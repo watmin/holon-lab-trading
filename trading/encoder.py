@@ -7,9 +7,10 @@ structure-preserving encoding.
 Field attribution (HOLON_CONTEXT.md):
   After OnlineSubspace.anomalous_component(vec) returns the out-of-manifold
   component, we identify which indicator fields drove the surprise by measuring
-  abs(cosine(anomalous, role_atom)) for each field's role atom.
-  Role atoms are retrieved via encoder.leaf_binding(scale_wrapper, field_name).
-  Higher value → that field contributed more to the anomaly.
+  abs(cosine(anomalous, leaf_binding)) per field.
+  leaf_binding(actual_value, field_name) gives the EXACT binding vector placed
+  into the encoded hypervector — passing actual field values (not a probe) is
+  required for precise attribution. Higher cosine → that field contributed more.
 """
 
 from __future__ import annotations
@@ -34,10 +35,6 @@ _LINEAR_FIELDS = {
     "rsi", "adx", "return_1",
     "hour_sin", "hour_cos", "dow_sin", "dow_cos",
 }
-
-# Canonical scale wrapper instances for role-atom lookup (value is arbitrary).
-_LOG_PROBE   = LogScale(1.0)
-_LINEAR_PROBE = LinearScale(1.0)
 
 
 class OHLCVEncoder:
@@ -87,15 +84,21 @@ class OHLCVEncoder:
         return vec, walkable
 
     def build_surprise_profile(
-        self, anomalous: np.ndarray
+        self,
+        anomalous: np.ndarray,
+        walkable: dict[str, Any] | None = None,
     ) -> dict[str, float]:
         """Attribute an anomalous component to specific indicator fields.
 
-        Uses abs(cosine(anomalous, role_atom)) per field.
-        Role atoms are retrieved via encoder.leaf_binding(scale_type, field_name).
+        Uses abs(cosine(anomalous, leaf_binding(value, field))) per field.
+        Passing the walkable dict gives exact attribution — leaf_binding with
+        the actual encoded value matches what went into the hypervector exactly.
+        Without walkable, falls back to a unit-value probe (less precise).
 
         Args:
             anomalous: out-of-manifold component from OnlineSubspace.anomalous_component()
+            walkable: the walkable dict returned by encode_with_walkable() — used
+                      to pass actual field values to leaf_binding for exact attribution.
 
         Returns:
             dict mapping field_name → surprise score in [0, 1].
@@ -115,16 +118,19 @@ class OHLCVEncoder:
             if weight <= 0.01:
                 continue  # gated field — exclude from profile
 
-            role = self._get_role_atom(enc, field)
-            if role is None:
+            # Use actual field value from walkable for exact leaf_binding;
+            # fall back to unit probe if walkable unavailable.
+            field_value = walkable.get(field) if walkable else None
+            binding = self._get_leaf_binding(enc, field, field_value)
+            if binding is None:
                 continue
 
-            role_f = role.astype(float)
-            rnorm = float(np.linalg.norm(role_f))
-            if rnorm == 0:
+            binding_f = binding.astype(float)
+            bnorm = float(np.linalg.norm(binding_f))
+            if bnorm == 0:
                 continue
 
-            sim = abs(float(np.dot(anomalous_f, role_f)) / (anorm * rnorm))
+            sim = abs(float(np.dot(anomalous_f, binding_f)) / (anorm * bnorm))
             profile[field] = sim
 
         return profile
@@ -135,12 +141,26 @@ class OHLCVEncoder:
         # Clear role atom cache so newly gated fields re-check on next call
         self._role_atoms.clear()
 
-    def _get_role_atom(self, enc, field: str) -> np.ndarray | None:
-        """Return (cached) role atom for a field, or None on error."""
+    def _get_leaf_binding(
+        self, enc, field: str, value: Any | None = None
+    ) -> np.ndarray | None:
+        """Return the leaf binding vector for a field, or None on error.
+
+        If value is provided, uses it directly (exact attribution).
+        If value is None, falls back to a unit probe (approximate, cached).
+        """
+        if value is not None:
+            # Exact: use the actual encoded value — not cached since values vary
+            try:
+                return enc.leaf_binding(value, field)
+            except Exception:
+                pass  # fall through to probe fallback
+
+        # Probe fallback (cached per field — deterministic for fixed probe)
         if field in self._role_atoms:
             return self._role_atoms[field]
         try:
-            probe = _LOG_PROBE if field in _LOG_FIELDS else _LINEAR_PROBE
+            probe = LogScale(1.0) if field in _LOG_FIELDS else LinearScale(1.0)
             atom = enc.leaf_binding(probe, field)
             self._role_atoms[field] = atom
             return atom

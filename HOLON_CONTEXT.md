@@ -198,21 +198,30 @@ If your library has fewer engrams than `prefilter_k`, tier 1 is skipped.
 anomalous = subspace.anomalous_component(vec)  # vec - reconstruct(vec)
 ```
 
-This is a full-dimensional vector (not a scalar). Because encoding uses role-filler
-binding, you can unbind it to find which fields drove the anomaly:
+This is a full-dimensional vector (not a scalar). The correct attribution method per the
+primer (series-001-003-memory.md) uses `leaf_binding` with the **actual field value**
+to get the exact binding vector that went into the encoded hypervector, then computes
+cosine similarity:
 
 ```python
-role_vec = client.get_vector("macd_hist")
-unbound = client.unbind(anomalous, role_vec)
-surprise = np.linalg.norm(unbound)   # higher = more anomalous in this field
+# Correct: pass actual field value for exact binding
+leaf = encoder.leaf_binding(LogScale(price_value), "price")
+sim = abs(cosine(anomalous, leaf))   # [0, 1], higher = more anomalous
+
+# Approximate fallback only when actual value unavailable:
+leaf = encoder.leaf_binding(LogScale(1.0), "price")   # unit probe
 ```
 
-High norm → that field contributed significantly to the out-of-manifold direction.
+`encoder.leaf_binding(value, path)` returns `bind(role[path], filler[value])` — the
+exact contribution this field made to the composite vector. Cosine to the anomalous
+component measures how much of the anomaly lies along that field's direction.
+
+High cosine → that field contributed significantly to the out-of-manifold direction.
 This is algebraic explainability: no separate explainer, no approximation, no SHAP.
-The explanation is in the geometry because the encoding was built from reversible operations.
 
 This is what `FeatureDarwinism` uses. The `surprise_profile` in an `Engram` is this
-dict, pre-computed at mint time.
+dict, pre-computed at mint time. Always pass the walkable dict to `build_surprise_profile`
+for exact attribution — the walkable is already available from `encode_with_walkable()`.
 
 ---
 
@@ -296,6 +305,48 @@ int8 representation.
 Instead assert `np.array_equal(v1, v2)` for exact identity. Use cosine only for
 *relative* comparison between different vectors (which is higher/lower), not as an
 absolute similarity score.
+
+---
+
+## StripedSubspace — When You Hit the Capacity Ceiling
+
+`OnlineSubspace` works well for ≤~30 leaf bindings per vector. The trading encoder has
+~19 bindings — comfortably within range. But the capacity ceiling matters to know about.
+
+**When you'd upgrade to `StripedSubspace`:**
+- If you add many more fields (e.g., per-candle feature sets, order book depth)
+- If per-field attribution from `anomalous_component` becomes noisy / non-discriminative
+- If you want the dual-signal (magnitude + direction profile) detection primitive
+
+**What it looks like:**
+```python
+from holon.memory.subspace import StripedSubspace
+from holon import HolonClient
+
+client = HolonClient(dimensions=4096)
+striped = StripedSubspace(dim=4096, k=16, n_stripes=8)
+
+# Encode into N stripe vectors instead of 1 composite
+stripe_vecs = client.encoder.encode_walkable_striped(walkable, n_stripes=8)
+
+# Update all stripes simultaneously
+residual = striped.update(stripe_vecs)
+
+# Per-stripe residual profile = directional signal
+profile = striped.residual_profile(stripe_vecs)  # [r0, r1, ..., r7]
+hot_stripe = int(np.argmax(profile))             # which field group lit up
+```
+
+Fields are assigned to stripes deterministically by FNV-1a hash of the dotted field path —
+same assignment on every node, every restart. No coordination.
+
+The aggregate `residual()` = RSS of per-stripe residuals. The `residual_profile()` is the
+directional signal that tells you *which fields* caused the anomaly, not just how anomalous
+overall. Both signals are required for reliable detection (see batch 018).
+
+**Phase 2 plan:** Once live system accumulates real data and Darwinism stabilizes, upgrade
+to `StripedSubspace` for crosstalk-free per-field attribution and the residual-profile
+directional signal.
 
 ---
 

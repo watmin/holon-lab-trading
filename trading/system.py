@@ -63,10 +63,10 @@ class RealTimeConsumer:
 
         for window_df in feed.stream():
             t0 = time.perf_counter()
-            vec = self.encoder.encode(window_df)
+            vec, walkable = self.encoder.encode_with_walkable(window_df)
             latency_ms = (time.perf_counter() - t0) * 1000
 
-            action, confidence, used_ids, surprise_profile = self._decide(vec)
+            action, confidence, used_ids, surprise_profile = self._decide(vec, walkable)
 
             price = float(window_df["close"].iloc[-1])
             entry = self.tracker.record(
@@ -95,12 +95,13 @@ class RealTimeConsumer:
             self._maybe_reload()
 
     def _decide(
-        self, vec: "np.ndarray"
+        self, vec: "np.ndarray", walkable: "dict | None" = None
     ) -> "tuple[str, float, list[str], dict[str, float]]":
         """Probe library; if no match, update subspace and maybe mint.
 
         Returns (action, confidence, used_engram_ids, surprise_profile).
         surprise_profile is non-empty when we updated the subspace (no match path).
+        walkable is passed through to build_surprise_profile for exact attribution.
         """
         import math
         matches = self.library.match(vec, top_k=3)
@@ -126,7 +127,7 @@ class RealTimeConsumer:
 
         # Build per-field surprise attribution from anomalous component
         anomalous = self.subspace.anomalous_component(vec)
-        surprise_profile = self.encoder.build_surprise_profile(anomalous)
+        surprise_profile = self.encoder.build_surprise_profile(anomalous, walkable)
 
         # Mint a new engram if the pattern is genuinely surprising
         if (

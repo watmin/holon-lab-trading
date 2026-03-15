@@ -89,7 +89,7 @@ class DiscoveryHarness:
 
             for step, window_df in enumerate(windows):
                 t0 = time.perf_counter()
-                vec = self.encoder.encode(window_df)
+                vec, walkable = self.encoder.encode_with_walkable(window_df)
                 encode_ms = (time.perf_counter() - t0) * 1000
 
                 # --- Phase A: probe existing engrams ---
@@ -116,7 +116,7 @@ class DiscoveryHarness:
 
                     # Compute field attribution from the anomalous component
                     anomalous = subspace.anomalous_component(vec)
-                    surprise_profile = self.encoder.build_surprise_profile(anomalous)
+                    surprise_profile = self.encoder.build_surprise_profile(anomalous, walkable)
 
                     # Mint on surprise (threshold is finite after step 1)
                     if (
