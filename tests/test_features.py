@@ -15,7 +15,7 @@ from __future__ import annotations
 import math
 
 import numpy as np
-import pandas as pd
+import pandas as pd  # noqa: F401 — used in TestComputeIndicators isinstance check
 import pytest
 
 from tests.conftest import make_flat_ohlcv, make_trending_ohlcv, make_volatile_ohlcv, make_short_ohlcv
@@ -201,6 +201,84 @@ class TestComputeReturns:
         returns = f.compute_returns(df, periods=5)
         for r in returns:
             assert not math.isnan(r)
+
+
+class TestComputeIndicators:
+    """Tests for the new compute_indicators() and compute_candle_row() methods."""
+
+    def test_compute_indicators_returns_dataframe(self):
+        df = make_volatile_ohlcv(250)
+        f = TechnicalFeatureFactory()
+        result = f.compute_indicators(df)
+        assert isinstance(result, pd.DataFrame)
+
+    def test_compute_indicators_has_expected_columns(self):
+        df = make_volatile_ohlcv(250)
+        f = TechnicalFeatureFactory()
+        result = f.compute_indicators(df)
+        expected = {
+            "sma20", "sma50", "sma200",
+            "bb_upper", "bb_lower", "bb_width",
+            "macd_line", "macd_signal", "macd_hist",
+            "rsi", "atr", "dmi_plus", "dmi_minus", "adx", "ret",
+        }
+        missing = expected - set(result.columns)
+        assert not missing, f"Missing columns: {missing}"
+
+    def test_compute_indicators_no_nan(self):
+        df = make_volatile_ohlcv(250)
+        f = TechnicalFeatureFactory()
+        result = f.compute_indicators(df)
+        assert not result.isnull().any().any(), "NaN values remain after dropna"
+
+    def test_compute_indicators_shorter_than_input(self):
+        df = make_volatile_ohlcv(250)
+        f = TechnicalFeatureFactory()
+        result = f.compute_indicators(df)
+        # NaN rows dropped — result should have fewer rows
+        assert len(result) < len(df)
+        assert len(result) > 0
+
+    def test_compute_candle_row_nested_structure(self):
+        df = make_volatile_ohlcv(250)
+        f = TechnicalFeatureFactory()
+        df_ind = f.compute_indicators(df)
+        row = f.compute_candle_row(df_ind, len(df_ind) - 1)
+
+        assert "ohlcv" in row
+        for k in ("open", "high", "low", "close"):
+            assert k in row["ohlcv"]
+        for k in ("vol", "atr", "rsi", "ret"):
+            assert k in row
+        assert "sma" in row
+        for k in ("s20", "s50", "s200"):
+            assert k in row["sma"]
+        assert "macd" in row
+        assert "bb" in row
+        assert "dmi" in row
+
+    def test_compute_candle_row_values_finite(self):
+        df = make_volatile_ohlcv(250)
+        f = TechnicalFeatureFactory()
+        df_ind = f.compute_indicators(df)
+        row = f.compute_candle_row(df_ind, len(df_ind) - 1)
+
+        def check_dict(d):
+            for v in d.values():
+                if isinstance(v, dict):
+                    check_dict(v)
+                else:
+                    assert math.isfinite(v), f"Non-finite value: {v}"
+
+        check_dict(row)
+
+    def test_compute_candle_row_prices_positive(self):
+        df = make_volatile_ohlcv(250)
+        f = TechnicalFeatureFactory()
+        df_ind = f.compute_indicators(df)
+        row = f.compute_candle_row(df_ind, len(df_ind) - 1)
+        for k in ("open", "high", "low", "close"):
+            assert row["ohlcv"][k] > 0
 
 
 class TestConfigurablePeriods:

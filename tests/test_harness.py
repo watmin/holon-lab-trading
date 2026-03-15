@@ -187,24 +187,25 @@ class TestDiscoveryHarness:
             initial_usdt=10_000.0,
             data_path=str(tmp_path / "btc.parquet"),
             db_path=str(tmp_path / "disc.db"),
+            save_dir=str(tmp_path),
         )
-        # Inject synthetic data (enough for 3 episodes × 10 steps with 40-candle window)
+        # 600 rows: enough for multi-episode discovery with 212-candle windows
         df = make_large_ohlcv(n=600, seed=99)
         inject_df(h.feed, df)
         return h
 
     def test_run_terminates(self, harness):
-        """3 episodes × 5 steps with 40-candle window should complete without error."""
-        harness.run(num_episodes=3, episode_length=5, window_candles=40)
+        """3 episodes × 5 steps should complete without error."""
+        harness.run(num_episodes=3, episode_length=5)
 
     def test_decisions_recorded(self, harness):
-        harness.run(num_episodes=2, episode_length=5, window_candles=40)
+        harness.run(num_episodes=2, episode_length=5)
         s = harness.tracker.summary()
         # 2 episodes × 5 steps = 10 decisions
         assert s["decisions"] == 10
 
     def test_results_structure(self, harness):
-        harness.run(num_episodes=2, episode_length=5, window_candles=40)
+        harness.run(num_episodes=2, episode_length=5)
         r = harness.results()
         assert "summary" in r
         assert "engram_count" in r
@@ -213,81 +214,70 @@ class TestDiscoveryHarness:
 
     def test_library_grows_over_episodes(self, harness):
         """With a volatile enough series, surprise fires and engrams are minted."""
-        harness.run(num_episodes=5, episode_length=20, window_candles=40)
+        harness.run(num_episodes=5, episode_length=20)
         # We don't assert a specific count — surprise depends on the series —
-        # but the library must be a valid EngramLibrary with consistent names.
-        names = harness.library.names()
+        # but names() must return a consistent list from stripe 0 library.
+        names = harness.names()
         assert isinstance(names, list)
         assert len(names) >= 0  # structural: names() always returns a list
 
     def test_engram_metadata_structure(self, harness):
         """Any minted engram must have the required metadata keys."""
-        harness.run(num_episodes=5, episode_length=20, window_candles=40)
-        for name in harness.library.names():
-            eng = harness.library.get(name)
-            assert eng is not None
-            assert eng.metadata is not None
-            assert "action" in eng.metadata
-            assert "confidence" in eng.metadata
-            assert "score" in eng.metadata
+        harness.run(num_episodes=5, episode_length=20)
+        for name in harness.names():
+            meta = harness.get_metadata(name)
+            assert meta is not None
+            assert "action" in meta
+            assert "confidence" in meta
+            assert "score" in meta
 
     def test_correct_direction_scores_positively(self, harness, tmp_path):
-        """Manually inject an engram, run one step where the price goes up,
-        and verify its score becomes positive."""
-        from holon.memory import OnlineSubspace, EngramLibrary
+        """Manually inject a striped engram, score it with a winning trade."""
+        from holon.memory import StripedSubspace
         import numpy as np
 
-        # Warm up the subspace with 10 vectors so threshold is finite
-        sub = OnlineSubspace(dim=harness.dimensions, k=harness.k)
+        ss = StripedSubspace(dim=harness.dimensions, k=harness.k,
+                             n_stripes=harness.encoder.N_STRIPES)
         rng = np.random.default_rng(0)
         for _ in range(20):
-            v = rng.choice(np.array([-1, 0, 1], dtype=np.int8), size=harness.dimensions)
-            sub.update(v)
+            vecs = [rng.choice(np.array([-1, 0, 1], dtype=np.int8), size=harness.dimensions)
+                    .astype(float) for _ in range(harness.encoder.N_STRIPES)]
+            ss.update(vecs)
 
-        # Add a BUY engram
-        harness.library.add(
-            "test_buy",
-            sub,
-            None,
-            action="BUY",
-            confidence=0.9,
-            score=0.0,
-        )
+        harness.library.add_striped("test_buy", ss, None, action="BUY", confidence=0.9, score=0.0)
 
-        # Simulate a call to _score_engrams: price went up → correct for BUY
         harness._score_engrams(["test_buy"], "BUY", actual_return=0.05)
-        eng = harness.library.get("test_buy")
-        assert eng.metadata["score"] > 0.0
+        meta = harness.get_metadata("test_buy")
+        assert meta is not None
+        assert meta["score"] > 0.0
 
     def test_wrong_direction_scores_negatively(self, harness):
         """BUY engram used when price fell → score should decrease."""
-        from holon.memory import OnlineSubspace
+        from holon.memory import StripedSubspace
         import numpy as np
 
-        sub = OnlineSubspace(dim=harness.dimensions, k=harness.k)
+        ss = StripedSubspace(dim=harness.dimensions, k=harness.k,
+                             n_stripes=harness.encoder.N_STRIPES)
         rng = np.random.default_rng(1)
         for _ in range(20):
-            v = rng.choice(np.array([-1, 0, 1], dtype=np.int8), size=harness.dimensions)
-            sub.update(v)
+            vecs = [rng.choice(np.array([-1, 0, 1], dtype=np.int8), size=harness.dimensions)
+                    .astype(float) for _ in range(harness.encoder.N_STRIPES)]
+            ss.update(vecs)
 
-        harness.library.add(
-            "test_sell_loss",
-            sub,
-            None,
-            action="BUY",
-            confidence=0.9,
-            score=0.0,
-        )
+        harness.library.add_striped("test_sell_loss", ss, None,
+                                    action="BUY", confidence=0.9, score=0.0)
+
         harness._score_engrams(["test_sell_loss"], "BUY", actual_return=-0.03)
-        eng = harness.library.get("test_sell_loss")
-        assert eng.metadata["score"] < 0.0
+        meta = harness.get_metadata("test_sell_loss")
+        assert meta is not None
+        assert meta["score"] < 0.0
 
     def test_unknown_engram_in_score_ignored(self, harness):
         """Non-existent engram ID in score call must not raise."""
         harness._score_engrams(["ghost_engram"], "BUY", actual_return=0.01)
 
     def test_results_summary_keys(self, harness):
-        harness.run(num_episodes=1, episode_length=5, window_candles=40)
+        harness.run(num_episodes=1, episode_length=5)
         r = harness.results()
         for key in ("total_return", "trades", "decisions"):
             assert key in r["summary"]

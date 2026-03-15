@@ -111,6 +111,135 @@ class TechnicalFeatureFactory:
         returns = df["close"].pct_change().tail(periods).tolist()
         return [0.0 if np.isnan(r) else float(r) for r in returns]
 
+    def compute_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Add all technical indicators as rolling columns to the DataFrame.
+
+        This computes indicators for the entire DataFrame at once for efficiency,
+        then the encoder can extract the last WINDOW_CANDLES rows for encoding.
+
+        Returns DataFrame with all indicator columns added (NaN rows dropped).
+        """
+        df = df.copy()
+
+        # Basic price series
+        close = df["close"]
+        high = df["high"]
+        low = df["low"]
+        volume = df["volume"]
+
+        # --- SMAs ---
+        df["sma20"] = close.rolling(20).mean()
+        df["sma50"] = close.rolling(50).mean()
+        df["sma200"] = close.rolling(200).mean()
+
+        # --- Bollinger Bands ---
+        bb_mid = close.rolling(20).mean()
+        bb_std = close.rolling(20).std()
+        df["bb_upper"] = bb_mid + 2.0 * bb_std
+        df["bb_lower"] = bb_mid - 2.0 * bb_std
+        df["bb_width"] = ((df["bb_upper"] - df["bb_lower"]) / bb_mid.replace(0.0, np.nan)).fillna(0.0)
+
+        # --- MACD ---
+        ema_fast = close.ewm(span=12, adjust=False).mean()
+        ema_slow = close.ewm(span=26, adjust=False).mean()
+        macd_line = ema_fast - ema_slow
+        macd_signal = macd_line.ewm(span=9, adjust=False).mean()
+        df["macd_line"] = macd_line
+        df["macd_signal"] = macd_signal
+        df["macd_hist"] = macd_line - macd_signal
+
+        # --- RSI ---
+        df["rsi"] = self._rsi_series(close, 14)
+
+        # --- ATR ---
+        tr = pd.concat(
+            [high - low, (high - close.shift()).abs(), (low - close.shift()).abs()],
+            axis=1,
+        ).max(axis=1)
+        df["atr"] = tr.rolling(14).mean()
+
+        # --- DMI/ADX ---
+        tr_smooth = tr.rolling(14).mean()
+        hd = high - high.shift()
+        ld = low.shift() - low
+        dmp = pd.Series(np.where((hd > ld) & (hd > 0), hd, 0.0), index=df.index).rolling(14).mean()
+        dmm = pd.Series(np.where((ld > hd) & (ld > 0), ld, 0.0), index=df.index).rolling(14).mean()
+
+        # Guard against zero ATR (flat price → tr=0)
+        tr_safe = tr_smooth.replace(0.0, np.nan)
+        df["dmi_plus"] = (100 * (dmp / tr_safe)).fillna(0.0)
+        df["dmi_minus"] = (100 * (dmm / tr_safe)).fillna(0.0)
+
+        # ADX: guard against dmi+ + dmi- == 0
+        dmi_sum = df["dmi_plus"] + df["dmi_minus"]
+        dx_num = (df["dmi_plus"] - df["dmi_minus"]).abs()
+        dx = (100 * dx_num / dmi_sum.replace(0.0, np.nan)).fillna(0.0)
+        df["adx"] = dx.rolling(14).mean().fillna(0.0)
+
+        # --- Returns ---
+        df["ret"] = close.pct_change()
+
+        # Drop rows with any NaN (insufficient data for indicators)
+        df = df.dropna().reset_index(drop=True)
+
+        return df
+
+    def compute_candle_row(self, df: pd.DataFrame, idx: int) -> dict[str, any]:
+        """Extract all indicators for a single candle row, returning nested dict.
+
+        Args:
+            df: DataFrame from compute_indicators() with all indicator columns
+            idx: Row index to extract
+
+        Returns:
+            Nested dict matching the per-candle schema in the plan
+        """
+        row = df.iloc[idx]
+
+        # Extract OHLCV
+        ohlcv = {
+            "open": row["open"],
+            "high": row["high"],
+            "low": row["low"],
+            "close": row["close"],
+        }
+
+        # Build nested structure
+        candle_data = {
+            "ohlcv": {
+                "open": ohlcv["open"],
+                "high": ohlcv["high"],
+                "low": ohlcv["low"],
+                "close": ohlcv["close"],
+            },
+            "vol": row["volume"],
+            "atr": row["atr"],
+            "rsi": row["rsi"],
+            "ret": row["ret"],
+            "sma": {
+                "s20": row["sma20"],    # BB middle
+                "s50": row["sma50"],
+                "s200": row["sma200"],
+            },
+            "macd": {
+                "line": row["macd_line"],
+                "signal": row["macd_signal"],
+                "hist": row["macd_hist"],
+            },
+            "bb": {
+                "upper": row["bb_upper"],
+                "lower": row["bb_lower"],
+                "width": row["bb_width"],
+            },
+            "dmi": {
+                "plus": row["dmi_plus"],
+                "minus": row["dmi_minus"],
+                "adx": row["adx"],
+            },
+        }
+
+        return candle_data
+
     @staticmethod
     def _rsi(series: pd.Series, period: int) -> float:
         delta = series.diff()
@@ -122,6 +251,19 @@ class TechnicalFeatureFactory:
             return 100.0 if gain > 0 else 50.0  # all gains → overbought
         rs = gain / loss
         return float(100.0 - 100.0 / (1.0 + rs))
+
+    @staticmethod
+    def _rsi_series(series: pd.Series, period: int) -> pd.Series:
+        """Compute RSI for the entire series."""
+        delta = series.diff()
+        gain = delta.where(delta > 0, 0.0).rolling(period).mean()
+        loss = (-delta.where(delta < 0, 0.0)).rolling(period).mean()
+        rs = gain / loss
+        rsi = 100.0 - 100.0 / (1.0 + rs)
+        # Handle edge cases
+        rsi = rsi.where(loss != 0, 100.0)  # All gains -> 100
+        rsi = rsi.where(gain != 0, 0.0)    # All losses -> 0
+        return rsi.fillna(50.0)
 
     @staticmethod
     def _atr(high: pd.Series, low: pd.Series, close: pd.Series, period: int) -> float:

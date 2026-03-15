@@ -176,17 +176,44 @@ direction is what matters, not distance from center.
 
 ## Two-Tier Matching in EngramLibrary
 
-`library.match(vec, top_k=3)` runs a two-tier filter:
+`EngramLibrary` is **polymorphic over subspace type** as of the striped engram extension.
+There are two distinct paths depending on how the engram was minted:
+
+### Single-vector engrams (from OnlineSubspace)
+
+```python
+library.add("name", online_subspace, **metadata)   # mint
+library.match(vec, top_k=3)                        # match
+```
 
 **Tier 1 — Eigenvalue pre-filter** (cheap, O(k×n)):
-Rank engrams by eigenvalue energy. Higher energy = broader pattern = plausible candidate.
-Returns top `prefilter_k` (default 10).
+Rank by eigenvalue energy signature. Returns top `prefilter_k` candidates.
 
-**Tier 2 — Full residual scoring** (expensive, O(k×dim) per candidate):
-Compute reconstruction residual against stored subspace. Return top-k sorted ascending.
+**Tier 2 — Full residual scoring** (O(k×dim) per candidate):
+Compute reconstruction residual. Return top-k sorted ascending (lower = better match).
 
-Lower residual = better match. A residual near zero means the probe vector lies on the
-engram's learned manifold. High residual = no match.
+### Striped engrams (from StripedSubspace)
+
+```python
+library.add_striped("name", striped_subspace, **metadata)   # mint
+library.match_striped(stripe_vecs, top_k=3)                 # match
+```
+
+Internally stores all N per-stripe `OnlineSubspace` snapshots under a single name.
+The eigenvalue signature is the concatenation of all per-stripe eigenvalue signatures.
+`match_striped()` computes RSS residual across all stripes — same two-tier structure.
+
+**The DDoS lab alternative — `bundle()` hack:** The http-lab sidesteps this by bundling
+all stripe vectors into one aggregate vector before passing to the library. This works but
+loses attribution resolution. The new API eliminates the need for that workaround.
+
+### Key facts
+
+- `match()` skips striped engrams; `match_striped()` skips single-vector engrams.
+- Both kinds coexist in one library — one JSON file, one `save()` / `load()`.
+- `library.names(kind="striped")` / `names(kind="single")` for filtered listing.
+- Calling `engram.residual(vec)` on a striped engram raises `TypeError` (use `residual_striped`).
+- `StripedSubspace` does **not** have `.eigenvalues` — never pass it to `library.add()`.
 
 If your library has fewer engrams than `prefilter_k`, tier 1 is skipped.
 
@@ -308,54 +335,120 @@ absolute similarity score.
 
 ---
 
-## StripedSubspace — When You Hit the Capacity Ceiling
+## StripedSubspace — Now Active (Window Snapshot Architecture)
 
-`OnlineSubspace` works well for ≤~30 leaf bindings per vector. The trading encoder has
-~19 bindings — comfortably within range. But the capacity ceiling matters to know about.
+The window-snapshot encoder produces **244 total leaf bindings** (20 fields/candle × 12
+candles + 4 time leaves). At this density, `StripedSubspace` with 8 stripes is the correct
+choice — it gives ~30 bindings/stripe, which is comfortably within the meaningful attribution
+range and avoids cross-field crosstalk in the anomalous component.
 
-**When you'd upgrade to `StripedSubspace`:**
-- If you add many more fields (e.g., per-candle feature sets, order book depth)
-- If per-field attribution from `anomalous_component` becomes noisy / non-discriminative
-- If you want the dual-signal (magnitude + direction profile) detection primitive
+**Why we upgraded from OnlineSubspace:** The per-candle OHLCV encoding produces a deeply
+nested walkable dict with keys like `t0.ohlcv.open`, `t3.macd.hist`, `t11.rsi`. These 244
+unique paths produce 244 independent leaf bindings — far above the ~30-binding sweet spot
+for a single `OnlineSubspace`. With 8 stripes, each stripe sees ~30 paths routed to it by
+FNV-1a hash of the FQDN path. The residual profile tells you *which candle slot and which
+indicator group* caused the anomaly.
 
-**What it looks like:**
+**Correct usage pattern:**
 ```python
-from holon.memory.subspace import StripedSubspace
+from holon.memory import StripedSubspace
 from holon import HolonClient
 
-client = HolonClient(dimensions=4096)
-striped = StripedSubspace(dim=4096, k=16, n_stripes=8)
+client = HolonClient(dimensions=1024)
+striped = StripedSubspace(dim=1024, k=16, n_stripes=8)
 
-# Encode into N stripe vectors instead of 1 composite
+# encode_walkable_striped is on client.encoder, NOT client directly
 stripe_vecs = client.encoder.encode_walkable_striped(walkable, n_stripes=8)
 
-# Update all stripes simultaneously
-residual = striped.update(stripe_vecs)
+# Score FIRST, then update
+if not np.isinf(striped.threshold):
+    pre_residual = striped.residual(stripe_vecs)
 
-# Per-stripe residual profile = directional signal
-profile = striped.residual_profile(stripe_vecs)  # [r0, r1, ..., r7]
-hot_stripe = int(np.argmax(profile))             # which field group lit up
+striped.update(stripe_vecs)
+
+# Attribution: which stripe was hottest?
+profile = striped.residual_profile(stripe_vecs)   # [r0, r1, ..., r7]
+hot_stripe = int(np.argmax(profile))
+anomalous = striped.anomalous_component(stripe_vecs, hot_stripe)
+
+# Field attribution within the hot stripe
+# Use client.encoder.field_stripe(path, n_stripes) to verify which stripe a path hashes to
 ```
 
-Fields are assigned to stripes deterministically by FNV-1a hash of the dotted field path —
-same assignment on every node, every restart. No coordination.
+**Key API finding:** `encode_walkable_striped` is on `client.encoder`, NOT `client`:
+- Correct: `client.encoder.encode_walkable_striped(walkable, n_stripes=8)`
+- Wrong: `client.encode_walkable_striped(walkable)` — AttributeError
 
-The aggregate `residual()` = RSS of per-stripe residuals. The `residual_profile()` is the
-directional signal that tells you *which fields* caused the anomaly, not just how anomalous
-overall. Both signals are required for reliable detection (see batch 018).
+**Stripe assignment:** Determined by `client.encoder.field_stripe(fqdn_path, n_stripes)`.
+Same assignment deterministically across nodes and restarts (FNV-1a hash). No coordination.
 
-**Phase 2 plan:** Once live system accumulates real data and Darwinism stabilizes, upgrade
-to `StripedSubspace` for crosstalk-free per-field attribution and the residual-profile
-directional signal.
+---
+
+## Window Snapshot Encoding — Why Nesting Matters
+
+**The core insight:** Aggregating a 12-candle window into statistics (mean RSI, max ATR, etc.)
+destroys temporal shape. A head-fake (dip then recovery to same endpoint as a smooth uptrend)
+has identical aggregate statistics to the uptrend, but produces cosine **0.42** between their
+window-snapshot hypervectors. The subspace trained on smooth uptrends flags the head-fake as
+novel (residual > threshold) while accepting the uptrend (residual < threshold).
+
+**Per-candle schema (20 leaves):**
+```
+t{i}.ohlcv.{open,high,low,close}  — LogScale: 4 OHLCV prices
+t{i}.vol                           — LogScale: volume
+t{i}.atr                           — LogScale: ATR(14), price-scale
+t{i}.rsi                           — LinearScale: RSI(14), bounded
+t{i}.ret                           — LinearScale: close-to-close return
+t{i}.sma.{s20,s50,s200}            — LogScale: SMA at 3 horizons
+t{i}.macd.{line,signal,hist}       — LinearScale: MACD system
+t{i}.bb.{upper,lower,width}        — upper/lower LogScale, width LinearScale
+t{i}.dmi.{plus,minus,adx}          — LinearScale: DMI/ADX system
+time.{hour_sin,hour_cos,dow_sin,dow_cos}  — once per window, not per candle
+```
+
+**Nesting does NOT create geometric proximity.** FNV-1a hashes each FQDN path independently.
+`t0.macd.line` and `t0.macd.signal` have role atom cosine near 0 — same as unrelated fields.
+Nesting is for human readability and attribution interpretability only.
+
+**Time features placement:** The `time` block (4 leaves) is placed once at the top level,
+not inside the per-candle loop. Hour-of-day and day-of-week are constant across all candles
+in a 60-minute window — encoding 12x wastes 48 bindings on identical values.
+
+---
+
+## Lookback vs Encode Window
+
+Two distinct constants:
+- `LOOKBACK_CANDLES = 200` — full df size fed to `compute_indicators()`. SMA200 needs 200 bars.
+  After `dropna`, ~200-199=1 usable row from exactly 200 input rows. Therefore the feed must
+  provide `LOOKBACK_CANDLES + WINDOW_CANDLES` rows (e.g., 212 for default config).
+- `WINDOW_CANDLES = 12` — trailing rows actually encoded. The "trader's screen view."
+
+**Feed sizing rule:** Always provide `LOOKBACK_CANDLES + WINDOW_CANDLES` rows to the encoder.
+The harness computes this automatically: `feed_window = LOOKBACK_CANDLES + window_candles`.
+
+---
+
+## Dim Choice: 1024 per Stripe
+
+Empirical finding from the DDoS detection lab: 4096 total dim is optimal. With 8 stripes,
+`dim=1024` per stripe = 8192 total effective dim. The stripe-level k=16 principal components
+per stripe × 8 = 128 effective components — well-matched to the 244 bindings distributed
+across stripes.
+
+For tests, dim=512 with n_stripes=4 is fast enough to validate logic without geometry tests.
 
 ---
 
 ## What This Lab Proves
 
 The holon Python library (no modifications) can encode OHLCV market data into a
-geometrically meaningful vector space, learn market-regime manifolds via `OnlineSubspace`,
-mint persistent pattern memories via `EngramLibrary`, and autonomously refine them
-through a 2-phase feedback loop.
+geometrically meaningful vector space using deeply nested per-candle window snapshots,
+detect regime anomalies via `StripedSubspace`, mint persistent pattern memories via
+`EngramLibrary`, and autonomously refine them through a 2-phase feedback loop.
+
+The window-snapshot approach enables pattern recognition of head-fakes, breakouts,
+momentum divergences, and V-recoveries that aggregate statistics cannot distinguish.
 
 If something seems hard to do with the public API, the answer is almost certainly in
 the primers. The library is more capable than it first appears. The primitives compose.

@@ -7,9 +7,9 @@
 
 ## Current State
 
-**Git:** `main` — 4 commits  
-**Tests:** 143 passing (last clean run: 2026-03-15)  
-**Blocker:** none.
+**Git:** `main`  
+**Tests:** 155 passing (last clean run: 2026-03-15)  
+**Blocker:** none — ready to pull real BTC data and run geometry validation.
 
 ---
 
@@ -17,162 +17,132 @@
 
 | Module | Status | Tests | Notes |
 |--------|--------|-------|-------|
-| `features.py` | ✅ complete | 27 | All indicators, NaN-safe, deterministic |
-| `encoder.py` | ✅ complete | 16 | LinearScale/LogScale routing, weight gating |
+| `features.py` | ✅ complete | 35 | `compute_indicators()` + `compute_candle_row()` added; DMI div-by-zero fixed |
+| `encoder.py` | ✅ complete | 30 | Window-snapshot; `encode_walkable_striped`; stripe-aware `build_surprise_profile` |
 | `tracker.py` | ✅ complete | 26 | BUY/SELL/HOLD math, SQLite, Sharpe/drawdown |
 | `darwinism.py` | ✅ complete | 22 | EMA reward/punish, pruning, save/load |
 | `feed.py` | ✅ complete | 10 | Window math, episode logic, replay, next_close |
-| `harness.py` | ✅ complete | 9 | Score-first, engram minting, EMA scoring |
-| `system.py` | ✅ complete | 0 | Two-phase orchestrator (live system, not unit-testable) |
-| `encoder.py` `build_surprise_profile()` | ✅ complete | 8 | Field attribution via leaf_binding + anomalous_component |
-| Darwinism wiring | ✅ complete | 10 | update() called in harness loop and RealTimeConsumer |
-| `scripts/report.py` | ✅ complete | 0 | Read-only status CLI: equity, Sharpe, feature rankings |
-| `scripts/validate_geometry.py` | ✅ complete | 0 | 5 geometry experiments, all passing on synthetic data |
+| `harness.py` | ✅ complete | 9 | StripedSubspace; score-first; stripe attribution; save_dir |
+| `system.py` | ✅ complete | 0 | Two-phase orchestrator; StripedSubspace wired |
+| `scripts/validate_geometry.py` | ✅ complete | 0 | Striped encoder; 4 gate experiments; passes on synthetic |
+| `scripts/report.py` | ✅ complete | 0 | Read-only CLI: equity, Sharpe, feature rankings |
 
 ---
 
-## Known Holon API Facts (learned from real calls)
+## Architecture: Window Snapshot + StripedSubspace
 
-| Thing | Correct | Wrong (skeleton had) |
-|-------|---------|----------------------|
-| HolonClient constructor | `HolonClient(dimensions=4096)` | `HolonClient(dim=4096)` |
-| EngramLibrary constructor | `EngramLibrary(dim=4096)` | same — correct |
-| OnlineSubspace constructor | `OnlineSubspace(dim=4096, k=64)` | same — correct |
-| EngramLibrary.add metadata | `library.add(name, sub, None, action="BUY", score=0.0)` | passed as dict |
-| Engram.metadata access | `eng.metadata["action"]` — plain dict | same |
-| Encoder dimensions | `client.encoder.vector_manager.dimensions` | `client.encoder.dimensions` |
-| Bipolar cosine identity | `np.array_equal(v, v)` not `cosine == 1.0` | assumed cosine=1 |
-| RSI all-gains | returns `100.0` (fixed in features.py) | returned `50.0` |
-| score-first pattern | `residual()` THEN `update()` | `update()` then threshold check |
+The encoder produces a **deeply nested per-candle walkable dict** (t0...t11 + time block),
+encoded via `client.encoder.encode_walkable_striped(walkable, n_stripes=8)` into 8 stripe
+vectors of dim=1024 each (8192 effective dim).
+
+**244 total leaf bindings** — 20 fields/candle × 12 candles + 4 time leaves.  
+~30 bindings/stripe (measured: min=26, max=34).
+
+`StripedSubspace.residual_profile()` tells you *which candle slot + indicator group* drove
+the anomaly. `anomalous_component(stripe_vecs, hot_stripe)` gives the out-of-subspace
+vector for per-field cosine attribution.
+
+See `HOLON_CONTEXT.md` for full rationale and API gotchas.
+
+---
+
+## Known Holon API Facts
+
+| Thing | Correct |
+|-------|---------|
+| HolonClient constructor | `HolonClient(dimensions=4096)` |
+| `encode_walkable_striped` location | `client.encoder.encode_walkable_striped(walkable, n_stripes=N)` — NOT `client.` |
+| StripedSubspace constructor | `StripedSubspace(dim=1024, k=16, n_stripes=8)` |
+| StripedSubspace update | `subspace.update(stripe_vecs)` — returns scalar RSS residual |
+| StripedSubspace residual | `subspace.residual(stripe_vecs)` — non-updating |
+| Residual profile | `subspace.residual_profile(stripe_vecs)` — array of per-stripe residuals |
+| Anomalous component | `subspace.anomalous_component(stripe_vecs, hot_stripe_idx)` |
+| Stripe assignment | `client.encoder.field_stripe(fqdn_path, n_stripes)` — FNV-1a, deterministic |
+| Encoder dimensions | `client.encoder.vector_manager.dimensions` |
+| Bipolar cosine identity | `np.array_equal(v, v)` — cosine ≠ 1.0 in bipolar {-1,0,1} space |
+| Feed sizing rule | Provide `LOOKBACK_CANDLES + WINDOW_CANDLES` rows to encoder |
 
 ---
 
 ## Next Steps (in order)
 
-### Step 1 — Unblock tests after holon port lands
+### Step 1 — Download historical BTC data (one-time, ~10 min)
 ```bash
 cd holon-lab-trading
-.venv/bin/pytest tests/ -q
-```
-Expected: 124 pass. If new API changes broke anything, fix and commit.
-
-### Step 2 — Download historical data (one-time)
-```bash
-./scripts/run_with_venv.sh python -c "
+../scripts/run_with_venv.sh python -c "
 from trading.feed import HistoricalFeed
 HistoricalFeed().ensure_data()
+print('Done')
 "
 ```
-Produces `data/btc_5m.parquet` (~2 years, ~210k candles). Takes ~10 min.
-Verify: `data/btc_5m.parquet` exists and is >50MB.
+Produces `data/btc_5m.parquet` (~2 years, ~210k candles). Verify >50MB.
 
-### Step 3 — Validate structural similarity empirically ✅ DONE
-`scripts/validate_geometry.py` — passes on synthetic data, designed to run on real parquet too.
-
-Key findings from building this:
-- **Identity:** same window → identical vector ✓ (cosine ≠ 1.0 in bipolar space — use array_equal)
-- **Proximity:** adjacent windows are statistically more similar than distant windows ✓
-- **Regime separation:** within-regime cosine > cross-regime at p<0.0001 ✓
-- **Weight gating:** zeroing MACD fields changes encoding ✓
-- **Subspace surprise:** familiar < threshold (always ✓); novel *directionally* higher
-  but `sigma_mult=3.5` needs real BTC variance to fully calibrate (runs with `--parquet`)
-
-Critical insight captured: **LogScale compresses absolute price differences — it's volatility
-regime shift, not price level, that drives indicator shape and thus subspace residual.**
-
-### Step 3b — Wire Darwinism + field attribution ✅ DONE
-- `OHLCVEncoder.build_surprise_profile(anomalous)` — `leaf_binding + abs(cosine)` per field
-- Harness scoring loop calls `darwinism.update()` with surprise profile on every step
-- `RealTimeConsumer` does the same with the realized return from the previous candle
-- `scripts/report.py` — read-only CLI showing equity, Sharpe, drawdown, feature rankings
-
-### Step 4 — Run geometry validation on real data
+### Step 2 — Run geometry validation gate on real data
 ```bash
-./scripts/run_with_venv.sh python scripts/validate_geometry.py --parquet data/btc_5m.parquet --dim 4096
+../scripts/run_with_venv.sh python scripts/validate_geometry.py \
+    --parquet data/btc_5m.parquet --dim 1024 --stripes 8 --window 12
 ```
-Expect: subspace surprise experiment to fully pass (threshold calibrates from real BTC variance).
+**Gate criteria — all must pass before running discovery harness:**
+- Identity: same window → identical stripe vectors
+- Proximity: adjacent windows closer than distant windows
+- Regime separation: t-test p < 0.05 (within > cross)
+- Subspace surprise: `StripedSubspace` flags volatile period as anomalous
 
-### Step 5 — Wire Darwinism into harness scoring
-Currently `FeatureDarwinism` is instantiated in the harness but `update()` is never
-called during discovery. The `anomalous_component` from `OnlineSubspace` gives
-per-field surprise; that needs to flow into `darwinism.update()`.
+If subspace surprise is INFO (familiar ok, novel doesn't cross), sweep `--window 6 12 24`
+to find the configuration where novel does cross threshold.
 
-Changes needed in `harness.py`:
-- After `subspace.update(vec)`, compute `anomalous = subspace.anomalous_component(vec)`.
-- Build a `surprise_profile: dict[str, float]` by unbinding field roles from `anomalous`.
-- Pass to `darwinism.update(surprise_profile, realized_return, action)`.
-
-This requires understanding how `anomalous_component` relates to field roles —
-read `HOLON_CONTEXT.md` section "Field Attribution" before touching this.
-
-### Step 5 — Run discovery harness (offline, ~10-30 min)
+### Step 3 — Run discovery harness (~30 min on 2 years of data)
 ```bash
-./scripts/discover.sh
+../scripts/run_with_venv.sh python -c "
+from trading.harness import DiscoveryHarness
+h = DiscoveryHarness()
+h.run(num_episodes=100, episode_length=500)
+"
 ```
 Produces:
 - `data/seed_engrams.json` — seed memory bank for live system
 - `data/feature_weights.json` — initial Darwinism weights
 - `data/discovery_log.csv` — full decision log
 
-Inspect results:
+Inspect feature ranking:
 ```bash
-./scripts/run_with_venv.sh python -c "
-from trading.darwinism import FeatureDarwinism
-d = FeatureDarwinism.load('data/feature_weights.json')
-print(d.report())
-"
-```
-Expected: non-trivial ranking (not all weights equal).
-
-### Step 6 — Build `scripts/report.py`
-Quick read-only CLI to inspect a running (or stopped) system:
-```
-=== Holon Lab Trading Report ===
-Uptime          : 14.2 hours
-Equity          : $10,847 (+8.5%)
-Sharpe          : 1.23
-Max Drawdown    : 4.1%
-Win Rate        : 52%
-Trades          : 41
-Decisions       : 168
-Engrams         : 23
-
-=== Feature Importance (Algebraic Darwinism) ===
-  macd_hist          importance=0.712  weight=1.82  [active]
-  rsi                importance=0.634  weight=1.41  [active]
-  adx                importance=0.201  weight=0.34  [active]
-  bb_width           importance=0.118  weight=0.12  [PRUNED]
-  ...
+../scripts/run_with_venv.sh python scripts/report.py
 ```
 
-### Step 7 — Start live system (24/7)
+### Step 4 — Start live system (24/7)
 ```bash
-./scripts/run_live.sh
+../scripts/run_with_venv.sh python trading/system.py
 ```
 Let it run for 48h minimum before drawing conclusions.
-The first 6h is "warm-up" — subspace is still calibrating threshold.
+First 6h is warm-up — `StripedSubspace` threshold still calibrating.
 
 ---
 
 ## Open Questions / Experiments to Run
 
-- **Does window size matter?** 12 candles (60 min) vs 40 candles (200 min) — 
-  do larger windows produce more stable regime detection?
-- **k selection:** default k=32 in harness. Plot residual vs k on real data to
-  find the knee empirically.
-- **Engram action label:** currently all minted engrams start as "HOLD". 
-  Should we label based on next-candle direction at mint time?
-- **Regime-aware minting:** only mint during high-volatility windows (ATR > threshold)?
-  Might reduce noise engrams.
+- **Optimal window?** Default is 12 candles (60 min). The geometry validation gate's
+  `--window 6 12 24` sweep will answer this empirically via engram quality metrics.
+- **k selection:** Default k=16 per stripe (128 total). Plot per-stripe residual variance
+  vs k on real data to find the knee.
+- **Engram action label:** All minted engrams start as "HOLD". Should we label based on
+  next-candle direction at mint time? Would seed the system with directional signal earlier.
+- **Library matching on stripe[0]:** Currently uses first stripe vec as the match key.
+  Better approach: store all stripe vecs in engram and match on RSS across stripes.
+- **Darwinism with nested paths:** `update_weights()` now takes flat keys but the encoder
+  uses nested field paths (e.g. `t0.macd.hist`). The Darwinism→weight gating bridge needs
+  a redesign once we have real data to know which fields actually matter.
 
 ---
 
 ## Lessons Captured
 
-See `HOLON_CONTEXT.md` for the full list. Key ones that bit us:
+See `HOLON_CONTEXT.md` for the full list. Key ones:
 
-1. `HolonClient(dimensions=...)` — not `dim=`
-2. Score before update — `residual()` THEN `update()`, never reversed
-3. Bipolar MAP cosine — use `np.array_equal` for identity, cosine only for relative comparison
-4. RSI with all-gains returns 100 (fixed); was returning 50 (divide-by-zero guard was wrong)
-5. `EngramLibrary.add()` takes metadata as `**kwargs`, not a positional dict
+1. `encode_walkable_striped` is on `client.encoder`, NOT `client` — AttributeError otherwise
+2. `LOOKBACK_CANDLES + WINDOW_CANDLES` rows required — not just `LOOKBACK_CANDLES`
+3. DMI/ADX division-by-zero on flat price series — guard `tr_smooth=0` with `.replace(0, nan)`
+4. Score before update — `residual()` THEN `update()`, never reversed
+5. Bipolar MAP cosine — use `np.array_equal` for identity, cosine only for relative comparison
+6. `StripedSubspace.threshold` is inf until all stripes have enough observations (k+1 each)
+7. Grok Code (the wrong model) partially implemented this plan and left things broken —
+   always verify test suite passes before treating work as done
