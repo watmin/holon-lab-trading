@@ -95,6 +95,7 @@ class DiscoveryHarness:
                 # --- Phase A: probe existing engrams ---
                 matches = self.library.match(vec, top_k=3)
                 action, confidence, used_ids = "HOLD", 0.5, []
+                surprise_profile: dict[str, float] = {}
 
                 if matches and matches[0][1] < match_threshold:
                     name, _residual = matches[0]
@@ -113,6 +114,10 @@ class DiscoveryHarness:
 
                     subspace.update(vec)
 
+                    # Compute field attribution from the anomalous component
+                    anomalous = subspace.anomalous_component(vec)
+                    surprise_profile = self.encoder.build_surprise_profile(anomalous)
+
                     # Mint on surprise (threshold is finite after step 1)
                     if (
                         not np.isinf(pre_residual)
@@ -124,7 +129,7 @@ class DiscoveryHarness:
                         self.library.add(
                             name,
                             subspace,
-                            None,  # surprise_profile — not computed here
+                            surprise_profile or None,
                             action="HOLD",
                             confidence=0.5,
                             score=0.0,
@@ -141,11 +146,14 @@ class DiscoveryHarness:
                     notes=f"ep={ep},step={step}",
                 )
 
-                # --- Score used engrams against next candle ---
+                # --- Score used engrams + update Darwinism on next candle ---
                 if step < len(windows) - 1:
                     next_close = windows[step + 1]["close"].iloc[-1]
                     actual_return = (next_close / price) - 1.0
                     self._score_engrams(used_ids, action, actual_return)
+                    # Feed per-field surprise into darwinism even on HOLD steps
+                    if surprise_profile:
+                        self.darwinism.update(surprise_profile, actual_return, action)
 
             print(
                 f"  ep {ep + 1:>3}/{num_episodes} | "

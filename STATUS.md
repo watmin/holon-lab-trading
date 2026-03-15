@@ -7,9 +7,9 @@
 
 ## Current State
 
-**Git:** `main` — 3 commits  
-**Tests:** 124 passing (last clean run: 2026-03-15, commit `107a2f4`)  
-**Blocker:** none — holon port landed, tests green again.
+**Git:** `main` — 4 commits  
+**Tests:** 143 passing (last clean run: 2026-03-15)  
+**Blocker:** none.
 
 ---
 
@@ -24,6 +24,10 @@
 | `feed.py` | ✅ complete | 10 | Window math, episode logic, replay, next_close |
 | `harness.py` | ✅ complete | 9 | Score-first, engram minting, EMA scoring |
 | `system.py` | ✅ complete | 0 | Two-phase orchestrator (live system, not unit-testable) |
+| `encoder.py` `build_surprise_profile()` | ✅ complete | 8 | Field attribution via leaf_binding + anomalous_component |
+| Darwinism wiring | ✅ complete | 10 | update() called in harness loop and RealTimeConsumer |
+| `scripts/report.py` | ✅ complete | 0 | Read-only status CLI: equity, Sharpe, feature rankings |
+| `scripts/validate_geometry.py` | ✅ complete | 0 | 5 geometry experiments, all passing on synthetic data |
 
 ---
 
@@ -75,6 +79,12 @@ Key findings from building this:
 
 Critical insight captured: **LogScale compresses absolute price differences — it's volatility
 regime shift, not price level, that drives indicator shape and thus subspace residual.**
+
+### Step 3b — Wire Darwinism + field attribution ✅ DONE
+- `OHLCVEncoder.build_surprise_profile(anomalous)` — `leaf_binding + abs(cosine)` per field
+- Harness scoring loop calls `darwinism.update()` with surprise profile on every step
+- `RealTimeConsumer` does the same with the realized return from the previous candle
+- `scripts/report.py` — read-only CLI showing equity, Sharpe, drawdown, feature rankings
 
 ### Step 4 — Run geometry validation on real data
 ```bash

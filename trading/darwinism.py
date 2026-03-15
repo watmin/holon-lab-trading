@@ -43,22 +43,28 @@ class FeatureDarwinism:
             or (action == "SELL" and realized_return < 0)
         )
 
+        # HOLD is neutral — no direction claim, no reward or punishment
+        if action == "HOLD":
+            return
+
         for field, surprise in surprise_profile.items():
             if field not in self.importance:
                 continue
 
-            fitness = (1.0 - surprise)  # low surprise = good fit
-            if direction_correct:
-                delta = fitness * 0.1
-            else:
-                delta = -fitness * 0.1
+            # surprise ∈ [0, 1]; fitness = 1 - surprise so low surprise → high fitness
+            fitness = 1.0 - float(surprise)
 
+            # Signal: +fitness if direction correct, -fitness if wrong
+            signal = fitness if direction_correct else -fitness
+
+            # EMA toward signal, importance clamped to [-1, 1]
             old = self.importance[field]
-            self.importance[field] = (
-                (1 - self.ema_alpha) * old + self.ema_alpha * (old + delta)
-            )
+            self.importance[field] = max(-1.0, min(1.0,
+                (1 - self.ema_alpha) * old + self.ema_alpha * signal
+            ))
 
-            self.weights[field] = max(0.01, self.weights[field] + delta * 0.05)
+            # Weight tracks importance, floored at 0.01
+            self.weights[field] = max(0.01, self.weights[field] + signal * 0.02)
 
     def get_weights(self) -> dict[str, float]:
         """Current weights, excluding pruned fields."""

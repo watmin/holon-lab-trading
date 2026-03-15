@@ -59,20 +59,30 @@ class RealTimeConsumer:
     def run(self, symbol: str = "BTC/USDT", timeframe: str = "5m") -> None:
         feed = LiveFeed(symbol=symbol, timeframe=timeframe, window=200)
         print(f"Phase 1 started: real-time consumer on {timeframe} {symbol}")
+        prev_price: float | None = None
 
         for window_df in feed.stream():
             t0 = time.perf_counter()
             vec = self.encoder.encode(window_df)
             latency_ms = (time.perf_counter() - t0) * 1000
 
-            action, confidence, used_ids = self._decide(vec)
+            action, confidence, used_ids, surprise_profile = self._decide(vec)
 
-            price = window_df["close"].iloc[-1]
+            price = float(window_df["close"].iloc[-1])
             entry = self.tracker.record(
                 action, confidence, price,
                 latency_ms=latency_ms,
                 used_engrams=used_ids,
             )
+
+            # Update Darwinism with realized return from previous candle
+            if prev_price is not None and surprise_profile:
+                actual_return = (price / prev_price) - 1.0
+                self.darwinism.update(surprise_profile, actual_return, action)
+                # Hot-push updated weights into encoder immediately
+                self.encoder.update_weights(self.darwinism.get_weights())
+
+            prev_price = price
 
             print(
                 f"[{entry['ts'][-8:]}] {action:4s} | "
@@ -84,8 +94,15 @@ class RealTimeConsumer:
 
             self._maybe_reload()
 
-    def _decide(self, vec) -> tuple[str, float, list[str]]:
-        """Probe library; if no match, update subspace and maybe mint."""
+    def _decide(
+        self, vec: "np.ndarray"
+    ) -> "tuple[str, float, list[str], dict[str, float]]":
+        """Probe library; if no match, update subspace and maybe mint.
+
+        Returns (action, confidence, used_engram_ids, surprise_profile).
+        surprise_profile is non-empty when we updated the subspace (no match path).
+        """
+        import math
         matches = self.library.match(vec, top_k=3)
 
         if matches and matches[0][1] < self.match_threshold:
@@ -96,19 +113,25 @@ class RealTimeConsumer:
                     eng.metadata.get("action", "HOLD"),
                     eng.metadata.get("confidence", 0.5),
                     [name],
+                    {},  # matched path — no new surprise profile
                 )
 
-        # Score before updating (HOLON_CONTEXT rule)
+        # Score before updating (HOLON_CONTEXT rule: residual() THEN update())
         pre_residual = (
             self.subspace.residual(vec)
-            if not __import__("math").isinf(self.subspace.threshold)
+            if not math.isinf(self.subspace.threshold)
             else float("inf")
         )
         self.subspace.update(vec)
 
+        # Build per-field surprise attribution from anomalous component
+        anomalous = self.subspace.anomalous_component(vec)
+        surprise_profile = self.encoder.build_surprise_profile(anomalous)
+
+        # Mint a new engram if the pattern is genuinely surprising
         if (
-            not __import__("math").isinf(pre_residual)
-            and not __import__("math").isinf(self.subspace.threshold)
+            not math.isinf(pre_residual)
+            and not math.isinf(self.subspace.threshold)
             and pre_residual > self.subspace.threshold
         ):
             self._engram_counter += 1
@@ -116,14 +139,14 @@ class RealTimeConsumer:
             self.library.add(
                 name,
                 self.subspace,
-                None,
+                surprise_profile or None,
                 action="HOLD",
                 confidence=0.5,
                 score=0.0,
                 origin="live",
             )
 
-        return "HOLD", 0.5, []
+        return "HOLD", 0.5, [], surprise_profile
 
     def _maybe_reload(self) -> None:
         """Hot-reload engram library and weights if critic shipped a new version."""
