@@ -440,6 +440,57 @@ For tests, dim=512 with n_stripes=4 is fast enough to validate logic without geo
 
 ---
 
+## Geometry Gate: Subspace Residuals, Not Pairwise Cosine
+
+When validating whether a class of market windows (e.g., BUY reversals) forms an
+algebraically separable manifold, the **wrong** approach is pairwise cosine similarity
+between encoded bundle vectors. This is the batch-017 "cosine-to-centroid" mistake:
+
+- Two BUY reversals at $4k (2019) and $80k (2024) have very different absolute indicator
+  values. Raw bundle-to-bundle cosine will be low — not because they lack shared structure,
+  but because absolute magnitudes differ across market regimes.
+- Pairwise cosine is magnitude-only. It asks "do these windows look alike?" not "do they
+  share an algebraic manifold?"
+
+**The correct geometry gate:**
+
+```python
+# Train a StripedSubspace on labeled reversal windows (train split)
+ss_reversal = StripedSubspace(dim=1024, k=32, n_stripes=8)
+for stripe_vecs in train_reversal_windows:
+    ss_reversal.update(stripe_vecs)
+
+# Train a noise subspace on random windows
+ss_noise = StripedSubspace(dim=1024, k=32, n_stripes=8)
+for stripe_vecs in random_windows:
+    ss_noise.update(stripe_vecs)
+
+# For each test reversal:
+delta = ss_noise.residual(window) - ss_reversal.residual(window)
+# delta > 0 → fits reversal manifold better than noise → geometric separability
+```
+
+One-sample t-test on `delta` vs 0 (alternative="greater"). If p < 0.05 and mean delta > 0,
+the reversal windows define a learnable algebraic manifold distinct from general noise.
+
+**Empirical result (652k candles, 2019–2025, 2% prominence):**
+- BUY: delta=+2.13±2.18, t=8.39, p≈0.000 ✓
+- SELL: delta=+1.11±1.95, t=4.91, p≈0.000 ✓
+
+Random windows score: delta=-3.3 (they fit the noise subspace, not the reversal one).
+
+**The key insight:** `StripedSubspace` learns directions of variance, not centroids.
+Two reversal windows from completely different price regimes can share the same manifold
+(same structural pattern in RSI momentum, BB position, MACD divergence shape) even when
+their bundle vectors have low cosine similarity. The residual measures fit to structure,
+not closeness to a centroid.
+
+**K=32 per stripe, DIM=1024** — per the parameter sweep finding: K is the quality lever
+for rank-1 per-stripe data, not DIM. Increasing K doubles separation; doubling DIM barely
+changes it. Use K≥32 for the geometry gate.
+
+---
+
 ## What This Lab Proves
 
 The holon Python library (no modifications) can encode OHLCV market data into a

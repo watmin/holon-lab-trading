@@ -66,6 +66,15 @@ class OHLCVEncoder:
         walkable = self._build_window_walkable(df)
         return self.client.encoder.encode_walkable_striped(walkable, n_stripes=self.n_stripes)
 
+    def encode_from_precomputed(self, df_ind: pd.DataFrame) -> list[np.ndarray]:
+        """Encode from a DataFrame that already has all indicator columns.
+
+        Skips indicator computation (saves ~15ms per call). df_ind must contain at
+        least window_candles rows with all indicator columns already present.
+        """
+        walkable = self._build_walkable_from_precomputed(df_ind)
+        return self.client.encoder.encode_walkable_striped(walkable, n_stripes=self.n_stripes)
+
     def encode_with_walkable(
         self, df: pd.DataFrame
     ) -> tuple[list[np.ndarray], dict[str, Any]]:
@@ -179,6 +188,42 @@ class OHLCVEncoder:
         # Time features once per window — not per candle (avoids 12x identical bindings)
         if "timestamp" in df_ind.columns:
             last_ts = pd.to_datetime(df_ind["timestamp"].iloc[-1])
+        else:
+            last_ts = pd.Timestamp.now()
+
+        walkable["time"] = {
+            "hour_sin": LinearScale(float(np.sin(2 * np.pi * last_ts.hour / 24))),
+            "hour_cos": LinearScale(float(np.cos(2 * np.pi * last_ts.hour / 24))),
+            "dow_sin": LinearScale(float(np.sin(2 * np.pi * last_ts.dayofweek / 7))),
+            "dow_cos": LinearScale(float(np.cos(2 * np.pi * last_ts.dayofweek / 7))),
+        }
+
+        return walkable
+
+    def _build_walkable_from_precomputed(self, df_ind: pd.DataFrame) -> dict[str, Any]:
+        """Build the walkable dict from a DataFrame that already has all indicator columns.
+
+        df_ind must already contain indicator columns (sma20, rsi, etc.) and at least
+        window_candles rows. Skips compute_indicators — use this when indicators have
+        been computed once across the full dataset and df_ind is a slice of that result.
+        """
+        if len(df_ind) < self.window_candles:
+            raise ValueError(
+                f"Need at least {self.window_candles} rows in pre-indicator df, "
+                f"got {len(df_ind)}"
+            )
+
+        walkable: dict[str, Any] = {}
+
+        for i in range(self.window_candles):
+            row_idx = len(df_ind) - self.window_candles + i
+            candle_raw = self.factory.compute_candle_row(df_ind, row_idx)
+            walkable[f"t{i}"] = self._wrap_candle(candle_raw)
+
+        # Time features from last candle
+        ts_col = "ts" if "ts" in df_ind.columns else "timestamp"
+        if ts_col in df_ind.columns:
+            last_ts = pd.to_datetime(df_ind[ts_col].iloc[-1])
         else:
             last_ts = pd.Timestamp.now()
 

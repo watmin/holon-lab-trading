@@ -7,15 +7,32 @@ Prominence: a peak must rise/fall at least PROMINENCE_PCT% from its surrounding
 base before being counted. This filters microstructure noise while preserving
 real regime changes.
 
+GEOMETRY GATE — The Correct Holon Approach
+==========================================
+We do NOT use pairwise cosine similarity between encoded bundle vectors.
+That is the "cosine-to-centroid" mistake documented in the Holon learning history
+(batch 017): magnitude-only, misses non-radial structure, asks if windows look
+similar to *each other* rather than whether they share an algebraic manifold.
+
+The correct test (from the memory primer and residual-profile post):
+  1. Split labeled reversals into train/test halves.
+  2. Train a StripedSubspace on the train reversals → "reversal manifold".
+  3. Train a StripedSubspace on random windows → "noise manifold".
+  4. For each test reversal, compute:
+       residual_rev  = reversal_subspace.residual(window)
+       residual_rand = random_subspace.residual(window)
+  5. For each random window (held out), compute the same pair.
+  6. Signal: reversal windows should have LOW residual against the reversal
+     subspace and HIGH residual against the random subspace (and vice versa
+     for random windows). t-test on (residual_rand - residual_rev) vs 0.
+
+If this passes, the reversal windows define a learnable algebraic manifold
+that is distinct from general market noise — not just visually clustered,
+but geometrically separable by StripedSubspace residual.
+
 Outputs:
   data/reversal_labels.parquet  — full candle DataFrame with action column
-  data/reversal_report.txt      — summary statistics and geometry validation
-
-Then runs a geometry gate:
-  - Encode windows ending at each labeled reversal
-  - Encode equal number of random (unlabeled) windows
-  - Test whether the two groups are algebraically separable (t-test on cosine sim)
-  - If separable: mint seed engrams from labeled reversals
+  data/seed_engrams.json        — minted seed engrams (if gate passes)
 
 Usage:
     ./scripts/run_with_venv.sh python scripts/label_reversals.py
@@ -31,7 +48,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from scipy.signal import find_peaks
-from scipy.stats import ttest_ind
+from scipy.stats import ttest_1samp, ttest_ind
 
 # Make trading package importable
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -52,8 +69,8 @@ LABEL_OFFSET   = 1      # label this many bars BEFORE the reversal (what a trade
 N_STRIPES      = OHLCVEncoder.N_STRIPES
 WINDOW_CANDLES = OHLCVEncoder.WINDOW_CANDLES
 LOOKBACK       = OHLCVEncoder.LOOKBACK_CANDLES
-DIM            = 512    # smaller for speed in the geometry test
-K              = 16
+DIM            = 1024   # per-stripe dim — K is the quality lever, not DIM
+K              = 32     # deflation steps: K dominates quality for rank-1 per-stripe data
 
 
 # ---------------------------------------------------------------------------
@@ -88,14 +105,11 @@ def label_reversals(
     df = df.copy()
     df["action"] = "HOLD"
 
-    # Place labels `offset` bars before the reversal
-    for idx in peaks:
-        label_idx = max(0, idx - offset)
-        df.iloc[label_idx, df.columns.get_loc("action")] = "SELL"
-
-    for idx in troughs:
-        label_idx = max(0, idx - offset)
-        df.iloc[label_idx, df.columns.get_loc("action")] = "BUY"
+    # Vectorized label placement — avoid per-row iloc which is O(n) per assignment
+    peak_labels   = np.clip(peaks - offset, 0, len(df) - 1)
+    trough_labels = np.clip(troughs - offset, 0, len(df) - 1)
+    df.iloc[peak_labels, df.columns.get_loc("action")]   = "SELL"
+    df.iloc[trough_labels, df.columns.get_loc("action")] = "BUY"
 
     return df, peaks, troughs
 
@@ -104,105 +118,180 @@ def label_reversals(
 # Geometry validation
 # ---------------------------------------------------------------------------
 
-def encode_window(encoder: OHLCVEncoder, df: pd.DataFrame, end_idx: int) -> list[np.ndarray] | None:
-    """Encode the window ending at end_idx. Returns None if insufficient data."""
-    needed = LOOKBACK + WINDOW_CANDLES
-    start = end_idx - needed + 1
-    if start < 0:
+def encode_window(encoder: OHLCVEncoder, df_ind: pd.DataFrame, end_idx: int) -> list[np.ndarray] | None:
+    """Encode the window ending at end_idx from a pre-indicator DataFrame.
+
+    df_ind must already have all indicator columns computed (via precompute_indicators).
+    Uses encode_from_precomputed() to skip re-running compute_indicators.
+    end_idx is a positional iloc index into df_ind.
+    """
+    start = end_idx - WINDOW_CANDLES + 1
+    if start < 0 or end_idx >= len(df_ind):
         return None
-    window_df = df.iloc[start:end_idx + 1].copy()
-    if len(window_df) < needed:
+    window_df = df_ind.iloc[start:end_idx + 1]
+    if len(window_df) < WINDOW_CANDLES:
         return None
     try:
-        return encoder.encode(window_df)
+        return encoder.encode_from_precomputed(window_df)
     except Exception:
         return None
 
 
-def agg_cosine(vecs_a: list[np.ndarray], vecs_b: list[np.ndarray]) -> float:
-    """Mean per-stripe cosine similarity between two stripe vector lists."""
-    sims = []
-    for a, b in zip(vecs_a, vecs_b):
-        a_f, b_f = a.astype(float), b.astype(float)
-        na, nb = np.linalg.norm(a_f), np.linalg.norm(b_f)
-        if na > 1e-10 and nb > 1e-10:
-            sims.append(float(np.dot(a_f, b_f) / (na * nb)))
-    return float(np.mean(sims)) if sims else 0.0
+def train_subspace(
+    stripe_vecs_list: list[list[np.ndarray]],
+    dim: int,
+    k: int,
+    n_stripes: int,
+) -> StripedSubspace:
+    """Train a StripedSubspace on a list of stripe vector observations."""
+    ss = StripedSubspace(dim=dim, k=k, n_stripes=n_stripes)
+    for stripe_vecs in stripe_vecs_list:
+        ss.update(stripe_vecs)
+    return ss
+
+
+def precompute_indicators(df: pd.DataFrame) -> pd.DataFrame:
+    """Run indicator computation once across the full dataset.
+
+    Returns a DataFrame with all indicator columns added. This is the expensive
+    step — do it once, then all window slices are just iloc[] operations.
+    """
+    from trading.features import TechnicalFeatureFactory
+    factory = TechnicalFeatureFactory()
+    return factory.compute_indicators(df)
 
 
 def geometry_gate(
-    df: pd.DataFrame,
+    df_ind: pd.DataFrame,
     encoder: OHLCVEncoder,
     reversal_indices: np.ndarray,
     label: str,
     n_sample: int = 200,
     rng: np.random.Generator = None,
 ) -> dict:
-    """Test whether reversal windows are geometrically separable from random windows.
+    """Test whether reversal windows define a learnable algebraic manifold.
 
-    Returns a dict with keys: within_mean, random_mean, separation, t_stat, p_value, passed.
+    The correct Holon approach — NOT pairwise cosine between bundle vectors.
+    That is the batch-017 mistake (cosine-to-centroid = magnitude only).
+
+    Method:
+      1. Split reversal_indices into train/test halves.
+      2. Encode all train reversals → train StripedSubspace on them.
+      3. Encode n_sample random windows → train a "noise" StripedSubspace.
+      4. For each test reversal: compute residual against both subspaces.
+      5. Signal: delta = residual_noise - residual_reversal should be > 0.
+         t-test against zero (one-sample, alternative="greater").
+
+    If delta is significantly positive, reversal windows fit the reversal
+    manifold better than the noise manifold — geometric separability proven.
+
+    Returns dict with: reversal_residual_mean, noise_residual_mean, delta_mean,
+                       t_stat, p_value, passed.
     """
     if rng is None:
         rng = np.random.default_rng(0)
 
-    # Encode reversal windows
-    rev_vecs = []
-    for idx in reversal_indices:
-        v = encode_window(encoder, df, idx)
+    min_idx = WINDOW_CANDLES
+
+    # Shuffle and partition reversal indices into train / test
+    valid_rev = [i for i in reversal_indices if i >= min_idx]
+    if len(valid_rev) < 20:
+        return {"error": f"Too few {label} reversal indices: {len(valid_rev)}"}
+    rng.shuffle(valid_rev)
+    n_use = min(n_sample, len(valid_rev))
+    n_train = n_use // 2
+    train_indices = valid_rev[:n_train]
+    test_indices  = valid_rev[n_train:n_use]
+
+    # --- Encode training reversals ---
+    print(f"    encoding {n_train} {label} train reversals...", flush=True)
+    train_vecs = []
+    for idx in train_indices:
+        v = encode_window(encoder, df_ind, idx)
         if v is not None:
-            rev_vecs.append(v)
-        if len(rev_vecs) >= n_sample:
-            break
+            train_vecs.append(v)
 
-    if len(rev_vecs) < 10:
-        return {"error": f"Too few encodable {label} reversals: {len(rev_vecs)}"}
+    if len(train_vecs) < 5:
+        return {"error": f"Too few encodable {label} train reversals: {len(train_vecs)}"}
 
-    # Encode random windows (same count, avoid reversal indices)
+    # --- Encode test reversals ---
+    print(f"    encoding {len(test_indices)} {label} test reversals...", flush=True)
+    test_vecs = []
+    for idx in test_indices:
+        v = encode_window(encoder, df_ind, idx)
+        if v is not None:
+            test_vecs.append(v)
+
+    if len(test_vecs) < 5:
+        return {"error": f"Too few encodable {label} test reversals: {len(test_vecs)}"}
+
+    # --- Encode random (noise) windows ---
     rev_set = set(reversal_indices.tolist())
-    valid_random = [i for i in range(LOOKBACK + WINDOW_CANDLES, len(df))
-                    if i not in rev_set]
-    random_sample = rng.choice(valid_random, size=min(len(rev_vecs), len(valid_random)),
-                               replace=False)
+    valid_rand = [i for i in range(min_idx, len(df_ind)) if i not in rev_set]
+    rand_sample_idx = rng.choice(valid_rand, size=min(n_use, len(valid_rand)), replace=False)
+    print(f"    encoding {len(rand_sample_idx)} random (noise) windows...", flush=True)
     rand_vecs = []
-    for idx in random_sample:
-        v = encode_window(encoder, df, idx)
+    for idx in rand_sample_idx:
+        v = encode_window(encoder, df_ind, idx)
         if v is not None:
             rand_vecs.append(v)
-        if len(rand_vecs) >= len(rev_vecs):
-            break
 
-    # Within-reversal pairwise cosine (sample pairs)
-    n_pairs = min(500, len(rev_vecs) * (len(rev_vecs) - 1) // 2)
-    within_scores = []
-    indices = rng.choice(len(rev_vecs), size=(n_pairs, 2), replace=True)
-    for i, j in indices:
-        if i != j:
-            within_scores.append(agg_cosine(rev_vecs[i], rev_vecs[j]))
+    if len(rand_vecs) < 10:
+        return {"error": f"Too few random windows: {len(rand_vecs)}"}
 
-    # Random pairwise cosine
-    random_scores = []
-    indices_r = rng.choice(len(rand_vecs), size=(n_pairs, 2), replace=True)
-    for i, j in indices_r:
-        if i != j:
-            random_scores.append(agg_cosine(rand_vecs[i], rand_vecs[j]))
+    # --- Train subspaces ---
+    print(f"    training reversal subspace on {len(train_vecs)} samples...", flush=True)
+    ss_reversal = train_subspace(train_vecs, DIM, K, N_STRIPES)
 
-    within_mean = float(np.mean(within_scores))
-    random_mean = float(np.mean(random_scores))
-    sep = within_mean - random_mean
-    t_stat, p_value = ttest_ind(within_scores, random_scores, alternative="greater")
+    n_rand_train = len(rand_vecs) // 2
+    print(f"    training noise subspace on {n_rand_train} samples...", flush=True)
+    ss_noise = train_subspace(rand_vecs[:n_rand_train], DIM, K, N_STRIPES)
+
+    rand_test_vecs = rand_vecs[n_rand_train:]
+
+    # --- Score test reversals against both manifolds ---
+    # delta > 0 means the window fits the reversal manifold better than noise
+    rev_deltas = []
+    for sv in test_vecs:
+        r_rev  = ss_reversal.residual(sv)
+        r_noise = ss_noise.residual(sv)
+        if not (np.isnan(r_rev) or np.isnan(r_noise) or np.isinf(r_rev) or np.isinf(r_noise)):
+            rev_deltas.append(float(r_noise - r_rev))
+
+    # --- Score held-out random windows against both manifolds (control) ---
+    rand_deltas = []
+    for sv in rand_test_vecs:
+        r_rev  = ss_reversal.residual(sv)
+        r_noise = ss_noise.residual(sv)
+        if not (np.isnan(r_rev) or np.isnan(r_noise) or np.isinf(r_rev) or np.isinf(r_noise)):
+            rand_deltas.append(float(r_noise - r_rev))
+
+    if len(rev_deltas) < 5:
+        return {"error": f"Too few scoreable {label} test windows: {len(rev_deltas)}"}
+
+    delta_mean = float(np.mean(rev_deltas))
+    delta_std  = float(np.std(rev_deltas))
+    rand_delta_mean = float(np.mean(rand_deltas)) if rand_deltas else 0.0
+
+    # One-sample t-test: is the mean delta significantly > 0?
+    t_stat, p_value = ttest_1samp(rev_deltas, popmean=0.0, alternative="greater")
+
+    # Also check reversal deltas are higher than random deltas (two-sample)
+    t2, p2 = ttest_ind(rev_deltas, rand_deltas, alternative="greater") if rand_deltas else (0.0, 1.0)
 
     return {
         "label": label,
-        "n_reversals": len(rev_vecs),
+        "n_train": len(train_vecs),
+        "n_test": len(test_vecs),
         "n_random": len(rand_vecs),
-        "within_mean": within_mean,
-        "within_std": float(np.std(within_scores)),
-        "random_mean": random_mean,
-        "random_std": float(np.std(random_scores)),
-        "separation": sep,
-        "t_stat": float(t_stat),
-        "p_value": float(p_value),
-        "passed": sep > 0 and p_value < 0.05,
+        "reversal_delta_mean": delta_mean,
+        "reversal_delta_std": delta_std,
+        "random_delta_mean": rand_delta_mean,
+        "t_stat_vs_zero": float(t_stat),
+        "p_value_vs_zero": float(p_value),
+        "t_stat_vs_random": float(t2),
+        "p_value_vs_random": float(p2),
+        "passed": delta_mean > 0 and p_value < 0.05,
     }
 
 
@@ -211,33 +300,34 @@ def geometry_gate(
 # ---------------------------------------------------------------------------
 
 def mint_reversal_engrams(
-    df: pd.DataFrame,
+    df_ind: pd.DataFrame,
     encoder: OHLCVEncoder,
-    labeled_df: pd.DataFrame,
+    peaks_ind: np.ndarray,
+    troughs_ind: np.ndarray,
     library: EngramLibrary,
     rng: np.random.Generator,
     max_engrams: int = 50,
 ) -> int:
-    """Train a StripedSubspace on each reversal cluster and mint an engram.
+    """Train a StripedSubspace on each reversal and mint a seed engram.
 
-    Groups reversals into temporal clusters (within 48h of each other),
-    trains a subspace on each cluster's windows, and mints one engram per cluster.
+    peaks_ind / troughs_ind are positional indices into df_ind (already mapped from
+    raw df space by subtracting the NaN warmup row count).
     """
-    buy_rows  = labeled_df[labeled_df["action"] == "BUY"].index.tolist()
-    sell_rows = labeled_df[labeled_df["action"] == "SELL"].index.tolist()
+    buy_rows  = troughs_ind.tolist()
+    sell_rows = peaks_ind.tolist()
 
     minted = 0
     for action, indices in [("BUY", buy_rows), ("SELL", sell_rows)]:
         # Shuffle and take up to max_engrams // 2 individual reversal engrams
         rng.shuffle(indices)
         for idx in indices[:max_engrams // 2]:
-            v = encode_window(encoder, df, idx)
+            v = encode_window(encoder, df_ind, idx)
             if v is None:
                 continue
             ss = StripedSubspace(dim=DIM, k=K, n_stripes=N_STRIPES)
             # Seed with the reversal window + its neighbors for a richer manifold
             for offset in range(-3, 4):
-                neighbor = encode_window(encoder, df, idx + offset)
+                neighbor = encode_window(encoder, df_ind, idx + offset)
                 if neighbor is not None:
                     ss.update(neighbor)
             if ss.n < 3:
@@ -260,7 +350,7 @@ def mint_reversal_engrams(
 
 def main():
     parser = argparse.ArgumentParser(description="Label BTC reversals and validate geometry")
-    parser.add_argument("--parquet", default="holon-lab-trading/data/btc_5m.parquet")
+    parser.add_argument("--parquet", default="holon-lab-trading/data/btc_5m_raw.parquet")
     parser.add_argument("--prominence", type=float, default=PROMINENCE_PCT,
                         help="Min price move fraction for valid reversal (default 0.02 = 2%%)")
     parser.add_argument("--min-dist", type=int, default=MIN_DIST_BARS,
@@ -278,6 +368,7 @@ def main():
     print(f"  close range: ${df['close'].min():,.0f} – ${df['close'].max():,.0f}")
 
     # --- Label reversals ---
+    print("Labeling reversals...", flush=True)
     labeled_df, peaks, troughs = label_reversals(
         df,
         prominence_pct=args.prominence,
@@ -310,6 +401,20 @@ def main():
     client = HolonClient(dimensions=DIM)
     encoder = OHLCVEncoder(client)
 
+    # --- Precompute indicators once across the full dataset ---
+    print("Precomputing indicators across full dataset (once)...", flush=True)
+    df_ind = precompute_indicators(df)
+    n_dropped = len(df) - len(df_ind)
+    print(f"  {len(df_ind):,} rows with indicators ready ({n_dropped} NaN warmup rows dropped)")
+
+    # Map raw df indices → df_ind positional indices (NaN warmup rows were dropped from the front)
+    def to_ind_idx(raw_idx: np.ndarray) -> np.ndarray:
+        shifted = raw_idx - n_dropped
+        return shifted[shifted >= 0]
+
+    peaks_ind = to_ind_idx(peaks)
+    troughs_ind = to_ind_idx(troughs)
+
     # --- Geometry gate ---
     rng = np.random.default_rng(42)
     print("\n" + "=" * 60)
@@ -317,18 +422,19 @@ def main():
     print("=" * 60)
 
     results = {}
-    for label, indices in [("BUY", troughs), ("SELL", peaks)]:
+    for label, indices in [("BUY", troughs_ind), ("SELL", peaks_ind)]:
         print(f"\n[{label}] Testing {len(indices)} reversal windows...")
-        r = geometry_gate(df, encoder, indices, label, n_sample=300, rng=rng)
+        r = geometry_gate(df_ind, encoder, indices, label, n_sample=150, rng=rng)
         results[label] = r
         if "error" in r:
             print(f"  ERROR: {r['error']}")
             continue
         status = "✓ PASS" if r["passed"] else "✗ FAIL"
-        print(f"  [{status}] within={r['within_mean']:.4f}±{r['within_std']:.4f}  "
-              f"random={r['random_mean']:.4f}±{r['random_std']:.4f}")
-        print(f"           sep={r['separation']:+.4f}  t={r['t_stat']:.2f}  p={r['p_value']:.4f}")
-        print(f"           n_reversals={r['n_reversals']}  n_random={r['n_random']}")
+        print(f"  [{status}] reversal_delta={r['reversal_delta_mean']:+.4f}±{r['reversal_delta_std']:.4f}  "
+              f"random_delta={r['random_delta_mean']:+.4f}")
+        print(f"           t(vs 0)={r['t_stat_vs_zero']:.2f}  p={r['p_value_vs_zero']:.4f}  "
+              f"t(vs rand)={r['t_stat_vs_random']:.2f}  p={r['p_value_vs_random']:.4f}")
+        print(f"           n_train={r['n_train']}  n_test={r['n_test']}  n_random={r['n_random']}")
 
     print("\n" + "=" * 60)
     all_passed = all(r.get("passed", False) for r in results.values() if "error" not in r)
@@ -343,7 +449,9 @@ def main():
     if not args.no_mint and all_passed:
         print("\nMinting reversal engrams...")
         library = EngramLibrary(dim=DIM)
-        n_minted = mint_reversal_engrams(df, encoder, labeled_df, library, rng)
+        n_minted = mint_reversal_engrams(
+            df_ind, encoder, peaks_ind, troughs_ind, library, rng
+        )
         engram_path = "holon-lab-trading/data/seed_engrams.json"
         library.save(engram_path)
         print(f"  Minted {n_minted} engrams → {engram_path}")
