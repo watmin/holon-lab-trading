@@ -23,29 +23,35 @@ _COLUMNS = ["timestamp", "open", "high", "low", "close", "volume"]
 
 
 class LiveFeed:
-    """Polls exchange for latest candles on each 5-minute boundary."""
+    """Polls exchange for latest candles on each 5-minute boundary.
+
+    Uses OKX (not Binance — geo-blocked in many regions). Falls back to
+    ReplayFeed automatically when parquet_path is provided (for local testing).
+    """
 
     def __init__(
         self,
         symbol: str = "BTC/USDT",
         timeframe: str = "5m",
         window: int = 200,
+        exchange_id: str = "okx",
     ):
         self.symbol = symbol
         self.timeframe = timeframe
         self.window = window
+        self.exchange_id = exchange_id
 
     def stream(self) -> Iterator[pd.DataFrame]:
         """Yield the latest `window` candles every 5 minutes, aligned to candle close."""
         import ccxt
 
-        exchange = ccxt.binance({"enableRateLimit": True})
+        exchange = getattr(ccxt, self.exchange_id)({"enableRateLimit": True})
         while True:
             ohlcv = exchange.fetch_ohlcv(
                 self.symbol, self.timeframe, limit=self.window
             )
             df = pd.DataFrame(ohlcv, columns=_COLUMNS)
-            df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
+            df["ts"] = pd.to_datetime(df["timestamp"], unit="ms")
             df = df.reset_index(drop=True)
             yield df
 
@@ -54,6 +60,59 @@ class LiveFeed:
             interval_s = _timeframe_to_seconds(self.timeframe)
             sleep_s = interval_s - (now % interval_s) + 1.0
             time.sleep(sleep_s)
+
+
+class ReplayFeed:
+    """Drives the full consumer loop at full speed from historical parquet data.
+
+    Yields sliding windows identical in shape to LiveFeed.stream() — same
+    column names, same window size — so RealTimeConsumer.run() works unchanged.
+    Used for local integration testing and backtesting.
+
+    Each yield advances by one candle (5 minutes of simulated time).
+    """
+
+    def __init__(
+        self,
+        parquet_path: str = "data/btc_5m_raw.parquet",
+        window: int = 212,           # LOOKBACK_CANDLES + WINDOW_CANDLES
+        start_idx: int | None = None,
+        max_steps: int | None = None,
+        rng_seed: int | None = 42,
+    ):
+        self.parquet_path = Path(parquet_path)
+        self.window = window
+        self.start_idx = start_idx
+        self.max_steps = max_steps
+        self.rng_seed = rng_seed
+        self._df: pd.DataFrame | None = None
+
+    def _load(self) -> pd.DataFrame:
+        if self._df is None:
+            self._df = pd.read_parquet(self.parquet_path)
+            # Normalise column names: fetch_btc.py uses 'ts', encoder uses 'ts'
+            if "timestamp" in self._df.columns and "ts" not in self._df.columns:
+                self._df = self._df.rename(columns={"timestamp": "ts"})
+        return self._df
+
+    def stream(self) -> Iterator[pd.DataFrame]:
+        """Yield sliding windows at full speed (no sleep). Stops at end of data."""
+        df = self._load()
+
+        rng = np.random.default_rng(self.rng_seed)
+        start = self.start_idx
+        if start is None:
+            max_start = len(df) - self.window - (self.max_steps or 1)
+            start = int(rng.integers(0, max(max_start, 1)))
+
+        steps = 0
+        idx = start
+        while idx + self.window <= len(df):
+            if self.max_steps is not None and steps >= self.max_steps:
+                break
+            yield df.iloc[idx: idx + self.window].reset_index(drop=True)
+            idx += 1
+            steps += 1
 
 
 class HistoricalFeed:

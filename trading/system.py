@@ -42,7 +42,7 @@ from holon.memory import EngramLibrary, StripedSubspace
 
 from .darwinism import FeatureDarwinism
 from .encoder import OHLCVEncoder
-from .feed import LiveFeed
+from .feed import LiveFeed, ReplayFeed
 from .tracker import ExperimentTracker
 
 ENGRAM_PATH  = "data/live_engrams.json"
@@ -108,6 +108,11 @@ class _RWLock:
 class RealTimeConsumer:
     """Consume live feed, encode, recall/mint, paper trade."""
 
+    # match_threshold is auto-calibrated from the first CALIBRATION_STEPS
+    # windows. Until then, no engram matches fire (threshold = inf).
+    # After calibration, threshold = p25 of observed top-1 residuals.
+    CALIBRATION_STEPS = 50
+
     def __init__(
         self,
         encoder: OHLCVEncoder,
@@ -117,7 +122,7 @@ class RealTimeConsumer:
         tracker: ExperimentTracker,
         darwinism: FeatureDarwinism,
         engram_path: str = ENGRAM_PATH,
-        match_threshold: float = 0.3,
+        match_threshold: float | None = None,
         reload_interval_s: int = 600,
     ):
         self.encoder = encoder
@@ -127,19 +132,32 @@ class RealTimeConsumer:
         self.tracker = tracker
         self.darwinism = darwinism
         self.engram_path = Path(engram_path)
+        # None = auto-calibrate from first CALIBRATION_STEPS windows
         self.match_threshold = match_threshold
         self.reload_interval_s = reload_interval_s
         self._last_reload = time.time()
         self._engram_counter = 0
         self._stop = threading.Event()
+        self._calibration_residuals: list[float] = []
 
     def stop(self) -> None:
         self._stop.set()
 
-    def run(self, symbol: str = "BTC/USDT", timeframe: str = "5m") -> None:
-        feed = LiveFeed(symbol=symbol, timeframe=timeframe,
-                        window=OHLCVEncoder.LOOKBACK_CANDLES)
-        print(f"[consumer] started: {timeframe} {symbol}", flush=True)
+    def run(
+        self,
+        symbol: str = "BTC/USDT",
+        timeframe: str = "5m",
+        feed=None,
+    ) -> None:
+        """Run the consumer loop.
+
+        feed: any object with a .stream() -> Iterator[DataFrame] method.
+              Defaults to LiveFeed (OKX). Pass a ReplayFeed for local testing.
+        """
+        if feed is None:
+            feed = LiveFeed(symbol=symbol, timeframe=timeframe,
+                            window=OHLCVEncoder.LOOKBACK_CANDLES + OHLCVEncoder.WINDOW_CANDLES)
+        print(f"[consumer] started: {getattr(feed, 'symbol', 'replay')}", flush=True)
         prev_price: float | None = None
 
         for window_df in feed.stream():
@@ -191,7 +209,22 @@ class RealTimeConsumer:
         with self.library_lock.reading():
             matches = self.library.match_striped(stripe_vecs, top_k=3)
 
-        if matches and matches[0][1] < self.match_threshold:
+        # Auto-calibrate match threshold from first N observations
+        if self.match_threshold is None:
+            if matches:
+                self._calibration_residuals.append(matches[0][1])
+            if len(self._calibration_residuals) >= self.CALIBRATION_STEPS:
+                # p25 of seen residuals — matches the best-fit quarter of patterns
+                self.match_threshold = float(
+                    np.percentile(self._calibration_residuals, 25)
+                )
+                print(
+                    f"[consumer] match_threshold calibrated: {self.match_threshold:.2f} "
+                    f"(p25 of {len(self._calibration_residuals)} observations)",
+                    flush=True,
+                )
+
+        if matches and self.match_threshold is not None and matches[0][1] < self.match_threshold:
             name, _res = matches[0]
             with self.library_lock.reading():
                 eng = self.library.get(name)
@@ -601,8 +634,17 @@ class TradingSystem:
             self.encoder.update_weights(self.darwinism.get_weights())
             print("[system] loaded feature weights from previous run", flush=True)
 
-    def start(self, symbol: str = "BTC/USDT", timeframe: str = "5m") -> None:
-        """Start critic (daemon) then consumer (blocking). Handles SIGTERM/SIGINT."""
+    def start(
+        self,
+        symbol: str = "BTC/USDT",
+        timeframe: str = "5m",
+        feed=None,
+    ) -> None:
+        """Start critic (daemon) then consumer (blocking). Handles SIGTERM/SIGINT.
+
+        feed: optional ReplayFeed (or any .stream() object) for local testing.
+              Defaults to LiveFeed against OKX.
+        """
         critic = AsyncCritic(
             library=self.library,
             library_lock=self.library_lock,
@@ -640,7 +682,7 @@ class TradingSystem:
         signal.signal(signal.SIGINT,  _shutdown)
 
         critic.start()
-        consumer.run(symbol=symbol, timeframe=timeframe)
+        consumer.run(symbol=symbol, timeframe=timeframe, feed=feed)
 
 
 if __name__ == "__main__":

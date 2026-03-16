@@ -8,11 +8,12 @@
 ## Current State
 
 **Git:** `main`  
-**Tests:** 155 passing (last clean run: 2026-03-15)  
+**Tests:** 164 passing (last clean run: 2026-03-15)  
 **Data:** `data/btc_5m_raw.parquet` — 652,608 candles, Jan 2019 – Mar 2025 ($3,366–$108,987)  
 **Geometry gate:** ✅ PASSED — BUY t=8.39 p≈0, SELL t=4.91 p≈0  
 **Seed engrams:** `data/seed_engrams.json` — 50 minted (25 BUY + 25 SELL), thin/individual  
-**Blocker:** none — ready to design AsyncCritic consolidation loop
+**Full loop:** ✅ PROVEN — 500-step replay (17ms/decision), critic fires + ships, BUY/SELL decisions post-calibration  
+**Blocker:** none — ready to wire LiveFeed to OKX and deploy
 
 ---
 
@@ -24,9 +25,9 @@
 | `encoder.py` | ✅ complete | 30 | Window-snapshot; `encode_walkable_striped`; `encode_from_precomputed()`; `build_surprise_profile` |
 | `tracker.py` | ✅ complete | 26 | BUY/SELL/HOLD math, SQLite, Sharpe/drawdown |
 | `darwinism.py` | ✅ complete | 22 | EMA reward/punish, pruning, save/load |
-| `feed.py` | ✅ complete | 10 | Window math, episode logic, replay, next_close |
+| `feed.py` | ✅ complete | 13 | ReplayFeed (full-speed historical, no sleep); LiveFeed → OKX |
 | `harness.py` | ✅ complete | 9 | StripedSubspace; score-first; stripe attribution; save_dir |
-| `system.py` | ✅ complete | 0 | Two-phase orchestrator; StripedSubspace + EngramLibrary wired |
+| `system.py` | ✅ complete | 9 | Two-phase orchestrator; auto-calibrating match_threshold; full loop proven |
 | `scripts/fetch_btc.py` | ✅ complete | 0 | OKX fetch, checkpoint every 30k candles, resume on crash |
 | `scripts/label_reversals.py` | ✅ complete | 0 | find_peaks labeling + correct subspace-residual geometry gate |
 | `scripts/validate_geometry.py` | ✅ complete | 0 | Striped encoder; 4 gate experiments |
