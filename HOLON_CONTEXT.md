@@ -491,6 +491,99 @@ changes it. Use K≥32 for the geometry gate.
 
 ---
 
+## Engram Consolidation and Federated Learning
+
+### The N thin vs 1 thick vs K regime question
+
+Three options when you have many labeled reversal events:
+
+**N thin (one per event):** 7 samples each. CCIPCA hasn't stabilized. `threshold` is
+unreliable. Eigenvalue signature used in tier-1 pre-filter is noise. Geometrically, each
+engram represents a point-estimate of a single reversal, not a manifold. Will match
+inconsistently in production.
+
+**1 thick (all events merged):** 3,000+ samples. CCIPCA fully converged. But learns the
+*union* of all reversal patterns across 6 years — bear markets, bull markets, ranging markets,
+different volatility regimes. The manifold it learns is so broad it has low specificity.
+It's essentially a prototype — the primer explicitly says subspaces beat prototypes for
+non-radial anomalies. Won't distinguish a COVID crash bounce from a 2021 ATH dip.
+
+**K regime engrams (correct):** The number K is discovered from data, not hardcoded.
+Cluster thin engrams by mutual residual, consolidate each cluster into one thick engram
+with 50–200 samples (enough for CCIPCA convergence), prune the thin originals. K will
+differ for BUY vs SELL and will drift as market conditions change.
+
+### AsyncCritic consolidation algorithm
+
+```python
+# 1. Build mutual residual matrix across all striped engrams
+names = library.names(kind="striped")
+residuals = {}
+for name_a in names:
+    engram_a = library.get(name_a)
+    for name_b in names:
+        if name_a == name_b: continue
+        engram_b = library.get(name_b)
+        # How well does engram_a explain engram_b's mean?
+        r = engram_a.residual_striped(engram_b.mean_stripe_vecs())
+        residuals[(name_a, name_b)] = r
+
+# 2. Cluster (single-linkage on residual distance)
+# Low mutual residual → same manifold → merge
+
+# 3. For each cluster: re-train StripedSubspace on union of member windows
+#    (requires storing raw stripe_vecs at mint time — see open question below)
+ss = StripedSubspace(dim=DIM, k=K, n_stripes=N_STRIPES)
+for stripe_vecs in cluster_windows:
+    ss.update(stripe_vecs)
+
+# 4. Mint one consolidated regime engram, prune member thin engrams
+library.add_striped(regime_name, ss, ...)
+for name in cluster_member_names:
+    library.remove(name)  # needs implementing
+```
+
+**Open question:** Where to store raw stripe_vecs for post-hoc consolidation?
+The engram stores the trained subspace snapshot, not the training data. Options:
+- SQLite table (natural fit alongside tracker.py's trade log)
+- In-memory dict (lost on restart — OK for short-running critic cycles)
+- Separate parquet file per engram name
+
+### Federated HQ/fleet model
+
+Because every Holon node shares the same vector space (hash-function codebook, no
+distribution), regime engrams from N independent instances are directly comparable at HQ.
+
+```
+Instance A ──engrams──▶ HQ Critic
+Instance B ──engrams──▶ HQ Critic  →  merged library  →  all instances
+Instance C ──engrams──▶ HQ Critic
+```
+
+HQ runs the same clustering algorithm across all incoming engrams regardless of source.
+The merge criterion: `residual_striped(engram_B_mean, engram_A)` — if instance A's regime
+engram already explains instance B's pattern (low residual), B's engram adds nothing.
+If high residual → genuinely new regime → keep and distribute.
+
+**No gradient averaging.** No model retraining. Subspace snapshots ship as JSON, load on
+any node, operate immediately. HQ never needs to know what data each instance saw — the
+geometry is self-describing.
+
+**Meta-subspace at HQ (open idea):** Run an `OnlineSubspace` over the residual profiles
+of all incoming fleet engrams. Would detect "the fleet is collectively seeing something new"
+before any single instance has enough samples to mint a stable regime engram.
+
+### Key constraint: store raw windows at mint time
+
+The AsyncCritic consolidation loop needs the original training windows to re-train a merged
+subspace. Currently `mint_reversal_engrams` discards stripe_vecs after calling
+`library.add_striped()`. The engram stores the trained subspace, not the inputs.
+
+This must be solved before consolidation can work. The simplest path: SQLite table
+`engram_windows (engram_name TEXT, stripe_idx INT, vec BLOB)` alongside the trade log.
+
+---
+
 ## What This Lab Proves
 
 The holon Python library (no modifications) can encode OHLCV market data into a

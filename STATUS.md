@@ -9,7 +9,10 @@
 
 **Git:** `main`  
 **Tests:** 155 passing (last clean run: 2026-03-15)  
-**Blocker:** none — ready to pull real BTC data and run geometry validation.
+**Data:** `data/btc_5m_raw.parquet` — 652,608 candles, Jan 2019 – Mar 2025 ($3,366–$108,987)  
+**Geometry gate:** ✅ PASSED — BUY t=8.39 p≈0, SELL t=4.91 p≈0  
+**Seed engrams:** `data/seed_engrams.json` — 50 minted (25 BUY + 25 SELL), thin/individual  
+**Blocker:** none — ready to design AsyncCritic consolidation loop
 
 ---
 
@@ -17,14 +20,16 @@
 
 | Module | Status | Tests | Notes |
 |--------|--------|-------|-------|
-| `features.py` | ✅ complete | 35 | `compute_indicators()` + `compute_candle_row()` added; DMI div-by-zero fixed |
-| `encoder.py` | ✅ complete | 30 | Window-snapshot; `encode_walkable_striped`; stripe-aware `build_surprise_profile` |
+| `features.py` | ✅ complete | 35 | `compute_indicators()` + `compute_candle_row()`; DMI div-by-zero fixed |
+| `encoder.py` | ✅ complete | 30 | Window-snapshot; `encode_walkable_striped`; `encode_from_precomputed()`; `build_surprise_profile` |
 | `tracker.py` | ✅ complete | 26 | BUY/SELL/HOLD math, SQLite, Sharpe/drawdown |
 | `darwinism.py` | ✅ complete | 22 | EMA reward/punish, pruning, save/load |
 | `feed.py` | ✅ complete | 10 | Window math, episode logic, replay, next_close |
 | `harness.py` | ✅ complete | 9 | StripedSubspace; score-first; stripe attribution; save_dir |
-| `system.py` | ✅ complete | 0 | Two-phase orchestrator; StripedSubspace wired |
-| `scripts/validate_geometry.py` | ✅ complete | 0 | Striped encoder; 4 gate experiments; passes on synthetic |
+| `system.py` | ✅ complete | 0 | Two-phase orchestrator; StripedSubspace + EngramLibrary wired |
+| `scripts/fetch_btc.py` | ✅ complete | 0 | OKX fetch, checkpoint every 30k candles, resume on crash |
+| `scripts/label_reversals.py` | ✅ complete | 0 | find_peaks labeling + correct subspace-residual geometry gate |
+| `scripts/validate_geometry.py` | ✅ complete | 0 | Striped encoder; 4 gate experiments |
 | `scripts/report.py` | ✅ complete | 0 | Read-only CLI: equity, Sharpe, feature rankings |
 
 ---
@@ -52,7 +57,7 @@ See `HOLON_CONTEXT.md` for full rationale and API gotchas.
 |-------|---------|
 | HolonClient constructor | `HolonClient(dimensions=4096)` |
 | `encode_walkable_striped` location | `client.encoder.encode_walkable_striped(walkable, n_stripes=N)` — NOT `client.` |
-| StripedSubspace constructor | `StripedSubspace(dim=1024, k=16, n_stripes=8)` |
+| StripedSubspace constructor | `StripedSubspace(dim=1024, k=32, n_stripes=8)` — K=32 is quality lever, not DIM |
 | StripedSubspace update | `subspace.update(stripe_vecs)` — returns scalar RSS residual |
 | StripedSubspace residual | `subspace.residual(stripe_vecs)` — non-updating |
 | Residual profile | `subspace.residual_profile(stripe_vecs)` — array of per-stripe residuals |
@@ -61,76 +66,101 @@ See `HOLON_CONTEXT.md` for full rationale and API gotchas.
 | Encoder dimensions | `client.encoder.vector_manager.dimensions` |
 | Bipolar cosine identity | `np.array_equal(v, v)` — cosine ≠ 1.0 in bipolar {-1,0,1} space |
 | Feed sizing rule | Provide `LOOKBACK_CANDLES + WINDOW_CANDLES` rows to encoder |
+| Fast batch encoding | `encoder.encode_from_precomputed(df_ind_slice)` — skips indicator recomputation |
+
+---
+
+## Engram Strategy: Thin → Regime → Federated
+
+The key architectural decision, informed by Holon geometry and the DDoS lab's federated
+learning design. Three layers, each building on the last:
+
+### Layer 1 — Thin seed engrams (current: 50)
+Each trained on one reversal event ±3 bars (7 samples). CCIPCA hasn't stabilized — `threshold`
+is unreliable at this count. These are starting points, not final memories. The geometry gate
+proved the *class* is separable (t≈8 on 75 samples); individual 7-sample engrams are much
+noisier but provide a starting seed for the live system.
+
+### Layer 2 — Regime engrams (AsyncCritic's job)
+The live system mints new thin engrams continuously. The AsyncCritic periodically:
+1. **Clusters** thin engrams by mutual residual — `engram_A.residual_striped(mean_of_engram_B)`
+   low → they've learned the same manifold → redundant
+2. **Consolidates** each cluster: re-train one `StripedSubspace` on the union of all windows
+   from that cluster's engrams → one thick regime engram (50–200 samples → stable threshold)
+3. **Prunes** the thin originals, keeps the consolidated one
+4. **Labels** consolidated engrams by the plurality action (BUY/SELL/HOLD) of their cluster
+
+K regime engrams emerge from data, not from a hardcoded count. K will differ for BUY vs SELL
+and will drift as market conditions change — that's the self-tuning behavior.
+
+### Layer 3 — Federated consolidation (future: N instances → HQ → fleet)
+Because every Holon node shares the same vector space (hash-function codebook, no
+distribution required), regime engrams from N independent trading instances are directly
+comparable at HQ:
+
+```
+Instance A  ──engrams──▶  HQ Critic
+Instance B  ──engrams──▶  HQ Critic  →  merged library  →  all instances
+Instance C  ──engrams──▶  HQ Critic
+```
+
+HQ runs the same clustering algorithm across all incoming engrams regardless of source.
+`residual_striped` is the merge criterion: if instance A's regime engram already explains
+instance B's reversal pattern (low residual), B's engram adds nothing — prune it. If B's
+engram has high residual against all of A's engrams, it represents a genuinely new regime
+the fleet hasn't seen — keep it and distribute.
+
+No gradient averaging (FedAvg). No model retraining. Subspace snapshots ship as JSON,
+load on any node, operate immediately. The coordination-free property means HQ never needs
+to know what data each instance saw — the geometry is self-describing.
+
+**Open question:** Should HQ also run a meta-subspace over the residual profiles of all
+incoming engrams? This would let it detect "the fleet is collectively seeing something new"
+before any individual instance has enough samples to mint a stable regime engram.
 
 ---
 
 ## Next Steps (in order)
 
-### Step 1 — Download historical BTC data (one-time, ~10 min)
-```bash
-cd holon-lab-trading
-../scripts/run_with_venv.sh python -c "
-from trading.feed import HistoricalFeed
-HistoricalFeed().ensure_data()
-print('Done')
-"
-```
-Produces `data/btc_5m.parquet` (~2 years, ~210k candles). Verify >50MB.
+### Step 1 — AsyncCritic consolidation loop
+Implement the cluster → consolidate → prune cycle in `system.py`'s `AsyncCritic`:
+- Mutual residual matrix across all striped engrams in library
+- Hierarchical clustering (single-linkage on residual distance)
+- Consolidation: re-train StripedSubspace on member windows
+- Requires storing raw stripe_vecs at mint time (currently discarded after minting)
 
-### Step 2 — Run geometry validation gate on real data
-```bash
-../scripts/run_with_venv.sh python scripts/validate_geometry.py \
-    --parquet data/btc_5m.parquet --dim 1024 --stripes 8 --window 12
-```
-**Gate criteria — all must pass before running discovery harness:**
-- Identity: same window → identical stripe vectors
-- Proximity: adjacent windows closer than distant windows
-- Regime separation: t-test p < 0.05 (within > cross)
-- Subspace surprise: `StripedSubspace` flags volatile period as anomalous
+**Decision needed:** Where do we store the raw training windows for post-hoc consolidation?
+Options: SQLite (alongside tracker), separate parquet per engram, in-memory only (lost on restart).
 
-If subspace surprise is INFO (familiar ok, novel doesn't cross), sweep `--window 6 12 24`
-to find the configuration where novel does cross threshold.
+### Step 2 — Wire AsyncCritic to labeled reversal data
+The critic currently has no access to the historical labels. Feed it `reversal_labels.parquet`
+so it can score each engram against known BUY/SELL ground truth during the consolidation pass.
 
-### Step 3 — Run discovery harness (~30 min on 2 years of data)
+### Step 3 — Start live system against paper trading
 ```bash
-../scripts/run_with_venv.sh python -c "
-from trading.harness import DiscoveryHarness
-h = DiscoveryHarness()
-h.run(num_episodes=100, episode_length=500)
-"
+../scripts/run_with_venv.sh python -u trading/system.py 2>&1 | tee /tmp/trading_live.txt
 ```
-Produces:
-- `data/seed_engrams.json` — seed memory bank for live system
-- `data/feature_weights.json` — initial Darwinism weights
-- `data/discovery_log.csv` — full decision log
+Let it run for 48h minimum. First 6h is warm-up.
 
-Inspect feature ranking:
-```bash
-../scripts/run_with_venv.sh python scripts/report.py
-```
-
-### Step 4 — Start live system (24/7)
-```bash
-../scripts/run_with_venv.sh python trading/system.py
-```
-Let it run for 48h minimum before drawing conclusions.
-First 6h is warm-up — `StripedSubspace` threshold still calibrating.
+### Step 4 — Federated HQ design (future)
+Design the HQ ingestion endpoint and fleet distribution protocol. The encoding layer
+already supports this (coordination-free). The missing piece is the transport and
+the HQ consolidation scheduler.
 
 ---
 
-## Open Questions / Experiments to Run
+## Open Questions
 
-- **Optimal window?** Default is 12 candles (60 min). The geometry validation gate's
-  `--window 6 12 24` sweep will answer this empirically via engram quality metrics.
-- **k selection:** Default k=16 per stripe (128 total). Plot per-stripe residual variance
-  vs k on real data to find the knee.
-- **Engram action label:** All minted engrams start as "HOLD". Should we label based on
-  next-candle direction at mint time? Would seed the system with directional signal earlier.
-- **Library matching on stripe[0]:** Currently uses first stripe vec as the match key.
-  Better approach: store all stripe vecs in engram and match on RSS across stripes.
-- **Darwinism with nested paths:** `update_weights()` now takes flat keys but the encoder
-  uses nested field paths (e.g. `t0.macd.hist`). The Darwinism→weight gating bridge needs
-  a redesign once we have real data to know which fields actually matter.
+- **Raw window storage for consolidation:** SQLite rows? Parquet per-engram? Need to
+  persist the encoded stripe_vecs that produced each engram so the critic can re-train.
+- **Meta-subspace at HQ:** OnlineSubspace over residual profiles of all fleet engrams —
+  would detect "the fleet is collectively seeing something new" before any single instance
+  has enough samples.
+- **Darwinism with nested paths:** `update_weights()` takes flat keys but encoder uses
+  nested paths (e.g. `t0.macd.hist`). Bridge needs redesign once real data shows which
+  fields drive decisions.
+- **Engram decay:** Should old regime engrams fade if the market regime changes?
+  EMA on the `score` field already supports this — just need the critic to apply it.
 
 ---
 
@@ -144,5 +174,9 @@ See `HOLON_CONTEXT.md` for the full list. Key ones:
 4. Score before update — `residual()` THEN `update()`, never reversed
 5. Bipolar MAP cosine — use `np.array_equal` for identity, cosine only for relative comparison
 6. `StripedSubspace.threshold` is inf until all stripes have enough observations (k+1 each)
-7. Grok Code (the wrong model) partially implemented this plan and left things broken —
-   always verify test suite passes before treating work as done
+7. Geometry gate: use subspace residuals, NOT pairwise cosine — pairwise cosine is the
+   batch-017 centroid mistake; reversal windows from different price regimes have low
+   bundle-to-bundle cosine but still share the same algebraic manifold
+8. K dominates quality, DIM barely matters — K=32 at DIM=512 beats K=16 at DIM=4096
+9. Per-row iloc assignment on large DataFrames is catastrophically slow — use vectorized
+   iloc with an array of indices instead
