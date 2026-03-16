@@ -1,6 +1,10 @@
 """Paper trading engine with full audit trail.
 
 No holon imports. Simulates trades, logs to SQLite, computes rolling metrics.
+
+SQLite schema:
+  decisions       — one row per 5-min candle decision
+  engram_windows  — raw stripe_vecs per engram, for AsyncCritic consolidation
 """
 
 from __future__ import annotations
@@ -32,7 +36,8 @@ class ExperimentTracker:
         self._trade_count = 0
 
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-        self.db = sqlite3.connect(db_path)
+        self.db = sqlite3.connect(db_path, check_same_thread=False)
+        self._lock = __import__("threading").Lock()
         self._init_db()
         self._start = datetime.utcnow()
 
@@ -50,6 +55,21 @@ class ExperimentTracker:
                 notes TEXT
             )
         """)
+        # Raw stripe_vecs stored here so AsyncCritic can re-train consolidated subspaces.
+        # Each row is one stripe vector (numpy array serialized as blob) for one engram window.
+        # The critic fetches all rows for a given engram_name and re-trains from them.
+        self.db.execute("""
+            CREATE TABLE IF NOT EXISTS engram_windows (
+                engram_name TEXT NOT NULL,
+                window_idx  INTEGER NOT NULL,
+                stripe_idx  INTEGER NOT NULL,
+                vec         BLOB NOT NULL
+            )
+        """)
+        self.db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_engram_windows_name
+            ON engram_windows (engram_name)
+        """)
         self.db.commit()
 
     def record(
@@ -62,27 +82,98 @@ class ExperimentTracker:
         notes: str = "",
     ) -> dict:
         """Record a decision, simulate trade, return the log entry."""
-        pnl = self._simulate(action, price)
-        equity = self.portfolio["usdt"] + self.portfolio["btc"] * price
-        self.equity_curve.append(equity)
+        with self._lock:
+            pnl = self._simulate(action, price)
+            equity = self.portfolio["usdt"] + self.portfolio["btc"] * price
+            self.equity_curve.append(equity)
 
-        entry = {
-            "ts": datetime.utcnow().isoformat(),
-            "action": action,
-            "confidence": confidence,
-            "price": price,
-            "equity": equity,
-            "simulated_pnl": pnl,
-            "latency_ms": latency_ms,
-            "used_engrams": json.dumps(used_engrams or []),
-            "notes": notes,
-        }
-        self.db.execute(
-            "INSERT INTO decisions VALUES (?,?,?,?,?,?,?,?,?)",
-            tuple(entry.values()),
-        )
-        self.db.commit()
-        return entry
+            entry = {
+                "ts": datetime.utcnow().isoformat(),
+                "action": action,
+                "confidence": confidence,
+                "price": price,
+                "equity": equity,
+                "simulated_pnl": pnl,
+                "latency_ms": latency_ms,
+                "used_engrams": json.dumps(used_engrams or []),
+                "notes": notes,
+            }
+            self.db.execute(
+                "INSERT INTO decisions VALUES (?,?,?,?,?,?,?,?,?)",
+                tuple(entry.values()),
+            )
+            self.db.commit()
+            return entry
+
+    def store_engram_windows(
+        self,
+        engram_name: str,
+        stripe_vecs_list: list[list[np.ndarray]],
+    ) -> None:
+        """Persist raw stripe vectors for an engram so the critic can re-train.
+
+        stripe_vecs_list is a list of window observations, each a list of N stripe
+        vectors (one per stripe). Stored as blobs; retrieved by load_engram_windows().
+        """
+        with self._lock:
+            rows = []
+            for w_idx, stripe_vecs in enumerate(stripe_vecs_list):
+                for s_idx, vec in enumerate(stripe_vecs):
+                    rows.append((
+                        engram_name,
+                        w_idx,
+                        s_idx,
+                        vec.astype(np.int8).tobytes(),
+                    ))
+            self.db.executemany(
+                "INSERT INTO engram_windows VALUES (?,?,?,?)", rows
+            )
+            self.db.commit()
+
+    def load_engram_windows(
+        self,
+        engram_name: str,
+        dim: int,
+    ) -> list[list[np.ndarray]]:
+        """Load raw stripe vectors for an engram, reconstructed as numpy arrays.
+
+        Returns a list of window observations, each a list of stripe vectors.
+        dim must match the dimensionality used when the engram was minted.
+        """
+        rows = self.db.execute(
+            "SELECT window_idx, stripe_idx, vec FROM engram_windows "
+            "WHERE engram_name = ? ORDER BY window_idx, stripe_idx",
+            (engram_name,),
+        ).fetchall()
+
+        if not rows:
+            return []
+
+        # Group by window_idx then stripe_idx
+        windows: dict[int, dict[int, np.ndarray]] = {}
+        for w_idx, s_idx, blob in rows:
+            windows.setdefault(w_idx, {})[s_idx] = np.frombuffer(blob, dtype=np.int8).copy()
+
+        return [
+            [windows[w][s] for s in sorted(windows[w])]
+            for w in sorted(windows)
+        ]
+
+    def delete_engram_windows(self, engram_name: str) -> None:
+        """Remove stored training windows for a pruned or consolidated engram."""
+        with self._lock:
+            self.db.execute(
+                "DELETE FROM engram_windows WHERE engram_name = ?", (engram_name,)
+            )
+            self.db.commit()
+
+    def engram_window_counts(self) -> dict[str, int]:
+        """Return {engram_name: window_count} for all stored engrams."""
+        rows = self.db.execute(
+            "SELECT engram_name, COUNT(DISTINCT window_idx) "
+            "FROM engram_windows GROUP BY engram_name"
+        ).fetchall()
+        return dict(rows)
 
     def equity(self, price: float | None = None) -> float:
         if price is None:
@@ -115,10 +206,11 @@ class ExperimentTracker:
 
     def recent_decisions(self, hours: int = 48) -> pd.DataFrame:
         """Load recent decisions from SQLite."""
-        return pd.read_sql(
-            f"SELECT * FROM decisions WHERE ts > datetime('now', '-{hours} hours')",
-            self.db,
-        )
+        with self._lock:
+            return pd.read_sql(
+                f"SELECT * FROM decisions WHERE ts > datetime('now', '-{hours} hours')",
+                self.db,
+            )
 
     def export_csv(self, path: str = "data/experiment_log.csv") -> None:
         df = pd.read_sql("SELECT * FROM decisions", self.db)
@@ -139,8 +231,9 @@ class ExperimentTracker:
             size_btc = self.portfolio["btc"]
             effective = price * (1 - self.slippage)
             proceeds = size_btc * effective * (1 - self.fee)
-            cost_basis = self.initial_usdt  # simplified
-            pnl = proceeds - (self.initial_usdt - self.portfolio["usdt"])
+            # Cost basis = USDT spent on the open BUY position
+            cost_basis = self.initial_usdt - self.portfolio["usdt"]
+            pnl = proceeds - cost_basis
             self.portfolio["usdt"] += proceeds
             self.portfolio["btc"] = 0.0
             self._trade_count += 1

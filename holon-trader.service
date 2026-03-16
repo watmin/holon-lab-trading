@@ -1,0 +1,30 @@
+[Unit]
+Description=Holon BTC Paper Trader
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=watmin
+WorkingDirectory=/home/watmin/work/holon/holon-lab-trading
+
+# -u for unbuffered Python stdout — ensures systemd journal gets real-time output
+ExecStart=/home/watmin/work/holon/scripts/run_with_venv.sh python -u trading/system.py
+
+# Restart on any non-zero exit; 10s delay to avoid hammering on network errors
+Restart=on-failure
+RestartSec=10s
+
+# Give the critic time to finish its cycle before SIGKILL on stop
+TimeoutStopSec=30s
+
+# Stdout/stderr both go to journal (journalctl -u holon-trader -f)
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=holon-trader
+
+# Environment — set seed for deterministic vector space across restarts
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
