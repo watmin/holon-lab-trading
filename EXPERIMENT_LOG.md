@@ -227,6 +227,12 @@ These techniques failed at specific insertion points (the learning/correction pa
 | 2 | Engram library (sub-pattern clustering) | Parallel classification | Capture distinct buy/sell sub-patterns. |
 | 5 | Subspace classification (OnlineSubspace) | Parallel classification | Second opinion via subspace projection. |
 
+### Tier 3.5 — Trader-level (safe, no learning changes)
+
+| ID | Experiment | Where | Rationale |
+|----|-----------|-------|-----------|
+| STR | Straddle on low conviction | Trader position sizing | When buy_sim ≈ sell_sim but both are high, play both sides. Captures volatility instead of direction. Low conviction + high recognition = "market will move, unclear which way." Net positive if winner > loser. |
+
 ### Tier 4 — Risky but principled
 
 | ID | Experiment | Where | Rationale |
