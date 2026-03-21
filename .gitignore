@@ -14,7 +14,14 @@ data/*.parquet
 data/*.db
 data/*.csv
 data/*.json
+data/*.log
+data/*.png
+data/*.npz
+data/vec_cache/
 !data/.gitkeep
+
+# Rust build artifacts
+rust/target/
 
 # IDE
 .vscode/

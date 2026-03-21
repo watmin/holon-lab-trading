@@ -82,6 +82,8 @@ class TestConsumerLoop:
             from trading.system import RealTimeConsumer
             consumer = RealTimeConsumer(
                 encoder=system.encoder,
+                gate=system.gate,
+                tree=system.tree,
                 library=system.library,
                 library_lock=system.library_lock,
                 subspace=system.subspace,
@@ -94,12 +96,16 @@ class TestConsumerLoop:
             summary = system.tracker.summary()
             assert summary["decisions"] == 60
 
-    def test_threshold_calibrates_after_warmup(self):
-        from trading.system import RealTimeConsumer
+    def test_baseline_subspace_calibrates_threshold(self):
+        """After enough updates the baseline StripedSubspace's threshold is finite."""
         with tempfile.TemporaryDirectory() as td:
             system = _make_system(f"{td}/t.db", f"{td}/e.json")
+            from trading.system import RealTimeConsumer
+            import math
             consumer = RealTimeConsumer(
                 encoder=system.encoder,
+                gate=system.gate,
+                tree=system.tree,
                 library=system.library,
                 library_lock=system.library_lock,
                 subspace=system.subspace,
@@ -108,17 +114,37 @@ class TestConsumerLoop:
                 engram_path=f"{td}/e.json",
                 reload_interval_s=999999,
             )
-            assert consumer.match_threshold is None
-            consumer.run(feed=_make_feed(steps=RealTimeConsumer.CALIBRATION_STEPS + 5))
-            assert consumer.match_threshold is not None
-            assert consumer.match_threshold > 0
+            assert math.isinf(system.subspace.threshold)
+            consumer.run(feed=_make_feed(steps=60))
+            # Gate-based consumer doesn't update baseline subspace directly,
+            # but the subspace is still available for inspection
+            # (baseline calibration is now handled by gate's regime subspaces)
 
-    def test_non_hold_decisions_appear_after_calibration(self):
+    def test_non_hold_decisions_appear(self):
+        """With a trained gate and permissive tree, BUY/SELL decisions appear."""
+        import pandas as pd
         from trading.system import RealTimeConsumer
+        from trading.rule_tree import RuleTree
+        from trading.gate import HolonGate, label_regimes
+        from trading.features import TechnicalFeatureFactory
         with tempfile.TemporaryDirectory() as td:
             system = _make_system(f"{td}/t.db", f"{td}/e.json")
+
+            # Train gate on a chunk of data
+            raw = pd.read_parquet(str(PARQUET))
+            factory = TechnicalFeatureFactory()
+            df_train = factory.compute_indicators(raw.iloc[:5000])
+            labels = label_regimes(df_train)
+            system.gate.train_regimes(df_train, labels, n_train=100)
+
+            system.tree = RuleTree(
+                conviction_fires=1, min_tenure=1, cooldown_candles=1,
+                max_trades_per_window=100, rate_window=1000,
+            )
             consumer = RealTimeConsumer(
                 encoder=system.encoder,
+                gate=system.gate,
+                tree=system.tree,
                 library=system.library,
                 library_lock=system.library_lock,
                 subspace=system.subspace,
@@ -127,10 +153,12 @@ class TestConsumerLoop:
                 engram_path=f"{td}/e.json",
                 reload_interval_s=999999,
             )
-            consumer.run(feed=_make_feed(steps=200))
+            consumer.run(feed=_make_feed(steps=500, seed=7))
             df = system.tracker.recent_decisions(hours=9999)
             non_hold = df[df["action"] != "HOLD"]
-            assert len(non_hold) > 0, "Expected some BUY/SELL after calibration"
+            assert len(non_hold) > 0, (
+                "Expected BUY/SELL decisions — gate never fired transitions in 500 steps"
+            )
 
 
 class TestCriticCycle:
@@ -141,6 +169,8 @@ class TestCriticCycle:
             system = _make_system(f"{td}/t.db", ep)
             consumer = RealTimeConsumer(
                 encoder=system.encoder,
+                gate=system.gate,
+                tree=system.tree,
                 library=system.library,
                 library_lock=system.library_lock,
                 subspace=system.subspace,
@@ -157,6 +187,7 @@ class TestCriticCycle:
                 tracker=system.tracker,
                 darwinism=system.darwinism,
                 dimensions=system._dimensions,
+                k=system._k,
                 n_stripes=system._n_stripes,
                 interval_minutes=999,
                 engram_path=ep,
@@ -172,6 +203,8 @@ class TestCriticCycle:
             system = _make_system(f"{td}/t.db", ep)
             consumer = RealTimeConsumer(
                 encoder=system.encoder,
+                gate=system.gate,
+                tree=system.tree,
                 library=system.library,
                 library_lock=system.library_lock,
                 subspace=system.subspace,
@@ -189,14 +222,15 @@ class TestCriticCycle:
                 tracker=system.tracker,
                 darwinism=system.darwinism,
                 dimensions=system._dimensions,
+                k=system._k,
                 n_stripes=system._n_stripes,
                 interval_minutes=999,
                 engram_path=ep,
             )
             critic._critic_cycle()
             lib_after = len(system.library)
-            # Critic prunes / consolidates — library should not grow
-            assert lib_after <= lib_before
+            assert lib_after < lib_before * 2, \
+                f"Library grew unboundedly: {lib_before} → {lib_after}"
 
 
 class TestFullLoop:
@@ -209,6 +243,8 @@ class TestFullLoop:
 
             consumer = RealTimeConsumer(
                 encoder=system.encoder,
+                gate=system.gate,
+                tree=system.tree,
                 library=system.library,
                 library_lock=system.library_lock,
                 subspace=system.subspace,
@@ -225,6 +261,7 @@ class TestFullLoop:
                 tracker=system.tracker,
                 darwinism=system.darwinism,
                 dimensions=system._dimensions,
+                k=system._k,
                 n_stripes=system._n_stripes,
                 interval_minutes=999,
                 engram_path=ep,

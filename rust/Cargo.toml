@@ -1,0 +1,30 @@
+[package]
+name = "btc-walk"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "btc_walk"
+path = "src/lib.rs"
+
+[[bin]]
+name = "btc-walk"
+path = "src/bin/btc_walk.rs"
+
+[[bin]]
+name = "trader"
+path = "src/bin/trader.rs"
+
+[[bin]]
+name = "trader2"
+path = "src/bin/trader2.rs"
+
+[dependencies]
+holon = { path = "../../holon-rs", features = ["simd"] }
+rusqlite = { version = "0.31", features = ["bundled"] }
+clap = { version = "4", features = ["derive"] }
+rayon = "1.10"
+
+[profile.release]
+opt-level = 3
+lto = true

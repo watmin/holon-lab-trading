@@ -69,8 +69,8 @@ LABEL_OFFSET   = 1      # label this many bars BEFORE the reversal (what a trade
 N_STRIPES      = OHLCVEncoder.N_STRIPES
 WINDOW_CANDLES = OHLCVEncoder.WINDOW_CANDLES
 LOOKBACK       = OHLCVEncoder.LOOKBACK_CANDLES
-DIM            = 1024   # per-stripe dim — K is the quality lever, not DIM
-K              = 32     # deflation steps: K dominates quality for rank-1 per-stripe data
+DIM            = 1024
+K              = 4      # 208 leaves / 32 stripes ≈ 6.5 per stripe; low k avoids over-deflation
 
 
 # ---------------------------------------------------------------------------
@@ -82,6 +82,7 @@ def label_reversals(
     prominence_pct: float = PROMINENCE_PCT,
     min_dist: int = MIN_DIST_BARS,
     offset: int = LABEL_OFFSET,
+    price_ref_slice: slice | None = None,
 ) -> pd.DataFrame:
     """Add an 'action' column to df: BUY at local minima, SELL at local maxima, HOLD elsewhere.
 
@@ -93,9 +94,14 @@ def label_reversals(
         prominence_pct: Minimum price move (as fraction of close) for a valid reversal.
         min_dist: Minimum bars between consecutive peaks.
         offset: How many bars before the reversal to place the label (1 = previous bar).
+        price_ref_slice: If provided, compute prominence from this slice of close
+            prices instead of the full series. Use this to anchor prominence to a
+            specific era (e.g. the seed training period) so the threshold is
+            appropriate for that price regime.
     """
     close = df["close"].values
-    prominence = float(np.median(close)) * prominence_pct
+    ref_prices = close[price_ref_slice] if price_ref_slice is not None else close
+    prominence = float(np.median(ref_prices)) * prominence_pct
 
     # Local maxima → SELL setups
     peaks, _ = find_peaks(close, prominence=prominence, distance=min_dist)
@@ -304,42 +310,41 @@ def mint_reversal_engrams(
     encoder: OHLCVEncoder,
     peaks_ind: np.ndarray,
     troughs_ind: np.ndarray,
+    hold_indices: np.ndarray,
     library: EngramLibrary,
-    rng: np.random.Generator,
-    max_engrams: int = 50,
 ) -> int:
-    """Train a StripedSubspace on each reversal and mint a seed engram.
+    """Mint 1 thick BUY + 1 thick SELL + 1 thick HOLD engram.
 
-    peaks_ind / troughs_ind are positional indices into df_ind (already mapped from
-    raw df space by subtracting the NaN warmup row count).
+    BUY/SELL engrams are trained on every encodable reversal window.
+    HOLD engram is trained on a sample of non-reversal windows — the positive
+    model of "normal, unremarkable market." Without it, HOLD is just
+    "BUY and SELL both failed," which is a weak negative signal.
+
+    peaks_ind / troughs_ind / hold_indices are positional indices into df_ind.
     """
-    buy_rows  = troughs_ind.tolist()
-    sell_rows = peaks_ind.tolist()
-
     minted = 0
-    for action, indices in [("BUY", buy_rows), ("SELL", sell_rows)]:
-        # Shuffle and take up to max_engrams // 2 individual reversal engrams
-        rng.shuffle(indices)
-        for idx in indices[:max_engrams // 2]:
-            v = encode_window(encoder, df_ind, idx)
-            if v is None:
-                continue
-            ss = StripedSubspace(dim=DIM, k=K, n_stripes=N_STRIPES)
-            # Seed with the reversal window + its neighbors for a richer manifold
-            for offset in range(-3, 4):
-                neighbor = encode_window(encoder, df_ind, idx + offset)
-                if neighbor is not None:
-                    ss.update(neighbor)
-            if ss.n < 3:
-                continue
-            engram_name = f"reversal_{action.lower()}_{idx}"
-            library.add_striped(
-                engram_name, ss, None,
-                action=action, confidence=0.75,
-                score=0.0, origin="labeled_reversal",
-                bar_idx=int(idx),
-            )
-            minted += 1
+    for action, indices in [("BUY", troughs_ind), ("SELL", peaks_ind), ("HOLD", hold_indices)]:
+        ss = StripedSubspace(dim=DIM, k=K, n_stripes=N_STRIPES)
+        encoded = 0
+        for idx in indices:
+            v = encode_window(encoder, df_ind, int(idx))
+            if v is not None:
+                ss.update(v)
+                encoded += 1
+
+        if encoded < 10:
+            print(f"  WARNING: only {encoded} encodable {action} windows, skipping", flush=True)
+            continue
+
+        engram_name = f"seed_{action.lower()}"
+        library.add_striped(
+            engram_name, ss, None,
+            action=action, confidence=0.75,
+            score=0.0, origin="labeled_reversal",
+            n_training_samples=encoded,
+        )
+        minted += 1
+        print(f"  {engram_name}: trained on {encoded} windows (n={ss.n})", flush=True)
 
     return minted
 
@@ -359,6 +364,8 @@ def main():
                         help="Bars before reversal to place label (default 1)")
     parser.add_argument("--no-mint", action="store_true",
                         help="Skip engram minting (geometry test only)")
+    parser.add_argument("--seed-end-year", type=int, default=2020,
+                        help="Last year (inclusive) to use for seed engram training (default 2020)")
     args = parser.parse_args()
 
     # --- Load data ---
@@ -367,6 +374,16 @@ def main():
     print(f"  {len(df)} candles | {df['ts'].iloc[0]} → {df['ts'].iloc[-1]}")
     print(f"  close range: ${df['close'].min():,.0f} – ${df['close'].max():,.0f}")
 
+    # --- Determine seed-era slice for prominence anchoring ---
+    ts_series = pd.to_datetime(df["ts"])
+    seed_end = pd.Timestamp(f"{args.seed_end_year}-12-31 23:59:59")
+    seed_mask = ts_series.values <= np.datetime64(seed_end)
+    seed_slice = slice(0, int(np.sum(seed_mask)))
+    seed_median_price = float(np.median(df["close"].values[seed_slice]))
+    full_median_price = float(np.median(df["close"].values))
+    print(f"Prominence anchor: seed-era median ${seed_median_price:,.0f} "
+          f"(full-dataset median ${full_median_price:,.0f})")
+
     # --- Label reversals ---
     print("Labeling reversals...", flush=True)
     labeled_df, peaks, troughs = label_reversals(
@@ -374,6 +391,7 @@ def main():
         prominence_pct=args.prominence,
         min_dist=args.min_dist,
         offset=args.offset,
+        price_ref_slice=seed_slice,
     )
 
     n_buy  = (labeled_df["action"] == "BUY").sum()
@@ -445,17 +463,48 @@ def main():
         print("    Consider: wider timeframe, larger prominence, longer window")
     print("=" * 60)
 
-    # --- Mint seed engrams from labeled reversals ---
+    # --- Mint seed engrams from labeled reversals (seed years only) ---
     if not args.no_mint and all_passed:
-        print("\nMinting reversal engrams...")
+        # peaks/troughs are raw df indices; filter to seed range
+        seed_peaks = peaks[ts_series.iloc[peaks].values <= np.datetime64(seed_end)]
+        seed_troughs = troughs[ts_series.iloc[troughs].values <= np.datetime64(seed_end)]
+
+        # Map to df_ind space
+        seed_peaks_ind = to_ind_idx(seed_peaks)
+        seed_troughs_ind = to_ind_idx(seed_troughs)
+
+        seed_start_year = ts_series.iloc[0].year
+
+        # Sample HOLD windows: non-reversal candles from the seed period
+        reversal_set = set(seed_peaks_ind.tolist() + seed_troughs_ind.tolist())
+        seed_end_idx_ind = int(np.searchsorted(
+            ts_series.iloc[n_dropped:].values, np.datetime64(seed_end)
+        ))
+        all_seed_indices = [
+            i for i in range(WINDOW_CANDLES, min(seed_end_idx_ind, len(df_ind)))
+            if i not in reversal_set
+        ]
+        # Sample ~300 HOLD windows — enough for a thick manifold, proportional
+        # to the reversal counts but representing the much larger normal class
+        n_hold_samples = min(300, len(all_seed_indices))
+        hold_indices = np.array(
+            rng.choice(all_seed_indices, size=n_hold_samples, replace=False)
+        )
+
+        print(f"\nMinting seed engrams from {seed_start_year}-{args.seed_end_year}:")
+        print(f"  {len(seed_troughs_ind)} BUY reversals, {len(seed_peaks_ind)} SELL reversals, {n_hold_samples} HOLD samples")
+
         library = EngramLibrary(dim=DIM)
         n_minted = mint_reversal_engrams(
-            df_ind, encoder, peaks_ind, troughs_ind, library, rng
+            df_ind, encoder, seed_peaks_ind, seed_troughs_ind, hold_indices, library,
         )
         engram_path = "holon-lab-trading/data/seed_engrams.json"
         library.save(engram_path)
-        print(f"  Minted {n_minted} engrams → {engram_path}")
-        print(f"  BUY:  {len(library.names(kind='striped'))} total striped engrams")
+        print(f"\n  Minted {n_minted} engrams → {engram_path}")
+        for name in library.names(kind="striped"):
+            eng = library.get(name)
+            n = eng._snapshot["stripes"][0].get("n", 0)
+            print(f"    {name}: n={n} action={eng.metadata.get('action')}")
 
     elif not all_passed:
         print("\nSkipping engram minting — geometry gate failed.")

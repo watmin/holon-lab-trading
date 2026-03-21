@@ -34,6 +34,7 @@ class ExperimentTracker:
         self.portfolio = {"usdt": initial_usdt, "btc": 0.0}
         self.equity_curve: list[float] = [initial_usdt]
         self._trade_count = 0
+        self._step = 0
 
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(db_path, check_same_thread=False)
@@ -45,6 +46,8 @@ class ExperimentTracker:
         self.db.execute("""
             CREATE TABLE IF NOT EXISTS decisions (
                 ts TEXT,
+                candle_ts TEXT,
+                step INTEGER,
                 action TEXT,
                 confidence REAL,
                 price REAL,
@@ -80,16 +83,38 @@ class ExperimentTracker:
         latency_ms: float = 0.0,
         used_engrams: list[str] | None = None,
         notes: str = "",
+        candle_ts: str | None = None,
     ) -> dict:
-        """Record a decision, simulate trade, return the log entry."""
+        """Record a decision, simulate trade, return the log entry.
+
+        The recorded action reflects what actually happened:
+          - BUY when flat (USDT>0) → BUY (trade executes)
+          - BUY when in position (BTC>0) → HOLD (no-op, already long)
+          - SELL when in position → SELL (trade executes)
+          - SELL when flat → HOLD (no-op, nothing to sell)
+          - HOLD → HOLD
+
+        candle_ts: timestamp of the actual market candle (vs wall-clock ts).
+        """
         with self._lock:
-            pnl = self._simulate(action, price)
+            self._step += 1
+
+            # Position-aware: downgrade no-op signals to HOLD
+            effective_action = action
+            if action == "BUY" and self.portfolio["usdt"] <= 0:
+                effective_action = "HOLD"
+            elif action == "SELL" and self.portfolio["btc"] <= 0:
+                effective_action = "HOLD"
+
+            pnl = self._simulate(effective_action, price)
             equity = self.portfolio["usdt"] + self.portfolio["btc"] * price
             self.equity_curve.append(equity)
 
             entry = {
                 "ts": datetime.utcnow().isoformat(),
-                "action": action,
+                "candle_ts": candle_ts or datetime.utcnow().isoformat(),
+                "step": self._step,
+                "action": effective_action,
                 "confidence": confidence,
                 "price": price,
                 "equity": equity,
@@ -99,7 +124,7 @@ class ExperimentTracker:
                 "notes": notes,
             }
             self.db.execute(
-                "INSERT INTO decisions VALUES (?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO decisions VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                 tuple(entry.values()),
             )
             self.db.commit()
@@ -204,9 +229,20 @@ class ExperimentTracker:
             "run_hours": (datetime.utcnow() - self._start).total_seconds() / 3600,
         }
 
-    def recent_decisions(self, hours: int = 48) -> pd.DataFrame:
-        """Load recent decisions from SQLite."""
+    def recent_decisions(self, hours: int = 48, last_n: int | None = None) -> pd.DataFrame:
+        """Load recent decisions from SQLite.
+
+        last_n: if set, return the last N decisions by step (ignores hours).
+                Use this in replay mode where wall-clock time is compressed.
+        hours:  used in live mode where candle time ≈ wall-clock time.
+        """
         with self._lock:
+            if last_n is not None:
+                return pd.read_sql(
+                    "SELECT * FROM decisions ORDER BY step DESC LIMIT ?",
+                    self.db,
+                    params=(last_n,),
+                )
             return pd.read_sql(
                 f"SELECT * FROM decisions WHERE ts > datetime('now', '-{hours} hours')",
                 self.db,

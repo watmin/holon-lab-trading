@@ -221,6 +221,9 @@ class TestComputeIndicators:
             "bb_upper", "bb_lower", "bb_width",
             "macd_line", "macd_signal", "macd_hist",
             "rsi", "atr", "dmi_plus", "dmi_minus", "adx", "ret",
+            "atr_r", "sma20_r", "sma50_r", "sma200_r",
+            "macd_line_r", "macd_signal_r", "macd_hist_r",
+            "vol_r", "open_r", "high_r", "low_r",
         }
         missing = expected - set(result.columns)
         assert not missing, f"Missing columns: {missing}"
@@ -246,12 +249,12 @@ class TestComputeIndicators:
         row = f.compute_candle_row(df_ind, len(df_ind) - 1)
 
         assert "ohlcv" in row
-        for k in ("open", "high", "low", "close"):
+        for k in ("open_r", "high_r", "low_r"):
             assert k in row["ohlcv"]
-        for k in ("vol", "atr", "rsi", "ret"):
+        for k in ("vol_r", "atr_r", "rsi", "ret"):
             assert k in row
         assert "sma" in row
-        for k in ("s20", "s50", "s200"):
+        for k in ("s20_r", "s50_r", "s200_r"):
             assert k in row["sma"]
         assert "macd" in row
         assert "bb" in row
@@ -272,13 +275,14 @@ class TestComputeIndicators:
 
         check_dict(row)
 
-    def test_compute_candle_row_prices_positive(self):
+    def test_compute_candle_row_ohlcv_ratios_near_zero(self):
+        """Normalized OHLCV ratios should be small (close to 0 = close to close price)."""
         df = make_volatile_ohlcv(250)
         f = TechnicalFeatureFactory()
         df_ind = f.compute_indicators(df)
         row = f.compute_candle_row(df_ind, len(df_ind) - 1)
-        for k in ("open", "high", "low", "close"):
-            assert row["ohlcv"][k] > 0
+        for k in ("open_r", "high_r", "low_r"):
+            assert abs(row["ohlcv"][k]) < 0.1, f"ohlcv.{k}={row['ohlcv'][k]} too far from 0"
 
 
 class TestConfigurablePeriods:

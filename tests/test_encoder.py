@@ -127,21 +127,18 @@ class TestStructuralSimilarity:
         for a, b in zip(s1, s2):
             np.testing.assert_array_equal(a, b)
 
-    def test_similar_windows_higher_cosine_than_different(self):
-        """Adjacent similar windows should be more similar than distant different ones."""
+    def test_different_price_levels_same_pattern_high_cosine(self):
+        """Price-normalized encoding: same pattern at different price levels should be very similar."""
         enc = make_encoder()
-        df_low_a = make_flat_ohlcv(250, price=50_000.0)
-        df_low_b = make_flat_ohlcv(250, price=50_100.0)   # 0.2% different
-        df_high  = make_flat_ohlcv(250, price=90_000.0)   # 80% different
+        df_low  = make_flat_ohlcv(250, price=5_000.0)
+        df_high = make_flat_ohlcv(250, price=90_000.0)
 
-        s_a = enc.encode(df_low_a)
-        s_b = enc.encode(df_low_b)
-        s_h = enc.encode(df_high)
+        s_low  = enc.encode(df_low)
+        s_high = enc.encode(df_high)
 
-        sim_close = aggregate_cosine(s_a, s_b)
-        sim_far   = aggregate_cosine(s_a, s_h)
-        assert sim_close > sim_far, (
-            f"Similar ({sim_close:.3f}) should exceed distant ({sim_far:.3f})"
+        sim = aggregate_cosine(s_low, s_high)
+        assert sim > 0.95, (
+            f"Same pattern at different price levels should be very similar ({sim:.3f})"
         )
 
     def test_different_regimes_lower_cosine(self):
@@ -197,12 +194,12 @@ class TestEncodeWithWalkable:
         t0 = walkable["t0"]
         for group in ("ohlcv", "sma", "macd", "bb", "dmi"):
             assert group in t0, f"Missing group {group} in t0"
-        for scalar in ("vol", "atr", "rsi", "ret"):
+        for scalar in ("vol_r", "atr_r", "rsi", "ret"):
             assert scalar in t0, f"Missing field {scalar} in t0"
 
-    def test_ohlcv_has_four_values(self, enc, large_volatile_df):
+    def test_ohlcv_has_normalized_values(self, enc, large_volatile_df):
         _, walkable = enc.encode_with_walkable(large_volatile_df)
-        for key in ("open", "high", "low", "close"):
+        for key in ("open_r", "high_r", "low_r"):
             assert key in walkable["t0"]["ohlcv"]
 
 

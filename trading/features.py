@@ -179,56 +179,62 @@ class TechnicalFeatureFactory:
         # --- Returns ---
         df["ret"] = close.pct_change()
 
+        # --- Price-normalized features ---
+        # These remove absolute price regime so engrams encode patterns, not levels.
+        df["atr_r"] = df["atr"] / close
+        df["sma20_r"] = close / df["sma20"] - 1
+        df["sma50_r"] = close / df["sma50"] - 1
+        df["sma200_r"] = close / df["sma200"] - 1
+        df["macd_line_r"] = df["macd_line"] / close
+        df["macd_signal_r"] = df["macd_signal"] / close
+        df["macd_hist_r"] = df["macd_hist"] / close
+        vol_ma = volume.rolling(48).mean()
+        df["vol_r"] = (volume / vol_ma.replace(0.0, np.nan)).fillna(1.0)
+        df["open_r"] = df["open"] / close - 1
+        df["high_r"] = df["high"] / close - 1
+        df["low_r"] = df["low"] / close - 1
+
         # Drop rows with any NaN (insufficient data for indicators)
         df = df.dropna().reset_index(drop=True)
 
         return df
 
     def compute_candle_row(self, df: pd.DataFrame, idx: int) -> dict[str, any]:
-        """Extract all indicators for a single candle row, returning nested dict.
+        """Extract all price-normalized indicators for a single candle row.
+
+        All features are price-regime-independent so engrams trained on
+        one price era generalize to another.
 
         Args:
             df: DataFrame from compute_indicators() with all indicator columns
             idx: Row index to extract
 
         Returns:
-            Nested dict matching the per-candle schema in the plan
+            Nested dict with price-normalized fields only.
         """
         row = df.iloc[idx]
 
-        # Extract OHLCV
-        ohlcv = {
-            "open": row["open"],
-            "high": row["high"],
-            "low": row["low"],
-            "close": row["close"],
-        }
-
-        # Build nested structure
-        candle_data = {
+        return {
             "ohlcv": {
-                "open": ohlcv["open"],
-                "high": ohlcv["high"],
-                "low": ohlcv["low"],
-                "close": ohlcv["close"],
+                "open_r": row["open_r"],
+                "high_r": row["high_r"],
+                "low_r": row["low_r"],
             },
-            "vol": row["volume"],
-            "atr": row["atr"],
+            "vol_r": row["vol_r"],
+            "atr_r": row["atr_r"],
             "rsi": row["rsi"],
             "ret": row["ret"],
             "sma": {
-                "s20": row["sma20"],    # BB middle
-                "s50": row["sma50"],
-                "s200": row["sma200"],
+                "s20_r": row["sma20_r"],
+                "s50_r": row["sma50_r"],
+                "s200_r": row["sma200_r"],
             },
             "macd": {
-                "line": row["macd_line"],
-                "signal": row["macd_signal"],
-                "hist": row["macd_hist"],
+                "line_r": row["macd_line_r"],
+                "signal_r": row["macd_signal_r"],
+                "hist_r": row["macd_hist_r"],
             },
             "bb": {
-                "upper": row["bb_upper"],
-                "lower": row["bb_lower"],
                 "width": row["bb_width"],
             },
             "dmi": {
@@ -237,8 +243,6 @@ class TechnicalFeatureFactory:
                 "adx": row["adx"],
             },
         }
-
-        return candle_data
 
     @staticmethod
     def _rsi(series: pd.Series, period: int) -> float:

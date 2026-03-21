@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 
 from holon import HolonClient
-from holon.kernel.walkable import LinearScale, LogScale
+from holon.kernel.walkable import LinearScale
 
 from .features import TechnicalFeatureFactory
 
@@ -41,7 +41,7 @@ class OHLCVEncoder:
 
     # Module constants — single source of truth for all consumers
     DEFAULT_DIM = 1024
-    N_STRIPES = 8
+    N_STRIPES = 32
     WINDOW_CANDLES = 12
     LOOKBACK_CANDLES = 200
 
@@ -237,31 +237,34 @@ class OHLCVEncoder:
         return walkable
 
     def _wrap_candle(self, raw: dict[str, Any]) -> dict[str, Any]:
-        """Wrap raw float values in the appropriate Scale type per the schema."""
+        """Wrap price-normalized float values in LinearScale.
+
+        All fields are price-regime-independent — no absolute prices, no
+        absolute SMA values, no absolute MACD values. This ensures engrams
+        trained on $5k BTC generalize to $50k BTC because they encode
+        *patterns* (relative positions, oscillator readings) not price levels.
+        """
         return {
             "ohlcv": {
-                "open":  LogScale(max(raw["ohlcv"]["open"],  1e-9)),
-                "high":  LogScale(max(raw["ohlcv"]["high"],  1e-9)),
-                "low":   LogScale(max(raw["ohlcv"]["low"],   1e-9)),
-                "close": LogScale(max(raw["ohlcv"]["close"], 1e-9)),
+                "open_r":  LinearScale(raw["ohlcv"]["open_r"]),
+                "high_r":  LinearScale(raw["ohlcv"]["high_r"]),
+                "low_r":   LinearScale(raw["ohlcv"]["low_r"]),
             },
-            "vol":  LogScale(max(raw["vol"], 1e-9)),
-            "atr":  LogScale(max(raw["atr"], 1e-9)),
-            "rsi":  LinearScale(raw["rsi"]),
-            "ret":  LinearScale(raw["ret"]),
+            "vol_r": LinearScale(raw["vol_r"]),
+            "atr_r": LinearScale(raw["atr_r"]),
+            "rsi":   LinearScale(raw["rsi"]),
+            "ret":   LinearScale(raw["ret"]),
             "sma": {
-                "s20":  LogScale(max(raw["sma"]["s20"],  1e-9)),
-                "s50":  LogScale(max(raw["sma"]["s50"],  1e-9)),
-                "s200": LogScale(max(raw["sma"]["s200"], 1e-9)),
+                "s20_r":  LinearScale(raw["sma"]["s20_r"]),
+                "s50_r":  LinearScale(raw["sma"]["s50_r"]),
+                "s200_r": LinearScale(raw["sma"]["s200_r"]),
             },
             "macd": {
-                "line":   LinearScale(raw["macd"]["line"]),
-                "signal": LinearScale(raw["macd"]["signal"]),
-                "hist":   LinearScale(raw["macd"]["hist"]),
+                "line_r":   LinearScale(raw["macd"]["line_r"]),
+                "signal_r": LinearScale(raw["macd"]["signal_r"]),
+                "hist_r":   LinearScale(raw["macd"]["hist_r"]),
             },
             "bb": {
-                "upper": LogScale(max(raw["bb"]["upper"], 1e-9)),
-                "lower": LogScale(max(raw["bb"]["lower"], 1e-9)),
                 "width": LinearScale(raw["bb"]["width"]),
             },
             "dmi": {
@@ -304,7 +307,7 @@ class OHLCVEncoder:
         if field_path in self._role_atoms:
             return self._role_atoms[field_path]
         try:
-            probe = LogScale(1.0) if self._is_log_field(field_path) else LinearScale(1.0)
+            probe = LinearScale(1.0)
             atom = enc.leaf_binding(probe, field_path)
             self._role_atoms[field_path] = atom
             return atom
@@ -312,13 +315,8 @@ class OHLCVEncoder:
             return None
 
     def _is_log_field(self, field_path: str) -> bool:
-        """Determine if a field path should use log scaling."""
-        log_suffixes = {
-            "ohlcv.open", "ohlcv.high", "ohlcv.low", "ohlcv.close",
-            "vol", "atr", "bb.upper", "bb.lower",
-            "sma.s20", "sma.s50", "sma.s200",
-        }
-        for suffix in log_suffixes:
-            if field_path.endswith(suffix) or field_path == suffix:
-                return True
+        """Determine if a field path should use log scaling.
+
+        After price normalization, all fields use LinearScale.
+        """
         return False

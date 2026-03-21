@@ -41,8 +41,8 @@ class DiscoveryHarness:
 
     def __init__(
         self,
-        dimensions: int = 4096,
-        k: int = 32,
+        dimensions: int = 1024,
+        k: int = 4,
         initial_usdt: float = 10_000.0,
         data_path: str = "data/btc_5m.parquet",
         db_path: str = "data/discovery.db",
