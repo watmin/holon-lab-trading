@@ -193,6 +193,23 @@ Wildly-wrong: 3 iterations. More aggressive correction for bigger mistakes.
 
 **Cost**: Trivial. Already have the primitive, just vary the parameter.
 
+**TESTED (2026-03-21) — RULED OUT.** Stacked on #7+#10+#3. Two variants tested:
+
+1. **Correction-path iterations** (1-3 iters scaled by conviction on wrong predictions):
+   Equity dropped to -7.4% at 50k, matching pre-separation-gate baseline. The
+   iterative grover overrides the separation gate — sep_gate scales down
+   correction_weight but grover increases amplification intensity independently.
+   The weight says "be gentle" but the iterations say "be aggressive."
+
+2. **Reward-path iterations** (1-3 iters on correct predictions, correction stays at 1):
+   Identical result — -7.4% at 50k. Same conflict from the other direction:
+   sep_gate scales down reward_weight but grover amplifies the vector signal.
+
+Root cause: grover_amplify with multiple iterations changes the *vector magnitude*
+independently of the weight multiplier. This conflicts with any weight-based gating
+(separation gate, confidence gate). The two mechanisms pull in opposite directions.
+Iterative grover is incompatible with the gating architecture.
+
 ### 13. Soft-then-Hard Filtering (Attend + Resonance Chain)
 
 `attend(vec, proto, alpha, Soft)` for broad feature weighting, then
@@ -230,6 +247,20 @@ less destructive.
 
 **Cost**: Trivial. One blend call.
 
+**TESTED (2026-03-21) — RULED OUT.** Stacked on #7+#10+#3. Replaced
+negate/amplify correction with `blend(vec, correct_proto, 0.5)`. Run
+matched pre-separation-gate baseline (-5.6% at 40k, heading to -7.4%).
+The blend completely nullified the separation gate's effect.
+
+Root cause: the negate/amplify correction path is *load-bearing* for the
+separation gate. It produces vectors with specific algebraic structure
+that interacts with prototype evolution. Replacing it with blend changes
+how prototypes evolve, causing them to converge in a way that makes the
+separation gate clamp to minimum (0.05), effectively freezing learning.
+All correction-path modifications (#12, #14, #15) produce identical
+results to the non-separation-gate baseline — the correction mechanism
+and the separation gate are a coupled system.
+
 ### 16. Complexity-Gated Learning
 
 Use `complexity(vec)` to measure how "mixed" a vector is before learning.
@@ -239,6 +270,20 @@ similarity threshold, use the vector's own information content to decide
 whether to learn from it.
 
 **Cost**: Trivial. One complexity call per update.
+
+**TESTED (2026-03-21) — RULED OUT.** Stacked on #7+#10+#3. Used
+`Primitives::complexity(vec)` to scale learning weights: `complexity_gate =
+(1.0 - comp * 0.8).clamp(0.2, 1.0)`. Run matched pre-separation-gate
+baseline exactly (-7.4% at 50k).
+
+Root cause: pixel-chart raster encoding produces vectors with near-identical
+complexity scores — every viewport fills the same grid with the same
+encoding process, so density and balance are structurally constant.
+The complexity gate degenerates to a uniform scalar that just reduces
+all learning weights equally, smothering the separation gate. Vector-level
+statistics (density, balance) don't capture signal ambiguity for this
+encoding — that information is relational (similarity to prototypes),
+which recognition rejection (#10) already handles correctly.
 
 ### 17. Reject-Based Class Isolation (OnlineSubspace)
 
@@ -268,20 +313,20 @@ Surgical at the dimension level rather than the vector level.
 |---|-----------|--------|------------|----------|--------|
 | 7 | Confidence-gated learning | High | Trivial | Reinforcement | **CONFIRMED** |
 | 10 | Recognition rejection | High | Trivial | Pruning | **CONFIRMED** |
-| 14 | Analogy-based correction | High | Trivial | Reinforcement | Queued |
-| 12 | Iterative grover amplification | Medium | Trivial | Reinforcement | Queued |
-| 16 | Complexity-gated learning | Medium | Trivial | Pruning | Queued |
-| 15 | Blend-based gentle correction | Medium | Trivial | Reinforcement | Queued |
+| 3 | Separation gate (regime detection) | High | Low | Architecture | **CONFIRMED** |
+| 16 | Complexity-gated learning | Low | Trivial | Pruning | **RULED OUT** |
+| 15 | Blend-based gentle correction | Low | Trivial | Reinforcement | **RULED OUT** |
 | 8 | Layered resonance filtering | Medium | Low | Reinforcement | Queued |
 | 13 | Soft-then-hard filtering | Medium | Low | Reinforcement | Queued |
 | 18 | Similarity profile correction | Medium | Low | Reinforcement | Queued |
-| 3 | Regime detection | Medium | Low | Architecture | Queued |
 | 11 | Negative prototyping | Medium | Low-Med | Pruning | Already impl (confusers) |
 | 2 | Engram library | High | Medium | Architecture | Queued |
 | 17 | Reject-based class isolation | High | Medium | Architecture | Queued |
 | 4 | Temporal binding | Medium | Medium | Encoding | Queued |
 | 5 | Subspace classification | Medium | Medium | Architecture | Queued |
 | 6 | Contrastive sharpening | Low | Low | Reinforcement | Queued |
+| 14 | Analogy-based correction | Low | Trivial | Reinforcement | **RULED OUT** |
+| 12 | Iterative grover amplification | Low | Trivial | Reinforcement | **RULED OUT** |
 | 9 | Cross-class surgical feedback | Low | Low | Reinforcement | **RULED OUT** |
 | 1 | Multi-timescale accumulators | Low | Low | Architecture | **RULED OUT** |
 
