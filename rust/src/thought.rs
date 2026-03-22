@@ -827,26 +827,11 @@ impl ThoughtJournaler {
             }
         }
 
-        // Confuser check
-        let buy_confuser_sim = if self.buy_confuser.count() > 0 {
-            Similarity::cosine(&cleaned, &self.buy_confuser.threshold())
-        } else {
-            -1.0
-        };
-        let sell_confuser_sim = if self.sell_confuser.count() > 0 {
-            Similarity::cosine(&cleaned, &self.sell_confuser.threshold())
-        } else {
-            -1.0
-        };
-
-        let buy_conviction = buy_sim - buy_confuser_sim;
-        let sell_conviction = sell_sim - sell_confuser_sim;
-
-        if buy_conviction > sell_conviction {
-            ThoughtPrediction { outcome: Some(Outcome::Buy), conviction: buy_conviction, coherence }
-        } else {
-            ThoughtPrediction { outcome: Some(Outcome::Sell), conviction: sell_conviction, coherence }
-        }
+        // Direction and conviction from raw discriminant margin
+        let is_buy = buy_sim > sell_sim;
+        let conviction = (buy_sim - sell_sim).abs();
+        let outcome = if is_buy { Some(Outcome::Buy) } else { Some(Outcome::Sell) };
+        ThoughtPrediction { outcome, conviction, coherence }
     }
 
     pub fn observe(
@@ -903,17 +888,30 @@ impl ThoughtJournaler {
             }
         }
 
-        // Raw accumulation
+        // Compute separation gate early — used for both raw accumulation and corrections.
+        // Thought vectors are compositionally self-similar, so ungated raw adds
+        // cause prototype convergence cascades that the visual system avoids
+        // through structural diversity of pixel encodings.
+        let sep_gate = if self.is_ready() {
+            let bp = self.buy_good.threshold();
+            let sp = self.sell_good.threshold();
+            let separation = 1.0 - Similarity::cosine(&bp, &sp);
+            separation.clamp(0.05, 1.0)
+        } else {
+            1.0
+        };
+
+        // Raw accumulation — gated by separation to prevent convergence cascade
         match outcome {
             Outcome::Buy => {
                 self.buy_good.decay(decay);
                 self.sell_good.decay(decay);
-                self.buy_good.add(thought);
+                self.buy_good.add_weighted(thought, sep_gate);
             }
             Outcome::Sell => {
                 self.buy_good.decay(decay);
                 self.sell_good.decay(decay);
-                self.sell_good.add(thought);
+                self.sell_good.add_weighted(thought, sep_gate);
             }
             _ => {}
         }
@@ -941,8 +939,6 @@ impl ThoughtJournaler {
                 let buy_proto = self.buy_good.threshold();
                 let sell_proto = self.sell_good.threshold();
 
-                let separation = 1.0 - Similarity::cosine(&buy_proto, &sell_proto);
-                let sep_gate = separation.clamp(0.05, 1.0);
                 let reward_weight = reward_weight * sep_gate;
                 let correction_weight = correction_weight * sep_gate;
 

@@ -84,6 +84,7 @@ do_test() {
 
     local outdir="$SCRIPT_DIR/orchestration_results"
     local logfile="$outdir/${name}.log"
+    local rundb="$outdir/${name}.db"
     mkdir -p "$outdir"
 
     do_build
@@ -91,11 +92,7 @@ do_test() {
     echo "Running: $candles candles, logging to $logfile"
     echo "Flags: ${extra_args[*]:-none}"
     echo "──────────────────────────────────────"
-    "$BINARY" --db-path "$DB_PATH" --max-candles "$candles" "${extra_args[@]}" 2>"$logfile" &
-    local pid=$!
-    echo "PID: $pid"
-    echo "Tail with: $0 log $name"
-    wait "$pid"
+    "$BINARY" --db-path "$DB_PATH" --max-candles "$candles" --run-db "$rundb" "${extra_args[@]}" 2>"$logfile"
     echo ""
     echo "Done. Results:"
     grep -E 'Equity:|Total return:|Win rate:|Rolling|recognition gate|noise_floor' "$logfile" || true

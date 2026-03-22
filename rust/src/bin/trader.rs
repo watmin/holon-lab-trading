@@ -85,6 +85,10 @@ struct Args {
     /// Orchestration mode: visual-only, thought-only, agree-only, meta-boost, weighted
     #[arg(long, default_value = "meta-boost")]
     orchestration: String,
+
+    /// Path for run database (absolute). Auto-generated if not provided.
+    #[arg(long)]
+    run_db: Option<PathBuf>,
 }
 
 // ─── Outcome ────────────────────────────────────────────────────────────────
@@ -261,18 +265,12 @@ impl Journaler {
             -1.0
         };
 
-        let buy_conviction = buy_sim - buy_confuser_sim;
-        let sell_conviction = sell_sim - sell_confuser_sim;
+        // Direction and conviction from raw discriminant margin.
+        // Confuser sims still computed for logging but don't affect prediction.
+        let is_buy = buy_sim > sell_sim;
+        let conviction = (buy_sim - sell_sim).abs();
 
-        let raw_direction_buy = buy_sim > sell_sim;
-        let adjusted_direction_buy = buy_conviction > sell_conviction;
-        let confuser_flipped = raw_direction_buy != adjusted_direction_buy;
-
-        let (prediction, conviction) = if adjusted_direction_buy {
-            (Some(Outcome::Buy), buy_conviction)
-        } else {
-            (Some(Outcome::Sell), sell_conviction)
-        };
+        let prediction = if is_buy { Some(Outcome::Buy) } else { Some(Outcome::Sell) };
 
         PredictionDetail {
             prediction,
@@ -284,7 +282,7 @@ impl Journaler {
             sell_confuser_sim,
             noise_sim,
             noise_gated: false,
-            confuser_flipped,
+            confuser_flipped: false,
         }
     }
 
@@ -806,9 +804,16 @@ fn main() {
     eprintln!("  Thought system ready ({} fact codebook entries).", fact_codebook.labels.len());
 
     // Initialize run database for structured logging
-    let run_ts = chrono::Utc::now().format("%Y%m%d_%H%M%S").to_string();
-    let run_db_path = format!("runs/run_{}.db", run_ts);
-    std::fs::create_dir_all("runs").ok();
+    let run_db_path = if let Some(ref p) = args.run_db {
+        if let Some(parent) = p.parent() {
+            std::fs::create_dir_all(parent).ok();
+        }
+        p.display().to_string()
+    } else {
+        let run_ts = chrono::Utc::now().format("%Y%m%d_%H%M%S").to_string();
+        std::fs::create_dir_all("runs").ok();
+        format!("runs/run_{}.db", run_ts)
+    };
     let run_db = Connection::open(&run_db_path).expect("failed to open run DB");
     run_db.execute_batch("
         PRAGMA journal_mode=WAL;
