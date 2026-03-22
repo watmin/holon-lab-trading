@@ -1,14 +1,18 @@
 # Next Moves — Holon BTC Trader
 
-## Current Baseline (Run: 2026-03-20)
+## Current Architecture (2026-03-22)
 
-Walk-forward over 652k 5-min BTC candles (2019-2025) at 10kD.
-Single pair of decaying accumulators (decay=0.999), four-case algebraic correction
-(resonance/negate/grover_amplify), discriminative recalibration every 500 updates.
+Two-agent system (visual + thought) with delta discriminant prediction.
+Walk-forward over 100k 5-min BTC candles (2019) at 10kD.
 
-Key observation: rolling accuracy oscillates between ~32-61%, recovering from
-regime-change dips within ~1000 labeled updates. The model adapts — this is
-fundamentally different from the static 50-53% we saw with fixed prototypes.
+Both systems use:
+- Delta discriminant: `delta_disc = difference(sell_proto, buy_proto)`
+- Self-tuning temporal smoothing: `alpha = (1 - cos(buy,sell)).clamp(0.05, 1.0)`
+- Confidence-gated learning (#7), recognition rejection (#10), separation gate (#3)
+- Raw accumulation + algebraic correction (resonance/negate/amplify)
+
+Latest run (vis-delta-disc): +0.26%, 51.4% win rate, 52.1% agreement.
+See EXPERIMENT_LOG.md for full results and run history.
 
 ---
 
@@ -314,17 +318,20 @@ Surgical at the dimension level rather than the vector level.
 | 7 | Confidence-gated learning | High | Trivial | Reinforcement | **CONFIRMED** |
 | 10 | Recognition rejection | High | Trivial | Pruning | **CONFIRMED** |
 | 3 | Separation gate (regime detection) | High | Low | Architecture | **CONFIRMED** |
+| DD | Delta discriminant | High | Low | Architecture | **CONFIRMED** (both systems) |
+| ST | Self-tuning smoothing | Medium | Trivial | Architecture | **CONFIRMED** (both systems) |
+| 6 | Contrastive sharpening (→ delta disc) | High | Low | Architecture | **CONFIRMED** (evolved into DD) |
 | 16 | Complexity-gated learning | Low | Trivial | Pruning | **RULED OUT** |
 | 15 | Blend-based gentle correction | Low | Trivial | Reinforcement | **RULED OUT** |
-| 8 | Layered resonance filtering | Medium | Low | Reinforcement | Queued |
-| 13 | Soft-then-hard filtering | Medium | Low | Reinforcement | Queued |
-| 18 | Similarity profile correction | Medium | Low | Reinforcement | Queued |
-| 11 | Negative prototyping | Medium | Low-Med | Pruning | Already impl (confusers) |
+| NC | Noise centering | Low | Trivial | Prediction | **RULED OUT** (negate too aggressive) |
+| 8 | Layered resonance filtering | Medium | Low | Reinforcement | ⚠️ Likely breaks sep gate |
+| 13 | Soft-then-hard filtering | Medium | Low | Reinforcement | ⚠️ Likely breaks sep gate |
+| 18 | Similarity profile correction | Medium | Low | Reinforcement | ⚠️ Likely breaks sep gate |
+| 11 | Negative prototyping | Medium | Low-Med | Pruning | Impl (confusers, log-only) |
 | 2 | Engram library | High | Medium | Architecture | Queued |
 | 17 | Reject-based class isolation | High | Medium | Architecture | Queued |
 | 4 | Temporal binding | Medium | Medium | Encoding | Queued |
 | 5 | Subspace classification | Medium | Medium | Architecture | Queued |
-| 6 | Contrastive sharpening | Low | Low | Reinforcement | Queued |
 | 14 | Analogy-based correction | Low | Trivial | Reinforcement | **RULED OUT** |
 | 12 | Iterative grover amplification | Low | Trivial | Reinforcement | **RULED OUT** |
 | 9 | Cross-class surgical feedback | Low | Low | Reinforcement | **RULED OUT** |

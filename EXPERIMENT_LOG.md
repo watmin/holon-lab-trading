@@ -4,41 +4,79 @@ Living document tracking experiment results, system architecture, and learnings.
 
 ---
 
-## Current Best: #7 + #10 + #3 → **+4.65% return, 50.5% win rate**
+## Current State (2026-03-22)
+
+Both visual and thought systems now use identical delta discriminant architecture
+with self-tuning temporal smoothing.
+
+### Latest Run: `vis-delta-disc` (100k candles)
+
+| Metric | Value |
+|--------|-------|
+| Equity | $10,026 (+0.26%) |
+| Win rate | 51.4% (34,237/66,597) |
+| Visual accuracy (overall) | 50.1% |
+| Thought accuracy (overall) | 51.5% |
+| Visual-Thought agreement | 52.1% |
+| Agreement accuracy (when agree) | 51.6% |
+| Candles | 100,000 (2019-01-01 to 2019-12-15) |
+| Buy-and-hold | +89.56% |
+| Visual bias | 67.6% Buy / 32.4% Sell |
+| Thought bias | 41.2% Buy / 58.8% Sell |
+| cos(buy_good, sell_good) visual | 0.9000 |
+| cos(buy_good, sell_good) thought | 0.9482 |
+| Phase | CONFIDENT |
+
+Key observation: visual and thought systems have **anti-correlated bias** — visual
+leans Buy, thought leans Sell. When they agree, both are overcoming their natural
+bias, which may indicate higher-quality signals. The systems trade leadership across
+different market regimes (visual surges in some periods, thought in others).
+
+### Previous Best: `conviction-fix-100k` (pre-delta, old dual-disc architecture)
 
 | Metric | Value |
 |--------|-------|
 | Equity | $10,465 (+4.65%) |
-| Win rate | 50.5% (33,663/66,599) |
-| j_acc overall | 50.6% |
-| j_acc rolling | 48.3% |
-| Candles | 100,000 (2019-01-01 to 2019-12-15) |
-| Buy-and-hold | +89.56% |
-| cos(buy_good, sell_good) | 0.9296 |
-| cos(buy_good, noise) | 0.5473 |
-| cos(sell_good, noise) | 0.5519 |
-| buy_good count | 68,051 |
-| sell_good count | 66,558 |
-| buy_confuser | 16,629 |
-| sell_confuser | 16,624 |
-| Phase | CONFIDENT |
+| Win rate | 50.5% |
+| Visual accuracy | 50.7% |
+| Thought accuracy | 50.3% |
+| Agreement | 55.0% |
+| Visual bias | 51.1% Buy (balanced) |
+| Thought bias | 49.3% Buy (balanced) |
 
 ---
 
 ## System Architecture
 
+### Delta Discriminant (both visual and thought)
+
+Both systems replaced dual discriminants (`buy_disc`/`sell_disc`) and noise
+stripping with a single symmetric delta discriminant:
+
+```
+delta_disc = difference(sell_proto, buy_proto)
+```
+
+Prediction: `delta_sim = cosine(vec, delta_disc)` — positive = Buy, negative = Sell,
+magnitude = conviction.
+
+Self-tuning temporal smoothing at recalibration:
+```
+alpha = (1.0 - cosine(buy_proto, sell_proto)).clamp(0.05, 1.0)
+delta_disc = blend(prev_delta, new_delta, alpha)
+```
+
+When prototypes are similar (fragile delta), alpha is small → conservative updates.
+When prototypes separate (robust delta), alpha approaches 1.0 → fast adaptation.
+
 ### Prediction Flow
 
 ```mermaid
 flowchart TD
-    V[/"Encoded Viewport"/] --> NS["Noise Stripping: negate vec, noise_proto"]
-    NS --> CS["Cosine Similarity vs buy_disc and sell_disc"]
-    CS --> NG{"Noise sim > max class sim?"}
-    NG -->|Yes| SIT[/"Sit out"/]
-    NG -->|No| CC["Confuser Check: conviction = good_sim - confuser_sim"]
-    CC --> PRED{"buy_conviction > sell_conviction?"}
-    PRED -->|Yes| BUY[/"Predict BUY"/]
-    PRED -->|No| SELL[/"Predict SELL"/]
+    V[/"Encoded Viewport (or Thought)"/] --> DS["delta_sim = cosine(vec, delta_disc)"]
+    DS --> DIR{"delta_sim > 0?"}
+    DIR -->|Yes| BUY[/"Predict BUY, conviction = delta_sim"/]
+    DIR -->|No| SELL[/"Predict SELL, conviction = |delta_sim|"/]
 ```
 
 ### Learning Flow (Journaler.observe)
@@ -48,7 +86,7 @@ flowchart TD
     INPUT[/"vec + outcome + prediction + conviction"/] --> CG["#7 Confidence Gate: weight *= conviction"]
     CG --> NOISE{"Noise?"}
     NOISE -->|Yes| NA["Add to noise_accum"] --> DONE[/"Return"/]
-    NOISE -->|No| RR{"#10 Recognition Rejection: max sim < 0.01?"}
+    NOISE -->|No| RR{"#10 Recognition Rejection: max sim < noise_floor?"}
     RR -->|Yes| SKIP[/"Skip learning"/]
     RR -->|No| RAW["Raw Accumulation: decay + add vec"]
     RAW --> WRONG{"Predicted wrong?"}
@@ -58,7 +96,7 @@ flowchart TD
     GATE["#3 Separation Gate: scale weights by proto divergence"] --> MATCH{"Prediction correct?"}
     MATCH -->|Reward| REWARD["resonance → amplify → add_weighted"]
     MATCH -->|Correction| CORRECT["resonance → negate → amplify → add_weighted"]
-    REWARD --> RECAL["Every 500 updates: recalibrate discriminative protos"]
+    REWARD --> RECAL["Every 500 updates: recalibrate delta_disc"]
     CORRECT --> RECAL
 
     style CG fill:#2d6a2d,color:#fff
@@ -72,9 +110,13 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    CANDLE[/"New 5-min candle"/] --> ENC["Encode viewport: 48 candles → pixel grid → bipolar vec"]
-    ENC --> JPRED["Journaler.predict(vec)"]
-    JPRED --> PHASE{"Current Phase?"}
+    CANDLE[/"New 5-min candle"/] --> ENC["Encode viewport + thought"]
+    ENC --> VPRED["Visual: cosine(vis_vec, vis_delta)"]
+    ENC --> TPRED["Thought: cosine(thought_vec, thought_delta)"]
+    VPRED --> AGREE{"Both agree on direction?"}
+    TPRED --> AGREE
+    AGREE -->|Yes| PHASE{"Current Phase?"}
+    AGREE -->|No| META["Meta-boost: still trade, weighted by agreement"]
 
     PHASE -->|OBSERVE| WAIT["No trade, just watch"]
     PHASE -->|TENTATIVE| SMALL["Trade min size 0.5%"]
@@ -88,7 +130,7 @@ flowchart TD
     RESOLVE -->|Down| SELL_OUT["Outcome: SELL"]
     RESOLVE -->|Flat| NOISE_OUT["Outcome: NOISE"]
 
-    BUY_OUT --> OBS["Journaler.observe"]
+    BUY_OUT --> OBS["Both journalers observe"]
     SELL_OUT --> OBS
     NOISE_OUT --> OBS
     OBS --> PNL["Update P&L + check phase transitions"]
@@ -102,22 +144,43 @@ flowchart TD
 
 | # | Technique | Return | Win Rate | Key Insight |
 |---|-----------|--------|----------|-------------|
-| 7 | Confidence-Gated Learning | +2.50%¹ | 49.6% | Scales learning by conviction. Prevents prototype smearing from coin-flip predictions. 62x better than ungated baseline. |
-| 10 | Recognition Rejection | +3.31%² | 49.7% | Skips learning when max similarity < 0.01. Filters truly novel/ambiguous data. |
-| 3 | Separation Gate | +4.65%³ | 50.5% | Scales learning by prototype divergence. Suppresses corrections when buy/sell converge during trends. Noise separation improved dramatically (0.78→0.55). |
+| 7 | Confidence-Gated Learning | +2.50%¹ | 49.6% | Scales learning by conviction. Prevents prototype smearing from coin-flip predictions. |
+| 10 | Recognition Rejection | +3.31%² | 49.7% | Skips learning when max similarity < noise_floor. Filters truly novel/ambiguous data. |
+| 3 | Separation Gate | +4.65%³ | 50.5% | Scales learning by prototype divergence. Suppresses corrections when buy/sell converge. |
+| DD | Delta Discriminant | +0.26%⁴ | 51.4% | Single symmetric discriminant replaces dual disc + noise stripping. Eliminates majority-class bias. |
+| ST | Self-Tuning Smoothing | (same)⁴ | 51.4% | Temporal blend of delta_disc with data-driven alpha. Prevents fragile delta flips. |
 
-¹ vs +0.04% baseline  ² stacked on #7  ³ stacked on #7+#10
+¹ vs +0.04% baseline  ² stacked on #7  ³ stacked on #7+#10  ⁴ stacked on all, both systems
+
+### Delta Discriminant Migration (2026-03-22)
+
+**Problem diagnosed**: The thought system's dual-discriminant + null_thought architecture
+introduced majority-class bias. The null_thought (average of all thoughts) was slightly
+Buy-biased because more candles resolved as Buy opportunities. Subtracting this biased
+null_thought disproportionately weakened Buy signal → 65-80% Sell prediction bias.
+
+**Solution**: Replace dual discriminants with `delta_disc = difference(sell_proto, buy_proto)`.
+This is inherently symmetric — shared components cancel algebraically. No background
+removal needed.
+
+**Fragility fix**: Pure delta_disc was fragile (cos(buy,sell)=0.94 → sparse delta → prone
+to sudden direction flips during strong trends). Fixed with temporal smoothing via
+`blend(prev, new, alpha)` where alpha self-tunes from prototype separation.
+
+**Applied to both systems**: Visual migrated from dual-disc + noise stripping to same
+pattern. Both systems now share identical prediction architecture.
 
 ### Ruled Out Techniques
 
 | # | Technique | Result | Root Cause |
 |---|-----------|--------|------------|
-| 1 | Multi-Timescale Accumulators | No improvement | Cross-timescale corrections corrupt accumulator state. Per-timescale fixes matched but didn't beat baseline. |
-| 9 | Cross-Class Surgical Feedback | +0.14% (was +3.31%) | Over-feeds accumulators. Double-adding on wrong predictions smears prototypes. |
-| 14 | Analogy-Based Correction | +2.23% (was +3.31%) | `analogy` degenerates when prototypes converge (difference→0). `flip` penalty dominates, creating asymmetric accumulator damage. |
-| 12 | Iterative Grover Amplification | -7.4% at 50k | Grover iterations change vector *intensity* independently of weight. Conflicts with all weight-based gates (#3, #7). Tested on both correction and reward paths — same result. |
-| 16 | Complexity-Gated Learning | -7.4% at 50k | Pixel encoding produces uniform complexity scores. Gate degenerates to constant scalar, smothering learning. |
-| 15 | Blend-Based Gentle Correction | -5.6% at 40k | Replaces load-bearing negate/amplify correction. Nullifies separation gate — correction mechanism and gate are a coupled system. |
+| 1 | Multi-Timescale Accumulators | No improvement | Cross-timescale corrections corrupt accumulator state. |
+| 9 | Cross-Class Surgical Feedback | +0.14% (was +3.31%) | Double-adding on wrong predictions smears prototypes. |
+| 14 | Analogy-Based Correction | +2.23% (was +3.31%) | `analogy` degenerates when prototypes converge. |
+| 12 | Iterative Grover Amplification | -7.4% at 50k | Conflicts with weight-based gates (#3, #7). |
+| 16 | Complexity-Gated Learning | -7.4% at 50k | Pixel encoding produces uniform complexity. Gate is constant. |
+| 15 | Blend-Based Gentle Correction | -5.6% at 40k | Breaks load-bearing negate/amplify correction path. |
+| NC | Noise Centering (thought) | 35-42% acc | `negate(vec, noise_proto)` too aggressive — inverts neutral signals. |
 
 ### Key Learnings
 
@@ -125,15 +188,18 @@ flowchart TD
 flowchart LR
     subgraph WORKS["What Works"]
         L1["GATING: deciding WHETHER to learn"]
+        L6["SYMMETRY: delta disc eliminates bias"]
+        L7["SMOOTHING: temporal blend prevents fragile flips"]
         WIN["#7 confidence, #10 rejection, #3 separation"]
     end
     subgraph FAILS["What Fails"]
-        L2["INTENSITY: more grover iterations → #12"]
+        L2["BACKGROUND REMOVAL: null_thought introduces bias"]
         L3["MECHANISM: replacing negate/amplify → #14, #15"]
-        L4["UNIFORM SCALING: same gate for all → #16"]
+        L4["NOISE CENTERING: negate too aggressive"]
     end
-    subgraph CRITICAL["Critical Constraint"]
+    subgraph CRITICAL["Critical Constraints"]
         L5["Correction path is LOAD-BEARING for sep gate"]
+        L8["Anti-correlated bias may be feature, not bug"]
     end
 
     L1 --> WIN
@@ -141,20 +207,6 @@ flowchart LR
     style FAILS fill:#8b0000,color:#fff
     style CRITICAL fill:#b8860b,color:#fff
 ```
-
-### What's Left to Try
-
-| Category | # | Technique | Risk Assessment |
-|----------|---|-----------|-----------------|
-| **Reinforcement** | 8 | Layered resonance filtering | ⚠️ Modifies correction path — likely breaks sep gate |
-| **Reinforcement** | 13 | Soft-then-hard filtering | ⚠️ Modifies correction path — likely breaks sep gate |
-| **Reinforcement** | 18 | Similarity profile correction | ⚠️ Modifies correction path — likely breaks sep gate |
-| **Encoding** | 4 | Temporal binding | ✅ Safe — changes input, not learning |
-| **Architecture** | 2 | Engram library (sub-patterns) | ✅ Safe — adds parallel classification |
-| **Architecture** | 17 | Reject-based class isolation | ✅ Safe — adds parallel classification |
-| **Architecture** | 5 | Subspace classification | ✅ Safe — adds parallel classification |
-
-**Recommendation**: Skip remaining reinforcement techniques (#8, #13, #18) — they all modify the correction path which is coupled to the separation gate. Next moves should come from **encoding** or **architecture** categories.
 
 ---
 
@@ -203,41 +255,57 @@ These techniques failed at specific insertion points (the learning/correction pa
 
 ---
 
-## Next Experiments (prioritized)
+## Next Experiments (prioritized for 2026-03-23)
 
-### Tier 1 — Trivial, safe (read-only or offline)
+### Tier 0 — Thought Vocabulary Expansion (highest value, safe)
+
+Adds genuinely new signal without touching learning or prediction.
+The expanded pairs/zones already improved thought from ~50% to 51.5%.
+These are the remaining planned items from THOUGHT_VOCAB.md.
+
+| ID | Experiment | Effort | Rationale |
+|----|-----------|--------|-----------|
+| TV4 | Candle range vs ATR zones | Trivial | `(at candle-range large-range)` — abnormal candle detection. Two zone checks. |
+| TV1 | Trend/reversal/continuation | Moderate | Uses `segment()` + `drift_rate()` from Holon. Biggest gap in thought vocabulary. |
+| TV2 | Divergence predicates | Low (needs TV1) | `(diverging close up rsi down)` — classic TA signal. |
+| TV3 | Temporal lookback (`since`) | Moderate | `(since fact N)` — multi-candle pattern memory. |
+| TV5 | Market holidays | Low | Calendar-based regime facts. Thin liquidity detection. |
+
+### Tier 1 — Analysis & Quick Wins (read-only)
 
 | ID | Experiment | Where | Rationale |
 |----|-----------|-------|-----------|
-| 12R | Grover-amplify disc protos at recalibration | Recalibrate (offline, every 500 updates) | Sharper discriminative protos. Not in feedback loop. |
-| 12P | Grover-amplify disc protos at prediction | Predict (read-only) | More decisive classifier. Doesn't touch learning. |
-| 1R | Fast/slow accumulator disagreement for phase demotion | Phase transition logic | Read-only from extra accumulators. Earlier regime detection. |
+| CONV | Conviction calibration check | DB analysis | Verify high delta_sim → higher accuracy. Previous inversion was from confuser subtraction (fixed). |
+| AGREE | High-conviction agreement filter | DB analysis | Accuracy when both agree AND both high conviction. May reveal strong sub-signal. |
+| 12R | Grover-amplify delta_disc at recalibration | Recalibrate (offline) | Sharpen delta. Adapt for new architecture (amplify against noise_proto?). |
 
-### Tier 2 — Moderate, safe (changes input or preprocessing)
+### Tier 2 — Encoding Changes (changes input, not learning)
 
 | ID | Experiment | Where | Rationale |
 |----|-----------|-------|-----------|
-| 4 | Temporal binding (bind consecutive viewports) | Encoding pipeline | New signal: transitions, not just snapshots. |
-| 12E | Grover-sharpen viewport vectors before learning | Encoding pipeline | Boost signal-to-noise before accumulation. |
+| 4 | Temporal binding (bind consecutive viewports) | Visual encoding | Captures transitions, not just snapshots. Fundamentally new signal. |
+| 12E | Grover-sharpen viewport vectors before learning | Visual encoding | Boost signal-to-noise in raw encoding. |
 
 ### Tier 3 — Architecture (parallel systems)
 
 | ID | Experiment | Where | Rationale |
 |----|-----------|-------|-----------|
-| 2 | Engram library (sub-pattern clustering) | Parallel classification | Capture distinct buy/sell sub-patterns. |
+| 2 | Engram library (sub-pattern clustering) | Parallel classification | A breakout-buy ≠ dip-buy. Sub-pattern prototypes. |
 | 5 | Subspace classification (OnlineSubspace) | Parallel classification | Second opinion via subspace projection. |
+| REG | Visual as regime detector | Trader/orchestration | Use visual rolling accuracy to gate trading, not for directional calls. |
 
 ### Tier 3.5 — Trader-level (safe, no learning changes)
 
 | ID | Experiment | Where | Rationale |
 |----|-----------|-------|-----------|
-| STR | Straddle on low conviction | Trader position sizing | When buy_sim ≈ sell_sim but both are high, play both sides. Captures volatility instead of direction. Low conviction + high recognition = "market will move, unclear which way." Net positive if winner > loser. |
+| STR | Straddle on low conviction | Trader position sizing | Low conviction + high recognition → play both sides. Captures volatility. |
 
-### Tier 4 — Risky but principled
+### Tier 4 — Investigation (diagnosis before fix)
 
 | ID | Experiment | Where | Rationale |
 |----|-----------|-------|-----------|
-| 14G | Analogy correction, only when separation > 0.5 | Correction path (conditional) | Analogy works when protos are distinct. Still touches feedback loop. |
+| BIAS | Visual Buy bias drift | Visual observe/recalibrate | Visual delta drifts to 76% Buy by 90k. Asymmetric correction path? |
+| 14G | Analogy correction, gated by separation > 0.5 | Correction path | Analogy works when protos are distinct. Risky — touches feedback loop. |
 
 ---
 
@@ -250,13 +318,18 @@ These techniques failed at specific insertion points (the learning/correction pa
 | 2026-03-21 | +#7+#10 | +3.31% | 49.7% | Recognition rejection confirmed |
 | 2026-03-21 | +#7+#10+#9 | +0.14% | — | Cross-class ruled out |
 | 2026-03-21 | +#7+#10+#14 | +2.23% | 49.5% | Analogy ruled out |
-| 2026-03-21 | +#7+#10+#3 | **+4.65%** | **50.5%** | **Current best** |
+| 2026-03-21 | +#7+#10+#3 | **+4.65%** | **50.5%** | Best P&L (old dual-disc architecture) |
 | 2026-03-21 | +#7+#10+#3+#12 (correction) | — | — | Killed at 50k (-7.4%) |
 | 2026-03-21 | +#7+#10+#3+#12 (reward) | — | — | Killed at 50k (-7.4%) |
 | 2026-03-21 | +#7+#10+#3+#16 | — | — | Killed at 60k (-5.3%) |
 | 2026-03-21 | +#7+#10+#3+#15 | — | — | Killed at 40k (-5.6%) |
-| 2026-03-22 | +thoughts (frozen, old #10 gate) | +5.2% at 60k | 50.5% | Thought system frozen after ~10k samples; still competitive |
-| 2026-03-22 | +thoughts (learning fix, 1% explore) | +3.0% at 40k | 50.3% | Thought learning unlocked; cos separation improving (0.83→0.80) |
+| 2026-03-22 | +thoughts (frozen, old #10 gate) | +5.2% at 60k | 50.5% | Thought system frozen after ~10k; still competitive |
+| 2026-03-22 | +thoughts (learning fix, 1% explore) | +3.0% at 40k | 50.3% | Thought learning unlocked; cos improving (0.83→0.80) |
+| 2026-03-22 | expanded-vocab (thought) | — | — | 29 comparison pairs + 6 zone checks. Cascade fixed but Sell bias from null_thought |
+| 2026-03-22 | delta-disc (thought only) | — | — | 50/50 balance restored but fragile — collapsed at 35k in bull run |
+| 2026-03-22 | delta-smooth (thought, α=0.3) | +4.66% | 51.6% | Temporal smoothing fixed fragility |
+| 2026-03-22 | delta-selftune (thought, self-tuning α) | +4.66% | 51.6% | Self-tuning α identical to fixed 0.3 (both clamp to 0.05) |
+| 2026-03-22 | **vis-delta-disc** (both systems delta) | +0.26% | 51.4% | Both systems on delta disc. Anti-correlated bias (vis=68% Buy, tht=41% Buy). Agreement 52.1%. |
 
 ---
 
@@ -314,60 +387,46 @@ New vs old thought accuracy (growing delta):
 
 ## Improvement Backlog (data-driven, prioritized)
 
-### Priority 0 — Noise Floor Ratchet (DONE, needs validation run)
-Exploration fix caused prototype cascade: 677 → 39,083 samples, cos
-collapsed from 0.805 → 0.992. Root cause: diluted prototypes raise
-entropy → noise_floor drops → gate opens → more dilution → runaway.
-Fix: `self.noise_floor = self.noise_floor.max(new_floor)` — floor can
-only tighten, never loosen. Code is in but needs a clean 100k run to
-validate.
+### ~~Priority 0 — Noise Floor Ratchet~~ ✅ DONE
+Validated. Thought system no longer cascades with expanded vocabulary.
 
-### Priority 1 — Throughput Regression
-Adding thought system dropped throughput from ~90/s to ~23/s (~4x slower).
-Need to profile: is it fact generation, thought vector encoding, or the
-thought predict/observe path? Likely candidate: per-candle fact evaluation
-iterating all comparison pairs × zones × predicates.
+### Priority 1 — Throughput
+Currently ~72 vec/s (was ~90/s before thoughts, ~23/s before batch optimization).
+Not blocking but room to improve. Thought predict/observe is cheap (~342ms total
+for 100k candles). Bottleneck is visual encoding pipeline.
 
-### Priority 2 — Near-Zero Sim Filter
-Buy/sell sims average -0.006/-0.023 — firmly in the VSA noise floor.
-Most predictions are indistinguishable from orthogonal noise. Add minimum
-absolute sim threshold (e.g., 0.03–0.05) to reject candles where
-`max(|buy_sim|, |sell_sim|) < threshold`. Trade less, but only when
-there's actual signal. Should reduce trade count significantly while
-improving per-trade accuracy.
+### ~~Priority 2 — Fix Conviction Metric~~ ✅ DONE
+Conviction is now `delta_sim.abs()` — single cosine against delta discriminant.
+No confuser subtraction. No mixed vector spaces.
 
-### Priority 2 — Fix Conviction Metric
-Current: `conviction = discriminant_sim - confuser_sim`. Problem:
-discriminants live in a narrow subspace (the ~20% NOT shared between
-buy/sell) while confusers are built from full raw vectors. The subtraction
-mixes incompatible vector spaces. Options:
-- **(a)** Use `buy_sim - sell_sim` (margin between discriminants) as conviction
-- **(b)** Project confusers into discriminant space before subtraction
-- **(c)** Compute confuser sims against discriminant-space vectors
+### ~~Priority 3 — Rethink Confusers~~ ✅ DONE
+Confusers still accumulate and log for diagnostics but don't affect prediction.
+No flipping. May revisit as rejection signal (high confuser_sim → abstain).
 
-Option (a) is simplest and directly measures "how much more buy-unique
-than sell-unique."
+### Priority 2 — Visual Buy Bias Drift
+Visual delta_disc drifts to 76% Buy predictions by 90k candles. The self-tuning
+alpha is 0.10 for visual (cos=0.90, more separated than thought's 0.95) so it
+adapts faster — but the adaptation is one-directional. Investigate whether the
+observe path's algebraic corrections are asymmetrically feeding the buy prototype.
 
-### Priority 3 — Rethink Confusers
-Net negative at 46.6% flip accuracy. The concept (flagging past mistakes)
-is sound; the implementation (flipping direction) is wrong. Options:
-- **(a)** Disable entirely (baseline improvement)
-- **(b)** Use confuser_sim as rejection signal — high confuser → abstain, don't reverse
-- **(c)** Rebuild confusers in discriminant space so the subtraction is meaningful
-
-### Priority 4 — Visual as Regime Detector
-Visual barely adds directional value but shows strong regime-dependent
-performance swings (32–62% across 5k buckets). Instead of using it for
-Buy/Sell calls, use its rolling accuracy or sim magnitude to:
+### Priority 3 — Visual as Regime Detector
+Visual shows strong regime-dependent accuracy swings (42-55% across 10k buckets).
+Instead of using it for directional calls, use its rolling accuracy to:
 - Modulate position sizing
-- Adjust thought system's confidence threshold
-- Gate trading activity (only trade when visual is in a "good regime")
+- Gate trading activity (only trade when visual accuracy is trending up)
+- Weight the meta-boost orchestration
 
-### Priority 5 — Verify Conviction Inversion Post-Fix
-After fixing the metric, re-check if low conviction still outperforms
-high conviction. If it persists with margin-based conviction, the
-discriminant prototypes themselves need work (resonance subtraction
-may be too aggressive at 0.80 cosine similarity).
+### Priority 4 — Verify Conviction Calibration
+With delta_sim as conviction, check if high-conviction predictions are more
+accurate than low-conviction. Previous inverse calibration was caused by
+confuser subtraction in a mixed vector space — should be resolved now.
+
+### Priority 5 — Agreement as Primary Signal
+Agreement rate (52%) and agreement accuracy (51.6%) suggest the two systems
+provide weak but real independent signals. The anti-correlated bias means
+agreement requires both systems to overcome their natural lean — potentially
+a stronger filter than raw accuracy. Investigate: accuracy when agree AND
+high conviction from both systems.
 
 ---
 
