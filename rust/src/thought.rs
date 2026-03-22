@@ -16,6 +16,9 @@ const INDICATOR_ATOMS: &[&str] = &[
     "rsi", "rsi-sma",
     "macd-line", "macd-signal", "macd-hist",
     "dmi-plus", "dmi-minus", "adx", "atr",
+    // Derived indicators (computed from OHLCV, not DB columns)
+    "prev-close", "prev-open", "prev-high", "prev-low",
+    "candle-range", "candle-body", "upper-wick", "lower-wick",
 ];
 
 const DIRECTION_ATOMS: &[&str] = &["up", "down", "flat"];
@@ -24,6 +27,7 @@ const INTENSITY_ATOMS: &[&str] = &["low", "medium", "high"];
 const ZONE_ATOMS: &[&str] = &[
     "overbought", "oversold", "neutral",
     "strong-trend", "weak-trend", "squeeze", "middle-zone",
+    "above-midline", "below-midline", "positive", "negative",
 ];
 const PREDICATE_ATOMS: &[&str] = &[
     "above", "below", "crosses-above", "crosses-below",
@@ -211,8 +215,34 @@ fn candle_field(candle: &Candle, name: &str) -> f64 {
         "dmi-minus" => candle.dmi_minus,
         "adx" => candle.adx,
         "atr" => candle.atr_r,
+        "candle-range" => candle.high - candle.low,
+        "candle-body" => (candle.close - candle.open).abs(),
+        "upper-wick" => candle.high - candle.close.max(candle.open),
+        "lower-wick" => candle.close.min(candle.open) - candle.low,
         _ => 0.0,
     }
+}
+
+/// Resolve a field value, handling prev-* lookups and derived fields.
+/// Returns None when the value is unavailable (missing prev candle, or
+/// indicator not yet computed — standard fields that are 0.0).
+fn field_value(now: &Candle, prev: Option<&Candle>, name: &str) -> Option<f64> {
+    if let Some(base) = name.strip_prefix("prev-") {
+        prev.map(|p| candle_field(p, base))
+    } else {
+        let v = candle_field(now, name);
+        if is_derived_field(name) {
+            Some(v)
+        } else if v == 0.0 {
+            None
+        } else {
+            Some(v)
+        }
+    }
+}
+
+fn is_derived_field(name: &str) -> bool {
+    matches!(name, "candle-range" | "candle-body" | "upper-wick" | "lower-wick")
 }
 
 // ─── ThoughtEncoder ─────────────────────────────────────────────────────────
@@ -226,11 +256,27 @@ pub struct ThoughtResult {
 
 /// Indicator pairs to check for comparison predicates (above/below/crosses/touches/bounces).
 const COMPARISON_PAIRS: &[(&str, &str)] = &[
+    // Original 9 pairs
     ("close", "sma20"), ("close", "sma50"), ("close", "sma200"),
     ("close", "bb-upper"), ("close", "bb-lower"),
     ("sma20", "sma50"), ("sma50", "sma200"),
     ("macd-line", "macd-signal"),
     ("dmi-plus", "dmi-minus"),
+    // Cross-candle (5)
+    ("high", "prev-high"), ("low", "prev-low"),
+    ("open", "prev-close"), ("close", "prev-close"), ("close", "prev-open"),
+    // OHLC vs structure (7)
+    ("open", "sma20"), ("open", "sma50"), ("open", "sma200"),
+    ("open", "bb-upper"), ("open", "bb-lower"),
+    ("high", "bb-upper"), ("low", "bb-lower"),
+    // Intra-candle structure (5)
+    ("close", "open"),
+    ("upper-wick", "candle-body"), ("lower-wick", "candle-body"),
+    ("upper-wick", "lower-wick"),
+    ("candle-range", "atr"),
+    // Additional structure (3)
+    ("candle-body", "candle-range"),
+    ("high", "sma200"), ("low", "sma200"),
 ];
 
 pub struct ThoughtEncoder {
@@ -256,6 +302,9 @@ impl ThoughtEncoder {
             ("rsi", "overbought"), ("rsi", "oversold"), ("rsi", "neutral"),
             ("adx", "strong-trend"), ("adx", "weak-trend"),
             ("bb-width", "squeeze"), ("close", "middle-zone"),
+            ("rsi", "above-midline"), ("rsi", "below-midline"),
+            ("macd-line", "positive"), ("macd-line", "negative"),
+            ("macd-hist", "positive"), ("macd-hist", "negative"),
         ];
         for &(ind, zone) in zone_checks {
             let key = format!("(at {} {})", ind, zone);
@@ -380,11 +429,11 @@ impl ThoughtEncoder {
         facts: &mut Vec<&'a Vector>,
         labels: &mut Vec<String>,
     ) {
-        for &(a, b) in COMPARISON_PAIRS {
-            let a_val = candle_field(now, a);
-            let b_val = candle_field(now, b);
+        let has_prev_field = |name: &str| name.starts_with("prev-");
 
-            if a_val <= 0.0 || b_val <= 0.0 { continue; }
+        for &(a, b) in COMPARISON_PAIRS {
+            let a_val = match field_value(now, prev, a) { Some(v) => v, None => continue };
+            let b_val = match field_value(now, prev, b) { Some(v) => v, None => continue };
 
             if a_val > b_val {
                 let key = format!("(above {} {})", a, b);
@@ -400,22 +449,25 @@ impl ThoughtEncoder {
                 }
             }
 
+            // crosses/touches/bounces need prev values of both fields;
+            // skip for pairs involving prev-* fields (would need prev-prev candle)
+            if has_prev_field(a) || has_prev_field(b) { continue; }
+
             if let Some(p) = prev {
-                let pa = candle_field(p, a);
-                let pb = candle_field(p, b);
-                if pa > 0.0 && pb > 0.0 {
-                    if pa < pb && a_val >= b_val {
-                        let key = format!("(crosses-above {} {})", a, b);
-                        if let Some(v) = self.fact_cache.get(&key) {
-                            facts.push(v);
-                            labels.push(key);
-                        }
-                    } else if pa > pb && a_val <= b_val {
-                        let key = format!("(crosses-below {} {})", a, b);
-                        if let Some(v) = self.fact_cache.get(&key) {
-                            facts.push(v);
-                            labels.push(key);
-                        }
+                let pa = match field_value(p, None, a) { Some(v) => v, None => continue };
+                let pb = match field_value(p, None, b) { Some(v) => v, None => continue };
+
+                if pa < pb && a_val >= b_val {
+                    let key = format!("(crosses-above {} {})", a, b);
+                    if let Some(v) = self.fact_cache.get(&key) {
+                        facts.push(v);
+                        labels.push(key);
+                    }
+                } else if pa > pb && a_val <= b_val {
+                    let key = format!("(crosses-below {} {})", a, b);
+                    if let Some(v) = self.fact_cache.get(&key) {
+                        facts.push(v);
+                        labels.push(key);
                     }
                 }
             }
@@ -430,8 +482,8 @@ impl ThoughtEncoder {
                 }
 
                 if let Some(p) = prev {
-                    let pa = candle_field(p, a);
-                    let pb = candle_field(p, b);
+                    let pa = match field_value(p, None, a) { Some(v) => v, None => continue };
+                    let pb = match field_value(p, None, b) { Some(v) => v, None => continue };
                     let prev_dist = (pa - pb).abs();
                     let now_dist = (a_val - b_val).abs();
                     if prev_dist < epsilon && now_dist > prev_dist {
@@ -474,6 +526,24 @@ impl ThoughtEncoder {
 
         if now.close > now.bb_lower && now.close < now.bb_upper && now.bb_upper > 0.0 {
             if let Some(v) = self.fact_cache.get("(at close middle-zone)") { facts.push(v); labels.push("(at close middle-zone)".into()); }
+        }
+
+        if now.rsi > 50.0 {
+            if let Some(v) = self.fact_cache.get("(at rsi above-midline)") { facts.push(v); labels.push("(at rsi above-midline)".into()); }
+        } else if now.rsi > 0.0 {
+            if let Some(v) = self.fact_cache.get("(at rsi below-midline)") { facts.push(v); labels.push("(at rsi below-midline)".into()); }
+        }
+
+        if now.macd_line > 0.0 {
+            if let Some(v) = self.fact_cache.get("(at macd-line positive)") { facts.push(v); labels.push("(at macd-line positive)".into()); }
+        } else if now.macd_line < 0.0 {
+            if let Some(v) = self.fact_cache.get("(at macd-line negative)") { facts.push(v); labels.push("(at macd-line negative)".into()); }
+        }
+
+        if now.macd_hist > 0.0 {
+            if let Some(v) = self.fact_cache.get("(at macd-hist positive)") { facts.push(v); labels.push("(at macd-hist positive)".into()); }
+        } else if now.macd_hist < 0.0 {
+            if let Some(v) = self.fact_cache.get("(at macd-hist negative)") { facts.push(v); labels.push("(at macd-hist negative)".into()); }
         }
     }
 
@@ -750,10 +820,7 @@ pub struct ThoughtJournaler {
     pub buy_confuser: Accumulator,
     pub sell_confuser: Accumulator,
     pub noise_accum: Accumulator,
-    pub background_accum: Accumulator,
-    buy_disc: Option<Vector>,
-    sell_disc: Option<Vector>,
-    null_thought: Option<Vector>,
+    delta_disc: Option<Vector>,
     updates: usize,
     recalib_interval: usize,
     pub dims: usize,
@@ -769,10 +836,7 @@ impl ThoughtJournaler {
             buy_confuser: Accumulator::new(dims),
             sell_confuser: Accumulator::new(dims),
             noise_accum: Accumulator::new(dims),
-            background_accum: Accumulator::new(dims),
-            buy_disc: None,
-            sell_disc: None,
-            null_thought: None,
+            delta_disc: None,
             updates: 0,
             recalib_interval,
             dims,
@@ -791,45 +855,22 @@ impl ThoughtJournaler {
             return ThoughtPrediction { outcome: None, conviction: 0.0, coherence };
         }
 
-        let buy_proto = self.buy_disc.as_ref()
+        let delta = self.delta_disc.as_ref()
             .cloned()
-            .unwrap_or_else(|| self.buy_good.threshold());
-        let sell_proto = self.sell_disc.as_ref()
-            .cloned()
-            .unwrap_or_else(|| self.sell_good.threshold());
+            .unwrap_or_else(|| Primitives::difference(
+                &self.sell_good.threshold(),
+                &self.buy_good.threshold(),
+            ));
 
         let vec = &thought.thought;
 
-        // Background removal: strip always-true facts (like null pixel removal in visual)
-        let centered = if let Some(ref null_thought) = self.null_thought {
-            Primitives::difference(null_thought, vec)
-        } else {
-            vec.clone()
-        };
+        // Single cosine against the buy-sell delta discriminant:
+        // positive → input aligns with buy-unique features
+        // negative → input aligns with sell-unique features
+        let delta_sim = Similarity::cosine(vec, &delta);
 
-        // Noise stripping
-        let cleaned = if self.noise_accum.count() > 0 {
-            let noise_proto = self.noise_accum.threshold();
-            Primitives::negate(&centered, &noise_proto)
-        } else {
-            centered
-        };
-
-        let buy_sim = Similarity::cosine(&cleaned, &buy_proto);
-        let sell_sim = Similarity::cosine(&cleaned, &sell_proto);
-
-        // Noise gate
-        if self.noise_accum.count() > 0 {
-            let noise_proto = self.noise_accum.threshold();
-            let noise_sim = Similarity::cosine(&cleaned, &noise_proto);
-            if noise_sim > buy_sim.max(sell_sim) {
-                return ThoughtPrediction { outcome: None, conviction: 0.0, coherence };
-            }
-        }
-
-        // Direction and conviction from raw discriminant margin
-        let is_buy = buy_sim > sell_sim;
-        let conviction = (buy_sim - sell_sim).abs();
+        let is_buy = delta_sim > 0.0;
+        let conviction = delta_sim.abs();
         let outcome = if is_buy { Some(Outcome::Buy) } else { Some(Outcome::Sell) };
         ThoughtPrediction { outcome, conviction, coherence }
     }
@@ -844,27 +885,16 @@ impl ThoughtJournaler {
         reward_weight: f64,
         correction_weight: f64,
     ) {
-        // Accumulate into background (every thought, regardless of outcome)
-        self.background_accum.add(thought);
-
-        // Background removal: strip always-true facts before learning
-        let thought = if let Some(ref null_thought) = self.null_thought {
-            Primitives::difference(null_thought, thought)
-        } else {
-            thought.clone()
-        };
-        let thought = &thought;
-
-        // #7 Confidence-gated learning
-        let gate = conviction.abs().clamp(0.3, 1.0);
-        let reward_weight = reward_weight * gate;
-        let correction_weight = correction_weight * gate;
-
         if outcome == Outcome::Noise {
             self.noise_accum.decay(decay);
             self.noise_accum.add(thought);
             return;
         }
+
+        // #7 Confidence-gated learning
+        let gate = conviction.abs().clamp(0.3, 1.0);
+        let reward_weight = reward_weight * gate;
+        let correction_weight = correction_weight * gate;
 
         // Always count non-noise observations and recalibrate on schedule,
         // even if the sample is rejected by the recognition gate below.
@@ -975,17 +1005,24 @@ impl ThoughtJournaler {
     }
 
     fn recalibrate(&mut self) {
-        // Update null thought from background accumulator
-        if self.background_accum.count() > 100 {
-            self.null_thought = Some(self.background_accum.threshold());
-        }
-
         if !self.is_ready() { return; }
         let buy_proto = self.buy_good.threshold();
         let sell_proto = self.sell_good.threshold();
-        let shared = Primitives::resonance(&buy_proto, &sell_proto);
-        self.buy_disc = Some(Primitives::negate(&buy_proto, &shared));
-        self.sell_disc = Some(Primitives::negate(&sell_proto, &shared));
+
+        // Single symmetric discriminant: difference naturally cancels shared
+        // components and captures what's unique to each class.
+        // Positive dimensions → buy-unique, negative → sell-unique.
+        let new_delta = Primitives::difference(&sell_proto, &buy_proto);
+
+        // Self-tuning temporal smoothing: use prototype separation as blend alpha.
+        // When prototypes are similar (cos~0.95), delta is sparse and fragile → alpha~0.05.
+        // When prototypes separate (cos~0.76), delta is robust → alpha~0.24.
+        let sep = 1.0 - Similarity::cosine(&buy_proto, &sell_proto);
+        let alpha = sep.clamp(0.05, 1.0);
+        self.delta_disc = Some(match &self.delta_disc {
+            Some(prev) => Primitives::blend(prev, &new_delta, alpha),
+            None => new_delta,
+        });
 
         // Derive recognition gate from prototype entropy
         let buy_entropy = Primitives::entropy(&buy_proto);
@@ -1023,6 +1060,9 @@ impl FactCodebook {
             ("rsi", "overbought"), ("rsi", "oversold"), ("rsi", "neutral"),
             ("adx", "strong-trend"), ("adx", "weak-trend"),
             ("bb-width", "squeeze"), ("close", "middle-zone"),
+            ("rsi", "above-midline"), ("rsi", "below-midline"),
+            ("macd-line", "positive"), ("macd-line", "negative"),
+            ("macd-hist", "positive"), ("macd-hist", "negative"),
         ];
         for &(ind, zone) in zone_checks {
             vectors.push(fact_binary(vocab, "at", ind, zone));
