@@ -169,8 +169,7 @@ struct Journaler {
     buy_confuser: Accumulator,
     sell_confuser: Accumulator,
     noise_accum: Accumulator,
-    buy_disc: Option<Vector>,
-    sell_disc: Option<Vector>,
+    delta_disc: Option<Vector>,
     updates: usize,
     recalib_interval: usize,
     use_grover: bool,
@@ -191,8 +190,7 @@ impl Journaler {
             buy_confuser: Accumulator::new(dims),
             sell_confuser: Accumulator::new(dims),
             noise_accum: Accumulator::new(dims),
-            buy_disc: None,
-            sell_disc: None,
+            delta_disc: None,
             updates: 0,
             recalib_interval,
             use_grover,
@@ -215,67 +213,43 @@ impl Journaler {
             return PredictionDetail::default();
         }
 
-        let buy_proto = self.buy_disc.as_ref()
+        let delta = self.delta_disc.as_ref()
             .cloned()
-            .unwrap_or_else(|| self.buy_good.threshold());
-        let sell_proto = self.sell_disc.as_ref()
-            .cloned()
-            .unwrap_or_else(|| self.sell_good.threshold());
+            .unwrap_or_else(|| Primitives::difference(
+                &self.sell_good.threshold(),
+                &self.buy_good.threshold(),
+            ));
 
-        let cleaned = if self.noise_accum.count() > 0 {
-            let noise_proto = self.noise_accum.threshold();
-            Primitives::negate(vec, &noise_proto)
-        } else {
-            vec.clone()
-        };
+        let delta_sim = Similarity::cosine(vec, &delta);
+        let is_buy = delta_sim > 0.0;
+        let conviction = delta_sim.abs();
 
-        let buy_sim = Similarity::cosine(&cleaned, &buy_proto);
-        let sell_sim = Similarity::cosine(&cleaned, &sell_proto);
-        let max_sim = buy_sim.max(sell_sim);
-
-        let noise_sim = if self.noise_accum.count() > 0 {
-            Similarity::cosine(&cleaned, &self.noise_accum.threshold())
-        } else {
-            -1.0
-        };
-
-        if noise_sim > max_sim {
-            return PredictionDetail {
-                prediction: None,
-                conviction: 0.0,
-                max_sim,
-                buy_sim,
-                sell_sim,
-                buy_confuser_sim: 0.0,
-                sell_confuser_sim: 0.0,
-                noise_sim,
-                noise_gated: true,
-                confuser_flipped: false,
-            };
-        }
+        let buy_sim = if is_buy { delta_sim } else { 0.0 };
+        let sell_sim = if !is_buy { -delta_sim } else { 0.0 };
 
         let buy_confuser_sim = if self.buy_confuser.count() > 0 {
-            Similarity::cosine(&cleaned, &self.buy_confuser.threshold())
+            Similarity::cosine(vec, &self.buy_confuser.threshold())
         } else {
             -1.0
         };
         let sell_confuser_sim = if self.sell_confuser.count() > 0 {
-            Similarity::cosine(&cleaned, &self.sell_confuser.threshold())
+            Similarity::cosine(vec, &self.sell_confuser.threshold())
         } else {
             -1.0
         };
 
-        // Direction and conviction from raw discriminant margin.
-        // Confuser sims still computed for logging but don't affect prediction.
-        let is_buy = buy_sim > sell_sim;
-        let conviction = (buy_sim - sell_sim).abs();
+        let noise_sim = if self.noise_accum.count() > 0 {
+            Similarity::cosine(vec, &self.noise_accum.threshold())
+        } else {
+            -1.0
+        };
 
         let prediction = if is_buy { Some(Outcome::Buy) } else { Some(Outcome::Sell) };
 
         PredictionDetail {
             prediction,
             conviction,
-            max_sim,
+            max_sim: conviction,
             buy_sim,
             sell_sim,
             buy_confuser_sim,
@@ -410,15 +384,16 @@ impl Journaler {
         }
         let buy_proto = self.buy_good.threshold();
         let sell_proto = self.sell_good.threshold();
-        let shared = Primitives::resonance(&buy_proto, &sell_proto);
-        self.buy_disc = Some(Primitives::negate(&buy_proto, &shared));
-        self.sell_disc = Some(Primitives::negate(&sell_proto, &shared));
 
-        // Derive recognition gate from prototype structure:
-        // entropy measures effective dimensionality usage (0..1),
-        // noise_floor = 1/sqrt(D_eff) where D_eff = dims * entropy.
-        // Use the sparser prototype (lower entropy → higher noise_floor)
-        // to avoid gating out the less-developed side.
+        let new_delta = Primitives::difference(&sell_proto, &buy_proto);
+
+        let sep = 1.0 - Similarity::cosine(&buy_proto, &sell_proto);
+        let alpha = sep.clamp(0.05, 1.0);
+        self.delta_disc = Some(match &self.delta_disc {
+            Some(prev) => Primitives::blend(prev, &new_delta, alpha),
+            None => new_delta,
+        });
+
         let buy_entropy = Primitives::entropy(&buy_proto);
         let sell_entropy = Primitives::entropy(&sell_proto);
         let min_entropy = buy_entropy.min(sell_entropy).max(0.01);
@@ -1405,8 +1380,9 @@ fn main() {
             eprintln!("    cos(sell_good, noise) = {:.4}", Similarity::cosine(&sell_proto, &noise_proto));
         }
 
-        if let (Some(ref bd), Some(ref sd)) = (&journaler.buy_disc, &journaler.sell_disc) {
-            eprintln!("    cos(buy_disc, sell_disc) = {:.4}", Similarity::cosine(bd, sd));
+        if let Some(ref delta) = journaler.delta_disc {
+            let sep = 1.0 - Similarity::cosine(&buy_proto, &sell_proto);
+            eprintln!("    delta_disc norm={:.4}, alpha={:.4}", Primitives::entropy(delta), sep.clamp(0.05, 1.0));
         }
         let buy_ent = Primitives::entropy(&buy_proto);
         let sell_ent = Primitives::entropy(&sell_proto);
