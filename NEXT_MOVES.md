@@ -1,17 +1,18 @@
 # Next Moves — Holon BTC Trader
 
-## Current Architecture (2026-03-22)
+## Current Architecture (2026-03-22, evening)
 
-Two-agent system (visual + thought) with delta discriminant prediction.
+Two-agent system (visual + thought) with raw delta discriminant prediction.
 Walk-forward over 100k 5-min BTC candles (2019) at 10kD.
 
 Both systems use:
-- Delta discriminant: `delta_disc = difference(sell_proto, buy_proto)`
-- Self-tuning temporal smoothing: `alpha = (1 - cos(buy,sell)).clamp(0.05, 1.0)`
-- Confidence-gated learning (#7), recognition rejection (#10), separation gate (#3)
-- Raw accumulation + algebraic correction (resonance/negate/amplify)
+- **Direction**: raw `difference(sell_proto, buy_proto)` — no temporal smoothing
+- **Conviction**: dual-cosine margin `|cos(vec, buy) - cos(vec, sell)|` — decoupled from learning
+- **Learning**: recognition rejection (#10), separation gate (#3), novelty-gated corrections
+- **Raw accumulation** (weight 1.0) + **algebraic correction** (weight × sep_gate × novelty)
+- Kill switch: `touch trader-stop` in cwd to abort
 
-Latest run (vis-delta-disc): +0.26%, 51.4% win rate, 52.1% agreement.
+Latest run (novelty-gate-v1, in progress): thought 54% accuracy, 46% agreement.
 See EXPERIMENT_LOG.md for full results and run history.
 
 ---
@@ -127,22 +128,57 @@ discriminative feature.
 
 ### 7. Confidence-Gated Learning
 
-Scale reward/correction weights by prediction confidence (the similarity gap).
-Coin-flip predictions (gap ~0.01) get gentle updates. High-confidence wrongs
-get aggressive surgery. Prevents the model from over-reinforcing noise.
+**TESTED (2026-03-21) — CONFIRMED, then REMOVED (2026-03-22).**
 
-    gap = abs(buy_sim - sell_sim)
-    effective_weight = base_weight * gap.clamp(min_gate, 1.0)
+Originally: `gate = conviction.abs().clamp(0.3, 1.0)`. Appeared to work
+(+2.50% at 100k). But investigation revealed the gate was an **accidental
+constant**: raw conviction was always 0.02-0.08, so clamp always hit the
+0.3 floor. The "gate" was just a fixed 0.3x multiplier on all corrections.
 
-**Cost**: Trivial. One multiply per update.
+When z-score conviction was introduced (varying 0.0-2.0), the gate became
+variable (0.3-1.0 range), creating a feedback loop where overconfident-and-wrong
+predictions got 3x the correction weight of quiet-but-right ones. This warped
+prototypes and degraded prediction accuracy (z-score run: 2-10% agreement).
 
-**TESTED (2026-03-21) — CONFIRMED.** gate = conviction.abs().clamp(0.3, 1.0).
-At 100k candles: equity $10,250 (+2.50%) vs baseline $10,004 (+0.04%).
-62x better return. Model stays CONFIDENT for 80k straight candles vs
-baseline's ~20k streaks. The gating stabilizes prototypes by reducing
-update weight for ambiguous predictions, preventing prototype smearing.
-Win rate slightly lower (49.6% vs 50.0%) but position sizing is much
-better due to sustained CONFIDENT phase.
+Removing the gate entirely caused corrections to self-reinforce and lock both
+systems into 100% Buy predictions (decoupled-raw run).
+
+**Root cause**: Conviction measures input-discriminant alignment, NOT prediction
+quality. Using it to gate learning couples trade sizing with prototype evolution
+through a self-reinforcing feedback loop.
+
+**Replaced by**: Novelty-gated corrections (see NG below).
+
+### NG. Novelty-Gated Corrections
+
+**CONFIRMED (2026-03-22).** Principled replacement for confidence gate.
+
+    correction_weight *= (1.0 - cosine(correction_vec, raw_vec).abs())
+
+Measures how much independent information the algebraic correction carries
+beyond what raw accumulation already captured. Grounded in Holon's
+`accumulate_weighted` semantics: weight by source reliability.
+
+When correction is mostly a copy of raw input (high cosine) → weight → 0
+(redundant, don't double-count). When correction extracts genuinely new
+features (low cosine) → weight → 1 (real discriminative signal).
+
+Empirically recovers the ~0.3 effective damping that the old confidence gate
+accidentally provided, but adapts per-observation rather than being a fixed
+constant. Thought system maintains balanced predictions (45/55 Buy/Sell),
+agreement at 42-46% is genuine, and agreement accuracy (53.6%) exceeds
+disagreement accuracy (49.7%).
+
+### DC. Decoupled Conviction
+
+**CONFIRMED (2026-03-22).** Conviction is purely for trade sizing, never
+fed back into observe(). Currently uses dual-cosine margin:
+
+    conviction = |cos(vec, buy_proto) - cos(vec, sell_proto)|
+
+This means conviction metrics can be freely swapped (z-score, percentile,
+learned rescaling) without affecting learning dynamics. The `_conviction`
+parameter in observe() is unused.
 
 ### 8. Layered Resonance Filtering
 
@@ -315,23 +351,25 @@ Surgical at the dimension level rather than the vector level.
 
 | # | Technique | Impact | Complexity | Category | Status |
 |---|-----------|--------|------------|----------|--------|
-| 7 | Confidence-gated learning | High | Trivial | Reinforcement | **CONFIRMED** |
+| NG | Novelty-gated corrections | High | Trivial | Reinforcement | **CONFIRMED** |
+| DC | Decoupled conviction | High | Trivial | Architecture | **CONFIRMED** |
 | 10 | Recognition rejection | High | Trivial | Pruning | **CONFIRMED** |
 | 3 | Separation gate (regime detection) | High | Low | Architecture | **CONFIRMED** |
-| DD | Delta discriminant | High | Low | Architecture | **CONFIRMED** (both systems) |
-| ST | Self-tuning smoothing | Medium | Trivial | Architecture | **CONFIRMED** (both systems) |
+| DD | Delta discriminant (raw, no smoothing) | High | Low | Architecture | **CONFIRMED** |
 | 6 | Contrastive sharpening (→ delta disc) | High | Low | Architecture | **CONFIRMED** (evolved into DD) |
-| 16 | Complexity-gated learning | Low | Trivial | Pruning | **RULED OUT** |
-| 15 | Blend-based gentle correction | Low | Trivial | Reinforcement | **RULED OUT** |
-| NC | Noise centering | Low | Trivial | Prediction | **RULED OUT** (negate too aggressive) |
-| 8 | Layered resonance filtering | Medium | Low | Reinforcement | ⚠️ Likely breaks sep gate |
-| 13 | Soft-then-hard filtering | Medium | Low | Reinforcement | ⚠️ Likely breaks sep gate |
-| 18 | Similarity profile correction | Medium | Low | Reinforcement | ⚠️ Likely breaks sep gate |
 | 11 | Negative prototyping | Medium | Low-Med | Pruning | Impl (confusers, log-only) |
 | 2 | Engram library | High | Medium | Architecture | Queued |
 | 17 | Reject-based class isolation | High | Medium | Architecture | Queued |
 | 4 | Temporal binding | Medium | Medium | Encoding | Queued |
 | 5 | Subspace classification | Medium | Medium | Architecture | Queued |
+| 8 | Layered resonance filtering | Medium | Low | Reinforcement | ⚠️ Likely breaks sep gate |
+| 13 | Soft-then-hard filtering | Medium | Low | Reinforcement | ⚠️ Likely breaks sep gate |
+| 18 | Similarity profile correction | Medium | Low | Reinforcement | ⚠️ Likely breaks sep gate |
+| 7 | Confidence-gated learning | — | — | Reinforcement | **REMOVED** (accidental constant) |
+| ST | Self-tuning smoothing | — | — | Architecture | **REMOVED** (causes direction freeze) |
+| 16 | Complexity-gated learning | Low | Trivial | Pruning | **RULED OUT** |
+| 15 | Blend-based gentle correction | Low | Trivial | Reinforcement | **RULED OUT** |
+| NC | Noise centering | Low | Trivial | Prediction | **RULED OUT** (negate too aggressive) |
 | 14 | Analogy-based correction | Low | Trivial | Reinforcement | **RULED OUT** |
 | 12 | Iterative grover amplification | Low | Trivial | Reinforcement | **RULED OUT** |
 | 9 | Cross-class surgical feedback | Low | Low | Reinforcement | **RULED OUT** |
@@ -493,15 +531,14 @@ more as it gets smarter. Track per-epoch accuracy to detect convergence.
 ### Composability
 
 All techniques from the candidate list plug into this architecture:
-- Multi-timescale (#1) -> different decay rates on journaler accumulators
-- Confidence gating (#7) -> driven by trader's self-assessed track record
+- Novelty-gated corrections (NG) -> scales algebraic correction by information gain
+- Decoupled conviction (DC) -> trade sizing independent of learning
 - Recognition rejection (#10) -> "unfamiliar AND confuser unknown -> sit out"
-- Cross-class feedback (#9) -> wrong predictions feed both journaler classes
 - Regime detection (#3) -> gates phase transitions (CONFIDENT -> TENTATIVE)
 - Engram library (#2) -> sub-patterns within each of the four categories
 - Negative prototyping (#11) -> IS the confuser accumulators
 - Layered resonance (#8) -> multi-pass filtering in journaler updates
-- Iterative grover (#12) -> scale correction strength by error magnitude
+- Temporal binding (#4) -> momentum context in encoding
 
 Pure Holon algebra. No gradients, no backprop, no GPU.
 

@@ -169,7 +169,6 @@ struct Journaler {
     buy_confuser: Accumulator,
     sell_confuser: Accumulator,
     noise_accum: Accumulator,
-    delta_disc: Option<Vector>,
     updates: usize,
     recalib_interval: usize,
     use_grover: bool,
@@ -190,7 +189,6 @@ impl Journaler {
             buy_confuser: Accumulator::new(dims),
             sell_confuser: Accumulator::new(dims),
             noise_accum: Accumulator::new(dims),
-            delta_disc: None,
             updates: 0,
             recalib_interval,
             use_grover,
@@ -213,25 +211,15 @@ impl Journaler {
             return PredictionDetail::default();
         }
 
-        let delta = self.delta_disc.as_ref()
-            .cloned()
-            .unwrap_or_else(|| Primitives::difference(
-                &self.sell_good.threshold(),
-                &self.buy_good.threshold(),
-            ));
+        let buy_proto = self.buy_good.threshold();
+        let sell_proto = self.sell_good.threshold();
 
-        let delta_sim = Similarity::cosine(vec, &delta);
-        let is_buy = delta_sim > 0.0;
+        let raw_delta = Primitives::difference(&sell_proto, &buy_proto);
+        let is_buy = Similarity::cosine(vec, &raw_delta) > 0.0;
 
-        let raw_delta = Primitives::difference(
-            &self.sell_good.threshold(),
-            &self.buy_good.threshold(),
-        );
-        let raw_sim = Similarity::cosine(vec, &raw_delta);
-        let conviction = raw_sim.abs();
-
-        let buy_sim = if is_buy { raw_sim } else { 0.0 };
-        let sell_sim = if !is_buy { -raw_sim } else { 0.0 };
+        let buy_sim = Similarity::cosine(vec, &buy_proto);
+        let sell_sim = Similarity::cosine(vec, &sell_proto);
+        let conviction = (buy_sim - sell_sim).abs();
 
         let buy_confuser_sim = if self.buy_confuser.count() > 0 {
             Similarity::cosine(vec, &self.buy_confuser.threshold())
@@ -271,18 +259,13 @@ impl Journaler {
         vec: &Vector,
         outcome: Outcome,
         prediction: Option<Outcome>,
-        conviction: f64,
+        _conviction: f64,
         decay: f64,
         reward_weight: f64,
         correction_weight: f64,
     ) {
         let use_grover = self.use_grover;
         let use_attend = self.use_attend;
-
-        // Confidence-gated learning: scale weights by prediction conviction.
-        let gate = conviction.abs().clamp(0.3, 1.0);
-        let reward_weight = reward_weight * gate;
-        let correction_weight = correction_weight * gate;
 
         // Noise always gets learned (it's its own category)
         if outcome == Outcome::Noise {
@@ -358,9 +341,10 @@ impl Journaler {
                     };
                     let aligned = extract_features(vec, correct_proto, use_attend);
                     let reinforced = amplify_signal(&aligned, opposing_proto, use_grover);
+                    let novelty = 1.0 - Similarity::cosine(&reinforced, vec).abs();
                     match outcome {
-                        Outcome::Buy => self.buy_good.add_weighted(&reinforced, reward_weight),
-                        _ => self.sell_good.add_weighted(&reinforced, reward_weight),
+                        Outcome::Buy => self.buy_good.add_weighted(&reinforced, reward_weight * novelty),
+                        _ => self.sell_good.add_weighted(&reinforced, reward_weight * novelty),
                     }
                 } else {
                     let wrong_proto = match outcome {
@@ -370,9 +354,10 @@ impl Journaler {
                     let misleading = extract_features(vec, wrong_proto, use_attend);
                     let unique = Primitives::negate(vec, &misleading);
                     let amplified = amplify_signal(&unique, &misleading, true);
+                    let novelty = 1.0 - Similarity::cosine(&amplified, vec).abs();
                     match outcome {
-                        Outcome::Buy => self.buy_good.add_weighted(&amplified, correction_weight),
-                        _ => self.sell_good.add_weighted(&amplified, correction_weight),
+                        Outcome::Buy => self.buy_good.add_weighted(&amplified, correction_weight * novelty),
+                        _ => self.sell_good.add_weighted(&amplified, correction_weight * novelty),
                     }
                 }
             }
@@ -390,15 +375,6 @@ impl Journaler {
         }
         let buy_proto = self.buy_good.threshold();
         let sell_proto = self.sell_good.threshold();
-
-        let new_delta = Primitives::difference(&sell_proto, &buy_proto);
-
-        let sep = 1.0 - Similarity::cosine(&buy_proto, &sell_proto);
-        let alpha = sep.clamp(0.05, 1.0);
-        self.delta_disc = Some(match &self.delta_disc {
-            Some(prev) => Primitives::blend(prev, &new_delta, alpha),
-            None => new_delta,
-        });
 
         let buy_entropy = Primitives::entropy(&buy_proto);
         let sell_entropy = Primitives::entropy(&sell_proto);
@@ -904,6 +880,7 @@ fn main() {
     eprintln!("\n  Starting walk-forward ({} candles, starting at index {})...",
         loop_count, start_idx);
 
+    let kill_file = std::path::Path::new("trader-stop");
     let batch_size = args.batch_size.max(1);
     let mut cursor = start_idx;
     let mut log_step: i64 = 0;
@@ -917,6 +894,11 @@ fn main() {
     let mut t_rest_us = 0u128;
 
     while cursor < end_idx {
+        if kill_file.exists() {
+            eprintln!("\n  Kill file detected ({}) — aborting.", kill_file.display());
+            std::fs::remove_file(kill_file).ok();
+            break;
+        }
         let batch_end = (cursor + batch_size).min(end_idx);
         let batch_len = batch_end - cursor;
 
@@ -1386,10 +1368,6 @@ fn main() {
             eprintln!("    cos(sell_good, noise) = {:.4}", Similarity::cosine(&sell_proto, &noise_proto));
         }
 
-        if let Some(ref delta) = journaler.delta_disc {
-            let sep = 1.0 - Similarity::cosine(&buy_proto, &sell_proto);
-            eprintln!("    delta_disc norm={:.4}, alpha={:.4}", Primitives::entropy(delta), sep.clamp(0.05, 1.0));
-        }
         let buy_ent = Primitives::entropy(&buy_proto);
         let sell_ent = Primitives::entropy(&sell_proto);
         eprintln!("    recognition gate: noise_floor={:.4} (buy_entropy={:.4}, sell_entropy={:.4}, d_eff={:.0})",

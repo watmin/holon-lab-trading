@@ -820,7 +820,6 @@ pub struct ThoughtJournaler {
     pub buy_confuser: Accumulator,
     pub sell_confuser: Accumulator,
     pub noise_accum: Accumulator,
-    delta_disc: Option<Vector>,
     updates: usize,
     recalib_interval: usize,
     pub dims: usize,
@@ -836,7 +835,6 @@ impl ThoughtJournaler {
             buy_confuser: Accumulator::new(dims),
             sell_confuser: Accumulator::new(dims),
             noise_accum: Accumulator::new(dims),
-            delta_disc: None,
             updates: 0,
             recalib_interval,
             dims,
@@ -855,26 +853,15 @@ impl ThoughtJournaler {
             return ThoughtPrediction { outcome: None, conviction: 0.0, coherence };
         }
 
-        let delta = self.delta_disc.as_ref()
-            .cloned()
-            .unwrap_or_else(|| Primitives::difference(
-                &self.sell_good.threshold(),
-                &self.buy_good.threshold(),
-            ));
-
         let vec = &thought.thought;
 
-        // Single cosine against the buy-sell delta discriminant:
-        // positive → input aligns with buy-unique features
-        // negative → input aligns with sell-unique features
-        let delta_sim = Similarity::cosine(vec, &delta);
-        let is_buy = delta_sim > 0.0;
+        let buy_proto = self.buy_good.threshold();
+        let sell_proto = self.sell_good.threshold();
 
-        let raw_delta = Primitives::difference(
-            &self.sell_good.threshold(),
-            &self.buy_good.threshold(),
-        );
-        let conviction = Similarity::cosine(vec, &raw_delta).abs();
+        let raw_delta = Primitives::difference(&sell_proto, &buy_proto);
+        let is_buy = Similarity::cosine(vec, &raw_delta) > 0.0;
+
+        let conviction = (Similarity::cosine(vec, &buy_proto) - Similarity::cosine(vec, &sell_proto)).abs();
         let outcome = if is_buy { Some(Outcome::Buy) } else { Some(Outcome::Sell) };
         ThoughtPrediction { outcome, conviction, coherence }
     }
@@ -884,7 +871,7 @@ impl ThoughtJournaler {
         thought: &Vector,
         outcome: Outcome,
         prediction: Option<Outcome>,
-        conviction: f64,
+        _conviction: f64,
         decay: f64,
         reward_weight: f64,
         correction_weight: f64,
@@ -894,11 +881,6 @@ impl ThoughtJournaler {
             self.noise_accum.add(thought);
             return;
         }
-
-        // #7 Confidence-gated learning
-        let gate = conviction.abs().clamp(0.3, 1.0);
-        let reward_weight = reward_weight * gate;
-        let correction_weight = correction_weight * gate;
 
         // Always count non-noise observations and recalibrate on schedule,
         // even if the sample is rejected by the recognition gate below.
@@ -986,9 +968,10 @@ impl ThoughtJournaler {
                     };
                     let aligned = Primitives::resonance(thought, correct_proto);
                     let reinforced = Primitives::amplify(&aligned, opposing_proto, 1.0);
+                    let novelty = 1.0 - Similarity::cosine(&reinforced, thought).abs();
                     match outcome {
-                        Outcome::Buy => self.buy_good.add_weighted(&reinforced, reward_weight),
-                        _ => self.sell_good.add_weighted(&reinforced, reward_weight),
+                        Outcome::Buy => self.buy_good.add_weighted(&reinforced, reward_weight * novelty),
+                        _ => self.sell_good.add_weighted(&reinforced, reward_weight * novelty),
                     }
                 } else {
                     let wrong_proto = match outcome {
@@ -998,9 +981,10 @@ impl ThoughtJournaler {
                     let misleading = Primitives::resonance(thought, wrong_proto);
                     let unique = Primitives::negate(thought, &misleading);
                     let amplified = Primitives::grover_amplify(&unique, &misleading, 1);
+                    let novelty = 1.0 - Similarity::cosine(&amplified, thought).abs();
                     match outcome {
-                        Outcome::Buy => self.buy_good.add_weighted(&amplified, correction_weight),
-                        _ => self.sell_good.add_weighted(&amplified, correction_weight),
+                        Outcome::Buy => self.buy_good.add_weighted(&amplified, correction_weight * novelty),
+                        _ => self.sell_good.add_weighted(&amplified, correction_weight * novelty),
                     }
                 }
             }
@@ -1012,21 +996,6 @@ impl ThoughtJournaler {
         if !self.is_ready() { return; }
         let buy_proto = self.buy_good.threshold();
         let sell_proto = self.sell_good.threshold();
-
-        // Single symmetric discriminant: difference naturally cancels shared
-        // components and captures what's unique to each class.
-        // Positive dimensions → buy-unique, negative → sell-unique.
-        let new_delta = Primitives::difference(&sell_proto, &buy_proto);
-
-        // Self-tuning temporal smoothing: use prototype separation as blend alpha.
-        // When prototypes are similar (cos~0.95), delta is sparse and fragile → alpha~0.05.
-        // When prototypes separate (cos~0.76), delta is robust → alpha~0.24.
-        let sep = 1.0 - Similarity::cosine(&buy_proto, &sell_proto);
-        let alpha = sep.clamp(0.05, 1.0);
-        self.delta_disc = Some(match &self.delta_disc {
-            Some(prev) => Primitives::blend(prev, &new_delta, alpha),
-            None => new_delta,
-        });
 
         // Derive recognition gate from prototype entropy
         let buy_entropy = Primitives::entropy(&buy_proto);

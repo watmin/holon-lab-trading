@@ -4,33 +4,35 @@ Living document tracking experiment results, system architecture, and learnings.
 
 ---
 
-## Current State (2026-03-22)
+## Current State (2026-03-22, evening)
 
-Both visual and thought systems now use identical delta discriminant architecture
-with self-tuning temporal smoothing.
+Architecture has undergone major restructuring today. Key changes:
+- **Confidence gate REMOVED** — was an accidental constant (0.3), not a principled gate
+- **Conviction decoupled from learning** — conviction is purely for trade sizing, never feeds back into observe()
+- **Novelty-gated corrections** — algebraic correction weight scaled by `(1.0 - cosine(correction, raw).abs())`
+- **Dual-cosine conviction** — `|cos(vec, buy_proto) - cos(vec, sell_proto)|` for position sizing
+- **Smoothed delta_disc REMOVED** — direction uses raw `difference(sell_proto, buy_proto)`, eliminating temporal smoothing freeze
 
-### Latest Run: `vis-delta-disc` (100k candles)
+### Latest Run: `novelty-gate-v1` (in progress, ~90k/100k)
 
-| Metric | Value |
-|--------|-------|
-| Equity | $10,026 (+0.26%) |
-| Win rate | 51.4% (34,237/66,597) |
-| Visual accuracy (overall) | 50.1% |
-| Thought accuracy (overall) | 51.5% |
-| Visual-Thought agreement | 52.1% |
-| Agreement accuracy (when agree) | 51.6% |
-| Candles | 100,000 (2019-01-01 to 2019-12-15) |
-| Buy-and-hold | +89.56% |
-| Visual bias | 67.6% Buy / 32.4% Sell |
-| Thought bias | 41.2% Buy / 58.8% Sell |
-| cos(buy_good, sell_good) visual | 0.9000 |
-| cos(buy_good, sell_good) thought | 0.9482 |
-| Phase | CONFIDENT |
+| Metric | Value (at 90k) |
+|--------|----------------|
+| Equity | $9,650 (-3.5%) |
+| Win rate | 50.7% (60,019 trades) |
+| Visual accuracy (rolling) | 40.9% |
+| Thought accuracy (rolling) | 54.1% |
+| Visual-Thought agreement | 46% |
+| Visual bias | 99%+ Buy (locked — pre-fix) |
+| Thought bias | ~45% Buy / 55% Sell (balanced) |
+| cos(buy_good, sell_good) visual | 0.89 |
+| cos(buy_good, sell_good) thought | 0.99 |
 
-Key observation: visual and thought systems have **anti-correlated bias** — visual
-leans Buy, thought leans Sell. When they agree, both are overcoming their natural
-bias, which may indicate higher-quality signals. The systems trade leadership across
-different market regimes (visual surges in some periods, thought in others).
+Key observations:
+- Thought system makes **independent, balanced predictions** thanks to novelty gate
+- Agreement at 42-46% is genuine (not 100% lock-in)
+- When systems agree: **53.6% accuracy** vs 49.7% when they disagree
+- Visual still locked Buy (pre-fix), thought carries the signal in later segments
+- Thought accuracy sustained 52-56% from 60-90k while visual declines
 
 ### All-Time Best P&L: `sep-gated-raw-100k` (pre-thought-delta, old dual-disc)
 
@@ -46,102 +48,121 @@ different market regimes (visual surges in some periods, thought in others).
 
 ### Run Leaderboard (all 100k runs)
 
-| Run | Return | Win% | Vis Acc | Tht Acc | Agree | Vis Conv | Tht Conv |
-|-----|--------|------|---------|---------|-------|----------|----------|
-| **sep-gated-raw-100k** | **+7.89%** | 50.7% | 50.74% | 50.53% | 52.4% | 0.032 | 0.12 (spiky) |
-| delta-selftune | +4.66% | 51.6% | 50.74% | 51.51% | 50.7% | 0.032 | 0.07 (flat) |
-| expanded-vocab | +3.05% | 49.9% | 50.74% | 50.18% | 49.8% | 0.032 | — |
-| conviction-fix-100k | +1.18% | 50.0% | 50.74% | 50.31% | 55.0% | 0.032 | — |
-| **vis-delta-disc** | +0.26% | 51.4% | 50.05% | 51.51% | 52.1% | **0.017** | 0.07 (flat) |
+| Run | Return | Win% | Vis Acc | Tht Acc | Agree | Notes |
+|-----|--------|------|---------|---------|-------|-------|
+| **sep-gated-raw-100k** | **+7.89%** | 50.7% | 50.7% | 50.5% | 52.4% | Old arch, best P&L |
+| delta-selftune | +4.66% | 51.6% | 50.7% | 51.5% | 50.7% | |
+| expanded-vocab | +3.05% | 49.9% | 50.7% | 50.2% | 49.8% | |
+| decoupled-raw | +1.91% | 50.5% | 50.5% | 50.5% | 99.9% | No conf gate, both locked Buy |
+| conviction-fix-100k | +1.18% | 50.0% | 50.7% | 50.3% | 55.0% | |
+| vis-delta-disc | +0.26% | 51.4% | 50.1% | 51.5% | 52.1% | |
+| raw-conviction | -0.82% | 50.5% | — | — | — | Raw conv, pre-decouple |
+| zscore-conviction | -2.1%* | 49.8%* | — | — | 2-10% | *aborted at 50k |
+| novelty-gate-v1 | -3.5%* | 50.7%* | — | 54.1% | 46% | *at 90k, in progress |
 
-### Critical Finding: Conviction Compression
+### Critical Finding: Conviction-Learning Coupling
 
-The delta discriminant + smoothing stabilized accuracy but **crushed conviction
-variance**, which directly drives P&L through position sizing.
+The confidence gate (`conviction.clamp(0.3, 1.0)`) was **never a principled design**.
+Raw conviction was always tiny (0.02-0.08), so the clamp always hit the 0.3 floor.
+The gate was effectively a **constant 0.3x multiplier** on all algebraic corrections.
 
-| Metric | sep-gated-raw (best P&L) | vis-delta-disc (current) |
-|--------|--------------------------|--------------------------|
-| Visual conviction (avg) | 0.032 | **0.017** (halved) |
-| Thought conviction range | 0.07 – **0.28** (spiky) | 0.063 – 0.075 (flat) |
-| Agreement range | 38% – **76%** (volatile) | 49% – 56% (stable) |
-| P&L | **+7.89%** | +0.26% |
+This accidental damper was load-bearing: it kept corrections subordinate to raw
+accumulation (Layer 1). Without it, corrections self-reinforce and lock predictions
+into one direction permanently (see `decoupled-raw` run: both systems predict Buy
+100% of the time from 10k candles onward).
 
-The old dual-disc + noise stripping architecture produced higher-magnitude
-cosine similarities (buy_sim/sell_sim margin is larger than delta_sim for a
-single cosine). The old thought system had wild conviction spikes during
-certain market regimes — those spikes drove larger positions on what turned
-out to be correct calls.
+**Two layers of learning in observe():**
+1. **Raw accumulation** (weight 1.0, always runs) — ground truth, symmetric
+2. **Algebraic correction** (weight × sep_gate × novelty, conditional) — derived signal, asymmetric
 
-The self-tuning temporal smoothing on the delta disc specifically prevents
-conviction spikes by blending away sudden delta changes. This is exactly
-what stabilized the fragile delta — but it also prevents the system from
-making big bets when it has genuine signal.
+The correction is a self-reinforcing loop: correct predictions amplify the pattern
+that produced them, making future predictions more likely to agree. The 0.3 damper
+kept this loop weak enough that Layer 1 dominated. The principled replacement is
+**novelty-gating**: `weight *= (1.0 - cosine(correction_vec, raw_vec).abs())`,
+which measures how much new information the correction carries beyond raw accumulation.
 
-**Implication**: The conviction metric (delta_sim.abs()) may need rescaling
-or a different activation function to recover position sizing variance.
-Alternatively, conviction should be derived from something other than raw
-cosine similarity — e.g., z-score of delta_sim relative to recent history.
+### Critical Finding: Conviction Inversely Correlates with Accuracy
+
+DB analysis from `decoupled-raw` revealed that both systems are **more accurate
+when less confident**:
+
+| Conviction bucket | Visual accuracy | Thought accuracy |
+|-------------------|----------------|------------------|
+| Low (< 0.02 vis / < 0.20 tht) | **58.2%** | **79.0%** |
+| High (> 0.12 vis / > 0.60 tht) | 49.2% | 52.6% |
+
+Position sizing based on conviction is actively harmful — it bets bigger on
+worse predictions. This is a fundamental issue with the delta discriminant's
+cosine magnitude as a confidence measure.
+
+### Critical Finding: Visual Temporal Smoothing Freeze
+
+The self-tuning temporal smoothing locked the visual system's delta_disc into
+a permanent Buy direction:
+- `cos(buy_proto, sell_proto)` ≈ 0.89 → alpha = 0.11
+- Delta_disc updates: 89% old direction, 11% new
+- Whatever direction the delta pointed at first recalibration becomes permanent
+- 100% Buy predictions from candle 2000 onward in all runs using smoothed delta
+
+The thought system survived with even worse separation (cos=0.99, alpha=0.05)
+because thought vectors have higher variance relative to the delta, causing
+`cosine(thought_vec, delta)` to naturally oscillate around zero.
+
+**Fix**: Removed smoothed delta_disc entirely. Direction now uses raw
+`difference(sell_proto, buy_proto)` which updates at every recalibration
+without temporal smoothing.
 
 ---
 
 ## System Architecture
 
-### Delta Discriminant (both visual and thought)
+### Prediction (both visual and thought)
 
-Both systems replaced dual discriminants (`buy_disc`/`sell_disc`) and noise
-stripping with a single symmetric delta discriminant:
-
+Direction from raw delta discriminant (no temporal smoothing):
 ```
-delta_disc = difference(sell_proto, buy_proto)
-```
-
-Prediction: `delta_sim = cosine(vec, delta_disc)` — positive = Buy, negative = Sell,
-magnitude = conviction.
-
-Self-tuning temporal smoothing at recalibration:
-```
-alpha = (1.0 - cosine(buy_proto, sell_proto)).clamp(0.05, 1.0)
-delta_disc = blend(prev_delta, new_delta, alpha)
+raw_delta = difference(sell_proto, buy_proto)
+is_buy = cosine(vec, raw_delta) > 0
 ```
 
-When prototypes are similar (fragile delta), alpha is small → conservative updates.
-When prototypes separate (robust delta), alpha approaches 1.0 → fast adaptation.
+Conviction from dual-cosine margin (decoupled from learning):
+```
+conviction = |cosine(vec, buy_proto) - cosine(vec, sell_proto)|
+```
 
 ### Prediction Flow
 
 ```mermaid
 flowchart TD
-    V[/"Encoded Viewport (or Thought)"/] --> DS["delta_sim = cosine(vec, delta_disc)"]
-    DS --> DIR{"delta_sim > 0?"}
-    DIR -->|Yes| BUY[/"Predict BUY, conviction = delta_sim"/]
-    DIR -->|No| SELL[/"Predict SELL, conviction = |delta_sim|"/]
+    V[/"Encoded Viewport (or Thought)"/] --> DELTA["raw_delta = difference(sell_proto, buy_proto)"]
+    DELTA --> DIR{"cosine(vec, raw_delta) > 0?"}
+    DIR -->|Yes| BUY[/"Predict BUY"/]
+    DIR -->|No| SELL[/"Predict SELL"/]
+    V --> CONV["|cos(vec, buy) - cos(vec, sell)|"]
+    CONV --> SIZE[/"conviction (trade sizing only)"/]
 ```
 
 ### Learning Flow (Journaler.observe)
 
+Conviction is NOT used in learning. Three gates control correction strength:
+
 ```mermaid
 flowchart TD
-    INPUT[/"vec + outcome + prediction + conviction"/] --> CG["#7 Confidence Gate: weight *= conviction"]
-    CG --> NOISE{"Noise?"}
+    INPUT[/"vec + outcome + prediction"/] --> NOISE{"Noise?"}
     NOISE -->|Yes| NA["Add to noise_accum"] --> DONE[/"Return"/]
-    NOISE -->|No| RR{"#10 Recognition Rejection: max sim < noise_floor?"}
+    NOISE -->|No| RR{"Recognition Rejection: max sim < noise_floor?"}
     RR -->|Yes| SKIP[/"Skip learning"/]
-    RR -->|No| RAW["Raw Accumulation: decay + add vec"]
+    RR -->|No| RAW["Layer 1: Raw Accumulation (weight 1.0)"]
     RAW --> WRONG{"Predicted wrong?"}
     WRONG -->|Yes| FEED["Feed Confuser accum"]
     WRONG -->|No| GATE
     FEED --> GATE
-    GATE["#3 Separation Gate: scale weights by proto divergence"] --> MATCH{"Prediction correct?"}
-    MATCH -->|Reward| REWARD["resonance → amplify → add_weighted"]
-    MATCH -->|Correction| CORRECT["resonance → negate → amplify → add_weighted"]
-    REWARD --> RECAL["Every 500 updates: recalibrate delta_disc"]
-    CORRECT --> RECAL
-
-    style CG fill:#2d6a2d,color:#fff
-    style RR fill:#2d6a2d,color:#fff
-    style GATE fill:#2d6a2d,color:#fff
-    style CORRECT fill:#8b4513,color:#fff
-    style REWARD fill:#1a5276,color:#fff
+    GATE["Separation Gate: weight *= (1 - cos(buy,sell))"] --> MATCH{"Prediction correct?"}
+    MATCH -->|Reward| REWARD["resonance -> amplify -> correction_vec"]
+    MATCH -->|Correction| CORRECT["resonance -> negate -> amplify -> correction_vec"]
+    REWARD --> NOV["Novelty Gate: weight *= (1 - cos(correction, raw))"]
+    CORRECT --> NOV
+    NOV --> ADD["Layer 2: add_weighted(correction, weight)"]
+    ADD --> RECAL["Every 500 updates: recalibrate noise_floor"]
 ```
 
 ### Trader Decision Flow
@@ -475,7 +496,22 @@ With delta_sim as conviction, check if high-conviction predictions are more
 accurate than low-conviction. Previous inverse calibration was caused by
 confuser subtraction in a mixed vector space — should be resolved now.
 
-### Priority 5 — Agreement as Primary Signal
+### Priority 5 — Reward Mechanism Redesign
+Current reward/correction is binary: prediction right → reinforce, wrong → correct.
+No scaling by outcome magnitude (how much price moved), trade profitability, or
+how wrong/right the prediction was. A 0.51% move gets the same treatment as a 5% move.
+
+Key gaps:
+- No concept of outcome magnitude in the learning signal
+- No gradient between "barely wrong" and "completely wrong"
+- No feedback from actual P&L into the learning system
+- The 0.5% threshold itself is binary — 0.49% = Noise, 0.51% = Signal
+
+Ideas and research: https://grok.com/c/25c9bfd2-8964-4972-9ba7-33f06a7f0e22?rid=90c2451a-7b28-491c-83f6-0a26be5ecede
+
+Circle back after current queue (vocab expansion, conviction rescaling).
+
+### Priority 6 — Agreement as Primary Signal
 Agreement rate (52%) and agreement accuracy (51.6%) suggest the two systems
 provide weak but real independent signals. The anti-correlated bias means
 agreement requires both systems to overcome their natural lean — potentially

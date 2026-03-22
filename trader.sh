@@ -87,6 +87,12 @@ do_test() {
     local rundb="$outdir/${name}.db"
     mkdir -p "$outdir"
 
+    if [ -f "$rundb" ]; then
+        echo "ERROR: Run DB already exists: $rundb"
+        echo "Pick a different --name or delete the old run first."
+        exit 1
+    fi
+
     do_build
     echo ""
     echo "Running: $candles candles, logging to $logfile"
