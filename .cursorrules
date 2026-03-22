@@ -1,0 +1,18 @@
+# Cursor Rules for Trading Lab
+
+## Build & Run
+- **Build/run helper**: `./trader.sh` — handles `CARGO_TARGET_DIR`, DB path, logging
+  - `./trader.sh build` — build release binary
+  - `./trader.sh run [flags]` — build + run
+  - `./trader.sh test <candles> [flags]` — build + run with logging
+  - `./trader.sh compare <candles>` — run all 5 orchestration modes
+  - `./trader.sh log <name>` — tail a test log
+  - `./trader.sh kill` — kill running traders
+- **NEVER** run `cargo build/run` directly — Cursor sandbox sets `CARGO_TARGET_DIR` to `/tmp/`, causing binary-not-found issues
+
+## Key Files
+- `rust/src/bin/trader.rs` — main trader binary
+- `rust/src/thought.rs` — thought vector system
+- `EXPERIMENT_LOG.md` — living experiment tracker
+- `THOUGHT_VOCAB.md` — compositional symbolic reasoning vocabulary reference
+- `orchestration_results/` — test output logs

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use rayon::prelude::*;
 
 use crate::db::Candle;
@@ -5,6 +6,52 @@ use holon::{Primitives, VectorManager, Vector};
 
 const NUM_PANELS: usize = 4;
 const NULL_TOKEN: &str = "null";
+
+const COLOR_TOKENS: &[&str] = &[
+    "null", "gs", "rs", "gw", "rw", "dj", "yl", "rl", "gl",
+    "wu", "wl", "vg", "vr", "rb", "ro", "rn", "ml", "ms",
+    "mhg", "mhr", "dp", "dm", "ax",
+];
+
+/// Pre-computed vectors for the visual encoding hot loop.
+/// Eliminates all VectorManager clones during raster encoding.
+pub struct VisualCache {
+    atoms: HashMap<&'static str, Vector>,
+    set_indicator: Vector,
+    row_positions: Vec<Vector>,
+    col_positions: Vec<Vector>,
+    /// Pre-computed encoded null cell at each row position:
+    /// bind(pos[ri], bind(set_indicator, null_atom))
+    null_row_vecs: Vec<Vector>,
+}
+
+impl VisualCache {
+    pub fn new(vm: &VectorManager, n_cols: usize, n_rows: usize) -> Self {
+        let total_rows = n_rows * NUM_PANELS;
+
+        let mut atoms = HashMap::new();
+        for &token in COLOR_TOKENS {
+            atoms.insert(token, vm.get_vector(token));
+        }
+
+        let set_indicator = vm.get_vector("set_indicator");
+
+        let row_positions: Vec<Vector> = (0..total_rows)
+            .map(|ri| vm.get_position_vector(ri as i64))
+            .collect();
+        let col_positions: Vec<Vector> = (0..n_cols)
+            .map(|ci| vm.get_position_vector(ci as i64))
+            .collect();
+
+        let null_atom = &atoms["null"];
+        let null_cell = Primitives::bind(&set_indicator, null_atom);
+        let null_row_vecs: Vec<Vector> = row_positions.iter()
+            .map(|pos| Primitives::bind(pos, &null_cell))
+            .collect();
+
+        Self { atoms, set_indicator, row_positions, col_positions, null_row_vecs }
+    }
+}
 
 /// A viewport is [col][row] = list of color tokens at that pixel.
 /// Columns are left-to-right (time), rows are top-to-bottom (all panels stacked).
@@ -316,6 +363,41 @@ pub fn raster_encode(vm: &VectorManager, vp: &Viewport, null_vec: &Vector) -> Ve
             let col_vec = Primitives::bundle(&row_refs);
             let pos = vm.get_position_vector(ci as i64);
             Primitives::bind(&pos, &col_vec)
+        })
+        .collect();
+
+    let col_refs: Vec<&Vector> = col_vecs.iter().collect();
+    let raw = Primitives::bundle(&col_refs);
+    Primitives::difference(null_vec, &raw)
+}
+
+/// Cached version: uses pre-computed atom/position vectors (zero clones from VectorManager)
+/// and skips null cells by using pre-computed null row vectors.
+pub fn raster_encode_cached(cache: &VisualCache, vp: &Viewport, null_vec: &Vector) -> Vector {
+    let col_vecs: Vec<Vector> = vp
+        .par_iter()
+        .enumerate()
+        .map(|(ci, column)| {
+            let row_vecs: Vec<Vector> = column
+                .iter()
+                .enumerate()
+                .map(|(ri, cell)| {
+                    if cell.len() == 1 && cell[0] == NULL_TOKEN {
+                        return cache.null_row_vecs[ri].clone();
+                    }
+
+                    let atom_refs: Vec<&Vector> = cell.iter()
+                        .map(|&c| &cache.atoms[c])
+                        .collect();
+                    let bundled = Primitives::bundle(&atom_refs);
+                    let cell_vec = Primitives::bind(&cache.set_indicator, &bundled);
+                    Primitives::bind(&cache.row_positions[ri], &cell_vec)
+                })
+                .collect();
+
+            let row_refs: Vec<&Vector> = row_vecs.iter().collect();
+            let col_vec = Primitives::bundle(&row_refs);
+            Primitives::bind(&cache.col_positions[ci], &col_vec)
         })
         .collect();
 

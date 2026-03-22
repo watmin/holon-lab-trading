@@ -255,3 +255,170 @@ These techniques failed at specific insertion points (the learning/correction pa
 | 2026-03-21 | +#7+#10+#3+#12 (reward) | — | — | Killed at 50k (-7.4%) |
 | 2026-03-21 | +#7+#10+#3+#16 | — | — | Killed at 60k (-5.3%) |
 | 2026-03-21 | +#7+#10+#3+#15 | — | — | Killed at 40k (-5.6%) |
+| 2026-03-22 | +thoughts (frozen, old #10 gate) | +5.2% at 60k | 50.5% | Thought system frozen after ~10k samples; still competitive |
+| 2026-03-22 | +thoughts (learning fix, 1% explore) | +3.0% at 40k | 50.3% | Thought learning unlocked; cos separation improving (0.83→0.80) |
+
+---
+
+## SQLite Analysis Findings (2026-03-22, run with thought learning fix)
+
+Data from `runs/run_20260322_020026.db` — 30k candles analyzed with per-candle prediction logging.
+
+### Conviction Is Inversely Calibrated
+
+| Thought conviction band | Trades | Accuracy |
+|--------------------------|--------|----------|
+| <0.1                     | 2,829  | **53.6%** |
+| 0.1–0.3                  | 5,400  | **53.1%** |
+| 0.3–0.5                  | 1,587  | 45.2%    |
+| 0.5–0.7                  | 115    | 53.0%    |
+| 0.7+                     | 233    | 52.8%    |
+
+Low conviction = higher accuracy. The metric measures prototype *familiarity* not *discriminative confidence*. When a pattern strongly matches one discriminant, it also partially trips the confuser (built from raw vectors, not discriminant-space). The confuser subtraction penalizes the strongest signals most.
+
+Visual conviction is flat — almost no accuracy relationship across bands (46–50% at all levels).
+
+### Confusers Are Net Negative
+
+- **Flip rate**: 6.1% of visual predictions (1,533 / 25,000)
+- **Flip accuracy**: 46.6% — worse than not flipping
+- Near-zero sims (avg buy_sim=-0.006, sell_sim=-0.023) mean the confuser subtraction dominates the tiny raw signal
+
+### Agreement Signal
+
+- **Agreement rate**: 50.3% (near-perfect independence)
+- When both agree Buy + low thought conviction: **54.1%** on 6,740 trades
+- When both agree Buy + high thought conviction: **47.2%** on 1,038 trades
+- **Thought wins 55.4% of disagreements**, trending to 62.9% at 20k+
+
+### Visual Acts as Regime Filter, Not Directional Predictor
+
+- Thought says Buy + visual agrees: 53.2% (7,778 trades)
+- Thought says Buy + visual disagrees: 53.6% (7,746 trades)
+- Visual agreement barely changes Buy accuracy — it's the *regime* that matters
+
+### Thought Learning Fix Confirmed Working
+
+| Step | cos_buy_sell | buy_count | sell_count | Notes |
+|------|-------------|-----------|------------|-------|
+| 10k  | 0.834       | 587       | 454        | Already exceeds old run's 50k totals (549/410) |
+| 20k  | 0.813       | 627       | 500        | Separation improving |
+| 30k  | 0.805       | 677       | 542        | Old run stuck at 0.878 |
+
+New vs old thought accuracy (growing delta):
+- 10-15k: +1.5pp
+- 20-25k: +2.2pp  
+- 25-30k: **+3.6pp**
+
+---
+
+## Improvement Backlog (data-driven, prioritized)
+
+### Priority 0 — Noise Floor Ratchet (DONE, needs validation run)
+Exploration fix caused prototype cascade: 677 → 39,083 samples, cos
+collapsed from 0.805 → 0.992. Root cause: diluted prototypes raise
+entropy → noise_floor drops → gate opens → more dilution → runaway.
+Fix: `self.noise_floor = self.noise_floor.max(new_floor)` — floor can
+only tighten, never loosen. Code is in but needs a clean 100k run to
+validate.
+
+### Priority 1 — Throughput Regression
+Adding thought system dropped throughput from ~90/s to ~23/s (~4x slower).
+Need to profile: is it fact generation, thought vector encoding, or the
+thought predict/observe path? Likely candidate: per-candle fact evaluation
+iterating all comparison pairs × zones × predicates.
+
+### Priority 2 — Near-Zero Sim Filter
+Buy/sell sims average -0.006/-0.023 — firmly in the VSA noise floor.
+Most predictions are indistinguishable from orthogonal noise. Add minimum
+absolute sim threshold (e.g., 0.03–0.05) to reject candles where
+`max(|buy_sim|, |sell_sim|) < threshold`. Trade less, but only when
+there's actual signal. Should reduce trade count significantly while
+improving per-trade accuracy.
+
+### Priority 2 — Fix Conviction Metric
+Current: `conviction = discriminant_sim - confuser_sim`. Problem:
+discriminants live in a narrow subspace (the ~20% NOT shared between
+buy/sell) while confusers are built from full raw vectors. The subtraction
+mixes incompatible vector spaces. Options:
+- **(a)** Use `buy_sim - sell_sim` (margin between discriminants) as conviction
+- **(b)** Project confusers into discriminant space before subtraction
+- **(c)** Compute confuser sims against discriminant-space vectors
+
+Option (a) is simplest and directly measures "how much more buy-unique
+than sell-unique."
+
+### Priority 3 — Rethink Confusers
+Net negative at 46.6% flip accuracy. The concept (flagging past mistakes)
+is sound; the implementation (flipping direction) is wrong. Options:
+- **(a)** Disable entirely (baseline improvement)
+- **(b)** Use confuser_sim as rejection signal — high confuser → abstain, don't reverse
+- **(c)** Rebuild confusers in discriminant space so the subtraction is meaningful
+
+### Priority 4 — Visual as Regime Detector
+Visual barely adds directional value but shows strong regime-dependent
+performance swings (32–62% across 5k buckets). Instead of using it for
+Buy/Sell calls, use its rolling accuracy or sim magnitude to:
+- Modulate position sizing
+- Adjust thought system's confidence threshold
+- Gate trading activity (only trade when visual is in a "good regime")
+
+### Priority 5 — Verify Conviction Inversion Post-Fix
+After fixing the metric, re-check if low conviction still outperforms
+high conviction. If it persists with margin-based conviction, the
+discriminant prototypes themselves need work (resonance subtraction
+may be too aggressive at 0.80 cosine similarity).
+
+---
+
+## Planned Instrumentation / Dashboard
+
+Metrics we currently lack visibility into. Priority: build
+structured logging first, dashboard second.
+
+### Confuser Impact Metrics
+- **Sim distributions**: histogram of buy_sim and sell_sim values
+  per candle — what does the typical spread look like?
+- **Confuser flip rate**: how often does `buy_conviction > sell_conviction`
+  differ from `buy_sim > sell_sim`? (i.e., confuser changed the
+  prediction direction)
+- **Flip accuracy**: when confusers flip a prediction, are they
+  right? Track flipped-and-correct vs flipped-and-wrong.
+- **Confuser magnitude**: distribution of `buy_confuser_sim` and
+  `sell_confuser_sim` — how large is the penalty relative to the
+  raw similarity? If confuser_sim is always tiny, they're not
+  doing much.
+- **Conviction before/after**: raw conviction (sim only) vs
+  adjusted conviction (sim - confuser_sim) distribution.
+
+### Prediction Pipeline Stage Metrics
+- **Noise gate rejection rate**: % of candles where noise_sim >
+  max(buy_sim, sell_sim). How often are we sitting out?
+- **Recognition gate rejection rate**: % of labeled outcomes where
+  max_sim < noise_floor. How much training data are we discarding?
+- **Separation gate scaling**: distribution of sep_gate values
+  (1 - cos(buy_proto, sell_proto)). How much is the correction
+  path being throttled?
+
+### Thought System Metrics
+- **Fact activation frequency**: which facts fire most often? The
+  background accumulator removes always-on facts, but tracking
+  frequency helps validate that it's working.
+- **Thought recognition rate**: % of candles where thought_sim
+  passes the thought noise_floor vs visual noise_floor.
+- **Fact count per candle**: distribution of how many facts are
+  true per candle (thought vector density).
+
+### Dashboard Vision
+Real-time TUI or web dashboard showing:
+- Rolling accuracy curves (visual, thought, agreement)
+- Equity curve
+- Sim distribution histograms (live updating)
+- Confuser flip events highlighted on the equity curve
+- Prototype separation (cos(buy, sell)) over time
+- Recognition gate threshold (noise_floor) over time
+
+**Implementation approach**: Start with structured JSON logging
+(one JSON object per candle to stderr), pipe to a log file.
+Dashboard reads the log. Keeps the trader binary clean — all
+visualization is a separate consumer of the log stream.
