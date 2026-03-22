@@ -868,9 +868,13 @@ impl ThoughtJournaler {
         // positive → input aligns with buy-unique features
         // negative → input aligns with sell-unique features
         let delta_sim = Similarity::cosine(vec, &delta);
-
         let is_buy = delta_sim > 0.0;
-        let conviction = delta_sim.abs();
+
+        let raw_delta = Primitives::difference(
+            &self.sell_good.threshold(),
+            &self.buy_good.threshold(),
+        );
+        let conviction = Similarity::cosine(vec, &raw_delta).abs();
         let outcome = if is_buy { Some(Outcome::Buy) } else { Some(Outcome::Sell) };
         ThoughtPrediction { outcome, conviction, coherence }
     }

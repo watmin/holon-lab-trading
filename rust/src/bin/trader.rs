@@ -222,10 +222,16 @@ impl Journaler {
 
         let delta_sim = Similarity::cosine(vec, &delta);
         let is_buy = delta_sim > 0.0;
-        let conviction = delta_sim.abs();
 
-        let buy_sim = if is_buy { delta_sim } else { 0.0 };
-        let sell_sim = if !is_buy { -delta_sim } else { 0.0 };
+        let raw_delta = Primitives::difference(
+            &self.sell_good.threshold(),
+            &self.buy_good.threshold(),
+        );
+        let raw_sim = Similarity::cosine(vec, &raw_delta);
+        let conviction = raw_sim.abs();
+
+        let buy_sim = if is_buy { raw_sim } else { 0.0 };
+        let sell_sim = if !is_buy { -raw_sim } else { 0.0 };
 
         let buy_confuser_sim = if self.buy_confuser.count() > 0 {
             Similarity::cosine(vec, &self.buy_confuser.threshold())
