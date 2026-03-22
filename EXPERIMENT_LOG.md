@@ -32,17 +32,55 @@ leans Buy, thought leans Sell. When they agree, both are overcoming their natura
 bias, which may indicate higher-quality signals. The systems trade leadership across
 different market regimes (visual surges in some periods, thought in others).
 
-### Previous Best: `conviction-fix-100k` (pre-delta, old dual-disc architecture)
+### All-Time Best P&L: `sep-gated-raw-100k` (pre-thought-delta, old dual-disc)
 
 | Metric | Value |
 |--------|-------|
-| Equity | $10,465 (+4.65%) |
-| Win rate | 50.5% |
+| Equity | $10,789 (+7.89%) |
+| Win rate | 50.7% |
 | Visual accuracy | 50.7% |
-| Thought accuracy | 50.3% |
-| Agreement | 55.0% |
+| Thought accuracy | 50.5% |
+| Agreement | 52.4% |
 | Visual bias | 51.1% Buy (balanced) |
-| Thought bias | 49.3% Buy (balanced) |
+| Thought bias | 60.7% Buy |
+
+### Run Leaderboard (all 100k runs)
+
+| Run | Return | Win% | Vis Acc | Tht Acc | Agree | Vis Conv | Tht Conv |
+|-----|--------|------|---------|---------|-------|----------|----------|
+| **sep-gated-raw-100k** | **+7.89%** | 50.7% | 50.74% | 50.53% | 52.4% | 0.032 | 0.12 (spiky) |
+| delta-selftune | +4.66% | 51.6% | 50.74% | 51.51% | 50.7% | 0.032 | 0.07 (flat) |
+| expanded-vocab | +3.05% | 49.9% | 50.74% | 50.18% | 49.8% | 0.032 | — |
+| conviction-fix-100k | +1.18% | 50.0% | 50.74% | 50.31% | 55.0% | 0.032 | — |
+| **vis-delta-disc** | +0.26% | 51.4% | 50.05% | 51.51% | 52.1% | **0.017** | 0.07 (flat) |
+
+### Critical Finding: Conviction Compression
+
+The delta discriminant + smoothing stabilized accuracy but **crushed conviction
+variance**, which directly drives P&L through position sizing.
+
+| Metric | sep-gated-raw (best P&L) | vis-delta-disc (current) |
+|--------|--------------------------|--------------------------|
+| Visual conviction (avg) | 0.032 | **0.017** (halved) |
+| Thought conviction range | 0.07 – **0.28** (spiky) | 0.063 – 0.075 (flat) |
+| Agreement range | 38% – **76%** (volatile) | 49% – 56% (stable) |
+| P&L | **+7.89%** | +0.26% |
+
+The old dual-disc + noise stripping architecture produced higher-magnitude
+cosine similarities (buy_sim/sell_sim margin is larger than delta_sim for a
+single cosine). The old thought system had wild conviction spikes during
+certain market regimes — those spikes drove larger positions on what turned
+out to be correct calls.
+
+The self-tuning temporal smoothing on the delta disc specifically prevents
+conviction spikes by blending away sudden delta changes. This is exactly
+what stabilized the fragile delta — but it also prevents the system from
+making big bets when it has genuine signal.
+
+**Implication**: The conviction metric (delta_sim.abs()) may need rescaling
+or a different activation function to recover position sizing variance.
+Alternatively, conviction should be derived from something other than raw
+cosine similarity — e.g., z-score of delta_sim relative to recent history.
 
 ---
 
@@ -318,7 +356,8 @@ These are the remaining planned items from THOUGHT_VOCAB.md.
 | 2026-03-21 | +#7+#10 | +3.31% | 49.7% | Recognition rejection confirmed |
 | 2026-03-21 | +#7+#10+#9 | +0.14% | — | Cross-class ruled out |
 | 2026-03-21 | +#7+#10+#14 | +2.23% | 49.5% | Analogy ruled out |
-| 2026-03-21 | +#7+#10+#3 | **+4.65%** | **50.5%** | Best P&L (old dual-disc architecture) |
+| 2026-03-21 | +#7+#10+#3 (sep-gated-raw) | **+7.89%** | **50.7%** | **All-time best P&L** |
+| 2026-03-21 | +#7+#10+#3 (conviction-fix) | +1.18% | 50.0% | Conviction metric changed, P&L dropped |
 | 2026-03-21 | +#7+#10+#3+#12 (correction) | — | — | Killed at 50k (-7.4%) |
 | 2026-03-21 | +#7+#10+#3+#12 (reward) | — | — | Killed at 50k (-7.4%) |
 | 2026-03-21 | +#7+#10+#3+#16 | — | — | Killed at 60k (-5.3%) |
@@ -403,7 +442,22 @@ No confuser subtraction. No mixed vector spaces.
 Confusers still accumulate and log for diagnostics but don't affect prediction.
 No flipping. May revisit as rejection signal (high confuser_sim → abstain).
 
-### Priority 2 — Visual Buy Bias Drift
+### Priority 2 — Conviction Rescaling
+Delta_sim.abs() produces conviction values ~2x lower than old dual-disc margin.
+Self-tuning smoothing further compresses conviction variance. Position sizer
+sees half the signal → makes smaller bets → lower P&L despite better accuracy.
+Options:
+- **(a)** Rescale delta_sim by a learned factor (e.g., 2x to match old range)
+- **(b)** Z-score conviction: `(delta_sim - rolling_mean) / rolling_std`
+- **(c)** Use conviction percentile rather than raw magnitude
+- **(d)** Separate conviction from smoothing — smooth the delta for direction,
+  but use raw (unsmoothed) delta_sim for conviction magnitude
+
+Option (d) is most principled: smoothing prevents direction flips (which is
+what we want), but conviction should reflect the current signal strength,
+not the smoothed historical average.
+
+### Priority 3 — Visual Buy Bias Drift
 Visual delta_disc drifts to 76% Buy predictions by 90k candles. The self-tuning
 alpha is 0.10 for visual (cos=0.90, more separated than thought's 0.95) so it
 adapts faster — but the adaptation is one-directional. Investigate whether the
