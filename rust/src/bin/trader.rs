@@ -214,11 +214,16 @@ impl Journaler {
         let buy_proto = self.buy_good.threshold();
         let sell_proto = self.sell_good.threshold();
 
-        let raw_delta = Primitives::difference(&sell_proto, &buy_proto);
+        // Strip shared structure: expose only what's unique to each class
+        let shared = Primitives::resonance(&buy_proto, &sell_proto);
+        let buy_disc = Primitives::negate(&buy_proto, &shared);
+        let sell_disc = Primitives::negate(&sell_proto, &shared);
+
+        let raw_delta = Primitives::difference(&sell_disc, &buy_disc);
         let is_buy = Similarity::cosine(vec, &raw_delta) > 0.0;
 
-        let buy_sim = Similarity::cosine(vec, &buy_proto);
-        let sell_sim = Similarity::cosine(vec, &sell_proto);
+        let buy_sim = Similarity::cosine(vec, &buy_disc);
+        let sell_sim = Similarity::cosine(vec, &sell_disc);
         let conviction = (buy_sim - sell_sim).abs();
 
         let buy_confuser_sim = if self.buy_confuser.count() > 0 {
@@ -243,7 +248,7 @@ impl Journaler {
         PredictionDetail {
             prediction,
             conviction,
-            max_sim: conviction,
+            max_sim: buy_sim.max(sell_sim),
             buy_sim,
             sell_sim,
             buy_confuser_sim,
@@ -263,6 +268,7 @@ impl Journaler {
         decay: f64,
         reward_weight: f64,
         correction_weight: f64,
+        signal_weight: f64,
     ) {
         let use_grover = self.use_grover;
         let use_attend = self.use_attend;
@@ -291,12 +297,12 @@ impl Journaler {
             Outcome::Buy => {
                 self.buy_good.decay(decay);
                 self.sell_good.decay(decay);
-                self.buy_good.add(vec);
+                self.buy_good.add_weighted(vec, signal_weight);
             }
             Outcome::Sell => {
                 self.buy_good.decay(decay);
                 self.sell_good.decay(decay);
-                self.sell_good.add(vec);
+                self.sell_good.add_weighted(vec, signal_weight);
             }
             _ => {}
         }
@@ -307,11 +313,11 @@ impl Journaler {
                 match pred {
                     Outcome::Buy => {
                         self.buy_confuser.decay(decay);
-                        self.buy_confuser.add(vec);
+                        self.buy_confuser.add_weighted(vec, signal_weight);
                     }
                     Outcome::Sell => {
                         self.sell_confuser.decay(decay);
-                        self.sell_confuser.add(vec);
+                        self.sell_confuser.add_weighted(vec, signal_weight);
                     }
                     _ => {}
                 }
@@ -343,8 +349,8 @@ impl Journaler {
                     let reinforced = amplify_signal(&aligned, opposing_proto, use_grover);
                     let novelty = 1.0 - Similarity::cosine(&reinforced, vec).abs();
                     match outcome {
-                        Outcome::Buy => self.buy_good.add_weighted(&reinforced, reward_weight * novelty),
-                        _ => self.sell_good.add_weighted(&reinforced, reward_weight * novelty),
+                        Outcome::Buy => self.buy_good.add_weighted(&reinforced, reward_weight * novelty * signal_weight),
+                        _ => self.sell_good.add_weighted(&reinforced, reward_weight * novelty * signal_weight),
                     }
                 } else {
                     let wrong_proto = match outcome {
@@ -356,8 +362,8 @@ impl Journaler {
                     let amplified = amplify_signal(&unique, &misleading, true);
                     let novelty = 1.0 - Similarity::cosine(&amplified, vec).abs();
                     match outcome {
-                        Outcome::Buy => self.buy_good.add_weighted(&amplified, correction_weight * novelty),
-                        _ => self.sell_good.add_weighted(&amplified, correction_weight * novelty),
+                        Outcome::Buy => self.buy_good.add_weighted(&amplified, correction_weight * novelty * signal_weight),
+                        _ => self.sell_good.add_weighted(&amplified, correction_weight * novelty * signal_weight),
                     }
                 }
             }
@@ -817,7 +823,12 @@ fn main() {
             buy_count     INTEGER,
             sell_count    INTEGER,
             confuser_buy_count  INTEGER,
-            confuser_sell_count INTEGER
+            confuser_sell_count INTEGER,
+            buy_purity    REAL,
+            sell_purity   REAL,
+            noise_purity  REAL,
+            buy_conf_purity  REAL,
+            sell_conf_purity REAL
         );
     ").expect("failed to create run DB tables");
 
@@ -875,6 +886,8 @@ fn main() {
     let mut labeled_count: usize = 0;
     let bnh_entry_price = candles[start_idx].close;
     let mut noise_count: usize = 0;
+    let mut move_sum: f64 = 0.0;
+    let mut move_count: usize = 0;
     let t_start = Instant::now();
 
     eprintln!("\n  Starting walk-forward ({} candles, starting at index {})...",
@@ -1027,6 +1040,14 @@ fn main() {
                 let entry_candle = &candles[entry.candle_idx];
 
                 if let Some(res) = resolve_outcome(&candles, entry.candle_idx, args.horizon, args.move_threshold, total_candles) {
+                    // Normalized signal weight: move magnitude relative to running mean.
+                    // Average weight stays ~1.0, isolating relative signal strength.
+                    let abs_move = res.pct_change.abs();
+                    move_sum += abs_move;
+                    move_count += 1;
+                    let mean_move = move_sum / move_count as f64;
+                    let sw = if mean_move > 0.0 { abs_move / mean_move } else { 1.0 };
+
                     // Visual journaler observes
                     journaler.observe(
                         &entry.vec,
@@ -1036,6 +1057,7 @@ fn main() {
                         args.decay,
                         args.reward_weight,
                         args.correction_weight,
+                        sw,
                     );
 
                     // Thought journaler observes
@@ -1052,6 +1074,7 @@ fn main() {
                         args.decay,
                         args.reward_weight,
                         args.correction_weight,
+                        sw,
                     );
 
                     match res.outcome {
@@ -1179,8 +1202,8 @@ fn main() {
                         Some(journaler.noise_accum.threshold())
                     } else { None };
                     run_db.execute(
-                        "INSERT INTO recalib_log (step, system, cos_buy_sell, cos_buy_noise, cos_sell_noise, noise_floor, buy_count, sell_count, confuser_buy_count, confuser_sell_count)
-                         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+                        "INSERT INTO recalib_log (step, system, cos_buy_sell, cos_buy_noise, cos_sell_noise, noise_floor, buy_count, sell_count, confuser_buy_count, confuser_sell_count, buy_purity, sell_purity, noise_purity, buy_conf_purity, sell_conf_purity)
+                         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
                         params![
                             encode_count as i64, "visual",
                             Similarity::cosine(&bp, &sp),
@@ -1191,6 +1214,11 @@ fn main() {
                             journaler.sell_good.count() as i64,
                             journaler.buy_confuser.count() as i64,
                             journaler.sell_confuser.count() as i64,
+                            journaler.buy_good.purity(),
+                            journaler.sell_good.purity(),
+                            journaler.noise_accum.purity(),
+                            journaler.buy_confuser.purity(),
+                            journaler.sell_confuser.purity(),
                         ],
                     ).ok();
                 }
@@ -1198,8 +1226,8 @@ fn main() {
                     let bp = thought_journaler.buy_good.threshold();
                     let sp = thought_journaler.sell_good.threshold();
                     run_db.execute(
-                        "INSERT INTO recalib_log (step, system, cos_buy_sell, cos_buy_noise, cos_sell_noise, noise_floor, buy_count, sell_count, confuser_buy_count, confuser_sell_count)
-                         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+                        "INSERT INTO recalib_log (step, system, cos_buy_sell, cos_buy_noise, cos_sell_noise, noise_floor, buy_count, sell_count, confuser_buy_count, confuser_sell_count, buy_purity, sell_purity, noise_purity, buy_conf_purity, sell_conf_purity)
+                         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
                         params![
                             encode_count as i64, "thought",
                             Similarity::cosine(&bp, &sp),
@@ -1209,6 +1237,11 @@ fn main() {
                             thought_journaler.sell_good.count() as i64,
                             thought_journaler.buy_confuser.count() as i64,
                             thought_journaler.sell_confuser.count() as i64,
+                            thought_journaler.buy_good.purity(),
+                            thought_journaler.sell_good.purity(),
+                            thought_journaler.noise_accum.purity(),
+                            thought_journaler.buy_confuser.purity(),
+                            thought_journaler.sell_confuser.purity(),
                         ],
                     ).ok();
                 }
@@ -1233,6 +1266,12 @@ fn main() {
         let entry_candle = &candles[entry.candle_idx];
 
         if let Some(res) = resolve_outcome(&candles, entry.candle_idx, args.horizon, args.move_threshold, total_candles) {
+            let abs_move = res.pct_change.abs();
+            move_sum += abs_move;
+            move_count += 1;
+            let mean_move = move_sum / move_count as f64;
+            let sw = if mean_move > 0.0 { abs_move / mean_move } else { 1.0 };
+
             journaler.observe(
                 &entry.vec,
                 res.outcome,
@@ -1241,6 +1280,7 @@ fn main() {
                 args.decay,
                 args.reward_weight,
                 args.correction_weight,
+                sw,
             );
 
             let t_outcome_th = match res.outcome {
@@ -1256,6 +1296,7 @@ fn main() {
                 args.decay,
                 args.reward_weight,
                 args.correction_weight,
+                sw,
             );
 
             match res.outcome {

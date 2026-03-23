@@ -12,8 +12,119 @@ Both systems use:
 - **Raw accumulation** (weight 1.0) + **algebraic correction** (weight × sep_gate × novelty)
 - Kill switch: `touch trader-stop` in cwd to abort
 
-Latest run (novelty-gate-v1, in progress): thought 54% accuracy, 46% agreement.
+Latest run (visual-fix-v1, 100k): vis 49.9%, thought 50.3%, agree 55%.
+Visual bias eliminated. Conviction crushed (avg 0.006 vis, 0.003 thought).
+Prototypes 0.90+ cosine similar; noise/confuser sims (0.276) exceed good
+proto sims (0.215). Signal-to-noise is the bottleneck.
+
 See EXPERIMENT_LOG.md for full results and run history.
+
+---
+
+## Signal Improvement Pipeline (active)
+
+Three prediction-path changes to recover signal separation. Independent of
+each other and of the learning path (won't interact with novelty gate).
+Test one at a time, measure each.
+
+### S1. Strip shared structure from discriminants (NEXT)
+
+Restore the `resonance` + `negate` approach from `sep-gated-raw` (best P&L
+run at +7.89%). At recalibrate:
+
+    shared = resonance(buy_proto, sell_proto)
+    buy_disc = negate(buy_proto, shared)
+    sell_disc = negate(sell_proto, shared)
+
+Predict against the stripped discriminants instead of raw prototypes.
+The raw delta for direction can use `difference(sell_disc, buy_disc)`.
+Conviction uses `|cos(vec, buy_disc) - cos(vec, sell_disc)|`.
+
+**Why it should work now**: The best run had this. It produced higher
+conviction variance (0.032 vs current 0.006) because stripping shared
+structure exposes the 10% of dimensions that actually differ between
+buy and sell. Previously removed when delta disc was introduced; the
+delta disc compresses both discriminants into a single vector.
+
+**Why it's safe**: Prediction-path only. Accumulators and learning
+path unchanged.
+
+### S2. Noise gating in predict() — ABANDONED
+
+Suppress predictions when `noise_sim > max(buy_sim, sell_sim)`.
+
+**Tested**: Gates nearly everything. Noise proto has 3x the sample count
+(60% of candles), producing a denser prototype that naturally wins cosine
+comparisons regardless of signal content. The gate measures prototype
+density, not signal quality.
+
+**Root cause**: Cosine against a single accumulated prototype can't
+distinguish "about to move" from "about to chop" — the market
+microstructure encoding is largely shared across noise/buy/sell candles.
+What causes a 0.5%+ move isn't separable from sideways action at
+this level of representation.
+
+**Revisit when**: We have a richer noise model — e.g., OnlineSubspace
+on the noise accumulator (manifold-aware, not prototype-based), or
+noise decomposed into sub-populations via engrams. The question "will
+it move?" is valid but needs more than one cosine to answer.
+
+### S3. Confuser check in predict()
+
+Reject predictions when confuser similarity exceeds good prototype:
+
+    if predicted Buy and buy_confuser_sim > buy_sim:
+        suppress or flip  // trap pattern detected
+
+DB shows confuser sims (0.278) exceed good proto sims (0.215). The
+confuser accumulators are being maintained but never consulted. This
+is the negative prototyping (#11) that was "impl, log-only" — time
+to use it.
+
+**Expected effect**: Filters out trap patterns, improves precision.
+
+**Status**: Blocked by same prototype density problem as S2. Confuser protos
+are denser and always win similarity comparisons. Requires solving prototype
+blurring first.
+
+### S3 / S2 Root Cause: Prototype Blurring
+
+Single accumulated prototypes blur with volume. Noise and confuser protos
+accumulate 3x+ more samples than buy/sell, making them denser and more
+similar to any input regardless of actual content. Cosine against a single
+accumulated prototype measures density, not category membership.
+
+---
+
+## Signal Weighting Experiment (completed, findings only)
+
+Attempted: weight accumulator adds by `move_pct.abs()` so stronger price
+moves influence prototypes more than weak ones.
+
+**Finding**: Raw `move_pct.abs()` weights (0.005–0.05) reduced the effective
+learning rate by ~100x compared to unweighted `add()` (weight=1.0). P&L
+improved from -8.97% to -3.86%, but we cannot distinguish "signal-proportional
+weighting helps" from "slower learning reduces overfitting."
+
+Log-compressed variant `ln(1 + move/threshold)` (weights 0.69–2.4, similar
+scale to baseline) performed worse (-7.34%), suggesting the P&L improvement
+was primarily from learning rate reduction, not relative signal weighting.
+
+Purity diagnostic was also unreliable: `purity = dim / Σ(sums[i]²)` assumes
+weight=1.0 per add. Weighted adds at 0.007 make the denominator tiny, purity
+clamps to 1.0 regardless of actual diversity. Holon library fix needed.
+
+**Backlogged experiments**:
+
+- **D-normalized**: `weight = move_pct.abs() / running_mean_move_pct` — keeps
+  average weight ~1.0, isolates relative signal strength from learning rate.
+  Cleanly tests "do stronger signals help?" (NEXT)
+- **Learning rate reduction**: Lower `reward_weight` / `correction_weight`
+  directly (no signal weighting). Tests if current learning is too aggressive.
+  Independent of all other changes.
+- **Purity fix**: Normalize purity formula for weight scale in Holon library.
+- **Self-tuning decay**: Use purity as feedback signal to auto-adjust decay
+  rate. Requires working purity first.
 
 ---
 

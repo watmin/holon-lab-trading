@@ -858,10 +858,15 @@ impl ThoughtJournaler {
         let buy_proto = self.buy_good.threshold();
         let sell_proto = self.sell_good.threshold();
 
-        let raw_delta = Primitives::difference(&sell_proto, &buy_proto);
+        // Strip shared structure: expose only what's unique to each class
+        let shared = Primitives::resonance(&buy_proto, &sell_proto);
+        let buy_disc = Primitives::negate(&buy_proto, &shared);
+        let sell_disc = Primitives::negate(&sell_proto, &shared);
+
+        let raw_delta = Primitives::difference(&sell_disc, &buy_disc);
         let is_buy = Similarity::cosine(vec, &raw_delta) > 0.0;
 
-        let conviction = (Similarity::cosine(vec, &buy_proto) - Similarity::cosine(vec, &sell_proto)).abs();
+        let conviction = (Similarity::cosine(vec, &buy_disc) - Similarity::cosine(vec, &sell_disc)).abs();
         let outcome = if is_buy { Some(Outcome::Buy) } else { Some(Outcome::Sell) };
         ThoughtPrediction { outcome, conviction, coherence }
     }
@@ -875,6 +880,7 @@ impl ThoughtJournaler {
         decay: f64,
         reward_weight: f64,
         correction_weight: f64,
+        signal_weight: f64,
     ) {
         if outcome == Outcome::Noise {
             self.noise_accum.decay(decay);
@@ -922,12 +928,12 @@ impl ThoughtJournaler {
             Outcome::Buy => {
                 self.buy_good.decay(decay);
                 self.sell_good.decay(decay);
-                self.buy_good.add_weighted(thought, sep_gate);
+                self.buy_good.add_weighted(thought, sep_gate * signal_weight);
             }
             Outcome::Sell => {
                 self.buy_good.decay(decay);
                 self.sell_good.decay(decay);
-                self.sell_good.add_weighted(thought, sep_gate);
+                self.sell_good.add_weighted(thought, sep_gate * signal_weight);
             }
             _ => {}
         }
@@ -938,11 +944,11 @@ impl ThoughtJournaler {
                 match pred {
                     Outcome::Buy => {
                         self.buy_confuser.decay(decay);
-                        self.buy_confuser.add(thought);
+                        self.buy_confuser.add_weighted(thought, signal_weight);
                     }
                     Outcome::Sell => {
                         self.sell_confuser.decay(decay);
-                        self.sell_confuser.add(thought);
+                        self.sell_confuser.add_weighted(thought, signal_weight);
                     }
                     _ => {}
                 }
@@ -970,8 +976,8 @@ impl ThoughtJournaler {
                     let reinforced = Primitives::amplify(&aligned, opposing_proto, 1.0);
                     let novelty = 1.0 - Similarity::cosine(&reinforced, thought).abs();
                     match outcome {
-                        Outcome::Buy => self.buy_good.add_weighted(&reinforced, reward_weight * novelty),
-                        _ => self.sell_good.add_weighted(&reinforced, reward_weight * novelty),
+                        Outcome::Buy => self.buy_good.add_weighted(&reinforced, reward_weight * novelty * signal_weight),
+                        _ => self.sell_good.add_weighted(&reinforced, reward_weight * novelty * signal_weight),
                     }
                 } else {
                     let wrong_proto = match outcome {
@@ -983,8 +989,8 @@ impl ThoughtJournaler {
                     let amplified = Primitives::grover_amplify(&unique, &misleading, 1);
                     let novelty = 1.0 - Similarity::cosine(&amplified, thought).abs();
                     match outcome {
-                        Outcome::Buy => self.buy_good.add_weighted(&amplified, correction_weight * novelty),
-                        _ => self.sell_good.add_weighted(&amplified, correction_weight * novelty),
+                        Outcome::Buy => self.buy_good.add_weighted(&amplified, correction_weight * novelty * signal_weight),
+                        _ => self.sell_good.add_weighted(&amplified, correction_weight * novelty * signal_weight),
                     }
                 }
             }
