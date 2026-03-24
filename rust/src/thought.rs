@@ -7,6 +7,36 @@ use holon::{
 
 use crate::db::Candle;
 
+fn cosine_f64(a: &[f64], b: &[f64]) -> f64 {
+    assert_eq!(a.len(), b.len());
+    let mut dot = 0.0_f64;
+    let mut na = 0.0_f64;
+    let mut nb = 0.0_f64;
+    for (&x, &y) in a.iter().zip(b.iter()) {
+        dot += x * y;
+        na += x * x;
+        nb += y * y;
+    }
+    let denom = (na * nb).sqrt();
+    if denom < 1e-10 { 0.0 } else { dot / denom }
+}
+
+fn cosine_f64_vs_vec(proto: &[f64], vec: &Vector) -> f64 {
+    let data = vec.data();
+    assert_eq!(proto.len(), data.len());
+    let mut dot = 0.0_f64;
+    let mut norm_p = 0.0_f64;
+    let mut norm_v = 0.0_f64;
+    for (&p, &v) in proto.iter().zip(data.iter()) {
+        let vf = v as f64;
+        dot += p * vf;
+        norm_p += p * p;
+        norm_v += vf * vf;
+    }
+    let denom = (norm_p * norm_v).sqrt();
+    if denom < 1e-10 { 0.0 } else { dot / denom }
+}
+
 // ─── Atoms ──────────────────────────────────────────────────────────────────
 
 const INDICATOR_ATOMS: &[&str] = &[
@@ -855,18 +885,14 @@ impl ThoughtJournaler {
 
         let vec = &thought.thought;
 
-        let buy_proto = self.buy_good.threshold();
-        let sell_proto = self.sell_good.threshold();
+        // Raw cosine prediction — prototypes already clean from learning
+        let buy_f64 = self.buy_good.normalize_f64();
+        let sell_f64 = self.sell_good.normalize_f64();
 
-        // Strip shared structure: expose only what's unique to each class
-        let shared = Primitives::resonance(&buy_proto, &sell_proto);
-        let buy_disc = Primitives::negate(&buy_proto, &shared);
-        let sell_disc = Primitives::negate(&sell_proto, &shared);
+        let bs = cosine_f64_vs_vec(&buy_f64, vec);
+        let ss = cosine_f64_vs_vec(&sell_f64, vec);
+        let (is_buy, conviction) = (bs > ss, (bs - ss).abs());
 
-        let raw_delta = Primitives::difference(&sell_disc, &buy_disc);
-        let is_buy = Similarity::cosine(vec, &raw_delta) > 0.0;
-
-        let conviction = (Similarity::cosine(vec, &buy_disc) - Similarity::cosine(vec, &sell_disc)).abs();
         let outcome = if is_buy { Some(Outcome::Buy) } else { Some(Outcome::Sell) };
         ThoughtPrediction { outcome, conviction, coherence }
     }
@@ -884,7 +910,7 @@ impl ThoughtJournaler {
     ) {
         if outcome == Outcome::Noise {
             self.noise_accum.decay(decay);
-            self.noise_accum.add(thought);
+            self.noise_accum.add_weighted(thought, signal_weight);
             return;
         }
 
@@ -896,44 +922,70 @@ impl ThoughtJournaler {
             self.recalibrate();
         }
 
-        // #10 Recognition rejection with exploration
-        if self.is_ready() {
-            let buy_proto = self.buy_good.threshold();
-            let sell_proto = self.sell_good.threshold();
-            let buy_sim = Similarity::cosine(thought, &buy_proto);
-            let sell_sim = Similarity::cosine(thought, &sell_proto);
+        // Adaptive recognition gate: exploration rate scales with prototype convergence
+        let cos_buy_sell = if self.is_ready() {
+            let buy_f64 = self.buy_good.normalize_f64();
+            let sell_f64 = self.sell_good.normalize_f64();
+            let cos_bs = cosine_f64(&buy_f64, &sell_f64);
+
+            let buy_sim = cosine_f64_vs_vec(&buy_f64, thought);
+            let sell_sim = cosine_f64_vs_vec(&sell_f64, thought);
             if buy_sim.max(sell_sim) < self.noise_floor {
-                // Epsilon-greedy: accept 1-in-100 rejected samples to allow adaptation
-                if self.updates % 100 != 0 {
+                let explore_interval = (1.0 / cos_bs.clamp(0.01, 1.0)) as usize;
+                if self.updates % explore_interval.max(1) != 0 {
                     return;
                 }
             }
-        }
-
-        // Compute separation gate early — used for both raw accumulation and corrections.
-        // Thought vectors are compositionally self-similar, so ungated raw adds
-        // cause prototype convergence cascades that the visual system avoids
-        // through structural diversity of pixel encodings.
-        let sep_gate = if self.is_ready() {
-            let bp = self.buy_good.threshold();
-            let sp = self.sell_good.threshold();
-            let separation = 1.0 - Similarity::cosine(&bp, &sp);
-            separation.clamp(0.05, 1.0)
+            cos_bs
         } else {
-            1.0
+            0.0
         };
 
-        // Raw accumulation — gated by separation to prevent convergence cascade
+        // Adaptive decay + separation gate
+        let separation = 1.0 - cos_buy_sell;
+        let effective_decay = 1.0 - (1.0 - decay) * separation;
+        let sep_gate = separation.clamp(0.05, 1.0);
+
+        // L1: Strip noise/background before accumulating.
+        let noise_stripped = if self.noise_accum.count() > 0 {
+            let noise_proto = self.noise_accum.threshold();
+            Some(Primitives::negate(thought, &noise_proto))
+        } else {
+            None
+        };
+        let base_thought = noise_stripped.as_ref().unwrap_or(thought);
+
+        // L2: Proportional contrastive stripping — strip rate equals cosine
+        let strip_rate = cos_buy_sell.clamp(0.0, 1.0);
+        let strip_interval = if strip_rate > 0.01 {
+            (1.0 / strip_rate) as usize
+        } else {
+            usize::MAX
+        };
+        let do_contrastive = self.is_ready()
+            && self.updates % strip_interval.max(1) == 0;
         match outcome {
             Outcome::Buy => {
-                self.buy_good.decay(decay);
-                self.sell_good.decay(decay);
-                self.buy_good.add_weighted(thought, sep_gate * signal_weight);
+                let add_thought = if do_contrastive {
+                    let sell_proto = self.sell_good.threshold();
+                    Primitives::negate(base_thought, &sell_proto)
+                } else {
+                    base_thought.clone()
+                };
+                self.buy_good.decay(effective_decay);
+                self.sell_good.decay(effective_decay);
+                self.buy_good.add_weighted(&add_thought, sep_gate * signal_weight);
             }
             Outcome::Sell => {
-                self.buy_good.decay(decay);
-                self.sell_good.decay(decay);
-                self.sell_good.add_weighted(thought, sep_gate * signal_weight);
+                let add_thought = if do_contrastive {
+                    let buy_proto = self.buy_good.threshold();
+                    Primitives::negate(base_thought, &buy_proto)
+                } else {
+                    base_thought.clone()
+                };
+                self.buy_good.decay(effective_decay);
+                self.sell_good.decay(effective_decay);
+                self.sell_good.add_weighted(&add_thought, sep_gate * signal_weight);
             }
             _ => {}
         }
@@ -943,11 +995,11 @@ impl ThoughtJournaler {
             if pred != outcome && pred != Outcome::Noise {
                 match pred {
                     Outcome::Buy => {
-                        self.buy_confuser.decay(decay);
+                        self.buy_confuser.decay(effective_decay);
                         self.buy_confuser.add_weighted(thought, signal_weight);
                     }
                     Outcome::Sell => {
-                        self.sell_confuser.decay(decay);
+                        self.sell_confuser.decay(effective_decay);
                         self.sell_confuser.add_weighted(thought, signal_weight);
                     }
                     _ => {}

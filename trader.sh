@@ -38,19 +38,42 @@ do_build() {
 }
 
 do_kill() {
+    local kill_file="$RUST_DIR/trader-stop"
+
+    # Drop kill switch file first (works across sandbox boundaries)
+    touch "$kill_file"
+    echo "Kill switch dropped: $kill_file"
+
+    # Also try direct kill for processes we own
     local pids
     pids=$(pgrep -f "target/release/trader" 2>/dev/null | grep -v $$ || true)
     if [ -z "$pids" ]; then
         echo "No trader processes found."
-    else
-        echo "Killing: $pids"
-        echo "$pids" | xargs kill -9 2>/dev/null || true
+        rm -f "$kill_file"
+        return
+    fi
+
+    echo "Waiting for processes to exit: $pids"
+    echo "$pids" | xargs kill -9 2>/dev/null || true
+
+    # Wait up to 30s for all trader processes to die
+    local waited=0
+    while pgrep -f "target/release/trader" >/dev/null 2>&1 && [ $waited -lt 30 ]; do
         sleep 1
-        echo "Done."
+        waited=$((waited + 1))
+    done
+
+    if pgrep -f "target/release/trader" >/dev/null 2>&1; then
+        echo "WARNING: some processes still running after 30s (may be in another sandbox)"
+        echo "Kill switch file remains at $kill_file — they will stop on next loop iteration."
+    else
+        echo "All trader processes stopped."
+        rm -f "$kill_file"
     fi
 }
 
 do_run() {
+    do_kill
     do_build
     echo ""
     echo "Running: $BINARY --db-path $DB_PATH $*"
@@ -93,6 +116,7 @@ do_test() {
         exit 1
     fi
 
+    do_kill
     do_build
     echo ""
     echo "Running: $candles candles, logging to $logfile"

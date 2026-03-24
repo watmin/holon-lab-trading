@@ -1,27 +1,160 @@
 # Next Moves — Holon BTC Trader
 
-## Current Architecture (2026-03-22, evening)
+## Current Architecture (2026-03-24)
 
-Two-agent system (visual + thought) with raw delta discriminant prediction.
+Two-agent system (visual + thought) with raw cosine prediction.
 Walk-forward over 100k 5-min BTC candles (2019) at 10kD.
 
 Both systems use:
-- **Direction**: raw `difference(sell_proto, buy_proto)` — no temporal smoothing
-- **Conviction**: dual-cosine margin `|cos(vec, buy) - cos(vec, sell)|` — decoupled from learning
-- **Learning**: recognition rejection (#10), separation gate (#3), novelty-gated corrections
-- **Raw accumulation** (weight 1.0) + **algebraic correction** (weight × sep_gate × novelty)
+- **Prediction**: Raw cosine — `cosine_f64(input, buy_f64) > cosine_f64(input, sell_f64)`.
+  No noise stripping in prediction. Prototypes carry discriminative signal
+  from clean learning; raw input matches against them directly.
+- **Conviction**: `|buy_sim - sell_sim|` — now usable with raw prediction.
+  High conviction (≥0.1) correlates with 59% accuracy (vs 50% baseline).
+  Only ~550/67k observations reach this level. Actionable as a gate.
+- **Learning**: recognition rejection (#10), separation gate (#3),
+  novelty-gated corrections, D-normalized signal weighting.
+  L1 strips noise from input before accumulating (`negate(vec, noise_proto)`).
+  L2 proportional contrastive stripping: `negate(input, opposing_proto)`
+  applied to a fraction of observations equal to `cos_buy_sell.clamp(0,1)`.
+  Adaptive decay: `effective_decay = 1 - (1-decay) * separation`.
+  Adaptive exploration: `explore_interval = floor(1 / cos_buy_sell.clamp(0.01, 1.0))`.
+  Sep_gate on both visual and thought raw accumulation.
+- **Raw accumulation** (sep_gate × weight × signal_weight) + **algebraic correction**
+  (weight × sep_gate × novelty × signal_weight)
 - Kill switch: `touch trader-stop` in cwd to abort
+- `trader.sh` auto-kills existing processes before starting new runs
 
-Latest run (visual-fix-v1, 100k): vis 49.9%, thought 50.3%, agree 55%.
-Visual bias eliminated. Conviction crushed (avg 0.006 vis, 0.003 thought).
-Prototypes 0.90+ cosine similar; noise/confuser sims (0.276) exceed good
-proto sims (0.215). Signal-to-noise is the bottleneck.
+### Run History (v4–v9)
 
-See EXPERIMENT_LOG.md for full results and run history.
+**v4 — Adaptive decay + exploration (100k)**: +8.2% equity.
+Adaptive decay froze at 1.000000, preventing memory loss. cos_buy_sell
+crept to 0.9998 — brakes work but can't stop convergence from new adds.
+
+**v5 — Always-on contrastive stripping (100k)**: -4.5% equity.
+cos went NEGATIVE (vis=-0.68, tht=-0.91). Separation solved but
+100% sell bias — DB showed zero buy predictions from 20k onward.
+Binary negate(subtract) too aggressive.
+
+**v6 — Binary-gated contrastive (cos>0 threshold) (100k)**: +4.3% equity.
+cos stabilized at ≈0.0 (orthogonal). But 99% agreement — both systems
+made identical predictions. Orthogonal prototypes too diffuse to produce
+independent signals.
+
+**v7 — Proportional contrastive (strip rate = cos) (partial)**:
+cos settled at vis=0.35, tht=0.02. Different equilibria per system.
+But still 99% agreement — predictions identical despite different cos.
+Diagnosis: triple-negate prediction degenerates when prototypes have
+real separation. Noise negate on prototypes destroys discriminative signal.
+
+**v8 — Input-only negate (100k)**: +1.9% equity.
+Removed negate on prototypes, kept negate on input. Initially independent
+(17% agreement at 10k, 55.9% agree accuracy). But noise accumulator grew
+and dominated prediction — agreement climbed to 71% with identical
+accuracies by 70k. Same degeneration, different timeline.
+
+**v9 — Raw cosine prediction (100k)**: Best run. +12.0% peak (50k), +1.9% final.
+No stripping in prediction at all. Prototypes carry signal from clean
+learning. Independent predictions (62-79% agreement, different accuracies).
+Win rate 53.7% at 40k. Conviction ≥0.1 → 59% accuracy (actionable gate).
+Thought has 100% buy bias from 20k onward. Second-half accuracy decay.
+
+### TOP PRIORITY: Next session
+
+**1. Fix thought 100% buy bias**
+
+Thought system predicts ALL buy from 20k onward — same directional bias
+problem that hit visual in v5 (100% sell). With raw cosine prediction
+and near-orthogonal prototypes, the bias comes from asymmetric prototype
+structure. Investigate: are thought buy/sell accumulator counts balanced?
+Is the correction path biasing one side? Is the contrastive stripping
+asymmetric?
+
+**2. Conviction as trade gate**
+
+DB shows conviction ≥0.1 correlates with 59% accuracy on 550 observations.
+Implement as a gate: only trade when conviction exceeds threshold.
+Fewer trades but higher win rate. The threshold should be derived from
+the data, not hardcoded — rolling percentile or adaptive.
+
+**3. Second-half accuracy decay**
+
+Non-noise accuracy fades: 51-55% (0-40k) → 48-49% (60-100k). Prototypes
+may not adapt fast enough to regime changes. Possible causes:
+- Proportional contrastive stripping barely firing (cos ≈ 0.01)
+- Adaptive decay keeping prototypes too frozen
+- Noise accumulator growing monotonically, never decaying
+
+### Queued: Gentler contrastive stripping methods
+
+When contrastive stripping IS needed, use gentler methods than
+binary `negate(subtract)`:
+
+- `reject(input, [opposing_proto])`: geometric projection removal.
+  Continuous, preserves magnitude. Available in Rust crate.
+- `negate(input, opponent, method=Orthogonalize)`: proper geometric
+  exclusion. Available in Rust crate.
+
+Lower priority now that proportional gating keeps cos near zero.
 
 ---
 
-## Signal Improvement Pipeline (active)
+## Learning Path Problems (identified 2026-03-23)
+
+Four problems in the learning path identified by reviewing Holon
+documentation (ops reference, memory primer, DDoS lab source) against
+our current observe() implementation.
+
+### L1. Raw accumulation adds unstripped input vectors
+
+`buy_good.add_weighted(vec, signal_weight)` adds the full candle encoding.
+A candle vector encodes everything — price level, volume, pattern shape,
+time features. Most of this is shared between buy and sell candles. The
+discriminating signal (what distinguishes a pre-buy candle from a
+pre-sell candle) is a small fraction of the total encoding. Shared
+structure overwhelms categorical signal, driving cos_buy_sell to 0.99.
+
+We strip shared structure at prediction time (float S1 in predict()),
+but NOT at learning time. The prototypes accumulate shared junk.
+
+The DDoS lab solved this with striped encoding — isolating discriminating
+fields from noise fields at the encoding level.
+
+**Possible fixes**: Strip before accumulating (add only the disagreeing
+dimensions), or use the `reject` / `project` ops to isolate the
+discriminating component before accumulation.
+
+### L2. Algebraic corrections use blurred bipolar prototypes
+
+`extract_features(vec, correct_proto, ...)` uses `resonance` or `attend`
+to find what in the input agrees with the prototype. But with
+cos_buy_sell = 0.99, the prototype is nearly identical for both classes.
+`resonance(input, blurred_prototype)` keeps dimensions where the input
+agrees with noise — the "correction" is correcting toward shared
+structure, not discriminating signal.
+
+From the ops doc: resonance "pulls out the part of a vector that's
+consistent with a known pattern." If the known pattern is blurred,
+the consistent part is noise.
+
+### L3. Both sides decay together on every observation
+
+On a buy outcome, both `buy_good.decay(decay)` and
+`sell_good.decay(decay)` are called. Both prototypes decay at the
+same rate regardless of which side received reinforcement. Over time,
+both converge to a weighted average of recent inputs. This is
+structurally different from the DDoS lab (one baseline accumulator)
+or a classification system where classes have independent examples.
+
+### L4. Recognition gate is effectively a no-op
+
+With float prototypes, buy_sim and sell_sim are both ~0.39 for every
+input (prototypes are nearly identical to average candle). noise_floor
+is 0.014. Everything passes. The gate adds compute but filters nothing.
+
+---
+
+## Signal Improvement Pipeline (completed / superseded)
 
 Three prediction-path changes to recover signal separation. Independent of
 each other and of the learning path (won't interact with novelty gate).
@@ -225,6 +358,36 @@ accumulators as a second opinion.
 
 **Cost**: Moderate. CCIPCA updates are cheap. Adds a parallel classification
 channel.
+
+### Queued: Discriminant Accumulator
+
+Replace the two-prototype convergence problem by construction. Instead of
+separate buy/sell accumulators that converge because they absorb shared market
+structure, maintain a **single discriminant accumulator**:
+
+```
+// Buy outcome: add input to discriminant
+disc_accum.add_weighted(input, weight);
+// Sell outcome: add negated input
+disc_accum.add_weighted(&negate_full(input), weight);
+```
+
+Prediction: `cosine(input, disc) > 0 → Buy, < 0 → Sell`.
+
+The discriminant cannot converge with itself — it captures only the difference
+between classes by construction. Keep buy/sell accumulators for the correction
+path (which needs opposing prototypes for extract_features/negate/amplify).
+
+This is equivalent to online `buy_accum - sell_accum` but avoids maintaining
+two large vectors whose shared component drowns the signal.
+
+**Prerequisite**: Verify Holon accumulator supports `negate_full` (all-dimension
+flip) or implement via `add_weighted` with negative weight. Also need to confirm
+the correction path still works with a discriminant-based prediction alongside
+prototype-based corrections.
+
+**Status**: Queued — try after contrastive stripping (which attacks the same
+convergence problem from the learning side).
 
 ### 6. Contrastive Sharpening via Difference
 
