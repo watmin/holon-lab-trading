@@ -25,6 +25,27 @@ Both systems use:
 - Kill switch: `touch trader-stop` in cwd to abort
 - `trader.sh` auto-kills existing processes before starting new runs
 
+### Thought Encoding: v10 Segment Narrative (2026-03-24)
+
+The thought encoder was overhauled from fixed-scale trend/reversal snapshots
+to PELT-based segment narrative encoding. Key changes:
+
+- **PELT change-point detection** on 17 raw indicator streams (close, SMAs,
+  BBs, volume, RSI, RSI-SMA, MACD, DMI/ADX, body, range)
+- **Segment facts**: each structural segment encoded with direction (up/down),
+  log-magnitude, log-duration, orthogonal structural position, and
+  log-encoded chronological anchor (candles ago)
+- **Zone-at-boundary facts**: scoped zone checks (RSI overbought/oversold,
+  MACD positive/negative, ADX/DMI strong/weak) bound to segment boundaries
+  with beginning/ending atoms
+- **Calendar facts**: day of week (7), hour blocks (6), sessions (4)
+- **Removed**: SCALES constant, micro/short/major atoms, intensity atoms,
+  IndicatorStreams vector pipeline, eval_trends/reversals/zones/divergence
+
+Result: 2.3x throughput improvement (~80/s → ~180/s). Thought buy bias
+broken (41% buy / 59% sell vs 100% buy in v9). Mid-run thought accuracy
+peaked at 62.3%.
+
 ### Run History (v4–v9)
 
 **v4 — Adaptive decay + exploration (100k)**: +8.2% equity.
@@ -59,16 +80,21 @@ learning. Independent predictions (62-79% agreement, different accuracies).
 Win rate 53.7% at 40k. Conviction ≥0.1 → 59% accuracy (actionable gate).
 Thought has 100% buy bias from 20k onward. Second-half accuracy decay.
 
+**v10 — Segment narrative thought encoding (100k)**: Thought buy bias broken.
+PELT-based segment narrative on 17 raw indicator streams. Thought predictions
+balanced (41% buy / 59% sell vs 100% buy in v9). cos(buy,sell) ~0.01
+(prototypes well separated). Mid-run thought accuracy peaked at 62.3%.
+Throughput 2.3x faster (~180/s vs ~80/s) from removing IndicatorStreams
+vector pipeline. cos(sell,noise) improved from -0.79 to -0.70 (still
+asymmetric). Overall equity: modest (similar to v9 final), but directional
+prediction is fundamentally healthier.
+
 ### TOP PRIORITY: Next session
 
-**1. Fix thought 100% buy bias**
+**1. ~~Fix thought 100% buy bias~~ — RESOLVED (v10)**
 
-Thought system predicts ALL buy from 20k onward — same directional bias
-problem that hit visual in v5 (100% sell). With raw cosine prediction
-and near-orthogonal prototypes, the bias comes from asymmetric prototype
-structure. Investigate: are thought buy/sell accumulator counts balanced?
-Is the correction path biasing one side? Is the contrastive stripping
-asymmetric?
+Segment narrative encoding broke the 100% buy bias. Thought system now
+produces balanced buy/sell predictions with healthy prototype separation.
 
 **2. Conviction as trade gate**
 
@@ -84,6 +110,13 @@ may not adapt fast enough to regime changes. Possible causes:
 - Proportional contrastive stripping barely firing (cos ≈ 0.01)
 - Adaptive decay keeping prototypes too frozen
 - Noise accumulator growing monotonically, never decaying
+
+**4. Thought cos(sell,noise) asymmetry**
+
+v10 improved sell-noise correlation from -0.79 to -0.70, but buy-noise
+is only -0.15. The sell prototype still has a stronger anti-correlation
+with noise than buy. This asymmetry may limit sell prediction quality
+long-term.
 
 ### Queued: Gentler contrastive stripping methods
 

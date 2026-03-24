@@ -1,7 +1,25 @@
 # Thought System — Implementation Status
 
 Tracks what from `THOUGHT_VOCAB.md` (specification) is implemented in
-`rust/src/thought.rs` (code). Updated 2026-03-22.
+`rust/src/thought.rs` (code). Updated 2026-03-24.
+
+---
+
+## Architecture Change: v10 Segment Narrative (2026-03-24)
+
+The thought encoder was overhauled from fixed-scale trend/reversal snapshots
+to PELT-based segment narrative encoding. This replaces `eval_trends_view`,
+`eval_reversals_view`, `eval_zones_cached`, and `eval_divergence_view` with
+a single `eval_segment_narrative()` that runs PELT change-point detection on
+17 raw indicator streams and encodes each structural segment with direction,
+log-magnitude, log-duration, orthogonal position, and log-chronological anchor.
+
+Zone checks are now scoped to relevant streams and bound to segment boundaries
+with `beginning`/`ending` atoms. Calendar atoms (day of week, hour blocks,
+sessions) added as viewport right-edge snapshot facts.
+
+Removed: SCALES constant, micro/short/major atoms, low/medium/high intensity
+atoms, IndicatorStreams vector encoding pipeline, segment_cache.
 
 ---
 
@@ -9,20 +27,19 @@ Tracks what from `THOUGHT_VOCAB.md` (specification) is implemented in
 
 | Group | Spec | Code | Status |
 |-------|------|------|--------|
-| Indicators (19) | close, open, high, low, volume, sma20, sma50, sma200, bb-upper, bb-lower, bb-width, rsi, rsi-sma, macd-line, macd-signal, macd-hist, dmi-plus, dmi-minus, adx, atr | All 19 | DONE |
+| Indicators (19+2) | close, open, high, low, volume, sma20, sma50, sma200, bb-upper, bb-lower, bb-width, rsi, rsi-sma, macd-line, macd-signal, macd-hist, dmi-plus, dmi-minus, adx, atr | All 19 + body, range | DONE |
 | Derived Indicators (8) | prev-close, prev-open, prev-high, prev-low, candle-range, candle-body, upper-wick, lower-wick | All 8 | DONE |
 | Directions (3) | up, down, flat | All 3 | DONE |
-| Scales (3) | micro, short, major | All 3 | DONE |
-| Intensities (3) | low, medium, high | All 3 | DONE |
-| Zones (13) | overbought, oversold, neutral, above-midline, below-midline, positive, negative, strong-trend, weak-trend, squeeze, middle-zone, large-range, small-range | 11 of 13 | **MISSING: large-range, small-range** |
-| Days of Week (7) | monday–sunday | 0 of 7 | **NOT IMPLEMENTED** |
-| Sessions (4) | asian-session, european-session, us-session, off-hours | 0 of 4 | **NOT IMPLEMENTED** |
-| Hour Blocks (6) | h00, h04, h08, h12, h16, h20 | 0 of 6 | **NOT IMPLEMENTED** |
-| Period (2) | weekend, weekday | 0 of 2 | **NOT IMPLEMENTED** |
-| Market Holidays (3) | us-holiday, eu-holiday, asia-holiday | 0 of 3 | **NOT IMPLEMENTED** |
-| Predicates (17) | above, below, crosses-above, crosses-below, touches, bounces-off, trending, at, reversal, continuation, diverging, since, at-day, at-session, at-hour, at-period, at-holiday | 12 of 17 | **MISSING: at-day, at-session, at-hour, at-period, at-holiday** |
-
-**Total atoms**: 84 spec'd, 62 implemented, 22 missing (all calendar/temporal).
+| Scales (3) | micro, short, major | — | **REMOVED** (v10: continuous log-encoded duration) |
+| Intensities (3) | low, medium, high | — | **REMOVED** (v10: continuous log-encoded magnitude) |
+| Zones (13) | overbought, oversold, neutral, above-midline, below-midline, positive, negative, strong-trend, weak-trend, squeeze, middle-zone, large-range, small-range | 11 of 13 | large-range/small-range **REPLACED** by `range` stream segmentation; squeeze **REPLACED** by emergent bb-upper/bb-lower segments |
+| Segment (2) | beginning, ending | Both | DONE (v10: zone-at-boundary binding) |
+| Days of Week (7) | monday–sunday | All 7 | DONE (v10) |
+| Sessions (4) | asian-session, european-session, us-session, off-hours | All 4 | DONE (v10) |
+| Hour Blocks (6) | h00, h04, h08, h12, h16, h20 | All 6 | DONE (v10) |
+| Period (2) | weekend, weekday | — | **DROPPED** (emergence from individual day atoms) |
+| Market Holidays (3) | us-holiday, eu-holiday, asia-holiday | 0 of 3 | Deferred |
+| Predicates (17) | above, below, crosses-above, crosses-below, touches, bounces-off, trending, at, reversal, continuation, diverging, since, at-day, at-session, at-hour, at-period, at-holiday | at-day, at-session, at-hour: DONE; trending, reversal, continuation, diverging: REMOVED | at-period dropped; at-holiday deferred |
 
 ---
 
@@ -30,15 +47,42 @@ Tracks what from `THOUGHT_VOCAB.md` (specification) is implemented in
 
 | Primitive | Spec Section | Code | Status |
 |-----------|-------------|------|--------|
-| Comparison (above/below/crosses/touches/bounces) | §3.1 | `eval_comparisons()` | DONE |
-| Trending (indicator, direction, scale, intensity) | §3.2 | `eval_trends()` | DONE |
-| Zone (at indicator zone) | §3.3 | `eval_zones()` | DONE (missing large-range, small-range) |
-| Reversal / Continuation | §3.4 | `eval_trends()` | DONE |
-| Divergence | §3.5 | `eval_divergences()` | DONE |
+| Comparison (above/below/crosses/touches/bounces) | §3.1 | `eval_comparisons_cached()` | DONE |
+| Trending (indicator, direction, scale, intensity) | §3.2 | — | **REMOVED** (v10: replaced by segment narrative) |
+| Zone (at indicator zone) | §3.3 | `eval_segment_narrative()` (zone-at-boundary) | DONE (v10: zones bound to segment boundaries with beginning/ending atoms) |
+| Reversal / Continuation | §3.4 | — | **REMOVED** (v10: implicit in direction changes between adjacent segments) |
+| Divergence | §3.5 | — | **REMOVED** (v10: emergent from segment direction co-occurrence) |
+| Segment Narrative | NEW (v10) | `eval_segment_narrative()` | DONE — PELT on 17 raw streams, 3-layer temporal binding |
 | Since (temporal binding) | §3.6 | `eval_temporal()` | DONE (chronological, max_lookback=12) |
-| Clock (at-day, at-session, at-hour, at-period) | §3.7 | — | **NOT IMPLEMENTED** |
-| Market Holidays (at-holiday) | §3.8 | — | **NOT IMPLEMENTED** |
+| Clock (at-day, at-session, at-hour) | §3.7 | `eval_calendar()` | DONE (v10) |
+| Market Holidays (at-holiday) | §3.8 | — | Deferred |
 | RSI vs RSI-SMA comparisons | §3.1 | Pre-computed in encoder | DONE |
+
+---
+
+## Segment Narrative Streams (v10)
+
+17 streams, each independently PELT-segmented:
+
+| Stream | Extractor | Zone Checks |
+|--------|-----------|-------------|
+| close | ln(close) | — |
+| sma20 | ln(sma20) | — |
+| sma50 | ln(sma50) | — |
+| sma200 | ln(sma200) | — |
+| bb-upper | ln(bb_upper) | — |
+| bb-lower | ln(bb_lower) | — |
+| volume | ln(volume) | — |
+| rsi | rsi | overbought(>70), oversold(<30), above-mid(>50), below-mid(<=50) |
+| rsi-sma | rolling 14-period RSI mean | — |
+| macd-line | macd_line | positive(>0), negative(<=0) |
+| macd-signal | macd_signal | — |
+| macd-hist | macd_hist | positive(>0), negative(<=0) |
+| dmi-plus | dmi_plus | strong(>25), weak(<20) |
+| dmi-minus | dmi_minus | strong(>25), weak(<20) |
+| adx | adx | strong(>25), weak(<20) |
+| body | close - open | — |
+| range | high - low | — |
 
 ---
 
@@ -49,37 +93,17 @@ Tracks what from `THOUGHT_VOCAB.md` (specification) is implemented in
 | Core MA/BB/MACD/DMI (9) | 9 pairs | 9 pairs | DONE |
 | OHLC vs structure (10 spec'd) | open vs sma20/50/200, open vs bb-upper/lower, high vs bb-upper, low vs bb-lower, high/low vs sma200, rsi vs rsi-sma | 7 + rsi-sma separate | **MISSING: (rsi, rsi-sma) in COMPARISON_PAIRS** (but pre-computed separately) |
 | Cross-candle (5) | high/prev-high, low/prev-low, open/prev-close, close/prev-close, close/prev-open | All 5 | DONE |
-| Intra-candle (8 spec'd) | close/open, close/high, low/close, upper-wick/candle-body, lower-wick/candle-body, upper-wick/lower-wick, candle-range/atr, candle-body/candle-range | 6 of 8 | **MISSING: (close, high), (low, close)** |
-
----
-
-## Zone Checks (§3.3)
-
-| Zone Check | Code | Status |
-|------------|------|--------|
-| (at rsi overbought/oversold/neutral) | Yes | DONE |
-| (at rsi above-midline/below-midline) | Yes | DONE |
-| (at adx strong-trend/weak-trend) | Yes | DONE |
-| (at bb-width squeeze) | Yes | DONE |
-| (at close middle-zone) | Yes | DONE |
-| (at macd-line positive/negative) | Yes | DONE |
-| (at macd-hist positive/negative) | Yes | DONE |
-| (at candle-range large-range) | No | **NOT IMPLEMENTED** (needs atom + threshold) |
-| (at candle-range small-range) | No | **NOT IMPLEMENTED** (needs atom + threshold) |
-| (at volume high/low) | No | **NOT IMPLEMENTED** (needs vol-sma20) |
+| Intra-candle (8 spec'd) | close/open, close/high, low/close, upper-wick/candle-body, lower-wick/candle-body, upper-wick/lower-wick, candle-range/atr, candle-body/candle-range | 6 of 8 | (close,high) and (low,close) **DROPPED** — covered by body/range streams + wick ratios |
 
 ---
 
 ## Holon Primitives Used (per primers)
 
-Primitives listed per the official primer docs at
-`~/work/holon/algebraic-intelligence.dev/src/content/docs/blog/primers/`.
-
 ### Core Algebra (series-001-002-holon-ops)
 
 | Primitive | Primer Description | Used in Thought Encoder | Used in Journaler (observe) | Status |
 |-----------|-------------------|------------------------|---------------------------|--------|
-| `bind` | Associate two vectors (element-wise multiply) | Yes — all fact composition | No | DONE |
+| `bind` | Associate two vectors (element-wise multiply) | Yes — all fact composition + segment narrative | No | DONE |
 | `bundle` | Superpose vectors (majority vote) | Yes — combine facts into thought | No | DONE |
 | `unbind` | Retrieve component from bound pair (self-inverse of bind) | No | No | Not used |
 | `prototype` | Extract category essence (threshold on agreement) | No | No | Not used (Accumulator.threshold() used instead) |
@@ -87,8 +111,8 @@ Primitives listed per the official primer docs at
 | `negate` | Remove component's influence (subtract/orthogonalize/flip) | No | Yes — correction: negate misleading features | DONE (observe) |
 | `amplify` | Boost signal in superposition | No | Yes — amplify aligned/corrected signals | DONE (observe) |
 | `flip` | Element-wise negation (+1 ↔ -1) | No | No | Not used |
-| `blend` | Weighted interpolation between vectors | No | No | Not used (was used for delta smoothing, now removed) |
-| `difference` | Delta between two states (after - before, thresholded) | Yes — raw_delta for direction | No | DONE |
+| `blend` | Weighted interpolation between vectors | No | No | Not used |
+| `difference` | Delta between two states (after - before, thresholded) | No | No | Removed (was used for raw_delta) |
 | `analogy` | Relational transfer: C + (B - A) | No | No | **NOT IMPLEMENTED** |
 
 ### Pattern Extraction (series-001-002)
@@ -121,8 +145,8 @@ Primitives listed per the official primer docs at
 |-----------|-------------------|------|--------|
 | `accumulate` / `decay` | Frequency-preserving running bundle | Yes — all 5 accumulators in Journaler | DONE |
 | `accumulate_weighted` | Weighted accumulation (confidence scaling) | Yes — novelty-gated corrections | DONE |
-| `segment` | Structural breakpoints in stream | Yes — trend/reversal detection | DONE |
-| `drift_rate` | Rate of change of similarity along stream | Yes — trend intensity | DONE |
+| `segment` | Structural breakpoints in stream | No | **REMOVED** (v10: replaced by PELT on raw values) |
+| `drift_rate` | Rate of change of similarity along stream | No | **REMOVED** (v10: magnitude is log-encoded per segment) |
 | `autocorrelate` | Self-similarity at lags (periodicity) | No | Deferred (§12.2) |
 | `cross_correlate` | Cross-stream similarity at lags (lead/lag) | No | Deferred (§12.3) |
 | `coherence` | Mean pairwise cosine similarity | Yes — ThoughtResult.coherence | DONE |
@@ -146,9 +170,9 @@ Primitives listed per the official primer docs at
 | Primitive | Primer Description | Used | Status |
 |-----------|-------------------|------|--------|
 | String atomization | SHA-256 + seed → bipolar vector | Yes — all atoms via VectorManager | DONE |
-| `$linear` / `$log` encoding | Magnitude-aware scalar encoding | Yes — ScalarEncoder for indicator streams | DONE |
+| `$linear` / `$log` encoding | Magnitude-aware scalar encoding | Yes — ScalarEncoder for segment magnitude/duration/chrono | DONE |
 | `$time` encoding | Cyclical temporal encoding (hour/day/month rotations) | No | **NOT IMPLEMENTED** (calendar uses atomic bind instead) |
-| Positional list encoding | bind(item, position_vector) | Yes — `since` temporal binding | DONE |
+| Positional list encoding | bind(item, position_vector) | Yes — segment position + `since` temporal binding | DONE |
 
 ---
 
@@ -156,44 +180,47 @@ Primitives listed per the official primer docs at
 
 | Feature | Spec | Status |
 |---------|------|--------|
+| PELT change-point detection | v10 | DONE (bic_penalty + pelt_changepoints on raw values) |
+| Segment narrative encoding | v10 | DONE (17 streams, 3-layer temporal binding) |
+| Zone-at-boundary facts | v10 | DONE (scoped to relevant streams, explicit opposites) |
+| Calendar facts | v10 | DONE (day of week, hour blocks, sessions) |
 | Chronological since (candle N) | §3.6 current | DONE (max_lookback=12) |
-| Segment-anchored since (structural N) | §3.6 planned | **NOT IMPLEMENTED** |
+| Segment-anchored since (structural N) | §3.6 planned | **NOT IMPLEMENTED** (PELT boundaries now available) |
 | Dynamic support/resistance | §12.1 | Deferred |
 | Periodicity detection | §12.2 | Deferred |
 | Lead/lag relationships | §12.3 | Deferred |
-| Volume SMA / volume zones | §12.5 | **NOT IMPLEMENTED** |
+| Volume SMA / volume zones | §12.5 | **NOT IMPLEMENTED** (volume segmentation partially covers) |
 
 ---
 
 ## Summary
 
-**Implemented**: Core TA vocabulary (indicators, comparisons, trends, zones,
-reversals, divergences, temporal echoes), fact codebook debug decoder, coherence.
-Streaming primitives (accumulate, decay, accumulate_weighted, segment, drift_rate,
-entropy, grover_amplify) used in Journaler observe/recalibrate. Core algebra
-(bind, bundle, difference, resonance, negate, amplify) used across encoder and
-observer.
+**Implemented (v10)**: PELT-based segment narrative across 17 indicator streams
+with 3-layer temporal binding (position, duration, chronological anchor). Zone
+checks scoped to relevant streams with explicit opposite poles, bound to segment
+boundaries. Calendar atoms (day, hour, session). Comparisons, temporal echoes,
+RSI-SMA unchanged. Core algebra (bind, bundle, resonance, negate, amplify) used
+across encoder and observer. ScalarEncoder for log-encoded magnitudes, durations,
+and chronological anchors.
 
-**Not implemented — low-hanging fruit (vocab)**:
-- Calendar atoms + predicates (22 atoms, 5 predicates, ~50 lines of code)
-- Missing zone atoms: large-range, small-range (2 atoms, 2 zone checks)
-- Missing comparison pairs: (close, high), (low, close)
-- Volume zones (needs vol-sma20 derived indicator)
+**Removed (v10)**: Fixed-scale trending/reversal/continuation/divergence facts,
+SCALES constant, micro/short/major atoms, low/medium/high intensity atoms,
+IndicatorStreams vector encoding pipeline (segment, drift_rate on encoded streams),
+standalone eval_zones.
+
+**Not implemented — backlog (not blocking)**:
+- Volume SMA comparison (vol-sma20 + comparison pair)
+- OHLC vs structure comparison pairs (3 of 10 missing)
+- Segment-anchored `since` lookback (PELT provides boundaries)
+- (rsi, rsi-sma) in COMPARISON_PAIRS (currently pre-computed separately)
 
 **Not implemented — low-hanging fruit (primitives)**:
 - `purity` — accumulator concentration, could inform learning health
 - `participation_ratio` — effective active dimensions, complementary to entropy
 - `capacity` — accumulator fullness, could gate when to stop learning
 
-**Not implemented — medium effort**:
-- `$time` cyclical encoding for timestamps (alternative to atomic calendar approach)
-- Segment-anchored temporal lookback (replace candle distance with segment distance)
-- `resonance` in encoder as confirmation primitive between facts
-- `bundle_with_confidence` for per-dimension confidence margins on thoughts
-- `similarity_profile` for structural delta between consecutive thoughts
-
 **Not implemented — larger effort / high potential**:
-- `Engram` / `EngramLibrary` — persistent pattern memory (queued in NEXT_MOVES #2)
+- `Engram` / `EngramLibrary` — persistent pattern memory
 - `OnlineSubspace` — manifold learning for market regime detection
 - `attend` / `project` / `reject` — subspace isolation in thought vectors
 - `conditional_bind` — gated composition (facts meaningful only in context)
