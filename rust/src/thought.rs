@@ -1,11 +1,76 @@
 use std::collections::HashMap;
 
 use holon::{
-    Accumulator, Primitives, ScalarEncoder, ScalarMode, SegmentMethod,
+    Accumulator, Primitives, ScalarEncoder,
     Similarity, Vector, VectorManager,
 };
 
 use crate::db::Candle;
+
+// ─── PELT change-point detection ────────────────────────────────────────────
+
+/// PELT change-point detection on raw scalar values.
+/// Returns changepoint indices (boundaries between segments).
+fn pelt_changepoints(values: &[f64], penalty: f64) -> Vec<usize> {
+    let n = values.len();
+    if n < 3 { return vec![]; }
+
+    let mut cum_sum = vec![0.0; n + 1];
+    let mut cum_sq = vec![0.0; n + 1];
+    for i in 0..n {
+        cum_sum[i + 1] = cum_sum[i] + values[i];
+        cum_sq[i + 1] = cum_sq[i] + values[i] * values[i];
+    }
+
+    let seg_cost = |s: usize, t: usize| -> f64 {
+        let len = (t - s) as f64;
+        if len < 1.0 { return 0.0; }
+        let sm = cum_sum[t] - cum_sum[s];
+        let sq = cum_sq[t] - cum_sq[s];
+        sq - sm * sm / len
+    };
+
+    let mut best_cost = vec![0.0_f64; n + 1];
+    let mut last_change = vec![0usize; n + 1];
+    let mut candidates: Vec<usize> = vec![0];
+
+    for t in 1..=n {
+        let mut best = f64::MAX;
+        let mut best_s = 0;
+        for &s in &candidates {
+            let cost = best_cost[s] + seg_cost(s, t) + penalty;
+            if cost < best {
+                best = cost;
+                best_s = s;
+            }
+        }
+        best_cost[t] = best;
+        last_change[t] = best_s;
+
+        candidates.retain(|&s| best_cost[s] + seg_cost(s, t) <= best_cost[t] + penalty);
+        candidates.push(t);
+    }
+
+    let mut cps = vec![];
+    let mut t = n;
+    while t > 0 {
+        let s = last_change[t];
+        if s > 0 { cps.push(s); }
+        t = s;
+    }
+    cps.reverse();
+    cps
+}
+
+/// BIC-derived penalty: 2 * variance * log(n)
+fn bic_penalty(values: &[f64]) -> f64 {
+    let n = values.len() as f64;
+    if n < 2.0 { return 1e10; }
+    let mean = values.iter().sum::<f64>() / n;
+    let var = values.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / n;
+    if var < 1e-20 { return 1e10; }
+    2.0 * var * n.ln()
+}
 
 fn cosine_f64(a: &[f64], b: &[f64]) -> f64 {
     assert_eq!(a.len(), b.len());
@@ -49,11 +114,11 @@ const INDICATOR_ATOMS: &[&str] = &[
     // Derived indicators (computed from OHLCV, not DB columns)
     "prev-close", "prev-open", "prev-high", "prev-low",
     "candle-range", "candle-body", "upper-wick", "lower-wick",
+    // Segment narrative streams
+    "body", "range",
 ];
 
 const DIRECTION_ATOMS: &[&str] = &["up", "down", "flat"];
-const SCALE_ATOMS: &[&str] = &["micro", "short", "major"];
-const INTENSITY_ATOMS: &[&str] = &["low", "medium", "high"];
 const ZONE_ATOMS: &[&str] = &[
     "overbought", "oversold", "neutral",
     "strong-trend", "weak-trend", "squeeze", "middle-zone",
@@ -62,26 +127,63 @@ const ZONE_ATOMS: &[&str] = &[
 const PREDICATE_ATOMS: &[&str] = &[
     "above", "below", "crosses-above", "crosses-below",
     "touches", "bounces-off",
-    "trending", "at", "reversal", "continuation", "diverging", "since",
+    "at", "since",
+];
+const SEGMENT_ATOMS: &[&str] = &["beginning", "ending"];
+const CALENDAR_ATOMS: &[&str] = &[
+    "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+    "h00", "h04", "h08", "h12", "h16", "h20",
+    "asian-session", "european-session", "us-session", "off-hours",
+    "at-day", "at-session", "at-hour",
 ];
 
 const ALL_ATOM_GROUPS: &[&[&str]] = &[
     INDICATOR_ATOMS,
     DIRECTION_ATOMS,
-    SCALE_ATOMS,
-    INTENSITY_ATOMS,
     ZONE_ATOMS,
     PREDICATE_ATOMS,
+    SEGMENT_ATOMS,
+    CALENDAR_ATOMS,
 ];
 
-// Indicators used for stream-based trend/reversal detection
-const STREAM_INDICATORS: &[&str] = &["close", "rsi", "macd-hist", "bb-width", "adx"];
+/// Raw value extractors for PELT segmentation — 17 streams
+const SEGMENT_STREAMS: &[(&str, fn(&Candle) -> f64)] = &[
+    ("close",       |c| c.close.ln()),
+    ("sma20",       |c| if c.sma20 > 0.0 { c.sma20.ln() } else { 0.0 }),
+    ("sma50",       |c| if c.sma50 > 0.0 { c.sma50.ln() } else { 0.0 }),
+    ("sma200",      |c| if c.sma200 > 0.0 { c.sma200.ln() } else { 0.0 }),
+    ("bb-upper",    |c| if c.bb_upper > 0.0 { c.bb_upper.ln() } else { 0.0 }),
+    ("bb-lower",    |c| if c.bb_lower > 0.0 { c.bb_lower.ln() } else { 0.0 }),
+    ("volume",      |c| if c.volume > 0.0 { c.volume.ln() } else { 0.0 }),
+    ("rsi",         |c| c.rsi),
+    ("rsi-sma",     |_c| 0.0),  // handled separately via rolling computation
+    ("macd-line",   |c| c.macd_line),
+    ("macd-signal", |c| c.macd_signal),
+    ("macd-hist",   |c| c.macd_hist),
+    ("dmi-plus",    |c| c.dmi_plus),
+    ("dmi-minus",   |c| c.dmi_minus),
+    ("adx",         |c| c.adx),
+    ("body",        |c| c.close - c.open),
+    ("range",       |c| c.high - c.low),
+];
 
-// Scale parameters: (name, segment window size)
-const SCALES: &[(&str, usize)] = &[
-    ("micro", 5),
-    ("short", 10),
-    ("major", 30),
+/// Zone checks scoped to their relevant streams.
+/// Each entry: (stream_name, zone_label, check_fn).
+const STREAM_ZONE_CHECKS: &[(&str, &str, &str, fn(&Candle) -> bool)] = &[
+    ("rsi", "rsi", "overbought",    |c| c.rsi > 70.0),
+    ("rsi", "rsi", "oversold",      |c| c.rsi < 30.0),
+    ("rsi", "rsi", "above-midline", |c| c.rsi > 50.0),
+    ("rsi", "rsi", "below-midline", |c| c.rsi <= 50.0),
+    ("adx", "adx", "strong-trend",  |c| c.adx > 25.0),
+    ("adx", "adx", "weak-trend",    |c| c.adx < 20.0),
+    ("dmi-plus",  "dmi-plus",  "strong-trend", |c| c.dmi_plus > 25.0),
+    ("dmi-plus",  "dmi-plus",  "weak-trend",   |c| c.dmi_plus < 20.0),
+    ("dmi-minus", "dmi-minus", "strong-trend",  |c| c.dmi_minus > 25.0),
+    ("dmi-minus", "dmi-minus", "weak-trend",    |c| c.dmi_minus < 20.0),
+    ("macd-line", "macd-line", "positive",      |c| c.macd_line > 0.0),
+    ("macd-line", "macd-line", "negative",      |c| c.macd_line <= 0.0),
+    ("macd-hist", "macd-hist", "positive",      |c| c.macd_hist > 0.0),
+    ("macd-hist", "macd-hist", "negative",      |c| c.macd_hist <= 0.0),
 ];
 
 // ─── ThoughtVocab ───────────────────────────────────────────────────────────
@@ -113,82 +215,40 @@ impl ThoughtVocab {
 
 // ─── IndicatorStreams ────────────────────────────────────────────────────────
 
-/// Maintains rolling vector streams for each indicator to feed segment()/drift_rate().
+/// Legacy stream infrastructure — retained for API compatibility with trader.rs.
+/// Segment narrative now operates on raw candle values via PELT, not encoded vector streams.
 pub struct IndicatorStreams {
-    streams: HashMap<String, Vec<Vector>>,
-    scalar_enc: ScalarEncoder,
+    count: usize,
     max_len: usize,
 }
 
 impl IndicatorStreams {
-    pub fn new(dims: usize, max_len: usize) -> Self {
-        let mut streams = HashMap::new();
-        for &ind in STREAM_INDICATORS {
-            streams.insert(ind.to_string(), Vec::with_capacity(max_len));
-        }
-        Self {
-            streams,
-            scalar_enc: ScalarEncoder::new(dims),
-            max_len,
-        }
+    pub fn new(_dims: usize, max_len: usize) -> Self {
+        Self { count: 0, max_len }
     }
 
-    pub fn push_candle(&mut self, candle: &Candle) {
-        let pairs: [(&str, f64); 5] = [
-            ("close", candle.close),
-            ("rsi", candle.rsi),
-            ("macd-hist", candle.macd_hist),
-            ("bb-width", candle.bb_upper - candle.bb_lower),
-            ("adx", candle.adx),
-        ];
-
-        for (name, value) in &pairs {
-            let vec = if *name == "close" {
-                self.scalar_enc.encode_log(value.max(1.0))
-            } else {
-                self.scalar_enc.encode(*value, ScalarMode::Linear { scale: 100.0 })
-            };
-
-            let stream = self.streams.get_mut(*name).unwrap();
-            stream.push(vec);
-            if stream.len() > self.max_len {
-                stream.remove(0);
-            }
+    pub fn push_candle(&mut self, _candle: &Candle) {
+        self.count += 1;
+        if self.count > self.max_len {
+            self.count = self.max_len;
         }
-    }
-
-    pub fn get_stream(&self, indicator: &str) -> &[Vector] {
-        self.streams.get(indicator).map(|v| v.as_slice()).unwrap_or(&[])
-    }
-
-    /// Returns a windowed view of a stream: the last `max_window` entries ending at position `end`.
-    pub fn get_stream_view(&self, indicator: &str, end: usize, max_window: usize) -> &[Vector] {
-        let full = self.streams.get(indicator).map(|v| v.as_slice()).unwrap_or(&[]);
-        let actual_end = end.min(full.len());
-        let start = actual_end.saturating_sub(max_window);
-        &full[start..actual_end]
     }
 
     pub fn len(&self) -> usize {
-        self.streams.get("close").map(|v| v.len()).unwrap_or(0)
+        self.count
     }
 
     pub fn max_len_val(&self) -> usize {
         self.max_len
     }
 
-    /// Temporarily raise the cap so batch pushes don't discard old entries.
     pub fn set_max_len(&mut self, new_max: usize) {
         self.max_len = new_max;
     }
 
-    /// Remove excess entries from the front of each stream to fit max_len.
     pub fn trim_to_max(&mut self) {
-        for stream in self.streams.values_mut() {
-            let excess = stream.len().saturating_sub(self.max_len);
-            if excess > 0 {
-                stream.drain(..excess);
-            }
+        if self.count > self.max_len {
+            self.count = self.max_len;
         }
     }
 }
@@ -199,21 +259,6 @@ impl IndicatorStreams {
 fn fact_binary(vocab: &ThoughtVocab, pred: &str, a: &str, b: &str) -> Vector {
     let ab = Primitives::bind(vocab.get(a), vocab.get(b));
     Primitives::bind(vocab.get(pred), &ab)
-}
-
-/// Ternary: (pred a b c) → bind(V("pred"), bind(V("a"), bind(V("b"), V("c"))))
-fn fact_ternary(vocab: &ThoughtVocab, pred: &str, a: &str, b: &str, c: &str) -> Vector {
-    let bc = Primitives::bind(vocab.get(b), vocab.get(c));
-    let abc = Primitives::bind(vocab.get(a), &bc);
-    Primitives::bind(vocab.get(pred), &abc)
-}
-
-/// Quaternary: (pred a b c d) → bind(V("pred"), bind(V("a"), bind(V("b"), bind(V("c"), V("d")))))
-fn fact_quaternary(vocab: &ThoughtVocab, pred: &str, a: &str, b: &str, c: &str, d: &str) -> Vector {
-    let cd = Primitives::bind(vocab.get(c), vocab.get(d));
-    let bcd = Primitives::bind(vocab.get(b), &cd);
-    let abcd = Primitives::bind(vocab.get(a), &bcd);
-    Primitives::bind(vocab.get(pred), &abcd)
 }
 
 /// Temporal binding: (since fact N) → bind(fact_vec, position_vector(N))
@@ -311,11 +356,13 @@ const COMPARISON_PAIRS: &[(&str, &str)] = &[
 
 pub struct ThoughtEncoder {
     vocab: ThoughtVocab,
+    scalar_enc: ScalarEncoder,
     fact_cache: HashMap<String, Vector>,
 }
 
 impl ThoughtEncoder {
     pub fn new(vocab: ThoughtVocab) -> Self {
+        let dims = vocab.dims();
         let mut fact_cache = HashMap::new();
 
         // Pre-compute comparison facts
@@ -327,53 +374,11 @@ impl ThoughtEncoder {
             }
         }
 
-        // Pre-compute zone facts
-        let zone_checks: &[(&str, &str)] = &[
-            ("rsi", "overbought"), ("rsi", "oversold"), ("rsi", "neutral"),
-            ("adx", "strong-trend"), ("adx", "weak-trend"),
-            ("bb-width", "squeeze"), ("close", "middle-zone"),
-            ("rsi", "above-midline"), ("rsi", "below-midline"),
-            ("macd-line", "positive"), ("macd-line", "negative"),
-            ("macd-hist", "positive"), ("macd-hist", "negative"),
-        ];
-        for &(ind, zone) in zone_checks {
+        // Pre-compute zone facts for segment boundaries
+        for &(_stream, ind, zone, _check) in STREAM_ZONE_CHECKS {
             let key = format!("(at {} {})", ind, zone);
-            fact_cache.insert(key, fact_binary(&vocab, "at", ind, zone));
-        }
-
-        // Pre-compute trending facts
-        for &ind in STREAM_INDICATORS {
-            for &dir in &["up", "down", "flat"] {
-                for &scale in &["micro", "short", "major"] {
-                    for &intensity in &["low", "medium", "high"] {
-                        let key = format!("(trending {} {} {} {})", ind, dir, scale, intensity);
-                        fact_cache.insert(key, fact_quaternary(&vocab, "trending", ind, dir, scale, intensity));
-                    }
-                }
-            }
-        }
-
-        // Pre-compute reversal/continuation facts
-        for &ind in STREAM_INDICATORS {
-            for &dir in &["up", "down"] {
-                for &scale in &["micro", "short", "major"] {
-                    let rkey = format!("(reversal {} {} {})", ind, dir, scale);
-                    fact_cache.insert(rkey, fact_ternary(&vocab, "reversal", ind, dir, scale));
-                    let ckey = format!("(continuation {} {} {})", ind, dir, scale);
-                    fact_cache.insert(ckey, fact_ternary(&vocab, "continuation", ind, dir, scale));
-                }
-            }
-        }
-
-        // Pre-compute divergence facts
-        for &close_dir in &["up", "down"] {
-            for &(indicator, _) in &[("rsi", 10), ("macd-hist", 10), ("adx", 10)] {
-                for &ind_dir in &["up", "down"] {
-                    if ind_dir != close_dir {
-                        let key = format!("(diverging close {} {} {})", close_dir, indicator, ind_dir);
-                        fact_cache.insert(key, fact_quaternary(&vocab, "diverging", "close", close_dir, indicator, ind_dir));
-                    }
-                }
+            if !fact_cache.contains_key(&key) {
+                fact_cache.insert(key, fact_binary(&vocab, "at", ind, zone));
             }
         }
 
@@ -383,7 +388,21 @@ impl ThoughtEncoder {
             fact_cache.insert(key, fact_binary(&vocab, pred, "rsi", "rsi-sma"));
         }
 
-        Self { vocab, fact_cache }
+        // Pre-compute calendar facts
+        for &day in &["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] {
+            let key = format!("(at-day {})", day);
+            fact_cache.insert(key, fact_binary(&vocab, "at-day", day, day));
+        }
+        for &hour in &["h00", "h04", "h08", "h12", "h16", "h20"] {
+            let key = format!("(at-hour {})", hour);
+            fact_cache.insert(key, fact_binary(&vocab, "at-hour", hour, hour));
+        }
+        for &session in &["asian-session", "european-session", "us-session", "off-hours"] {
+            let key = format!("(at-session {})", session);
+            fact_cache.insert(key, fact_binary(&vocab, "at-session", session, session));
+        }
+
+        Self { vocab, scalar_enc: ScalarEncoder::new(dims), fact_cache }
     }
 
     pub fn vocab(&self) -> &ThoughtVocab {
@@ -404,37 +423,23 @@ impl ThoughtEncoder {
     pub fn encode_view(
         &self,
         candles: &[Candle],
-        streams: &IndicatorStreams,
-        stream_end: usize,
-        max_window: usize,
+        _streams: &IndicatorStreams,
+        _stream_end: usize,
+        _max_window: usize,
         vm: &VectorManager,
     ) -> ThoughtResult {
         let mut cached_facts: Vec<&Vector> = Vec::with_capacity(64);
-        let mut owned_facts: Vec<Vector> = Vec::new();
-        let mut labels: Vec<String> = Vec::with_capacity(64);
+        let mut owned_facts: Vec<Vector> = Vec::with_capacity(96);
+        let mut labels: Vec<String> = Vec::with_capacity(96);
 
         let now = candles.last().unwrap();
         let prev = if candles.len() >= 2 { Some(&candles[candles.len() - 2]) } else { None };
 
-        // Pre-compute segments once for both trends and reversals
-        let mut segment_cache: HashMap<(&str, &str), Vec<usize>> = HashMap::new();
-        for &indicator in STREAM_INDICATORS {
-            let stream = streams.get_stream_view(indicator, stream_end, max_window);
-            if stream.len() < 5 { continue; }
-            for &(scale_name, window) in SCALES {
-                if stream.len() < window + 2 { continue; }
-                let segments = Primitives::segment(stream, window, 0.3, SegmentMethod::Diff);
-                segment_cache.insert((indicator, scale_name), segments);
-            }
-        }
-
         self.eval_comparisons_cached(now, prev, &mut cached_facts, &mut labels);
-        self.eval_zones_cached(now, &mut cached_facts, &mut labels);
-        self.eval_trends_view(streams, stream_end, max_window, &segment_cache, &mut cached_facts, &mut labels);
-        self.eval_reversals_view(streams, stream_end, max_window, &segment_cache, &mut cached_facts, &mut labels);
-        self.eval_divergence_view(streams, stream_end, max_window, &mut cached_facts, &mut labels);
+        self.eval_segment_narrative(candles, vm, &mut owned_facts, &mut labels);
         self.eval_temporal(candles, vm, &mut owned_facts, &mut labels);
         self.eval_rsi_sma_cached(candles, &mut cached_facts, &mut labels);
+        self.eval_calendar(now, &mut cached_facts, &mut labels);
 
         let fact_count = cached_facts.len() + owned_facts.len();
         let thought = if fact_count == 0 {
@@ -528,155 +533,113 @@ impl ThoughtEncoder {
         }
     }
 
-    // ─── Zone predicates (cached) ────────────────────────────────────────
+    // ─── Segment narrative (PELT-based) ────────────────────────────────
 
-    fn eval_zones_cached<'a>(
-        &'a self,
-        now: &Candle,
-        facts: &mut Vec<&'a Vector>,
+    fn eval_segment_narrative(
+        &self,
+        candles: &[Candle],
+        vm: &VectorManager,
+        facts: &mut Vec<Vector>,
         labels: &mut Vec<String>,
     ) {
-        let zone = if now.rsi > 70.0 { Some("(at rsi overbought)") }
-            else if now.rsi < 30.0 { Some("(at rsi oversold)") }
-            else { Some("(at rsi neutral)") };
-        if let Some(key) = zone {
-            if let Some(v) = self.fact_cache.get(key) { facts.push(v); labels.push(key.into()); }
-        }
+        let n_candles = candles.len();
+        if n_candles < 5 { return; }
 
-        if now.adx > 25.0 {
-            if let Some(v) = self.fact_cache.get("(at adx strong-trend)") { facts.push(v); labels.push("(at adx strong-trend)".into()); }
-        } else if now.adx < 20.0 {
-            if let Some(v) = self.fact_cache.get("(at adx weak-trend)") { facts.push(v); labels.push("(at adx weak-trend)".into()); }
-        }
+        let beginning_atom = self.vocab.get("beginning");
+        let ending_atom = self.vocab.get("ending");
 
-        let bb_width = now.bb_upper - now.bb_lower;
-        if bb_width > 0.0 && bb_width < now.close * 0.01 {
-            if let Some(v) = self.fact_cache.get("(at bb-width squeeze)") { facts.push(v); labels.push("(at bb-width squeeze)".into()); }
-        }
+        for &(stream_name, extractor) in SEGMENT_STREAMS {
+            let values: Vec<f64> = if stream_name == "rsi-sma" {
+                // Rolling RSI SMA (14-period)
+                (0..n_candles).map(|i| {
+                    let start = i.saturating_sub(13);
+                    let window = &candles[start..=i];
+                    window.iter().map(|c| c.rsi).sum::<f64>() / window.len() as f64
+                }).collect()
+            } else {
+                candles.iter().map(extractor).collect()
+            };
 
-        if now.close > now.bb_lower && now.close < now.bb_upper && now.bb_upper > 0.0 {
-            if let Some(v) = self.fact_cache.get("(at close middle-zone)") { facts.push(v); labels.push("(at close middle-zone)".into()); }
-        }
+            if values.len() < 5 { continue; }
 
-        if now.rsi > 50.0 {
-            if let Some(v) = self.fact_cache.get("(at rsi above-midline)") { facts.push(v); labels.push("(at rsi above-midline)".into()); }
-        } else if now.rsi > 0.0 {
-            if let Some(v) = self.fact_cache.get("(at rsi below-midline)") { facts.push(v); labels.push("(at rsi below-midline)".into()); }
-        }
+            // Skip streams with degenerate data (all zeros or NaN)
+            let finite_count = values.iter().filter(|v| v.is_finite() && **v != 0.0).count();
+            if finite_count < 5 { continue; }
 
-        if now.macd_line > 0.0 {
-            if let Some(v) = self.fact_cache.get("(at macd-line positive)") { facts.push(v); labels.push("(at macd-line positive)".into()); }
-        } else if now.macd_line < 0.0 {
-            if let Some(v) = self.fact_cache.get("(at macd-line negative)") { facts.push(v); labels.push("(at macd-line negative)".into()); }
-        }
+            let penalty = bic_penalty(&values);
+            let changepoints = pelt_changepoints(&values, penalty);
 
-        if now.macd_hist > 0.0 {
-            if let Some(v) = self.fact_cache.get("(at macd-hist positive)") { facts.push(v); labels.push("(at macd-hist positive)".into()); }
-        } else if now.macd_hist < 0.0 {
-            if let Some(v) = self.fact_cache.get("(at macd-hist negative)") { facts.push(v); labels.push("(at macd-hist negative)".into()); }
-        }
-    }
+            let mut boundaries = vec![0];
+            boundaries.extend_from_slice(&changepoints);
+            boundaries.push(values.len());
 
-    // ─── Trend detection (view-aware) ───────────────────────────────────
+            let n_segments = boundaries.len() - 1;
+            let ind_atom = self.vocab.get(stream_name);
 
-    fn eval_trends_view<'a>(
-        &'a self,
-        streams: &IndicatorStreams,
-        stream_end: usize,
-        max_window: usize,
-        _segment_cache: &HashMap<(&str, &str), Vec<usize>>,
-        facts: &mut Vec<&'a Vector>,
-        labels: &mut Vec<String>,
-    ) {
-        for &indicator in STREAM_INDICATORS {
-            let stream = streams.get_stream_view(indicator, stream_end, max_window);
-            if stream.len() < 5 { continue; }
+            // Collect zone checks relevant to this stream
+            let zone_checks: Vec<_> = STREAM_ZONE_CHECKS.iter()
+                .filter(|&&(s, _, _, _)| s == stream_name)
+                .collect();
 
-            for &(scale_name, window) in SCALES {
-                if stream.len() < window + 2 { continue; }
+            // Walk segments from newest (position 0) to oldest
+            for pos in 0..n_segments {
+                let seg_idx = n_segments - 1 - pos;
+                let start = boundaries[seg_idx];
+                let end = boundaries[seg_idx + 1];
+                let duration = end - start;
+                let candles_ago_end = n_candles - end;
 
-                let drifts = Primitives::drift_rate(stream, window);
-                let avg_drift = if drifts.is_empty() {
-                    0.0
-                } else {
-                    let recent = &drifts[drifts.len().saturating_sub(3)..];
-                    recent.iter().sum::<f64>() / recent.len() as f64
-                };
+                let seg_start_val = values[start];
+                let seg_end_val = values[end - 1];
+                let change = seg_end_val - seg_start_val;
 
-                let n = stream.len();
-                let recent_sim = if n >= 2 {
-                    Similarity::cosine(&stream[n - 2], &stream[n - 1])
-                } else {
-                    0.0
-                };
+                let dir = if change.abs() < 1e-10 { "flat" }
+                          else if change > 0.0 { "up" }
+                          else { "down" };
 
-                let dir = if avg_drift < 0.01 { "flat" }
-                    else if recent_sim > 0.5 { "up" }
-                    else { "down" };
+                // bind(direction, encode_log(|change|))
+                let mag_vec = self.scalar_enc.encode_log(change.abs().max(1e-10));
+                let dir_atom = self.vocab.get(dir);
+                let signed_mag = Primitives::bind(dir_atom, &mag_vec);
 
-                let intensity = if avg_drift < 0.05 { "low" }
-                    else if avg_drift < 0.15 { "medium" }
-                    else { "high" };
+                let duration_vec = self.scalar_enc.encode_log(duration as f64);
 
-                let key = format!("(trending {} {} {} {})", indicator, dir, scale_name, intensity);
-                if let Some(v) = self.fact_cache.get(&key) {
-                    facts.push(v);
-                    labels.push(key);
-                }
-            }
-        }
-    }
+                // segment_desc = bind(indicator, bind(signed_magnitude, duration))
+                let desc = Primitives::bind(ind_atom,
+                           &Primitives::bind(&signed_mag, &duration_vec));
 
-    // ─── Reversal / Continuation (view-aware) ───────────────────────────
+                // Three-layer temporal: position (orthogonal) × chrono anchor (log)
+                let pos_vec = vm.get_position_vector(pos as i64);
+                let chrono_vec = self.scalar_enc.encode_log((candles_ago_end + 1) as f64);
+                let temporal = Primitives::bind(&pos_vec, &chrono_vec);
 
-    fn eval_reversals_view<'a>(
-        &'a self,
-        streams: &IndicatorStreams,
-        stream_end: usize,
-        max_window: usize,
-        segment_cache: &HashMap<(&str, &str), Vec<usize>>,
-        facts: &mut Vec<&'a Vector>,
-        labels: &mut Vec<String>,
-    ) {
-        for &indicator in STREAM_INDICATORS {
-            let stream = streams.get_stream_view(indicator, stream_end, max_window);
-            if stream.len() < 5 { continue; }
+                let segment_fact = Primitives::bind(&desc, &temporal);
+                facts.push(segment_fact);
+                labels.push(format!("(seg {} {} {:.4} dur={} @{} ago={})",
+                                   stream_name, dir, change, duration, pos, candles_ago_end));
 
-            for &(scale_name, window) in SCALES {
-                if stream.len() < window + 2 { continue; }
+                // Zone states at segment boundaries (only for streams with zone checks)
+                if !zone_checks.is_empty() {
+                    let begin_candle = &candles[start.min(n_candles - 1)];
+                    let end_candle = &candles[(end - 1).min(n_candles - 1)];
 
-                let segments = match segment_cache.get(&(indicator, scale_name)) {
-                    Some(s) => s,
-                    None => continue,
-                };
-
-                if segments.len() >= 2 {
-                    let last_boundary = segments[segments.len() - 1];
-                    let recency = stream.len() - 1 - last_boundary;
-
-                    if recency <= window {
-                        let n = stream.len();
-                        let seg_start_val = &stream[last_boundary.min(n - 1)];
-                        let current_val = &stream[n - 1];
-                        let sim = Similarity::cosine(seg_start_val, current_val);
-
-                        let dir = if sim > 0.5 { "up" } else { "down" };
-                        let key = format!("(reversal {} {} {})", indicator, dir, scale_name);
-                        if let Some(v) = self.fact_cache.get(&key) {
-                            facts.push(v);
-                            labels.push(key);
-                        }
-                    } else {
-                        let n = stream.len();
-                        let early = &stream[n.saturating_sub(window)];
-                        let current = &stream[n - 1];
-                        let sim = Similarity::cosine(early, current);
-
-                        let dir = if sim > 0.5 { "up" } else { "down" };
-                        let key = format!("(continuation {} {} {})", indicator, dir, scale_name);
-                        if let Some(v) = self.fact_cache.get(&key) {
-                            facts.push(v);
-                            labels.push(key);
+                    for &&(_stream, ind, zone, check) in &zone_checks {
+                        let zone_key = format!("(at {} {})", ind, zone);
+                        if let Some(zone_vec) = self.fact_cache.get(&zone_key) {
+                            if check(begin_candle) {
+                                let bound = Primitives::bind(
+                                    &Primitives::bind(zone_vec, beginning_atom),
+                                    &pos_vec);
+                                facts.push(bound);
+                                labels.push(format!("(zone {} {} beginning @{})", ind, zone, pos));
+                            }
+                            if check(end_candle) {
+                                let bound = Primitives::bind(
+                                    &Primitives::bind(zone_vec, ending_atom),
+                                    &pos_vec);
+                                facts.push(bound);
+                                labels.push(format!("(zone {} {} ending @{})", ind, zone, pos));
+                            }
                         }
                     }
                 }
@@ -684,55 +647,78 @@ impl ThoughtEncoder {
         }
     }
 
-    // ─── Divergence (view-aware) ──────────────────────────────────────────
+    // ─── Calendar facts (viewport right-edge) ───────────────────────────
 
-    fn eval_divergence_view<'a>(
+    fn eval_calendar<'a>(
         &'a self,
-        streams: &IndicatorStreams,
-        stream_end: usize,
-        max_window: usize,
+        now: &Candle,
         facts: &mut Vec<&'a Vector>,
         labels: &mut Vec<String>,
     ) {
-        let close_dir = self.stream_direction_view(streams, stream_end, max_window, "close", 10);
-        if close_dir == "flat" { return; }
+        // Day of week from timestamp (format: "YYYY-MM-DD HH:MM:SS" or similar)
+        if let Some(day) = Self::day_of_week_from_ts(&now.ts) {
+            let key = format!("(at-day {})", day);
+            if let Some(v) = self.fact_cache.get(&key) {
+                facts.push(v);
+                labels.push(key);
+            }
+        }
 
-        let opposites = [("rsi", 10), ("macd-hist", 10), ("adx", 10)];
-        for &(indicator, window) in &opposites {
-            let ind_dir = self.stream_direction_view(streams, stream_end, max_window, indicator, window);
-            if ind_dir != "flat" && ind_dir != close_dir {
-                let key = format!("(diverging close {} {} {})", close_dir, indicator, ind_dir);
-                if let Some(v) = self.fact_cache.get(&key) {
-                    facts.push(v);
-                    labels.push(key);
-                }
+        // Hour block (4-hour buckets)
+        if let Some(hour_block) = Self::hour_block_from_ts(&now.ts) {
+            let key = format!("(at-hour {})", hour_block);
+            if let Some(v) = self.fact_cache.get(&key) {
+                facts.push(v);
+                labels.push(key);
+            }
+        }
+
+        // Trading session
+        if let Some(session) = Self::session_from_ts(&now.ts) {
+            let key = format!("(at-session {})", session);
+            if let Some(v) = self.fact_cache.get(&key) {
+                facts.push(v);
+                labels.push(key);
             }
         }
     }
 
-    fn stream_direction_view(&self, streams: &IndicatorStreams, stream_end: usize, max_window: usize, indicator: &str, window: usize) -> &'static str {
-        let stream = streams.get_stream_view(indicator, stream_end, max_window);
-        if stream.len() < window + 2 { return "flat"; }
+    fn day_of_week_from_ts(ts: &str) -> Option<&'static str> {
+        // Parse "YYYY-MM-DD ..." and compute day of week via Tomohiko Sakamoto's algorithm
+        if ts.len() < 10 { return None; }
+        let y: i32 = ts[0..4].parse().ok()?;
+        let m: u32 = ts[5..7].parse().ok()?;
+        let d: u32 = ts[8..10].parse().ok()?;
+        let days = &["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+        let t = [0_i32, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4];
+        let y = if m < 3 { y - 1 } else { y };
+        let dow = ((y + y / 4 - y / 100 + y / 400 + t[(m - 1) as usize] + d as i32) % 7) as usize;
+        Some(days[dow])
+    }
 
-        let drifts = Primitives::drift_rate(stream, window);
-        if drifts.is_empty() { return "flat"; }
+    fn hour_block_from_ts(ts: &str) -> Option<&'static str> {
+        if ts.len() < 13 { return None; }
+        let h: u32 = ts[11..13].parse().ok()?;
+        match h {
+            0..=3   => Some("h00"),
+            4..=7   => Some("h04"),
+            8..=11  => Some("h08"),
+            12..=15 => Some("h12"),
+            16..=19 => Some("h16"),
+            20..=23 => Some("h20"),
+            _ => None,
+        }
+    }
 
-        let recent = &drifts[drifts.len().saturating_sub(3)..];
-        let avg = recent.iter().sum::<f64>() / recent.len() as f64;
-
-        let n = stream.len();
-        let sim = if n >= 2 {
-            Similarity::cosine(&stream[n - 2], &stream[n - 1])
-        } else {
-            return "flat";
-        };
-
-        if avg < 0.01 {
-            "flat"
-        } else if sim > 0.5 {
-            "up"
-        } else {
-            "down"
+    fn session_from_ts(ts: &str) -> Option<&'static str> {
+        if ts.len() < 13 { return None; }
+        let h: u32 = ts[11..13].parse().ok()?;
+        match h {
+            0..=7   => Some("asian-session"),
+            8..=13  => Some("european-session"),
+            14..=20 => Some("us-session"),
+            21..=23 => Some("off-hours"),
+            _ => None,
         }
     }
 
@@ -1086,41 +1072,13 @@ impl FactCodebook {
             }
         }
 
-        // Zone facts
-        let zone_checks: &[(&str, &str)] = &[
-            ("rsi", "overbought"), ("rsi", "oversold"), ("rsi", "neutral"),
-            ("adx", "strong-trend"), ("adx", "weak-trend"),
-            ("bb-width", "squeeze"), ("close", "middle-zone"),
-            ("rsi", "above-midline"), ("rsi", "below-midline"),
-            ("macd-line", "positive"), ("macd-line", "negative"),
-            ("macd-hist", "positive"), ("macd-hist", "negative"),
-        ];
-        for &(ind, zone) in zone_checks {
-            vectors.push(fact_binary(vocab, "at", ind, zone));
-            labels.push(format!("(at {} {})", ind, zone));
-        }
-
-        // Trending facts (subset of common combinations)
-        for &ind in STREAM_INDICATORS {
-            for &dir in &["up", "down"] {
-                for &scale in &["micro", "short", "major"] {
-                    for &intensity in &["low", "medium", "high"] {
-                        vectors.push(fact_quaternary(vocab, "trending", ind, dir, scale, intensity));
-                        labels.push(format!("(trending {} {} {} {})", ind, dir, scale, intensity));
-                    }
-                }
-            }
-        }
-
-        // Reversal / continuation facts
-        for &ind in STREAM_INDICATORS {
-            for &dir in &["up", "down"] {
-                for &scale in &["micro", "short", "major"] {
-                    vectors.push(fact_ternary(vocab, "reversal", ind, dir, scale));
-                    labels.push(format!("(reversal {} {} {})", ind, dir, scale));
-                    vectors.push(fact_ternary(vocab, "continuation", ind, dir, scale));
-                    labels.push(format!("(continuation {} {} {})", ind, dir, scale));
-                }
+        // Zone facts (from segment boundary checks)
+        let mut seen_zones = std::collections::HashSet::new();
+        for &(_stream, ind, zone, _check) in STREAM_ZONE_CHECKS {
+            let key = format!("(at {} {})", ind, zone);
+            if seen_zones.insert(key.clone()) {
+                vectors.push(fact_binary(vocab, "at", ind, zone));
+                labels.push(key);
             }
         }
 
