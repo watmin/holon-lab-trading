@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use holon::{
-    Accumulator, Primitives, ScalarEncoder,
+    Accumulator, Primitives, ScalarEncoder, ScalarMode,
     Vector, VectorManager,
 };
 
@@ -70,6 +70,54 @@ fn bic_penalty(values: &[f64]) -> f64 {
     let var = values.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / n;
     if var < 1e-20 { return 1e10; }
     2.0 * var * n.ln()
+}
+
+/// Direction of the most recent PELT segment: "up", "down", or None if degenerate.
+fn most_recent_segment_dir(values: &[f64]) -> Option<&'static str> {
+    if values.len() < 5 { return None; }
+    let penalty = bic_penalty(values);
+    let cps = pelt_changepoints(values, penalty);
+    let start = cps.last().copied().unwrap_or(0);
+    let end = values.len();
+    if end <= start { return None; }
+    let change = values[end - 1] - values[start];
+    if change.abs() < 1e-10 { None }
+    else if change > 0.0 { Some("up") }
+    else { Some("down") }
+}
+
+/// Local swing highs: indices where value is strictly greater than all values
+/// within `radius` bars on each side. Returns (index, value) pairs, oldest first.
+fn swing_highs(values: &[f64], radius: usize) -> Vec<(usize, f64)> {
+    let n = values.len();
+    let mut out = Vec::new();
+    if n < radius * 2 + 1 { return out; }
+    for i in radius..n - radius {
+        let v = values[i];
+        if values[i - radius..i].iter().all(|&x| x < v)
+            && values[i + 1..=i + radius].iter().all(|&x| x < v)
+        {
+            out.push((i, v));
+        }
+    }
+    out
+}
+
+/// Local swing lows: indices where value is strictly less than all values
+/// within `radius` bars on each side. Returns (index, value) pairs, oldest first.
+fn swing_lows(values: &[f64], radius: usize) -> Vec<(usize, f64)> {
+    let n = values.len();
+    let mut out = Vec::new();
+    if n < radius * 2 + 1 { return out; }
+    for i in radius..n - radius {
+        let v = values[i];
+        if values[i - radius..i].iter().all(|&x| x > v)
+            && values[i + 1..=i + radius].iter().all(|&x| x > v)
+        {
+            out.push((i, v));
+        }
+    }
+    out
 }
 
 fn cosine_f64(a: &[f64], b: &[f64]) -> f64 {
@@ -171,6 +219,8 @@ const INDICATOR_ATOMS: &[&str] = &[
     "candle-range", "candle-body", "upper-wick", "lower-wick",
     // Segment narrative streams
     "body", "range",
+    // Range context
+    "range-pos",
 ];
 
 const DIRECTION_ATOMS: &[&str] = &["up", "down", "flat"];
@@ -183,6 +233,7 @@ const PREDICATE_ATOMS: &[&str] = &[
     "above", "below", "crosses-above", "crosses-below",
     "touches", "bounces-off",
     "at", "since",
+    "diverging", "confirming", "contradicting",
 ];
 const SEGMENT_ATOMS: &[&str] = &["beginning", "ending"];
 const CALENDAR_ATOMS: &[&str] = &[
@@ -495,6 +546,9 @@ impl ThoughtEncoder {
         self.eval_temporal(candles, vm, &mut owned_facts, &mut labels);
         self.eval_rsi_sma_cached(candles, &mut cached_facts, &mut labels);
         self.eval_calendar(now, &mut cached_facts, &mut labels);
+        self.eval_divergence(candles, vm, &mut owned_facts, &mut labels);
+        self.eval_volume_confirmation(candles, &mut owned_facts, &mut labels);
+        self.eval_range_position(candles, &mut owned_facts, &mut labels);
 
         let fact_count = cached_facts.len() + owned_facts.len();
         let thought = if fact_count == 0 {
@@ -788,42 +842,202 @@ impl ThoughtEncoder {
     ) {
         if candles.len() < 3 { return; }
 
-        let max_lookback = 12.min(candles.len() - 2);
+        // Build close PELT segment map for structural lookback.
+        // segment_of[i] = segment index (0 = oldest) for candle i.
+        let close_vals: Vec<f64> = candles.iter().map(|c| c.close.ln()).collect();
+        let penalty = bic_penalty(&close_vals);
+        let cps = pelt_changepoints(&close_vals, penalty);
+        let n = candles.len();
+        let mut boundaries = vec![0usize];
+        boundaries.extend_from_slice(&cps);
+        boundaries.push(n);
+        let n_segs = boundaries.len() - 1;
+        let mut segment_of = vec![0usize; n];
+        for seg in 0..n_segs {
+            for j in boundaries[seg]..boundaries[seg + 1] {
+                segment_of[j] = seg;
+            }
+        }
+        let current_seg = segment_of[n - 1];
 
-        // Check for crosses in the recent past
-        for n in 1..=max_lookback {
-            let idx = candles.len() - 1 - n;
+        let max_lookback = 12.min(n - 2);
+
+        for back in 1..=max_lookback {
+            let idx = n - 1 - back;
             let c = &candles[idx];
             let p = &candles[idx.saturating_sub(1)];
 
-            // Golden/death cross lookback
+            // Segment distance: how many segment boundaries between this candle and now.
+            // Events in the same segment as the current candle get distance 1 (very recent).
+            let seg_dist = (current_seg - segment_of[idx]).max(1);
+
+            // Golden/death cross
             if p.sma50 > 0.0 && p.sma200 > 0.0 && c.sma50 > 0.0 && c.sma200 > 0.0 {
                 if p.sma50 < p.sma200 && c.sma50 >= c.sma200 {
                     let base = fact_binary(&self.vocab, "crosses-above", "sma50", "sma200");
-                    facts.push(fact_since(vm, &base, n));
-                    labels.push(format!("(since (crosses-above sma50 sma200) {})", n));
+                    facts.push(fact_since(vm, &base, seg_dist));
+                    labels.push(format!("(since (crosses-above sma50 sma200) {}seg)", seg_dist));
                 }
                 if p.sma50 > p.sma200 && c.sma50 <= c.sma200 {
                     let base = fact_binary(&self.vocab, "crosses-below", "sma50", "sma200");
-                    facts.push(fact_since(vm, &base, n));
-                    labels.push(format!("(since (crosses-below sma50 sma200) {})", n));
+                    facts.push(fact_since(vm, &base, seg_dist));
+                    labels.push(format!("(since (crosses-below sma50 sma200) {}seg)", seg_dist));
                 }
             }
 
-            // MACD cross lookback
+            // MACD cross
             if p.macd_line != 0.0 && c.macd_line != 0.0 {
                 if p.macd_line < p.macd_signal && c.macd_line >= c.macd_signal {
                     let base = fact_binary(&self.vocab, "crosses-above", "macd-line", "macd-signal");
-                    facts.push(fact_since(vm, &base, n));
-                    labels.push(format!("(since (crosses-above macd-line macd-signal) {})", n));
+                    facts.push(fact_since(vm, &base, seg_dist));
+                    labels.push(format!("(since (crosses-above macd-line macd-signal) {}seg)", seg_dist));
                 }
                 if p.macd_line > p.macd_signal && c.macd_line <= c.macd_signal {
                     let base = fact_binary(&self.vocab, "crosses-below", "macd-line", "macd-signal");
-                    facts.push(fact_since(vm, &base, n));
-                    labels.push(format!("(since (crosses-below macd-line macd-signal) {})", n));
+                    facts.push(fact_since(vm, &base, seg_dist));
+                    labels.push(format!("(since (crosses-below macd-line macd-signal) {}seg)", seg_dist));
                 }
             }
         }
+    }
+
+    // ─── RSI divergence (PELT-structural) ──────────────────────────────
+
+    fn eval_divergence(
+        &self,
+        candles: &[Candle],
+        vm: &VectorManager,
+        facts: &mut Vec<Vector>,
+        labels: &mut Vec<String>,
+    ) {
+        if candles.len() < 10 { return; }
+
+        // PELT on ln(close) to find structural segments — same basis as segment narrative.
+        let close_ln: Vec<f64> = candles.iter().map(|c| c.close.ln()).collect();
+        let penalty = bic_penalty(&close_ln);
+        let cps = pelt_changepoints(&close_ln, penalty);
+
+        let n = close_ln.len();
+        let mut boundaries = vec![0usize];
+        boundaries.extend_from_slice(&cps);
+        boundaries.push(n);
+        let n_segs = boundaries.len() - 1;
+        if n_segs < 3 { return; }
+
+        // Segment directions: +1 up, -1 down, 0 flat.
+        let seg_dirs: Vec<i8> = (0..n_segs)
+            .map(|i| {
+                let change = close_ln[boundaries[i + 1] - 1] - close_ln[boundaries[i]];
+                if change > 1e-10 { 1 } else if change < -1e-10 { -1 } else { 0 }
+            })
+            .collect();
+
+        // Peaks: up→down boundary. Peak candle = last candle of the up-segment.
+        // Troughs: down→up boundary. Trough candle = last candle of the down-segment.
+        let mut peaks:   Vec<usize> = Vec::new();
+        let mut troughs: Vec<usize> = Vec::new();
+        for i in 0..n_segs - 1 {
+            if seg_dirs[i] == 1 && seg_dirs[i + 1] == -1 {
+                peaks.push(boundaries[i + 1] - 1);
+            } else if seg_dirs[i] == -1 && seg_dirs[i + 1] == 1 {
+                troughs.push(boundaries[i + 1] - 1);
+            }
+        }
+
+        // Bearish divergence: every consecutive peak pair where price made higher
+        // high but RSI made lower high. Temporal binding = how recent the newer peak is.
+        for pair in peaks.windows(2) {
+            let (i_prev, i_curr) = (pair[0], pair[1]);
+            if candles[i_curr].close > candles[i_prev].close
+                && candles[i_curr].rsi < candles[i_prev].rsi
+            {
+                let close_up  = Primitives::bind(self.vocab.get("close"), self.vocab.get("up"));
+                let rsi_down  = Primitives::bind(self.vocab.get("rsi"),   self.vocab.get("down"));
+                let div_fact = Primitives::bind(
+                    self.vocab.get("diverging"),
+                    &Primitives::bind(&close_up, &rsi_down),
+                );
+                let ago = n - 1 - i_curr;
+                let pos = vm.get_position_vector(ago as i64);
+                facts.push(Primitives::bind(&div_fact, &pos));
+                labels.push(format!("(diverging close up rsi down @{})", ago));
+            }
+        }
+
+        // Bullish divergence: every consecutive trough pair where price made lower
+        // low but RSI made higher low.
+        for pair in troughs.windows(2) {
+            let (i_prev, i_curr) = (pair[0], pair[1]);
+            if candles[i_curr].close < candles[i_prev].close
+                && candles[i_curr].rsi > candles[i_prev].rsi
+            {
+                let close_down = Primitives::bind(self.vocab.get("close"), self.vocab.get("down"));
+                let rsi_up     = Primitives::bind(self.vocab.get("rsi"),   self.vocab.get("up"));
+                let div_fact = Primitives::bind(
+                    self.vocab.get("diverging"),
+                    &Primitives::bind(&close_down, &rsi_up),
+                );
+                let ago = n - 1 - i_curr;
+                let pos = vm.get_position_vector(ago as i64);
+                facts.push(Primitives::bind(&div_fact, &pos));
+                labels.push(format!("(diverging close down rsi up @{})", ago));
+            }
+        }
+    }
+
+    // ─── Volume confirmation ─────────────────────────────────────────────
+
+    fn eval_volume_confirmation(
+        &self,
+        candles: &[Candle],
+        facts: &mut Vec<Vector>,
+        labels: &mut Vec<String>,
+    ) {
+        if candles.len() < 5 { return; }
+
+        let close_vals: Vec<f64> = candles.iter().map(|c| c.close.ln()).collect();
+        let vol_vals: Vec<f64> = candles.iter()
+            .map(|c| if c.volume > 0.0 { c.volume.ln() } else { 0.0 })
+            .collect();
+
+        let close_dir = most_recent_segment_dir(&close_vals);
+        let vol_dir   = most_recent_segment_dir(&vol_vals);
+
+        if let (Some(cd), Some(vd)) = (close_dir, vol_dir) {
+            let predicate = if cd == vd { "confirming" } else { "contradicting" };
+            let fact = Primitives::bind(
+                self.vocab.get(predicate),
+                &Primitives::bind(self.vocab.get("volume"), self.vocab.get("close")),
+            );
+            facts.push(fact);
+            labels.push(format!("({} volume close)", predicate));
+        }
+    }
+
+    // ─── Range position scalar ───────────────────────────────────────────
+
+    fn eval_range_position(
+        &self,
+        candles: &[Candle],
+        facts: &mut Vec<Vector>,
+        labels: &mut Vec<String>,
+    ) {
+        if candles.is_empty() { return; }
+
+        let range_high = candles.iter().map(|c| c.high).fold(f64::NEG_INFINITY, f64::max);
+        let range_low  = candles.iter().map(|c| c.low ).fold(f64::INFINITY,     f64::min);
+        let span = range_high - range_low;
+        if span < 1e-10 { return; }
+
+        let current  = candles.last().unwrap().close;
+        let position = (current - range_low) / span; // 0.0 = range low, 1.0 = range high
+
+        // Linear encoding with scale=2.0: position 0.0 and 1.0 are anti-correlated,
+        // position 0.5 is orthogonal to both. Equal absolute differences → equal similarity.
+        let pos_vec = self.scalar_enc.encode(position, ScalarMode::Linear { scale: 2.0 });
+        let fact = Primitives::bind(self.vocab.get("range-pos"), &pos_vec);
+        facts.push(fact);
+        labels.push(format!("(range-pos {:.3})", position));
     }
 
     // ─── RSI SMA (cached) ───────────────────────────────────────────────

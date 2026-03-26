@@ -57,8 +57,14 @@ struct Args {
     horizon: usize,
 
     /// Price move required to label a candle Buy or Sell (0.005 = 0.5%).
+    /// Ignored when atr_multiplier > 0 (dynamic threshold takes over).
     #[arg(long, default_value_t = 0.005)]
     move_threshold: f64,
+
+    /// ATR-based move threshold: threshold = K × atr_r (ATR/close ratio at entry).
+    /// 0.0 = use fixed move_threshold. ~3.0 ≈ 0.5% for BTC. Asset-independent.
+    #[arg(long, default_value_t = 0.0)]
+    atr_multiplier: f64,
 
     /// Accumulator decay rate per candle (0.999 = slow fade).
     #[arg(long, default_value_t = 0.999)]
@@ -89,10 +95,25 @@ struct Args {
     /// than 85% of its other predictions). 0.0 = disabled. The threshold is
     /// computed from the conviction distribution and updated every recalib_interval
     /// candles — no fixed magic value needed.
+    /// Ignored when flip_mode = "auto".
     #[arg(long, default_value_t = 0.85)]
     flip_quantile: f64,
 
-    /// visual-only | thought-only | agree-only | meta-boost | weighted
+    /// "quantile" = use flip_quantile percentile. "auto" = find the conviction
+    /// level where cumulative win rate from the top first drops below min_edge.
+    #[arg(long, default_value = "quantile")]
+    flip_mode: String,
+
+    /// Minimum cumulative win rate (from the top) to keep expanding the flip zone.
+    /// Only used when flip_mode = "auto". 0.52 = need at least 52% accuracy.
+    #[arg(long, default_value_t = 0.52)]
+    min_edge: f64,
+
+    /// "legacy" = phase-based with 5% cap. "kelly" = half-Kelly from calibration curve.
+    #[arg(long, default_value = "legacy")]
+    sizing: String,
+
+    /// visual-only | thought-only | agree-only | meta-boost | weighted | thought-led | thought-contrarian
     #[arg(long, default_value = "meta-boost")]
     orchestration: String,
 
@@ -238,6 +259,27 @@ impl Trader {
     }
 }
 
+/// Half-Kelly position sizing from the empirical calibration curve.
+/// Estimates win rate at the given conviction by looking at all resolved
+/// predictions with conviction >= this level, then sizes by half-Kelly.
+/// Returns None if insufficient data or no edge.
+fn kelly_frac(conviction: f64, resolved: &VecDeque<(f64, bool)>, min_sample: usize) -> Option<f64> {
+    if resolved.len() < min_sample { return None; }
+    let mut wins = 0u32;
+    let mut total = 0u32;
+    for &(conv, correct) in resolved.iter() {
+        if conv >= conviction {
+            total += 1;
+            if correct { wins += 1; }
+        }
+    }
+    if total < min_sample as u32 { return None; }
+    let win_rate = wins as f64 / total as f64;
+    let kelly = 2.0 * win_rate - 1.0; // even-money Kelly
+    if kelly <= 0.0 { return None; }
+    Some((kelly / 2.0).min(0.15)) // half-Kelly, cap at 15%
+}
+
 // ─── Pending entry ───────────────────────────────────────────────────────────
 
 struct Pending {
@@ -247,6 +289,7 @@ struct Pending {
     tht_vec:       Vector,
     vis_pred:      Prediction,
     tht_pred:      Prediction,
+    raw_meta_dir:  Option<Outcome>,  // un-flipped direction (for auto calibration)
     meta_dir:      Option<Outcome>,
     meta_conviction: f64,
     position_frac: Option<f64>,
@@ -316,6 +359,24 @@ fn orchestrate(
                 (None, None)    => (None, 0.0),
             }
         }
+
+        // Thought sets direction and conviction (preserving its high flip threshold).
+        // Visual acts as a binary veto: if visual has a direction and disagrees, skip.
+        "thought-led" => match td {
+            None => (None, 0.0),
+            Some(t) => match vd {
+                Some(v) if v != t => (None, 0.0), // visual veto
+                _ => (Some(t), tht.conviction),
+            },
+        },
+
+        // Thought's flip zone, but ONLY when visual explicitly disagrees.
+        // Visual disagreement = visual sees a strong trend; thought sees exhaustion.
+        // Empirically: vis-disagree trades win 54.1% vs 52.7% when visual agrees.
+        "thought-contrarian" => match (td, vd) {
+            (Some(t), Some(v)) if v != t => (Some(t), tht.conviction),
+            _ => (None, 0.0),
+        },
 
         other => panic!("unknown orchestration mode: {}", other),
     }
@@ -395,9 +456,17 @@ fn main() {
         .expect("failed to configure rayon");
 
     eprintln!("trader3: visual+thought journals, discriminant prediction");
-    eprintln!("  {}D  window={}  horizon={}  threshold={:.3}%  decay={}",
-        args.dims, args.window, args.horizon,
-        args.move_threshold * 100.0, args.decay);
+    let thresh_desc = if args.atr_multiplier > 0.0 {
+        format!("{}×ATR", args.atr_multiplier)
+    } else {
+        format!("{:.3}%", args.move_threshold * 100.0)
+    };
+    let flip_desc = match args.flip_mode.as_str() {
+        "auto" => format!("auto(min_edge={:.2})", args.min_edge),
+        _ => format!("q{:.0}", args.flip_quantile * 100.0),
+    };
+    eprintln!("  {}D  window={}  horizon={}  threshold={}  decay={}  flip={}",
+        args.dims, args.window, args.horizon, thresh_desc, args.decay, flip_desc);
     eprintln!("  observe={}  recalib_interval={}  orchestration={}  min_conviction={:.3}",
         args.observe_period, args.recalib_interval, args.orchestration, args.min_conviction);
 
@@ -455,6 +524,9 @@ fn main() {
             ("window",          &args.window.to_string()),
             ("horizon",         &args.horizon.to_string()),
             ("move_threshold",  &args.move_threshold.to_string()),
+            ("atr_multiplier",  &args.atr_multiplier.to_string()),
+            ("flip_mode",       &args.flip_mode),
+            ("min_edge",        &args.min_edge.to_string()),
             ("decay",           &args.decay.to_string()),
             ("observe_period",  &args.observe_period.to_string()),
             ("recalib_interval",&args.recalib_interval.to_string()),
@@ -506,6 +578,10 @@ fn main() {
     let conviction_window = args.recalib_interval * 100; // ~50k candles
     let mut conviction_history: VecDeque<f64> = VecDeque::new();
     let mut flip_threshold: f64 = 0.0; // 0 until warmup complete
+
+    // Auto flip mode: track resolved predictions to build calibration curve.
+    // Each entry records (conviction, was_the_flipped_prediction_correct).
+    let mut resolved_preds: VecDeque<(f64, bool)> = VecDeque::new();
 
     let kill_file = std::path::Path::new("trader-stop");
     let mut cursor = start_idx;
@@ -573,15 +649,46 @@ fn main() {
                 conviction_history.pop_front();
             }
             // Recompute flip threshold every recalib_interval candles, after warmup.
-            if args.flip_quantile > 0.0
-                && conviction_history.len() >= flip_warmup
+            if conviction_history.len() >= flip_warmup
                 && encode_count % args.recalib_interval == 0
             {
-                let mut sorted: Vec<f64> = conviction_history.iter().copied().collect();
-                sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
-                let idx = ((sorted.len() as f64 * args.flip_quantile) as usize)
-                    .min(sorted.len() - 1);
-                flip_threshold = sorted[idx];
+                match args.flip_mode.as_str() {
+                    "quantile" if args.flip_quantile > 0.0 => {
+                        let mut sorted: Vec<f64> = conviction_history.iter().copied().collect();
+                        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                        let idx = ((sorted.len() as f64 * args.flip_quantile) as usize)
+                            .min(sorted.len() - 1);
+                        flip_threshold = sorted[idx];
+                    }
+                    "auto" if resolved_preds.len() >= flip_warmup => {
+                        // Sort by conviction descending, walk down accumulating
+                        // flipped win rate. Find the deepest conviction where
+                        // cumulative win rate exceeds min_edge AND is statistically
+                        // significant (> 0.50 + 1.96/sqrt(N)). Both must hold.
+                        let mut sorted: Vec<(f64, bool)> = resolved_preds.iter().copied().collect();
+                        sorted.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
+                        let mut wins = 0u32;
+                        let mut total = 0u32;
+                        let mut best_threshold = f64::MAX;
+                        let min_bucket = 50u32;
+                        for &(conv, correct) in &sorted {
+                            total += 1;
+                            if correct { wins += 1; }
+                            if total >= min_bucket {
+                                let wr = wins as f64 / total as f64;
+                                let ci = 1.96 / (total as f64).sqrt();
+                                let floor = args.min_edge.max(0.50 + ci);
+                                if wr >= floor {
+                                    best_threshold = conv;
+                                }
+                            }
+                        }
+                        if best_threshold < f64::MAX {
+                            flip_threshold = best_threshold;
+                        }
+                    }
+                    _ => {} // quantile=0 or not enough data yet
+                }
             }
 
             // Contrarian flip: high conviction = trend extreme = reversal likely.
@@ -597,9 +704,23 @@ fn main() {
             };
 
             let position_frac = if meta_dir.is_some() {
-                match trader.position_frac(meta_conviction, args.min_conviction, flip_threshold) {
-                    Some(frac) => Some(frac),
-                    None => { trader.trades_skipped += 1; None }
+                match args.sizing.as_str() {
+                    "kelly" => {
+                        if trader.phase == Phase::Observe {
+                            None
+                        } else {
+                            match kelly_frac(meta_conviction, &resolved_preds, 50) {
+                                Some(frac) => Some(frac),
+                                None => { trader.trades_skipped += 1; None }
+                            }
+                        }
+                    }
+                    _ => {
+                        match trader.position_frac(meta_conviction, args.min_conviction, flip_threshold) {
+                            Some(frac) => Some(frac),
+                            None => { trader.trades_skipped += 1; None }
+                        }
+                    }
                 }
             } else {
                 None
@@ -612,6 +733,7 @@ fn main() {
                 tht_vec,
                 vis_pred:      vis_pred.clone(),
                 tht_pred:      tht_pred.clone(),
+                raw_meta_dir:  raw_meta_dir,
                 meta_dir,
                 meta_conviction,
                 position_frac,
@@ -640,9 +762,15 @@ fn main() {
 
                 // Learn only on the first threshold crossing per pending entry.
                 if entry.first_outcome.is_none() {
-                    let outcome = if pct > args.move_threshold       { Some(Outcome::Buy)  }
-                                  else if pct < -args.move_threshold { Some(Outcome::Sell) }
-                                  else                               { None };
+                    let thresh = if args.atr_multiplier > 0.0 {
+                        let entry_atr = candles[entry.candle_idx].atr_r;
+                        args.atr_multiplier * entry_atr
+                    } else {
+                        args.move_threshold
+                    };
+                    let outcome = if pct > thresh       { Some(Outcome::Buy)  }
+                                  else if pct < -thresh { Some(Outcome::Sell) }
+                                  else                  { None };
 
                     if let Some(o) = outcome {
                         let sw = signal_weight(abs_pct, &mut move_sum, &mut move_count);
@@ -702,6 +830,22 @@ fn main() {
                         let ok = td == final_out;
                         tht_rolling.push_back(ok);
                         if tht_rolling.len() > rolling_cap { tht_rolling.pop_front(); }
+                    }
+
+                    // Auto flip calibration: always evaluate the FLIPPED prediction
+                    // so the calibration curve measures contrarian accuracy regardless
+                    // of whether flipping is currently active.
+                    if let Some(raw_dir) = entry.raw_meta_dir {
+                        let flipped_dir = match raw_dir {
+                            Outcome::Buy  => Outcome::Sell,
+                            Outcome::Sell => Outcome::Buy,
+                            Outcome::Noise => Outcome::Noise,
+                        };
+                        let correct = flipped_dir == final_out;
+                        resolved_preds.push_back((entry.meta_conviction, correct));
+                        if resolved_preds.len() > conviction_window {
+                            resolved_preds.pop_front();
+                        }
                     }
                 }
 
