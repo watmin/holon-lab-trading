@@ -40,7 +40,7 @@ impl VisualCache {
             .map(|ri| vm.get_position_vector(ri as i64))
             .collect();
         let col_positions: Vec<Vector> = (0..n_cols)
-            .map(|ci| vm.get_position_vector(ci as i64))
+            .map(|ci| vm.get_position_vector((total_rows + ci) as i64))
             .collect();
 
         let null_atom = &atoms["null"];
@@ -50,6 +50,27 @@ impl VisualCache {
             .collect();
 
         Self { atoms, set_indicator, row_positions, col_positions, null_row_vecs }
+    }
+
+    /// Build cell-level codebook: bind(row_pos[r], bind(set_indicator, atom[color]))
+    /// for every (row, color) pair. Returns vectors and labels.
+    pub fn build_codebook(&self) -> (Vec<Vector>, Vec<String>) {
+        let mut vecs = Vec::new();
+        let mut labels = Vec::new();
+        for (ri, row_pos) in self.row_positions.iter().enumerate() {
+            for &token in COLOR_TOKENS {
+                if token == "null" { continue; }
+                let cell_vec = Primitives::bind(&self.set_indicator, &self.atoms[token]);
+                let atom = Primitives::bind(row_pos, &cell_vec);
+                vecs.push(atom);
+                labels.push(format!("r{}-{}", ri, token));
+            }
+        }
+        (vecs, labels)
+    }
+
+    pub fn col_positions(&self) -> &[Vector] {
+        &self.col_positions
     }
 }
 

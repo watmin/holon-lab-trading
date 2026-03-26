@@ -1,8 +1,8 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use holon::{
     Accumulator, Primitives, ScalarEncoder,
-    Similarity, Vector, VectorManager,
+    Vector, VectorManager,
 };
 
 use crate::db::Candle;
@@ -100,6 +100,61 @@ fn cosine_f64_vs_vec(proto: &[f64], vec: &Vector) -> f64 {
     }
     let denom = (norm_p * norm_v).sqrt();
     if denom < 1e-10 { 0.0 } else { dot / denom }
+}
+
+/// Float-space invert: cosine of continuous f64 proto against bipolar codebook atoms.
+/// Threshold is 1/sqrt(D) — the expected absolute cosine of a random bipolar vector
+/// against any fixed vector in D dimensions. Atoms above this are statistically present.
+fn invert_f64(proto: &[f64], codebook: &[Vector], top_k: usize) -> Vec<(usize, f64)> {
+    let norm_p: f64 = proto.iter().map(|x| x * x).sum::<f64>().sqrt();
+    if norm_p < 1e-10 { return vec![]; }
+    let threshold = 1.0 / (proto.len() as f64).sqrt();
+
+    let mut results: Vec<(usize, f64)> = codebook.iter().enumerate()
+        .map(|(i, atom)| {
+            let dot: f64 = proto.iter().zip(atom.data().iter())
+                .map(|(&p, &a)| p * (a as f64)).sum();
+            let norm_a = (atom.dimensions() as f64).sqrt();
+            (i, dot / (norm_p * norm_a))
+        })
+        .filter(|(_, sim)| *sim > threshold)
+        .collect();
+    results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    results.truncate(top_k);
+    results
+}
+
+/// Cosine between two bipolar vectors using integer dot product.
+#[inline]
+fn bipolar_cosine(a: &[i8], b: &[i8]) -> f64 {
+    let mut dot = 0i64;
+    let mut nnz_a = 0i64;
+    let mut nnz_b = 0i64;
+    for (&x, &y) in a.iter().zip(b.iter()) {
+        dot += (x as i64) * (y as i64);
+        nnz_a += (x != 0) as i64;
+        nnz_b += (y != 0) as i64;
+    }
+    let denom = ((nnz_a * nnz_b) as f64).sqrt();
+    if denom < 1.0 { 0.0 } else { dot as f64 / denom }
+}
+
+/// Coverage-based prediction: what fraction of discriminative atom weights are present in the input.
+/// Returns (coverage 0.0-1.0, atoms_found, atoms_total).
+fn disc_coverage(input: &Vector, atoms: &[DiscAtom], noise_floor: f64) -> (f64, usize, usize) {
+    if atoms.is_empty() { return (0.0, 0, 0); }
+    let total_weight: f64 = atoms.iter().map(|a| a.weight).sum();
+    if total_weight < 1e-10 { return (0.0, 0, atoms.len()); }
+    let input_data = input.data();
+    let mut found_weight = 0.0_f64;
+    let mut found_count = 0usize;
+    for a in atoms {
+        if bipolar_cosine(input_data, a.atom_vec.data()) > noise_floor {
+            found_weight += a.weight;
+            found_count += 1;
+        }
+    }
+    (found_weight / total_weight, found_count, atoms.len())
 }
 
 // ─── Atoms ──────────────────────────────────────────────────────────────────
@@ -809,8 +864,15 @@ impl ThoughtEncoder {
 
 pub struct ThoughtPrediction {
     pub outcome: Option<Outcome>,
-    pub conviction: f64,
     pub coherence: f64,
+    pub buy_coverage: f64,
+    pub sell_coverage: f64,
+    pub buy_atoms_found: usize,
+    pub buy_atoms_total: usize,
+    pub sell_atoms_found: usize,
+    pub sell_atoms_total: usize,
+    pub buy_sim: f64,
+    pub sell_sim: f64,
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -830,16 +892,26 @@ impl std::fmt::Display for Outcome {
     }
 }
 
+pub struct DiscAtom {
+    pub atom_vec: Vector,
+    pub weight: f64,
+    pub label: String,
+}
+
 pub struct ThoughtJournaler {
     pub buy_good: Accumulator,
     pub sell_good: Accumulator,
-    pub buy_confuser: Accumulator,
-    pub sell_confuser: Accumulator,
-    pub noise_accum: Accumulator,
     updates: usize,
     recalib_interval: usize,
     pub dims: usize,
     pub noise_floor: f64,
+    codebook_vecs: Vec<Vector>,
+    codebook_labels: Vec<String>,
+    pub disc_buy_atoms: Vec<DiscAtom>,
+    pub disc_sell_atoms: Vec<DiscAtom>,
+    pub disc_proj_atoms: Vec<DiscAtom>,
+    pub proj_used: usize,
+    pub proj_skipped: usize,
 }
 
 impl ThoughtJournaler {
@@ -848,14 +920,23 @@ impl ThoughtJournaler {
         Self {
             buy_good: Accumulator::new(dims),
             sell_good: Accumulator::new(dims),
-            buy_confuser: Accumulator::new(dims),
-            sell_confuser: Accumulator::new(dims),
-            noise_accum: Accumulator::new(dims),
             updates: 0,
             recalib_interval,
             dims,
             noise_floor,
+            codebook_vecs: Vec::new(),
+            codebook_labels: Vec::new(),
+            disc_buy_atoms: Vec::new(),
+            disc_sell_atoms: Vec::new(),
+            disc_proj_atoms: Vec::new(),
+            proj_used: 0,
+            proj_skipped: 0,
         }
+    }
+
+    pub fn set_codebook(&mut self, codebook: &FactCodebook) {
+        self.codebook_vecs = codebook.vectors.clone();
+        self.codebook_labels = codebook.labels.clone();
     }
 
     pub fn is_ready(&self) -> bool {
@@ -864,176 +945,82 @@ impl ThoughtJournaler {
 
     pub fn predict(&self, thought: &ThoughtResult) -> ThoughtPrediction {
         let coherence = thought.coherence;
+        let no_pred = ThoughtPrediction {
+            outcome: None, coherence,
+            buy_coverage: 0.0, sell_coverage: 0.0,
+            buy_atoms_found: 0, buy_atoms_total: 0,
+            sell_atoms_found: 0, sell_atoms_total: 0,
+            buy_sim: 0.0, sell_sim: 0.0,
+        };
 
-        if !self.is_ready() {
-            return ThoughtPrediction { outcome: None, conviction: 0.0, coherence };
+        if !self.is_ready() { return no_pred; }
+
+        let has_buy = !self.disc_buy_atoms.is_empty();
+        let has_sell = !self.disc_sell_atoms.is_empty();
+        if !has_buy && !has_sell { return no_pred; }
+
+        let (buy_cov, buy_found, buy_total) = disc_coverage(&thought.thought, &self.disc_buy_atoms, self.noise_floor);
+        let (sell_cov, sell_found, sell_total) = disc_coverage(&thought.thought, &self.disc_sell_atoms, self.noise_floor);
+
+        let outcome = if has_buy && has_sell {
+            if buy_cov > sell_cov { Some(Outcome::Buy) } else { Some(Outcome::Sell) }
+        } else if has_buy && buy_cov > 0.0 {
+            Some(Outcome::Buy)
+        } else if has_sell && sell_cov > 0.0 {
+            Some(Outcome::Sell)
+        } else {
+            None
+        };
+
+        ThoughtPrediction {
+            outcome, coherence,
+            buy_coverage: buy_cov, sell_coverage: sell_cov,
+            buy_atoms_found: buy_found, buy_atoms_total: buy_total,
+            sell_atoms_found: sell_found, sell_atoms_total: sell_total,
+            buy_sim: buy_cov, sell_sim: sell_cov,
         }
+    }
 
-        let vec = &thought.thought;
-
-        // Raw cosine prediction — prototypes already clean from learning
-        let buy_f64 = self.buy_good.normalize_f64();
-        let sell_f64 = self.sell_good.normalize_f64();
-
-        let bs = cosine_f64_vs_vec(&buy_f64, vec);
-        let ss = cosine_f64_vs_vec(&sell_f64, vec);
-        let (is_buy, conviction) = (bs > ss, (bs - ss).abs());
-
-        let outcome = if is_buy { Some(Outcome::Buy) } else { Some(Outcome::Sell) };
-        ThoughtPrediction { outcome, conviction, coherence }
+    pub fn decay_all(&mut self, decay: f64) {
+        self.buy_good.decay(decay);
+        self.sell_good.decay(decay);
     }
 
     pub fn observe(
         &mut self,
         thought: &Vector,
         outcome: Outcome,
-        prediction: Option<Outcome>,
-        _conviction: f64,
-        decay: f64,
-        reward_weight: f64,
-        correction_weight: f64,
         signal_weight: f64,
     ) {
-        if outcome == Outcome::Noise {
-            self.noise_accum.decay(decay);
-            self.noise_accum.add_weighted(thought, signal_weight);
-            return;
-        }
+        if outcome == Outcome::Noise { return; }
 
-        // Always count non-noise observations and recalibrate on schedule,
-        // even if the sample is rejected by the recognition gate below.
-        // This breaks the deadlock where frozen prototypes prevent recalibration.
         self.updates += 1;
         if self.updates % self.recalib_interval == 0 {
             self.recalibrate();
         }
 
-        // Adaptive recognition gate: exploration rate scales with prototype convergence
-        let cos_buy_sell = if self.is_ready() {
-            let buy_f64 = self.buy_good.normalize_f64();
-            let sell_f64 = self.sell_good.normalize_f64();
-            let cos_bs = cosine_f64(&buy_f64, &sell_f64);
+        let learn_vec = self.project_contrastive(thought, outcome);
+        let target = learn_vec.as_ref().unwrap_or(thought);
+        if learn_vec.is_some() { self.proj_used += 1; } else { self.proj_skipped += 1; }
 
-            let buy_sim = cosine_f64_vs_vec(&buy_f64, thought);
-            let sell_sim = cosine_f64_vs_vec(&sell_f64, thought);
-            if buy_sim.max(sell_sim) < self.noise_floor {
-                let explore_interval = (1.0 / cos_bs.clamp(0.01, 1.0)) as usize;
-                if self.updates % explore_interval.max(1) != 0 {
-                    return;
-                }
-            }
-            cos_bs
-        } else {
-            0.0
-        };
-
-        // Adaptive decay + separation gate
-        let separation = 1.0 - cos_buy_sell;
-        let effective_decay = 1.0 - (1.0 - decay) * separation;
-        let sep_gate = separation.clamp(0.05, 1.0);
-
-        // L1: Strip noise/background before accumulating.
-        let noise_stripped = if self.noise_accum.count() > 0 {
-            let noise_proto = self.noise_accum.threshold();
-            Some(Primitives::negate(thought, &noise_proto))
-        } else {
-            None
-        };
-        let base_thought = noise_stripped.as_ref().unwrap_or(thought);
-
-        // L2: Proportional contrastive stripping — strip rate equals cosine
-        let strip_rate = cos_buy_sell.clamp(0.0, 1.0);
-        let strip_interval = if strip_rate > 0.01 {
-            (1.0 / strip_rate) as usize
-        } else {
-            usize::MAX
-        };
-        let do_contrastive = self.is_ready()
-            && self.updates % strip_interval.max(1) == 0;
         match outcome {
-            Outcome::Buy => {
-                let add_thought = if do_contrastive {
-                    let sell_proto = self.sell_good.threshold();
-                    Primitives::negate(base_thought, &sell_proto)
-                } else {
-                    base_thought.clone()
-                };
-                self.buy_good.decay(effective_decay);
-                self.sell_good.decay(effective_decay);
-                self.buy_good.add_weighted(&add_thought, sep_gate * signal_weight);
-            }
-            Outcome::Sell => {
-                let add_thought = if do_contrastive {
-                    let buy_proto = self.buy_good.threshold();
-                    Primitives::negate(base_thought, &buy_proto)
-                } else {
-                    base_thought.clone()
-                };
-                self.buy_good.decay(effective_decay);
-                self.sell_good.decay(effective_decay);
-                self.sell_good.add_weighted(&add_thought, sep_gate * signal_weight);
-            }
+            Outcome::Buy => self.buy_good.add_weighted(target, signal_weight),
+            Outcome::Sell => self.sell_good.add_weighted(target, signal_weight),
             _ => {}
         }
+    }
 
-        // Feed confuser if wrong
-        if let Some(pred) = prediction {
-            if pred != outcome && pred != Outcome::Noise {
-                match pred {
-                    Outcome::Buy => {
-                        self.buy_confuser.decay(effective_decay);
-                        self.buy_confuser.add_weighted(thought, signal_weight);
-                    }
-                    Outcome::Sell => {
-                        self.sell_confuser.decay(effective_decay);
-                        self.sell_confuser.add_weighted(thought, signal_weight);
-                    }
-                    _ => {}
-                }
-            }
-        }
-
-        // #3 Separation-gated algebraic correction (load-bearing path)
-        if let Some(pred) = prediction {
-            if pred != Outcome::Noise && self.is_ready() {
-                let buy_proto = self.buy_good.threshold();
-                let sell_proto = self.sell_good.threshold();
-
-                let reward_weight = reward_weight * sep_gate;
-                let correction_weight = correction_weight * sep_gate;
-
-                let pred_matches = (pred == Outcome::Buy && outcome == Outcome::Buy)
-                    || (pred == Outcome::Sell && outcome == Outcome::Sell);
-
-                if pred_matches {
-                    let (correct_proto, opposing_proto) = match outcome {
-                        Outcome::Buy => (&buy_proto, &sell_proto),
-                        _ => (&sell_proto, &buy_proto),
-                    };
-                    let aligned = Primitives::resonance(thought, correct_proto);
-                    let reinforced = Primitives::amplify(&aligned, opposing_proto, 1.0);
-                    let novelty = 1.0 - Similarity::cosine(&reinforced, thought).abs();
-                    match outcome {
-                        Outcome::Buy => self.buy_good.add_weighted(&reinforced, reward_weight * novelty * signal_weight),
-                        _ => self.sell_good.add_weighted(&reinforced, reward_weight * novelty * signal_weight),
-                    }
-                } else {
-                    let wrong_proto = match outcome {
-                        Outcome::Buy => &sell_proto,
-                        _ => &buy_proto,
-                    };
-                    let misleading = Primitives::resonance(thought, wrong_proto);
-                    let unique = Primitives::negate(thought, &misleading);
-                    let amplified = Primitives::grover_amplify(&unique, &misleading, 1);
-                    let novelty = 1.0 - Similarity::cosine(&amplified, thought).abs();
-                    match outcome {
-                        Outcome::Buy => self.buy_good.add_weighted(&amplified, correction_weight * novelty * signal_weight),
-                        _ => self.sell_good.add_weighted(&amplified, correction_weight * novelty * signal_weight),
-                    }
-                }
-            }
-        }
-
+    fn project_contrastive(&self, input: &Vector, outcome: Outcome) -> Option<Vector> {
+        if !self.is_ready() { return None; }
+        let opposing = match outcome {
+            Outcome::Buy => self.sell_good.threshold(),
+            Outcome::Sell => self.buy_good.threshold(),
+            _ => return None,
+        };
+        let data: Vec<i8> = input.data().iter().zip(opposing.data().iter())
+            .map(|(&v, &p)| if v != p { v } else { 0 })
+            .collect();
+        Some(Vector::from_data(data))
     }
 
     fn recalibrate(&mut self) {
@@ -1041,13 +1028,82 @@ impl ThoughtJournaler {
         let buy_proto = self.buy_good.threshold();
         let sell_proto = self.sell_good.threshold();
 
-        // Derive recognition gate from prototype entropy
         let buy_entropy = Primitives::entropy(&buy_proto);
         let sell_entropy = Primitives::entropy(&sell_proto);
         let min_entropy = buy_entropy.min(sell_entropy).max(0.01);
         let d_eff = self.dims as f64 * min_entropy;
         let new_floor = 1.0 / d_eff.sqrt();
         self.noise_floor = self.noise_floor.max(new_floor);
+
+        let source_buy_f64 = self.buy_good.normalize_f64();
+        let source_sell_f64 = self.sell_good.normalize_f64();
+
+        if self.codebook_vecs.is_empty() { return; }
+
+        let buy_atoms = invert_f64(&source_buy_f64, &self.codebook_vecs, 20);
+        let sell_atoms = invert_f64(&source_sell_f64, &self.codebook_vecs, 20);
+
+        let atom_buy_sims: HashMap<usize, f64> = buy_atoms.into_iter().collect();
+        let atom_sell_sims: HashMap<usize, f64> = sell_atoms.into_iter().collect();
+
+        let all_atoms: HashSet<usize> = atom_buy_sims.keys()
+            .chain(atom_sell_sims.keys()).copied().collect();
+
+        let mut new_buy_atoms: Vec<DiscAtom> = Vec::new();
+        let mut new_sell_atoms: Vec<DiscAtom> = Vec::new();
+
+        for idx in all_atoms {
+            let bs = atom_buy_sims.get(&idx).copied().unwrap_or(0.0);
+            let ss = atom_sell_sims.get(&idx).copied().unwrap_or(0.0);
+            let diff = bs - ss;
+            let label = if idx < self.codebook_labels.len() {
+                self.codebook_labels[idx].clone()
+            } else {
+                format!("atom-{}", idx)
+            };
+            if diff > 0.0 {
+                new_buy_atoms.push(DiscAtom {
+                    atom_vec: self.codebook_vecs[idx].clone(),
+                    weight: diff,
+                    label,
+                });
+            } else if diff < 0.0 {
+                new_sell_atoms.push(DiscAtom {
+                    atom_vec: self.codebook_vecs[idx].clone(),
+                    weight: diff.abs(),
+                    label,
+                });
+            }
+        }
+
+        self.disc_buy_atoms = new_buy_atoms;
+        self.disc_sell_atoms = new_sell_atoms;
+
+        // Build capped projection list: top atoms covering 90% of total weight
+        let mut all_proj: Vec<(&Vector, f64)> = self.disc_buy_atoms.iter()
+            .chain(self.disc_sell_atoms.iter())
+            .map(|a| (&a.atom_vec, a.weight))
+            .collect();
+        all_proj.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+        let total_w: f64 = all_proj.iter().map(|(_, w)| w).sum();
+        let target_w = total_w * 0.90;
+        let mut cum_w = 0.0;
+        let mut kept = 0usize;
+        self.disc_proj_atoms = Vec::new();
+        for (vec, w) in &all_proj {
+            if cum_w >= target_w { break; }
+            self.disc_proj_atoms.push(DiscAtom {
+                atom_vec: (*vec).clone(),
+                weight: *w,
+                label: String::new(),
+            });
+            cum_w += w;
+            kept += 1;
+        }
+
+        eprintln!("      tht weight dist: total={:.4} | proj={} of {} atoms",
+            total_w, kept, all_proj.len());
     }
 }
 

@@ -1,4 +1,4 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -6,7 +6,7 @@ use std::time::Instant;
 use clap::Parser;
 use rayon::prelude::*;
 use rusqlite::{Connection, params};
-use holon::{Accumulator, AttendMode, Primitives, Similarity, VectorManager, Vector};
+use holon::{Accumulator, Primitives, VectorManager, Vector};
 
 use btc_walk::db::load_candles;
 use btc_walk::thought::{
@@ -116,22 +116,6 @@ impl fmt::Display for Outcome {
 
 // ─── Algebra helpers ────────────────────────────────────────────────────────
 
-fn extract_features(vec: &Vector, reference: &Vector, use_attend: bool) -> Vector {
-    if use_attend {
-        Primitives::attend(vec, reference, 1.0, AttendMode::Soft)
-    } else {
-        Primitives::resonance(vec, reference)
-    }
-}
-
-fn amplify_signal(signal: &Vector, background: &Vector, use_grover: bool) -> Vector {
-    if use_grover {
-        Primitives::grover_amplify(signal, background, 1)
-    } else {
-        Primitives::amplify(signal, background, 1.0)
-    }
-}
-
 /// Cosine similarity between two float vectors.
 fn cosine_f64(a: &[f64], b: &[f64]) -> f64 {
     assert_eq!(a.len(), b.len());
@@ -164,84 +148,151 @@ fn cosine_f64_vs_vec(proto: &[f64], vec: &Vector) -> f64 {
     if denom < 1e-10 { 0.0 } else { dot / denom }
 }
 
+/// Float-space invert: cosine of continuous f64 proto against bipolar codebook atoms.
+/// Threshold is 1/sqrt(D) — the expected absolute cosine of a random bipolar vector
+/// against any fixed vector in D dimensions. Atoms above this are statistically present.
+fn invert_f64(proto: &[f64], codebook: &[Vector], top_k: usize) -> Vec<(usize, f64)> {
+    let norm_p: f64 = proto.iter().map(|x| x * x).sum::<f64>().sqrt();
+    if norm_p < 1e-10 { return vec![]; }
+    let threshold = 1.0 / (proto.len() as f64).sqrt();
+
+    let mut results: Vec<(usize, f64)> = codebook.iter().enumerate()
+        .map(|(i, atom)| {
+            let dot: f64 = proto.iter().zip(atom.data().iter())
+                .map(|(&p, &a)| p * (a as f64)).sum();
+            let norm_a = (atom.dimensions() as f64).sqrt();
+            (i, dot / (norm_p * norm_a))
+        })
+        .filter(|(_, sim)| *sim > threshold)
+        .collect();
+    results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    results.truncate(top_k);
+    results
+}
+
+/// Float-space column unbinding: multiply each f64 dim by position's +1/-1.
+/// Bipolar bind is self-inverse, so this extracts column content from a continuous prototype.
+fn unbind_f64(pos: &Vector, proto_f64: &[f64]) -> Vec<f64> {
+    proto_f64.iter().zip(pos.data().iter())
+        .map(|(&p, &v)| p * (v as f64))
+        .collect()
+}
+
+/// Cosine between two bipolar vectors using integer dot product.
+/// Both vectors must be bipolar (elements in {-1, 0, 1}).
+/// cosine = dot / (norm_a * norm_b), where norm = sqrt(nnz) for bipolar.
+#[inline]
+fn bipolar_cosine(a: &[i8], b: &[i8]) -> f64 {
+    let mut dot = 0i64;
+    let mut nnz_a = 0i64;
+    let mut nnz_b = 0i64;
+    for (&x, &y) in a.iter().zip(b.iter()) {
+        dot += (x as i64) * (y as i64);
+        nnz_a += (x != 0) as i64;
+        nnz_b += (y != 0) as i64;
+    }
+    let denom = ((nnz_a * nnz_b) as f64).sqrt();
+    if denom < 1.0 { 0.0 } else { dot as f64 / denom }
+}
+
+/// Coverage-based prediction for visual disc atoms.
+fn vis_disc_coverage(input: &Vector, atoms: &[VisDiscAtom], noise_floor: f64) -> (f64, usize, usize) {
+    if atoms.is_empty() { return (0.0, 0, 0); }
+    let total_weight: f64 = atoms.iter().map(|a| a.weight).sum();
+    if total_weight < 1e-10 { return (0.0, 0, atoms.len()); }
+    let input_data = input.data();
+    let mut found_weight = 0.0_f64;
+    let mut found_count = 0usize;
+    for a in atoms {
+        if bipolar_cosine(input_data, a.atom_vec.data()) > noise_floor {
+            found_weight += a.weight;
+            found_count += 1;
+        }
+    }
+    (found_weight / total_weight, found_count, atoms.len())
+}
+
 // ─── Prediction Detail ──────────────────────────────────────────────────────
 
 #[derive(Clone)]
 struct PredictionDetail {
     prediction: Option<Outcome>,
-    conviction: f64,
-    max_sim: f64,
+    buy_coverage: f64,
+    sell_coverage: f64,
+    buy_atoms_found: usize,
+    buy_atoms_total: usize,
+    sell_atoms_found: usize,
+    sell_atoms_total: usize,
     buy_sim: f64,
     sell_sim: f64,
-    clean_buy_sim: f64,
-    clean_sell_sim: f64,
-    input_sparsity: f64,
-    buy_sparsity: f64,
-    sell_sparsity: f64,
-    buy_confuser_sim: f64,
-    sell_confuser_sim: f64,
-    noise_sim: f64,
-    noise_gated: bool,
-    confuser_flipped: bool,
 }
 
 impl Default for PredictionDetail {
     fn default() -> Self {
         Self {
             prediction: None,
-            conviction: 0.0,
-            max_sim: 0.0,
+            buy_coverage: 0.0,
+            sell_coverage: 0.0,
+            buy_atoms_found: 0,
+            buy_atoms_total: 0,
+            sell_atoms_found: 0,
+            sell_atoms_total: 0,
             buy_sim: 0.0,
             sell_sim: 0.0,
-            clean_buy_sim: 0.0,
-            clean_sell_sim: 0.0,
-            input_sparsity: 0.0,
-            buy_sparsity: 0.0,
-            sell_sparsity: 0.0,
-            buy_confuser_sim: 0.0,
-            sell_confuser_sim: 0.0,
-            noise_sim: 0.0,
-            noise_gated: false,
-            confuser_flipped: false,
         }
     }
 }
 
 // ─── Journaler ──────────────────────────────────────────────────────────────
 
+struct VisDiscAtom {
+    atom_vec: Vector,
+    weight: f64,
+    label: String,
+}
+
 struct Journaler {
     buy_good: Accumulator,
     sell_good: Accumulator,
-    buy_confuser: Accumulator,
-    sell_confuser: Accumulator,
-    noise_accum: Accumulator,
     updates: usize,
     recalib_interval: usize,
-    use_grover: bool,
-    use_attend: bool,
     dims: usize,
     noise_floor: f64,
+    codebook_vecs: Vec<Vector>,
+    codebook_labels: Vec<String>,
+    col_positions: Vec<Vector>,
+    disc_buy_atoms: Vec<VisDiscAtom>,
+    disc_sell_atoms: Vec<VisDiscAtom>,
+    disc_proj_atoms: Vec<VisDiscAtom>,
+    proj_used: usize,
+    proj_skipped: usize,
 }
 
 impl Journaler {
-    fn new(dims: usize, recalib_interval: usize, use_grover: bool, use_attend: bool) -> Self {
-        // 1/sqrt(D): standard deviation of cosine similarity between random
-        // vectors in D dimensions. Below this, similarity is indistinguishable
-        // from noise.
+    fn new(dims: usize, recalib_interval: usize, _use_grover: bool, _use_attend: bool) -> Self {
         let noise_floor = 1.0 / (dims as f64).sqrt();
         Self {
             buy_good: Accumulator::new(dims),
             sell_good: Accumulator::new(dims),
-            buy_confuser: Accumulator::new(dims),
-            sell_confuser: Accumulator::new(dims),
-            noise_accum: Accumulator::new(dims),
             updates: 0,
             recalib_interval,
-            use_grover,
-            use_attend,
             dims,
             noise_floor,
+            codebook_vecs: Vec::new(),
+            codebook_labels: Vec::new(),
+            col_positions: Vec::new(),
+            disc_buy_atoms: Vec::new(),
+            disc_sell_atoms: Vec::new(),
+            disc_proj_atoms: Vec::new(),
+            proj_used: 0,
+            proj_skipped: 0,
         }
+    }
+
+    fn set_visual_codebook(&mut self, codebook_vecs: Vec<Vector>, codebook_labels: Vec<String>, col_positions: Vec<Vector>) {
+        self.codebook_vecs = codebook_vecs;
+        self.codebook_labels = codebook_labels;
+        self.col_positions = col_positions;
     }
 
     fn recognition_threshold(&self) -> f64 {
@@ -257,228 +308,82 @@ impl Journaler {
             return PredictionDetail::default();
         }
 
-        // Raw cosine prediction — prototypes are already clean from
-        // noise-stripped + contrastive learning. No stripping in prediction.
-        let buy_f64 = self.buy_good.normalize_f64();
-        let sell_f64 = self.sell_good.normalize_f64();
+        let has_buy = !self.disc_buy_atoms.is_empty();
+        let has_sell = !self.disc_sell_atoms.is_empty();
+        if !has_buy && !has_sell {
+            return PredictionDetail::default();
+        }
 
-        let buy_sim = cosine_f64_vs_vec(&buy_f64, vec);
-        let sell_sim = cosine_f64_vs_vec(&sell_f64, vec);
+        let (buy_cov, buy_found, buy_total) = vis_disc_coverage(vec, &self.disc_buy_atoms, self.noise_floor);
+        let (sell_cov, sell_found, sell_total) = vis_disc_coverage(vec, &self.disc_sell_atoms, self.noise_floor);
 
-        let is_buy = buy_sim > sell_sim;
-        let conviction = (buy_sim - sell_sim).abs();
-        let (clean_buy_sim, clean_sell_sim, input_sparsity, buy_sparsity, sell_sparsity) =
-            (buy_sim, sell_sim, 1.0, 1.0, 1.0);
-
-        let buy_confuser_sim = if self.buy_confuser.count() > 0 {
-            cosine_f64_vs_vec(&self.buy_confuser.normalize_f64(), vec)
+        let prediction = if has_buy && has_sell {
+            if buy_cov > sell_cov { Some(Outcome::Buy) } else { Some(Outcome::Sell) }
+        } else if has_buy && buy_cov > 0.0 {
+            Some(Outcome::Buy)
+        } else if has_sell && sell_cov > 0.0 {
+            Some(Outcome::Sell)
         } else {
-            -1.0
+            None
         };
-        let sell_confuser_sim = if self.sell_confuser.count() > 0 {
-            cosine_f64_vs_vec(&self.sell_confuser.normalize_f64(), vec)
-        } else {
-            -1.0
-        };
-
-        let noise_sim = if self.noise_accum.count() > 0 {
-            cosine_f64_vs_vec(&self.noise_accum.normalize_f64(), vec)
-        } else {
-            -1.0
-        };
-
-        let prediction = if is_buy { Some(Outcome::Buy) } else { Some(Outcome::Sell) };
 
         PredictionDetail {
             prediction,
-            conviction,
-            max_sim: buy_sim.max(sell_sim),
-            buy_sim,
-            sell_sim,
-            clean_buy_sim,
-            clean_sell_sim,
-            input_sparsity,
-            buy_sparsity,
-            sell_sparsity,
-            buy_confuser_sim,
-            sell_confuser_sim,
-            noise_sim,
-            noise_gated: false,
-            confuser_flipped: false,
+            buy_coverage: buy_cov,
+            sell_coverage: sell_cov,
+            buy_atoms_found: buy_found,
+            buy_atoms_total: buy_total,
+            sell_atoms_found: sell_found,
+            sell_atoms_total: sell_total,
+            buy_sim: buy_cov,
+            sell_sim: sell_cov,
         }
+    }
+
+    fn decay_all(&mut self, decay: f64) {
+        self.buy_good.decay(decay);
+        self.sell_good.decay(decay);
     }
 
     fn observe(
         &mut self,
         vec: &Vector,
         outcome: Outcome,
-        prediction: Option<Outcome>,
-        _conviction: f64,
-        decay: f64,
-        reward_weight: f64,
-        correction_weight: f64,
         signal_weight: f64,
     ) {
-        let use_grover = self.use_grover;
-        let use_attend = self.use_attend;
+        if outcome == Outcome::Noise { return; }
 
-        // Noise always gets learned (it's its own category)
-        if outcome == Outcome::Noise {
-            self.noise_accum.decay(decay);
-            self.noise_accum.add_weighted(vec, signal_weight);
-            return;
-        }
-
-        // Count updates and recalibrate even on rejected samples
-        // (breaks deadlock where frozen prototypes prevent recalibration)
         self.updates += 1;
         if self.updates % self.recalib_interval == 0 {
             self.recalibrate();
         }
 
-        // Adaptive recognition gate: exploration rate scales with prototype convergence.
-        // When prototypes are blurred (cos≈1), gate is unreliable — let more through.
-        // When prototypes are sharp (cos≈0), gate is meaningful — be selective.
-        let cos_buy_sell = if self.is_ready() {
-            let buy_f64 = self.buy_good.normalize_f64();
-            let sell_f64 = self.sell_good.normalize_f64();
-            let cos_bs = cosine_f64(&buy_f64, &sell_f64);
+        let learn_vec = self.project_to_disc(vec);
+        let target = learn_vec.as_ref().unwrap_or(vec);
+        if learn_vec.is_some() { self.proj_used += 1; } else { self.proj_skipped += 1; }
 
-            let buy_sim = cosine_f64_vs_vec(&buy_f64, vec);
-            let sell_sim = cosine_f64_vs_vec(&sell_f64, vec);
-            if buy_sim.max(sell_sim) < self.recognition_threshold() {
-                let explore_interval = (1.0 / cos_bs.clamp(0.01, 1.0)) as usize;
-                if self.updates % explore_interval.max(1) != 0 {
-                    return;
-                }
-            }
-            cos_bs
-        } else {
-            0.0
-        };
-
-        // Adaptive decay + separation gate (parity with thought system)
-        let separation = 1.0 - cos_buy_sell;
-        let effective_decay = 1.0 - (1.0 - decay) * separation;
-        let sep_gate = separation.clamp(0.05, 1.0);
-
-        // L1: Strip noise/background before accumulating.
-        let noise_stripped = if self.noise_accum.count() > 0 {
-            let noise_proto = self.noise_accum.threshold();
-            Some(Primitives::negate(vec, &noise_proto))
-        } else {
-            None
-        };
-        let base_vec = noise_stripped.as_ref().unwrap_or(vec);
-
-        // L2: Proportional contrastive stripping — strip rate equals cosine.
-        // cos=0.99 → strip 99%. cos=0.5 → strip 50%. cos≤0 → never strip.
-        let strip_rate = cos_buy_sell.clamp(0.0, 1.0);
-        let strip_interval = if strip_rate > 0.01 {
-            (1.0 / strip_rate) as usize
-        } else {
-            usize::MAX
-        };
-        let do_contrastive = self.is_ready()
-            && self.updates % strip_interval.max(1) == 0;
         match outcome {
-            Outcome::Buy => {
-                let add_vec = if do_contrastive {
-                    let sell_proto = self.sell_good.threshold();
-                    Primitives::negate(base_vec, &sell_proto)
-                } else {
-                    base_vec.clone()
-                };
-                self.buy_good.decay(effective_decay);
-                self.sell_good.decay(effective_decay);
-                self.buy_good.add_weighted(&add_vec, sep_gate * signal_weight);
-            }
-            Outcome::Sell => {
-                let add_vec = if do_contrastive {
-                    let buy_proto = self.buy_good.threshold();
-                    Primitives::negate(base_vec, &buy_proto)
-                } else {
-                    base_vec.clone()
-                };
-                self.buy_good.decay(effective_decay);
-                self.sell_good.decay(effective_decay);
-                self.sell_good.add_weighted(&add_vec, sep_gate * signal_weight);
-            }
+            Outcome::Buy => self.buy_good.add_weighted(target, signal_weight),
+            Outcome::Sell => self.sell_good.add_weighted(target, signal_weight),
             _ => {}
         }
+    }
 
-        // Feed confuser if journaler predicted and was wrong
-        if let Some(pred) = prediction {
-            if pred != outcome && pred != Outcome::Noise {
-                match pred {
-                    Outcome::Buy => {
-                        self.buy_confuser.decay(effective_decay);
-                        self.buy_confuser.add_weighted(vec, signal_weight);
-                    }
-                    Outcome::Sell => {
-                        self.sell_confuser.decay(effective_decay);
-                        self.sell_confuser.add_weighted(vec, signal_weight);
-                    }
-                    _ => {}
-                }
+    fn project_to_disc(&self, input: &Vector) -> Option<Vector> {
+        if self.disc_proj_atoms.is_empty() { return None; }
+        let input_data = input.data();
+        let mut found: Vec<&Vector> = Vec::new();
+        for atom in &self.disc_proj_atoms {
+            if bipolar_cosine(input_data, atom.atom_vec.data()) > self.noise_floor {
+                found.push(&atom.atom_vec);
             }
         }
-
-        // Algebraic correction gated by prototype separation.
-        // When buy and sell prototypes converge (trending market),
-        // corrections based on their relationship are noise — scale down.
-        if let Some(pred) = prediction {
-            if pred != Outcome::Noise && self.is_ready() {
-                // Float cosine for separation gate (magnitude-aware)
-                let buy_f64 = self.buy_good.normalize_f64();
-                let sell_f64 = self.sell_good.normalize_f64();
-                let separation = 1.0 - cosine_f64(&buy_f64, &sell_f64);
-                let sep_gate = separation.clamp(0.05, 1.0);
-
-                // Bipolar prototypes for algebraic ops
-                let buy_proto = self.buy_good.threshold();
-                let sell_proto = self.sell_good.threshold();
-                let reward_weight = reward_weight * sep_gate;
-                let correction_weight = correction_weight * sep_gate;
-
-                let pred_matches = (pred == Outcome::Buy && outcome == Outcome::Buy)
-                    || (pred == Outcome::Sell && outcome == Outcome::Sell);
-
-                if pred_matches {
-                    let (correct_proto, opposing_proto) = match outcome {
-                        Outcome::Buy => (&buy_proto, &sell_proto),
-                        _ => (&sell_proto, &buy_proto),
-                    };
-                    let aligned = extract_features(vec, correct_proto, use_attend);
-                    let reinforced = amplify_signal(&aligned, opposing_proto, use_grover);
-                    let novelty = 1.0 - Similarity::cosine(&reinforced, vec).abs();
-                    match outcome {
-                        Outcome::Buy => self.buy_good.add_weighted(&reinforced, reward_weight * novelty * signal_weight),
-                        _ => self.sell_good.add_weighted(&reinforced, reward_weight * novelty * signal_weight),
-                    }
-                } else {
-                    let wrong_proto = match outcome {
-                        Outcome::Buy => &sell_proto,
-                        _ => &buy_proto,
-                    };
-                    let misleading = extract_features(vec, wrong_proto, use_attend);
-                    let unique = Primitives::negate(vec, &misleading);
-                    let amplified = amplify_signal(&unique, &misleading, true);
-                    let novelty = 1.0 - Similarity::cosine(&amplified, vec).abs();
-                    match outcome {
-                        Outcome::Buy => self.buy_good.add_weighted(&amplified, correction_weight * novelty * signal_weight),
-                        _ => self.sell_good.add_weighted(&amplified, correction_weight * novelty * signal_weight),
-                    }
-                }
-            }
-        }
-
+        if found.is_empty() { return None; }
+        Some(Primitives::bundle(&found))
     }
 
     fn recalibrate(&mut self) {
-        if !self.is_ready() {
-            return;
-        }
+        if !self.is_ready() { return; }
         let buy_proto = self.buy_good.threshold();
         let sell_proto = self.sell_good.threshold();
 
@@ -487,6 +392,101 @@ impl Journaler {
         let min_entropy = buy_entropy.min(sell_entropy).max(0.01);
         let d_eff = self.dims as f64 * min_entropy;
         self.noise_floor = 1.0 / d_eff.sqrt();
+
+        let source_buy_f64 = self.buy_good.normalize_f64();
+        let source_sell_f64 = self.sell_good.normalize_f64();
+
+        if self.codebook_vecs.is_empty() || self.col_positions.is_empty() { return; }
+
+        let mut atom_buy_sims: HashMap<(usize, usize), f64> = HashMap::new();
+        let mut atom_sell_sims: HashMap<(usize, usize), f64> = HashMap::new();
+
+        for (ci, col_pos) in self.col_positions.iter().enumerate() {
+            let buy_col = unbind_f64(col_pos, &source_buy_f64);
+            let sell_col = unbind_f64(col_pos, &source_sell_f64);
+
+            for (idx, sim) in invert_f64(&buy_col, &self.codebook_vecs, 20) {
+                atom_buy_sims.insert((ci, idx), sim);
+            }
+            for (idx, sim) in invert_f64(&sell_col, &self.codebook_vecs, 20) {
+                atom_sell_sims.insert((ci, idx), sim);
+            }
+        }
+
+        let all_keys: HashSet<(usize, usize)> = atom_buy_sims.keys()
+            .chain(atom_sell_sims.keys()).copied().collect();
+
+        let mut new_buy_atoms: Vec<VisDiscAtom> = Vec::new();
+        let mut new_sell_atoms: Vec<VisDiscAtom> = Vec::new();
+
+        for &(ci, atom_idx) in &all_keys {
+            let bs = atom_buy_sims.get(&(ci, atom_idx)).copied().unwrap_or(0.0);
+            let ss = atom_sell_sims.get(&(ci, atom_idx)).copied().unwrap_or(0.0);
+            let diff = bs - ss;
+            let label_base = if atom_idx < self.codebook_labels.len() {
+                &self.codebook_labels[atom_idx]
+            } else {
+                "?"
+            };
+            let label = format!("c{}-{}", ci, label_base);
+
+            // Rebind column position into atom vec so it matches input structure
+            let col_data = self.col_positions[ci].data();
+            let atom_data = self.codebook_vecs[atom_idx].data();
+            let bound: Vec<i8> = col_data.iter().zip(atom_data.iter())
+                .map(|(&c, &a)| if c * a > 0 { 1i8 } else { -1i8 })
+                .collect();
+            let bound_vec = Vector::from_data(bound);
+
+            if diff > 0.0 {
+                new_buy_atoms.push(VisDiscAtom { atom_vec: bound_vec, weight: diff, label });
+            } else if diff < 0.0 {
+                new_sell_atoms.push(VisDiscAtom { atom_vec: bound_vec, weight: diff.abs(), label });
+            }
+        }
+
+        self.disc_buy_atoms = new_buy_atoms;
+        self.disc_sell_atoms = new_sell_atoms;
+
+        // Build capped projection list: top atoms by weight covering 90% of total weight
+        let mut all_proj: Vec<(&Vector, f64)> = self.disc_buy_atoms.iter()
+            .chain(self.disc_sell_atoms.iter())
+            .map(|a| (&a.atom_vec, a.weight))
+            .collect();
+        all_proj.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+        let total_w: f64 = all_proj.iter().map(|(_, w)| w).sum();
+        let target_w = total_w * 0.90;
+        let mut cum_w = 0.0;
+        let mut kept = 0usize;
+        self.disc_proj_atoms = Vec::new();
+        for (vec, w) in &all_proj {
+            if cum_w >= target_w { break; }
+            self.disc_proj_atoms.push(VisDiscAtom {
+                atom_vec: (*vec).clone(),
+                weight: *w,
+                label: String::new(),
+            });
+            cum_w += w;
+            kept += 1;
+        }
+
+        // Distribution diagnostic: how many atoms for 50/80/90/95%
+        let pcts = [0.50, 0.80, 0.90, 0.95];
+        let mut counts = [0usize; 4];
+        cum_w = 0.0;
+        for (pi, &frac) in pcts.iter().enumerate() {
+            let target = total_w * frac;
+            while cum_w < target && counts[pi] < all_proj.len() {
+                cum_w += all_proj[counts[pi]].1;
+                counts[pi] += 1;
+            }
+            if pi + 1 < pcts.len() {
+                counts[pi + 1] = counts[pi];
+            }
+        }
+        eprintln!("      vis weight dist: total={:.2} | 50%={} 80%={} 90%={} 95%={} of {} atoms → proj={}",
+            total_w, counts[0], counts[1], counts[2], counts[3], all_proj.len(), kept);
     }
 }
 
@@ -658,51 +658,25 @@ struct TradeAction {
     position_frac: f64,
 }
 
+fn compute_signal_weight(abs_move: f64, move_sum: &mut f64, move_count: &mut usize, learning_rate: f64) -> f64 {
+    *move_sum += abs_move;
+    *move_count += 1;
+    let mean_move = *move_sum / *move_count as f64;
+    (abs_move / mean_move) * learning_rate
+}
+
 struct PendingEntry {
     candle_idx: usize,
     vec: Vector,
     journaler_prediction: Option<Outcome>,
-    conviction: f64,
-    max_sim: f64,
     trade_action: Option<TradeAction>,
     thought_vec: Vector,
     thought_prediction: Option<thought::Outcome>,
-    thought_conviction: f64,
+    thought_detail: thought::ThoughtPrediction,
     vis_detail: PredictionDetail,
-}
-
-struct Resolution {
-    outcome: Outcome,
-    pct_change: f64,
-}
-
-/// Scan candles from entry+1 through entry+horizon for the first threshold hit.
-/// Exit at the first candle that crosses the move threshold in either direction.
-/// If neither threshold is hit, label as Noise.
-fn resolve_outcome(
-    candles: &[btc_walk::db::Candle],
-    entry_idx: usize,
-    horizon: usize,
-    move_threshold: f64,
-    total_candles: usize,
-) -> Option<Resolution> {
-    let max_idx = (entry_idx + horizon).min(total_candles - 1);
-    if entry_idx + 1 > max_idx {
-        return None;
-    }
-
-    let entry_price = candles[entry_idx].close;
-
-    for k in 1..=(max_idx - entry_idx) {
-        let pct = (candles[entry_idx + k].close - entry_price) / entry_price;
-        if pct > move_threshold {
-            return Some(Resolution { outcome: Outcome::Buy, pct_change: pct });
-        } else if pct < -move_threshold {
-            return Some(Resolution { outcome: Outcome::Sell, pct_change: pct });
-        }
-    }
-
-    Some(Resolution { outcome: Outcome::Noise, pct_change: 0.0 })
+    learn_count: usize,
+    first_outcome: Option<Outcome>,
+    peak_pct: f64,
 }
 
 // ─── Meta Orchestrator ───────────────────────────────────────────────────────
@@ -864,6 +838,7 @@ fn main() {
     let mut thought_streams = IndicatorStreams::new(args.dims, args.window + 48);
     let mut thought_journaler = ThoughtJournaler::new(args.dims, args.recalib_interval);
     let fact_codebook = FactCodebook::build(thought_encoder.vocab());
+    thought_journaler.set_codebook(&fact_codebook);
     eprintln!("  Thought system ready ({} fact codebook entries).", fact_codebook.labels.len());
 
     // Initialize run database for structured logging
@@ -891,51 +866,54 @@ fn main() {
             step              INTEGER PRIMARY KEY,
             candle_idx        INTEGER,
             timestamp         TEXT,
-            -- visual prediction detail (raw)
+            -- visual prediction
             vis_pred          TEXT,
+            vis_buy_coverage  REAL,
+            vis_sell_coverage REAL,
+            vis_buy_atoms_found  INTEGER,
+            vis_buy_atoms_total  INTEGER,
+            vis_sell_atoms_found INTEGER,
+            vis_sell_atoms_total INTEGER,
             vis_buy_sim       REAL,
             vis_sell_sim      REAL,
-            -- visual cleaned similarities (after noise negate)
-            vis_clean_buy_sim REAL,
-            vis_clean_sell_sim REAL,
-            vis_input_sparsity REAL,
-            vis_buy_sparsity  REAL,
-            vis_sell_sparsity REAL,
-            -- visual other
-            vis_buy_conf_sim  REAL,
-            vis_sell_conf_sim REAL,
-            vis_noise_sim     REAL,
-            vis_conviction    REAL,
-            vis_noise_gated   INTEGER,
-            vis_confuser_flipped INTEGER,
-            -- thought prediction detail
+            -- thought prediction
             thought_pred      TEXT,
-            thought_conviction REAL,
+            thought_buy_coverage  REAL,
+            thought_sell_coverage REAL,
+            thought_buy_atoms_found  INTEGER,
+            thought_buy_atoms_total  INTEGER,
+            thought_sell_atoms_found INTEGER,
+            thought_sell_atoms_total INTEGER,
+            thought_buy_sim   REAL,
+            thought_sell_sim  REAL,
             -- agreement
             agree             INTEGER,
             -- outcome (filled when resolved)
             actual            TEXT,
             -- trader
             action            TEXT,
-            equity            REAL
+            equity            REAL,
+            -- event-driven resolution
+            learn_count       INTEGER,
+            peak_pct          REAL
         );
 
         CREATE TABLE IF NOT EXISTS recalib_log (
             step          INTEGER,
             system        TEXT,
             cos_buy_sell  REAL,
-            cos_buy_noise REAL,
-            cos_sell_noise REAL,
             noise_floor   REAL,
             buy_count     INTEGER,
             sell_count    INTEGER,
-            confuser_buy_count  INTEGER,
-            confuser_sell_count INTEGER,
             buy_purity    REAL,
             sell_purity   REAL,
-            noise_purity  REAL,
-            buy_conf_purity  REAL,
-            sell_conf_purity REAL
+            disc_buy_atoms   INTEGER,
+            disc_sell_atoms  INTEGER,
+            disc_buy_total_weight REAL,
+            disc_sell_total_weight REAL,
+            proj_used     INTEGER,
+            proj_skipped  INTEGER,
+            proj_atoms    INTEGER
         );
     ").expect("failed to create run DB tables");
 
@@ -962,6 +940,12 @@ fn main() {
         args.use_grover,
         args.use_attend,
     );
+    {
+        let (vis_cb_vecs, vis_cb_labels) = visual_cache.build_codebook();
+        let col_pos = visual_cache.col_positions().to_vec();
+        eprintln!("  Visual codebook: {} cell atoms, {} columns", vis_cb_vecs.len(), col_pos.len());
+        journaler.set_visual_codebook(vis_cb_vecs, vis_cb_labels, col_pos);
+    }
     let mut trader = Trader::new(args.initial_equity, args.observe_period);
 
     // Journaler accuracy tracking (visual)
@@ -1077,11 +1061,10 @@ fn main() {
             let rest_start = std::time::Instant::now();
 
             let j_pred = vis_detail.prediction;
-            let conviction = vis_detail.conviction;
-            let j_max_sim = vis_detail.max_sim;
+            let conviction = (vis_detail.buy_coverage - vis_detail.sell_coverage).abs();
 
             let t_outcome = t_pred.outcome;
-            let t_conviction = t_pred.conviction;
+            let t_conviction = (t_pred.buy_coverage - t_pred.sell_coverage).abs();
             let t_coherence = t_pred.coherence;
 
             // Rolling accuracies for weighted mode
@@ -1133,78 +1116,65 @@ fn main() {
                 candle_idx: i,
                 vec,
                 journaler_prediction: j_pred,
-                conviction,
-                max_sim: j_max_sim,
                 trade_action,
                 thought_vec: thought_result.thought,
                 thought_prediction: t_outcome,
-                thought_conviction: t_conviction,
+                thought_detail: t_pred,
                 vis_detail: vis_detail.clone(),
+                learn_count: 0,
+                first_outcome: None,
+                peak_pct: 0.0,
             });
 
-            // Resolve oldest entry when buffer exceeds horizon
-            if pending.len() > args.horizon {
-                let entry = pending.pop_front().unwrap();
-                let entry_candle = &candles[entry.candle_idx];
+            // Decay once per candle (decoupled from learn event frequency)
+            journaler.decay_all(args.decay);
+            thought_journaler.decay_all(args.decay);
 
-                if let Some(res) = resolve_outcome(&candles, entry.candle_idx, args.horizon, args.move_threshold, total_candles) {
-                    // Normalized signal weight: move magnitude relative to running mean.
-                    // Average weight stays ~1.0 for buy/sell, isolating relative signal strength.
-                    // Noise (pct_change=0) gets learning_rate directly (no signal weighting).
-                    let abs_move = res.pct_change.abs();
-                    let sw = if abs_move > 0.0 {
-                        move_sum += abs_move;
-                        move_count += 1;
-                        let mean_move = move_sum / move_count as f64;
-                        (abs_move / mean_move) * args.learning_rate
-                    } else {
-                        args.learning_rate
-                    };
+            // Phase 1: Event-driven learning — scan all pending entries
+            let current_price = candles[i].close;
+            for entry in pending.iter_mut() {
+                let entry_price = candles[entry.candle_idx].close;
+                let pct = (current_price - entry_price) / entry_price;
+                let abs_pct = pct.abs();
 
-                    // Visual journaler observes
-                    journaler.observe(
-                        &entry.vec,
-                        res.outcome,
-                        entry.journaler_prediction,
-                        entry.conviction,
-                        args.decay,
-                        args.reward_weight,
-                        args.correction_weight,
-                        sw,
-                    );
+                if abs_pct > entry.peak_pct { entry.peak_pct = abs_pct; }
 
-                    // Thought journaler observes
-                    let t_outcome_th = match res.outcome {
-                        Outcome::Buy => thought::Outcome::Buy,
-                        Outcome::Sell => thought::Outcome::Sell,
-                        Outcome::Noise => thought::Outcome::Noise,
-                    };
-                    thought_journaler.observe(
-                        &entry.thought_vec,
-                        t_outcome_th,
-                        entry.thought_prediction,
-                        entry.thought_conviction,
-                        args.decay,
-                        args.reward_weight,
-                        args.correction_weight,
-                        sw,
-                    );
+                if pct > args.move_threshold {
+                    let sw = compute_signal_weight(abs_pct, &mut move_sum, &mut move_count, args.learning_rate);
+                    journaler.observe(&entry.vec, Outcome::Buy, sw);
+                    thought_journaler.observe(&entry.thought_vec, thought::Outcome::Buy, sw);
+                    entry.learn_count += 1;
+                    if entry.first_outcome.is_none() { entry.first_outcome = Some(Outcome::Buy); }
+                } else if pct < -args.move_threshold {
+                    let sw = compute_signal_weight(abs_pct, &mut move_sum, &mut move_count, args.learning_rate);
+                    journaler.observe(&entry.vec, Outcome::Sell, sw);
+                    thought_journaler.observe(&entry.thought_vec, thought::Outcome::Sell, sw);
+                    entry.learn_count += 1;
+                    if entry.first_outcome.is_none() { entry.first_outcome = Some(Outcome::Sell); }
+                }
+            }
 
-                    match res.outcome {
+            // Phase 2: Expire entries that reached horizon age
+            while let Some(front) = pending.front() {
+                if i - front.candle_idx >= args.horizon {
+                    let entry = pending.pop_front().unwrap();
+                    let entry_candle = &candles[entry.candle_idx];
+
+                    let final_outcome = entry.first_outcome.unwrap_or(Outcome::Noise);
+
+                    match final_outcome {
                         Outcome::Noise => noise_count += 1,
                         _ => labeled_count += 1,
                     }
 
-                    // Visual accuracy tracking + sim bucket recording
+                    // Visual accuracy tracking (based on first crossing)
                     if let Some(pred) = entry.journaler_prediction {
-                        if res.outcome != Outcome::Noise {
-                            let is_correct = pred == res.outcome;
+                        if final_outcome != Outcome::Noise {
+                            let is_correct = pred == final_outcome;
                             j_total += 1;
                             if is_correct { j_correct += 1; }
                             j_rolling.push_back(is_correct);
-                            if j_rolling.len() > j_rolling_cap {
-                                j_rolling.pop_front();
-                            }
+                            if j_rolling.len() > j_rolling_cap { j_rolling.pop_front(); }
                             let ye = j_by_year.entry(entry_candle.year).or_insert((0, 0));
                             ye.1 += 1;
                             if is_correct { ye.0 += 1; }
@@ -1213,46 +1183,38 @@ fn main() {
 
                     // Thought accuracy tracking
                     if let Some(t_pred) = entry.thought_prediction {
-                        if res.outcome != Outcome::Noise {
-                            let t_is_correct = (t_pred == thought::Outcome::Buy && res.outcome == Outcome::Buy)
-                                || (t_pred == thought::Outcome::Sell && res.outcome == Outcome::Sell);
+                        if final_outcome != Outcome::Noise {
+                            let t_is_correct = (t_pred == thought::Outcome::Buy && final_outcome == Outcome::Buy)
+                                || (t_pred == thought::Outcome::Sell && final_outcome == Outcome::Sell);
                             tj_total += 1;
                             if t_is_correct { tj_correct += 1; }
                             tj_rolling.push_back(t_is_correct);
-                            if tj_rolling.len() > j_rolling_cap {
-                                tj_rolling.pop_front();
-                            }
+                            if tj_rolling.len() > j_rolling_cap { tj_rolling.pop_front(); }
                         }
                     }
 
-                    // Agreement accuracy: when both agree, was the prediction correct?
+                    // Agreement accuracy
                     if let (Some(vp), Some(tp)) = (entry.journaler_prediction, entry.thought_prediction) {
-                        if res.outcome != Outcome::Noise {
+                        if final_outcome != Outcome::Noise {
                             let v_buy = vp == Outcome::Buy;
                             let t_buy = tp == thought::Outcome::Buy;
                             if v_buy == t_buy {
-                                let correct = (v_buy && res.outcome == Outcome::Buy)
-                                    || (!v_buy && res.outcome == Outcome::Sell);
+                                let correct = (v_buy && final_outcome == Outcome::Buy)
+                                    || (!v_buy && final_outcome == Outcome::Sell);
                                 agree_rolling.push_back(correct);
-                                if agree_rolling.len() > j_rolling_cap {
-                                    agree_rolling.pop_front();
-                                }
+                                if agree_rolling.len() > j_rolling_cap { agree_rolling.pop_front(); }
                             }
                         }
                     }
 
                     if let Some(ref action) = entry.trade_action {
-                        if res.outcome != Outcome::Noise {
-                            trader.record_trade(
-                                res.pct_change,
-                                action.position_frac,
-                                action.direction,
-                                entry_candle.year,
-                            );
+                        if final_outcome != Outcome::Noise {
+                            let pct_for_trade = if final_outcome == Outcome::Buy { entry.peak_pct } else { -entry.peak_pct };
+                            trader.record_trade(pct_for_trade, action.position_frac, action.direction, entry_candle.year);
                         }
                     }
 
-                    // Log to run DB
+                    // Log to run DB at expiry
                     let vd = &entry.vis_detail;
                     let vis_pred_str = entry.journaler_prediction.map(|p| format!("{:?}", p));
                     let thought_pred_str = entry.thought_prediction.map(|p| format!("{:?}", p));
@@ -1265,26 +1227,33 @@ fn main() {
                         _ => None,
                     };
                     let action_str = entry.trade_action.as_ref().map(|a| format!("{:?}", a.direction));
-                    let actual_str = format!("{:?}", res.outcome);
+                    let actual_str = format!("{:?}", final_outcome);
 
+                    let td = &entry.thought_detail;
                     run_db.execute(
                         "INSERT INTO candle_log (step, candle_idx, timestamp,
-                            vis_pred, vis_buy_sim, vis_sell_sim,
-                            vis_clean_buy_sim, vis_clean_sell_sim,
-                            vis_input_sparsity, vis_buy_sparsity, vis_sell_sparsity,
-                            vis_buy_conf_sim, vis_sell_conf_sim,
-                            vis_noise_sim, vis_conviction, vis_noise_gated, vis_confuser_flipped,
-                            thought_pred, thought_conviction, agree, actual, action, equity)
-                         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23)",
+                            vis_pred, vis_buy_coverage, vis_sell_coverage,
+                            vis_buy_atoms_found, vis_buy_atoms_total,
+                            vis_sell_atoms_found, vis_sell_atoms_total,
+                            vis_buy_sim, vis_sell_sim,
+                            thought_pred, thought_buy_coverage, thought_sell_coverage,
+                            thought_buy_atoms_found, thought_buy_atoms_total,
+                            thought_sell_atoms_found, thought_sell_atoms_total,
+                            thought_buy_sim, thought_sell_sim,
+                            agree, actual, action, equity, learn_count, peak_pct)
+                         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27)",
                         params![
                             log_step, entry.candle_idx as i64, &entry_candle.ts,
-                            vis_pred_str, vd.buy_sim, vd.sell_sim,
-                            vd.clean_buy_sim, vd.clean_sell_sim,
-                            vd.input_sparsity, vd.buy_sparsity, vd.sell_sparsity,
-                            vd.buy_confuser_sim, vd.sell_confuser_sim,
-                            vd.noise_sim, vd.conviction, vd.noise_gated as i32, vd.confuser_flipped as i32,
-                            thought_pred_str, entry.thought_conviction,
+                            vis_pred_str, vd.buy_coverage, vd.sell_coverage,
+                            vd.buy_atoms_found as i64, vd.buy_atoms_total as i64,
+                            vd.sell_atoms_found as i64, vd.sell_atoms_total as i64,
+                            vd.buy_sim, vd.sell_sim,
+                            thought_pred_str, td.buy_coverage, td.sell_coverage,
+                            td.buy_atoms_found as i64, td.buy_atoms_total as i64,
+                            td.sell_atoms_found as i64, td.sell_atoms_total as i64,
+                            td.buy_sim, td.sell_sim,
                             agree.map(|a| a as i32), &actual_str, action_str, trader.equity,
+                            entry.learn_count as i64, entry.peak_pct,
                         ],
                     ).ok();
                     log_step += 1;
@@ -1295,6 +1264,8 @@ fn main() {
                     }
 
                     trader.tick_observe();
+                } else {
+                    break;
                 }
             }
 
@@ -1334,94 +1305,87 @@ fn main() {
                     trader.equity, trader_return, bnh_return,
                 );
 
-                // Disc diagnostics
-                if journaler.is_ready() {
-                    let bp = journaler.buy_good.normalize_f64();
-                    let sp = journaler.sell_good.normalize_f64();
-                    let disc_plus = bp.iter().zip(sp.iter()).filter(|(&b, &s)| b - s > 0.0).count();
-                    let disc_minus = bp.iter().zip(sp.iter()).filter(|(&b, &s)| b - s < 0.0).count();
-                    let disc_zero = bp.len() - disc_plus - disc_minus;
-                    eprintln!("    vis disc: +1={} -1={} 0={} (ratio={:.2})",
-                        disc_plus, disc_minus, disc_zero,
-                        disc_plus as f64 / (disc_plus + disc_minus).max(1) as f64);
-                }
-                if thought_journaler.is_ready() {
-                    let tbp = thought_journaler.buy_good.normalize_f64();
-                    let tsp = thought_journaler.sell_good.normalize_f64();
-                    let disc_plus = tbp.iter().zip(tsp.iter()).filter(|(&b, &s)| b - s > 0.0).count();
-                    let disc_minus = tbp.iter().zip(tsp.iter()).filter(|(&b, &s)| b - s < 0.0).count();
-                    let disc_zero = tbp.len() - disc_plus - disc_minus;
-                    eprintln!("    tht disc: +1={} -1={} 0={} (ratio={:.2})",
-                        disc_plus, disc_minus, disc_zero,
-                        disc_plus as f64 / (disc_plus + disc_minus).max(1) as f64);
+                // Disc atom diagnostics
+                {
+                    let vb_n = journaler.disc_buy_atoms.len();
+                    let vs_n = journaler.disc_sell_atoms.len();
+                    let vb_tw: f64 = journaler.disc_buy_atoms.iter().map(|a| a.weight).sum();
+                    let vs_tw: f64 = journaler.disc_sell_atoms.iter().map(|a| a.weight).sum();
+                    let tb_n = thought_journaler.disc_buy_atoms.len();
+                    let ts_n = thought_journaler.disc_sell_atoms.len();
+                    let tb_tw: f64 = thought_journaler.disc_buy_atoms.iter().map(|a| a.weight).sum();
+                    let ts_tw: f64 = thought_journaler.disc_sell_atoms.iter().map(|a| a.weight).sum();
+                    eprintln!("    disc atoms: vis(buy={} w={:.2}, sell={} w={:.2}) tht(buy={} w={:.2}, sell={} w={:.2})",
+                        vb_n, vb_tw, vs_n, vs_tw, tb_n, tb_tw, ts_n, ts_tw);
+                    let v_total = journaler.proj_used + journaler.proj_skipped;
+                    let t_total = thought_journaler.proj_used + thought_journaler.proj_skipped;
+                    eprintln!("    disc proj: vis={}/{} ({:.0}%) tht={}/{} ({:.0}%) | proj_atoms: vis={} tht={}",
+                        journaler.proj_used, v_total,
+                        if v_total > 0 { journaler.proj_used as f64 / v_total as f64 * 100.0 } else { 0.0 },
+                        thought_journaler.proj_used, t_total,
+                        if t_total > 0 { thought_journaler.proj_used as f64 / t_total as f64 * 100.0 } else { 0.0 },
+                        journaler.disc_proj_atoms.len(), thought_journaler.disc_proj_atoms.len());
                 }
 
-                // Adaptive state diagnostics
+                // Prototype convergence diagnostics
                 if journaler.is_ready() {
                     let vb = journaler.buy_good.normalize_f64();
                     let vs = journaler.sell_good.normalize_f64();
                     let v_cos = cosine_f64(&vb, &vs);
-                    let v_sep = 1.0 - v_cos;
-                    let v_eff_decay = 1.0 - (1.0 - args.decay) * v_sep;
-                    let v_explore = (1.0 / v_cos.clamp(0.01, 1.0)) as usize;
                     let tb = thought_journaler.buy_good.normalize_f64();
                     let ts = thought_journaler.sell_good.normalize_f64();
                     let t_cos = cosine_f64(&tb, &ts);
-                    let t_sep = 1.0 - t_cos;
-                    let t_eff_decay = 1.0 - (1.0 - args.decay) * t_sep;
-                    let t_explore = (1.0 / t_cos.clamp(0.01, 1.0)) as usize;
-                    eprintln!("    adaptive: vis(cos={:.4} decay={:.6} explore=1/{}) tht(cos={:.4} decay={:.6} explore=1/{})",
-                        v_cos, v_eff_decay, v_explore, t_cos, t_eff_decay, t_explore);
+                    eprintln!("    proto: vis(cos={:.4}) tht(cos={:.4})", v_cos, t_cos);
                 }
 
                 // Snapshot recalib state to DB
                 if journaler.is_ready() {
                     let bp = journaler.buy_good.normalize_f64();
                     let sp = journaler.sell_good.normalize_f64();
-                    let np = if journaler.noise_accum.count() > 0 {
-                        Some(journaler.noise_accum.normalize_f64())
-                    } else { None };
+                    let vis_buy_tw: f64 = journaler.disc_buy_atoms.iter().map(|a| a.weight).sum();
+                    let vis_sell_tw: f64 = journaler.disc_sell_atoms.iter().map(|a| a.weight).sum();
                     run_db.execute(
-                        "INSERT INTO recalib_log (step, system, cos_buy_sell, cos_buy_noise, cos_sell_noise, noise_floor, buy_count, sell_count, confuser_buy_count, confuser_sell_count, buy_purity, sell_purity, noise_purity, buy_conf_purity, sell_conf_purity)
+                        "INSERT INTO recalib_log (step, system, cos_buy_sell, noise_floor, buy_count, sell_count, buy_purity, sell_purity, disc_buy_atoms, disc_sell_atoms, disc_buy_total_weight, disc_sell_total_weight, proj_used, proj_skipped, proj_atoms)
                          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
                         params![
                             encode_count as i64, "visual",
                             cosine_f64(&bp, &sp),
-                            np.as_ref().map(|n| cosine_f64(&bp, n)).unwrap_or(0.0),
-                            np.as_ref().map(|n| cosine_f64(&sp, n)).unwrap_or(0.0),
                             journaler.noise_floor,
                             journaler.buy_good.count() as i64,
                             journaler.sell_good.count() as i64,
-                            journaler.buy_confuser.count() as i64,
-                            journaler.sell_confuser.count() as i64,
                             journaler.buy_good.purity(),
                             journaler.sell_good.purity(),
-                            journaler.noise_accum.purity(),
-                            journaler.buy_confuser.purity(),
-                            journaler.sell_confuser.purity(),
+                            journaler.disc_buy_atoms.len() as i64,
+                            journaler.disc_sell_atoms.len() as i64,
+                            vis_buy_tw, vis_sell_tw,
+                            journaler.proj_used as i64,
+                            journaler.proj_skipped as i64,
+                            journaler.disc_proj_atoms.len() as i64,
                         ],
                     ).ok();
                 }
                 if thought_journaler.is_ready() {
                     let bp = thought_journaler.buy_good.normalize_f64();
                     let sp = thought_journaler.sell_good.normalize_f64();
+                    let tht_buy_tw: f64 = thought_journaler.disc_buy_atoms.iter().map(|a| a.weight).sum();
+                    let tht_sell_tw: f64 = thought_journaler.disc_sell_atoms.iter().map(|a| a.weight).sum();
                     run_db.execute(
-                        "INSERT INTO recalib_log (step, system, cos_buy_sell, cos_buy_noise, cos_sell_noise, noise_floor, buy_count, sell_count, confuser_buy_count, confuser_sell_count, buy_purity, sell_purity, noise_purity, buy_conf_purity, sell_conf_purity)
+                        "INSERT INTO recalib_log (step, system, cos_buy_sell, noise_floor, buy_count, sell_count, buy_purity, sell_purity, disc_buy_atoms, disc_sell_atoms, disc_buy_total_weight, disc_sell_total_weight, proj_used, proj_skipped, proj_atoms)
                          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
                         params![
                             encode_count as i64, "thought",
                             cosine_f64(&bp, &sp),
-                            0.0, 0.0,
                             thought_journaler.noise_floor,
                             thought_journaler.buy_good.count() as i64,
                             thought_journaler.sell_good.count() as i64,
-                            thought_journaler.buy_confuser.count() as i64,
-                            thought_journaler.sell_confuser.count() as i64,
                             thought_journaler.buy_good.purity(),
                             thought_journaler.sell_good.purity(),
-                            thought_journaler.noise_accum.purity(),
-                            thought_journaler.buy_confuser.purity(),
-                            thought_journaler.sell_confuser.purity(),
+                            thought_journaler.disc_buy_atoms.len() as i64,
+                            thought_journaler.disc_sell_atoms.len() as i64,
+                            tht_buy_tw, tht_sell_tw,
+                            thought_journaler.proj_used as i64,
+                            thought_journaler.proj_skipped as i64,
+                            thought_journaler.disc_proj_atoms.len() as i64,
                         ],
                     ).ok();
                 }
@@ -1441,128 +1405,77 @@ fn main() {
     let total_ms = (t_visual_batch_us + t_thought_encode_us + t_visual_predict_us + t_thought_predict_us + t_rest_us) as f64 / 1000.0;
     eprintln!("  Total accounted:      {:>8.1}", total_ms);
 
-    // Drain remaining pending entries
+    // Drain remaining pending entries (log only, no further learning)
     while let Some(entry) = pending.pop_front() {
         let entry_candle = &candles[entry.candle_idx];
+        let final_outcome = entry.first_outcome.unwrap_or(Outcome::Noise);
 
-        if let Some(res) = resolve_outcome(&candles, entry.candle_idx, args.horizon, args.move_threshold, total_candles) {
-            let abs_move = res.pct_change.abs();
-            let sw = if abs_move > 0.0 {
-                move_sum += abs_move;
-                move_count += 1;
-                let mean_move = move_sum / move_count as f64;
-                (abs_move / mean_move) * args.learning_rate
-            } else {
-                args.learning_rate
-            };
-
-            journaler.observe(
-                &entry.vec,
-                res.outcome,
-                entry.journaler_prediction,
-                entry.conviction,
-                args.decay,
-                args.reward_weight,
-                args.correction_weight,
-                sw,
-            );
-
-            let t_outcome_th = match res.outcome {
-                Outcome::Buy => thought::Outcome::Buy,
-                Outcome::Sell => thought::Outcome::Sell,
-                Outcome::Noise => thought::Outcome::Noise,
-            };
-            thought_journaler.observe(
-                &entry.thought_vec,
-                t_outcome_th,
-                entry.thought_prediction,
-                entry.thought_conviction,
-                args.decay,
-                args.reward_weight,
-                args.correction_weight,
-                sw,
-            );
-
-            match res.outcome {
-                Outcome::Noise => noise_count += 1,
-                _ => labeled_count += 1,
-            }
-
-            if let Some(pred) = entry.journaler_prediction {
-                if res.outcome != Outcome::Noise {
-                    let is_correct = pred == res.outcome;
-                    j_total += 1;
-                    if is_correct { j_correct += 1; }
-                    j_rolling.push_back(is_correct);
-                    if j_rolling.len() > j_rolling_cap {
-                        j_rolling.pop_front();
-                    }
-                    let ye = j_by_year.entry(entry_candle.year).or_insert((0, 0));
-                    ye.1 += 1;
-                    if is_correct { ye.0 += 1; }
-                }
-            }
-
-            if let Some(t_pred) = entry.thought_prediction {
-                if res.outcome != Outcome::Noise {
-                    let t_is_correct = (t_pred == thought::Outcome::Buy && res.outcome == Outcome::Buy)
-                        || (t_pred == thought::Outcome::Sell && res.outcome == Outcome::Sell);
-                    tj_total += 1;
-                    if t_is_correct { tj_correct += 1; }
-                    tj_rolling.push_back(t_is_correct);
-                    if tj_rolling.len() > j_rolling_cap {
-                        tj_rolling.pop_front();
-                    }
-                }
-            }
-
-            if let Some(ref action) = entry.trade_action {
-                if res.outcome != Outcome::Noise {
-                    trader.record_trade(
-                        res.pct_change,
-                        action.position_frac,
-                        action.direction,
-                        entry_candle.year,
-                    );
-                }
-            }
-
-            // Log to run DB (drain)
-            let vd = &entry.vis_detail;
-            let vis_pred_str = entry.journaler_prediction.map(|p| format!("{:?}", p));
-            let thought_pred_str = entry.thought_prediction.map(|p| format!("{:?}", p));
-            let agree = match (entry.journaler_prediction, entry.thought_prediction) {
-                (Some(vp), Some(tp)) => {
-                    let v_buy = vp == Outcome::Buy;
-                    let t_buy = tp == thought::Outcome::Buy;
-                    Some(v_buy == t_buy)
-                }
-                _ => None,
-            };
-            let action_str = entry.trade_action.as_ref().map(|a| format!("{:?}", a.direction));
-            let actual_str = format!("{:?}", res.outcome);
-            run_db.execute(
-                "INSERT INTO candle_log (step, candle_idx, timestamp,
-                    vis_pred, vis_buy_sim, vis_sell_sim,
-                    vis_clean_buy_sim, vis_clean_sell_sim,
-                    vis_input_sparsity, vis_buy_sparsity, vis_sell_sparsity,
-                    vis_buy_conf_sim, vis_sell_conf_sim,
-                    vis_noise_sim, vis_conviction, vis_noise_gated, vis_confuser_flipped,
-                    thought_pred, thought_conviction, agree, actual, action, equity)
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23)",
-                params![
-                    log_step, entry.candle_idx as i64, &entry_candle.ts,
-                    vis_pred_str, vd.buy_sim, vd.sell_sim,
-                    vd.clean_buy_sim, vd.clean_sell_sim,
-                    vd.input_sparsity, vd.buy_sparsity, vd.sell_sparsity,
-                    vd.buy_confuser_sim, vd.sell_confuser_sim,
-                    vd.noise_sim, vd.conviction, vd.noise_gated as i32, vd.confuser_flipped as i32,
-                    thought_pred_str, entry.thought_conviction,
-                    agree.map(|a| a as i32), &actual_str, action_str, trader.equity,
-                ],
-            ).ok();
-            log_step += 1;
+        match final_outcome {
+            Outcome::Noise => noise_count += 1,
+            _ => labeled_count += 1,
         }
+
+        if let Some(pred) = entry.journaler_prediction {
+            if final_outcome != Outcome::Noise {
+                let is_correct = pred == final_outcome;
+                j_total += 1;
+                if is_correct { j_correct += 1; }
+                j_rolling.push_back(is_correct);
+                if j_rolling.len() > j_rolling_cap { j_rolling.pop_front(); }
+                let ye = j_by_year.entry(entry_candle.year).or_insert((0, 0));
+                ye.1 += 1;
+                if is_correct { ye.0 += 1; }
+            }
+        }
+
+        if let Some(t_pred) = entry.thought_prediction {
+            if final_outcome != Outcome::Noise {
+                let t_is_correct = (t_pred == thought::Outcome::Buy && final_outcome == Outcome::Buy)
+                    || (t_pred == thought::Outcome::Sell && final_outcome == Outcome::Sell);
+                tj_total += 1;
+                if t_is_correct { tj_correct += 1; }
+                tj_rolling.push_back(t_is_correct);
+                if tj_rolling.len() > j_rolling_cap { tj_rolling.pop_front(); }
+            }
+        }
+
+        let vd = &entry.vis_detail;
+        let td = &entry.thought_detail;
+        let vis_pred_str = entry.journaler_prediction.map(|p| format!("{:?}", p));
+        let thought_pred_str = entry.thought_prediction.map(|p| format!("{:?}", p));
+        let agree = match (entry.journaler_prediction, entry.thought_prediction) {
+            (Some(vp), Some(tp)) => Some((vp == Outcome::Buy) == (tp == thought::Outcome::Buy)),
+            _ => None,
+        };
+        let action_str = entry.trade_action.as_ref().map(|a| format!("{:?}", a.direction));
+        let actual_str = format!("{:?}", final_outcome);
+        run_db.execute(
+            "INSERT INTO candle_log (step, candle_idx, timestamp,
+                vis_pred, vis_buy_coverage, vis_sell_coverage,
+                vis_buy_atoms_found, vis_buy_atoms_total,
+                vis_sell_atoms_found, vis_sell_atoms_total,
+                vis_buy_sim, vis_sell_sim,
+                thought_pred, thought_buy_coverage, thought_sell_coverage,
+                thought_buy_atoms_found, thought_buy_atoms_total,
+                thought_sell_atoms_found, thought_sell_atoms_total,
+                thought_buy_sim, thought_sell_sim,
+                agree, actual, action, equity, learn_count, peak_pct)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27)",
+            params![
+                log_step, entry.candle_idx as i64, &entry_candle.ts,
+                vis_pred_str, vd.buy_coverage, vd.sell_coverage,
+                vd.buy_atoms_found as i64, vd.buy_atoms_total as i64,
+                vd.sell_atoms_found as i64, vd.sell_atoms_total as i64,
+                vd.buy_sim, vd.sell_sim,
+                thought_pred_str, td.buy_coverage, td.sell_coverage,
+                td.buy_atoms_found as i64, td.buy_atoms_total as i64,
+                td.sell_atoms_found as i64, td.sell_atoms_total as i64,
+                td.buy_sim, td.sell_sim,
+                agree.map(|a| a as i32), &actual_str, action_str, trader.equity,
+                entry.learn_count as i64, entry.peak_pct,
+            ],
+        ).ok();
+        log_step += 1;
     }
 
     run_db.execute_batch("COMMIT").ok();
@@ -1580,32 +1493,25 @@ fn main() {
     // Visual Journaler diagnostics
     eprintln!("\n  ═══ Visual Journaler ═══");
     eprintln!("  Accumulators:");
-    eprintln!("    buy_good:     count={}, purity={:.4}",
+    eprintln!("    buy_good:      count={}, purity={:.4}",
         journaler.buy_good.count(), journaler.buy_good.purity());
-    eprintln!("    sell_good:    count={}, purity={:.4}",
+    eprintln!("    sell_good:     count={}, purity={:.4}",
         journaler.sell_good.count(), journaler.sell_good.purity());
-    eprintln!("    buy_confuser: count={}", journaler.buy_confuser.count());
-    eprintln!("    sell_confuser:count={}", journaler.sell_confuser.count());
-    eprintln!("    noise:        count={}", journaler.noise_accum.count());
 
     if journaler.is_ready() {
         let buy_f64 = journaler.buy_good.normalize_f64();
         let sell_f64 = journaler.sell_good.normalize_f64();
         eprintln!("    cos(buy_good, sell_good) = {:.4}", cosine_f64(&buy_f64, &sell_f64));
-
-        if journaler.noise_accum.count() > 0 {
-            let noise_f64 = journaler.noise_accum.normalize_f64();
-            eprintln!("    cos(buy_good, noise) = {:.4}", cosine_f64(&buy_f64, &noise_f64));
-            eprintln!("    cos(sell_good, noise) = {:.4}", cosine_f64(&sell_f64, &noise_f64));
-        }
-
-        let buy_proto = journaler.buy_good.threshold();
-        let sell_proto = journaler.sell_good.threshold();
-        let buy_ent = Primitives::entropy(&buy_proto);
-        let sell_ent = Primitives::entropy(&sell_proto);
-        eprintln!("    recognition gate: noise_floor={:.4} (buy_entropy={:.4}, sell_entropy={:.4}, d_eff={:.0})",
-            journaler.noise_floor, buy_ent, sell_ent,
-            journaler.dims as f64 * buy_ent.min(sell_ent).max(0.01));
+        let vb_tw: f64 = journaler.disc_buy_atoms.iter().map(|a| a.weight).sum();
+        let vs_tw: f64 = journaler.disc_sell_atoms.iter().map(|a| a.weight).sum();
+        eprintln!("    disc atoms: buy={} (w={:.2}), sell={} (w={:.2})",
+            journaler.disc_buy_atoms.len(), vb_tw,
+            journaler.disc_sell_atoms.len(), vs_tw);
+        let v_total = journaler.proj_used + journaler.proj_skipped;
+        eprintln!("    disc proj: {}/{} ({:.0}%) | proj_atoms={}",
+            journaler.proj_used, v_total,
+            if v_total > 0 { journaler.proj_used as f64 / v_total as f64 * 100.0 } else { 0.0 },
+            journaler.disc_proj_atoms.len());
     }
 
     let j_overall = if j_total > 0 { j_correct as f64 / j_total as f64 * 100.0 } else { 0.0 };
@@ -1629,24 +1535,25 @@ fn main() {
     // Thought Journaler diagnostics
     eprintln!("\n  ═══ Thought Journaler ═══");
     eprintln!("  Accumulators:");
-    eprintln!("    buy_good:     count={}, purity={:.4}",
+    eprintln!("    buy_good:      count={}, purity={:.4}",
         thought_journaler.buy_good.count(), thought_journaler.buy_good.purity());
-    eprintln!("    sell_good:    count={}, purity={:.4}",
+    eprintln!("    sell_good:     count={}, purity={:.4}",
         thought_journaler.sell_good.count(), thought_journaler.sell_good.purity());
-    eprintln!("    buy_confuser: count={}", thought_journaler.buy_confuser.count());
-    eprintln!("    sell_confuser:count={}", thought_journaler.sell_confuser.count());
-    eprintln!("    noise:        count={}", thought_journaler.noise_accum.count());
 
     if thought_journaler.is_ready() {
         let t_buy_f64 = thought_journaler.buy_good.normalize_f64();
         let t_sell_f64 = thought_journaler.sell_good.normalize_f64();
         eprintln!("    cos(buy_good, sell_good) = {:.4}", cosine_f64(&t_buy_f64, &t_sell_f64));
-
-        if thought_journaler.noise_accum.count() > 0 {
-            let t_noise_f64 = thought_journaler.noise_accum.normalize_f64();
-            eprintln!("    cos(buy_good, noise) = {:.4}", cosine_f64(&t_buy_f64, &t_noise_f64));
-            eprintln!("    cos(sell_good, noise) = {:.4}", cosine_f64(&t_sell_f64, &t_noise_f64));
-        }
+        let tb_tw: f64 = thought_journaler.disc_buy_atoms.iter().map(|a| a.weight).sum();
+        let ts_tw: f64 = thought_journaler.disc_sell_atoms.iter().map(|a| a.weight).sum();
+        eprintln!("    disc atoms: buy={} (w={:.2}), sell={} (w={:.2})",
+            thought_journaler.disc_buy_atoms.len(), tb_tw,
+            thought_journaler.disc_sell_atoms.len(), ts_tw);
+        let t_total = thought_journaler.proj_used + thought_journaler.proj_skipped;
+        eprintln!("    disc proj: {}/{} ({:.0}%) | proj_atoms={}",
+            thought_journaler.proj_used, t_total,
+            if t_total > 0 { thought_journaler.proj_used as f64 / t_total as f64 * 100.0 } else { 0.0 },
+            thought_journaler.disc_proj_atoms.len());
 
         if args.debug_thoughts {
             let t_buy = thought_journaler.buy_good.threshold();
@@ -1658,12 +1565,6 @@ fn main() {
             eprintln!("  Thought sell prototype top facts:");
             for (label, sim) in fact_codebook.decode(&t_sell, 5, 0.05) {
                 eprintln!("    {:.3}  {}", sim, label);
-            }
-            if thought_journaler.buy_confuser.count() > 0 {
-                eprintln!("  Thought buy confuser top facts:");
-                for (label, sim) in fact_codebook.decode(&thought_journaler.buy_confuser.threshold(), 5, 0.05) {
-                    eprintln!("    {:.3}  {}", sim, label);
-                }
             }
         }
     }
