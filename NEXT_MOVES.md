@@ -83,25 +83,56 @@ FROM recalib_log ORDER BY step;
 
 **P&L returns are secondary.** The current paper trading P&L calc is a rough proxy — position sizing is simplistic and not the focus. We are chasing **prediction accuracy** (win rate). >60% sustained over 100k candles would exceed published ML trading benchmarks.
 
-Current best: **56.5% win** (thought-only q95, 3,844 trades, 100k candles Jan–Dec 2019)
+Current best: **57.1% win** (thought-only q95, vocab v3, 3,857 trades, 100k candles Jan–Dec 2019)
+
+---
+
+## Run History — Session 2 (2026-03-26)
+
+| Candles | Name | Win | Equity | Trades | Notes |
+|---------|------|-----|--------|--------|-------|
+| 100k | thought-vocab-v2-100k | 53.8% | +8.17% | 11,203 | vocab v2, q85. Best P&L balanced. |
+| 100k | thought-vocab-v2-q95-100k | 56.9% | +4.17% | 3,853 | vocab v2, q95. |
+| 100k | thought-vocab-v3-q95-100k | **57.1%** | +4.39% | 3,857 | PELT divergence, q95. Best win rate. |
+| 100k | auto-flip-v4-100k | 51.5% | **+17.61%** | 19,159 | auto flip min_edge=0.55. Best P&L. |
+| 100k | thought-vocab-v4-q95-100k | 56.7% | +4.18% | 3,877 | + wick PELT streams, q95. |
 
 ---
 
 ## Open problems / next experiments
 
-1. **Self-deterministic move_threshold**: hardcoded 0.5% is BTC-specific. For cross-asset use (SPY, Gold, Silver), the label threshold should be derived from observed price action — e.g., `K × ATR` at entry time. ATR is already in the Candle struct. This is how we generalize without tuning.
+### Implemented, needs isolated testing
 
-2. **Self-deterministic flip threshold via calibration curve**: maintain rolling histogram of (conviction bucket → empirical win rate). The flip threshold is wherever win rate first exceeds noise (~51.5%). Removes `flip_quantile` as a hyperparameter. Requires ~500+ resolved trades per recalib to estimate reliably.
+1. **ATR-based move_threshold** (`--atr-multiplier K`): Implemented. Replaces fixed 0.5% with `K × atr_r` per candle. Asset-independent. K≈3.0 approximates current 0.5% for BTC. **Not yet tested in isolation** — combined run (ATR + auto flip) regressed because both changed at once. Next step: ATR-only with proven q95 quantile.
 
-3. **Thought vocab: RSI divergence**: `(diverging close rsi)` — price higher high while RSI lower high (bearish), or price lower low while RSI higher low (bullish). The most classic reversal signal, completely absent from current vocab. PELT segment co-occurrence partially captures this but without peak/trough precision.
+2. **Kelly position sizing** (`--sizing kelly`): Implemented. Half-Kelly from calibration curve. Self-gates (no trade when Kelly ≤ 0). Not yet tested — P&L metric is secondary for now.
 
-4. **Thought vocab: candlestick patterns**: pin bars (long wick relative to body), engulfing candles, doji. A trader looks at these immediately. Currently absent — only wick/body ratio comparisons exist, not named pattern predicates.
+3. **thought-visual-amp orchestration**: Implemented. Visual conviction magnitude amplifies thought conviction: `meta_conviction = tht × (1 + vis)`. Visual strength confirms trend clarity regardless of direction. DB simulation showed 67.7% at amp≥0.20 (319 trades from 30k candles). q95 run showed no improvement (quantile adapts to shifted distribution). **Testing with auto flip mode** (edge-based threshold should benefit from amplification).
 
-5. **Thought vocab: volume behavior**: is volume spiking or fading on the current move? "High volume breakout" vs "low volume exhaustion move" are distinct thoughts a trader has. Need to check if volume is in SEGMENT_STREAMS.
+### Self-derived min_edge — needs rework
 
-6. **Thought vocab: 48-candle high/low as S/R**: "price approaching the recent range high" is a core trader thought. `prev-high`/`prev-low` cover single-candle lookback; we have no fact for "near the 48-candle high/low".
+The `0.50 + 2σ(window_win_rates)` approach to self-derive min_edge has three issues:
 
-7. **Full dataset run**: validate thought-only q85 (+7.85%, 53.9%) over 652k candles (Jan 2019–Mar 2025).
+**Cold start contamination**: Trades taken before flip activates but resolved after were polluting the window. Partially fixed with `was_flipped` flag on Pending struct — only trades that were actually flipped at entry time get tracked. **Status: flag implemented, not yet validated.**
+
+**Small sample variance**: 20 trades per window is too few. Win rate of 20 trades has ±20pp noise → inflated stddev → derived min_edge of 0.75-0.93 (absurd). **Fix: require ≥100 trades per window.**
+
+**Insufficient windows**: 5 windows of noisy data → unstable stddev. **Fix: require ≥10 windows (1000+ flipped trades) before self-derivation kicks in. Until then, use seeded min_edge.**
+
+The overall fix: `if flipped_trade_count < 1000 { use args.min_edge } else { self-derive }`. The system needs enough flip-zone trading history before it can measure its own prediction stability. **Currently disabled in code** — using fixed `args.min_edge` until these fixes are validated.
+
+### Thought vocab
+
+4. **Candlestick patterns**: designed as emergent (comparison predicate co-occurrence). Doji, hammer, engulfing, pin bar facts all co-occur from existing comparisons. The discriminant should discover these without named atoms. **Status: believed to be working via emergence, not validated.**
+
+5. **Momentum deceleration**: price still rising but rate slowing. PELT captures direction but not second derivative. Could add a `momentum` SEGMENT_STREAM: rate of change of close over rolling window.
+
+6. **Candle compression**: recent candles getting smaller. PELT on `body` and `range` streams captures this (added). PELT on `upper-wick` and `lower-wick` streams also added (vocab v4). Not yet showing clear win rate improvement.
+
+### Validation
+
+7. **Full dataset run**: validate best result over 652k candles (Jan 2019–Mar 2025).
+8. **Cross-asset**: test on Gold/Silver with `--atr-multiplier`. Calendar facts may need session-aware adjustments for equity markets.
 
 ---
 

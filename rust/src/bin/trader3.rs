@@ -291,6 +291,7 @@ struct Pending {
     tht_pred:      Prediction,
     raw_meta_dir:  Option<Outcome>,  // un-flipped direction (for auto calibration)
     meta_dir:      Option<Outcome>,
+    was_flipped:   bool,             // true if flip was active when this entry was created
     meta_conviction: f64,
     position_frac: Option<f64>,
     first_outcome: Option<Outcome>, // set on first threshold crossing; drives learning
@@ -368,6 +369,13 @@ fn orchestrate(
                 Some(v) if v != t => (None, 0.0), // visual veto
                 _ => (Some(t), tht.conviction),
             },
+        },
+
+        // Thought direction, conviction amplified by visual conviction magnitude.
+        // Visual strength confirms trend clarity regardless of direction.
+        "thought-visual-amp" => match td {
+            None => (None, 0.0),
+            Some(t) => (Some(t), tht.conviction * (1.0 + vis.conviction)),
         },
 
         // Thought's flip zone, but ONLY when visual explicitly disagrees.
@@ -583,6 +591,13 @@ fn main() {
     // Each entry records (conviction, was_the_flipped_prediction_correct).
     let mut resolved_preds: VecDeque<(f64, bool)> = VecDeque::new();
 
+    // Self-derived min_edge: track flip-zone win rate per recalib window.
+    // min_edge = 0.50 + 2σ where σ = stddev of recent window win rates.
+    let mut window_win_rates: VecDeque<f64> = VecDeque::new();
+    let mut window_wins: u32 = 0;
+    let mut window_total: u32 = 0;
+    let mut derived_min_edge: f64 = args.min_edge; // start with CLI value
+
     let kill_file = std::path::Path::new("trader-stop");
     let mut cursor = start_idx;
 
@@ -661,10 +676,15 @@ fn main() {
                         flip_threshold = sorted[idx];
                     }
                     "auto" if resolved_preds.len() >= flip_warmup => {
+                        // Self-derived min_edge: disabled pending better cold start
+                        // handling. Using fixed args.min_edge for now.
+                        // TODO: track window win rates only from was_flipped trades,
+                        // require >= 100 trades per window, >= 10 windows for stability.
+
                         // Sort by conviction descending, walk down accumulating
                         // flipped win rate. Find the deepest conviction where
-                        // cumulative win rate exceeds min_edge AND is statistically
-                        // significant (> 0.50 + 1.96/sqrt(N)). Both must hold.
+                        // cumulative win rate exceeds derived_min_edge AND is
+                        // statistically significant.
                         let mut sorted: Vec<(f64, bool)> = resolved_preds.iter().copied().collect();
                         sorted.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
                         let mut wins = 0u32;
@@ -735,6 +755,7 @@ fn main() {
                 tht_pred:      tht_pred.clone(),
                 raw_meta_dir:  raw_meta_dir,
                 meta_dir,
+                was_flipped:   flip_threshold > 0.0 && meta_conviction >= flip_threshold,
                 meta_conviction,
                 position_frac,
                 first_outcome: None,
@@ -854,6 +875,12 @@ fn main() {
                     if let Some(dir) = entry.meta_dir {
                         if final_out != Outcome::Noise {
                             trader.record_trade(entry.outcome_pct, frac, dir, entry.year);
+                            // Track flip-zone trade outcomes for self-derived min_edge.
+                            // Only trades that were actually flipped at entry time.
+                            if entry.was_flipped {
+                                window_total += 1;
+                                if dir == final_out { window_wins += 1; }
+                            }
                         }
                     }
                 }
@@ -909,14 +936,14 @@ fn main() {
                 let ret = (trader.equity - trader.initial_equity) / trader.initial_equity * 100.0;
                 let bnh = (candles[i].close - bnh_entry) / bnh_entry * 100.0;
                 eprintln!(
-                    "  {}/{} ({:.0}/s ETA {:.0}s) | {} | {} | vis={:.1}% tht={:.1}% | trades={} win={:.1}% | ${:.0} ({:+.1}%) vs B&H {:+.1}% | flip@{:.3}",
+                    "  {}/{} ({:.0}/s ETA {:.0}s) | {} | {} | vis={:.1}% tht={:.1}% | trades={} win={:.1}% | ${:.0} ({:+.1}%) vs B&H {:+.1}% | flip@{:.3} edge={:.3}",
                     encode_count, loop_count, rate, eta,
                     &candles[i].ts[..10],
                     trader.phase,
                     vis_acc, tht_acc,
                     trader.trades_taken, trader.win_rate(),
                     trader.equity, ret, bnh,
-                    flip_threshold,
+                    flip_threshold, derived_min_edge,
                 );
             }
         }

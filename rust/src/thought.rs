@@ -271,6 +271,8 @@ const SEGMENT_STREAMS: &[(&str, fn(&Candle) -> f64)] = &[
     ("adx",         |c| c.adx),
     ("body",        |c| c.close - c.open),
     ("range",       |c| c.high - c.low),
+    ("upper-wick",  |c| c.high - c.close.max(c.open)),
+    ("lower-wick",  |c| c.close.min(c.open) - c.low),
 ];
 
 /// Zone checks scoped to their relevant streams.
