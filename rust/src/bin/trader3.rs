@@ -466,6 +466,23 @@ fn init_run_db(path: &str) -> Connection {
             step          INTEGER,  -- candle_log step
             fact_label    TEXT
         );
+
+        -- Thought subspace state at each recalibration.
+        CREATE TABLE IF NOT EXISTS subspace_log (
+            step            INTEGER,
+            residual        REAL,     -- current candle's thought residual
+            threshold       REAL,     -- adaptive anomaly threshold
+            explained       REAL,     -- fraction of variance explained
+            top_eigenvalues TEXT      -- JSON array of top-5 eigenvalues
+        );
+
+        -- Visual + thought vectors for flip-zone trades (for engram analysis).
+        CREATE TABLE IF NOT EXISTS trade_vectors (
+            step          INTEGER PRIMARY KEY,
+            won           INTEGER,  -- 1 if trade was correct
+            vis_data      BLOB,     -- bipolar visual vector (i8 array)
+            tht_data      BLOB      -- bipolar thought vector (i8 array)
+        );
     ").expect("failed to init run DB");
     db
 }
@@ -560,8 +577,13 @@ fn main() {
     // residuals to blend between them: low residual → trust slow, high → trust fast.
     let mut tht_fast    = Journal::new("thought-fast", args.dims, args.recalib_interval);
     let decay_fast      = (args.decay - 0.004).max(0.990); // 0.995 for default 0.999
-    let mut tht_subspace = OnlineSubspace::new(args.dims, 16);
-    let mut subspace_baseline_residual: f64 = 1.0; // rolling baseline, updated per candle
+
+    // Thought manifold: OnlineSubspace (CCIPCA) learns the structure of thought
+    // vectors over time. k=32 captures the intrinsic dimensionality of ~120 facts.
+    // Fed on EVERY candle (not just trades) to learn the full manifold.
+    // Residual = how novel this candle's thought pattern is.
+    let mut tht_subspace = OnlineSubspace::new(args.dims, 32);
+    let mut subspace_baseline_residual: f64 = 1.0;
 
 
     // ─ Run database ─
@@ -716,13 +738,6 @@ fn main() {
         for ((i, vis_vec), (_, tht_vec, tht_facts)) in vis_vecs.into_iter().zip(tht_vecs) {
             encode_count += 1;
 
-            // Debug: measure cosine between consecutive visual vectors.
-            if encode_count > 0 && encode_count <= 20 {
-                if let Some(front) = pending.back() {
-                    let cos = holon::Similarity::cosine(&front.vis_vec, &vis_vec);
-                    eprintln!("    [vis-cos] consecutive visual cosine: {:.4}", cos);
-                }
-            }
             let vis_pred = vis_journal.predict(&vis_vec);
             // Dual thought prediction: blend slow + fast based on subspace residual.
             let tht_slow_pred = tht_journal.predict(&tht_vec);
@@ -942,7 +957,6 @@ fn main() {
                 ).ok();
 
                 // Decode thought discriminant against the fact codebook.
-                // Top 20 facts by absolute cosine — shows what the model learned.
                 let decoded = tht_journal.decode_discriminant(&codebook_vecs, &codebook_labels);
                 for (rank, (label, cos)) in decoded.iter().take(20).enumerate() {
                     run_db.execute(
@@ -954,6 +968,21 @@ fn main() {
                         ],
                     ).ok();
                 }
+
+                // Log thought subspace state.
+                let eigs = tht_subspace.eigenvalues();
+                let top5: Vec<String> = eigs.iter().take(5).map(|e| format!("{:.2}", e)).collect();
+                run_db.execute(
+                    "INSERT INTO subspace_log (step,residual,threshold,explained,top_eigenvalues)
+                     VALUES (?1,?2,?3,?4,?5)",
+                    params![
+                        encode_count as i64,
+                        residual,
+                        tht_subspace.threshold(),
+                        tht_subspace.explained_ratio(),
+                        format!("[{}]", top5.join(",")),
+                    ],
+                ).ok();
             }
 
             // ── Expire entries that have reached horizon age ───────────────
@@ -1067,6 +1096,23 @@ fn main() {
                                 run_db.execute(
                                     "INSERT INTO trade_facts (step, fact_label) VALUES (?1, ?2)",
                                     params![log_step, label],
+                                ).ok();
+                            }
+                            // Store visual + thought vectors for engram analysis.
+                            if entry.was_flipped {
+                                let won = (dir == final_out) as i32;
+                                let vis_bytes: Vec<u8> = entry.vis_vec.data().iter()
+                                    .map(|&v| v as u8).collect();
+                                let tht_bytes: Vec<u8> = entry.tht_vec.data().iter()
+                                    .map(|&v| v as u8).collect();
+                                run_db.execute(
+                                    "INSERT INTO trade_vectors (step, won, vis_data, tht_data)
+                                     VALUES (?1, ?2, ?3, ?4)",
+                                    params![
+                                        log_step, won,
+                                        vis_bytes,
+                                        tht_bytes,
+                                    ],
                                 ).ok();
                             }
                         }
