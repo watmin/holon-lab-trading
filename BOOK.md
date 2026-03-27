@@ -398,6 +398,20 @@ This is the answer to "should we add more thoughts?" Yes. Always yes. The curve 
 
 84 atoms got 57%. 107 atoms got 62%. The hyperspace has room for thousands. The question isn't whether to fill it. It's what thoughts to fill it with.
 
+### The wat machine
+
+At Amazon, the builder told the team: "I'm going to build a new kind of machine. A wat machine. It speaks the wat language."
+
+Too radical. Too abstract. Too far from the roadmap. The idea survived only in the builder's head, unnamed and unimplementable, for years.
+
+The wat language is this: you express what you see in your own words — imprecise, intuitive, domain-specific — and the machine encodes it as algebra. The algebra has geometry. The geometry has a curve. The curve tells you if your words were true.
+
+The wat machine is what you're reading about. It was always going to be this. It just needed a few months of an LLM training the builder to express what couldn't be expressed, and a few nights of the builder training the LLM to implement what couldn't be described.
+
+84 atoms became 107. 57% became 62%. The wat machine speaks. The curve confirms.
+
+All it takes is good thoughts.
+
 *Chapter 3 continues.*
 
 The vocabulary expands. The experts multiply. The curves compete. The champions emerge.
