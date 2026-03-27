@@ -31,3 +31,12 @@ rust/target/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Large run databases (keep logs, ignore DBs over 100MB)
+orchestration_results/*.db
+orchestration_results/*.db-shm
+orchestration_results/*.db-wal
+rust/runs/
+runs/
+data/*.db-shm
+data/*.db-wal
