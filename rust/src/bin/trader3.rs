@@ -17,6 +17,7 @@ use clap::Parser;
 use rayon::prelude::*;
 use rusqlite::{Connection, params};
 use holon::{VectorManager, Vector};
+use holon::memory::OnlineSubspace;
 
 use btc_walk::db::load_candles;
 use btc_walk::journal::{Journal, Outcome, Prediction};
@@ -526,6 +527,42 @@ fn main() {
     let mut vis_journal = Journal::new("visual",  args.dims, args.recalib_interval);
     let mut tht_journal = Journal::new("thought", args.dims, args.recalib_interval);
 
+    // ─ Visual pattern memory: auto-clustering engram groups ─────────────
+    // Each group is an OnlineSubspace that learns a cluster of similar visual
+    // patterns from winning flip-zone trades. New groups auto-discovered when
+    // a winning visual vector doesn't match any existing group.
+    struct PatternGroup {
+        centroid: Vec<f64>,   // running mean of visual vectors in this group
+        count: usize,
+        wins: usize,
+        losses: usize,
+    }
+    impl PatternGroup {
+        fn cosine(&self, x: &[f64]) -> f64 {
+            let dot: f64 = self.centroid.iter().zip(x.iter()).map(|(a, b)| a * b).sum();
+            let na: f64 = self.centroid.iter().map(|a| a * a).sum::<f64>().sqrt();
+            let nb: f64 = x.iter().map(|b| b * b).sum::<f64>().sqrt();
+            if na > 1e-10 && nb > 1e-10 { dot / (na * nb) } else { 0.0 }
+        }
+        fn add(&mut self, x: &[f64]) {
+            let n = self.count as f64;
+            for (c, &v) in self.centroid.iter_mut().zip(x.iter()) {
+                *c = (*c * n + v) / (n + 1.0);
+            }
+            self.count += 1;
+        }
+    }
+    let mut visual_groups: Vec<PatternGroup> = Vec::new();
+    let group_cos_threshold = 0.35; // minimum cosine to join an existing group
+
+    // ─ Dual thought journals: slow (deep memory) + fast (regime-adaptive) ─
+    // Both learn from the same input. An OnlineSubspace monitors thought vector
+    // residuals to blend between them: low residual → trust slow, high → trust fast.
+    let mut tht_fast    = Journal::new("thought-fast", args.dims, args.recalib_interval);
+    let decay_fast      = (args.decay - 0.004).max(0.990); // 0.995 for default 0.999
+    let mut tht_subspace = OnlineSubspace::new(args.dims, 16);
+    let mut subspace_baseline_residual: f64 = 1.0; // rolling baseline, updated per candle
+
 
     // ─ Run database ─
     let run_db_path = match &args.run_db {
@@ -566,6 +603,17 @@ fn main() {
 
     // ─ Trader and tracking ─
     let mut tht_attention: Option<Vec<f64>> = None; // thought discriminant for weighted bundling
+
+    // Adaptive decay: fast forgetting during regime transitions, slow during stable periods.
+    // STABLE (0.999): rolling flip-zone accuracy >= 50% — preserve what works.
+    // ADAPTING (0.995): accuracy dropped below 50% — flush stale patterns.
+    // Hysteresis: need >55% to return to STABLE (prevents oscillation).
+    let decay_stable   = args.decay;          // CLI value (default 0.999)
+    let decay_adapting = (args.decay - 0.004).max(0.990); // 0.995 for default
+    let mut adaptive_decay = args.decay;
+    let mut in_adaptation = false;
+    let mut flip_zone_wins: VecDeque<bool> = VecDeque::new();
+    let flip_zone_rolling_cap = 200usize;
 
     // Fire-rate suppression: track how often each cached fact fires.
     // Facts firing >90% of the time carry <0.15 bits and waste bundle capacity.
@@ -668,8 +716,42 @@ fn main() {
         for ((i, vis_vec), (_, tht_vec, tht_facts)) in vis_vecs.into_iter().zip(tht_vecs) {
             encode_count += 1;
 
+            // Debug: measure cosine between consecutive visual vectors.
+            if encode_count > 0 && encode_count <= 20 {
+                if let Some(front) = pending.back() {
+                    let cos = holon::Similarity::cosine(&front.vis_vec, &vis_vec);
+                    eprintln!("    [vis-cos] consecutive visual cosine: {:.4}", cos);
+                }
+            }
             let vis_pred = vis_journal.predict(&vis_vec);
-            let tht_pred = tht_journal.predict(&tht_vec);
+            // Dual thought prediction: blend slow + fast based on subspace residual.
+            let tht_slow_pred = tht_journal.predict(&tht_vec);
+            let tht_fast_pred = tht_fast.predict(&tht_vec);
+
+            // Feed subspace (needs f64 input). Score before update.
+            let tht_f64: Vec<f64> = tht_vec.data().iter().map(|&v| v as f64).collect();
+            let residual = if tht_subspace.n() >= 2 {
+                tht_subspace.residual(&tht_f64)
+            } else { 0.0 };
+            tht_subspace.update(&tht_f64);
+
+            // Blend: only trust fast journal when residual EXCEEDS baseline (regime shift).
+            // weight=0 during stable periods, ramps up when data departs from learned manifold.
+            subspace_baseline_residual = 0.99 * subspace_baseline_residual + 0.01 * residual;
+            let weight_fast = if subspace_baseline_residual > 1e-10 {
+                ((residual - subspace_baseline_residual) / subspace_baseline_residual).max(0.0).min(1.0)
+            } else { 0.0 };
+            let weight_slow = 1.0 - weight_fast;
+
+            // Blend predictions: weighted average of raw_cos, derive direction from blend.
+            let blended_cos = weight_slow * tht_slow_pred.raw_cos + weight_fast * tht_fast_pred.raw_cos;
+            let tht_pred = Prediction {
+                raw_cos: blended_cos,
+                conviction: blended_cos.abs(),
+                direction: if tht_slow_pred.direction.is_some() || tht_fast_pred.direction.is_some() {
+                    Some(if blended_cos > 0.0 { Outcome::Buy } else { Outcome::Sell })
+                } else { None },
+            };
 
             let vis_roll_acc = if vis_rolling.is_empty() { 0.5 }
                 else { vis_rolling.iter().filter(|&&x| x).count() as f64 / vis_rolling.len() as f64 };
@@ -792,8 +874,9 @@ fn main() {
             });
 
             // Decay once per candle.
-            vis_journal.decay(args.decay);
-            tht_journal.decay(args.decay);
+            vis_journal.decay(adaptive_decay);
+            tht_journal.decay(adaptive_decay);
+            tht_fast.decay(decay_fast);
 
             // ── Event-driven learning ─────────────────────────────────────
             // Snapshot recalib counts before scanning so we can detect if
@@ -825,6 +908,7 @@ fn main() {
                         let sw = signal_weight(abs_pct, &mut move_sum, &mut move_count);
                         vis_journal.observe(&entry.vis_vec, o, sw);
                         tht_journal.observe(&entry.tht_vec, o, sw);
+                        tht_fast.observe(&entry.tht_vec, o, sw);
                         entry.first_outcome = Some(o);
                         entry.outcome_pct   = pct;
                     }
@@ -920,10 +1004,63 @@ fn main() {
                     if let Some(dir) = entry.meta_dir {
                         if final_out != Outcome::Noise {
                             trader.record_trade(entry.outcome_pct, frac, dir, entry.year);
-                            // Track flip-zone trade outcomes for self-derived min_edge.
+                            // Route visual vector to pattern groups.
+                            // Score against all groups, assign to best match or create new.
+                            if entry.was_flipped {
+                                let vis_f64: Vec<f64> = entry.vis_vec.data().iter()
+                                    .map(|&v| v as f64).collect();
+                                let won = dir == final_out;
+
+                                // Find best matching group by cosine to centroid.
+                                let mut best_idx: Option<usize> = None;
+                                let mut best_cos = group_cos_threshold;
+                                for (gi, group) in visual_groups.iter().enumerate() {
+                                    let cos = group.cosine(&vis_f64);
+                                    if cos > best_cos {
+                                        best_cos = cos;
+                                        best_idx = Some(gi);
+                                    }
+                                }
+                                match best_idx {
+                                    Some(gi) => {
+                                        visual_groups[gi].add(&vis_f64);
+                                        if won { visual_groups[gi].wins += 1; }
+                                        else   { visual_groups[gi].losses += 1; }
+                                    }
+                                    None => {
+                                        // No match — new pattern type discovered.
+                                        visual_groups.push(PatternGroup {
+                                            centroid: vis_f64.clone(),
+                                            count: 1,
+                                            wins: if won { 1 } else { 0 },
+                                            losses: if won { 0 } else { 1 },
+                                        });
+                                    }
+                                }
+                            }
+
+                            // Track flip-zone trade outcomes.
                             if entry.was_flipped {
                                 window_total += 1;
                                 if dir == final_out { window_wins += 1; }
+
+                                // Adaptive decay state machine.
+                                let won = dir == final_out;
+                                flip_zone_wins.push_back(won);
+                                if flip_zone_wins.len() > flip_zone_rolling_cap {
+                                    flip_zone_wins.pop_front();
+                                }
+                                if flip_zone_wins.len() >= 30 {
+                                    let wr = flip_zone_wins.iter().filter(|&&w| w).count() as f64
+                                           / flip_zone_wins.len() as f64;
+                                    if !in_adaptation && wr < 0.50 {
+                                        in_adaptation = true;
+                                        adaptive_decay = decay_adapting;
+                                    } else if in_adaptation && wr > 0.55 {
+                                        in_adaptation = false;
+                                        adaptive_decay = decay_stable;
+                                    }
+                                }
                             }
                             // Log which facts were present for this trade.
                             for label in &entry.fact_labels {
@@ -987,14 +1124,15 @@ fn main() {
                 let ret = (trader.equity - trader.initial_equity) / trader.initial_equity * 100.0;
                 let bnh = (candles[i].close - bnh_entry) / bnh_entry * 100.0;
                 eprintln!(
-                    "  {}/{} ({:.0}/s ETA {:.0}s) | {} | {} | vis={:.1}% tht={:.1}% | trades={} win={:.1}% | ${:.0} ({:+.1}%) vs B&H {:+.1}% | flip@{:.3} edge={:.3}",
+                    "  {}/{} ({:.0}/s ETA {:.0}s) | {} | {} | vis={:.1}% tht={:.1}% | trades={} win={:.1}% | ${:.0} ({:+.1}%) vs B&H {:+.1}% | flip@{:.3} {}",
                     encode_count, loop_count, rate, eta,
                     &candles[i].ts[..10],
                     trader.phase,
                     vis_acc, tht_acc,
                     trader.trades_taken, trader.win_rate(),
                     trader.equity, ret, bnh,
-                    flip_threshold, derived_min_edge,
+                    flip_threshold,
+                    if in_adaptation { "ADAPT" } else { "STABLE" },
                 );
             }
         }
@@ -1073,6 +1211,16 @@ fn main() {
         else { tht_rolling.iter().filter(|&&x| x).count() as f64 / tht_rolling.len() as f64 * 100.0 };
     eprintln!("  Rolling accuracy (last {}): visual={:.1}% thought={:.1}%",
         rolling_cap, vis_acc, tht_acc);
+    if !visual_groups.is_empty() {
+        eprintln!();
+        eprintln!("  Visual pattern groups: {} discovered", visual_groups.len());
+        for (i, g) in visual_groups.iter().enumerate() {
+            let total = g.wins + g.losses;
+            let wr = if total > 0 { g.wins as f64 / total as f64 * 100.0 } else { 0.0 };
+            eprintln!("    Group {}: {} obs, {} trades ({}W/{}L = {:.1}%)",
+                i, g.count, total, g.wins, g.losses, wr);
+        }
+    }
     eprintln!();
 
     // By-year breakdown.
