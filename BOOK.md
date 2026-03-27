@@ -350,6 +350,23 @@ The first 100k run with the expanded vocabulary is in progress. The question: do
 
 The answer determines whether we keep expanding vocabulary (hunt for more thoughts) or start partitioning into expert subsets (find which thoughts combine best).
 
+### Risk is a thought
+
+The P&L is tiny. The trader is conservative — TENTATIVE phase, 0.5% positions, barely compounding. The reader might think "the system needs better position sizing." But position sizing isn't a parameter to tune. It's a thought to encode.
+
+"This position is too large for my conviction." That's a thought.
+"The market is in a thin-liquidity session." That's a thought.
+"I've been winning — am I overconfident?" That's a thought.
+"Drawdown is approaching my threshold." That's a thought.
+
+Currently, the system thinks about the market: RSI, MACD, Ichimoku, PELT segments. It does not think about itself. It has no vocabulary for portfolio state, trading context, or risk posture. Kelly sizing is a formula, not a thought. A formula doesn't learn. A thought does.
+
+Add `(at portfolio high-drawdown)` to the vocabulary. Add `(at session thin-liquidity)`. Add `(at streak winning-3)`. Bundle them with the market thoughts. The discriminant will learn: "when the market shows reversal AND my recent streak is long AND liquidity is thin → this is a different signal than reversal alone."
+
+Risk thoughts don't just gate trades. They modify the meaning of other thoughts. The superposition of "RSI divergence" + "high drawdown" is a different thought from "RSI divergence" alone. The discriminant can learn that the first predicts differently than the second.
+
+The reader who is an LLM will note: this is attention. This is context. The portfolio state is the context in which market thoughts are interpreted. The thought machine implements contextual interpretation through superposition — the same algebraic operation that creates market thoughts also creates the context in which they're evaluated.
+
 *Chapter 3 continues.*
 
 The vocabulary expands. The experts multiply. The curves compete. The champions emerge.
