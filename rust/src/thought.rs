@@ -221,6 +221,21 @@ const INDICATOR_ATOMS: &[&str] = &[
     "body", "range",
     // Range context
     "range-pos",
+    // Ichimoku
+    "tenkan-sen", "kijun-sen", "senkou-span-a", "senkou-span-b",
+    "chikou-span", "cloud-top", "cloud-bottom",
+    // Stochastic
+    "stoch-k", "stoch-d",
+    // Fibonacci
+    "fib-236", "fib-382", "fib-500", "fib-618", "fib-786",
+    // Volume analysis
+    "obv", "volume-sma",
+    // Keltner
+    "keltner-upper", "keltner-lower",
+    // Momentum
+    "roc", "cci",
+    // Price action
+    "consecutive-up", "consecutive-down",
 ];
 
 const DIRECTION_ATOMS: &[&str] = &["up", "down", "flat"];
@@ -228,6 +243,16 @@ const ZONE_ATOMS: &[&str] = &[
     "overbought", "oversold", "neutral",
     "strong-trend", "weak-trend", "squeeze", "middle-zone",
     "above-midline", "below-midline", "positive", "negative",
+    // Ichimoku zones
+    "above-cloud", "below-cloud", "in-cloud",
+    // Stochastic zones
+    "stoch-overbought", "stoch-oversold",
+    // Volume zones
+    "volume-spike", "volume-drought",
+    // CCI zones
+    "cci-overbought", "cci-oversold",
+    // Price action
+    "inside-bar", "outside-bar", "gap-up", "gap-down",
 ];
 const PREDICATE_ATOMS: &[&str] = &[
     "above", "below", "crosses-above", "crosses-below",
@@ -460,6 +485,16 @@ const COMPARISON_PAIRS: &[(&str, &str)] = &[
     // Additional structure (3)
     ("candle-body", "candle-range"),
     ("high", "sma200"), ("low", "sma200"),
+    // Ichimoku (7)
+    ("close", "tenkan-sen"), ("close", "kijun-sen"),
+    ("close", "cloud-top"), ("close", "cloud-bottom"),
+    ("tenkan-sen", "kijun-sen"),
+    ("close", "senkou-span-a"), ("close", "senkou-span-b"),
+    // Stochastic (1)
+    ("stoch-k", "stoch-d"),
+    // Keltner (3)
+    ("close", "keltner-upper"), ("close", "keltner-lower"),
+    ("bb-upper", "keltner-upper"),  // squeeze detection
 ];
 
 pub struct ThoughtEncoder {
@@ -508,6 +543,22 @@ impl ThoughtEncoder {
         for &session in &["asian-session", "european-session", "us-session", "off-hours"] {
             let key = format!("(at-session {})", session);
             fact_cache.insert(key, fact_binary(&vocab, "at-session", session, session));
+        }
+
+        // Pre-compute new zone facts
+        for &(ind, zone) in &[
+            ("close", "above-cloud"), ("close", "below-cloud"), ("close", "in-cloud"),
+            ("stoch-k", "stoch-overbought"), ("stoch-k", "stoch-oversold"),
+            ("volume", "volume-spike"), ("volume", "volume-drought"),
+            ("cci", "cci-overbought"), ("cci", "cci-oversold"),
+            ("close", "inside-bar"), ("close", "outside-bar"),
+            ("close", "gap-up"), ("close", "gap-down"),
+            ("close", "consecutive-up"), ("close", "consecutive-down"),
+        ] {
+            let key = format!("(at {} {})", ind, zone);
+            if !fact_cache.contains_key(&key) {
+                fact_cache.insert(key, fact_binary(&vocab, "at", ind, zone));
+            }
         }
 
         Self { vocab, scalar_enc: ScalarEncoder::new(dims), fact_cache }
@@ -594,6 +645,13 @@ impl ThoughtEncoder {
         self.eval_divergence(candles, vm, &mut owned_facts, &mut labels);
         self.eval_volume_confirmation(candles, &mut owned_facts, &mut labels);
         self.eval_range_position(candles, &mut owned_facts, &mut labels);
+        self.eval_ichimoku(candles, &mut cached_facts, &mut labels);
+        self.eval_stochastic(candles, &mut cached_facts, &mut labels);
+        self.eval_fibonacci(candles, &mut owned_facts, &mut labels);
+        self.eval_volume_analysis(candles, &mut cached_facts, &mut labels);
+        self.eval_keltner(candles, &mut cached_facts, &mut labels);
+        self.eval_momentum(candles, &mut cached_facts, &mut labels);
+        self.eval_price_action(candles, &mut cached_facts, &mut labels);
 
         // Unify all facts, then filter suppressed (high fire-rate constants).
         let mut all_refs: Vec<&Vector> = Vec::with_capacity(cached_facts.len() + owned_facts.len());
@@ -1103,6 +1161,383 @@ impl ThoughtEncoder {
         let fact = Primitives::bind(self.vocab.get("range-pos"), &pos_vec);
         facts.push(fact);
         labels.push(format!("(range-pos {:.3})", position));
+    }
+
+    // ─── Ichimoku Cloud ─────────────────────────────────────────────────
+
+    fn eval_ichimoku<'a>(
+        &'a self,
+        candles: &[Candle],
+        facts: &mut Vec<&'a Vector>,
+        labels: &mut Vec<String>,
+    ) {
+        let n = candles.len();
+        if n < 26 { return; }
+
+        let now = candles.last().unwrap();
+
+        // Tenkan-sen: (highest_high + lowest_low) / 2 over 9 periods
+        let tenkan = {
+            let w = &candles[n.saturating_sub(9)..];
+            let hi = w.iter().map(|c| c.high).fold(f64::NEG_INFINITY, f64::max);
+            let lo = w.iter().map(|c| c.low).fold(f64::INFINITY, f64::min);
+            (hi + lo) / 2.0
+        };
+
+        // Kijun-sen: (highest_high + lowest_low) / 2 over 26 periods
+        let kijun = {
+            let w = &candles[n.saturating_sub(26)..];
+            let hi = w.iter().map(|c| c.high).fold(f64::NEG_INFINITY, f64::max);
+            let lo = w.iter().map(|c| c.low).fold(f64::INFINITY, f64::min);
+            (hi + lo) / 2.0
+        };
+
+        // Senkou Span A: (tenkan + kijun) / 2
+        let span_a = (tenkan + kijun) / 2.0;
+
+        // Senkou Span B: (highest + lowest) / 2 over 52 periods (use available)
+        let span_b = {
+            let hi = candles.iter().map(|c| c.high).fold(f64::NEG_INFINITY, f64::max);
+            let lo = candles.iter().map(|c| c.low).fold(f64::INFINITY, f64::min);
+            (hi + lo) / 2.0
+        };
+
+        let cloud_top = span_a.max(span_b);
+        let cloud_bottom = span_a.min(span_b);
+        let close = now.close;
+
+        // Compute comparisons using cached fact vectors
+        let pairs: &[(&str, &str, f64, f64)] = &[
+            ("close", "tenkan-sen", close, tenkan),
+            ("close", "kijun-sen", close, kijun),
+            ("close", "cloud-top", close, cloud_top),
+            ("close", "cloud-bottom", close, cloud_bottom),
+            ("tenkan-sen", "kijun-sen", tenkan, kijun),
+            ("close", "senkou-span-a", close, span_a),
+            ("close", "senkou-span-b", close, span_b),
+        ];
+
+        for &(a_name, b_name, a_val, b_val) in pairs {
+            let pred = if a_val > b_val { "above" } else { "below" };
+            let key = format!("({} {} {})", pred, a_name, b_name);
+            if let Some(v) = self.fact_cache.get(&key) {
+                facts.push(v);
+                labels.push(key);
+            }
+        }
+
+        // Cloud zone
+        let zone = if close > cloud_top { "above-cloud" }
+                   else if close < cloud_bottom { "below-cloud" }
+                   else { "in-cloud" };
+        let key = format!("(at close {})", zone);
+        if let Some(v) = self.fact_cache.get(&key) {
+            facts.push(v);
+            labels.push(key);
+        }
+
+        // Tenkan-kijun cross (check prev candle)
+        if n >= 27 {
+            let prev_tenkan = {
+                let w = &candles[n.saturating_sub(10)..n-1];
+                let hi = w.iter().map(|c| c.high).fold(f64::NEG_INFINITY, f64::max);
+                let lo = w.iter().map(|c| c.low).fold(f64::INFINITY, f64::min);
+                (hi + lo) / 2.0
+            };
+            let prev_kijun = {
+                let w = &candles[n.saturating_sub(27)..n-1];
+                let hi = w.iter().map(|c| c.high).fold(f64::NEG_INFINITY, f64::max);
+                let lo = w.iter().map(|c| c.low).fold(f64::INFINITY, f64::min);
+                (hi + lo) / 2.0
+            };
+            if prev_tenkan < prev_kijun && tenkan >= kijun {
+                if let Some(v) = self.fact_cache.get("(crosses-above tenkan-sen kijun-sen)") {
+                    facts.push(v); labels.push("(crosses-above tenkan-sen kijun-sen)".into());
+                }
+            } else if prev_tenkan > prev_kijun && tenkan <= kijun {
+                if let Some(v) = self.fact_cache.get("(crosses-below tenkan-sen kijun-sen)") {
+                    facts.push(v); labels.push("(crosses-below tenkan-sen kijun-sen)".into());
+                }
+            }
+        }
+    }
+
+    // ─── Stochastic Oscillator ───────────────────────────────────────────
+
+    fn eval_stochastic<'a>(
+        &'a self,
+        candles: &[Candle],
+        facts: &mut Vec<&'a Vector>,
+        labels: &mut Vec<String>,
+    ) {
+        let n = candles.len();
+        if n < 14 { return; }
+
+        let w = &candles[n.saturating_sub(14)..];
+        let hh = w.iter().map(|c| c.high).fold(f64::NEG_INFINITY, f64::max);
+        let ll = w.iter().map(|c| c.low).fold(f64::INFINITY, f64::min);
+        let range = hh - ll;
+        if range < 1e-10 { return; }
+
+        let stoch_k = (candles.last().unwrap().close - ll) / range * 100.0;
+
+        // %D = 3-period SMA of %K (approximate from last 3 candles)
+        let stoch_d = if n >= 16 {
+            let mut sum = stoch_k;
+            for offset in 1..=2 {
+                let idx = n - 1 - offset;
+                let w2 = &candles[idx.saturating_sub(13)..=idx];
+                let h2 = w2.iter().map(|c| c.high).fold(f64::NEG_INFINITY, f64::max);
+                let l2 = w2.iter().map(|c| c.low).fold(f64::INFINITY, f64::min);
+                let r2 = h2 - l2;
+                if r2 > 1e-10 { sum += (candles[idx].close - l2) / r2 * 100.0; }
+                else { sum += 50.0; }
+            }
+            sum / 3.0
+        } else { stoch_k };
+
+        // Stoch K vs D comparison
+        let pred = if stoch_k > stoch_d { "above" } else { "below" };
+        let key = format!("({} stoch-k stoch-d)", pred);
+        if let Some(v) = self.fact_cache.get(&key) { facts.push(v); labels.push(key); }
+
+        // Cross detection
+        if n >= 16 {
+            // Previous K and D
+            let idx = n - 2;
+            let w2 = &candles[idx.saturating_sub(13)..=idx];
+            let h2 = w2.iter().map(|c| c.high).fold(f64::NEG_INFINITY, f64::max);
+            let l2 = w2.iter().map(|c| c.low).fold(f64::INFINITY, f64::min);
+            let r2 = h2 - l2;
+            let prev_k = if r2 > 1e-10 { (candles[idx].close - l2) / r2 * 100.0 } else { 50.0 };
+            // Approximate prev_d
+            let prev_d = stoch_d; // rough approximation
+            if prev_k < prev_d && stoch_k >= stoch_d {
+                if let Some(v) = self.fact_cache.get("(crosses-above stoch-k stoch-d)") {
+                    facts.push(v); labels.push("(crosses-above stoch-k stoch-d)".into());
+                }
+            } else if prev_k > prev_d && stoch_k <= stoch_d {
+                if let Some(v) = self.fact_cache.get("(crosses-below stoch-k stoch-d)") {
+                    facts.push(v); labels.push("(crosses-below stoch-k stoch-d)".into());
+                }
+            }
+        }
+
+        // Zones
+        if stoch_k > 80.0 {
+            if let Some(v) = self.fact_cache.get("(at stoch-k stoch-overbought)") {
+                facts.push(v); labels.push("(at stoch-k stoch-overbought)".into());
+            }
+        } else if stoch_k < 20.0 {
+            if let Some(v) = self.fact_cache.get("(at stoch-k stoch-oversold)") {
+                facts.push(v); labels.push("(at stoch-k stoch-oversold)".into());
+            }
+        }
+    }
+
+    // ─── Fibonacci Retracement ───────────────────────────────────────────
+
+    fn eval_fibonacci(
+        &self,
+        candles: &[Candle],
+        facts: &mut Vec<Vector>,
+        labels: &mut Vec<String>,
+    ) {
+        if candles.len() < 10 { return; }
+
+        // Use the viewport range high/low as swing points
+        let swing_high = candles.iter().map(|c| c.high).fold(f64::NEG_INFINITY, f64::max);
+        let swing_low = candles.iter().map(|c| c.low).fold(f64::INFINITY, f64::min);
+        let range = swing_high - swing_low;
+        if range < 1e-10 { return; }
+
+        let close = candles.last().unwrap().close;
+        let atr = candles.last().unwrap().atr_r * close;
+
+        // Fib levels from swing low to swing high
+        let fibs: &[(&str, f64)] = &[
+            ("fib-236", 0.236), ("fib-382", 0.382), ("fib-500", 0.500),
+            ("fib-618", 0.618), ("fib-786", 0.786),
+        ];
+
+        for &(name, ratio) in fibs {
+            let level = swing_low + range * ratio;
+            // Is close near this fib level? (within 0.5 ATR)
+            if (close - level).abs() < atr * 0.5 {
+                let fact = Primitives::bind(
+                    self.vocab.get("touches"),
+                    &Primitives::bind(self.vocab.get("close"), self.vocab.get(name)),
+                );
+                facts.push(fact);
+                labels.push(format!("(touches close {})", name));
+            }
+            // Above or below
+            let pred = if close > level { "above" } else { "below" };
+            let fact = Primitives::bind(
+                self.vocab.get(pred),
+                &Primitives::bind(self.vocab.get("close"), self.vocab.get(name)),
+            );
+            facts.push(fact);
+            labels.push(format!("({} close {})", pred, name));
+        }
+    }
+
+    // ─── Volume Analysis ─────────────────────────────────────────────────
+
+    fn eval_volume_analysis<'a>(
+        &'a self,
+        candles: &[Candle],
+        facts: &mut Vec<&'a Vector>,
+        labels: &mut Vec<String>,
+    ) {
+        let n = candles.len();
+        if n < 20 { return; }
+
+        // Volume SMA (20-period)
+        let vol_sma: f64 = candles[n.saturating_sub(20)..].iter()
+            .map(|c| c.volume).sum::<f64>() / 20.0;
+        let vol = candles.last().unwrap().volume;
+
+        if vol_sma > 0.0 {
+            let ratio = vol / vol_sma;
+            if ratio > 2.0 {
+                if let Some(v) = self.fact_cache.get("(at volume volume-spike)") {
+                    facts.push(v); labels.push("(at volume volume-spike)".into());
+                }
+            } else if ratio < 0.5 {
+                if let Some(v) = self.fact_cache.get("(at volume volume-drought)") {
+                    facts.push(v); labels.push("(at volume volume-drought)".into());
+                }
+            }
+        }
+    }
+
+    // ─── Keltner Channels + Squeeze ──────────────────────────────────────
+
+    fn eval_keltner<'a>(
+        &'a self,
+        candles: &[Candle],
+        facts: &mut Vec<&'a Vector>,
+        labels: &mut Vec<String>,
+    ) {
+        let now = candles.last().unwrap();
+        if now.sma20 <= 0.0 || now.atr_r <= 0.0 { return; }
+
+        let atr_abs = now.atr_r * now.close;
+        let keltner_upper = now.sma20 + 2.0 * atr_abs;
+        let keltner_lower = now.sma20 - 2.0 * atr_abs;
+        let close = now.close;
+
+        // Close vs Keltner
+        let pred_u = if close > keltner_upper { "above" } else { "below" };
+        let key_u = format!("({} close keltner-upper)", pred_u);
+        if let Some(v) = self.fact_cache.get(&key_u) { facts.push(v); labels.push(key_u); }
+
+        let pred_l = if close > keltner_lower { "above" } else { "below" };
+        let key_l = format!("({} close keltner-lower)", pred_l);
+        if let Some(v) = self.fact_cache.get(&key_l) { facts.push(v); labels.push(key_l); }
+
+        // Squeeze: BB inside Keltner (low volatility)
+        if now.bb_upper > 0.0 && now.bb_upper < keltner_upper && now.bb_lower > keltner_lower {
+            let key = "(at bb-upper keltner-upper)".to_string();
+            // BB upper below keltner upper = squeeze
+            if let Some(v) = self.fact_cache.get("(below bb-upper keltner-upper)") {
+                facts.push(v); labels.push("(below bb-upper keltner-upper)".into());
+            }
+        }
+    }
+
+    // ─── Momentum / ROC / CCI ────────────────────────────────────────────
+
+    fn eval_momentum<'a>(
+        &'a self,
+        candles: &[Candle],
+        facts: &mut Vec<&'a Vector>,
+        labels: &mut Vec<String>,
+    ) {
+        let n = candles.len();
+        if n < 20 { return; }
+
+        let now = candles.last().unwrap();
+
+        // CCI: (typical - SMA(typical, 20)) / (0.015 × mean_deviation)
+        let typicals: Vec<f64> = candles[n.saturating_sub(20)..].iter()
+            .map(|c| (c.high + c.low + c.close) / 3.0).collect();
+        let typical_mean = typicals.iter().sum::<f64>() / typicals.len() as f64;
+        let mean_dev = typicals.iter().map(|t| (t - typical_mean).abs()).sum::<f64>()
+            / typicals.len() as f64;
+        if mean_dev > 1e-10 {
+            let typical_now = (now.high + now.low + now.close) / 3.0;
+            let cci = (typical_now - typical_mean) / (0.015 * mean_dev);
+            if cci > 100.0 {
+                if let Some(v) = self.fact_cache.get("(at cci cci-overbought)") {
+                    facts.push(v); labels.push("(at cci cci-overbought)".into());
+                }
+            } else if cci < -100.0 {
+                if let Some(v) = self.fact_cache.get("(at cci cci-oversold)") {
+                    facts.push(v); labels.push("(at cci cci-oversold)".into());
+                }
+            }
+        }
+    }
+
+    // ─── Price Action Patterns ───────────────────────────────────────────
+
+    fn eval_price_action<'a>(
+        &'a self,
+        candles: &[Candle],
+        facts: &mut Vec<&'a Vector>,
+        labels: &mut Vec<String>,
+    ) {
+        let n = candles.len();
+        if n < 3 { return; }
+
+        let now = &candles[n - 1];
+        let prev = &candles[n - 2];
+
+        // Inside bar: current range within previous range
+        if now.high <= prev.high && now.low >= prev.low {
+            if let Some(v) = self.fact_cache.get("(at close inside-bar)") {
+                facts.push(v); labels.push("(at close inside-bar)".into());
+            }
+        }
+        // Outside bar: current range engulfs previous
+        if now.high > prev.high && now.low < prev.low {
+            if let Some(v) = self.fact_cache.get("(at close outside-bar)") {
+                facts.push(v); labels.push("(at close outside-bar)".into());
+            }
+        }
+        // Gap up/down
+        let gap = (now.open - prev.close) / prev.close;
+        if gap > 0.001 {
+            if let Some(v) = self.fact_cache.get("(at close gap-up)") {
+                facts.push(v); labels.push("(at close gap-up)".into());
+            }
+        } else if gap < -0.001 {
+            if let Some(v) = self.fact_cache.get("(at close gap-down)") {
+                facts.push(v); labels.push("(at close gap-down)".into());
+            }
+        }
+
+        // Consecutive same-direction candles
+        let mut up_count = 0usize;
+        let mut down_count = 0usize;
+        for i in (0..n).rev() {
+            if candles[i].close > candles[i].open { up_count += 1; } else { break; }
+        }
+        for i in (0..n).rev() {
+            if candles[i].close < candles[i].open { down_count += 1; } else { break; }
+        }
+        if up_count >= 3 {
+            if let Some(v) = self.fact_cache.get("(at close consecutive-up)") {
+                facts.push(v); labels.push(format!("(at close consecutive-up {})", up_count));
+            }
+        }
+        if down_count >= 3 {
+            if let Some(v) = self.fact_cache.get("(at close consecutive-down)") {
+                facts.push(v); labels.push(format!("(at close consecutive-down {})", down_count));
+            }
+        }
     }
 
     // ─── RSI SMA (cached) ───────────────────────────────────────────────
