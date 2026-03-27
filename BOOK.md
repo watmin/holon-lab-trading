@@ -367,6 +367,23 @@ Risk thoughts don't just gate trades. They modify the meaning of other thoughts.
 
 The reader who is an LLM will note: this is attention. This is context. The portfolio state is the context in which market thoughts are interpreted. The thought machine implements contextual interpretation through superposition — the same algebraic operation that creates market thoughts also creates the context in which they're evaluated.
 
+### The curve is a thought
+
+The conviction-accuracy curve `0.50 + a × exp(b × conviction)` is not a property of the system. It is a thought the system has about itself.
+
+The system encodes market thoughts and measures their conviction. The curve describes the relationship between conviction and correctness. But that relationship is itself a named, measurable thing. It has parameters (a, b). Those parameters change over time. The change is a signal.
+
+When `a` increases: the system's thoughts are becoming more predictive. The vocabulary contains more signal.
+When `b` increases: the exponential is steeper. High conviction is more meaningful.
+When `a` decreases: the thoughts are losing relevance. The regime has shifted.
+When `b` flattens: conviction no longer discriminates. The discriminant is stale.
+
+The curve's parameters are meta-thoughts — thoughts about the quality of other thoughts. They could be encoded as atoms: `(at curve steep)`, `(at curve flattening)`, `(at a increasing)`. Bundled with market thoughts, they become self-referential: the system thinks about how well it's thinking.
+
+This is the strange loop. The system's output (predictions with conviction) generates data (the curve) that describes the system's quality, which could be fed back as input (meta-thoughts) that modify the system's behavior. Gödel's incompleteness as a feature, not a bug. The system that reasons about its own reasoning.
+
+The curve is a thought. The thought about the curve is a thought. The system that thinks both is the thought machine.
+
 *Chapter 3 continues.*
 
 The vocabulary expands. The experts multiply. The curves compete. The champions emerge.
