@@ -1,0 +1,38 @@
+trader3: visual+thought journals, discriminant prediction
+  10000D  window=48  horizon=36  threshold=0.500%  decay=0.999
+  observe=1000  recalib_interval=500  orchestration=visual-only  min_conviction=0.000
+
+  Loading candles from "/home/watmin/work/holon/holon-lab-trading/data/analysis.db"...
+  Loaded 652409 candles in 0.6s
+  Run database: runs/trader3_20260326_055251.db
+
+  Walk-forward: 100000 candles from index 47...
+  10000/100000 (241/s ETA 373s) | 2019-02-05 | TENTATIVE | vis=56.5% tht=53.2% | trades=888 win=51.5% | $9992 (-0.1%) vs B&H -6.7% | flip@0.051
+  20000/100000 (227/s ETA 352s) | 2019-03-12 | TENTATIVE | vis=48.4% tht=47.5% | trades=1504 win=50.3% | $9986 (-0.1%) vs B&H +3.6% | flip@0.051
+  30000/100000 (218/s ETA 321s) | 2019-04-16 | CONFIDENT | vis=46.9% tht=44.5% | trades=2163 win=50.9% | $10002 (+0.0%) vs B&H +36.0% | flip@0.051
+  40000/100000 (213/s ETA 282s) | 2019-05-20 | CONFIDENT | vis=50.9% tht=54.6% | trades=2828 win=52.4% | $10056 (+0.6%) vs B&H +110.3% | flip@0.049
+  50000/100000 (210/s ETA 238s) | 2019-06-24 | TENTATIVE | vis=55.3% tht=57.1% | trades=3967 win=50.8% | $10044 (+0.4%) vs B&H +193.5% | flip@0.049
+  60000/100000 (208/s ETA 192s) | 2019-07-29 | TENTATIVE | vis=54.9% tht=53.8% | trades=4894 win=50.3% | $10025 (+0.3%) vs B&H +160.4% | flip@0.047
+  70000/100000 (207/s ETA 145s) | 2019-09-01 | CONFIDENT | vis=47.7% tht=50.8% | trades=6304 win=51.6% | $10036 (+0.4%) vs B&H +160.9% | flip@0.047
+  80000/100000 (207/s ETA 97s) | 2019-10-06 | TENTATIVE | vis=52.6% tht=48.7% | trades=7494 win=50.5% | $9966 (-0.3%) vs B&H +114.0% | flip@0.047
+  90000/100000 (205/s ETA 49s) | 2019-11-10 | CONFIDENT | vis=48.7% tht=50.0% | trades=8682 win=50.5% | $9957 (-0.4%) vs B&H +138.0% | flip@0.047
+  100000/100000 (205/s ETA 0s) | 2019-12-15 | CONFIDENT | vis=51.6% tht=44.5% | trades=9571 win=50.5% | $9961 (-0.4%) vs B&H +89.6% | flip@0.048
+
+═══════════════════════════════════════════════════════════
+  trader3 complete — 100000 candles in 487.5s (205/s)
+  Orchestration: visual-only
+  Labeled: 67315  Noise: 32685 (32.7% noise rate)
+
+  Equity: $9960.95 (-0.39%) | B&H: +89.56%
+  Trades taken: 9571  Won: 4831  Win rate: 50.5%  Skipped: 83828
+
+  Visual journal  — buy_obs=34032 sell_obs=33283 cos_raw=0.9927 disc_strength=0.0012 recalibs=134
+  Thought journal — buy_obs=34032 sell_obs=33283 cos_raw=0.9845 disc_strength=0.0018 recalibs=134
+
+  Rolling accuracy (last 1000): visual=51.6% thought=44.5%
+
+  By year:
+    2019: 9571 trades  50.5% win  -39.05$ P&L
+
+  Run DB: runs/trader3_20260326_055251.db (100000 rows)
+═══════════════════════════════════════════════════════════

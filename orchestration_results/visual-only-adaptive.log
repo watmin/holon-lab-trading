@@ -1,0 +1,25 @@
+trader: Self-Supervised BTC Trader
+  10000D, window=48, px_rows=25
+  Grid: 48 cols x 100 rows (4800 pixels/viewport)
+  Horizon: 36 candles (180min)
+  Move threshold: 0.500% (50.0bps)
+  Decay: 0.999, Recalib interval: 500
+  Observe period: 1000 candles
+  Initial equity: $10000
+  Reward weight: 1, Correction weight: 1.5
+  Use grover: false, Use attend: false
+  Threads: 8, Batch size: 256
+
+  Loading candles from "./data/analysis.db"...
+  Loaded 652409 candles in 0.6s
+  Warming vector cache...
+  Encoding null template...
+  Null template encoded.
+  Initializing thought system...
+  Thought system ready (177 fact codebook entries).
+
+  Starting walk-forward (50000 candles, starting at index 47)...
+    10000/50000 (24/s, ETA 1654s) | 2019-02-05 13:45:00 | CONFIDENT | vis=50.6% thought=44.2% agree=51% | trades=3921 win=48.2% | eq=$9955 (-0.5%) vs bnh -6.7%
+    20000/50000 (25/s, ETA 1200s) | 2019-03-12 07:05:00 | TENTATIVE | vis=37.1% thought=58.9% agree=54% | trades=8188 win=45.8% | eq=$9779 (-2.2%) vs bnh +3.6%
+    30000/50000 (25/s, ETA 803s) | 2019-04-16 00:25:00 | TENTATIVE | vis=50.5% thought=40.8% agree=52% | trades=12829 win=45.6% | eq=$9571 (-4.3%) vs bnh +36.0%
+    40000/50000 (25/s, ETA 403s) | 2019-05-20 17:45:00 | CONFIDENT | vis=55.0% thought=54.4% agree=51% | trades=20322 win=46.0% | eq=$9458 (-5.4%) vs bnh +110.3%

@@ -1,0 +1,41 @@
+trader: Self-Supervised BTC Trader
+  10000D, window=48, px_rows=25
+  Grid: 48 cols x 100 rows (4800 pixels/viewport)
+  Horizon: 36 candles (180min)
+  Move threshold: 0.500% (50.0bps)
+  Decay: 0.999, Recalib interval: 500
+  Observe period: 1000 candles
+  Initial equity: $10000
+  Reward weight: 1, Correction weight: 1.5
+  Use grover: false, Use attend: false
+  Threads: 8, Batch size: 256
+
+  Loading candles from "/home/watmin/work/holon/holon-lab-trading/data/analysis.db"...
+  Loaded 652409 candles in 0.7s
+  Warming vector cache...
+  Encoding null template...
+  Null template + visual cache ready.
+  Initializing thought system...
+  Thought system ready (177 fact codebook entries).
+  Run database: runs/run_20260322_045816.db
+
+  Starting walk-forward (10000 candles, starting at index 47)...
+    500/10000 (79/s, ETA 120s) | 2019-01-03 14:05:00 | OBSERVE | vis=64.1% thought=41.2% agree=58% | trades=0 win=0.0% | eq=$10000 (+0.0%) vs bnh +2.5%
+    1000/10000 (76/s, ETA 119s) | 2019-01-05 07:45:00 | OBSERVE | vis=57.5% thought=47.5% agree=62% | trades=0 win=0.0% | eq=$10000 (+0.0%) vs bnh +2.1%
+    1500/10000 (75/s, ETA 113s) | 2019-01-07 01:25:00 | TENTATIVE | vis=55.1% thought=48.1% agree=59% | trades=250 win=52.8% | eq=$9998 (-0.0%) vs bnh +7.3%
+    2000/10000 (74/s, ETA 107s) | 2019-01-08 19:05:00 | TENTATIVE | vis=50.8% thought=53.9% agree=55% | trades=530 win=51.9% | eq=$10002 (+0.0%) vs bnh +6.9%
+    2500/10000 (74/s, ETA 101s) | 2019-01-10 12:45:00 | TENTATIVE | vis=52.9% thought=52.7% agree=53% | trades=707 win=52.1% | eq=$10000 (-0.0%) vs bnh +0.6%
+    3000/10000 (74/s, ETA 95s) | 2019-01-12 06:25:00 | CONFIDENT | vis=51.5% thought=51.1% agree=54% | trades=1090 win=52.1% | eq=$10011 (+0.1%) vs bnh -3.5%
+    3500/10000 (73/s, ETA 89s) | 2019-01-14 00:05:00 | CONFIDENT | vis=48.3% thought=52.3% agree=54% | trades=1254 win=52.3% | eq=$10011 (+0.1%) vs bnh -6.4%
+    4000/10000 (73/s, ETA 82s) | 2019-01-15 17:45:00 | CONFIDENT | vis=54.9% thought=55.6% agree=55% | trades=1517 win=55.4% | eq=$10055 (+0.5%) vs bnh -3.0%
+    4500/10000 (73/s, ETA 75s) | 2019-01-17 11:25:00 | CONFIDENT | vis=50.8% thought=58.7% agree=55% | trades=1822 win=56.1% | eq=$10134 (+1.3%) vs bnh -3.6%
+    5000/10000 (73/s, ETA 69s) | 2019-01-19 05:05:00 | CONFIDENT | vis=48.5% thought=59.9% agree=55% | trades=1986 win=56.1% | eq=$10139 (+1.4%) vs bnh -2.8%
+    5500/10000 (73/s, ETA 62s) | 2019-01-20 22:45:00 | CONFIDENT | vis=50.8% thought=57.2% agree=54% | trades=2152 win=54.8% | eq=$10087 (+0.9%) vs bnh -4.5%
+    6000/10000 (73/s, ETA 55s) | 2019-01-22 16:25:00 | CONFIDENT | vis=50.7% thought=55.8% agree=52% | trades=2352 win=54.8% | eq=$10100 (+1.0%) vs bnh -3.8%
+    6500/10000 (73/s, ETA 48s) | 2019-01-24 10:05:00 | CONFIDENT | vis=48.8% thought=55.4% agree=51% | trades=2552 win=55.1% | eq=$10110 (+1.1%) vs bnh -4.4%
+    7000/10000 (73/s, ETA 41s) | 2019-01-26 03:45:00 | CONFIDENT | vis=47.9% thought=54.1% agree=50% | trades=2708 win=54.6% | eq=$10105 (+1.1%) vs bnh -3.5%
+    7500/10000 (73/s, ETA 34s) | 2019-01-27 21:25:00 | CONFIDENT | vis=50.8% thought=55.5% agree=51% | trades=2908 win=55.2% | eq=$10122 (+1.2%) vs bnh -3.9%
+    8000/10000 (72/s, ETA 28s) | 2019-01-29 15:05:00 | CONFIDENT | vis=61.4% thought=61.0% agree=52% | trades=3221 win=57.2% | eq=$10256 (+2.6%) vs bnh -8.0%
+    8500/10000 (72/s, ETA 21s) | 2019-01-31 08:45:00 | CONFIDENT | vis=56.6% thought=57.4% agree=52% | trades=3458 win=56.0% | eq=$10193 (+1.9%) vs bnh -7.3%
+    9000/10000 (72/s, ETA 14s) | 2019-02-02 02:25:00 | TENTATIVE | vis=60.5% thought=56.7% agree=53% | trades=3657 win=55.9% | eq=$10197 (+2.0%) vs bnh -6.6%
+    9500/10000 (72/s, ETA 7s) | 2019-02-03 20:05:00 | CONFIDENT | vis=60.9% thought=55.1% agree=53% | trades=3822 win=55.8% | eq=$10200 (+2.0%) vs bnh -7.3%

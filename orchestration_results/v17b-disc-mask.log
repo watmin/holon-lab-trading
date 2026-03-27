@@ -1,0 +1,35 @@
+trader: Self-Supervised BTC Trader
+  10000D, window=48, px_rows=25
+  Grid: 48 cols x 100 rows (4800 pixels/viewport)
+  Horizon: 36 candles (180min)
+  Move threshold: 0.500% (50.0bps)
+  Decay: 0.998, Recalib interval: 500
+  Observe period: 5000 candles
+  Initial equity: $10000
+  Reward weight: 1, Correction weight: 1.5, Learning rate: 1
+  Use grover: false, Use attend: false
+  Threads: 8, Batch size: 128
+
+  Loading candles from "/home/watmin/work/holon/holon-lab-trading/data/analysis.db"...
+  Loaded 652409 candles in 0.6s
+  Warming vector cache...
+  Encoding null template...
+  Null template + visual cache ready.
+  Initializing thought system...
+  Thought system ready (74 fact codebook entries).
+  Run database: /home/watmin/work/holon/holon-lab-trading/orchestration_results/v17b-disc-mask.db
+  Visual codebook: 2200 cell atoms, 48 columns
+
+  Starting walk-forward (100000 candles, starting at index 47)...
+    10000/100000 (48/s, ETA 1881s) | 2019-02-05 13:45:00 | TENTATIVE | vis=52.7% thought=49.0% agree=51%(52.2%) | trades=1921 win=49.5% | eq=$9975 (-0.3%) vs bnh -6.7%
+    disc atoms: vis(buy=651 w=5.43, sell=609 w=5.41) tht(buy=12 w=0.07, sell=10 w=0.04)
+    disc proj: vis=46661/47160 (99%) tht=46661/47160 (99%) | mask: vis=1161/10000 tht=183/10000
+    proto: vis(cos=0.9630) tht(cos=0.9076)
+    20000/100000 (49/s, ETA 1635s) | 2019-03-12 07:05:00 | TENTATIVE | vis=46.5% thought=43.1% agree=51%(43.5%) | trades=6188 win=47.9% | eq=$9918 (-0.8%) vs bnh +3.6%
+    disc atoms: vis(buy=591 w=3.50, sell=564 w=3.50) tht(buy=9 w=0.05, sell=13 w=0.04)
+    disc proj: vis=91167/91666 (99%) tht=91167/91666 (99%) | mask: vis=1186/10000 tht=152/10000
+    proto: vis(cos=0.9868) tht(cos=0.9208)
+    30000/100000 (47/s, ETA 1491s) | 2019-04-16 00:25:00 | CONFIDENT | vis=52.5% thought=53.7% agree=51%(52.6%) | trades=10829 win=48.5% | eq=$9646 (-3.5%) vs bnh +36.0%
+    disc atoms: vis(buy=615 w=4.67, sell=608 w=4.66) tht(buy=7 w=0.03, sell=13 w=0.05)
+    disc proj: vis=153019/153518 (100%) tht=153019/153518 (100%) | mask: vis=1105/10000 tht=138/10000
+    proto: vis(cos=0.9739) tht(cos=0.9468)

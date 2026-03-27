@@ -1,0 +1,38 @@
+trader3: visual+thought journals, discriminant prediction
+  10000D  window=48  horizon=36  threshold=0.500%  decay=0.999
+  observe=1000  recalib_interval=500  orchestration=thought-only  min_conviction=0.000
+
+  Loading candles from "/home/watmin/work/holon/holon-lab-trading/data/analysis.db"...
+  Loaded 652409 candles in 0.6s
+  Run database: /home/watmin/work/holon/holon-lab-trading/orchestration_results/thought-q95-100k.db
+
+  Walk-forward: 100000 candles from index 47...
+  10000/100000 (210/s ETA 429s) | 2019-02-05 | TENTATIVE | vis=56.5% tht=53.2% | trades=413 win=62.5% | $10039 (+0.4%) vs B&H -6.7% | flip@0.179
+  20000/100000 (213/s ETA 375s) | 2019-03-12 | CONFIDENT | vis=48.4% tht=47.5% | trades=577 win=57.0% | $10028 (+0.3%) vs B&H +3.6% | flip@0.167
+  30000/100000 (213/s ETA 329s) | 2019-04-16 | CONFIDENT | vis=46.9% tht=44.5% | trades=761 win=57.8% | $10045 (+0.5%) vs B&H +36.0% | flip@0.162
+  40000/100000 (215/s ETA 280s) | 2019-05-20 | CONFIDENT | vis=50.9% tht=54.6% | trades=1140 win=62.1% | $10166 (+1.7%) vs B&H +110.3% | flip@0.165
+  50000/100000 (214/s ETA 233s) | 2019-06-24 | CONFIDENT | vis=55.3% tht=57.1% | trades=1411 win=60.9% | $10239 (+2.4%) vs B&H +193.5% | flip@0.163
+  60000/100000 (216/s ETA 185s) | 2019-07-29 | TENTATIVE | vis=54.9% tht=53.8% | trades=1742 win=59.1% | $10249 (+2.5%) vs B&H +160.4% | flip@0.158
+  70000/100000 (217/s ETA 138s) | 2019-09-01 | CONFIDENT | vis=47.7% tht=50.8% | trades=2547 win=57.8% | $10292 (+2.9%) vs B&H +160.9% | flip@0.166
+  80000/100000 (216/s ETA 93s) | 2019-10-06 | CONFIDENT | vis=52.6% tht=48.7% | trades=2922 win=57.3% | $10310 (+3.1%) vs B&H +114.0% | flip@0.169
+  90000/100000 (216/s ETA 46s) | 2019-11-10 | CONFIDENT | vis=48.7% tht=50.0% | trades=3535 win=57.8% | $10372 (+3.7%) vs B&H +138.0% | flip@0.173
+  100000/100000 (217/s ETA 0s) | 2019-12-15 | CONFIDENT | vis=51.6% tht=44.5% | trades=3844 win=56.5% | $10332 (+3.3%) vs B&H +89.6% | flip@0.176
+
+═══════════════════════════════════════════════════════════
+  trader3 complete — 100000 candles in 460.0s (217/s)
+  Orchestration: thought-only
+  Labeled: 67315  Noise: 32685 (32.7% noise rate)
+
+  Equity: $10332.48 (+3.32%) | B&H: +89.56%
+  Trades taken: 3844  Won: 2172  Win rate: 56.5%  Skipped: 93416
+
+  Visual journal  — buy_obs=34032 sell_obs=33283 cos_raw=0.9927 disc_strength=0.0012 recalibs=134
+  Thought journal — buy_obs=34032 sell_obs=33283 cos_raw=0.9845 disc_strength=0.0018 recalibs=134
+
+  Rolling accuracy (last 1000): visual=51.6% thought=44.5%
+
+  By year:
+    2019: 3844 trades  56.5% win  +332.48$ P&L
+
+  Run DB: /home/watmin/work/holon/holon-lab-trading/orchestration_results/thought-q95-100k.db (100000 rows)
+═══════════════════════════════════════════════════════════

@@ -1,0 +1,25 @@
+trader: Self-Supervised BTC Trader
+  10000D, window=48, px_rows=25
+  Grid: 48 cols x 100 rows (4800 pixels/viewport)
+  Horizon: 36 candles (180min)
+  Move threshold: 0.500% (50.0bps)
+  Decay: 0.999, Recalib interval: 500
+  Observe period: 1000 candles
+  Initial equity: $10000
+  Reward weight: 1, Correction weight: 1.5, Learning rate: 1
+  Use grover: false, Use attend: false
+  Threads: 8, Batch size: 256
+
+  Loading candles from "/home/watmin/work/holon/holon-lab-trading/data/analysis.db"...
+  Loaded 652409 candles in 0.6s
+  Warming vector cache...
+  Encoding null template...
+  Null template + visual cache ready.
+  Initializing thought system...
+  Thought system ready (223 fact codebook entries).
+  Run database: /home/watmin/work/holon/holon-lab-trading/orchestration_results/clean-input-v1.db
+
+  Starting walk-forward (100000 candles, starting at index 47)...
+    10000/100000 (78/s, ETA 1158s) | 2019-02-05 13:45:00 | TENTATIVE | vis=43.9% thought=43.9% agree=100% | trades=3921 win=47.1% | eq=$9775 (-2.2%) vs bnh -6.7%
+    20000/100000 (79/s, ETA 1010s) | 2019-03-12 07:05:00 | TENTATIVE | vis=60.3% thought=60.3% agree=100% | trades=8188 win=51.3% | eq=$9956 (-0.4%) vs bnh +3.6%
+    30000/100000 (77/s, ETA 906s) | 2019-04-16 00:25:00 | TENTATIVE | vis=41.5% thought=41.5% agree=100% | trades=12829 win=52.6% | eq=$10371 (+3.7%) vs bnh +36.0%

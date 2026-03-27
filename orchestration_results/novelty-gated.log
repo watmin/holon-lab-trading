@@ -1,0 +1,89 @@
+trader: Self-Supervised BTC Trader
+  10000D, window=48, px_rows=25
+  Grid: 48 cols x 100 rows (4800 pixels/viewport)
+  Horizon: 36 candles (180min)
+  Move threshold: 0.500% (50.0bps)
+  Decay: 0.999, Recalib interval: 500
+  Observe period: 1000 candles
+  Initial equity: $10000
+  Reward weight: 1, Correction weight: 1.5
+  Use grover: false, Use attend: false
+  Threads: 8, Batch size: 256
+
+  Loading candles from "/home/watmin/work/holon/holon-lab-trading/data/analysis.db"...
+  Loaded 652409 candles in 1.3s
+  Warming vector cache...
+  Encoding null template...
+  Null template + visual cache ready.
+  Initializing thought system...
+  Thought system ready (223 fact codebook entries).
+  Run database: /home/watmin/work/holon/holon-lab-trading/orchestration_results/novelty-gated.db
+
+  Starting walk-forward (100000 candles, starting at index 47)...
+
+  Kill file detected (/tmp/trader-stop) — aborting.
+
+  --- Timing breakdown (total ms) ---
+  Visual batch encode:   15899.8
+  Thought encode:        31684.9
+  Visual predict:          415.7
+  Thought predict:         187.5
+  Rest (resolve/log):      817.6
+  Total accounted:       49005.4
+
+  Run database written: /home/watmin/work/holon/holon-lab-trading/orchestration_results/novelty-gated.db (3840 rows)
+
+  Walk-forward complete.
+  Orchestration mode: meta-boost
+  Encoded 3840 viewports in 49.5s (78 vec/s)
+  Labeled (BUY/SELL): 2176, Noise: 1664
+
+  ═══ Visual Journaler ═══
+  Accumulators:
+    buy_good:     count=2217, purity=0.0001
+    sell_good:    count=2094, purity=0.0001
+    buy_confuser: count=1032
+    sell_confuser:count=45
+    noise:        count=1664
+    cos(buy_good, sell_good) = 0.8914
+    cos(buy_good, noise) = 0.4733
+    cos(sell_good, noise) = 0.4142
+    delta_disc norm=0.5958, alpha=0.1086
+    recognition gate: noise_floor=0.0153 (buy_entropy=0.4460, sell_entropy=0.4298, d_eff=4298)
+
+  Visual prediction accuracy:
+    Overall: 49.6% (1058/2135)
+    Rolling (last 1000): 47.6%
+
+  Per-year breakdown:
+    2019: 49.6% (1058/2135)
+
+  ═══ Thought Journaler ═══
+  Accumulators:
+    buy_good:     count=2217, purity=0.0027
+    sell_good:    count=2094, purity=0.0023
+    buy_confuser: count=406
+    sell_confuser:count=681
+    noise:        count=1664
+    cos(buy_good, sell_good) = 0.9480
+    cos(buy_good, noise) = 0.8778
+    cos(sell_good, noise) = 0.8834
+
+  Thought prediction accuracy:
+    Overall: 49.1% (1048/2135)
+    Rolling (last 1000): 49.7%
+    Visual-Thought agreement: 37.1% (1409/3797)
+
+  ═══ Trader ═══
+  Final phase: TENTATIVE
+  Equity: $9896.53 (started $10000)
+  Total return: -1.03%
+  Trades taken: 1450, skipped: 993
+  Win rate: 47.7% (691/1450)
+  Confidence (rolling acc - 0.5): -0.020
+
+  Per-year P&L:
+    2019: trades=1450 win_rate=47.7% pnl=$-103.47
+
+  Buy-and-hold return over same period: 89.56%
+  ═══════════════════════════════════════

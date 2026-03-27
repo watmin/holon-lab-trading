@@ -1,0 +1,126 @@
+trader: Self-Supervised BTC Trader
+  10000D, window=48, px_rows=25
+  Grid: 48 cols x 100 rows (4800 pixels/viewport)
+  Horizon: 36 candles (180min)
+  Move threshold: 0.500% (50.0bps)
+  Decay: 0.999, Recalib interval: 500
+  Observe period: 1000 candles
+  Initial equity: $10000
+  Reward weight: 1, Correction weight: 1.5, Learning rate: 1
+  Use grover: false, Use attend: false
+  Threads: 8, Batch size: 256
+
+  Loading candles from "/home/watmin/work/holon/holon-lab-trading/data/analysis.db"...
+  Loaded 652409 candles in 0.6s
+  Warming vector cache...
+  Encoding null template...
+  Null template + visual cache ready.
+  Initializing thought system...
+  Thought system ready (223 fact codebook entries).
+  Run database: /home/watmin/work/holon/holon-lab-trading/orchestration_results/v6-gated-contrastive.db
+
+  Starting walk-forward (100000 candles, starting at index 47)...
+    10000/100000 (76/s, ETA 1181s) | 2019-02-05 13:45:00 | CONFIDENT | vis=56.1% thought=56.1% agree=98%(56.1%) | trades=3921 win=52.9% | eq=$10142 (+1.4%) vs bnh -6.7%
+    vis disc: +1=6939 -1=3061 0=0 (ratio=0.69)
+    tht disc: +1=4417 -1=5583 0=0 (ratio=0.44)
+    adaptive: vis(cos=0.0041 decay=0.999004 explore=1/100) tht(cos=-0.0016 decay=0.998998 explore=1/100)
+    20000/100000 (76/s, ETA 1050s) | 2019-03-12 07:05:00 | CONFIDENT | vis=39.7% thought=39.7% agree=99%(39.7%) | trades=8188 win=48.7% | eq=$10031 (+0.3%) vs bnh +3.6%
+    vis disc: +1=6921 -1=3079 0=0 (ratio=0.69)
+    tht disc: +1=3761 -1=6239 0=0 (ratio=0.38)
+    adaptive: vis(cos=-0.0008 decay=0.998999 explore=1/100) tht(cos=-0.0017 decay=0.998998 explore=1/100)
+    30000/100000 (77/s, ETA 911s) | 2019-04-16 00:25:00 | CONFIDENT | vis=58.5% thought=58.5% agree=99%(58.5%) | trades=12829 win=47.4% | eq=$9818 (-1.8%) vs bnh +36.0%
+    vis disc: +1=6939 -1=3061 0=0 (ratio=0.69)
+    tht disc: +1=3595 -1=6405 0=0 (ratio=0.36)
+    adaptive: vis(cos=-0.0003 decay=0.999000 explore=1/100) tht(cos=-0.0009 decay=0.998999 explore=1/100)
+    40000/100000 (77/s, ETA 780s) | 2019-05-20 17:45:00 | TENTATIVE | vis=46.1% thought=46.1% agree=99%(46.1%) | trades=20322 win=46.3% | eq=$9440 (-5.6%) vs bnh +110.3%
+    vis disc: +1=3036 -1=6964 0=0 (ratio=0.30)
+    tht disc: +1=3620 -1=6380 0=0 (ratio=0.36)
+    adaptive: vis(cos=0.0009 decay=0.999001 explore=1/100) tht(cos=-0.0001 decay=0.999000 explore=1/100)
+    50000/100000 (77/s, ETA 647s) | 2019-06-24 11:05:00 | TENTATIVE | vis=37.7% thought=37.7% agree=100%(37.7%) | trades=29158 win=46.7% | eq=$9258 (-7.4%) vs bnh +193.5%
+    vis disc: +1=3059 -1=6941 0=0 (ratio=0.31)
+    tht disc: +1=3522 -1=6478 0=0 (ratio=0.35)
+    adaptive: vis(cos=0.0006 decay=0.999001 explore=1/100) tht(cos=-0.0001 decay=0.999000 explore=1/100)
+    60000/100000 (77/s, ETA 516s) | 2019-07-29 04:25:00 | CONFIDENT | vis=47.0% thought=47.0% agree=100%(47.0%) | trades=38706 win=47.7% | eq=$9468 (-5.3%) vs bnh +160.4%
+    vis disc: +1=6901 -1=3099 0=0 (ratio=0.69)
+    tht disc: +1=3519 -1=6481 0=0 (ratio=0.35)
+    adaptive: vis(cos=0.0015 decay=0.999002 explore=1/100) tht(cos=-0.0003 decay=0.999000 explore=1/100)
+    70000/100000 (78/s, ETA 386s) | 2019-09-01 21:45:00 | CONFIDENT | vis=54.5% thought=54.5% agree=100%(54.5%) | trades=46832 win=48.4% | eq=$9793 (-2.1%) vs bnh +160.9%
+    vis disc: +1=6899 -1=3101 0=0 (ratio=0.69)
+    tht disc: +1=3564 -1=6436 0=0 (ratio=0.36)
+    adaptive: vis(cos=0.0011 decay=0.999001 explore=1/100) tht(cos=0.0007 decay=0.999001 explore=1/100)
+    80000/100000 (78/s, ETA 258s) | 2019-10-06 15:05:00 | CONFIDENT | vis=52.9% thought=52.6% agree=99%(51.5%) | trades=53486 win=48.8% | eq=$10171 (+1.7%) vs bnh +114.0%
+    vis disc: +1=6901 -1=3099 0=0 (ratio=0.69)
+    tht disc: +1=3439 -1=6561 0=0 (ratio=0.34)
+    adaptive: vis(cos=-0.0013 decay=0.998999 explore=1/100) tht(cos=0.0001 decay=0.999000 explore=1/100)
+    90000/100000 (72/s, ETA 138s) | 2019-11-10 08:25:00 | CONFIDENT | vis=59.1% thought=58.6% agree=99%(58.6%) | trades=60027 win=49.1% | eq=$10165 (+1.7%) vs bnh +138.0%
+    vis disc: +1=6943 -1=3057 0=0 (ratio=0.69)
+    tht disc: +1=3368 -1=6632 0=0 (ratio=0.34)
+    adaptive: vis(cos=0.0003 decay=0.999000 explore=1/100) tht(cos=-0.0008 decay=0.998999 explore=1/100)
+    100000/100000 (68/s, ETA 0s) | 2019-12-15 01:45:00 | CONFIDENT | vis=56.1% thought=56.1% agree=99%(56.1%) | trades=66575 win=49.5% | eq=$10220 (+2.2%) vs bnh +89.6%
+    vis disc: +1=6911 -1=3089 0=0 (ratio=0.69)
+    tht disc: +1=3421 -1=6579 0=0 (ratio=0.34)
+    adaptive: vis(cos=0.0001 decay=0.999000 explore=1/100) tht(cos=0.0001 decay=0.999000 explore=1/100)
+
+  --- Timing breakdown (total ms) ---
+  Visual batch encode:  468327.7
+  Thought encode:       928597.7
+  Visual predict:        26566.4
+  Thought predict:        6898.9
+  Rest (resolve/log):    21762.8
+  Total accounted:      1452153.5
+
+  Run database written: /home/watmin/work/holon/holon-lab-trading/orchestration_results/v6-gated-contrastive.db (100000 rows)
+
+  Walk-forward complete.
+  Orchestration mode: meta-boost
+  Encoded 100000 viewports in 1465.1s (68 vec/s)
+  Labeled (BUY/SELL): 67325, Noise: 32675
+
+  ═══ Visual Journaler ═══
+  Accumulators:
+    buy_good:     count=22717, purity=0.0000
+    sell_good:    count=20918, purity=0.0000
+    buy_confuser: count=5
+    sell_confuser:count=11338
+    noise:        count=32675
+    cos(buy_good, sell_good) = 0.0001
+    cos(buy_good, noise) = -0.0283
+    cos(sell_good, noise) = -0.4355
+    recognition gate: noise_floor=0.0153 (buy_entropy=0.4295, sell_entropy=0.5595, d_eff=4295)
+
+  Visual prediction accuracy:
+    Overall: 49.5% (33281/67284)
+    Rolling (last 1000): 55.4%
+
+  Per-year breakdown:
+    2019: 49.5% (33281/67284)
+
+  ═══ Thought Journaler ═══
+  Accumulators:
+    buy_good:     count=32975, purity=0.0000
+    sell_good:    count=30072, purity=0.0000
+    buy_confuser: count=22
+    sell_confuser:count=16442
+    noise:        count=32675
+    cos(buy_good, sell_good) = -0.0017
+    cos(buy_good, noise) = -0.7783
+    cos(sell_good, noise) = -0.1050
+
+  Thought prediction accuracy:
+    Overall: 49.4% (33262/67284)
+    Rolling (last 1000): 55.4%
+    Visual-Thought agreement: 99.3% (99215/99957)
+
+  ═══ Trader ═══
+  Final phase: CONFIDENT
+  Equity: $10222.61 (started $10000)
+  Total return: 2.23%
+  Trades taken: 66599, skipped: 993
+  Win rate: 49.5% (32970/66599)
+  Confidence (rolling acc - 0.5): 0.070
+
+  Per-year P&L:
+    2019: trades=66599 win_rate=49.5% pnl=$222.61
+
+  Buy-and-hold return over same period: 89.56%
+  ═══════════════════════════════════════

@@ -1,0 +1,25 @@
+    Finished `release` profile [optimized] target(s) in 0.06s
+     Running `target/release/trader --max-candles 50000 --orchestration thought-only`
+trader: Self-Supervised BTC Trader
+  10000D, window=48, px_rows=25
+  Grid: 48 cols x 100 rows (4800 pixels/viewport)
+  Horizon: 36 candles (180min)
+  Move threshold: 0.500% (50.0bps)
+  Decay: 0.999, Recalib interval: 500
+  Observe period: 1000 candles
+  Initial equity: $10000
+  Reward weight: 1, Correction weight: 1.5
+  Use grover: false, Use attend: false
+  Threads: 8, Batch size: 256
+
+  Loading candles from "../data/analysis.db"...
+  Loaded 652409 candles in 0.6s
+  Warming vector cache...
+  Encoding null template...
+  Null template encoded.
+  Initializing thought system...
+  Thought system ready (177 fact codebook entries).
+
+  Starting walk-forward (50000 candles, starting at index 47)...
+    10000/50000 (24/s, ETA 1659s) | 2019-02-05 13:45:00 | TENTATIVE | vis=36.7% thought=44.2% agree=52% | trades=716 win=48.7% | eq=$9977 (-0.2%) vs bnh -6.7%
+    20000/50000 (24/s, ETA 1250s) | 2019-03-12 07:05:00 | TENTATIVE | vis=44.2% thought=58.9% agree=54% | trades=716 win=48.7% | eq=$9977 (-0.2%) vs bnh +3.6%

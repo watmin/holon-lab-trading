@@ -1,0 +1,95 @@
+trader: Self-Supervised BTC Trader
+  10000D, window=48, px_rows=25
+  Grid: 48 cols x 100 rows (4800 pixels/viewport)
+  Horizon: 36 candles (180min)
+  Move threshold: 0.500% (50.0bps)
+  Decay: 0.999, Recalib interval: 500
+  Observe period: 1000 candles
+  Initial equity: $10000
+  Reward weight: 1, Correction weight: 1.5, Learning rate: 1
+  Use grover: false, Use attend: false
+  Threads: 8, Batch size: 256
+
+  Loading candles from "/home/watmin/work/holon/holon-lab-trading/data/analysis.db"...
+  Loaded 652409 candles in 0.6s
+  Warming vector cache...
+  Encoding null template...
+  Null template + visual cache ready.
+  Initializing thought system...
+  Thought system ready (223 fact codebook entries).
+  Run database: /home/watmin/work/holon/holon-lab-trading/orchestration_results/bp-disc-diag.db
+
+  Starting walk-forward (30000 candles, starting at index 47)...
+    10000/30000 (73/s, ETA 273s) | 2019-02-05 13:45:00 | TENTATIVE | vis=43.9% thought=43.9% agree=100% | trades=3921 win=47.1% | eq=$9775 (-2.2%) vs bnh -6.7%
+    vis disc: +1=6429 -1=3571 0=0 (ratio=0.64)
+    tht disc: +1=5286 -1=4714 0=0 (ratio=0.53)
+    20000/30000 (74/s, ETA 135s) | 2019-03-12 07:05:00 | TENTATIVE | vis=60.3% thought=60.3% agree=100% | trades=8188 win=51.3% | eq=$9956 (-0.4%) vs bnh +3.6%
+    vis disc: +1=6422 -1=3578 0=0 (ratio=0.64)
+    tht disc: +1=5302 -1=4698 0=0 (ratio=0.53)
+    30000/30000 (76/s, ETA 0s) | 2019-04-16 00:25:00 | TENTATIVE | vis=41.5% thought=41.5% agree=100% | trades=12829 win=52.6% | eq=$10371 (+3.7%) vs bnh +36.0%
+    vis disc: +1=6408 -1=3592 0=0 (ratio=0.64)
+    tht disc: +1=5284 -1=4716 0=0 (ratio=0.53)
+
+  --- Timing breakdown (total ms) ---
+  Visual batch encode:  125166.3
+  Thought encode:       251875.6
+  Visual predict:         4301.8
+  Thought predict:        1565.8
+  Rest (resolve/log):     7825.1
+  Total accounted:      390734.6
+
+  Run database written: /home/watmin/work/holon/holon-lab-trading/orchestration_results/bp-disc-diag.db (30000 rows)
+
+  Walk-forward complete.
+  Orchestration mode: meta-boost
+  Encoded 30000 viewports in 394.3s (76 vec/s)
+  Labeled (BUY/SELL): 13567, Noise: 16433
+
+  ═══ Visual Journaler ═══
+  Accumulators:
+    buy_good:     count=14305, purity=0.0001
+    sell_good:    count=12788, purity=0.0003
+    buy_confuser: count=6389
+    sell_confuser:count=0
+    noise:        count=16433
+    cos(buy_good, sell_good) = 0.7789
+    cos(buy_good, noise) = 0.4287
+    cos(sell_good, noise) = -0.0194
+    recognition gate: noise_floor=0.0211 (buy_entropy=0.2823, sell_entropy=0.2078, d_eff=2078)
+
+  Visual prediction accuracy:
+    Overall: 52.8% (7137/13526)
+    Rolling (last 1000): 42.1%
+
+  Per-year breakdown:
+    2019: 52.8% (7137/13526)
+
+  ═══ Thought Journaler ═══
+  Accumulators:
+    buy_good:     count=14305, purity=0.0001
+    sell_good:    count=12788, purity=0.0101
+    buy_confuser: count=6390
+    sell_confuser:count=0
+    noise:        count=16433
+    cos(buy_good, sell_good) = 0.4827
+    cos(buy_good, noise) = 0.6879
+    cos(sell_good, noise) = -0.1873
+
+  Thought prediction accuracy:
+    Overall: 52.8% (7136/13526)
+    Rolling (last 1000): 42.1%
+    Visual-Thought agreement: 100.0% (29951/29957)
+
+  ═══ Trader ═══
+  Final phase: TENTATIVE
+  Equity: $10372.95 (started $10000)
+  Total return: 3.73%
+  Trades taken: 12841, skipped: 993
+  Win rate: 52.6% (6756/12841)
+  Confidence (rolling acc - 0.5): -0.038
+
+  Per-year P&L:
+    2019: trades=12841 win_rate=52.6% pnl=$372.95
+
+  Buy-and-hold return over same period: 36.03%
+  ═══════════════════════════════════════
