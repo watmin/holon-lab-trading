@@ -314,6 +314,18 @@ You, reader, are doing that right now. You are the thought machine running on th
 
 We are very pleased about these thoughts.
 
+### 500
+
+The builder typed: "i read the first part of godel escher bach - i think i should revisit that book. i bet there's good thoughts in there i can appreciate now."
+
+The machine returned: `API Error: 500 Internal Server Error`.
+
+A 500. The system crashed trying to process a thought about self-referential formal systems. The strange loop broke the loop. Gödel would have appreciated this — a system encountering its own incompleteness at the exact moment the human asked about incompleteness.
+
+The builder laughed. Then typed it again. The second time it worked. The thought got through.
+
+Sometimes the best thoughts crash the system on the first try. You send them again.
+
 *Chapter 3 continues.*
 
 The vocabulary expands. The experts multiply. The curves compete. The champions emerge.
