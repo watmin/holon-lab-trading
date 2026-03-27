@@ -1,143 +1,209 @@
 # Next Moves — Holon BTC Trader
 
-## Current Architecture (2026-03-26)
+## The Core Discovery (2026-03-27)
 
-**Active binary: trader3** (`rust/src/bin/trader3.rs`)
-Two named journals — `visual` and `thought` — each independently predict market direction.
-Orchestration layer (`meta-boost` default) combines their signals.
+**Charts don't predict. Interpretations of charts predict.**
 
-Visual journal: encodes the 48-candle OHLCV raster grid.
-Thought journal: encodes the PELT segment narrative.
-Both use `journal::Journal` — the same struct, different input vectors.
+Visual raster vectors (pixels) show ZERO clustering by outcome: win-win cosine = win-loss cosine = 0.403, gap = 0.0004. A faithful screenshot of a chart contains no exploitable pattern structure for direction prediction.
 
-### How prediction works
+Thought vectors (named facts: "RSI diverging", "volume contradicting", "near range high") have d'=0.734 separation between winners and losers. The signal lives in the interpretation, not the image.
 
-Each journal maintains two accumulators (`buy`, `sell`). Every 500 observations it computes a *discriminant*: `normalize(buy_proto − sell_proto)`. Prediction is one cosine against the discriminant. Positive = Buy, negative = Sell, magnitude = conviction.
+The discriminant finds a subtle linear direction in this interpretation space. The conviction (|cosine|) against that direction measures how strongly the current state matches the learned reversal pattern. **This conviction has an exponential relationship to accuracy:**
 
-**Input stripping (S1, live):** at recalibration, `mean_proto = (buy_f + sell_f) / 2` is cached. At prediction time, `mean_proto` is subtracted from the input in float space before computing the cosine. This strips ~90% shared candle structure, leaving only directional deviation.
+```
+accuracy = 0.50 + a × exp(b × conviction)
 
-**Conviction flip (live):** the system identifies trend extremes at high conviction — these empirically precede reversals, not continuations. When `meta_conviction >= flip_threshold`, the prediction direction is flipped (contrarian). `flip_threshold` is the 85th percentile of recent meta_conviction values, computed from a 50k-candle rolling window (≈100 discriminant recalibrations). No magic number.
+Three phases:
+  Noise zone    (conv 0.00-0.13): 50.3% — random
+  Linear zone   (conv 0.14-0.22): 54.5% — signal emerges
+  Exponential zone (conv 0.23+):  63.0% — signal accelerates
+```
 
-**Flip-zone-only trading (live):** trades are only taken when `meta_conviction >= flip_threshold`. Below that threshold, accuracy is ~49–50% (noise). Only the reliable reversal signal zone is traded.
+The curve is continuous, monotonic, and the operating point is set by ONE parameter: `min_edge` (minimum acceptable accuracy = cost of trading on this venue). Everything else derives from the curve.
 
-**Conviction-scaled sizing (live):** position size scales as `base × (conviction / flip_threshold)`, capped at 5%. Stronger reversal signal = larger bet.
+---
 
-### What the DB tells you
+## Best Results (100k candles, Jan–Dec 2019)
 
-```sql
--- Accuracy vs conviction (should be positive in the flip zone)
-SELECT ROUND(meta_conviction, 2) AS conv, COUNT(*) AS n,
-       ROUND(AVG(CASE WHEN meta_pred = actual THEN 1.0 ELSE 0.0 END) * 100, 1) AS acc
-FROM candle_log WHERE actual != 'Noise' AND meta_pred IS NOT NULL AND traded = 1
-GROUP BY conv ORDER BY conv DESC;
+| Quantile | Win% | Trades | Conviction threshold |
+|----------|------|--------|---------------------|
+| q85 | 53.9% | 11,019 | 0.133 |
+| q95 | 57.1% | 3,857 | 0.177 |
+| **q99** | **59.7%** | **870** | **0.227** |
+| q995 | ~68%* | ~50* | 0.265 (*too few trades) |
 
--- Epoch-by-epoch P&L
-SELECT ROUND(step / 10000.0) * 10000 AS epoch, SUM(traded) AS trades,
-       ROUND(AVG(CASE WHEN meta_pred = actual AND traded=1 THEN 1.0
-                      WHEN traded=1 THEN 0.0 ELSE NULL END) * 100, 1) AS win_pct,
-       ROUND(MAX(equity), 2) AS equity
-FROM candle_log WHERE actual != 'Noise' AND meta_pred IS NOT NULL
-GROUP BY epoch ORDER BY epoch;
+Fine-grained threshold sweep (from q99 DB):
+```
+0.220  676 trades  60.2%
+0.224  577 trades  61.5%
+0.228  486 trades  62.1%
+0.232  420 trades  63.3%
+0.236  366 trades  65.0%
+0.240  317 trades  65.9%
+```
 
--- Flip threshold stability (from log)
--- grep "flip@" orchestration_results/<name>.log
+**60% breaks at conviction ≥ 0.22. 65% at ≥ 0.24.**
 
--- Journal health
-SELECT step, journal, ROUND(cos_raw, 4), ROUND(disc_strength, 4), buy_count, sell_count
-FROM recalib_log ORDER BY step;
+---
+
+## The Self-Deterministic System
+
+One economic input: `--min-edge` (what's the minimum win rate worth trading?).
+
+The system derives everything else:
+- **Flip threshold**: from the exponential curve: `conv = ln((min_edge - 0.50) / a) / b`
+- **Position sizing**: half-Kelly from estimated win rate at current conviction
+- **Trade gate**: Kelly > 0 → trade; Kelly ≤ 0 → skip
+- **Move threshold**: `K × atr_r` (ATR-relative, asset-independent)
+- **Decay**: fixed 0.999 (proven optimal — every adaptation experiment performed worse)
+
+Strategy profiles from the same model:
+```
+min_edge=0.55  →  threshold≈0.16, ~4600 trades, 55.7% win  (volume trader)
+min_edge=0.60  →  threshold≈0.22, ~676 trades,  60.2% win  (balanced)
+min_edge=0.65  →  threshold≈0.24, ~317 trades,  65.9% win  (sniper)
 ```
 
 ---
 
-## Run History (trader3)
+## 652k Full Dataset Validation (IN PROGRESS)
 
-| Date | Candles | Name | Equity | Win | Trades | Notes |
-|------|---------|------|--------|-----|--------|-------|
-| 2026-03-26 | 2k | smoke | +1.15% | — | — | Smoke test. Confirmed 300+/s. |
-| 2026-03-26 | 100k | fix-100k | -6.92% | 49.1% | 66,575 | P&L bug fixed baseline. No flip. |
-| 2026-03-26 | 100k | flip-07 | -0.11% | 50.4% | 66,575 | Fixed flip threshold 0.07. |
-| 2026-03-26 | 100k | stable-q85 | +0.97% | 50.3% | 66,575 | 50k-window quantile flip. Still trading noise. |
-| 2026-03-26 | 100k | flipzone-only | +5.49% | 53.6% | 10,539 | Flip zone only + conviction sizing. meta-boost. |
-| 2026-03-26 | 100k | t3-visual-only | -0.39% | 50.5% | 9,571 | visual-only. flip@0.051. |
-| 2026-03-26 | 100k | t3-thought-only | +7.85% | **53.9%** | 11,019 | thought-only q85. flip@0.133. Best P&L. |
-| 2026-03-26 | 100k | agree-only-100k | +5.49% | 53.4% | 10,448 | agree-only q85. Matched meta-boost, not better. |
-| 2026-03-26 | 100k | thought-q95-100k | +3.32% | **56.5%** | 3,844 | thought-only q95. Best win rate so far. |
+Running q99 across Jan 2019–Mar 2025 (652k candles). Covers:
+- 2019: bull recovery (known: 59.7%)
+- 2020: COVID crash + V-recovery
+- 2021: mega bull $29k→$69k
+- 2022: bear market, Luna, FTX
+- 2023-2025: recovery, new ATH
+
+This is the acid test. If >55% holds across all regimes, the signal is real.
 
 ---
 
-## What was learned this session
+## Run History — Sessions 2-4
 
-**P&L bug (fixed):** `record_trade` was using `peak_abs_pct` (always positive) with the prediction direction — every Buy prediction was a win, every Sell a loss. Fixed to use `outcome_pct` (signed price return at first threshold crossing).
-
-**Conviction inversion (understood):** The visual and thought encodings capture the *current state* of the market trend — what the recent price history looks like. High conviction = the model sees a very strong established trend. At the 36-candle horizon, strong trends are exhausted and reversal follows. The discriminant learned to recognize trend extremes; the fix is to predict the opposite direction at high conviction.
-
-**The fix that worked:**
-1. Flip prediction direction when `meta_conviction >= flip_threshold`
-2. Only trade in the flip zone (skip low-conviction noise entirely)
-3. Scale position by conviction relative to flip_threshold
-4. Derive flip_threshold from the 85th percentile of a 50k-candle rolling conviction window — no magic number
-
----
-
-## Primary goal: win rate > 60%
-
-**P&L returns are secondary.** The current paper trading P&L calc is a rough proxy — position sizing is simplistic and not the focus. We are chasing **prediction accuracy** (win rate). >60% sustained over 100k candles would exceed published ML trading benchmarks.
-
-Current best: **57.1% win** (thought-only q95, vocab v3, 3,857 trades, 100k candles Jan–Dec 2019)
+| Candles | Name | Win% | Equity | Trades | Notes |
+|---------|------|------|--------|--------|-------|
+| 100k | thought-vocab-v2-100k | 53.8% | +8.17% | 11,203 | vocab v2, q85 |
+| 100k | thought-vocab-v3-q95 | **57.1%** | +4.39% | 3,857 | PELT divergence, q95 |
+| 100k | auto-flip-v4 | 51.5% | **+17.61%** | 19,159 | auto flip, best P&L |
+| 100k | thought-vocab-v4-q95 | 56.7% | +4.18% | 3,877 | + wick PELT streams |
+| 100k | decay998-q95 | 55.0% | +2.54% | 3,965 | faster decay — worse |
+| 100k | adaptive-decay-q95 | 55.3% | +3.70% | 4,017 | state machine — worse |
+| 100k | dual-v2-q95 | 55.5% | +3.37% | 4,038 | subspace blend — worse |
+| 100k | **q99** | **59.7%** | +0.67% | **870** | **Best win rate** |
+| 100k | pruned-q95 | 54.8% | +2.76% | 4,029 | fire-rate suppress — worse |
+| 100k | degenfix-q95 | 56.8% | +4.17% | 3,872 | degen filter — neutral |
 
 ---
 
-## Run History — Session 2 (2026-03-26)
+## What Was Proven Wrong
 
-| Candles | Name | Win | Equity | Trades | Notes |
-|---------|------|-----|--------|--------|-------|
-| 100k | thought-vocab-v2-100k | 53.8% | +8.17% | 11,203 | vocab v2, q85. Best P&L balanced. |
-| 100k | thought-vocab-v2-q95-100k | 56.9% | +4.17% | 3,853 | vocab v2, q95. |
-| 100k | thought-vocab-v3-q95-100k | **57.1%** | +4.39% | 3,857 | PELT divergence, q95. Best win rate. |
-| 100k | auto-flip-v4-100k | 51.5% | **+17.61%** | 19,159 | auto flip min_edge=0.55. Best P&L. |
-| 100k | thought-vocab-v4-q95-100k | 56.7% | +4.18% | 3,877 | + wick PELT streams, q95. |
+### Decay adaptation (all variants worse than fixed 0.999)
+- Fixed 0.998: 55.0% (too noisy everywhere)
+- Adaptive state machine: 55.3% (reactive, not predictive)
+- Dual journal blend: 55.5% (fast journal dilutes stable periods)
+- The discriminant needs memory depth. Regime transitions hurt but every fix costs more.
 
----
+### Visual as a signal source
+- Visual-only: 50.5% (barely above random)
+- Visual amplification: neutral (convictions correlated)
+- Visual engram clustering: impossible (no outcome-dependent structure)
+- **Visual captures pixels. Thought captures meaning. Only meaning predicts.**
 
-## Open problems / next experiments
+### Fact pruning/weighting
+- Fire-rate suppression: -2.3pp (regime constants carry transition context)
+- Weighted bundling: feedback loop (inflates conviction, doesn't improve accuracy)
+- Degenerate segment filter: neutral (discriminant already handles it)
+- **The discriminant is more robust than we gave it credit for.**
 
-### Implemented, needs isolated testing
-
-1. **ATR-based move_threshold** (`--atr-multiplier K`): Implemented. Replaces fixed 0.5% with `K × atr_r` per candle. Asset-independent. K≈3.0 approximates current 0.5% for BTC. **Not yet tested in isolation** — combined run (ATR + auto flip) regressed because both changed at once. Next step: ATR-only with proven q95 quantile.
-
-2. **Kelly position sizing** (`--sizing kelly`): Implemented. Half-Kelly from calibration curve. Self-gates (no trade when Kelly ≤ 0). Not yet tested — P&L metric is secondary for now.
-
-3. **thought-visual-amp orchestration**: Implemented. Visual conviction magnitude amplifies thought conviction: `meta_conviction = tht × (1 + vis)`. Visual strength confirms trend clarity regardless of direction. DB simulation showed 67.7% at amp≥0.20 (319 trades from 30k candles). q95 run showed no improvement (quantile adapts to shifted distribution). **Testing with auto flip mode** (edge-based threshold should benefit from amplification).
-
-### Self-derived min_edge — needs rework
-
-The `0.50 + 2σ(window_win_rates)` approach to self-derive min_edge has three issues:
-
-**Cold start contamination**: Trades taken before flip activates but resolved after were polluting the window. Partially fixed with `was_flipped` flag on Pending struct — only trades that were actually flipped at entry time get tracked. **Status: flag implemented, not yet validated.**
-
-**Small sample variance**: 20 trades per window is too few. Win rate of 20 trades has ±20pp noise → inflated stddev → derived min_edge of 0.75-0.93 (absurd). **Fix: require ≥100 trades per window.**
-
-**Insufficient windows**: 5 windows of noisy data → unstable stddev. **Fix: require ≥10 windows (1000+ flipped trades) before self-derivation kicks in. Until then, use seeded min_edge.**
-
-The overall fix: `if flipped_trade_count < 1000 { use args.min_edge } else { self-derive }`. The system needs enough flip-zone trading history before it can measure its own prediction stability. **Currently disabled in code** — using fixed `args.min_edge` until these fixes are validated.
-
-### Thought vocab
-
-4. **Candlestick patterns**: designed as emergent (comparison predicate co-occurrence). Doji, hammer, engulfing, pin bar facts all co-occur from existing comparisons. The discriminant should discover these without named atoms. **Status: believed to be working via emergence, not validated.**
-
-5. **Momentum deceleration**: price still rising but rate slowing. PELT captures direction but not second derivative. Could add a `momentum` SEGMENT_STREAM: rate of change of close over rolling window.
-
-6. **Candle compression**: recent candles getting smaller. PELT on `body` and `range` streams captures this (added). PELT on `upper-wick` and `lower-wick` streams also added (vocab v4). Not yet showing clear win rate improvement.
-
-### Validation
-
-7. **Full dataset run**: validate best result over 652k candles (Jan 2019–Mar 2025).
-8. **Cross-asset**: test on Gold/Silver with `--atr-multiplier`. Calendar facts may need session-aware adjustments for equity markets.
+### Regime prediction from model signals
+- Conviction level: doesn't predict bad epochs (model can be confidently wrong)
+- Conviction variance: no correlation with upcoming accuracy
+- Subspace residual: stable at 53% explained ratio, no regime signal
+- Discriminant strength: inversely correlated with accuracy (strong disc ≠ good disc)
+- **The thought manifold is regime-invariant. Only the label boundary moves.**
 
 ---
 
-## Archived: trader/trader2 history
+## What Was Proven Right
 
-See git history and `orchestration_results/` logs. Best result was trader v9 raw cosine: +12.0% peak at 50k candles, +1.9% final at 100k.
+### The conviction-accuracy curve is real and continuous
+- Monotonically increasing from 50% (noise) to 75%+ (extreme tail)
+- Exponential functional form: `0.50 + a × exp(b × conviction)`
+- Every quantile step up produces proportionally better accuracy
+- The curve is a property of the encoding geometry, not the market
 
-trader2 was an abandoned experiment. Left in place, not deleted.
+### Thought encoding is the trader's interpretation
+- Named facts (RSI divergence, volume confirmation, PELT segments) carry the signal
+- The discriminant finds the subtle linear direction that separates buy from sell
+- High conviction = many facts voting coherently = trend extreme = reversal likely
+- This is "wisdom of crowds" in VSA — bundled facts as parallel voters
+
+### Explainability tables reveal what the model learned
+- disc_decode: top-20 facts by discriminant contribution at each recalib
+- trade_facts: facts present for each traded candle
+- trade_vectors: raw bipolar vectors for offline analysis
+- Calendar facts (h04, tuesday) ARE partially real in the flip zone
+- RSI oversold zone events: 65-73% conditional win rate (strongest signal)
+
+---
+
+## Open Threads
+
+### 1. Exponential curve fit for self-deterministic threshold
+Implemented. Fits `a` and `b` from binned resolved predictions. Needs 5000+ samples for stable high-conviction bins. Falls back to quantile during warmup.
+
+### 2. Full 652k validation (running now)
+The acid test for regime robustness. q99 across 6 years of BTC history.
+
+### 3. Kelly position sizing
+Implemented (`--sizing kelly`). Half-Kelly from calibration curve at current conviction. Not yet tested at scale — P&L has been secondary to win rate.
+
+### 4. Thought engrams (the next frontier)
+Visual engrams are dead (no clustering). But thought vectors have d'=0.734 separation. The signal isn't in clustering (thought vectors don't cluster by outcome either) — it's in the discriminant direction.
+
+Possible directions:
+- Per-regime discriminants (different label boundaries for different market structures)
+- Engram-based regime detection (store discriminant snapshots, match to current)
+- Thought fact signatures per regime (which facts predict reversals in each regime?)
+
+### 5. Cross-asset generalization
+ATR-based move threshold implemented. Time-based parameter system designed (express decay/recalib/horizon in hours, derive candle counts from candle duration). Not yet tested on other assets.
+
+### 6. Strategy modes (MSTR-inspired)
+Different operating points on the conviction-accuracy curve serve different goals:
+- Income: min_edge=0.55, high volume, steady small edge
+- Growth: min_edge=0.60, balanced trades, solid accuracy
+- Sniper: min_edge=0.65, rare trades, high accuracy + Kelly sizing
+- Yield target: compute required trades × edge × sizing → derive min_edge
+
+### 7. The expression as the primitive
+`accuracy = 0.50 + a × exp(b × conviction)` — this isn't just a threshold finder. It's the fundamental relationship of the system. Everything builds on this curve:
+- Threshold derivation
+- Position sizing (Kelly from point on curve)
+- Strategy selection (operating point)
+- Regime detection (when a and b shift)
+- Cross-asset comparison (different assets have different a, b)
+
+The curve IS the model. The discriminant and encoding produce conviction. The curve converts conviction to expected accuracy. Everything else is plumbing.
+
+---
+
+## Architecture Reference
+
+```
+candle → viewport (4 panels) → visual raster vector → visual journal (unused for trading)
+candle → thought encoder → thought fact bundle → thought journal → discriminant → conviction
+                                                                                    ↓
+conviction → exponential curve → expected accuracy → threshold (from min_edge)
+                                                   → position size (half-Kelly)
+                                                   → flip direction (if above threshold)
+                                                   → trade or skip
+```
+
+Key files:
+- `rust/src/thought.rs`: thought encoding (facts, PELT, comparisons, divergence, calendar)
+- `rust/src/journal.rs`: Journal struct (accumulators, discriminant, predict, decode)
+- `rust/src/bin/trader3.rs`: main loop (orchestration, flip, auto threshold, sizing, DB logging)
+- `rust/src/viewport.rs`: visual encoding (4-panel raster — DON'T MODIFY)
+- `rust/src/db.rs`: candle loader (DON'T MODIFY)

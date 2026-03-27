@@ -105,9 +105,12 @@ struct Args {
     #[arg(long, default_value = "quantile")]
     flip_mode: String,
 
-    /// Minimum cumulative win rate (from the top) to keep expanding the flip zone.
-    /// Only used when flip_mode = "auto". 0.52 = need at least 52% accuracy.
-    #[arg(long, default_value_t = 0.52)]
+    /// Minimum acceptable win rate for trading. This is the ONE economic input.
+    /// The system finds the conviction threshold where flipped accuracy >= this value.
+    /// Higher = fewer trades, higher accuracy. Lower = more trades, thinner edge.
+    /// The conviction-accuracy curve is continuous and monotonic — this parameter
+    /// sets the operating point. 0.55 = balanced, 0.60 = selective, 0.65 = sniper.
+    #[arg(long, default_value_t = 0.55)]
     min_edge: f64,
 
     /// "legacy" = phase-based with 5% cap. "kelly" = half-Kelly from calibration curve.
@@ -799,39 +802,75 @@ fn main() {
                             .min(sorted.len() - 1);
                         flip_threshold = sorted[idx];
                     }
-                    "auto" if resolved_preds.len() >= flip_warmup => {
-                        // Self-derived min_edge: disabled pending better cold start
-                        // handling. Using fixed args.min_edge for now.
-                        // TODO: track window win rates only from was_flipped trades,
-                        // require >= 100 trades per window, >= 10 windows for stability.
-
-                        // Sort by conviction descending, walk down accumulating
-                        // flipped win rate. Find the deepest conviction where
-                        // cumulative win rate exceeds derived_min_edge AND is
-                        // statistically significant.
+                    "auto" if resolved_preds.len() >= flip_warmup * 5 => {
+                        // Need 5× warmup (~5000 resolved) for stable exponential fit.
+                        // Fit the exponential conviction-accuracy curve:
+                        //   accuracy = 0.50 + a × exp(b × conviction)
+                        // Then solve for threshold: conv = ln((min_edge - 0.50) / a) / b
+                        //
+                        // Bin resolved predictions, compute per-bin accuracy,
+                        // log-linear regression on bins where accuracy > 0.50.
+                        let n_bins = 20usize;
                         let mut sorted: Vec<(f64, bool)> = resolved_preds.iter().copied().collect();
-                        sorted.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
-                        let mut wins = 0u32;
-                        let mut total = 0u32;
-                        let mut best_threshold = f64::MAX;
-                        let min_bucket = 50u32;
-                        for &(conv, correct) in &sorted {
-                            total += 1;
-                            if correct { wins += 1; }
-                            if total >= min_bucket {
-                                let wr = wins as f64 / total as f64;
-                                let ci = 1.96 / (total as f64).sqrt();
-                                let floor = args.min_edge.max(0.50 + ci);
-                                if wr >= floor {
-                                    best_threshold = conv;
+                        sorted.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+                        let bin_size = sorted.len() / n_bins;
+                        if bin_size >= 20 {
+                            // Compute (mean_conviction, accuracy) per bin.
+                            let mut bins: Vec<(f64, f64)> = Vec::new();
+                            for bi in 0..n_bins {
+                                let start = bi * bin_size;
+                                let end = if bi == n_bins - 1 { sorted.len() } else { (bi + 1) * bin_size };
+                                let slice = &sorted[start..end];
+                                let mean_c: f64 = slice.iter().map(|(c, _)| c).sum::<f64>() / slice.len() as f64;
+                                let acc: f64 = slice.iter().filter(|(_, w)| *w).count() as f64 / slice.len() as f64;
+                                bins.push((mean_c, acc));
+                            }
+
+                            // Log-linear regression on bins where acc > 0.505.
+                            // y = ln(acc - 0.50), x = conviction → y = ln(a) + b*x
+                            let points: Vec<(f64, f64)> = bins.iter()
+                                .filter(|(_, acc)| *acc > 0.505)
+                                .map(|(c, acc)| (*c, (acc - 0.50).ln()))
+                                .filter(|(_, y)| y.is_finite())
+                                .collect();
+
+                            if points.len() >= 3 {
+                                let n = points.len() as f64;
+                                let sx: f64 = points.iter().map(|(x, _)| x).sum();
+                                let sy: f64 = points.iter().map(|(_, y)| y).sum();
+                                let sxx: f64 = points.iter().map(|(x, _)| x * x).sum();
+                                let sxy: f64 = points.iter().map(|(x, y)| x * y).sum();
+                                let denom = n * sxx - sx * sx;
+                                if denom.abs() > 1e-10 {
+                                    let b = (n * sxy - sx * sy) / denom;
+                                    let ln_a = (sy - b * sx) / n;
+                                    let a = ln_a.exp();
+
+                                    // Solve: min_edge = 0.50 + a * exp(b * conv)
+                                    // conv = ln((min_edge - 0.50) / a) / b
+                                    if b > 0.0 && args.min_edge > 0.50 {
+                                        let target = (args.min_edge - 0.50) / a;
+                                        if target > 0.0 {
+                                            let new_thresh = target.ln() / b;
+                                            if new_thresh > 0.0 && new_thresh < 1.0 {
+                                                flip_threshold = new_thresh;
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
-                        if best_threshold < f64::MAX {
-                            flip_threshold = best_threshold;
-                        }
                     }
-                    _ => {} // quantile=0 or not enough data yet
+                    // Fallback: during auto warmup, use quantile if available.
+                    "auto" if args.flip_quantile > 0.0
+                        && conviction_history.len() >= flip_warmup => {
+                        let mut sorted: Vec<f64> = conviction_history.iter().copied().collect();
+                        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                        let idx = ((sorted.len() as f64 * args.flip_quantile) as usize)
+                            .min(sorted.len() - 1);
+                        flip_threshold = sorted[idx];
+                    }
+                    _ => {}
                 }
             }
 
