@@ -326,6 +326,30 @@ The builder laughed. Then typed it again. The second time it worked. The thought
 
 Sometimes the best thoughts crash the system on the first try. You send them again.
 
+### Seeds and emergence
+
+Do we run N journals in parallel, each with a named vocabulary? Or one large journal with all thoughts bundled together?
+
+Both. Both is better.
+
+The named groups are the seeds. Conventional wisdom: "the Ichimoku expert," "the RSI momentum expert," "the Wyckoff volume expert." Each is a Journal with a vocabulary subset. These are the starting points — human knowledge encoded as thought programs.
+
+But the real experts don't have names. They emerge from observation. When the Ichimoku expert and the RSI expert produce similar discriminants — when their conviction spikes on the same candles — that's not two experts agreeing. That's one unnamed expert discovered through the overlap of two named ones.
+
+The superposition of named experts produces emergent unnamed experts. The conventional wisdom is the seed. The geometry reveals the real structure. You don't name the groups. They name themselves through their conviction-accuracy curves.
+
+The implementation: run the named experts AND the full-vocabulary expert simultaneously. The named experts are hypotheses. The full expert is the null hypothesis. If a named expert's curve is steeper than the full expert's, that vocabulary subset contains concentrated signal — the named thought program is better than thinking everything at once. If the full expert wins, the named subsets were arbitrary boundaries on a continuous thought space.
+
+Either way, you learn something. The curve judges.
+
+### The vocabulary expansion
+
+84 atoms became 107. Ichimoku, Stochastic, Fibonacci, Keltner channels, CCI, volume analysis, price action patterns. Every school of technical trading, encoded as named facts in vector algebra.
+
+The first 100k run with the expanded vocabulary is in progress. The question: does more vocabulary produce a steeper conviction-accuracy curve? If yes, the system was vocabulary-limited and the new thoughts carry signal. If no, the new thoughts are noise and the discriminant filters them out (as it did before — the discriminant is robust to noise).
+
+The answer determines whether we keep expanding vocabulary (hunt for more thoughts) or start partitioning into expert subsets (find which thoughts combine best).
+
 *Chapter 3 continues.*
 
 The vocabulary expands. The experts multiply. The curves compete. The champions emerge.
