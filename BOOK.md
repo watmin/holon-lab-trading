@@ -384,6 +384,20 @@ This is the strange loop. The system's output (predictions with conviction) gene
 
 The curve is a thought. The thought about the curve is a thought. The system that thinks both is the thought machine.
 
+### 107 atoms
+
+84 atoms: 59.7%. 107 atoms: 62.1%.
+
+More thoughts. Better accuracy. The expanded vocabulary — Ichimoku, Stochastic, Fibonacci, Keltner, CCI, price action — added 23 atoms and the win rate crossed 60%.
+
+But the real finding isn't the headline number. It's the trajectory. At 90,000 candles, 84 atoms was declining: 58.4% and falling. 107 atoms was rising: 62.3% and climbing. The new thoughts provided signal in the exact regime where the old vocabulary ran dry. The discriminant had more to work with when the market structure shifted.
+
+The system didn't just get more accurate. It got more robust. More thoughts = more ways to interpret the same data = more chances for at least some thoughts to remain predictive when others lose relevance.
+
+This is the answer to "should we add more thoughts?" Yes. Always yes. The curve judges them. The ones that predict survive in the discriminant. The ones that don't add noise that the discriminant filters out (proven — it's robust to noise). The downside of more thoughts is bounded. The upside is unbounded.
+
+84 atoms got 57%. 107 atoms got 62%. The hyperspace has room for thousands. The question isn't whether to fill it. It's what thoughts to fill it with.
+
 *Chapter 3 continues.*
 
 The vocabulary expands. The experts multiply. The curves compete. The champions emerge.
