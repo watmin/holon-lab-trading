@@ -8,7 +8,7 @@
 ///
 /// All measurement lives in the run SQLite DB — no verbose log spam.
 /// Use the DB to understand what the system is doing.
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -20,7 +20,7 @@ use holon::{VectorManager, Vector};
 
 use btc_walk::db::load_candles;
 use btc_walk::journal::{Journal, Outcome, Prediction};
-use btc_walk::thought::{ThoughtEncoder, ThoughtVocab, IndicatorStreams};
+use btc_walk::thought::{ThoughtEncoder, ThoughtResult, ThoughtVocab, IndicatorStreams};
 use btc_walk::viewport::{
     render_viewport, build_viewport, build_null_template,
     raster_encode, raster_encode_cached, VisualCache,
@@ -294,6 +294,7 @@ struct Pending {
     was_flipped:   bool,             // true if flip was active when this entry was created
     meta_conviction: f64,
     position_frac: Option<f64>,
+    fact_labels:   Vec<String>,      // thought facts present at this candle
     first_outcome: Option<Outcome>, // set on first threshold crossing; drives learning
     outcome_pct:   f64,             // price change at first crossing (for DB)
     peak_abs_pct:  f64,             // max |price change| seen while pending (for P&L)
@@ -449,6 +450,21 @@ fn init_run_db(path: &str) -> Connection {
             buy_count     INTEGER,
             sell_count    INTEGER
         );
+
+        -- Top fact contributions to discriminant at each recalibration.
+        CREATE TABLE IF NOT EXISTS disc_decode (
+            step          INTEGER,  -- recalib step
+            journal       TEXT,
+            rank          INTEGER,  -- 1 = most influential
+            fact_label    TEXT,
+            cosine        REAL      -- +buy / -sell
+        );
+
+        -- Facts present for each traded candle (flip zone trades only).
+        CREATE TABLE IF NOT EXISTS trade_facts (
+            step          INTEGER,  -- candle_log step
+            fact_label    TEXT
+        );
     ").expect("failed to init run DB");
     db
 }
@@ -502,6 +518,7 @@ fn main() {
     // ─ Thought encoding setup ─
     let thought_vocab   = ThoughtVocab::new(&vm);
     let thought_encoder = ThoughtEncoder::new(thought_vocab);
+    let (codebook_labels, codebook_vecs) = thought_encoder.fact_codebook();
     // IndicatorStreams parameter is unused by encode_view (v10+), but kept for API compat.
     let thought_streams = IndicatorStreams::new(args.dims, args.window + 48);
 
@@ -548,6 +565,15 @@ fn main() {
     eprintln!("  Run database: {}", run_db_path);
 
     // ─ Trader and tracking ─
+    let mut tht_attention: Option<Vec<f64>> = None; // thought discriminant for weighted bundling
+
+    // Fire-rate suppression: track how often each cached fact fires.
+    // Facts firing >90% of the time carry <0.15 bits and waste bundle capacity.
+    let fire_rate_window = 500usize; // assess over last N candles
+    let fire_rate_threshold = 0.90;
+    let mut fire_counts: HashMap<String, usize> = HashMap::new();
+    let mut fire_total: usize = 0;
+    let mut suppressed_facts: HashSet<String> = HashSet::new();
     let mut trader    = Trader::new(args.initial_equity, args.observe_period);
     let mut pending:    VecDeque<Pending> = VecDeque::new();
     let mut vis_rolling: VecDeque<bool>  = VecDeque::new();
@@ -627,18 +653,19 @@ fn main() {
             .collect();
 
         // ── Parallel: thought encode ─────────────────────────────────────────
-        let tht_vecs: Vec<(usize, Vector)> = (cursor..batch_end)
+        let sup_ref = if suppressed_facts.is_empty() { None } else { Some(&suppressed_facts) };
+        let tht_vecs: Vec<(usize, Vector, Vec<String>)> = (cursor..batch_end)
             .into_par_iter()
             .map(|i| {
                 let w_start = i.saturating_sub(args.window - 1);
                 let window  = &candles[w_start..=i];
-                let result  = thought_encoder.encode_view(window, &thought_streams, 0, 0, &vm);
-                (i, result.thought)
+                let result  = thought_encoder.encode_view(window, &thought_streams, 0, 0, &vm, None, sup_ref);
+                (i, result.thought, result.fact_labels)
             })
             .collect();
 
         // ── Sequential: predict + buffer + learn + expire ────────────────────
-        for ((i, vis_vec), (_, tht_vec)) in vis_vecs.into_iter().zip(tht_vecs) {
+        for ((i, vis_vec), (_, tht_vec, tht_facts)) in vis_vecs.into_iter().zip(tht_vecs) {
             encode_count += 1;
 
             let vis_pred = vis_journal.predict(&vis_vec);
@@ -758,6 +785,7 @@ fn main() {
                 was_flipped:   flip_threshold > 0.0 && meta_conviction >= flip_threshold,
                 meta_conviction,
                 position_frac,
+                fact_labels:   tht_facts,
                 first_outcome: None,
                 outcome_pct:   0.0,
                 peak_abs_pct:  0.0,
@@ -816,6 +844,9 @@ fn main() {
                 ).ok();
             }
             if tht_journal.recalib_count != tht_recalib_before {
+                // Update attention weights for next batch's weighted bundling.
+                tht_attention = tht_journal.discriminant().map(|d| d.to_vec());
+
                 run_db.execute(
                     "INSERT INTO recalib_log (step,journal,cos_raw,disc_strength,buy_count,sell_count)
                      VALUES (?1,?2,?3,?4,?5,?6)",
@@ -825,6 +856,20 @@ fn main() {
                         tht_journal.buy.count() as i64, tht_journal.sell.count() as i64,
                     ],
                 ).ok();
+
+                // Decode thought discriminant against the fact codebook.
+                // Top 20 facts by absolute cosine — shows what the model learned.
+                let decoded = tht_journal.decode_discriminant(&codebook_vecs, &codebook_labels);
+                for (rank, (label, cos)) in decoded.iter().take(20).enumerate() {
+                    run_db.execute(
+                        "INSERT INTO disc_decode (step,journal,rank,fact_label,cosine)
+                         VALUES (?1,?2,?3,?4,?5)",
+                        params![
+                            encode_count as i64, "thought",
+                            (rank + 1) as i64, label, cos,
+                        ],
+                    ).ok();
+                }
             }
 
             // ── Expire entries that have reached horizon age ───────────────
@@ -876,10 +921,16 @@ fn main() {
                         if final_out != Outcome::Noise {
                             trader.record_trade(entry.outcome_pct, frac, dir, entry.year);
                             // Track flip-zone trade outcomes for self-derived min_edge.
-                            // Only trades that were actually flipped at entry time.
                             if entry.was_flipped {
                                 window_total += 1;
                                 if dir == final_out { window_wins += 1; }
+                            }
+                            // Log which facts were present for this trade.
+                            for label in &entry.fact_labels {
+                                run_db.execute(
+                                    "INSERT INTO trade_facts (step, fact_label) VALUES (?1, ?2)",
+                                    params![log_step, label],
+                                ).ok();
                             }
                         }
                     }

@@ -517,17 +517,58 @@ impl ThoughtEncoder {
         &self.vocab
     }
 
+    /// Return the pre-computed fact codebook: (label, vector) pairs for all
+    /// cached comparison, zone, calendar, and RSI-SMA facts. Use for
+    /// discriminant decoding.
+    pub fn fact_codebook(&self) -> (Vec<String>, Vec<Vector>) {
+        let mut labels = Vec::with_capacity(self.fact_cache.len());
+        let mut vecs   = Vec::with_capacity(self.fact_cache.len());
+        for (label, vec) in &self.fact_cache {
+            labels.push(label.clone());
+            vecs.push(vec.clone());
+        }
+        (labels, vecs)
+    }
+
     pub fn encode(
         &self,
         candles: &[Candle],
         streams: &IndicatorStreams,
         vm: &VectorManager,
     ) -> ThoughtResult {
-        self.encode_view(candles, streams, usize::MAX, streams.max_len_val(), vm)
+        self.encode_view(candles, streams, usize::MAX, streams.max_len_val(), vm, None, None)
+    }
+
+    /// Weighted bundle: each fact scaled by |cosine(fact, discriminant)|.
+    /// Facts the discriminant ignores get near-zero weight. Facts it relies
+    /// on get amplified. Result is thresholded to bipolar.
+    fn weighted_bundle(facts: &[&Vector], disc: &[f64], dims: usize) -> Vector {
+        let disc_norm: f64 = disc.iter().map(|x| x * x).sum::<f64>().sqrt();
+        if disc_norm < 1e-10 { return Primitives::bundle(facts); }
+
+        let inv_disc_norm = 1.0 / disc_norm;
+        let mut sum = vec![0.0f64; dims];
+        for fact in facts {
+            // |cosine(fact, disc)| — bipolar fact means norm = sqrt(D)
+            let dot: f64 = fact.data().iter().zip(disc.iter())
+                .map(|(&v, &d)| v as f64 * d)
+                .sum();
+            let norm_v = (fact.dimensions() as f64).sqrt();
+            let w = (dot * inv_disc_norm / norm_v).abs();
+            for (s, &v) in sum.iter_mut().zip(fact.data().iter()) {
+                *s += w * v as f64;
+            }
+        }
+        Vector::from_data(sum.iter()
+            .map(|&v| if v > 0.0 { 1 } else if v < 0.0 { -1 } else { 0 })
+            .collect())
     }
 
     /// Encode with a windowed view of the streams — enables batch-parallel encoding
     /// where each candle sees only the stream entries up to its position.
+    /// If `attention` is provided (the journal's discriminant), facts are weighted
+    /// by |cosine(fact, discriminant)| before bundling — learned attention that
+    /// suppresses noise and amplifies signal.
     pub fn encode_view(
         &self,
         candles: &[Candle],
@@ -535,6 +576,8 @@ impl ThoughtEncoder {
         _stream_end: usize,
         _max_window: usize,
         vm: &VectorManager,
+        attention: Option<&[f64]>,
+        suppressed: Option<&HashSet<String>>,
     ) -> ThoughtResult {
         let mut cached_facts: Vec<&Vector> = Vec::with_capacity(64);
         let mut owned_facts: Vec<Vector> = Vec::with_capacity(96);
@@ -552,12 +595,28 @@ impl ThoughtEncoder {
         self.eval_volume_confirmation(candles, &mut owned_facts, &mut labels);
         self.eval_range_position(candles, &mut owned_facts, &mut labels);
 
-        let fact_count = cached_facts.len() + owned_facts.len();
+        // Unify all facts, then filter suppressed (high fire-rate constants).
+        let mut all_refs: Vec<&Vector> = Vec::with_capacity(cached_facts.len() + owned_facts.len());
+        all_refs.extend(cached_facts.iter().copied());
+        all_refs.extend(owned_facts.iter());
+
+        if let Some(sup) = suppressed {
+            let mut kept_refs: Vec<&Vector> = Vec::with_capacity(all_refs.len());
+            let mut kept_labels: Vec<String> = Vec::with_capacity(labels.len());
+            for (vec, label) in all_refs.iter().zip(labels.iter()) {
+                if !sup.contains(label) {
+                    kept_refs.push(vec);
+                    kept_labels.push(label.clone());
+                }
+            }
+            all_refs = kept_refs;
+            labels = kept_labels;
+        }
+
+        let fact_count = all_refs.len();
         let thought = if fact_count == 0 {
             Vector::zeros(self.vocab.dims())
         } else {
-            let mut all_refs: Vec<&Vector> = cached_facts.iter().copied().collect();
-            all_refs.extend(owned_facts.iter());
             Primitives::bundle(&all_refs)
         };
 
@@ -699,6 +758,10 @@ impl ThoughtEncoder {
                 let end = boundaries[seg_idx + 1];
                 let duration = end - start;
                 let candles_ago_end = n_candles - end;
+
+                // Skip degenerate segments: dur=1 at the window edge is a boundary
+                // artifact, not a market signal.
+                if duration <= 1 && (start == 0 || end >= n_candles) { continue; }
 
                 let seg_start_val = values[start];
                 let seg_end_val = values[end - 1];

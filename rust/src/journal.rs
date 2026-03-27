@@ -147,6 +147,28 @@ impl Journal {
         }
     }
 
+    /// Decode the discriminant: compute cosine of each fact vector against the
+    /// discriminant. Returns (label, cosine) pairs sorted by absolute cosine
+    /// descending (most influential facts first). Positive = Buy-leaning,
+    /// negative = Sell-leaning.
+    pub fn decode_discriminant(&self, fact_vecs: &[Vector], fact_labels: &[String]) -> Vec<(String, f64)> {
+        let Some(disc) = &self.discriminant else { return vec![]; };
+        let mut results: Vec<(String, f64)> = fact_vecs.iter()
+            .zip(fact_labels.iter())
+            .map(|(vec, label)| {
+                let cos = cosine_proto_vs_vec(disc, vec);
+                (label.clone(), cos)
+            })
+            .collect();
+        results.sort_by(|a, b| b.1.abs().partial_cmp(&a.1.abs()).unwrap());
+        results
+    }
+
+    /// Get the discriminant vector (for external analysis).
+    pub fn discriminant(&self) -> Option<&[f64]> {
+        self.discriminant.as_deref()
+    }
+
     fn recalibrate(&mut self) {
         if self.buy.count() == 0 || self.sell.count() == 0 { return; }
 
