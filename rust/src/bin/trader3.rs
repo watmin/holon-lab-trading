@@ -696,8 +696,24 @@ impl Trader {
         ]
     }
 
-    /// Five risk feature vectors — one per subspace branch.
-    fn risk_branch_features(&self) -> [Vec<f64>; 5] {
+    /// Five risk WAT vectors — named atoms bound with scalar magnitudes.
+    /// Each branch gets a bundled thought vector at full dimensionality.
+    fn risk_branch_wat(&self, vm: &VectorManager, scalar: &holon::ScalarEncoder) -> [Vec<f64>; 5] {
+        // Helper: encode a named risk thought with a continuous value.
+        // bind(atom_name, encode_linear(value, scale)) → f64 vector
+        let thought = |name: &str, value: f64, scale: f64| -> Vector {
+            let sv = scalar.encode(value, holon::ScalarMode::Linear { scale });
+            Primitives::bind(&vm.get_vector(name), &sv)
+        };
+
+        // Helper: bundle thoughts into one f64 vector for the subspace.
+        let bundle_f64 = |thoughts: Vec<Vector>| -> Vec<f64> {
+            let refs: Vec<&Vector> = thoughts.iter().collect();
+            let bundled = Primitives::bundle(&refs);
+            bundled.data().iter().map(|&v| v as f64).collect()
+        };
+
+        // ── Now build the original features as named thoughts ────────
         let dd = if self.peak_equity > 0.0 { (self.peak_equity - self.equity) / self.peak_equity } else { 0.0 };
         let dd_vel = if self.equity_at_trade.len() >= 5 {
             let eq5 = self.equity_at_trade[self.equity_at_trade.len() - 5];
@@ -708,13 +724,24 @@ impl Trader {
             ((self.equity - self.dd_bottom_equity) / (self.peak_equity - self.dd_bottom_equity)).max(0.0).min(1.0)
         } else { 1.0 };
         let hist_worst = self.completed_drawdowns.iter().copied().fold(0.0_f64, f64::max);
-        let dd_branch = vec![dd, dd_vel, self.trades_since_bottom as f64 / 100.0, recovery,
-            if hist_worst > 0.001 { dd / hist_worst } else { 0.0 }];
+        let dd_branch = bundle_f64(vec![
+            thought("drawdown",         dd,                                          1.0),
+            thought("dd-velocity",      dd_vel,                                      0.2),
+            thought("recovery-progress",recovery,                                    2.0),
+            thought("dd-duration",      self.trades_since_bottom as f64 / 100.0,     2.0),
+            thought("dd-historical",    if hist_worst > 0.001 { dd / hist_worst } else { 0.0 }, 2.0),
+        ]);
 
         let wr10 = self.win_rate_last_n(10);
         let wr50 = self.win_rate_last_n(50);
         let wr200 = self.win_rate_last_n(200);
-        let acc_branch = vec![wr10, wr50, wr200, wr10 - wr50, wr10 - wr200];
+        let acc_branch = bundle_f64(vec![
+            thought("acc-10",          wr10,           2.0),
+            thought("acc-50",          wr50,           2.0),
+            thought("acc-200",         wr200,          2.0),
+            thought("acc-trajectory",  wr10 - wr50,    0.5),
+            thought("acc-divergence",  wr10 - wr200,   0.5),
+        ]);
 
         let returns: Vec<f64> = self.trade_returns.iter().rev().take(50).copied().collect();
         let vol_branch = if returns.len() >= 5 {
@@ -726,8 +753,14 @@ impl Trader {
             let worst = returns.iter().copied().fold(0.0_f64, f64::min);
             let best = returns.iter().copied().fold(0.0_f64, f64::max);
             let skew = if vol > 1e-10 { returns.iter().map(|r| ((r - mean) / vol).powi(3)).sum::<f64>() / n } else { 0.0 };
-            vec![vol, sharpe, worst, best, skew]
-        } else { vec![0.0; 5] };
+            bundle_f64(vec![
+                thought("pnl-vol",      vol,     0.1),
+                thought("trade-sharpe", sharpe,  4.0),
+                thought("worst-trade",  worst,   0.1),
+                thought("return-skew",  skew,    4.0),
+                thought("equity-curve", best,    0.1),
+            ])
+        } else { vec![0.0; vm.dimensions()] };
 
         let corr_branch = if self.rolling.len() >= 20 {
             let seq: Vec<f64> = self.rolling.iter().rev().take(50).map(|&w| if w { 1.0 } else { -1.0 }).collect();
@@ -736,14 +769,26 @@ impl Trader {
             let ac = if sv > 1e-10 { let mut c = 0.0; for i in 0..seq.len()-1 { c += (seq[i]-sm)*(seq[i+1]-sm); } c / ((seq.len()-1) as f64 * sv) } else { 0.0 };
             let ld = self.rolling.iter().rev().take(20).filter(|&&x| !x).count() as f64 / 20.0;
             let mut consec = 0.0_f64; for &o in self.rolling.iter().rev() { if !o { consec += 1.0; } else { break; } }
-            vec![ac, ld, consec / 10.0, self.trades_taken as f64 / 1000.0, 0.0]
-        } else { vec![0.0; 5] };
+            bundle_f64(vec![
+                thought("loss-pattern",  ac,            2.0),
+                thought("loss-density",  ld,            2.0),
+                thought("consec-loss",   consec / 10.0, 2.0),
+                thought("trade-density", self.trades_taken as f64 / 1000.0, 2.0),
+                thought("streak",        ac.signum(),   2.0), // direction of clustering
+            ])
+        } else { vec![0.0; vm.dimensions()] };
 
         let eq_pct = (self.equity - self.initial_equity) / self.initial_equity;
-        let mut streak = 0.0_f64;
-        if let Some(&last) = self.rolling.back() { for &o in self.rolling.iter().rev() { if o == last { streak += if last { 1.0 } else { -1.0 }; } else { break; } } }
+        let mut streak_val = 0.0_f64;
+        if let Some(&last) = self.rolling.back() { for &o in self.rolling.iter().rev() { if o == last { streak_val += if last { 1.0 } else { -1.0 }; } else { break; } } }
         let wr_all = if self.trades_taken > 0 { self.trades_won as f64 / self.trades_taken as f64 } else { 0.5 };
-        let panel_branch = vec![eq_pct, streak / 10.0, wr_all, self.trades_taken as f64 / 1000.0, (self.trades_taken as f64).sqrt() / 30.0];
+        let panel_branch = bundle_f64(vec![
+            thought("equity-curve",    eq_pct,                                  2.0),
+            thought("streak",          streak_val / 10.0,                       2.0),
+            thought("recent-accuracy", wr_all,                                  2.0),
+            thought("trade-density",   self.trades_taken as f64 / 1000.0,       2.0),
+            thought("trade-frequency", (self.trades_taken as f64).sqrt() / 30.0, 2.0),
+        ]);
 
         [dd_branch, acc_branch, vol_branch, corr_branch, panel_branch]
     }
@@ -1175,13 +1220,18 @@ fn main() {
         name: &'static str,
         subspace: OnlineSubspace,
     }
+    // Each risk branch operates at full dimensionality — named wat vectors.
+    // Atoms bound with scalar magnitudes, bundled per branch, fed to subspace.
     let mut risk_branches: Vec<RiskBranch> = vec![
-        RiskBranch { name: "drawdown",    subspace: OnlineSubspace::with_params(5, 3, 2.0, 0.01, 3.5, 50) },
-        RiskBranch { name: "accuracy",    subspace: OnlineSubspace::with_params(5, 3, 2.0, 0.01, 3.5, 50) },
-        RiskBranch { name: "volatility",  subspace: OnlineSubspace::with_params(5, 3, 2.0, 0.01, 3.5, 50) },
-        RiskBranch { name: "correlation", subspace: OnlineSubspace::with_params(5, 3, 2.0, 0.01, 3.5, 50) },
-        RiskBranch { name: "panel",       subspace: OnlineSubspace::with_params(5, 3, 2.0, 0.01, 3.5, 50) },
+        RiskBranch { name: "drawdown",    subspace: OnlineSubspace::with_params(args.dims, 8, 2.0, 0.01, 3.5, 100) },
+        RiskBranch { name: "accuracy",    subspace: OnlineSubspace::with_params(args.dims, 8, 2.0, 0.01, 3.5, 100) },
+        RiskBranch { name: "volatility",  subspace: OnlineSubspace::with_params(args.dims, 8, 2.0, 0.01, 3.5, 100) },
+        RiskBranch { name: "correlation", subspace: OnlineSubspace::with_params(args.dims, 8, 2.0, 0.01, 3.5, 100) },
+        RiskBranch { name: "panel",       subspace: OnlineSubspace::with_params(args.dims, 8, 2.0, 0.01, 3.5, 100) },
     ];
+
+    // Risk scalar encoder — separate from thought encoder's scalar encoder
+    let risk_scalar = holon::ScalarEncoder::new(args.dims);
 
     // ─ Expert panel: N journals with different vocabulary profiles ──────
     // Each expert thinks different thoughts about the same candles.
@@ -1563,7 +1613,7 @@ fn main() {
             // Risk branch: five subspaces, each scoring its domain.
             // The WORST residual ratio drives the multiplier.
             // If ANY dimension is anomalous, scale down.
-            let branch_features = trader.risk_branch_features();
+            let branch_features = trader.risk_branch_wat(&vm, &risk_scalar);
             let mut worst_ratio = 1.0_f64; // 1.0 = all healthy
             let healthy = trader.is_healthy() && trader.trades_taken >= 20;
             for (bi, branch) in risk_branches.iter_mut().enumerate() {
