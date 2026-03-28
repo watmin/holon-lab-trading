@@ -1101,7 +1101,12 @@ fn main() {
             // Position sizing: Kelly from the curve × drawdown cap.
             // The curve handles selectivity. The drawdown cap handles survival.
             // Nothing else. No graduated gate, no stability gate, no phase gate.
-            let position_frac = if meta_dir.is_some() && trader.phase != Phase::Observe {
+            // The flip zone gate stays — below the threshold, the direction
+            // isn't flipped, so it's WRONG. Kelly can't fix wrong direction.
+            let position_frac = if meta_dir.is_some()
+                && trader.phase != Phase::Observe
+                && (flip_threshold <= 0.0 || meta_conviction >= flip_threshold)
+            {
                 let mt = if args.atr_multiplier > 0.0 {
                     args.atr_multiplier * candles[i].atr_r
                 } else { args.move_threshold };
