@@ -1,0 +1,13 @@
+trader3: visual+thought journals, discriminant prediction
+  20000D  window=48  horizon=36  threshold=0.500%  decay=0.999  flip=q85
+  observe=1000  recalib_interval=500  orchestration=thought-only  min_conviction=0.000
+
+  Loading candles from "/home/watmin/work/holon/holon-lab-trading/data/analysis.db"...
+  Loaded 652409 candles in 0.6s
+  Run database: /home/watmin/work/holon/holon-lab-trading/orchestration_results/celebration-run.db
+
+  Walk-forward: 100000 candles from index 47...
+  10000/100000 (230/s ETA 392s) | 2019-02-05 | CONFIDENT | vis=0.0% tht=48.9% | trades=752 win=58.6% | $14820 (+48.2%) vs B&H -6.7% | flip@0.147 CALIBRATING
+  20000/100000 (191/s ETA 419s) | 2019-03-12 | CONFIDENT | vis=0.0% tht=44.0% | trades=1514 win=55.9% | $25265 (+152.7%) vs B&H +3.6% | flip@0.150 CALIBRATING
+  30000/100000 (152/s ETA 459s) | 2019-04-16 | CONFIDENT | vis=0.0% tht=52.1% | trades=2398 win=57.4% | $132735 (+1227.4%) vs B&H +36.0% | flip@0.138 CALIBRATING
+  40000/100000 (126/s ETA 477s) | 2019-05-20 | CONFIDENT | vis=0.0% tht=55.4% | trades=3260 win=58.0% | $514892 (+5048.9%) vs B&H +110.3% | flip@0.116 CALIBRATING

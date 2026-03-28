@@ -1233,6 +1233,10 @@ fn main() {
     // Risk scalar encoder — separate from thought encoder's scalar encoder
     let risk_scalar = holon::ScalarEncoder::new(args.dims);
     let mut cached_risk_mult: f64 = 0.5;
+    // Cached curve params — recomputed at recalib intervals, not per trade.
+    let mut cached_curve_a: f64 = 0.0;
+    let mut cached_curve_b: f64 = 0.0;
+    let mut curve_valid = false;
 
     // ─ Expert panel: N journals with different vocabulary profiles ──────
     // Each expert thinks different thoughts about the same candles.
@@ -1649,34 +1653,18 @@ fn main() {
 
                 match args.sizing.as_str() {
                     "kelly" => {
-                        match kelly_frac(meta_conviction, &resolved_preds, 50, mt) {
-                            Some((frac, a, b)) => {
-                                // Track curve params (for logging/diagnostics)
-                                if curve_a_history.is_empty()
-                                    || curve_a_history.back() != Some(&a) {
-                                    curve_a_history.push_back(a);
-                                    curve_b_history.push_back(b);
-                                    if curve_a_history.len() > 10 { curve_a_history.pop_front(); }
-                                    if curve_b_history.len() > 10 { curve_b_history.pop_front(); }
-
-                                    // Adaptive window: stable curve → shrink (adapt faster).
-                                    // Unstable → grow (need more data).
-                                    if curve_a_history.len() >= 3 {
-                                        let n = curve_a_history.len();
-                                        let last_da = (curve_a_history[n-1] - curve_a_history[n-2]).abs()
-                                            / curve_a_history[n-2].abs().max(1e-10);
-                                        let last_db = (curve_b_history[n-1] - curve_b_history[n-2]).abs()
-                                            / curve_b_history[n-2].abs().max(1e-10);
-                                        if last_da < 0.10 && last_db < 0.10 {
-                                            // Stable: shrink toward 1500 (faster adaptation)
-                                            conviction_window = (conviction_window - 50).max(1500);
-                                        } else {
-                                            // Unstable: grow toward 5000 (more data)
-                                            conviction_window = (conviction_window + 100).min(5000);
-                                        }
-                                    }
-                                }
-                                // Drawdown cap: the only risk gate.
+                        // Fast path: evaluate cached curve params. No sorting.
+                        let kelly_result = if curve_valid && cached_curve_b > 0.0 {
+                            let win_rate = (0.50 + cached_curve_a * (cached_curve_b * meta_conviction).exp()).min(0.95);
+                            let edge = 2.0 * win_rate - 1.0;
+                            if edge > 0.0 {
+                                let half_kelly_risk = edge / 2.0;
+                                Some(half_kelly_risk / mt)
+                            } else { None }
+                        } else { None };
+                        match kelly_result {
+                            Some(frac) => {
+                                let frac = frac.min(1.0);
                                 let dd = if trader.peak_equity > 0.0 {
                                     (trader.peak_equity - trader.equity) / trader.peak_equity
                                 } else { 0.0 };
@@ -1837,6 +1825,14 @@ fn main() {
             }
             if tht_journal.recalib_count != tht_recalib_before {
                 tht_attention = tht_journal.discriminant().map(|d| d.to_vec());
+
+                // Pre-compute curve params for Kelly — once per recalib, not per trade.
+                if let Some((_, a, b)) = kelly_frac(0.15, &resolved_preds, 50,
+                    if args.atr_multiplier > 0.0 { args.atr_multiplier * candles[i].atr_r } else { args.move_threshold }) {
+                    cached_curve_a = a;
+                    cached_curve_b = b;
+                    curve_valid = true;
+                }
 
                 // Feed panel engram: if recent panel accuracy was good, store current state.
                 if panel_recalib_total >= 10 {
