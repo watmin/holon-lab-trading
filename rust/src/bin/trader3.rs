@@ -127,6 +127,16 @@ struct Args {
     #[arg(long, default_value_t = 0.20)]
     max_drawdown: f64,
 
+    /// Per-swap fee as a fraction (0.0010 = 10bps = Jupiter Ultra).
+    /// Applied twice per round trip (entry + exit).
+    #[arg(long, default_value_t = 0.0)]
+    swap_fee: f64,
+
+    /// Slippage estimate per swap as a fraction (0.0025 = 25bps).
+    /// Models DEX/AMM execution cost beyond the explicit fee.
+    #[arg(long, default_value_t = 0.0)]
+    slippage: f64,
+
     /// visual-only | thought-only | agree-only | meta-boost | weighted | thought-led | thought-contrarian
     #[arg(long, default_value = "meta-boost")]
     orchestration: String,
@@ -256,14 +266,19 @@ impl Trader {
     ///
     /// Long (Buy): profit when price goes up (outcome_pct > 0).
     /// Short (Sell): profit when price goes down (outcome_pct < 0), i.e. -outcome_pct > 0.
-    fn record_trade(&mut self, outcome_pct: f64, frac: f64, direction: Outcome, year: i32) {
+    fn record_trade(&mut self, outcome_pct: f64, frac: f64, direction: Outcome, year: i32,
+                     swap_fee: f64, slippage: f64) {
         let directional_return = match direction {
             Outcome::Buy   =>  outcome_pct,
             Outcome::Sell  => -outcome_pct,
             Outcome::Noise => return,
         };
-        let pnl = self.equity * frac * directional_return;
-        let won = directional_return > 0.0;
+        // Round-trip cost: fee + slippage on entry, fee + slippage on exit.
+        let round_trip_cost = 2.0 * (swap_fee + slippage);
+        let net_return = directional_return - round_trip_cost;
+        let position_value = self.equity * frac;
+        let pnl = position_value * net_return;
+        let won = net_return > 0.0;
         self.equity += pnl;
         // Drawdown tracking
         let was_at_peak = self.equity >= self.peak_equity * 0.999;
@@ -290,7 +305,7 @@ impl Trader {
         // Trade history
         self.equity_at_trade.push_back(self.equity);
         if self.equity_at_trade.len() > 500 { self.equity_at_trade.pop_front(); }
-        self.trade_returns.push_back(directional_return);
+        self.trade_returns.push_back(net_return);
         if self.trade_returns.len() > 500 { self.trade_returns.pop_front(); }
         self.trades_taken += 1;
         if won { self.trades_won += 1; }
@@ -910,6 +925,12 @@ struct Pending {
     year:          i32,
     vis_vec:       Vector,
     tht_vec:       Vector,
+    // Ledger: price path tracking (no hallucination — pure measurement)
+    entry_price:       f64,
+    max_favorable:     f64,    // best price move in our direction
+    max_adverse:       f64,    // worst price move against our direction
+    crossing_candle:   Option<usize>, // candle index when threshold first crossed
+    path_candles:      usize,  // candles elapsed since entry
     vis_pred:      Prediction,
     tht_pred:      Prediction,
     raw_meta_dir:  Option<Outcome>,  // un-flipped direction (for auto calibration)
@@ -1120,6 +1141,35 @@ fn init_run_db(path: &str) -> Connection {
             won           INTEGER
         );
 
+        -- The ledger. One row per resolved trade. Pure accounting — no hallucination.
+        -- Every number is measured, not predicted. This is what the risk experts read.
+        CREATE TABLE IF NOT EXISTS trade_ledger (
+            step              INTEGER PRIMARY KEY,
+            candle_idx        INTEGER,  -- entry candle
+            timestamp         TEXT,     -- entry time
+            exit_candle_idx   INTEGER,  -- candle where threshold crossed (NULL if expired as Noise)
+            exit_timestamp    TEXT,
+            direction         TEXT,     -- 'Buy' | 'Sell'
+            conviction        REAL,     -- meta_conviction at entry
+            was_flipped       INTEGER,  -- 1 if flip was active
+            entry_price       REAL,
+            exit_price        REAL,     -- price at first threshold crossing (or at horizon expiry)
+            position_frac     REAL,     -- fraction of equity risked
+            position_usd      REAL,     -- dollar value of position at entry
+            gross_return_pct  REAL,     -- directional return before costs
+            swap_fee_pct      REAL,     -- total swap fees (round trip)
+            slippage_pct      REAL,     -- total slippage (round trip)
+            net_return_pct    REAL,     -- gross - fees - slippage
+            pnl_usd           REAL,     -- net dollar P&L
+            equity_after      REAL,     -- equity after this trade
+            max_favorable_pct REAL,     -- best excursion in our direction
+            max_adverse_pct   REAL,     -- worst excursion against us
+            crossing_candles  INTEGER,  -- candles from entry to threshold crossing (NULL if Noise)
+            horizon_candles   INTEGER,  -- total candles this entry was pending
+            outcome           TEXT,     -- 'Buy' | 'Sell' | 'Noise'
+            won               INTEGER   -- 1 if net_return > 0 (after costs)
+        );
+
         -- Visual + thought vectors for flip-zone trades (for engram analysis).
         CREATE TABLE IF NOT EXISTS trade_vectors (
             step          INTEGER PRIMARY KEY,
@@ -1155,6 +1205,11 @@ fn main() {
         args.dims, args.window, args.horizon, thresh_desc, args.decay, flip_desc);
     eprintln!("  observe={}  recalib_interval={}  orchestration={}  min_conviction={:.3}",
         args.observe_period, args.recalib_interval, args.orchestration, args.min_conviction);
+    if args.swap_fee > 0.0 || args.slippage > 0.0 {
+        eprintln!("  venue: {:.1}bps fee + {:.1}bps slippage per swap ({:.2}% round trip)",
+            args.swap_fee * 10000.0, args.slippage * 10000.0,
+            2.0 * (args.swap_fee + args.slippage) * 100.0);
+    }
 
     // ─ Load candles ─
     eprintln!("\n  Loading candles from {:?}...", args.db_path);
@@ -1313,6 +1368,9 @@ fn main() {
             ("min_conviction",  &args.min_conviction.to_string()),
             ("flip_quantile",   &args.flip_quantile.to_string()),
             ("max_candles",     &args.max_candles.to_string()),
+            ("swap_fee",        &args.swap_fee.to_string()),
+            ("slippage",        &args.slippage.to_string()),
+            ("sizing",          &args.sizing),
         ] {
             stmt.execute(params![k, v]).ok();
         }
@@ -1693,6 +1751,11 @@ fn main() {
                 first_outcome: None,
                 outcome_pct:   0.0,
                 peak_abs_pct:  0.0,
+                entry_price:       candles[i].close,
+                max_favorable:     0.0,
+                max_adverse:       0.0,
+                crossing_candle:   None,
+                path_candles:      0,
             });
 
             // Decay once per candle.
@@ -1716,6 +1779,20 @@ fn main() {
                 let abs_pct     = pct.abs();
 
                 if abs_pct > entry.peak_abs_pct { entry.peak_abs_pct = abs_pct; }
+                entry.path_candles = i - entry.candle_idx;
+
+                // Track directional excursion relative to predicted direction.
+                let directional_pct = match entry.meta_dir {
+                    Some(Outcome::Buy)  =>  pct,
+                    Some(Outcome::Sell) => -pct,
+                    _ => pct.abs(), // no direction → track absolute
+                };
+                if directional_pct > entry.max_favorable {
+                    entry.max_favorable = directional_pct;
+                }
+                if directional_pct < entry.max_adverse {
+                    entry.max_adverse = directional_pct; // most negative = worst drawdown
+                }
 
                 // Learn only on the first threshold crossing per pending entry.
                 if entry.first_outcome.is_none() {
@@ -1730,6 +1807,7 @@ fn main() {
                                   else                  { None };
 
                     if let Some(o) = outcome {
+                        entry.crossing_candle = Some(i);
                         let sw = signal_weight(abs_pct, &mut move_sum, &mut move_count);
                         vis_journal.observe(&entry.vis_vec, o, sw);
                         tht_journal.observe(&entry.tht_vec, o, sw);
@@ -1915,7 +1993,48 @@ fn main() {
                 if let Some(frac) = entry.position_frac {
                     if let Some(dir) = entry.meta_dir {
                         if final_out != Outcome::Noise {
-                            trader.record_trade(entry.outcome_pct, frac, dir, entry.year);
+                            let gross_ret = match dir {
+                                Outcome::Buy  =>  entry.outcome_pct,
+                                Outcome::Sell => -entry.outcome_pct,
+                                Outcome::Noise => 0.0,
+                            };
+                            let rt_fee = 2.0 * args.swap_fee;
+                            let rt_slip = 2.0 * args.slippage;
+                            let net_ret = gross_ret - rt_fee - rt_slip;
+                            let pos_usd = trader.equity * frac;
+                            let trade_pnl = pos_usd * net_ret;
+                            trader.record_trade(entry.outcome_pct, frac, dir, entry.year,
+                                                args.swap_fee, args.slippage);
+                            let exit_candle = entry.crossing_candle;
+                            let exit_ts = exit_candle.map(|ci| candles[ci].ts.clone());
+                            let exit_price = exit_candle.map(|ci| candles[ci].close)
+                                .unwrap_or(candles[i].close);
+                            let crossing_elapsed = entry.crossing_candle
+                                .map(|ci| (ci - entry.candle_idx) as i64);
+                            run_db.execute(
+                                "INSERT INTO trade_ledger
+                                 (step,candle_idx,timestamp,exit_candle_idx,exit_timestamp,
+                                  direction,conviction,was_flipped,
+                                  entry_price,exit_price,position_frac,position_usd,
+                                  gross_return_pct,swap_fee_pct,slippage_pct,net_return_pct,
+                                  pnl_usd,equity_after,
+                                  max_favorable_pct,max_adverse_pct,
+                                  crossing_candles,horizon_candles,outcome,won)
+                                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24)",
+                                params![
+                                    log_step, entry.candle_idx as i64, &entry_candle.ts,
+                                    exit_candle.map(|ci| ci as i64), exit_ts,
+                                    dir.to_string(), entry.meta_conviction,
+                                    entry.was_flipped as i32,
+                                    entry.entry_price, exit_price,
+                                    frac, pos_usd,
+                                    gross_ret * 100.0, rt_fee * 100.0, rt_slip * 100.0,
+                                    net_ret * 100.0, trade_pnl, trader.equity,
+                                    entry.max_favorable * 100.0, entry.max_adverse * 100.0,
+                                    crossing_elapsed, entry.path_candles as i64,
+                                    final_out.to_string(), (net_ret > 0.0) as i32,
+                                ],
+                            ).ok();
                             // Risk expert learns from this trade's outcome.
                             // Track panel accuracy for engram gating
                             panel_recalib_total += 1;
@@ -2117,6 +2236,11 @@ fn main() {
     eprintln!("  trader3 complete — {} candles in {:.1}s ({:.0}/s)",
         encode_count, total_time, encode_count as f64 / total_time);
     eprintln!("  Orchestration: {}", args.orchestration);
+    if args.swap_fee > 0.0 || args.slippage > 0.0 {
+        let rt = 2.0 * (args.swap_fee + args.slippage) * 100.0;
+        eprintln!("  Venue costs: {:.1}bps fee + {:.1}bps slippage = {:.2}% round trip",
+            args.swap_fee * 10000.0, args.slippage * 10000.0, rt);
+    }
     eprintln!("  Labeled: {}  Noise: {} ({:.1}% noise rate)",
         labeled_count, noise_count,
         noise_count as f64 / (labeled_count + noise_count).max(1) as f64 * 100.0);

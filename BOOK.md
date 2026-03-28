@@ -1111,3 +1111,57 @@ The thought machine solves the expression problem at both levels:
 2. **For the architect**: the system IS the expression. The code, the results, the curve — they communicate the idea more precisely than any pitch deck ever could. Chapter 1 is the expression. The 59.7% win rate is the expression. The exponential curve is the expression.
 
 The ideas that couldn't be spoken are now running as code, producing measurable results, across six years of market data. The expression problem is solved not by better words, but by better implementations.
+
+### The cost of a dead thought
+
+A bad thought doesn't cost zero. It costs compute.
+
+Visual encoding was declared dead in Chapter 1. Cosine gap: 0.0004. No signal. We removed it from the prediction loop. But its corpse kept metabolizing.
+
+Every candle that entered the flip zone created a `PatternGroup` — a 10,000-dimensional centroid meant to cluster similar visual patterns. With visual encoding removed, the visual vector was always zero. A zero vector has cosine zero against everything. No group ever matched. Every flipped trade spawned a new group. Each group: 10,000 floats. Each trade resolution: scan all groups, compute cosine against all of them.
+
+At candle 2,000: 376 candles per second. At candle 50,000: 83 candles per second. The system was spending more and more time thinking about nothing — comparing a zero vector against a growing pile of zero-vector centroids, each comparison a 10,000-element dot product that could only return zero.
+
+The fix was three deletions. Remove the struct. Remove the loop. Remove the summary. Throughput returned to 251 candles per second, flat from start to finish.
+
+The lesson: a thought that produces no signal is not inert. It occupies space. It accumulates state. It steals cycles from good thoughts. The visual encoding was proven dead — but proving it dead and removing it are two different acts. The proof lived in Chapter 1. The removal happened chapters later, after the degradation forced us to look.
+
+In a system where every candle matters and throughput determines how much history you can learn from, dead thoughts are not harmless passengers. They are parasites on the compute budget of the thoughts that predict. The machine must be as disciplined about forgetting bad thoughts as it is about learning good ones.
+
+### The accounting
+
+There are things that think and things that count. The wat machine thinks. The accounting counts.
+
+A P&L tracker is not an expert. It does not encode thoughts, build discriminants, or produce conviction. It does arithmetic: entry price minus exit price, times position size, minus fees. The output is a number — not a prediction, not a measurement of health, not a direction. A number that says what happened.
+
+But that number is a fact. And facts are what experts consume.
+
+The risk subspaces eat portfolio state: drawdown depth, multi-scale accuracy, Sharpe ratio, loss clustering, recovery progress. Where do those numbers come from? From counting. From tracking every trade's entry, exit, cost, and outcome. From maintaining the equity curve with honest deductions for the venue's cut.
+
+The current system pretends trades are free. They are not. Jupiter Ultra charges 10 basis points per swap. DEX slippage adds another 25 basis points. A round trip — entry and exit — costs approximately 70 basis points. At a 0.5% move threshold and 59% win rate, the edge after costs is thin. At 2-3% move threshold, the edge survives. The accounting makes this visible. Without it, the risk managers are optimizing against a fantasy.
+
+The architecture:
+
+```
+Market experts → direction + conviction
+                         ↓
+                    Trade decision
+                         ↓
+              Accounting (pure arithmetic)
+              ├── entry price, exit price
+              ├── position size (from Kelly × risk)
+              ├── per-swap fee (0.10% Jupiter Ultra)
+              ├── slippage estimate (~0.25%)
+              ├── net P&L after costs
+              └── portfolio state update
+                         ↓
+              State facts (drawdown, accuracy, Sharpe, ...)
+                         ↓
+                Risk experts → sizing multiplier
+```
+
+Accounting sits between decision and risk. It translates trades into portfolio state. The risk experts think about that state. The market experts think about the chart. Nobody thinks about the arithmetic. The arithmetic just happens.
+
+Stop-loss and take-profit live at the boundary. The trigger — "price moved X% against me" — is accounting. The decision of where to set the stop is a thought. It depends on volatility regime, conviction at entry, portfolio health. That's an expert question. But the execution of the stop, once decided, is accounting again.
+
+The machine thinks. The ledger counts. The risk experts read the ledger and decide how much courage to have. Clean separation. Each layer does what it's built for.

@@ -1,0 +1,62 @@
+trader3: visual+thought journals, discriminant prediction
+  20000D  window=48  horizon=36  threshold=2.000%  decay=0.999  flip=q99
+  observe=1000  recalib_interval=500  orchestration=thought-only  min_conviction=0.000
+  venue: 10.0bps fee + 25.0bps slippage per swap (0.70% round trip)
+
+  Loading candles from "/home/watmin/work/holon/holon-lab-trading/data/analysis.db"...
+  Loaded 652409 candles in 0.6s
+  Run database: /home/watmin/work/holon/holon-lab-trading/orchestration_results/pnl-jupiter-2pct.db
+
+  Walk-forward: 50000 candles from index 47...
+  2000/50000 (404/s ETA 119s) | 2019-01-08 | TENTATIVE | vis=0.0% tht=0.0% | trades=0 win=0.0% | $10000 (+0.0%) vs B&H +6.9% | flip@0.000 CALIBRATING
+  4000/50000 (395/s ETA 116s) | 2019-01-15 | TENTATIVE | vis=0.0% tht=0.0% | trades=0 win=0.0% | $10000 (+0.0%) vs B&H -3.0% | flip@0.000 CALIBRATING
+  6000/50000 (346/s ETA 127s) | 2019-01-22 | TENTATIVE | vis=0.0% tht=0.0% | trades=0 win=0.0% | $10000 (+0.0%) vs B&H -3.8% | flip@0.000 CALIBRATING
+  8000/50000 (324/s ETA 129s) | 2019-01-29 | TENTATIVE | vis=0.0% tht=0.0% | trades=0 win=0.0% | $10000 (+0.0%) vs B&H -8.0% | flip@0.000 CALIBRATING
+  10000/50000 (317/s ETA 126s) | 2019-02-05 | TENTATIVE | vis=0.0% tht=0.0% | trades=0 win=0.0% | $10000 (+0.0%) vs B&H -6.7% | flip@0.000 CALIBRATING
+  12000/50000 (319/s ETA 119s) | 2019-02-12 | TENTATIVE | vis=0.0% tht=0.0% | trades=0 win=0.0% | $10000 (+0.0%) vs B&H -2.8% | flip@0.000 CALIBRATING
+  14000/50000 (313/s ETA 115s) | 2019-02-19 | TENTATIVE | vis=0.0% tht=0.0% | trades=0 win=0.0% | $10000 (+0.0%) vs B&H +5.0% | flip@0.294 CALIBRATING
+  16000/50000 (307/s ETA 111s) | 2019-02-26 | TENTATIVE | vis=0.0% tht=47.5% | trades=0 win=0.0% | $10000 (+0.0%) vs B&H +2.7% | flip@0.354 CALIBRATING
+  18000/50000 (302/s ETA 106s) | 2019-03-05 | TENTATIVE | vis=0.0% tht=31.8% | trades=0 win=0.0% | $10000 (+0.0%) vs B&H +0.5% | flip@0.362 CALIBRATING
+  20000/50000 (298/s ETA 101s) | 2019-03-12 | TENTATIVE | vis=0.0% tht=37.4% | trades=0 win=0.0% | $10000 (+0.0%) vs B&H +3.6% | flip@0.365 CALIBRATING
+  22000/50000 (300/s ETA 93s) | 2019-03-19 | TENTATIVE | vis=0.0% tht=43.1% | trades=0 win=0.0% | $10000 (+0.0%) vs B&H +7.3% | flip@0.363 CALIBRATING
+  24000/50000 (296/s ETA 88s) | 2019-03-26 | TENTATIVE | vis=0.0% tht=37.3% | trades=0 win=0.0% | $10000 (+0.0%) vs B&H +6.2% | flip@0.353 CALIBRATING
+  26000/50000 (293/s ETA 82s) | 2019-04-02 | TENTATIVE | vis=0.0% tht=37.3% | trades=0 win=0.0% | $10000 (+0.0%) vs B&H +12.5% | flip@0.366 CALIBRATING
+  28000/50000 (290/s ETA 76s) | 2019-04-09 | TENTATIVE | vis=0.0% tht=52.4% | trades=0 win=0.0% | $10000 (+0.0%) vs B&H +39.9% | flip@0.323 CALIBRATING
+  30000/50000 (288/s ETA 69s) | 2019-04-16 | TENTATIVE | vis=0.0% tht=46.0% | trades=0 win=0.0% | $10000 (+0.0%) vs B&H +36.0% | flip@0.236 CALIBRATING
+  32000/50000 (287/s ETA 63s) | 2019-04-22 | TENTATIVE | vis=0.0% tht=47.0% | trades=0 win=0.0% | $10000 (+0.0%) vs B&H +44.6% | flip@0.237 CALIBRATING
+  34000/50000 (285/s ETA 56s) | 2019-04-29 | TENTATIVE | vis=0.0% tht=50.5% | trades=0 win=0.0% | $10000 (+0.0%) vs B&H +40.5% | flip@0.217 CALIBRATING
+  36000/50000 (284/s ETA 49s) | 2019-05-06 | TENTATIVE | vis=0.0% tht=50.9% | trades=0 win=0.0% | $10000 (+0.0%) vs B&H +54.7% | flip@0.212 CALIBRATING
+  38000/50000 (282/s ETA 43s) | 2019-05-13 | TENTATIVE | vis=0.0% tht=47.1% | trades=6 win=33.3% | $9443 (-5.6%) vs B&H +110.5% | flip@0.209 CALIBRATING
+  40000/50000 (279/s ETA 36s) | 2019-05-20 | TENTATIVE | vis=0.0% tht=48.9% | trades=9 win=55.6% | $9659 (-3.4%) vs B&H +110.3% | flip@0.188 CALIBRATING
+  42000/50000 (277/s ETA 29s) | 2019-05-27 | TENTATIVE | vis=0.0% tht=51.5% | trades=13 win=38.5% | $8988 (-10.1%) vs B&H +138.6% | flip@0.198 CALIBRATING
+  44000/50000 (277/s ETA 22s) | 2019-06-03 | TENTATIVE | vis=0.0% tht=60.7% | trades=15 win=33.3% | $8702 (-13.0%) vs B&H +125.7% | flip@0.177 CALIBRATING
+  46000/50000 (273/s ETA 15s) | 2019-06-10 | TENTATIVE | vis=0.0% tht=56.8% | trades=20 win=45.0% | $8835 (-11.6%) vs B&H +112.7% | flip@0.175 CALIBRATING
+  48000/50000 (271/s ETA 7s) | 2019-06-17 | TENTATIVE | vis=0.0% tht=59.8% | trades=20 win=45.0% | $8835 (-11.6%) vs B&H +148.1% | flip@0.126 CALIBRATING
+  50000/50000 (272/s ETA 0s) | 2019-06-24 | TENTATIVE | vis=0.0% tht=56.3% | trades=20 win=45.0% | $8835 (-11.6%) vs B&H +193.5% | flip@0.136 CALIBRATING
+
+═══════════════════════════════════════════════════════════
+  trader3 complete — 50000 candles in 184.0s (272/s)
+  Orchestration: thought-only
+  Venue costs: 10.0bps fee + 25.0bps slippage = 0.70% round trip
+  Labeled: 4778  Noise: 45222 (90.4% noise rate)
+
+  Equity: $8835.42 (-11.65%) | B&H: +193.46%
+  Trades taken: 20  Won: 9  Win rate: 45.0%  Skipped: 0
+
+  Visual journal  — buy_obs=2661 sell_obs=2117 cos_raw=0.0000 disc_strength=0.0000 recalibs=9
+  Thought journal — buy_obs=2661 sell_obs=2117 cos_raw=0.9291 disc_strength=0.0027 recalibs=9
+
+  Rolling accuracy (last 1000): visual=0.0% thought=56.3%
+
+  Expert panel:
+    momentum: recalibs=9 disc_str=0.0020 buy=2661 sell=2117
+    structure: recalibs=9 disc_str=0.0026 buy=2661 sell=2117
+    volume: recalibs=9 disc_str=0.0007 buy=2661 sell=2117
+    narrative: recalibs=9 disc_str=0.0038 buy=2661 sell=2117
+    regime: recalibs=9 disc_str=0.0025 buy=2661 sell=2117
+
+  By year:
+    2019: 20 trades  45.0% win  -1164.58$ P&L
+
+  Run DB: /home/watmin/work/holon/holon-lab-trading/orchestration_results/pnl-jupiter-2pct.db (50000 rows)
+═══════════════════════════════════════════════════════════
