@@ -1420,17 +1420,32 @@ fn main() {
             // Risk conviction → risk curve → estimated accuracy of portfolio state
             // → Kelly multiplier. High risk conviction + favorable = scale up.
             // High risk conviction + unfavorable = scale down.
-            let risk_mult = if risk_resolved.len() >= 500 {
-                // Estimate risk accuracy at current conviction
+            // Risk multiplier: direct prediction, no flip.
+            // Buy direction = "good state" → scale up.
+            // Sell direction = "bad state" → scale down.
+            // Conviction magnitude = how confident in the assessment.
+            let risk_mult = if risk_resolved.len() >= 500 && risk_pred.direction.is_some() {
                 let above: usize = risk_resolved.iter()
                     .filter(|(c, _)| *c >= risk_pred.conviction).count();
                 let wins: usize = risk_resolved.iter()
                     .filter(|(c, w)| *c >= risk_pred.conviction && *w).count();
                 if above >= 20 {
                     let risk_acc = wins as f64 / above as f64;
-                    (risk_acc * 2.0 - 1.0).max(0.0).min(2.0)
-                } else { 0.25 } // insufficient data at this conviction → cautious
-            } else { 0.25 }; // "I don't know yet" → be careful, not full speed
+                    // Risk says "good state" with accuracy → scale up
+                    // Risk says "bad state" with accuracy → scale down
+                    match risk_pred.direction {
+                        Some(Outcome::Buy) => {
+                            // "Good state" — multiply by how confident + accurate
+                            (risk_acc * 2.0 - 1.0).max(0.1).min(2.0)
+                        }
+                        Some(Outcome::Sell) => {
+                            // "Bad state" — invert: high accuracy in bad prediction → low mult
+                            (1.0 - (risk_acc * 2.0 - 1.0)).max(0.1).min(1.0)
+                        }
+                        _ => 0.25
+                    }
+                } else { 0.25 }
+            } else { 0.25 }; // "I don't know yet" → cautious
 
             // The flip zone gate stays — below the threshold, the direction
             // isn't flipped, so it's WRONG. Kelly can't fix wrong direction.
@@ -1718,16 +1733,19 @@ fn main() {
                                 let (rv, _) = trader.risk_facts(&vm, None, None, trader.trades_taken, encode_count);
                                 if !rv.is_empty() {
                                     let rvec = Primitives::bundle(&rv.iter().collect::<Vec<_>>());
-                                    risk_journal.observe(&rvec, final_out, 1.0);
-                                    // Track risk curve
+                                    // Risk labels: Win → Buy, Lose → Sell.
+                                    // The risk expert predicts trade QUALITY, not direction.
+                                    let won = dir == final_out;
+                                    let risk_label = if won { Outcome::Buy } else { Outcome::Sell };
+                                    risk_journal.observe(&rvec, risk_label, 1.0);
+                                    // Track risk curve — DIRECT, no flip.
+                                    // High conviction toward Buy = "good state" = scale up.
                                     let rpred = risk_journal.predict(&rvec);
-                                    if let Some(rd) = rpred.direction {
-                                        let flipped_rd = match rd {
-                                            Outcome::Buy => Outcome::Sell,
-                                            Outcome::Sell => Outcome::Buy,
-                                            Outcome::Noise => Outcome::Noise,
-                                        };
-                                        risk_resolved.push_back((rpred.conviction, flipped_rd == final_out));
+                                    if rpred.direction.is_some() {
+                                        // "Correct" means risk predicted Buy AND trade won,
+                                        // or risk predicted Sell AND trade lost.
+                                        let risk_correct = rpred.direction == Some(risk_label);
+                                        risk_resolved.push_back((rpred.conviction, risk_correct));
                                         if risk_resolved.len() > conviction_window {
                                             risk_resolved.pop_front();
                                         }
