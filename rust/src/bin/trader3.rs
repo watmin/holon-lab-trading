@@ -137,6 +137,13 @@ struct Args {
     #[arg(long, default_value_t = 0.0)]
     slippage: f64,
 
+    /// Trade management mode. "legacy" = exit at first threshold crossing (fire-and-forget).
+    /// "managed" = trailing stop + take profit, active management each candle.
+    /// Managed mode self-calibrates from the ledger: wide defaults during cold boot,
+    /// tightens from MFE/MAE experience after enough trades.
+    #[arg(long, default_value = "legacy")]
+    exit_mode: String,
+
     /// visual-only | thought-only | agree-only | meta-boost | weighted | thought-led | thought-contrarian
     #[arg(long, default_value = "meta-boost")]
     orchestration: String,
@@ -925,12 +932,8 @@ struct Pending {
     year:          i32,
     vis_vec:       Vector,
     tht_vec:       Vector,
-    // Ledger: price path tracking (no hallucination — pure measurement)
-    entry_price:       f64,
-    max_favorable:     f64,    // best price move in our direction
-    max_adverse:       f64,    // worst price move against our direction
-    crossing_candle:   Option<usize>, // candle index when threshold first crossed
-    path_candles:      usize,  // candles elapsed since entry
+
+    // ── Prediction (what the experts said) ────────────────────────────
     vis_pred:      Prediction,
     tht_pred:      Prediction,
     raw_meta_dir:  Option<Outcome>,  // un-flipped direction (for auto calibration)
@@ -941,9 +944,31 @@ struct Pending {
     expert_vecs:   Vec<Vector>,       // per-expert thought vectors
     expert_preds:  Vec<Prediction>,   // per-expert predictions at entry time
     fact_labels:   Vec<String>,      // thought facts present at this candle
+
+    // ── Learning (event-driven, first crossing only) ─────────────────
     first_outcome: Option<Outcome>, // set on first threshold crossing; drives learning
     outcome_pct:   f64,             // price change at first crossing (for DB)
-    peak_abs_pct:  f64,             // max |price change| seen while pending (for P&L)
+
+    // ── Accounting (pure measurement, no hallucination) ──────────────
+    entry_price:       f64,
+    max_favorable:     f64,    // best price move in our direction
+    max_adverse:       f64,    // worst price move against us (negative)
+    peak_abs_pct:      f64,    // max |price change| seen while pending
+    crossing_candle:   Option<usize>, // candle index when threshold first crossed
+    path_candles:      usize,  // candles elapsed since entry
+
+    // ── Trade management (the enterprise) ────────────────────────────
+    trailing_stop:     f64,    // current stop level (pct from entry, starts negative)
+    exit_reason:       Option<ExitReason>, // why the trade closed
+    exit_pct:          f64,    // actual exit price change (for P&L)
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum ExitReason {
+    ThresholdCrossing,   // legacy: exit at first threshold crossing
+    TrailingStop,        // stop loss hit (including raised stops)
+    TakeProfit,          // target reached
+    HorizonExpiry,       // ran out of time
 }
 
 // ─── Orchestration ───────────────────────────────────────────────────────────
@@ -1167,7 +1192,8 @@ fn init_run_db(path: &str) -> Connection {
             crossing_candles  INTEGER,  -- candles from entry to threshold crossing (NULL if Noise)
             horizon_candles   INTEGER,  -- total candles this entry was pending
             outcome           TEXT,     -- 'Buy' | 'Sell' | 'Noise'
-            won               INTEGER   -- 1 if net_return > 0 (after costs)
+            won               INTEGER,  -- 1 if net_return > 0 (after costs)
+            exit_reason       TEXT      -- 'ThresholdCrossing' | 'TrailingStop' | 'TakeProfit' | 'HorizonExpiry'
         );
 
         -- Visual + thought vectors for flip-zone trades (for engram analysis).
@@ -1400,6 +1426,19 @@ fn main() {
     let mut suppressed_facts: HashSet<String> = HashSet::new();
     let mut trader    = Trader::new(args.initial_equity, args.observe_period);
     let mut pending:    VecDeque<Pending> = VecDeque::new();
+
+    // ─ Self-calibrating exit parameters (managed mode) ───────────────
+    // "I don't know" = wide defaults. The ledger teaches us.
+    // Cold boot: generous stop (5%), no take-profit ceiling, wide trail.
+    // After min_exit_samples trades: compute from MFE/MAE percentiles.
+    let min_exit_samples = 50usize; // need this many resolved trades to calibrate
+    let mut exit_mfe_history: VecDeque<f64> = VecDeque::new(); // max favorable excursion per trade
+    let mut exit_mae_history: VecDeque<f64> = VecDeque::new(); // max adverse excursion per trade
+    let exit_history_cap = 500usize;
+    // Current parameters (start wide, tighten from experience)
+    let mut active_stop_loss:     f64 = 0.05;   // 5% — generous, let the market show us
+    let mut active_take_profit:   f64 = 0.10;   // 10% — effectively no ceiling during cold boot
+    let mut active_trail_distance: f64 = 0.02;  // 2% — wide trail, let winners breathe
     let mut vis_rolling: VecDeque<bool>  = VecDeque::new();
     let mut tht_rolling: VecDeque<bool>  = VecDeque::new();
     let rolling_cap = 1000usize;
@@ -1750,12 +1789,15 @@ fn main() {
                 fact_labels:   tht_facts,
                 first_outcome: None,
                 outcome_pct:   0.0,
-                peak_abs_pct:  0.0,
                 entry_price:       candles[i].close,
                 max_favorable:     0.0,
                 max_adverse:       0.0,
+                peak_abs_pct:      0.0,
                 crossing_candle:   None,
                 path_candles:      0,
+                trailing_stop:     -active_stop_loss, // starts at current calibrated stop (negative = below entry)
+                exit_reason:       None,
+                exit_pct:          0.0,
             });
 
             // Decay once per candle.
@@ -1792,6 +1834,35 @@ fn main() {
                 }
                 if directional_pct < entry.max_adverse {
                     entry.max_adverse = directional_pct; // most negative = worst drawdown
+                }
+
+                // ── Trade management: trailing stop + take profit ────────
+                // Separate from learning. Learning fires at first threshold crossing.
+                // Exit fires when management says the trade is over.
+                //
+                // "I don't know" = don't act. During cold boot (< min_exit_samples
+                // resolved trades), use legacy behavior: exit at threshold crossing.
+                // The legacy system generates the ledger data the managed system
+                // needs. After enough experience, managed exits activate with
+                // parameters learned from the MFE/MAE distribution.
+                if args.exit_mode == "managed" && entry.exit_reason.is_none()
+                    && entry.position_frac.is_some()
+                    && exit_mfe_history.len() >= min_exit_samples
+                {
+                    // Raise the floor: trailing stop follows favorable movement.
+                    let new_stop = entry.max_favorable - active_trail_distance;
+                    if new_stop > entry.trailing_stop {
+                        entry.trailing_stop = new_stop;
+                    }
+
+                    // Check exits (priority: take profit > stop loss)
+                    if directional_pct >= active_take_profit {
+                        entry.exit_reason = Some(ExitReason::TakeProfit);
+                        entry.exit_pct = pct;
+                    } else if directional_pct <= entry.trailing_stop {
+                        entry.exit_reason = Some(ExitReason::TrailingStop);
+                        entry.exit_pct = pct;
+                    }
                 }
 
                 // Learn only on the first threshold crossing per pending entry.
@@ -1946,11 +2017,46 @@ fn main() {
                 ).ok();
             }
 
-            // ── Expire entries that have reached horizon age ───────────────
-            while let Some(front) = pending.front() {
-                if i - front.candle_idx < args.horizon { break; }
+            // ── Resolve entries: managed exit OR horizon expiry ──────────
+            // In legacy mode: horizon is the exit.
+            // In managed mode: the market is the exit (stop/TP). The horizon
+            // only controls learning labels. Trades live until the market
+            // closes them. A safety max (10× horizon) prevents unbounded
+            // queue growth for trades that drift sideways forever.
+            let max_pending_age = if args.exit_mode == "managed" {
+                args.horizon * 10 // safety valve — not an exit strategy
+            } else {
+                args.horizon
+            };
+            let mut resolved_indices: Vec<usize> = Vec::new();
+            for (qi, entry) in pending.iter().enumerate() {
+                let age = i - entry.candle_idx;
+                let horizon_expired = age >= max_pending_age;
+                let managed_exited = entry.exit_reason.is_some();
+                // In legacy mode: also expire at normal horizon
+                let legacy_expired = args.exit_mode != "managed" && age >= args.horizon;
+                if horizon_expired || managed_exited || legacy_expired {
+                    resolved_indices.push(qi);
+                }
+            }
+            // Drain in reverse order to preserve indices.
+            let mut resolved_entries: Vec<Pending> = Vec::new();
+            for &qi in resolved_indices.iter().rev() {
+                // VecDeque::remove returns Option, but we just found these indices
+                if let Some(entry) = pending.remove(qi) {
+                    resolved_entries.push(entry);
+                }
+            }
+            resolved_entries.reverse(); // restore chronological order
 
-                let entry       = pending.pop_front().unwrap();
+            for mut entry in resolved_entries {
+                // Set exit reason for horizon expiry if not already managed-exited.
+                if entry.exit_reason.is_none() {
+                    entry.exit_reason = Some(ExitReason::HorizonExpiry);
+                    // Exit at current price for horizon expiry
+                    let entry_price = candles[entry.candle_idx].close;
+                    entry.exit_pct = (current_price - entry_price) / entry_price;
+                }
                 let final_out   = entry.first_outcome.unwrap_or(Outcome::Noise);
                 let entry_candle = &candles[entry.candle_idx];
 
@@ -1992,10 +2098,25 @@ fn main() {
                 // Resolve paper trade.
                 if let Some(frac) = entry.position_frac {
                     if let Some(dir) = entry.meta_dir {
-                        if final_out != Outcome::Noise {
+                        // In managed mode: use exit_pct (from stop/TP/expiry).
+                        // In legacy mode: use outcome_pct (first threshold crossing).
+                        // Managed trades always resolve (even Noise gets an exit_pct from horizon expiry).
+                        let trade_pct = if args.exit_mode == "managed" {
+                            entry.exit_pct
+                        } else {
+                            entry.outcome_pct
+                        };
+                        let has_trade = if args.exit_mode == "managed" {
+                            // Managed mode: resolve all entries that had a position
+                            true
+                        } else {
+                            // Legacy: only resolve non-Noise
+                            final_out != Outcome::Noise
+                        };
+                        if has_trade {
                             let gross_ret = match dir {
-                                Outcome::Buy  =>  entry.outcome_pct,
-                                Outcome::Sell => -entry.outcome_pct,
+                                Outcome::Buy  =>  trade_pct,
+                                Outcome::Sell => -trade_pct,
                                 Outcome::Noise => 0.0,
                             };
                             let rt_fee = 2.0 * args.swap_fee;
@@ -2003,7 +2124,7 @@ fn main() {
                             let net_ret = gross_ret - rt_fee - rt_slip;
                             let pos_usd = trader.equity * frac;
                             let trade_pnl = pos_usd * net_ret;
-                            trader.record_trade(entry.outcome_pct, frac, dir, entry.year,
+                            trader.record_trade(trade_pct, frac, dir, entry.year,
                                                 args.swap_fee, args.slippage);
                             let exit_candle = entry.crossing_candle;
                             let exit_ts = exit_candle.map(|ci| candles[ci].ts.clone());
@@ -2019,8 +2140,8 @@ fn main() {
                                   gross_return_pct,swap_fee_pct,slippage_pct,net_return_pct,
                                   pnl_usd,equity_after,
                                   max_favorable_pct,max_adverse_pct,
-                                  crossing_candles,horizon_candles,outcome,won)
-                                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24)",
+                                  crossing_candles,horizon_candles,outcome,won,exit_reason)
+                                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25)",
                                 params![
                                     log_step, entry.candle_idx as i64, &entry_candle.ts,
                                     exit_candle.map(|ci| ci as i64), exit_ts,
@@ -2033,8 +2154,55 @@ fn main() {
                                     entry.max_favorable * 100.0, entry.max_adverse * 100.0,
                                     crossing_elapsed, entry.path_candles as i64,
                                     final_out.to_string(), (net_ret > 0.0) as i32,
+                                    match entry.exit_reason {
+                                        Some(ExitReason::ThresholdCrossing) => "ThresholdCrossing",
+                                        Some(ExitReason::TrailingStop) => "TrailingStop",
+                                        Some(ExitReason::TakeProfit) => "TakeProfit",
+                                        Some(ExitReason::HorizonExpiry) => "HorizonExpiry",
+                                        None => "HorizonExpiry",
+                                    },
                                 ],
                             ).ok();
+                            // ── Feed exit calibration from experience ────────
+                            if args.exit_mode == "managed" {
+                                exit_mfe_history.push_back(entry.max_favorable);
+                                if exit_mfe_history.len() > exit_history_cap {
+                                    exit_mfe_history.pop_front();
+                                }
+                                exit_mae_history.push_back(entry.max_adverse.abs());
+                                if exit_mae_history.len() > exit_history_cap {
+                                    exit_mae_history.pop_front();
+                                }
+
+                                // Recalibrate when we have enough experience.
+                                if exit_mfe_history.len() >= min_exit_samples
+                                    && exit_mfe_history.len() % 20 == 0 // every 20 trades
+                                {
+                                    let round_trip_cost = 2.0 * (args.swap_fee + args.slippage);
+
+                                    // Stop loss: p75 of MAE on gross winners.
+                                    // "75% of winning trades never dip past this point."
+                                    // If you're past this, you're probably wrong.
+                                    let mut mae_sorted: Vec<f64> = exit_mae_history.iter().copied().collect();
+                                    mae_sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                                    let p75_mae = mae_sorted[(mae_sorted.len() * 75 / 100).min(mae_sorted.len() - 1)];
+                                    active_stop_loss = p75_mae.max(round_trip_cost * 2.0); // never tighter than 2× costs
+
+                                    // Take profit: p75 of MFE on all trades.
+                                    // "75% of trades reach at least this favorable point."
+                                    // Capture the move most trades actually make.
+                                    let mut mfe_sorted: Vec<f64> = exit_mfe_history.iter().copied().collect();
+                                    mfe_sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                                    let p75_mfe = mfe_sorted[(mfe_sorted.len() * 75 / 100).min(mfe_sorted.len() - 1)];
+                                    active_take_profit = p75_mfe.max(round_trip_cost * 3.0); // must clear 3× costs
+
+                                    // Trail distance: p25 of MFE.
+                                    // "25% of trades barely move in our favor."
+                                    // The trail should be wide enough to not stop out normal retraces.
+                                    let p25_mfe = mfe_sorted[(mfe_sorted.len() * 25 / 100).min(mfe_sorted.len() - 1)];
+                                    active_trail_distance = p25_mfe.max(round_trip_cost); // at least covers costs
+                                }
+                            }
                             // Risk expert learns from this trade's outcome.
                             // Track panel accuracy for engram gating
                             panel_recalib_total += 1;
@@ -2168,8 +2336,18 @@ fn main() {
                     else { tht_rolling.iter().filter(|&&x| x).count() as f64 / tht_rolling.len() as f64 * 100.0 };
                 let ret = (trader.equity - trader.initial_equity) / trader.initial_equity * 100.0;
                 let bnh = (candles[i].close - bnh_entry) / bnh_entry * 100.0;
+                let exit_info = if args.exit_mode == "managed" {
+                    if exit_mfe_history.len() < min_exit_samples {
+                        format!(" | exit:COLD({}/{})", exit_mfe_history.len(), min_exit_samples)
+                    } else {
+                        format!(" | sl={:.2}% tp={:.2}% tr={:.2}%",
+                            active_stop_loss * 100.0,
+                            active_take_profit * 100.0,
+                            active_trail_distance * 100.0)
+                    }
+                } else { String::new() };
                 eprintln!(
-                    "  {}/{} ({:.0}/s ETA {:.0}s) | {} | {} | vis={:.1}% tht={:.1}% | trades={} win={:.1}% | ${:.0} ({:+.1}%) vs B&H {:+.1}% | flip@{:.3} {}",
+                    "  {}/{} ({:.0}/s ETA {:.0}s) | {} | {} | vis={:.1}% tht={:.1}% | trades={} win={:.1}% | ${:.0} ({:+.1}%) vs B&H {:+.1}% | flip@{:.3} {}{}",
                     encode_count, loop_count, rate, eta,
                     &candles[i].ts[..10],
                     trader.phase,
@@ -2181,6 +2359,7 @@ fn main() {
                     else if panel_familiar { "ENGRAM" }
                     else if in_adaptation { "ADAPT" }
                     else { "STABLE" },
+                    exit_info,
                 );
             }
         }
@@ -2240,6 +2419,17 @@ fn main() {
         let rt = 2.0 * (args.swap_fee + args.slippage) * 100.0;
         eprintln!("  Venue costs: {:.1}bps fee + {:.1}bps slippage = {:.2}% round trip",
             args.swap_fee * 10000.0, args.slippage * 10000.0, rt);
+    }
+    if args.exit_mode == "managed" {
+        if exit_mfe_history.len() >= min_exit_samples {
+            eprintln!("  Exit params (learned from {} trades): stop={:.2}% tp={:.2}% trail={:.2}%",
+                exit_mfe_history.len(),
+                active_stop_loss * 100.0, active_take_profit * 100.0,
+                active_trail_distance * 100.0);
+        } else {
+            eprintln!("  Exit params: COLD BOOT (only {} / {} trades observed)",
+                exit_mfe_history.len(), min_exit_samples);
+        }
     }
     eprintln!("  Labeled: {}  Noise: {} ({:.1}% noise rate)",
         labeled_count, noise_count,
