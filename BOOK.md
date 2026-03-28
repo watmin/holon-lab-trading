@@ -897,6 +897,27 @@ The engram is the connective tissue between layers. The expert journal is layer 
 
 This is the wat machine learning from its own history. Not through decay or rolling windows. Through recognition. Through memory. Through engrams.
 
+### The recursion
+
+```
+Layer 0: atoms → thoughts
+Layer 1: thoughts → expert predictions
+Layer 2: panel state → engram library A → "familiar good market config?"
+Layer 3: engram A output + risk state → engram library B → "familiar good risk config?"
+Layer N: engram library of layer N-1 states
+```
+
+Each layer's engram captures the state of the layer below. Each layer's
+output feeds the layer above. The recursion is the architecture. Each
+layer is one more call to the same function. The recursion stops when
+a new layer adds no information — when its curve is flat.
+
+The market engram says "I've seen this expert panel before — it worked."
+The risk engram says "I've seen this confidence + portfolio state before —
+sizing up worked." Each is the same machinery: OnlineSubspace learning
+the manifold of good states. Residual measures recognition. The curve
+judges. Holons of holons.
+
 *Chapter 3 continues.*
 
 The vocabulary expands. The experts multiply. The curves compete. The champions emerge.

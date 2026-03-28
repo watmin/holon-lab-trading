@@ -562,6 +562,17 @@ fn init_run_db(path: &str) -> Connection {
             correct       INTEGER   -- 1 if flipped prediction matches actual
         );
 
+        -- Risk state at each trade resolution.
+        CREATE TABLE IF NOT EXISTS risk_log (
+            step          INTEGER,
+            drawdown_pct  REAL,
+            streak_len    INTEGER,
+            streak_dir    TEXT,     -- 'winning' | 'losing'
+            recent_acc    REAL,
+            equity_pct    REAL,     -- equity change from initial
+            won           INTEGER
+        );
+
         -- Visual + thought vectors for flip-zone trades (for engram analysis).
         CREATE TABLE IF NOT EXISTS trade_vectors (
             step          INTEGER PRIMARY KEY,
@@ -702,6 +713,14 @@ fn main() {
     // Residual = how novel this candle's thought pattern is.
     let mut tht_subspace = OnlineSubspace::new(args.dims, 32);
     let mut subspace_baseline_residual: f64 = 1.0;
+
+    // Layer 2: Panel state engram — learns the manifold of "good panel configurations."
+    // Encodes each expert's (signed conviction) as a feature vector.
+    // Dimensionality = number of experts. Fed after each recalib if accuracy was good.
+    let panel_dim = expert_profiles.len() + 1; // experts + generalist
+    let mut panel_engram = OnlineSubspace::with_params(panel_dim, 4, 2.0, 0.01, 3.5, 100);
+    let mut panel_recalib_wins: u32 = 0;
+    let mut panel_recalib_total: u32 = 0;
 
 
     // ─ Run database ─
@@ -882,35 +901,21 @@ fn main() {
                 if above >= 20 { wins as f64 / above as f64 } else { 0.50 }
             };
 
-            // Each expert competes via ENGRAM MATCHING.
-            // "Does this expert's current discriminant match a known good state?"
-            let mut best_engram_match: Option<(usize, f64)> = None; // (expert_idx, residual)
-            for ei in 0..experts.len() {
-                if experts[ei].good_state_subspace.n() < 5 { continue; }
-                if expert_preds[ei].direction.is_none() { continue; }
-                let disc = match experts[ei].journal.discriminant() {
-                    Some(d) => d,
-                    None => continue,
-                };
-                let residual = experts[ei].good_state_subspace.residual(disc);
-                let threshold = experts[ei].good_state_subspace.threshold();
-                if residual < threshold {
-                    // Expert is in a recognized good state. Pick the best match.
-                    let normalized = residual / threshold; // 0 = perfect match, 1 = barely
-                    if best_engram_match.is_none() || normalized < best_engram_match.unwrap().1 {
-                        best_engram_match = Some((ei, normalized));
-                    }
-                }
+            // Generalist drives direction. No expert overrides.
+            // Panel engram modulates SIZING confidence (Layer 2).
+            // Encode panel state: each expert's signed conviction.
+            let mut panel_state: Vec<f64> = vec![tht_pred.raw_cos]; // generalist
+            for ep in &expert_preds {
+                panel_state.push(ep.raw_cos);
             }
-            if let Some((ei, _)) = best_engram_match {
-                let ep = &expert_preds[ei];
-                best_pred = Prediction {
-                    raw_cos: if ep.raw_cos > 0.0 { tht_pred.conviction } else { -tht_pred.conviction },
-                    conviction: tht_pred.conviction,
-                    direction: ep.direction,
-                };
-                best_source = experts[ei].name;
-            }
+            // Query panel engram: does this configuration match a known good one?
+            let panel_familiar = if panel_engram.n() >= 10 {
+                let residual = panel_engram.residual(&panel_state);
+                let threshold = panel_engram.threshold();
+                residual < threshold // true = familiar good config
+            } else {
+                false
+            };
             let tht_pred = best_pred;
 
             let vis_roll_acc = if vis_rolling.is_empty() { 0.5 }
@@ -1190,8 +1195,17 @@ fn main() {
                 ).ok();
             }
             if tht_journal.recalib_count != tht_recalib_before {
-                // Update attention weights for next batch's weighted bundling.
                 tht_attention = tht_journal.discriminant().map(|d| d.to_vec());
+
+                // Feed panel engram: if recent panel accuracy was good, store current state.
+                if panel_recalib_total >= 10 {
+                    let acc = panel_recalib_wins as f64 / panel_recalib_total as f64;
+                    if acc > 0.55 {
+                        panel_engram.update(&panel_state);
+                    }
+                }
+                panel_recalib_wins = 0;
+                panel_recalib_total = 0;
 
                 run_db.execute(
                     "INSERT INTO recalib_log (step,journal,cos_raw,disc_strength,buy_count,sell_count)
@@ -1280,6 +1294,37 @@ fn main() {
                     if let Some(dir) = entry.meta_dir {
                         if final_out != Outcome::Noise {
                             trader.record_trade(entry.outcome_pct, frac, dir, entry.year);
+                            // Track panel accuracy for engram gating
+                            panel_recalib_total += 1;
+                            if dir == final_out { panel_recalib_wins += 1; }
+
+                            // Log risk state at trade resolution
+                            {
+                                let dd = if trader.peak_equity > 0.0 {
+                                    (trader.peak_equity - trader.equity) / trader.peak_equity * 100.0
+                                } else { 0.0 };
+                                let (streak_len, streak_dir) = {
+                                    let mut len = 0i32;
+                                    if let Some(&last) = trader.rolling.back() {
+                                        for &o in trader.rolling.iter().rev() {
+                                            if o == last { len += 1; } else { break; }
+                                        }
+                                    }
+                                    let dir = if trader.rolling.back() == Some(&true) { "winning" } else { "losing" };
+                                    (len, dir)
+                                };
+                                let recent_acc = if trader.rolling.len() >= 5 {
+                                    trader.rolling.iter().filter(|&&x| x).count() as f64
+                                        / trader.rolling.len() as f64
+                                } else { 0.5 };
+                                let eq_pct = (trader.equity - trader.initial_equity) / trader.initial_equity * 100.0;
+                                let won = (dir == final_out) as i32;
+                                run_db.execute(
+                                    "INSERT INTO risk_log (step,drawdown_pct,streak_len,streak_dir,recent_acc,equity_pct,won)
+                                     VALUES (?1,?2,?3,?4,?5,?6,?7)",
+                                    params![log_step, dd, streak_len, streak_dir, recent_acc, eq_pct, won],
+                                ).ok();
+                            }
                             // Route visual vector to pattern groups.
                             // Score against all groups, assign to best match or create new.
                             if entry.was_flipped {
@@ -1425,7 +1470,7 @@ fn main() {
                     trader.trades_taken, trader.win_rate(),
                     trader.equity, ret, bnh,
                     flip_threshold,
-                    if in_adaptation { "ADAPT" } else { "STABLE" },
+                    if panel_familiar { "ENGRAM" } else if in_adaptation { "ADAPT" } else { "STABLE" },
                 );
             }
         }
