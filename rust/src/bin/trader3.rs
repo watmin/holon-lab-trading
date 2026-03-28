@@ -724,6 +724,14 @@ fn main() {
     let mut visual_groups: Vec<PatternGroup> = Vec::new();
     let group_cos_threshold = 0.35; // minimum cosine to join an existing group
 
+    // ─ Risk expert: separate journal that learns from portfolio state ───
+    // Sees ONLY risk thoughts (drawdown, streak, accuracy, equity curve).
+    // Learns which portfolio states precede winning vs losing trades.
+    // Its conviction = "how confident am I about the portfolio state?"
+    // Its curve = "does portfolio state predict trade quality?"
+    let mut risk_journal = Journal::new("risk", args.dims, args.recalib_interval);
+    let mut risk_resolved: VecDeque<(f64, bool)> = VecDeque::new();
+
     // ─ Expert panel: N journals with different vocabulary profiles ──────
     // Each expert thinks different thoughts about the same candles.
     // The orchestrator selects the expert with highest conviction × curve quality.
@@ -1101,6 +1109,34 @@ fn main() {
             // Position sizing: Kelly from the curve × drawdown cap.
             // The curve handles selectivity. The drawdown cap handles survival.
             // Nothing else. No graduated gate, no stability gate, no phase gate.
+            // Risk expert: encode portfolio state, predict, get conviction.
+            let (risk_vecs, _risk_labels) = trader.risk_facts(&vm);
+            let risk_vec = if risk_vecs.is_empty() {
+                Vector::zeros(args.dims)
+            } else {
+                let refs: Vec<&Vector> = risk_vecs.iter().collect();
+                Primitives::bundle(&refs)
+            };
+            let risk_pred = risk_journal.predict(&risk_vec);
+            risk_journal.decay(args.decay);
+
+            // Kelly from curve × risk expert sizing multiplier.
+            // Risk conviction → risk curve → estimated accuracy of portfolio state
+            // → Kelly multiplier. High risk conviction + favorable = scale up.
+            // High risk conviction + unfavorable = scale down.
+            let risk_mult = if risk_resolved.len() >= 200 {
+                // Estimate risk accuracy at current conviction
+                let above: usize = risk_resolved.iter()
+                    .filter(|(c, _)| *c >= risk_pred.conviction).count();
+                let wins: usize = risk_resolved.iter()
+                    .filter(|(c, w)| *c >= risk_pred.conviction && *w).count();
+                if above >= 20 {
+                    let risk_acc = wins as f64 / above as f64;
+                    // Convert to multiplier: 50% = 0 (no adjustment), 60% = 0.2 boost, 40% = -0.2 reduce
+                    (risk_acc * 2.0 - 1.0).max(0.0).min(2.0) // 0.0 to 2.0 multiplier
+                } else { 1.0 }
+            } else { 1.0 }; // no data yet → neutral
+
             // The flip zone gate stays — below the threshold, the direction
             // isn't flipped, so it's WRONG. Kelly can't fix wrong direction.
             let position_frac = if meta_dir.is_some()
@@ -1129,7 +1165,7 @@ fn main() {
                                 } else { 0.0 };
                                 let dd_room = (args.max_drawdown - dd).max(0.0);
                                 let cap = (dd_room / (4.0 * mt)).min(1.0);
-                                let sized = frac.min(cap);
+                                let sized = frac.min(cap) * risk_mult;
                                 if sized < 1e-6 { None } else { Some(sized) }
                             }
                             None => None
@@ -1379,6 +1415,31 @@ fn main() {
                     if let Some(dir) = entry.meta_dir {
                         if final_out != Outcome::Noise {
                             trader.record_trade(entry.outcome_pct, frac, dir, entry.year);
+                            // Risk expert learns from this trade's outcome.
+                            // It observes the risk vec that was present at entry time.
+                            // (We use current risk state as proxy — close enough since
+                            // entries resolve within horizon=36 candles.)
+                            {
+                                let (rv, _) = trader.risk_facts(&vm);
+                                if !rv.is_empty() {
+                                    let rvec = Primitives::bundle(&rv.iter().collect::<Vec<_>>());
+                                    risk_journal.observe(&rvec, final_out, 1.0);
+                                    // Track risk curve
+                                    let rpred = risk_journal.predict(&rvec);
+                                    if let Some(rd) = rpred.direction {
+                                        let flipped_rd = match rd {
+                                            Outcome::Buy => Outcome::Sell,
+                                            Outcome::Sell => Outcome::Buy,
+                                            Outcome::Noise => Outcome::Noise,
+                                        };
+                                        risk_resolved.push_back((rpred.conviction, flipped_rd == final_out));
+                                        if risk_resolved.len() > conviction_window {
+                                            risk_resolved.pop_front();
+                                        }
+                                    }
+                                }
+                            }
+
                             // Track panel accuracy for engram gating
                             panel_recalib_total += 1;
                             if dir == final_out { panel_recalib_wins += 1; }

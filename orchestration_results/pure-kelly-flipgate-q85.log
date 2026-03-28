@@ -7,3 +7,8 @@ trader3: visual+thought journals, discriminant prediction
   Run database: /home/watmin/work/holon/holon-lab-trading/orchestration_results/pure-kelly-flipgate-q85.db
 
   Walk-forward: 100000 candles from index 47...
+  10000/100000 (241/s ETA 373s) | 2019-02-05 | TENTATIVE | vis=0.0% tht=48.7% | trades=467 win=60.8% | $18589 (+85.9%) vs B&H -6.7% | flip@0.129 CALIBRATING
+  20000/100000 (243/s ETA 329s) | 2019-03-12 | TENTATIVE | vis=0.0% tht=46.7% | trades=467 win=60.8% | $18589 (+85.9%) vs B&H +3.6% | flip@0.134 CALIBRATING
+  30000/100000 (246/s ETA 285s) | 2019-04-16 | TENTATIVE | vis=0.0% tht=51.9% | trades=467 win=60.8% | $18589 (+85.9%) vs B&H +36.0% | flip@0.141 CALIBRATING
+  40000/100000 (246/s ETA 244s) | 2019-05-20 | TENTATIVE | vis=0.0% tht=49.6% | trades=467 win=60.8% | $18589 (+85.9%) vs B&H +110.3% | flip@0.141 CALIBRATING
+  50000/100000 (244/s ETA 205s) | 2019-06-24 | TENTATIVE | vis=0.0% tht=56.5% | trades=467 win=60.8% | $18589 (+85.9%) vs B&H +193.5% | flip@0.142 CALIBRATING
