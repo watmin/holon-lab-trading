@@ -341,11 +341,22 @@ impl Trader {
     }
 }
 
-/// Half-Kelly position sizing from the empirical calibration curve.
-/// Estimates win rate at the given conviction by looking at all resolved
-/// predictions with conviction >= this level, then sizes by half-Kelly.
-/// Returns None if insufficient data or no edge.
-fn kelly_frac(conviction: f64, resolved: &VecDeque<(f64, bool)>, min_sample: usize) -> Option<f64> {
+/// Kelly position sizing calibrated for the move_threshold payoff structure.
+///
+/// The payoff per trade is ±move_threshold (e.g., 0.5%) of entry price.
+/// Kelly fraction = edge / payoff. For even-money bets at win_rate p:
+///   edge = 2p - 1
+///   kelly_risk = edge / 2 (half-Kelly for safety)
+///   position = kelly_risk / move_threshold
+///
+/// At 60% accuracy, 0.5% threshold: position = 0.10 / 0.005 = 20× (leverage).
+/// Capped at max_position (default 1.0 = 100% of equity, no leverage).
+fn kelly_frac(
+    conviction: f64,
+    resolved: &VecDeque<(f64, bool)>,
+    min_sample: usize,
+    move_threshold: f64,
+) -> Option<f64> {
     if resolved.len() < min_sample { return None; }
     let mut wins = 0u32;
     let mut total = 0u32;
@@ -357,9 +368,11 @@ fn kelly_frac(conviction: f64, resolved: &VecDeque<(f64, bool)>, min_sample: usi
     }
     if total < min_sample as u32 { return None; }
     let win_rate = wins as f64 / total as f64;
-    let kelly = 2.0 * win_rate - 1.0; // even-money Kelly
-    if kelly <= 0.0 { return None; }
-    Some((kelly / 2.0).min(0.15)) // half-Kelly, cap at 15%
+    let edge = 2.0 * win_rate - 1.0;
+    if edge <= 0.0 { return None; }
+    let half_kelly_risk = edge / 2.0; // fraction of equity to RISK
+    let position = half_kelly_risk / move_threshold; // scale for payoff
+    Some(position.min(1.0)) // cap at 100% of equity (no leverage)
 }
 
 // ─── Pending entry ───────────────────────────────────────────────────────────
@@ -1054,7 +1067,10 @@ fn main() {
                 } else {
                     match args.sizing.as_str() {
                         "kelly" => {
-                            match kelly_frac(meta_conviction, &resolved_preds, 50) {
+                            let mt = if args.atr_multiplier > 0.0 {
+                                args.atr_multiplier * candles[i].atr_r
+                            } else { args.move_threshold };
+                            match kelly_frac(meta_conviction, &resolved_preds, 50, mt) {
                                 Some(frac) => Some(frac),
                                 None => { trader.trades_skipped += 1; None }
                             }

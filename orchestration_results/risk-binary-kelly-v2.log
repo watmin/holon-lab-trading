@@ -1,0 +1,55 @@
+trader3: visual+thought journals, discriminant prediction
+  20000D  window=48  horizon=36  threshold=0.500%  decay=0.999  flip=q99
+  observe=1000  recalib_interval=500  orchestration=thought-only  min_conviction=0.000
+
+  Loading candles from "/home/watmin/work/holon/holon-lab-trading/data/analysis.db"...
+  Loaded 652409 candles in 0.7s
+  Run database: /home/watmin/work/holon/holon-lab-trading/orchestration_results/risk-binary-kelly-v2.db
+
+  Walk-forward: 100000 candles from index 47...
+  10000/100000 (259/s ETA 348s) | 2019-02-05 | TENTATIVE | vis=0.0% tht=46.3% | trades=0 win=0.0% | $10000 (+0.0%) vs B&H -6.7% | flip@0.247 STABLE
+  20000/100000 (256/s ETA 313s) | 2019-03-12 | TENTATIVE | vis=0.0% tht=44.7% | trades=0 win=0.0% | $10000 (+0.0%) vs B&H +3.6% | flip@0.228 STABLE
+  30000/100000 (252/s ETA 278s) | 2019-04-16 | TENTATIVE | vis=0.0% tht=48.4% | trades=8 win=75.0% | $10026 (+0.3%) vs B&H +36.0% | flip@0.222 STABLE
+  40000/100000 (247/s ETA 243s) | 2019-05-20 | TENTATIVE | vis=0.0% tht=55.5% | trades=8 win=75.0% | $10026 (+0.3%) vs B&H +110.3% | flip@0.215 STABLE
+  50000/100000 (246/s ETA 204s) | 2019-06-24 | TENTATIVE | vis=0.0% tht=55.6% | trades=8 win=75.0% | $10026 (+0.3%) vs B&H +193.5% | flip@0.212 STABLE
+  60000/100000 (245/s ETA 163s) | 2019-07-29 | TENTATIVE | vis=0.0% tht=53.2% | trades=8 win=75.0% | $10026 (+0.3%) vs B&H +160.4% | flip@0.203 STABLE
+  70000/100000 (244/s ETA 123s) | 2019-09-01 | TENTATIVE | vis=0.0% tht=52.6% | trades=8 win=75.0% | $10026 (+0.3%) vs B&H +160.9% | flip@0.219 STABLE
+  80000/100000 (243/s ETA 82s) | 2019-10-06 | TENTATIVE | vis=0.0% tht=46.1% | trades=8 win=75.0% | $10026 (+0.3%) vs B&H +114.0% | flip@0.221 STABLE
+  90000/100000 (243/s ETA 41s) | 2019-11-10 | TENTATIVE | vis=0.0% tht=46.5% | trades=8 win=75.0% | $10026 (+0.3%) vs B&H +138.0% | flip@0.235 STABLE
+  100000/100000 (243/s ETA 0s) | 2019-12-15 | TENTATIVE | vis=0.0% tht=43.9% | trades=8 win=75.0% | $10026 (+0.3%) vs B&H +89.6% | flip@0.236 STABLE
+
+═══════════════════════════════════════════════════════════
+  trader3 complete — 100000 candles in 411.9s (243/s)
+  Orchestration: thought-only
+  Labeled: 67315  Noise: 32685 (32.7% noise rate)
+
+  Equity: $10026.28 (+0.26%) | B&H: +89.56%
+  Trades taken: 8  Won: 6  Win rate: 75.0%  Skipped: 98990
+
+  Visual journal  — buy_obs=34032 sell_obs=33283 cos_raw=0.0000 disc_strength=0.0000 recalibs=134
+  Thought journal — buy_obs=34032 sell_obs=33283 cos_raw=0.9865 disc_strength=0.0012 recalibs=134
+
+  Rolling accuracy (last 1000): visual=0.0% thought=43.9%
+
+  Visual pattern groups: 8 discovered
+    Group 0: 1 obs, 1 trades (1W/0L = 100.0%)
+    Group 1: 1 obs, 1 trades (1W/0L = 100.0%)
+    Group 2: 1 obs, 1 trades (1W/0L = 100.0%)
+    Group 3: 1 obs, 1 trades (1W/0L = 100.0%)
+    Group 4: 1 obs, 1 trades (1W/0L = 100.0%)
+    Group 5: 1 obs, 1 trades (0W/1L = 0.0%)
+    Group 6: 1 obs, 1 trades (1W/0L = 100.0%)
+    Group 7: 1 obs, 1 trades (0W/1L = 0.0%)
+
+  Expert panel:
+    momentum: recalibs=134 disc_str=0.0006 buy=34032 sell=33283
+    structure: recalibs=134 disc_str=0.0011 buy=34032 sell=33283
+    volume: recalibs=134 disc_str=0.0013 buy=34032 sell=33283
+    narrative: recalibs=134 disc_str=0.0017 buy=34032 sell=33283
+    regime: recalibs=134 disc_str=0.0008 buy=34032 sell=33283
+
+  By year:
+    2019: 8 trades  75.0% win  +26.28$ P&L
+
+  Run DB: /home/watmin/work/holon/holon-lab-trading/orchestration_results/risk-binary-kelly-v2.db (100000 rows)
+═══════════════════════════════════════════════════════════
