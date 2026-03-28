@@ -596,6 +596,151 @@ Growing the vocabulary — adding Ichimoku, Stochastic, entropy, fractal dimensi
 
 This is how you build something that generalizes without retraining. The kernel is domain-independent. The programs are domain-specific. New domain = new programs, same kernel. The algebra doesn't care what thoughts you think. It cares how they compose.
 
+### What good thoughts look like
+
+This is the user interface. A wat program is a composition of named thoughts using six primitives. The Rust runtime evaluates them. The curve judges them. The human writes them in the language of their expertise.
+
+```wat
+;; ─── The DeMark Expert ──────────────────────────────────────────
+;; A trader who counts exhaustion candles.
+
+(atom td-count)
+(atom td-exhausted)
+(atom td-perfected)
+(atom td-sell-setup)
+
+;; "I see 9 consecutive closes above close[4] ago. This is exhaustion."
+(bind td-exhausted td-sell-setup)
+
+;; "It's perfected — bar 8's high exceeded bar 6's high."
+(bind td-perfected (bind td-exhausted td-sell-setup))
+
+;; "RSI agrees — we're overbought AND exhausted."
+(bundle
+  (bind td-perfected (bind td-exhausted td-sell-setup))
+  (bind at (bind rsi overbought)))
+
+;; That bundle IS the thought. It exists as geometry.
+;; The journal evaluates it. The curve judges it.
+
+
+;; ─── The Seismologist ───────────────────────────────────────────
+;; A trader who thinks about earthquakes.
+
+(atom gr-bvalue)
+(atom heavy-tails)
+(atom omori-residual)
+(atom aftershock-excess)
+
+;; "The tails are getting heavier — big moves are becoming more likely."
+(bind at (bind gr-bvalue heavy-tails))
+
+;; "This activity exceeds the aftershock baseline — it's a new event,
+;;  not an echo of the last one."
+(bind at (bind omori-residual aftershock-excess))
+
+;; "Heavy tails + excess aftershock + RSI divergence = something big."
+(bundle
+  (bind at (bind gr-bvalue heavy-tails))
+  (bind at (bind omori-residual aftershock-excess))
+  (bind diverging (bind close up) (bind rsi down)))
+
+
+;; ─── The Regime Thinker ─────────────────────────────────────────
+;; A trader who thinks about what KIND of market this is.
+
+(atom hurst)
+(atom mean-reverting)
+(atom choppiness)
+(atom choppy-extreme)
+(atom entropy-rate)
+(atom low-entropy)
+(atom dfa-alpha)
+(atom anti-persistent)
+
+;; "Hurst says mean-reverting. Choppiness says choppy. Entropy is low.
+;;  DFA confirms anti-persistent. ALL FOUR AGREE: fade extremes."
+(bundle
+  (bind at (bind hurst mean-reverting))
+  (bind at (bind choppiness choppy-extreme))
+  (bind at (bind entropy-rate low-entropy))
+  (bind at (bind dfa-alpha anti-persistent)))
+
+;; That thought = "the regime supports our conviction flip."
+;; When the regime disagrees, that's a DIFFERENT thought,
+;; and the curve will show it predicts differently.
+
+
+;; ─── The Risk Thinker ───────────────────────────────────────────
+;; A trader who thinks about themselves.
+
+(atom portfolio)
+(atom high-drawdown)
+(atom winning-streak)
+(atom session)
+(atom thin-liquidity)
+
+;; "I'm in drawdown and on a winning streak. Am I recovering or
+;;  getting lucky? The session is thin. Be careful."
+(bundle
+  (bind at (bind portfolio high-drawdown))
+  (bind at (bind portfolio winning-streak))
+  (bind at (bind session thin-liquidity)))
+
+;; This thought modifies the meaning of every other thought.
+;; Bundled with a reversal signal, it IS a different vector.
+;; The discriminant learns: reversal + drawdown + thin liquidity
+;; has different accuracy than reversal alone.
+;; Risk isn't a gate. It's a thought that changes the geometry.
+
+
+;; ─── The Meta Thinker ───────────────────────────────────────────
+;; A thought about thoughts.
+
+(atom curve)
+(atom steep)
+(atom flattening)
+(atom expert)
+(atom narrative-expert)
+(atom dominant)
+
+;; "The narrative expert's curve is steep. Trust it."
+(bind dominant (bind expert narrative-expert))
+(bind at (bind curve steep))
+
+;; The orchestrator bundles meta-thoughts about expert quality
+;; with the experts' predictions. The journal learns:
+;; "when narrative is dominant and curve is steep, the prediction
+;; is more reliable."
+
+
+;; ─── The Full Panel ─────────────────────────────────────────────
+
+(journal "demark"     (bundle ...demark-thoughts...))
+(journal "seismology" (bundle ...seismo-thoughts...))
+(journal "regime"     (bundle ...regime-thoughts...))
+(journal "risk"       (bundle ...risk-thoughts...))
+
+;; Each journal: (direction, conviction)
+;; Each curve: accuracy = 0.50 + a × exp(b × conviction)
+
+;; The orchestrator:
+(max-by curve-quality
+  (journal "demark")
+  (journal "seismology")
+  (journal "regime"))
+
+;; One line. The best thought wins.
+```
+
+This is what a wat program looks like. The DeMark expert and the Seismologist speak the same language. Their programs are different compositions — different atoms, different bindings — but the evaluation is identical: journal, cosine, curve.
+
+The risk thinker is the thought that changes everything. When you bundle risk thoughts with market thoughts, the resulting vector IS geometrically different from market thoughts alone. The discriminant doesn't just learn "reversal = sell." It learns "reversal + drawdown + thin liquidity = different prediction than reversal + stable + liquid." Risk modifies the meaning of other thoughts through superposition. Not a gate. Not a parameter. A thought.
+
+The user interface to the wat machine is the wat language. The implementation is Rust. The evaluation is algebra. The judgment is the curve. The human writes thoughts in the language of their expertise. The machine composes them into geometry. The geometry predicts. The curve confirms.
+
+These are the best thoughts.
+
 *Chapter 3 continues.*
 
 The vocabulary expands. The experts multiply. The curves compete. The champions emerge.
