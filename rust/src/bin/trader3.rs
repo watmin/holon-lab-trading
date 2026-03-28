@@ -348,13 +348,14 @@ impl Trader {
 /// The curve generalizes from ALL resolved predictions.
 ///
 /// Falls back to cumulative estimate if curve fit not available.
+/// Returns (position_frac, curve_a, curve_b) or None.
 fn kelly_frac(
     conviction: f64,
     resolved: &VecDeque<(f64, bool)>,
     min_sample: usize,
     move_threshold: f64,
-) -> Option<f64> {
-    if resolved.len() < 200 { return None; } // need data for curve fit
+) -> Option<(f64, f64, f64)> {
+    if resolved.len() < 500 { return None; }
 
     // Fit the exponential curve from resolved predictions (binned).
     let n_bins = 20usize;
@@ -380,7 +381,7 @@ fn kelly_frac(
     }
 
     // Log-linear regression: ln(acc - 0.50) = ln(a) + b * conviction
-    let win_rate = if points.len() >= 3 {
+    let (win_rate, curve_a, curve_b) = if points.len() >= 3 {
         let n = points.len() as f64;
         let sx: f64 = points.iter().map(|(x, _)| x).sum();
         let sy: f64 = points.iter().map(|(_, y)| y).sum();
@@ -391,8 +392,8 @@ fn kelly_frac(
             let b = (n * sxy - sx * sy) / denom;
             let ln_a = (sy - b * sx) / n;
             let a = ln_a.exp();
-            // Evaluate curve at current conviction
-            (0.50 + a * (b * conviction).exp()).min(0.95)
+            let wr = (0.50 + a * (b * conviction).exp()).min(0.95);
+            (wr, a, b)
         } else { return None; }
     } else { return None; };
 
@@ -400,7 +401,7 @@ fn kelly_frac(
     if edge <= 0.0 { return None; }
     let half_kelly_risk = edge / 2.0;
     let position = half_kelly_risk / move_threshold;
-    Some(position.min(1.0))
+    Some((position.min(1.0), curve_a, curve_b))
 }
 
 // ─── Pending entry ───────────────────────────────────────────────────────────
@@ -769,6 +770,12 @@ fn main() {
     let mut panel_recalib_wins: u32 = 0;
     let mut panel_recalib_total: u32 = 0;
 
+    // Curve stability: track (a, b) parameters across recalibs.
+    // Trade only when both parameters stabilize (<10% change, 3 consecutive recalibs).
+    let mut curve_a_history: VecDeque<f64> = VecDeque::new();
+    let mut curve_b_history: VecDeque<f64> = VecDeque::new();
+    let mut curve_stable = false;
+
 
     // ─ Run database ─
     let run_db_path = match &args.run_db {
@@ -1099,7 +1106,33 @@ fn main() {
                                 args.atr_multiplier * candles[i].atr_r
                             } else { args.move_threshold };
                             match kelly_frac(meta_conviction, &resolved_preds, 50, mt) {
-                                Some(frac) => Some(frac),
+                                Some((frac, a, b)) => {
+                                    // Track curve parameters for stability detection
+                                    if curve_a_history.is_empty()
+                                        || curve_a_history.back() != Some(&a)
+                                    {
+                                        curve_a_history.push_back(a);
+                                        curve_b_history.push_back(b);
+                                        if curve_a_history.len() > 10 {
+                                            curve_a_history.pop_front();
+                                            curve_b_history.pop_front();
+                                        }
+                                        // Stable if last 3 changes were < 10%
+                                        if curve_a_history.len() >= 4 {
+                                            let n = curve_a_history.len();
+                                            let stable_count = (1..n).rev().take(3).filter(|&i| {
+                                                let da = (curve_a_history[i] - curve_a_history[i-1]).abs()
+                                                    / curve_a_history[i-1].abs().max(1e-10);
+                                                let db = (curve_b_history[i] - curve_b_history[i-1]).abs()
+                                                    / curve_b_history[i-1].abs().max(1e-10);
+                                                da < 0.10 && db < 0.10
+                                            }).count();
+                                            curve_stable = stable_count >= 3;
+                                        }
+                                    }
+                                    if curve_stable { Some(frac) }
+                                    else { trader.trades_skipped += 1; None }
+                                }
                                 None => { trader.trades_skipped += 1; None }
                             }
                         }
@@ -1547,7 +1580,10 @@ fn main() {
                     trader.trades_taken, trader.win_rate(),
                     trader.equity, ret, bnh,
                     flip_threshold,
-                    if panel_familiar { "ENGRAM" } else if in_adaptation { "ADAPT" } else { "STABLE" },
+                    if !curve_stable { "CALIBRATING" }
+                    else if panel_familiar { "ENGRAM" }
+                    else if in_adaptation { "ADAPT" }
+                    else { "STABLE" },
                 );
             }
         }

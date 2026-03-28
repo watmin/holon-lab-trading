@@ -7,3 +7,6 @@ trader3: visual+thought journals, discriminant prediction
   Run database: /home/watmin/work/holon/holon-lab-trading/orchestration_results/continuous-curve-kelly-q85.db
 
   Walk-forward: 100000 candles from index 47...
+  10000/100000 (252/s ETA 358s) | 2019-02-05 | TENTATIVE | vis=0.0% tht=45.6% | trades=245 win=39.6% | $8846 (-11.5%) vs B&H -6.7% | flip@0.131 ADAPT
+  20000/100000 (251/s ETA 318s) | 2019-03-12 | TENTATIVE | vis=0.0% tht=46.7% | trades=245 win=39.6% | $8846 (-11.5%) vs B&H +3.6% | flip@0.135 ADAPT
+  30000/100000 (251/s ETA 279s) | 2019-04-16 | TENTATIVE | vis=0.0% tht=51.9% | trades=245 win=39.6% | $8846 (-11.5%) vs B&H +36.0% | flip@0.141 ADAPT
