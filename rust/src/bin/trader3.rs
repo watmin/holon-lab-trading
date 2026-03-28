@@ -573,7 +573,7 @@ fn main() {
         for (i, tht_vec, tht_facts, expert_vecs) in tht_vecs {
             encode_count += 1;
 
-            // Expert panel: predict from each expert
+            // ── Expert predictions: each expert speaks ─────────────────
             let expert_preds: Vec<Prediction> = expert_vecs.iter().enumerate()
                 .map(|(ei, vec)| experts[ei].journal.predict(vec))
                 .collect();
@@ -581,60 +581,67 @@ fn main() {
             let vis_vec = null_vec.clone(); // stub for Pending compatibility
             let vis_pred = Prediction::default();
 
-            // ── Expert selection: (max-by curve-quality experts) ─────────
-            // The generalist predicts. Then each expert competes.
-            // Winner = expert whose estimated flipped accuracy at their
-            // current conviction is highest. Falls back to generalist
-            // if no expert has enough data.
+            // The generalist still encodes for backward compatibility
+            // (flip threshold, resolved_preds tracking, DB logging).
+            // But direction and conviction now come from the expert panel.
             let tht_pred = tht_journal.predict(&tht_vec);
-            let mut best_pred = tht_pred.clone();
-            let mut best_source = "generalist";
-            let min_expert_resolved = 500usize;
 
-            // Estimate generalist ROLLING accuracy (last 200 resolved)
-            let rolling_window = 200usize;
-            let gen_acc = {
-                let recent: Vec<&(f64, bool)> = resolved_preds.iter().rev()
-                    .take(rolling_window).collect();
-                let above: usize = recent.iter()
-                    .filter(|(c, _)| *c >= tht_pred.conviction).count();
-                let wins: usize = recent.iter()
-                    .filter(|(c, w)| *c >= tht_pred.conviction && *w).count();
-                if above >= 20 { wins as f64 / above as f64 } else { 0.50 }
-            };
+            // ── Manager: reads expert panel, decides ─────────────────
+            // The manager's thought = the configuration of expert opinions.
+            // Template 2 (REACTION): panel_engram measures familiarity.
+            // Direction: weighted vote of experts by their rolling accuracy.
+            // Conviction: average of voting experts' convictions.
+            let panel_state: Vec<f64> = expert_preds.iter()
+                .map(|ep| ep.raw_cos).collect();
 
-            // Generalist drives direction. No expert overrides.
-            // Panel engram modulates SIZING confidence (Layer 2).
-            // Encode panel state: each expert's signed conviction.
-            let mut panel_state: Vec<f64> = vec![tht_pred.raw_cos]; // generalist
-            for ep in &expert_preds {
-                panel_state.push(ep.raw_cos);
-            }
-            // Query panel engram: does this configuration match a known good one?
             let panel_familiar = if panel_engram.n() >= 10 {
                 let residual = panel_engram.residual(&panel_state);
                 let threshold = panel_engram.threshold();
-                residual < threshold // true = familiar good config
+                residual < threshold
             } else {
                 false
             };
-            let tht_pred = best_pred;
 
-            let vis_roll_acc = if vis_rolling.is_empty() { 0.5 }
-                else { vis_rolling.iter().filter(|&&x| x).count() as f64 / vis_rolling.len() as f64 };
-            let tht_roll_acc = if tht_rolling.is_empty() { 0.5 }
-                else { tht_rolling.iter().filter(|&&x| x).count() as f64 / tht_rolling.len() as f64 };
+            // Expert vote: each expert votes Buy or Sell.
+            // Weight by their rolling accuracy (experts with more resolved
+            // correct predictions get more say).
+            let mut buy_weight = 0.0_f64;
+            let mut sell_weight = 0.0_f64;
+            let mut total_conviction = 0.0_f64;
+            let mut voting_experts = 0usize;
+            for (ei, ep) in expert_preds.iter().enumerate() {
+                if let Some(dir) = ep.direction {
+                    let exp_acc = if experts[ei].resolved.len() >= 20 {
+                        let wins = experts[ei].resolved.iter()
+                            .filter(|(_, correct)| *correct).count();
+                        wins as f64 / experts[ei].resolved.len() as f64
+                    } else {
+                        0.5 // no track record yet — neutral weight
+                    };
+                    let weight = (exp_acc - 0.4).max(0.0); // only experts above 40% get a vote
+                    match dir {
+                        Outcome::Buy  => buy_weight += weight,
+                        Outcome::Sell => sell_weight += weight,
+                        _ => {}
+                    }
+                    total_conviction += ep.conviction;
+                    voting_experts += 1;
+                }
+            }
 
-            let (mut raw_meta_dir, mut meta_conviction) = orchestrate(
-                &args.orchestration,
-                &vis_pred, &tht_pred,
-                vis_roll_acc, tht_roll_acc,
-            );
-
-            // Expert panel: observe only, don't override predictions.
-            // Experts build their curves independently. Selection comes later
-            // once we understand their conviction scales and regime strengths.
-            // The generalist drives all trading decisions.
+            let (raw_meta_dir, meta_conviction) = if voting_experts == 0 {
+                (None, 0.0)
+            } else {
+                let dir = if buy_weight > sell_weight {
+                    Some(Outcome::Buy)
+                } else if sell_weight > buy_weight {
+                    Some(Outcome::Sell)
+                } else {
+                    None // tied — no signal
+                };
+                let conv = total_conviction / voting_experts as f64;
+                (dir, conv)
+            };
 
             // Track conviction history for dynamic threshold computation.
             // Window spans recalib_interval * 100 candles (~6 months at 5m).
