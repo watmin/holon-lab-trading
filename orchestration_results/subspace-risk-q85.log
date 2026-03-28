@@ -7,3 +7,9 @@ trader3: visual+thought journals, discriminant prediction
   Run database: /home/watmin/work/holon/holon-lab-trading/orchestration_results/subspace-risk-q85.db
 
   Walk-forward: 100000 candles from index 47...
+  10000/100000 (203/s ETA 443s) | 2019-02-05 | CONFIDENT | vis=0.0% tht=48.8% | trades=782 win=59.1% | $18575 (+85.8%) vs B&H -6.7% | flip@0.129 CALIBRATING
+  20000/100000 (160/s ETA 499s) | 2019-03-12 | CONFIDENT | vis=0.0% tht=46.6% | trades=1687 win=55.5% | $16986 (+69.9%) vs B&H +3.6% | flip@0.137 CALIBRATING
+  30000/100000 (132/s ETA 529s) | 2019-04-16 | TENTATIVE | vis=0.0% tht=52.7% | trades=2653 win=52.3% | $12702 (+27.0%) vs B&H +36.0% | flip@0.144 CALIBRATING
+  40000/100000 (118/s ETA 508s) | 2019-05-20 | CONFIDENT | vis=0.0% tht=54.7% | trades=3472 win=54.7% | $53786 (+437.9%) vs B&H +110.3% | flip@0.142 CALIBRATING
+  50000/100000 (100/s ETA 499s) | 2019-06-24 | TENTATIVE | vis=0.0% tht=56.5% | trades=4509 win=52.3% | $43727 (+337.3%) vs B&H +193.5% | flip@0.140 CALIBRATING
+  60000/100000 (90/s ETA 443s) | 2019-07-29 | TENTATIVE | vis=0.0% tht=46.5% | trades=5369 win=52.2% | $47729 (+377.3%) vs B&H +160.4% | flip@0.137 CALIBRATING

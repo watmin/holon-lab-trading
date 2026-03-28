@@ -646,9 +646,9 @@ impl Trader {
             }
         }
 
-        // Loss clustering (autocorrelation lag-1)
+        // Loss clustering (autocorrelation lag-1, capped at 50)
         let autocorr = if self.rolling.len() >= 20 {
-            let seq: Vec<f64> = self.rolling.iter().rev().take(50)
+            let seq: Vec<f64> = self.rolling.iter().rev().take(50.min(self.rolling.len()))
                 .map(|&w| if w { 1.0 } else { -1.0 }).collect();
             let sm = seq.iter().sum::<f64>() / seq.len() as f64;
             let sv = seq.iter().map(|v| (v - sm).powi(2)).sum::<f64>() / seq.len() as f64;
@@ -1805,19 +1805,6 @@ fn main() {
                         if final_out != Outcome::Noise {
                             trader.record_trade(entry.outcome_pct, frac, dir, entry.year);
                             // Risk expert learns from this trade's outcome.
-                            // It observes the risk vec that was present at entry time.
-                            // (We use current risk state as proxy — close enough since
-                            // entries resolve within horizon=36 candles.)
-                            {
-                                let (rv, _) = trader.risk_facts(&vm, None, None, trader.trades_taken, encode_count);
-                                if !rv.is_empty() {
-                                    let rvec = Primitives::bundle(&rv.iter().collect::<Vec<_>>());
-                                    // Risk subspace updated per-candle above (gated by is_healthy).
-                                    // No per-trade observation needed — the subspace learns
-                                    // the MANIFOLD of healthy states, not individual outcomes.
-                                }
-                            }
-
                             // Track panel accuracy for engram gating
                             panel_recalib_total += 1;
                             if dir == final_out { panel_recalib_wins += 1; }
