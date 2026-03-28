@@ -298,6 +298,7 @@ struct Pending {
     was_flipped:   bool,             // true if flip was active when this entry was created
     meta_conviction: f64,
     position_frac: Option<f64>,
+    expert_vecs:   Vec<Vector>,       // per-expert thought vectors
     fact_labels:   Vec<String>,      // thought facts present at this candle
     first_outcome: Option<Outcome>, // set on first threshold crossing; drives learning
     outcome_pct:   f64,             // price change at first crossing (for DB)
@@ -575,6 +576,25 @@ fn main() {
     let mut visual_groups: Vec<PatternGroup> = Vec::new();
     let group_cos_threshold = 0.35; // minimum cosine to join an existing group
 
+    // ─ Expert panel: N journals with different vocabulary profiles ──────
+    // Each expert thinks different thoughts about the same candles.
+    // The orchestrator selects the expert with highest conviction × curve quality.
+    struct Expert {
+        name: &'static str,
+        profile: &'static str,  // matches ThoughtEncoder::EXPERT_PROFILES
+        journal: Journal,
+        resolved: VecDeque<(f64, bool)>,  // per-expert calibration curve
+    }
+    let expert_profiles = ["momentum", "structure", "volume", "narrative"];
+    let mut experts: Vec<Expert> = expert_profiles.iter().map(|&profile| {
+        Expert {
+            name: profile,
+            profile,
+            journal: Journal::new(profile, args.dims, args.recalib_interval),
+            resolved: VecDeque::new(),
+        }
+    }).collect();
+
     // ─ Dual thought journals: slow (deep memory) + fast (regime-adaptive) ─
     // Both learn from the same input. An OnlineSubspace monitors thought vector
     // residuals to blend between them: low residual → trust slow, high → trust fast.
@@ -725,21 +745,36 @@ fn main() {
             })
             .collect();
 
-        // ── Parallel: thought encode ─────────────────────────────────────────
+        // ── Parallel: thought encode (full + expert profiles) ────────────────
         let sup_ref = if suppressed_facts.is_empty() { None } else { Some(&suppressed_facts) };
-        let tht_vecs: Vec<(usize, Vector, Vec<String>)> = (cursor..batch_end)
+        let n_experts = experts.len();
+        let tht_vecs: Vec<(usize, Vector, Vec<String>, Vec<Vector>)> = (cursor..batch_end)
             .into_par_iter()
             .map(|i| {
                 let w_start = i.saturating_sub(args.window - 1);
                 let window  = &candles[w_start..=i];
-                let result  = thought_encoder.encode_view(window, &thought_streams, 0, 0, &vm, None, sup_ref);
-                (i, result.thought, result.fact_labels)
+                let full = thought_encoder.encode_view(window, &thought_streams, 0, 0, &vm, None, sup_ref, "full");
+                // Encode for each expert profile
+                let expert_vecs: Vec<Vector> = expert_profiles.iter()
+                    .map(|&profile| {
+                        thought_encoder.encode_view(window, &thought_streams, 0, 0, &vm, None, None, profile).thought
+                    })
+                    .collect();
+                (i, full.thought, full.fact_labels, expert_vecs)
             })
             .collect();
 
         // ── Sequential: predict + buffer + learn + expire ────────────────────
-        for ((i, vis_vec), (_, tht_vec, tht_facts)) in vis_vecs.into_iter().zip(tht_vecs) {
+        for ((i, vis_vec), (_, tht_vec, tht_facts, expert_vecs)) in vis_vecs.into_iter().zip(tht_vecs) {
             encode_count += 1;
+
+            // Expert panel: predict from each expert, track their state
+            for (ei, expert_vec) in expert_vecs.iter().enumerate() {
+                let pred = experts[ei].journal.predict(expert_vec);
+                // We'll track expert predictions for curve building later
+                // For now just feed them (observe happens at learning time below)
+                let _ = pred; // predictions tracked but not used for trading yet
+            }
 
             let vis_pred = vis_journal.predict(&vis_vec);
             // Dual thought prediction: blend slow + fast based on subspace residual.
@@ -921,6 +956,7 @@ fn main() {
                 was_flipped:   flip_threshold > 0.0 && meta_conviction >= flip_threshold,
                 meta_conviction,
                 position_frac,
+                expert_vecs,
                 fact_labels:   tht_facts,
                 first_outcome: None,
                 outcome_pct:   0.0,
@@ -931,6 +967,9 @@ fn main() {
             vis_journal.decay(adaptive_decay);
             tht_journal.decay(adaptive_decay);
             tht_fast.decay(decay_fast);
+            for expert in &mut experts {
+                expert.journal.decay(args.decay);
+            }
 
             // ── Event-driven learning ─────────────────────────────────────
             // Snapshot recalib counts before scanning so we can detect if
@@ -963,6 +1002,10 @@ fn main() {
                         vis_journal.observe(&entry.vis_vec, o, sw);
                         tht_journal.observe(&entry.tht_vec, o, sw);
                         tht_fast.observe(&entry.tht_vec, o, sw);
+                        // Expert panel: each expert observes with its own vector
+                        for (ei, expert_vec) in entry.expert_vecs.iter().enumerate() {
+                            experts[ei].journal.observe(expert_vec, o, sw);
+                        }
                         entry.first_outcome = Some(o);
                         entry.outcome_pct   = pct;
                     }
@@ -1307,6 +1350,20 @@ fn main() {
         }
     }
     eprintln!();
+
+    // Expert panel summary.
+    if !experts.is_empty() {
+        eprintln!("  Expert panel:");
+        for expert in &experts {
+            eprintln!("    {}: recalibs={} disc_str={:.4} buy={} sell={}",
+                expert.name,
+                expert.journal.recalib_count,
+                expert.journal.last_disc_strength,
+                expert.journal.buy.count(),
+                expert.journal.sell.count());
+        }
+        eprintln!();
+    }
 
     // By-year breakdown.
     let mut years: Vec<i32> = trader.by_year.keys().copied().collect();

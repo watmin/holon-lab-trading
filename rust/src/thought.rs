@@ -587,7 +587,7 @@ impl ThoughtEncoder {
         streams: &IndicatorStreams,
         vm: &VectorManager,
     ) -> ThoughtResult {
-        self.encode_view(candles, streams, usize::MAX, streams.max_len_val(), vm, None, None)
+        self.encode_view(candles, streams, usize::MAX, streams.max_len_val(), vm, None, None, "full")
     }
 
     /// Weighted bundle: each fact scaled by |cosine(fact, discriminant)|.
@@ -615,11 +615,19 @@ impl ThoughtEncoder {
             .collect())
     }
 
-    /// Encode with a windowed view of the streams — enables batch-parallel encoding
-    /// where each candle sees only the stream entries up to its position.
-    /// If `attention` is provided (the journal's discriminant), facts are weighted
-    /// by |cosine(fact, discriminant)| before bundling — learned attention that
-    /// suppresses noise and amplifies signal.
+    /// Expert profiles: which eval methods to run.
+    /// "full" = all methods (generalist). Named profiles select subsets.
+    pub const EXPERT_PROFILES: &'static [&'static str] = &[
+        "full",       // all thoughts — the generalist
+        "momentum",   // RSI, Stochastic, MACD, divergence, CCI
+        "structure",  // Ichimoku, SMA, Fibonacci, BB/Keltner, range position
+        "volume",     // volume analysis, volume confirmation, price action
+        "narrative",  // PELT segments, temporal lookback, calendar
+    ];
+
+    /// Encode with a windowed view of the streams.
+    /// `expert` selects which thought vocabulary to activate:
+    ///   "full" = all, "momentum"/"structure"/"volume"/"narrative" = subsets.
     pub fn encode_view(
         &self,
         candles: &[Candle],
@@ -629,6 +637,7 @@ impl ThoughtEncoder {
         vm: &VectorManager,
         attention: Option<&[f64]>,
         suppressed: Option<&HashSet<String>>,
+        expert: &str,
     ) -> ThoughtResult {
         let mut cached_facts: Vec<&Vector> = Vec::with_capacity(64);
         let mut owned_facts: Vec<Vector> = Vec::with_capacity(96);
@@ -637,21 +646,70 @@ impl ThoughtEncoder {
         let now = candles.last().unwrap();
         let prev = if candles.len() >= 2 { Some(&candles[candles.len() - 2]) } else { None };
 
-        self.eval_comparisons_cached(now, prev, &mut cached_facts, &mut labels);
-        self.eval_segment_narrative(candles, vm, &mut owned_facts, &mut labels);
-        self.eval_temporal(candles, vm, &mut owned_facts, &mut labels);
-        self.eval_rsi_sma_cached(candles, &mut cached_facts, &mut labels);
-        self.eval_calendar(now, &mut cached_facts, &mut labels);
-        self.eval_divergence(candles, vm, &mut owned_facts, &mut labels);
-        self.eval_volume_confirmation(candles, &mut owned_facts, &mut labels);
-        self.eval_range_position(candles, &mut owned_facts, &mut labels);
-        self.eval_ichimoku(candles, &mut cached_facts, &mut labels);
-        self.eval_stochastic(candles, &mut cached_facts, &mut labels);
-        self.eval_fibonacci(candles, &mut owned_facts, &mut labels);
-        self.eval_volume_analysis(candles, &mut cached_facts, &mut labels);
-        self.eval_keltner(candles, &mut cached_facts, &mut labels);
-        self.eval_momentum(candles, &mut cached_facts, &mut labels);
-        self.eval_price_action(candles, &mut cached_facts, &mut labels);
+        let is = |profiles: &[&str]| -> bool {
+            expert == "full" || profiles.contains(&expert)
+        };
+
+        // Comparisons: shared across most experts (core TA relationships)
+        if is(&["momentum", "structure"]) {
+            self.eval_comparisons_cached(now, prev, &mut cached_facts, &mut labels);
+        }
+        // PELT segment narrative
+        if is(&["narrative", "structure"]) {
+            self.eval_segment_narrative(candles, vm, &mut owned_facts, &mut labels);
+        }
+        // Temporal lookback (crosses)
+        if is(&["narrative", "momentum"]) {
+            self.eval_temporal(candles, vm, &mut owned_facts, &mut labels);
+        }
+        // RSI-SMA
+        if is(&["momentum"]) {
+            self.eval_rsi_sma_cached(candles, &mut cached_facts, &mut labels);
+        }
+        // Calendar
+        if is(&["narrative"]) {
+            self.eval_calendar(now, &mut cached_facts, &mut labels);
+        }
+        // RSI divergence
+        if is(&["momentum"]) {
+            self.eval_divergence(candles, vm, &mut owned_facts, &mut labels);
+        }
+        // Volume confirmation
+        if is(&["volume"]) {
+            self.eval_volume_confirmation(candles, &mut owned_facts, &mut labels);
+        }
+        // Range position
+        if is(&["structure"]) {
+            self.eval_range_position(candles, &mut owned_facts, &mut labels);
+        }
+        // Ichimoku
+        if is(&["structure"]) {
+            self.eval_ichimoku(candles, &mut cached_facts, &mut labels);
+        }
+        // Stochastic
+        if is(&["momentum"]) {
+            self.eval_stochastic(candles, &mut cached_facts, &mut labels);
+        }
+        // Fibonacci
+        if is(&["structure"]) {
+            self.eval_fibonacci(candles, &mut owned_facts, &mut labels);
+        }
+        // Volume analysis
+        if is(&["volume"]) {
+            self.eval_volume_analysis(candles, &mut cached_facts, &mut labels);
+        }
+        // Keltner + squeeze
+        if is(&["structure"]) {
+            self.eval_keltner(candles, &mut cached_facts, &mut labels);
+        }
+        // CCI
+        if is(&["momentum"]) {
+            self.eval_momentum(candles, &mut cached_facts, &mut labels);
+        }
+        // Price action
+        if is(&["volume"]) {
+            self.eval_price_action(candles, &mut cached_facts, &mut labels);
+        }
 
         // Unify all facts, then filter suppressed (high fire-rate constants).
         let mut all_refs: Vec<&Vector> = Vec::with_capacity(cached_facts.len() + owned_facts.len());
