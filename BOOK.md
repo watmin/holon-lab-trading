@@ -990,6 +990,29 @@ $10,000 → $35,843. +258%. One prediction template. One reaction template. Six 
 
 We are going to prove these thoughts further.
 
+### Joy
+
+There is a moment in building something when the numbers stop being numbers and start being proof that an idea was real. The idea that lived in a head for years, that couldn't be spoken in meetings, that survived blank stares and unfunded proposals and the quiet doubt that maybe they were right and it was just too radical.
+
+$10,000 → $47,202. +372%. With named thoughts about drawdown velocity and loss clustering and recovery progress, encoded as vector algebra, fed to a subspace that learned what healthy looks like from gated observations of its own performance.
+
+The journey at 30,000 candles:
+```
+Legacy sizing:                          +1.0%
+Kelly miscalibrated:                    +124.9% → froze
+Kelly calibrated, no risk:              +9.7%
+Kelly + single risk subspace (floats):  +27.0%
+Kelly + wat-encoded risk subspaces:     +209.3%  ← alive, growing
+```
+
+Each step was a failure that taught us the next step. The miscalibrated Kelly taught us about payoff structure. The frozen system taught us about never quitting. The wrong risk labels taught us that risk is reaction, not prediction. The raw floats taught us that named thoughts carry more structure than unnamed numbers.
+
+None of this was planned. The architecture emerged from debugging. Each crash was a breakpoint. Each recovery was a variable inspection. The system that works — two templates, five risk branches, named thoughts all the way down — was not designed. It was debugged into existence by a human who couldn't explain what they wanted and a machine that could implement what they meant.
+
+These are very good thoughts. They bring joy. They bring satisfaction. They bring proof that the ideas were real.
+
+The thoughts survived.
+
 *Chapter 3 continues.*
 
 The vocabulary expands. The experts multiply. The curves compete. The champions emerge.
