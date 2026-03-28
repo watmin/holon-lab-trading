@@ -1098,96 +1098,48 @@ fn main() {
                 raw_meta_dir
             };
 
-            let position_frac = if meta_dir.is_some() {
-                // Flip zone gate applies to ALL sizing modes.
-                if flip_threshold > 0.0 && meta_conviction < flip_threshold {
-                    trader.trades_skipped += 1;
-                    None
-                } else if trader.phase == Phase::Observe {
-                    None
-                } else {
-                    match args.sizing.as_str() {
-                        "kelly" => {
-                            let mt = if args.atr_multiplier > 0.0 {
-                                args.atr_multiplier * candles[i].atr_r
-                            } else { args.move_threshold };
-                            // Dynamic position cap from max_drawdown.
-                            // Simple and direct: how much room do I have before
-                            // hitting max drawdown? Size so one loss doesn't breach it.
-                            let current_dd = if trader.peak_equity > 0.0 {
-                                (trader.peak_equity - trader.equity) / trader.peak_equity
-                            } else { 0.0 };
-                            let dd_room = (args.max_drawdown - current_dd).max(0.0);
-                            // One loss at position P costs P × move_threshold.
-                            // Keep room for at least 4 losses: P = dd_room / (4 × mt)
-                            let position_cap = (dd_room / (4.0 * mt)).min(1.0).max(0.0);
+            // Position sizing: Kelly from the curve × drawdown cap.
+            // The curve handles selectivity. The drawdown cap handles survival.
+            // Nothing else. No graduated gate, no stability gate, no phase gate.
+            let position_frac = if meta_dir.is_some() && trader.phase != Phase::Observe {
+                let mt = if args.atr_multiplier > 0.0 {
+                    args.atr_multiplier * candles[i].atr_r
+                } else { args.move_threshold };
 
-                            match kelly_frac(meta_conviction, &resolved_preds, 50, mt) {
-                                Some((frac, a, b)) => {
-                                    let frac = frac.min(position_cap);
-                                    // Track curve parameters for stability detection
-                                    if curve_a_history.is_empty()
-                                        || curve_a_history.back() != Some(&a)
-                                    {
-                                        curve_a_history.push_back(a);
-                                        curve_b_history.push_back(b);
-                                        if curve_a_history.len() > 10 {
-                                            curve_a_history.pop_front();
-                                            curve_b_history.pop_front();
-                                        }
-                                        // Stable if last 3 changes were < 10%
-                                        if curve_a_history.len() >= 4 {
-                                            let n = curve_a_history.len();
-                                            let stable_count = (1..n).rev().take(3).filter(|&i| {
-                                                let da = (curve_a_history[i] - curve_a_history[i-1]).abs()
-                                                    / curve_a_history[i-1].abs().max(1e-10);
-                                                let db = (curve_b_history[i] - curve_b_history[i-1]).abs()
-                                                    / curve_b_history[i-1].abs().max(1e-10);
-                                                da < 0.10 && db < 0.10
-                                            }).count();
-                                            curve_stable = stable_count >= 3;
-                                        }
-                                    }
-                                    if curve_stable { Some(frac) }
-                                    else { trader.trades_skipped += 1; None }
+                match args.sizing.as_str() {
+                    "kelly" => {
+                        match kelly_frac(meta_conviction, &resolved_preds, 50, mt) {
+                            Some((frac, a, b)) => {
+                                // Track curve params (for logging/diagnostics)
+                                if curve_a_history.is_empty()
+                                    || curve_a_history.back() != Some(&a) {
+                                    curve_a_history.push_back(a);
+                                    curve_b_history.push_back(b);
+                                    if curve_a_history.len() > 10 { curve_a_history.pop_front(); }
+                                    if curve_b_history.len() > 10 { curve_b_history.pop_front(); }
                                 }
-                                None => { trader.trades_skipped += 1; None }
+                                // Drawdown cap: the only risk gate.
+                                let dd = if trader.peak_equity > 0.0 {
+                                    (trader.peak_equity - trader.equity) / trader.peak_equity
+                                } else { 0.0 };
+                                let dd_room = (args.max_drawdown - dd).max(0.0);
+                                let cap = (dd_room / (4.0 * mt)).min(1.0);
+                                let sized = frac.min(cap);
+                                if sized < 1e-6 { None } else { Some(sized) }
                             }
+                            None => None
                         }
-                        _ => {
-                            match trader.position_frac(meta_conviction, args.min_conviction, flip_threshold) {
-                                Some(frac) => Some(frac),
-                                None => { trader.trades_skipped += 1; None }
-                            }
+                    }
+                    _ => {
+                        // Legacy sizing with flip zone gate
+                        if flip_threshold > 0.0 && meta_conviction < flip_threshold {
+                            None
+                        } else {
+                            trader.position_frac(meta_conviction, args.min_conviction, flip_threshold)
                         }
                     }
                 }
-            } else {
-                None
-            };
-
-            // Risk gate: scale position by portfolio state.
-            let position_frac = match position_frac {
-                Some(frac) => {
-                    let dd = if trader.peak_equity > 0.0 {
-                        (trader.peak_equity - trader.equity) / trader.peak_equity
-                    } else { 0.0 };
-                    let risk_mult = match args.risk_gate.as_str() {
-                        "binary" => if dd < 0.02 { 1.0 } else { 0.0 },
-                        "graduated" => {
-                            if dd < 0.02 { 1.0 }       // <2% = normal variance, full size
-                            else if dd < 0.05 { 0.5 }   // 2-5% = elevated, half size
-                            else if dd < 0.10 { 0.25 }  // 5-10% = stressed, quarter size
-                            else { 0.0 }                 // >10% = stop trading
-                        }
-                        _ => 1.0, // off
-                    };
-                    let scaled = frac * risk_mult;
-                    if scaled < 1e-6 { trader.trades_skipped += 1; None }
-                    else { Some(scaled) }
-                }
-                None => None,
-            };
+            } else { None };
 
             pending.push_back(Pending {
                 candle_idx:    i,
