@@ -115,6 +115,12 @@ struct Args {
     #[arg(long, default_value = "legacy")]
     sizing: String,
 
+    /// Risk gate: scale position by portfolio state.
+    /// "off" = no adjustment. "binary" = trade only at peak equity.
+    /// "graduated" = scale down by drawdown depth.
+    #[arg(long, default_value = "off")]
+    risk_gate: String,
+
     /// visual-only | thought-only | agree-only | meta-boost | weighted | thought-led | thought-contrarian
     #[arg(long, default_value = "meta-boost")]
     orchestration: String,
@@ -1059,6 +1065,29 @@ fn main() {
                 }
             } else {
                 None
+            };
+
+            // Risk gate: scale position by portfolio state.
+            let position_frac = match position_frac {
+                Some(frac) => {
+                    let dd = if trader.peak_equity > 0.0 {
+                        (trader.peak_equity - trader.equity) / trader.peak_equity
+                    } else { 0.0 };
+                    let risk_mult = match args.risk_gate.as_str() {
+                        "binary" => if dd < 0.001 { 1.0 } else { 0.0 },
+                        "graduated" => {
+                            if dd < 0.001 { 1.0 }
+                            else if dd < 0.01 { 0.5 }
+                            else if dd < 0.03 { 0.25 }
+                            else { 0.0 }
+                        }
+                        _ => 1.0, // off
+                    };
+                    let scaled = frac * risk_mult;
+                    if scaled < 1e-6 { trader.trades_skipped += 1; None }
+                    else { Some(scaled) }
+                }
+                None => None,
             };
 
             pending.push_back(Pending {
