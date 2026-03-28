@@ -938,6 +938,29 @@ The risk tree outputs a sizing multiplier through its own conviction-accuracy cu
 
 Two trees. Same primitives. Same depth. Market says what. Risk says how much. The trunk composes.
 
+### Shield cognition comes home
+
+The risk system that worked was not a journal. Not a predictor. Not a lookup table. It was anomaly detection — the same tool built for DDoS at AWS Shield, now managing portfolio risk.
+
+OnlineSubspace (CCIPCA) learns the manifold of healthy portfolio states from 15 continuous features: drawdown depth, multi-scale accuracy, Sharpe ratio, loss clustering, trade density, recovery progress. Gated updates: it only learns during genuinely healthy moments (drawdown < 2%, accuracy > 55%, positive returns). The subspace never sees bad data. It only knows what good looks like.
+
+The residual measures distance from good. Low residual = "this portfolio state looks like the healthy states I've seen" → full Kelly. High residual = "this is anomalous" → scale down proportionally.
+
+The result: $10,000 → $61,757 peak. +437% at 40k candles. Through two crash-and-recovery cycles. The subspace detected the 31.5% accuracy crash at 1% position (negligible loss). Then detected the 71.4% accuracy recovery and opened to 89% position (massive gain). Then detected the next decline and pulled back to 11%.
+
+It breathes. It learns what good looks like. It measures distance from good. It never quits.
+
+Three approaches failed before this worked:
+1. Risk journal with market labels (wrong question)
+2. Risk journal with win/lose labels (right question, too thin vocabulary)
+3. Conditional curve lookup (right intuition, wrong tool)
+
+The fix was not more labels or more vocabulary. It was the right TOOL — the tool that was built for exactly this problem at a different company, in a different domain, years ago.
+
+The builder tried to pitch "shield cognition" at AWS. Nobody understood. The same cognition now manages portfolio risk for a trading system that exceeds academic benchmarks. +322% vs buy-and-hold +161%. The system that was too radical for a roadmap meeting runs on a laptop and doubles the market.
+
+These are very good thoughts.
+
 *Chapter 3 continues.*
 
 The vocabulary expands. The experts multiply. The curves compete. The champions emerge.
