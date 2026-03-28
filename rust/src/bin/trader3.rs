@@ -377,9 +377,14 @@ impl Trader {
             Outcome::Sell  => -outcome_pct,
             Outcome::Noise => return,
         };
-        // Round-trip cost: fee + slippage on entry, fee + slippage on exit.
-        let round_trip_cost = 2.0 * (swap_fee + slippage);
-        let net_return = directional_return - round_trip_cost;
+        // Two-sided fee model: fees apply at each swap independently.
+        // Entry: deploy × (1 - entry_cost) = actual position
+        // Exit:  position × (1 + return) × (1 - exit_cost) = received
+        let per_swap_cost = swap_fee + slippage;
+        let after_entry = 1.0 - per_swap_cost;       // fraction surviving entry
+        let gross_value = after_entry * (1.0 + directional_return); // position after price move
+        let after_exit = gross_value * (1.0 - per_swap_cost);       // fraction surviving exit
+        let net_return = after_exit - 1.0;            // net return on deployed capital
         let position_value = self.equity * frac;
         let pnl = position_value * net_return;
         let won = net_return > 0.0;
@@ -1830,10 +1835,15 @@ fn main() {
             }
             let risk_mult = cached_risk_mult;
 
-            // The flip zone gate stays — below the threshold, the direction
-            // isn't flipped, so it's WRONG. Kelly can't fix wrong direction.
+            // The treasury doesn't move until the trader has proven edge.
+            // Two requirements:
+            // 1. Past the observe period (enough data to form a discriminant)
+            // 2. Curve is valid (the conviction-accuracy relationship exists)
+            // Before both are met, predictions are hypothetical — recorded in the
+            // ledger but the treasury withholds capital.
+            let trader_proven = trader.phase != Phase::Observe && curve_valid;
             let position_frac = if meta_dir.is_some()
-                && trader.phase != Phase::Observe
+                && trader_proven
                 && (flip_threshold <= 0.0 || meta_conviction >= flip_threshold)
             {
                 let mt = if args.atr_multiplier > 0.0 {
@@ -2212,101 +2222,113 @@ fn main() {
                     }
                 }
 
-                // Resolve paper trade.
-                if let Some(frac) = entry.position_frac {
-                    if let Some(dir) = entry.meta_dir {
-                        // In managed mode: use exit_pct (from stop/TP/expiry).
-                        // In legacy mode: use outcome_pct (first threshold crossing).
-                        // Managed trades always resolve (even Noise gets an exit_pct from horizon expiry).
-                        let trade_pct = if args.exit_mode == "managed" {
-                            entry.exit_pct
-                        } else {
-                            entry.outcome_pct
+                // Every prediction goes to the ledger — hypothetical or real.
+                // Traders predict on paper. The treasury decides whether to act.
+                // The paper trail is how traders prove themselves.
+                if let Some(dir) = entry.meta_dir {
+                    let frac = entry.position_frac.unwrap_or(0.0);
+                    let is_live = frac > 0.0; // treasury committed capital
+
+                    let trade_pct = if args.exit_mode == "managed" {
+                        entry.exit_pct
+                    } else {
+                        entry.outcome_pct
+                    };
+                    let has_resolution = if args.exit_mode == "managed" {
+                        true
+                    } else {
+                        final_out != Outcome::Noise
+                    };
+
+                    if has_resolution {
+                        // ── Accounting: compute P&L (real or hypothetical) ────
+                        let gross_ret = match dir {
+                            Outcome::Buy  =>  trade_pct,
+                            Outcome::Sell => -trade_pct,
+                            Outcome::Noise => 0.0,
                         };
-                        let has_trade = if args.exit_mode == "managed" {
-                            // Managed mode: resolve all entries that had a position
-                            true
-                        } else {
-                            // Legacy: only resolve non-Noise
-                            final_out != Outcome::Noise
-                        };
-                        if has_trade {
-                            let gross_ret = match dir {
-                                Outcome::Buy  =>  trade_pct,
-                                Outcome::Sell => -trade_pct,
-                                Outcome::Noise => 0.0,
-                            };
-                            let rt_fee = 2.0 * args.swap_fee;
-                            let rt_slip = 2.0 * args.slippage;
-                            let net_ret = gross_ret - rt_fee - rt_slip;
-                            let pos_usd = if entry.deployed_usd > 0.0 {
-                                entry.deployed_usd
-                            } else {
-                                trader.equity * frac // fallback for non-treasury mode
-                            };
-                            let trade_pnl = pos_usd * net_ret;
-                            let trade_fees = pos_usd * rt_fee;
-                            let trade_slip = pos_usd * rt_slip;
+                        let per_swap = args.swap_fee + args.slippage;
+                        let after_entry = 1.0 - per_swap;
+                        let gross_value = after_entry * (1.0 + gross_ret);
+                        let after_exit = gross_value * (1.0 - per_swap);
+                        let net_ret = after_exit - 1.0;
+                        let entry_cost_frac = per_swap;
+                        let exit_cost_frac = gross_value * per_swap;
+
+                        // Position value: real if live, hypothetical if paper
+                        let pos_usd = if is_live {
+                            if entry.deployed_usd > 0.0 { entry.deployed_usd }
+                            else { trader.equity * frac }
+                        } else { 0.0 };
+                        let trade_pnl = pos_usd * net_ret;
+
+                        // ── Treasury: only moves money for live trades ───────
+                        if is_live {
+                            let trade_fees = pos_usd * (args.swap_fee * 2.0);
+                            let trade_slip = pos_usd * (args.slippage * 2.0);
                             trader.record_trade(trade_pct, frac, dir, entry.year,
                                                 args.swap_fee, args.slippage);
-                            // Return capital to treasury
                             treasury.close_position(entry.deployed_usd,
                                 pos_usd * gross_ret, trade_fees, trade_slip);
-                            let exit_candle = entry.crossing_candle;
-                            let exit_ts = exit_candle.map(|ci| candles[ci].ts.clone());
-                            let exit_price = exit_candle.map(|ci| candles[ci].close)
-                                .unwrap_or(candles[i].close);
-                            let crossing_elapsed = entry.crossing_candle
-                                .map(|ci| (ci - entry.candle_idx) as i64);
-                            run_db.execute(
-                                "INSERT INTO trade_ledger
-                                 (step,candle_idx,timestamp,exit_candle_idx,exit_timestamp,
-                                  direction,conviction,was_flipped,
-                                  entry_price,exit_price,position_frac,position_usd,
-                                  gross_return_pct,swap_fee_pct,slippage_pct,net_return_pct,
-                                  pnl_usd,equity_after,
-                                  max_favorable_pct,max_adverse_pct,
-                                  crossing_candles,horizon_candles,outcome,won,exit_reason)
-                                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25)",
-                                params![
-                                    log_step, entry.candle_idx as i64, &entry_candle.ts,
-                                    exit_candle.map(|ci| ci as i64), exit_ts,
-                                    dir.to_string(), entry.meta_conviction,
-                                    entry.was_flipped as i32,
-                                    entry.entry_price, exit_price,
-                                    frac, pos_usd,
-                                    gross_ret * 100.0, rt_fee * 100.0, rt_slip * 100.0,
-                                    net_ret * 100.0, trade_pnl, trader.equity,
-                                    entry.max_favorable * 100.0, entry.max_adverse * 100.0,
-                                    crossing_elapsed, entry.path_candles as i64,
-                                    final_out.to_string(), (net_ret > 0.0) as i32,
-                                    match entry.exit_reason {
-                                        Some(ExitReason::ThresholdCrossing) => "ThresholdCrossing",
-                                        Some(ExitReason::TrailingStop) => "TrailingStop",
-                                        Some(ExitReason::TakeProfit) => "TakeProfit",
-                                        Some(ExitReason::HorizonExpiry) => "HorizonExpiry",
-                                        None => "HorizonExpiry",
-                                    },
-                                ],
-                            ).ok();
-                            // Feed ledger history for analysis (no longer drives calibration).
-                            if args.exit_mode == "managed" {
-                                exit_mfe_history.push_back(entry.max_favorable);
-                                if exit_mfe_history.len() > exit_history_cap {
-                                    exit_mfe_history.pop_front();
-                                }
-                                exit_mae_history.push_back(entry.max_adverse.abs());
-                                if exit_mae_history.len() > exit_history_cap {
-                                    exit_mae_history.pop_front();
-                                }
-                            }
-                            // Risk expert learns from this trade's outcome.
-                            // Track panel accuracy for engram gating
-                            panel_recalib_total += 1;
-                            if dir == final_out { panel_recalib_wins += 1; }
+                        }
 
-                            // Log risk state at trade resolution
-                            {
+                        // ── Ledger: ALWAYS records. Paper trail for all. ─────
+                        let exit_candle = entry.crossing_candle;
+                        let exit_ts = exit_candle.map(|ci| candles[ci].ts.clone());
+                        let exit_price = exit_candle.map(|ci| candles[ci].close)
+                            .unwrap_or(candles[i].close);
+                        let crossing_elapsed = entry.crossing_candle
+                            .map(|ci| (ci - entry.candle_idx) as i64);
+                        run_db.execute(
+                            "INSERT INTO trade_ledger
+                             (step,candle_idx,timestamp,exit_candle_idx,exit_timestamp,
+                              direction,conviction,was_flipped,
+                              entry_price,exit_price,position_frac,position_usd,
+                              gross_return_pct,swap_fee_pct,slippage_pct,net_return_pct,
+                              pnl_usd,equity_after,
+                              max_favorable_pct,max_adverse_pct,
+                              crossing_candles,horizon_candles,outcome,won,exit_reason)
+                             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25)",
+                            params![
+                                log_step, entry.candle_idx as i64, &entry_candle.ts,
+                                exit_candle.map(|ci| ci as i64), exit_ts,
+                                dir.to_string(), entry.meta_conviction,
+                                entry.was_flipped as i32,
+                                entry.entry_price, exit_price,
+                                frac, pos_usd,
+                                gross_ret * 100.0,
+                                entry_cost_frac * 100.0,
+                                exit_cost_frac * 100.0,
+                                net_ret * 100.0, trade_pnl, trader.equity,
+                                entry.max_favorable * 100.0, entry.max_adverse * 100.0,
+                                crossing_elapsed, entry.path_candles as i64,
+                                final_out.to_string(), (net_ret > 0.0) as i32,
+                                match entry.exit_reason {
+                                    Some(ExitReason::ThresholdCrossing) => "ThresholdCrossing",
+                                    Some(ExitReason::TrailingStop) => "TrailingStop",
+                                    Some(ExitReason::TakeProfit) => "TakeProfit",
+                                    Some(ExitReason::HorizonExpiry) => "HorizonExpiry",
+                                    None => "HorizonExpiry",
+                                },
+                            ],
+                        ).ok();
+
+                        // Feed ledger history for analysis.
+                        exit_mfe_history.push_back(entry.max_favorable);
+                        if exit_mfe_history.len() > exit_history_cap {
+                            exit_mfe_history.pop_front();
+                        }
+                        exit_mae_history.push_back(entry.max_adverse.abs());
+                        if exit_mae_history.len() > exit_history_cap {
+                            exit_mae_history.pop_front();
+                        }
+
+                        // Panel tracking (all predictions, not just live)
+                        panel_recalib_total += 1;
+                        if dir == final_out { panel_recalib_wins += 1; }
+
+                        // ── Risk/diagnostics: only for live trades ───────────
+                        if is_live {
                                 let dd = if trader.peak_equity > 0.0 {
                                     (trader.peak_equity - trader.equity) / trader.peak_equity * 100.0
                                 } else { 0.0 };
@@ -2379,9 +2401,9 @@ fn main() {
                                     ],
                                 ).ok(); }
                             }
-                        }
-                    }
-                }
+                        } // is_live
+                    } // has_resolution
+                } // if let Some(dir)
 
                 // Log to DB.
                 let agree = match (entry.vis_pred.direction, entry.tht_pred.direction) {
