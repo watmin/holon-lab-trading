@@ -918,6 +918,26 @@ sizing up worked." Each is the same machinery: OnlineSubspace learning
 the manifold of good states. Residual measures recognition. The curve
 judges. Holons of holons.
 
+### Risk is not a prediction problem. Risk is not a lookup table. Risk is a tree.
+
+We tried three approaches to risk:
+
+1. **Risk journal with market-direction labels** — learned "which portfolio states precede up moves." That's a worse market expert. Wrong question.
+
+2. **Risk journal with win/lose labels** — learned "which portfolio states precede winning trades." Right question, but 8 thin facts collapsed the discriminant to "drawdown = bad." Tautology, not insight.
+
+3. **Conditional curve lookup** — partitioned resolved predictions by drawdown depth. Right intuition (different states need different curves) but threw away the 25 rich risk facts we built. A stump, not a tree.
+
+The fix is not to simplify further. It's to build the risk tree with the same depth as the market tree. Rich vocabulary. Multiple specialized experts. Each with its own discriminant and curve. The risk generalist discovers the composite signal.
+
+The market tree proved: 150 atoms with 5 experts beats 84 atoms with 1 expert. The risk tree should prove the same: 25+ risk facts with 5 risk experts should beat 4 drawdown buckets.
+
+The risk experts predict WIN/LOSE — that is the correct label. The failure was vocabulary depth, not the question. Eight facts can't express "drawdown is accelerating but losses are random and accuracy is improving at the 10-trade scale." Twenty-five facts can.
+
+The risk tree outputs a sizing multiplier through its own conviction-accuracy curve. High risk conviction toward "Win" = "I strongly recognize this as a state that precedes winning trades" = size up. High conviction toward "Lose" = "this state precedes losses" = size down.
+
+Two trees. Same primitives. Same depth. Market says what. Risk says how much. The trunk composes.
+
 *Chapter 3 continues.*
 
 The vocabulary expands. The experts multiply. The curves compete. The champions emerge.
