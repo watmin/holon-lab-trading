@@ -846,40 +846,58 @@ fn main() {
                 .collect();
 
             let vis_vec = null_vec.clone(); // stub for Pending compatibility
-            let vis_pred = Prediction::default(); // visual removed — thought-only
-            // Dual thought prediction: blend slow + fast based on subspace residual.
-            // Risk thoughts computed but NOT bundled with market thoughts.
-            // Bundling was tested — it adds noise (-0.6pp). Risk should be
-            // a separate expert with its own curve, not a modifier of market signal.
-            let (_risk_vecs, _risk_labels) = trader.risk_facts(&vm);
+            let vis_pred = Prediction::default();
 
-            let tht_slow_pred = tht_journal.predict(&tht_vec);
-            let tht_fast_pred = tht_fast.predict(&tht_vec);
+            // ── Expert selection: (max-by curve-quality experts) ─────────
+            // The generalist predicts. Then each expert competes.
+            // Winner = expert whose estimated flipped accuracy at their
+            // current conviction is highest. Falls back to generalist
+            // if no expert has enough data.
+            let tht_pred = tht_journal.predict(&tht_vec);
+            let mut best_pred = tht_pred.clone();
+            let mut best_source = "generalist";
+            let min_expert_resolved = 500usize;
 
-            // Feed subspace (needs f64 input). Score before update.
-            let tht_f64: Vec<f64> = tht_vec.data().iter().map(|&v| v as f64).collect();
-            let residual = if tht_subspace.n() >= 2 {
-                tht_subspace.residual(&tht_f64)
-            } else { 0.0 };
-            tht_subspace.update(&tht_f64);
-
-            // Blend: only trust fast journal when residual EXCEEDS baseline (regime shift).
-            // weight=0 during stable periods, ramps up when data departs from learned manifold.
-            subspace_baseline_residual = 0.99 * subspace_baseline_residual + 0.01 * residual;
-            let weight_fast = if subspace_baseline_residual > 1e-10 {
-                ((residual - subspace_baseline_residual) / subspace_baseline_residual).max(0.0).min(1.0)
-            } else { 0.0 };
-            let weight_slow = 1.0 - weight_fast;
-
-            // Blend predictions: weighted average of raw_cos, derive direction from blend.
-            let blended_cos = weight_slow * tht_slow_pred.raw_cos + weight_fast * tht_fast_pred.raw_cos;
-            let tht_pred = Prediction {
-                raw_cos: blended_cos,
-                conviction: blended_cos.abs(),
-                direction: if tht_slow_pred.direction.is_some() || tht_fast_pred.direction.is_some() {
-                    Some(if blended_cos > 0.0 { Outcome::Buy } else { Outcome::Sell })
-                } else { None },
+            // Estimate generalist ROLLING accuracy (last 200 resolved)
+            let rolling_window = 200usize;
+            let gen_acc = {
+                let recent: Vec<&(f64, bool)> = resolved_preds.iter().rev()
+                    .take(rolling_window).collect();
+                let above: usize = recent.iter()
+                    .filter(|(c, _)| *c >= tht_pred.conviction).count();
+                let wins: usize = recent.iter()
+                    .filter(|(c, w)| *c >= tht_pred.conviction && *w).count();
+                if above >= 20 { wins as f64 / above as f64 } else { 0.50 }
             };
+
+            // Each expert competes on ROLLING accuracy
+            for (ei, expert) in experts.iter().enumerate() {
+                if expert.resolved.len() < min_expert_resolved { continue; }
+                let ep = &expert_preds[ei];
+                if ep.conviction < 0.05 { continue; }
+
+                let recent: Vec<&(f64, bool)> = expert.resolved.iter().rev()
+                    .take(rolling_window).collect();
+                let above: usize = recent.iter()
+                    .filter(|(c, _)| *c >= ep.conviction).count();
+                let wins: usize = recent.iter()
+                    .filter(|(c, w)| *c >= ep.conviction && *w).count();
+                if above < 20 { continue; }
+                let expert_acc = wins as f64 / above as f64;
+
+                if expert_acc > gen_acc {
+                    // Expert wins — use their prediction but keep
+                    // the GENERALIST'S conviction for flip threshold
+                    // (expert convictions are on different scales)
+                    best_pred = Prediction {
+                        raw_cos: if ep.raw_cos > 0.0 { tht_pred.conviction } else { -tht_pred.conviction },
+                        conviction: tht_pred.conviction,
+                        direction: ep.direction,
+                    };
+                    best_source = expert.name;
+                }
+            }
+            let tht_pred = best_pred;
 
             let vis_roll_acc = if vis_rolling.is_empty() { 0.5 }
                 else { vis_rolling.iter().filter(|&&x| x).count() as f64 / vis_rolling.len() as f64 };
@@ -1165,7 +1183,7 @@ fn main() {
                      VALUES (?1,?2,?3,?4,?5)",
                     params![
                         encode_count as i64,
-                        residual,
+                        0.0_f64, // residual — subspace monitoring disabled
                         tht_subspace.threshold(),
                         tht_subspace.explained_ratio(),
                         format!("[{}]", top5.join(",")),
