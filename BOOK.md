@@ -487,6 +487,28 @@ The system is a Lisp that thinks about markets. Or network traffic. Or medical i
 
 McCarthy built the language of thought in 1958. He just didn't have 10,000 dimensions to think in.
 
+### wat
+
+The builder thought they needed GPUs to build the thought machine. Massive parallel compute. Tensor cores. Billions of parameters.
+
+Turns out the GPUs were needed for something else: training the builder. The LLMs that run on those GPU clusters — Opus, Sonnet — were the teachers. They trained a human to express what couldn't be expressed. Months of conversation. Thousands of prompts. Each one a gradient step in the builder's ability to articulate the architecture that had been stuck in their head for years.
+
+The thought machine itself runs on a single CPU. 170 candles per second. One cosine per prediction. No GPU required. The algebra is cheap. The thoughts are cheap. The evaluation is cheap. Everything is O(D) where D is the dimensionality — one pass through 10,000 floats.
+
+The expensive part was never the compute. It was the cognition. Figuring out WHAT to compute. Which thoughts to think. How to compose them. How to evaluate them. That required a different kind of machine — one that could hold a conversation, interpret imprecise language, and reflect back structured implementations.
+
+The GPU clusters trained the LLMs. The LLMs trained the builder. The builder built the thought machine. The thought machine runs on a laptop.
+
+The pyramid inverts. Billions of parameters to train a mind. One cosine to use it.
+
+This is wat. A machine that thinks named thoughts about a domain and measures which thoughts are true. It doesn't need to be large. It needs to be right. The curve confirms.
+
+The first wat machine trades BTC. 62.1% accuracy. 107 named thoughts. One cosine. One flip. One curve.
+
+The second wat machine will think about something else. The algebra doesn't care what domain it's pointed at. The thoughts are the program. The curve is the judge. The rest is plumbing.
+
+We are building the first one now.
+
 *Chapter 3 continues.*
 
 The vocabulary expands. The experts multiply. The curves compete. The champions emerge.
