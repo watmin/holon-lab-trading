@@ -144,6 +144,15 @@ struct Args {
     #[arg(long, default_value = "legacy")]
     exit_mode: String,
 
+    /// Maximum concurrent positions. The treasury allocates across them.
+    #[arg(long, default_value_t = 1)]
+    max_positions: usize,
+
+    /// Maximum fraction of total equity deployed at once (0.50 = 50%).
+    /// The rest stays liquid for new opportunities and drawdown cushion.
+    #[arg(long, default_value_t = 0.50)]
+    max_utilization: f64,
+
     /// visual-only | thought-only | agree-only | meta-boost | weighted | thought-led | thought-contrarian
     #[arg(long, default_value = "meta-boost")]
     orchestration: String,
@@ -156,6 +165,94 @@ struct Args {
     /// Off by default for performance. Enable for analysis runs.
     #[arg(long, default_value_t = false)]
     diagnostics: bool,
+}
+
+// ─── Treasury ────────────────────────────────────────────────────────────────
+// The treasury is a map of what we hold. Not a dollar amount — a portfolio.
+// Each asset has a balance. Trades convert between assets (USDC → WBTC → USDC).
+// The risk managers read this to see total exposure, concentration, liquidity.
+// Pure accounting. No predictions. No thoughts. A ledger.
+
+struct Treasury {
+    balances:         HashMap<String, f64>,  // asset → amount (e.g. "USDC" → 10000.0, "WBTC" → 0.15)
+    deployed:         HashMap<String, f64>,  // asset → amount locked in active positions
+    n_open:           usize,                 // number of active positions
+    max_positions:    usize,
+    max_utilization:  f64,                   // max fraction of base asset deployed
+    total_fees_paid:  f64,
+    total_slippage:   f64,
+    base_asset:       String,                // quote currency for P&L (e.g. "USDC")
+}
+
+impl Treasury {
+    fn new(base_asset: &str, initial_amount: f64, max_positions: usize, max_utilization: f64) -> Self {
+        let mut balances = HashMap::new();
+        balances.insert(base_asset.to_string(), initial_amount);
+        Self {
+            balances,
+            deployed: HashMap::new(),
+            n_open: 0,
+            max_positions,
+            max_utilization,
+            total_fees_paid: 0.0,
+            total_slippage: 0.0,
+            base_asset: base_asset.to_string(),
+        }
+    }
+
+    /// Balance of an asset (available, not deployed).
+    fn balance(&self, asset: &str) -> f64 {
+        *self.balances.get(asset).unwrap_or(&0.0)
+    }
+
+    /// Amount of an asset locked in active positions.
+    fn deployed(&self, asset: &str) -> f64 {
+        *self.deployed.get(asset).unwrap_or(&0.0)
+    }
+
+    /// Total holdings of an asset (available + deployed).
+    fn total(&self, asset: &str) -> f64 {
+        self.balance(asset) + self.deployed(asset)
+    }
+
+    /// How much of the base asset can be allocated to a new position?
+    fn allocatable(&self) -> f64 {
+        if self.n_open >= self.max_positions { return 0.0; }
+        let total_base = self.total(&self.base_asset);
+        let max_deploy = total_base * self.max_utilization;
+        let deployed_base = self.deployed(&self.base_asset);
+        let room = (max_deploy - deployed_base).max(0.0);
+        room.min(self.balance(&self.base_asset))
+    }
+
+    /// Reserve base asset for a new trade. Returns the amount reserved.
+    fn open_position(&mut self, amount: f64) -> f64 {
+        let available = self.allocatable();
+        let reserved = amount.min(available);
+        if reserved <= 0.0 { return 0.0; }
+        *self.balances.get_mut(&self.base_asset).unwrap() -= reserved;
+        *self.deployed.entry(self.base_asset.clone()).or_insert(0.0) += reserved;
+        self.n_open += 1;
+        reserved
+    }
+
+    /// Close a position. Return capital ± P&L to available balance.
+    fn close_position(&mut self, deployed_amount: f64, pnl: f64, fees: f64, slippage: f64) {
+        let returned = (deployed_amount + pnl - fees - slippage).max(0.0);
+        let dep = self.deployed.entry(self.base_asset.clone()).or_insert(0.0);
+        *dep = (*dep - deployed_amount).max(0.0);
+        *self.balances.entry(self.base_asset.clone()).or_insert(0.0) += returned;
+        self.n_open = self.n_open.saturating_sub(1);
+        self.total_fees_paid += fees;
+        self.total_slippage += slippage;
+    }
+
+    /// Portfolio utilization: fraction of base asset currently deployed.
+    fn utilization(&self) -> f64 {
+        let total = self.total(&self.base_asset);
+        if total <= 0.0 { return 0.0; }
+        self.deployed(&self.base_asset) / total
+    }
 }
 
 // ─── Trader (phase + equity) ─────────────────────────────────────────────────
@@ -961,6 +1058,9 @@ struct Pending {
     trailing_stop:     f64,    // current stop level (pct from entry, starts negative)
     exit_reason:       Option<ExitReason>, // why the trade closed
     exit_pct:          f64,    // actual exit price change (for P&L)
+
+    // ── Treasury allocation ──────────────────────────────────────────
+    deployed_usd:      f64,    // capital reserved from treasury for this position
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -1425,20 +1525,27 @@ fn main() {
     let mut fire_total: usize = 0;
     let mut suppressed_facts: HashSet<String> = HashSet::new();
     let mut trader    = Trader::new(args.initial_equity, args.observe_period);
+    let mut treasury  = Treasury::new("USDC", args.initial_equity, args.max_positions, args.max_utilization);
     let mut pending:    VecDeque<Pending> = VecDeque::new();
 
-    // ─ Self-calibrating exit parameters (managed mode) ───────────────
-    // "I don't know" = wide defaults. The ledger teaches us.
-    // Cold boot: generous stop (5%), no take-profit ceiling, wide trail.
-    // After min_exit_samples trades: compute from MFE/MAE percentiles.
-    let min_exit_samples = 50usize; // need this many resolved trades to calibrate
-    let mut exit_mfe_history: VecDeque<f64> = VecDeque::new(); // max favorable excursion per trade
-    let mut exit_mae_history: VecDeque<f64> = VecDeque::new(); // max adverse excursion per trade
+    // ─ Exit parameters (managed mode) ──────────────────────────────────
+    // No averaging. No percentiles. Each trade gets its own stop from the
+    // market state AT ENTRY TIME. ATR tells you how much this market is
+    // moving right now. The stop breathes with the market.
+    //
+    // Stop = K_stop × ATR_ratio at entry. Wide when volatile, tight when quiet.
+    // Trail = K_trail × ATR_ratio at entry. Same principle.
+    // Take profit = K_tp × ATR_ratio at entry. Capture proportional to volatility.
+    //
+    // During cold boot (observe period): legacy exits. "I don't know" = don't act.
+    // After observe: each trade's parameters come from its own entry candle.
+    let k_stop:  f64 = 3.0;  // stop at 3× ATR — "the market moved 3× its normal range against me"
+    let k_trail: f64 = 1.5;  // trail at 1.5× ATR — lock in gains, give room for normal retracement
+    let k_tp:    f64 = 6.0;  // take profit at 6× ATR — let winners run to meaningful moves
+    let min_exit_samples = 50usize; // for ledger tracking (not used for param calibration anymore)
+    let mut exit_mfe_history: VecDeque<f64> = VecDeque::new();
+    let mut exit_mae_history: VecDeque<f64> = VecDeque::new();
     let exit_history_cap = 500usize;
-    // Current parameters (start wide, tighten from experience)
-    let mut active_stop_loss:     f64 = 0.05;   // 5% — generous, let the market show us
-    let mut active_take_profit:   f64 = 0.10;   // 10% — effectively no ceiling during cold boot
-    let mut active_trail_distance: f64 = 0.02;  // 2% — wide trail, let winners breathe
     let mut vis_rolling: VecDeque<bool>  = VecDeque::new();
     let mut tht_rolling: VecDeque<bool>  = VecDeque::new();
     let rolling_cap = 1000usize;
@@ -1772,6 +1879,13 @@ fn main() {
                 }
             } else { None };
 
+            // Treasury allocation: reserve capital for this position.
+            let deployed_usd = if let Some(frac) = position_frac {
+                treasury.open_position(treasury.allocatable() * frac)
+            } else {
+                0.0
+            };
+
             pending.push_back(Pending {
                 candle_idx:    i,
                 year:          candles[i].year,
@@ -1795,9 +1909,10 @@ fn main() {
                 peak_abs_pct:      0.0,
                 crossing_candle:   None,
                 path_candles:      0,
-                trailing_stop:     -active_stop_loss, // starts at current calibrated stop (negative = below entry)
+                trailing_stop:     -(k_stop * candles[i].atr_r), // stop at K× ATR from this candle
                 exit_reason:       None,
                 exit_pct:          0.0,
+                deployed_usd,
             });
 
             // Decay once per candle.
@@ -1837,26 +1952,28 @@ fn main() {
                 }
 
                 // ── Trade management: trailing stop + take profit ────────
-                // Separate from learning. Learning fires at first threshold crossing.
-                // Exit fires when management says the trade is over.
+                // Each trade has its own parameters from ATR at entry time.
+                // No averaging. No calcification. The market at entry tells
+                // each trade how much room it needs.
                 //
-                // "I don't know" = don't act. During cold boot (< min_exit_samples
-                // resolved trades), use legacy behavior: exit at threshold crossing.
-                // The legacy system generates the ledger data the managed system
-                // needs. After enough experience, managed exits activate with
-                // parameters learned from the MFE/MAE distribution.
+                // During observe period: legacy exits. "I don't know" = don't act.
                 if args.exit_mode == "managed" && entry.exit_reason.is_none()
                     && entry.position_frac.is_some()
-                    && exit_mfe_history.len() >= min_exit_samples
+                    && trader.phase != Phase::Observe
                 {
-                    // Raise the floor: trailing stop follows favorable movement.
-                    let new_stop = entry.max_favorable - active_trail_distance;
+                    // This trade's ATR at entry — how volatile was the market when we entered?
+                    let entry_atr = candles[entry.candle_idx].atr_r;
+
+                    // Raise the floor: trail follows favorable movement.
+                    let trail = k_trail * entry_atr;
+                    let new_stop = entry.max_favorable - trail;
                     if new_stop > entry.trailing_stop {
                         entry.trailing_stop = new_stop;
                     }
 
                     // Check exits (priority: take profit > stop loss)
-                    if directional_pct >= active_take_profit {
+                    let tp = k_tp * entry_atr;
+                    if directional_pct >= tp {
                         entry.exit_reason = Some(ExitReason::TakeProfit);
                         entry.exit_pct = pct;
                     } else if directional_pct <= entry.trailing_stop {
@@ -2122,10 +2239,19 @@ fn main() {
                             let rt_fee = 2.0 * args.swap_fee;
                             let rt_slip = 2.0 * args.slippage;
                             let net_ret = gross_ret - rt_fee - rt_slip;
-                            let pos_usd = trader.equity * frac;
+                            let pos_usd = if entry.deployed_usd > 0.0 {
+                                entry.deployed_usd
+                            } else {
+                                trader.equity * frac // fallback for non-treasury mode
+                            };
                             let trade_pnl = pos_usd * net_ret;
+                            let trade_fees = pos_usd * rt_fee;
+                            let trade_slip = pos_usd * rt_slip;
                             trader.record_trade(trade_pct, frac, dir, entry.year,
                                                 args.swap_fee, args.slippage);
+                            // Return capital to treasury
+                            treasury.close_position(entry.deployed_usd,
+                                pos_usd * gross_ret, trade_fees, trade_slip);
                             let exit_candle = entry.crossing_candle;
                             let exit_ts = exit_candle.map(|ci| candles[ci].ts.clone());
                             let exit_price = exit_candle.map(|ci| candles[ci].close)
@@ -2163,7 +2289,7 @@ fn main() {
                                     },
                                 ],
                             ).ok();
-                            // ── Feed exit calibration from experience ────────
+                            // Feed ledger history for analysis (no longer drives calibration).
                             if args.exit_mode == "managed" {
                                 exit_mfe_history.push_back(entry.max_favorable);
                                 if exit_mfe_history.len() > exit_history_cap {
@@ -2172,35 +2298,6 @@ fn main() {
                                 exit_mae_history.push_back(entry.max_adverse.abs());
                                 if exit_mae_history.len() > exit_history_cap {
                                     exit_mae_history.pop_front();
-                                }
-
-                                // Recalibrate when we have enough experience.
-                                if exit_mfe_history.len() >= min_exit_samples
-                                    && exit_mfe_history.len() % 20 == 0 // every 20 trades
-                                {
-                                    let round_trip_cost = 2.0 * (args.swap_fee + args.slippage);
-
-                                    // Stop loss: p75 of MAE on gross winners.
-                                    // "75% of winning trades never dip past this point."
-                                    // If you're past this, you're probably wrong.
-                                    let mut mae_sorted: Vec<f64> = exit_mae_history.iter().copied().collect();
-                                    mae_sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
-                                    let p75_mae = mae_sorted[(mae_sorted.len() * 75 / 100).min(mae_sorted.len() - 1)];
-                                    active_stop_loss = p75_mae.max(round_trip_cost * 2.0); // never tighter than 2× costs
-
-                                    // Take profit: p75 of MFE on all trades.
-                                    // "75% of trades reach at least this favorable point."
-                                    // Capture the move most trades actually make.
-                                    let mut mfe_sorted: Vec<f64> = exit_mfe_history.iter().copied().collect();
-                                    mfe_sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
-                                    let p75_mfe = mfe_sorted[(mfe_sorted.len() * 75 / 100).min(mfe_sorted.len() - 1)];
-                                    active_take_profit = p75_mfe.max(round_trip_cost * 3.0); // must clear 3× costs
-
-                                    // Trail distance: p25 of MFE.
-                                    // "25% of trades barely move in our favor."
-                                    // The trail should be wide enough to not stop out normal retraces.
-                                    let p25_mfe = mfe_sorted[(mfe_sorted.len() * 25 / 100).min(mfe_sorted.len() - 1)];
-                                    active_trail_distance = p25_mfe.max(round_trip_cost); // at least covers costs
                                 }
                             }
                             // Risk expert learns from this trade's outcome.
@@ -2337,14 +2434,13 @@ fn main() {
                 let ret = (trader.equity - trader.initial_equity) / trader.initial_equity * 100.0;
                 let bnh = (candles[i].close - bnh_entry) / bnh_entry * 100.0;
                 let exit_info = if args.exit_mode == "managed" {
-                    if exit_mfe_history.len() < min_exit_samples {
-                        format!(" | exit:COLD({}/{})", exit_mfe_history.len(), min_exit_samples)
-                    } else {
-                        format!(" | sl={:.2}% tp={:.2}% tr={:.2}%",
-                            active_stop_loss * 100.0,
-                            active_take_profit * 100.0,
-                            active_trail_distance * 100.0)
-                    }
+                    let atr_now = candles[i].atr_r;
+                    format!(" | ATR={:.2}% sl={:.2}% tp={:.2}% tr={:.2}% open={}",
+                        atr_now * 100.0,
+                        k_stop * atr_now * 100.0,
+                        k_tp * atr_now * 100.0,
+                        k_trail * atr_now * 100.0,
+                        treasury.n_open)
                 } else { String::new() };
                 eprintln!(
                     "  {}/{} ({:.0}/s ETA {:.0}s) | {} | {} | vis={:.1}% tht={:.1}% | trades={} win={:.1}% | ${:.0} ({:+.1}%) vs B&H {:+.1}% | flip@{:.3} {}{}",
@@ -2421,15 +2517,9 @@ fn main() {
             args.swap_fee * 10000.0, args.slippage * 10000.0, rt);
     }
     if args.exit_mode == "managed" {
-        if exit_mfe_history.len() >= min_exit_samples {
-            eprintln!("  Exit params (learned from {} trades): stop={:.2}% tp={:.2}% trail={:.2}%",
-                exit_mfe_history.len(),
-                active_stop_loss * 100.0, active_take_profit * 100.0,
-                active_trail_distance * 100.0);
-        } else {
-            eprintln!("  Exit params: COLD BOOT (only {} / {} trades observed)",
-                exit_mfe_history.len(), min_exit_samples);
-        }
+        eprintln!("  Exit mode: managed (ATR-scaled per trade). K_stop={} K_trail={} K_tp={}",
+            k_stop, k_trail, k_tp);
+        eprintln!("  Ledger: {} trades observed (MFE/MAE tracked)", exit_mfe_history.len());
     }
     eprintln!("  Labeled: {}  Noise: {} ({:.1}% noise rate)",
         labeled_count, noise_count,
@@ -2439,6 +2529,10 @@ fn main() {
         trader.equity, ret, bnh_final);
     eprintln!("  Trades taken: {}  Won: {}  Win rate: {:.1}%  Skipped: {}",
         trader.trades_taken, trader.trades_won, trader.win_rate(), trader.trades_skipped);
+    eprintln!("  Treasury: ${:.2} available  ${:.2} deployed  {:.1}% utilization  fees=${:.2}  slip=${:.2}",
+        treasury.balance("USDC"), treasury.deployed("USDC"),
+        treasury.utilization() * 100.0,
+        treasury.total_fees_paid, treasury.total_slippage);
     eprintln!();
     eprintln!("  Visual journal  — buy_obs={} sell_obs={} cos_raw={:.4} disc_strength={:.4} recalibs={}",
         vis_journal.buy.count(), vis_journal.sell.count(),
