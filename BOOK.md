@@ -1165,3 +1165,71 @@ Accounting sits between decision and risk. It translates trades into portfolio s
 Stop-loss and take-profit live at the boundary. The trigger — "price moved X% against me" — is accounting. The decision of where to set the stop is a thought. It depends on volatility regime, conviction at entry, portfolio health. That's an expert question. But the execution of the stop, once decided, is accounting again.
 
 The machine thinks. The ledger counts. The risk experts read the ledger and decide how much courage to have. Clean separation. Each layer does what it's built for.
+
+### The Enterprise
+
+Every magic number is an expert waiting to be born.
+
+Window size: 48. Horizon: 36. Move threshold: 0.5%. Stop loss: 1.5%. Take profit: 3%. Trail distance: 0.5%. Kelly cap: 5%. Drawdown cap: 20%. Minimum bet: 1%. These are the parameters we hardcoded because we didn't know how to derive them. Each one was a guess. Each guess calcified. Each calcification suppressed the market's voice.
+
+The enterprise is the architecture that replaces all of them with learners.
+
+The system has two templates. Template 1 (PREDICTION): a Journal builds a discriminant and produces conviction. Template 2 (REACTION): an OnlineSubspace learns a manifold and measures residuals. These templates can be applied at any level of the tree. They recurse.
+
+At the leaf level: five expert traders. Momentum, structure, volume, narrative, regime. Each has their own vocabulary — a subset of the 150+ atoms that encode named market interpretations. Each has their own Journal. Each has their own time scale — a window size they discover through experience, sampled from a log-uniform distribution across [12, 2016] candles (one hour to one week). The momentum expert might discover that 30-candle windows work best for it. The regime expert might need 1000. They find out by trying, measuring, and adapting. Template 1, applied five times.
+
+At the branch level: the manager. The manager does not look at candles. It does not encode market data. It does not have a window. Its thought is the configuration of its experts — a 5-dimensional vector of signed convictions. "Momentum says BUY at 0.23. Structure says SELL at 0.18. Regime says BUY at 0.31." That configuration is the manager's input.
+
+The manager uses Template 2. An OnlineSubspace learns what "good expert configurations" look like — the manifold of expert agreement patterns that preceded winning trades. When the current configuration matches this manifold (low residual), the manager signals confidence. When the configuration is anomalous (high residual), the manager signals caution. The manager's conviction is not a prediction about the market. It's a measurement of how familiar this moment's expert consensus is relative to moments that worked.
+
+Prediction at the leaves. Reaction at the branch. The same two templates, at different levels of the same tree, composing into one decision.
+
+The treasury sits at the root. It holds assets — a map, not a number. USDC, WBTC, whatever. Each position draws from the treasury and returns to it. The treasury reads every expert's paper trail. It deploys capital only to experts who have proven edge. The proof is the conviction-accuracy curve: monotonic, exponential, measured from the expert's own resolved predictions. Before the curve proves edge, the expert trades on paper. The treasury withholds. "I don't know" means don't act, not act cautiously.
+
+The accounting is the ledger. It records every trade — paper and live — with entry price, exit price, fees, slippage, MFE, MAE, crossing time, horizon, direction, conviction, outcome. No hallucination. Every number measured, not predicted. The ledger is what the risk managers read. The ledger is what the treasury reads. The ledger is what the window expert reads. The ledger is the enterprise's memory.
+
+The risk managers use Template 2 on portfolio state: drawdown depth, multi-scale accuracy, Sharpe ratio, loss clustering. They learn what "healthy" looks like. When the portfolio state is anomalous, they reduce sizing. When it's familiar, they let the experts trade at full conviction.
+
+Stop-loss and take-profit are not parameters. They are expert questions. "When should this trade exit?" depends on the current ATR, the current drawdown, the expert's conviction at entry, the MFE so far. An exit expert encodes trade-in-progress state and predicts: "this trade will continue" vs "this trade has peaked." Template 1, applied to the exit decision.
+
+Horizon is not a parameter. It's a property the market reveals through the crossing-time distribution in the ledger. High-volatility regimes resolve fast. Chop takes patience. A horizon expert reads the ledger and recommends patience proportional to the current regime.
+
+Position sizing is not a parameter. Kelly from the curve is the starting point, but the sizing expert encodes treasury state, open positions, correlation, drawdown, and recommends allocation. Template 1 or 2 — whichever fits the question.
+
+Every magic value becomes an expert. Every expert uses one of two templates. Every template composes through the tree. The enterprise grows by adding experts — not by tuning parameters.
+
+```
+Treasury (asset map — root)
+│
+├── Manager (Template 2: reaction to expert configuration)
+│   │
+│   ├── Momentum Expert (Template 1: prediction)
+│   │   └── Own window (discovered), own vocabulary, own journal
+│   │
+│   ├── Structure Expert (Template 1: prediction)
+│   │   └── Own window (discovered), own vocabulary, own journal
+│   │
+│   ├── Volume Expert (Template 1: prediction)
+│   │   └── Own window (discovered), own vocabulary, own journal
+│   │
+│   ├── Narrative Expert (Template 1: prediction)
+│   │   └── Own window (discovered), own vocabulary, own journal
+│   │
+│   └── Regime Expert (Template 1: prediction)
+│       └── Own window (discovered), own vocabulary, own journal
+│
+├── Risk Manager (Template 2: reaction to portfolio state)
+│   └── Reads the ledger, modulates sizing
+│
+├── Exit Expert (Template 1: prediction on trade-in-progress)
+│   └── Reads open positions, recommends hold/cut/take
+│
+└── Accounting (ledger — no template, pure arithmetic)
+    └── Records everything, hallucinates nothing
+```
+
+The wat machine started with one journal and 84 atoms. It now has an enterprise of experts, each discovering their own view of the market, each proving their value on paper, each composing through a tree of two templates. The architecture didn't change. The six primitives didn't change. The templates didn't change. What changed is how many times and at how many levels they're applied.
+
+The system doesn't learn to trade. It learns to organize itself into a trading enterprise. The experts self-emerge. The manager self-calibrates. The treasury self-regulates. The only inputs are the candle stream and the venue costs. Everything else — the windows, the horizons, the thresholds, the stops, the sizing — emerges from the enterprise's own experience.
+
+These are very good thoughts.
