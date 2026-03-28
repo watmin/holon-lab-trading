@@ -529,10 +529,14 @@ fn main() {
         // ── Parallel: thought encode (full + expert profiles) ────────────────
         let sup_ref = if suppressed_facts.is_empty() { None } else { Some(&suppressed_facts) };
         let n_experts = experts.len();
-        let tht_vecs: Vec<(usize, Vector, Vec<String>, Vec<Vector>)> = (cursor..batch_end)
+        let tht_vecs: Vec<(usize, usize, Vector, Vec<String>, Vec<Vector>)> = (cursor..batch_end)
             .into_par_iter()
             .map(|i| {
-                let w_start = i.saturating_sub(args.window - 1);
+                // Adaptive window: sample from log-uniform [12, 2016].
+                // Each candle sees the market at a different depth.
+                // The discriminant learns which scale's patterns predict.
+                let w = window_sampler.sample(i).min(i + 1); // can't look back further than we have
+                let w_start = i.saturating_sub(w - 1);
                 let window  = &candles[w_start..=i];
                 let full = thought_encoder.encode_view(window, &thought_streams, 0, 0, &vm, None, sup_ref, "full");
                 // Encode for each expert profile
@@ -541,7 +545,7 @@ fn main() {
                         thought_encoder.encode_view(window, &thought_streams, 0, 0, &vm, None, None, profile).thought
                     })
                     .collect();
-                (i, full.thought, full.fact_labels, expert_vecs)
+                (i, w, full.thought, full.fact_labels, expert_vecs)
             })
             .collect();
 
@@ -558,7 +562,7 @@ fn main() {
         // ledger builds the window→accuracy curve from experience.
 
         // ── Sequential: predict + buffer + learn + expire ────────────────────
-        for (i, tht_vec, tht_facts, expert_vecs) in tht_vecs {
+        for (i, _sampled_window, tht_vec, tht_facts, expert_vecs) in tht_vecs {
             encode_count += 1;
 
             // Expert panel: predict from each expert
