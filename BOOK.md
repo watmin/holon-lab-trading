@@ -741,6 +741,68 @@ The user interface to the wat machine is the wat language. The implementation is
 
 These are the best thoughts.
 
+### Risk is a thought that changes the geometry
+
+Risk thoughts are about the TRADER, not the MARKET. They are computed from portfolio state, not candles. When bundled with market thoughts, they change the geometry of the prediction.
+
+```wat
+;; ── Drawdown ────────────────────────────────────────────────────
+;; "I'm in a 2.5% drawdown."
+(bind at (bind drawdown moderate))
+
+;; ── Streak ──────────────────────────────────────────────────────
+;; "I've won 7 in a row."
+(bind at (bind streak (bind winning long-streak)))
+
+;; The discriminant learns: "reversal signal + long winning streak"
+;; predicts differently than "reversal signal + long losing streak."
+;; Maybe the winning streak means our thoughts are good right now.
+;; Maybe it means we're due for reversion. The curve will say.
+
+;; ── Recent accuracy ─────────────────────────────────────────────
+;; "My recent predictions have been cold."
+(bind at (bind recent-accuracy cold))
+
+;; When bundled with a high-conviction market signal:
+;; Does "cold + high conviction" predict differently than
+;; "hot + high conviction"? The curve knows.
+
+;; ── Equity curve ────────────────────────────────────────────────
+;; "My equity curve is falling."
+(bind at (bind equity-curve falling))
+
+;; ── The full bundle ─────────────────────────────────────────────
+;; Every candle gets risk thoughts bundled with market thoughts:
+(bundle
+  ;; Market thoughts
+  (bind diverging (bind close up) (bind rsi down))
+  (bind at (bind chop chop-trending))
+  (bind at (bind td-count td-exhausted))
+
+  ;; Risk thoughts
+  (bind at (bind drawdown moderate))
+  (bind at (bind streak (bind winning long-streak)))
+  (bind at (bind recent-accuracy hot))
+  (bind at (bind equity-curve rising)))
+
+;; The discriminant sees ONE vector. Market + risk in superposition.
+;; The cosine finds the direction that separates wins from losses
+;; GIVEN THE FULL CONTEXT.
+;;
+;; "Reversal + trending + exhausted + moderate drawdown + winning
+;;  streak + hot accuracy + rising equity"
+;; is a SPECIFIC geometric direction. The curve says whether that
+;; specific combination predicts.
+;;
+;; "Should I be risky?" isn't a yes/no. It's a thought that
+;; composes with other thoughts. The composition has a conviction.
+;; The conviction has a curve. The curve says how risky to be.
+```
+
+Risk doesn't gate trades. Risk doesn't modify position sizes from outside. Risk enters the SAME bundle as market thoughts and participates in the SAME cosine. The discriminant learns the joint distribution of market state and portfolio state. The curve measures whether risk awareness improves prediction.
+
+A good risk thought makes the curve steeper — it helps the system distinguish high-accuracy moments from low-accuracy moments. A bad risk thought flattens it. Same six primitives. Same measurement. Same judgment.
+
 *Chapter 3 continues.*
 
 The vocabulary expands. The experts multiply. The curves compete. The champions emerge.

@@ -16,7 +16,7 @@ use std::time::Instant;
 use clap::Parser;
 use rayon::prelude::*;
 use rusqlite::{Connection, params};
-use holon::{VectorManager, Vector};
+use holon::{Primitives, VectorManager, Vector};
 use holon::memory::OnlineSubspace;
 
 use btc_walk::db::load_candles;
@@ -142,6 +142,7 @@ impl fmt::Display for Phase {
 struct Trader {
     equity:          f64,
     initial_equity:  f64,
+    peak_equity:     f64,
     phase:           Phase,
     observe_left:    usize,
     trades_taken:    usize,
@@ -160,6 +161,7 @@ impl Trader {
         Self {
             equity: initial_equity,
             initial_equity,
+            peak_equity: initial_equity,
             phase: Phase::Observe,
             observe_left: observe_period,
             trades_taken: 0,
@@ -232,6 +234,7 @@ impl Trader {
         let pnl = self.equity * frac * directional_return;
         let won = directional_return > 0.0;
         self.equity += pnl;
+        if self.equity > self.peak_equity { self.peak_equity = self.equity; }
         self.trades_taken += 1;
         if won { self.trades_won += 1; }
         self.rolling.push_back(won);
@@ -241,6 +244,77 @@ impl Trader {
         if won { ys.wins += 1; }
         ys.pnl += pnl;
         self.check_phase();
+    }
+
+    /// Encode portfolio state as risk thought atoms.
+    /// Returns (fact_vectors, labels) to bundle with market thoughts.
+    fn risk_facts(&self, vm: &VectorManager) -> (Vec<Vector>, Vec<String>) {
+        let mut facts = Vec::with_capacity(8);
+        let mut labels = Vec::with_capacity(8);
+
+        // Drawdown
+        let dd = if self.peak_equity > 0.0 {
+            (self.peak_equity - self.equity) / self.peak_equity
+        } else { 0.0 };
+        let dd_zone = if dd < 0.001 { "drawdown-at-peak" }
+            else if dd < 0.01 { "drawdown-shallow" }
+            else if dd < 0.03 { "drawdown-moderate" }
+            else { "drawdown-deep" };
+        let dd_vec = Primitives::bind(
+            &vm.get_vector("at"),
+            &Primitives::bind(&vm.get_vector("drawdown"), &vm.get_vector(dd_zone)),
+        );
+        facts.push(dd_vec);
+        labels.push(format!("(at drawdown {})", dd_zone));
+
+        // Streak
+        if !self.rolling.is_empty() {
+            let last = *self.rolling.back().unwrap();
+            let mut streak_len = 0usize;
+            for &outcome in self.rolling.iter().rev() {
+                if outcome == last { streak_len += 1; } else { break; }
+            }
+            let streak_dir = if last { "streak-winning" } else { "streak-losing" };
+            let streak_size = if streak_len >= 5 { "streak-long" } else { "streak-short" };
+            let s_vec = Primitives::bind(
+                &vm.get_vector("at"),
+                &Primitives::bind(
+                    &vm.get_vector("streak"),
+                    &Primitives::bind(&vm.get_vector(streak_dir), &vm.get_vector(streak_size)),
+                ),
+            );
+            facts.push(s_vec);
+            labels.push(format!("(at streak {} {})", streak_dir, streak_size));
+        }
+
+        // Recent accuracy
+        if self.rolling.len() >= 10 {
+            let recent_acc = self.rolling.iter().filter(|&&x| x).count() as f64
+                / self.rolling.len() as f64;
+            let acc_zone = if recent_acc > 0.60 { "accuracy-hot" }
+                else if recent_acc < 0.45 { "accuracy-cold" }
+                else { "accuracy-normal" };
+            let a_vec = Primitives::bind(
+                &vm.get_vector("at"),
+                &Primitives::bind(&vm.get_vector("recent-accuracy"), &vm.get_vector(acc_zone)),
+            );
+            facts.push(a_vec);
+            labels.push(format!("(at recent-accuracy {})", acc_zone));
+        }
+
+        // Equity curve direction (compare equity to initial)
+        let eq_pct = (self.equity - self.initial_equity) / self.initial_equity;
+        let eq_zone = if eq_pct > 0.01 { "equity-rising" }
+            else if eq_pct < -0.01 { "equity-falling" }
+            else { "equity-flat" };
+        let e_vec = Primitives::bind(
+            &vm.get_vector("at"),
+            &Primitives::bind(&vm.get_vector("equity-curve"), &vm.get_vector(eq_zone)),
+        );
+        facts.push(e_vec);
+        labels.push(format!("(at equity-curve {})", eq_zone));
+
+        (facts, labels)
     }
 
     fn tick_observe(&mut self) {
@@ -774,8 +848,19 @@ fn main() {
             let vis_vec = null_vec.clone(); // stub for Pending compatibility
             let vis_pred = Prediction::default(); // visual removed — thought-only
             // Dual thought prediction: blend slow + fast based on subspace residual.
-            let tht_slow_pred = tht_journal.predict(&tht_vec);
-            let tht_fast_pred = tht_fast.predict(&tht_vec);
+            // Bundle risk thoughts with market thoughts before prediction.
+            // The discriminant sees market + portfolio state in one vector.
+            let (risk_vecs, _risk_labels) = trader.risk_facts(&vm);
+            let tht_with_risk = if risk_vecs.is_empty() {
+                tht_vec.clone()
+            } else {
+                let mut all: Vec<&Vector> = vec![&tht_vec];
+                all.extend(risk_vecs.iter());
+                Primitives::bundle(&all)
+            };
+
+            let tht_slow_pred = tht_journal.predict(&tht_with_risk);
+            let tht_fast_pred = tht_fast.predict(&tht_with_risk);
 
             // Feed subspace (needs f64 input). Score before update.
             let tht_f64: Vec<f64> = tht_vec.data().iter().map(|&v| v as f64).collect();

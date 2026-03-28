@@ -275,6 +275,12 @@ const ZONE_ATOMS: &[&str] = &[
     "trending-geometry", "random-walk-geometry", "mean-reverting-geometry",
     "heavy-tails", "light-tails",
     "low-entropy-rate", "high-entropy-rate",
+    // Risk / portfolio state
+    "drawdown", "drawdown-shallow", "drawdown-moderate", "drawdown-deep", "drawdown-at-peak",
+    "streak", "streak-winning", "streak-losing", "streak-long", "streak-short",
+    "recent-accuracy", "accuracy-hot", "accuracy-cold", "accuracy-normal",
+    "equity-curve", "equity-rising", "equity-falling", "equity-flat",
+    "trade-frequency", "overtrading", "undertrading",
 ];
 const PREDICATE_ATOMS: &[&str] = &[
     "above", "below", "crosses-above", "crosses-below",
