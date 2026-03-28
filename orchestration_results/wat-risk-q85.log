@@ -7,3 +7,5 @@ trader3: visual+thought journals, discriminant prediction
   Run database: /home/watmin/work/holon/holon-lab-trading/orchestration_results/wat-risk-q85.db
 
   Walk-forward: 100000 candles from index 47...
+  10000/100000 (153/s ETA 587s) | 2019-02-05 | CONFIDENT | vis=0.0% tht=48.8% | trades=782 win=59.1% | $17335 (+73.3%) vs B&H -6.7% | flip@0.129 CALIBRATING
+  20000/100000 (126/s ETA 633s) | 2019-03-12 | CONFIDENT | vis=0.0% tht=46.6% | trades=1687 win=55.5% | $27304 (+173.0%) vs B&H +3.6% | flip@0.137 CALIBRATING

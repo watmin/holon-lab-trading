@@ -1232,6 +1232,7 @@ fn main() {
 
     // Risk scalar encoder — separate from thought encoder's scalar encoder
     let risk_scalar = holon::ScalarEncoder::new(args.dims);
+    let mut cached_risk_mult: f64 = 0.5;
 
     // ─ Expert panel: N journals with different vocabulary profiles ──────
     // Each expert thinks different thoughts about the same candles.
@@ -1610,29 +1611,28 @@ fn main() {
             // Position sizing: Kelly from the curve × drawdown cap.
             // The curve handles selectivity. The drawdown cap handles survival.
             // Nothing else. No graduated gate, no stability gate, no phase gate.
-            // Risk branch: five subspaces, each scoring its domain.
-            // The WORST residual ratio drives the multiplier.
-            // If ANY dimension is anomalous, scale down.
-            let branch_features = trader.risk_branch_wat(&vm, &risk_scalar);
-            let mut worst_ratio = 1.0_f64; // 1.0 = all healthy
-            let healthy = trader.is_healthy() && trader.trades_taken >= 20;
-            for (bi, branch) in risk_branches.iter_mut().enumerate() {
-                let features = &branch_features[bi];
-                if branch.subspace.n() >= 10 {
-                    let residual = branch.subspace.residual(features);
-                    let threshold = branch.subspace.threshold();
-                    let ratio = if residual < threshold { 1.0 }
-                        else { (threshold / residual).max(0.1) };
-                    worst_ratio = worst_ratio.min(ratio);
+            // Risk branch: compute only at recalib intervals (not every candle).
+            // Between recalibs, reuse the last risk_mult.
+            if encode_count % args.recalib_interval == 0 || encode_count < 100 {
+                let branch_features = trader.risk_branch_wat(&vm, &risk_scalar);
+                let mut worst_ratio = 1.0_f64;
+                let healthy = trader.is_healthy() && trader.trades_taken >= 20;
+                for (bi, branch) in risk_branches.iter_mut().enumerate() {
+                    let features = &branch_features[bi];
+                    if branch.subspace.n() >= 10 {
+                        let residual = branch.subspace.residual(features);
+                        let threshold = branch.subspace.threshold();
+                        let ratio = if residual < threshold { 1.0 }
+                            else { (threshold / residual).max(0.1) };
+                        worst_ratio = worst_ratio.min(ratio);
+                    }
+                    if healthy { branch.subspace.update(features); }
                 }
-                // Gated update: score FIRST, then learn if healthy
-                if healthy {
-                    branch.subspace.update(features);
-                }
+                cached_risk_mult = if risk_branches[0].subspace.n() >= 10 {
+                    worst_ratio
+                } else { 0.5 };
             }
-            let risk_mult = if risk_branches[0].subspace.n() >= 10 {
-                worst_ratio
-            } else { 0.5 }; // not enough data → cautious
+            let risk_mult = cached_risk_mult;
 
             // The flip zone gate stays — below the threshold, the direction
             // isn't flipped, so it's WRONG. Kelly can't fix wrong direction.
