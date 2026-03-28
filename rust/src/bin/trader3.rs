@@ -121,6 +121,12 @@ struct Args {
     #[arg(long, default_value = "off")]
     risk_gate: String,
 
+    /// Maximum acceptable drawdown (0.20 = 20%). The second economic input.
+    /// Combined with the conviction-accuracy curve, this determines position caps.
+    /// The system adjusts sizing to keep expected worst-case drawdown within this limit.
+    #[arg(long, default_value_t = 0.20)]
+    max_drawdown: f64,
+
     /// visual-only | thought-only | agree-only | meta-boost | weighted | thought-led | thought-contrarian
     #[arg(long, default_value = "meta-boost")]
     orchestration: String,
@@ -401,7 +407,7 @@ fn kelly_frac(
     if edge <= 0.0 { return None; }
     let half_kelly_risk = edge / 2.0;
     let position = half_kelly_risk / move_threshold;
-    Some((position.min(1.0), curve_a, curve_b))
+    Some((position, curve_a, curve_b))
 }
 
 // ─── Pending entry ───────────────────────────────────────────────────────────
@@ -1105,8 +1111,20 @@ fn main() {
                             let mt = if args.atr_multiplier > 0.0 {
                                 args.atr_multiplier * candles[i].atr_r
                             } else { args.move_threshold };
+                            // Dynamic position cap from max_drawdown.
+                            // Simple and direct: how much room do I have before
+                            // hitting max drawdown? Size so one loss doesn't breach it.
+                            let current_dd = if trader.peak_equity > 0.0 {
+                                (trader.peak_equity - trader.equity) / trader.peak_equity
+                            } else { 0.0 };
+                            let dd_room = (args.max_drawdown - current_dd).max(0.0);
+                            // One loss at position P costs P × move_threshold.
+                            // Keep room for at least 4 losses: P = dd_room / (4 × mt)
+                            let position_cap = (dd_room / (4.0 * mt)).min(1.0).max(0.0);
+
                             match kelly_frac(meta_conviction, &resolved_preds, 50, mt) {
                                 Some((frac, a, b)) => {
+                                    let frac = frac.min(position_cap);
                                     // Track curve parameters for stability detection
                                     if curve_a_history.is_empty()
                                         || curve_a_history.back() != Some(&a)
