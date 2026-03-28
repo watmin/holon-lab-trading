@@ -803,6 +803,46 @@ Risk doesn't gate trades. Risk doesn't modify position sizes from outside. Risk 
 
 A good risk thought makes the curve steeper — it helps the system distinguish high-accuracy moments from low-accuracy moments. A bad risk thought flattens it. Same six primitives. Same measurement. Same judgment.
 
+### One expert per signal type
+
+Don't bundle different kinds of signal into one vector. We proved this twice:
+
+1. Visual + thought bundled → worse than thought alone. (Chapter 1)
+2. Risk + market bundled → worse than market alone. (Chapter 3)
+
+The lesson: one vector can't point in two directions at once. A discriminant finds ONE linear direction. If you force market signal and risk signal into the same vector, the discriminant compromises between them and finds neither cleanly.
+
+Each signal type needs its own geometry. Its own discriminant. Its own curve. The orchestrator is the only place where different signal types meet — and it meets them as EVALUATED curves, not as raw vectors.
+
+```
+market expert  → curve A → conviction + expected accuracy
+risk expert    → curve B → conviction + expected accuracy
+regime expert  → curve C → conviction + expected accuracy
+orchestrator:  compose(curve_A, curve_B, curve_C) → action
+```
+
+The orchestrator doesn't do algebra on vectors. It does algebra on JUDGMENTS. Each expert has already collapsed its superposition into a conviction and an accuracy estimate. The orchestrator works with those scalars, not with 20,000-dimensional vectors.
+
+This is why it scales. Adding a new expert doesn't change the orchestrator's dimensionality. It adds one more (conviction, accuracy) pair to the composition. The composition is cheap — it's scalar arithmetic on curve outputs.
+
+### The enterprise
+
+There's no reason the orchestrator can't be stacked. An orchestrator is itself a wat machine — it takes inputs (expert judgments), develops a discriminant (which combinations of expert states predict outcomes), and produces a curve (which orchestration states are reliable).
+
+```
+Layer 0: atoms → thoughts
+Layer 1: thoughts → expert predictions (market, risk, regime, ...)
+Layer 2: expert predictions → orchestrator A (trading decisions)
+Layer 3: orchestrator A + orchestrator B → meta-orchestrator (portfolio allocation)
+Layer 4: meta-orchestrators → enterprise orchestrator (multi-asset, multi-strategy)
+```
+
+Each layer is a wat machine. Each layer has experts with curves. Each layer's orchestrator is itself an expert at the next layer up. Holons composing into holons.
+
+The enterprise is a tree of wat machines. The leaves think about markets. The branches think about which leaves to trust. The trunk thinks about which branches to allocate capital to. Every node is the same six primitives: atom, bind, bundle, cosine, journal, curve.
+
+A trading desk is a tree of experts. A hedge fund is a forest. The wat machine is the node. The curve is the evaluation. The orchestrator is the edge. Scale is composition.
+
 *Chapter 3 continues.*
 
 The vocabulary expands. The experts multiply. The curves compete. The champions emerge.
