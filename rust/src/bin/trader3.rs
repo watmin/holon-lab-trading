@@ -1045,21 +1045,25 @@ fn main() {
             };
 
             let position_frac = if meta_dir.is_some() {
-                match args.sizing.as_str() {
-                    "kelly" => {
-                        if trader.phase == Phase::Observe {
-                            None
-                        } else {
+                // Flip zone gate applies to ALL sizing modes.
+                if flip_threshold > 0.0 && meta_conviction < flip_threshold {
+                    trader.trades_skipped += 1;
+                    None
+                } else if trader.phase == Phase::Observe {
+                    None
+                } else {
+                    match args.sizing.as_str() {
+                        "kelly" => {
                             match kelly_frac(meta_conviction, &resolved_preds, 50) {
                                 Some(frac) => Some(frac),
                                 None => { trader.trades_skipped += 1; None }
                             }
                         }
-                    }
-                    _ => {
-                        match trader.position_frac(meta_conviction, args.min_conviction, flip_threshold) {
-                            Some(frac) => Some(frac),
-                            None => { trader.trades_skipped += 1; None }
+                        _ => {
+                            match trader.position_frac(meta_conviction, args.min_conviction, flip_threshold) {
+                                Some(frac) => Some(frac),
+                                None => { trader.trades_skipped += 1; None }
+                            }
                         }
                     }
                 }
