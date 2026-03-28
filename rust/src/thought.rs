@@ -281,6 +281,11 @@ const ZONE_ATOMS: &[&str] = &[
     "recent-accuracy", "accuracy-hot", "accuracy-cold", "accuracy-normal",
     "equity-curve", "equity-rising", "equity-falling", "equity-flat",
     "trade-frequency", "overtrading", "undertrading",
+    // Expert-state atoms (risk expert thinks about market experts)
+    "expert-confident", "expert-uncertain",
+    "expert-agreement", "experts-agree", "experts-disagree",
+    "market-conviction", "conviction-extreme", "conviction-moderate", "conviction-weak",
+    "trade-density", "density-high", "density-low", "density-normal",
 ];
 const PREDICATE_ATOMS: &[&str] = &[
     "above", "below", "crosses-above", "crosses-below",

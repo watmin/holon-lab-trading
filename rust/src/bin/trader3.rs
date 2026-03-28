@@ -258,9 +258,8 @@ impl Trader {
         self.check_phase();
     }
 
-    /// Encode portfolio state as risk thought atoms.
-    /// Returns (fact_vectors, labels) to bundle with market thoughts.
-    fn risk_facts(&self, vm: &VectorManager) -> (Vec<Vector>, Vec<String>) {
+    /// Encode portfolio state + expert state as risk thought atoms.
+    fn risk_facts(&self, vm: &VectorManager, expert_preds: Option<&[Prediction]>, generalist_pred: Option<&Prediction>, recent_trade_count: usize, candle_count: usize) -> (Vec<Vector>, Vec<String>) {
         let mut facts = Vec::with_capacity(8);
         let mut labels = Vec::with_capacity(8);
 
@@ -325,6 +324,58 @@ impl Trader {
         );
         facts.push(e_vec);
         labels.push(format!("(at equity-curve {})", eq_zone));
+
+        // Expert state: how are the market experts doing?
+        if let Some(gen) = generalist_pred {
+            let conv_zone = if gen.conviction > 0.20 { "conviction-extreme" }
+                else if gen.conviction > 0.12 { "conviction-moderate" }
+                else { "conviction-weak" };
+            let cv = Primitives::bind(
+                &vm.get_vector("at"),
+                &Primitives::bind(&vm.get_vector("market-conviction"), &vm.get_vector(conv_zone)),
+            );
+            facts.push(cv);
+            labels.push(format!("(at market-conviction {})", conv_zone));
+        }
+
+        if let Some(eps) = expert_preds {
+            // Expert agreement: do they agree on direction?
+            let dirs: Vec<Option<Outcome>> = eps.iter().map(|p| p.direction).collect();
+            let buy_count = dirs.iter().filter(|d| **d == Some(Outcome::Buy)).count();
+            let sell_count = dirs.iter().filter(|d| **d == Some(Outcome::Sell)).count();
+            let agree_zone = if buy_count >= 4 || sell_count >= 4 { "experts-agree" }
+                else { "experts-disagree" };
+            let ag = Primitives::bind(
+                &vm.get_vector("at"),
+                &Primitives::bind(&vm.get_vector("expert-agreement"), &vm.get_vector(agree_zone)),
+            );
+            facts.push(ag);
+            labels.push(format!("(at expert-agreement {})", agree_zone));
+
+            // Highest expert conviction
+            let max_conv = eps.iter().map(|p| p.conviction).fold(0.0_f64, f64::max);
+            let exp_zone = if max_conv > 0.15 { "expert-confident" } else { "expert-uncertain" };
+            let ec = Primitives::bind(
+                &vm.get_vector("at"),
+                &Primitives::bind(&vm.get_vector("expert-agreement"), &vm.get_vector(exp_zone)),
+            );
+            facts.push(ec);
+            labels.push(format!("(at expert-state {})", exp_zone));
+        }
+
+        // Trade density: am I overtrading?
+        if candle_count > 100 {
+            let density = self.trades_taken as f64 / candle_count as f64;
+            let den_zone = if density > 0.05 { "density-high" }
+                else if density < 0.01 { "density-low" }
+                else { "density-normal" };
+            let dv = Primitives::bind(
+                &vm.get_vector("at"),
+                &Primitives::bind(&vm.get_vector("trade-density"), &vm.get_vector(den_zone)),
+            );
+            facts.push(dv);
+            labels.push(format!("(at trade-density {})", den_zone));
+        }
 
         (facts, labels)
     }
@@ -1110,7 +1161,7 @@ fn main() {
             // The curve handles selectivity. The drawdown cap handles survival.
             // Nothing else. No graduated gate, no stability gate, no phase gate.
             // Risk expert: encode portfolio state, predict, get conviction.
-            let (risk_vecs, _risk_labels) = trader.risk_facts(&vm);
+            let (risk_vecs, _risk_labels) = trader.risk_facts(&vm, Some(&expert_preds), Some(&tht_pred), trader.trades_taken, encode_count);
             let risk_vec = if risk_vecs.is_empty() {
                 Vector::zeros(args.dims)
             } else {
@@ -1420,7 +1471,7 @@ fn main() {
                             // (We use current risk state as proxy — close enough since
                             // entries resolve within horizon=36 candles.)
                             {
-                                let (rv, _) = trader.risk_facts(&vm);
+                                let (rv, _) = trader.risk_facts(&vm, None, None, trader.trades_taken, encode_count);
                                 if !rv.is_empty() {
                                     let rvec = Primitives::bundle(&rv.iter().collect::<Vec<_>>());
                                     risk_journal.observe(&rvec, final_out, 1.0);
