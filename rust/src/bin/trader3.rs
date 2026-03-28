@@ -22,15 +22,13 @@ use holon::memory::OnlineSubspace;
 use btc_walk::db::load_candles;
 use btc_walk::journal::{Journal, Outcome, Prediction};
 use btc_walk::thought::{ThoughtEncoder, ThoughtResult, ThoughtVocab, IndicatorStreams};
-use btc_walk::viewport::{
-    render_viewport, build_viewport, build_null_template,
-    raster_encode, raster_encode_cached, VisualCache,
-};
+// Visual encoding removed — proven zero outcome clustering (cosine gap = 0.0004).
+// The visual raster is an artifact of Chapter 1. Charts don't predict; thoughts predict.
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const BATCH_SIZE: usize = 256;
-const THREADS: usize = 8;
+const THREADS: usize = 10;
 
 // ─── CLI ─────────────────────────────────────────────────────────────────────
 
@@ -539,13 +537,12 @@ fn main() {
                  "vg","vr","rb","ro","rn","ml","ms","mhg","mhr","dp","dm","ax","set_indicator"] {
         vm.get_vector(tok);
     }
-    let max_pos = args.window.max(args.px_rows * 4);
+    let max_pos = args.window;
     for p in 0..max_pos as i64 { vm.get_position_vector(p); }
 
     // ─ Visual encoding setup ─
-    let null_template = build_null_template(args.window, args.px_rows);
-    let null_vec = raster_encode(&vm, &null_template, &Vector::zeros(args.dims));
-    let visual_cache = VisualCache::new(&vm, args.window, args.px_rows);
+    // Visual encoding removed. Null vector kept for Pending struct compatibility.
+    let null_vec = Vector::zeros(args.dims);
 
     // ─ Thought encoding setup ─
     let thought_vocab   = ThoughtVocab::new(&vm);
@@ -555,7 +552,9 @@ fn main() {
     let thought_streams = IndicatorStreams::new(args.dims, args.window + 48);
 
     // ─ Named journals ─
-    let mut vis_journal = Journal::new("visual",  args.dims, args.recalib_interval);
+    // Visual journal removed — Chapter 1 artifact. See BOOK.md.
+    // Stub journal kept for DB logging compatibility (vis_cos/vis_pred columns).
+    let mut vis_journal = Journal::new("visual-stub", args.dims, args.recalib_interval);
     let mut tht_journal = Journal::new("thought", args.dims, args.recalib_interval);
 
     // ─ Visual pattern memory: auto-clustering engram groups ─────────────
@@ -744,17 +743,6 @@ fn main() {
         let batch_end = (cursor + BATCH_SIZE).min(end_idx);
         let _batch_len = batch_end - cursor;
 
-        // ── Parallel: visual encode ──────────────────────────────────────────
-        let vis_vecs: Vec<(usize, Vector)> = (cursor..batch_end)
-            .into_par_iter()
-            .map(|i| {
-                let panels = render_viewport(&candles, i, args.window, args.px_rows);
-                let vp     = build_viewport(&panels, args.window, args.px_rows);
-                let vec    = raster_encode_cached(&visual_cache, &vp, &null_vec);
-                (i, vec)
-            })
-            .collect();
-
         // ── Parallel: thought encode (full + expert profiles) ────────────────
         let sup_ref = if suppressed_facts.is_empty() { None } else { Some(&suppressed_facts) };
         let n_experts = experts.len();
@@ -775,7 +763,7 @@ fn main() {
             .collect();
 
         // ── Sequential: predict + buffer + learn + expire ────────────────────
-        for ((i, vis_vec), (_, tht_vec, tht_facts, expert_vecs)) in vis_vecs.into_iter().zip(tht_vecs) {
+        for (i, tht_vec, tht_facts, expert_vecs) in tht_vecs {
             encode_count += 1;
 
             // Expert panel: predict from each expert
@@ -783,7 +771,8 @@ fn main() {
                 .map(|(ei, vec)| experts[ei].journal.predict(vec))
                 .collect();
 
-            let vis_pred = vis_journal.predict(&vis_vec);
+            let vis_vec = null_vec.clone(); // stub for Pending compatibility
+            let vis_pred = Prediction::default(); // visual removed — thought-only
             // Dual thought prediction: blend slow + fast based on subspace residual.
             let tht_slow_pred = tht_journal.predict(&tht_vec);
             let tht_fast_pred = tht_fast.predict(&tht_vec);
