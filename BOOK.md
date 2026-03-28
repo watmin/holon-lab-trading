@@ -843,6 +843,37 @@ The enterprise is a tree of wat machines. The leaves think about markets. The br
 
 A trading desk is a tree of experts. A hedge fund is a forest. The wat machine is the node. The curve is the evaluation. The orchestrator is the edge. Scale is composition.
 
+### Two trees, one trunk
+
+```
+Market orchestrator:                Risk orchestrator:
+  momentum    → curve                 drawdown     → curve
+  structure   → curve                 streak       → curve
+  narrative   → curve                 equity-curve → curve
+  volume      → curve                 frequency    → curve
+  regime      → curve                 regime-fit   → curve
+  → max-by → direction + conviction   correlation  → curve
+                                      → max-by → risk conviction
+
+         ╲                          ╱
+          ╲                        ╱
+           trunk: sizing = compose(market_curve, risk_curve)
+```
+
+The market expert says WHAT. The risk expert says HOW MUCH.
+Both are trees of sub-experts. Both use the same six primitives.
+The trunk composes their evaluated curves into action.
+
+The regime-fit expert is the thought about thoughts: "are my market
+experts' curves steep or flat right now?" The correlation expert is
+the thought about agreement: "are orthogonal minds reaching the same
+conclusion?" Expert agreement from different vocabularies is a strong
+signal. Expert disagreement is uncertainty.
+
+Each leaf is a journal. Each branch is an orchestrator. Each
+orchestrator is itself an expert at the next layer. The tree grows
+as deep as the thoughts require. The curve judges every node.
+
 *Chapter 3 continues.*
 
 The vocabulary expands. The experts multiply. The curves compete. The champions emerge.

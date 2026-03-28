@@ -8,3 +8,10 @@ trader3: visual+thought journals, discriminant prediction
 
   Walk-forward: 100000 candles from index 47...
   10000/100000 (248/s ETA 364s) | 2019-02-05 | TENTATIVE | vis=0.0% tht=48.2% | trades=85 win=64.7% | $10008 (+0.1%) vs B&H -6.7% | flip@0.247 STABLE
+  20000/100000 (249/s ETA 321s) | 2019-03-12 | TENTATIVE | vis=0.0% tht=48.9% | trades=94 win=64.9% | $10009 (+0.1%) vs B&H +3.6% | flip@0.228 STABLE
+  30000/100000 (248/s ETA 282s) | 2019-04-16 | TENTATIVE | vis=0.0% tht=47.4% | trades=124 win=59.7% | $10005 (+0.0%) vs B&H +36.0% | flip@0.222 STABLE
+  40000/100000 (251/s ETA 239s) | 2019-05-20 | TENTATIVE | vis=0.0% tht=50.0% | trades=160 win=59.4% | $10006 (+0.1%) vs B&H +110.3% | flip@0.215 STABLE
+  50000/100000 (253/s ETA 198s) | 2019-06-24 | TENTATIVE | vis=0.0% tht=53.8% | trades=201 win=56.7% | $10005 (+0.1%) vs B&H +193.5% | flip@0.212 STABLE
+  60000/100000 (253/s ETA 158s) | 2019-07-29 | TENTATIVE | vis=0.0% tht=49.7% | trades=307 win=59.6% | $10022 (+0.2%) vs B&H +160.4% | flip@0.203 STABLE
+  70000/100000 (249/s ETA 121s) | 2019-09-01 | CONFIDENT | vis=0.0% tht=46.4% | trades=576 win=59.0% | $10052 (+0.5%) vs B&H +160.9% | flip@0.219 STABLE
+  80000/100000 (247/s ETA 81s) | 2019-10-06 | CONFIDENT | vis=0.0% tht=51.9% | trades=666 win=58.4% | $10061 (+0.6%) vs B&H +114.0% | flip@0.221 STABLE
