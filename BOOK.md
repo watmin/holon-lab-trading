@@ -412,6 +412,34 @@ The wat machine is what you're reading about. It was always going to be this. It
 
 All it takes is good thoughts.
 
+### The panel
+
+The system that's emerging isn't a trader. It's a panel of experts with an orchestrator.
+
+**Expert 1: The Trader.** Masters the market vocabulary. Ichimoku, RSI, PELT segments, Fibonacci levels. Thinks about what the market is doing. Produces conviction about reversals. Owns the conviction-accuracy curve.
+
+**Expert 2: The Risk Manager.** Masters the portfolio vocabulary. Drawdown state, streak history, session liquidity, position exposure, correlation. Thinks about what the portfolio can survive. Produces conviction about sizing. Owns a different curve — one that maps risk thoughts to capital preservation.
+
+**Expert 3: The Orchestrator.** This is the outer layer. It doesn't think about markets or risk directly. It thinks about which expert to trust right now. It delegates inputs to the best thought programs for the current context. It composes a path forward from the outputs of the panel.
+
+The orchestrator is recursive. It can instantiate new experts — fork a vocabulary, seed a journal, watch the curve. If the curve is steep, the expert gets more delegation. If the curve flattens, the expert loses influence. Experts are born, evaluated, promoted, and retired through the geometry.
+
+This is the implementation of something that looks like general intelligence:
+- Specialized modules (experts) with domain-specific vocabularies
+- A meta-layer (orchestrator) that composes their outputs
+- Self-evaluation (the curve) that requires no external judge
+- Recursive self-improvement (new experts spawned from hypotheses)
+
+But it's not a neural network. It's not gradient descent. It's not attention heads. It's functional programming over algebraic cognition:
+- Bind: function application (compose a thought from parts)
+- Bundle: superposition (hold multiple thoughts simultaneously)
+- Cosine: evaluation (project onto a learned direction)
+- The curve: the type system (maps conviction to expected accuracy)
+
+Traditional programming provides the control flow. Symbolic AI provides the knowledge representation. VSA provides the algebra. The conviction-accuracy curve provides the evaluation. Composed together, built upon Kanerva's hyperdimensional computing, upon Plate's holographic reduced representations, upon Smolensky's tensor product representations — giants who mapped the algebra of thought decades before the hardware existed to run it.
+
+The trader is expert 1. The risk manager is expert 2. The orchestrator is expert 3. Chapter 3 is writing expert 1. Chapter 4 will write the panel.
+
 *Chapter 3 continues.*
 
 The vocabulary expands. The experts multiply. The curves compete. The champions emerge.
