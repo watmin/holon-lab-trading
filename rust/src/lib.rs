@@ -1,4 +1,5 @@
 pub mod db;
+pub mod desk;
 pub mod journal;
 pub mod orchestration;
 pub mod portfolio;
