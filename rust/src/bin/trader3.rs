@@ -263,7 +263,6 @@ impl Trader {
         // Drawdown tracking
         let was_at_peak = self.equity >= self.peak_equity * 0.999;
         if self.equity > self.peak_equity {
-            // New peak — record completed drawdown if we were in one
             if self.dd_bottom_equity < self.peak_equity * 0.999 {
                 let dd_depth = (self.peak_equity - self.dd_bottom_equity) / self.peak_equity;
                 self.completed_drawdowns.push_back(dd_depth);
@@ -273,6 +272,10 @@ impl Trader {
             self.dd_bottom_equity = self.equity;
             self.trades_since_bottom = 0;
         }
+        // Rolling peak: decay toward current equity. The peak "forgets"
+        // old highs over time. After ~700 trades at a lower level, the peak
+        // has halved the gap. The cap reopens as the peak converges down.
+        self.peak_equity = self.peak_equity * 0.999 + self.equity * 0.001;
         if self.equity < self.dd_bottom_equity {
             self.dd_bottom_equity = self.equity;
             self.trades_since_bottom = 0;
