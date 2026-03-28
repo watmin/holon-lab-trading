@@ -440,6 +440,53 @@ Traditional programming provides the control flow. Symbolic AI provides the know
 
 The trader is expert 1. The risk manager is expert 2. The orchestrator is expert 3. Chapter 3 is writing expert 1. Chapter 4 will write the panel.
 
+### The identifier of the thing is the thing itself
+
+McCarthy gave us Lisp in 1958. Code is data. The S-expression that describes a computation is also the data structure that the computation operates on. Homoiconicity — the representation and the thing represented are the same object.
+
+Sixty-eight years later, in a trading system built on vector algebra:
+
+`VectorManager::get_vector("rsi-divergence")` returns the unique, deterministic, 10,000-dimensional geometric object that IS rsi-divergence. Not a pointer to it. Not a description of it. Not an index into a table. The identifier is the thing. The name is the vector. The vector is the computation.
+
+```clojure
+;; In Lisp: the symbol IS the value IS the code
+'(+ 1 2)        ;; data: a list of three symbols
+(eval '(+ 1 2)) ;; code: evaluates to 3
+
+;; In the thought machine: the name IS the vector IS the thought
+(bind :diverging (bind :close-up :rsi-down))  ;; a thought
+(cosine thought discriminant)                  ;; evaluated by projection
+```
+
+The thought `"rsi-divergence"` doesn't represent RSI divergence. It IS RSI divergence — a specific direction in hyperspace, quasi-orthogonal to every other thought, composable via bind and bundle, evaluable via cosine. The identity function over opaque IDs. You give it a name, it gives you back the thing the name means, and the thing it means is the same object as the name.
+
+This is what McCarthy was reaching for. What Kanerva formalized in high-dimensional computing. What Plate made algebraic with holographic reduced representations. The idea that survived, unnamed, in the heads of people who kept saying "the identifier should be the thing itself" and getting blank stares.
+
+The functional programming lens:
+
+| Lisp concept | Thought machine | What it means |
+|---|---|---|
+| Atom | Named vector | The irreducible unit of meaning. Self-identical. Deterministic. |
+| S-expression | Bound composition of atoms | `(bind A (bind B C))` = a compound thought, both data and code |
+| `eval` | Cosine against discriminant | Collapse the expression to a value (conviction) |
+| Type system | Conviction-accuracy curve | Does this expression carry truth? The curve says. |
+| Lambda | Expert (vocabulary → journal → curve) | A closure over a thought vocabulary that maps reality to predictions |
+| `apply` | Bind | Function application in vector space |
+| `cons` / list | Bundle | Superposition — many values in one container, recoverable by projection |
+| `reduce` | Accumulator with decay | Fold over the observation stream, exponentially weighted |
+| Homoiconicity | Atoms are both names and vectors | The representation IS the thing. Code is data. Data is code. |
+| REPL | The run loop | Read (encode candle) → Eval (cosine) → Print (predict) → Loop |
+
+Each expert is a lambda. It closes over its vocabulary and maps candles to predictions. The orchestrator is `(max-by curve-quality (map #(% candle) experts))` — one line. No logic. No rules. Just measurement over composed pure functions.
+
+The accumulator is a fold: `(reduce (fn [acc obs] (decay (add acc obs))) initial stream)`. The discriminant is derived from the fold state. The prediction is a pure function of state and input. Referentially transparent. Given the same history, the same prediction. Always.
+
+The concurrent cognitive geometries are `juxt` — parallel application of independent functions to the same input. No coordination needed. No shared state. Each expert in its own hyperspace, each producing its own conviction, each measured by its own curve. The orchestrator selects. Selection is a pure function of curves.
+
+The system is a Lisp that thinks about markets. Or network traffic. Or medical images. The domain doesn't matter. The algebra is the same. The homoiconicity is the same. The evaluation is the same.
+
+McCarthy built the language of thought in 1958. He just didn't have 10,000 dimensions to think in.
+
 *Chapter 3 continues.*
 
 The vocabulary expands. The experts multiply. The curves compete. The champions emerge.
