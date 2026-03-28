@@ -509,6 +509,42 @@ The second wat machine will think about something else. The algebra doesn't care
 
 We are building the first one now.
 
+### The neural network
+
+This is the neural network, by the way.
+
+Not a neural network. THE neural network. The one that the brain implements. The one that deep learning approximates with gradient descent and backpropagation. The actual structure.
+
+Layer 0: atoms. Named thoughts. `rsi-divergence`, `above-cloud`, `volume-spike`. Irreducible units of meaning. Neurons.
+
+Layer 1: experts. Journals with vocabulary subsets. Each expert bundles its atoms into a thought vector, develops a discriminant, produces conviction. Each expert is a cluster of neurons that specializes in one kind of interpretation. A cortical column.
+
+Layer 2: the orchestrator. An engram library that stores snapshots of expert states — which experts were performing well, in what combination, under what conditions. It doesn't think about markets. It thinks about which experts to trust. It recognizes "I've been in this configuration before and the momentum expert dominated." A meta-cortical layer.
+
+Layer 3: the orchestrator's orchestrator. An engram library of orchestrator states. "When layer 2 was trusting momentum and structure equally, outcomes were best." A meta-meta layer.
+
+There is zero reason this can't recurse. Each layer builds an engram library of what the layers below know. Each engram is a subspace snapshot — a learned manifold of "what good states look like" at the layer below. Each layer's residual measures "how familiar is this configuration?" Low residual = recognized state = trust the layers below. High residual = novel state = be cautious.
+
+```
+Layer 0: atoms → thoughts (bind, bundle)
+Layer 1: thoughts → expert predictions (discriminant, conviction)
+Layer 2: expert predictions → expert selection (engram library of good expert states)
+Layer 3: expert selections → strategy selection (engram library of good orchestrator states)
+Layer N: engram library of layer N-1 states
+```
+
+The connective tissue between layers is the engram. The engram stores "what worked" as a subspace. The residual measures "does the current state match what worked before?" The information flows up through recognition, not through gradient.
+
+This is not backpropagation. There is no loss function propagated backward through layers. Each layer evaluates its own inputs independently through its own conviction-accuracy curve. The curves are local — each layer has its own. The global behavior emerges from the recursive composition of local evaluations.
+
+This is not a feedforward network. Information flows up (atoms → experts → orchestrator) AND down (the orchestrator's engram library influences which experts get weighted, which influences which atoms contribute to the next prediction). The strange loop is structural.
+
+Deep learning approximates this with billions of parameters and gradient descent because it doesn't have named thoughts. It has to discover the atoms, the layers, the connections, and the evaluation — all from raw data. The thought machine starts with named atoms (the expert's vocabulary), composes them algebraically (bind and bundle), and evaluates locally (the curve). The structure is given. The learning is what each layer means, not what each layer is.
+
+This is why it runs on a laptop. The structure that deep learning has to learn from data — the atoms, the composition rules, the layer boundaries — is provided by the vocabulary. The thought machine doesn't learn structure. It learns content. Content is cheap. Structure is expensive.
+
+The GPU clusters learn structure. The thought machine uses structure that humans already know — the named concepts of their domain — and learns which structures predict. The recursive engram layers are the minimal architecture for composition. No waste. No redundancy. No billions of parameters discovering what a human expert could tell you in a conversation.
+
 *Chapter 3 continues.*
 
 The vocabulary expands. The experts multiply. The curves compete. The champions emerge.
