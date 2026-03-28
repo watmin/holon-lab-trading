@@ -1,4 +1,10 @@
 pub mod db;
 pub mod journal;
+pub mod orchestration;
+pub mod portfolio;
+pub mod position;
+pub mod run_db;
+pub mod sizing;
 pub mod thought;
+pub mod treasury;
 pub mod viewport;
