@@ -7,3 +7,6 @@ trader3: visual+thought journals, discriminant prediction
   Run database: /home/watmin/work/holon/holon-lab-trading/orchestration_results/never-quit-kelly-q85.db
 
   Walk-forward: 100000 candles from index 47...
+  10000/100000 (188/s ETA 477s) | 2019-02-05 | CONFIDENT | vis=0.0% tht=48.8% | trades=782 win=59.1% | $12406 (+24.1%) vs B&H -6.7% | flip@0.129 CALIBRATING
+  20000/100000 (157/s ETA 511s) | 2019-03-12 | CONFIDENT | vis=0.0% tht=46.6% | trades=1687 win=55.5% | $10435 (+4.3%) vs B&H +3.6% | flip@0.137 CALIBRATING
+  30000/100000 (127/s ETA 550s) | 2019-04-16 | TENTATIVE | vis=0.0% tht=52.7% | trades=2653 win=52.3% | $10451 (+4.5%) vs B&H +36.0% | flip@0.144 CALIBRATING

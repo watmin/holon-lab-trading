@@ -1736,18 +1736,10 @@ fn main() {
                                 let (rv, _) = trader.risk_facts(&vm, None, None, trader.trades_taken, encode_count);
                                 if !rv.is_empty() {
                                     let rvec = Primitives::bundle(&rv.iter().collect::<Vec<_>>());
-                                    // Risk labels: evaluate DECISION quality, not just outcome.
-                                    // Good decision = won, OR lost small (sized correctly).
-                                    // Bad decision = lost big (oversized for the outcome).
+                                    // Risk labels: Win → Buy, Lose → Sell. No filtering.
+                                    // The discriminant handles noise. We proved this.
                                     let won = dir == final_out;
-                                    let pos = entry.position_frac.unwrap_or(0.0);
-                                    let risk_label = if won {
-                                        Outcome::Buy  // winning trade = good decision regardless
-                                    } else if pos < 0.05 {
-                                        Outcome::Noise // small loss at small size = acceptable, don't learn
-                                    } else {
-                                        Outcome::Sell  // loss at significant size = bad decision
-                                    };
+                                    let risk_label = if won { Outcome::Buy } else { Outcome::Sell };
                                     risk_journal.observe(&rvec, risk_label, 1.0);
                                     // Track risk curve — DIRECT, no flip.
                                     // High conviction toward Buy = "good state" = scale up.
