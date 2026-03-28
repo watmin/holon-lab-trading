@@ -617,6 +617,98 @@ impl Trader {
         (facts, labels)
     }
 
+    /// Raw f64 risk features for the OnlineSubspace (not VSA atoms).
+    /// 15 continuous features capturing portfolio health.
+    fn risk_features(&self) -> Vec<f64> {
+        let dd = if self.peak_equity > 0.0 {
+            (self.peak_equity - self.equity) / self.peak_equity
+        } else { 0.0 };
+
+        // Win rates at 3 scales
+        let wr10 = self.win_rate_last_n(10);
+        let wr50 = self.win_rate_last_n(50);
+        let wr200 = self.win_rate_last_n(200);
+
+        // Equity trajectory (last 10 trade returns mean)
+        let recent_returns: Vec<f64> = self.trade_returns.iter().rev().take(10).copied().collect();
+        let ret_mean = if recent_returns.is_empty() { 0.0 }
+            else { recent_returns.iter().sum::<f64>() / recent_returns.len() as f64 };
+        let ret_var = if recent_returns.len() >= 2 {
+            recent_returns.iter().map(|r| (r - ret_mean).powi(2)).sum::<f64>() / recent_returns.len() as f64
+        } else { 0.0 };
+        let sharpe = if ret_var.sqrt() > 1e-10 { ret_mean / ret_var.sqrt() } else { 0.0 };
+
+        // Streak
+        let mut streak: f64 = 0.0;
+        if let Some(&last) = self.rolling.back() {
+            for &o in self.rolling.iter().rev() {
+                if o == last { streak += if last { 1.0 } else { -1.0 }; } else { break; }
+            }
+        }
+
+        // Loss clustering (autocorrelation lag-1)
+        let autocorr = if self.rolling.len() >= 20 {
+            let seq: Vec<f64> = self.rolling.iter().rev().take(50)
+                .map(|&w| if w { 1.0 } else { -1.0 }).collect();
+            let sm = seq.iter().sum::<f64>() / seq.len() as f64;
+            let sv = seq.iter().map(|v| (v - sm).powi(2)).sum::<f64>() / seq.len() as f64;
+            if sv > 1e-10 {
+                let mut cov = 0.0;
+                for i in 0..seq.len() - 1 { cov += (seq[i] - sm) * (seq[i+1] - sm); }
+                cov / ((seq.len() - 1) as f64 * sv)
+            } else { 0.0 }
+        } else { 0.0 };
+
+        // Trade density
+        let density = if self.trades_taken > 0 && !self.trade_timestamps.is_empty() {
+            let recent = self.trade_timestamps.iter().rev()
+                .take_while(|&&ts| ts + 200 > *self.trade_timestamps.back().unwrap_or(&0))
+                .count();
+            recent as f64 / 200.0
+        } else { 0.0 };
+
+        // Recovery progress
+        let recovery = if self.peak_equity > self.dd_bottom_equity && dd > 0.005 {
+            let total = self.peak_equity - self.dd_bottom_equity;
+            ((self.equity - self.dd_bottom_equity) / total).max(0.0).min(1.0)
+        } else { 1.0 }; // at peak = fully recovered
+
+        // Worst recent trade
+        let worst = self.trade_returns.iter().rev().take(20)
+            .copied().fold(0.0_f64, f64::min);
+
+        vec![
+            dd,             // 0: drawdown depth
+            wr10,           // 1: 10-trade win rate
+            wr50,           // 2: 50-trade win rate
+            wr200,          // 3: 200-trade win rate
+            wr10 - wr50,    // 4: accuracy trajectory (positive = improving)
+            ret_mean,       // 5: recent return mean
+            ret_var.sqrt(), // 6: recent return volatility
+            sharpe,         // 7: trade Sharpe
+            streak,         // 8: current streak (positive = winning, negative = losing)
+            autocorr,       // 9: loss clustering
+            density,        // 10: trade density
+            recovery,       // 11: recovery progress
+            worst,          // 12: worst recent trade
+            self.trades_since_bottom as f64 / 100.0, // 13: trades since dd bottom (normalized)
+            self.trades_taken as f64 / 1000.0,       // 14: total experience (normalized)
+        ]
+    }
+
+    /// Is the portfolio in a "healthy" state? (gates subspace updates)
+    fn is_healthy(&self) -> bool {
+        let dd = if self.peak_equity > 0.0 {
+            (self.peak_equity - self.equity) / self.peak_equity
+        } else { 0.0 };
+        let wr50 = self.win_rate_last_n(50);
+        let recent_returns: Vec<f64> = self.trade_returns.iter().rev().take(50).copied().collect();
+        let ret_mean = if recent_returns.is_empty() { 0.0 }
+            else { recent_returns.iter().sum::<f64>() / recent_returns.len() as f64 };
+
+        dd < 0.02 && wr50 > 0.55 && ret_mean > 0.0
+    }
+
     fn record_timestamp(&mut self, candle_idx: usize) {
         self.trade_timestamps.push_back(candle_idx);
         if self.trade_timestamps.len() > 500 { self.trade_timestamps.pop_front(); }
@@ -1023,11 +1115,15 @@ fn main() {
     let mut visual_groups: Vec<PatternGroup> = Vec::new();
     let group_cos_threshold = 0.35; // minimum cosine to join an existing group
 
-    // ─ Risk tree: mirrors market tree ───────────────────────────────────
-    // Five risk sub-experts + risk generalist. Each predicts Win/Lose
-    // from its focused risk vocabulary. Separate hyperspace from market.
-    let mut risk_generalist = Journal::new("risk-gen", args.dims, args.recalib_interval);
-    let mut risk_resolved: VecDeque<(f64, bool)> = VecDeque::new();
+    // ─ Risk as anomaly detection: learn what "healthy" looks like ───────
+    // OnlineSubspace learns the manifold of healthy portfolio states.
+    // Gated updates: only learn from genuinely healthy moments.
+    // Residual = distance from healthy. Low = trust Kelly. High = reduce.
+    // Same tool as DDoS detection. Bringing it home.
+    // Risk state is low-dimensional: ~15 continuous features.
+    // No VSA encoding needed — raw f64 features into OnlineSubspace.
+    let risk_feature_dim = 15;
+    let mut risk_subspace = OnlineSubspace::with_params(risk_feature_dim, 6, 2.0, 0.01, 3.5, 50);
 
     // ─ Expert panel: N journals with different vocabulary profiles ──────
     // Each expert thinks different thoughts about the same candles.
@@ -1406,30 +1502,26 @@ fn main() {
             // Position sizing: Kelly from the curve × drawdown cap.
             // The curve handles selectivity. The drawdown cap handles survival.
             // Nothing else. No graduated gate, no stability gate, no phase gate.
-            // Risk tree: encode ALL 25 risk facts, predict Win/Lose.
-            let (risk_vecs, _risk_labels) = trader.risk_facts(&vm, Some(&expert_preds), Some(&tht_pred), trader.trades_taken, encode_count);
-            let risk_vec = if risk_vecs.is_empty() {
-                Vector::zeros(args.dims)
+            // Risk as anomaly detection: is the portfolio state healthy?
+            let risk_features = trader.risk_features();
+            let risk_mult = if risk_subspace.n() >= 20 {
+                let residual = risk_subspace.residual(&risk_features);
+                let threshold = risk_subspace.threshold();
+                if residual < threshold {
+                    1.0 // healthy — on the manifold, full Kelly
+                } else {
+                    // Anomalous — scale down proportionally to distance
+                    (threshold / residual).max(0.1).min(1.0)
+                }
             } else {
-                let refs: Vec<&Vector> = risk_vecs.iter().collect();
-                Primitives::bundle(&refs)
+                0.5 // not enough data → cautious
             };
-            let risk_pred = risk_generalist.predict(&risk_vec);
-            risk_generalist.decay(args.decay);
 
-            // Risk multiplier: direct prediction, Win=Buy, Lose=Sell.
-            // Accuracy of risk expert at its conviction → multiplier.
-            // 60% risk accuracy → 1.2×. 40% → 0.8×. Center at 1.0 when 50%.
-            let risk_mult = if risk_resolved.len() >= 500 && risk_pred.direction.is_some() {
-                let above: usize = risk_resolved.iter()
-                    .filter(|(c, _)| *c >= risk_pred.conviction).count();
-                let wins: usize = risk_resolved.iter()
-                    .filter(|(c, w)| *c >= risk_pred.conviction && *w).count();
-                if above >= 20 {
-                    let risk_acc = wins as f64 / above as f64;
-                    (risk_acc * 2.0).max(0.2).min(2.0)
-                } else { 0.5 }
-            } else { 0.5 }; // "I don't know yet" → half sizing
+            // Gated update: only learn from healthy states.
+            // Score FIRST (above), then update if healthy.
+            if trader.is_healthy() && trader.trades_taken >= 20 {
+                risk_subspace.update(&risk_features);
+            }
 
             // The flip zone gate stays — below the threshold, the direction
             // isn't flipped, so it's WRONG. Kelly can't fix wrong direction.
@@ -1720,23 +1812,9 @@ fn main() {
                                 let (rv, _) = trader.risk_facts(&vm, None, None, trader.trades_taken, encode_count);
                                 if !rv.is_empty() {
                                     let rvec = Primitives::bundle(&rv.iter().collect::<Vec<_>>());
-                                    // Risk generalist learns Win/Lose from portfolio state
-                                    let (rv, _) = trader.risk_facts(&vm, None, None, trader.trades_taken, encode_count);
-                                    if !rv.is_empty() {
-                                        let rvec = Primitives::bundle(&rv.iter().collect::<Vec<_>>());
-                                        let won = dir == final_out;
-                                        let risk_label = if won { Outcome::Buy } else { Outcome::Sell };
-                                        risk_generalist.observe(&rvec, risk_label, 1.0);
-                                        // Track risk curve — direct, no flip
-                                        let rpred = risk_generalist.predict(&rvec);
-                                        if rpred.direction.is_some() {
-                                            let correct = rpred.direction == Some(risk_label);
-                                            risk_resolved.push_back((rpred.conviction, correct));
-                                            if risk_resolved.len() > conviction_window {
-                                                risk_resolved.pop_front();
-                                            }
-                                        }
-                                    }
+                                    // Risk subspace updated per-candle above (gated by is_healthy).
+                                    // No per-trade observation needed — the subspace learns
+                                    // the MANIFOLD of healthy states, not individual outcomes.
                                 }
                             }
 
