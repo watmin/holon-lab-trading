@@ -874,6 +874,29 @@ Each leaf is a journal. Each branch is an orchestrator. Each
 orchestrator is itself an expert at the next layer. The tree grows
 as deep as the thoughts require. The curve judges every node.
 
+### The memory that makes selection work
+
+Expert selection from rolling accuracy failed — 57.7% vs the generalist's 61.8%. The rolling window has 5-10 high-conviction data points per expert. That's noise, not signal.
+
+Engrams solve this by recognizing STATES, not counting outcomes.
+
+The expert's discriminant — the learned direction that separates buy from sell — has a specific shape at each recalibration. That shape is an eigenvalue signature. When the narrative expert is in a "good state" (the state it was in during its 90% accuracy epoch), the eigenvalues have a specific pattern.
+
+Store that pattern as an engram. Next time the narrative expert's discriminant develops a similar eigenvalue signature, the engram library recognizes it: "I've seen this shape before. It was good."
+
+```
+Rolling (amnesiac):
+  "Who won the last 200 trades?" → noisy, lagging
+
+Engram (memory):
+  "Does this expert's current state match a known good state?"
+  → pattern recognition from ALL history, immediate, no outcomes needed
+```
+
+The engram is the connective tissue between layers. The expert journal is layer 1 — it thinks about markets. The engram library is layer 2 — it thinks about which expert states are good. The orchestrator reads the engram library's residuals and selects the expert whose current state most closely matches its historically good states.
+
+This is the wat machine learning from its own history. Not through decay or rolling windows. Through recognition. Through memory. Through engrams.
+
 *Chapter 3 continues.*
 
 The vocabulary expands. The experts multiply. The curves compete. The champions emerge.

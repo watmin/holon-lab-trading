@@ -664,9 +664,17 @@ fn main() {
     // The orchestrator selects the expert with highest conviction × curve quality.
     struct Expert {
         name: &'static str,
-        profile: &'static str,  // matches ThoughtEncoder::EXPERT_PROFILES
+        profile: &'static str,
         journal: Journal,
-        resolved: VecDeque<(f64, bool)>,  // per-expert calibration curve
+        resolved: VecDeque<(f64, bool)>,
+        // Engram memory: subspace of "good discriminant states."
+        // When the current discriminant matches this subspace (low residual),
+        // this expert is likely in a good state.
+        good_state_subspace: OnlineSubspace,
+        // Track accuracy since last recalib for engram gating.
+        recalib_wins: u32,
+        recalib_total: u32,
+        last_recalib_count: usize,
     }
     let expert_profiles = ["momentum", "structure", "volume", "narrative", "regime"];
     let mut experts: Vec<Expert> = expert_profiles.iter().map(|&profile| {
@@ -675,6 +683,10 @@ fn main() {
             profile,
             journal: Journal::new(profile, args.dims, args.recalib_interval),
             resolved: VecDeque::new(),
+            good_state_subspace: OnlineSubspace::new(args.dims, 8),
+            recalib_wins: 0,
+            recalib_total: 0,
+            last_recalib_count: 0,
         }
     }).collect();
 
@@ -870,32 +882,34 @@ fn main() {
                 if above >= 20 { wins as f64 / above as f64 } else { 0.50 }
             };
 
-            // Each expert competes on ROLLING accuracy
-            for (ei, expert) in experts.iter().enumerate() {
-                if expert.resolved.len() < min_expert_resolved { continue; }
-                let ep = &expert_preds[ei];
-                if ep.conviction < 0.05 { continue; }
-
-                let recent: Vec<&(f64, bool)> = expert.resolved.iter().rev()
-                    .take(rolling_window).collect();
-                let above: usize = recent.iter()
-                    .filter(|(c, _)| *c >= ep.conviction).count();
-                let wins: usize = recent.iter()
-                    .filter(|(c, w)| *c >= ep.conviction && *w).count();
-                if above < 20 { continue; }
-                let expert_acc = wins as f64 / above as f64;
-
-                if expert_acc > gen_acc {
-                    // Expert wins — use their prediction but keep
-                    // the GENERALIST'S conviction for flip threshold
-                    // (expert convictions are on different scales)
-                    best_pred = Prediction {
-                        raw_cos: if ep.raw_cos > 0.0 { tht_pred.conviction } else { -tht_pred.conviction },
-                        conviction: tht_pred.conviction,
-                        direction: ep.direction,
-                    };
-                    best_source = expert.name;
+            // Each expert competes via ENGRAM MATCHING.
+            // "Does this expert's current discriminant match a known good state?"
+            let mut best_engram_match: Option<(usize, f64)> = None; // (expert_idx, residual)
+            for ei in 0..experts.len() {
+                if experts[ei].good_state_subspace.n() < 5 { continue; }
+                if expert_preds[ei].direction.is_none() { continue; }
+                let disc = match experts[ei].journal.discriminant() {
+                    Some(d) => d,
+                    None => continue,
+                };
+                let residual = experts[ei].good_state_subspace.residual(disc);
+                let threshold = experts[ei].good_state_subspace.threshold();
+                if residual < threshold {
+                    // Expert is in a recognized good state. Pick the best match.
+                    let normalized = residual / threshold; // 0 = perfect match, 1 = barely
+                    if best_engram_match.is_none() || normalized < best_engram_match.unwrap().1 {
+                        best_engram_match = Some((ei, normalized));
+                    }
                 }
+            }
+            if let Some((ei, _)) = best_engram_match {
+                let ep = &expert_preds[ei];
+                best_pred = Prediction {
+                    raw_cos: if ep.raw_cos > 0.0 { tht_pred.conviction } else { -tht_pred.conviction },
+                    conviction: tht_pred.conviction,
+                    direction: ep.direction,
+                };
+                best_source = experts[ei].name;
             }
             let tht_pred = best_pred;
 
@@ -1101,9 +1115,36 @@ fn main() {
                         vis_journal.observe(&entry.vis_vec, o, sw);
                         tht_journal.observe(&entry.tht_vec, o, sw);
                         tht_fast.observe(&entry.tht_vec, o, sw);
-                        // Expert panel: each expert observes and tracks its curve
+                        // Expert panel: each expert observes, tracks curve, and feeds engrams
                         for (ei, expert_vec) in entry.expert_vecs.iter().enumerate() {
                             experts[ei].journal.observe(expert_vec, o, sw);
+                            // Track accuracy since last recalib for engram gating
+                            if let Some(raw_dir) = entry.expert_preds[ei].direction {
+                                let flipped = match raw_dir {
+                                    Outcome::Buy => Outcome::Sell,
+                                    Outcome::Sell => Outcome::Buy,
+                                    Outcome::Noise => Outcome::Noise,
+                                };
+                                experts[ei].recalib_total += 1;
+                                if flipped == o { experts[ei].recalib_wins += 1; }
+                            }
+                            // When expert recalibrates: evaluate last period's accuracy.
+                            // If good (>55%), snapshot discriminant as a "good state" engram.
+                            if experts[ei].journal.recalib_count > experts[ei].last_recalib_count {
+                                experts[ei].last_recalib_count = experts[ei].journal.recalib_count;
+                                if experts[ei].recalib_total >= 20 {
+                                    let acc = experts[ei].recalib_wins as f64
+                                        / experts[ei].recalib_total as f64;
+                                    if acc > 0.55 {
+                                        if let Some(disc) = experts[ei].journal.discriminant() {
+                                            let disc_owned = disc.to_vec();
+                                            experts[ei].good_state_subspace.update(&disc_owned);
+                                        }
+                                    }
+                                }
+                                experts[ei].recalib_wins = 0;
+                                experts[ei].recalib_total = 0;
+                            }
                             if let Some(raw_dir) = entry.expert_preds[ei].direction {
                                 let flipped = match raw_dir {
                                     Outcome::Buy  => Outcome::Sell,
