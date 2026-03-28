@@ -571,6 +571,31 @@ The wat language is what you write when you name a technical trading concept and
 
 Lisp gave us AI as symbol manipulation. Wat gives us AI as thought geometry. Same lineage. Same homoiconicity. Different dimensionality.
 
+### Six primitives
+
+The wat language is not the trading vocabulary. The wat language is:
+
+```
+atom    — name a thought
+bind    — compose thoughts
+bundle  — superpose thoughts
+cosine  — measure a thought
+journal — learn from a stream of thoughts
+curve   — evaluate the quality of learned thoughts
+```
+
+Six primitives. That's the language. Everything else is userland.
+
+Ichimoku, RSI divergence, DeMark Sequential, Hurst Exponent, Shannon Entropy — these aren't the language. They're programs written in the language. A trader writes `(bind :diverging (bind :close-up :rsi-down))`. That's a wat program. The thought encoder is a wat compiler. The journal is the wat runtime. The curve is the type checker.
+
+Holon is the kernel. It provides the six primitives. The trader is userland — a domain-specific standard library of named thoughts composed using the kernel's algebra. The DDoS detector is different userland. Different standard library. Same six primitives. Same kernel.
+
+Rich Hickey built Clojure on a small set of immutable primitives and let users compose everything else. The wat machine follows the same philosophy: provide just enough for experts to express their domain, then get out of the way. The kernel doesn't know what RSI means. It knows what bind means. The expert brings the domain knowledge. The kernel brings the algebra. The curve judges the result.
+
+Growing the vocabulary — adding Ichimoku, Stochastic, entropy, fractal dimension — isn't growing the language. It's growing the standard library for one application. The language stays at six primitives. The kernel stays stable. The userland programs multiply.
+
+This is how you build something that generalizes without retraining. The kernel is domain-independent. The programs are domain-specific. New domain = new programs, same kernel. The algebra doesn't care what thoughts you think. It cares how they compose.
+
 *Chapter 3 continues.*
 
 The vocabulary expands. The experts multiply. The curves compete. The champions emerge.
