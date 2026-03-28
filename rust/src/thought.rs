@@ -281,11 +281,32 @@ const ZONE_ATOMS: &[&str] = &[
     "recent-accuracy", "accuracy-hot", "accuracy-cold", "accuracy-normal",
     "equity-curve", "equity-rising", "equity-falling", "equity-flat",
     "trade-frequency", "overtrading", "undertrading",
-    // Expert-state atoms (risk expert thinks about market experts)
+    // Expert-state atoms
     "expert-confident", "expert-uncertain",
     "expert-agreement", "experts-agree", "experts-disagree",
     "market-conviction", "conviction-extreme", "conviction-moderate", "conviction-weak",
     "trade-density", "density-high", "density-low", "density-normal",
+    // Drawdown dynamics (Category 1)
+    "dd-trivial", "dd-serious", "dd-extreme",
+    "dd-velocity", "dd-accelerating", "dd-decelerating", "dd-stable-dd", "dd-recovering",
+    "dd-duration", "dd-brief", "dd-medium-dur", "dd-extended", "dd-chronic",
+    "dd-historical", "dd-normal-range", "dd-worst-quartile", "dd-unprecedented",
+    // Win rate dynamics (Category 3)
+    "acc-10", "acc-50", "acc-200",
+    "acc-hot", "acc-warm", "acc-normal-acc", "acc-cool", "acc-cold",
+    "acc-trajectory", "acc-improving", "acc-declining", "acc-stable-acc",
+    "acc-divergence", "short-hot-long-cold", "short-cold-long-hot", "acc-aligned",
+    // Return volatility (Category 4)
+    "pnl-vol", "pnl-vol-low", "pnl-vol-medium", "pnl-vol-high", "pnl-vol-extreme",
+    "trade-sharpe", "sharpe-excellent", "sharpe-good", "sharpe-mediocre", "sharpe-negative",
+    "worst-trade", "worst-mild", "worst-moderate-wt", "worst-severe", "worst-catastrophic",
+    // Loss correlation (Category 9)
+    "loss-pattern", "losses-clustered", "losses-random", "losses-alternating",
+    "loss-density", "ld-sparse", "ld-normal", "ld-dense", "ld-overwhelming",
+    "consec-loss", "cl-none", "cl-short", "cl-medium", "cl-long",
+    // Recovery dynamics (Category 7)
+    "recovery-progress", "no-recovery", "early-recovery", "half-recovered", "nearly-recovered",
+    "recovery-quality", "recovery-solid", "recovery-fragile", "recovery-volatile",
 ];
 const PREDICATE_ATOMS: &[&str] = &[
     "above", "below", "crosses-above", "crosses-below",

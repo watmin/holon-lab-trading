@@ -163,6 +163,14 @@ struct Trader {
     rolling:         VecDeque<bool>,   // recent trade outcomes
     rolling_cap:     usize,
     by_year:         HashMap<i32, YearStats>,
+
+    // Risk vocabulary infrastructure
+    equity_at_trade:    VecDeque<f64>,   // equity after each trade (500)
+    trade_returns:      VecDeque<f64>,   // directional return per trade (500)
+    trade_timestamps:   VecDeque<usize>, // candle index at resolution (500)
+    dd_bottom_equity:   f64,             // deepest point of current drawdown
+    trades_since_bottom: usize,          // trades since drawdown bottom
+    completed_drawdowns: VecDeque<f64>,  // max depth of each completed dd (20)
 }
 
 #[derive(Default)]
@@ -182,6 +190,12 @@ impl Trader {
             rolling: VecDeque::new(),
             rolling_cap: 500,
             by_year: HashMap::new(),
+            equity_at_trade: VecDeque::new(),
+            trade_returns: VecDeque::new(),
+            trade_timestamps: VecDeque::new(),
+            dd_bottom_equity: initial_equity,
+            trades_since_bottom: 0,
+            completed_drawdowns: VecDeque::new(),
         }
     }
 
@@ -246,7 +260,30 @@ impl Trader {
         let pnl = self.equity * frac * directional_return;
         let won = directional_return > 0.0;
         self.equity += pnl;
-        if self.equity > self.peak_equity { self.peak_equity = self.equity; }
+        // Drawdown tracking
+        let was_at_peak = self.equity >= self.peak_equity * 0.999;
+        if self.equity > self.peak_equity {
+            // New peak — record completed drawdown if we were in one
+            if self.dd_bottom_equity < self.peak_equity * 0.999 {
+                let dd_depth = (self.peak_equity - self.dd_bottom_equity) / self.peak_equity;
+                self.completed_drawdowns.push_back(dd_depth);
+                if self.completed_drawdowns.len() > 20 { self.completed_drawdowns.pop_front(); }
+            }
+            self.peak_equity = self.equity;
+            self.dd_bottom_equity = self.equity;
+            self.trades_since_bottom = 0;
+        }
+        if self.equity < self.dd_bottom_equity {
+            self.dd_bottom_equity = self.equity;
+            self.trades_since_bottom = 0;
+        } else {
+            self.trades_since_bottom += 1;
+        }
+        // Trade history
+        self.equity_at_trade.push_back(self.equity);
+        if self.equity_at_trade.len() > 500 { self.equity_at_trade.pop_front(); }
+        self.trade_returns.push_back(directional_return);
+        if self.trade_returns.len() > 500 { self.trade_returns.pop_front(); }
         self.trades_taken += 1;
         if won { self.trades_won += 1; }
         self.rolling.push_back(won);
@@ -258,10 +295,11 @@ impl Trader {
         self.check_phase();
     }
 
-    /// Encode portfolio state + expert state as risk thought atoms.
+    /// Encode portfolio state as rich risk thoughts — 204 atoms, ~54 facts.
+    /// Separate hyperspace from market thoughts. Never bundled together.
     fn risk_facts(&self, vm: &VectorManager, expert_preds: Option<&[Prediction]>, generalist_pred: Option<&Prediction>, recent_trade_count: usize, candle_count: usize) -> (Vec<Vector>, Vec<String>) {
-        let mut facts = Vec::with_capacity(8);
-        let mut labels = Vec::with_capacity(8);
+        let mut facts = Vec::with_capacity(60);
+        let mut labels = Vec::with_capacity(60);
 
         // Drawdown
         let dd = if self.peak_equity > 0.0 {
@@ -325,6 +363,202 @@ impl Trader {
         facts.push(e_vec);
         labels.push(format!("(at equity-curve {})", eq_zone));
 
+        // ── Category 1: Drawdown dynamics (deep) ──────────────────────
+        // Velocity: is drawdown accelerating or decelerating?
+        if self.equity_at_trade.len() >= 5 {
+            let dd_now = dd;
+            let dd_5ago = if self.equity_at_trade.len() >= 5 {
+                let eq5 = self.equity_at_trade[self.equity_at_trade.len() - 5];
+                (self.peak_equity - eq5) / self.peak_equity
+            } else { 0.0 };
+            let vel_zone = if dd_now < 0.001 { "dd-recovering" }
+                else if dd_now > dd_5ago + 0.01 { "dd-accelerating" }
+                else if dd_now < dd_5ago - 0.005 { "dd-decelerating" }
+                else { "dd-stable-dd" };
+            let v = Primitives::bind(&vm.get_vector("at"),
+                &Primitives::bind(&vm.get_vector("dd-velocity"), &vm.get_vector(vel_zone)));
+            facts.push(v); labels.push(format!("(at dd-velocity {})", vel_zone));
+        }
+
+        // Duration: how many trades since peak?
+        let trades_since_peak = self.trades_taken.saturating_sub(
+            self.equity_at_trade.iter().enumerate()
+                .filter(|(_, &eq)| eq >= self.peak_equity * 0.999)
+                .map(|(i, _)| i).last().unwrap_or(0));
+        let dur_zone = if trades_since_peak < 10 { "dd-brief" }
+            else if trades_since_peak < 30 { "dd-medium-dur" }
+            else if trades_since_peak < 100 { "dd-extended" }
+            else { "dd-chronic" };
+        let dv = Primitives::bind(&vm.get_vector("at"),
+            &Primitives::bind(&vm.get_vector("dd-duration"), &vm.get_vector(dur_zone)));
+        facts.push(dv); labels.push(format!("(at dd-duration {})", dur_zone));
+
+        // Historical comparison
+        if !self.completed_drawdowns.is_empty() {
+            let mut sorted_dds: Vec<f64> = self.completed_drawdowns.iter().copied().collect();
+            sorted_dds.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            let median = sorted_dds[sorted_dds.len() / 2];
+            let max_dd = sorted_dds.last().copied().unwrap_or(0.0);
+            let hist_zone = if dd > max_dd && dd > 0.01 { "dd-unprecedented" }
+                else if dd > median { "dd-worst-quartile" }
+                else { "dd-normal-range" };
+            let hv = Primitives::bind(&vm.get_vector("at"),
+                &Primitives::bind(&vm.get_vector("dd-historical"), &vm.get_vector(hist_zone)));
+            facts.push(hv); labels.push(format!("(at dd-historical {})", hist_zone));
+        }
+
+        // ── Category 3: Win rate dynamics (multi-scale) ──────────────
+        if self.rolling.len() >= 10 {
+            let acc10 = self.win_rate_last_n(10);
+            let acc_zone = |r: f64| -> &str {
+                if r > 0.65 { "acc-hot" }
+                else if r > 0.57 { "acc-warm" }
+                else if r > 0.48 { "acc-normal-acc" }
+                else if r > 0.40 { "acc-cool" }
+                else { "acc-cold" }
+            };
+            let v10 = Primitives::bind(&vm.get_vector("at"),
+                &Primitives::bind(&vm.get_vector("acc-10"), &vm.get_vector(acc_zone(acc10))));
+            facts.push(v10); labels.push(format!("(at acc-10 {})", acc_zone(acc10)));
+
+            if self.rolling.len() >= 50 {
+                let acc50 = self.win_rate_last_n(50);
+                let v50 = Primitives::bind(&vm.get_vector("at"),
+                    &Primitives::bind(&vm.get_vector("acc-50"), &vm.get_vector(acc_zone(acc50))));
+                facts.push(v50); labels.push(format!("(at acc-50 {})", acc_zone(acc50)));
+
+                // Trajectory
+                let traj = if acc10 > acc50 + 0.08 { "acc-improving" }
+                    else if acc10 < acc50 - 0.08 { "acc-declining" }
+                    else { "acc-stable-acc" };
+                let tv = Primitives::bind(&vm.get_vector("at"),
+                    &Primitives::bind(&vm.get_vector("acc-trajectory"), &vm.get_vector(traj)));
+                facts.push(tv); labels.push(format!("(at acc-trajectory {})", traj));
+            }
+
+            if self.rolling.len() >= 200 {
+                let acc200 = self.win_rate_last_n(200);
+                let v200 = Primitives::bind(&vm.get_vector("at"),
+                    &Primitives::bind(&vm.get_vector("acc-200"), &vm.get_vector(acc_zone(acc200))));
+                facts.push(v200); labels.push(format!("(at acc-200 {})", acc_zone(acc200)));
+
+                // Divergence: short vs long term
+                let div = if acc10 > 0.60 && acc200 < 0.50 { "short-hot-long-cold" }
+                    else if acc10 < 0.45 && acc200 > 0.55 { "short-cold-long-hot" }
+                    else { "acc-aligned" };
+                let dv = Primitives::bind(&vm.get_vector("at"),
+                    &Primitives::bind(&vm.get_vector("acc-divergence"), &vm.get_vector(div)));
+                facts.push(dv); labels.push(format!("(at acc-divergence {})", div));
+            }
+        }
+
+        // ── Category 4: Return volatility ────────────────────────────
+        if self.trade_returns.len() >= 20 {
+            let returns: Vec<f64> = self.trade_returns.iter().rev().take(50).copied().collect();
+            let n = returns.len() as f64;
+            let mean = returns.iter().sum::<f64>() / n;
+            let var = returns.iter().map(|r| (r - mean).powi(2)).sum::<f64>() / n;
+            let vol = var.sqrt();
+
+            if vol > 1e-10 {
+                // Sharpe
+                let sharpe = mean / vol;
+                let sharpe_zone = if sharpe > 1.0 { "sharpe-excellent" }
+                    else if sharpe > 0.3 { "sharpe-good" }
+                    else if sharpe > 0.0 { "sharpe-mediocre" }
+                    else { "sharpe-negative" };
+                let sv = Primitives::bind(&vm.get_vector("at"),
+                    &Primitives::bind(&vm.get_vector("trade-sharpe"), &vm.get_vector(sharpe_zone)));
+                facts.push(sv); labels.push(format!("(at trade-sharpe {})", sharpe_zone));
+            }
+
+            // Worst trade
+            let worst = returns.iter().copied().fold(0.0_f64, f64::min);
+            let worst_zone = if worst > -0.003 { "worst-mild" }
+                else if worst > -0.005 { "worst-moderate-wt" }
+                else if worst > -0.01 { "worst-severe" }
+                else { "worst-catastrophic" };
+            let wv = Primitives::bind(&vm.get_vector("at"),
+                &Primitives::bind(&vm.get_vector("worst-trade"), &vm.get_vector(worst_zone)));
+            facts.push(wv); labels.push(format!("(at worst-trade {})", worst_zone));
+        }
+
+        // ── Category 9: Loss correlation ─────────────────────────────
+        if self.rolling.len() >= 20 {
+            // Loss density (last 20)
+            let losses_20 = self.rolling.iter().rev().take(20).filter(|&&x| !x).count();
+            let ld_zone = if losses_20 < 6 { "ld-sparse" }
+                else if losses_20 < 10 { "ld-normal" }
+                else if losses_20 < 14 { "ld-dense" }
+                else { "ld-overwhelming" };
+            let lv = Primitives::bind(&vm.get_vector("at"),
+                &Primitives::bind(&vm.get_vector("loss-density"), &vm.get_vector(ld_zone)));
+            facts.push(lv); labels.push(format!("(at loss-density {})", ld_zone));
+
+            // Consecutive losses
+            let mut consec = 0usize;
+            for &outcome in self.rolling.iter().rev() {
+                if !outcome { consec += 1; } else { break; }
+            }
+            let cl_zone = if consec == 0 { "cl-none" }
+                else if consec <= 3 { "cl-short" }
+                else if consec <= 7 { "cl-medium" }
+                else { "cl-long" };
+            let cv = Primitives::bind(&vm.get_vector("at"),
+                &Primitives::bind(&vm.get_vector("consec-loss"), &vm.get_vector(cl_zone)));
+            facts.push(cv); labels.push(format!("(at consec-loss {})", cl_zone));
+
+            // Loss clustering (autocorrelation of outcomes)
+            if self.rolling.len() >= 30 {
+                let seq: Vec<f64> = self.rolling.iter().rev().take(50)
+                    .map(|&w| if w { 1.0 } else { -1.0 }).collect();
+                let sm = seq.iter().sum::<f64>() / seq.len() as f64;
+                let sv = seq.iter().map(|v| (v - sm).powi(2)).sum::<f64>() / seq.len() as f64;
+                if sv > 1e-10 {
+                    let mut cov = 0.0_f64;
+                    for i in 0..seq.len() - 1 {
+                        cov += (seq[i] - sm) * (seq[i + 1] - sm);
+                    }
+                    cov /= (seq.len() - 1) as f64;
+                    let autocorr = cov / sv;
+                    let lp_zone = if autocorr > 0.2 { "losses-clustered" }
+                        else if autocorr < -0.2 { "losses-alternating" }
+                        else { "losses-random" };
+                    let lpv = Primitives::bind(&vm.get_vector("at"),
+                        &Primitives::bind(&vm.get_vector("loss-pattern"), &vm.get_vector(lp_zone)));
+                    facts.push(lpv); labels.push(format!("(at loss-pattern {})", lp_zone));
+                }
+            }
+        }
+
+        // ── Category 7: Recovery dynamics ────────────────────────────
+        if dd > 0.005 && self.dd_bottom_equity < self.peak_equity * 0.99 {
+            let total_dd = self.peak_equity - self.dd_bottom_equity;
+            let recovered = self.equity - self.dd_bottom_equity;
+            let pct = if total_dd > 0.0 { (recovered / total_dd).max(0.0) } else { 0.0 };
+            let rec_zone = if self.equity <= self.dd_bottom_equity { "no-recovery" }
+                else if pct < 0.30 { "early-recovery" }
+                else if pct < 0.70 { "half-recovered" }
+                else { "nearly-recovered" };
+            let rv = Primitives::bind(&vm.get_vector("at"),
+                &Primitives::bind(&vm.get_vector("recovery-progress"), &vm.get_vector(rec_zone)));
+            facts.push(rv); labels.push(format!("(at recovery-progress {})", rec_zone));
+
+            // Recovery quality
+            if self.trades_since_bottom >= 5 {
+                let recent_wr = self.rolling.iter().rev()
+                    .take(self.trades_since_bottom.min(50))
+                    .filter(|&&x| x).count() as f64
+                    / self.trades_since_bottom.min(50) as f64;
+                let qual = if recent_wr > 0.60 { "recovery-solid" }
+                    else if recent_wr > 0.50 { "recovery-fragile" }
+                    else { "recovery-volatile" };
+                let qv = Primitives::bind(&vm.get_vector("at"),
+                    &Primitives::bind(&vm.get_vector("recovery-quality"), &vm.get_vector(qual)));
+                facts.push(qv); labels.push(format!("(at recovery-quality {})", qual));
+            }
+        }
+
         // Expert state: how are the market experts doing?
         if let Some(gen) = generalist_pred {
             let conv_zone = if gen.conviction > 0.20 { "conviction-extreme" }
@@ -378,6 +612,17 @@ impl Trader {
         }
 
         (facts, labels)
+    }
+
+    fn record_timestamp(&mut self, candle_idx: usize) {
+        self.trade_timestamps.push_back(candle_idx);
+        if self.trade_timestamps.len() > 500 { self.trade_timestamps.pop_front(); }
+    }
+
+    fn win_rate_last_n(&self, n: usize) -> f64 {
+        let recent: Vec<&bool> = self.rolling.iter().rev().take(n).collect();
+        if recent.is_empty() { return 0.5; }
+        recent.iter().filter(|&&x| *x).count() as f64 / recent.len() as f64
     }
 
     fn tick_observe(&mut self) {
