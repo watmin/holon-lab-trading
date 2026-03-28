@@ -333,12 +333,15 @@ fn main() {
         name: &'static str,
         profile: &'static str,
         journal: Journal,
-        resolved: VecDeque<(f64, bool)>,
+        resolved: VecDeque<(f64, bool)>,  // (conviction, correct_after_flip)
         good_state_subspace: OnlineSubspace,
         recalib_wins: u32,
         recalib_total: u32,
         last_recalib_count: usize,
-        window_sampler: WindowSampler,  // each expert explores their own scale
+        window_sampler: WindowSampler,
+        // Per-expert flip: each expert discovers their own reversal threshold.
+        conviction_history: VecDeque<f64>,
+        flip_threshold: f64,
     }
     let expert_profiles = ["momentum", "structure", "volume", "narrative", "regime"];
     let mut experts: Vec<Expert> = expert_profiles.iter().enumerate().map(|(ei, &profile)| {
@@ -353,9 +356,11 @@ fn main() {
             last_recalib_count: 0,
             // Each expert gets a different seed: they explore independently.
             window_sampler: WindowSampler::new(
-                args.dims as u64 + ei as u64 * 7919, // prime offset per expert
+                args.dims as u64 + ei as u64 * 7919,
                 12, 2016,
             ),
+            conviction_history: VecDeque::new(),
+            flip_threshold: 0.0,
         }
     }).collect();
 
@@ -588,6 +593,9 @@ fn main() {
             encode_count += 1;
 
             // ── Expert predictions: each expert speaks ─────────────────
+            // No flip. The discriminant learns what predicts — including reversals.
+            // The flip was a hack for a single journal. The enterprise lets each
+            // expert's discriminant encode the full pattern naturally.
             let expert_preds: Vec<Prediction> = expert_vecs.iter().enumerate()
                 .map(|(ei, vec)| experts[ei].journal.predict(vec))
                 .collect();
@@ -746,17 +754,11 @@ fn main() {
                 }
             }
 
-            // Contrarian flip: high conviction = trend extreme = reversal likely.
-            // Threshold is the data-driven flip_quantile percentile of recent convictions.
-            let meta_dir = if flip_threshold > 0.0 && meta_conviction >= flip_threshold {
-                raw_meta_dir.map(|d| match d {
-                    Outcome::Buy  => Outcome::Sell,
-                    Outcome::Sell => Outcome::Buy,
-                    Outcome::Noise => Outcome::Noise,
-                })
-            } else {
-                raw_meta_dir
-            };
+            // No flip. The enterprise doesn't invert its own decisions.
+            // The experts' discriminants learn the full pattern — including reversals.
+            // The manager reads their opinions and decides whether to deploy.
+            // If reversal behavior emerges, it emerges from the experts' learning.
+            let meta_dir = raw_meta_dir;
 
             // Position sizing: Kelly from the curve × drawdown cap.
             // The curve handles selectivity. The drawdown cap handles survival.
@@ -991,14 +993,11 @@ fn main() {
                         for (ei, expert_vec) in entry.expert_vecs.iter().enumerate() {
                             experts[ei].journal.observe(expert_vec, o, sw);
                             // Track accuracy since last recalib for engram gating
-                            if let Some(raw_dir) = entry.expert_preds[ei].direction {
-                                let flipped = match raw_dir {
-                                    Outcome::Buy => Outcome::Sell,
-                                    Outcome::Sell => Outcome::Buy,
-                                    Outcome::Noise => Outcome::Noise,
-                                };
+                            if let Some(pred_dir) = entry.expert_preds[ei].direction {
+                                // No flip. Experts learn raw. Their discriminants encode
+                                // the full pattern including reversals naturally.
                                 experts[ei].recalib_total += 1;
-                                if flipped == o { experts[ei].recalib_wins += 1; }
+                                if pred_dir == o { experts[ei].recalib_wins += 1; }
                             }
                             // When expert recalibrates: evaluate last period's accuracy.
                             // If good (>55%), snapshot discriminant as a "good state" engram.
@@ -1017,17 +1016,28 @@ fn main() {
                                 experts[ei].recalib_wins = 0;
                                 experts[ei].recalib_total = 0;
                             }
-                            if let Some(raw_dir) = entry.expert_preds[ei].direction {
-                                let flipped = match raw_dir {
-                                    Outcome::Buy  => Outcome::Sell,
-                                    Outcome::Sell => Outcome::Buy,
-                                    Outcome::Noise => Outcome::Noise,
-                                };
-                                let correct = flipped == o;
+                            if let Some(pred_dir) = entry.expert_preds[ei].direction {
+                                // expert_preds are already flipped at prediction time.
+                                // Check directly against outcome.
+                                let correct = pred_dir == o;
                                 experts[ei].resolved.push_back(
                                     (entry.expert_preds[ei].conviction, correct));
                                 if experts[ei].resolved.len() > conviction_window {
                                     experts[ei].resolved.pop_front();
+                                }
+                                // Update per-expert conviction history + flip threshold
+                                experts[ei].conviction_history.push_back(entry.expert_preds[ei].conviction);
+                                if experts[ei].conviction_history.len() > 2000 {
+                                    experts[ei].conviction_history.pop_front();
+                                }
+                                if experts[ei].conviction_history.len() >= 200
+                                    && experts[ei].resolved.len() % 50 == 0
+                                {
+                                    let mut sorted: Vec<f64> = experts[ei].conviction_history.iter().copied().collect();
+                                    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                                    let idx = ((sorted.len() as f64 * args.flip_quantile) as usize)
+                                        .min(sorted.len() - 1);
+                                    experts[ei].flip_threshold = sorted[idx];
                                 }
                                 // Log for post-hoc analysis
                                 if args.diagnostics { run_db.execute(
@@ -1037,7 +1047,7 @@ fn main() {
                                         log_step,
                                         experts[ei].name,
                                         entry.expert_preds[ei].conviction,
-                                        raw_dir.to_string(),
+                                        pred_dir.to_string(),
                                         correct as i32,
                                     ],
                                 ).ok(); }
@@ -1191,18 +1201,11 @@ fn main() {
                         if tht_rolling.len() > rolling_cap { tht_rolling.pop_front(); }
                     }
 
-                    // Auto flip calibration: always evaluate the FLIPPED prediction
-                    // so the calibration curve measures contrarian accuracy regardless
-                    // of whether flipping is currently active.
-                    if let Some(raw_dir) = entry.raw_meta_dir {
-                        let flipped_dir = match raw_dir {
-                            Outcome::Buy  => Outcome::Sell,
-                            Outcome::Sell => Outcome::Buy,
-                            Outcome::Noise => Outcome::Noise,
-                        };
-                        let correct = flipped_dir == final_out;
+                    // Track manager's raw prediction accuracy. No flip.
+                    // The manager's resolved preds drive its own proof gate.
+                    if let Some(pred_dir) = entry.raw_meta_dir {
+                        let correct = pred_dir == final_out;
                         resolved_preds.push_back((entry.meta_conviction, correct));
-                        // Manager's own resolved predictions — for its own proof gate.
                         mgr_resolved.push_back((entry.meta_conviction, correct));
                         if mgr_resolved.len() > 5000 { mgr_resolved.pop_front(); }
                         if resolved_preds.len() > conviction_window {
