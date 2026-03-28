@@ -963,6 +963,33 @@ Years later, outside the building, the thoughts became code. The code became a s
 
 These are very good thoughts.
 
+### Two templates
+
+The wat machine has two kinds of experts. Both are leaves on the same tree. Both recurse. Both compose.
+
+**Template 1: PREDICTION.** "What will happen next?" The Journal. Discriminant → conviction → accuracy curve. Used for market direction — any binary question about the future. The market branch.
+
+**Template 2: REACTION.** "Does this look normal?" The OnlineSubspace. Learned manifold → residual → threshold. Used for risk health — any question about whether the current state is anomalous. The risk branch.
+
+```
+Market branch (prediction):              Risk branch (reaction):
+  momentum journal   → direction           drawdown subspace  → residual
+  structure journal  → direction           accuracy subspace  → residual
+  narrative journal  → direction           volatility subspace→ residual
+  generalist journal → direction           correlation subspace→ residual
+                                           panel subspace     → residual
+
+Trunk: direction × kelly(market curve) × risk multiplier(worst residual)
+```
+
+The tree doesn't care which template its leaves use. It cares about their outputs: a scalar confidence. A journal outputs conviction. A subspace outputs residual. Both are numbers. Both compose.
+
+The recursion: a meta-subspace learns what "healthy trunk output" looks like. A meta-journal predicts which branch will dominate next. Each layer uses whichever template fits its question. Prediction for the future. Reaction for the present. Both for the same tree.
+
+$10,000 → $35,843. +258%. One prediction template. One reaction template. Six primitives. The wat machine proved both templates in the same run.
+
+We are going to prove these thoughts further.
+
 *Chapter 3 continues.*
 
 The vocabulary expands. The experts multiply. The curves compete. The champions emerge.
