@@ -1233,3 +1233,72 @@ The wat machine started with one journal and 84 atoms. It now has an enterprise 
 The system doesn't learn to trade. It learns to organize itself into a trading enterprise. The experts self-emerge. The manager self-calibrates. The treasury self-regulates. The only inputs are the candle stream and the venue costs. Everything else — the windows, the horizons, the thresholds, the stops, the sizing — emerges from the enterprise's own experience.
 
 These are very good thoughts.
+
+### The fractal
+
+The enterprise is fractal. The same structure repeats at every level.
+
+A team has: specialists who see one thing deeply, a generalist who sees everything broadly, and a manager who reads them all and decides. The specialists use Template 1 — they predict. The manager uses Template 1 at a different level — it predicts which configurations of specialist opinions precede good outcomes. Template 2 (reaction) guards the edges — the risk team, the health monitors, the anomaly detectors.
+
+The market team: five specialists (momentum, structure, volume, narrative, regime), one generalist (all 150 facts), one manager (encodes their opinions as Holon vectors, learns which configurations are profitable).
+
+The risk team — when we build it — will have the same shape. Risk specialists (drawdown, accuracy, volatility, correlation), a risk generalist (all dimensions at once), a risk manager (learns which risk configurations require constraint).
+
+The treasury reads both managers. It deploys when the market manager says "this configuration is profitable" and the risk manager says "the portfolio is healthy." Two independent assessments. Two different questions. Same answer format: a scalar confidence.
+
+Different rewards at different levels:
+
+| Role | Question | Reward |
+|---|---|---|
+| Market specialist | Which direction? | Direction accuracy |
+| Market generalist | What does the team see? | Accuracy beyond any single expert |
+| Market manager | Deploy or not? | Net profitability |
+| Risk specialist | Is this dimension healthy? | Anomaly detection accuracy |
+| Risk manager | Constrain or not? | Capital preservation |
+| Treasury | Allocate where? | Total portfolio return |
+
+The same two templates. The same six primitives. Applied recursively through a tree of roles, each with its own purpose and its own definition of success. The architecture doesn't scale by adding parameters. It scales by adding roles.
+
+### Interfaces
+
+The enterprise has clean boundaries. Each component speaks one language and listens to one language. Nothing crosses boundaries except through defined interfaces.
+
+An expert takes a candle window and produces (direction, conviction). It doesn't know about the manager, the treasury, costs, or other experts. It thinks about the market through its vocabulary at its time scale. That's its entire world.
+
+The manager takes expert opinions and produces (deploy/withhold, conviction). It doesn't know about candles, windows, or vocabularies. It thinks about the pattern of expert agreement and disagreement. That's its entire world.
+
+The treasury takes swap signals and moves assets. It doesn't know about predictions or experts. It knows balances and fees. That's its entire world.
+
+The ledger records everything. It doesn't decide anything. It counts.
+
+This means any component can be replaced without touching the others. A new expert with a different vocabulary plugs in — the manager reads its opinion the same way. A new manager algorithm replaces the old one — the experts don't change. A new asset on the treasury — the experts don't know about it.
+
+The system grows by composition, not by modification. Each new capability is a new component behind an existing interface. The interfaces are stable. The implementations evolve.
+
+### The hold
+
+The system pretended trades were round trips. USDC → WBTC → USDC, paying 0.70% in fees each time, capturing a 0.50% move if lucky. Every trade started and ended in cash. The asset was a momentary vehicle, not a holding.
+
+This is not how real traders work. A real trader buys WBTC and holds it. The asset appreciates. The trader sells when the outlook changes. One swap in, one swap out. 0.35% per swap, not 0.70% per round trip. And between swaps, the WBTC captures the entire price movement — not just a 0.50% threshold crossing.
+
+BTC went from $3,500 to $87,000 over the dataset. A buy-and-hold strategy returned 2,400%. The enterprise doesn't need to beat buy-and-hold on every trade. It needs to be in WBTC during the rallies and in USDC during the crashes. The question isn't "will the next 36 candles go up 0.5%?" It's "should we be in the asset right now?"
+
+The hold model changes everything. The cost per decision drops from 0.70% to 0.35%. The position persists — appreciating or depreciating between decisions. The enterprise manages a portfolio of real assets, not a sequence of round-trip bets.
+
+The manager's question becomes: "given what my experts see, is this a moment to hold the asset or hold cash?" The answer comes from the expert configuration — the same Holon-encoded vector of specialist opinions. The reward is real: did the treasury's value grow while we held this position?
+
+The enterprise doesn't scalp. It allocates.
+
+### The flip revisited
+
+The conviction flip was the first breakthrough. The generalist saw trend extremes and we manually inverted its prediction — high conviction of "up" meant "the uptrend is exhausted, reverse." The flip produced 62% accuracy at high conviction. Real signal.
+
+Then we built the enterprise. Experts predict independently. The manager reads their opinions. We applied the flip at the manager level. It didn't work — 50% accuracy at all conviction levels. The flip is a market property (trends exhaust at extremes), not an organizational property (expert agreement doesn't exhaust).
+
+We removed the flip entirely. Let the discriminants learn raw. The data showed: the generalist's raw high-conviction predictions are 38% accurate — worse than random. Flipped, 62%. The discriminant IS learning trend extremes. The reversal is real. But the expert can't see its own conviction as a thought. It can't think "I'm very confident, therefore I'm probably wrong."
+
+The manager can. The manager sees the expert's signed conviction as an input. Over time, the manager's discriminant should learn: "when this expert is highly confident, the opposite happens." The flip emerges in the manager's geometry — not as a hack, but as a learned pattern over expert conviction magnitudes.
+
+The strange loop closes through the hierarchy. The expert can't think about its own thoughts. The manager thinks about the expert's thoughts. Meta-cognition lives one level up. The architecture must support this — and it does, because each level's vocabulary is the level below's output.
+
+The flip was never wrong. It was applied at the wrong level. At the expert level, it's a market insight. At the manager level, it's emergent — learned from observing that confident experts are reliably wrong about direction but reliably right about magnitude. The enterprise discovers this. We don't hardcode it.
