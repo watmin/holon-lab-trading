@@ -131,6 +131,20 @@ pub fn init_run_db(path: &str) -> Connection {
             vis_data      BLOB,     -- bipolar visual vector (i8 array)
             tht_data      BLOB      -- bipolar thought vector (i8 array)
         );
+
+        -- Desk predictions: every desk's paper trail.
+        -- One row per resolved prediction per desk.
+        CREATE TABLE IF NOT EXISTS desk_predictions (
+            desk          TEXT,       -- desk name (e.g. 'desk-48c')
+            candle_idx    INTEGER,    -- entry candle
+            conviction    REAL,       -- prediction conviction
+            direction     TEXT,       -- predicted direction (flipped)
+            outcome       TEXT,       -- actual: 'Buy' | 'Sell' | 'Noise'
+            correct       INTEGER,    -- 1 if flipped prediction matched outcome
+            gross_pct     REAL,       -- price change at threshold crossing
+            window        INTEGER,    -- desk window size
+            horizon       INTEGER     -- desk horizon size
+        );
     ").expect("failed to init run DB");
     db
 }

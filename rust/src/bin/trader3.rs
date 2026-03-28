@@ -162,6 +162,13 @@ struct Args {
     #[arg(long, default_value = "meta-boost")]
     orchestration: String,
 
+    /// Comma-separated desk configurations: "window:horizon,window:horizon,..."
+    /// Each desk runs its own thought encoder at its own time scale.
+    /// Example: "48:36,200:144,1000:576" for fast/medium/slow desks.
+    /// Empty string = single desk using --window and --horizon (legacy mode).
+    #[arg(long, default_value = "")]
+    desks: String,
+
     /// Output SQLite database for this run. Auto-generated if omitted.
     #[arg(long)]
     run_db: Option<PathBuf>,
@@ -228,11 +235,39 @@ fn main() {
     // Visual encoding removed. Null vector kept for Pending struct compatibility.
     let null_vec = Vector::zeros(args.dims);
 
-    // ─ Thought encoding setup ─
+    // ─ Multi-desk setup ──────────────────────────────────────────────────
+    // Each desk is a business unit with its own time scale.
+    // Parse --desks flag, or fall back to single desk from --window/--horizon.
+    use btc_walk::desk::{Desk, DeskConfig, DeskResolved};
+    let desk_configs: Vec<(usize, usize)> = if args.desks.is_empty() {
+        vec![(args.window, args.horizon)]
+    } else {
+        args.desks.split(',').map(|s| {
+            let parts: Vec<&str> = s.split(':').collect();
+            let w: usize = parts[0].parse().expect("bad desk window");
+            let h: usize = parts[1].parse().expect("bad desk horizon");
+            (w, h)
+        }).collect()
+    };
+    let all_profiles: Vec<&'static str> = vec!["momentum", "structure", "volume", "narrative", "regime"];
+    let mut desks: Vec<Desk> = desk_configs.iter().enumerate().map(|(di, &(w, h))| {
+        let name = format!("desk-{}c", w);
+        let config = DeskConfig {
+            name,
+            window: w,
+            horizon: h,
+            expert_profiles: all_profiles.clone(),
+        };
+        // Pre-warm position vectors for this desk's window size
+        for p in 0..w as i64 { vm.get_position_vector(p); }
+        Desk::new(config, args.dims, args.recalib_interval, &vm)
+    }).collect();
+    eprintln!("  Desks: {}", desks.iter().map(|d| format!("{}(w={},h={})", d.config.name, d.window(), d.horizon())).collect::<Vec<_>>().join(", "));
+
+    // ─ Primary desk thought encoding (legacy — uses args.window) ─
     let thought_vocab   = ThoughtVocab::new(&vm);
     let thought_encoder = ThoughtEncoder::new(thought_vocab);
     let (codebook_labels, codebook_vecs) = thought_encoder.fact_codebook();
-    // IndicatorStreams parameter is unused by encode_view (v10+), but kept for API compat.
     let thought_streams = IndicatorStreams::new(args.dims, args.window + 48);
 
     // ─ Named journals ─
@@ -503,6 +538,49 @@ fn main() {
                 (i, full.thought, full.fact_labels, expert_vecs)
             })
             .collect();
+
+        // ── Desk encoding: each desk encodes at its own time scale ────────
+        // Only the generalist "full" profile per desk — expert profiles are
+        // observational and too expensive to compute 6× per desk per candle.
+        // Parallel across candles within each desk.
+        for desk in &mut desks {
+            let dw = desk.window();
+            let desk_vecs: Vec<(usize, Vector, Vec<String>)> = (cursor..batch_end)
+                .into_par_iter()
+                .filter_map(|i| {
+                    if i < dw { return None; }
+                    let w_start = i.saturating_sub(dw - 1);
+                    let window = &candles[w_start..=i];
+                    let full = desk.thought_encoder.encode_view(
+                        window, &desk.thought_streams, 0, 0, &vm, None, None, "full",
+                    );
+                    Some((i, full.thought, full.fact_labels))
+                })
+                .collect();
+
+            for (i, thought, _facts) in desk_vecs {
+                let pred = desk.predict(&thought);
+                desk.buffer_prediction(i, thought, pred);
+                desk.encode_count += 1;
+            }
+            // Learn from threshold crossings, expire past horizon, log to DB
+            if let Some(&last_i) = (cursor..batch_end).collect::<Vec<_>>().last() {
+                let resolved = desk.learn_and_resolve(last_i, &candles, args.move_threshold, args.atr_multiplier);
+                for r in &resolved {
+                    run_db.execute(
+                        "INSERT INTO desk_predictions (desk,candle_idx,conviction,direction,outcome,correct,gross_pct,window,horizon)
+                         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+                        rusqlite::params![
+                            r.desk_name, r.candle_idx as i64, r.conviction,
+                            r.direction.map(|d| d.to_string()),
+                            r.outcome.to_string(), r.correct as i32,
+                            r.gross_pct * 100.0, r.window as i64, r.horizon as i64,
+                        ],
+                    ).ok();
+                }
+            }
+            desk.decay(args.decay);
+        }
 
         // ── Sequential: predict + buffer + learn + expire ────────────────────
         for (i, tht_vec, tht_facts, expert_vecs) in tht_vecs {
@@ -1329,8 +1407,14 @@ fn main() {
                         k_trail * atr_now * 100.0,
                         treasury.n_open)
                 } else { String::new() };
+                let desk_info = if desks.len() > 1 {
+                    let di: Vec<String> = desks.iter().map(|d| {
+                        format!("{}={:.1}%", d.config.name, d.rolling_accuracy(200) * 100.0)
+                    }).collect();
+                    format!(" | {}", di.join(" "))
+                } else { String::new() };
                 eprintln!(
-                    "  {}/{} ({:.0}/s ETA {:.0}s) | {} | {} | vis={:.1}% tht={:.1}% | trades={} win={:.1}% | ${:.0} ({:+.1}%) vs B&H {:+.1}% | flip@{:.3} {}{}",
+                    "  {}/{} ({:.0}/s ETA {:.0}s) | {} | {} | vis={:.1}% tht={:.1}% | trades={} win={:.1}% | ${:.0} ({:+.1}%) vs B&H {:+.1}% | flip@{:.3} {}{}{}",
                     encode_count, loop_count, rate, eta,
                     &candles[i].ts[..10],
                     trader.phase,
@@ -1343,6 +1427,7 @@ fn main() {
                     else if in_adaptation { "ADAPT" }
                     else { "STABLE" },
                     exit_info,
+                    desk_info,
                 );
             }
         }
@@ -1447,6 +1532,19 @@ fn main() {
                 expert.journal.last_disc_strength,
                 expert.journal.buy.count(),
                 expert.journal.sell.count());
+        }
+        eprintln!();
+    }
+
+    // Desk summary.
+    if desks.len() > 1 {
+        eprintln!("  Desks:");
+        for desk in &desks {
+            let acc = desk.rolling_accuracy(500) * 100.0;
+            let resolved = desk.resolved_preds.len();
+            eprintln!("    {}: acc={:.1}% resolved={} labeled={} noise={} recalibs={}",
+                desk.config.name, acc, resolved, desk.labeled_count, desk.noise_count,
+                desk.generalist.recalib_count);
         }
         eprintln!();
     }
