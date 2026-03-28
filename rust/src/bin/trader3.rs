@@ -962,33 +962,9 @@ fn main() {
                         vis_journal.observe(&entry.vis_vec, o, sw);
                         tht_journal.observe(&entry.tht_vec, o, sw);
                         tht_fast.observe(&entry.tht_vec, o, sw);
-                        // Manager learns: reconstruct its thought from expert + generalist at entry
-                        {
-                            let mut mgr_entry_facts: Vec<Vector> = entry.expert_preds.iter().enumerate()
-                                .map(|(ei, ep)| {
-                                    let cv = mgr_scalar.encode_log(ep.raw_cos.abs().max(1e-10));
-                                    let role = if ep.raw_cos >= 0.0 {
-                                        expert_atoms[ei].clone()
-                                    } else {
-                                        Primitives::permute(&expert_atoms[ei], 1)
-                                    };
-                                    Primitives::bind(&role, &cv)
-                                }).collect();
-                            // Generalist's voice at entry time
-                            {
-                                let gen_cos = entry.tht_pred.raw_cos;
-                                let cv = mgr_scalar.encode_log(gen_cos.abs().max(1e-10));
-                                let role = if gen_cos >= 0.0 {
-                                    generalist_atom.clone()
-                                } else {
-                                    Primitives::permute(&generalist_atom, 1)
-                                };
-                                mgr_entry_facts.push(Primitives::bind(&role, &cv));
-                            }
-                            let mrefs: Vec<&Vector> = mgr_entry_facts.iter().collect();
-                            let mgr_vec = Primitives::bundle(&mrefs);
-                            mgr_journal.observe(&mgr_vec, o, sw);
-                        }
+                        // Manager does NOT learn here. Manager learns Win/Lose at trade
+                        // resolution, not Buy/Sell at threshold crossing. The manager's
+                        // question is "should I deploy?" not "which direction?"
                         // Expert panel: each expert observes, tracks curve, and feeds engrams
                         for (ei, expert_vec) in entry.expert_vecs.iter().enumerate() {
                             experts[ei].journal.observe(expert_vec, o, sw);
@@ -1201,17 +1177,8 @@ fn main() {
                         if tht_rolling.len() > rolling_cap { tht_rolling.pop_front(); }
                     }
 
-                    // Track manager's raw prediction accuracy. No flip.
-                    // The manager's resolved preds drive its own proof gate.
-                    if let Some(pred_dir) = entry.raw_meta_dir {
-                        let correct = pred_dir == final_out;
-                        resolved_preds.push_back((entry.meta_conviction, correct));
-                        mgr_resolved.push_back((entry.meta_conviction, correct));
-                        if mgr_resolved.len() > 5000 { mgr_resolved.pop_front(); }
-                        if resolved_preds.len() > conviction_window {
-                            resolved_preds.pop_front();
-                        }
-                    }
+                    // Manager profitability tracking moved to trade resolution
+                    // block below where net_ret is computed.
                 }
 
                 // Every prediction goes to the ledger — hypothetical or real.
@@ -1253,6 +1220,40 @@ fn main() {
                             else { trader.equity * frac }
                         } else { 0.0 };
                         let trade_pnl = pos_usd * net_ret;
+
+                        // ── Manager learns Win/Lose at resolution ─────────
+                        // The manager's question: "was this configuration profitable?"
+                        // Win = net_ret > 0 (after costs). Lose = net_ret <= 0.
+                        // The manager learns from ALL predictions — paper and live.
+                        // The reversal pattern emerges: "experts confident + wrong direction
+                        // = Lose" → manager learns to withhold when it sees that config.
+                        {
+                            let mgr_label = if net_ret > 0.0 { Outcome::Buy } else { Outcome::Sell };
+                            // Buy = Win, Sell = Lose in the manager's space.
+                            let mut mgr_res_facts: Vec<Vector> = entry.expert_preds.iter().enumerate()
+                                .map(|(ei, ep)| {
+                                    let cv = mgr_scalar.encode_log(ep.raw_cos.abs().max(1e-10));
+                                    let role = if ep.raw_cos >= 0.0 {
+                                        expert_atoms[ei].clone()
+                                    } else {
+                                        Primitives::permute(&expert_atoms[ei], 1)
+                                    };
+                                    Primitives::bind(&role, &cv)
+                                }).collect();
+                            {
+                                let gen_cos = entry.tht_pred.raw_cos;
+                                let cv = mgr_scalar.encode_log(gen_cos.abs().max(1e-10));
+                                let role = if gen_cos >= 0.0 {
+                                    generalist_atom.clone()
+                                } else {
+                                    Primitives::permute(&generalist_atom, 1)
+                                };
+                                mgr_res_facts.push(Primitives::bind(&role, &cv));
+                            }
+                            let mrefs: Vec<&Vector> = mgr_res_facts.iter().collect();
+                            let mgr_vec = Primitives::bundle(&mrefs);
+                            mgr_journal.observe(&mgr_vec, mgr_label, 1.0);
+                        }
 
                         // ── Treasury: only moves money for live trades ───────
                         if is_live {
@@ -1318,6 +1319,17 @@ fn main() {
                         // Panel tracking (all predictions, not just live)
                         panel_recalib_total += 1;
                         if dir == final_out { panel_recalib_wins += 1; }
+
+                        // Manager profitability tracking: Win/Lose, not direction.
+                        if entry.raw_meta_dir.is_some() {
+                            let profitable = net_ret > 0.0;
+                            resolved_preds.push_back((entry.meta_conviction, profitable));
+                            mgr_resolved.push_back((entry.meta_conviction, profitable));
+                            if mgr_resolved.len() > 5000 { mgr_resolved.pop_front(); }
+                            if resolved_preds.len() > conviction_window {
+                                resolved_preds.pop_front();
+                            }
+                        }
 
                         // ── Risk/diagnostics: only for live trades ───────────
                         if is_live {
