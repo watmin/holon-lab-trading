@@ -1094,12 +1094,12 @@ fn main() {
                         (trader.peak_equity - trader.equity) / trader.peak_equity
                     } else { 0.0 };
                     let risk_mult = match args.risk_gate.as_str() {
-                        "binary" => if dd < 0.001 { 1.0 } else { 0.0 },
+                        "binary" => if dd < 0.02 { 1.0 } else { 0.0 },
                         "graduated" => {
-                            if dd < 0.001 { 1.0 }
-                            else if dd < 0.01 { 0.5 }
-                            else if dd < 0.03 { 0.25 }
-                            else { 0.0 }
+                            if dd < 0.02 { 1.0 }       // <2% = normal variance, full size
+                            else if dd < 0.05 { 0.5 }   // 2-5% = elevated, half size
+                            else if dd < 0.10 { 0.25 }  // 5-10% = stressed, quarter size
+                            else { 0.0 }                 // >10% = stop trading
                         }
                         _ => 1.0, // off
                     };
