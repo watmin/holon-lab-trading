@@ -696,6 +696,58 @@ impl Trader {
         ]
     }
 
+    /// Five risk feature vectors — one per subspace branch.
+    fn risk_branch_features(&self) -> [Vec<f64>; 5] {
+        let dd = if self.peak_equity > 0.0 { (self.peak_equity - self.equity) / self.peak_equity } else { 0.0 };
+        let dd_vel = if self.equity_at_trade.len() >= 5 {
+            let eq5 = self.equity_at_trade[self.equity_at_trade.len() - 5];
+            let dd5 = if self.peak_equity > 0.0 { (self.peak_equity - eq5) / self.peak_equity } else { 0.0 };
+            dd - dd5
+        } else { 0.0 };
+        let recovery = if self.peak_equity > self.dd_bottom_equity && dd > 0.005 {
+            ((self.equity - self.dd_bottom_equity) / (self.peak_equity - self.dd_bottom_equity)).max(0.0).min(1.0)
+        } else { 1.0 };
+        let hist_worst = self.completed_drawdowns.iter().copied().fold(0.0_f64, f64::max);
+        let dd_branch = vec![dd, dd_vel, self.trades_since_bottom as f64 / 100.0, recovery,
+            if hist_worst > 0.001 { dd / hist_worst } else { 0.0 }];
+
+        let wr10 = self.win_rate_last_n(10);
+        let wr50 = self.win_rate_last_n(50);
+        let wr200 = self.win_rate_last_n(200);
+        let acc_branch = vec![wr10, wr50, wr200, wr10 - wr50, wr10 - wr200];
+
+        let returns: Vec<f64> = self.trade_returns.iter().rev().take(50).copied().collect();
+        let vol_branch = if returns.len() >= 5 {
+            let n = returns.len() as f64;
+            let mean = returns.iter().sum::<f64>() / n;
+            let var = returns.iter().map(|r| (r - mean).powi(2)).sum::<f64>() / n;
+            let vol = var.sqrt();
+            let sharpe = if vol > 1e-10 { mean / vol } else { 0.0 };
+            let worst = returns.iter().copied().fold(0.0_f64, f64::min);
+            let best = returns.iter().copied().fold(0.0_f64, f64::max);
+            let skew = if vol > 1e-10 { returns.iter().map(|r| ((r - mean) / vol).powi(3)).sum::<f64>() / n } else { 0.0 };
+            vec![vol, sharpe, worst, best, skew]
+        } else { vec![0.0; 5] };
+
+        let corr_branch = if self.rolling.len() >= 20 {
+            let seq: Vec<f64> = self.rolling.iter().rev().take(50).map(|&w| if w { 1.0 } else { -1.0 }).collect();
+            let sm = seq.iter().sum::<f64>() / seq.len() as f64;
+            let sv = seq.iter().map(|v| (v - sm).powi(2)).sum::<f64>() / seq.len() as f64;
+            let ac = if sv > 1e-10 { let mut c = 0.0; for i in 0..seq.len()-1 { c += (seq[i]-sm)*(seq[i+1]-sm); } c / ((seq.len()-1) as f64 * sv) } else { 0.0 };
+            let ld = self.rolling.iter().rev().take(20).filter(|&&x| !x).count() as f64 / 20.0;
+            let mut consec = 0.0_f64; for &o in self.rolling.iter().rev() { if !o { consec += 1.0; } else { break; } }
+            vec![ac, ld, consec / 10.0, self.trades_taken as f64 / 1000.0, 0.0]
+        } else { vec![0.0; 5] };
+
+        let eq_pct = (self.equity - self.initial_equity) / self.initial_equity;
+        let mut streak = 0.0_f64;
+        if let Some(&last) = self.rolling.back() { for &o in self.rolling.iter().rev() { if o == last { streak += if last { 1.0 } else { -1.0 }; } else { break; } } }
+        let wr_all = if self.trades_taken > 0 { self.trades_won as f64 / self.trades_taken as f64 } else { 0.5 };
+        let panel_branch = vec![eq_pct, streak / 10.0, wr_all, self.trades_taken as f64 / 1000.0, (self.trades_taken as f64).sqrt() / 30.0];
+
+        [dd_branch, acc_branch, vol_branch, corr_branch, panel_branch]
+    }
+
     /// Is the portfolio in a "healthy" state? (gates subspace updates)
     fn is_healthy(&self) -> bool {
         let dd = if self.peak_equity > 0.0 {
@@ -1115,15 +1167,21 @@ fn main() {
     let mut visual_groups: Vec<PatternGroup> = Vec::new();
     let group_cos_threshold = 0.35; // minimum cosine to join an existing group
 
-    // ─ Risk as anomaly detection: learn what "healthy" looks like ───────
-    // OnlineSubspace learns the manifold of healthy portfolio states.
-    // Gated updates: only learn from genuinely healthy moments.
-    // Residual = distance from healthy. Low = trust Kelly. High = reduce.
-    // Same tool as DDoS detection. Bringing it home.
-    // Risk state is low-dimensional: ~15 continuous features.
-    // No VSA encoding needed — raw f64 features into OnlineSubspace.
-    let risk_feature_dim = 15;
-    let mut risk_subspace = OnlineSubspace::with_params(risk_feature_dim, 6, 2.0, 0.01, 3.5, 50);
+    // ─ Risk branch: five specialized subspaces ─────────────────────────
+    // Each measures health in its own domain. The worst residual drives
+    // the risk multiplier. Gated updates: only learn from healthy states.
+    // Template 2 (REACTION) applied five times.
+    struct RiskBranch {
+        name: &'static str,
+        subspace: OnlineSubspace,
+    }
+    let mut risk_branches: Vec<RiskBranch> = vec![
+        RiskBranch { name: "drawdown",    subspace: OnlineSubspace::with_params(5, 3, 2.0, 0.01, 3.5, 50) },
+        RiskBranch { name: "accuracy",    subspace: OnlineSubspace::with_params(5, 3, 2.0, 0.01, 3.5, 50) },
+        RiskBranch { name: "volatility",  subspace: OnlineSubspace::with_params(5, 3, 2.0, 0.01, 3.5, 50) },
+        RiskBranch { name: "correlation", subspace: OnlineSubspace::with_params(5, 3, 2.0, 0.01, 3.5, 50) },
+        RiskBranch { name: "panel",       subspace: OnlineSubspace::with_params(5, 3, 2.0, 0.01, 3.5, 50) },
+    ];
 
     // ─ Expert panel: N journals with different vocabulary profiles ──────
     // Each expert thinks different thoughts about the same candles.
@@ -1502,26 +1560,29 @@ fn main() {
             // Position sizing: Kelly from the curve × drawdown cap.
             // The curve handles selectivity. The drawdown cap handles survival.
             // Nothing else. No graduated gate, no stability gate, no phase gate.
-            // Risk as anomaly detection: is the portfolio state healthy?
-            let risk_features = trader.risk_features();
-            let risk_mult = if risk_subspace.n() >= 20 {
-                let residual = risk_subspace.residual(&risk_features);
-                let threshold = risk_subspace.threshold();
-                if residual < threshold {
-                    1.0 // healthy — on the manifold, full Kelly
-                } else {
-                    // Anomalous — scale down proportionally to distance
-                    (threshold / residual).max(0.1).min(1.0)
+            // Risk branch: five subspaces, each scoring its domain.
+            // The WORST residual ratio drives the multiplier.
+            // If ANY dimension is anomalous, scale down.
+            let branch_features = trader.risk_branch_features();
+            let mut worst_ratio = 1.0_f64; // 1.0 = all healthy
+            let healthy = trader.is_healthy() && trader.trades_taken >= 20;
+            for (bi, branch) in risk_branches.iter_mut().enumerate() {
+                let features = &branch_features[bi];
+                if branch.subspace.n() >= 10 {
+                    let residual = branch.subspace.residual(features);
+                    let threshold = branch.subspace.threshold();
+                    let ratio = if residual < threshold { 1.0 }
+                        else { (threshold / residual).max(0.1) };
+                    worst_ratio = worst_ratio.min(ratio);
                 }
-            } else {
-                0.5 // not enough data → cautious
-            };
-
-            // Gated update: only learn from healthy states.
-            // Score FIRST (above), then update if healthy.
-            if trader.is_healthy() && trader.trades_taken >= 20 {
-                risk_subspace.update(&risk_features);
+                // Gated update: score FIRST, then learn if healthy
+                if healthy {
+                    branch.subspace.update(features);
+                }
             }
+            let risk_mult = if risk_branches[0].subspace.n() >= 10 {
+                worst_ratio
+            } else { 0.5 }; // not enough data → cautious
 
             // The flip zone gate stays — below the threshold, the direction
             // isn't flipped, so it's WRONG. Kelly can't fix wrong direction.
