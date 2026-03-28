@@ -15,7 +15,7 @@ use std::time::Instant;
 use clap::Parser;
 use rayon::prelude::*;
 use rusqlite::params;
-use holon::{VectorManager, Vector};
+use holon::{Primitives, VectorManager, Vector};
 use holon::memory::OnlineSubspace;
 
 use btc_walk::db::load_candles;
@@ -282,6 +282,13 @@ fn main() {
     let mut vis_journal = Journal::new("visual-stub", args.dims, args.recalib_interval);
     let mut tht_journal = Journal::new("thought", args.dims, args.recalib_interval);
 
+    // ─ Manager journal: thinks in expert opinions, not candle data ────
+    // The manager's vocabulary = its experts. Each expert is an atom.
+    // The manager's thought = bundle(bind(expert_atom, scalar(conviction))).
+    // The manager's discriminant learns which expert configurations predict.
+    let mut mgr_journal = Journal::new("manager", args.dims, args.recalib_interval);
+    let mgr_scalar = holon::ScalarEncoder::new(args.dims);
+
     // ─ Visual pattern memory: auto-clustering engram groups ─────────────
     // Each group is an OnlineSubspace that learns a cluster of similar visual
     // patterns from winning flip-zone trades. New groups auto-discovered when
@@ -366,6 +373,10 @@ fn main() {
     // Layer 2: Panel state engram — learns the manifold of "good panel configurations."
     // Encodes each expert's (signed conviction) as a feature vector.
     // Dimensionality = number of experts. Fed after each recalib if accuracy was good.
+    // Manager's vocabulary = its experts. Each expert name is an atom.
+    let expert_atoms: Vec<Vector> = expert_profiles.iter()
+        .map(|&name| vm.get_vector(name))
+        .collect();
     let panel_dim = expert_profiles.len(); // experts only — manager doesn't encode
     let mut panel_engram = OnlineSubspace::with_params(panel_dim, 4, 2.0, 0.01, 3.5, 100);
     let mut panel_recalib_wins: u32 = 0;
@@ -586,14 +597,36 @@ fn main() {
             // But direction and conviction now come from the expert panel.
             let tht_pred = tht_journal.predict(&tht_vec);
 
-            // ── Manager: reads expert panel, decides ─────────────────
-            // The manager's thought = the configuration of expert opinions.
-            // Template 2 (REACTION): panel_engram measures familiarity.
-            // Direction: weighted vote of experts by their rolling accuracy.
-            // Conviction: average of voting experts' convictions.
+            // ── Manager: encodes expert panel as a thought, predicts ─────
+            // The manager's vocabulary = its experts. Each expert is an atom.
+            // bind(expert_atom, scalar(signed_conviction)) per expert.
+            // Bundle all → one vector in 20k-dim space.
+            // The manager's journal learns a discriminant over these vectors.
+            // Direction + conviction come from ONE cosine against ONE discriminant.
+            // Same machinery as every other journal, one level up.
+            // Manager encodes expert panel as Holon thought vector.
+            // Each expert's signed conviction is encoded as:
+            //   bind(expert_atom, scalar(|conviction|)) for BUY predictions
+            //   bind(permute(expert_atom), scalar(|conviction|)) for SELL predictions
+            // Permutation makes buy/sell structurally distinct in the hyperspace.
+            let mgr_facts: Vec<Vector> = expert_preds.iter().enumerate()
+                .map(|(ei, ep)| {
+                    let conviction_vec = mgr_scalar.encode_log(ep.raw_cos.abs().max(1e-10));
+                    let role = if ep.raw_cos >= 0.0 {
+                        expert_atoms[ei].clone()
+                    } else {
+                        Primitives::permute(&expert_atoms[ei], 1) // shift = SELL
+                    };
+                    Primitives::bind(&role, &conviction_vec)
+                })
+                .collect();
+            let mgr_refs: Vec<&Vector> = mgr_facts.iter().collect();
+            let mgr_thought = Primitives::bundle(&mgr_refs);
+            let mgr_pred = mgr_journal.predict(&mgr_thought);
+
+            // Panel state for engram (Template 2 — reaction layer)
             let panel_state: Vec<f64> = expert_preds.iter()
                 .map(|ep| ep.raw_cos).collect();
-
             let panel_familiar = if panel_engram.n() >= 10 {
                 let residual = panel_engram.residual(&panel_state);
                 let threshold = panel_engram.threshold();
@@ -602,46 +635,9 @@ fn main() {
                 false
             };
 
-            // Expert vote: each expert votes Buy or Sell.
-            // Weight by their rolling accuracy (experts with more resolved
-            // correct predictions get more say).
-            let mut buy_weight = 0.0_f64;
-            let mut sell_weight = 0.0_f64;
-            let mut total_conviction = 0.0_f64;
-            let mut voting_experts = 0usize;
-            for (ei, ep) in expert_preds.iter().enumerate() {
-                if let Some(dir) = ep.direction {
-                    let exp_acc = if experts[ei].resolved.len() >= 20 {
-                        let wins = experts[ei].resolved.iter()
-                            .filter(|(_, correct)| *correct).count();
-                        wins as f64 / experts[ei].resolved.len() as f64
-                    } else {
-                        0.5 // no track record yet — neutral weight
-                    };
-                    let weight = (exp_acc - 0.4).max(0.0); // only experts above 40% get a vote
-                    match dir {
-                        Outcome::Buy  => buy_weight += weight,
-                        Outcome::Sell => sell_weight += weight,
-                        _ => {}
-                    }
-                    total_conviction += ep.conviction;
-                    voting_experts += 1;
-                }
-            }
-
-            let (raw_meta_dir, meta_conviction) = if voting_experts == 0 {
-                (None, 0.0)
-            } else {
-                let dir = if buy_weight > sell_weight {
-                    Some(Outcome::Buy)
-                } else if sell_weight > buy_weight {
-                    Some(Outcome::Sell)
-                } else {
-                    None // tied — no signal
-                };
-                let conv = total_conviction / voting_experts as f64;
-                (dir, conv)
-            };
+            // Manager's prediction drives direction + conviction.
+            let raw_meta_dir = mgr_pred.direction;
+            let meta_conviction = mgr_pred.conviction;
 
             // Track conviction history for dynamic threshold computation.
             // Window spans recalib_interval * 100 candles (~6 months at 5m).
@@ -867,6 +863,7 @@ fn main() {
             vis_journal.decay(adaptive_decay);
             tht_journal.decay(adaptive_decay);
             tht_fast.decay(decay_fast);
+            mgr_journal.decay(adaptive_decay);
             for expert in &mut experts {
                 expert.journal.decay(args.decay);
             }
@@ -948,6 +945,22 @@ fn main() {
                         vis_journal.observe(&entry.vis_vec, o, sw);
                         tht_journal.observe(&entry.tht_vec, o, sw);
                         tht_fast.observe(&entry.tht_vec, o, sw);
+                        // Manager learns: reconstruct its thought from expert predictions at entry
+                        {
+                            let mgr_entry_facts: Vec<Vector> = entry.expert_preds.iter().enumerate()
+                                .map(|(ei, ep)| {
+                                    let cv = mgr_scalar.encode_log(ep.raw_cos.abs().max(1e-10));
+                                    let role = if ep.raw_cos >= 0.0 {
+                                        expert_atoms[ei].clone()
+                                    } else {
+                                        Primitives::permute(&expert_atoms[ei], 1)
+                                    };
+                                    Primitives::bind(&role, &cv)
+                                }).collect();
+                            let mrefs: Vec<&Vector> = mgr_entry_facts.iter().collect();
+                            let mgr_vec = Primitives::bundle(&mrefs);
+                            mgr_journal.observe(&mgr_vec, o, sw);
+                        }
                         // Expert panel: each expert observes, tracks curve, and feeds engrams
                         for (ei, expert_vec) in entry.expert_vecs.iter().enumerate() {
                             experts[ei].journal.observe(expert_vec, o, sw);
