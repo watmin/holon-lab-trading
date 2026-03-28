@@ -366,7 +366,7 @@ fn main() {
     // Layer 2: Panel state engram — learns the manifold of "good panel configurations."
     // Encodes each expert's (signed conviction) as a feature vector.
     // Dimensionality = number of experts. Fed after each recalib if accuracy was good.
-    let panel_dim = expert_profiles.len() + 1; // experts + generalist
+    let panel_dim = expert_profiles.len(); // experts only — manager doesn't encode
     let mut panel_engram = OnlineSubspace::with_params(panel_dim, 4, 2.0, 0.01, 3.5, 100);
     let mut panel_recalib_wins: u32 = 0;
     let mut panel_recalib_total: u32 = 0;
