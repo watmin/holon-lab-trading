@@ -1,0 +1,102 @@
+trader3: visual+thought journals, discriminant prediction
+  10000D  window=48  horizon=36  threshold=0.500%  decay=0.999  flip=q99
+  observe=1000  recalib_interval=500  orchestration=thought-only  min_conviction=0.000
+
+  Loading candles from "/home/watmin/work/holon/holon-lab-trading/data/analysis.db"...
+  Loaded 652409 candles in 0.6s
+  Run database: /home/watmin/work/holon/holon-lab-trading/orchestration_results/full-652k-expanded-vocab.db
+
+  Walk-forward: 652362 candles from index 47...
+  10000/652362 (167/s ETA 3850s) | 2019-02-05 | TENTATIVE | vis=56.5% tht=47.3% | trades=107 win=67.3% | $10011 (+0.1%) vs B&H -6.7% | flip@0.265 STABLE
+  20000/652362 (166/s ETA 3801s) | 2019-03-12 | TENTATIVE | vis=48.4% tht=44.0% | trades=109 win=66.1% | $10011 (+0.1%) vs B&H +3.6% | flip@0.243 STABLE
+  30000/652362 (166/s ETA 3744s) | 2019-04-16 | TENTATIVE | vis=46.9% tht=48.4% | trades=131 win=66.4% | $10014 (+0.1%) vs B&H +36.0% | flip@0.235 STABLE
+  40000/652362 (166/s ETA 3689s) | 2019-05-20 | TENTATIVE | vis=50.9% tht=55.0% | trades=160 win=70.6% | $10021 (+0.2%) vs B&H +110.3% | flip@0.229 STABLE
+  50000/652362 (165/s ETA 3646s) | 2019-06-24 | TENTATIVE | vis=55.3% tht=56.5% | trades=198 win=65.2% | $10019 (+0.2%) vs B&H +193.5% | flip@0.226 STABLE
+  60000/652362 (165/s ETA 3592s) | 2019-07-29 | TENTATIVE | vis=54.9% tht=53.2% | trades=306 win=63.1% | $10030 (+0.3%) vs B&H +160.4% | flip@0.215 STABLE
+  70000/652362 (166/s ETA 3513s) | 2019-09-01 | CONFIDENT | vis=47.7% tht=54.1% | trades=572 win=60.1% | $10063 (+0.6%) vs B&H +160.9% | flip@0.230 STABLE
+  80000/652362 (167/s ETA 3432s) | 2019-10-06 | CONFIDENT | vis=52.6% tht=46.7% | trades=649 win=61.0% | $10084 (+0.8%) vs B&H +114.0% | flip@0.232 STABLE
+  90000/652362 (166/s ETA 3396s) | 2019-11-10 | CONFIDENT | vis=48.7% tht=47.6% | trades=913 win=62.3% | $10147 (+1.5%) vs B&H +138.0% | flip@0.246 STABLE
+  100000/652362 (167/s ETA 3309s) | 2019-12-15 | CONFIDENT | vis=51.6% tht=43.0% | trades=941 win=62.1% | $10149 (+1.5%) vs B&H +89.6% | flip@0.248 STABLE
+  110000/652362 (168/s ETA 3229s) | 2020-01-18 | CONFIDENT | vis=58.9% tht=55.8% | trades=1022 win=60.2% | $10131 (+1.3%) vs B&H +139.8% | flip@0.253 STABLE
+  120000/652362 (168/s ETA 3165s) | 2020-02-22 | CONFIDENT | vis=50.0% tht=45.1% | trades=1081 win=60.5% | $10146 (+1.5%) vs B&H +160.0% | flip@0.252 STABLE
+  130000/652362 (169/s ETA 3091s) | 2020-03-28 | CONFIDENT | vis=48.9% tht=44.9% | trades=1122 win=61.3% | $10170 (+1.7%) vs B&H +66.1% | flip@0.252 STABLE
+  140000/652362 (169/s ETA 3024s) | 2020-05-01 | CONFIDENT | vis=36.2% tht=38.2% | trades=1267 win=62.3% | $10209 (+2.1%) vs B&H +138.6% | flip@0.247 STABLE
+  150000/652362 (169/s ETA 2967s) | 2020-06-05 | CONFIDENT | vis=49.8% tht=55.1% | trades=1314 win=62.3% | $10224 (+2.2%) vs B&H +161.3% | flip@0.248 STABLE
+  160000/652362 (169/s ETA 2910s) | 2020-07-10 | CONFIDENT | vis=57.4% tht=48.9% | trades=1376 win=61.1% | $10208 (+2.1%) vs B&H +147.4% | flip@0.245 STABLE
+  170000/652362 (169/s ETA 2859s) | 2020-08-14 | CONFIDENT | vis=47.1% tht=48.6% | trades=1382 win=61.1% | $10208 (+2.1%) vs B&H +214.5% | flip@0.241 STABLE
+  180000/652362 (169/s ETA 2798s) | 2020-09-17 | CONFIDENT | vis=52.3% tht=48.5% | trades=1405 win=61.3% | $10220 (+2.2%) vs B&H +194.0% | flip@0.238 STABLE
+  190000/652362 (169/s ETA 2735s) | 2020-10-22 | CONFIDENT | vis=48.4% tht=51.3% | trades=1407 win=61.3% | $10220 (+2.2%) vs B&H +247.8% | flip@0.226 STABLE
+  200000/652362 (169/s ETA 2674s) | 2020-11-26 | CONFIDENT | vis=51.3% tht=56.1% | trades=1534 win=60.6% | $10225 (+2.2%) vs B&H +381.2% | flip@0.227 ADAPT
+  210000/652362 (169/s ETA 2618s) | 2020-12-31 | TENTATIVE | vis=51.6% tht=46.0% | trades=1853 win=59.1% | $10240 (+2.4%) vs B&H +686.9% | flip@0.234 ADAPT
+  220000/652362 (169/s ETA 2562s) | 2021-02-03 | CONFIDENT | vis=49.2% tht=50.9% | trades=2041 win=58.5% | $10239 (+2.4%) vs B&H +897.2% | flip@0.243 ADAPT
+  230000/652362 (169/s ETA 2502s) | 2021-03-10 | CONFIDENT | vis=53.4% tht=45.6% | trades=2295 win=58.5% | $10253 (+2.5%) vs B&H +1375.6% | flip@0.256 STABLE
+  240000/652362 (169/s ETA 2444s) | 2021-04-14 | CONFIDENT | vis=49.1% tht=50.2% | trades=2523 win=57.6% | $10259 (+2.6%) vs B&H +1616.5% | flip@0.270 ADAPT
+  250000/652362 (169/s ETA 2387s) | 2021-05-18 | CONFIDENT | vis=52.3% tht=50.6% | trades=2566 win=57.8% | $10261 (+2.6%) vs B&H +1057.2% | flip@0.273 ADAPT
+  260000/652362 (168/s ETA 2338s) | 2021-06-22 | CONFIDENT | vis=50.2% tht=45.6% | trades=2685 win=57.7% | $10277 (+2.8%) vs B&H +728.1% | flip@0.274 ADAPT
+  270000/652362 (168/s ETA 2275s) | 2021-07-27 | CONFIDENT | vis=52.6% tht=54.5% | trades=2739 win=57.8% | $10285 (+2.9%) vs B&H +907.7% | flip@0.276 STABLE
+  280000/652362 (168/s ETA 2213s) | 2021-08-31 | CONFIDENT | vis=52.9% tht=53.4% | trades=2816 win=58.0% | $10293 (+2.9%) vs B&H +1161.9% | flip@0.273 STABLE
+  290000/652362 (168/s ETA 2156s) | 2021-10-04 | CONFIDENT | vis=45.8% tht=43.1% | trades=3029 win=57.5% | $10299 (+3.0%) vs B&H +1230.7% | flip@0.284 ADAPT
+  300000/652362 (168/s ETA 2094s) | 2021-11-08 | CONFIDENT | vis=44.6% tht=45.9% | trades=3134 win=57.7% | $10321 (+3.2%) vs B&H +1674.4% | flip@0.290 STABLE
+  310000/652362 (168/s ETA 2033s) | 2021-12-13 | CONFIDENT | vis=54.3% tht=47.0% | trades=3156 win=57.6% | $10319 (+3.2%) vs B&H +1226.2% | flip@0.287 STABLE
+  320000/652362 (169/s ETA 1969s) | 2022-01-16 | CONFIDENT | vis=43.7% tht=51.7% | trades=3168 win=57.5% | $10318 (+3.2%) vs B&H +1062.8% | flip@0.285 STABLE
+  330000/652362 (169/s ETA 1908s) | 2022-02-20 | CONFIDENT | vis=46.2% tht=43.5% | trades=3233 win=57.3% | $10310 (+3.1%) vs B&H +935.2% | flip@0.286 STABLE
+  340000/652362 (169/s ETA 1845s) | 2022-03-27 | CONFIDENT | vis=46.1% tht=49.5% | trades=3246 win=57.4% | $10314 (+3.1%) vs B&H +1101.5% | flip@0.266 STABLE
+  350000/652362 (170/s ETA 1783s) | 2022-05-01 | CONFIDENT | vis=49.2% tht=53.2% | trades=3278 win=57.5% | $10320 (+3.2%) vs B&H +921.3% | flip@0.249 STABLE
+  360000/652362 (170/s ETA 1721s) | 2022-06-04 | CONFIDENT | vis=50.7% tht=52.6% | trades=3373 win=57.7% | $10327 (+3.3%) vs B&H +700.8% | flip@0.246 STABLE
+  370000/652362 (170/s ETA 1659s) | 2022-07-09 | CONFIDENT | vis=50.4% tht=47.4% | trades=3391 win=57.6% | $10324 (+3.2%) vs B&H +480.4% | flip@0.245 STABLE
+  380000/652362 (170/s ETA 1598s) | 2022-08-13 | CONFIDENT | vis=52.7% tht=56.9% | trades=3576 win=57.5% | $10344 (+3.4%) vs B&H +564.7% | flip@0.239 STABLE
+  390000/652362 (171/s ETA 1537s) | 2022-09-17 | CONFIDENT | vis=50.7% tht=48.9% | trades=3854 win=57.6% | $10379 (+3.8%) vs B&H +436.8% | flip@0.254 STABLE
+  400000/652362 (171/s ETA 1476s) | 2022-10-21 | CONFIDENT | vis=54.2% tht=50.6% | trades=3869 win=57.6% | $10380 (+3.8%) vs B&H +415.7% | flip@0.254 STABLE
+  410000/652362 (171/s ETA 1418s) | 2022-11-25 | CONFIDENT | vis=45.1% tht=43.2% | trades=3955 win=57.4% | $10380 (+3.8%) vs B&H +344.1% | flip@0.257 STABLE
+  420000/652362 (171/s ETA 1358s) | 2022-12-30 | CONFIDENT | vis=33.6% tht=46.1% | trades=4021 win=57.3% | $10381 (+3.8%) vs B&H +347.4% | flip@0.281 ADAPT
+  430000/652362 (171/s ETA 1301s) | 2023-02-02 | CONFIDENT | vis=56.9% tht=50.1% | trades=4031 win=57.3% | $10385 (+3.8%) vs B&H +537.6% | flip@0.281 ADAPT
+  440000/652362 (171/s ETA 1240s) | 2023-03-09 | CONFIDENT | vis=48.7% tht=50.6% | trades=4063 win=57.1% | $10384 (+3.8%) vs B&H +486.4% | flip@0.275 ADAPT
+  450000/652362 (171/s ETA 1181s) | 2023-04-13 | CONFIDENT | vis=50.5% tht=51.5% | trades=4074 win=57.1% | $10384 (+3.8%) vs B&H +710.3% | flip@0.275 ADAPT
+  460000/652362 (171/s ETA 1124s) | 2023-05-18 | CONFIDENT | vis=47.2% tht=51.8% | trades=4222 win=56.7% | $10382 (+3.8%) vs B&H +635.9% | flip@0.283 ADAPT
+  470000/652362 (171/s ETA 1065s) | 2023-06-21 | TENTATIVE | vis=49.3% tht=46.2% | trades=4239 win=56.7% | $10377 (+3.8%) vs B&H +713.0% | flip@0.270 ADAPT
+  480000/652362 (171/s ETA 1007s) | 2023-07-26 | TENTATIVE | vis=49.4% tht=46.6% | trades=4297 win=56.6% | $10374 (+3.7%) vs B&H +687.8% | flip@0.274 ADAPT
+  490000/652362 (171/s ETA 949s) | 2023-08-30 | CONFIDENT | vis=45.9% tht=53.1% | trades=4466 win=57.5% | $10457 (+4.6%) vs B&H +640.0% | flip@0.287 STABLE
+  500000/652362 (171/s ETA 890s) | 2023-10-03 | CONFIDENT | vis=46.1% tht=50.5% | trades=4466 win=57.5% | $10457 (+4.6%) vs B&H +638.5% | flip@0.288 STABLE
+  510000/652362 (171/s ETA 832s) | 2023-11-07 | CONFIDENT | vis=49.1% tht=40.6% | trades=4466 win=57.5% | $10457 (+4.6%) vs B&H +836.2% | flip@0.275 STABLE
+  520000/652362 (171/s ETA 774s) | 2023-12-12 | CONFIDENT | vis=50.7% tht=49.8% | trades=4489 win=57.4% | $10449 (+4.5%) vs B&H +1028.6% | flip@0.275 STABLE
+  530000/652362 (171/s ETA 715s) | 2024-01-16 | CONFIDENT | vis=57.4% tht=48.1% | trades=4627 win=56.9% | $10431 (+4.3%) vs B&H +1051.2% | flip@0.279 ADAPT
+  540000/652362 (171/s ETA 656s) | 2024-02-19 | CONFIDENT | vis=47.4% tht=49.2% | trades=4715 win=56.6% | $10422 (+4.2%) vs B&H +1298.3% | flip@0.274 ADAPT
+  550000/652362 (171/s ETA 598s) | 2024-03-25 | CONFIDENT | vis=54.9% tht=57.1% | trades=4746 win=56.7% | $10433 (+4.3%) vs B&H +1711.2% | flip@0.273 ADAPT
+  560000/652362 (171/s ETA 539s) | 2024-04-29 | CONFIDENT | vis=47.6% tht=45.1% | trades=4839 win=57.1% | $10466 (+4.7%) vs B&H +1572.7% | flip@0.278 STABLE
+  570000/652362 (171/s ETA 480s) | 2024-06-03 | CONFIDENT | vis=54.1% tht=50.1% | trades=4882 win=56.7% | $10450 (+4.5%) vs B&H +1723.3% | flip@0.281 STABLE
+  580000/652362 (172/s ETA 422s) | 2024-07-07 | CONFIDENT | vis=53.1% tht=54.9% | trades=4893 win=56.8% | $10451 (+4.5%) vs B&H +1433.6% | flip@0.272 STABLE
+  590000/652362 (172/s ETA 363s) | 2024-08-11 | CONFIDENT | vis=45.9% tht=49.8% | trades=4929 win=56.8% | $10456 (+4.6%) vs B&H +1538.6% | flip@0.258 STABLE
+  600000/652362 (172/s ETA 305s) | 2024-09-15 | CONFIDENT | vis=51.4% tht=46.7% | trades=4946 win=56.8% | $10454 (+4.5%) vs B&H +1520.3% | flip@0.256 STABLE
+  610000/652362 (172/s ETA 247s) | 2024-10-19 | CONFIDENT | vis=48.1% tht=46.7% | trades=4951 win=56.8% | $10455 (+4.6%) vs B&H +1741.0% | flip@0.249 STABLE
+  620000/652362 (172/s ETA 189s) | 2024-11-23 | TENTATIVE | vis=51.1% tht=48.5% | trades=4975 win=56.7% | $10452 (+4.5%) vs B&H +2557.5% | flip@0.239 STABLE
+  630000/652362 (172/s ETA 130s) | 2024-12-28 | TENTATIVE | vis=52.7% tht=57.4% | trades=5288 win=55.9% | $10439 (+4.4%) vs B&H +2443.7% | flip@0.250 STABLE
+  640000/652362 (171/s ETA 72s) | 2025-02-01 | CONFIDENT | vis=45.1% tht=45.5% | trades=5501 win=56.4% | $10469 (+4.7%) vs B&H +2665.4% | flip@0.260 STABLE
+  650000/652362 (171/s ETA 14s) | 2025-03-07 | CONFIDENT | vis=50.0% tht=48.2% | trades=5610 win=56.2% | $10469 (+4.7%) vs B&H +2276.0% | flip@0.275 STABLE
+
+═══════════════════════════════════════════════════════════
+  trader3 complete — 652362 candles in 3817.1s (171/s)
+  Orchestration: thought-only
+  Labeled: 462714  Noise: 189648 (29.1% noise rate)
+
+  Equity: $10466.28 (+4.66%) | B&H: +2172.51%
+  Trades taken: 5616  Won: 3156  Win rate: 56.2%  Skipped: 643911
+
+  Visual journal  — buy_obs=234188 sell_obs=228526 cos_raw=0.9958 disc_strength=0.0009 recalibs=925
+  Thought journal — buy_obs=234188 sell_obs=228526 cos_raw=0.9825 disc_strength=0.0019 recalibs=925
+
+  Rolling accuracy (last 1000): visual=47.3% thought=57.0%
+
+  Visual pattern groups: 1 discovered
+    Group 0: 5616 obs, 5616 trades (3156W/2460L = 56.2%)
+
+  By year:
+    2019: 953 trades  61.6% win  +143.45$ P&L
+    2020: 900 trades  56.6% win  +96.08$ P&L
+    2021: 1315 trades  55.2% win  +78.42$ P&L
+    2022: 853 trades  56.4% win  +62.85$ P&L
+    2023: 599 trades  54.9% win  +53.62$ P&L
+    2024: 669 trades  48.7% win  +5.32$ P&L
+    2025: 327 trades  60.6% win  +26.53$ P&L
+
+  Run DB: /home/watmin/work/holon/holon-lab-trading/orchestration_results/full-652k-expanded-vocab.db (652362 rows)
+═══════════════════════════════════════════════════════════
