@@ -1020,13 +1020,17 @@ fn main() {
     let mut visual_groups: Vec<PatternGroup> = Vec::new();
     let group_cos_threshold = 0.35; // minimum cosine to join an existing group
 
-    // ─ Risk expert: separate journal that learns from portfolio state ───
-    // Sees ONLY risk thoughts (drawdown, streak, accuracy, equity curve).
-    // Learns which portfolio states precede winning vs losing trades.
-    // Its conviction = "how confident am I about the portfolio state?"
-    // Its curve = "does portfolio state predict trade quality?"
-    let mut risk_journal = Journal::new("risk", args.dims, args.recalib_interval);
-    let mut risk_resolved: VecDeque<(f64, bool)> = VecDeque::new();
+    // ─ Risk as conditional curve, not a journal ────────────────────────
+    // Partition resolved predictions by risk state. Each partition has
+    // its own conviction-accuracy curve. Kelly reads the right curve
+    // for the current risk state. No prediction. No training. Just
+    // conditional measurement.
+    //
+    // Risk states: "peak", "shallow", "moderate", "deep"
+    let mut risk_partitions: HashMap<String, VecDeque<(f64, bool)>> = HashMap::new();
+    for state in &["peak", "shallow", "moderate", "deep"] {
+        risk_partitions.insert(state.to_string(), VecDeque::new());
+    }
 
     // ─ Expert panel: N journals with different vocabulary profiles ──────
     // Each expert thinks different thoughts about the same candles.
@@ -1405,47 +1409,16 @@ fn main() {
             // Position sizing: Kelly from the curve × drawdown cap.
             // The curve handles selectivity. The drawdown cap handles survival.
             // Nothing else. No graduated gate, no stability gate, no phase gate.
-            // Risk expert: encode portfolio state, predict, get conviction.
-            let (risk_vecs, _risk_labels) = trader.risk_facts(&vm, Some(&expert_preds), Some(&tht_pred), trader.trades_taken, encode_count);
-            let risk_vec = if risk_vecs.is_empty() {
-                Vector::zeros(args.dims)
-            } else {
-                let refs: Vec<&Vector> = risk_vecs.iter().collect();
-                Primitives::bundle(&refs)
-            };
-            let risk_pred = risk_journal.predict(&risk_vec);
-            risk_journal.decay(args.decay);
-
-            // Kelly from curve × risk expert sizing multiplier.
-            // Risk conviction → risk curve → estimated accuracy of portfolio state
-            // → Kelly multiplier. High risk conviction + favorable = scale up.
-            // High risk conviction + unfavorable = scale down.
-            // Risk multiplier: direct prediction, no flip.
-            // Buy direction = "good state" → scale up.
-            // Sell direction = "bad state" → scale down.
-            // Conviction magnitude = how confident in the assessment.
-            let risk_mult = if risk_resolved.len() >= 500 && risk_pred.direction.is_some() {
-                let above: usize = risk_resolved.iter()
-                    .filter(|(c, _)| *c >= risk_pred.conviction).count();
-                let wins: usize = risk_resolved.iter()
-                    .filter(|(c, w)| *c >= risk_pred.conviction && *w).count();
-                if above >= 20 {
-                    let risk_acc = wins as f64 / above as f64;
-                    // Risk says "good state" with accuracy → scale up
-                    // Risk says "bad state" with accuracy → scale down
-                    match risk_pred.direction {
-                        Some(Outcome::Buy) => {
-                            // "Good state" — multiply by how confident + accurate
-                            (risk_acc * 2.0 - 1.0).max(0.1).min(2.0)
-                        }
-                        Some(Outcome::Sell) => {
-                            // "Bad state" — invert: high accuracy in bad prediction → low mult
-                            (1.0 - (risk_acc * 2.0 - 1.0)).max(0.1).min(1.0)
-                        }
-                        _ => 0.25
-                    }
-                } else { 0.25 }
-            } else { 0.25 }; // "I don't know yet" → cautious
+            // Risk as conditional curve — no journal, no prediction.
+            // Classify current portfolio state, use that partition's
+            // resolved predictions for Kelly. The right curve for the right state.
+            let dd = if trader.peak_equity > 0.0 {
+                (trader.peak_equity - trader.equity) / trader.peak_equity
+            } else { 0.0 };
+            let risk_state = if dd < 0.02 { "peak" }
+                else if dd < 0.05 { "shallow" }
+                else if dd < 0.10 { "moderate" }
+                else { "deep" };
 
             // The flip zone gate stays — below the threshold, the direction
             // isn't flipped, so it's WRONG. Kelly can't fix wrong direction.
@@ -1459,7 +1432,11 @@ fn main() {
 
                 match args.sizing.as_str() {
                     "kelly" => {
-                        match kelly_frac(meta_conviction, &resolved_preds, 50, mt) {
+                        // Conditional curve: use the risk partition for current state.
+                        // At peak → peak partition's curve. In drawdown → drawdown curve.
+                        let partition = risk_partitions.get(risk_state).unwrap();
+                        let curve_source = if partition.len() >= 100 { partition } else { &resolved_preds };
+                        match kelly_frac(meta_conviction, curve_source, 50, mt) {
                             Some((frac, a, b)) => {
                                 // Track curve params (for logging/diagnostics)
                                 if curve_a_history.is_empty()
@@ -1475,7 +1452,7 @@ fn main() {
                                 } else { 0.0 };
                                 let dd_room = (args.max_drawdown - dd).max(0.0);
                                 let cap = (dd_room / (4.0 * mt)).min(1.0);
-                                let sized = frac.min(cap) * risk_mult;
+                                let sized = frac.min(cap);
                                 // NEVER zero. Always learn. Minimum 1% position.
                                 // The wat machine never quits — it gets quiet.
                                 let min_bet = 0.01;
@@ -1736,21 +1713,19 @@ fn main() {
                                 let (rv, _) = trader.risk_facts(&vm, None, None, trader.trades_taken, encode_count);
                                 if !rv.is_empty() {
                                     let rvec = Primitives::bundle(&rv.iter().collect::<Vec<_>>());
-                                    // Risk labels: Win → Buy, Lose → Sell. No filtering.
-                                    // The discriminant handles noise. We proved this.
-                                    let won = dir == final_out;
-                                    let risk_label = if won { Outcome::Buy } else { Outcome::Sell };
-                                    risk_journal.observe(&rvec, risk_label, 1.0);
-                                    // Track risk curve — DIRECT, no flip.
-                                    // High conviction toward Buy = "good state" = scale up.
-                                    let rpred = risk_journal.predict(&rvec);
-                                    if rpred.direction.is_some() {
-                                        // "Correct" means risk predicted Buy AND trade won,
-                                        // or risk predicted Sell AND trade lost.
-                                        let risk_correct = rpred.direction == Some(risk_label);
-                                        risk_resolved.push_back((rpred.conviction, risk_correct));
-                                        if risk_resolved.len() > conviction_window {
-                                            risk_resolved.pop_front();
+                                    // Tag this resolved prediction with its risk state
+                                    // and add to the appropriate partition.
+                                    let trade_dd = if trader.peak_equity > 0.0 {
+                                        (trader.peak_equity - trader.equity) / trader.peak_equity
+                                    } else { 0.0 };
+                                    let trade_risk_state = if trade_dd < 0.02 { "peak" }
+                                        else if trade_dd < 0.05 { "shallow" }
+                                        else if trade_dd < 0.10 { "moderate" }
+                                        else { "deep" };
+                                    if let Some(partition) = risk_partitions.get_mut(trade_risk_state) {
+                                        partition.push_back((entry.meta_conviction, dir == final_out));
+                                        if partition.len() > conviction_window / 4 {
+                                            partition.pop_front();
                                         }
                                     }
                                 }
