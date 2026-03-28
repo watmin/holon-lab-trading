@@ -1,4 +1,4 @@
-# The Thought Machine
+# The Wat Machine
 
 ## Chapter 1 — The Scaffold
 
