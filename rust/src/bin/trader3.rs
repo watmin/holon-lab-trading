@@ -1175,7 +1175,7 @@ fn main() {
             // Risk conviction → risk curve → estimated accuracy of portfolio state
             // → Kelly multiplier. High risk conviction + favorable = scale up.
             // High risk conviction + unfavorable = scale down.
-            let risk_mult = if risk_resolved.len() >= 200 {
+            let risk_mult = if risk_resolved.len() >= 500 {
                 // Estimate risk accuracy at current conviction
                 let above: usize = risk_resolved.iter()
                     .filter(|(c, _)| *c >= risk_pred.conviction).count();
@@ -1183,10 +1183,9 @@ fn main() {
                     .filter(|(c, w)| *c >= risk_pred.conviction && *w).count();
                 if above >= 20 {
                     let risk_acc = wins as f64 / above as f64;
-                    // Convert to multiplier: 50% = 0 (no adjustment), 60% = 0.2 boost, 40% = -0.2 reduce
-                    (risk_acc * 2.0 - 1.0).max(0.0).min(2.0) // 0.0 to 2.0 multiplier
-                } else { 1.0 }
-            } else { 1.0 }; // no data yet → neutral
+                    (risk_acc * 2.0 - 1.0).max(0.0).min(2.0)
+                } else { 0.25 } // insufficient data at this conviction → cautious
+            } else { 0.25 }; // "I don't know yet" → be careful, not full speed
 
             // The flip zone gate stays — below the threshold, the direction
             // isn't flipped, so it's WRONG. Kelly can't fix wrong direction.
