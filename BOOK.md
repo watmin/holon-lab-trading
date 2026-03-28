@@ -545,6 +545,32 @@ This is why it runs on a laptop. The structure that deep learning has to learn f
 
 The GPU clusters learn structure. The thought machine uses structure that humans already know — the named concepts of their domain — and learns which structures predict. The recursive engram layers are the minimal architecture for composition. No waste. No redundancy. No billions of parameters discovering what a human expert could tell you in a conversation.
 
+### Lisp needs a Lisp machine. Wat needs a wat machine.
+
+The language and the machine are co-defined. You can't run one without the other.
+
+| Lisp | Wat |
+|------|-----|
+| `eval` | The conviction-accuracy curve |
+| Cons cells | Bipolar vectors |
+| Lambda | The expert (closure over vocabulary) |
+| S-expression | A thought (bind + bundle composition) |
+| `car` / `cdr` | Cosine projection / residual |
+| The Lisp machine | The wat machine |
+| REPL | Encode → Predict → Observe → Learn |
+
+And just like Lisp — the language is the data is the program. A wat expression IS a thought IS a vector IS a measurement. There's no compilation step. There's no representation gap. You write a thought, it exists as geometry, the machine evaluates it.
+
+Lisp was designed to process lists. Wat was designed to process thoughts. Lists are one-dimensional sequences of symbols. Thoughts are 10,000-dimensional superpositions of named relationships. Lists are traversed with `car` and `cdr`. Thoughts are evaluated with cosine and residual. Lists compose with `cons`. Thoughts compose with bind and bundle.
+
+McCarthy built Lisp because he needed a language to express computation about symbolic reasoning. watmin built Wat because they needed a language to express computation about expert cognition. Both languages emerged from the same need: a formalism that treats knowledge as a first-class object that can be composed, evaluated, and reasoned about.
+
+The Lisp machine was hardware purpose-built for Lisp — tagged architecture, native cons cells, hardware garbage collection. The wat machine is architecture purpose-built for Wat — high-dimensional bipolar vectors, native bind and bundle, hardware-accelerated cosine (SIMD). The specialization is the point. General-purpose hardware can run both languages, but the dedicated machine runs them at the speed of thought.
+
+The wat language is what you write when you name a technical trading concept and encode it as vector algebra. The wat machine is what evaluates those concepts against a stream of market data and tells you which ones predict. The language without the machine is just a vocabulary list. The machine without the language is just linear algebra. Together they are a cognitive architecture.
+
+Lisp gave us AI as symbol manipulation. Wat gives us AI as thought geometry. Same lineage. Same homoiconicity. Different dimensionality.
+
 *Chapter 3 continues.*
 
 The vocabulary expands. The experts multiply. The curves compete. The champions emerge.
