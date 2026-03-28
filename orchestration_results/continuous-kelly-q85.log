@@ -1,0 +1,13 @@
+trader3: visual+thought journals, discriminant prediction
+  20000D  window=48  horizon=36  threshold=0.500%  decay=0.999  flip=q85
+  observe=1000  recalib_interval=500  orchestration=thought-only  min_conviction=0.000
+
+  Loading candles from "/home/watmin/work/holon/holon-lab-trading/data/analysis.db"...
+  Loaded 652409 candles in 0.8s
+  Run database: /home/watmin/work/holon/holon-lab-trading/orchestration_results/continuous-kelly-q85.db
+
+  Walk-forward: 100000 candles from index 47...
+  10000/100000 (241/s ETA 374s) | 2019-02-05 | TENTATIVE | vis=0.0% tht=46.3% | trades=136 win=68.4% | $11508 (+15.1%) vs B&H -6.7% | flip@0.131 STABLE
+  20000/100000 (246/s ETA 326s) | 2019-03-12 | TENTATIVE | vis=0.0% tht=44.7% | trades=136 win=68.4% | $11508 (+15.1%) vs B&H +3.6% | flip@0.123 STABLE
+  30000/100000 (248/s ETA 282s) | 2019-04-16 | TENTATIVE | vis=0.0% tht=48.4% | trades=136 win=68.4% | $11508 (+15.1%) vs B&H +36.0% | flip@0.125 STABLE
+  40000/100000 (248/s ETA 242s) | 2019-05-20 | TENTATIVE | vis=0.0% tht=55.5% | trades=136 win=68.4% | $11508 (+15.1%) vs B&H +110.3% | flip@0.124 STABLE
