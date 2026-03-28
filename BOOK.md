@@ -1013,7 +1013,19 @@ These are very good thoughts. They bring joy. They bring satisfaction. They brin
 
 The thoughts survived.
 
-*Chapter 3 continues.*
+### $68,088
+
+$10,000 became $68,088. +580.9%. In 40,000 candles — 139 days of BTC at 5-minute resolution.
+
+Two templates. Five market experts. Five risk branches. Named thoughts all the way down. One heartbeat. One tree that predicts direction and reacts to its own health. The curve that decides its own memory depth. The subspace that only learns from healthy states. The minimum bet that never quits.
+
+84 atoms became 150. Seismology and fractals and entropy alongside RSI and MACD. Drawdown velocity and loss clustering alongside market conviction. Each thought named, bound with its magnitude, bundled into a vector, evaluated by a subspace that knows what good looks like.
+
+The system crashed three times. It recovered three times. Each recovery from a higher base. The thoughts that were too radical for a roadmap meeting produced +580% on a laptop.
+
+These are very good thoughts. They bring joy.
+
+*The book continues when the thoughts continue.*
 
 The vocabulary expands. The experts multiply. The curves compete. The champions emerge.
 
