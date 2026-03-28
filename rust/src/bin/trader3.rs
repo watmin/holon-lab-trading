@@ -322,6 +322,8 @@ fn main() {
     let mut cached_curve_a: f64 = 0.0;
     let mut cached_curve_b: f64 = 0.0;
     let mut curve_valid = false;
+    let mut mgr_curve_valid = false;  // manager must prove its own edge
+    let mut mgr_resolved: VecDeque<(f64, bool)> = VecDeque::new();
 
     // ─ Expert panel: N traders, each with own vocabulary and own window ─
     // Each expert thinks different thoughts at their own time scale.
@@ -775,7 +777,7 @@ fn main() {
             // 2. Curve is valid (the conviction-accuracy relationship exists)
             // Before both are met, predictions are hypothetical — recorded in the
             // ledger but the treasury withholds capital.
-            let trader_proven = trader.phase != Phase::Observe && curve_valid;
+            let trader_proven = trader.phase != Phase::Observe && mgr_curve_valid;
             let position_frac = if meta_dir.is_some()
                 && trader_proven
                 && (flip_threshold <= 0.0 || meta_conviction >= flip_threshold)
@@ -1039,11 +1041,20 @@ fn main() {
                 tht_attention = tht_journal.discriminant().map(|d| d.to_vec());
 
                 // Pre-compute curve params for Kelly — once per recalib, not per trade.
+                // Uses the generalist's resolved_preds for the curve fit.
                 if let Some((_, a, b)) = kelly_frac(0.15, &resolved_preds, 50,
                     if args.atr_multiplier > 0.0 { args.atr_multiplier * candles[i].atr_r } else { args.move_threshold }) {
                     cached_curve_a = a;
                     cached_curve_b = b;
                     curve_valid = true;
+                }
+                // Manager's own proof: does the manager's curve show edge?
+                // The manager must prove itself independently before the treasury acts.
+                if mgr_resolved.len() >= 100 {
+                    let mt = if args.atr_multiplier > 0.0 { args.atr_multiplier * candles[i].atr_r } else { args.move_threshold };
+                    if let Some((_, _a, _b)) = kelly_frac(0.15, &mgr_resolved, 50, mt) {
+                        mgr_curve_valid = true;
+                    }
                 }
 
                 // Feed panel engram: if recent panel accuracy was good, store current state.
@@ -1167,6 +1178,9 @@ fn main() {
                         };
                         let correct = flipped_dir == final_out;
                         resolved_preds.push_back((entry.meta_conviction, correct));
+                        // Manager's own resolved predictions — for its own proof gate.
+                        mgr_resolved.push_back((entry.meta_conviction, correct));
+                        if mgr_resolved.len() > 5000 { mgr_resolved.pop_front(); }
                         if resolved_preds.len() > conviction_window {
                             resolved_preds.pop_front();
                         }
