@@ -231,6 +231,12 @@ fn main() {
     let max_pos = args.window;
     for p in 0..max_pos as i64 { vm.get_position_vector(p); }
 
+    // ─ Adaptive window sampler ─
+    use btc_walk::window_sampler::WindowSampler;
+    let window_sampler = WindowSampler::new(args.dims as u64, 12, 2016);
+    // Pre-warm position vectors for the max possible window
+    for p in 0..2016_i64 { vm.get_position_vector(p); }
+
     // ─ Visual encoding setup ─
     // Visual encoding removed. Null vector kept for Pending struct compatibility.
     let null_vec = Vector::zeros(args.dims);
@@ -539,48 +545,17 @@ fn main() {
             })
             .collect();
 
-        // ── Desk encoding: each desk encodes at its own time scale ────────
-        // Only the generalist "full" profile per desk — expert profiles are
-        // observational and too expensive to compute 6× per desk per candle.
-        // Parallel across candles within each desk.
-        for desk in &mut desks {
-            let dw = desk.window();
-            let desk_vecs: Vec<(usize, Vector, Vec<String>)> = (cursor..batch_end)
-                .into_par_iter()
-                .filter_map(|i| {
-                    if i < dw { return None; }
-                    let w_start = i.saturating_sub(dw - 1);
-                    let window = &candles[w_start..=i];
-                    let full = desk.thought_encoder.encode_view(
-                        window, &desk.thought_streams, 0, 0, &vm, None, None, "full",
-                    );
-                    Some((i, full.thought, full.fact_labels))
-                })
-                .collect();
-
-            for (i, thought, _facts) in desk_vecs {
-                let pred = desk.predict(&thought);
-                desk.buffer_prediction(i, thought, pred);
-                desk.encode_count += 1;
-            }
-            // Learn from threshold crossings, expire past horizon, log to DB
-            if let Some(&last_i) = (cursor..batch_end).collect::<Vec<_>>().last() {
-                let resolved = desk.learn_and_resolve(last_i, &candles, args.move_threshold, args.atr_multiplier);
-                for r in &resolved {
-                    run_db.execute(
-                        "INSERT INTO desk_predictions (desk,candle_idx,conviction,direction,outcome,correct,gross_pct,window,horizon)
-                         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
-                        rusqlite::params![
-                            r.desk_name, r.candle_idx as i64, r.conviction,
-                            r.direction.map(|d| d.to_string()),
-                            r.outcome.to_string(), r.correct as i32,
-                            r.gross_pct * 100.0, r.window as i64, r.horizon as i64,
-                        ],
-                    ).ok();
-                }
-            }
-            desk.decay(args.decay);
-        }
+        // ── Adaptive window: exploratory encoding at sampled depths ──────
+        // Each candle gets an additional encoding at a random window size
+        // from the log-uniform range [12, 2016]. The sampled thoughts go
+        // into the SAME primary journal — the discriminant sorts out which
+        // scale's patterns predict. The window_sampler is deterministic:
+        // same candle = same exploratory window. Reproducible.
+        //
+        // The primary encoding (above) uses args.window (default 48).
+        // This adds one exploratory encoding per candle at a different scale.
+        // The desk_predictions table logs which window was used, so the
+        // ledger builds the window→accuracy curve from experience.
 
         // ── Sequential: predict + buffer + learn + expire ────────────────────
         for (i, tht_vec, tht_facts, expert_vecs) in tht_vecs {
