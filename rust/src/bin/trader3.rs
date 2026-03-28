@@ -1386,7 +1386,10 @@ fn main() {
     // Window = ~3 months of 5m candles: large enough to be stable across
     // week-to-week regime noise, small enough to adapt to structural shifts.
     let flip_warmup = args.recalib_interval * 2;
-    let conviction_window = args.recalib_interval * 100; // ~50k candles
+    // Conviction window: starts at 2000 (statistically robust minimum).
+    // Shrinks when curve is stable, grows when unstable.
+    // The curve stability tracking we built decides the window size.
+    let mut conviction_window: usize = 2000;
     let mut conviction_history: VecDeque<f64> = VecDeque::new();
     let mut flip_threshold: f64 = 0.0; // 0 until warmup complete
 
@@ -1655,6 +1658,23 @@ fn main() {
                                     curve_b_history.push_back(b);
                                     if curve_a_history.len() > 10 { curve_a_history.pop_front(); }
                                     if curve_b_history.len() > 10 { curve_b_history.pop_front(); }
+
+                                    // Adaptive window: stable curve → shrink (adapt faster).
+                                    // Unstable → grow (need more data).
+                                    if curve_a_history.len() >= 3 {
+                                        let n = curve_a_history.len();
+                                        let last_da = (curve_a_history[n-1] - curve_a_history[n-2]).abs()
+                                            / curve_a_history[n-2].abs().max(1e-10);
+                                        let last_db = (curve_b_history[n-1] - curve_b_history[n-2]).abs()
+                                            / curve_b_history[n-2].abs().max(1e-10);
+                                        if last_da < 0.10 && last_db < 0.10 {
+                                            // Stable: shrink toward 1500 (faster adaptation)
+                                            conviction_window = (conviction_window - 50).max(1500);
+                                        } else {
+                                            // Unstable: grow toward 5000 (more data)
+                                            conviction_window = (conviction_window + 100).min(5000);
+                                        }
+                                    }
                                 }
                                 // Drawdown cap: the only risk gate.
                                 let dd = if trader.peak_equity > 0.0 {
