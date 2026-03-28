@@ -7,3 +7,11 @@ trader3: visual+thought journals, discriminant prediction
   Run database: /home/watmin/work/holon/holon-lab-trading/orchestration_results/deep-risk-correct-labels.db
 
   Walk-forward: 100000 candles from index 47...
+  10000/100000 (189/s ETA 476s) | 2019-02-05 | CONFIDENT | vis=0.0% tht=48.8% | trades=782 win=59.1% | $12406 (+24.1%) vs B&H -6.7% | flip@0.129 CALIBRATING
+  20000/100000 (187/s ETA 427s) | 2019-03-12 | TENTATIVE | vis=0.0% tht=46.7% | trades=1271 win=54.6% | $10368 (+3.7%) vs B&H +3.6% | flip@0.135 CALIBRATING
+  30000/100000 (201/s ETA 348s) | 2019-04-16 | TENTATIVE | vis=0.0% tht=51.9% | trades=1271 win=54.6% | $10368 (+3.7%) vs B&H +36.0% | flip@0.141 CALIBRATING
+  40000/100000 (209/s ETA 288s) | 2019-05-20 | TENTATIVE | vis=0.0% tht=49.6% | trades=1271 win=54.6% | $10368 (+3.7%) vs B&H +110.3% | flip@0.141 CALIBRATING
+  50000/100000 (214/s ETA 233s) | 2019-06-24 | TENTATIVE | vis=0.0% tht=56.5% | trades=1271 win=54.6% | $10368 (+3.7%) vs B&H +193.5% | flip@0.142 CALIBRATING
+  60000/100000 (218/s ETA 183s) | 2019-07-29 | TENTATIVE | vis=0.0% tht=47.8% | trades=1271 win=54.6% | $10368 (+3.7%) vs B&H +160.4% | flip@0.142 CALIBRATING
+  70000/100000 (218/s ETA 137s) | 2019-09-01 | TENTATIVE | vis=0.0% tht=54.8% | trades=1271 win=54.6% | $10368 (+3.7%) vs B&H +160.9% | flip@0.148 CALIBRATING
+  80000/100000 (218/s ETA 92s) | 2019-10-06 | TENTATIVE | vis=0.0% tht=44.2% | trades=1271 win=54.6% | $10368 (+3.7%) vs B&H +114.0% | flip@0.148 CALIBRATING

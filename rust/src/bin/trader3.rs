@@ -1476,7 +1476,10 @@ fn main() {
                                 let dd_room = (args.max_drawdown - dd).max(0.0);
                                 let cap = (dd_room / (4.0 * mt)).min(1.0);
                                 let sized = frac.min(cap) * risk_mult;
-                                if sized < 1e-6 { None } else { Some(sized) }
+                                // NEVER zero. Always learn. Minimum 1% position.
+                                // The wat machine never quits — it gets quiet.
+                                let min_bet = 0.01;
+                                Some(sized.max(min_bet))
                             }
                             None => None
                         }
@@ -1733,10 +1736,18 @@ fn main() {
                                 let (rv, _) = trader.risk_facts(&vm, None, None, trader.trades_taken, encode_count);
                                 if !rv.is_empty() {
                                     let rvec = Primitives::bundle(&rv.iter().collect::<Vec<_>>());
-                                    // Risk labels: Win → Buy, Lose → Sell.
-                                    // The risk expert predicts trade QUALITY, not direction.
+                                    // Risk labels: evaluate DECISION quality, not just outcome.
+                                    // Good decision = won, OR lost small (sized correctly).
+                                    // Bad decision = lost big (oversized for the outcome).
                                     let won = dir == final_out;
-                                    let risk_label = if won { Outcome::Buy } else { Outcome::Sell };
+                                    let pos = entry.position_frac.unwrap_or(0.0);
+                                    let risk_label = if won {
+                                        Outcome::Buy  // winning trade = good decision regardless
+                                    } else if pos < 0.05 {
+                                        Outcome::Noise // small loss at small size = acceptable, don't learn
+                                    } else {
+                                        Outcome::Sell  // loss at significant size = bad decision
+                                    };
                                     risk_journal.observe(&rvec, risk_label, 1.0);
                                     // Track risk curve — DIRECT, no flip.
                                     // High conviction toward Buy = "good state" = scale up.
