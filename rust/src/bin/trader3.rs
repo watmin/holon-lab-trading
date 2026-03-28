@@ -316,25 +316,23 @@ fn main() {
     let mut cached_curve_b: f64 = 0.0;
     let mut curve_valid = false;
 
-    // ─ Expert panel: N journals with different vocabulary profiles ──────
-    // Each expert thinks different thoughts about the same candles.
-    // The orchestrator selects the expert with highest conviction × curve quality.
+    // ─ Expert panel: N traders, each with own vocabulary and own window ─
+    // Each expert thinks different thoughts at their own time scale.
+    // The manager aggregates their predictions — it does not encode.
+    // Each expert discovers their optimal window through experience.
     struct Expert {
         name: &'static str,
         profile: &'static str,
         journal: Journal,
         resolved: VecDeque<(f64, bool)>,
-        // Engram memory: subspace of "good discriminant states."
-        // When the current discriminant matches this subspace (low residual),
-        // this expert is likely in a good state.
         good_state_subspace: OnlineSubspace,
-        // Track accuracy since last recalib for engram gating.
         recalib_wins: u32,
         recalib_total: u32,
         last_recalib_count: usize,
+        window_sampler: WindowSampler,  // each expert explores their own scale
     }
     let expert_profiles = ["momentum", "structure", "volume", "narrative", "regime"];
-    let mut experts: Vec<Expert> = expert_profiles.iter().map(|&profile| {
+    let mut experts: Vec<Expert> = expert_profiles.iter().enumerate().map(|(ei, &profile)| {
         Expert {
             name: profile,
             profile,
@@ -344,6 +342,11 @@ fn main() {
             recalib_wins: 0,
             recalib_total: 0,
             last_recalib_count: 0,
+            // Each expert gets a different seed: they explore independently.
+            window_sampler: WindowSampler::new(
+                args.dims as u64 + ei as u64 * 7919, // prime offset per expert
+                12, 2016,
+            ),
         }
     }).collect();
 
@@ -526,43 +529,48 @@ fn main() {
         let batch_end = (cursor + BATCH_SIZE).min(end_idx);
         let _batch_len = batch_end - cursor;
 
-        // ── Parallel: thought encode (full + expert profiles) ────────────────
+        // ── Parallel: each expert encodes at their own sampled window ────
+        // The manager doesn't encode — it reads expert predictions.
+        // Each expert samples their own window from [12, 2016] per candle.
+        // Their discriminant learns which scale's patterns predict for their
+        // vocabulary. A "full" encoding at args.window is kept for the primary
+        // journal (tht_journal) which still drives flip threshold + sizing.
         let sup_ref = if suppressed_facts.is_empty() { None } else { Some(&suppressed_facts) };
         let n_experts = experts.len();
-        let tht_vecs: Vec<(usize, usize, Vector, Vec<String>, Vec<Vector>)> = (cursor..batch_end)
+
+        // Expert samplers are not Send, so collect windows first
+        let expert_windows: Vec<Vec<usize>> = experts.iter()
+            .map(|exp| {
+                (cursor..batch_end).map(|i| exp.window_sampler.sample(i).min(i + 1)).collect()
+            }).collect();
+
+        let tht_vecs: Vec<(usize, Vector, Vec<String>, Vec<Vector>)> = (cursor..batch_end)
             .into_par_iter()
             .map(|i| {
-                // Adaptive window: sample from log-uniform [12, 2016].
-                // Each candle sees the market at a different depth.
-                // The discriminant learns which scale's patterns predict.
-                let w = window_sampler.sample(i).min(i + 1); // can't look back further than we have
-                let w_start = i.saturating_sub(w - 1);
+                let bi = i - cursor; // batch index
+
+                // Primary encoding at fixed window — drives the main journal + flip threshold.
+                let w_start = i.saturating_sub(args.window - 1);
                 let window  = &candles[w_start..=i];
                 let full = thought_encoder.encode_view(window, &thought_streams, 0, 0, &vm, None, sup_ref, "full");
-                // Encode for each expert profile
-                let expert_vecs: Vec<Vector> = expert_profiles.iter()
-                    .map(|&profile| {
-                        thought_encoder.encode_view(window, &thought_streams, 0, 0, &vm, None, None, profile).thought
+
+                // Each expert encodes at their own sampled window.
+                let expert_vecs: Vec<Vector> = (0..n_experts)
+                    .map(|ei| {
+                        let ew = expert_windows[ei][bi];
+                        let ew_start = i.saturating_sub(ew - 1);
+                        let exp_window = &candles[ew_start..=i];
+                        thought_encoder.encode_view(exp_window, &thought_streams, 0, 0, &vm, None, None, expert_profiles[ei]).thought
                     })
                     .collect();
-                (i, w, full.thought, full.fact_labels, expert_vecs)
+                (i, full.thought, full.fact_labels, expert_vecs)
             })
             .collect();
-
-        // ── Adaptive window: exploratory encoding at sampled depths ──────
-        // Each candle gets an additional encoding at a random window size
-        // from the log-uniform range [12, 2016]. The sampled thoughts go
-        // into the SAME primary journal — the discriminant sorts out which
-        // scale's patterns predict. The window_sampler is deterministic:
-        // same candle = same exploratory window. Reproducible.
-        //
-        // The primary encoding (above) uses args.window (default 48).
-        // This adds one exploratory encoding per candle at a different scale.
         // The desk_predictions table logs which window was used, so the
         // ledger builds the window→accuracy curve from experience.
 
         // ── Sequential: predict + buffer + learn + expire ────────────────────
-        for (i, _sampled_window, tht_vec, tht_facts, expert_vecs) in tht_vecs {
+        for (i, tht_vec, tht_facts, expert_vecs) in tht_vecs {
             encode_count += 1;
 
             // Expert panel: predict from each expert
