@@ -594,7 +594,7 @@ fn main() {
         journal: Journal,
         resolved: VecDeque<(f64, bool)>,  // per-expert calibration curve
     }
-    let expert_profiles = ["momentum", "structure", "volume", "narrative"];
+    let expert_profiles = ["momentum", "structure", "volume", "narrative", "regime"];
     let mut experts: Vec<Expert> = expert_profiles.iter().map(|&profile| {
         Expert {
             name: profile,

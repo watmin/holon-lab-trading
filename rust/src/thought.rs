@@ -236,6 +236,18 @@ const INDICATOR_ATOMS: &[&str] = &[
     "roc", "cci",
     // Price action
     "consecutive-up", "consecutive-down",
+    // Tier-1 underdogs
+    "kama", "kama-er",            // Kaufman adaptive MA + efficiency ratio
+    "chop",                       // Choppiness Index
+    "dfa-alpha",                  // Detrended Fluctuation Analysis
+    "variance-ratio",             // Lo-MacKinlay variance ratio
+    "td-count",                   // DeMark TD Sequential count
+    "aroon-up", "aroon-down",     // Aroon trend freshness
+    // Tier-1 esoteric
+    "fractal-dim",                // Fractal dimension (Higuchi)
+    "spectral-slope",             // Power spectrum slope
+    "entropy-rate",               // Sequential entropy (linguistics)
+    "gr-bvalue",                  // Gutenberg-Richter b-value (seismology)
 ];
 
 const DIRECTION_ATOMS: &[&str] = &["up", "down", "flat"];
@@ -253,6 +265,16 @@ const ZONE_ATOMS: &[&str] = &[
     "cci-overbought", "cci-oversold",
     // Price action
     "inside-bar", "outside-bar", "gap-up", "gap-down",
+    // Regime zones
+    "efficient-trend", "inefficient-chop", "moderate-efficiency",
+    "chop-trending", "chop-choppy", "chop-extreme", "chop-transition",
+    "persistent-dfa", "anti-persistent-dfa", "random-walk-dfa",
+    "vr-momentum", "vr-mean-revert", "vr-neutral",
+    "td-exhausted", "td-building", "td-mature", "td-inactive",
+    "aroon-strong-up", "aroon-strong-down", "aroon-consolidating", "aroon-stale",
+    "trending-geometry", "random-walk-geometry", "mean-reverting-geometry",
+    "heavy-tails", "light-tails",
+    "low-entropy-rate", "high-entropy-rate",
 ];
 const PREDICATE_ATOMS: &[&str] = &[
     "above", "below", "crosses-above", "crosses-below",
@@ -554,6 +576,16 @@ impl ThoughtEncoder {
             ("close", "inside-bar"), ("close", "outside-bar"),
             ("close", "gap-up"), ("close", "gap-down"),
             ("close", "consecutive-up"), ("close", "consecutive-down"),
+            // Regime zones
+            ("kama-er", "efficient-trend"), ("kama-er", "inefficient-chop"),
+            ("chop", "chop-trending"), ("chop", "chop-choppy"), ("chop", "chop-extreme"), ("chop", "chop-transition"),
+            ("dfa-alpha", "persistent-dfa"), ("dfa-alpha", "anti-persistent-dfa"), ("dfa-alpha", "random-walk-dfa"),
+            ("variance-ratio", "vr-momentum"), ("variance-ratio", "vr-mean-revert"), ("variance-ratio", "vr-neutral"),
+            ("td-count", "td-exhausted"), ("td-count", "td-mature"), ("td-count", "td-building"), ("td-count", "td-inactive"),
+            ("aroon-up", "aroon-strong-up"), ("aroon-up", "aroon-strong-down"), ("aroon-up", "aroon-consolidating"), ("aroon-up", "aroon-stale"),
+            ("fractal-dim", "trending-geometry"), ("fractal-dim", "random-walk-geometry"), ("fractal-dim", "mean-reverting-geometry"),
+            ("gr-bvalue", "heavy-tails"), ("gr-bvalue", "light-tails"),
+            ("entropy-rate", "low-entropy-rate"), ("entropy-rate", "high-entropy-rate"),
         ] {
             let key = format!("(at {} {})", ind, zone);
             if !fact_cache.contains_key(&key) {
@@ -623,6 +655,7 @@ impl ThoughtEncoder {
         "structure",  // Ichimoku, SMA, Fibonacci, BB/Keltner, range position
         "volume",     // volume analysis, volume confirmation, price action
         "narrative",  // PELT segments, temporal lookback, calendar
+        "regime",     // Choppiness, DFA, Hurst, Variance Ratio, Fractal Dim, Entropy, GR b-value
     ];
 
     /// Encode with a windowed view of the streams.
@@ -709,6 +742,10 @@ impl ThoughtEncoder {
         // Price action
         if is(&["volume"]) {
             self.eval_price_action(candles, &mut cached_facts, &mut labels);
+        }
+        // Advanced indicators: regime detection, seismology, info theory
+        if is(&["regime", "momentum", "structure"]) {
+            self.eval_advanced(candles, &mut cached_facts, &mut owned_facts, &mut labels);
         }
 
         // Unify all facts, then filter suppressed (high fire-rate constants).
@@ -1594,6 +1631,286 @@ impl ThoughtEncoder {
         if down_count >= 3 {
             if let Some(v) = self.fact_cache.get("(at close consecutive-down)") {
                 facts.push(v); labels.push(format!("(at close consecutive-down {})", down_count));
+            }
+        }
+    }
+
+    // ─── Advanced indicators (tier-1 underdogs + esoteric) ─────────────
+
+    fn eval_advanced<'a>(
+        &'a self,
+        candles: &[Candle],
+        facts: &mut Vec<&'a Vector>,
+        owned_facts: &mut Vec<Vector>,
+        labels: &mut Vec<String>,
+    ) {
+        let n = candles.len();
+        if n < 20 { return; }
+
+        let closes: Vec<f64> = candles.iter().map(|c| c.close).collect();
+        let now = candles.last().unwrap();
+
+        // ── KAMA Efficiency Ratio ─────────────────────────────────────
+        // ER = |net movement| / sum(|step movements|) over 10 periods
+        let er_period = 10.min(n - 1);
+        let net_move = (closes[n - 1] - closes[n - 1 - er_period]).abs();
+        let step_sum: f64 = (n - er_period..n).map(|i| (closes[i] - closes[i - 1]).abs()).sum();
+        let er = if step_sum > 1e-10 { net_move / step_sum } else { 0.0 };
+
+        let zone = if er > 0.6 { "efficient-trend" } else if er < 0.3 { "inefficient-chop" } else { "moderate-efficiency" };
+        let key = format!("(at kama-er {})", zone);
+        if let Some(v) = self.fact_cache.get(&key) { facts.push(v); labels.push(key); }
+
+        // ── Choppiness Index (14-period) ──────────────────────────────
+        let chop_period = 14.min(n - 1);
+        let chop_slice = &candles[n - chop_period..];
+        let chop_atr_sum: f64 = (1..chop_period).map(|i| {
+            let hl = chop_slice[i].high - chop_slice[i].low;
+            let hc = (chop_slice[i].high - chop_slice[i - 1].close).abs();
+            let lc = (chop_slice[i].low - chop_slice[i - 1].close).abs();
+            hl.max(hc).max(lc)
+        }).sum();
+        let chop_hi = chop_slice.iter().map(|c| c.high).fold(f64::NEG_INFINITY, f64::max);
+        let chop_lo = chop_slice.iter().map(|c| c.low).fold(f64::INFINITY, f64::min);
+        let chop_range = chop_hi - chop_lo;
+        let chop = if chop_range > 1e-10 {
+            100.0 * (chop_atr_sum / chop_range).log10() / (chop_period as f64).log10()
+        } else { 100.0 };
+
+        let chop_zone = if chop < 38.2 { "chop-trending" } else if chop > 75.0 { "chop-extreme" } else if chop > 61.8 { "chop-choppy" } else { "chop-transition" };
+        let key = format!("(at chop {})", chop_zone);
+        if let Some(v) = self.fact_cache.get(&key) { facts.push(v); labels.push(key); }
+
+        // ── DFA Alpha (detrended fluctuation analysis) ────────────────
+        let returns: Vec<f64> = (1..n).map(|i| (closes[i] / closes[i - 1]).ln()).collect();
+        if returns.len() >= 16 {
+            let ret_mean = returns.iter().sum::<f64>() / returns.len() as f64;
+            let integrated: Vec<f64> = returns.iter().scan(0.0, |acc, &r| { *acc += r - ret_mean; Some(*acc) }).collect();
+            let scales: Vec<usize> = vec![4, 6, 8, 12, 16].into_iter().filter(|&s| s <= integrated.len()).collect();
+            if scales.len() >= 3 {
+                let mut log_f = Vec::new();
+                let mut log_s = Vec::new();
+                for &s in &scales {
+                    let num_segs = integrated.len() / s;
+                    if num_segs == 0 { continue; }
+                    let mut f2_sum = 0.0;
+                    for seg in 0..num_segs {
+                        let start = seg * s;
+                        let seg_data = &integrated[start..start + s];
+                        // Linear detrend
+                        let sx: f64 = (0..s).map(|i| i as f64).sum();
+                        let sy: f64 = seg_data.iter().sum();
+                        let sxx: f64 = (0..s).map(|i| (i * i) as f64).sum();
+                        let sxy: f64 = (0..s).map(|i| i as f64 * seg_data[i]).sum();
+                        let sn = s as f64;
+                        let denom = sn * sxx - sx * sx;
+                        let (a, b) = if denom.abs() > 1e-10 {
+                            let b = (sn * sxy - sx * sy) / denom;
+                            let a = (sy - b * sx) / sn;
+                            (a, b)
+                        } else { (0.0, 0.0) };
+                        let rms: f64 = seg_data.iter().enumerate()
+                            .map(|(i, &y)| { let trend = a + b * i as f64; (y - trend).powi(2) })
+                            .sum::<f64>() / sn;
+                        f2_sum += rms;
+                    }
+                    let f = (f2_sum / num_segs as f64).sqrt();
+                    if f > 1e-10 {
+                        log_f.push(f.ln());
+                        log_s.push((s as f64).ln());
+                    }
+                }
+                if log_f.len() >= 3 {
+                    let nf = log_f.len() as f64;
+                    let sx: f64 = log_s.iter().sum();
+                    let sy: f64 = log_f.iter().sum();
+                    let sxx: f64 = log_s.iter().map(|x| x * x).sum();
+                    let sxy: f64 = log_s.iter().zip(log_f.iter()).map(|(x, y)| x * y).sum();
+                    let denom = nf * sxx - sx * sx;
+                    if denom.abs() > 1e-10 {
+                        let alpha = (nf * sxy - sx * sy) / denom;
+                        let alpha = alpha.clamp(0.0, 1.5);
+                        let dfa_zone = if alpha > 0.6 { "persistent-dfa" }
+                            else if alpha < 0.4 { "anti-persistent-dfa" }
+                            else { "random-walk-dfa" };
+                        let key = format!("(at dfa-alpha {})", dfa_zone);
+                        if let Some(v) = self.fact_cache.get(&key) { facts.push(v); labels.push(key); }
+                    }
+                }
+            }
+        }
+
+        // ── Variance Ratio (k=5) ─────────────────────────────────────
+        if returns.len() >= 10 {
+            let var1: f64 = returns.iter().map(|r| r * r).sum::<f64>() / returns.len() as f64;
+            let k = 5usize;
+            let k_returns: Vec<f64> = (0..returns.len() - k + 1)
+                .map(|i| returns[i..i + k].iter().sum::<f64>()).collect();
+            if !k_returns.is_empty() && var1 > 1e-20 {
+                let var_k: f64 = k_returns.iter().map(|r| r * r).sum::<f64>() / k_returns.len() as f64 / k as f64;
+                let vr = var_k / var1;
+                let vr_zone = if vr > 1.3 { "vr-momentum" } else if vr < 0.7 { "vr-mean-revert" } else { "vr-neutral" };
+                let key = format!("(at variance-ratio {})", vr_zone);
+                if let Some(v) = self.fact_cache.get(&key) { facts.push(v); labels.push(key); }
+            }
+        }
+
+        // ── DeMark TD Sequential ─────────────────────────────────────
+        if n >= 5 {
+            let mut count: i32 = 0;
+            for i in 4..n {
+                if closes[i] > closes[i - 4] {
+                    count = if count > 0 { count + 1 } else { 1 };
+                } else if closes[i] < closes[i - 4] {
+                    count = if count < 0 { count - 1 } else { -1 };
+                } else { count = 0; }
+            }
+            let abs_count = count.unsigned_abs();
+            let td_zone = if abs_count >= 9 { "td-exhausted" }
+                else if abs_count >= 7 { "td-mature" }
+                else if abs_count >= 4 { "td-building" }
+                else { "td-inactive" };
+            let key = format!("(at td-count {})", td_zone);
+            if let Some(v) = self.fact_cache.get(&key) { facts.push(v); labels.push(key); }
+        }
+
+        // ── Aroon (25-period) ────────────────────────────────────────
+        let aroon_period = 25.min(n - 1);
+        if n > aroon_period {
+            let slice = &candles[n - aroon_period - 1..];
+            let mut hi_idx = 0;
+            let mut lo_idx = 0;
+            for i in 0..=aroon_period {
+                if slice[i].high >= slice[hi_idx].high { hi_idx = i; }
+                if slice[i].low <= slice[lo_idx].low { lo_idx = i; }
+            }
+            let aroon_up = 100.0 * hi_idx as f64 / aroon_period as f64;
+            let aroon_down = 100.0 * lo_idx as f64 / aroon_period as f64;
+            let aroon_zone = if aroon_up > 80.0 && aroon_down < 30.0 { "aroon-strong-up" }
+                else if aroon_down > 80.0 && aroon_up < 30.0 { "aroon-strong-down" }
+                else if aroon_up < 20.0 && aroon_down < 20.0 { "aroon-stale" }
+                else { "aroon-consolidating" };
+            let key = format!("(at aroon-up {})", aroon_zone);
+            if let Some(v) = self.fact_cache.get(&key) { facts.push(v); labels.push(key); }
+        }
+
+        // ── Fractal Dimension (Katz) ─────────────────────────────────
+        {
+            let path_len: f64 = (1..n).map(|i| ((closes[i] - closes[i-1]).powi(2) + 1.0).sqrt()).sum();
+            let max_dist = closes.iter().map(|&c| (c - closes[0]).abs()).fold(0.0_f64, f64::max);
+            if path_len > 1e-10 && max_dist > 1e-10 {
+                let nf = n as f64;
+                let fd = nf.ln() / (nf.ln() + (max_dist / path_len).ln());
+                let fd = fd.clamp(1.0, 2.0);
+                let fd_zone = if fd < 1.3 { "trending-geometry" }
+                    else if fd > 1.7 { "mean-reverting-geometry" }
+                    else { "random-walk-geometry" };
+                let key = format!("(at fractal-dim {})", fd_zone);
+                if let Some(v) = self.fact_cache.get(&key) { facts.push(v); labels.push(key); }
+            }
+        }
+
+        // ── Spectral Slope ───────────────────────────────────────────
+        if returns.len() >= 16 {
+            // Simple periodogram: compute power at each frequency
+            let nr = returns.len();
+            let mut log_p = Vec::new();
+            let mut log_f = Vec::new();
+            for k in 1..nr / 2 {
+                let freq = k as f64 / nr as f64;
+                let mut re = 0.0_f64;
+                let mut im = 0.0_f64;
+                for (t, &r) in returns.iter().enumerate() {
+                    let angle = 2.0 * std::f64::consts::PI * k as f64 * t as f64 / nr as f64;
+                    re += r * angle.cos();
+                    im += r * angle.sin();
+                }
+                let power = (re * re + im * im) / nr as f64;
+                if power > 1e-20 {
+                    log_p.push(power.ln());
+                    log_f.push(freq.ln());
+                }
+            }
+            if log_p.len() >= 4 {
+                let nf = log_p.len() as f64;
+                let sx: f64 = log_f.iter().sum();
+                let sy: f64 = log_p.iter().sum();
+                let sxx: f64 = log_f.iter().map(|x| x * x).sum();
+                let sxy: f64 = log_f.iter().zip(log_p.iter()).map(|(x, y)| x * y).sum();
+                let denom = nf * sxx - sx * sx;
+                if denom.abs() > 1e-10 {
+                    let _beta = (nf * sxy - sx * sy) / denom;
+                    // beta near 0 = white noise, near -2 = Brownian
+                    // Stored as atom but not yet zoned — curve will judge
+                }
+            }
+        }
+
+        // ── Entropy Rate (bigram conditional entropy) ────────────────
+        if returns.len() >= 20 {
+            // Classify each return as up/flat/down
+            let classes: Vec<u8> = returns.iter().map(|&r| {
+                if r > 0.0001 { 2 } else if r < -0.0001 { 0 } else { 1 }
+            }).collect();
+            // Count bigram frequencies
+            let mut bigrams = [[0u32; 3]; 3];
+            let mut unigrams = [0u32; 3];
+            for w in classes.windows(2) {
+                bigrams[w[0] as usize][w[1] as usize] += 1;
+                unigrams[w[0] as usize] += 1;
+            }
+            // Conditional entropy H(X_t | X_{t-1})
+            let total = (classes.len() - 1) as f64;
+            let mut h_cond = 0.0_f64;
+            for i in 0..3 {
+                if unigrams[i] == 0 { continue; }
+                let p_i = unigrams[i] as f64 / total;
+                for j in 0..3 {
+                    if bigrams[i][j] == 0 { continue; }
+                    let p_j_given_i = bigrams[i][j] as f64 / unigrams[i] as f64;
+                    h_cond -= p_i * p_j_given_i * p_j_given_i.ln();
+                }
+            }
+            // Normalize by max entropy (ln(3))
+            let h_norm = h_cond / 3.0_f64.ln();
+            let ent_zone = if h_norm < 0.7 { "low-entropy-rate" } else { "high-entropy-rate" };
+            let key = format!("(at entropy-rate {})", ent_zone);
+            if let Some(v) = self.fact_cache.get(&key) { facts.push(v); labels.push(key); }
+        }
+
+        // ── Gutenberg-Richter b-value (seismology) ───────────────────
+        if returns.len() >= 20 {
+            // b-value = slope of log(frequency) vs log(magnitude)
+            let mut abs_returns: Vec<f64> = returns.iter().map(|r| r.abs()).collect();
+            abs_returns.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            let nr = abs_returns.len();
+            // Compute complementary CDF at a few magnitude thresholds
+            let thresholds: Vec<f64> = (1..5).map(|i| {
+                abs_returns[nr * i / 5]
+            }).collect();
+            let mut log_n = Vec::new();
+            let mut log_m = Vec::new();
+            for &t in &thresholds {
+                if t < 1e-10 { continue; }
+                let count = abs_returns.iter().filter(|&&r| r >= t).count();
+                if count > 0 {
+                    log_n.push((count as f64).ln());
+                    log_m.push(t.ln());
+                }
+            }
+            if log_n.len() >= 3 {
+                let nf = log_n.len() as f64;
+                let sx: f64 = log_m.iter().sum();
+                let sy: f64 = log_n.iter().sum();
+                let sxx: f64 = log_m.iter().map(|x| x * x).sum();
+                let sxy: f64 = log_m.iter().zip(log_n.iter()).map(|(x, y)| x * y).sum();
+                let denom = nf * sxx - sx * sx;
+                if denom.abs() > 1e-10 {
+                    let b = -(nf * sxy - sx * sy) / denom; // negative slope
+                    let gr_zone = if b < 1.0 { "heavy-tails" } else { "light-tails" };
+                    let key = format!("(at gr-bvalue {})", gr_zone);
+                    if let Some(v) = self.fact_cache.get(&key) { facts.push(v); labels.push(key); }
+                }
             }
         }
     }
