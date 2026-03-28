@@ -1274,7 +1274,13 @@ fn main() {
                                 _ => 0.0,
                             };
                             let per_swap = args.swap_fee + args.slippage;
-                            let hyp_net = (1.0 - per_swap) * (1.0 + directional) * (1.0 - per_swap) - 1.0;
+                            // In hold mode: one swap per signal (0.35% cost).
+                            // In round-trip mode: two swaps per trade (0.70% cost).
+                            let hyp_net = if args.asset_mode == "hold" {
+                                directional - per_swap // single swap cost
+                            } else {
+                                (1.0 - per_swap) * (1.0 + directional) * (1.0 - per_swap) - 1.0
+                            };
                             let mgr_label = if hyp_net > 0.0 { Outcome::Buy } else { Outcome::Sell };
 
                             let mut mgr_facts: Vec<Vector> = entry.expert_preds.iter().enumerate()
