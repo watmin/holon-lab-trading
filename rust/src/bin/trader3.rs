@@ -1274,10 +1274,24 @@ fn main() {
                                 _ => 0.0,
                             };
                             let per_swap = args.swap_fee + args.slippage;
-                            // In hold mode: one swap per signal (0.35% cost).
-                            // In round-trip mode: two swaps per trade (0.70% cost).
+                            // In hold mode: use the FULL price change at horizon expiry,
+                            // not just threshold crossing. The position doesn't exit at
+                            // 0.5% — it holds until the next signal. The horizon price
+                            // change is the best proxy for "what would holding have done?"
+                            let hyp_directional = if args.asset_mode == "hold" {
+                                // Use exit_pct (price at horizon) not outcome_pct (threshold crossing)
+                                let full_pct = (current_price - candles[entry.candle_idx].close)
+                                    / candles[entry.candle_idx].close;
+                                match majority_dir {
+                                    Outcome::Buy  =>  full_pct,
+                                    Outcome::Sell => -full_pct,
+                                    _ => 0.0,
+                                }
+                            } else {
+                                directional
+                            };
                             let hyp_net = if args.asset_mode == "hold" {
-                                directional - per_swap // single swap cost
+                                hyp_directional - per_swap
                             } else {
                                 (1.0 - per_swap) * (1.0 + directional) * (1.0 - per_swap) - 1.0
                             };
