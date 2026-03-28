@@ -1177,8 +1177,67 @@ fn main() {
                         if tht_rolling.len() > rolling_cap { tht_rolling.pop_front(); }
                     }
 
-                    // Manager profitability tracking moved to trade resolution
-                    // block below where net_ret is computed.
+                    // ── Manager learns from ALL non-Noise outcomes ──────────
+                    // The manager doesn't need meta_dir to learn. It needs to
+                    // see the expert configuration + whether following the experts
+                    // would have been profitable. Breaks the deadlock: the manager
+                    // learns even when it has no opinion of its own yet.
+                    {
+                        // Hypothetical: if we followed the majority expert direction,
+                        // would it have been profitable after costs?
+                        let expert_majority = {
+                            let buys = entry.expert_preds.iter()
+                                .filter(|ep| ep.direction == Some(Outcome::Buy)).count();
+                            let sells = entry.expert_preds.iter()
+                                .filter(|ep| ep.direction == Some(Outcome::Sell)).count();
+                            if buys > sells { Some(Outcome::Buy) }
+                            else if sells > buys { Some(Outcome::Sell) }
+                            else { None }
+                        };
+                        if let Some(majority_dir) = expert_majority {
+                            let directional = match majority_dir {
+                                Outcome::Buy  =>  entry.outcome_pct,
+                                Outcome::Sell => -entry.outcome_pct,
+                                _ => 0.0,
+                            };
+                            let per_swap = args.swap_fee + args.slippage;
+                            let hyp_net = (1.0 - per_swap) * (1.0 + directional) * (1.0 - per_swap) - 1.0;
+                            let mgr_label = if hyp_net > 0.0 { Outcome::Buy } else { Outcome::Sell };
+
+                            let mut mgr_facts: Vec<Vector> = entry.expert_preds.iter().enumerate()
+                                .map(|(ei, ep)| {
+                                    let cv = mgr_scalar.encode_log(ep.raw_cos.abs().max(1e-10));
+                                    let role = if ep.raw_cos >= 0.0 {
+                                        expert_atoms[ei].clone()
+                                    } else {
+                                        Primitives::permute(&expert_atoms[ei], 1)
+                                    };
+                                    Primitives::bind(&role, &cv)
+                                }).collect();
+                            {
+                                let gen_cos = entry.tht_pred.raw_cos;
+                                let cv = mgr_scalar.encode_log(gen_cos.abs().max(1e-10));
+                                let role = if gen_cos >= 0.0 {
+                                    generalist_atom.clone()
+                                } else {
+                                    Primitives::permute(&generalist_atom, 1)
+                                };
+                                mgr_facts.push(Primitives::bind(&role, &cv));
+                            }
+                            let mrefs: Vec<&Vector> = mgr_facts.iter().collect();
+                            let mgr_vec = Primitives::bundle(&mrefs);
+                            mgr_journal.observe(&mgr_vec, mgr_label, 1.0);
+
+                            // Track for proof gate
+                            let profitable = hyp_net > 0.0;
+                            mgr_resolved.push_back((entry.meta_conviction, profitable));
+                            if mgr_resolved.len() > 5000 { mgr_resolved.pop_front(); }
+                            resolved_preds.push_back((entry.meta_conviction, profitable));
+                            if resolved_preds.len() > conviction_window {
+                                resolved_preds.pop_front();
+                            }
+                        }
+                    }
                 }
 
                 // Every prediction goes to the ledger — hypothetical or real.
