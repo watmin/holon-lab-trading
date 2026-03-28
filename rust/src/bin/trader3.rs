@@ -299,6 +299,7 @@ struct Pending {
     meta_conviction: f64,
     position_frac: Option<f64>,
     expert_vecs:   Vec<Vector>,       // per-expert thought vectors
+    expert_preds:  Vec<Prediction>,   // per-expert predictions at entry time
     fact_labels:   Vec<String>,      // thought facts present at this candle
     first_outcome: Option<Outcome>, // set on first threshold crossing; drives learning
     outcome_pct:   f64,             // price change at first crossing (for DB)
@@ -478,6 +479,15 @@ fn init_run_db(path: &str) -> Connection {
             threshold       REAL,     -- adaptive anomaly threshold
             explained       REAL,     -- fraction of variance explained
             top_eigenvalues TEXT      -- JSON array of top-5 eigenvalues
+        );
+
+        -- Per-expert predictions logged at entry expiry.
+        CREATE TABLE IF NOT EXISTS expert_log (
+            step          INTEGER,
+            expert        TEXT,
+            conviction    REAL,
+            direction     TEXT,     -- raw (un-flipped) prediction
+            correct       INTEGER   -- 1 if flipped prediction matches actual
         );
 
         -- Visual + thought vectors for flip-zone trades (for engram analysis).
@@ -768,13 +778,10 @@ fn main() {
         for ((i, vis_vec), (_, tht_vec, tht_facts, expert_vecs)) in vis_vecs.into_iter().zip(tht_vecs) {
             encode_count += 1;
 
-            // Expert panel: predict from each expert, track their state
-            for (ei, expert_vec) in expert_vecs.iter().enumerate() {
-                let pred = experts[ei].journal.predict(expert_vec);
-                // We'll track expert predictions for curve building later
-                // For now just feed them (observe happens at learning time below)
-                let _ = pred; // predictions tracked but not used for trading yet
-            }
+            // Expert panel: predict from each expert
+            let expert_preds: Vec<Prediction> = expert_vecs.iter().enumerate()
+                .map(|(ei, vec)| experts[ei].journal.predict(vec))
+                .collect();
 
             let vis_pred = vis_journal.predict(&vis_vec);
             // Dual thought prediction: blend slow + fast based on subspace residual.
@@ -811,11 +818,16 @@ fn main() {
             let tht_roll_acc = if tht_rolling.is_empty() { 0.5 }
                 else { tht_rolling.iter().filter(|&&x| x).count() as f64 / tht_rolling.len() as f64 };
 
-            let (raw_meta_dir, meta_conviction) = orchestrate(
+            let (mut raw_meta_dir, mut meta_conviction) = orchestrate(
                 &args.orchestration,
                 &vis_pred, &tht_pred,
                 vis_roll_acc, tht_roll_acc,
             );
+
+            // Expert panel: observe only, don't override predictions.
+            // Experts build their curves independently. Selection comes later
+            // once we understand their conviction scales and regime strengths.
+            // The generalist drives all trading decisions.
 
             // Track conviction history for dynamic threshold computation.
             // Window spans recalib_interval * 100 candles (~6 months at 5m).
@@ -957,6 +969,7 @@ fn main() {
                 meta_conviction,
                 position_frac,
                 expert_vecs,
+                expert_preds,
                 fact_labels:   tht_facts,
                 first_outcome: None,
                 outcome_pct:   0.0,
@@ -1002,9 +1015,34 @@ fn main() {
                         vis_journal.observe(&entry.vis_vec, o, sw);
                         tht_journal.observe(&entry.tht_vec, o, sw);
                         tht_fast.observe(&entry.tht_vec, o, sw);
-                        // Expert panel: each expert observes with its own vector
+                        // Expert panel: each expert observes and tracks its curve
                         for (ei, expert_vec) in entry.expert_vecs.iter().enumerate() {
                             experts[ei].journal.observe(expert_vec, o, sw);
+                            if let Some(raw_dir) = entry.expert_preds[ei].direction {
+                                let flipped = match raw_dir {
+                                    Outcome::Buy  => Outcome::Sell,
+                                    Outcome::Sell => Outcome::Buy,
+                                    Outcome::Noise => Outcome::Noise,
+                                };
+                                let correct = flipped == o;
+                                experts[ei].resolved.push_back(
+                                    (entry.expert_preds[ei].conviction, correct));
+                                if experts[ei].resolved.len() > conviction_window {
+                                    experts[ei].resolved.pop_front();
+                                }
+                                // Log for post-hoc analysis
+                                run_db.execute(
+                                    "INSERT INTO expert_log (step,expert,conviction,direction,correct)
+                                     VALUES (?1,?2,?3,?4,?5)",
+                                    params![
+                                        log_step,
+                                        experts[ei].name,
+                                        entry.expert_preds[ei].conviction,
+                                        raw_dir.to_string(),
+                                        correct as i32,
+                                    ],
+                                ).ok();
+                            }
                         }
                         entry.first_outcome = Some(o);
                         entry.outcome_pct   = pct;
