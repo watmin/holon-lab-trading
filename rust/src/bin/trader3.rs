@@ -848,19 +848,13 @@ fn main() {
             let vis_vec = null_vec.clone(); // stub for Pending compatibility
             let vis_pred = Prediction::default(); // visual removed — thought-only
             // Dual thought prediction: blend slow + fast based on subspace residual.
-            // Bundle risk thoughts with market thoughts before prediction.
-            // The discriminant sees market + portfolio state in one vector.
-            let (risk_vecs, _risk_labels) = trader.risk_facts(&vm);
-            let tht_with_risk = if risk_vecs.is_empty() {
-                tht_vec.clone()
-            } else {
-                let mut all: Vec<&Vector> = vec![&tht_vec];
-                all.extend(risk_vecs.iter());
-                Primitives::bundle(&all)
-            };
+            // Risk thoughts computed but NOT bundled with market thoughts.
+            // Bundling was tested — it adds noise (-0.6pp). Risk should be
+            // a separate expert with its own curve, not a modifier of market signal.
+            let (_risk_vecs, _risk_labels) = trader.risk_facts(&vm);
 
-            let tht_slow_pred = tht_journal.predict(&tht_with_risk);
-            let tht_fast_pred = tht_fast.predict(&tht_with_risk);
+            let tht_slow_pred = tht_journal.predict(&tht_vec);
+            let tht_fast_pred = tht_fast.predict(&tht_vec);
 
             // Feed subspace (needs f64 input). Score before update.
             let tht_f64: Vec<f64> = tht_vec.data().iter().map(|&v| v as f64).collect();
