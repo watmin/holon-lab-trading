@@ -134,6 +134,11 @@ struct Args {
     /// Output SQLite database for this run. Auto-generated if omitted.
     #[arg(long)]
     run_db: Option<PathBuf>,
+
+    /// Enable heavy diagnostic tables (trade_facts, trade_vectors, expert_log).
+    /// Off by default for performance. Enable for analysis runs.
+    #[arg(long, default_value_t = false)]
+    diagnostics: bool,
 }
 
 // ─── Trader (phase + equity) ─────────────────────────────────────────────────
@@ -1188,29 +1193,9 @@ fn main() {
     // Each group is an OnlineSubspace that learns a cluster of similar visual
     // patterns from winning flip-zone trades. New groups auto-discovered when
     // a winning visual vector doesn't match any existing group.
-    struct PatternGroup {
-        centroid: Vec<f64>,   // running mean of visual vectors in this group
-        count: usize,
-        wins: usize,
-        losses: usize,
-    }
-    impl PatternGroup {
-        fn cosine(&self, x: &[f64]) -> f64 {
-            let dot: f64 = self.centroid.iter().zip(x.iter()).map(|(a, b)| a * b).sum();
-            let na: f64 = self.centroid.iter().map(|a| a * a).sum::<f64>().sqrt();
-            let nb: f64 = x.iter().map(|b| b * b).sum::<f64>().sqrt();
-            if na > 1e-10 && nb > 1e-10 { dot / (na * nb) } else { 0.0 }
-        }
-        fn add(&mut self, x: &[f64]) {
-            let n = self.count as f64;
-            for (c, &v) in self.centroid.iter_mut().zip(x.iter()) {
-                *c = (*c * n + v) / (n + 1.0);
-            }
-            self.count += 1;
-        }
-    }
-    let mut visual_groups: Vec<PatternGroup> = Vec::new();
-    let group_cos_threshold = 0.35; // minimum cosine to join an existing group
+    // Visual pattern grouping removed — visual encoding proven zero signal.
+    // The old code accumulated unbounded PatternGroups with zero-vector centroids
+    // (since vis_vec is always null), causing O(n_groups × dims) per flipped trade.
 
     // ─ Risk branch: five specialized subspaces ─────────────────────────
     // Each measures health in its own domain. The worst residual drives
@@ -1792,7 +1777,7 @@ fn main() {
                                     experts[ei].resolved.pop_front();
                                 }
                                 // Log for post-hoc analysis
-                                run_db.execute(
+                                if args.diagnostics { run_db.execute(
                                     "INSERT INTO expert_log (step,expert,conviction,direction,correct)
                                      VALUES (?1,?2,?3,?4,?5)",
                                     params![
@@ -1802,7 +1787,7 @@ fn main() {
                                         raw_dir.to_string(),
                                         correct as i32,
                                     ],
-                                ).ok();
+                                ).ok(); }
                             }
                         }
                         entry.first_outcome = Some(o);
@@ -1957,47 +1942,12 @@ fn main() {
                                 } else { 0.5 };
                                 let eq_pct = (trader.equity - trader.initial_equity) / trader.initial_equity * 100.0;
                                 let won = (dir == final_out) as i32;
-                                run_db.execute(
+                                if args.diagnostics { run_db.execute(
                                     "INSERT INTO risk_log (step,drawdown_pct,streak_len,streak_dir,recent_acc,equity_pct,won)
                                      VALUES (?1,?2,?3,?4,?5,?6,?7)",
                                     params![log_step, dd, streak_len, streak_dir, recent_acc, eq_pct, won],
-                                ).ok();
+                                ).ok(); }
                             }
-                            // Route visual vector to pattern groups.
-                            // Score against all groups, assign to best match or create new.
-                            if entry.was_flipped {
-                                let vis_f64: Vec<f64> = entry.vis_vec.data().iter()
-                                    .map(|&v| v as f64).collect();
-                                let won = dir == final_out;
-
-                                // Find best matching group by cosine to centroid.
-                                let mut best_idx: Option<usize> = None;
-                                let mut best_cos = group_cos_threshold;
-                                for (gi, group) in visual_groups.iter().enumerate() {
-                                    let cos = group.cosine(&vis_f64);
-                                    if cos > best_cos {
-                                        best_cos = cos;
-                                        best_idx = Some(gi);
-                                    }
-                                }
-                                match best_idx {
-                                    Some(gi) => {
-                                        visual_groups[gi].add(&vis_f64);
-                                        if won { visual_groups[gi].wins += 1; }
-                                        else   { visual_groups[gi].losses += 1; }
-                                    }
-                                    None => {
-                                        // No match — new pattern type discovered.
-                                        visual_groups.push(PatternGroup {
-                                            centroid: vis_f64.clone(),
-                                            count: 1,
-                                            wins: if won { 1 } else { 0 },
-                                            losses: if won { 0 } else { 1 },
-                                        });
-                                    }
-                                }
-                            }
-
                             // Track flip-zone trade outcomes.
                             if entry.was_flipped {
                                 window_total += 1;
@@ -2023,10 +1973,10 @@ fn main() {
                             }
                             // Log which facts were present for this trade.
                             for label in &entry.fact_labels {
-                                run_db.execute(
+                                if args.diagnostics { run_db.execute(
                                     "INSERT INTO trade_facts (step, fact_label) VALUES (?1, ?2)",
                                     params![log_step, label],
-                                ).ok();
+                                ).ok(); }
                             }
                             // Store visual + thought vectors for engram analysis.
                             if entry.was_flipped {
@@ -2035,7 +1985,7 @@ fn main() {
                                     .map(|&v| v as u8).collect();
                                 let tht_bytes: Vec<u8> = entry.tht_vec.data().iter()
                                     .map(|&v| v as u8).collect();
-                                run_db.execute(
+                                if args.diagnostics { run_db.execute(
                                     "INSERT INTO trade_vectors (step, won, vis_data, tht_data)
                                      VALUES (?1, ?2, ?3, ?4)",
                                     params![
@@ -2043,7 +1993,7 @@ fn main() {
                                         vis_bytes,
                                         tht_bytes,
                                     ],
-                                ).ok();
+                                ).ok(); }
                             }
                         }
                     }
@@ -2190,16 +2140,6 @@ fn main() {
         else { tht_rolling.iter().filter(|&&x| x).count() as f64 / tht_rolling.len() as f64 * 100.0 };
     eprintln!("  Rolling accuracy (last {}): visual={:.1}% thought={:.1}%",
         rolling_cap, vis_acc, tht_acc);
-    if !visual_groups.is_empty() {
-        eprintln!();
-        eprintln!("  Visual pattern groups: {} discovered", visual_groups.len());
-        for (i, g) in visual_groups.iter().enumerate() {
-            let total = g.wins + g.losses;
-            let wr = if total > 0 { g.wins as f64 / total as f64 * 100.0 } else { 0.0 };
-            eprintln!("    Group {}: {} obs, {} trades ({}W/{}L = {:.1}%)",
-                i, g.count, total, g.wins, g.losses, wr);
-        }
-    }
     eprintln!();
 
     // Expert panel summary.
