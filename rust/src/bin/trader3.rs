@@ -375,11 +375,12 @@ fn main() {
     // Layer 2: Panel state engram — learns the manifold of "good panel configurations."
     // Encodes each expert's (signed conviction) as a feature vector.
     // Dimensionality = number of experts. Fed after each recalib if accuracy was good.
-    // Manager's vocabulary = its experts. Each expert name is an atom.
+    // Manager's vocabulary = its experts + generalist. Each is an atom.
     let expert_atoms: Vec<Vector> = expert_profiles.iter()
         .map(|&name| vm.get_vector(name))
         .collect();
-    let panel_dim = expert_profiles.len(); // experts only — manager doesn't encode
+    let generalist_atom = vm.get_vector("generalist"); // the team's composite voice
+    let panel_dim = expert_profiles.len() + 1; // experts + generalist
     let mut panel_engram = OnlineSubspace::with_params(panel_dim, 4, 2.0, 0.01, 3.5, 100);
     let mut panel_recalib_wins: u32 = 0;
     let mut panel_recalib_total: u32 = 0;
@@ -611,24 +612,36 @@ fn main() {
             //   bind(expert_atom, scalar(|conviction|)) for BUY predictions
             //   bind(permute(expert_atom), scalar(|conviction|)) for SELL predictions
             // Permutation makes buy/sell structurally distinct in the hyperspace.
-            let mgr_facts: Vec<Vector> = expert_preds.iter().enumerate()
+            // Encode each expert's opinion + the generalist's holistic view.
+            let mut mgr_facts: Vec<Vector> = expert_preds.iter().enumerate()
                 .map(|(ei, ep)| {
                     let conviction_vec = mgr_scalar.encode_log(ep.raw_cos.abs().max(1e-10));
                     let role = if ep.raw_cos >= 0.0 {
                         expert_atoms[ei].clone()
                     } else {
-                        Primitives::permute(&expert_atoms[ei], 1) // shift = SELL
+                        Primitives::permute(&expert_atoms[ei], 1)
                     };
                     Primitives::bind(&role, &conviction_vec)
                 })
                 .collect();
+            // The generalist: the team's composite voice. Sees all 150 facts.
+            {
+                let gen_conv = mgr_scalar.encode_log(tht_pred.raw_cos.abs().max(1e-10));
+                let gen_role = if tht_pred.raw_cos >= 0.0 {
+                    generalist_atom.clone()
+                } else {
+                    Primitives::permute(&generalist_atom, 1)
+                };
+                mgr_facts.push(Primitives::bind(&gen_role, &gen_conv));
+            }
             let mgr_refs: Vec<&Vector> = mgr_facts.iter().collect();
             let mgr_thought = Primitives::bundle(&mgr_refs);
             let mgr_pred = mgr_journal.predict(&mgr_thought);
 
             // Panel state for engram (Template 2 — reaction layer)
-            let panel_state: Vec<f64> = expert_preds.iter()
+            let mut panel_state: Vec<f64> = expert_preds.iter()
                 .map(|ep| ep.raw_cos).collect();
+            panel_state.push(tht_pred.raw_cos); // generalist's voice
             let panel_familiar = if panel_engram.n() >= 10 {
                 let residual = panel_engram.residual(&panel_state);
                 let threshold = panel_engram.threshold();
@@ -947,9 +960,9 @@ fn main() {
                         vis_journal.observe(&entry.vis_vec, o, sw);
                         tht_journal.observe(&entry.tht_vec, o, sw);
                         tht_fast.observe(&entry.tht_vec, o, sw);
-                        // Manager learns: reconstruct its thought from expert predictions at entry
+                        // Manager learns: reconstruct its thought from expert + generalist at entry
                         {
-                            let mgr_entry_facts: Vec<Vector> = entry.expert_preds.iter().enumerate()
+                            let mut mgr_entry_facts: Vec<Vector> = entry.expert_preds.iter().enumerate()
                                 .map(|(ei, ep)| {
                                     let cv = mgr_scalar.encode_log(ep.raw_cos.abs().max(1e-10));
                                     let role = if ep.raw_cos >= 0.0 {
@@ -959,6 +972,17 @@ fn main() {
                                     };
                                     Primitives::bind(&role, &cv)
                                 }).collect();
+                            // Generalist's voice at entry time
+                            {
+                                let gen_cos = entry.tht_pred.raw_cos;
+                                let cv = mgr_scalar.encode_log(gen_cos.abs().max(1e-10));
+                                let role = if gen_cos >= 0.0 {
+                                    generalist_atom.clone()
+                                } else {
+                                    Primitives::permute(&generalist_atom, 1)
+                                };
+                                mgr_entry_facts.push(Primitives::bind(&role, &cv));
+                            }
                             let mrefs: Vec<&Vector> = mgr_entry_facts.iter().collect();
                             let mgr_vec = Primitives::bundle(&mrefs);
                             mgr_journal.observe(&mgr_vec, o, sw);
