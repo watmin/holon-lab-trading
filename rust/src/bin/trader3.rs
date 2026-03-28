@@ -158,6 +158,13 @@ struct Args {
     #[arg(long, default_value_t = 0.50)]
     max_utilization: f64,
 
+    /// Asset model: "round-trip" = USDC→WBTC→USDC per trade (0.70% RT cost).
+    /// "hold" = treasury holds WBTC between BUY signals. BUY = swap USDC→WBTC,
+    /// SELL = swap WBTC→USDC. One swap per signal (0.35% cost). WBTC appreciates
+    /// between signals. The position persists.
+    #[arg(long, default_value = "hold")]
+    asset_mode: String,
+
     /// visual-only | thought-only | agree-only | meta-boost | weighted | thought-led | thought-contrarian
     #[arg(long, default_value = "meta-boost")]
     orchestration: String,
@@ -484,6 +491,17 @@ fn main() {
     let mut tht_rolling: VecDeque<bool>  = VecDeque::new();
     let rolling_cap = 1000usize;
 
+    // ─ Hold-mode state: which asset does the treasury hold? ────────────
+    // Starts in USDC. BUY signal = swap to WBTC. SELL signal = swap to USDC.
+    // Position persists between signals. WBTC appreciates with the market.
+    #[derive(Clone, Copy, PartialEq)]
+    enum HoldState { InUsdc, InWbtc }
+    let mut hold_state = HoldState::InUsdc;
+    let mut last_swap_candle: usize = 0;
+    let mut last_swap_price: f64 = 0.0;
+    let mut hold_swaps: usize = 0;
+    let mut hold_wins: usize = 0;
+
     let total_candles = candles.len();
     let start_idx     = args.window - 1;
     let end_idx       = if args.max_candles > 0 {
@@ -759,6 +777,61 @@ fn main() {
             // The manager reads their opinions and decides whether to deploy.
             // If reversal behavior emerges, it emerges from the experts' learning.
             let meta_dir = raw_meta_dir;
+
+            // ── Hold mode: swap when signal changes position ─────────
+            // BUY signal + currently in USDC = swap USDC→WBTC.
+            // SELL signal + currently in WBTC = swap WBTC→USDC.
+            // The position persists between signals. WBTC appreciates.
+            if args.asset_mode == "hold" && trader.phase != Phase::Observe && mgr_curve_valid {
+                let btc_price = candles[i].close;
+                let fee_rate = args.swap_fee + args.slippage;
+                match (meta_dir, hold_state) {
+                    (Some(Outcome::Buy), HoldState::InUsdc) => {
+                        // Swap all available USDC → WBTC
+                        let usdc_available = treasury.balance("USDC");
+                        if usdc_available > 1.0 {
+                            let (spent, received) = treasury.swap("USDC", "WBTC", usdc_available, btc_price, fee_rate);
+                            hold_state = HoldState::InWbtc;
+                            last_swap_candle = i;
+                            last_swap_price = btc_price;
+                            hold_swaps += 1;
+                            run_db.execute(
+                                "INSERT INTO trade_ledger (step,candle_idx,timestamp,direction,entry_price,position_usd,swap_fee_pct,exit_reason)
+                                 VALUES (?1,?2,?3,'Buy',?4,?5,?6,'Swap')",
+                                rusqlite::params![log_step, i as i64, &candles[i].ts, btc_price, spent, fee_rate * 100.0],
+                            ).ok();
+                        }
+                    }
+                    (Some(Outcome::Sell), HoldState::InWbtc) => {
+                        // Swap all WBTC → USDC
+                        let wbtc_available = treasury.balance("WBTC");
+                        if wbtc_available > 0.0 {
+                            let wbtc_value_usdc = wbtc_available * btc_price;
+                            let (spent_wbtc, received_usdc) = treasury.swap("WBTC", "USDC", wbtc_available, 1.0 / btc_price, fee_rate);
+                            hold_state = HoldState::InUsdc;
+                            let hold_return = (btc_price - last_swap_price) / last_swap_price;
+                            let hold_candles = i - last_swap_candle;
+                            if hold_return > 0.0 { hold_wins += 1; }
+                            hold_swaps += 1;
+                            run_db.execute(
+                                "INSERT INTO trade_ledger (step,candle_idx,timestamp,direction,entry_price,exit_price,gross_return_pct,net_return_pct,position_usd,swap_fee_pct,horizon_candles,won,exit_reason)
+                                 VALUES (?1,?2,?3,'Sell',?4,?5,?6,?7,?8,?9,?10,?11,'Swap')",
+                                rusqlite::params![
+                                    log_step, i as i64, &candles[i].ts,
+                                    last_swap_price, btc_price,
+                                    hold_return * 100.0,
+                                    (hold_return - 2.0 * fee_rate) * 100.0, // approximate net
+                                    wbtc_value_usdc,
+                                    fee_rate * 100.0,
+                                    hold_candles as i64,
+                                    (hold_return > 2.0 * fee_rate) as i32,
+                                    ],
+                            ).ok();
+                        }
+                    }
+                    _ => {} // signal matches current position — hold
+                }
+            }
 
             // Position sizing: Kelly from the curve × drawdown cap.
             // The curve handles selectivity. The drawdown cap handles survival.
@@ -1548,6 +1621,16 @@ fn main() {
                     exit_info,
                     desk_info,
                 );
+                if args.asset_mode == "hold" {
+                    let mut prices = HashMap::new();
+                    prices.insert("USDC".to_string(), 1.0);
+                    prices.insert("WBTC".to_string(), candles[i].close);
+                    let tv = treasury.total_value(&prices);
+                    let tv_ret = (tv - args.initial_equity) / args.initial_equity * 100.0;
+                    let state = if hold_state == HoldState::InWbtc { "WBTC" } else { "USDC" };
+                    eprintln!("    treasury: ${:.0} ({:+.1}%) in {} | swaps={} wins={}",
+                        tv, tv_ret, state, hold_swaps, hold_wins);
+                }
             }
         }
 

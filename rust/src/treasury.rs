@@ -86,4 +86,47 @@ impl Treasury {
         if total <= 0.0 { return 0.0; }
         self.deployed(&self.base_asset) / total
     }
+
+    /// Swap one asset for another at a given price, minus fees.
+    /// `from` asset is sold, `to` asset is bought.
+    /// `price` = how many units of `from` per unit of `to` (e.g. 87000 USDC per WBTC).
+    /// `fee_rate` = fraction taken per swap (e.g. 0.0035 = 35bps).
+    /// Returns (from_amount_spent, to_amount_received).
+    pub fn swap(
+        &mut self,
+        from: &str,
+        to: &str,
+        amount_from: f64,
+        price: f64,
+        fee_rate: f64,
+    ) -> (f64, f64) {
+        let available = self.balance(from);
+        let spend = amount_from.min(available);
+        if spend <= 0.0 || price <= 0.0 { return (0.0, 0.0); }
+
+        let after_fee = spend * (1.0 - fee_rate);
+        let received = after_fee / price; // convert from → to at price
+        let fee_amount = spend * fee_rate;
+
+        *self.balances.entry(from.to_string()).or_insert(0.0) -= spend;
+        *self.balances.entry(to.to_string()).or_insert(0.0) += received;
+        self.total_fees_paid += fee_amount;
+
+        (spend, received)
+    }
+
+    /// Total portfolio value in a given denomination.
+    /// Requires a price map: asset → price_in_base_asset.
+    pub fn total_value(&self, prices: &HashMap<String, f64>) -> f64 {
+        let mut total = 0.0;
+        for (asset, &bal) in &self.balances {
+            let price = prices.get(asset).copied().unwrap_or(1.0); // base asset = 1.0
+            total += bal * price;
+        }
+        for (asset, &dep) in &self.deployed {
+            let price = prices.get(asset).copied().unwrap_or(1.0);
+            total += dep * price;
+        }
+        total
+    }
 }
