@@ -67,6 +67,21 @@ const INDICATOR_ATOMS: &[&str] = &[
     // vocab/persistence module
     "hurst",                      // Hurst exponent
     "autocorr",                   // lag-1 autocorrelation
+    // vocab/keltner expanded
+    "kelt-pos",                   // Keltner channel position [0,1]
+    "bb-pos",                     // Bollinger Band position [0,1]
+    "volatility",                 // volatility regime indicator
+    "trend",                      // trend regime indicator
+    // vocab/regime expanded
+    "trend-consistency-6", "trend-consistency-12", "trend-consistency-24",
+    "atr-roc-6", "atr-roc-12",
+    "range-pos-12", "range-pos-24", "range-pos-48",
+    // vocab/timeframe
+    "tf-1h", "tf-4h",
+    "tf-1h-ret", "tf-4h-ret",
+    "tf-1h-body", "tf-4h-body",
+    "tf-1h-range-pos", "tf-4h-range-pos",
+    "tf-all-agree", "tf-all-disagree", "tf-1h-agrees", "tf-4h-agrees",
 ];
 
 const DIRECTION_ATOMS: &[&str] = &["up", "down", "flat"];
@@ -100,6 +115,12 @@ const ZONE_ATOMS: &[&str] = &[
     "ult-osc-overbought", "ult-osc-oversold",
     // vocab/flow zones
     "mfi-overbought", "mfi-oversold",
+    // vocab/regime expanded zones
+    "trend-strong", "trend-choppy",
+    "vol-expanding", "vol-contracting",
+    // vocab/timeframe zones
+    "tf-1h-up-strong", "tf-1h-up-mild", "tf-1h-down-strong", "tf-1h-down-mild",
+    "tf-4h-up-strong", "tf-4h-up-mild", "tf-4h-down-strong", "tf-4h-down-mild",
     // vocab/persistence zones
     "hurst-trending", "hurst-reverting",
     "autocorr-positive", "autocorr-negative",
@@ -418,6 +439,15 @@ impl ThoughtEncoder {
             ("autocorr", "autocorr-positive"), ("autocorr", "autocorr-negative"),
             ("adx", "moderate-trend"),
             ("kama-er", "moderate-efficiency"),
+            // vocab/regime expanded zones
+            ("trend", "trend-strong"), ("trend", "trend-choppy"),
+            ("volatility", "vol-expanding"), ("volatility", "vol-contracting"),
+            ("volatility", "squeeze"),
+            // vocab/timeframe zones
+            ("tf-1h", "tf-1h-up-strong"), ("tf-1h", "tf-1h-up-mild"),
+            ("tf-1h", "tf-1h-down-strong"), ("tf-1h", "tf-1h-down-mild"),
+            ("tf-4h", "tf-4h-up-strong"), ("tf-4h", "tf-4h-up-mild"),
+            ("tf-4h", "tf-4h-down-strong"), ("tf-4h", "tf-4h-down-mild"),
         ] {
             let key = format!("(at {} {})", ind, zone);
             if !fact_cache.contains_key(&key) {
@@ -529,13 +559,15 @@ impl ThoughtEncoder {
         }
 
         // ── EXCLUSIVE: structure ────────────────────────────────────
-        // Geometric shape: segments, levels, channels, cloud, fibs.
+        // Geometric shape: segments, levels, channels, cloud, fibs, multi-timeframe.
         if is(&["structure"]) {
             self.eval_segment_narrative(candles, vm, &mut owned_facts, &mut labels);
             self.eval_range_position(candles, &mut owned_facts, &mut labels);
             self.eval_ichimoku(candles, &mut cached_facts, &mut owned_facts, &mut labels);
             self.eval_fibonacci(candles, &mut cached_facts, &mut owned_facts, &mut labels);
             self.eval_keltner(candles, &mut cached_facts, &mut owned_facts, &mut labels);
+            // vocab/timeframe: multi-timeframe geometry (range position, body ratio)
+            self.encode_facts(&crate::vocab::timeframe::eval_timeframe_structure(candles), &mut cached_facts, &mut owned_facts, &mut labels);
         }
 
         // ── EXCLUSIVE: volume ───────────────────────────────────────
@@ -549,17 +581,19 @@ impl ThoughtEncoder {
         }
 
         // ── EXCLUSIVE: narrative ────────────────────────────────────
-        // The story: what happened when. Calendar + temporal lookback.
+        // The story: what happened when. Calendar + temporal lookback + multi-timeframe context.
         if is(&["narrative"]) {
             self.eval_temporal(candles, vm, &mut owned_facts, &mut labels);
             self.eval_calendar(now, &mut cached_facts, &mut owned_facts, &mut labels);
+            // vocab/timeframe: multi-timeframe narrative (direction, agreement)
+            self.encode_facts(&crate::vocab::timeframe::eval_timeframe_narrative(candles), &mut cached_facts, &mut owned_facts, &mut labels);
         }
 
         // ── EXCLUSIVE: regime ───────────────────────────────────────
         // Market character: trending/chaotic/persistent/mean-reverting.
         // Abstract properties that survive window noise.
         if is(&["regime"]) {
-            self.eval_advanced(candles, &mut cached_facts, &mut owned_facts, &mut labels);
+            self.eval_regime_module(candles, &mut cached_facts, &mut owned_facts, &mut labels);
             // vocab/persistence: Hurst, autocorrelation, ADX zones
             self.eval_persistence_module(candles, &mut cached_facts, &mut owned_facts, &mut labels);
         }
@@ -1045,9 +1079,8 @@ impl ThoughtEncoder {
         labels: &mut Vec<String>,
     ) {
         use crate::vocab::keltner::eval_keltner;
-        if let Some(kelt_facts) = eval_keltner(candles) {
+        let kelt_facts = eval_keltner(candles);
             self.encode_facts(&kelt_facts, facts, owned_facts, labels);
-        }
     }
 
     // ─── Momentum / ROC / CCI ────────────────────────────────────────────
@@ -1134,7 +1167,7 @@ impl ThoughtEncoder {
 
     // ─── Advanced indicators (tier-1 underdogs + esoteric) ─────────────
 
-    fn eval_advanced<'a>(
+    fn eval_regime_module<'a>(
         &'a self,
         candles: &[Candle],
         facts: &mut Vec<&'a Vector>,

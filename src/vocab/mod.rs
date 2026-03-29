@@ -43,6 +43,7 @@ pub mod keltner;       // Keltner Channels + squeeze detection
 pub mod momentum;      // CCI zones
 pub mod price_action;  // Inside/outside bars, gaps, consecutive candles
 pub mod divergence;    // RSI divergence via PELT structural peaks/troughs
+pub mod timeframe;     // Inter-timeframe structure: 1h/4h agreement, range position, body ratio
 // pub mod complexity;    // TODO: SampEn, permutation entropy, Lyapunov
 // pub mod crosses;       // TODO: SMA cross timing, histogram turns
 // pub mod channels;      // TODO: donchian, supertrend, SAR

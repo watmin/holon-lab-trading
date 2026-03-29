@@ -224,5 +224,37 @@ pub fn eval_regime(candles: &[Candle]) -> Vec<Fact<'static>> {
         }
     }
 
+    // ── Trend consistency (pre-computed on Candle) ─────────────────
+    // What fraction of recent candles closed in the same direction?
+    // High consistency = trending. Low = choppy.
+    let now = candles.last().unwrap();
+    facts.push(Fact::Scalar { indicator: "trend-consistency-6", value: now.trend_consistency_6, scale: 1.0 });
+    facts.push(Fact::Scalar { indicator: "trend-consistency-12", value: now.trend_consistency_12, scale: 1.0 });
+    facts.push(Fact::Scalar { indicator: "trend-consistency-24", value: now.trend_consistency_24, scale: 1.0 });
+
+    // Strong trend at multiple scales = conviction. Disagreement = noise.
+    if now.trend_consistency_6 > 0.8 && now.trend_consistency_12 > 0.7 {
+        facts.push(Fact::Zone { indicator: "trend", zone: "trend-strong" });
+    } else if now.trend_consistency_6 < 0.35 && now.trend_consistency_12 < 0.4 {
+        facts.push(Fact::Zone { indicator: "trend", zone: "trend-choppy" });
+    }
+
+    // ── Volatility acceleration (pre-computed on Candle) ─────────
+    // Is ATR expanding or contracting? Expanding = breakout. Contracting = squeeze building.
+    facts.push(Fact::Scalar { indicator: "atr-roc-6", value: now.atr_roc_6.clamp(-1.0, 1.0) * 0.5 + 0.5, scale: 1.0 });
+    facts.push(Fact::Scalar { indicator: "atr-roc-12", value: now.atr_roc_12.clamp(-1.0, 1.0) * 0.5 + 0.5, scale: 1.0 });
+
+    if now.atr_roc_6 > 0.2 {
+        facts.push(Fact::Zone { indicator: "volatility", zone: "vol-expanding" });
+    } else if now.atr_roc_6 < -0.15 {
+        facts.push(Fact::Zone { indicator: "volatility", zone: "vol-contracting" });
+    }
+
+    // ── Range position at multiple scales (pre-computed on Candle) ──
+    // Where is price in the range? 0.0 = at low. 1.0 = at high.
+    facts.push(Fact::Scalar { indicator: "range-pos-12", value: now.range_pos_12, scale: 1.0 });
+    facts.push(Fact::Scalar { indicator: "range-pos-24", value: now.range_pos_24, scale: 1.0 });
+    facts.push(Fact::Scalar { indicator: "range-pos-48", value: now.range_pos_48, scale: 1.0 });
+
     facts
 }
