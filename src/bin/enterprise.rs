@@ -116,12 +116,6 @@ struct Args {
     #[arg(long, default_value = "legacy")]
     sizing: String,
 
-    /// Risk gate: scale position by portfolio state.
-    /// "off" = no adjustment. "binary" = trade only at peak equity.
-    /// "graduated" = scale down by drawdown depth.
-    #[arg(long, default_value = "off")]
-    risk_gate: String,
-
     /// Maximum acceptable drawdown (0.20 = 20%). The second economic input.
     /// Combined with the conviction-accuracy curve, this determines position caps.
     /// The system adjusts sizing to keep expected worst-case drawdown within this limit.
@@ -217,15 +211,7 @@ fn main() {
 
     let vm = VectorManager::new(args.dims);
 
-    // ─ Pre-warm VM vector cache ─
-    for tok in &["null","gs","rs","gw","rw","dj","yl","rl","gl","wu","wl",
-                 "vg","vr","rb","ro","rn","ml","ms","mhg","mhr","dp","dm","ax","set_indicator"] {
-        vm.get_vector(tok);
-    }
-    let max_pos = args.window;
-    for p in 0..max_pos as i64 { vm.get_position_vector(p); }
-
-    // Pre-warm position vectors for the max possible window
+    // ─ Pre-warm position vectors for max possible window ─
     for p in 0..2016_i64 { vm.get_position_vector(p); }
 
     // ─ Thought encoding setup ─
@@ -248,6 +234,7 @@ fn main() {
 
     // ─ Exit expert: learns when to hold vs exit positions ─────────
     // decomplect:allow(inline-encoding) — exit expert atoms + encoding grow here until market/exit.rs
+    // dead-thoughts:allow(scaffolding) — exit expert learns but never predicts yet. Wired when exit expert activates.
     let mut exit_journal = Journal::new("exit-expert", args.dims, args.recalib_interval);
     let exit_scalar = holon::ScalarEncoder::new(args.dims);
     let pos_pnl_atom = vm.get_vector("position-pnl");
@@ -593,6 +580,7 @@ fn main() {
             let mut panel_state: Vec<f64> = observer_preds.iter()
                 .map(|ep| ep.raw_cos).collect();
             panel_state.push(tht_pred.raw_cos); // generalist's voice
+            // dead-thoughts:allow(scaffolding) — panel_familiar computed for display only; wired when panel engram drives decisions
             let panel_familiar = if panel_engram.n() >= 10 {
                 let residual = panel_engram.residual(&panel_state);
                 let threshold = panel_engram.threshold();

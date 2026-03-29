@@ -430,10 +430,6 @@ impl ThoughtEncoder {
         Self { vocab, scalar_enc: ScalarEncoder::new(dims), fact_cache }
     }
 
-    pub fn vocab(&self) -> &ThoughtVocab {
-        &self.vocab
-    }
-
     /// Return the pre-computed fact codebook: (label, vector) pairs for all
     /// cached comparison, zone, calendar, and RSI-SMA facts. Use for
     /// discriminant decoding.
@@ -493,26 +489,10 @@ impl ThoughtEncoder {
         }
     }
 
-    pub fn encode(
-        &self,
-        candles: &[Candle],
-        vm: &VectorManager,
-    ) -> ThoughtResult {
-        self.encode_view(candles, vm, "full")
-    }
 
 
     /// Expert profiles: which eval methods to run.
     /// "full" = all methods (generalist). Named profiles select subsets.
-    pub const EXPERT_PROFILES: &'static [&'static str] = &[
-        "full",       // all thoughts — the generalist
-        "momentum",   // RSI, Stochastic, MACD, divergence, CCI
-        "structure",  // Ichimoku, SMA, Fibonacci, BB/Keltner, range position
-        "volume",     // volume analysis, volume confirmation, price action
-        "narrative",  // PELT segments, temporal lookback, calendar
-        "regime",     // Choppiness, DFA, Hurst, Variance Ratio, Fractal Dim, Entropy, GR b-value
-    ];
-
     /// Encode with a windowed view of the streams.
     /// `expert` selects which thought vocabulary to activate:
     ///   "full" = all, "momentum"/"structure"/"volume"/"narrative" = subsets.
