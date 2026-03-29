@@ -15,6 +15,13 @@
 pub mod oscillators;   // Williams%R, StochRSI, UltOsc, multi-ROC
 pub mod flow;          // OBV, VWAP, MFI, buying/selling pressure
 pub mod persistence;   // Hurst, autocorrelation, ADX zones
+pub mod regime;        // KAMA ER, choppiness, DFA, DeMark, Aroon, fractal dim, entropy, GR b-value
+pub mod ichimoku;      // Ichimoku Cloud: tenkan, kijun, spans, cloud zone, TK cross
+pub mod stochastic;    // Stochastic Oscillator: %K, %D, zones, crossover
+pub mod fibonacci;     // Fibonacci retracement levels and proximity
+pub mod keltner;       // Keltner Channels + squeeze detection
+pub mod momentum;      // CCI zones
+pub mod price_action;  // Inside/outside bars, gaps, consecutive candles
 // pub mod complexity;    // TODO: SampEn, permutation entropy, Lyapunov
 // pub mod divergence;    // TODO: multi-indicator divergence framework
 // pub mod crosses;       // TODO: SMA cross timing, histogram turns

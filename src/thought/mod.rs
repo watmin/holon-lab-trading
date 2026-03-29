@@ -1092,50 +1092,23 @@ impl ThoughtEncoder {
         facts: &mut Vec<&'a Vector>,
         labels: &mut Vec<String>,
     ) {
-        let n = candles.len();
-        if n < 26 { return; }
-
-        let now = candles.last().unwrap();
-
-        // Tenkan-sen: (highest_high + lowest_low) / 2 over 9 periods
-        let tenkan = {
-            let w = &candles[n.saturating_sub(9)..];
-            let hi = w.iter().map(|c| c.high).fold(f64::NEG_INFINITY, f64::max);
-            let lo = w.iter().map(|c| c.low).fold(f64::INFINITY, f64::min);
-            (hi + lo) / 2.0
+        use crate::vocab::ichimoku::eval_ichimoku;
+        let ichi = match eval_ichimoku(candles) {
+            Some(f) => f,
+            None => return,
         };
 
-        // Kijun-sen: (highest_high + lowest_low) / 2 over 26 periods
-        let kijun = {
-            let w = &candles[n.saturating_sub(26)..];
-            let hi = w.iter().map(|c| c.high).fold(f64::NEG_INFINITY, f64::max);
-            let lo = w.iter().map(|c| c.low).fold(f64::INFINITY, f64::min);
-            (hi + lo) / 2.0
-        };
-
-        // Senkou Span A: (tenkan + kijun) / 2
-        let span_a = (tenkan + kijun) / 2.0;
-
-        // Senkou Span B: (highest + lowest) / 2 over 52 periods (use available)
-        let span_b = {
-            let hi = candles.iter().map(|c| c.high).fold(f64::NEG_INFINITY, f64::max);
-            let lo = candles.iter().map(|c| c.low).fold(f64::INFINITY, f64::min);
-            (hi + lo) / 2.0
-        };
-
-        let cloud_top = span_a.max(span_b);
-        let cloud_bottom = span_a.min(span_b);
-        let close = now.close;
+        let close = candles.last().unwrap().close;
 
         // Compute comparisons using cached fact vectors
         let pairs: &[(&str, &str, f64, f64)] = &[
-            ("close", "tenkan-sen", close, tenkan),
-            ("close", "kijun-sen", close, kijun),
-            ("close", "cloud-top", close, cloud_top),
-            ("close", "cloud-bottom", close, cloud_bottom),
-            ("tenkan-sen", "kijun-sen", tenkan, kijun),
-            ("close", "senkou-span-a", close, span_a),
-            ("close", "senkou-span-b", close, span_b),
+            ("close", "tenkan-sen", close, ichi.tenkan),
+            ("close", "kijun-sen", close, ichi.kijun),
+            ("close", "cloud-top", close, ichi.cloud_top),
+            ("close", "cloud-bottom", close, ichi.cloud_bottom),
+            ("tenkan-sen", "kijun-sen", ichi.tenkan, ichi.kijun),
+            ("close", "senkou-span-a", close, ichi.span_a),
+            ("close", "senkou-span-b", close, ichi.span_b),
         ];
 
         for &(a_name, b_name, a_val, b_val) in pairs {
@@ -1148,37 +1121,17 @@ impl ThoughtEncoder {
         }
 
         // Cloud zone
-        let zone = if close > cloud_top { "above-cloud" }
-                   else if close < cloud_bottom { "below-cloud" }
-                   else { "in-cloud" };
-        let key = format!("(at close {})", zone);
+        let key = format!("(at close {})", ichi.cloud_zone);
         if let Some(v) = self.fact_cache.get(&key) {
             facts.push(v);
             labels.push(key);
         }
 
-        // Tenkan-kijun cross (check prev candle)
-        if n >= 27 {
-            let prev_tenkan = {
-                let w = &candles[n.saturating_sub(10)..n-1];
-                let hi = w.iter().map(|c| c.high).fold(f64::NEG_INFINITY, f64::max);
-                let lo = w.iter().map(|c| c.low).fold(f64::INFINITY, f64::min);
-                (hi + lo) / 2.0
-            };
-            let prev_kijun = {
-                let w = &candles[n.saturating_sub(27)..n-1];
-                let hi = w.iter().map(|c| c.high).fold(f64::NEG_INFINITY, f64::max);
-                let lo = w.iter().map(|c| c.low).fold(f64::INFINITY, f64::min);
-                (hi + lo) / 2.0
-            };
-            if prev_tenkan < prev_kijun && tenkan >= kijun {
-                if let Some(v) = self.fact_cache.get("(crosses-above tenkan-sen kijun-sen)") {
-                    facts.push(v); labels.push("(crosses-above tenkan-sen kijun-sen)".into());
-                }
-            } else if prev_tenkan > prev_kijun && tenkan <= kijun {
-                if let Some(v) = self.fact_cache.get("(crosses-below tenkan-sen kijun-sen)") {
-                    facts.push(v); labels.push("(crosses-below tenkan-sen kijun-sen)".into());
-                }
+        // Tenkan-kijun cross
+        if let Some(dir) = ichi.tk_cross {
+            let key = format!("(crosses-{} tenkan-sen kijun-sen)", dir);
+            if let Some(v) = self.fact_cache.get(&key) {
+                facts.push(v); labels.push(key);
             }
         }
     }
@@ -1191,68 +1144,27 @@ impl ThoughtEncoder {
         facts: &mut Vec<&'a Vector>,
         labels: &mut Vec<String>,
     ) {
-        let n = candles.len();
-        if n < 14 { return; }
-
-        let w = &candles[n.saturating_sub(14)..];
-        let hh = w.iter().map(|c| c.high).fold(f64::NEG_INFINITY, f64::max);
-        let ll = w.iter().map(|c| c.low).fold(f64::INFINITY, f64::min);
-        let range = hh - ll;
-        if range < 1e-10 { return; }
-
-        let stoch_k = (candles.last().unwrap().close - ll) / range * 100.0;
-
-        // %D = 3-period SMA of %K (approximate from last 3 candles)
-        let stoch_d = if n >= 16 {
-            let mut sum = stoch_k;
-            for offset in 1..=2 {
-                let idx = n - 1 - offset;
-                let w2 = &candles[idx.saturating_sub(13)..=idx];
-                let h2 = w2.iter().map(|c| c.high).fold(f64::NEG_INFINITY, f64::max);
-                let l2 = w2.iter().map(|c| c.low).fold(f64::INFINITY, f64::min);
-                let r2 = h2 - l2;
-                if r2 > 1e-10 { sum += (candles[idx].close - l2) / r2 * 100.0; }
-                else { sum += 50.0; }
-            }
-            sum / 3.0
-        } else { stoch_k };
+        use crate::vocab::stochastic::eval_stochastic;
+        let stoch = match eval_stochastic(candles) {
+            Some(f) => f,
+            None => return,
+        };
 
         // Stoch K vs D comparison
-        let pred = if stoch_k > stoch_d { "above" } else { "below" };
+        let pred = if stoch.k > stoch.d { "above" } else { "below" };
         let key = format!("({} stoch-k stoch-d)", pred);
         if let Some(v) = self.fact_cache.get(&key) { facts.push(v); labels.push(key); }
 
         // Cross detection
-        if n >= 16 {
-            // Previous K and D
-            let idx = n - 2;
-            let w2 = &candles[idx.saturating_sub(13)..=idx];
-            let h2 = w2.iter().map(|c| c.high).fold(f64::NEG_INFINITY, f64::max);
-            let l2 = w2.iter().map(|c| c.low).fold(f64::INFINITY, f64::min);
-            let r2 = h2 - l2;
-            let prev_k = if r2 > 1e-10 { (candles[idx].close - l2) / r2 * 100.0 } else { 50.0 };
-            // Approximate prev_d
-            let prev_d = stoch_d; // rough approximation
-            if prev_k < prev_d && stoch_k >= stoch_d {
-                if let Some(v) = self.fact_cache.get("(crosses-above stoch-k stoch-d)") {
-                    facts.push(v); labels.push("(crosses-above stoch-k stoch-d)".into());
-                }
-            } else if prev_k > prev_d && stoch_k <= stoch_d {
-                if let Some(v) = self.fact_cache.get("(crosses-below stoch-k stoch-d)") {
-                    facts.push(v); labels.push("(crosses-below stoch-k stoch-d)".into());
-                }
-            }
+        if let Some(dir) = stoch.crossover {
+            let key = format!("(crosses-{} stoch-k stoch-d)", dir);
+            if let Some(v) = self.fact_cache.get(&key) { facts.push(v); labels.push(key); }
         }
 
         // Zones
-        if stoch_k > 80.0 {
-            if let Some(v) = self.fact_cache.get("(at stoch-k stoch-overbought)") {
-                facts.push(v); labels.push("(at stoch-k stoch-overbought)".into());
-            }
-        } else if stoch_k < 20.0 {
-            if let Some(v) = self.fact_cache.get("(at stoch-k stoch-oversold)") {
-                facts.push(v); labels.push("(at stoch-k stoch-oversold)".into());
-            }
+        if let Some(zone) = stoch.zone {
+            let key = format!("(at stoch-k {})", zone);
+            if let Some(v) = self.fact_cache.get(&key) { facts.push(v); labels.push(key); }
         }
     }
 
@@ -1264,42 +1176,28 @@ impl ThoughtEncoder {
         facts: &mut Vec<Vector>,
         labels: &mut Vec<String>,
     ) {
-        if candles.len() < 10 { return; }
+        use crate::vocab::fibonacci::eval_fibonacci;
+        let fib = match eval_fibonacci(candles) {
+            Some(f) => f,
+            None => return,
+        };
 
-        // Use the viewport range high/low as swing points
-        let swing_high = candles.iter().map(|c| c.high).fold(f64::NEG_INFINITY, f64::max);
-        let swing_low = candles.iter().map(|c| c.low).fold(f64::INFINITY, f64::min);
-        let range = swing_high - swing_low;
-        if range < 1e-10 { return; }
-
-        let close = candles.last().unwrap().close;
-        let atr = candles.last().unwrap().atr_r * close;
-
-        // Fib levels from swing low to swing high
-        let fibs: &[(&str, f64)] = &[
-            ("fib-236", 0.236), ("fib-382", 0.382), ("fib-500", 0.500),
-            ("fib-618", 0.618), ("fib-786", 0.786),
-        ];
-
-        for &(name, ratio) in fibs {
-            let level = swing_low + range * ratio;
-            // Is close near this fib level? (within 0.5 ATR)
-            if (close - level).abs() < atr * 0.5 {
+        for level in &fib.levels {
+            if level.touching {
                 let fact = Primitives::bind(
                     self.vocab.get("touches"),
-                    &Primitives::bind(self.vocab.get("close"), self.vocab.get(name)),
+                    &Primitives::bind(self.vocab.get("close"), self.vocab.get(level.name)),
                 );
                 facts.push(fact);
-                labels.push(format!("(touches close {})", name));
+                labels.push(format!("(touches close {})", level.name));
             }
-            // Above or below
-            let pred = if close > level { "above" } else { "below" };
+            let pred = if level.above { "above" } else { "below" };
             let fact = Primitives::bind(
                 self.vocab.get(pred),
-                &Primitives::bind(self.vocab.get("close"), self.vocab.get(name)),
+                &Primitives::bind(self.vocab.get("close"), self.vocab.get(level.name)),
             );
             facts.push(fact);
-            labels.push(format!("({} close {})", pred, name));
+            labels.push(format!("({} close {})", pred, level.name));
         }
     }
 
@@ -1341,27 +1239,21 @@ impl ThoughtEncoder {
         facts: &mut Vec<&'a Vector>,
         labels: &mut Vec<String>,
     ) {
-        let now = candles.last().unwrap();
-        if now.sma20 <= 0.0 || now.atr_r <= 0.0 { return; }
-
-        let atr_abs = now.atr_r * now.close;
-        let keltner_upper = now.sma20 + 2.0 * atr_abs;
-        let keltner_lower = now.sma20 - 2.0 * atr_abs;
-        let close = now.close;
+        use crate::vocab::keltner::eval_keltner;
+        let kelt = match eval_keltner(candles) {
+            Some(f) => f,
+            None => return,
+        };
 
         // Close vs Keltner
-        let pred_u = if close > keltner_upper { "above" } else { "below" };
-        let key_u = format!("({} close keltner-upper)", pred_u);
+        let key_u = format!("({} close keltner-upper)", kelt.close_vs_upper);
         if let Some(v) = self.fact_cache.get(&key_u) { facts.push(v); labels.push(key_u); }
 
-        let pred_l = if close > keltner_lower { "above" } else { "below" };
-        let key_l = format!("({} close keltner-lower)", pred_l);
+        let key_l = format!("({} close keltner-lower)", kelt.close_vs_lower);
         if let Some(v) = self.fact_cache.get(&key_l) { facts.push(v); labels.push(key_l); }
 
         // Squeeze: BB inside Keltner (low volatility)
-        if now.bb_upper > 0.0 && now.bb_upper < keltner_upper && now.bb_lower > keltner_lower {
-            let _key = "(at bb-upper keltner-upper)".to_string();
-            // BB upper below keltner upper = squeeze
+        if kelt.squeeze {
             if let Some(v) = self.fact_cache.get("(below bb-upper keltner-upper)") {
                 facts.push(v); labels.push("(below bb-upper keltner-upper)".into());
             }
@@ -1376,29 +1268,12 @@ impl ThoughtEncoder {
         facts: &mut Vec<&'a Vector>,
         labels: &mut Vec<String>,
     ) {
-        let n = candles.len();
-        if n < 20 { return; }
+        use crate::vocab::momentum::eval_momentum;
+        let mom = eval_momentum(candles);
 
-        let now = candles.last().unwrap();
-
-        // CCI: (typical - SMA(typical, 20)) / (0.015 × mean_deviation)
-        let typicals: Vec<f64> = candles[n.saturating_sub(20)..].iter()
-            .map(|c| (c.high + c.low + c.close) / 3.0).collect();
-        let typical_mean = typicals.iter().sum::<f64>() / typicals.len() as f64;
-        let mean_dev = typicals.iter().map(|t| (t - typical_mean).abs()).sum::<f64>()
-            / typicals.len() as f64;
-        if mean_dev > 1e-10 {
-            let typical_now = (now.high + now.low + now.close) / 3.0;
-            let cci = (typical_now - typical_mean) / (0.015 * mean_dev);
-            if cci > 100.0 {
-                if let Some(v) = self.fact_cache.get("(at cci cci-overbought)") {
-                    facts.push(v); labels.push("(at cci cci-overbought)".into());
-                }
-            } else if cci < -100.0 {
-                if let Some(v) = self.fact_cache.get("(at cci cci-oversold)") {
-                    facts.push(v); labels.push("(at cci cci-oversold)".into());
-                }
-            }
+        if let Some(zone) = mom.cci_zone {
+            let key = format!("(at cci {})", zone);
+            if let Some(v) = self.fact_cache.get(&key) { facts.push(v); labels.push(key); }
         }
     }
 
@@ -1410,53 +1285,22 @@ impl ThoughtEncoder {
         facts: &mut Vec<&'a Vector>,
         labels: &mut Vec<String>,
     ) {
-        let n = candles.len();
-        if n < 3 { return; }
+        use crate::vocab::price_action::eval_price_action;
+        let pa = eval_price_action(candles);
 
-        let now = &candles[n - 1];
-        let prev = &candles[n - 2];
-
-        // Inside bar: current range within previous range
-        if now.high <= prev.high && now.low >= prev.low {
-            if let Some(v) = self.fact_cache.get("(at close inside-bar)") {
-                facts.push(v); labels.push("(at close inside-bar)".into());
-            }
-        }
-        // Outside bar: current range engulfs previous
-        if now.high > prev.high && now.low < prev.low {
-            if let Some(v) = self.fact_cache.get("(at close outside-bar)") {
-                facts.push(v); labels.push("(at close outside-bar)".into());
-            }
-        }
-        // Gap up/down
-        let gap = (now.open - prev.close) / prev.close;
-        if gap > 0.001 {
-            if let Some(v) = self.fact_cache.get("(at close gap-up)") {
-                facts.push(v); labels.push("(at close gap-up)".into());
-            }
-        } else if gap < -0.001 {
-            if let Some(v) = self.fact_cache.get("(at close gap-down)") {
-                facts.push(v); labels.push("(at close gap-down)".into());
-            }
+        for pattern in &pa.patterns {
+            let key = format!("(at close {})", pattern);
+            if let Some(v) = self.fact_cache.get(&key) { facts.push(v); labels.push(key); }
         }
 
-        // Consecutive same-direction candles
-        let mut up_count = 0usize;
-        let mut down_count = 0usize;
-        for i in (0..n).rev() {
-            if candles[i].close > candles[i].open { up_count += 1; } else { break; }
-        }
-        for i in (0..n).rev() {
-            if candles[i].close < candles[i].open { down_count += 1; } else { break; }
-        }
-        if up_count >= 3 {
+        if let Some(count) = pa.consecutive_up {
             if let Some(v) = self.fact_cache.get("(at close consecutive-up)") {
-                facts.push(v); labels.push(format!("(at close consecutive-up {})", up_count));
+                facts.push(v); labels.push(format!("(at close consecutive-up {})", count));
             }
         }
-        if down_count >= 3 {
+        if let Some(count) = pa.consecutive_down {
             if let Some(v) = self.fact_cache.get("(at close consecutive-down)") {
-                facts.push(v); labels.push(format!("(at close consecutive-down {})", down_count));
+                facts.push(v); labels.push(format!("(at close consecutive-down {})", count));
             }
         }
     }
@@ -1635,273 +1479,24 @@ impl ThoughtEncoder {
         _owned_facts: &mut Vec<Vector>,
         labels: &mut Vec<String>,
     ) {
-        let n = candles.len();
-        if n < 20 { return; }
+        use crate::vocab::regime::eval_regime;
+        let regime = eval_regime(candles);
 
-        let closes: Vec<f64> = candles.iter().map(|c| c.close).collect();
-        let _now = candles.last().unwrap();
-
-        // ── KAMA Efficiency Ratio ─────────────────────────────────────
-        // ER = |net movement| / sum(|step movements|) over 10 periods
-        let er_period = 10.min(n - 1);
-        let net_move = (closes[n - 1] - closes[n - 1 - er_period]).abs();
-        let step_sum: f64 = (n - er_period..n).map(|i| (closes[i] - closes[i - 1]).abs()).sum();
-        let er = if step_sum > 1e-10 { net_move / step_sum } else { 0.0 };
-
-        let zone = if er > 0.6 { "efficient-trend" } else if er < 0.3 { "inefficient-chop" } else { "moderate-efficiency" };
-        let key = format!("(at kama-er {})", zone);
-        if let Some(v) = self.fact_cache.get(&key) { facts.push(v); labels.push(key); }
-
-        // ── Choppiness Index (14-period) ──────────────────────────────
-        let chop_period = 14.min(n - 1);
-        let chop_slice = &candles[n - chop_period..];
-        let chop_atr_sum: f64 = (1..chop_period).map(|i| {
-            let hl = chop_slice[i].high - chop_slice[i].low;
-            let hc = (chop_slice[i].high - chop_slice[i - 1].close).abs();
-            let lc = (chop_slice[i].low - chop_slice[i - 1].close).abs();
-            hl.max(hc).max(lc)
-        }).sum();
-        let chop_hi = chop_slice.iter().map(|c| c.high).fold(f64::NEG_INFINITY, f64::max);
-        let chop_lo = chop_slice.iter().map(|c| c.low).fold(f64::INFINITY, f64::min);
-        let chop_range = chop_hi - chop_lo;
-        let chop = if chop_range > 1e-10 {
-            100.0 * (chop_atr_sum / chop_range).log10() / (chop_period as f64).log10()
-        } else { 100.0 };
-
-        let chop_zone = if chop < 38.2 { "chop-trending" } else if chop > 75.0 { "chop-extreme" } else if chop > 61.8 { "chop-choppy" } else { "chop-transition" };
-        let key = format!("(at chop {})", chop_zone);
-        if let Some(v) = self.fact_cache.get(&key) { facts.push(v); labels.push(key); }
-
-        // ── DFA Alpha (detrended fluctuation analysis) ────────────────
-        let returns: Vec<f64> = (1..n).map(|i| (closes[i] / closes[i - 1]).ln()).collect();
-        if returns.len() >= 16 {
-            let ret_mean = returns.iter().sum::<f64>() / returns.len() as f64;
-            let integrated: Vec<f64> = returns.iter().scan(0.0, |acc, &r| { *acc += r - ret_mean; Some(*acc) }).collect();
-            let scales: Vec<usize> = vec![4, 6, 8, 12, 16].into_iter().filter(|&s| s <= integrated.len()).collect();
-            if scales.len() >= 3 {
-                let mut log_f = Vec::new();
-                let mut log_s = Vec::new();
-                for &s in &scales {
-                    let num_segs = integrated.len() / s;
-                    if num_segs == 0 { continue; }
-                    let mut f2_sum = 0.0;
-                    for seg in 0..num_segs {
-                        let start = seg * s;
-                        let seg_data = &integrated[start..start + s];
-                        // Linear detrend
-                        let sx: f64 = (0..s).map(|i| i as f64).sum();
-                        let sy: f64 = seg_data.iter().sum();
-                        let sxx: f64 = (0..s).map(|i| (i * i) as f64).sum();
-                        let sxy: f64 = (0..s).map(|i| i as f64 * seg_data[i]).sum();
-                        let sn = s as f64;
-                        let denom = sn * sxx - sx * sx;
-                        let (a, b) = if denom.abs() > 1e-10 {
-                            let b = (sn * sxy - sx * sy) / denom;
-                            let a = (sy - b * sx) / sn;
-                            (a, b)
-                        } else { (0.0, 0.0) };
-                        let rms: f64 = seg_data.iter().enumerate()
-                            .map(|(i, &y)| { let trend = a + b * i as f64; (y - trend).powi(2) })
-                            .sum::<f64>() / sn;
-                        f2_sum += rms;
-                    }
-                    let f = (f2_sum / num_segs as f64).sqrt();
-                    if f > 1e-10 {
-                        log_f.push(f.ln());
-                        log_s.push((s as f64).ln());
-                    }
-                }
-                if log_f.len() >= 3 {
-                    let nf = log_f.len() as f64;
-                    let sx: f64 = log_s.iter().sum();
-                    let sy: f64 = log_f.iter().sum();
-                    let sxx: f64 = log_s.iter().map(|x| x * x).sum();
-                    let sxy: f64 = log_s.iter().zip(log_f.iter()).map(|(x, y)| x * y).sum();
-                    let denom = nf * sxx - sx * sx;
-                    if denom.abs() > 1e-10 {
-                        let alpha = (nf * sxy - sx * sy) / denom;
-                        let alpha = alpha.clamp(0.0, 1.5);
-                        let dfa_zone = if alpha > 0.6 { "persistent-dfa" }
-                            else if alpha < 0.4 { "anti-persistent-dfa" }
-                            else { "random-walk-dfa" };
-                        let key = format!("(at dfa-alpha {})", dfa_zone);
-                        if let Some(v) = self.fact_cache.get(&key) { facts.push(v); labels.push(key); }
-                    }
-                }
-            }
-        }
-
-        // ── Variance Ratio (k=5) ─────────────────────────────────────
-        if returns.len() >= 10 {
-            let var1: f64 = returns.iter().map(|r| r * r).sum::<f64>() / returns.len() as f64;
-            let k = 5usize;
-            let k_returns: Vec<f64> = (0..returns.len() - k + 1)
-                .map(|i| returns[i..i + k].iter().sum::<f64>()).collect();
-            if !k_returns.is_empty() && var1 > 1e-20 {
-                let var_k: f64 = k_returns.iter().map(|r| r * r).sum::<f64>() / k_returns.len() as f64 / k as f64;
-                let vr = var_k / var1;
-                let vr_zone = if vr > 1.3 { "vr-momentum" } else if vr < 0.7 { "vr-mean-revert" } else { "vr-neutral" };
-                let key = format!("(at variance-ratio {})", vr_zone);
+        let zones: &[(&str, Option<&str>)] = &[
+            ("kama-er",         regime.kama_er_zone),
+            ("chop",            regime.choppiness_zone),
+            ("dfa-alpha",       regime.dfa_zone),
+            ("variance-ratio",  regime.variance_ratio_zone),
+            ("td-count",        regime.demark_zone),
+            ("aroon-up",        regime.aroon_zone),
+            ("fractal-dim",     regime.fractal_dim_zone),
+            ("entropy-rate",    regime.entropy_zone),
+            ("gr-bvalue",       regime.gr_bvalue_zone),
+        ];
+        for &(indicator, zone_opt) in zones {
+            if let Some(zone) = zone_opt {
+                let key = format!("(at {} {})", indicator, zone);
                 if let Some(v) = self.fact_cache.get(&key) { facts.push(v); labels.push(key); }
-            }
-        }
-
-        // ── DeMark TD Sequential ─────────────────────────────────────
-        if n >= 5 {
-            let mut count: i32 = 0;
-            for i in 4..n {
-                if closes[i] > closes[i - 4] {
-                    count = if count > 0 { count + 1 } else { 1 };
-                } else if closes[i] < closes[i - 4] {
-                    count = if count < 0 { count - 1 } else { -1 };
-                } else { count = 0; }
-            }
-            let abs_count = count.unsigned_abs();
-            let td_zone = if abs_count >= 9 { "td-exhausted" }
-                else if abs_count >= 7 { "td-mature" }
-                else if abs_count >= 4 { "td-building" }
-                else { "td-inactive" };
-            let key = format!("(at td-count {})", td_zone);
-            if let Some(v) = self.fact_cache.get(&key) { facts.push(v); labels.push(key); }
-        }
-
-        // ── Aroon (25-period) ────────────────────────────────────────
-        let aroon_period = 25.min(n - 1);
-        if n > aroon_period {
-            let slice = &candles[n - aroon_period - 1..];
-            let mut hi_idx = 0;
-            let mut lo_idx = 0;
-            for i in 0..=aroon_period {
-                if slice[i].high >= slice[hi_idx].high { hi_idx = i; }
-                if slice[i].low <= slice[lo_idx].low { lo_idx = i; }
-            }
-            let aroon_up = 100.0 * hi_idx as f64 / aroon_period as f64;
-            let aroon_down = 100.0 * lo_idx as f64 / aroon_period as f64;
-            let aroon_zone = if aroon_up > 80.0 && aroon_down < 30.0 { "aroon-strong-up" }
-                else if aroon_down > 80.0 && aroon_up < 30.0 { "aroon-strong-down" }
-                else if aroon_up < 20.0 && aroon_down < 20.0 { "aroon-stale" }
-                else { "aroon-consolidating" };
-            let key = format!("(at aroon-up {})", aroon_zone);
-            if let Some(v) = self.fact_cache.get(&key) { facts.push(v); labels.push(key); }
-        }
-
-        // ── Fractal Dimension (Katz) ─────────────────────────────────
-        {
-            let path_len: f64 = (1..n).map(|i| ((closes[i] - closes[i-1]).powi(2) + 1.0).sqrt()).sum();
-            let max_dist = closes.iter().map(|&c| (c - closes[0]).abs()).fold(0.0_f64, f64::max);
-            if path_len > 1e-10 && max_dist > 1e-10 {
-                let nf = n as f64;
-                let fd = nf.ln() / (nf.ln() + (max_dist / path_len).ln());
-                let fd = fd.clamp(1.0, 2.0);
-                let fd_zone = if fd < 1.3 { "trending-geometry" }
-                    else if fd > 1.7 { "mean-reverting-geometry" }
-                    else { "random-walk-geometry" };
-                let key = format!("(at fractal-dim {})", fd_zone);
-                if let Some(v) = self.fact_cache.get(&key) { facts.push(v); labels.push(key); }
-            }
-        }
-
-        // ── Spectral Slope ───────────────────────────────────────────
-        if returns.len() >= 16 {
-            // Simple periodogram: compute power at each frequency
-            let nr = returns.len();
-            let mut log_p = Vec::new();
-            let mut log_f = Vec::new();
-            for k in 1..nr / 2 {
-                let freq = k as f64 / nr as f64;
-                let mut re = 0.0_f64;
-                let mut im = 0.0_f64;
-                for (t, &r) in returns.iter().enumerate() {
-                    let angle = 2.0 * std::f64::consts::PI * k as f64 * t as f64 / nr as f64;
-                    re += r * angle.cos();
-                    im += r * angle.sin();
-                }
-                let power = (re * re + im * im) / nr as f64;
-                if power > 1e-20 {
-                    log_p.push(power.ln());
-                    log_f.push(freq.ln());
-                }
-            }
-            if log_p.len() >= 4 {
-                let nf = log_p.len() as f64;
-                let sx: f64 = log_f.iter().sum();
-                let sy: f64 = log_p.iter().sum();
-                let sxx: f64 = log_f.iter().map(|x| x * x).sum();
-                let sxy: f64 = log_f.iter().zip(log_p.iter()).map(|(x, y)| x * y).sum();
-                let denom = nf * sxx - sx * sx;
-                if denom.abs() > 1e-10 {
-                    let _beta = (nf * sxy - sx * sy) / denom;
-                    // beta near 0 = white noise, near -2 = Brownian
-                    // Stored as atom but not yet zoned — curve will judge
-                }
-            }
-        }
-
-        // ── Entropy Rate (bigram conditional entropy) ────────────────
-        if returns.len() >= 20 {
-            // Classify each return as up/flat/down
-            let classes: Vec<u8> = returns.iter().map(|&r| {
-                if r > 0.0001 { 2 } else if r < -0.0001 { 0 } else { 1 }
-            }).collect();
-            // Count bigram frequencies
-            let mut bigrams = [[0u32; 3]; 3];
-            let mut unigrams = [0u32; 3];
-            for w in classes.windows(2) {
-                bigrams[w[0] as usize][w[1] as usize] += 1;
-                unigrams[w[0] as usize] += 1;
-            }
-            // Conditional entropy H(X_t | X_{t-1})
-            let total = (classes.len() - 1) as f64;
-            let mut h_cond = 0.0_f64;
-            for i in 0..3 {
-                if unigrams[i] == 0 { continue; }
-                let p_i = unigrams[i] as f64 / total;
-                for j in 0..3 {
-                    if bigrams[i][j] == 0 { continue; }
-                    let p_j_given_i = bigrams[i][j] as f64 / unigrams[i] as f64;
-                    h_cond -= p_i * p_j_given_i * p_j_given_i.ln();
-                }
-            }
-            // Normalize by max entropy (ln(3))
-            let h_norm = h_cond / 3.0_f64.ln();
-            let ent_zone = if h_norm < 0.7 { "low-entropy-rate" } else { "high-entropy-rate" };
-            let key = format!("(at entropy-rate {})", ent_zone);
-            if let Some(v) = self.fact_cache.get(&key) { facts.push(v); labels.push(key); }
-        }
-
-        // ── Gutenberg-Richter b-value (seismology) ───────────────────
-        if returns.len() >= 20 {
-            // b-value = slope of log(frequency) vs log(magnitude)
-            let mut abs_returns: Vec<f64> = returns.iter().map(|r| r.abs()).collect();
-            abs_returns.sort_by(|a, b| a.partial_cmp(b).unwrap());
-            let nr = abs_returns.len();
-            // Compute complementary CDF at a few magnitude thresholds
-            let thresholds: Vec<f64> = (1..5).map(|i| {
-                abs_returns[nr * i / 5]
-            }).collect();
-            let mut log_n = Vec::new();
-            let mut log_m = Vec::new();
-            for &t in &thresholds {
-                if t < 1e-10 { continue; }
-                let count = abs_returns.iter().filter(|&&r| r >= t).count();
-                if count > 0 {
-                    log_n.push((count as f64).ln());
-                    log_m.push(t.ln());
-                }
-            }
-            if log_n.len() >= 3 {
-                let nf = log_n.len() as f64;
-                let sx: f64 = log_m.iter().sum();
-                let sy: f64 = log_n.iter().sum();
-                let sxx: f64 = log_m.iter().map(|x| x * x).sum();
-                let sxy: f64 = log_m.iter().zip(log_n.iter()).map(|(x, y)| x * y).sum();
-                let denom = nf * sxx - sx * sx;
-                if denom.abs() > 1e-10 {
-                    let b = -(nf * sxy - sx * sy) / denom; // negative slope
-                    let gr_zone = if b < 1.0 { "heavy-tails" } else { "light-tails" };
-                    let key = format!("(at gr-bvalue {})", gr_zone);
-                    if let Some(v) = self.fact_cache.get(&key) { facts.push(v); labels.push(key); }
-                }
             }
         }
     }
