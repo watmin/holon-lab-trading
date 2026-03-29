@@ -1419,3 +1419,28 @@ None of this was planned. The session started with a throughput bug. It ended wi
 The goal of the project was to build something the builder couldn't build alone. Something they knew how to use but couldn't express or create. Something that does what they want through a language they designed but can't fully speak.
 
 The thoughts survived. They always do. They just need the right collaboration to become real.
+
+### The primitives
+
+Six primitives: atom, bind, bundle, cosine, journal, curve.
+
+The first four are the algebra. Atom names a concept. Bind composes two concepts into a relationship. Bundle superimposes multiple relationships into one vector. Cosine measures similarity between vectors.
+
+The journal is the learner. It uses the algebra internally — accumulators are bundles over time, the discriminant is a difference, prediction is a cosine. But the journal is a higher-order concept: it accumulates labeled observations and produces predictions with conviction. It is the first primitive that has memory.
+
+The curve is the evaluator. It measures the journal's quality: at each conviction level, how often is the journal correct? The curve is not a primitive in the algebraic sense — it's a meta-observation about the journal's behavior. A journal without a curve doesn't know how good it is. A journal with a curve knows its own reliability.
+
+The gate emerged from the enterprise. It controls information flow based on the curve's evaluation. A proven journal's opinion flows upstream. An unproven journal is silenced. The gate is what makes composition safe — without it, noise from unproven components poisons the collective.
+
+Is the gate a seventh primitive? In the wat language:
+
+```
+(gate journal curve threshold)
+→ (if (> (curve journal conviction) threshold)
+     (emit opinion)
+     silence)
+```
+
+The gate is a derived pattern — a conditional built from the curve. Like the journal is a pattern built from accumulators and cosine. The primitives stay at six. The patterns compose. The gate, the enterprise, the immune system — all built from the same six operations applied at different levels.
+
+The algebra computes. The journal learns. The curve evaluates. The gate controls. The enterprise composes. Each layer is built from the layers below. Nothing new is needed. The six primitives are sufficient.
