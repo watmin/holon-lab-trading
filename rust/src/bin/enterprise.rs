@@ -408,8 +408,6 @@ fn main() {
     // ─ Dual thought journals: slow (deep memory) + fast (regime-adaptive) ─
     // Both learn from the same input. An OnlineSubspace monitors thought vector
     // residuals to blend between them: low residual → trust slow, high → trust fast.
-    let mut tht_fast    = Journal::new("thought-fast", args.dims, args.recalib_interval);
-    let decay_fast      = (args.decay - 0.004).max(0.990); // 0.995 for default 0.999
 
     // Thought manifold: OnlineSubspace (CCIPCA) learns the structure of thought
     // vectors over time. k=32 captures the intrinsic dimensionality of ~120 facts.
@@ -1308,7 +1306,6 @@ fn main() {
             // Decay once per candle.
             vis_journal.decay(adaptive_decay);
             tht_journal.decay(adaptive_decay);
-            tht_fast.decay(decay_fast);
             mgr_journal.decay(adaptive_decay);
             for observer in &mut observers {
                 observer.journal.decay(args.decay);
@@ -1390,7 +1387,6 @@ fn main() {
                         let sw = signal_weight(abs_pct, &mut move_sum, &mut move_count);
                         vis_journal.observe(&entry.vis_vec, o, sw);
                         tht_journal.observe(&entry.tht_vec, o, sw);
-                        tht_fast.observe(&entry.tht_vec, o, sw);
                         // Manager does NOT learn here. Manager learns Win/Lose at trade
                         // resolution, not Buy/Sell at threshold crossing. The manager's
                         // question is "should I deploy?" not "which direction?"
