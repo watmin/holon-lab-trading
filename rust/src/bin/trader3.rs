@@ -501,6 +501,14 @@ fn main() {
     let mut treasury  = Treasury::new("USDC", args.initial_equity, args.max_positions, args.max_utilization);
     let mut pending:    VecDeque<Pending> = VecDeque::new();
 
+    // ─ Managed positions: concurrent, independently managed ──────────
+    use btc_walk::position::{ManagedPosition, PositionPhase, PositionExit};
+    let mut positions: Vec<ManagedPosition> = Vec::new();
+    let mut next_position_id: usize = 0;
+    let mut last_exit_candle: usize = 0; // cooldown: candle of last position exit
+    let cooldown_candles: usize = args.horizon; // minimum hold before new position after exit
+    let max_single_position: f64 = 0.20; // max 20% of equity in one position
+
     // ─ Exit parameters (managed mode) ──────────────────────────────────
     // No averaging. No percentiles. Each trade gets its own stop from the
     // market state AT ENTRY TIME. ATR tells you how much this market is
@@ -927,65 +935,112 @@ fn main() {
             // If reversal behavior emerges, it emerges from the experts' learning.
             let meta_dir = raw_meta_dir;
 
-            // ── Hold mode: swap when signal changes position ─────────
-            // BUY signal + currently in USDC = swap USDC→WBTC.
-            // SELL signal + currently in WBTC = swap WBTC→USDC.
-            // The position persists between signals. WBTC appreciates.
-            // Hold mode: only swap when conviction is in the proven band.
-            // The band is where the manager has demonstrated >51% accuracy.
-            // Outside the band, hold current position. "I don't know" = don't act.
+            // ── Position management: tick all open positions ─────────
+            let btc_price = candles[i].close;
+            let fee_rate = args.swap_fee + args.slippage;
+            let mut closed_positions: Vec<usize> = Vec::new();
+            for pos in positions.iter_mut() {
+                if pos.phase == PositionPhase::Closed { continue; }
+                if let Some(exit) = pos.tick(btc_price, k_trail) {
+                    match exit {
+                        PositionExit::TakeProfit if pos.phase == PositionPhase::Active => {
+                            // Partial exit: reclaim capital + fees + minimum profit
+                            let reclaim_usdc = pos.usdc_deployed + pos.total_fees + pos.usdc_deployed * 0.01;
+                            let reclaim_wbtc = reclaim_usdc / btc_price / (1.0 - fee_rate);
+                            if reclaim_wbtc < pos.wbtc_held {
+                                // Partial: sell enough to reclaim, rest is runner
+                                let (sold, received) = treasury.swap("WBTC", "USDC",
+                                    reclaim_wbtc, 1.0 / btc_price, fee_rate);
+                                pos.wbtc_held -= sold;
+                                pos.usdc_reclaimed += received;
+                                pos.total_fees += sold * btc_price * fee_rate;
+                                pos.phase = PositionPhase::Runner;
+                                hold_swaps += 1;
+                                hold_wins += 1;
+                            } else {
+                                // Not enough WBTC to reclaim — full exit
+                                let (sold, received) = treasury.swap("WBTC", "USDC",
+                                    pos.wbtc_held, 1.0 / btc_price, fee_rate);
+                                pos.usdc_reclaimed += received;
+                                pos.total_fees += sold * btc_price * fee_rate;
+                                pos.wbtc_held = 0.0;
+                                pos.phase = PositionPhase::Closed;
+                                hold_swaps += 1;
+                                if pos.return_pct(btc_price) > 0.0 { hold_wins += 1; }
+                                closed_positions.push(pos.id);
+                                last_exit_candle = i;
+                            }
+                        }
+                        PositionExit::StopLoss | PositionExit::TakeProfit => {
+                            // Full exit (stop loss or runner TP)
+                            if pos.wbtc_held > 0.0 {
+                                let (sold, received) = treasury.swap("WBTC", "USDC",
+                                    pos.wbtc_held, 1.0 / btc_price, fee_rate);
+                                pos.usdc_reclaimed += received;
+                                pos.total_fees += sold * btc_price * fee_rate;
+                            }
+                            pos.wbtc_held = 0.0;
+                            pos.phase = PositionPhase::Closed;
+                            hold_swaps += 1;
+                            if pos.return_pct(btc_price) > 0.0 { hold_wins += 1; }
+                            closed_positions.push(pos.id);
+                            last_exit_candle = i;
+                        }
+                        _ => {}
+                    }
+                    // Log to ledger
+                    let ret = pos.return_pct(btc_price);
+                    run_db.execute(
+                        "INSERT INTO trade_ledger (step,candle_idx,timestamp,direction,entry_price,exit_price,gross_return_pct,position_usd,swap_fee_pct,horizon_candles,won,exit_reason)
+                         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
+                        rusqlite::params![
+                            log_step, i as i64, &candles[i].ts,
+                            "Sell", pos.entry_price, btc_price,
+                            ret * 100.0, pos.usdc_deployed,
+                            fee_rate * 100.0, pos.candles_held as i64,
+                            (ret > 0.0) as i32,
+                            if pos.phase == PositionPhase::Runner { "PartialProfit" } else { "StopLoss" },
+                        ],
+                    ).ok();
+                }
+            }
+            // Remove closed positions
+            positions.retain(|p| p.phase != PositionPhase::Closed);
+
+            // ── Open new position: manager BUY in proven band ────────
             let in_proven_band = meta_conviction >= mgr_proven_band.0
                 && meta_conviction < mgr_proven_band.1;
+            let cooled_down = i.saturating_sub(last_exit_candle) >= cooldown_candles;
             if args.asset_mode == "hold" && trader.phase != Phase::Observe
-                && mgr_curve_valid && in_proven_band
+                && mgr_curve_valid && in_proven_band && cooled_down
+                && meta_dir == Some(Outcome::Buy)
             {
-                let btc_price = candles[i].close;
-                let fee_rate = args.swap_fee + args.slippage;
-                match (meta_dir, hold_state) {
-                    (Some(Outcome::Buy), HoldState::InUsdc) => {
-                        // Swap all available USDC → WBTC
-                        let usdc_available = treasury.balance("USDC");
-                        if usdc_available > 1.0 {
-                            let (spent, received) = treasury.swap("USDC", "WBTC", usdc_available, btc_price, fee_rate);
-                            hold_state = HoldState::InWbtc;
-                            last_swap_candle = i;
-                            last_swap_price = btc_price;
-                            hold_swaps += 1;
-                            run_db.execute(
-                                "INSERT INTO trade_ledger (step,candle_idx,timestamp,direction,entry_price,position_usd,swap_fee_pct,exit_reason)
-                                 VALUES (?1,?2,?3,'Buy',?4,?5,?6,'Swap')",
-                                rusqlite::params![log_step, i as i64, &candles[i].ts, btc_price, spent, fee_rate * 100.0],
-                            ).ok();
-                        }
+                // Risk check: expected move must exceed swap cost
+                let expected_move = candles[i].atr_r * (cooldown_candles as f64).sqrt();
+                if expected_move > 2.0 * fee_rate {
+                    // Kelly sizing from band accuracy (simplified)
+                    let band_edge: f64 = 0.03; // ~53% accuracy → 3% edge, half-Kelly → 1.5%
+                    let frac = (band_edge / 2.0).min(max_single_position);
+                    let usdc_available = treasury.balance("USDC");
+                    let deploy = usdc_available * frac;
+                    if deploy > 10.0 { // minimum position size
+                        let (spent, received) = treasury.swap("USDC", "WBTC",
+                            deploy, btc_price, fee_rate);
+                        let entry_fee = spent * fee_rate;
+                        let pos = ManagedPosition::new(
+                            next_position_id, i, btc_price, candles[i].atr_r,
+                            Outcome::Buy, spent, received, entry_fee,
+                            k_stop, k_tp,
+                        );
+                        next_position_id += 1;
+                        hold_swaps += 1;
+                        run_db.execute(
+                            "INSERT INTO trade_ledger (step,candle_idx,timestamp,direction,entry_price,position_usd,swap_fee_pct,exit_reason)
+                             VALUES (?1,?2,?3,'Buy',?4,?5,?6,'Open')",
+                            rusqlite::params![log_step, i as i64, &candles[i].ts, btc_price, spent, fee_rate * 100.0],
+                        ).ok();
+                        positions.push(pos);
                     }
-                    (Some(Outcome::Sell), HoldState::InWbtc) => {
-                        // Swap all WBTC → USDC
-                        let wbtc_available = treasury.balance("WBTC");
-                        if wbtc_available > 0.0 {
-                            let wbtc_value_usdc = wbtc_available * btc_price;
-                            let (spent_wbtc, received_usdc) = treasury.swap("WBTC", "USDC", wbtc_available, 1.0 / btc_price, fee_rate);
-                            hold_state = HoldState::InUsdc;
-                            let hold_return = (btc_price - last_swap_price) / last_swap_price;
-                            let hold_candles = i - last_swap_candle;
-                            if hold_return > 0.0 { hold_wins += 1; }
-                            hold_swaps += 1;
-                            run_db.execute(
-                                "INSERT INTO trade_ledger (step,candle_idx,timestamp,direction,entry_price,exit_price,gross_return_pct,net_return_pct,position_usd,swap_fee_pct,horizon_candles,won,exit_reason)
-                                 VALUES (?1,?2,?3,'Sell',?4,?5,?6,?7,?8,?9,?10,?11,'Swap')",
-                                rusqlite::params![
-                                    log_step, i as i64, &candles[i].ts,
-                                    last_swap_price, btc_price,
-                                    hold_return * 100.0,
-                                    (hold_return - 2.0 * fee_rate) * 100.0, // approximate net
-                                    wbtc_value_usdc,
-                                    fee_rate * 100.0,
-                                    hold_candles as i64,
-                                    (hold_return > 2.0 * fee_rate) as i32,
-                                    ],
-                            ).ok();
-                        }
-                    }
-                    _ => {} // signal matches current position — hold
                 }
             }
 
@@ -1837,8 +1892,9 @@ fn main() {
                     let band_str = if mgr_curve_valid {
                         format!(" band=[{:.3},{:.3}]", mgr_proven_band.0, mgr_proven_band.1)
                     } else { " band=none".to_string() };
-                    eprintln!("    treasury: ${:.0} ({:+.1}%) in {} | swaps={} wins={} | proven=[{}]{}",
-                        tv, tv_ret, state, hold_swaps, hold_wins, proven_str, band_str);
+                    let open_positions = positions.len();
+                    eprintln!("    treasury: ${:.0} ({:+.1}%) in {} | pos={} swaps={} wins={} | proven=[{}]{}",
+                        tv, tv_ret, state, open_positions, hold_swaps, hold_wins, proven_str, band_str);
                 }
             }
         }
