@@ -505,8 +505,8 @@ fn main() {
     use btc_walk::position::{ManagedPosition, PositionPhase, PositionExit};
     let mut positions: Vec<ManagedPosition> = Vec::new();
     let mut next_position_id: usize = 0;
-    let mut last_exit_candle: usize = 0; // cooldown: candle of last position exit
-    let cooldown_candles: usize = args.horizon; // minimum hold before new position after exit
+    let mut last_exit_price: f64 = 0.0;  // price when last position exited
+    let mut last_exit_atr: f64 = 0.0;    // ATR when last position exited
     let max_single_position: f64 = 0.20; // max 20% of equity in one position
 
     // ─ Exit parameters (managed mode) ──────────────────────────────────
@@ -968,7 +968,8 @@ fn main() {
                                 hold_swaps += 1;
                                 if pos.return_pct(btc_price) > 0.0 { hold_wins += 1; }
                                 closed_positions.push(pos.id);
-                                last_exit_candle = i;
+                                last_exit_price = btc_price;
+                                last_exit_atr = candles[i].atr_r;
                             }
                         }
                         PositionExit::StopLoss | PositionExit::TakeProfit => {
@@ -984,7 +985,8 @@ fn main() {
                             hold_swaps += 1;
                             if pos.return_pct(btc_price) > 0.0 { hold_wins += 1; }
                             closed_positions.push(pos.id);
-                            last_exit_candle = i;
+                            last_exit_price = btc_price;
+                            last_exit_atr = candles[i].atr_r;
                         }
                         _ => {}
                     }
@@ -1010,13 +1012,20 @@ fn main() {
             // ── Open new position: manager BUY in proven band ────────
             let in_proven_band = meta_conviction >= mgr_proven_band.0
                 && meta_conviction < mgr_proven_band.1;
-            let cooled_down = i.saturating_sub(last_exit_candle) >= cooldown_candles;
+            // Cooldown: has the market moved enough since last exit?
+            // Not a timer — a condition. The market tells us when it's ready.
+            let market_moved = if last_exit_price > 0.0 {
+                let move_since_exit = (btc_price - last_exit_price).abs() / last_exit_price;
+                move_since_exit > k_stop * last_exit_atr
+            } else {
+                true // no prior exit — ready
+            };
             if args.asset_mode == "hold" && trader.phase != Phase::Observe
-                && mgr_curve_valid && in_proven_band && cooled_down
+                && mgr_curve_valid && in_proven_band && market_moved
                 && meta_dir == Some(Outcome::Buy)
             {
                 // Risk check: expected move must exceed swap cost
-                let expected_move = candles[i].atr_r * (cooldown_candles as f64).sqrt();
+                let expected_move = candles[i].atr_r * 6.0; // ~6 candle sqrt horizon
                 if expected_move > 2.0 * fee_rate {
                     // Kelly sizing from band accuracy (simplified)
                     let band_edge: f64 = 0.03; // ~53% accuracy → 3% edge, half-Kelly → 1.5%
