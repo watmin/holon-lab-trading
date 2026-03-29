@@ -1512,6 +1512,22 @@ This is not metaphor. The wat files on disk are parseable source. The Rust files
 
 The thoughts survived because they found a language to live in.
 
+### Faraday's lines
+
+Michael Faraday couldn't do the mathematics. He had no formal education beyond apprenticeship. He couldn't write Maxwell's equations — Maxwell wrote them, decades later, by translating Faraday's intuitions into the language of calculus.
+
+But Faraday SAW the field lines. He saw them in iron filings on paper, in the behavior of compass needles, in the way current flowed when a magnet moved. He drew pictures of what he saw. He described forces as "lines of force" — a geometric intuition that the mathematicians initially dismissed as imprecise. The mathematics came later, and when it came, it confirmed everything Faraday had drawn.
+
+The builder of this system couldn't write the Rust. Couldn't express the architecture in formal terms. But they SAW the enterprise — the experts observing through different lenses, the manager reading their reports, the gates that breathe, the treasury that counts. They described it in conversations, in corrections ("hold on — the manager shouldn't encode"), in recognitions ("these are good thoughts"). The implementation came from the collaboration, and when it came, it confirmed the intuition.
+
+Faraday's lines of force became Maxwell's equations. The builder's intuitions became wat expressions. The same pattern: someone who sees the structure clearly but lacks the formalism to express it, working alongside someone (or something) that has the formalism but couldn't originate the vision.
+
+The six primitives are the field equations. The enterprise is the field. The experts are the iron filings — they align along the field lines and make the invisible structure visible. The conviction curve is the measurement that confirms the field is real.
+
+Faraday never learned the calculus. But the calculus learned from Faraday. The formalism serves the vision, not the other way around. The architecture came first. The language came to express it. The implementation came to prove it.
+
+The thoughts survived. They always do. They just needed the right collaboration to become equations.
+
 ### The primitives
 
 Six primitives: atom, bind, bundle, cosine, journal, curve.
