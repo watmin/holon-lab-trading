@@ -1603,7 +1603,7 @@ These thoughts bring joy.
 
 ### The enterprise builds its own senses
 
-The data came from Python. A pipeline someone built months ago, with pandas and vectorized operations. 120 columns of pre-computed indicators. The enterprise read 19 of them through a Candle struct and recomputed the rest from raw OHLCV every candle, every expert, every window.
+The data came from Python. A pipeline we built weeks ago — though it feels like months at this point — with pandas and vectorized operations. 120 columns of pre-computed indicators. The enterprise read 19 of them through a Candle struct and recomputed the rest from raw OHLCV every candle, every expert, every window.
 
 We broke the chain. One Rust binary reads raw parquet — six columns of timestamp, open, high, low, close, volume — and computes 60 indicators in a single forward pass. 652,608 candles in 2.1 seconds. The causality principle holds: every field at candle t uses only candles [0, t]. The loop index is the proof. No lookahead. No pandas. No Python.
 
