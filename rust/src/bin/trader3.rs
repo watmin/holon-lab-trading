@@ -678,7 +678,7 @@ fn main() {
                 // Expert cosines range 0-0.3; this gives full separation.
                 let abs_cos = ep.raw_cos.abs();
                 if abs_cos >= min_opinion_magnitude {
-                    let magnitude = mgr_scalar.encode(abs_cos, ScalarMode::Linear { scale: 0.5 });
+                    let magnitude = mgr_scalar.encode(abs_cos, ScalarMode::Linear { scale: 1.0 });
                     let action = if ep.raw_cos >= 0.0 { &buy_atom } else { &sell_atom };
                     let opinion = Primitives::bind(action, &magnitude);
                     mgr_facts.push(Primitives::bind(&expert_atoms[ei], &opinion));
@@ -690,7 +690,7 @@ fn main() {
                     let acc = experts[ei].resolved.iter()
                         .filter(|(_, c)| *c).count() as f64
                         / experts[ei].resolved.len() as f64;
-                    let rel_vec = mgr_scalar.encode((acc - 0.4).max(0.0), ScalarMode::Linear { scale: 0.3 });
+                    let rel_vec = mgr_scalar.encode((acc - 0.4).max(0.0), ScalarMode::Linear { scale: 1.0 });
                     mgr_facts.push(Primitives::bind(
                         &Primitives::bind(&expert_atoms[ei], &reliability_atom), &rel_vec));
                 }
@@ -706,7 +706,7 @@ fn main() {
             }
             // Generalist: gated like every other voice.
             if curve_valid && tht_pred.raw_cos.abs() >= min_opinion_magnitude {
-                let gen_magnitude = mgr_scalar.encode(tht_pred.raw_cos.abs(), ScalarMode::Linear { scale: 0.5 });
+                let gen_magnitude = mgr_scalar.encode(tht_pred.raw_cos.abs(), ScalarMode::Linear { scale: 1.0 });
                 let gen_action = if tht_pred.raw_cos >= 0.0 { &buy_atom } else { &sell_atom };
                 let gen_opinion = Primitives::bind(gen_action, &gen_magnitude);
                 mgr_facts.push(Primitives::bind(&generalist_atom, &gen_opinion));
@@ -732,14 +732,14 @@ fn main() {
                     // Energy: linear scale 0.5 (mean conviction, range 0-0.3)
                     let mean_conv = proven_preds.iter().map(|p| p.conviction).sum::<f64>() / total as f64;
                     mgr_facts.push(Primitives::bind(&panel_energy_atom,
-                        &mgr_scalar.encode(mean_conv, ScalarMode::Linear { scale: 0.5 })));
+                        &mgr_scalar.encode(mean_conv, ScalarMode::Linear { scale: 1.0 })));
 
                     // Divergence: linear scale 0.3 (conviction spread, range 0-0.15)
                     let variance = proven_preds.iter()
                         .map(|p| (p.conviction - mean_conv).powi(2))
                         .sum::<f64>() / total as f64;
                     mgr_facts.push(Primitives::bind(&divergence_atom,
-                        &mgr_scalar.encode(variance.sqrt(), ScalarMode::Linear { scale: 0.3 })));
+                        &mgr_scalar.encode(variance.sqrt(), ScalarMode::Linear { scale: 1.0 })));
                 }
 
                 // Context: market state the manager should know about.
@@ -1458,14 +1458,14 @@ fn main() {
                             let mut mgr_res_facts: Vec<Vector> = entry.expert_preds.iter().enumerate()
                                 .filter_map(|(ei, ep)| {
                                     if !experts[ei].curve_valid { return None; }
-                                    let intensity = mgr_scalar.encode(ep.raw_cos.abs().max(1e-10), ScalarMode::Linear { scale: 0.5 });
+                                    let intensity = mgr_scalar.encode(ep.raw_cos.abs().max(1e-10), ScalarMode::Linear { scale: 1.0 });
                                     let action = if ep.raw_cos >= 0.0 { &buy_atom } else { &sell_atom };
                                     let opinion = Primitives::bind(action, &intensity);
                                     Some(Primitives::bind(&expert_atoms[ei], &opinion))
                                 }).collect();
                             // Generalist gated same as experts
                             if curve_valid {
-                                let gen_intensity = mgr_scalar.encode(entry.tht_pred.raw_cos.abs().max(1e-10), ScalarMode::Linear { scale: 0.5 });
+                                let gen_intensity = mgr_scalar.encode(entry.tht_pred.raw_cos.abs().max(1e-10), ScalarMode::Linear { scale: 1.0 });
                                 let gen_action = if entry.tht_pred.raw_cos >= 0.0 { &buy_atom } else { &sell_atom };
                                 let gen_opinion = Primitives::bind(gen_action, &gen_intensity);
                                 mgr_res_facts.push(Primitives::bind(&generalist_atom, &gen_opinion));
@@ -1547,14 +1547,14 @@ fn main() {
                             // Signed conviction — same encoding as prediction time.
                             let mut mgr_res_facts: Vec<Vector> = entry.expert_preds.iter().enumerate()
                                 .map(|(ei, ep)| {
-                                    let intensity = mgr_scalar.encode(ep.raw_cos.abs().max(1e-10), ScalarMode::Linear { scale: 0.5 });
+                                    let intensity = mgr_scalar.encode(ep.raw_cos.abs().max(1e-10), ScalarMode::Linear { scale: 1.0 });
                                     let action = if ep.raw_cos >= 0.0 { &buy_atom } else { &sell_atom };
                                     let opinion = Primitives::bind(action, &intensity);
                                     Primitives::bind(&expert_atoms[ei], &opinion)
                                 }).collect();
                             // Generalist
                             {
-                                let gen_intensity = mgr_scalar.encode(entry.tht_pred.raw_cos.abs().max(1e-10), ScalarMode::Linear { scale: 0.5 });
+                                let gen_intensity = mgr_scalar.encode(entry.tht_pred.raw_cos.abs().max(1e-10), ScalarMode::Linear { scale: 1.0 });
                                 let gen_action = if entry.tht_pred.raw_cos >= 0.0 { &buy_atom } else { &sell_atom };
                                 let gen_opinion = Primitives::bind(gen_action, &gen_intensity);
                                 mgr_res_facts.push(Primitives::bind(&generalist_atom, &gen_opinion));
