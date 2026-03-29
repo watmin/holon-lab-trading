@@ -1,6 +1,7 @@
 pub mod db;
 pub mod desk;          // TODO: multi-desk experiment, still referenced by enterprise.rs
 pub mod journal;
+pub mod manager;
 pub mod portfolio;
 pub mod position;
 pub mod run_db;
