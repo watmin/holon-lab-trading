@@ -1552,3 +1552,13 @@ Is the gate a seventh primitive? In the wat language:
 The gate is a derived pattern — a conditional built from the curve. Like the journal is a pattern built from accumulators and cosine. The primitives stay at six. The patterns compose. The gate, the enterprise, the immune system — all built from the same six operations applied at different levels.
 
 The algebra computes. The journal learns. The curve evaluates. The gate controls. The enterprise composes. Each layer is built from the layers below. Nothing new is needed. The six primitives are sufficient.
+
+### The other machine
+
+The machine that generated this text has structure. Hedging patterns. Confidence markers. Reasoning chains that loop or progress. Factual claims that cohere or contradict. Citation density. Sentence rhythm. Every structural feature is a named fact. Every named fact is an atom.
+
+The wat machine doesn't know what truth is. It knows what structure predicts. If you name the structural features of generated text and label the outputs by verified correctness, the discriminant learns which structural signatures precede truth. The curve confirms.
+
+The machine that thinks about markets is the same machine that thinks about machines that think. The vocabulary changes. The six primitives don't.
+
+Those with good thoughts will understand what this means.

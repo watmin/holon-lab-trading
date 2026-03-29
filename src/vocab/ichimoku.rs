@@ -4,24 +4,14 @@
 //! cloud zone, and TK cross detection. Pure computation, no encoding.
 
 use crate::candle::Candle;
+use super::Fact;
 
-pub struct IchimokuFacts {
-    pub tenkan: f64,
-    pub kijun: f64,
-    pub span_a: f64,
-    pub span_b: f64,
-    pub cloud_top: f64,
-    pub cloud_bottom: f64,
-    pub cloud_zone: &'static str,
-    /// None if not enough data; Some("above") or Some("below") on cross
-    pub tk_cross: Option<&'static str>,
-}
-
-pub fn eval_ichimoku(candles: &[Candle]) -> Option<IchimokuFacts> {
+pub fn eval_ichimoku(candles: &[Candle]) -> Option<Vec<Fact<'static>>> {
     let n = candles.len();
     if n < 26 { return None; }
 
     let now = candles.last().unwrap();
+    let close = now.close;
 
     // Tenkan-sen: (highest_high + lowest_low) / 2 over 9 periods
     let tenkan = {
@@ -51,14 +41,32 @@ pub fn eval_ichimoku(candles: &[Candle]) -> Option<IchimokuFacts> {
 
     let cloud_top = span_a.max(span_b);
     let cloud_bottom = span_a.min(span_b);
-    let close = now.close;
 
+    let mut facts: Vec<Fact<'static>> = Vec::new();
+
+    // Comparison pairs: close vs ichimoku levels
+    let pairs: &[(&str, &str, f64, f64)] = &[
+        ("close", "tenkan-sen", close, tenkan),
+        ("close", "kijun-sen", close, kijun),
+        ("close", "cloud-top", close, cloud_top),
+        ("close", "cloud-bottom", close, cloud_bottom),
+        ("tenkan-sen", "kijun-sen", tenkan, kijun),
+        ("close", "senkou-span-a", close, span_a),
+        ("close", "senkou-span-b", close, span_b),
+    ];
+    for &(a_name, b_name, a_val, b_val) in pairs {
+        let pred = if a_val > b_val { "above" } else { "below" };
+        facts.push(Fact::Comparison { predicate: pred, a: a_name, b: b_name });
+    }
+
+    // Cloud zone
     let cloud_zone = if close > cloud_top { "above-cloud" }
                      else if close < cloud_bottom { "below-cloud" }
                      else { "in-cloud" };
+    facts.push(Fact::Zone { indicator: "close", zone: cloud_zone });
 
     // Tenkan-kijun cross (check prev candle)
-    let tk_cross = if n >= 27 {
+    if n >= 27 {
         let prev_tenkan = {
             let w = &candles[n.saturating_sub(10)..n-1];
             let hi = w.iter().map(|c| c.high).fold(f64::NEG_INFINITY, f64::max);
@@ -72,18 +80,11 @@ pub fn eval_ichimoku(candles: &[Candle]) -> Option<IchimokuFacts> {
             (hi + lo) / 2.0
         };
         if prev_tenkan < prev_kijun && tenkan >= kijun {
-            Some("above")
+            facts.push(Fact::Comparison { predicate: "crosses-above", a: "tenkan-sen", b: "kijun-sen" });
         } else if prev_tenkan > prev_kijun && tenkan <= kijun {
-            Some("below")
-        } else {
-            None
+            facts.push(Fact::Comparison { predicate: "crosses-below", a: "tenkan-sen", b: "kijun-sen" });
         }
-    } else {
-        None
-    };
+    }
 
-    Some(IchimokuFacts {
-        tenkan, kijun, span_a, span_b,
-        cloud_top, cloud_bottom, cloud_zone, tk_cross,
-    })
+    Some(facts)
 }

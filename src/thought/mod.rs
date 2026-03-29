@@ -401,6 +401,15 @@ impl ThoughtEncoder {
             }
         }
 
+        // Pre-compute fibonacci comparison facts (touches/above/below close vs fib levels)
+        for &fib in &["fib-236", "fib-382", "fib-500", "fib-618", "fib-786"] {
+            for &pred in &["above", "below", "touches"] {
+                let key = format!("({} close {})", pred, fib);
+                let vec = fact_binary(&vocab, pred, "close", fib);
+                fact_cache.insert(key, vec);
+            }
+        }
+
         // Pre-compute zone facts for segment boundaries
         for &(_stream, ind, zone, _check) in STREAM_ZONE_CHECKS {
             let key = format!("(at {} {})", ind, zone);
@@ -448,6 +457,17 @@ impl ThoughtEncoder {
             ("fractal-dim", "trending-geometry"), ("fractal-dim", "random-walk-geometry"), ("fractal-dim", "mean-reverting-geometry"),
             ("gr-bvalue", "heavy-tails"), ("gr-bvalue", "light-tails"),
             ("entropy-rate", "low-entropy-rate"), ("entropy-rate", "high-entropy-rate"),
+            // vocab/oscillators zones
+            ("williams-r", "williams-overbought"), ("williams-r", "williams-oversold"),
+            ("stoch-rsi", "stoch-rsi-overbought"), ("stoch-rsi", "stoch-rsi-oversold"),
+            ("ult-osc", "ult-osc-overbought"), ("ult-osc", "ult-osc-oversold"),
+            // vocab/flow zones
+            ("mfi", "mfi-overbought"), ("mfi", "mfi-oversold"),
+            // vocab/persistence zones
+            ("hurst", "hurst-trending"), ("hurst", "hurst-reverting"),
+            ("autocorr", "autocorr-positive"), ("autocorr", "autocorr-negative"),
+            ("adx", "moderate-trend"),
+            ("kama-er", "moderate-efficiency"),
         ] {
             let key = format!("(at {} {})", ind, zone);
             if !fact_cache.contains_key(&key) {
@@ -577,11 +597,11 @@ impl ThoughtEncoder {
         // Oscillators, crosses, divergence. Speed and direction of change.
         if is(&["momentum"]) {
             self.eval_rsi_sma_cached(candles, &mut cached_facts, &mut labels);
-            self.eval_stochastic(candles, &mut cached_facts, &mut labels);
-            self.eval_momentum(candles, &mut cached_facts, &mut labels); // CCI, ROC
+            self.eval_stochastic(candles, &mut cached_facts, &mut owned_facts, &mut labels);
+            self.eval_momentum(candles, &mut cached_facts, &mut owned_facts, &mut labels); // CCI, ROC
             self.eval_divergence(candles, vm, &mut owned_facts, &mut labels);
             // vocab/oscillators: Williams %R, Stochastic RSI, Ultimate Oscillator, multi-ROC
-            self.eval_oscillators_module(candles, &mut owned_facts, &mut labels);
+            self.eval_oscillators_module(candles, &mut cached_facts, &mut owned_facts, &mut labels);
         }
 
         // ── EXCLUSIVE: structure ────────────────────────────────────
@@ -589,9 +609,9 @@ impl ThoughtEncoder {
         if is(&["structure"]) {
             self.eval_segment_narrative(candles, vm, &mut owned_facts, &mut labels);
             self.eval_range_position(candles, &mut owned_facts, &mut labels);
-            self.eval_ichimoku(candles, &mut cached_facts, &mut labels);
-            self.eval_fibonacci(candles, &mut owned_facts, &mut labels);
-            self.eval_keltner(candles, &mut cached_facts, &mut labels);
+            self.eval_ichimoku(candles, &mut cached_facts, &mut owned_facts, &mut labels);
+            self.eval_fibonacci(candles, &mut cached_facts, &mut owned_facts, &mut labels);
+            self.eval_keltner(candles, &mut cached_facts, &mut owned_facts, &mut labels);
         }
 
         // ── EXCLUSIVE: volume ───────────────────────────────────────
@@ -599,9 +619,9 @@ impl ThoughtEncoder {
         if is(&["volume"]) {
             self.eval_volume_confirmation(candles, &mut owned_facts, &mut labels);
             self.eval_volume_analysis(candles, &mut cached_facts, &mut labels);
-            self.eval_price_action(candles, &mut cached_facts, &mut labels);
+            self.eval_price_action(candles, &mut cached_facts, &mut owned_facts, &mut labels);
             // vocab/flow: OBV, VWAP, MFI, buying/selling pressure
-            self.eval_flow_module(candles, &mut owned_facts, &mut labels);
+            self.eval_flow_module(candles, &mut cached_facts, &mut owned_facts, &mut labels);
         }
 
         // ── EXCLUSIVE: narrative ────────────────────────────────────
@@ -617,7 +637,7 @@ impl ThoughtEncoder {
         if is(&["regime"]) {
             self.eval_advanced(candles, &mut cached_facts, &mut owned_facts, &mut labels);
             // vocab/persistence: Hurst, autocorrelation, ADX zones
-            self.eval_persistence_module(candles, &mut owned_facts, &mut labels);
+            self.eval_persistence_module(candles, &mut cached_facts, &mut owned_facts, &mut labels);
         }
 
         // Unify all facts, then filter suppressed (high fire-rate constants).
@@ -1136,49 +1156,12 @@ impl ThoughtEncoder {
         &'a self,
         candles: &[Candle],
         facts: &mut Vec<&'a Vector>,
+        owned_facts: &mut Vec<Vector>,
         labels: &mut Vec<String>,
     ) {
         use crate::vocab::ichimoku::eval_ichimoku;
-        let ichi = match eval_ichimoku(candles) {
-            Some(f) => f,
-            None => return,
-        };
-
-        let close = candles.last().unwrap().close;
-
-        // Compute comparisons using cached fact vectors
-        let pairs: &[(&str, &str, f64, f64)] = &[
-            ("close", "tenkan-sen", close, ichi.tenkan),
-            ("close", "kijun-sen", close, ichi.kijun),
-            ("close", "cloud-top", close, ichi.cloud_top),
-            ("close", "cloud-bottom", close, ichi.cloud_bottom),
-            ("tenkan-sen", "kijun-sen", ichi.tenkan, ichi.kijun),
-            ("close", "senkou-span-a", close, ichi.span_a),
-            ("close", "senkou-span-b", close, ichi.span_b),
-        ];
-
-        for &(a_name, b_name, a_val, b_val) in pairs {
-            let pred = if a_val > b_val { "above" } else { "below" };
-            let key = format!("({} {} {})", pred, a_name, b_name);
-            if let Some(v) = self.fact_cache.get(&key) {
-                facts.push(v);
-                labels.push(key);
-            }
-        }
-
-        // Cloud zone
-        let key = format!("(at close {})", ichi.cloud_zone);
-        if let Some(v) = self.fact_cache.get(&key) {
-            facts.push(v);
-            labels.push(key);
-        }
-
-        // Tenkan-kijun cross
-        if let Some(dir) = ichi.tk_cross {
-            let key = format!("(crosses-{} tenkan-sen kijun-sen)", dir);
-            if let Some(v) = self.fact_cache.get(&key) {
-                facts.push(v); labels.push(key);
-            }
+        if let Some(ichi_facts) = eval_ichimoku(candles) {
+            self.encode_facts(&ichi_facts, facts, owned_facts, labels);
         }
     }
 
@@ -1188,62 +1171,27 @@ impl ThoughtEncoder {
         &'a self,
         candles: &[Candle],
         facts: &mut Vec<&'a Vector>,
+        owned_facts: &mut Vec<Vector>,
         labels: &mut Vec<String>,
     ) {
         use crate::vocab::stochastic::eval_stochastic;
-        let stoch = match eval_stochastic(candles) {
-            Some(f) => f,
-            None => return,
-        };
-
-        // Stoch K vs D comparison
-        let pred = if stoch.k > stoch.d { "above" } else { "below" };
-        let key = format!("({} stoch-k stoch-d)", pred);
-        if let Some(v) = self.fact_cache.get(&key) { facts.push(v); labels.push(key); }
-
-        // Cross detection
-        if let Some(dir) = stoch.crossover {
-            let key = format!("(crosses-{} stoch-k stoch-d)", dir);
-            if let Some(v) = self.fact_cache.get(&key) { facts.push(v); labels.push(key); }
-        }
-
-        // Zones
-        if let Some(zone) = stoch.zone {
-            let key = format!("(at stoch-k {})", zone);
-            if let Some(v) = self.fact_cache.get(&key) { facts.push(v); labels.push(key); }
+        if let Some(stoch_facts) = eval_stochastic(candles) {
+            self.encode_facts(&stoch_facts, facts, owned_facts, labels);
         }
     }
 
     // ─── Fibonacci Retracement ───────────────────────────────────────────
 
-    fn eval_fibonacci(
-        &self,
+    fn eval_fibonacci<'a>(
+        &'a self,
         candles: &[Candle],
-        facts: &mut Vec<Vector>,
+        facts: &mut Vec<&'a Vector>,
+        owned_facts: &mut Vec<Vector>,
         labels: &mut Vec<String>,
     ) {
         use crate::vocab::fibonacci::eval_fibonacci;
-        let fib = match eval_fibonacci(candles) {
-            Some(f) => f,
-            None => return,
-        };
-
-        for level in &fib.levels {
-            if level.touching {
-                let fact = Primitives::bind(
-                    self.vocab.get("touches"),
-                    &Primitives::bind(self.vocab.get("close"), self.vocab.get(level.name)),
-                );
-                facts.push(fact);
-                labels.push(format!("(touches close {})", level.name));
-            }
-            let pred = if level.above { "above" } else { "below" };
-            let fact = Primitives::bind(
-                self.vocab.get(pred),
-                &Primitives::bind(self.vocab.get("close"), self.vocab.get(level.name)),
-            );
-            facts.push(fact);
-            labels.push(format!("({} close {})", pred, level.name));
+        if let Some(fib_facts) = eval_fibonacci(candles) {
+            self.encode_facts(&fib_facts, facts, owned_facts, labels);
         }
     }
 
@@ -1283,26 +1231,12 @@ impl ThoughtEncoder {
         &'a self,
         candles: &[Candle],
         facts: &mut Vec<&'a Vector>,
+        owned_facts: &mut Vec<Vector>,
         labels: &mut Vec<String>,
     ) {
         use crate::vocab::keltner::eval_keltner;
-        let kelt = match eval_keltner(candles) {
-            Some(f) => f,
-            None => return,
-        };
-
-        // Close vs Keltner
-        let key_u = format!("({} close keltner-upper)", kelt.close_vs_upper);
-        if let Some(v) = self.fact_cache.get(&key_u) { facts.push(v); labels.push(key_u); }
-
-        let key_l = format!("({} close keltner-lower)", kelt.close_vs_lower);
-        if let Some(v) = self.fact_cache.get(&key_l) { facts.push(v); labels.push(key_l); }
-
-        // Squeeze: BB inside Keltner (low volatility)
-        if kelt.squeeze {
-            if let Some(v) = self.fact_cache.get("(below bb-upper keltner-upper)") {
-                facts.push(v); labels.push("(below bb-upper keltner-upper)".into());
-            }
+        if let Some(kelt_facts) = eval_keltner(candles) {
+            self.encode_facts(&kelt_facts, facts, owned_facts, labels);
         }
     }
 
@@ -1312,15 +1246,11 @@ impl ThoughtEncoder {
         &'a self,
         candles: &[Candle],
         facts: &mut Vec<&'a Vector>,
+        owned_facts: &mut Vec<Vector>,
         labels: &mut Vec<String>,
     ) {
         use crate::vocab::momentum::eval_momentum;
-        let mom = eval_momentum(candles);
-
-        if let Some(zone) = mom.cci_zone {
-            let key = format!("(at cci {})", zone);
-            if let Some(v) = self.fact_cache.get(&key) { facts.push(v); labels.push(key); }
-        }
+        self.encode_facts(&eval_momentum(candles), facts, owned_facts, labels);
     }
 
     // ─── Price Action Patterns ───────────────────────────────────────────
@@ -1329,191 +1259,67 @@ impl ThoughtEncoder {
         &'a self,
         candles: &[Candle],
         facts: &mut Vec<&'a Vector>,
+        owned_facts: &mut Vec<Vector>,
         labels: &mut Vec<String>,
     ) {
         use crate::vocab::price_action::eval_price_action;
-        let pa = eval_price_action(candles);
-
-        for pattern in &pa.patterns {
-            let key = format!("(at close {})", pattern);
-            if let Some(v) = self.fact_cache.get(&key) { facts.push(v); labels.push(key); }
-        }
-
-        if let Some(count) = pa.consecutive_up {
-            if let Some(v) = self.fact_cache.get("(at close consecutive-up)") {
-                facts.push(v); labels.push(format!("(at close consecutive-up {})", count));
-            }
-        }
-        if let Some(count) = pa.consecutive_down {
-            if let Some(v) = self.fact_cache.get("(at close consecutive-down)") {
-                facts.push(v); labels.push(format!("(at close consecutive-down {})", count));
-            }
-        }
+        self.encode_facts(&eval_price_action(candles), facts, owned_facts, labels);
     }
 
     // ─── vocab/oscillators module ──────────────────────────────────────
 
-    fn eval_oscillators_module(
-        &self,
+    fn eval_oscillators_module<'a>(
+        &'a self,
         candles: &[Candle],
-        facts: &mut Vec<Vector>,
+        facts: &mut Vec<&'a Vector>,
+        owned_facts: &mut Vec<Vector>,
         labels: &mut Vec<String>,
     ) {
         use crate::vocab::oscillators::eval_oscillators;
-        let osc = eval_oscillators(candles);
-
-        // Williams %R zone
-        if let Some(zone) = osc.williams_zone {
-            if let Some(v) = self.fact_cache.get(&format!("(at williams-r {})", zone)) {
-                facts.push(v.clone()); labels.push(format!("(at williams-r {})", zone));
-            } else {
-                // Build fact from atoms if not pre-cached
-                let fact = Primitives::bind(self.vocab.get("at"),
-                    &Primitives::bind(self.vocab.get("williams-r"), self.vocab.get(zone)));
-                facts.push(fact); labels.push(format!("(at williams-r {})", zone));
-            }
-        }
-        // Williams %R scalar
-        if let Some(wr) = osc.williams_r {
-            let v = self.scalar_enc.encode((wr + 100.0) / 100.0, ScalarMode::Linear { scale: 1.0 }); // normalize [-100,0] → [0,1]
-            facts.push(Primitives::bind(self.vocab.get("williams-r"), &v));
-            labels.push(format!("(williams-r {:.1})", wr));
-        }
-
-        // Stochastic RSI zone
-        if let Some(zone) = osc.stoch_rsi_zone {
-            let fact = Primitives::bind(self.vocab.get("at"),
-                &Primitives::bind(self.vocab.get("stoch-rsi"), self.vocab.get(zone)));
-            facts.push(fact); labels.push(format!("(at stoch-rsi {})", zone));
-        }
-        // Stochastic RSI scalar
-        if let Some(srsi) = osc.stoch_rsi {
-            let v = self.scalar_enc.encode(srsi, ScalarMode::Linear { scale: 1.0 });
-            facts.push(Primitives::bind(self.vocab.get("stoch-rsi"), &v));
-            labels.push(format!("(stoch-rsi {:.3})", srsi));
-        }
-
-        // Ultimate Oscillator zone
-        if let Some(zone) = osc.ult_osc_zone {
-            let fact = Primitives::bind(self.vocab.get("at"),
-                &Primitives::bind(self.vocab.get("ult-osc"), self.vocab.get(zone)));
-            facts.push(fact); labels.push(format!("(at ult-osc {})", zone));
-        }
-
-        // Multi-timeframe ROC: accelerating or decelerating momentum
-        if osc.roc_accelerating {
-            facts.push(self.vocab.get("roc-accelerating").clone());
-            labels.push("(roc-accelerating)".to_string());
-        }
-        if osc.roc_decelerating {
-            facts.push(self.vocab.get("roc-decelerating").clone());
-            labels.push("(roc-decelerating)".to_string());
-        }
+        self.encode_facts(&eval_oscillators(candles), facts, owned_facts, labels);
     }
 
     // ─── Advanced indicators (tier-1 underdogs + esoteric) ─────────────
 
     // ─── vocab/flow module ────────────────────────────────────────────
 
-    fn eval_flow_module(
-        &self,
+    fn eval_flow_module<'a>(
+        &'a self,
         candles: &[Candle],
-        facts: &mut Vec<Vector>,
+        facts: &mut Vec<&'a Vector>,
+        owned_facts: &mut Vec<Vector>,
         labels: &mut Vec<String>,
     ) {
         use crate::vocab::flow::eval_flow;
-        let flow = eval_flow(candles);
+        let (obv, flow_facts) = eval_flow(candles);
 
-        // OBV direction
-        if flow.obv_sign > 0.0 {
-            facts.push(self.vocab.get("obv").clone());
+        // OBV direction: direct bind patterns that don't fit Fact variants
+        if obv.obv_sign > 0.0 {
+            owned_facts.push(self.vocab.get("obv").clone());
             labels.push("(obv rising)".to_string());
-        } else if flow.obv_sign < 0.0 {
-            facts.push(Primitives::bind(self.vocab.get("obv"), self.vocab.get("down")));
+        } else if obv.obv_sign < 0.0 {
+            owned_facts.push(Primitives::bind(self.vocab.get("obv"), self.vocab.get("down")));
             labels.push("(obv falling)".to_string());
         }
-
-        // OBV divergence (strongest volume signal)
-        if flow.obv_diverges {
-            let fact = Primitives::bind(self.vocab.get("obv"), self.vocab.get("divergence"));
-            facts.push(fact);
+        if obv.obv_diverges {
+            owned_facts.push(Primitives::bind(self.vocab.get("obv"), self.vocab.get("divergence")));
             labels.push("(obv divergence)".to_string());
         }
 
-        // VWAP distance
-        if let Some(dist) = flow.vwap_distance {
-            let v = self.scalar_enc.encode(dist.clamp(-1.0, 1.0) * 0.5 + 0.5, ScalarMode::Linear { scale: 1.0 });
-            facts.push(Primitives::bind(self.vocab.get("vwap"), &v));
-            labels.push(format!("(vwap-dist {:.4})", dist));
-        }
-
-        // MFI zone
-        if let Some(zone) = flow.mfi_zone {
-            let fact = Primitives::bind(self.vocab.get("at"),
-                &Primitives::bind(self.vocab.get("mfi"), self.vocab.get(zone)));
-            facts.push(fact);
-            labels.push(format!("(at mfi {})", zone));
-        }
-
-        // Buying/selling pressure
-        let bp_vec = self.scalar_enc.encode(flow.buy_pressure, ScalarMode::Linear { scale: 1.0 });
-        facts.push(Primitives::bind(self.vocab.get("buy-pressure"), &bp_vec));
-        labels.push(format!("(buy-pressure {:.3})", flow.buy_pressure));
-
-        let sp_vec = self.scalar_enc.encode(flow.sell_pressure, ScalarMode::Linear { scale: 1.0 });
-        facts.push(Primitives::bind(self.vocab.get("sell-pressure"), &sp_vec));
-        labels.push(format!("(sell-pressure {:.3})", flow.sell_pressure));
-
-        // Body ratio (conviction of the candle)
-        let br_vec = self.scalar_enc.encode(flow.body_ratio, ScalarMode::Linear { scale: 1.0 });
-        facts.push(Primitives::bind(self.vocab.get("body-ratio"), &br_vec));
-        labels.push(format!("(body-ratio {:.3})", flow.body_ratio));
+        self.encode_facts(&flow_facts, facts, owned_facts, labels);
     }
 
     // ─── vocab/persistence module ─────────────────────────────────────
 
-    fn eval_persistence_module(
-        &self,
+    fn eval_persistence_module<'a>(
+        &'a self,
         candles: &[Candle],
-        facts: &mut Vec<Vector>,
+        facts: &mut Vec<&'a Vector>,
+        owned_facts: &mut Vec<Vector>,
         labels: &mut Vec<String>,
     ) {
         use crate::vocab::persistence::eval_persistence;
-        let pers = eval_persistence(candles);
-
-        // Hurst exponent: continuous + zone
-        if let Some(h) = pers.hurst {
-            let v = self.scalar_enc.encode(h.clamp(0.0, 1.0), ScalarMode::Linear { scale: 1.0 });
-            facts.push(Primitives::bind(self.vocab.get("hurst"), &v));
-            labels.push(format!("(hurst {:.3})", h));
-        }
-        if let Some(zone) = pers.hurst_zone {
-            let fact = Primitives::bind(self.vocab.get("at"),
-                &Primitives::bind(self.vocab.get("hurst"), self.vocab.get(zone)));
-            facts.push(fact);
-            labels.push(format!("(at hurst {})", zone));
-        }
-
-        // Autocorrelation: continuous + zone
-        if let Some(ac) = pers.autocorr {
-            let v = self.scalar_enc.encode(ac.clamp(-1.0, 1.0) * 0.5 + 0.5, ScalarMode::Linear { scale: 1.0 });
-            facts.push(Primitives::bind(self.vocab.get("autocorr"), &v));
-            labels.push(format!("(autocorr {:.3})", ac));
-        }
-        if let Some(zone) = pers.autocorr_zone {
-            let fact = Primitives::bind(self.vocab.get("at"),
-                &Primitives::bind(self.vocab.get("autocorr"), self.vocab.get(zone)));
-            facts.push(fact);
-            labels.push(format!("(at autocorr {})", zone));
-        }
-
-        // ADX zone (more granular than existing strong/weak)
-        {
-            let fact = Primitives::bind(self.vocab.get("at"),
-                &Primitives::bind(self.vocab.get("adx"), self.vocab.get(pers.adx_zone)));
-            facts.push(fact);
-            labels.push(format!("(at adx {})", pers.adx_zone));
-        }
+        self.encode_facts(&eval_persistence(candles), facts, owned_facts, labels);
     }
 
     // ─── Advanced indicators (tier-1 underdogs + esoteric) ─────────────

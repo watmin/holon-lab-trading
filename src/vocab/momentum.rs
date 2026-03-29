@@ -4,14 +4,11 @@
 //! Pure computation, no encoding.
 
 use crate::candle::Candle;
+use super::Fact;
 
-pub struct MomentumFacts {
-    pub cci_zone: Option<&'static str>,
-}
-
-pub fn eval_momentum(candles: &[Candle]) -> MomentumFacts {
+pub fn eval_momentum(candles: &[Candle]) -> Vec<Fact<'static>> {
     let n = candles.len();
-    let mut facts = MomentumFacts { cci_zone: None };
+    let mut facts: Vec<Fact<'static>> = Vec::new();
     if n < 20 { return facts; }
 
     let now = candles.last().unwrap();
@@ -26,9 +23,9 @@ pub fn eval_momentum(candles: &[Candle]) -> MomentumFacts {
         let typical_now = (now.high + now.low + now.close) / 3.0;
         let cci = (typical_now - typical_mean) / (0.015 * mean_dev);
         if cci > 100.0 {
-            facts.cci_zone = Some("cci-overbought");
+            facts.push(Fact::Zone { indicator: "cci", zone: "cci-overbought" });
         } else if cci < -100.0 {
-            facts.cci_zone = Some("cci-oversold");
+            facts.push(Fact::Zone { indicator: "cci", zone: "cci-oversold" });
         }
     }
 

@@ -7,6 +7,7 @@
 //! (label, vector) pairs. The thought encoder bundles them.
 
 use crate::candle::Candle;
+use super::Fact;
 
 /// Williams %R: close relative to high-low range, inverted.
 /// Range: [-100, 0]. -20 to 0 = overbought. -100 to -80 = oversold.
@@ -86,43 +87,38 @@ pub fn roc(candles: &[Candle], period: usize) -> Option<f64> {
 }
 
 /// Evaluate all oscillator facts for a candle window.
-/// Returns (label, is_zone) pairs. Zone facts are binary (present/absent).
-/// Scalar facts are continuous values to be encoded.
-pub struct OscillatorFacts {
-    pub williams_r: Option<f64>,
-    pub williams_zone: Option<&'static str>,  // "williams-overbought" or "williams-oversold"
-    pub stoch_rsi: Option<f64>,
-    pub stoch_rsi_zone: Option<&'static str>,
-    pub ult_osc: Option<f64>,
-    pub ult_osc_zone: Option<&'static str>,
-    pub roc_5: Option<f64>,
-    pub roc_10: Option<f64>,
-    pub roc_20: Option<f64>,
-    pub roc_accelerating: bool,  // roc_5 > roc_10 > roc_20
-    pub roc_decelerating: bool,  // roc_5 < roc_10 < roc_20
-}
+pub fn eval_oscillators(candles: &[Candle]) -> Vec<Fact<'static>> {
+    let mut facts: Vec<Fact<'static>> = Vec::new();
 
-pub fn eval_oscillators(candles: &[Candle]) -> OscillatorFacts {
     let wr = williams_r(candles, 14);
-    let wr_zone = wr.and_then(|v| {
-        if v > -20.0 { Some("williams-overbought") }
-        else if v < -80.0 { Some("williams-oversold") }
-        else { None }
-    });
+    if let Some(v) = wr {
+        if v > -20.0 {
+            facts.push(Fact::Zone { indicator: "williams-r", zone: "williams-overbought" });
+        } else if v < -80.0 {
+            facts.push(Fact::Zone { indicator: "williams-r", zone: "williams-oversold" });
+        }
+        // Normalize [-100,0] → [0,1]
+        facts.push(Fact::Scalar { indicator: "williams-r", value: (v + 100.0) / 100.0, scale: 1.0 });
+    }
 
     let srsi = stochastic_rsi(candles, 14);
-    let srsi_zone = srsi.and_then(|v| {
-        if v > 0.8 { Some("stoch-rsi-overbought") }
-        else if v < 0.2 { Some("stoch-rsi-oversold") }
-        else { None }
-    });
+    if let Some(v) = srsi {
+        if v > 0.8 {
+            facts.push(Fact::Zone { indicator: "stoch-rsi", zone: "stoch-rsi-overbought" });
+        } else if v < 0.2 {
+            facts.push(Fact::Zone { indicator: "stoch-rsi", zone: "stoch-rsi-oversold" });
+        }
+        facts.push(Fact::Scalar { indicator: "stoch-rsi", value: v, scale: 1.0 });
+    }
 
     let uo = ultimate_oscillator(candles, 7, 14, 28);
-    let uo_zone = uo.and_then(|v| {
-        if v > 70.0 { Some("ult-osc-overbought") }
-        else if v < 30.0 { Some("ult-osc-oversold") }
-        else { None }
-    });
+    if let Some(v) = uo {
+        if v > 70.0 {
+            facts.push(Fact::Zone { indicator: "ult-osc", zone: "ult-osc-overbought" });
+        } else if v < 30.0 {
+            facts.push(Fact::Zone { indicator: "ult-osc", zone: "ult-osc-oversold" });
+        }
+    }
 
     let r5 = roc(candles, 5);
     let r10 = roc(candles, 10);
@@ -137,17 +133,12 @@ pub fn eval_oscillators(candles: &[Candle]) -> OscillatorFacts {
         _ => false,
     };
 
-    OscillatorFacts {
-        williams_r: wr,
-        williams_zone: wr_zone,
-        stoch_rsi: srsi,
-        stoch_rsi_zone: srsi_zone,
-        ult_osc: uo,
-        ult_osc_zone: uo_zone,
-        roc_5: r5,
-        roc_10: r10,
-        roc_20: r20,
-        roc_accelerating: accel,
-        roc_decelerating: decel,
+    if accel {
+        facts.push(Fact::Bare { label: "roc-accelerating" });
     }
+    if decel {
+        facts.push(Fact::Bare { label: "roc-decelerating" });
+    }
+
+    facts
 }

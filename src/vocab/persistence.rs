@@ -8,6 +8,7 @@
 //! "Is this market trending or mean-reverting? Persistent or random?"
 
 use crate::candle::Candle;
+use super::Fact;
 
 /// Simplified Hurst exponent estimate via rescaled range (R/S).
 /// H > 0.5: persistent (trends continue). H < 0.5: anti-persistent.
@@ -70,38 +71,31 @@ pub fn adx_zone(adx: f64) -> &'static str {
 }
 
 /// All persistence facts.
-pub struct PersistenceFacts {
-    pub hurst: Option<f64>,
-    pub hurst_zone: Option<&'static str>,
-    pub autocorr: Option<f64>,
-    pub autocorr_zone: Option<&'static str>,
-    pub adx_zone: &'static str,
-    pub adx_value: f64,
-}
+pub fn eval_persistence(candles: &[Candle]) -> Vec<Fact<'static>> {
+    let mut facts: Vec<Fact<'static>> = Vec::new();
 
-pub fn eval_persistence(candles: &[Candle]) -> PersistenceFacts {
     let h = hurst_estimate(candles, candles.len().min(100));
-    let h_zone = h.and_then(|v| {
-        if v > 0.55 { Some("hurst-trending") }
-        else if v < 0.45 { Some("hurst-reverting") }
-        else { None }
-    });
+    if let Some(v) = h {
+        facts.push(Fact::Scalar { indicator: "hurst", value: v.clamp(0.0, 1.0), scale: 1.0 });
+        if v > 0.55 {
+            facts.push(Fact::Zone { indicator: "hurst", zone: "hurst-trending" });
+        } else if v < 0.45 {
+            facts.push(Fact::Zone { indicator: "hurst", zone: "hurst-reverting" });
+        }
+    }
 
     let ac = autocorrelation_lag1(candles, candles.len().min(50));
-    let ac_zone = ac.and_then(|v| {
-        if v > 0.1 { Some("autocorr-positive") }
-        else if v < -0.1 { Some("autocorr-negative") }
-        else { None }
-    });
+    if let Some(v) = ac {
+        facts.push(Fact::Scalar { indicator: "autocorr", value: v.clamp(-1.0, 1.0) * 0.5 + 0.5, scale: 1.0 });
+        if v > 0.1 {
+            facts.push(Fact::Zone { indicator: "autocorr", zone: "autocorr-positive" });
+        } else if v < -0.1 {
+            facts.push(Fact::Zone { indicator: "autocorr", zone: "autocorr-negative" });
+        }
+    }
 
     let now = candles.last().unwrap();
+    facts.push(Fact::Zone { indicator: "adx", zone: adx_zone(now.adx) });
 
-    PersistenceFacts {
-        hurst: h,
-        hurst_zone: h_zone,
-        autocorr: ac,
-        autocorr_zone: ac_zone,
-        adx_zone: adx_zone(now.adx),
-        adx_value: now.adx,
-    }
+    facts
 }

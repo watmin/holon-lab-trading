@@ -4,18 +4,9 @@
 //! using the viewport swing high/low. Pure computation, no encoding.
 
 use crate::candle::Candle;
+use super::Fact;
 
-pub struct FibLevel {
-    pub name: &'static str,
-    pub touching: bool,
-    pub above: bool,
-}
-
-pub struct FibonacciFacts {
-    pub levels: Vec<FibLevel>,
-}
-
-pub fn eval_fibonacci(candles: &[Candle]) -> Option<FibonacciFacts> {
+pub fn eval_fibonacci(candles: &[Candle]) -> Option<Vec<Fact<'static>>> {
     if candles.len() < 10 { return None; }
 
     let swing_high = candles.iter().map(|c| c.high).fold(f64::NEG_INFINITY, f64::max);
@@ -31,14 +22,16 @@ pub fn eval_fibonacci(candles: &[Candle]) -> Option<FibonacciFacts> {
         ("fib-618", 0.618), ("fib-786", 0.786),
     ];
 
-    let levels = fibs.iter().map(|&(name, ratio)| {
-        let level = swing_low + range * ratio;
-        FibLevel {
-            name,
-            touching: (close - level).abs() < atr * 0.5,
-            above: close > level,
-        }
-    }).collect();
+    let mut facts: Vec<Fact<'static>> = Vec::new();
 
-    Some(FibonacciFacts { levels })
+    for &(name, ratio) in fibs {
+        let level = swing_low + range * ratio;
+        if (close - level).abs() < atr * 0.5 {
+            facts.push(Fact::Comparison { predicate: "touches", a: "close", b: name });
+        }
+        let pred = if close > level { "above" } else { "below" };
+        facts.push(Fact::Comparison { predicate: pred, a: "close", b: name });
+    }
+
+    Some(facts)
 }

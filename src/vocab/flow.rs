@@ -7,6 +7,7 @@
 //! the move has backing.
 
 use crate::candle::Candle;
+use super::Fact;
 
 /// On-Balance Volume direction: is OBV trending with or against price?
 /// Returns (obv_slope_sign, obv_diverges_from_price)
@@ -106,38 +107,42 @@ pub fn pressure_analysis(candle: &Candle) -> (f64, f64, f64) {
     (buy_pressure, sell_pressure, body_ratio)
 }
 
-/// All flow facts for a candle window.
-pub struct FlowFacts {
-    pub obv_sign: f64,           // +1 rising, -1 falling, 0 flat
-    pub obv_diverges: bool,      // OBV vs price divergence
-    pub vwap_distance: Option<f64>,  // fraction above/below VWAP
-    pub mfi: Option<f64>,        // Money Flow Index 0-100
-    pub mfi_zone: Option<&'static str>,
-    pub buy_pressure: f64,       // 0-1
-    pub sell_pressure: f64,      // 0-1
-    pub body_ratio: f64,         // 0-1
+/// OBV analysis results that need special encoding (bind patterns
+/// that don't fit the Fact interface).
+pub struct ObvFacts {
+    pub obv_sign: f64,
+    pub obv_diverges: bool,
 }
 
-pub fn eval_flow(candles: &[Candle]) -> FlowFacts {
+/// All flow facts for a candle window.
+/// OBV direction/divergence returned separately because they use
+/// direct bind patterns that don't map to Fact variants.
+pub fn eval_flow(candles: &[Candle]) -> (ObvFacts, Vec<Fact<'static>>) {
+    let mut facts: Vec<Fact<'static>> = Vec::new();
+
     let (obv_sign, obv_diverges) = obv_analysis(candles);
-    let vwap_dist = vwap_distance(candles);
+
+    // VWAP distance
+    if let Some(dist) = vwap_distance(candles) {
+        facts.push(Fact::Scalar { indicator: "vwap", value: dist.clamp(-1.0, 1.0) * 0.5 + 0.5, scale: 1.0 });
+    }
+
+    // MFI zone
     let mfi = money_flow_index(candles, 14);
-    let mfi_zone = mfi.and_then(|v| {
-        if v > 80.0 { Some("mfi-overbought") }
-        else if v < 20.0 { Some("mfi-oversold") }
-        else { None }
-    });
+    if let Some(v) = mfi {
+        if v > 80.0 {
+            facts.push(Fact::Zone { indicator: "mfi", zone: "mfi-overbought" });
+        } else if v < 20.0 {
+            facts.push(Fact::Zone { indicator: "mfi", zone: "mfi-oversold" });
+        }
+    }
+
+    // Buying/selling pressure + body ratio
     let now = candles.last().unwrap();
     let (bp, sp, br) = pressure_analysis(now);
+    facts.push(Fact::Scalar { indicator: "buy-pressure", value: bp, scale: 1.0 });
+    facts.push(Fact::Scalar { indicator: "sell-pressure", value: sp, scale: 1.0 });
+    facts.push(Fact::Scalar { indicator: "body-ratio", value: br, scale: 1.0 });
 
-    FlowFacts {
-        obv_sign,
-        obv_diverges,
-        vwap_distance: vwap_dist,
-        mfi,
-        mfi_zone,
-        buy_pressure: bp,
-        sell_pressure: sp,
-        body_ratio: br,
-    }
+    (ObvFacts { obv_sign, obv_diverges }, facts)
 }
