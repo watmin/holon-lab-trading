@@ -525,13 +525,19 @@ fn main() {
     // Seed treasury 50/50: half USDC, half WBTC at starting price.
     // "I don't know which way the market will go — hold both."
     // Both directions can trade from candle 1.
+    let seed_price = candles[args.window - 1].close;
     {
-        let start_price = candles[args.window - 1].close;
         let half = args.initial_equity / 2.0;
-        let wbtc_amount = half / start_price;
+        let seed_wbtc = half / seed_price;
         *treasury.balances.get_mut("USDC").unwrap() = half;
-        treasury.balances.insert("WBTC".to_string(), wbtc_amount);
+        treasury.balances.insert("WBTC".to_string(), seed_wbtc);
     }
+    // Counterfactual: snapshot treasury before each swap.
+    // Compare actual value vs "what if we hadn't swapped?"
+    // The risk manager learns from the difference.
+    let mut last_snapshot_value: f64 = args.initial_equity;
+    let mut last_snapshot_balances: HashMap<String, f64> = treasury.balances.clone();
+    let mut cumulative_alpha: f64 = 0.0; // total value gained vs inaction
     let mut pending:    VecDeque<Pending> = VecDeque::new();
 
     // ─ Managed positions: concurrent, independently managed ──────────
@@ -1120,15 +1126,18 @@ fn main() {
                 // Risk check: expected move must exceed swap cost
                 let expected_move = candles[i].atr_r * 6.0; // ~6 candle sqrt horizon
                 if expected_move > 2.0 * fee_rate {
-                    // Kelly sizing from band accuracy (simplified)
-                    let band_edge: f64 = 0.03; // ~53% accuracy → 3% edge, half-Kelly → 1.5%
+                    let band_edge: f64 = 0.03;
                     let frac = (band_edge / 2.0).min(max_single_position);
                     let usdc_available = treasury.balance("USDC");
                     let deploy = usdc_available * frac;
-                    if deploy > 10.0 { // minimum position size
+                    if deploy > 10.0 {
+                        // Snapshot before swap — counterfactual baseline
+                        last_snapshot_balances = treasury.balances.clone();
+                        for (a, d) in &treasury.deployed {
+                            *last_snapshot_balances.entry(a.clone()).or_insert(0.0) += d;
+                        }
                         let (spent, received) = treasury.swap("USDC", "WBTC",
                             deploy, btc_price, fee_rate);
-                        // Claim the WBTC — this position owns it now
                         treasury.claim("WBTC", received);
                         let entry_fee = spent * fee_rate;
                         let pos = ManagedPosition::new(
@@ -2032,8 +2041,13 @@ fn main() {
                         format!(" band=[{:.3},{:.3}]", mgr_proven_band.0, mgr_proven_band.1)
                     } else { " band=none".to_string() };
                     let open_positions = positions.len();
-                    eprintln!("    treasury: ${:.0} ({:+.1}%) in {} | pos={} swaps={} wins={} | proven=[{}]{}",
-                        tv, tv_ret, state, open_positions, hold_swaps, hold_wins, proven_str, band_str);
+                    // Counterfactual: what would the pre-swap snapshot be worth now?
+                    let snapshot_value: f64 = last_snapshot_balances.iter()
+                        .map(|(a, &bal)| bal * prices.get(a).copied().unwrap_or(1.0))
+                        .sum();
+                    let alpha = tv - snapshot_value; // positive = trading beat inaction
+                    eprintln!("    treasury: ${:.0} ({:+.1}%) | passive: ${:.0} | alpha: ${:+.0} | pos={} swaps={} wins={} | proven=[{}]{}",
+                        tv, tv_ret, snapshot_value, alpha, open_positions, hold_swaps, hold_wins, proven_str, band_str);
                 }
             }
         }
