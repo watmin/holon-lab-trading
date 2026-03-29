@@ -52,7 +52,8 @@ struct Args {
     #[arg(long, default_value_t = 48)]
     window: usize,
 
-    /// Candles to wait before measuring price outcome (lookahead window).
+    /// Learning horizon: candles to wait before labeling a pending entry.
+    /// Also used as safety valve base (10× = max pending age for queue cleanup).
     #[arg(long, default_value_t = 36)]
     horizon: usize,
 
@@ -131,13 +132,6 @@ struct Args {
     /// Models DEX/AMM execution cost beyond the explicit fee.
     #[arg(long, default_value_t = 0.0)]
     slippage: f64,
-
-    /// Trade management mode. "legacy" = exit at first threshold crossing (fire-and-forget).
-    /// "managed" = trailing stop + take profit, active management each candle.
-    /// Managed mode self-calibrates from the ledger: wide defaults during cold boot,
-    /// tightens from MFE/MAE experience after enough trades.
-    #[arg(long, default_value = "legacy")]
-    exit_mode: String,
 
     /// Maximum concurrent positions. The treasury allocates across them.
     #[arg(long, default_value_t = 1)]
@@ -400,7 +394,7 @@ fn main() {
     // Trail = K_trail × ATR_ratio at entry. Same principle.
     // Take profit = K_tp × ATR_ratio at entry. Capture proportional to volatility.
     //
-    // During cold boot (observe period): legacy exits. "I don't know" = don't act.
+    // During observe period: no managed exits. "I don't know" = don't act.
     // After observe: each trade's parameters come from its own entry candle.
     let k_stop:  f64 = 3.0;  // stop at 3× ATR — "the market moved 3× its normal range against me"
     let k_trail: f64 = 1.5;  // trail at 1.5× ATR — lock in gains, give room for normal retracement
@@ -1052,8 +1046,8 @@ fn main() {
                 // No averaging. No calcification. The market at entry tells
                 // each trade how much room it needs.
                 //
-                // During observe period: legacy exits. "I don't know" = don't act.
-                if args.exit_mode == "managed" && entry.exit_reason.is_none()
+                // Managed exits: the market closes the trade, not the clock.
+                if entry.exit_reason.is_none()
                     && entry.position_frac.is_some()
                     && portfolio.phase != Phase::Observe
                 {
@@ -1261,24 +1255,16 @@ fn main() {
             }
 
             // ── Resolve entries: managed exit OR horizon expiry ──────────
-            // In legacy mode: horizon is the exit.
-            // In managed mode: the market is the exit (stop/TP). The horizon
-            // only controls learning labels. Trades live until the market
-            // closes them. A safety max (10× horizon) prevents unbounded
-            // queue growth for trades that drift sideways forever.
-            let max_pending_age = if args.exit_mode == "managed" {
-                args.horizon * 10 // safety valve — not an exit strategy
-            } else {
-                args.horizon
-            };
+            // Horizon is the safety valve, not the exit strategy.
+            // The market closes the trade (stop/TP). The horizon only controls
+            // learning labels. Safety max (10× horizon) prevents unbounded queue growth.
+            let max_pending_age = args.horizon * 10;
             let mut resolved_indices: Vec<usize> = Vec::new();
             for (qi, entry) in pending.iter().enumerate() {
                 let age = i - entry.candle_idx;
-                let horizon_expired = age >= max_pending_age;
-                let managed_exited = entry.exit_reason.is_some();
-                // In legacy mode: also expire at normal horizon
-                let legacy_expired = args.exit_mode != "managed" && age >= args.horizon;
-                if horizon_expired || managed_exited || legacy_expired {
+                let safety_expired = age >= max_pending_age;
+                let market_exited = entry.exit_reason.is_some();
+                if safety_expired || market_exited {
                     resolved_indices.push(qi);
                 }
             }
@@ -1376,18 +1362,8 @@ fn main() {
                     let frac = entry.position_frac.unwrap_or(0.0);
                     let is_live = frac > 0.0; // treasury committed capital
 
-                    let trade_pct = if args.exit_mode == "managed" {
-                        entry.exit_pct
-                    } else {
-                        entry.outcome_pct
-                    };
-                    let has_resolution = if args.exit_mode == "managed" {
-                        true
-                    } else {
-                        final_out != Outcome::Noise
-                    };
-
-                    if has_resolution {
+                    let trade_pct = entry.exit_pct;
+                    {
                         // ── Accounting: compute P&L (real or hypothetical) ────
                         let gross_ret = match dir {
                             Outcome::Buy  =>  trade_pct,
@@ -1455,7 +1431,6 @@ fn main() {
                                 crossing_elapsed, entry.path_candles as i64,
                                 final_out.to_string(), (net_ret > 0.0) as i32,
                                 match entry.exit_reason {
-                                    Some(ExitReason::ThresholdCrossing) => "ThresholdCrossing",
                                     Some(ExitReason::TrailingStop) => "TrailingStop",
                                     Some(ExitReason::TakeProfit) => "TakeProfit",
                                     Some(ExitReason::HorizonExpiry) => "HorizonExpiry",
@@ -1540,7 +1515,7 @@ fn main() {
                                 ).ok(); }
                             }
                         } // is_live
-                    } // has_resolution
+                    }
                 } // if let Some(dir)
 
                 // Log to DB. Visual columns get NULLs (schema kept for backward compat).
@@ -1583,15 +1558,13 @@ fn main() {
                     else { tht_rolling.iter().filter(|&&x| x).count() as f64 / tht_rolling.len() as f64 * 100.0 };
                 let ret = (portfolio.equity - portfolio.initial_equity) / portfolio.initial_equity * 100.0;
                 let bnh = (candles[i].close - bnh_entry) / bnh_entry * 100.0;
-                let exit_info = if args.exit_mode == "managed" {
-                    let atr_now = candles[i].atr_r;
-                    format!(" | ATR={:.2}% sl={:.2}% tp={:.2}% tr={:.2}% open={}",
-                        atr_now * 100.0,
-                        k_stop * atr_now * 100.0,
-                        k_tp * atr_now * 100.0,
-                        k_trail * atr_now * 100.0,
-                        treasury.n_open)
-                } else { String::new() };
+                let atr_now = candles[i].atr_r;
+                let exit_info = format!(" | ATR={:.2}% sl={:.2}% tp={:.2}% tr={:.2}% open={}",
+                    atr_now * 100.0,
+                    k_stop * atr_now * 100.0,
+                    k_tp * atr_now * 100.0,
+                    k_trail * atr_now * 100.0,
+                    treasury.n_open);
                 eprintln!(
                     "  {}/{} ({:.0}/s ETA {:.0}s) | {} | {} | tht={:.1}% | trades={} win={:.1}% | ${:.0} ({:+.1}%) vs B&H {:+.1}% | flip@{:.3} {}{}",
                     encode_count, loop_count, rate, eta,
@@ -1681,10 +1654,7 @@ fn main() {
         eprintln!("  Venue costs: {:.1}bps fee + {:.1}bps slippage = {:.2}% round trip",
             args.swap_fee * 10000.0, args.slippage * 10000.0, rt);
     }
-    if args.exit_mode == "managed" {
-        eprintln!("  Exit mode: managed (ATR-scaled per trade). K_stop={} K_trail={} K_tp={}",
-            k_stop, k_trail, k_tp);
-    }
+    eprintln!("  Exit: ATR-scaled (K_stop={} K_trail={} K_tp={})", k_stop, k_trail, k_tp);
     eprintln!("  Labeled: {}  Noise: {} ({:.1}% noise rate)",
         labeled_count, noise_count,
         noise_count as f64 / (labeled_count + noise_count).max(1) as f64 * 100.0);

@@ -54,10 +54,9 @@ pub struct Pending {
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum ExitReason {
-    ThresholdCrossing,   // legacy: exit at first threshold crossing
     TrailingStop,        // stop loss hit (including raised stops)
     TakeProfit,          // target reached
-    HorizonExpiry,       // ran out of time
+    HorizonExpiry,       // safety valve — queue cleanup, not an exit strategy
 }
 
 // ─── Managed Position ────────────────────────────────────────────────────────
