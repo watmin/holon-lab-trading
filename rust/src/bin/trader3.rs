@@ -626,21 +626,34 @@ fn main() {
             // But direction and conviction now come from the expert panel.
             let tht_pred = tht_journal.predict(&tht_vec);
 
-            // ── Manager: encodes expert INTENSITY, not direction ─────────
-            // Experts detect energy: "something is about to happen."
-            // They don't claim direction — that's the manager's job.
-            // bind(expert_atom, scalar(conviction_magnitude)) — unsigned.
-            // The manager learns which intensity patterns precede profits.
+            // ── Manager: encodes expert SIGNED convictions ──────────────
+            // The expert's full opinion: direction + intensity.
+            // (bind expert-atom (encode-log |conviction|)) for BUY
+            // (bind (permute expert-atom) (encode-log |conviction|)) for SELL
+            // The sign makes BUY@0.25 orthogonal to SELL@0.25 in hyperspace.
+            // The manager learns which SHAPES of signed opinion precede
+            // up-moves vs down-moves. The flip emerges in the discriminant:
+            // "when momentum says BUY at high conviction, the price goes DOWN"
+            // becomes a geometric property of the Sell prototype.
             let mut mgr_facts: Vec<Vector> = expert_preds.iter().enumerate()
                 .map(|(ei, ep)| {
-                    let intensity = mgr_scalar.encode_log(ep.conviction.max(1e-10));
-                    Primitives::bind(&expert_atoms[ei], &intensity)
+                    let magnitude = mgr_scalar.encode_log(ep.raw_cos.abs().max(1e-10));
+                    let role = if ep.raw_cos >= 0.0 {
+                        expert_atoms[ei].clone()         // BUY lean
+                    } else {
+                        Primitives::permute(&expert_atoms[ei], 1) // SELL lean
+                    };
+                    Primitives::bind(&role, &magnitude)
                 })
                 .collect();
-            // The generalist's intensity.
             {
-                let gen_intensity = mgr_scalar.encode_log(tht_pred.conviction.max(1e-10));
-                mgr_facts.push(Primitives::bind(&generalist_atom, &gen_intensity));
+                let gen_mag = mgr_scalar.encode_log(tht_pred.raw_cos.abs().max(1e-10));
+                let gen_role = if tht_pred.raw_cos >= 0.0 {
+                    generalist_atom.clone()
+                } else {
+                    Primitives::permute(&generalist_atom, 1)
+                };
+                mgr_facts.push(Primitives::bind(&gen_role, &gen_mag));
             }
             let mgr_refs: Vec<&Vector> = mgr_facts.iter().collect();
             let mgr_thought = Primitives::bundle(&mgr_refs);
@@ -1347,15 +1360,25 @@ fn main() {
                         {
                             let mgr_label = if net_ret > 0.0 { Outcome::Buy } else { Outcome::Sell };
                             // Buy = Win, Sell = Lose in the manager's space.
-                            // Unsigned intensity — same encoding as prediction time.
+                            // Signed conviction — same encoding as prediction time.
                             let mut mgr_res_facts: Vec<Vector> = entry.expert_preds.iter().enumerate()
                                 .map(|(ei, ep)| {
-                                    let intensity = mgr_scalar.encode_log(ep.conviction.max(1e-10));
-                                    Primitives::bind(&expert_atoms[ei], &intensity)
+                                    let magnitude = mgr_scalar.encode_log(ep.raw_cos.abs().max(1e-10));
+                                    let role = if ep.raw_cos >= 0.0 {
+                                        expert_atoms[ei].clone()
+                                    } else {
+                                        Primitives::permute(&expert_atoms[ei], 1)
+                                    };
+                                    Primitives::bind(&role, &magnitude)
                                 }).collect();
                             {
-                                let gen_intensity = mgr_scalar.encode_log(entry.tht_pred.conviction.max(1e-10));
-                                mgr_res_facts.push(Primitives::bind(&generalist_atom, &gen_intensity));
+                                let gen_mag = mgr_scalar.encode_log(entry.tht_pred.raw_cos.abs().max(1e-10));
+                                let gen_role = if entry.tht_pred.raw_cos >= 0.0 {
+                                    generalist_atom.clone()
+                                } else {
+                                    Primitives::permute(&generalist_atom, 1)
+                                };
+                                mgr_res_facts.push(Primitives::bind(&gen_role, &gen_mag));
                             }
                             let mrefs: Vec<&Vector> = mgr_res_facts.iter().collect();
                             let mgr_vec = Primitives::bundle(&mrefs);
