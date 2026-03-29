@@ -719,25 +719,24 @@ fn main() {
             // up-moves vs down-moves. The flip emerges in the discriminant:
             // "when momentum says BUY at high conviction, the price goes DOWN"
             // becomes a geometric property of the Sell prototype.
-            // Only include proven experts. Silence, not noise.
-            // Unproven experts keep learning on paper but don't pollute
-            // the manager's input. The gate opens when the expert's
-            // conviction-accuracy curve validates.
+            // The filter is a thought. Proven experts are bound with "proven" atom.
+            // Tentative experts are bound with "tentative" atom. Both enter the
+            // bundle. The discriminant learns what credibility means.
+            let proven_atom = vm.get_vector("proven");
+            let tentative_atom = vm.get_vector("tentative");
             let mut mgr_facts: Vec<Vector> = Vec::new();
             for (ei, ep) in expert_preds.iter().enumerate() {
-                if !experts[ei].curve_valid { continue; } // gate closed
-
-                // Fact 1: expert × action × magnitude
-                // bind(expert, bind(buy|sell, encode-linear(magnitude, 0.5)))
-                // Linear scale 0.5: cosine 0.0 and 0.5 are orthogonal.
-                // Expert cosines range 0-0.3; this gives full separation.
                 let abs_cos = ep.raw_cos.abs();
-                if abs_cos >= min_opinion_magnitude {
-                    let magnitude = mgr_scalar.encode(abs_cos, ScalarMode::Linear { scale: 1.0 });
-                    let action = if ep.raw_cos >= 0.0 { &buy_atom } else { &sell_atom };
-                    let opinion = Primitives::bind(action, &magnitude);
-                    mgr_facts.push(Primitives::bind(&expert_atoms[ei], &opinion));
-                }
+                if abs_cos < min_opinion_magnitude { continue; } // below noise floor = silence
+
+                // bind(expert, bind(status, bind(action, magnitude)))
+                // status = proven | tentative
+                // The discriminant decides what tentative means.
+                let magnitude = mgr_scalar.encode(abs_cos, ScalarMode::Linear { scale: 1.0 });
+                let action = if ep.raw_cos >= 0.0 { &buy_atom } else { &sell_atom };
+                let status = if experts[ei].curve_valid { &proven_atom } else { &tentative_atom };
+                let opinion = Primitives::bind(status, &Primitives::bind(action, &magnitude));
+                mgr_facts.push(Primitives::bind(&expert_atoms[ei], &opinion));
 
                 // Fact 2: reliability — how accurate is this expert?
                 // Linear scale 0.3: accuracy excess 0.0-0.15 gets full separation.
@@ -1119,15 +1118,17 @@ fn main() {
             } else {
                 true // no prior exit — ready
             };
+            let risk_allows = cached_risk_mult > 0.3; // risk rejects if multiplier too low
             if args.asset_mode == "hold" && trader.phase != Phase::Observe
-                && mgr_curve_valid && in_proven_band && market_moved
+                && mgr_curve_valid && in_proven_band && market_moved && risk_allows
                 && meta_dir == Some(Outcome::Buy)
             {
                 // Risk check: expected move must exceed swap cost
-                let expected_move = candles[i].atr_r * 6.0; // ~6 candle sqrt horizon
+                let expected_move = candles[i].atr_r * 6.0;
                 if expected_move > 2.0 * fee_rate {
                     let band_edge: f64 = 0.03;
-                    let frac = (band_edge / 2.0).min(max_single_position);
+                    // Risk modulates sizing: full edge when healthy, reduced when stressed
+                    let frac = ((band_edge / 2.0) * cached_risk_mult).min(max_single_position);
                     let usdc_available = treasury.balance("USDC");
                     let deploy = usdc_available * frac;
                     if deploy > 10.0 {
@@ -1161,13 +1162,13 @@ fn main() {
             // SELL = swap WBTC → USDC. Profits when BTC drops.
             // Uses the same band, cooldown, and risk checks.
             if args.asset_mode == "hold" && trader.phase != Phase::Observe
-                && mgr_curve_valid && in_proven_band && market_moved
+                && mgr_curve_valid && in_proven_band && market_moved && risk_allows
                 && meta_dir == Some(Outcome::Sell)
             {
                 let expected_move = candles[i].atr_r * 6.0;
                 if expected_move > 2.0 * fee_rate {
                     let band_edge: f64 = 0.03;
-                    let frac = (band_edge / 2.0).min(max_single_position);
+                    let frac = ((band_edge / 2.0) * cached_risk_mult).min(max_single_position);
                     let wbtc_available = treasury.balance("WBTC");
                     let wbtc_to_sell = wbtc_available * frac;
                     let usdc_value = wbtc_to_sell * btc_price;
