@@ -1,17 +1,37 @@
 //! Vocabulary modules — the enterprise's thoughts.
 //!
-//! Each module implements a set of atoms + eval methods from the wat spec.
-//! Experts include the modules they need via their profile's eval dispatch.
+//! Each module is a pure function: candles in, facts out.
+//! Modules don't import holon. They don't create vectors.
+//! They return Fact data. The encoder renders data into geometry.
 //!
-//! Structure mirrors wat/mod/:
-//!   wat/mod/oscillators.wat  → vocab/oscillators.rs
-//!   wat/mod/flow.wat         → vocab/flow.rs
-//!   etc.
+//! The contract (from wat/vocab.wat):
+//!   fn eval_foo(candles: &[Candle]) -> Vec<Fact>
 //!
-//! The stdlib (common.wat) lives in thought.rs as eval_comparisons_cached.
-//! Modules add domain-specific facts on top of stdlib.
+//! Adding a new module:
+//!   1. Write eval_foo(candles) -> Vec<Fact>
+//!   2. Add one line to the profile dispatch
+//!   3. The encoder never changes
 
-// Domain modules — each implements eval methods for its atoms
+// ─── The Fact ───────────────────────────────────────────────────────────────
+// Data, not vectors. The interface between vocab modules and the encoder.
+
+/// What a vocab module says about a candle window.
+pub enum Fact<'a> {
+    /// "This indicator is in this zone." → (at indicator zone)
+    Zone { indicator: &'a str, zone: &'a str },
+
+    /// "A is above/below B." → (above a b) or (below a b)
+    Comparison { predicate: &'a str, a: &'a str, b: &'a str },
+
+    /// "This indicator has this continuous value." → bind(indicator, encode(value))
+    Scalar { indicator: &'a str, value: f64, scale: f64 },
+
+    /// "This named condition is present." → atom lookup
+    Bare { label: &'a str },
+}
+
+// ─── Domain modules ─────────────────────────────────────────────────────────
+
 pub mod oscillators;   // Williams%R, StochRSI, UltOsc, multi-ROC
 pub mod flow;          // OBV, VWAP, MFI, buying/selling pressure
 pub mod persistence;   // Hurst, autocorrelation, ADX zones

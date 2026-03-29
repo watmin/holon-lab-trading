@@ -7,32 +7,11 @@
 //! The regime expert's exclusive vocabulary.
 
 use crate::candle::Candle;
+use super::Fact;
 
-pub struct RegimeFacts {
-    pub kama_er_zone: Option<&'static str>,
-    pub choppiness_zone: Option<&'static str>,
-    pub dfa_zone: Option<&'static str>,
-    pub variance_ratio_zone: Option<&'static str>,
-    pub demark_zone: Option<&'static str>,
-    pub aroon_zone: Option<&'static str>,
-    pub fractal_dim_zone: Option<&'static str>,
-    pub entropy_zone: Option<&'static str>,
-    pub gr_bvalue_zone: Option<&'static str>,
-}
-
-pub fn eval_regime(candles: &[Candle]) -> RegimeFacts {
+pub fn eval_regime(candles: &[Candle]) -> Vec<Fact<'static>> {
     let n = candles.len();
-    let mut facts = RegimeFacts {
-        kama_er_zone: None,
-        choppiness_zone: None,
-        dfa_zone: None,
-        variance_ratio_zone: None,
-        demark_zone: None,
-        aroon_zone: None,
-        fractal_dim_zone: None,
-        entropy_zone: None,
-        gr_bvalue_zone: None,
-    };
+    let mut facts: Vec<Fact<'static>> = Vec::new();
     if n < 20 { return facts; }
 
     let closes: Vec<f64> = candles.iter().map(|c| c.close).collect();
@@ -42,9 +21,9 @@ pub fn eval_regime(candles: &[Candle]) -> RegimeFacts {
     let net_move = (closes[n - 1] - closes[n - 1 - er_period]).abs();
     let step_sum: f64 = (n - er_period..n).map(|i| (closes[i] - closes[i - 1]).abs()).sum();
     let er = if step_sum > 1e-10 { net_move / step_sum } else { 0.0 };
-    facts.kama_er_zone = Some(if er > 0.6 { "efficient-trend" }
+    facts.push(Fact::Zone { indicator: "kama-er", zone: if er > 0.6 { "efficient-trend" }
         else if er < 0.3 { "inefficient-chop" }
-        else { "moderate-efficiency" });
+        else { "moderate-efficiency" } });
 
     // ── Choppiness Index (14-period) ──────────────────────────────
     let chop_period = 14.min(n - 1);
@@ -61,10 +40,10 @@ pub fn eval_regime(candles: &[Candle]) -> RegimeFacts {
     let chop = if chop_range > 1e-10 {
         100.0 * (chop_atr_sum / chop_range).log10() / (chop_period as f64).log10()
     } else { 100.0 };
-    facts.choppiness_zone = Some(if chop < 38.2 { "chop-trending" }
+    facts.push(Fact::Zone { indicator: "chop", zone: if chop < 38.2 { "chop-trending" }
         else if chop > 75.0 { "chop-extreme" }
         else if chop > 61.8 { "chop-choppy" }
-        else { "chop-transition" });
+        else { "chop-transition" } });
 
     // ── DFA Alpha (detrended fluctuation analysis) ────────────────
     let returns: Vec<f64> = (1..n).map(|i| (closes[i] / closes[i - 1]).ln()).collect();
@@ -115,9 +94,9 @@ pub fn eval_regime(candles: &[Candle]) -> RegimeFacts {
                 let denom = nf * sxx - sx * sx;
                 if denom.abs() > 1e-10 {
                     let alpha = ((nf * sxy - sx * sy) / denom).clamp(0.0, 1.5);
-                    facts.dfa_zone = Some(if alpha > 0.6 { "persistent-dfa" }
+                    facts.push(Fact::Zone { indicator: "dfa-alpha", zone: if alpha > 0.6 { "persistent-dfa" }
                         else if alpha < 0.4 { "anti-persistent-dfa" }
-                        else { "random-walk-dfa" });
+                        else { "random-walk-dfa" } });
                 }
             }
         }
@@ -133,9 +112,9 @@ pub fn eval_regime(candles: &[Candle]) -> RegimeFacts {
             let var_k: f64 = k_returns.iter().map(|r| r * r).sum::<f64>()
                 / k_returns.len() as f64 / k as f64;
             let vr = var_k / var1;
-            facts.variance_ratio_zone = Some(if vr > 1.3 { "vr-momentum" }
+            facts.push(Fact::Zone { indicator: "variance-ratio", zone: if vr > 1.3 { "vr-momentum" }
                 else if vr < 0.7 { "vr-mean-revert" }
-                else { "vr-neutral" });
+                else { "vr-neutral" } });
         }
     }
 
@@ -150,10 +129,10 @@ pub fn eval_regime(candles: &[Candle]) -> RegimeFacts {
             } else { count = 0; }
         }
         let abs_count = count.unsigned_abs();
-        facts.demark_zone = Some(if abs_count >= 9 { "td-exhausted" }
+        facts.push(Fact::Zone { indicator: "td-count", zone: if abs_count >= 9 { "td-exhausted" }
             else if abs_count >= 7 { "td-mature" }
             else if abs_count >= 4 { "td-building" }
-            else { "td-inactive" });
+            else { "td-inactive" } });
     }
 
     // ── Aroon (25-period) ────────────────────────────────────────
@@ -168,10 +147,10 @@ pub fn eval_regime(candles: &[Candle]) -> RegimeFacts {
         }
         let aroon_up = 100.0 * hi_idx as f64 / aroon_period as f64;
         let aroon_down = 100.0 * lo_idx as f64 / aroon_period as f64;
-        facts.aroon_zone = Some(if aroon_up > 80.0 && aroon_down < 30.0 { "aroon-strong-up" }
+        facts.push(Fact::Zone { indicator: "aroon-up", zone: if aroon_up > 80.0 && aroon_down < 30.0 { "aroon-strong-up" }
             else if aroon_down > 80.0 && aroon_up < 30.0 { "aroon-strong-down" }
             else if aroon_up < 20.0 && aroon_down < 20.0 { "aroon-stale" }
-            else { "aroon-consolidating" });
+            else { "aroon-consolidating" } });
     }
 
     // ── Fractal Dimension (Katz) ─────────────────────────────────
@@ -181,9 +160,9 @@ pub fn eval_regime(candles: &[Candle]) -> RegimeFacts {
         if path_len > 1e-10 && max_dist > 1e-10 {
             let nf = n as f64;
             let fd = (nf.ln() / (nf.ln() + (max_dist / path_len).ln())).clamp(1.0, 2.0);
-            facts.fractal_dim_zone = Some(if fd < 1.3 { "trending-geometry" }
+            facts.push(Fact::Zone { indicator: "fractal-dim", zone: if fd < 1.3 { "trending-geometry" }
                 else if fd > 1.7 { "mean-reverting-geometry" }
-                else { "random-walk-geometry" });
+                else { "random-walk-geometry" } });
         }
     }
 
@@ -210,8 +189,8 @@ pub fn eval_regime(candles: &[Candle]) -> RegimeFacts {
             }
         }
         let h_norm = h_cond / 3.0_f64.ln();
-        facts.entropy_zone = Some(if h_norm < 0.7 { "low-entropy-rate" }
-            else { "high-entropy-rate" });
+        facts.push(Fact::Zone { indicator: "entropy-rate", zone: if h_norm < 0.7 { "low-entropy-rate" }
+            else { "high-entropy-rate" } });
     }
 
     // ── Gutenberg-Richter b-value (seismology) ───────────────────
@@ -239,8 +218,8 @@ pub fn eval_regime(candles: &[Candle]) -> RegimeFacts {
             let denom = nf * sxx - sx * sx;
             if denom.abs() > 1e-10 {
                 let b = -(nf * sxy - sx * sy) / denom;
-                facts.gr_bvalue_zone = Some(if b < 1.0 { "heavy-tails" }
-                    else { "light-tails" });
+                facts.push(Fact::Zone { indicator: "gr-bvalue",
+                    zone: if b < 1.0 { "heavy-tails" } else { "light-tails" } });
             }
         }
     }

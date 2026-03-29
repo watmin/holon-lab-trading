@@ -475,6 +475,52 @@ impl ThoughtEncoder {
         (labels, vecs)
     }
 
+    /// Render vocab module facts into vectors. The ONE method that turns
+    /// any module's output into geometry. Modules return data. This renders it.
+    pub fn encode_facts<'a>(
+        &'a self,
+        module_facts: &[crate::vocab::Fact],
+        facts: &mut Vec<&'a Vector>,
+        owned_facts: &mut Vec<Vector>,
+        labels: &mut Vec<String>,
+    ) {
+        for fact in module_facts {
+            match fact {
+                crate::vocab::Fact::Zone { indicator, zone } => {
+                    let key = format!("(at {} {})", indicator, zone);
+                    if let Some(v) = self.fact_cache.get(&key) {
+                        facts.push(v);
+                        labels.push(key);
+                    }
+                }
+                crate::vocab::Fact::Comparison { predicate, a, b } => {
+                    let key = format!("({} {} {})", predicate, a, b);
+                    if let Some(v) = self.fact_cache.get(&key) {
+                        facts.push(v);
+                        labels.push(key);
+                    }
+                }
+                crate::vocab::Fact::Scalar { indicator, value, scale } => {
+                    let v = self.scalar_enc.encode(*value, ScalarMode::Linear { scale: *scale });
+                    let bound = Primitives::bind(self.vocab.get(indicator), &v);
+                    labels.push(format!("({} {:.3})", indicator, value));
+                    owned_facts.push(bound);
+                }
+                crate::vocab::Fact::Bare { label } => {
+                    if let Some(v) = self.fact_cache.get(*label) {
+                        facts.push(v);
+                        labels.push(label.to_string());
+                    } else {
+                        // Try as a raw atom
+                        let atom = self.vocab.get(label);
+                        owned_facts.push(atom.clone());
+                        labels.push(label.to_string());
+                    }
+                }
+            }
+        }
+    }
+
     pub fn encode(
         &self,
         candles: &[Candle],
@@ -1476,29 +1522,11 @@ impl ThoughtEncoder {
         &'a self,
         candles: &[Candle],
         facts: &mut Vec<&'a Vector>,
-        _owned_facts: &mut Vec<Vector>,
+        owned_facts: &mut Vec<Vector>,
         labels: &mut Vec<String>,
     ) {
         use crate::vocab::regime::eval_regime;
-        let regime = eval_regime(candles);
-
-        let zones: &[(&str, Option<&str>)] = &[
-            ("kama-er",         regime.kama_er_zone),
-            ("chop",            regime.choppiness_zone),
-            ("dfa-alpha",       regime.dfa_zone),
-            ("variance-ratio",  regime.variance_ratio_zone),
-            ("td-count",        regime.demark_zone),
-            ("aroon-up",        regime.aroon_zone),
-            ("fractal-dim",     regime.fractal_dim_zone),
-            ("entropy-rate",    regime.entropy_zone),
-            ("gr-bvalue",       regime.gr_bvalue_zone),
-        ];
-        for &(indicator, zone_opt) in zones {
-            if let Some(zone) = zone_opt {
-                let key = format!("(at {} {})", indicator, zone);
-                if let Some(v) = self.fact_cache.get(&key) { facts.push(v); labels.push(key); }
-            }
-        }
+        self.encode_facts(&eval_regime(candles), facts, owned_facts, labels);
     }
 
     // ─── RSI SMA (cached) ───────────────────────────────────────────────
