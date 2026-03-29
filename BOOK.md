@@ -1434,6 +1434,20 @@ The risk manager learns from alpha. "When the enterprise traded in this state, w
 
 Every run has a benchmark now. The benchmark is not buy-and-hold. The benchmark is the treasury's own state one moment ago. The enterprise must justify each action against the immediate alternative of inaction. The ledger tracks both. The alpha is the proof.
 
+### Subscriptions
+
+Thoughts are published, not pushed. An expert publishes its prediction on every candle — regardless of whether anyone listens. The paper trail exists whether or not the gate is open. The expert speaks into the void and the void records.
+
+The manager subscribes. But only to proven voices. The gate controls who the manager listens to, not who speaks. An unproven expert's channel exists, its predictions accumulate, its journal learns. The manager simply doesn't subscribe until the curve validates.
+
+Risk subscribes to everything. It needs the full picture — proven and unproven, traded and hypothetical, successful and failed. Risk can't learn what "unhealthy" looks like if it only sees healthy states.
+
+The exit expert subscribes to open positions. Not to market data, not to expert opinions. It sees position state: P&L, hold duration, MFE, stop distance. A different channel entirely.
+
+The permissions are the subscriptions. The gates control who listens, not who speaks.
+
+This is how real organizations work. Everyone has a voice. Not everyone has an audience. The audience is earned through proof. But the voice is never silenced — because the day an unproven voice suddenly becomes right is the day the enterprise needs to hear it. The paper trail ensures that when a gate opens, the journal behind it has been learning the whole time.
+
 ### The primitives
 
 Six primitives: atom, bind, bundle, cosine, journal, curve.
