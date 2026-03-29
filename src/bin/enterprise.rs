@@ -7,7 +7,7 @@
 /// The manager reads expert opinions and decides.
 /// Risk modulates sizing. Treasury executes. Positions manage themselves.
 /// The ledger records everything. The DB is the debugger.
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -19,7 +19,7 @@ use holon::memory::OnlineSubspace;
 
 use enterprise::candle::load_candles;
 use enterprise::journal::{Journal, Outcome, Prediction};
-use enterprise::thought::{ThoughtEncoder, ThoughtVocab, IndicatorStreams};
+use enterprise::thought::{ThoughtEncoder, ThoughtVocab};
 use enterprise::treasury::Treasury;
 use enterprise::portfolio::{Portfolio, Phase};
 use enterprise::sizing::{kelly_frac, signal_weight};
@@ -235,7 +235,6 @@ fn main() {
     let thought_vocab   = ThoughtVocab::new(&vm);
     let thought_encoder = ThoughtEncoder::new(thought_vocab);
     let (codebook_labels, codebook_vecs) = thought_encoder.fact_codebook();
-    let thought_streams = IndicatorStreams::new(args.dims, args.window + 48);
 
     // ─ Named journals ─
     // Visual journal removed — Chapter 1 artifact, proven zero signal.
@@ -526,7 +525,6 @@ fn main() {
         // Their discriminant learns which scale's patterns predict for their
         // vocabulary. A "full" encoding at args.window is kept for the primary
         // journal (tht_journal) which still drives flip threshold + sizing.
-        let sup_ref: Option<&HashSet<String>> = None;
         let n_observers = observers.len();
 
         // Expert samplers are not Send, so collect windows first
@@ -543,7 +541,7 @@ fn main() {
                 // Primary encoding at fixed window — drives the main journal + flip threshold.
                 let w_start = i.saturating_sub(args.window - 1);
                 let window  = &candles[w_start..=i];
-                let full = thought_encoder.encode_view(window, &thought_streams, 0, 0, &vm, None, sup_ref, "full");
+                let full = thought_encoder.encode_view(window, &vm, "full");
 
                 // Each expert encodes at their own sampled window.
                 let observer_vecs: Vec<Vector> = (0..n_observers)
@@ -551,7 +549,7 @@ fn main() {
                         let ew = observer_windows[ei][bi];
                         let ew_start = i.saturating_sub(ew - 1);
                         let exp_window = &candles[ew_start..=i];
-                        thought_encoder.encode_view(exp_window, &thought_streams, 0, 0, &vm, None, None, observer_names[ei]).thought
+                        thought_encoder.encode_view(exp_window, &vm, observer_names[ei]).thought
                     })
                     .collect();
                 (i, full.thought, full.fact_labels, observer_vecs)

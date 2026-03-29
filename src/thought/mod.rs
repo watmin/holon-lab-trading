@@ -1,6 +1,6 @@
 pub mod pelt;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use holon::{
     Primitives, ScalarEncoder, ScalarMode,
@@ -229,45 +229,6 @@ impl ThoughtVocab {
     }
 }
 
-// ─── IndicatorStreams ────────────────────────────────────────────────────────
-
-/// Legacy stream infrastructure — retained for API compatibility with trader.rs.
-/// Segment narrative now operates on raw candle values via PELT, not encoded vector streams.
-pub struct IndicatorStreams {
-    count: usize,
-    max_len: usize,
-}
-
-impl IndicatorStreams {
-    pub fn new(_dims: usize, max_len: usize) -> Self {
-        Self { count: 0, max_len }
-    }
-
-    pub fn push_candle(&mut self, _candle: &Candle) {
-        self.count += 1;
-        if self.count > self.max_len {
-            self.count = self.max_len;
-        }
-    }
-
-    pub fn len(&self) -> usize {
-        self.count
-    }
-
-    pub fn max_len_val(&self) -> usize {
-        self.max_len
-    }
-
-    pub fn set_max_len(&mut self, new_max: usize) {
-        self.max_len = new_max;
-    }
-
-    pub fn trim_to_max(&mut self) {
-        if self.count > self.max_len {
-            self.count = self.max_len;
-        }
-    }
-}
 
 // ─── Fact composition helpers ───────────────────────────────────────────────
 
@@ -537,10 +498,9 @@ impl ThoughtEncoder {
     pub fn encode(
         &self,
         candles: &[Candle],
-        streams: &IndicatorStreams,
         vm: &VectorManager,
     ) -> ThoughtResult {
-        self.encode_view(candles, streams, usize::MAX, streams.max_len_val(), vm, None, None, "full")
+        self.encode_view(candles, vm, "full")
     }
 
 
@@ -561,12 +521,7 @@ impl ThoughtEncoder {
     pub fn encode_view(
         &self,
         candles: &[Candle],
-        _streams: &IndicatorStreams,
-        _stream_end: usize,
-        _max_window: usize,
         vm: &VectorManager,
-        _attention: Option<&[f64]>,
-        suppressed: Option<&HashSet<String>>,
         expert: &str,
     ) -> ThoughtResult {
         let mut cached_facts: Vec<&Vector> = Vec::with_capacity(64);
@@ -633,23 +588,10 @@ impl ThoughtEncoder {
             self.eval_persistence_module(candles, &mut cached_facts, &mut owned_facts, &mut labels);
         }
 
-        // Unify all facts, then filter suppressed (high fire-rate constants).
+        // Unify all facts into a single reference list for bundling.
         let mut all_refs: Vec<&Vector> = Vec::with_capacity(cached_facts.len() + owned_facts.len());
         all_refs.extend(cached_facts.iter().copied());
         all_refs.extend(owned_facts.iter());
-
-        if let Some(sup) = suppressed {
-            let mut kept_refs: Vec<&Vector> = Vec::with_capacity(all_refs.len());
-            let mut kept_labels: Vec<String> = Vec::with_capacity(labels.len());
-            for (vec, label) in all_refs.iter().zip(labels.iter()) {
-                if !sup.contains(label) {
-                    kept_refs.push(vec);
-                    kept_labels.push(label.clone());
-                }
-            }
-            all_refs = kept_refs;
-            labels = kept_labels;
-        }
 
         let fact_count = all_refs.len();
         let thought = if fact_count == 0 {
