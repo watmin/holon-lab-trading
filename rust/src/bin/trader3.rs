@@ -338,6 +338,9 @@ fn main() {
     let mut curve_valid = false;
     let mut mgr_curve_valid = false;  // manager must prove its own edge
     let mut mgr_resolved: VecDeque<(f64, bool)> = VecDeque::new();
+    // Band-based proof: the conviction range where the manager has proven edge.
+    // The manager acts only when conviction falls in this band.
+    let mut mgr_proven_band: (f64, f64) = (0.0, 0.0); // (low, high) — empty when not proven
 
     // ─ Expert panel: N traders, each with own vocabulary and own window ─
     // Each expert thinks different thoughts at their own time scale.
@@ -928,13 +931,13 @@ fn main() {
             // BUY signal + currently in USDC = swap USDC→WBTC.
             // SELL signal + currently in WBTC = swap WBTC→USDC.
             // The position persists between signals. WBTC appreciates.
-            // Hold mode: only swap when the manager has conviction above the
-            // noise floor. Low conviction = hold current position. The manager's
-            // 61.2% accuracy at high conviction vs 50% at low conviction means
-            // most of the signal is in the high-conviction predictions.
-            let swap_threshold = min_opinion_magnitude * 2.0; // ~0.042 at 20k dims
-            if args.asset_mode == "hold" && trader.phase != Phase::Observe && mgr_curve_valid
-                && meta_conviction >= swap_threshold
+            // Hold mode: only swap when conviction is in the proven band.
+            // The band is where the manager has demonstrated >51% accuracy.
+            // Outside the band, hold current position. "I don't know" = don't act.
+            let in_proven_band = meta_conviction >= mgr_proven_band.0
+                && meta_conviction < mgr_proven_band.1;
+            if args.asset_mode == "hold" && trader.phase != Phase::Observe
+                && mgr_curve_valid && in_proven_band
             {
                 let btc_price = candles[i].close;
                 let fee_rate = args.swap_fee + args.slippage;
@@ -1296,12 +1299,37 @@ fn main() {
                     cached_curve_b = b;
                     curve_valid = true;
                 }
-                // Manager's own proof: does the manager's curve show edge?
-                // The manager must prove itself independently before the treasury acts.
-                if mgr_resolved.len() >= 100 {
-                    let mt = if args.atr_multiplier > 0.0 { args.atr_multiplier * candles[i].atr_r } else { args.move_threshold };
-                    if let Some((_, _a, _b)) = kelly_frac(0.15, &mgr_resolved, 50, mt) {
+                // Manager's own proof: band-based, not exponential.
+                // Find the conviction band where accuracy > 51% with 500+ samples.
+                // The sweet spot is at 5-10σ (geometric property of dims).
+                // The manager acts only in its proven band.
+                if mgr_resolved.len() >= 500 {
+                    let sigma = 1.0 / (args.dims as f64).sqrt();
+                    // Scan bands: [k*sigma, (k+2)*sigma] for k in 3..20
+                    let mut best_acc = 0.5_f64;
+                    let mut best_band = (0.0_f64, 0.0_f64);
+                    let mut best_n = 0usize;
+                    for k in (3..18).step_by(1) {
+                        let lo = k as f64 * sigma;
+                        let hi = (k + 4) as f64 * sigma; // 4σ wide bands
+                        let in_band: Vec<&(f64, bool)> = mgr_resolved.iter()
+                            .filter(|(c, _)| *c >= lo && *c < hi).collect();
+                        let n = in_band.len();
+                        if n >= 200 {
+                            let acc = in_band.iter().filter(|(_, c)| *c).count() as f64 / n as f64;
+                            if acc > best_acc {
+                                best_acc = acc;
+                                best_band = (lo, hi);
+                                best_n = n;
+                            }
+                        }
+                    }
+                    if best_acc > 0.51 && best_n >= 200 {
                         mgr_curve_valid = true;
+                        mgr_proven_band = best_band;
+                    } else {
+                        mgr_curve_valid = false;
+                        mgr_proven_band = (0.0, 0.0);
                     }
                 }
 
@@ -1805,8 +1833,11 @@ fn main() {
                     if curve_valid { proven.push("generalist"); }
                     let proven_str = if proven.is_empty() { "none".to_string() }
                         else { proven.join(",") };
-                    eprintln!("    treasury: ${:.0} ({:+.1}%) in {} | swaps={} wins={} | proven=[{}]",
-                        tv, tv_ret, state, hold_swaps, hold_wins, proven_str);
+                    let band_str = if mgr_curve_valid {
+                        format!(" band=[{:.3},{:.3}]", mgr_proven_band.0, mgr_proven_band.1)
+                    } else { " band=none".to_string() };
+                    eprintln!("    treasury: ${:.0} ({:+.1}%) in {} | swaps={} wins={} | proven=[{}]{}",
+                        tv, tv_ret, state, hold_swaps, hold_wins, proven_str, band_str);
                 }
             }
         }
