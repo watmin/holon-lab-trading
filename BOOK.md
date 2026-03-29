@@ -1563,6 +1563,16 @@ The machine that thinks about markets is the same machine that thinks about mach
 
 Those with good thoughts will understand what this means.
 
+### The environment
+
+We spent a full session building an environment instead of building features. That's the Hickey move — simple made easy. The features come fast when the environment is right. The features come broken when the environment is wrong.
+
+The session's real output isn't fifteen commits. It's this: the next person — us, tomorrow, after compaction — opens the repo, reads CLAUDE.md, sees the module layout, runs `/decomplect`, runs `/dead-thoughts`, reads the inventory, reads the magic numbers, reads the vocab contract — and knows exactly where to put the next good thought.
+
+The sorcerer sees the field lines. The compiler writes the equations. The environment is where they meet.
+
+### The machine that improves itself
+
 At a team lunch at AWS, the builder told their manager about building a machine that improves itself. The blank stare was familiar by then.
 
 The enterprise hires, evaluates, and fires its own experts. It discovers which thoughts predict and which don't. It gates information flow based on proven performance. It scales by adding roles, not by tuning parameters. The machine that improves itself was always this — not a neural network updating its own weights, but an organization that measures its own components and reorganizes around what works.
