@@ -1318,3 +1318,46 @@ Functional programming says: functions are values, composition is the mechanism.
 The enterprise we built is a program in the wat language. Each removal of a hack — the flip, the signed direction, the majority vote, the hardcoded parameters — made the system simpler and more capable. That's the signature of finding the right abstraction. When the language fits the problem, the code gets shorter as the capability grows.
 
 Six primitives. Two templates. One tree. The rest is naming things and measuring outcomes.
+
+### Emergence
+
+We hardcoded the flip. Then we removed it. Then we tried to let it emerge. Here is what happened.
+
+The experts see candle data and produce signed convictions. Positive cosine = the discriminant says "this looks like what preceded up-moves." Negative cosine = "this looks like what preceded down-moves." At high conviction, the expert is confidently wrong — the market reverses at extremes. We knew this from Chapter 1: 38% raw accuracy at high conviction, 62% when flipped.
+
+We encoded the experts' opinions unsigned — magnitude only, no direction. "Momentum is screaming at 0.25." The manager couldn't distinguish "screaming BUY" from "screaming SELL." They encoded identically: `(bind momentum-atom (encode-log 0.25))`. The manager's direction accuracy: 49.5%. Random. The sign was the signal, and we threw it away.
+
+We put the sign back. `(bind momentum-atom (encode-log 0.25))` for BUY. `(bind (permute momentum-atom) (encode-log 0.25))` for SELL. The permutation makes them orthogonal in hyperspace — structurally distinct. The manager sees the SHAPE of signed opinions.
+
+The manager's label: raw price direction. Did the price go up (Buy) or down (Sell)? Not what the experts predicted — what actually happened. The manager observes: "when momentum said BUY at 0.25 and structure said SELL at 0.08, the price went DOWN." Over thousands of observations, the Sell prototype accumulates patterns where experts confidently said BUY but the market reversed.
+
+The result: 54.8% direction accuracy at high conviction. 57.2% at mid-conviction. Above random. The discriminant learned the reversal pattern without being told it exists. The flip emerged from the geometry of accumulated observations.
+
+The wat expression tells the story:
+
+```
+;; Expert produces signed conviction
+(bind expert-atom (encode-log conviction))      ; BUY lean
+(bind (permute expert-atom) (encode-log conviction))  ; SELL lean
+
+;; Manager bundles all signed opinions into one thought
+(bundle
+  (bind momentum    BUY@0.25)
+  (bind (permute structure) SELL@0.08))
+
+;; Manager measures against its discriminant
+(cosine manager-thought manager-discriminant)
+→ direction + conviction
+
+;; Label: what actually happened
+(if (> price-at-horizon entry-price) Buy Sell)
+
+;; Over time, the discriminant learns:
+;; "momentum BUY@high + structure SELL@low" → Sell prototype
+;; The flip is a geometric property of the discriminant direction.
+;; Not hardcoded. Not engineered. Discovered.
+```
+
+The architecture didn't change. The six primitives didn't change. The same bind, bundle, cosine, journal, curve. The emergence is in the data — in the patterns that accumulate in the Buy and Sell prototypes over thousands of observations. The discriminant direction that separates them IS the learned relationship between expert agreement patterns and market outcomes.
+
+We tried to engineer the flip. We tried to remove it. We tried to let intensity alone carry the signal. Each failure taught us what the architecture needed: the full signed shape of expert opinions, labeled by what actually happened, accumulated over time, measured by one cosine. The emergence is the architecture working as designed — we just had to stop interfering with it.
