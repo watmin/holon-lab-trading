@@ -390,11 +390,18 @@ fn main() {
     // Layer 2: Panel state engram — learns the manifold of "good panel configurations."
     // Encodes each expert's (signed conviction) as a feature vector.
     // Dimensionality = number of experts. Fed after each recalib if accuracy was good.
-    // Manager's vocabulary = its experts + generalist. Each is an atom.
+    // Manager's vocabulary = its experts + generalist + panel-level concepts.
     let expert_atoms: Vec<Vector> = expert_profiles.iter()
         .map(|&name| vm.get_vector(name))
         .collect();
-    let generalist_atom = vm.get_vector("generalist"); // the team's composite voice
+    let generalist_atom = vm.get_vector("generalist");
+    // Panel-level atoms: emergent properties of the expert collective.
+    let agreement_atom = vm.get_vector("panel-agreement");     // how aligned are the experts?
+    let panel_energy_atom = vm.get_vector("panel-energy");     // how loud is everyone?
+    let divergence_atom = vm.get_vector("panel-divergence");   // do they agree on intensity?
+    // Context atoms: market state visible to the manager.
+    let volatility_atom = vm.get_vector("market-volatility");  // ATR right now
+    let disc_strength_atom = vm.get_vector("disc-strength");   // generalist's signal quality
     let panel_dim = expert_profiles.len() + 1; // experts + generalist
     let mut panel_engram = OnlineSubspace::with_params(panel_dim, 4, 2.0, 0.01, 3.5, 100);
     let mut panel_recalib_wins: u32 = 0;
@@ -654,9 +661,8 @@ fn main() {
                     Some(Primitives::bind(&role, &magnitude))
                 })
                 .collect();
-            // Generalist is gated like every other voice.
-            // Same proof requirement — no special treatment.
-            if curve_valid { // generalist uses the existing tht_journal curve_valid
+            // Generalist: gated like every other voice.
+            if curve_valid {
                 let gen_mag = mgr_scalar.encode_log(tht_pred.raw_cos.abs().max(1e-10));
                 let gen_role = if tht_pred.raw_cos >= 0.0 {
                     generalist_atom.clone()
@@ -664,6 +670,45 @@ fn main() {
                     Primitives::permute(&generalist_atom, 1)
                 };
                 mgr_facts.push(Primitives::bind(&gen_role, &gen_mag));
+            }
+
+            // Panel-level facts: emergent properties of the expert collective.
+            // These tell the manager about the SHAPE of agreement, not just who said what.
+            {
+                let proven_preds: Vec<&Prediction> = expert_preds.iter().enumerate()
+                    .filter(|(ei, _)| experts[*ei].curve_valid)
+                    .map(|(_, ep)| ep)
+                    .collect();
+
+                if proven_preds.len() >= 2 {
+                    // Agreement: what fraction of proven experts agree on direction?
+                    let buys = proven_preds.iter().filter(|p| p.raw_cos > 0.0).count();
+                    let total = proven_preds.len();
+                    let agreement = (buys.max(total - buys) as f64) / total as f64; // 0.5 = split, 1.0 = unanimous
+                    mgr_facts.push(Primitives::bind(&agreement_atom,
+                        &mgr_scalar.encode_log(agreement.max(0.01))));
+
+                    // Energy: mean conviction magnitude across proven experts.
+                    let mean_conv = proven_preds.iter().map(|p| p.conviction).sum::<f64>() / total as f64;
+                    mgr_facts.push(Primitives::bind(&panel_energy_atom,
+                        &mgr_scalar.encode_log(mean_conv.max(1e-10))));
+
+                    // Divergence: spread of conviction magnitudes. High = some loud, some quiet.
+                    let variance = proven_preds.iter()
+                        .map(|p| (p.conviction - mean_conv).powi(2))
+                        .sum::<f64>() / total as f64;
+                    mgr_facts.push(Primitives::bind(&divergence_atom,
+                        &mgr_scalar.encode_log(variance.sqrt().max(1e-10))));
+                }
+
+                // Context: market state the manager should know about.
+                let atr = candles[i].atr_r;
+                mgr_facts.push(Primitives::bind(&volatility_atom,
+                    &mgr_scalar.encode_log(atr.max(1e-10))));
+
+                // Generalist's discriminant strength: how much signal does the holistic view have?
+                mgr_facts.push(Primitives::bind(&disc_strength_atom,
+                    &mgr_scalar.encode_log(tht_journal.last_disc_strength.max(1e-10))));
             }
             let mgr_refs: Vec<&Vector> = mgr_facts.iter().collect();
             let mgr_pred = if mgr_refs.is_empty() {
@@ -1669,8 +1714,9 @@ fn main() {
                     let tv = treasury.total_value(&prices);
                     let tv_ret = (tv - args.initial_equity) / args.initial_equity * 100.0;
                     let state = if hold_state == HoldState::InWbtc { "WBTC" } else { "USDC" };
-                    let proven: Vec<&str> = experts.iter()
+                    let mut proven: Vec<&str> = experts.iter()
                         .filter(|e| e.curve_valid).map(|e| e.name).collect();
+                    if curve_valid { proven.push("generalist"); }
                     let proven_str = if proven.is_empty() { "none".to_string() }
                         else { proven.join(",") };
                     eprintln!("    treasury: ${:.0} ({:+.1}%) in {} | swaps={} wins={} | proven=[{}]",
