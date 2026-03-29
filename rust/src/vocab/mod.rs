@@ -14,7 +14,7 @@
 // Domain modules — each implements eval methods for its atoms
 pub mod oscillators;   // Williams%R, StochRSI, UltOsc, multi-ROC
 pub mod flow;          // OBV, VWAP, MFI, buying/selling pressure
-// pub mod persistence;   // TODO: Hurst, autocorrelation, ADX zones
+pub mod persistence;   // Hurst, autocorrelation, ADX zones
 // pub mod complexity;    // TODO: SampEn, permutation entropy, Lyapunov
 // pub mod divergence;    // TODO: multi-indicator divergence framework
 // pub mod crosses;       // TODO: SMA cross timing, histogram turns

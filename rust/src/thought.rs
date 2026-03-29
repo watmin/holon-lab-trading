@@ -259,6 +259,9 @@ const INDICATOR_ATOMS: &[&str] = &[
     "mfi",                        // Money Flow Index
     "buy-pressure", "sell-pressure", "body-ratio",
     "divergence",                 // generic divergence atom (used with OBV)
+    // vocab/persistence module
+    "hurst",                      // Hurst exponent
+    "autocorr",                   // lag-1 autocorrelation
 ];
 
 const DIRECTION_ATOMS: &[&str] = &["up", "down", "flat"];
@@ -292,6 +295,10 @@ const ZONE_ATOMS: &[&str] = &[
     "ult-osc-overbought", "ult-osc-oversold",
     // vocab/flow zones
     "mfi-overbought", "mfi-oversold",
+    // vocab/persistence zones
+    "hurst-trending", "hurst-reverting",
+    "autocorr-positive", "autocorr-negative",
+    "moderate-trend",
     // Risk / portfolio state
     "drawdown", "drawdown-shallow", "drawdown-moderate", "drawdown-deep", "drawdown-at-peak",
     "streak", "streak-winning", "streak-losing", "streak-long", "streak-short",
@@ -781,6 +788,8 @@ impl ThoughtEncoder {
         // Abstract properties that survive window noise.
         if is(&["regime"]) {
             self.eval_advanced(candles, &mut cached_facts, &mut owned_facts, &mut labels);
+            // vocab/persistence: Hurst, autocorrelation, ADX zones
+            self.eval_persistence_module(candles, &mut owned_facts, &mut labels);
         }
 
         // Unify all facts, then filter suppressed (high fire-rate constants).
@@ -1787,6 +1796,52 @@ impl ThoughtEncoder {
         let br_vec = self.scalar_enc.encode(flow.body_ratio, ScalarMode::Linear { scale: 1.0 });
         facts.push(Primitives::bind(self.vocab.get("body-ratio"), &br_vec));
         labels.push(format!("(body-ratio {:.3})", flow.body_ratio));
+    }
+
+    // ─── vocab/persistence module ─────────────────────────────────────
+
+    fn eval_persistence_module(
+        &self,
+        candles: &[Candle],
+        facts: &mut Vec<Vector>,
+        labels: &mut Vec<String>,
+    ) {
+        use crate::vocab::persistence::eval_persistence;
+        let pers = eval_persistence(candles);
+
+        // Hurst exponent: continuous + zone
+        if let Some(h) = pers.hurst {
+            let v = self.scalar_enc.encode(h.clamp(0.0, 1.0), ScalarMode::Linear { scale: 1.0 });
+            facts.push(Primitives::bind(self.vocab.get("hurst"), &v));
+            labels.push(format!("(hurst {:.3})", h));
+        }
+        if let Some(zone) = pers.hurst_zone {
+            let fact = Primitives::bind(self.vocab.get("at"),
+                &Primitives::bind(self.vocab.get("hurst"), self.vocab.get(zone)));
+            facts.push(fact);
+            labels.push(format!("(at hurst {})", zone));
+        }
+
+        // Autocorrelation: continuous + zone
+        if let Some(ac) = pers.autocorr {
+            let v = self.scalar_enc.encode(ac.clamp(-1.0, 1.0) * 0.5 + 0.5, ScalarMode::Linear { scale: 1.0 });
+            facts.push(Primitives::bind(self.vocab.get("autocorr"), &v));
+            labels.push(format!("(autocorr {:.3})", ac));
+        }
+        if let Some(zone) = pers.autocorr_zone {
+            let fact = Primitives::bind(self.vocab.get("at"),
+                &Primitives::bind(self.vocab.get("autocorr"), self.vocab.get(zone)));
+            facts.push(fact);
+            labels.push(format!("(at autocorr {})", zone));
+        }
+
+        // ADX zone (more granular than existing strong/weak)
+        {
+            let fact = Primitives::bind(self.vocab.get("at"),
+                &Primitives::bind(self.vocab.get("adx"), self.vocab.get(pers.adx_zone)));
+            facts.push(fact);
+            labels.push(format!("(at adx {})", pers.adx_zone));
+        }
     }
 
     // ─── Advanced indicators (tier-1 underdogs + esoteric) ─────────────
