@@ -90,8 +90,8 @@
   (bundle
     (bind market-volatility (encode-log (atr candle)))            ; orders of magnitude — log correct
     (bind disc-strength (encode-log (disc-strength generalist)))  ; orders of magnitude — log correct
-    (bind hour-of-day (atom (hour-block candle)))                 ; named atom: h00..h20
-    (bind day-of-week (atom (session candle)))))                  ; named atom: asian/european/us/off
+    (bind hour-of-day (encode-circular hour 24.0))               ; hour 23 near hour 0
+    (bind day-of-week (encode-circular day-of-week 7.0))))       ; sunday near monday
 
 ;; ── Motion ──────────────────────────────────────────────────────────
 ;;
