@@ -40,3 +40,4 @@ rust/runs/
 runs/
 data/*.db-shm
 data/*.db-wal
+/target/
