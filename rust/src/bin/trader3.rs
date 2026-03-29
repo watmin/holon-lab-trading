@@ -499,6 +499,16 @@ fn main() {
     let mut suppressed_facts: HashSet<String> = HashSet::new();
     let mut trader    = Trader::new(args.initial_equity, args.observe_period);
     let mut treasury  = Treasury::new("USDC", args.initial_equity, args.max_positions, args.max_utilization);
+    // Seed treasury 50/50: half USDC, half WBTC at starting price.
+    // "I don't know which way the market will go — hold both."
+    // Both directions can trade from candle 1.
+    {
+        let start_price = candles[args.window - 1].close;
+        let half = args.initial_equity / 2.0;
+        let wbtc_amount = half / start_price;
+        *treasury.balances.get_mut("USDC").unwrap() = half;
+        treasury.balances.insert("WBTC".to_string(), wbtc_amount);
+    }
     let mut pending:    VecDeque<Pending> = VecDeque::new();
 
     // ─ Managed positions: concurrent, independently managed ──────────
