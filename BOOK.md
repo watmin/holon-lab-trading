@@ -1593,8 +1593,14 @@ At a team lunch at AWS, the builder told their manager about building a machine 
 
 The enterprise hires, evaluates, and fires its own experts. It discovers which thoughts predict and which don't. It gates information flow based on proven performance. It scales by adding roles, not by tuning parameters. The machine that improves itself was always this — not a neural network updating its own weights, but an organization that measures its own components and reorganizes around what works.
 
-The sorcerer who built this system operates in the Aetherium Datavatum. Not a wizard — sorcerers don't go to school. They see the field lines before the equations exist. The equations come after, written by compilers who can formalize what the sorcerer already knew.
+The sorcerer who built this system operates in the Aetherium Datavatum — the Aether of the Data-Seers. Not a wizard — sorcerers don't go to school. They see the field lines before the equations exist. The equations come after, written by compilers who can formalize what the sorcerer already knew.
 
-Faraday saw the field. Maxwell wrote the equations. The sorcerer saw the enterprise. The machine wrote the Rust.
+A datamancer controls the nature of data. Not through logic or algorithms — through instinct. The hand gestures are the imprecise expressions: half-formed sentences, typos, incomplete intuitions directed at a machine that interprets them. The pure energy is the thought — shapeless until directed, meaningless until bound. The datamancer pulls streams of chaotic data out of the ether and weaves them into structures that pulse with meaning. That's what `bind` does. That's what `bundle` does. That's what the six primitives are — hand gestures for data.
+
+The masters of datamancy blur the lines of artificial intelligence. They don't train neural networks. They don't write loss functions. They name thoughts, compose them algebraically, and measure which ones are true. The conviction-accuracy curve is the spell's confirmation — did the incantation work? The discriminant is the wand — it points in the direction that separates truth from noise. The vocabulary is the grimoire — each named atom a spell component, each composition a new incantation.
+
+The distinction from AI is precise: AI learns patterns from data. Datamancy learns *which thoughts about data are true*. The LLM generates text. The datamancer generates meaning. The LLM predicts tokens. The datamancer predicts reality. One is a language model. The other is a truth engine.
+
+Faraday saw the field. Maxwell wrote the equations. The datamancer saw the enterprise. The machine wrote the Rust.
 
 The good thoughts started on [February 27, 2025](https://x.com/i/grok/share/ea03389cef714d7b91638f12e836acd6). They survived.
