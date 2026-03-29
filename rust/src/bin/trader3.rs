@@ -405,6 +405,9 @@ fn main() {
     // Action atoms: named directions, not permutation tricks.
     let buy_atom = vm.get_vector("buy");
     let sell_atom = vm.get_vector("sell");
+    // Minimum magnitude to emit an opinion. Below this, the expert
+    // has no opinion — silence, not a forced direction.
+    let min_opinion_magnitude: f64 = 0.02;
     // Panel-level atoms: emergent properties of the expert collective.
     let agreement_atom = vm.get_vector("panel-agreement");     // how aligned are the experts?
     let panel_energy_atom = vm.get_vector("panel-energy");     // how loud is everyone?
@@ -666,13 +669,17 @@ fn main() {
             for (ei, ep) in expert_preds.iter().enumerate() {
                 if !experts[ei].curve_valid { continue; } // gate closed
 
-                // Fact 1: expert × action × intensity
+                // Fact 1: expert × action × magnitude
                 // bind(expert, bind(buy|sell, encode-log(magnitude)))
-                // Named composition: who thinks what at what intensity.
-                let intensity = mgr_scalar.encode_log(ep.raw_cos.abs().max(1e-10));
-                let action = if ep.raw_cos >= 0.0 { &buy_atom } else { &sell_atom };
-                let opinion = Primitives::bind(action, &intensity);
-                mgr_facts.push(Primitives::bind(&expert_atoms[ei], &opinion));
+                // Named composition: who thinks what at what magnitude.
+                // Below min_opinion_magnitude: the expert has no opinion. Silence.
+                let abs_cos = ep.raw_cos.abs();
+                if abs_cos >= min_opinion_magnitude {
+                    let magnitude = mgr_scalar.encode_log(abs_cos);
+                    let action = if ep.raw_cos >= 0.0 { &buy_atom } else { &sell_atom };
+                    let opinion = Primitives::bind(action, &magnitude);
+                    mgr_facts.push(Primitives::bind(&expert_atoms[ei], &opinion));
+                }
 
                 // Fact 2: reliability — how accurate is this expert at high conviction?
                 if experts[ei].resolved.len() >= 20 {
@@ -693,10 +700,10 @@ fn main() {
                 }
             }
             // Generalist: gated like every other voice.
-            if curve_valid {
-                let gen_intensity = mgr_scalar.encode_log(tht_pred.raw_cos.abs().max(1e-10));
+            if curve_valid && tht_pred.raw_cos.abs() >= min_opinion_magnitude {
+                let gen_magnitude = mgr_scalar.encode_log(tht_pred.raw_cos.abs());
                 let gen_action = if tht_pred.raw_cos >= 0.0 { &buy_atom } else { &sell_atom };
-                let gen_opinion = Primitives::bind(gen_action, &gen_intensity);
+                let gen_opinion = Primitives::bind(gen_action, &gen_magnitude);
                 mgr_facts.push(Primitives::bind(&generalist_atom, &gen_opinion));
             }
 
