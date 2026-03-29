@@ -406,6 +406,9 @@ fn main() {
     let agreement_atom = vm.get_vector("panel-agreement");     // how aligned are the experts?
     let panel_energy_atom = vm.get_vector("panel-energy");     // how loud is everyone?
     let divergence_atom = vm.get_vector("panel-divergence");   // do they agree on intensity?
+    // Per-expert quality atoms: HOW proven, not just proven/not.
+    let reliability_atom = vm.get_vector("expert-reliability"); // accuracy level of this expert
+    let tenure_atom = vm.get_vector("expert-tenure");           // how long proven
     // Context atoms: market state visible to the manager.
     let volatility_atom = vm.get_vector("market-volatility");  // ATR right now
     let disc_strength_atom = vm.get_vector("disc-strength");   // generalist's signal quality
@@ -656,18 +659,37 @@ fn main() {
             // Unproven experts keep learning on paper but don't pollute
             // the manager's input. The gate opens when the expert's
             // conviction-accuracy curve validates.
-            let mut mgr_facts: Vec<Vector> = expert_preds.iter().enumerate()
-                .filter_map(|(ei, ep)| {
-                    if !experts[ei].curve_valid { return None; } // gate closed
-                    let magnitude = mgr_scalar.encode_log(ep.raw_cos.abs().max(1e-10));
-                    let role = if ep.raw_cos >= 0.0 {
-                        expert_atoms[ei].clone()         // BUY lean
-                    } else {
-                        Primitives::permute(&expert_atoms[ei], 1) // SELL lean
-                    };
-                    Some(Primitives::bind(&role, &magnitude))
-                })
-                .collect();
+            let mut mgr_facts: Vec<Vector> = Vec::new();
+            for (ei, ep) in expert_preds.iter().enumerate() {
+                if !experts[ei].curve_valid { continue; } // gate closed
+
+                // Fact 1: signed conviction (direction + intensity)
+                let magnitude = mgr_scalar.encode_log(ep.raw_cos.abs().max(1e-10));
+                let role = if ep.raw_cos >= 0.0 {
+                    expert_atoms[ei].clone()
+                } else {
+                    Primitives::permute(&expert_atoms[ei], 1)
+                };
+                mgr_facts.push(Primitives::bind(&role, &magnitude));
+
+                // Fact 2: reliability — how accurate is this expert at high conviction?
+                if experts[ei].resolved.len() >= 20 {
+                    let acc = experts[ei].resolved.iter()
+                        .filter(|(_, c)| *c).count() as f64
+                        / experts[ei].resolved.len() as f64;
+                    let rel_vec = mgr_scalar.encode_log((acc - 0.4).max(1e-10)); // 0.4 baseline
+                    mgr_facts.push(Primitives::bind(
+                        &Primitives::bind(&expert_atoms[ei], &reliability_atom), &rel_vec));
+                }
+
+                // Fact 3: tenure — how many resolved predictions since gate opened?
+                let tenure = experts[ei].resolved.len() as f64;
+                if tenure >= 50.0 {
+                    let ten_vec = mgr_scalar.encode_log(tenure.max(1e-10));
+                    mgr_facts.push(Primitives::bind(
+                        &Primitives::bind(&expert_atoms[ei], &tenure_atom), &ten_vec));
+                }
+            }
             // Generalist: gated like every other voice.
             if curve_valid {
                 let gen_mag = mgr_scalar.encode_log(tht_pred.raw_cos.abs().max(1e-10));
