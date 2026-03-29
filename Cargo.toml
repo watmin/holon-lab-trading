@@ -11,12 +11,23 @@ path = "src/lib.rs"
 name = "enterprise"
 path = "src/bin/enterprise.rs"
 
+[[bin]]
+name = "build-candles"
+path = "src/bin/build_candles.rs"
+required-features = ["parquet"]
+
+[features]
+default = []
+parquet = ["dep:parquet", "dep:arrow"]
+
 [dependencies]
 holon = { path = "../holon-rs", features = ["simd"] }
 rusqlite = { version = "0.31", features = ["bundled"] }
 clap = { version = "4", features = ["derive"] }
 rayon = "1.10"
 chrono = "0.4"
+parquet = { version = "53", optional = true }
+arrow = { version = "53", optional = true, features = ["prettyprint"] }
 
 [profile.release]
 opt-level = 3
