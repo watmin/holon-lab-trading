@@ -8,7 +8,7 @@ argument-hint: [file-path]
 
 The datamancer's ward. Run all three linters in parallel against the target (default: the full enterprise).
 
-Launch three agents simultaneously:
+Launch THREE SEPARATE background agents in a SINGLE message. Not one agent doing three things — three independent agents running in parallel. Each agent reads its own skill file and reports independently.
 
 1. **`/decomplect`** — read `.claude/skills/decomplect/SKILL.md`, scan the target file(s). Recognize `decomplect:allow()` annotations. Report only new unaccepted findings.
 
