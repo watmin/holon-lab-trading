@@ -1685,22 +1685,27 @@ fn main() {
                                 / candles[entry.candle_idx].close;
                             let mgr_label = if price_change > 0.0 { Outcome::Buy } else { Outcome::Sell };
 
-                            // Signed conviction, gated — same encoding as prediction time.
-                            // Only proven experts included. Silence, not noise.
-                            let mut mgr_res_facts: Vec<Vector> = entry.expert_preds.iter().enumerate()
-                                .filter_map(|(ei, ep)| {
-                                    if !experts[ei].curve_valid { return None; }
-                                    let intensity = mgr_scalar.encode(ep.raw_cos.abs().max(1e-10), ScalarMode::Linear { scale: 1.0 });
-                                    let action = if ep.raw_cos >= 0.0 { &buy_atom } else { &sell_atom };
-                                    let opinion = Primitives::bind(action, &intensity);
-                                    Some(Primitives::bind(&expert_atoms[ei], &opinion))
-                                }).collect();
-                            // Generalist gated same as experts
-                            if curve_valid {
-                                let gen_intensity = mgr_scalar.encode(entry.tht_pred.raw_cos.abs().max(1e-10), ScalarMode::Linear { scale: 1.0 });
+                            // Same decomposed encoding as prediction time.
+                            // All experts above noise floor. Credibility separate from opinion.
+                            let mut mgr_res_facts: Vec<Vector> = Vec::new();
+                            for (ei, ep) in entry.expert_preds.iter().enumerate() {
+                                let abs_cos = ep.raw_cos.abs();
+                                if abs_cos < min_opinion_magnitude { continue; }
+                                let magnitude = mgr_scalar.encode(abs_cos, ScalarMode::Linear { scale: 1.0 });
+                                let action = if ep.raw_cos >= 0.0 { &buy_atom } else { &sell_atom };
+                                mgr_res_facts.push(Primitives::bind(&expert_atoms[ei],
+                                    &Primitives::bind(action, &magnitude)));
+                                let status = if experts[ei].curve_valid { &proven_atom } else { &tentative_atom };
+                                mgr_res_facts.push(Primitives::bind(&expert_atoms[ei], status));
+                            }
+                            // Generalist
+                            if entry.tht_pred.raw_cos.abs() >= min_opinion_magnitude {
+                                let gen_mag = mgr_scalar.encode(entry.tht_pred.raw_cos.abs(), ScalarMode::Linear { scale: 1.0 });
                                 let gen_action = if entry.tht_pred.raw_cos >= 0.0 { &buy_atom } else { &sell_atom };
-                                let gen_opinion = Primitives::bind(gen_action, &gen_intensity);
-                                mgr_res_facts.push(Primitives::bind(&generalist_atom, &gen_opinion));
+                                mgr_res_facts.push(Primitives::bind(&generalist_atom,
+                                    &Primitives::bind(gen_action, &gen_mag)));
+                                let gen_status = if curve_valid { &proven_atom } else { &tentative_atom };
+                                mgr_res_facts.push(Primitives::bind(&generalist_atom, gen_status));
                             }
                             let mrefs: Vec<&Vector> = mgr_res_facts.iter().collect();
                             if !mrefs.is_empty() { // at least one proven expert
