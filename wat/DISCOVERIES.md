@@ -134,3 +134,17 @@ Append-only. Each entry dated. The act of writing specifications reveals gaps.
     of bind(permute(expert,1), magnitude). Named composition is readable and unbindable.
     But we haven't proven this produces better or worse signal than permute — it's a
     clarity improvement, not necessarily a signal improvement. Need to test both.
+
+23. **The accuracy sweet spot scales with 1/sqrt(dims).** Peak accuracy at 0.06-0.10
+    conviction = ~5-10σ where σ=1/sqrt(dims). Above noise floor (3σ) but below
+    overconfidence. The discriminant amplifies both signal and error at high conviction.
+    The sweet spot is where enough facts align to be above noise but not enough to
+    amplify the discriminant's errors.
+
+    At 20k dims: sweet spot ≈ 0.035-0.071
+    At 10k dims: sweet spot ≈ 0.05-0.10
+    At 4k dims:  sweet spot ≈ 0.08-0.16
+
+    This means the swap conviction threshold is derivable: ~5/sqrt(dims).
+    Not a tuned parameter. A geometric property. The manager should act
+    when conviction is in the sweet spot, not at the extremes.
