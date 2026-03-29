@@ -7,7 +7,7 @@
 //! These measure PROPERTIES of the price series, not direction.
 //! "Is this market trending or mean-reverting? Persistent or random?"
 
-use crate::db::Candle;
+use crate::candle::Candle;
 
 /// Simplified Hurst exponent estimate via rescaled range (R/S).
 /// H > 0.5: persistent (trends continue). H < 0.5: anti-persistent.

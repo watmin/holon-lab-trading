@@ -1,9 +1,10 @@
 use rusqlite::Connection;
 
-// ─── DB setup ────────────────────────────────────────────────────────────────
+// ─── Ledger ─────────────────────────────────────────────────────────────────
+// The ledger records everything. It doesn't decide anything. It counts.
 
-pub fn init_run_db(path: &str) -> Connection {
-    let db = Connection::open(path).expect("failed to open run DB");
+pub fn init_ledger(path: &str) -> Connection {
+    let db = Connection::open(path).expect("failed to open ledger");
     db.execute_batch("
         PRAGMA journal_mode=WAL;
         PRAGMA synchronous=NORMAL;

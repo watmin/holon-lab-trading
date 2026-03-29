@@ -89,7 +89,7 @@ case "${1:-}" in
         echo "Flags: ${extra_args[*]:-}"
         echo "──────────────────────────────────────"
 
-        "$BINARY" --db-path "$DB_PATH" --max-candles "$candles" --run-db "$rundb" "${extra_args[@]}" 2> "$logfile"
+        "$BINARY" --db-path "$DB_PATH" --max-candles "$candles" --ledger "$rundb" "${extra_args[@]}" 2> "$logfile"
 
         echo ""
         echo "Done. Key results:"

@@ -6,7 +6,7 @@
 //! Volume tells you WHO is behind the move. Flow tells you WHETHER
 //! the move has backing.
 
-use crate::db::Candle;
+use crate::candle::Candle;
 
 /// On-Balance Volume direction: is OBV trending with or against price?
 /// Returns (obv_slope_sign, obv_diverges_from_price)

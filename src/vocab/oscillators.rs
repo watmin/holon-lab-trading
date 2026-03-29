@@ -6,9 +6,7 @@
 //! Each function takes a candle window and produces named facts as
 //! (label, vector) pairs. The thought encoder bundles them.
 
-use holon::{Primitives, ScalarMode, Vector};
-use crate::db::Candle;
-use crate::thought::ThoughtVocab;
+use crate::candle::Candle;
 
 /// Williams %R: close relative to high-low range, inverted.
 /// Range: [-100, 0]. -20 to 0 = overbought. -100 to -80 = oversold.

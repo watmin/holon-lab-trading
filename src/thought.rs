@@ -5,7 +5,7 @@ use holon::{
     Vector, VectorManager,
 };
 
-use crate::db::Candle;
+use crate::candle::Candle;
 
 // ─── PELT change-point detection ────────────────────────────────────────────
 
@@ -86,69 +86,6 @@ fn most_recent_segment_dir(values: &[f64]) -> Option<&'static str> {
     else { Some("down") }
 }
 
-/// Local swing highs: indices where value is strictly greater than all values
-/// within `radius` bars on each side. Returns (index, value) pairs, oldest first.
-fn swing_highs(values: &[f64], radius: usize) -> Vec<(usize, f64)> {
-    let n = values.len();
-    let mut out = Vec::new();
-    if n < radius * 2 + 1 { return out; }
-    for i in radius..n - radius {
-        let v = values[i];
-        if values[i - radius..i].iter().all(|&x| x < v)
-            && values[i + 1..=i + radius].iter().all(|&x| x < v)
-        {
-            out.push((i, v));
-        }
-    }
-    out
-}
-
-/// Local swing lows: indices where value is strictly less than all values
-/// within `radius` bars on each side. Returns (index, value) pairs, oldest first.
-fn swing_lows(values: &[f64], radius: usize) -> Vec<(usize, f64)> {
-    let n = values.len();
-    let mut out = Vec::new();
-    if n < radius * 2 + 1 { return out; }
-    for i in radius..n - radius {
-        let v = values[i];
-        if values[i - radius..i].iter().all(|&x| x > v)
-            && values[i + 1..=i + radius].iter().all(|&x| x > v)
-        {
-            out.push((i, v));
-        }
-    }
-    out
-}
-
-fn cosine_f64(a: &[f64], b: &[f64]) -> f64 {
-    assert_eq!(a.len(), b.len());
-    let mut dot = 0.0_f64;
-    let mut na = 0.0_f64;
-    let mut nb = 0.0_f64;
-    for (&x, &y) in a.iter().zip(b.iter()) {
-        dot += x * y;
-        na += x * x;
-        nb += y * y;
-    }
-    let denom = (na * nb).sqrt();
-    if denom < 1e-10 { 0.0 } else { dot / denom }
-}
-
-fn cosine_f64_vs_vec(proto: &[f64], vec: &Vector) -> f64 {
-    let data = vec.data();
-    assert_eq!(proto.len(), data.len());
-    let mut dot = 0.0_f64;
-    let mut norm_p = 0.0_f64;
-    let mut norm_v = 0.0_f64;
-    for (&p, &v) in proto.iter().zip(data.iter()) {
-        let vf = v as f64;
-        dot += p * vf;
-        norm_p += p * p;
-        norm_v += vf * vf;
-    }
-    let denom = (norm_p * norm_v).sqrt();
-    if denom < 1e-10 { 0.0 } else { dot / denom }
-}
 
 /// Float-space invert: cosine of continuous f64 proto against bipolar codebook atoms.
 /// Threshold is 1/sqrt(D) — the expected absolute cosine of a random bipolar vector
@@ -678,30 +615,6 @@ impl ThoughtEncoder {
         self.encode_view(candles, streams, usize::MAX, streams.max_len_val(), vm, None, None, "full")
     }
 
-    /// Weighted bundle: each fact scaled by |cosine(fact, discriminant)|.
-    /// Facts the discriminant ignores get near-zero weight. Facts it relies
-    /// on get amplified. Result is thresholded to bipolar.
-    fn weighted_bundle(facts: &[&Vector], disc: &[f64], dims: usize) -> Vector {
-        let disc_norm: f64 = disc.iter().map(|x| x * x).sum::<f64>().sqrt();
-        if disc_norm < 1e-10 { return Primitives::bundle(facts); }
-
-        let inv_disc_norm = 1.0 / disc_norm;
-        let mut sum = vec![0.0f64; dims];
-        for fact in facts {
-            // |cosine(fact, disc)| — bipolar fact means norm = sqrt(D)
-            let dot: f64 = fact.data().iter().zip(disc.iter())
-                .map(|(&v, &d)| v as f64 * d)
-                .sum();
-            let norm_v = (fact.dimensions() as f64).sqrt();
-            let w = (dot * inv_disc_norm / norm_v).abs();
-            for (s, &v) in sum.iter_mut().zip(fact.data().iter()) {
-                *s += w * v as f64;
-            }
-        }
-        Vector::from_data(sum.iter()
-            .map(|&v| if v > 0.0 { 1 } else if v < 0.0 { -1 } else { 0 })
-            .collect())
-    }
 
     /// Expert profiles: which eval methods to run.
     /// "full" = all methods (generalist). Named profiles select subsets.
@@ -724,7 +637,7 @@ impl ThoughtEncoder {
         _stream_end: usize,
         _max_window: usize,
         vm: &VectorManager,
-        attention: Option<&[f64]>,
+        _attention: Option<&[f64]>,
         suppressed: Option<&HashSet<String>>,
         expert: &str,
     ) -> ThoughtResult {
@@ -1578,7 +1491,7 @@ impl ThoughtEncoder {
 
         // Squeeze: BB inside Keltner (low volatility)
         if now.bb_upper > 0.0 && now.bb_upper < keltner_upper && now.bb_lower > keltner_lower {
-            let key = "(at bb-upper keltner-upper)".to_string();
+            let _key = "(at bb-upper keltner-upper)".to_string();
             // BB upper below keltner upper = squeeze
             if let Some(v) = self.fact_cache.get("(below bb-upper keltner-upper)") {
                 facts.push(v); labels.push("(below bb-upper keltner-upper)".into());
@@ -1850,14 +1763,14 @@ impl ThoughtEncoder {
         &'a self,
         candles: &[Candle],
         facts: &mut Vec<&'a Vector>,
-        owned_facts: &mut Vec<Vector>,
+        _owned_facts: &mut Vec<Vector>,
         labels: &mut Vec<String>,
     ) {
         let n = candles.len();
         if n < 20 { return; }
 
         let closes: Vec<f64> = candles.iter().map(|c| c.close).collect();
-        let now = candles.last().unwrap();
+        let _now = candles.last().unwrap();
 
         // ── KAMA Efficiency Ratio ─────────────────────────────────────
         // ER = |net movement| / sum(|step movements|) over 10 periods

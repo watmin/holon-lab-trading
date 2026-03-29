@@ -11,7 +11,7 @@ use std::collections::VecDeque;
 pub fn kelly_frac(
     conviction: f64,
     resolved: &VecDeque<(f64, bool)>,
-    min_sample: usize,
+    _min_sample: usize,
     move_threshold: f64,
 ) -> Option<(f64, f64, f64)> {
     if resolved.len() < 500 { return None; }

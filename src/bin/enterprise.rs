@@ -14,19 +14,19 @@ use std::time::Instant;
 use clap::Parser;
 use rayon::prelude::*;
 use rusqlite::params;
-use holon::{Primitives, ScalarMode, Similarity, VectorManager, Vector};
+use holon::{Primitives, ScalarMode, VectorManager, Vector};
 use holon::memory::OnlineSubspace;
 
-use enterprise::db::load_candles;
+use enterprise::candle::load_candles;
 use enterprise::journal::{Journal, Outcome, Prediction};
 use enterprise::thought::{ThoughtEncoder, ThoughtVocab, IndicatorStreams};
 use enterprise::treasury::Treasury;
-use enterprise::portfolio::{Trader, Phase, YearStats};
+use enterprise::portfolio::{Portfolio, Phase};
 use enterprise::sizing::{kelly_frac, signal_weight};
 use enterprise::market::observer::Observer;
 use enterprise::position::{Pending, ExitReason, ExitObservation};
 use enterprise::risk::RiskBranch;
-use enterprise::run_db::init_run_db;
+use enterprise::ledger::init_ledger;
 use enterprise::market::{parse_candle_hour, parse_candle_day};
 use enterprise::market::manager::{ManagerAtoms, ManagerContext, encode_manager_thought};
 
@@ -163,9 +163,9 @@ struct Args {
 
 
 
-    /// Output SQLite database for this run. Auto-generated if omitted.
+    /// Output SQLite ledger for this run. Auto-generated if omitted.
     #[arg(long)]
-    run_db: Option<PathBuf>,
+    ledger: Option<PathBuf>,
 
     /// Enable heavy diagnostic tables (trade_facts, trade_vectors, observer_log).
     /// Off by default for performance. Enable for analysis runs.
@@ -227,7 +227,7 @@ fn main() {
 
     // ─ Adaptive window sampler ─
     use enterprise::window_sampler::WindowSampler;
-    let window_sampler = WindowSampler::new(args.dims as u64, 12, 2016);
+    let _window_sampler = WindowSampler::new(args.dims as u64, 12, 2016);
     // Pre-warm position vectors for the max possible window
     for p in 0..2016_i64 { vm.get_position_vector(p); }
 
@@ -256,13 +256,13 @@ fn main() {
     let pos_pnl_atom = vm.get_vector("position-pnl");
     let pos_hold_atom = vm.get_vector("position-hold");
     let pos_mfe_atom = vm.get_vector("position-mfe");
-    let pos_mae_atom = vm.get_vector("position-mae");
+    let _pos_mae_atom = vm.get_vector("position-mae");
     let pos_atr_entry_atom = vm.get_vector("position-atr-entry");
     let pos_atr_now_atom = vm.get_vector("position-atr-now");
     let pos_stop_dist_atom = vm.get_vector("position-stop-dist");
     let pos_phase_atom = vm.get_vector("position-phase");
     let pos_dir_atom = vm.get_vector("position-direction");
-    let exit_expert_valid = false;
+    let _exit_expert_valid = false;
     let mut exit_pending: Vec<ExitObservation> = Vec::new();
     // Exit timing: derived after k_stop is defined (see below).
 
@@ -316,8 +316,8 @@ fn main() {
     // vectors over time. k=32 captures the intrinsic dimensionality of ~120 facts.
     // Fed on EVERY candle (not just trades) to learn the full manifold.
     // Residual = how novel this candle's thought pattern is.
-    let mut tht_subspace = OnlineSubspace::new(args.dims, 32);
-    let mut subspace_baseline_residual: f64 = 1.0;
+    let tht_subspace = OnlineSubspace::new(args.dims, 32);
+    let _subspace_baseline_residual: f64 = 1.0;
 
     // Layer 2: Panel state engram — learns the manifold of "good panel configurations."
     // Encodes each observer's (signed conviction) as a feature vector.
@@ -340,13 +340,13 @@ fn main() {
 
     // Curve stability: track (a, b) parameters across recalibs.
     // Trade only when both parameters stabilize (<10% change, 3 consecutive recalibs).
-    let mut curve_a_history: VecDeque<f64> = VecDeque::new();
-    let mut curve_b_history: VecDeque<f64> = VecDeque::new();
-    let mut curve_stable = false;
+    let _curve_a_history: VecDeque<f64> = VecDeque::new();
+    let _curve_b_history: VecDeque<f64> = VecDeque::new();
+    let curve_stable = false;
 
 
     // ─ Run database ─
-    let run_db_path = match &args.run_db {
+    let ledger_path = match &args.ledger {
         Some(p) => {
             if let Some(parent) = p.parent() { std::fs::create_dir_all(parent).ok(); }
             p.display().to_string()
@@ -357,9 +357,9 @@ fn main() {
             format!("runs/enterprise_{}.db", ts)
         }
     };
-    let run_db = init_run_db(&run_db_path);
+    let ledger = init_ledger(&ledger_path);
     {
-        let mut stmt = run_db.prepare("INSERT INTO meta (key,value) VALUES (?1,?2)").unwrap();
+        let mut stmt = ledger.prepare("INSERT INTO meta (key,value) VALUES (?1,?2)").unwrap();
         for (k, v) in &[
             ("binary",          "enterprise"),
             ("mode", "enterprise"),
@@ -383,9 +383,9 @@ fn main() {
             stmt.execute(params![k, v]).ok();
         }
     }
-    eprintln!("  Run database: {}", run_db_path);
+    eprintln!("  Run database: {}", ledger_path);
 
-    // ─ Trader and tracking ─
+    // ─ Portfolio and tracking ─
     let mut tht_attention: Option<Vec<f64>> = None; // thought discriminant for weighted bundling
 
     // Adaptive decay: fast forgetting during regime transitions, slow during stable periods.
@@ -401,12 +401,12 @@ fn main() {
 
     // Fire-rate suppression: track how often each cached fact fires.
     // Facts firing >90% of the time carry <0.15 bits and waste bundle capacity.
-    let fire_rate_window = 500usize; // assess over last N candles
-    let fire_rate_threshold = 0.90;
-    let mut fire_counts: HashMap<String, usize> = HashMap::new();
-    let mut fire_total: usize = 0;
-    let mut suppressed_facts: HashSet<String> = HashSet::new();
-    let mut trader    = Trader::new(args.initial_equity, args.observe_period);
+    let _fire_rate_window = 500usize; // assess over last N candles
+    let _fire_rate_threshold = 0.90;
+    let _fire_counts: HashMap<String, usize> = HashMap::new();
+    let _fire_total: usize = 0;
+    let suppressed_facts: HashSet<String> = HashSet::new();
+    let mut portfolio    = Portfolio::new(args.initial_equity, args.observe_period);
     let mut treasury  = Treasury::new("USDC", args.initial_equity, args.max_positions, args.max_utilization);
     // Seed treasury 50/50: half USDC, half WBTC at starting price.
     // "I don't know which way the market will go — hold both."
@@ -421,9 +421,9 @@ fn main() {
     // Counterfactual: snapshot treasury before each swap.
     // Compare actual value vs "what if we hadn't swapped?"
     // The risk manager learns from the difference.
-    let mut last_snapshot_value: f64 = args.initial_equity;
+    let _last_snapshot_value: f64 = args.initial_equity;
     let mut last_snapshot_balances: HashMap<String, f64> = treasury.balances.clone();
-    let mut cumulative_alpha: f64 = 0.0; // total value gained vs inaction
+    let _cumulative_alpha: f64 = 0.0; // total value gained vs inaction
     let mut pending:    VecDeque<Pending> = VecDeque::new();
 
     // ─ Managed positions: concurrent, independently managed ──────────
@@ -448,7 +448,7 @@ fn main() {
     let k_stop:  f64 = 3.0;  // stop at 3× ATR — "the market moved 3× its normal range against me"
     let k_trail: f64 = 1.5;  // trail at 1.5× ATR — lock in gains, give room for normal retracement
     let k_tp:    f64 = 6.0;  // take profit at 6× ATR — let winners run to meaningful moves
-    let min_exit_samples = 50usize;
+    let _min_exit_samples = 50usize;
     // Exit observation timing derived from stop parameter.
     // Expected candles to move one stop-width: k_stop² (ATR × sqrt(N) scaling).
     // Observe at half that rate (Nyquist).
@@ -465,9 +465,9 @@ fn main() {
     // Position persists between signals. WBTC appreciates with the market.
     #[derive(Clone, Copy, PartialEq)]
     enum HoldState { InUsdc, InWbtc }
-    let mut hold_state = HoldState::InUsdc;
-    let mut last_swap_candle: usize = 0;
-    let mut last_swap_price: f64 = 0.0;
+    let hold_state = HoldState::InUsdc;
+    let _last_swap_candle: usize = 0;
+    let _last_swap_price: f64 = 0.0;
     let mut hold_swaps: usize = 0;
     let mut hold_wins: usize = 0;
 
@@ -503,7 +503,7 @@ fn main() {
     // Conviction window: starts at 2000 (statistically robust minimum).
     // Shrinks when curve is stable, grows when unstable.
     // The curve stability tracking we built decides the window size.
-    let mut conviction_window: usize = 2000;
+    let conviction_window: usize = 2000;
     let mut conviction_history: VecDeque<f64> = VecDeque::new();
     let mut flip_threshold: f64 = 0.0; // 0 until warmup complete
 
@@ -513,15 +513,15 @@ fn main() {
 
     // Self-derived min_edge: track flip-zone win rate per recalib window.
     // min_edge = 0.50 + 2σ where σ = stddev of recent window win rates.
-    let mut window_win_rates: VecDeque<f64> = VecDeque::new();
+    let _window_win_rates: VecDeque<f64> = VecDeque::new();
     let mut window_wins: u32 = 0;
     let mut window_total: u32 = 0;
-    let mut derived_min_edge: f64 = args.min_edge; // start with CLI value
+    let _derived_min_edge: f64 = args.min_edge; // start with CLI value
 
     let kill_file = std::path::Path::new("trader-stop");
     let mut cursor = start_idx;
 
-    run_db.execute_batch("BEGIN").ok();
+    ledger.execute_batch("BEGIN").ok();
 
     eprintln!("\n  Walk-forward: {} candles from index {}...", loop_count, start_idx);
 
@@ -851,7 +851,6 @@ fn main() {
                             last_exit_price = btc_price;
                             last_exit_atr = candles[i].atr_r;
                         }
-                        _ => {}
                     }
                     // Log to ledger
                     let ret = pos.return_pct(btc_price);
@@ -861,7 +860,7 @@ fn main() {
                         (PositionExit::TakeProfit, _) => "PartialProfit",
                         (PositionExit::StopLoss, _) => "StopLoss",
                     };
-                    run_db.execute(
+                    ledger.execute(
                         "INSERT INTO trade_ledger (step,candle_idx,timestamp,direction,entry_price,exit_price,gross_return_pct,position_usd,swap_fee_pct,horizon_candles,won,exit_reason)
                          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
                         rusqlite::params![
@@ -894,7 +893,7 @@ fn main() {
             // asset to deploy. Everything else is the same.
             let risk_allows = cached_risk_mult > 0.3;
             let should_open = args.asset_mode == "hold"
-                && trader.phase != Phase::Observe
+                && portfolio.phase != Phase::Observe
                 && mgr_curve_valid && in_proven_band && market_moved && risk_allows
                 && (meta_dir == Some(Outcome::Buy) || meta_dir == Some(Outcome::Sell));
 
@@ -947,7 +946,7 @@ fn main() {
                         next_position_id += 1;
                         hold_swaps += 1;
                         let dir_str = if direction == Outcome::Buy { "Buy" } else { "Sell" };
-                        run_db.execute(
+                        ledger.execute(
                             "INSERT INTO trade_ledger (step,candle_idx,timestamp,direction,entry_price,position_usd,swap_fee_pct,exit_reason)
                              VALUES (?1,?2,?3,?4,?5,?6,?7,'Open')",
                             rusqlite::params![log_step, i as i64, &candles[i].ts, dir_str, btc_price, usdc_value, fee_rate * 100.0],
@@ -963,9 +962,9 @@ fn main() {
             // Risk branch: compute only at recalib intervals (not every candle).
             // Between recalibs, reuse the last risk_mult.
             if encode_count % args.recalib_interval == 0 || encode_count < 100 {
-                let branch_features = trader.risk_branch_wat(&vm, &risk_scalar);
+                let branch_features = portfolio.risk_branch_wat(&vm, &risk_scalar);
                 let mut worst_ratio = 1.0_f64;
-                let healthy = trader.is_healthy() && trader.trades_taken >= 20;
+                let healthy = portfolio.is_healthy() && portfolio.trades_taken >= 20;
                 for (bi, branch) in risk_branches.iter_mut().enumerate() {
                     let features = &branch_features[bi];
                     if branch.subspace.n() >= 10 {
@@ -983,15 +982,15 @@ fn main() {
             }
             let risk_mult = cached_risk_mult;
 
-            // The treasury doesn't move until the trader has proven edge.
+            // The treasury doesn't move until the portfolio has proven edge.
             // Two requirements:
             // 1. Past the observe period (enough data to form a discriminant)
             // 2. Curve is valid (the conviction-accuracy relationship exists)
             // Before both are met, predictions are hypothetical — recorded in the
             // ledger but the treasury withholds capital.
-            let trader_proven = trader.phase != Phase::Observe && mgr_curve_valid;
+            let portfolio_proven = portfolio.phase != Phase::Observe && mgr_curve_valid;
             let position_frac = if meta_dir.is_some()
-                && trader_proven
+                && portfolio_proven
                 && (flip_threshold <= 0.0 || meta_conviction >= flip_threshold)
             {
                 let mt = if args.atr_multiplier > 0.0 {
@@ -1012,8 +1011,8 @@ fn main() {
                         match kelly_result {
                             Some(frac) => {
                                 let frac = frac.min(1.0);
-                                let dd = if trader.peak_equity > 0.0 {
-                                    (trader.peak_equity - trader.equity) / trader.peak_equity
+                                let dd = if portfolio.peak_equity > 0.0 {
+                                    (portfolio.peak_equity - portfolio.equity) / portfolio.peak_equity
                                 } else { 0.0 };
                                 let dd_room = (args.max_drawdown - dd).max(0.0);
                                 let cap = (dd_room / (4.0 * mt)).min(1.0);
@@ -1031,7 +1030,7 @@ fn main() {
                         if flip_threshold > 0.0 && meta_conviction < flip_threshold {
                             None
                         } else {
-                            trader.position_frac(meta_conviction, args.min_conviction, flip_threshold)
+                            portfolio.position_frac(meta_conviction, args.min_conviction, flip_threshold)
                         }
                     }
                 }
@@ -1113,7 +1112,7 @@ fn main() {
                 // During observe period: legacy exits. "I don't know" = don't act.
                 if args.exit_mode == "managed" && entry.exit_reason.is_none()
                     && entry.position_frac.is_some()
-                    && trader.phase != Phase::Observe
+                    && portfolio.phase != Phase::Observe
                 {
                     // This trade's ATR at entry — how volatile was the market when we entered?
                     let entry_atr = candles[entry.candle_idx].atr_r;
@@ -1218,7 +1217,7 @@ fn main() {
                                     }
                                 }
                                 // Log for post-hoc analysis
-                                if args.diagnostics { run_db.execute(
+                                if args.diagnostics { ledger.execute(
                                     "INSERT INTO observer_log (step,expert,conviction,direction,correct)
                                      VALUES (?1,?2,?3,?4,?5)",
                                     params![
@@ -1293,7 +1292,7 @@ fn main() {
                 panel_recalib_wins = 0;
                 panel_recalib_total = 0;
 
-                run_db.execute(
+                ledger.execute(
                     "INSERT INTO recalib_log (step,journal,cos_raw,disc_strength,buy_count,sell_count)
                      VALUES (?1,?2,?3,?4,?5,?6)",
                     params![
@@ -1306,7 +1305,7 @@ fn main() {
                 // Decode thought discriminant against the fact codebook.
                 let decoded = tht_journal.decode_discriminant(&codebook_vecs, &codebook_labels);
                 for (rank, (label, cos)) in decoded.iter().take(20).enumerate() {
-                    run_db.execute(
+                    ledger.execute(
                         "INSERT INTO disc_decode (step,journal,rank,fact_label,cosine)
                          VALUES (?1,?2,?3,?4,?5)",
                         params![
@@ -1319,7 +1318,7 @@ fn main() {
                 // Log thought subspace state.
                 let eigs = tht_subspace.eigenvalues();
                 let top5: Vec<String> = eigs.iter().take(5).map(|e| format!("{:.2}", e)).collect();
-                run_db.execute(
+                ledger.execute(
                     "INSERT INTO subspace_log (step,residual,threshold,explained,top_eigenvalues)
                      VALUES (?1,?2,?3,?4,?5)",
                     params![
@@ -1406,7 +1405,7 @@ fn main() {
                             else { None }
                         };
                         if let Some(majority_dir) = expert_majority {
-                            let directional = match majority_dir {
+                            let _directional = match majority_dir {
                                 Outcome::Buy  =>  entry.outcome_pct,
                                 Outcome::Sell => -entry.outcome_pct,
                                 _ => 0.0,
@@ -1507,7 +1506,7 @@ fn main() {
                         // Position value: real if live, hypothetical if paper
                         let pos_usd = if is_live {
                             if entry.deployed_usd > 0.0 { entry.deployed_usd }
-                            else { trader.equity * frac }
+                            else { portfolio.equity * frac }
                         } else { 0.0 };
                         let trade_pnl = pos_usd * net_ret;
 
@@ -1556,7 +1555,7 @@ fn main() {
                         if is_live {
                             let trade_fees = pos_usd * (args.swap_fee * 2.0);
                             let trade_slip = pos_usd * (args.slippage * 2.0);
-                            trader.record_trade(trade_pct, frac, dir, entry.year,
+                            portfolio.record_trade(trade_pct, frac, dir, entry.year,
                                                 args.swap_fee, args.slippage);
                             treasury.close_position(entry.deployed_usd,
                                 pos_usd * gross_ret, trade_fees, trade_slip);
@@ -1569,7 +1568,7 @@ fn main() {
                             .unwrap_or(candles[i].close);
                         let crossing_elapsed = entry.crossing_candle
                             .map(|ci| (ci - entry.candle_idx) as i64);
-                        run_db.execute(
+                        ledger.execute(
                             "INSERT INTO trade_ledger
                              (step,candle_idx,timestamp,exit_candle_idx,exit_timestamp,
                               direction,conviction,was_flipped,
@@ -1589,7 +1588,7 @@ fn main() {
                                 gross_ret * 100.0,
                                 entry_cost_frac * 100.0,
                                 exit_cost_frac * 100.0,
-                                net_ret * 100.0, trade_pnl, trader.equity,
+                                net_ret * 100.0, trade_pnl, portfolio.equity,
                                 entry.max_favorable * 100.0, entry.max_adverse * 100.0,
                                 crossing_elapsed, entry.path_candles as i64,
                                 final_out.to_string(), (net_ret > 0.0) as i32,
@@ -1631,26 +1630,26 @@ fn main() {
 
                         // ── Risk/diagnostics: only for live trades ───────────
                         if is_live {
-                                let dd = if trader.peak_equity > 0.0 {
-                                    (trader.peak_equity - trader.equity) / trader.peak_equity * 100.0
+                                let dd = if portfolio.peak_equity > 0.0 {
+                                    (portfolio.peak_equity - portfolio.equity) / portfolio.peak_equity * 100.0
                                 } else { 0.0 };
                                 let (streak_len, streak_dir) = {
                                     let mut len = 0i32;
-                                    if let Some(&last) = trader.rolling.back() {
-                                        for &o in trader.rolling.iter().rev() {
+                                    if let Some(&last) = portfolio.rolling.back() {
+                                        for &o in portfolio.rolling.iter().rev() {
                                             if o == last { len += 1; } else { break; }
                                         }
                                     }
-                                    let dir = if trader.rolling.back() == Some(&true) { "winning" } else { "losing" };
+                                    let dir = if portfolio.rolling.back() == Some(&true) { "winning" } else { "losing" };
                                     (len, dir)
                                 };
-                                let recent_acc = if trader.rolling.len() >= 5 {
-                                    trader.rolling.iter().filter(|&&x| x).count() as f64
-                                        / trader.rolling.len() as f64
+                                let recent_acc = if portfolio.rolling.len() >= 5 {
+                                    portfolio.rolling.iter().filter(|&&x| x).count() as f64
+                                        / portfolio.rolling.len() as f64
                                 } else { 0.5 };
-                                let eq_pct = (trader.equity - trader.initial_equity) / trader.initial_equity * 100.0;
+                                let eq_pct = (portfolio.equity - portfolio.initial_equity) / portfolio.initial_equity * 100.0;
                                 let won = (dir == final_out) as i32;
-                                if args.diagnostics { run_db.execute(
+                                if args.diagnostics { ledger.execute(
                                     "INSERT INTO risk_log (step,drawdown_pct,streak_len,streak_dir,recent_acc,equity_pct,won)
                                      VALUES (?1,?2,?3,?4,?5,?6,?7)",
                                     params![log_step, dd, streak_len, streak_dir, recent_acc, eq_pct, won],
@@ -1680,7 +1679,7 @@ fn main() {
                             }
                             // Log which facts were present for this trade.
                             for label in &entry.fact_labels {
-                                if args.diagnostics { run_db.execute(
+                                if args.diagnostics { ledger.execute(
                                     "INSERT INTO trade_facts (step, fact_label) VALUES (?1, ?2)",
                                     params![log_step, label],
                                 ).ok(); }
@@ -1690,7 +1689,7 @@ fn main() {
                                 let won = (dir == final_out) as i32;
                                 let tht_bytes: Vec<u8> = entry.tht_vec.data().iter()
                                     .map(|&v| v as u8).collect();
-                                if args.diagnostics { run_db.execute(
+                                if args.diagnostics { ledger.execute(
                                     "INSERT INTO trade_vectors (step, won, vis_data, tht_data)
                                      VALUES (?1, ?2, ?3, ?4)",
                                     params![
@@ -1705,7 +1704,7 @@ fn main() {
                 } // if let Some(dir)
 
                 // Log to DB. Visual columns get NULLs (schema kept for backward compat).
-                run_db.execute(
+                ledger.execute(
                     "INSERT INTO candle_log
                      (step,candle_idx,timestamp,
                       vis_cos,vis_conviction,vis_pred,
@@ -1724,18 +1723,18 @@ fn main() {
                         final_out.to_string(),
                         entry.position_frac.is_some() as i32,
                         entry.position_frac,
-                        trader.equity,
+                        portfolio.equity,
                         entry.outcome_pct,
                     ],
                 ).ok();
                 log_step   += 1;
                 db_batch   += 1;
                 if db_batch >= 5_000 {
-                    run_db.execute_batch("COMMIT; BEGIN").ok();
+                    ledger.execute_batch("COMMIT; BEGIN").ok();
                     db_batch = 0;
                 }
 
-                trader.tick_observe();
+                portfolio.tick_observe();
             }
 
             // ── Progress line ─────────────────────────────────────────────
@@ -1745,7 +1744,7 @@ fn main() {
                 let eta     = (loop_count - encode_count) as f64 / rate;
                 let tht_acc = if tht_rolling.is_empty() { 0.0 }
                     else { tht_rolling.iter().filter(|&&x| x).count() as f64 / tht_rolling.len() as f64 * 100.0 };
-                let ret = (trader.equity - trader.initial_equity) / trader.initial_equity * 100.0;
+                let ret = (portfolio.equity - portfolio.initial_equity) / portfolio.initial_equity * 100.0;
                 let bnh = (candles[i].close - bnh_entry) / bnh_entry * 100.0;
                 let exit_info = if args.exit_mode == "managed" {
                     let atr_now = candles[i].atr_r;
@@ -1760,10 +1759,10 @@ fn main() {
                     "  {}/{} ({:.0}/s ETA {:.0}s) | {} | {} | tht={:.1}% | trades={} win={:.1}% | ${:.0} ({:+.1}%) vs B&H {:+.1}% | flip@{:.3} {}{}",
                     encode_count, loop_count, rate, eta,
                     &candles[i].ts[..10],
-                    trader.phase,
+                    portfolio.phase,
                     tht_acc,
-                    trader.trades_taken, trader.win_rate(),
-                    trader.equity, ret, bnh,
+                    portfolio.trades_taken, portfolio.win_rate(),
+                    portfolio.equity, ret, bnh,
                     flip_threshold,
                     if !curve_stable { "CALIBRATING" }
                     else if panel_familiar { "ENGRAM" }
@@ -1777,7 +1776,7 @@ fn main() {
                     prices.insert("WBTC".to_string(), candles[i].close);
                     let tv = treasury.total_value(&prices);
                     let tv_ret = (tv - args.initial_equity) / args.initial_equity * 100.0;
-                    let state = if hold_state == HoldState::InWbtc { "WBTC" } else { "USDC" };
+                    let _state = if hold_state == HoldState::InWbtc { "WBTC" } else { "USDC" };
                     let mut proven: Vec<&str> = observers.iter()
                         .filter(|e| e.curve_valid).map(|e| e.name).collect();
                     if curve_valid { proven.push("generalist"); }
@@ -1807,7 +1806,7 @@ fn main() {
         let entry_candle = &candles[entry.candle_idx];
         match final_out { Outcome::Noise => noise_count += 1, _ => labeled_count += 1 }
 
-        run_db.execute(
+        ledger.execute(
             "INSERT INTO candle_log
              (step,candle_idx,timestamp,
               vis_cos,vis_conviction,vis_pred,
@@ -1826,18 +1825,18 @@ fn main() {
                 final_out.to_string(),
                 entry.position_frac.is_some() as i32,
                 entry.position_frac,
-                trader.equity,
+                portfolio.equity,
                 entry.outcome_pct,
             ],
         ).ok();
         log_step += 1;
     }
 
-    run_db.execute_batch("COMMIT").ok();
+    ledger.execute_batch("COMMIT").ok();
 
     // ─ Final summary ─────────────────────────────────────────────────────────
     let total_time = t_start.elapsed().as_secs_f64();
-    let ret        = (trader.equity - trader.initial_equity) / trader.initial_equity * 100.0;
+    let ret        = (portfolio.equity - portfolio.initial_equity) / portfolio.initial_equity * 100.0;
     let bnh_final  = (candles[end_idx - 1].close - bnh_entry) / bnh_entry * 100.0;
 
     eprintln!("\n═══════════════════════════════════════════════════════════");
@@ -1859,9 +1858,9 @@ fn main() {
         noise_count as f64 / (labeled_count + noise_count).max(1) as f64 * 100.0);
     eprintln!();
     eprintln!("  Equity: ${:.2} ({:+.2}%) | B&H: {:+.2}%",
-        trader.equity, ret, bnh_final);
+        portfolio.equity, ret, bnh_final);
     eprintln!("  Trades taken: {}  Won: {}  Win rate: {:.1}%  Skipped: {}",
-        trader.trades_taken, trader.trades_won, trader.win_rate(), trader.trades_skipped);
+        portfolio.trades_taken, portfolio.trades_won, portfolio.win_rate(), portfolio.trades_skipped);
     eprintln!("  Treasury: ${:.2} available  ${:.2} deployed  {:.1}% utilization  fees=${:.2}  slip=${:.2}",
         treasury.balance("USDC"), treasury.deployed("USDC"),
         treasury.utilization() * 100.0,
@@ -1893,18 +1892,18 @@ fn main() {
     }
 
     // By-year breakdown.
-    let mut years: Vec<i32> = trader.by_year.keys().copied().collect();
+    let mut years: Vec<i32> = portfolio.by_year.keys().copied().collect();
     years.sort();
     if !years.is_empty() {
         eprintln!("  By year:");
         for y in years {
-            let ys = &trader.by_year[&y];
+            let ys = &portfolio.by_year[&y];
             let wr = if ys.trades > 0 { ys.wins as f64 / ys.trades as f64 * 100.0 } else { 0.0 };
             eprintln!("    {}: {} trades  {:.1}% win  {:+.2}$ P&L", y, ys.trades, wr, ys.pnl);
         }
         eprintln!();
     }
 
-    eprintln!("  Run DB: {} ({} rows)", run_db_path, log_step);
+    eprintln!("  Run DB: {} ({} rows)", ledger_path, log_step);
     eprintln!("═══════════════════════════════════════════════════════════");
 }
