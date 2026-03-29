@@ -340,15 +340,17 @@ fn main() {
         name: &'static str,
         profile: &'static str,
         journal: Journal,
-        resolved: VecDeque<(f64, bool)>,  // (conviction, correct_after_flip)
+        resolved: VecDeque<(f64, bool)>,  // (conviction, correct)
         good_state_subspace: OnlineSubspace,
         recalib_wins: u32,
         recalib_total: u32,
         last_recalib_count: usize,
         window_sampler: WindowSampler,
-        // Per-expert flip: each expert discovers their own reversal threshold.
         conviction_history: VecDeque<f64>,
         flip_threshold: f64,
+        // Proof gate: the expert must prove direction accuracy before
+        // its opinion flows upstream. Silence, not noise.
+        curve_valid: bool,
     }
     let expert_profiles = ["momentum", "structure", "volume", "narrative", "regime"];
     let mut experts: Vec<Expert> = expert_profiles.iter().enumerate().map(|(ei, &profile)| {
@@ -368,6 +370,7 @@ fn main() {
             ),
             conviction_history: VecDeque::new(),
             flip_threshold: 0.0,
+            curve_valid: false,
         }
     }).collect();
 
@@ -635,15 +638,20 @@ fn main() {
             // up-moves vs down-moves. The flip emerges in the discriminant:
             // "when momentum says BUY at high conviction, the price goes DOWN"
             // becomes a geometric property of the Sell prototype.
+            // Only include proven experts. Silence, not noise.
+            // Unproven experts keep learning on paper but don't pollute
+            // the manager's input. The gate opens when the expert's
+            // conviction-accuracy curve validates.
             let mut mgr_facts: Vec<Vector> = expert_preds.iter().enumerate()
-                .map(|(ei, ep)| {
+                .filter_map(|(ei, ep)| {
+                    if !experts[ei].curve_valid { return None; } // gate closed
                     let magnitude = mgr_scalar.encode_log(ep.raw_cos.abs().max(1e-10));
                     let role = if ep.raw_cos >= 0.0 {
                         expert_atoms[ei].clone()         // BUY lean
                     } else {
                         Primitives::permute(&expert_atoms[ei], 1) // SELL lean
                     };
-                    Primitives::bind(&role, &magnitude)
+                    Some(Primitives::bind(&role, &magnitude))
                 })
                 .collect();
             {
@@ -656,8 +664,13 @@ fn main() {
                 mgr_facts.push(Primitives::bind(&gen_role, &gen_mag));
             }
             let mgr_refs: Vec<&Vector> = mgr_facts.iter().collect();
-            let mgr_thought = Primitives::bundle(&mgr_refs);
-            let mgr_pred = mgr_journal.predict(&mgr_thought);
+            let mgr_pred = if mgr_refs.is_empty() {
+                // No proven experts yet — manager can't predict. Silence.
+                Prediction::default()
+            } else {
+                let mgr_thought = Primitives::bundle(&mgr_refs);
+                mgr_journal.predict(&mgr_thought)
+            };
 
             // Panel state for engram (Template 2 — reaction layer)
             let mut panel_state: Vec<f64> = expert_preds.iter()
@@ -1083,6 +1096,18 @@ fn main() {
                                         .min(sorted.len() - 1);
                                     experts[ei].flip_threshold = sorted[idx];
                                 }
+                                // Proof gate: does this expert have direction edge?
+                                // Check if accuracy at high conviction exceeds 52%.
+                                if experts[ei].resolved.len() >= 100 {
+                                    let high_conv: Vec<&(f64, bool)> = experts[ei].resolved.iter()
+                                        .filter(|(c, _)| *c >= experts[ei].flip_threshold * 0.8)
+                                        .collect();
+                                    if high_conv.len() >= 20 {
+                                        let acc = high_conv.iter().filter(|(_, c)| *c).count() as f64
+                                            / high_conv.len() as f64;
+                                        experts[ei].curve_valid = acc > 0.52;
+                                    }
+                                }
                                 // Log for post-hoc analysis
                                 if args.diagnostics { run_db.execute(
                                     "INSERT INTO expert_log (step,expert,conviction,direction,correct)
@@ -1278,19 +1303,33 @@ fn main() {
                                 / candles[entry.candle_idx].close;
                             let mgr_label = if price_change > 0.0 { Outcome::Buy } else { Outcome::Sell };
 
-                            // Unsigned intensity — same encoding as prediction time.
-                            let mut mgr_facts: Vec<Vector> = entry.expert_preds.iter().enumerate()
-                                .map(|(ei, ep)| {
-                                    let intensity = mgr_scalar.encode_log(ep.conviction.max(1e-10));
-                                    Primitives::bind(&expert_atoms[ei], &intensity)
+                            // Signed conviction, gated — same encoding as prediction time.
+                            // Only proven experts included. Silence, not noise.
+                            let mut mgr_res_facts: Vec<Vector> = entry.expert_preds.iter().enumerate()
+                                .filter_map(|(ei, ep)| {
+                                    if !experts[ei].curve_valid { return None; }
+                                    let magnitude = mgr_scalar.encode_log(ep.raw_cos.abs().max(1e-10));
+                                    let role = if ep.raw_cos >= 0.0 {
+                                        expert_atoms[ei].clone()
+                                    } else {
+                                        Primitives::permute(&expert_atoms[ei], 1)
+                                    };
+                                    Some(Primitives::bind(&role, &magnitude))
                                 }).collect();
                             {
-                                let gen_intensity = mgr_scalar.encode_log(entry.tht_pred.conviction.max(1e-10));
-                                mgr_facts.push(Primitives::bind(&generalist_atom, &gen_intensity));
+                                let gen_mag = mgr_scalar.encode_log(entry.tht_pred.raw_cos.abs().max(1e-10));
+                                let gen_role = if entry.tht_pred.raw_cos >= 0.0 {
+                                    generalist_atom.clone()
+                                } else {
+                                    Primitives::permute(&generalist_atom, 1)
+                                };
+                                mgr_res_facts.push(Primitives::bind(&gen_role, &gen_mag));
                             }
-                            let mrefs: Vec<&Vector> = mgr_facts.iter().collect();
-                            let mgr_vec = Primitives::bundle(&mrefs);
-                            mgr_journal.observe(&mgr_vec, mgr_label, 1.0);
+                            let mrefs: Vec<&Vector> = mgr_res_facts.iter().collect();
+                            if !mrefs.is_empty() { // at least one proven expert
+                                let mgr_vec = Primitives::bundle(&mrefs);
+                                mgr_journal.observe(&mgr_vec, mgr_label, 1.0);
+                            }
 
                             // Track for proof gate: did the manager predict the right direction?
                             // The manager predicts Buy (price up) or Sell (price down) from
@@ -1626,8 +1665,12 @@ fn main() {
                     let tv = treasury.total_value(&prices);
                     let tv_ret = (tv - args.initial_equity) / args.initial_equity * 100.0;
                     let state = if hold_state == HoldState::InWbtc { "WBTC" } else { "USDC" };
-                    eprintln!("    treasury: ${:.0} ({:+.1}%) in {} | swaps={} wins={}",
-                        tv, tv_ret, state, hold_swaps, hold_wins);
+                    let proven: Vec<&str> = experts.iter()
+                        .filter(|e| e.curve_valid).map(|e| e.name).collect();
+                    let proven_str = if proven.is_empty() { "none".to_string() }
+                        else { proven.join(",") };
+                    eprintln!("    treasury: ${:.0} ({:+.1}%) in {} | swaps={} wins={} | proven=[{}]",
+                        tv, tv_ret, state, hold_swaps, hold_wins, proven_str);
                 }
             }
         }
