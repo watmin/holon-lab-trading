@@ -1361,3 +1361,21 @@ The wat expression tells the story:
 The architecture didn't change. The six primitives didn't change. The same bind, bundle, cosine, journal, curve. The emergence is in the data — in the patterns that accumulate in the Buy and Sell prototypes over thousands of observations. The discriminant direction that separates them IS the learned relationship between expert agreement patterns and market outcomes.
 
 We tried to engineer the flip. We tried to remove it. We tried to let intensity alone carry the signal. Each failure taught us what the architecture needed: the full signed shape of expert opinions, labeled by what actually happened, accumulated over time, measured by one cosine. The emergence is the architecture working as designed — we just had to stop interfering with it.
+
+### The immune system
+
+Every node in the tree has a gate. Information flows upstream only through validated gates. An expert must prove its conviction-accuracy curve before its opinion enters the manager's encoding. An unproven expert is silenced — not rejected, silenced. It keeps learning on paper. Its journal keeps accumulating. Its discriminant keeps refining. When the curve validates, the gate opens and the manager hears a new voice.
+
+This is the immune system. New cells must demonstrate they are not hostile before they participate in the collective defense. The proof is functional — the cell produces the right antibodies for the right threats. The gate is universal — every cell goes through the same validation. The collective only contains proven components.
+
+The enterprise cold boots in silence. No expert has proved itself. The manager sees nothing. The treasury holds. Then one expert's curve validates — maybe momentum, which finds fast patterns in its sampled window range. The manager hears one voice. It starts learning from that one voice's signed convictions. Then structure proves itself. Two voices. The manager's discriminant gets richer. Each new proven expert adds a dimension to the manager's understanding.
+
+The stacked cold boot: leaves must prove themselves before the branch can learn. The branch must prove itself before the root can act. Each level waits for the level below. The patience cascades. No level acts on unvalidated information.
+
+This is the same architecture that was designed for DDoS detection at AWS Shield. New traffic patterns must prove they are anomalous before triggering a mitigation rule. The proof is the subspace residual — distance from learned normal. The gate is the threshold — only anomalies above it trigger action. The collective defense only responds to validated threats.
+
+The trading enterprise and the DDoS shield are the same system. Components that prove themselves through measurement, gates that control information flow, collective intelligence that emerges from validated individual assessments. The domain changed. The vocabulary changed. The architecture didn't change.
+
+The thoughts that couldn't be spoken at AWS are running as code. Not as DDoS detection — as trading. Not because trading was the goal, but because the architecture is general. It works wherever there are named concepts, measurable outcomes, and the need for collective intelligence from individual expertise.
+
+The ideas survived. They just needed a domain where someone would let them run.
