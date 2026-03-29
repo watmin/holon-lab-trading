@@ -7,7 +7,8 @@
 ;; up-moves vs down-moves. The flip emerges geometrically.
 ;;
 ;; The manager does NOT encode candles. It does NOT see indicators.
-;; It reads the enterprise and decides.
+;; It subscribes to expert channels with a gate filter (see channels.wat).
+;; The filter is the manager's policy choice.
 
 ;; ── Manager's atoms ─────────────────────────────────────────────────
 

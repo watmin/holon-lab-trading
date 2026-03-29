@@ -1,11 +1,29 @@
-;; ── common vocabulary ───────────────────────────────────────────────
+;; ── common vocabulary (stdlib) ──────────────────────────────────────
 ;;
 ;; Shared atoms used across the enterprise. Every role that references
 ;; these concepts uses the same atom → same vector → same geometry.
+;;
+;; See also:
+;;   primitives.wat  — corelib (atom, bind, bundle, cosine, journal, curve)
+;;   channels.wat    — communication contract (publish, subscribe, filter)
+;;   mod/            — domain vocabulary modules
+
+;; ── Actions ─────────────────────────────────────────────────────────
+;; Named action atoms: (bind expert (bind buy magnitude))
+;; Buy and sell are atoms. Named composition, not permutation tricks.
+(atom "buy")
+(atom "sell")
+
+;; ── Gate status ─────────────────────────────────────────────────────
+;; Annotations on messages, not architecture constraints.
+;; Consumers filter on these. Channels don't.
+(atom "proven")       ; expert has validated curve
+(atom "tentative")    ; expert has NOT validated curve
+;; Usage: (bind expert (bind proven (bind action magnitude)))
+;;    or: (bind expert (bind tentative (bind action magnitude)))
 
 ;; ── Direction ───────────────────────────────────────────────────────
-;; BUY lean = atom as-is. SELL lean = (permute atom 1).
-;; The permutation makes them orthogonal. The discriminant separates.
+;; Market direction atoms used in labels and predictions.
 
 ;; ── Time (from THOUGHT_VOCAB.md) ────────────────────────────────────
 ;;
