@@ -3,6 +3,7 @@ pub mod journal;
 pub mod market;
 pub mod portfolio;
 pub mod position;
+pub mod risk;
 pub mod run_db;
 pub mod sizing;
 pub mod thought;

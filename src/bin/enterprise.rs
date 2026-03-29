@@ -23,7 +23,9 @@ use enterprise::thought::{ThoughtEncoder, ThoughtVocab, IndicatorStreams};
 use enterprise::treasury::Treasury;
 use enterprise::portfolio::{Trader, Phase, YearStats};
 use enterprise::sizing::{kelly_frac, signal_weight};
-use enterprise::position::{Pending, ExitReason};
+use enterprise::market::observer::Observer;
+use enterprise::position::{Pending, ExitReason, ExitObservation};
+use enterprise::risk::RiskBranch;
 use enterprise::run_db::init_run_db;
 use enterprise::market::{parse_candle_hour, parse_candle_day};
 use enterprise::market::manager::{ManagerAtoms, ManagerContext, encode_manager_thought};
@@ -261,13 +263,6 @@ fn main() {
     let pos_phase_atom = vm.get_vector("position-phase");
     let pos_dir_atom = vm.get_vector("position-direction");
     let exit_expert_valid = false;
-    // Pending exit observations: snapshot position state, resolve later
-    struct ExitObservation {
-        thought: Vector,
-        pos_id: usize,
-        snapshot_pnl: f64,
-        snapshot_candle: usize,
-    }
     let mut exit_pending: Vec<ExitObservation> = Vec::new();
     // Exit timing: derived after k_stop is defined (see below).
 
@@ -282,19 +277,12 @@ fn main() {
     // ─ Risk branch: five specialized subspaces ─────────────────────────
     // Each measures health in its own domain. The worst residual drives
     // the risk multiplier. Gated updates: only learn from healthy states.
-    // Template 2 (REACTION) applied five times.
-    struct RiskBranch {
-        name: &'static str,
-        subspace: OnlineSubspace,
-    }
-    // Each risk branch operates at full dimensionality — named wat vectors.
-    // Atoms bound with scalar magnitudes, bundled per branch, fed to subspace.
     let mut risk_branches: Vec<RiskBranch> = vec![
-        RiskBranch { name: "drawdown",    subspace: OnlineSubspace::with_params(args.dims, 8, 2.0, 0.01, 3.5, 100) },
-        RiskBranch { name: "accuracy",    subspace: OnlineSubspace::with_params(args.dims, 8, 2.0, 0.01, 3.5, 100) },
-        RiskBranch { name: "volatility",  subspace: OnlineSubspace::with_params(args.dims, 8, 2.0, 0.01, 3.5, 100) },
-        RiskBranch { name: "correlation", subspace: OnlineSubspace::with_params(args.dims, 8, 2.0, 0.01, 3.5, 100) },
-        RiskBranch { name: "panel",       subspace: OnlineSubspace::with_params(args.dims, 8, 2.0, 0.01, 3.5, 100) },
+        RiskBranch::new("drawdown",    args.dims),
+        RiskBranch::new("accuracy",    args.dims),
+        RiskBranch::new("volatility",  args.dims),
+        RiskBranch::new("correlation", args.dims),
+        RiskBranch::new("panel",       args.dims),
     ];
 
     // Risk scalar encoder — separate from thought encoder's scalar encoder
@@ -313,43 +301,11 @@ fn main() {
     // ─ Observer panel: N traders, each with own vocabulary and own window ─
     // Each expert thinks different thoughts at their own time scale.
     // The manager aggregates their predictions — it does not encode.
-    // Each expert discovers their optimal window through experience.
-    struct Observer {
-        name: &'static str,
-        profile: &'static str,
-        journal: Journal,
-        resolved: VecDeque<(f64, bool)>,  // (conviction, correct)
-        good_state_subspace: OnlineSubspace,
-        recalib_wins: u32,
-        recalib_total: u32,
-        last_recalib_count: usize,
-        window_sampler: WindowSampler,
-        conviction_history: VecDeque<f64>,
-        flip_threshold: f64,
-        // Proof gate: the expert must prove direction accuracy before
-        // its opinion flows upstream. Silence, not noise.
-        curve_valid: bool,
-    }
     let observer_names = ["momentum", "structure", "volume", "narrative", "regime"];
     let mut observers: Vec<Observer> = observer_names.iter().enumerate().map(|(ei, &profile)| {
-        Observer {
-            name: profile,
-            profile,
-            journal: Journal::new(profile, args.dims, args.recalib_interval),
-            resolved: VecDeque::new(),
-            good_state_subspace: OnlineSubspace::new(args.dims, 8),
-            recalib_wins: 0,
-            recalib_total: 0,
-            last_recalib_count: 0,
-            // Each expert gets a different seed: they explore independently.
-            window_sampler: WindowSampler::new(
-                args.dims as u64 + ei as u64 * 7919,
-                12, 2016,
-            ),
-            conviction_history: VecDeque::new(),
-            flip_threshold: 0.0,
-            curve_valid: false,
-        }
+        // Each expert gets a different seed: they explore independently.
+        Observer::new(profile, args.dims, args.recalib_interval,
+            args.dims as u64 + ei as u64 * 7919)
     }).collect();
 
     // ─ Dual thought journals: slow (deep memory) + fast (regime-adaptive) ─

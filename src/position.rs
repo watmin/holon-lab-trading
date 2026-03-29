@@ -1,6 +1,17 @@
 use holon::Vector;
 use crate::journal::{Outcome, Prediction};
 
+// ─── Exit observation ───────────────────────────────────────────────────────
+
+/// Snapshot of position state for deferred exit expert learning.
+/// Resolves after exit_horizon candles: did holding improve the position?
+pub struct ExitObservation {
+    pub thought: Vector,
+    pub pos_id: usize,
+    pub snapshot_pnl: f64,
+    pub snapshot_candle: usize,
+}
+
 // ─── Pending entry ───────────────────────────────────────────────────────────
 
 pub struct Pending {

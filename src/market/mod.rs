@@ -3,6 +3,7 @@
 //! Time encoding, candle helpers, and re-exports for market::manager, etc.
 
 pub mod manager;
+pub mod observer;
 
 /// Parse hour-of-day from candle timestamp "YYYY-MM-DD HH:MM:SS".
 pub fn parse_candle_hour(ts: &str) -> f64 {
