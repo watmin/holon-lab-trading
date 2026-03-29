@@ -247,6 +247,7 @@ fn main() {
     let mgr_atoms = ManagerAtoms::new(&vm);
 
     // ─ Exit expert: learns when to hold vs exit positions ─────────
+    // decomplect:allow(inline-encoding) — exit expert atoms + encoding grow here until market/exit.rs
     let mut exit_journal = Journal::new("exit-expert", args.dims, args.recalib_interval);
     let exit_scalar = holon::ScalarEncoder::new(args.dims);
     let pos_pnl_atom = vm.get_vector("position-pnl");
@@ -613,6 +614,7 @@ fn main() {
                 conviction_history.pop_front();
             }
             // Recompute flip threshold every recalib_interval candles, after warmup.
+            // decomplect:allow(inline-computation) — flip threshold curve fitting, extracts to sizing module
             if conviction_history.len() >= flip_warmup
                 && encode_count % args.recalib_interval == 0
             {
@@ -1106,7 +1108,8 @@ fn main() {
                         // Manager does NOT learn here. Manager learns Win/Lose at trade
                         // resolution, not Buy/Sell at threshold crossing. The manager's
                         // question is "should I deploy?" not "which direction?"
-                        // Observer panel: each observer observes, tracks curve, and feeds engrams
+                        // decomplect:allow(braided-concerns) — observer learn + track + gate + log
+                        // Extracts to Observer::resolve() when observer methods are built
                         for (ei, expert_vec) in entry.observer_vecs.iter().enumerate() {
                             observers[ei].journal.observe(expert_vec, o, sw);
                             // Track accuracy since last recalib for engram gating
@@ -1199,6 +1202,7 @@ fn main() {
                     curve_valid = true;
                 }
                 // Manager's own proof: band-based, not exponential.
+                // decomplect:allow(inline-computation) — manager band proof, extracts to market/manager.rs
                 // Find the conviction band where accuracy > 51% with 500+ samples.
                 // The sweet spot is at 5-10σ (geometric property of dims).
                 // The manager acts only in its proven band.

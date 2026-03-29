@@ -174,6 +174,7 @@ impl Portfolio {
         self.check_phase();
     }
 
+    // decomplect:allow(wrong-struct) — risk encoding on Portfolio, migrates to risk/ when risk manager is built
     /// Five risk WAT vectors — named atoms bound with scalar magnitudes.
     /// Each branch gets a bundled thought vector at full dimensionality.
     pub fn risk_branch_wat(&self, vm: &VectorManager, scalar: &holon::ScalarEncoder) -> [Vec<f64>; 5] {

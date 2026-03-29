@@ -92,6 +92,16 @@ Flat modules stay flat until they need a sibling. Promote `foo.rs` to `foo/mod.r
 
 - **The main loop itself.** The heartbeat is the enterprise's pulse. It is the one place where all the modules meet. That meeting IS the orchestration. Don't extract it into abstraction — the heartbeat's clarity comes from being readable top-to-bottom, not from being hidden behind traits.
 
+## Accepted findings
+
+Skip findings annotated with `decomplect:allow(category)` in a comment at the site. The annotation must include a reason. Report the annotation so the human knows it exists, but don't flag it as a finding.
+
+```rust
+// decomplect:allow(inline-encoding) — exit expert grows here until it needs its own module
+```
+
+Categories: `inline-encoding`, `braided-concerns`, `wrong-struct`, `inline-computation`, `duplicated-encoding`.
+
 ## The test
 
 After all changes: enterprise.rs has zero inline struct definitions, zero duplicated encoding blocks, and every domain concept lives in its domain module. The binary calls functions. The modules define vocabulary. The architecture is visible in the file tree.

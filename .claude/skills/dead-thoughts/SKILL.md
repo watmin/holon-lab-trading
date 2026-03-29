@@ -41,6 +41,17 @@ Later: IndicatorStreams (40 lines), suppressed_facts (always empty HashSet passe
 
 Dead thoughts don't just waste space. They waste cycles, they lie to you, and they hide behind the compiler's silence.
 
+## Accepted findings
+
+Skip findings annotated with `dead-thoughts:allow(category)` in a comment at the site. The annotation must include a reason. Report the annotation so the human knows it exists, but don't flag it as a finding.
+
+```rust
+// dead-thoughts:allow(scaffolding) — wired when exit expert activates
+let exit_pending: Vec<ExitObservation> = Vec::new();
+```
+
+Categories: `scaffolding`, `unused-struct`, `always-none`, `never-populated`, `always-same-branch`.
+
 ## What to do
 
 Remove the dead code. Don't comment it out. Don't add `_` prefix. Don't keep it "for compatibility." If it's dead, it's gone. Git remembers.
