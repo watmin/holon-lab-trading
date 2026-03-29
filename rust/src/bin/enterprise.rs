@@ -1,13 +1,12 @@
-/// trader3 — Clean-slate BTC walk-forward trader.
+/// enterprise — self-organizing BTC trading enterprise.
 ///
-/// Two named journals (visual + thought) each learn to predict direction
-/// independently. An orchestration layer combines their signals.
+/// Six primitives. Seven layers. One heartbeat per candle.
+/// See wat/examples/enterprise.wat for the specification.
 ///
-/// Visual journal: learns from raster-encoded OHLCV grids.
-/// Thought journal: learns from PELT segment narrative vectors.
-///
-/// All measurement lives in the run SQLite DB — no verbose log spam.
-/// Use the DB to understand what the system is doing.
+/// Experts predict direction from candle data at sampled time scales.
+/// The manager reads expert opinions and decides.
+/// Risk modulates sizing. Treasury executes. Positions manage themselves.
+/// The ledger records everything. The DB is the debugger.
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
 use std::time::Instant;
@@ -38,7 +37,7 @@ const THREADS: usize = 10;
 // ─── CLI ─────────────────────────────────────────────────────────────────────
 
 #[derive(Parser)]
-#[command(name = "trader3", about = "BTC walk-forward trader (visual + thought journals)")]
+#[command(name = "enterprise", about = "Self-organizing BTC trading enterprise")]
 struct Args {
     /// Source candle database (pre-computed indicators).
     #[arg(long, default_value = "../data/analysis.db")]
@@ -202,7 +201,7 @@ fn main() {
         .build_global()
         .expect("failed to configure rayon");
 
-    eprintln!("trader3: visual+thought journals, discriminant prediction");
+    eprintln!("enterprise: visual+thought journals, discriminant prediction");
     let thresh_desc = if args.atr_multiplier > 0.0 {
         format!("{}×ATR", args.atr_multiplier)
     } else {
@@ -468,14 +467,14 @@ fn main() {
         None => {
             let ts = chrono::Utc::now().format("%Y%m%d_%H%M%S");
             std::fs::create_dir_all("runs").ok();
-            format!("runs/trader3_{}.db", ts)
+            format!("runs/enterprise_{}.db", ts)
         }
     };
     let run_db = init_run_db(&run_db_path);
     {
         let mut stmt = run_db.prepare("INSERT INTO meta (key,value) VALUES (?1,?2)").unwrap();
         for (k, v) in &[
-            ("binary",          "trader3"),
+            ("binary",          "enterprise"),
             ("orchestration",   args.orchestration.as_str()),
             ("dims",            &args.dims.to_string()),
             ("window",          &args.window.to_string()),
@@ -2104,7 +2103,7 @@ fn main() {
     let bnh_final  = (candles[end_idx - 1].close - bnh_entry) / bnh_entry * 100.0;
 
     eprintln!("\n═══════════════════════════════════════════════════════════");
-    eprintln!("  trader3 complete — {} candles in {:.1}s ({:.0}/s)",
+    eprintln!("  enterprise complete — {} candles in {:.1}s ({:.0}/s)",
         encode_count, total_time, encode_count as f64 / total_time);
     eprintln!("  Orchestration: {}", args.orchestration);
     if args.swap_fee > 0.0 || args.slippage > 0.0 {
