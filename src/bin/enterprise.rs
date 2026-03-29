@@ -1218,7 +1218,7 @@ fn main() {
                                 }
                                 // Log for post-hoc analysis
                                 if args.diagnostics { ledger.execute(
-                                    "INSERT INTO observer_log (step,expert,conviction,direction,correct)
+                                    "INSERT INTO observer_log (step,observer,conviction,direction,correct)
                                      VALUES (?1,?2,?3,?4,?5)",
                                     params![
                                         log_step,
@@ -1690,11 +1690,10 @@ fn main() {
                                 let tht_bytes: Vec<u8> = entry.tht_vec.data().iter()
                                     .map(|&v| v as u8).collect();
                                 if args.diagnostics { ledger.execute(
-                                    "INSERT INTO trade_vectors (step, won, vis_data, tht_data)
-                                     VALUES (?1, ?2, ?3, ?4)",
+                                    "INSERT INTO trade_vectors (step, won, tht_data)
+                                     VALUES (?1, ?2, ?3)",
                                     params![
                                         log_step, won,
-                                        rusqlite::types::Null,
                                         tht_bytes,
                                     ],
                                 ).ok(); }
@@ -1707,17 +1706,14 @@ fn main() {
                 ledger.execute(
                     "INSERT INTO candle_log
                      (step,candle_idx,timestamp,
-                      vis_cos,vis_conviction,vis_pred,
                       tht_cos,tht_conviction,tht_pred,
-                      agree,meta_pred,meta_conviction,
+                      meta_pred,meta_conviction,
                       actual,traded,position_frac,equity,outcome_pct)
-                     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)",
+                     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
                     params![
                         log_step, entry.candle_idx as i64, &entry_candle.ts,
-                        0.0_f64, 0.0_f64, Option::<String>::None,
                         entry.tht_pred.raw_cos, entry.tht_pred.conviction,
                         entry.tht_pred.direction.map(|d| d.to_string()),
-                        Option::<i32>::None,
                         entry.meta_dir.map(|d| d.to_string()),
                         entry.meta_conviction,
                         final_out.to_string(),
@@ -1809,17 +1805,14 @@ fn main() {
         ledger.execute(
             "INSERT INTO candle_log
              (step,candle_idx,timestamp,
-              vis_cos,vis_conviction,vis_pred,
               tht_cos,tht_conviction,tht_pred,
-              agree,meta_pred,meta_conviction,
+              meta_pred,meta_conviction,
               actual,traded,position_frac,equity,outcome_pct)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)",
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
             params![
                 log_step, entry.candle_idx as i64, &entry_candle.ts,
-                0.0_f64, 0.0_f64, Option::<String>::None,
                 entry.tht_pred.raw_cos, entry.tht_pred.conviction,
                 entry.tht_pred.direction.map(|d| d.to_string()),
-                Option::<i32>::None,
                 entry.meta_dir.map(|d| d.to_string()),
                 entry.meta_conviction,
                 final_out.to_string(),

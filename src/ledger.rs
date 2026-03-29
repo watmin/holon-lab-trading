@@ -19,17 +19,11 @@ pub fn init_ledger(path: &str) -> Connection {
             step             INTEGER PRIMARY KEY,
             candle_idx       INTEGER,
             timestamp        TEXT,
-            -- visual journal
-            vis_cos          REAL,    -- signed cosine vs discriminant (+buy, -sell)
-            vis_conviction   REAL,    -- |vis_cos|
-            vis_pred         TEXT,    -- 'Buy' | 'Sell' | NULL
             -- thought journal
             tht_cos          REAL,
             tht_conviction   REAL,
             tht_pred         TEXT,
-            -- agreement (NULL if either journal had no prediction yet)
-            agree            INTEGER,
-            -- orchestration output
+            -- manager output
             meta_pred        TEXT,
             meta_conviction  REAL,
             -- what actually happened
@@ -75,10 +69,10 @@ pub fn init_ledger(path: &str) -> Connection {
             top_eigenvalues TEXT      -- JSON array of top-5 eigenvalues
         );
 
-        -- Per-expert predictions logged at entry expiry.
-        CREATE TABLE IF NOT EXISTS expert_log (
+        -- Per-observer predictions logged at entry expiry.
+        CREATE TABLE IF NOT EXISTS observer_log (
             step          INTEGER,
-            expert        TEXT,
+            observer      TEXT,
             conviction    REAL,
             direction     TEXT,     -- raw (un-flipped) prediction
             correct       INTEGER   -- 1 if flipped prediction matches actual
@@ -125,26 +119,11 @@ pub fn init_ledger(path: &str) -> Connection {
             exit_reason       TEXT      -- 'ThresholdCrossing' | 'TrailingStop' | 'TakeProfit' | 'HorizonExpiry'
         );
 
-        -- Visual + thought vectors for flip-zone trades (for engram analysis).
+        -- Thought vectors for flip-zone trades (for engram analysis).
         CREATE TABLE IF NOT EXISTS trade_vectors (
             step          INTEGER PRIMARY KEY,
             won           INTEGER,  -- 1 if trade was correct
-            vis_data      BLOB,     -- bipolar visual vector (i8 array)
             tht_data      BLOB      -- bipolar thought vector (i8 array)
-        );
-
-        -- Desk predictions: every desk's paper trail.
-        -- One row per resolved prediction per desk.
-        CREATE TABLE IF NOT EXISTS desk_predictions (
-            desk          TEXT,       -- desk name (e.g. 'desk-48c')
-            candle_idx    INTEGER,    -- entry candle
-            conviction    REAL,       -- prediction conviction
-            direction     TEXT,       -- predicted direction (flipped)
-            outcome       TEXT,       -- actual: 'Buy' | 'Sell' | 'Noise'
-            correct       INTEGER,    -- 1 if flipped prediction matched outcome
-            gross_pct     REAL,       -- price change at threshold crossing
-            window        INTEGER,    -- desk window size
-            horizon       INTEGER     -- desk horizon size
         );
     ").expect("failed to init run DB");
     db

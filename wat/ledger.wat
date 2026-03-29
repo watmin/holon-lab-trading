@@ -17,13 +17,14 @@
 
 ;; ── Tables ──────────────────────────────────────────────────────────
 ;;
-;; candle_log:       per-candle state (manager prediction, expert convictions)
-;; trade_ledger:     per-position lifecycle (entry, exits, P&L, alpha)
+;; candle_log:       per-candle state (thought + manager prediction, outcome)
+;; trade_ledger:     per-position lifecycle (entry, exits, P&L, costs)
 ;; recalib_log:      per-recalibration state (disc_strength, cos_raw)
 ;; disc_decode:      top discriminant facts at each recalibration
-;; desk_predictions: per-desk resolved predictions
-;; expert_log:       per-expert predictions (diagnostics)
+;; observer_log:     per-observer predictions (diagnostics)
 ;; risk_log:         per-trade risk state (diagnostics)
+;; trade_facts:      fact attribution for traded candles (diagnostics)
+;; trade_vectors:    thought vectors for engram analysis (diagnostics)
 ;;
 ;; Future:
 ;; channel_log:      every message on every channel (full enterprise trace)
