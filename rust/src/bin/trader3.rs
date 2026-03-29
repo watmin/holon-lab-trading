@@ -1255,29 +1255,15 @@ fn main() {
                                 Outcome::Sell => -entry.outcome_pct,
                                 _ => 0.0,
                             };
-                            let per_swap = args.swap_fee + args.slippage;
-                            // In hold mode: use the FULL price change at horizon expiry,
-                            // not just threshold crossing. The position doesn't exit at
-                            // 0.5% — it holds until the next signal. The horizon price
-                            // change is the best proxy for "what would holding have done?"
-                            let hyp_directional = if args.asset_mode == "hold" {
-                                // Use exit_pct (price at horizon) not outcome_pct (threshold crossing)
-                                let full_pct = (current_price - candles[entry.candle_idx].close)
-                                    / candles[entry.candle_idx].close;
-                                match majority_dir {
-                                    Outcome::Buy  =>  full_pct,
-                                    Outcome::Sell => -full_pct,
-                                    _ => 0.0,
-                                }
-                            } else {
-                                directional
-                            };
-                            let hyp_net = if args.asset_mode == "hold" {
-                                hyp_directional - per_swap
-                            } else {
-                                (1.0 - per_swap) * (1.0 + directional) * (1.0 - per_swap) - 1.0
-                            };
-                            let mgr_label = if hyp_net > 0.0 { Outcome::Buy } else { Outcome::Sell };
+                            // Manager learns raw price direction from intensity patterns.
+                            // Not "was the expert majority right?" but "did the price go up or down?"
+                            // The manager maps intensity patterns → direction.
+                            // Both sides are learned: the same intensity pattern that preceded UP
+                            // teaches the Buy accumulator; the same pattern that preceded DOWN
+                            // teaches the Sell accumulator. The discriminant separates.
+                            let price_change = (current_price - candles[entry.candle_idx].close)
+                                / candles[entry.candle_idx].close;
+                            let mgr_label = if price_change > 0.0 { Outcome::Buy } else { Outcome::Sell };
 
                             // Unsigned intensity — same encoding as prediction time.
                             let mut mgr_facts: Vec<Vector> = entry.expert_preds.iter().enumerate()
@@ -1293,11 +1279,18 @@ fn main() {
                             let mgr_vec = Primitives::bundle(&mrefs);
                             mgr_journal.observe(&mgr_vec, mgr_label, 1.0);
 
-                            // Track for proof gate
-                            let profitable = hyp_net > 0.0;
-                            mgr_resolved.push_back((entry.meta_conviction, profitable));
+                            // Track for proof gate: did the manager predict the right direction?
+                            // The manager predicts Buy (price up) or Sell (price down) from
+                            // intensity patterns. If its prediction matches the actual direction,
+                            // that's a correct call — proof the intensity pattern is useful.
+                            let mgr_correct = if let Some(mgr_dir) = entry.raw_meta_dir {
+                                mgr_dir == mgr_label // manager predicted the actual direction
+                            } else {
+                                false // no prediction = not correct
+                            };
+                            mgr_resolved.push_back((entry.meta_conviction, mgr_correct));
                             if mgr_resolved.len() > 5000 { mgr_resolved.pop_front(); }
-                            resolved_preds.push_back((entry.meta_conviction, profitable));
+                            resolved_preds.push_back((entry.meta_conviction, mgr_correct));
                             if resolved_preds.len() > conviction_window {
                                 resolved_preds.pop_front();
                             }
