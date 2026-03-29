@@ -1,0 +1,57 @@
+---
+name: wat-check
+description: Verify the Rust implementation honors the wat specification. The spec is the source of truth. When code and spec diverge, one of them is wrong.
+argument-hint: [wat-file]
+---
+
+# Wat Check
+
+> The spec is the source of truth for what the enterprise SHOULD do. The Rust implements it. When code and spec diverge, update the one that's wrong. — CLAUDE.md
+
+The wat files in `wat/` are the domain specifications. They describe what each component thinks, how it encodes, what it learns, what labels it uses, what it does NOT do. The Rust in `src/` implements them.
+
+This skill finds divergence between spec and implementation.
+
+## How to check
+
+For a given wat file (default: all in `wat/`), read the spec and find its implementation counterpart:
+
+```
+wat/manager.wat      → src/market/manager.rs + enterprise.rs (manager sections)
+wat/risk.wat         → src/risk/ + enterprise.rs (risk sections)
+wat/treasury.wat     → src/treasury.rs + enterprise.rs (treasury sections)
+wat/ledger.wat       → src/ledger.rs
+wat/position.wat     → src/position.rs + enterprise.rs (position sections)
+wat/generalist.wat   → enterprise.rs (generalist sections)
+wat/expert/*.wat     → src/market/observer.rs + src/thought/mod.rs
+wat/vocab.wat        → src/vocab/mod.rs + src/vocab/*.rs
+```
+
+For each spec section, verify:
+
+1. **Atoms match.** Every atom declared in the spec exists in the implementation. Every atom used in the implementation is declared in the spec.
+
+2. **Encoding matches.** The encoding pattern described in the spec (bind, bundle, encode-linear, encode-log, encode-circular) matches what the code does. Same atoms, same composition, same scalar modes.
+
+3. **Labels match.** The learning labels described in the spec (Buy/Sell for direction, Win/Lose for profitability, Healthy/Unhealthy for risk) match what the code passes to `journal.observe()`. No label mixing — each journal gets ONE kind of label.
+
+4. **"Does NOT" clauses hold.** Every spec has a section saying what the component does NOT do. Verify the implementation respects these boundaries. The manager does NOT encode candles. The treasury does NOT predict. The ledger does NOT transform.
+
+5. **Learning frequency matches.** The spec says when learning happens (at horizon, at first crossing, at resolution). The code should learn at the same events, not more, not fewer.
+
+6. **Gate conditions match.** The spec describes proof gates (curve validation, minimum accuracy). The code should gate at the same thresholds using the same mechanism.
+
+## What to report
+
+For each divergence:
+- **Spec says:** (quote the relevant wat lines)
+- **Code does:** (cite file:line and what it actually does)
+- **Verdict:** spec is right and code should change, OR code evolved past the spec and spec should update
+
+## Accepted divergences
+
+Skip divergences annotated with `wat-check:allow(category)` in the code. Categories: `aspirational` (spec describes future work), `evolved` (code intentionally diverges, spec needs update).
+
+## The principle
+
+The wat files are the sorcerer's incantations — what the enterprise SHOULD think. The Rust is the compiled spell. When the compiled spell doesn't match the incantation, the spell is broken. The curve won't confirm a broken spell.
