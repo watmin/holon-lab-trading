@@ -1,0 +1,23 @@
+[package]
+name = "enterprise"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "enterprise"
+path = "src/lib.rs"
+
+[[bin]]
+name = "enterprise"
+path = "src/bin/enterprise.rs"
+
+[dependencies]
+holon = { path = "../holon-rs", features = ["simd"] }
+rusqlite = { version = "0.31", features = ["bundled"] }
+clap = { version = "4", features = ["derive"] }
+rayon = "1.10"
+chrono = "0.4"
+
+[profile.release]
+opt-level = 3
+lto = true

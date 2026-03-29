@@ -5,9 +5,8 @@ set -euo pipefail
 unset CARGO_TARGET_DIR 2>/dev/null || true
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-RUST_DIR="$SCRIPT_DIR/rust"
 DB_PATH="$SCRIPT_DIR/data/analysis.db"
-BINARY="$RUST_DIR/target/release/enterprise"
+BINARY="$SCRIPT_DIR/target/release/enterprise"
 
 usage() {
     echo "Usage: $0 <command> [args...]"
@@ -26,15 +25,23 @@ usage() {
 
 do_build() {
     echo "Building enterprise (release)..."
-    cd "$RUST_DIR" && cargo build --release --bin enterprise 2>&1
+    mkdir -p "$SCRIPT_DIR/.build"
+    cd "$SCRIPT_DIR" && cargo build --release --bin enterprise \
+        > "$SCRIPT_DIR/.build/stdout.log" 2> "$SCRIPT_DIR/.build/stderr.log"
+    local exit_code=$?
+    if [[ $exit_code -ne 0 ]]; then
+        echo "BUILD FAILED. See .build/stderr.log"
+        tail -10 "$SCRIPT_DIR/.build/stderr.log"
+        exit 1
+    fi
     echo "Binary: $BINARY"
 }
 
 do_kill() {
-    touch "$RUST_DIR/trader-stop"
+    touch "$SCRIPT_DIR/trader-stop"
     sleep 1
     pkill -f "target/release/enterprise" 2>/dev/null || true
-    rm -f "$RUST_DIR/trader-stop"
+    rm -f "$SCRIPT_DIR/trader-stop"
     echo "Killed."
 }
 
