@@ -301,9 +301,7 @@ fn is_derived_field(name: &str) -> bool {
 
 pub struct ThoughtResult {
     pub thought: Vector,
-    pub coherence: f64,
     pub fact_labels: Vec<String>,
-    pub fact_count: usize,
 }
 
 /// Indicator pairs to check for comparison predicates (above/below/crosses/touches/bounces).
@@ -593,16 +591,13 @@ impl ThoughtEncoder {
         all_refs.extend(cached_facts.iter().copied());
         all_refs.extend(owned_facts.iter());
 
-        let fact_count = all_refs.len();
-        let thought = if fact_count == 0 {
+        let thought = if all_refs.is_empty() {
             Vector::zeros(self.vocab.dims())
         } else {
             Primitives::bundle(&all_refs)
         };
 
-        let coherence = 0.0;
-
-        ThoughtResult { thought, coherence, fact_labels: labels, fact_count }
+        ThoughtResult { thought, fact_labels: labels }
     }
 
     // ─── Comparison predicates (cached) ──────────────────────────────────

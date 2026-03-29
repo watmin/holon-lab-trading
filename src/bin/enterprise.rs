@@ -225,9 +225,6 @@ fn main() {
     let max_pos = args.window;
     for p in 0..max_pos as i64 { vm.get_position_vector(p); }
 
-    // ─ Adaptive window sampler ─
-    use enterprise::window_sampler::WindowSampler;
-    let _window_sampler = WindowSampler::new(args.dims as u64, 12, 2016);
     // Pre-warm position vectors for the max possible window
     for p in 0..2016_i64 { vm.get_position_vector(p); }
 
@@ -255,13 +252,11 @@ fn main() {
     let pos_pnl_atom = vm.get_vector("position-pnl");
     let pos_hold_atom = vm.get_vector("position-hold");
     let pos_mfe_atom = vm.get_vector("position-mfe");
-    let _pos_mae_atom = vm.get_vector("position-mae");
     let pos_atr_entry_atom = vm.get_vector("position-atr-entry");
     let pos_atr_now_atom = vm.get_vector("position-atr-now");
     let pos_stop_dist_atom = vm.get_vector("position-stop-dist");
     let pos_phase_atom = vm.get_vector("position-phase");
     let pos_dir_atom = vm.get_vector("position-direction");
-    let _exit_expert_valid = false;
     let mut exit_pending: Vec<ExitObservation> = Vec::new();
     // Exit timing: derived after k_stop is defined (see below).
 
@@ -310,12 +305,6 @@ fn main() {
     // ─ Dual thought journals: slow (deep memory) + fast (regime-adaptive) ─
     // Both learn from the same input. An OnlineSubspace monitors thought vector
     // residuals to blend between them: low residual → trust slow, high → trust fast.
-
-    // Thought manifold: OnlineSubspace (CCIPCA) learns the structure of thought
-    // vectors over time. k=32 captures the intrinsic dimensionality of ~120 facts.
-    // Fed on EVERY candle (not just trades) to learn the full manifold.
-    // Residual = how novel this candle's thought pattern is.
-    let tht_subspace = OnlineSubspace::new(args.dims, 32);
 
     // Layer 2: Panel state engram — learns the manifold of "good panel configurations."
     // Encodes each observer's (signed conviction) as a feature vector.
@@ -377,8 +366,6 @@ fn main() {
     eprintln!("  Run database: {}", ledger_path);
 
     // ─ Portfolio and tracking ─
-    let mut tht_attention: Option<Vec<f64>> = None; // thought discriminant for weighted bundling
-
     // Adaptive decay: fast forgetting during regime transitions, slow during stable periods.
     // STABLE (0.999): rolling flip-zone accuracy >= 50% — preserve what works.
     // ADAPTING (0.995): accuracy dropped below 50% — flush stale patterns.
@@ -405,9 +392,7 @@ fn main() {
     // Counterfactual: snapshot treasury before each swap.
     // Compare actual value vs "what if we hadn't swapped?"
     // The risk manager learns from the difference.
-    let _last_snapshot_value: f64 = args.initial_equity;
     let mut last_snapshot_balances: HashMap<String, f64> = treasury.balances.clone();
-    let _cumulative_alpha: f64 = 0.0; // total value gained vs inaction
     let mut pending:    VecDeque<Pending> = VecDeque::new();
 
     // ─ Managed positions: concurrent, independently managed ──────────
@@ -432,26 +417,17 @@ fn main() {
     let k_stop:  f64 = 3.0;  // stop at 3× ATR — "the market moved 3× its normal range against me"
     let k_trail: f64 = 1.5;  // trail at 1.5× ATR — lock in gains, give room for normal retracement
     let k_tp:    f64 = 6.0;  // take profit at 6× ATR — let winners run to meaningful moves
-    let _min_exit_samples = 50usize;
     // Exit observation timing derived from stop parameter.
     // Expected candles to move one stop-width: k_stop² (ATR × sqrt(N) scaling).
     // Observe at half that rate (Nyquist).
     let exit_horizon: usize = (k_stop * k_stop) as usize; // 9 at k_stop=3
     let exit_observe_interval: usize = (exit_horizon / 2).max(1); // 4 at k_stop=3
-    let mut exit_mfe_history: VecDeque<f64> = VecDeque::new();
-    let mut exit_mae_history: VecDeque<f64> = VecDeque::new();
-    let exit_history_cap = 500usize;
     let mut tht_rolling: VecDeque<bool>  = VecDeque::new();
     let rolling_cap = 1000usize;
 
     // ─ Hold-mode state: which asset does the treasury hold? ────────────
     // Starts in USDC. BUY signal = swap to WBTC. SELL signal = swap to USDC.
     // Position persists between signals. WBTC appreciates with the market.
-    #[derive(Clone, Copy, PartialEq)]
-    enum HoldState { InUsdc, InWbtc }
-    let hold_state = HoldState::InUsdc;
-    let _last_swap_candle: usize = 0;
-    let _last_swap_price: f64 = 0.0;
     let mut hold_swaps: usize = 0;
     let mut hold_wins: usize = 0;
 
@@ -497,11 +473,6 @@ fn main() {
 
     // Self-derived min_edge: track flip-zone win rate per recalib window.
     // min_edge = 0.50 + 2σ where σ = stddev of recent window win rates.
-    let _window_win_rates: VecDeque<f64> = VecDeque::new();
-    let mut window_wins: u32 = 0;
-    let mut window_total: u32 = 0;
-    let _derived_min_edge: f64 = args.min_edge; // start with CLI value
-
     let kill_file = std::path::Path::new("trader-stop");
     let mut cursor = start_idx;
 
@@ -517,8 +488,6 @@ fn main() {
         }
 
         let batch_end = (cursor + BATCH_SIZE).min(end_idx);
-        let _batch_len = batch_end - cursor;
-
         // ── Parallel: each observer encodes at their own sampled window ────
         // The manager doesn't encode — it reads expert predictions.
         // Each expert samples their own window from [12, 2016] per candle.
@@ -780,8 +749,6 @@ fn main() {
                         snapshot_candle: i,
                     });
 
-                    // Apply exit expert's prediction (if proven)
-                    // TODO: gate on exit_expert_valid, modulate k_trail per position
                 }
 
                 if let Some(exit) = pos.tick(btc_price, k_trail) {
@@ -1221,8 +1188,6 @@ fn main() {
 
             // Log any recalibrations that fired during this candle's learning.
             if tht_journal.recalib_count != tht_recalib_before {
-                tht_attention = tht_journal.discriminant().map(|d| d.to_vec());
-
                 // Pre-compute curve params for Kelly — once per recalib, not per trade.
                 // Uses the generalist's resolved_preds for the curve fit.
                 if let Some((_, a, b)) = kelly_frac(0.15, &resolved_preds, 50,
@@ -1298,20 +1263,6 @@ fn main() {
                     ).ok();
                 }
 
-                // Log thought subspace state.
-                let eigs = tht_subspace.eigenvalues();
-                let top5: Vec<String> = eigs.iter().take(5).map(|e| format!("{:.2}", e)).collect();
-                ledger.execute(
-                    "INSERT INTO subspace_log (step,residual,threshold,explained,top_eigenvalues)
-                     VALUES (?1,?2,?3,?4,?5)",
-                    params![
-                        encode_count as i64,
-                        0.0_f64, // residual — subspace monitoring disabled
-                        tht_subspace.threshold(),
-                        tht_subspace.explained_ratio(),
-                        format!("[{}]", top5.join(",")),
-                    ],
-                ).ok();
             }
 
             // ── Resolve entries: managed exit OR horizon expiry ──────────
@@ -1387,12 +1338,7 @@ fn main() {
                             else if sells > buys { Some(Outcome::Sell) }
                             else { None }
                         };
-                        if let Some(majority_dir) = expert_majority {
-                            let _directional = match majority_dir {
-                                Outcome::Buy  =>  entry.outcome_pct,
-                                Outcome::Sell => -entry.outcome_pct,
-                                _ => 0.0,
-                            };
+                        if let Some(_majority_dir) = expert_majority {
                             // Manager learns raw price direction from intensity patterns.
                             // Not "was the expert majority right?" but "did the price go up or down?"
                             // The manager maps intensity patterns → direction.
@@ -1585,16 +1531,6 @@ fn main() {
                             ],
                         ).ok();
 
-                        // Feed ledger history for analysis.
-                        exit_mfe_history.push_back(entry.max_favorable);
-                        if exit_mfe_history.len() > exit_history_cap {
-                            exit_mfe_history.pop_front();
-                        }
-                        exit_mae_history.push_back(entry.max_adverse.abs());
-                        if exit_mae_history.len() > exit_history_cap {
-                            exit_mae_history.pop_front();
-                        }
-
                         // Panel tracking (all predictions, not just live)
                         panel_recalib_total += 1;
                         if dir == final_out { panel_recalib_wins += 1; }
@@ -1639,9 +1575,6 @@ fn main() {
                                 ).ok(); }
                             // Track flip-zone trade outcomes.
                             if entry.was_flipped {
-                                window_total += 1;
-                                if dir == final_out { window_wins += 1; }
-
                                 // Adaptive decay state machine.
                                 let won = dir == final_out;
                                 flip_zone_wins.push_back(won);
@@ -1755,7 +1688,6 @@ fn main() {
                     prices.insert("WBTC".to_string(), candles[i].close);
                     let tv = treasury.total_value(&prices);
                     let tv_ret = (tv - args.initial_equity) / args.initial_equity * 100.0;
-                    let _state = if hold_state == HoldState::InWbtc { "WBTC" } else { "USDC" };
                     let mut proven: Vec<&str> = observers.iter()
                         .filter(|e| e.curve_valid).map(|e| e.name).collect();
                     if curve_valid { proven.push("generalist"); }
@@ -1827,7 +1759,7 @@ fn main() {
     if args.exit_mode == "managed" {
         eprintln!("  Exit mode: managed (ATR-scaled per trade). K_stop={} K_trail={} K_tp={}",
             k_stop, k_trail, k_tp);
-        eprintln!("  Ledger: {} trades observed (MFE/MAE tracked)", exit_mfe_history.len());
+        eprintln!("  Exit mode: managed (ATR-scaled per trade)");
     }
     eprintln!("  Labeled: {}  Noise: {} ({:.1}% noise rate)",
         labeled_count, noise_count,
