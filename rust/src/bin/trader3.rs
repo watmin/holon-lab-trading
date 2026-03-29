@@ -405,9 +405,12 @@ fn main() {
     // Action atoms: named directions, not permutation tricks.
     let buy_atom = vm.get_vector("buy");
     let sell_atom = vm.get_vector("sell");
-    // Minimum magnitude to emit an opinion. Below this, the expert
-    // has no opinion — silence, not a forced direction.
-    let min_opinion_magnitude: f64 = 0.02;
+    // Minimum magnitude to emit an opinion. Below this, the cosine
+    // projection is indistinguishable from random alignment — noise.
+    // Derived from dimensionality: 3σ where σ = 1/sqrt(dims).
+    // At 20k dims: 3/141.4 ≈ 0.021. Not a magic number — a property
+    // of the hyperspace.
+    let min_opinion_magnitude: f64 = 3.0 / (args.dims as f64).sqrt();
     // Panel-level atoms: emergent properties of the expert collective.
     let agreement_atom = vm.get_vector("panel-agreement");     // how aligned are the experts?
     let panel_energy_atom = vm.get_vector("panel-energy");     // how loud is everyone?
