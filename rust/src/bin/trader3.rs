@@ -303,6 +303,29 @@ fn main() {
     // Coherence atom: how concentrated is the panel?
     let coherence_atom = vm.get_vector("panel-coherence");
 
+    // ─ Exit expert: learns when to hold vs exit positions ─────────
+    let mut exit_journal = Journal::new("exit-expert", args.dims, args.recalib_interval);
+    let exit_scalar = holon::ScalarEncoder::new(args.dims);
+    let pos_pnl_atom = vm.get_vector("position-pnl");
+    let pos_hold_atom = vm.get_vector("position-hold");
+    let pos_mfe_atom = vm.get_vector("position-mfe");
+    let pos_mae_atom = vm.get_vector("position-mae");
+    let pos_atr_entry_atom = vm.get_vector("position-atr-entry");
+    let pos_atr_now_atom = vm.get_vector("position-atr-now");
+    let pos_stop_dist_atom = vm.get_vector("position-stop-dist");
+    let pos_phase_atom = vm.get_vector("position-phase");
+    let pos_dir_atom = vm.get_vector("position-direction");
+    let exit_expert_valid = false;
+    // Pending exit observations: snapshot position state, resolve later
+    struct ExitObservation {
+        thought: Vector,
+        pos_id: usize,
+        snapshot_pnl: f64,
+        snapshot_candle: usize,
+    }
+    let mut exit_pending: Vec<ExitObservation> = Vec::new();
+    let exit_horizon: usize = 12; // resolve exit predictions after 12 candles (1 hour)
+
     // ─ Visual pattern memory: auto-clustering engram groups ─────────────
     // Each group is an OnlineSubspace that learns a cluster of similar visual
     // patterns from winning flip-zone trades. New groups auto-discovered when
@@ -949,8 +972,54 @@ fn main() {
             let btc_price = candles[i].close;
             let fee_rate = args.swap_fee + args.slippage;
             let mut closed_positions: Vec<usize> = Vec::new();
+            // ── Exit expert: encode each position's state, predict, learn ──
+            // Resolve pending exit observations (did holding improve the position?)
+            exit_pending.retain(|obs| {
+                if i - obs.snapshot_candle >= exit_horizon {
+                    // Find the position and check if P&L improved
+                    if let Some(pos) = positions.iter().find(|p| p.id == obs.pos_id) {
+                        let current_pnl = pos.return_pct(btc_price);
+                        let improved = current_pnl > obs.snapshot_pnl;
+                        let label = if improved { Outcome::Buy } else { Outcome::Sell }; // Buy=Hold was right
+                        exit_journal.observe(&obs.thought, label, 1.0);
+                    }
+                    false // remove resolved observation
+                } else {
+                    true // keep pending
+                }
+            });
+
             for pos in positions.iter_mut() {
                 if pos.phase == PositionPhase::Closed { continue; }
+
+                // Exit expert: encode position state every 6 candles
+                if pos.candles_held > 0 && pos.candles_held % 6 == 0 {
+                    let pnl_frac = pos.return_pct(btc_price);
+                    let mfe_frac = (pos.high_water - pos.entry_price) / pos.entry_price;
+                    let stop_dist = (btc_price - pos.trailing_stop).abs() / btc_price;
+                    let exit_thought = Primitives::bundle(&[
+                        &Primitives::bind(&pos_pnl_atom, &exit_scalar.encode(pnl_frac.clamp(-1.0, 1.0) * 0.5 + 0.5, ScalarMode::Linear { scale: 1.0 })),
+                        &Primitives::bind(&pos_hold_atom, &exit_scalar.encode_log(pos.candles_held as f64)),
+                        &Primitives::bind(&pos_mfe_atom, &exit_scalar.encode(mfe_frac.clamp(0.0, 1.0), ScalarMode::Linear { scale: 1.0 })),
+                        &Primitives::bind(&pos_atr_entry_atom, &exit_scalar.encode_log(pos.entry_atr.max(1e-10))),
+                        &Primitives::bind(&pos_atr_now_atom, &exit_scalar.encode_log(candles[i].atr_r.max(1e-10))),
+                        &Primitives::bind(&pos_stop_dist_atom, &exit_scalar.encode(stop_dist.clamp(0.0, 1.0), ScalarMode::Linear { scale: 1.0 })),
+                        &Primitives::bind(&pos_phase_atom, &vm.get_vector(if pos.phase == PositionPhase::Runner { "runner" } else { "active" })),
+                        &Primitives::bind(&pos_dir_atom, &vm.get_vector(if pos.direction == Outcome::Buy { "buy" } else { "sell" })),
+                    ]);
+
+                    // Buffer observation for resolution
+                    exit_pending.push(ExitObservation {
+                        thought: exit_thought.clone(),
+                        pos_id: pos.id,
+                        snapshot_pnl: pnl_frac,
+                        snapshot_candle: i,
+                    });
+
+                    // Apply exit expert's prediction (if proven)
+                    // TODO: gate on exit_expert_valid, modulate k_trail per position
+                }
+
                 if let Some(exit) = pos.tick(btc_price, k_trail) {
                     match exit {
                         PositionExit::TakeProfit if pos.phase == PositionPhase::Active => {
