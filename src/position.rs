@@ -28,6 +28,7 @@ pub struct Pending {
     pub position_frac: Option<f64>,
     pub observer_vecs:   Vec<Vector>,       // per-observer thought vectors
     pub observer_preds:  Vec<Prediction>,   // per-observer predictions at entry time
+    pub mgr_thought:     Option<Vector>,    // complete manager thought (delta-enriched) for learning
     pub fact_labels:   Vec<String>,      // thought facts present at this candle
 
     // ── Learning (event-driven, first crossing only) ─────────────────

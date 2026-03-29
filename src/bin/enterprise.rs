@@ -572,8 +572,8 @@ fn main() {
             // Difference: what changed since last candle?
             // The manager sees motion, not just position.
             let mgr_refs: Vec<&Vector> = mgr_facts.iter().collect();
-            let mgr_pred = if mgr_refs.is_empty() {
-                Prediction::default()
+            let (mgr_pred, stored_mgr_thought) = if mgr_refs.is_empty() {
+                (Prediction::default(), None)
             } else {
                 let mgr_thought = Primitives::bundle(&mgr_refs);
                 let final_thought = if let Some(ref prev) = prev_mgr_thought {
@@ -584,7 +584,8 @@ fn main() {
                     mgr_thought.clone()
                 };
                 prev_mgr_thought = Some(mgr_thought);
-                mgr_journal.predict(&final_thought)
+                let pred = mgr_journal.predict(&final_thought);
+                (pred, Some(final_thought))
             };
 
             // Panel state for engram (Template 2 — reaction layer)
@@ -1005,6 +1006,7 @@ fn main() {
                 position_frac,
                 observer_vecs,
                 observer_preds,
+                mgr_thought:   stored_mgr_thought,
                 fact_labels:   tht_facts,
                 first_outcome: None,
                 outcome_pct:   0.0,
@@ -1349,35 +1351,10 @@ fn main() {
                                 / candles[entry.candle_idx].close;
                             let mgr_label = if price_change > 0.0 { Outcome::Buy } else { Outcome::Sell };
 
-                            // Same canonical encoding as prediction time.
-                            let res_curve_valid: Vec<bool> = observers.iter().map(|o| o.curve_valid).collect();
-                            let res_resolved_lens: Vec<usize> = observers.iter().map(|o| o.resolved.len()).collect();
-                            let res_resolved_accs: Vec<f64> = observers.iter().map(|o| {
-                                let len = o.resolved.len();
-                                if len == 0 { 0.0 } else {
-                                    o.resolved.iter().filter(|(_, c)| *c).count() as f64 / len as f64
-                                }
-                            }).collect();
-                            let res_ctx = ManagerContext {
-                                observer_preds: &entry.observer_preds,
-                                observer_atoms: &observer_atoms,
-                                observer_curve_valid: &res_curve_valid,
-                                observer_resolved_lens: &res_resolved_lens,
-                                observer_resolved_accs: &res_resolved_accs,
-                                observer_vecs: &entry.observer_vecs,
-                                generalist_pred: &entry.tht_pred,
-                                generalist_atom: &generalist_atom,
-                                generalist_curve_valid: curve_valid,
-                                candle_atr: candles[entry.candle_idx].atr_r,
-                                candle_hour: parse_candle_hour(&candles[entry.candle_idx].ts),
-                                candle_day: parse_candle_day(&candles[entry.candle_idx].ts),
-                                disc_strength: tht_journal.last_disc_strength,
-                            };
-                            let mgr_res_facts = encode_manager_thought(&res_ctx, &mgr_atoms, &mgr_scalar, min_opinion_magnitude);
-                            let mrefs: Vec<&Vector> = mgr_res_facts.iter().collect();
-                            if !mrefs.is_empty() {
-                                let mgr_vec = Primitives::bundle(&mrefs);
-                                mgr_journal.observe(&mgr_vec, mgr_label, 1.0);
+                            // Learn from the SAME thought the manager predicted with.
+                            // Stored at prediction time, delta-enriched. One encoding path.
+                            if let Some(ref mgr_vec) = entry.mgr_thought {
+                                mgr_journal.observe(mgr_vec, mgr_label, 1.0);
                             }
 
                             // Track for proof gate: did the manager predict the right direction?
@@ -1448,35 +1425,9 @@ fn main() {
                         {
                             let mgr_label = if net_ret > 0.0 { Outcome::Buy } else { Outcome::Sell };
                             // Buy = Win, Sell = Lose in the manager's space.
-                            // Same canonical encoding as prediction time.
-                            let wl_curve_valid: Vec<bool> = observers.iter().map(|o| o.curve_valid).collect();
-                            let wl_resolved_lens: Vec<usize> = observers.iter().map(|o| o.resolved.len()).collect();
-                            let wl_resolved_accs: Vec<f64> = observers.iter().map(|o| {
-                                let len = o.resolved.len();
-                                if len == 0 { 0.0 } else {
-                                    o.resolved.iter().filter(|(_, c)| *c).count() as f64 / len as f64
-                                }
-                            }).collect();
-                            let wl_ctx = ManagerContext {
-                                observer_preds: &entry.observer_preds,
-                                observer_atoms: &observer_atoms,
-                                observer_curve_valid: &wl_curve_valid,
-                                observer_resolved_lens: &wl_resolved_lens,
-                                observer_resolved_accs: &wl_resolved_accs,
-                                observer_vecs: &entry.observer_vecs,
-                                generalist_pred: &entry.tht_pred,
-                                generalist_atom: &generalist_atom,
-                                generalist_curve_valid: curve_valid,
-                                candle_atr: candles[entry.candle_idx].atr_r,
-                                candle_hour: parse_candle_hour(&candles[entry.candle_idx].ts),
-                                candle_day: parse_candle_day(&candles[entry.candle_idx].ts),
-                                disc_strength: tht_journal.last_disc_strength,
-                            };
-                            let wl_facts = encode_manager_thought(&wl_ctx, &mgr_atoms, &mgr_scalar, min_opinion_magnitude);
-                            let mrefs: Vec<&Vector> = wl_facts.iter().collect();
-                            if !mrefs.is_empty() {
-                                let mgr_vec = Primitives::bundle(&mrefs);
-                                mgr_journal.observe(&mgr_vec, mgr_label, 1.0);
+                            // Learn from the SAME thought the manager predicted with.
+                            if let Some(ref mgr_vec) = entry.mgr_thought {
+                                mgr_journal.observe(mgr_vec, mgr_label, 1.0);
                             }
                         }
 
