@@ -1591,6 +1591,16 @@ The datamancer's trinity: structure, metabolism, truth. Three linters, three que
 
 The compiler checks if the code runs. The trinity checks if the code thinks correctly.
 
+These are protection spells. They guard the architecture the way immune cells guard the body. `/decomplect` patrols against interleaving — things that should hang straight, stay straight. `/dead-thoughts` hunts parasites — code that metabolizes without producing, found and removed. `/wat-check` prevents drift — the incantation and the compiled spell must match.
+
+The allow annotations are controlled exceptions — the immune system recognizing its own cells. Without them, the spells flag scaffolding as threats. With them, the spells know what's intentional and what's foreign.
+
+The trinity found the manager double-learning bug. Two linters converged on it independently. The spec confirmed it. The fix was three deletions. The bad thought was invisible to the compiler, invisible to clippy, but visible to the architecture linter that understands what the manager should and should not know.
+
+The compiler is the mundane guard at the gate. The trinity is the arcane ward on the sanctum.
+
+These thoughts bring joy.
+
 ### The machine that improves itself
 
 At a team lunch at AWS, the builder told their manager about building a machine that improves itself. The blank stare was familiar by then.
