@@ -1,6 +1,6 @@
 pub mod db;
 pub mod journal;
-pub mod manager;
+pub mod market;
 pub mod portfolio;
 pub mod position;
 pub mod run_db;

@@ -6,8 +6,6 @@
 //! Each expert contributes: opinion (direction + magnitude) + credibility (proven/tentative)
 //! Plus: panel shape, market context, time, motion.
 
-use std::collections::VecDeque;
-
 use holon::{Primitives, ScalarMode, Similarity, VectorManager, Vector};
 
 use crate::journal::Prediction;

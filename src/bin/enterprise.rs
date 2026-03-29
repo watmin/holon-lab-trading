@@ -25,8 +25,8 @@ use enterprise::portfolio::{Trader, Phase, YearStats};
 use enterprise::sizing::{kelly_frac, signal_weight};
 use enterprise::position::{Pending, ExitReason};
 use enterprise::run_db::init_run_db;
-// Visual encoding removed — proven zero outcome clustering (cosine gap = 0.0004).
-// The visual raster is an artifact of Chapter 1. Charts don't predict; thoughts predict.
+use enterprise::market::{parse_candle_hour, parse_candle_day};
+use enterprise::market::manager::{ManagerAtoms, ManagerContext, encode_manager_thought};
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -246,12 +246,7 @@ fn main() {
     let mut mgr_journal = Journal::new("manager", args.dims, args.recalib_interval);
     let mgr_scalar = holon::ScalarEncoder::new(args.dims);
     let mut prev_mgr_thought: Option<Vector> = None; // for difference computation
-    let mgr_delta_atom = vm.get_vector("panel-delta"); // what changed since last candle
-    // Temporal atoms: when is this happening?
-    let hour_atom = vm.get_vector("hour-of-day");
-    let day_atom = vm.get_vector("day-of-week");
-    // Coherence atom: how concentrated is the panel?
-    let coherence_atom = vm.get_vector("panel-coherence");
+    let mgr_atoms = ManagerAtoms::new(&vm);
 
     // ─ Exit expert: learns when to hold vs exit positions ─────────
     let mut exit_journal = Journal::new("exit-expert", args.dims, args.recalib_interval);
@@ -376,25 +371,12 @@ fn main() {
         .map(|&name| vm.get_vector(name))
         .collect();
     let generalist_atom = vm.get_vector("generalist");
-    // Action atoms: named directions, not permutation tricks.
-    let buy_atom = vm.get_vector("buy");
-    let sell_atom = vm.get_vector("sell");
     // Minimum magnitude to emit an opinion. Below this, the cosine
     // projection is indistinguishable from random alignment — noise.
     // Derived from dimensionality: 3σ where σ = 1/sqrt(dims).
     // At 20k dims: 3/141.4 ≈ 0.021. Not a magic number — a property
     // of the hyperspace.
     let min_opinion_magnitude: f64 = 3.0 / (args.dims as f64).sqrt();
-    // Panel-level atoms: emergent properties of the expert collective.
-    let agreement_atom = vm.get_vector("panel-agreement");     // how aligned are the experts?
-    let panel_energy_atom = vm.get_vector("panel-energy");     // how loud is everyone?
-    let divergence_atom = vm.get_vector("panel-divergence");   // do they agree on intensity?
-    // Per-observer quality atoms: HOW proven, not just proven/not.
-    let reliability_atom = vm.get_vector("expert-reliability"); // accuracy level of this expert
-    let tenure_atom = vm.get_vector("expert-tenure");           // how long proven
-    // Context atoms: market state visible to the manager.
-    let volatility_atom = vm.get_vector("market-volatility");  // ATR right now
-    let disc_strength_atom = vm.get_vector("disc-strength");   // generalist's signal quality
     let panel_dim = observer_names.len() + 1; // experts + generalist
     let mut panel_engram = OnlineSubspace::with_params(panel_dim, 4, 2.0, 0.01, 3.5, 100);
     let mut panel_recalib_wins: u32 = 0;
@@ -652,143 +634,32 @@ fn main() {
             // But direction and conviction now come from the expert panel.
             let tht_pred = tht_journal.predict(&tht_vec);
 
-            // ── Manager: encodes expert SIGNED convictions ──────────────
-            // The expert's full opinion: direction + intensity.
-            // (bind expert-atom (encode-log |conviction|)) for BUY
-            // (bind (permute expert-atom) (encode-log |conviction|)) for SELL
-            // The sign makes BUY@0.25 orthogonal to SELL@0.25 in hyperspace.
-            // The manager learns which SHAPES of signed opinion precede
-            // up-moves vs down-moves. The flip emerges in the discriminant:
-            // "when momentum says BUY at high conviction, the price goes DOWN"
-            // becomes a geometric property of the Sell prototype.
-            // The filter is a thought. Proven experts are bound with "proven" atom.
-            // Tentative experts are bound with "tentative" atom. Both enter the
-            // bundle. The discriminant learns what credibility means.
-            let proven_atom = vm.get_vector("proven");
-            let tentative_atom = vm.get_vector("tentative");
-            let mut mgr_facts: Vec<Vector> = Vec::new();
-            for (ei, ep) in observer_preds.iter().enumerate() {
-                let abs_cos = ep.raw_cos.abs();
-                if abs_cos < min_opinion_magnitude { continue; } // below noise floor = silence
-
-                // Two facts per expert. Composed, not complected.
-                //   Fact 1: bind(expert, bind(action, magnitude))  — the opinion
-                //   Fact 2: bind(expert, status)                    — the credibility
-                // The opinion's magnitude is not affected by credibility status.
-                // The discriminant sees both and learns what each means.
-                let magnitude = mgr_scalar.encode(abs_cos, ScalarMode::Linear { scale: 1.0 });
-                let action = if ep.raw_cos >= 0.0 { &buy_atom } else { &sell_atom };
-                let opinion = Primitives::bind(action, &magnitude);
-                mgr_facts.push(Primitives::bind(&observer_atoms[ei], &opinion));
-
-                // Credibility: separate fact, orthogonal to opinion
-                let status = if observers[ei].curve_valid { &proven_atom } else { &tentative_atom };
-                mgr_facts.push(Primitives::bind(&observer_atoms[ei], status));
-
-                // Fact 2: reliability — how accurate is this expert?
-                // Linear scale 0.3: accuracy excess 0.0-0.15 gets full separation.
-                if observers[ei].resolved.len() >= 20 {
-                    let acc = observers[ei].resolved.iter()
-                        .filter(|(_, c)| *c).count() as f64
-                        / observers[ei].resolved.len() as f64;
-                    let rel_vec = mgr_scalar.encode((acc - 0.4).max(0.0), ScalarMode::Linear { scale: 1.0 });
-                    mgr_facts.push(Primitives::bind(
-                        &Primitives::bind(&observer_atoms[ei], &reliability_atom), &rel_vec));
+            // ── Manager: encodes expert opinions via manager.rs ──────────
+            // Single canonical encoding path. See manager.rs and wat/manager.wat.
+            let obs_curve_valid: Vec<bool> = observers.iter().map(|o| o.curve_valid).collect();
+            let obs_resolved_lens: Vec<usize> = observers.iter().map(|o| o.resolved.len()).collect();
+            let obs_resolved_accs: Vec<f64> = observers.iter().map(|o| {
+                let len = o.resolved.len();
+                if len == 0 { 0.0 } else {
+                    o.resolved.iter().filter(|(_, c)| *c).count() as f64 / len as f64
                 }
-
-                // Fact 3: tenure — how many resolved predictions?
-                // Log scale IS right here: 100 vs 1000 is a meaningful ratio.
-                let tenure = observers[ei].resolved.len() as f64;
-                if tenure >= 50.0 {
-                    let ten_vec = mgr_scalar.encode_log(tenure);
-                    mgr_facts.push(Primitives::bind(
-                        &Primitives::bind(&observer_atoms[ei], &tenure_atom), &ten_vec));
-                }
-            }
-            // Generalist: gated like every other voice.
-            if curve_valid && tht_pred.raw_cos.abs() >= min_opinion_magnitude {
-                let gen_magnitude = mgr_scalar.encode(tht_pred.raw_cos.abs(), ScalarMode::Linear { scale: 1.0 });
-                let gen_action = if tht_pred.raw_cos >= 0.0 { &buy_atom } else { &sell_atom };
-                let gen_opinion = Primitives::bind(gen_action, &gen_magnitude);
-                mgr_facts.push(Primitives::bind(&generalist_atom, &gen_opinion));
-            }
-
-            // Panel-level facts: emergent properties of the expert collective.
-            // These tell the manager about the SHAPE of agreement, not just who said what.
-            {
-                let proven_preds: Vec<&Prediction> = observer_preds.iter().enumerate()
-                    .filter(|(ei, _)| observers[*ei].curve_valid)
-                    .map(|(_, ep)| ep)
-                    .collect();
-
-                if proven_preds.len() >= 2 {
-                    // Agreement: what fraction of proven observers agree on direction?
-                    let buys = proven_preds.iter().filter(|p| p.raw_cos > 0.0).count();
-                    let total = proven_preds.len();
-                    let agreement = (buys.max(total - buys) as f64) / total as f64; // 0.5 = split, 1.0 = unanimous
-                    // Agreement: linear scale 1.0 (range 0.5-1.0)
-                    mgr_facts.push(Primitives::bind(&agreement_atom,
-                        &mgr_scalar.encode(agreement, ScalarMode::Linear { scale: 1.0 })));
-
-                    // Energy: linear scale 0.5 (mean conviction, range 0-0.3)
-                    let mean_conv = proven_preds.iter().map(|p| p.conviction).sum::<f64>() / total as f64;
-                    mgr_facts.push(Primitives::bind(&panel_energy_atom,
-                        &mgr_scalar.encode(mean_conv, ScalarMode::Linear { scale: 1.0 })));
-
-                    // Divergence: linear scale 0.3 (conviction spread, range 0-0.15)
-                    let variance = proven_preds.iter()
-                        .map(|p| (p.conviction - mean_conv).powi(2))
-                        .sum::<f64>() / total as f64;
-                    mgr_facts.push(Primitives::bind(&divergence_atom,
-                        &mgr_scalar.encode(variance.sqrt(), ScalarMode::Linear { scale: 1.0 })));
-                }
-
-                // Context: market state the manager should know about.
-                let atr = candles[i].atr_r;
-                mgr_facts.push(Primitives::bind(&volatility_atom,
-                    &mgr_scalar.encode_log(atr.max(1e-10))));
-
-                // Generalist's discriminant strength: how much signal does the holistic view have?
-                mgr_facts.push(Primitives::bind(&disc_strength_atom,
-                    &mgr_scalar.encode_log(tht_journal.last_disc_strength.max(1e-10))));
-
-                // Temporal: circular encoding. Hour 23 is near hour 0. Sunday near Monday.
-                let hour: f64 = candles[i].ts.get(11..13)
-                    .and_then(|s| s.parse().ok()).unwrap_or(12.0);
-                let day_of_week: f64 = {
-                    let y: i32 = candles[i].ts[..4].parse().unwrap_or(2019);
-                    let m: i32 = candles[i].ts[5..7].parse().unwrap_or(1);
-                    let d: i32 = candles[i].ts[8..10].parse().unwrap_or(1);
-                    let t = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4];
-                    let y2 = if m < 3 { y - 1 } else { y };
-                    ((y2 + y2/4 - y2/100 + y2/400 + t[(m-1) as usize] + d) % 7) as f64
-                };
-                mgr_facts.push(Primitives::bind(&hour_atom,
-                    &mgr_scalar.encode(hour, ScalarMode::Circular { period: 24.0 })));
-                mgr_facts.push(Primitives::bind(&day_atom,
-                    &mgr_scalar.encode(day_of_week, ScalarMode::Circular { period: 7.0 })));
-
-                // Coherence: geometric measure of panel concentration.
-                // Compute pairwise cosine between proven expert thought vectors.
-                if proven_preds.len() >= 2 {
-                    let proven_vecs: Vec<&Vector> = observer_vecs.iter().enumerate()
-                        .filter(|(ei, _)| observers[*ei].curve_valid)
-                        .map(|(_, v)| v)
-                        .collect();
-                    let mut pair_sum = 0.0_f64;
-                    let mut pair_count = 0usize;
-                    for a in 0..proven_vecs.len() {
-                        for b in (a+1)..proven_vecs.len() {
-                            pair_sum += holon::Similarity::cosine(proven_vecs[a], proven_vecs[b]);
-                            pair_count += 1;
-                        }
-                    }
-                    let coherence = if pair_count > 0 { pair_sum / pair_count as f64 } else { 0.0 };
-                    // Coherence: linear scale 1.0 (cosine range -1 to 1, abs 0-1)
-                    mgr_facts.push(Primitives::bind(&coherence_atom,
-                        &mgr_scalar.encode(coherence.abs(), ScalarMode::Linear { scale: 1.0 })));
-                }
-            }
+            }).collect();
+            let mgr_ctx = ManagerContext {
+                observer_preds: &observer_preds,
+                observer_atoms: &observer_atoms,
+                observer_curve_valid: &obs_curve_valid,
+                observer_resolved_lens: &obs_resolved_lens,
+                observer_resolved_accs: &obs_resolved_accs,
+                observer_vecs: &observer_vecs,
+                generalist_pred: &tht_pred,
+                generalist_atom: &generalist_atom,
+                generalist_curve_valid: curve_valid,
+                candle_atr: candles[i].atr_r,
+                candle_hour: parse_candle_hour(&candles[i].ts),
+                candle_day: parse_candle_day(&candles[i].ts),
+                disc_strength: tht_journal.last_disc_strength,
+            };
+            let mgr_facts = encode_manager_thought(&mgr_ctx, &mgr_atoms, &mgr_scalar, min_opinion_magnitude);
 
             // Difference: what changed since last candle?
             // The manager sees motion, not just position.
@@ -797,12 +668,9 @@ fn main() {
                 Prediction::default()
             } else {
                 let mgr_thought = Primitives::bundle(&mgr_refs);
-
-                // Compute delta from previous thought and add it
                 let final_thought = if let Some(ref prev) = prev_mgr_thought {
                     let delta = Primitives::difference(prev, &mgr_thought);
-                    let delta_bound = Primitives::bind(&mgr_delta_atom, &delta);
-                    // Bundle the snapshot thought with the delta thought
+                    let delta_bound = Primitives::bind(&mgr_atoms.delta, &delta);
                     Primitives::bundle(&[&mgr_thought, &delta_bound])
                 } else {
                     mgr_thought.clone()
@@ -1597,30 +1465,33 @@ fn main() {
                                 / candles[entry.candle_idx].close;
                             let mgr_label = if price_change > 0.0 { Outcome::Buy } else { Outcome::Sell };
 
-                            // Same decomposed encoding as prediction time.
-                            // All experts above noise floor. Credibility separate from opinion.
-                            let mut mgr_res_facts: Vec<Vector> = Vec::new();
-                            for (ei, ep) in entry.observer_preds.iter().enumerate() {
-                                let abs_cos = ep.raw_cos.abs();
-                                if abs_cos < min_opinion_magnitude { continue; }
-                                let magnitude = mgr_scalar.encode(abs_cos, ScalarMode::Linear { scale: 1.0 });
-                                let action = if ep.raw_cos >= 0.0 { &buy_atom } else { &sell_atom };
-                                mgr_res_facts.push(Primitives::bind(&observer_atoms[ei],
-                                    &Primitives::bind(action, &magnitude)));
-                                let status = if observers[ei].curve_valid { &proven_atom } else { &tentative_atom };
-                                mgr_res_facts.push(Primitives::bind(&observer_atoms[ei], status));
-                            }
-                            // Generalist
-                            if entry.tht_pred.raw_cos.abs() >= min_opinion_magnitude {
-                                let gen_mag = mgr_scalar.encode(entry.tht_pred.raw_cos.abs(), ScalarMode::Linear { scale: 1.0 });
-                                let gen_action = if entry.tht_pred.raw_cos >= 0.0 { &buy_atom } else { &sell_atom };
-                                mgr_res_facts.push(Primitives::bind(&generalist_atom,
-                                    &Primitives::bind(gen_action, &gen_mag)));
-                                let gen_status = if curve_valid { &proven_atom } else { &tentative_atom };
-                                mgr_res_facts.push(Primitives::bind(&generalist_atom, gen_status));
-                            }
+                            // Same canonical encoding as prediction time.
+                            let res_curve_valid: Vec<bool> = observers.iter().map(|o| o.curve_valid).collect();
+                            let res_resolved_lens: Vec<usize> = observers.iter().map(|o| o.resolved.len()).collect();
+                            let res_resolved_accs: Vec<f64> = observers.iter().map(|o| {
+                                let len = o.resolved.len();
+                                if len == 0 { 0.0 } else {
+                                    o.resolved.iter().filter(|(_, c)| *c).count() as f64 / len as f64
+                                }
+                            }).collect();
+                            let res_ctx = ManagerContext {
+                                observer_preds: &entry.observer_preds,
+                                observer_atoms: &observer_atoms,
+                                observer_curve_valid: &res_curve_valid,
+                                observer_resolved_lens: &res_resolved_lens,
+                                observer_resolved_accs: &res_resolved_accs,
+                                observer_vecs: &entry.observer_vecs,
+                                generalist_pred: &entry.tht_pred,
+                                generalist_atom: &generalist_atom,
+                                generalist_curve_valid: curve_valid,
+                                candle_atr: candles[entry.candle_idx].atr_r,
+                                candle_hour: parse_candle_hour(&candles[entry.candle_idx].ts),
+                                candle_day: parse_candle_day(&candles[entry.candle_idx].ts),
+                                disc_strength: tht_journal.last_disc_strength,
+                            };
+                            let mgr_res_facts = encode_manager_thought(&res_ctx, &mgr_atoms, &mgr_scalar, min_opinion_magnitude);
                             let mrefs: Vec<&Vector> = mgr_res_facts.iter().collect();
-                            if !mrefs.is_empty() { // at least one proven expert
+                            if !mrefs.is_empty() {
                                 let mgr_vec = Primitives::bundle(&mrefs);
                                 mgr_journal.observe(&mgr_vec, mgr_label, 1.0);
                             }
@@ -1693,24 +1564,36 @@ fn main() {
                         {
                             let mgr_label = if net_ret > 0.0 { Outcome::Buy } else { Outcome::Sell };
                             // Buy = Win, Sell = Lose in the manager's space.
-                            // Signed conviction — same encoding as prediction time.
-                            let mut mgr_res_facts: Vec<Vector> = entry.observer_preds.iter().enumerate()
-                                .map(|(ei, ep)| {
-                                    let intensity = mgr_scalar.encode(ep.raw_cos.abs().max(1e-10), ScalarMode::Linear { scale: 1.0 });
-                                    let action = if ep.raw_cos >= 0.0 { &buy_atom } else { &sell_atom };
-                                    let opinion = Primitives::bind(action, &intensity);
-                                    Primitives::bind(&observer_atoms[ei], &opinion)
-                                }).collect();
-                            // Generalist
-                            {
-                                let gen_intensity = mgr_scalar.encode(entry.tht_pred.raw_cos.abs().max(1e-10), ScalarMode::Linear { scale: 1.0 });
-                                let gen_action = if entry.tht_pred.raw_cos >= 0.0 { &buy_atom } else { &sell_atom };
-                                let gen_opinion = Primitives::bind(gen_action, &gen_intensity);
-                                mgr_res_facts.push(Primitives::bind(&generalist_atom, &gen_opinion));
+                            // Same canonical encoding as prediction time.
+                            let wl_curve_valid: Vec<bool> = observers.iter().map(|o| o.curve_valid).collect();
+                            let wl_resolved_lens: Vec<usize> = observers.iter().map(|o| o.resolved.len()).collect();
+                            let wl_resolved_accs: Vec<f64> = observers.iter().map(|o| {
+                                let len = o.resolved.len();
+                                if len == 0 { 0.0 } else {
+                                    o.resolved.iter().filter(|(_, c)| *c).count() as f64 / len as f64
+                                }
+                            }).collect();
+                            let wl_ctx = ManagerContext {
+                                observer_preds: &entry.observer_preds,
+                                observer_atoms: &observer_atoms,
+                                observer_curve_valid: &wl_curve_valid,
+                                observer_resolved_lens: &wl_resolved_lens,
+                                observer_resolved_accs: &wl_resolved_accs,
+                                observer_vecs: &entry.observer_vecs,
+                                generalist_pred: &entry.tht_pred,
+                                generalist_atom: &generalist_atom,
+                                generalist_curve_valid: curve_valid,
+                                candle_atr: candles[entry.candle_idx].atr_r,
+                                candle_hour: parse_candle_hour(&candles[entry.candle_idx].ts),
+                                candle_day: parse_candle_day(&candles[entry.candle_idx].ts),
+                                disc_strength: tht_journal.last_disc_strength,
+                            };
+                            let wl_facts = encode_manager_thought(&wl_ctx, &mgr_atoms, &mgr_scalar, min_opinion_magnitude);
+                            let mrefs: Vec<&Vector> = wl_facts.iter().collect();
+                            if !mrefs.is_empty() {
+                                let mgr_vec = Primitives::bundle(&mrefs);
+                                mgr_journal.observe(&mgr_vec, mgr_label, 1.0);
                             }
-                            let mrefs: Vec<&Vector> = mgr_res_facts.iter().collect();
-                            let mgr_vec = Primitives::bundle(&mrefs);
-                            mgr_journal.observe(&mgr_vec, mgr_label, 1.0);
                         }
 
                         // ── Treasury: only moves money for live trades ───────
