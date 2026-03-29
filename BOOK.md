@@ -590,7 +590,7 @@ Ichimoku, RSI divergence, DeMark Sequential, Hurst Exponent, Shannon Entropy —
 
 Holon is the kernel. It provides the six primitives. The trader is userland — a domain-specific standard library of named thoughts composed using the kernel's algebra. The DDoS detector is different userland. Different standard library. Same six primitives. Same kernel.
 
-Rich Hickey built Clojure on a small set of immutable primitives and let users compose everything else. The wat machine follows the same philosophy: provide just enough for experts to express their domain, then get out of the way. The kernel doesn't know what RSI means. It knows what bind means. The expert brings the domain knowledge. The kernel brings the algebra. The curve judges the result.
+[Brian Beckman](https://www.youtube.com/watch?v=XxzzJiXHOJs) showed that stateless state is the zen of composition. Rich Hickey built Clojure on a small set of immutable primitives and let users compose everything else. The wat machine follows the same philosophy: provide just enough for experts to express their domain, then get out of the way. The kernel doesn't know what RSI means. It knows what bind means. The expert brings the domain knowledge. The kernel brings the algebra. The curve judges the result.
 
 Growing the vocabulary — adding Ichimoku, Stochastic, entropy, fractal dimension — isn't growing the language. It's growing the standard library for one application. The language stays at six primitives. The kernel stays stable. The userland programs multiply.
 
@@ -1464,7 +1464,7 @@ Six primitives. One more thing they can express.
 
 ### The monoid
 
-A monoid is a set of things plus a rule for combining the things, and that rule obeys some rules. Brian Beckman said this on a whiteboard, explaining why programmers shouldn't fear the monad.
+A monoid is a set of things plus a rule for combining the things, and that rule obeys some rules. [Brian Beckman said this on a whiteboard](https://www.youtube.com/watch?v=ZhuHCtR3xq8), explaining why programmers shouldn't fear the monad.
 
 The wat machine is a monoid. Thoughts are the things. Bundle is the rule for combining. The rule obeys rules: bundling is associative (the order of composition doesn't change the result) and has an identity element (the zero vector changes nothing). Every thought is an element of the monoid. Every bundle is a composition within the monoid. The discriminant is a direction within the monoid that separates two accumulated compositions.
 
@@ -1476,7 +1476,7 @@ The algebra was always there. Kanerva's hyperdimensional computing. Beckman's mo
 
 ### Simple made easy
 
-Rich Hickey defined the distinction: simple means not interleaved, easy means near at hand. They are not the same thing. A system can be easy to use and deeply complex. A system can be hard to learn and profoundly simple.
+[Rich Hickey defined the distinction](https://www.youtube.com/watch?v=SxdOUGdseq4): simple means not interleaved, easy means near at hand. They are not the same thing. A system can be easy to use and deeply complex. A system can be hard to learn and profoundly simple.
 
 The enterprise has MORE things than the single generalist journal. More experts, more channels, more subscriptions, more positions, more modules. But they hang straight down. The momentum expert doesn't know about the treasury. The risk manager doesn't know about PELT segments. The exit expert doesn't know about expert opinions. Each is an island connected through abstractions.
 
