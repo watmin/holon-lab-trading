@@ -146,10 +146,9 @@ const PREDICATE_ATOMS: &[&str] = &[
 ];
 const SEGMENT_ATOMS: &[&str] = &["beginning", "ending"];
 const CALENDAR_ATOMS: &[&str] = &[
-    "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
-    "h00", "h04", "h08", "h12", "h16", "h20",
+    "hour-of-day", "day-of-week",
     "asian-session", "european-session", "us-session", "off-hours",
-    "at-day", "at-session", "at-hour",
+    "at-session",
 ];
 
 const ALL_ATOM_GROUPS: &[&[&str]] = &[
@@ -424,19 +423,13 @@ impl ThoughtEncoder {
             fact_cache.insert(key, fact_binary(&vocab, pred, "rsi", "rsi-sma"));
         }
 
-        // Pre-compute calendar facts
-        for &day in &["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] {
-            let key = format!("(at-day {})", day);
-            fact_cache.insert(key, fact_binary(&vocab, "at-day", day, day));
-        }
-        for &hour in &["h00", "h04", "h08", "h12", "h16", "h20"] {
-            let key = format!("(at-hour {})", hour);
-            fact_cache.insert(key, fact_binary(&vocab, "at-hour", hour, hour));
-        }
+        // Pre-compute session facts (categorical — sessions have discrete character)
         for &session in &["asian-session", "european-session", "us-session", "off-hours"] {
             let key = format!("(at-session {})", session);
             fact_cache.insert(key, fact_binary(&vocab, "at-session", session, session));
         }
+        // Hour and day use circular encoding now — computed live in eval_calendar,
+        // not pre-cached. The discriminant learns proximity: hour 23 is near hour 0.
 
         // Pre-compute new zone facts
         for &(ind, zone) in &[
@@ -628,7 +621,7 @@ impl ThoughtEncoder {
         // The story: what happened when. Calendar + temporal lookback.
         if is(&["narrative"]) {
             self.eval_temporal(candles, vm, &mut owned_facts, &mut labels);
-            self.eval_calendar(now, &mut cached_facts, &mut labels);
+            self.eval_calendar(now, &mut cached_facts, &mut owned_facts, &mut labels);
         }
 
         // ── EXCLUSIVE: regime ───────────────────────────────────────
@@ -872,60 +865,32 @@ impl ThoughtEncoder {
         &'a self,
         now: &Candle,
         facts: &mut Vec<&'a Vector>,
+        owned_facts: &mut Vec<Vector>,
         labels: &mut Vec<String>,
     ) {
-        // Day of week from timestamp (format: "YYYY-MM-DD HH:MM:SS" or similar)
-        if let Some(day) = Self::day_of_week_from_ts(&now.ts) {
-            let key = format!("(at-day {})", day);
-            if let Some(v) = self.fact_cache.get(&key) {
-                facts.push(v);
-                labels.push(key);
-            }
-        }
+        use crate::market::{parse_candle_hour, parse_candle_day};
 
-        // Hour block (4-hour buckets)
-        if let Some(hour_block) = Self::hour_block_from_ts(&now.ts) {
-            let key = format!("(at-hour {})", hour_block);
-            if let Some(v) = self.fact_cache.get(&key) {
-                facts.push(v);
-                labels.push(key);
-            }
-        }
+        // Hour and day: circular encoding. Hour 23 is near hour 0. Sunday near Monday.
+        // The manager and observer agree on time — same functions, same encoding.
+        let hour = parse_candle_hour(&now.ts);
+        let day = parse_candle_day(&now.ts);
 
-        // Trading session
-        if let Some(session) = Self::session_from_ts(&now.ts) {
+        let hour_vec = self.scalar_enc.encode(hour, ScalarMode::Circular { period: 24.0 });
+        owned_facts.push(Primitives::bind(self.vocab.get("hour-of-day"), &hour_vec));
+        labels.push(format!("(hour-of-day {:.0})", hour));
+
+        let day_vec = self.scalar_enc.encode(day, ScalarMode::Circular { period: 7.0 });
+        owned_facts.push(Primitives::bind(self.vocab.get("day-of-week"), &day_vec));
+        labels.push(format!("(day-of-week {:.0})", day));
+
+        // Trading session: categorical. Sessions have discrete character, not circular position.
+        let session = Self::session_from_ts(&now.ts);
+        if let Some(session) = session {
             let key = format!("(at-session {})", session);
             if let Some(v) = self.fact_cache.get(&key) {
                 facts.push(v);
                 labels.push(key);
             }
-        }
-    }
-
-    fn day_of_week_from_ts(ts: &str) -> Option<&'static str> {
-        // Parse "YYYY-MM-DD ..." and compute day of week via Tomohiko Sakamoto's algorithm
-        if ts.len() < 10 { return None; }
-        let y: i32 = ts[0..4].parse().ok()?;
-        let m: u32 = ts[5..7].parse().ok()?;
-        let d: u32 = ts[8..10].parse().ok()?;
-        let days = &["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-        let t = [0_i32, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4];
-        let y = if m < 3 { y - 1 } else { y };
-        let dow = ((y + y / 4 - y / 100 + y / 400 + t[(m - 1) as usize] + d as i32) % 7) as usize;
-        Some(days[dow])
-    }
-
-    fn hour_block_from_ts(ts: &str) -> Option<&'static str> {
-        if ts.len() < 13 { return None; }
-        let h: u32 = ts[11..13].parse().ok()?;
-        match h {
-            0..=3   => Some("h00"),
-            4..=7   => Some("h04"),
-            8..=11  => Some("h08"),
-            12..=15 => Some("h12"),
-            16..=19 => Some("h16"),
-            20..=23 => Some("h20"),
-            _ => None,
         }
     }
 
