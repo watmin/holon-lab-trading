@@ -32,11 +32,7 @@ rust/target/
 .coverage
 htmlcov/
 
-# Large run databases (keep logs, ignore DBs over 100MB)
-enterprise_results/*.db
-enterprise_results/*.db-shm
-enterprise_results/*.db-wal
-rust/runs/
+# Run ledgers and logs
 runs/
 data/*.db-shm
 data/*.db-wal
