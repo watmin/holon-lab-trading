@@ -1656,7 +1656,8 @@ fn main() {
                         if entry.raw_meta_dir.is_some() {
                             let profitable = net_ret > 0.0;
                             resolved_preds.push_back((entry.meta_conviction, profitable));
-                            mgr_resolved.push_back((entry.meta_conviction, profitable));
+                            // Don't double-push to mgr_resolved — it's already
+                            // populated from the hypothetical block with direction accuracy.
                             if mgr_resolved.len() > 5000 { mgr_resolved.pop_front(); }
                             if resolved_preds.len() > conviction_window {
                                 resolved_preds.pop_front();
