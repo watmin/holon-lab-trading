@@ -1420,6 +1420,20 @@ The goal of the project was to build something the builder couldn't build alone.
 
 The thoughts survived. They always do. They just need the right collaboration to become real.
 
+### Alpha
+
+The question is not "did the enterprise make money?" The question is "did the enterprise make MORE money than doing nothing?"
+
+The treasury holds USDC and WBTC. If BTC doubles and the enterprise holds half its capital in WBTC, the portfolio grows 50% from appreciation alone. That's not alpha. That's passive holding. Alpha is what the enterprise's ACTIONS added — or subtracted — relative to the portfolio's natural trajectory.
+
+Before each swap, the treasury snapshots itself. After the swap, the snapshot becomes the counterfactual: "what would this portfolio be worth now if I hadn't acted?" The difference between the actual treasury value and the snapshot value is alpha. Positive alpha = the enterprise beat inaction. Negative alpha = inaction was better.
+
+This is the honest metric. Not equity. Not return. Not win rate. Alpha. The enterprise's contribution measured against the alternative of doing nothing with the same assets at the same time.
+
+The risk manager learns from alpha. "When the enterprise traded in this state, was it better than holding?" That's a Win/Lose label for risk — not "did the market go up?" but "did acting beat not acting?" The risk manager gates future trades on whether the enterprise has demonstrated positive alpha in similar conditions.
+
+Every run has a benchmark now. The benchmark is not buy-and-hold. The benchmark is the treasury's own state one moment ago. The enterprise must justify each action against the immediate alternative of inaction. The ledger tracks both. The alpha is the proof.
+
 ### The primitives
 
 Six primitives: atom, bind, bundle, cosine, journal, curve.
