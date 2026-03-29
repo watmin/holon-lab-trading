@@ -51,7 +51,6 @@ const INDICATOR_ATOMS: &[&str] = &[
     "aroon-up", "aroon-down",     // Aroon trend freshness
     // Tier-1 esoteric
     "fractal-dim",                // Fractal dimension (Higuchi)
-    "spectral-slope",             // Power spectrum slope
     "entropy-rate",               // Sequential entropy (linguistics)
     "gr-bvalue",                  // Gutenberg-Richter b-value (seismology)
     // vocab/oscillators module

@@ -1332,7 +1332,7 @@ fn main() {
                             else if sells > buys { Some(Outcome::Sell) }
                             else { None }
                         };
-                        if let Some(_majority_dir) = expert_majority {
+                        if expert_majority.is_some() {
                             // Manager learns raw price direction from intensity patterns.
                             // Not "was the expert majority right?" but "did the price go up or down?"
                             // The manager maps intensity patterns → direction.
