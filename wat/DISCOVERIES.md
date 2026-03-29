@@ -37,3 +37,44 @@ Append-only. Each entry dated. The act of writing specifications reveals gaps.
 6. **Missing: the manager doesn't know how LONG each expert has been proven.** An expert
    that just opened its gate (100 resolved predictions) is less trustworthy than one
    that's been open for 5000. Tenure as a fact?
+
+## 2026-03-29: Writing expert specs
+
+7. **eval_advanced is shared across 3 experts.** Momentum, structure, AND regime all
+   see DFA alpha, entropy rate, fractal dimension, etc. The manager sees these regime
+   indicators through 3 different experts' signed convictions. Should regime OWN these
+   exclusively? Momentum and structure have their own primary vocabularies. Giving
+   regime exclusive ownership of abstract indicators would make the experts more
+   distinct and reduce redundant signal to the manager.
+
+8. **Volume is the thinnest expert.** Only 3 eval methods. Appeared proven once in 100k
+   (at 50k candle mark). Questions: is it inherently less predictive, or is the
+   vocabulary too thin? Should we add: OBV divergence, VWAP, money flow, buying/selling
+   volume? Should price action (inside bar, gaps) move to structure?
+
+9. **Narrative duplicates the manager's temporal encoding.** The narrative expert
+   encodes calendar as part of its thought (bundled with segments). The manager also
+   encodes calendar as separate context atoms. The manager gets time signal twice:
+   once from narrative's conviction (which incorporates calendar) and once from its
+   own temporal atoms. Redundancy vs reinforcement — need to test.
+
+10. **Structure is the most window-sensitive expert.** PELT, range position, fibonacci
+    all change meaning with window size. Structure might benefit from a NARROWER
+    window sampling range than other experts. Could the sampler learn an optimal range
+    per expert? The structure expert needs 3-8 PELT segments to be meaningful — too
+    few (large window) or too many (small window) degrades.
+
+11. **Regime survived gates because of abstraction.** DFA alpha, entropy, fractal dim
+    measure SERIES PROPERTIES not specific candle values. These are stable across
+    window sizes. The other experts' facts depend on specific candle values in the
+    window — different sampled windows give different facts. Regime's abstraction is
+    its strength. This suggests: MORE abstract indicators for regime, FEWER window-
+    dependent indicators shared with others.
+
+12. **Expert vocabulary boundaries need revision.** The current assignment is ad-hoc:
+    - Comparisons in momentum AND structure
+    - eval_advanced in momentum AND structure AND regime
+    - Price action in volume (but inside bars are geometric = structure?)
+    A principled redesign: each expert should have EXCLUSIVE facts that no other
+    expert sees, plus SHARED facts that provide common ground. The exclusive facts
+    define the expert's unique perspective. The shared facts enable comparison.
