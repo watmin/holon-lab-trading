@@ -717,24 +717,26 @@ fn main() {
                 mgr_facts.push(Primitives::bind(&disc_strength_atom,
                     &mgr_scalar.encode_log(tht_journal.last_disc_strength.max(1e-10))));
 
-                // Temporal: when is this happening? Markets behave differently by time.
-                let hour = candles[i].ts.get(11..13)
-                    .and_then(|s| s.parse::<f64>().ok()).unwrap_or(12.0);
-                // Day of week from the candle's year/month/day via Zeller-like formula
-                let day_of_week = {
-                    let y: i32 = candles[i].ts[..4].parse().unwrap_or(2019);
-                    let m: i32 = candles[i].ts[5..7].parse().unwrap_or(1);
-                    let d: i32 = candles[i].ts[8..10].parse().unwrap_or(1);
-                    // Tomohiko Sakamoto's algorithm
-                    let t = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4];
-                    let y2 = if m < 3 { y - 1 } else { y };
-                    ((y2 + y2/4 - y2/100 + y2/400 + t[(m-1) as usize] + d) % 7) as f64
+                // Temporal: same atoms the thought encoder uses.
+                // Named time concepts, not scalars. (at-hour h20) not encode_log(20).
+                let hour: usize = candles[i].ts.get(11..13)
+                    .and_then(|s| s.parse().ok()).unwrap_or(12);
+                let hour_block = match hour {
+                    0..=3   => "h00",
+                    4..=7   => "h04",
+                    8..=11  => "h08",
+                    12..=15 => "h12",
+                    16..=19 => "h16",
+                    _       => "h20",
                 };
-                // Circular encoding: hour 23 is close to hour 0
-                mgr_facts.push(Primitives::bind(&hour_atom,
-                    &mgr_scalar.encode_log((hour + 1.0).max(1e-10)))); // +1 to avoid log(0)
-                mgr_facts.push(Primitives::bind(&day_atom,
-                    &mgr_scalar.encode_log((day_of_week + 1.0).max(1e-10))));
+                let session = match hour {
+                    0..=7   => "asian-session",
+                    8..=13  => "european-session",
+                    14..=20 => "us-session",
+                    _       => "off-hours",
+                };
+                mgr_facts.push(Primitives::bind(&hour_atom, &vm.get_vector(hour_block)));
+                mgr_facts.push(Primitives::bind(&day_atom, &vm.get_vector(session)));
 
                 // Coherence: geometric measure of panel concentration.
                 // Compute pairwise cosine between proven expert thought vectors.
