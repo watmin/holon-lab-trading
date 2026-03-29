@@ -9,4 +9,5 @@ pub mod sizing;
 pub mod thought;
 pub mod treasury;
 pub mod viewport;
+pub mod vocab;
 pub mod window_sampler;
