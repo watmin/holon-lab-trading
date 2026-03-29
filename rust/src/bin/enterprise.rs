@@ -17,14 +17,14 @@ use rusqlite::params;
 use holon::{Primitives, ScalarMode, Similarity, VectorManager, Vector};
 use holon::memory::OnlineSubspace;
 
-use btc_walk::db::load_candles;
-use btc_walk::journal::{Journal, Outcome, Prediction};
-use btc_walk::thought::{ThoughtEncoder, ThoughtVocab, IndicatorStreams};
-use btc_walk::treasury::Treasury;
-use btc_walk::portfolio::{Trader, Phase, YearStats};
-use btc_walk::sizing::{kelly_frac, signal_weight};
-use btc_walk::position::{Pending, ExitReason};
-use btc_walk::run_db::init_run_db;
+use enterprise::db::load_candles;
+use enterprise::journal::{Journal, Outcome, Prediction};
+use enterprise::thought::{ThoughtEncoder, ThoughtVocab, IndicatorStreams};
+use enterprise::treasury::Treasury;
+use enterprise::portfolio::{Trader, Phase, YearStats};
+use enterprise::sizing::{kelly_frac, signal_weight};
+use enterprise::position::{Pending, ExitReason};
+use enterprise::run_db::init_run_db;
 // Visual encoding removed — proven zero outcome clustering (cosine gap = 0.0004).
 // The visual raster is an artifact of Chapter 1. Charts don't predict; thoughts predict.
 
@@ -237,7 +237,7 @@ fn main() {
     for p in 0..max_pos as i64 { vm.get_position_vector(p); }
 
     // ─ Adaptive window sampler ─
-    use btc_walk::window_sampler::WindowSampler;
+    use enterprise::window_sampler::WindowSampler;
     let window_sampler = WindowSampler::new(args.dims as u64, 12, 2016);
     // Pre-warm position vectors for the max possible window
     for p in 0..2016_i64 { vm.get_position_vector(p); }
@@ -249,7 +249,7 @@ fn main() {
     // ─ Multi-desk setup ──────────────────────────────────────────────────
     // Each desk is a business unit with its own time scale.
     // Parse --desks flag, or fall back to single desk from --window/--horizon.
-    use btc_walk::desk::{Desk, DeskConfig, DeskResolved};
+    use enterprise::desk::{Desk, DeskConfig, DeskResolved};
     let desk_configs: Vec<(usize, usize)> = if args.desks.is_empty() {
         vec![(args.window, args.horizon)]
     } else {
@@ -539,7 +539,7 @@ fn main() {
     let mut pending:    VecDeque<Pending> = VecDeque::new();
 
     // ─ Managed positions: concurrent, independently managed ──────────
-    use btc_walk::position::{ManagedPosition, PositionPhase, PositionExit};
+    use enterprise::position::{ManagedPosition, PositionPhase, PositionExit};
     let mut positions: Vec<ManagedPosition> = Vec::new();
     let mut next_position_id: usize = 0;
     let mut last_exit_price: f64 = 0.0;  // price when last position exited

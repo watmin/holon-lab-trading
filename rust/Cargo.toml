@@ -1,27 +1,15 @@
 [package]
-name = "btc-walk"
+name = "enterprise"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "btc_walk"
+name = "enterprise"
 path = "src/lib.rs"
 
 [[bin]]
-name = "btc-walk"
-path = "src/bin/btc_walk.rs"
-
-[[bin]]
-name = "trader"
-path = "src/bin/trader.rs"
-
-[[bin]]
-name = "trader2"
-path = "src/bin/trader2.rs"
-
-[[bin]]
-name = "trader3"
-path = "src/bin/trader3.rs"
+name = "enterprise"
+path = "src/bin/enterprise.rs"
 
 [dependencies]
 holon = { path = "../../holon-rs", features = ["simd"] }
