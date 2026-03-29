@@ -6,16 +6,27 @@
 
 use std::collections::VecDeque;
 
+use holon::Vector;
 use holon::memory::OnlineSubspace;
 
-use crate::journal::Journal;
+use crate::journal::{Journal, Outcome, Prediction};
 use crate::window_sampler::WindowSampler;
+
+/// Data returned from resolve() for diagnostic logging.
+/// The heartbeat logs this to the ledger if diagnostics are enabled.
+pub struct ResolveLog {
+    pub name: &'static str,
+    pub conviction: f64,
+    pub direction: Outcome,
+    pub correct: bool,
+}
 
 pub struct Observer {
     pub name: &'static str,
     pub profile: &'static str,
     pub journal: Journal,
     pub resolved: VecDeque<(f64, bool)>,  // (conviction, correct)
+    // dead-thoughts:allow(scaffolding) — updated but never queried; wired when observer recognizes its own good states
     pub good_state_subspace: OnlineSubspace,
     pub recalib_wins: u32,
     pub recalib_total: u32,
@@ -44,5 +55,90 @@ impl Observer {
             flip_threshold: 0.0,
             curve_valid: false,
         }
+    }
+
+    /// Resolve a prediction against an observed outcome.
+    /// Handles: learning, accuracy tracking, engram gating, curve validation,
+    /// flip threshold update, and resolved prediction tracking.
+    /// Returns a log record if the observer had a directional prediction.
+    pub fn resolve(
+        &mut self,
+        thought_vec: &Vector,
+        prediction: &Prediction,
+        outcome: Outcome,
+        signal_weight: f64,
+        flip_quantile: f64,
+        conviction_window: usize,
+    ) -> Option<ResolveLog> {
+        // 1. Learn: accumulate this observation
+        self.journal.observe(thought_vec, outcome, signal_weight);
+
+        // 2. Track accuracy since last recalib (for engram gating)
+        if let Some(pred_dir) = prediction.direction {
+            self.recalib_total += 1;
+            if pred_dir == outcome { self.recalib_wins += 1; }
+        }
+
+        // 3. Engram gating: if expert just recalibrated with good accuracy,
+        //    snapshot the discriminant as a "good state"
+        if self.journal.recalib_count > self.last_recalib_count {
+            self.last_recalib_count = self.journal.recalib_count;
+            if self.recalib_total >= 20 {
+                let acc = self.recalib_wins as f64 / self.recalib_total as f64;
+                if acc > 0.55 {
+                    if let Some(disc) = self.journal.discriminant() {
+                        let disc_owned = disc.to_vec();
+                        self.good_state_subspace.update(&disc_owned);
+                    }
+                }
+            }
+            self.recalib_wins = 0;
+            self.recalib_total = 0;
+        }
+
+        // 4-7: Only if the observer had a directional prediction
+        let pred_dir = prediction.direction?;
+        let correct = pred_dir == outcome;
+
+        // 4. Track resolved predictions
+        self.resolved.push_back((prediction.conviction, correct));
+        if self.resolved.len() > conviction_window {
+            self.resolved.pop_front();
+        }
+
+        // 5. Update conviction history + flip threshold
+        self.conviction_history.push_back(prediction.conviction);
+        if self.conviction_history.len() > 2000 {
+            self.conviction_history.pop_front();
+        }
+        if self.conviction_history.len() >= 200
+            && self.resolved.len() % 50 == 0
+        {
+            let mut sorted: Vec<f64> = self.conviction_history.iter().copied().collect();
+            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            let idx = ((sorted.len() as f64 * flip_quantile) as usize)
+                .min(sorted.len() - 1);
+            self.flip_threshold = sorted[idx];
+        }
+
+        // 6. Proof gate: does this expert have direction edge?
+        if self.resolved.len() >= 100 {
+            let high_conv: Vec<&(f64, bool)> = self.resolved.iter()
+                .filter(|(c, _)| *c >= self.flip_threshold * 0.8)
+                .collect();
+            if high_conv.len() >= 20 {
+                let acc = high_conv.iter().filter(|(_, c)| *c).count() as f64
+                    / high_conv.len() as f64;
+                self.curve_valid = acc > 0.52;
+            }
+        }
+
+        // 7. Return log data (heartbeat writes to ledger if diagnostics enabled)
+        Some(ResolveLog {
+            name: self.name,
+            conviction: prediction.conviction,
+            direction: pred_dir,
+            correct,
+        })
     }
 }

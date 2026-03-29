@@ -1091,80 +1091,18 @@ fn main() {
                         // Manager does NOT learn here. Manager learns Buy/Sell (direction)
                         // at first-crossing in the resolution block below.
                         // wat/manager.wat: "Does NOT know about costs."
-                        // decomplect:allow(braided-concerns) — observer learn + track + gate + log
-                        // Extracts to Observer::resolve() when observer methods are built
+                        // Observer resolution: learn, track, gate, validate, log.
+                        // Each observer resolves its prediction against the outcome.
                         for (ei, expert_vec) in entry.observer_vecs.iter().enumerate() {
-                            observers[ei].journal.observe(expert_vec, o, sw);
-                            // Track accuracy since last recalib for engram gating
-                            if let Some(pred_dir) = entry.observer_preds[ei].direction {
-                                // No flip. Experts learn raw. Their discriminants encode
-                                // the full pattern including reversals naturally.
-                                observers[ei].recalib_total += 1;
-                                if pred_dir == o { observers[ei].recalib_wins += 1; }
-                            }
-                            // When expert recalibrates: evaluate last period's accuracy.
-                            // If good (>55%), snapshot discriminant as a "good state" engram.
-                            if observers[ei].journal.recalib_count > observers[ei].last_recalib_count {
-                                observers[ei].last_recalib_count = observers[ei].journal.recalib_count;
-                                if observers[ei].recalib_total >= 20 {
-                                    let acc = observers[ei].recalib_wins as f64
-                                        / observers[ei].recalib_total as f64;
-                                    if acc > 0.55 {
-                                        if let Some(disc) = observers[ei].journal.discriminant() {
-                                            let disc_owned = disc.to_vec();
-                                            observers[ei].good_state_subspace.update(&disc_owned);
-                                        }
-                                    }
-                                }
-                                observers[ei].recalib_wins = 0;
-                                observers[ei].recalib_total = 0;
-                            }
-                            if let Some(pred_dir) = entry.observer_preds[ei].direction {
-                                // observer_preds are already flipped at prediction time.
-                                // Check directly against outcome.
-                                let correct = pred_dir == o;
-                                observers[ei].resolved.push_back(
-                                    (entry.observer_preds[ei].conviction, correct));
-                                if observers[ei].resolved.len() > conviction_window {
-                                    observers[ei].resolved.pop_front();
-                                }
-                                // Update per-observer conviction history + flip threshold
-                                observers[ei].conviction_history.push_back(entry.observer_preds[ei].conviction);
-                                if observers[ei].conviction_history.len() > 2000 {
-                                    observers[ei].conviction_history.pop_front();
-                                }
-                                if observers[ei].conviction_history.len() >= 200
-                                    && observers[ei].resolved.len() % 50 == 0
-                                {
-                                    let mut sorted: Vec<f64> = observers[ei].conviction_history.iter().copied().collect();
-                                    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
-                                    let idx = ((sorted.len() as f64 * args.flip_quantile) as usize)
-                                        .min(sorted.len() - 1);
-                                    observers[ei].flip_threshold = sorted[idx];
-                                }
-                                // Proof gate: does this expert have direction edge?
-                                // Check if accuracy at high conviction exceeds 52%.
-                                if observers[ei].resolved.len() >= 100 {
-                                    let high_conv: Vec<&(f64, bool)> = observers[ei].resolved.iter()
-                                        .filter(|(c, _)| *c >= observers[ei].flip_threshold * 0.8)
-                                        .collect();
-                                    if high_conv.len() >= 20 {
-                                        let acc = high_conv.iter().filter(|(_, c)| *c).count() as f64
-                                            / high_conv.len() as f64;
-                                        observers[ei].curve_valid = acc > 0.52;
-                                    }
-                                }
-                                // Log for post-hoc analysis
+                            if let Some(log) = observers[ei].resolve(
+                                expert_vec, &entry.observer_preds[ei], o, sw,
+                                args.flip_quantile, conviction_window,
+                            ) {
                                 if args.diagnostics { ledger.execute(
                                     "INSERT INTO observer_log (step,observer,conviction,direction,correct)
                                      VALUES (?1,?2,?3,?4,?5)",
-                                    params![
-                                        log_step,
-                                        observers[ei].name,
-                                        entry.observer_preds[ei].conviction,
-                                        pred_dir.to_string(),
-                                        correct as i32,
-                                    ],
+                                    params![log_step, log.name, log.conviction,
+                                            log.direction.to_string(), log.correct as i32],
                                 ).ok(); }
                             }
                         }
@@ -1518,7 +1456,7 @@ fn main() {
                     }
                 } // if let Some(dir)
 
-                // Log to DB. Visual columns get NULLs (schema kept for backward compat).
+                // Log to ledger.
                 ledger.execute(
                     "INSERT INTO candle_log
                      (step,candle_idx,timestamp,
