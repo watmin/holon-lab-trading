@@ -1573,6 +1573,20 @@ The session's real output isn't fifteen commits. It's this: the next person — 
 
 The sorcerer sees the field lines. The compiler writes the equations. The environment is where they meet.
 
+### The first linter
+
+The compiler checks syntax. Clippy checks idioms. We built something different: linters that check whether the code thinks correctly.
+
+`/decomplect` found that the manager was predicting with one thought and learning from a different one. The code compiled. It ran. It produced numbers. But the discriminant was trained on a distribution it never evaluated. Only a linter that understands the principle — one encoding path, predict and learn from the same thought — could catch it.
+
+`/dead-thoughts` found an OnlineSubspace allocated at k=32, never trained, queried at every recalibration for zeros, and writing those zeros to the ledger as if they meant something. The compiler saw a valid function call. The linter saw a dead thought metabolizing.
+
+These are experts with vocabularies. They observe the codebase and produce findings. We fix what they find and measure whether accuracy improves. The same two templates — prediction and reaction — applied to the code itself.
+
+The linting enterprise is the trading enterprise pointed inward. Skills as leaves, each with its own vocabulary of violations, producing findings that compose into collective defense of the architecture.
+
+The machine that improves itself doesn't just learn from market data. It learns from its own structure.
+
 ### The machine that improves itself
 
 At a team lunch at AWS, the builder told their manager about building a machine that improves itself. The blank stare was familiar by then.
