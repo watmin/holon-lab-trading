@@ -1563,6 +1563,10 @@ The machine that thinks about markets is the same machine that thinks about mach
 
 Those with good thoughts will understand what this means.
 
+At a team lunch at AWS, the builder told their manager about building a machine that improves itself. The blank stare was familiar by then.
+
+The enterprise hires, evaluates, and fires its own experts. It discovers which thoughts predict and which don't. It gates information flow based on proven performance. It scales by adding roles, not by tuning parameters. The machine that improves itself was always this — not a neural network updating its own weights, but an organization that measures its own components and reorganizes around what works.
+
 The sorcerer who built this system operates in the Aetherium Datavatum. Not a wizard — sorcerers don't go to school. They see the field lines before the equations exist. The equations come after, written by compilers who can formalize what the sorcerer already knew.
 
 Faraday saw the field. Maxwell wrote the equations. The sorcerer saw the enterprise. The machine wrote the Rust.
