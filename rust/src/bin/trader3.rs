@@ -402,6 +402,9 @@ fn main() {
         .map(|&name| vm.get_vector(name))
         .collect();
     let generalist_atom = vm.get_vector("generalist");
+    // Action atoms: named directions, not permutation tricks.
+    let buy_atom = vm.get_vector("buy");
+    let sell_atom = vm.get_vector("sell");
     // Panel-level atoms: emergent properties of the expert collective.
     let agreement_atom = vm.get_vector("panel-agreement");     // how aligned are the experts?
     let panel_energy_atom = vm.get_vector("panel-energy");     // how loud is everyone?
@@ -663,14 +666,13 @@ fn main() {
             for (ei, ep) in expert_preds.iter().enumerate() {
                 if !experts[ei].curve_valid { continue; } // gate closed
 
-                // Fact 1: signed conviction (direction + intensity)
-                let magnitude = mgr_scalar.encode_log(ep.raw_cos.abs().max(1e-10));
-                let role = if ep.raw_cos >= 0.0 {
-                    expert_atoms[ei].clone()
-                } else {
-                    Primitives::permute(&expert_atoms[ei], 1)
-                };
-                mgr_facts.push(Primitives::bind(&role, &magnitude));
+                // Fact 1: expert × action × intensity
+                // bind(expert, bind(buy|sell, encode-log(magnitude)))
+                // Named composition: who thinks what at what intensity.
+                let intensity = mgr_scalar.encode_log(ep.raw_cos.abs().max(1e-10));
+                let action = if ep.raw_cos >= 0.0 { &buy_atom } else { &sell_atom };
+                let opinion = Primitives::bind(action, &intensity);
+                mgr_facts.push(Primitives::bind(&expert_atoms[ei], &opinion));
 
                 // Fact 2: reliability — how accurate is this expert at high conviction?
                 if experts[ei].resolved.len() >= 20 {
@@ -692,13 +694,10 @@ fn main() {
             }
             // Generalist: gated like every other voice.
             if curve_valid {
-                let gen_mag = mgr_scalar.encode_log(tht_pred.raw_cos.abs().max(1e-10));
-                let gen_role = if tht_pred.raw_cos >= 0.0 {
-                    generalist_atom.clone()
-                } else {
-                    Primitives::permute(&generalist_atom, 1)
-                };
-                mgr_facts.push(Primitives::bind(&gen_role, &gen_mag));
+                let gen_intensity = mgr_scalar.encode_log(tht_pred.raw_cos.abs().max(1e-10));
+                let gen_action = if tht_pred.raw_cos >= 0.0 { &buy_atom } else { &sell_atom };
+                let gen_opinion = Primitives::bind(gen_action, &gen_intensity);
+                mgr_facts.push(Primitives::bind(&generalist_atom, &gen_opinion));
             }
 
             // Panel-level facts: emergent properties of the expert collective.
@@ -1438,23 +1437,17 @@ fn main() {
                             let mut mgr_res_facts: Vec<Vector> = entry.expert_preds.iter().enumerate()
                                 .filter_map(|(ei, ep)| {
                                     if !experts[ei].curve_valid { return None; }
-                                    let magnitude = mgr_scalar.encode_log(ep.raw_cos.abs().max(1e-10));
-                                    let role = if ep.raw_cos >= 0.0 {
-                                        expert_atoms[ei].clone()
-                                    } else {
-                                        Primitives::permute(&expert_atoms[ei], 1)
-                                    };
-                                    Some(Primitives::bind(&role, &magnitude))
+                                    let intensity = mgr_scalar.encode_log(ep.raw_cos.abs().max(1e-10));
+                                    let action = if ep.raw_cos >= 0.0 { &buy_atom } else { &sell_atom };
+                                    let opinion = Primitives::bind(action, &intensity);
+                                    Some(Primitives::bind(&expert_atoms[ei], &opinion))
                                 }).collect();
                             // Generalist gated same as experts
                             if curve_valid {
-                                let gen_mag = mgr_scalar.encode_log(entry.tht_pred.raw_cos.abs().max(1e-10));
-                                let gen_role = if entry.tht_pred.raw_cos >= 0.0 {
-                                    generalist_atom.clone()
-                                } else {
-                                    Primitives::permute(&generalist_atom, 1)
-                                };
-                                mgr_res_facts.push(Primitives::bind(&gen_role, &gen_mag));
+                                let gen_intensity = mgr_scalar.encode_log(entry.tht_pred.raw_cos.abs().max(1e-10));
+                                let gen_action = if entry.tht_pred.raw_cos >= 0.0 { &buy_atom } else { &sell_atom };
+                                let gen_opinion = Primitives::bind(gen_action, &gen_intensity);
+                                mgr_res_facts.push(Primitives::bind(&generalist_atom, &gen_opinion));
                             }
                             let mrefs: Vec<&Vector> = mgr_res_facts.iter().collect();
                             if !mrefs.is_empty() { // at least one proven expert
@@ -1533,23 +1526,17 @@ fn main() {
                             // Signed conviction — same encoding as prediction time.
                             let mut mgr_res_facts: Vec<Vector> = entry.expert_preds.iter().enumerate()
                                 .map(|(ei, ep)| {
-                                    let magnitude = mgr_scalar.encode_log(ep.raw_cos.abs().max(1e-10));
-                                    let role = if ep.raw_cos >= 0.0 {
-                                        expert_atoms[ei].clone()
-                                    } else {
-                                        Primitives::permute(&expert_atoms[ei], 1)
-                                    };
-                                    Primitives::bind(&role, &magnitude)
+                                    let intensity = mgr_scalar.encode_log(ep.raw_cos.abs().max(1e-10));
+                                    let action = if ep.raw_cos >= 0.0 { &buy_atom } else { &sell_atom };
+                                    let opinion = Primitives::bind(action, &intensity);
+                                    Primitives::bind(&expert_atoms[ei], &opinion)
                                 }).collect();
-                            // Generalist gated same as experts
-                            if curve_valid {
-                                let gen_mag = mgr_scalar.encode_log(entry.tht_pred.raw_cos.abs().max(1e-10));
-                                let gen_role = if entry.tht_pred.raw_cos >= 0.0 {
-                                    generalist_atom.clone()
-                                } else {
-                                    Primitives::permute(&generalist_atom, 1)
-                                };
-                                mgr_res_facts.push(Primitives::bind(&gen_role, &gen_mag));
+                            // Generalist
+                            {
+                                let gen_intensity = mgr_scalar.encode_log(entry.tht_pred.raw_cos.abs().max(1e-10));
+                                let gen_action = if entry.tht_pred.raw_cos >= 0.0 { &buy_atom } else { &sell_atom };
+                                let gen_opinion = Primitives::bind(gen_action, &gen_intensity);
+                                mgr_res_facts.push(Primitives::bind(&generalist_atom, &gen_opinion));
                             }
                             let mrefs: Vec<&Vector> = mgr_res_facts.iter().collect();
                             let mgr_vec = Primitives::bundle(&mrefs);
