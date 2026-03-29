@@ -1,8 +1,8 @@
-//! Manager encoding — expert opinions become the manager's thought.
+//! Manager encoding — observer opinions become the manager's thought.
 //!
 //! Spec: wat/manager.wat
 //!
-//! The manager thinks in expert opinions, not candle data.
+//! The manager thinks in observer opinions, not candle data.
 //! Each expert contributes: opinion (direction + magnitude) + credibility (proven/tentative)
 //! Plus: panel shape, market context, time, motion.
 
@@ -14,12 +14,12 @@ use crate::journal::Prediction;
 
 /// Everything the manager needs to encode one candle's thought.
 pub struct ManagerContext<'a> {
-    pub expert_preds: &'a [Prediction],
-    pub expert_atoms: &'a [Vector],
-    pub expert_curve_valid: &'a [bool],
-    pub expert_resolved_lens: &'a [usize],
-    pub expert_resolved_accs: &'a [f64],  // rolling accuracy per expert
-    pub expert_vecs: &'a [Vector],        // expert thought vectors (for coherence)
+    pub observer_preds: &'a [Prediction],
+    pub observer_atoms: &'a [Vector],
+    pub observer_curve_valid: &'a [bool],
+    pub observer_resolved_lens: &'a [usize],
+    pub observer_resolved_accs: &'a [f64],  // rolling accuracy per observer
+    pub observer_vecs: &'a [Vector],        // expert thought vectors (for coherence)
     pub generalist_pred: &'a Prediction,
     pub generalist_atom: &'a Vector,
     pub generalist_curve_valid: bool,
@@ -70,7 +70,7 @@ impl ManagerAtoms {
     }
 }
 
-/// Encode the manager's thought from expert opinions.
+/// Encode the manager's thought from observer opinions.
 /// This is Layer 2 from enterprise.wat — called once per candle at prediction time,
 /// and reconstructed at resolution time.
 pub fn encode_manager_thought(
@@ -82,7 +82,7 @@ pub fn encode_manager_thought(
     let mut facts: Vec<Vector> = Vec::new();
 
     // Per-expert: opinion + credibility + reliability + tenure
-    for (ei, ep) in ctx.expert_preds.iter().enumerate() {
+    for (ei, ep) in ctx.observer_preds.iter().enumerate() {
         let abs_cos = ep.raw_cos.abs();
         if abs_cos < min_opinion { continue; }
 
@@ -90,26 +90,26 @@ pub fn encode_manager_thought(
         let magnitude = scalar.encode(abs_cos, ScalarMode::Linear { scale: 1.0 });
         let action = if ep.raw_cos >= 0.0 { &atoms.buy } else { &atoms.sell };
         let opinion = Primitives::bind(action, &magnitude);
-        facts.push(Primitives::bind(&ctx.expert_atoms[ei], &opinion));
+        facts.push(Primitives::bind(&ctx.observer_atoms[ei], &opinion));
 
         // Credibility: bind(expert, proven|tentative)
-        let status = if ctx.expert_curve_valid[ei] { &atoms.proven } else { &atoms.tentative };
-        facts.push(Primitives::bind(&ctx.expert_atoms[ei], status));
+        let status = if ctx.observer_curve_valid[ei] { &atoms.proven } else { &atoms.tentative };
+        facts.push(Primitives::bind(&ctx.observer_atoms[ei], status));
 
         // Reliability: bind(bind(expert, reliability), accuracy)
-        if ctx.expert_resolved_lens[ei] >= 20 {
-            let acc = ctx.expert_resolved_accs[ei];
+        if ctx.observer_resolved_lens[ei] >= 20 {
+            let acc = ctx.observer_resolved_accs[ei];
             let rel = scalar.encode((acc - 0.4).max(0.0), ScalarMode::Linear { scale: 1.0 });
             facts.push(Primitives::bind(
-                &Primitives::bind(&ctx.expert_atoms[ei], &atoms.reliability), &rel));
+                &Primitives::bind(&ctx.observer_atoms[ei], &atoms.reliability), &rel));
         }
 
         // Tenure: bind(bind(expert, tenure), count)
-        let tenure = ctx.expert_resolved_lens[ei] as f64;
+        let tenure = ctx.observer_resolved_lens[ei] as f64;
         if tenure >= 50.0 {
             let ten = scalar.encode_log(tenure);
             facts.push(Primitives::bind(
-                &Primitives::bind(&ctx.expert_atoms[ei], &atoms.tenure), &ten));
+                &Primitives::bind(&ctx.observer_atoms[ei], &atoms.tenure), &ten));
         }
     }
 
@@ -125,8 +125,8 @@ pub fn encode_manager_thought(
     }
 
     // Panel shape (needs 2+ proven experts)
-    let proven_preds: Vec<&Prediction> = ctx.expert_preds.iter().enumerate()
-        .filter(|(ei, _)| ctx.expert_curve_valid[*ei])
+    let proven_preds: Vec<&Prediction> = ctx.observer_preds.iter().enumerate()
+        .filter(|(ei, _)| ctx.observer_curve_valid[*ei])
         .map(|(_, ep)| ep)
         .collect();
 
@@ -148,8 +148,8 @@ pub fn encode_manager_thought(
             &scalar.encode(variance.sqrt(), ScalarMode::Linear { scale: 1.0 })));
 
         // Coherence: pairwise cosine between proven expert thought vectors
-        let proven_vecs: Vec<&Vector> = ctx.expert_vecs.iter().enumerate()
-            .filter(|(ei, _)| ctx.expert_curve_valid[*ei])
+        let proven_vecs: Vec<&Vector> = ctx.observer_vecs.iter().enumerate()
+            .filter(|(ei, _)| ctx.observer_curve_valid[*ei])
             .map(|(_, v)| v)
             .collect();
         if proven_vecs.len() >= 2 {

@@ -1,7 +1,7 @@
 //! A Desk is a business unit within the enterprise.
 //!
 //! Each desk looks at the market through its own time scale (window size),
-//! runs its own set of expert traders, maintains its own pending positions,
+//! runs its own set of observers, maintains its own pending positions,
 //! and builds its own paper trail. The treasury reads the paper trails
 //! and allocates capital to desks whose traders prove edge.
 //!
@@ -15,8 +15,8 @@ use crate::journal::{Journal, Outcome, Prediction};
 use crate::thought::{ThoughtEncoder, ThoughtVocab, IndicatorStreams};
 use crate::db::Candle;
 
-/// One expert trader within a desk.
-pub struct Expert {
+/// One observer within a desk.
+pub struct Observer {
     pub name: &'static str,
     pub profile: &'static str,
     pub journal: Journal,
@@ -54,7 +54,7 @@ pub struct DeskConfig {
     pub name: String,
     pub window: usize,
     pub horizon: usize,
-    pub expert_profiles: Vec<&'static str>,
+    pub observer_names: Vec<&'static str>,
 }
 
 /// A desk's live state — its memory.
@@ -63,7 +63,7 @@ pub struct Desk {
     pub thought_encoder: ThoughtEncoder,
     pub thought_streams: IndicatorStreams,
     pub generalist: Journal,
-    pub experts: Vec<Expert>,
+    pub observers: Vec<Observer>,
     pub pending: VecDeque<DeskPending>,
 
     // Paper trail: predictions + outcomes, regardless of capital deployment.
@@ -92,12 +92,12 @@ impl Desk {
         let gen_name: &'static str = Box::leak(format!("{}-generalist", config.name).into_boxed_str());
         let generalist = Journal::new(gen_name, dims, recalib_interval);
 
-        let experts: Vec<Expert> = config.expert_profiles.iter().map(|&profile| {
-            let expert_name: &'static str = Box::leak(format!("{}-{}", config.name, profile).into_boxed_str());
-            Expert {
+        let observers: Vec<Observer> = config.observer_names.iter().map(|&profile| {
+            let observer_name: &'static str = Box::leak(format!("{}-{}", config.name, profile).into_boxed_str());
+            Observer {
                 name: profile,
                 profile,
-                journal: Journal::new(expert_name, dims, recalib_interval),
+                journal: Journal::new(observer_name, dims, recalib_interval),
                 resolved: VecDeque::new(),
                 recalib_total: 0,
                 recalib_wins: 0,
@@ -111,7 +111,7 @@ impl Desk {
             thought_encoder,
             thought_streams,
             generalist,
-            experts,
+            observers,
             pending: VecDeque::new(),
             resolved_preds: VecDeque::new(),
             conviction_history: VecDeque::new(),
@@ -149,14 +149,14 @@ impl Desk {
         let full = self.thought_encoder.encode_view(
             candles, &self.thought_streams, 0, 0, vm, None, None, "full",
         );
-        let expert_vecs: Vec<Vector> = self.config.expert_profiles.iter()
+        let observer_vecs: Vec<Vector> = self.config.observer_names.iter()
             .map(|&profile| {
                 self.thought_encoder.encode_view(
                     candles, &self.thought_streams, 0, 0, vm, None, None, profile,
                 ).thought
             })
             .collect();
-        (full.thought, full.fact_labels, expert_vecs)
+        (full.thought, full.fact_labels, observer_vecs)
     }
 
     /// Predict direction from a thought vector using the generalist.
@@ -167,8 +167,8 @@ impl Desk {
     /// Decay all journals by one step.
     pub fn decay(&mut self, rate: f64) {
         self.generalist.decay(rate);
-        for expert in &mut self.experts {
-            expert.journal.decay(rate);
+        for observer in &mut self.observers {
+            observer.journal.decay(rate);
         }
     }
 

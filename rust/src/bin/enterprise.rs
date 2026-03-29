@@ -178,7 +178,7 @@ struct Args {
     #[arg(long)]
     run_db: Option<PathBuf>,
 
-    /// Enable heavy diagnostic tables (trade_facts, trade_vectors, expert_log).
+    /// Enable heavy diagnostic tables (trade_facts, trade_vectors, observer_log).
     /// Off by default for performance. Enable for analysis runs.
     #[arg(long, default_value_t = false)]
     diagnostics: bool,
@@ -267,7 +267,7 @@ fn main() {
             name,
             window: w,
             horizon: h,
-            expert_profiles: all_profiles.clone(),
+            observer_names: all_profiles.clone(),
         };
         // Pre-warm position vectors for this desk's window size
         for p in 0..w as i64 { vm.get_position_vector(p); }
@@ -288,7 +288,7 @@ fn main() {
     let mut tht_journal = Journal::new("thought", args.dims, args.recalib_interval);
 
     // ─ Manager journal: thinks in expert opinions, not candle data ────
-    // The manager's vocabulary = its experts. Each expert is an atom.
+    // The manager's vocabulary = its observers. Each expert is an atom.
     // The manager's thought = bundle(bind(expert_atom, scalar(conviction))).
     // The manager's discriminant learns which expert configurations predict.
     let mut mgr_journal = Journal::new("manager", args.dims, args.recalib_interval);
@@ -363,11 +363,11 @@ fn main() {
     // The manager acts only when conviction falls in this band.
     let mut mgr_proven_band: (f64, f64) = (0.0, 0.0); // (low, high) — empty when not proven
 
-    // ─ Expert panel: N traders, each with own vocabulary and own window ─
+    // ─ Observer panel: N traders, each with own vocabulary and own window ─
     // Each expert thinks different thoughts at their own time scale.
     // The manager aggregates their predictions — it does not encode.
     // Each expert discovers their optimal window through experience.
-    struct Expert {
+    struct Observer {
         name: &'static str,
         profile: &'static str,
         journal: Journal,
@@ -383,9 +383,9 @@ fn main() {
         // its opinion flows upstream. Silence, not noise.
         curve_valid: bool,
     }
-    let expert_profiles = ["momentum", "structure", "volume", "narrative", "regime"];
-    let mut experts: Vec<Expert> = expert_profiles.iter().enumerate().map(|(ei, &profile)| {
-        Expert {
+    let observer_names = ["momentum", "structure", "volume", "narrative", "regime"];
+    let mut observers: Vec<Observer> = observer_names.iter().enumerate().map(|(ei, &profile)| {
+        Observer {
             name: profile,
             profile,
             journal: Journal::new(profile, args.dims, args.recalib_interval),
@@ -419,10 +419,10 @@ fn main() {
     let mut subspace_baseline_residual: f64 = 1.0;
 
     // Layer 2: Panel state engram — learns the manifold of "good panel configurations."
-    // Encodes each expert's (signed conviction) as a feature vector.
-    // Dimensionality = number of experts. Fed after each recalib if accuracy was good.
+    // Encodes each observer's (signed conviction) as a feature vector.
+    // Dimensionality = number of observers. Fed after each recalib if accuracy was good.
     // Manager's vocabulary = its experts + generalist + panel-level concepts.
-    let expert_atoms: Vec<Vector> = expert_profiles.iter()
+    let observer_atoms: Vec<Vector> = observer_names.iter()
         .map(|&name| vm.get_vector(name))
         .collect();
     let generalist_atom = vm.get_vector("generalist");
@@ -439,13 +439,13 @@ fn main() {
     let agreement_atom = vm.get_vector("panel-agreement");     // how aligned are the experts?
     let panel_energy_atom = vm.get_vector("panel-energy");     // how loud is everyone?
     let divergence_atom = vm.get_vector("panel-divergence");   // do they agree on intensity?
-    // Per-expert quality atoms: HOW proven, not just proven/not.
+    // Per-observer quality atoms: HOW proven, not just proven/not.
     let reliability_atom = vm.get_vector("expert-reliability"); // accuracy level of this expert
     let tenure_atom = vm.get_vector("expert-tenure");           // how long proven
     // Context atoms: market state visible to the manager.
     let volatility_atom = vm.get_vector("market-volatility");  // ATR right now
     let disc_strength_atom = vm.get_vector("disc-strength");   // generalist's signal quality
-    let panel_dim = expert_profiles.len() + 1; // experts + generalist
+    let panel_dim = observer_names.len() + 1; // experts + generalist
     let mut panel_engram = OnlineSubspace::with_params(panel_dim, 4, 2.0, 0.01, 3.5, 100);
     let mut panel_recalib_wins: u32 = 0;
     let mut panel_recalib_total: u32 = 0;
@@ -648,17 +648,17 @@ fn main() {
         let batch_end = (cursor + BATCH_SIZE).min(end_idx);
         let _batch_len = batch_end - cursor;
 
-        // ── Parallel: each expert encodes at their own sampled window ────
+        // ── Parallel: each observer encodes at their own sampled window ────
         // The manager doesn't encode — it reads expert predictions.
         // Each expert samples their own window from [12, 2016] per candle.
         // Their discriminant learns which scale's patterns predict for their
         // vocabulary. A "full" encoding at args.window is kept for the primary
         // journal (tht_journal) which still drives flip threshold + sizing.
         let sup_ref = if suppressed_facts.is_empty() { None } else { Some(&suppressed_facts) };
-        let n_experts = experts.len();
+        let n_observers = observers.len();
 
         // Expert samplers are not Send, so collect windows first
-        let expert_windows: Vec<Vec<usize>> = experts.iter()
+        let observer_windows: Vec<Vec<usize>> = observers.iter()
             .map(|exp| {
                 (cursor..batch_end).map(|i| exp.window_sampler.sample(i).min(i + 1)).collect()
             }).collect();
@@ -674,30 +674,30 @@ fn main() {
                 let full = thought_encoder.encode_view(window, &thought_streams, 0, 0, &vm, None, sup_ref, "full");
 
                 // Each expert encodes at their own sampled window.
-                let expert_vecs: Vec<Vector> = (0..n_experts)
+                let observer_vecs: Vec<Vector> = (0..n_observers)
                     .map(|ei| {
-                        let ew = expert_windows[ei][bi];
+                        let ew = observer_windows[ei][bi];
                         let ew_start = i.saturating_sub(ew - 1);
                         let exp_window = &candles[ew_start..=i];
-                        thought_encoder.encode_view(exp_window, &thought_streams, 0, 0, &vm, None, None, expert_profiles[ei]).thought
+                        thought_encoder.encode_view(exp_window, &thought_streams, 0, 0, &vm, None, None, observer_names[ei]).thought
                     })
                     .collect();
-                (i, full.thought, full.fact_labels, expert_vecs)
+                (i, full.thought, full.fact_labels, observer_vecs)
             })
             .collect();
         // The desk_predictions table logs which window was used, so the
         // ledger builds the window→accuracy curve from experience.
 
         // ── Sequential: predict + buffer + learn + expire ────────────────────
-        for (i, tht_vec, tht_facts, expert_vecs) in tht_vecs {
+        for (i, tht_vec, tht_facts, observer_vecs) in tht_vecs {
             encode_count += 1;
 
-            // ── Expert predictions: each expert speaks ─────────────────
+            // ── Expert predictions: each observer speaks ─────────────────
             // No flip. The discriminant learns what predicts — including reversals.
             // The flip was a hack for a single journal. The enterprise lets each
             // expert's discriminant encode the full pattern naturally.
-            let expert_preds: Vec<Prediction> = expert_vecs.iter().enumerate()
-                .map(|(ei, vec)| experts[ei].journal.predict(vec))
+            let observer_preds: Vec<Prediction> = observer_vecs.iter().enumerate()
+                .map(|(ei, vec)| observers[ei].journal.predict(vec))
                 .collect();
 
             let vis_vec = null_vec.clone(); // stub for Pending compatibility
@@ -723,7 +723,7 @@ fn main() {
             let proven_atom = vm.get_vector("proven");
             let tentative_atom = vm.get_vector("tentative");
             let mut mgr_facts: Vec<Vector> = Vec::new();
-            for (ei, ep) in expert_preds.iter().enumerate() {
+            for (ei, ep) in observer_preds.iter().enumerate() {
                 let abs_cos = ep.raw_cos.abs();
                 if abs_cos < min_opinion_magnitude { continue; } // below noise floor = silence
 
@@ -735,30 +735,30 @@ fn main() {
                 let magnitude = mgr_scalar.encode(abs_cos, ScalarMode::Linear { scale: 1.0 });
                 let action = if ep.raw_cos >= 0.0 { &buy_atom } else { &sell_atom };
                 let opinion = Primitives::bind(action, &magnitude);
-                mgr_facts.push(Primitives::bind(&expert_atoms[ei], &opinion));
+                mgr_facts.push(Primitives::bind(&observer_atoms[ei], &opinion));
 
                 // Credibility: separate fact, orthogonal to opinion
-                let status = if experts[ei].curve_valid { &proven_atom } else { &tentative_atom };
-                mgr_facts.push(Primitives::bind(&expert_atoms[ei], status));
+                let status = if observers[ei].curve_valid { &proven_atom } else { &tentative_atom };
+                mgr_facts.push(Primitives::bind(&observer_atoms[ei], status));
 
                 // Fact 2: reliability — how accurate is this expert?
                 // Linear scale 0.3: accuracy excess 0.0-0.15 gets full separation.
-                if experts[ei].resolved.len() >= 20 {
-                    let acc = experts[ei].resolved.iter()
+                if observers[ei].resolved.len() >= 20 {
+                    let acc = observers[ei].resolved.iter()
                         .filter(|(_, c)| *c).count() as f64
-                        / experts[ei].resolved.len() as f64;
+                        / observers[ei].resolved.len() as f64;
                     let rel_vec = mgr_scalar.encode((acc - 0.4).max(0.0), ScalarMode::Linear { scale: 1.0 });
                     mgr_facts.push(Primitives::bind(
-                        &Primitives::bind(&expert_atoms[ei], &reliability_atom), &rel_vec));
+                        &Primitives::bind(&observer_atoms[ei], &reliability_atom), &rel_vec));
                 }
 
                 // Fact 3: tenure — how many resolved predictions?
                 // Log scale IS right here: 100 vs 1000 is a meaningful ratio.
-                let tenure = experts[ei].resolved.len() as f64;
+                let tenure = observers[ei].resolved.len() as f64;
                 if tenure >= 50.0 {
                     let ten_vec = mgr_scalar.encode_log(tenure);
                     mgr_facts.push(Primitives::bind(
-                        &Primitives::bind(&expert_atoms[ei], &tenure_atom), &ten_vec));
+                        &Primitives::bind(&observer_atoms[ei], &tenure_atom), &ten_vec));
                 }
             }
             // Generalist: gated like every other voice.
@@ -772,13 +772,13 @@ fn main() {
             // Panel-level facts: emergent properties of the expert collective.
             // These tell the manager about the SHAPE of agreement, not just who said what.
             {
-                let proven_preds: Vec<&Prediction> = expert_preds.iter().enumerate()
-                    .filter(|(ei, _)| experts[*ei].curve_valid)
+                let proven_preds: Vec<&Prediction> = observer_preds.iter().enumerate()
+                    .filter(|(ei, _)| observers[*ei].curve_valid)
                     .map(|(_, ep)| ep)
                     .collect();
 
                 if proven_preds.len() >= 2 {
-                    // Agreement: what fraction of proven experts agree on direction?
+                    // Agreement: what fraction of proven observers agree on direction?
                     let buys = proven_preds.iter().filter(|p| p.raw_cos > 0.0).count();
                     let total = proven_preds.len();
                     let agreement = (buys.max(total - buys) as f64) / total as f64; // 0.5 = split, 1.0 = unanimous
@@ -827,8 +827,8 @@ fn main() {
                 // Coherence: geometric measure of panel concentration.
                 // Compute pairwise cosine between proven expert thought vectors.
                 if proven_preds.len() >= 2 {
-                    let proven_vecs: Vec<&Vector> = expert_vecs.iter().enumerate()
-                        .filter(|(ei, _)| experts[*ei].curve_valid)
+                    let proven_vecs: Vec<&Vector> = observer_vecs.iter().enumerate()
+                        .filter(|(ei, _)| observers[*ei].curve_valid)
                         .map(|(_, v)| v)
                         .collect();
                     let mut pair_sum = 0.0_f64;
@@ -868,7 +868,7 @@ fn main() {
             };
 
             // Panel state for engram (Template 2 — reaction layer)
-            let mut panel_state: Vec<f64> = expert_preds.iter()
+            let mut panel_state: Vec<f64> = observer_preds.iter()
                 .map(|ep| ep.raw_cos).collect();
             panel_state.push(tht_pred.raw_cos); // generalist's voice
             let panel_familiar = if panel_engram.n() >= 10 {
@@ -1288,8 +1288,8 @@ fn main() {
                 was_flipped:   flip_threshold > 0.0 && meta_conviction >= flip_threshold,
                 meta_conviction,
                 position_frac,
-                expert_vecs,
-                expert_preds,
+                observer_vecs,
+                observer_preds,
                 fact_labels:   tht_facts,
                 first_outcome: None,
                 outcome_pct:   0.0,
@@ -1310,8 +1310,8 @@ fn main() {
             tht_journal.decay(adaptive_decay);
             tht_fast.decay(decay_fast);
             mgr_journal.decay(adaptive_decay);
-            for expert in &mut experts {
-                expert.journal.decay(args.decay);
+            for observer in &mut observers {
+                observer.journal.decay(args.decay);
             }
 
             // ── Event-driven learning ─────────────────────────────────────
@@ -1394,76 +1394,76 @@ fn main() {
                         // Manager does NOT learn here. Manager learns Win/Lose at trade
                         // resolution, not Buy/Sell at threshold crossing. The manager's
                         // question is "should I deploy?" not "which direction?"
-                        // Expert panel: each expert observes, tracks curve, and feeds engrams
-                        for (ei, expert_vec) in entry.expert_vecs.iter().enumerate() {
-                            experts[ei].journal.observe(expert_vec, o, sw);
+                        // Observer panel: each observer observes, tracks curve, and feeds engrams
+                        for (ei, expert_vec) in entry.observer_vecs.iter().enumerate() {
+                            observers[ei].journal.observe(expert_vec, o, sw);
                             // Track accuracy since last recalib for engram gating
-                            if let Some(pred_dir) = entry.expert_preds[ei].direction {
+                            if let Some(pred_dir) = entry.observer_preds[ei].direction {
                                 // No flip. Experts learn raw. Their discriminants encode
                                 // the full pattern including reversals naturally.
-                                experts[ei].recalib_total += 1;
-                                if pred_dir == o { experts[ei].recalib_wins += 1; }
+                                observers[ei].recalib_total += 1;
+                                if pred_dir == o { observers[ei].recalib_wins += 1; }
                             }
                             // When expert recalibrates: evaluate last period's accuracy.
                             // If good (>55%), snapshot discriminant as a "good state" engram.
-                            if experts[ei].journal.recalib_count > experts[ei].last_recalib_count {
-                                experts[ei].last_recalib_count = experts[ei].journal.recalib_count;
-                                if experts[ei].recalib_total >= 20 {
-                                    let acc = experts[ei].recalib_wins as f64
-                                        / experts[ei].recalib_total as f64;
+                            if observers[ei].journal.recalib_count > observers[ei].last_recalib_count {
+                                observers[ei].last_recalib_count = observers[ei].journal.recalib_count;
+                                if observers[ei].recalib_total >= 20 {
+                                    let acc = observers[ei].recalib_wins as f64
+                                        / observers[ei].recalib_total as f64;
                                     if acc > 0.55 {
-                                        if let Some(disc) = experts[ei].journal.discriminant() {
+                                        if let Some(disc) = observers[ei].journal.discriminant() {
                                             let disc_owned = disc.to_vec();
-                                            experts[ei].good_state_subspace.update(&disc_owned);
+                                            observers[ei].good_state_subspace.update(&disc_owned);
                                         }
                                     }
                                 }
-                                experts[ei].recalib_wins = 0;
-                                experts[ei].recalib_total = 0;
+                                observers[ei].recalib_wins = 0;
+                                observers[ei].recalib_total = 0;
                             }
-                            if let Some(pred_dir) = entry.expert_preds[ei].direction {
-                                // expert_preds are already flipped at prediction time.
+                            if let Some(pred_dir) = entry.observer_preds[ei].direction {
+                                // observer_preds are already flipped at prediction time.
                                 // Check directly against outcome.
                                 let correct = pred_dir == o;
-                                experts[ei].resolved.push_back(
-                                    (entry.expert_preds[ei].conviction, correct));
-                                if experts[ei].resolved.len() > conviction_window {
-                                    experts[ei].resolved.pop_front();
+                                observers[ei].resolved.push_back(
+                                    (entry.observer_preds[ei].conviction, correct));
+                                if observers[ei].resolved.len() > conviction_window {
+                                    observers[ei].resolved.pop_front();
                                 }
-                                // Update per-expert conviction history + flip threshold
-                                experts[ei].conviction_history.push_back(entry.expert_preds[ei].conviction);
-                                if experts[ei].conviction_history.len() > 2000 {
-                                    experts[ei].conviction_history.pop_front();
+                                // Update per-observer conviction history + flip threshold
+                                observers[ei].conviction_history.push_back(entry.observer_preds[ei].conviction);
+                                if observers[ei].conviction_history.len() > 2000 {
+                                    observers[ei].conviction_history.pop_front();
                                 }
-                                if experts[ei].conviction_history.len() >= 200
-                                    && experts[ei].resolved.len() % 50 == 0
+                                if observers[ei].conviction_history.len() >= 200
+                                    && observers[ei].resolved.len() % 50 == 0
                                 {
-                                    let mut sorted: Vec<f64> = experts[ei].conviction_history.iter().copied().collect();
+                                    let mut sorted: Vec<f64> = observers[ei].conviction_history.iter().copied().collect();
                                     sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
                                     let idx = ((sorted.len() as f64 * args.flip_quantile) as usize)
                                         .min(sorted.len() - 1);
-                                    experts[ei].flip_threshold = sorted[idx];
+                                    observers[ei].flip_threshold = sorted[idx];
                                 }
                                 // Proof gate: does this expert have direction edge?
                                 // Check if accuracy at high conviction exceeds 52%.
-                                if experts[ei].resolved.len() >= 100 {
-                                    let high_conv: Vec<&(f64, bool)> = experts[ei].resolved.iter()
-                                        .filter(|(c, _)| *c >= experts[ei].flip_threshold * 0.8)
+                                if observers[ei].resolved.len() >= 100 {
+                                    let high_conv: Vec<&(f64, bool)> = observers[ei].resolved.iter()
+                                        .filter(|(c, _)| *c >= observers[ei].flip_threshold * 0.8)
                                         .collect();
                                     if high_conv.len() >= 20 {
                                         let acc = high_conv.iter().filter(|(_, c)| *c).count() as f64
                                             / high_conv.len() as f64;
-                                        experts[ei].curve_valid = acc > 0.52;
+                                        observers[ei].curve_valid = acc > 0.52;
                                     }
                                 }
                                 // Log for post-hoc analysis
                                 if args.diagnostics { run_db.execute(
-                                    "INSERT INTO expert_log (step,expert,conviction,direction,correct)
+                                    "INSERT INTO observer_log (step,expert,conviction,direction,correct)
                                      VALUES (?1,?2,?3,?4,?5)",
                                     params![
                                         log_step,
-                                        experts[ei].name,
-                                        entry.expert_preds[ei].conviction,
+                                        observers[ei].name,
+                                        entry.observer_preds[ei].conviction,
                                         pred_dir.to_string(),
                                         correct as i32,
                                     ],
@@ -1652,9 +1652,9 @@ fn main() {
                         // Hypothetical: if we followed the majority expert direction,
                         // would it have been profitable after costs?
                         let expert_majority = {
-                            let buys = entry.expert_preds.iter()
+                            let buys = entry.observer_preds.iter()
                                 .filter(|ep| ep.direction == Some(Outcome::Buy)).count();
-                            let sells = entry.expert_preds.iter()
+                            let sells = entry.observer_preds.iter()
                                 .filter(|ep| ep.direction == Some(Outcome::Sell)).count();
                             if buys > sells { Some(Outcome::Buy) }
                             else if sells > buys { Some(Outcome::Sell) }
@@ -1679,15 +1679,15 @@ fn main() {
                             // Same decomposed encoding as prediction time.
                             // All experts above noise floor. Credibility separate from opinion.
                             let mut mgr_res_facts: Vec<Vector> = Vec::new();
-                            for (ei, ep) in entry.expert_preds.iter().enumerate() {
+                            for (ei, ep) in entry.observer_preds.iter().enumerate() {
                                 let abs_cos = ep.raw_cos.abs();
                                 if abs_cos < min_opinion_magnitude { continue; }
                                 let magnitude = mgr_scalar.encode(abs_cos, ScalarMode::Linear { scale: 1.0 });
                                 let action = if ep.raw_cos >= 0.0 { &buy_atom } else { &sell_atom };
-                                mgr_res_facts.push(Primitives::bind(&expert_atoms[ei],
+                                mgr_res_facts.push(Primitives::bind(&observer_atoms[ei],
                                     &Primitives::bind(action, &magnitude)));
-                                let status = if experts[ei].curve_valid { &proven_atom } else { &tentative_atom };
-                                mgr_res_facts.push(Primitives::bind(&expert_atoms[ei], status));
+                                let status = if observers[ei].curve_valid { &proven_atom } else { &tentative_atom };
+                                mgr_res_facts.push(Primitives::bind(&observer_atoms[ei], status));
                             }
                             // Generalist
                             if entry.tht_pred.raw_cos.abs() >= min_opinion_magnitude {
@@ -1773,12 +1773,12 @@ fn main() {
                             let mgr_label = if net_ret > 0.0 { Outcome::Buy } else { Outcome::Sell };
                             // Buy = Win, Sell = Lose in the manager's space.
                             // Signed conviction — same encoding as prediction time.
-                            let mut mgr_res_facts: Vec<Vector> = entry.expert_preds.iter().enumerate()
+                            let mut mgr_res_facts: Vec<Vector> = entry.observer_preds.iter().enumerate()
                                 .map(|(ei, ep)| {
                                     let intensity = mgr_scalar.encode(ep.raw_cos.abs().max(1e-10), ScalarMode::Linear { scale: 1.0 });
                                     let action = if ep.raw_cos >= 0.0 { &buy_atom } else { &sell_atom };
                                     let opinion = Primitives::bind(action, &intensity);
-                                    Primitives::bind(&expert_atoms[ei], &opinion)
+                                    Primitives::bind(&observer_atoms[ei], &opinion)
                                 }).collect();
                             // Generalist
                             {
@@ -2034,7 +2034,7 @@ fn main() {
                     let tv = treasury.total_value(&prices);
                     let tv_ret = (tv - args.initial_equity) / args.initial_equity * 100.0;
                     let state = if hold_state == HoldState::InWbtc { "WBTC" } else { "USDC" };
-                    let mut proven: Vec<&str> = experts.iter()
+                    let mut proven: Vec<&str> = observers.iter()
                         .filter(|e| e.curve_valid).map(|e| e.name).collect();
                     if curve_valid { proven.push("generalist"); }
                     let proven_str = if proven.is_empty() { "none".to_string() }
@@ -2144,16 +2144,16 @@ fn main() {
         rolling_cap, vis_acc, tht_acc);
     eprintln!();
 
-    // Expert panel summary.
-    if !experts.is_empty() {
-        eprintln!("  Expert panel:");
-        for expert in &experts {
+    // Observer panel summary.
+    if !observers.is_empty() {
+        eprintln!("  Observer panel:");
+        for observer in &observers {
             eprintln!("    {}: recalibs={} disc_str={:.4} buy={} sell={}",
-                expert.name,
-                expert.journal.recalib_count,
-                expert.journal.last_disc_strength,
-                expert.journal.buy.count(),
-                expert.journal.sell.count());
+                observer.name,
+                observer.journal.recalib_count,
+                observer.journal.last_disc_strength,
+                observer.journal.buy.count(),
+                observer.journal.sell.count());
         }
         eprintln!();
     }

@@ -17,8 +17,8 @@ pub struct Pending {
     pub was_flipped:   bool,             // true if flip was active when this entry was created
     pub meta_conviction: f64,
     pub position_frac: Option<f64>,
-    pub expert_vecs:   Vec<Vector>,       // per-expert thought vectors
-    pub expert_preds:  Vec<Prediction>,   // per-expert predictions at entry time
+    pub observer_vecs:   Vec<Vector>,       // per-observer thought vectors
+    pub observer_preds:  Vec<Prediction>,   // per-observer predictions at entry time
     pub fact_labels:   Vec<String>,      // thought facts present at this candle
 
     // ── Learning (event-driven, first crossing only) ─────────────────
