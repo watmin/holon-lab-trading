@@ -41,18 +41,30 @@
 ;; SELL lean uses (permute expert-atom 1). This makes BUY@0.25
 ;; orthogonal to SELL@0.25 in the hyperspace.
 
-(define (encode-expert expert-atom raw-cos)
-  (let ((magnitude (encode-log (abs raw-cos)))
-        (role (if (>= raw-cos 0.0)
-                  expert-atom                    ; BUY lean
-                  (permute expert-atom 1))))      ; SELL lean
-    (bind role magnitude)))
+;; Guard: below 3σ noise floor (3/sqrt(dims)), the expert has no opinion.
+;; Silence, not forced direction. The noise floor is a property of the
+;; hyperspace geometry, not a tuned parameter.
 
-;; Example: momentum says BUY at conviction 0.25
-;; → (bind momentum-atom (encode-log 0.25))
+(define (encode-expert expert-atom raw-cos dims)
+  (let ((noise-floor (/ 3.0 (sqrt dims))))
+    (if (< (abs raw-cos) noise-floor)
+        nothing                                   ; silence — no opinion
+        (let ((magnitude (encode-linear (abs raw-cos) 1.0))  ; scale=1.0, theoretical [0,1]
+              (action    (if (>= raw-cos 0.0) (atom "buy") (atom "sell"))))
+          (bind expert-atom (bind action magnitude))))))
+
+;; Example: momentum says BUY at magnitude 0.25
+;; → (bind momentum (bind buy (encode-linear 0.25 1.0)))
 ;;
-;; Example: structure says SELL at conviction 0.18
-;; → (bind (permute structure-atom 1) (encode-log 0.18))
+;; Example: structure says SELL at magnitude 0.18
+;; → (bind structure (bind sell (encode-linear 0.18 1.0)))
+;;
+;; Example: volume at magnitude 0.01 (below noise floor at 20k dims)
+;; → nothing (silenced)
+;;
+;; Additional per-expert facts (when proven):
+;; → (bind (bind expert reliability) (encode-linear (- accuracy 0.4) 1.0))
+;; → (bind (bind expert tenure) (encode-log resolved-count))
 
 ;; ── Panel shape ─────────────────────────────────────────────────────
 ;;
@@ -67,19 +79,19 @@
          (spread  (stddev (map conviction proven-experts)))
          (coherence (mean-pairwise-cosine (map thought-vec proven-experts))))
     (bundle
-      (bind panel-agreement (encode-log agree))
-      (bind panel-energy (encode-log energy))
-      (bind panel-divergence (encode-log spread))
-      (bind panel-coherence (encode-log coherence)))))
+      (bind panel-agreement (encode-linear agree 1.0))       ; [0,1] fraction
+      (bind panel-energy (encode-linear energy 1.0))         ; [0,1] fraction
+      (bind panel-divergence (encode-linear spread 1.0))     ; [0,1] fraction
+      (bind panel-coherence (encode-linear coherence 1.0))))) ; [0,1] fraction
 
 ;; ── Context ─────────────────────────────────────────────────────────
 
 (define (market-context candle generalist-journal)
   (bundle
-    (bind market-volatility (encode-log (atr candle)))
-    (bind disc-strength (encode-log (disc-strength generalist-journal)))
-    (bind hour-of-day (atom (hour-block candle)))       ; h00..h20
-    (bind day-of-week (atom (session candle)))))         ; asian/european/us/off
+    (bind market-volatility (encode-log (atr candle)))            ; orders of magnitude — log correct
+    (bind disc-strength (encode-log (disc-strength generalist)))  ; orders of magnitude — log correct
+    (bind hour-of-day (atom (hour-block candle)))                 ; named atom: h00..h20
+    (bind day-of-week (atom (session candle)))))                  ; named atom: asian/european/us/off
 
 ;; ── Motion ──────────────────────────────────────────────────────────
 ;;

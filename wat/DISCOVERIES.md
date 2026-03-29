@@ -108,3 +108,29 @@ Append-only. Each entry dated. The act of writing specifications reveals gaps.
     conviction→accuracy. The manager's actual curve peaks at mid-conviction. Need a
     different proof mechanism: "is there ANY conviction range where accuracy exceeds X%?"
     or a binned accuracy check instead of exponential fit.
+
+## 2026-03-29: Scalar encoding mismatch
+
+19. **encode_log was compressing expert convictions into noise.** Expert cosines range
+    0-0.3. encode_log (designed for 1-10M packet rates) mapped the entire range to 15%
+    of the rotation. The manager couldn't distinguish 0.05 from 0.20 — cosine similarity
+    ~0.64 between them. This explains why the curve flattened at scale: the discriminant
+    couldn't find boundaries when all inputs looked the same.
+
+20. **Linear encoding with scale=1.0 for all [0,1] fractions.** The theoretical range
+    of cosine magnitude is [0,1]. Scale=1.0 makes 0 and 1 orthogonal. No empirical
+    tuning. No observed-data dependency. Initial attempt used scale=0.5 and 0.3 based
+    on observed ranges — that's the same "magic number from data" anti-pattern.
+    Scale=1.0 from the theoretical range is principled.
+
+21. **Encoding rule: match the encoder to the value's nature.**
+    - [0,1] fractions → encode-linear scale=1.0
+    - Orders of magnitude → encode-log
+    - Named categories → atom lookup
+    - Below noise floor → silence
+    This should be in the primitives spec.
+
+22. **Named action atoms replaced permute.** bind(expert, bind(buy, magnitude)) instead
+    of bind(permute(expert,1), magnitude). Named composition is readable and unbindable.
+    But we haven't proven this produces better or worse signal than permute — it's a
+    clarity improvement, not necessarily a signal improvement. Need to test both.
