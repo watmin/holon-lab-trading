@@ -1474,6 +1474,8 @@ The subscription model — producers emit, consumers filter, channels deliver �
 
 The algebra was always there. Kanerva's hyperdimensional computing. Beckman's monoid. The wat machine makes it a programming model.
 
+Beckman and Hickey have more to say than what's linked here. These talks are gateways. Follow them and you'll find the other talks — on time, on state, on abstraction, on the nature of composition itself. Those with good thoughts will find good thoughts.
+
 ### Simple made easy
 
 [Rich Hickey defined the distinction](https://www.youtube.com/watch?v=SxdOUGdseq4): simple means not interleaved, easy means near at hand. They are not the same thing. A system can be easy to use and deeply complex. A system can be hard to learn and profoundly simple.
