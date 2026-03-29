@@ -42,8 +42,8 @@ pub mod fibonacci;     // Fibonacci retracement levels and proximity
 pub mod keltner;       // Keltner Channels + squeeze detection
 pub mod momentum;      // CCI zones
 pub mod price_action;  // Inside/outside bars, gaps, consecutive candles
+pub mod divergence;    // RSI divergence via PELT structural peaks/troughs
 // pub mod complexity;    // TODO: SampEn, permutation entropy, Lyapunov
-// pub mod divergence;    // TODO: multi-indicator divergence framework
 // pub mod crosses;       // TODO: SMA cross timing, histogram turns
 // pub mod channels;      // TODO: donchian, supertrend, SAR
 // pub mod levels;        // TODO: pivot points, round numbers

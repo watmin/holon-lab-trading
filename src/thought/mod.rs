@@ -1,4 +1,4 @@
-mod pelt;
+pub mod pelt;
 
 use std::collections::{HashMap, HashSet};
 
@@ -985,78 +985,17 @@ impl ThoughtEncoder {
         facts: &mut Vec<Vector>,
         labels: &mut Vec<String>,
     ) {
-        if candles.len() < 10 { return; }
-
-        // PELT on ln(close) to find structural segments — same basis as segment narrative.
-        let close_ln: Vec<f64> = candles.iter().map(|c| c.close.ln()).collect();
-        let penalty = bic_penalty(&close_ln);
-        let cps = pelt_changepoints(&close_ln, penalty);
-
-        let n = close_ln.len();
-        let mut boundaries = vec![0usize];
-        boundaries.extend_from_slice(&cps);
-        boundaries.push(n);
-        let n_segs = boundaries.len() - 1;
-        if n_segs < 3 { return; }
-
-        // Segment directions: +1 up, -1 down, 0 flat.
-        let seg_dirs: Vec<i8> = (0..n_segs)
-            .map(|i| {
-                let change = close_ln[boundaries[i + 1] - 1] - close_ln[boundaries[i]];
-                if change > 1e-10 { 1 } else if change < -1e-10 { -1 } else { 0 }
-            })
-            .collect();
-
-        // Peaks: up→down boundary. Peak candle = last candle of the up-segment.
-        // Troughs: down→up boundary. Trough candle = last candle of the down-segment.
-        let mut peaks:   Vec<usize> = Vec::new();
-        let mut troughs: Vec<usize> = Vec::new();
-        for i in 0..n_segs - 1 {
-            if seg_dirs[i] == 1 && seg_dirs[i + 1] == -1 {
-                peaks.push(boundaries[i + 1] - 1);
-            } else if seg_dirs[i] == -1 && seg_dirs[i + 1] == 1 {
-                troughs.push(boundaries[i + 1] - 1);
-            }
-        }
-
-        // Bearish divergence: every consecutive peak pair where price made higher
-        // high but RSI made lower high. Temporal binding = how recent the newer peak is.
-        for pair in peaks.windows(2) {
-            let (i_prev, i_curr) = (pair[0], pair[1]);
-            if candles[i_curr].close > candles[i_prev].close
-                && candles[i_curr].rsi < candles[i_prev].rsi
-            {
-                let close_up  = Primitives::bind(self.vocab.get("close"), self.vocab.get("up"));
-                let rsi_down  = Primitives::bind(self.vocab.get("rsi"),   self.vocab.get("down"));
-                let div_fact = Primitives::bind(
-                    self.vocab.get("diverging"),
-                    &Primitives::bind(&close_up, &rsi_down),
-                );
-                let ago = n - 1 - i_curr;
-                let pos = vm.get_position_vector(ago as i64);
-                facts.push(Primitives::bind(&div_fact, &pos));
-                labels.push(format!("(diverging close up rsi down @{})", ago));
-            }
-        }
-
-        // Bullish divergence: every consecutive trough pair where price made lower
-        // low but RSI made higher low.
-        for pair in troughs.windows(2) {
-            let (i_prev, i_curr) = (pair[0], pair[1]);
-            if candles[i_curr].close < candles[i_prev].close
-                && candles[i_curr].rsi > candles[i_prev].rsi
-            {
-                let close_down = Primitives::bind(self.vocab.get("close"), self.vocab.get("down"));
-                let rsi_up     = Primitives::bind(self.vocab.get("rsi"),   self.vocab.get("up"));
-                let div_fact = Primitives::bind(
-                    self.vocab.get("diverging"),
-                    &Primitives::bind(&close_down, &rsi_up),
-                );
-                let ago = n - 1 - i_curr;
-                let pos = vm.get_position_vector(ago as i64);
-                facts.push(Primitives::bind(&div_fact, &pos));
-                labels.push(format!("(diverging close down rsi up @{})", ago));
-            }
+        use crate::vocab::divergence::eval_divergence;
+        for div in eval_divergence(candles) {
+            // bind(diverging, bind(bind(close, price_dir), bind(indicator, indicator_dir)))
+            let price_fact = Primitives::bind(self.vocab.get("close"), self.vocab.get(div.price_dir));
+            let ind_fact = Primitives::bind(self.vocab.get(div.indicator), self.vocab.get(div.indicator_dir));
+            let div_fact = Primitives::bind(self.vocab.get("diverging"),
+                &Primitives::bind(&price_fact, &ind_fact));
+            let pos = vm.get_position_vector(div.candles_ago as i64);
+            facts.push(Primitives::bind(&div_fact, &pos));
+            labels.push(format!("(diverging close {} {} {} @{})",
+                div.price_dir, div.indicator, div.indicator_dir, div.candles_ago));
         }
     }
 
