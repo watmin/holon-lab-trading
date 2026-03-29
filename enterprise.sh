@@ -5,7 +5,7 @@ set -euo pipefail
 unset CARGO_TARGET_DIR 2>/dev/null || true
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DB_PATH="$SCRIPT_DIR/data/analysis.db"
+DB_PATH="$SCRIPT_DIR/data/candles.db"
 BINARY="$SCRIPT_DIR/target/release/enterprise"
 
 usage() {

@@ -41,7 +41,7 @@ const THREADS: usize = 10;
 #[command(name = "enterprise", about = "Self-organizing BTC trading enterprise")]
 struct Args {
     /// Source candle database (pre-computed indicators).
-    #[arg(long, default_value = "../data/analysis.db")]
+    #[arg(long, default_value = "data/candles.db")]
     db_path: PathBuf,
 
     /// Vector dimension. Higher = more expressive, slower.
