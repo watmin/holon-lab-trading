@@ -1005,16 +1005,22 @@ fn main() {
                     }
                     // Log to ledger
                     let ret = pos.return_pct(btc_price);
+                    let exit_dir = match pos.direction { Outcome::Buy => "Buy", _ => "Sell" };
+                    let exit_type = match (exit, pos.phase) {
+                        (PositionExit::TakeProfit, PositionPhase::Runner) => "RunnerTP",
+                        (PositionExit::TakeProfit, _) => "PartialProfit",
+                        (PositionExit::StopLoss, _) => "StopLoss",
+                    };
                     run_db.execute(
                         "INSERT INTO trade_ledger (step,candle_idx,timestamp,direction,entry_price,exit_price,gross_return_pct,position_usd,swap_fee_pct,horizon_candles,won,exit_reason)
                          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
                         rusqlite::params![
                             log_step, i as i64, &candles[i].ts,
-                            "Sell", pos.entry_price, btc_price,
+                            exit_dir, pos.entry_price, btc_price,
                             ret * 100.0, pos.usdc_deployed,
                             fee_rate * 100.0, pos.candles_held as i64,
                             (ret > 0.0) as i32,
-                            if pos.phase == PositionPhase::Runner { "PartialProfit" } else { "StopLoss" },
+                            exit_type,
                         ],
                     ).ok();
                 }
