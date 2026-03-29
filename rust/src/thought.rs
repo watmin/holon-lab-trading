@@ -715,68 +715,50 @@ impl ThoughtEncoder {
             expert == "full" || profiles.contains(&expert)
         };
 
-        // Comparisons: shared across most experts (core TA relationships)
-        if is(&["momentum", "structure"]) {
+        // ── SHARED: comparisons (baseline for all experts) ────────────
+        // Every expert needs price vs indicator relationships as context.
+        if is(&["momentum", "structure", "volume", "narrative", "regime"]) {
             self.eval_comparisons_cached(now, prev, &mut cached_facts, &mut labels);
         }
-        // PELT segment narrative
-        if is(&["narrative", "structure"]) {
-            self.eval_segment_narrative(candles, vm, &mut owned_facts, &mut labels);
-        }
-        // Temporal lookback (crosses)
-        if is(&["narrative", "momentum"]) {
-            self.eval_temporal(candles, vm, &mut owned_facts, &mut labels);
-        }
-        // RSI-SMA
+
+        // ── EXCLUSIVE: momentum ─────────────────────────────────────
+        // Oscillators, crosses, divergence. Speed and direction of change.
         if is(&["momentum"]) {
             self.eval_rsi_sma_cached(candles, &mut cached_facts, &mut labels);
-        }
-        // Calendar
-        if is(&["narrative"]) {
-            self.eval_calendar(now, &mut cached_facts, &mut labels);
-        }
-        // RSI divergence
-        if is(&["momentum"]) {
+            self.eval_stochastic(candles, &mut cached_facts, &mut labels);
+            self.eval_momentum(candles, &mut cached_facts, &mut labels); // CCI, ROC
             self.eval_divergence(candles, vm, &mut owned_facts, &mut labels);
         }
-        // Volume confirmation
-        if is(&["volume"]) {
-            self.eval_volume_confirmation(candles, &mut owned_facts, &mut labels);
-        }
-        // Range position
+
+        // ── EXCLUSIVE: structure ────────────────────────────────────
+        // Geometric shape: segments, levels, channels, cloud, fibs.
         if is(&["structure"]) {
+            self.eval_segment_narrative(candles, vm, &mut owned_facts, &mut labels);
             self.eval_range_position(candles, &mut owned_facts, &mut labels);
-        }
-        // Ichimoku
-        if is(&["structure"]) {
             self.eval_ichimoku(candles, &mut cached_facts, &mut labels);
-        }
-        // Stochastic
-        if is(&["momentum"]) {
-            self.eval_stochastic(candles, &mut cached_facts, &mut labels);
-        }
-        // Fibonacci
-        if is(&["structure"]) {
             self.eval_fibonacci(candles, &mut owned_facts, &mut labels);
-        }
-        // Volume analysis
-        if is(&["volume"]) {
-            self.eval_volume_analysis(candles, &mut cached_facts, &mut labels);
-        }
-        // Keltner + squeeze
-        if is(&["structure"]) {
             self.eval_keltner(candles, &mut cached_facts, &mut labels);
         }
-        // CCI
-        if is(&["momentum"]) {
-            self.eval_momentum(candles, &mut cached_facts, &mut labels);
-        }
-        // Price action
+
+        // ── EXCLUSIVE: volume ───────────────────────────────────────
+        // Participation: is the market backing the move?
         if is(&["volume"]) {
+            self.eval_volume_confirmation(candles, &mut owned_facts, &mut labels);
+            self.eval_volume_analysis(candles, &mut cached_facts, &mut labels);
             self.eval_price_action(candles, &mut cached_facts, &mut labels);
         }
-        // Advanced indicators: regime detection, seismology, info theory
-        if is(&["regime", "momentum", "structure"]) {
+
+        // ── EXCLUSIVE: narrative ────────────────────────────────────
+        // The story: what happened when. Calendar + temporal lookback.
+        if is(&["narrative"]) {
+            self.eval_temporal(candles, vm, &mut owned_facts, &mut labels);
+            self.eval_calendar(now, &mut cached_facts, &mut labels);
+        }
+
+        // ── EXCLUSIVE: regime ───────────────────────────────────────
+        // Market character: trending/chaotic/persistent/mean-reverting.
+        // Abstract properties that survive window noise.
+        if is(&["regime"]) {
             self.eval_advanced(candles, &mut cached_facts, &mut owned_facts, &mut labels);
         }
 
