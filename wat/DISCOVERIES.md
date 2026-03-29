@@ -78,3 +78,33 @@ Append-only. Each entry dated. The act of writing specifications reveals gaps.
     A principled redesign: each expert should have EXCLUSIVE facts that no other
     expert sees, plus SHARED facts that provide common ground. The exclusive facts
     define the expert's unique perspective. The shared facts enable comparison.
+
+## 2026-03-29: Exclusive vocabularies + enriched manager results
+
+13. **Exclusive vocabularies doubled throughput.** 138/s up from 80/s. Less duplication =
+    less compute. eval_advanced running once (regime) instead of 3x.
+
+14. **The generalist proved itself for the first time with exclusive vocabularies.**
+    Previously redundant (same signal with or without). Now the gap between generalist's
+    holistic view (150 facts) and each specialist's narrow view (30-40 facts) is wider.
+    The generalist IS adding information the specialists can't.
+
+15. **Manager curve peaks at mid-conviction (53.0%) not high conviction (50.1%).** The
+    manager is most accurate when moderately sure. At high conviction it may be
+    overfitting to strong patterns that don't generalize. This is why the Kelly fit
+    (which expects monotonic increase) doesn't validate as the action trigger.
+
+16. **The generalist's curve is inverted: 41.3% at high conviction.** This is the
+    strongest reversal signal in the system. The flip IS emerging in the manager's
+    geometry — it reads the generalist's high conviction and learns it means the
+    opposite. The generalist at 41.3% = 58.7% when flipped.
+
+17. **Implemented per-expert reliability + tenure.** Each proven expert now contributes
+    3 facts: signed conviction, accuracy level, resolved count. Addresses the
+    mid-conviction peak — the manager can now distinguish reliable veterans from
+    barely-proven newcomers. ~27 facts per candle, up from 6 original.
+
+18. **The action trigger needs rethinking.** Kelly exponential fit assumes monotonic
+    conviction→accuracy. The manager's actual curve peaks at mid-conviction. Need a
+    different proof mechanism: "is there ANY conviction range where accuracy exceeds X%?"
+    or a binned accuracy check instead of exponential fit.
