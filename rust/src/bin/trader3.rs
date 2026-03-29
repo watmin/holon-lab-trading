@@ -15,7 +15,7 @@ use std::time::Instant;
 use clap::Parser;
 use rayon::prelude::*;
 use rusqlite::params;
-use holon::{Primitives, Similarity, VectorManager, Vector};
+use holon::{Primitives, ScalarMode, Similarity, VectorManager, Vector};
 use holon::memory::OnlineSubspace;
 
 use btc_walk::db::load_candles;
@@ -673,38 +673,40 @@ fn main() {
                 if !experts[ei].curve_valid { continue; } // gate closed
 
                 // Fact 1: expert × action × magnitude
-                // bind(expert, bind(buy|sell, encode-log(magnitude)))
-                // Named composition: who thinks what at what magnitude.
-                // Below min_opinion_magnitude: the expert has no opinion. Silence.
+                // bind(expert, bind(buy|sell, encode-linear(magnitude, 0.5)))
+                // Linear scale 0.5: cosine 0.0 and 0.5 are orthogonal.
+                // Expert cosines range 0-0.3; this gives full separation.
                 let abs_cos = ep.raw_cos.abs();
                 if abs_cos >= min_opinion_magnitude {
-                    let magnitude = mgr_scalar.encode_log(abs_cos);
+                    let magnitude = mgr_scalar.encode(abs_cos, ScalarMode::Linear { scale: 0.5 });
                     let action = if ep.raw_cos >= 0.0 { &buy_atom } else { &sell_atom };
                     let opinion = Primitives::bind(action, &magnitude);
                     mgr_facts.push(Primitives::bind(&expert_atoms[ei], &opinion));
                 }
 
-                // Fact 2: reliability — how accurate is this expert at high conviction?
+                // Fact 2: reliability — how accurate is this expert?
+                // Linear scale 0.3: accuracy excess 0.0-0.15 gets full separation.
                 if experts[ei].resolved.len() >= 20 {
                     let acc = experts[ei].resolved.iter()
                         .filter(|(_, c)| *c).count() as f64
                         / experts[ei].resolved.len() as f64;
-                    let rel_vec = mgr_scalar.encode_log((acc - 0.4).max(1e-10)); // 0.4 baseline
+                    let rel_vec = mgr_scalar.encode((acc - 0.4).max(0.0), ScalarMode::Linear { scale: 0.3 });
                     mgr_facts.push(Primitives::bind(
                         &Primitives::bind(&expert_atoms[ei], &reliability_atom), &rel_vec));
                 }
 
-                // Fact 3: tenure — how many resolved predictions since gate opened?
+                // Fact 3: tenure — how many resolved predictions?
+                // Log scale IS right here: 100 vs 1000 is a meaningful ratio.
                 let tenure = experts[ei].resolved.len() as f64;
                 if tenure >= 50.0 {
-                    let ten_vec = mgr_scalar.encode_log(tenure.max(1e-10));
+                    let ten_vec = mgr_scalar.encode_log(tenure);
                     mgr_facts.push(Primitives::bind(
                         &Primitives::bind(&expert_atoms[ei], &tenure_atom), &ten_vec));
                 }
             }
             // Generalist: gated like every other voice.
             if curve_valid && tht_pred.raw_cos.abs() >= min_opinion_magnitude {
-                let gen_magnitude = mgr_scalar.encode_log(tht_pred.raw_cos.abs());
+                let gen_magnitude = mgr_scalar.encode(tht_pred.raw_cos.abs(), ScalarMode::Linear { scale: 0.5 });
                 let gen_action = if tht_pred.raw_cos >= 0.0 { &buy_atom } else { &sell_atom };
                 let gen_opinion = Primitives::bind(gen_action, &gen_magnitude);
                 mgr_facts.push(Primitives::bind(&generalist_atom, &gen_opinion));
@@ -723,20 +725,21 @@ fn main() {
                     let buys = proven_preds.iter().filter(|p| p.raw_cos > 0.0).count();
                     let total = proven_preds.len();
                     let agreement = (buys.max(total - buys) as f64) / total as f64; // 0.5 = split, 1.0 = unanimous
+                    // Agreement: linear scale 1.0 (range 0.5-1.0)
                     mgr_facts.push(Primitives::bind(&agreement_atom,
-                        &mgr_scalar.encode_log(agreement.max(0.01))));
+                        &mgr_scalar.encode(agreement, ScalarMode::Linear { scale: 1.0 })));
 
-                    // Energy: mean conviction magnitude across proven experts.
+                    // Energy: linear scale 0.5 (mean conviction, range 0-0.3)
                     let mean_conv = proven_preds.iter().map(|p| p.conviction).sum::<f64>() / total as f64;
                     mgr_facts.push(Primitives::bind(&panel_energy_atom,
-                        &mgr_scalar.encode_log(mean_conv.max(1e-10))));
+                        &mgr_scalar.encode(mean_conv, ScalarMode::Linear { scale: 0.5 })));
 
-                    // Divergence: spread of conviction magnitudes. High = some loud, some quiet.
+                    // Divergence: linear scale 0.3 (conviction spread, range 0-0.15)
                     let variance = proven_preds.iter()
                         .map(|p| (p.conviction - mean_conv).powi(2))
                         .sum::<f64>() / total as f64;
                     mgr_facts.push(Primitives::bind(&divergence_atom,
-                        &mgr_scalar.encode_log(variance.sqrt().max(1e-10))));
+                        &mgr_scalar.encode(variance.sqrt(), ScalarMode::Linear { scale: 0.3 })));
                 }
 
                 // Context: market state the manager should know about.
@@ -785,8 +788,9 @@ fn main() {
                         }
                     }
                     let coherence = if pair_count > 0 { pair_sum / pair_count as f64 } else { 0.0 };
+                    // Coherence: linear scale 1.0 (cosine range -1 to 1, abs 0-1)
                     mgr_facts.push(Primitives::bind(&coherence_atom,
-                        &mgr_scalar.encode_log((coherence.abs() + 0.01).max(1e-10))));
+                        &mgr_scalar.encode(coherence.abs(), ScalarMode::Linear { scale: 1.0 })));
                 }
             }
 
@@ -929,7 +933,14 @@ fn main() {
             // BUY signal + currently in USDC = swap USDC→WBTC.
             // SELL signal + currently in WBTC = swap WBTC→USDC.
             // The position persists between signals. WBTC appreciates.
-            if args.asset_mode == "hold" && trader.phase != Phase::Observe && mgr_curve_valid {
+            // Hold mode: only swap when the manager has conviction above the
+            // noise floor. Low conviction = hold current position. The manager's
+            // 61.2% accuracy at high conviction vs 50% at low conviction means
+            // most of the signal is in the high-conviction predictions.
+            let swap_threshold = min_opinion_magnitude * 2.0; // ~0.042 at 20k dims
+            if args.asset_mode == "hold" && trader.phase != Phase::Observe && mgr_curve_valid
+                && meta_conviction >= swap_threshold
+            {
                 let btc_price = candles[i].close;
                 let fee_rate = args.swap_fee + args.slippage;
                 match (meta_dir, hold_state) {
@@ -1447,14 +1458,14 @@ fn main() {
                             let mut mgr_res_facts: Vec<Vector> = entry.expert_preds.iter().enumerate()
                                 .filter_map(|(ei, ep)| {
                                     if !experts[ei].curve_valid { return None; }
-                                    let intensity = mgr_scalar.encode_log(ep.raw_cos.abs().max(1e-10));
+                                    let intensity = mgr_scalar.encode(ep.raw_cos.abs().max(1e-10), ScalarMode::Linear { scale: 0.5 });
                                     let action = if ep.raw_cos >= 0.0 { &buy_atom } else { &sell_atom };
                                     let opinion = Primitives::bind(action, &intensity);
                                     Some(Primitives::bind(&expert_atoms[ei], &opinion))
                                 }).collect();
                             // Generalist gated same as experts
                             if curve_valid {
-                                let gen_intensity = mgr_scalar.encode_log(entry.tht_pred.raw_cos.abs().max(1e-10));
+                                let gen_intensity = mgr_scalar.encode(entry.tht_pred.raw_cos.abs().max(1e-10), ScalarMode::Linear { scale: 0.5 });
                                 let gen_action = if entry.tht_pred.raw_cos >= 0.0 { &buy_atom } else { &sell_atom };
                                 let gen_opinion = Primitives::bind(gen_action, &gen_intensity);
                                 mgr_res_facts.push(Primitives::bind(&generalist_atom, &gen_opinion));
@@ -1536,14 +1547,14 @@ fn main() {
                             // Signed conviction — same encoding as prediction time.
                             let mut mgr_res_facts: Vec<Vector> = entry.expert_preds.iter().enumerate()
                                 .map(|(ei, ep)| {
-                                    let intensity = mgr_scalar.encode_log(ep.raw_cos.abs().max(1e-10));
+                                    let intensity = mgr_scalar.encode(ep.raw_cos.abs().max(1e-10), ScalarMode::Linear { scale: 0.5 });
                                     let action = if ep.raw_cos >= 0.0 { &buy_atom } else { &sell_atom };
                                     let opinion = Primitives::bind(action, &intensity);
                                     Primitives::bind(&expert_atoms[ei], &opinion)
                                 }).collect();
                             // Generalist
                             {
-                                let gen_intensity = mgr_scalar.encode_log(entry.tht_pred.raw_cos.abs().max(1e-10));
+                                let gen_intensity = mgr_scalar.encode(entry.tht_pred.raw_cos.abs().max(1e-10), ScalarMode::Linear { scale: 0.5 });
                                 let gen_action = if entry.tht_pred.raw_cos >= 0.0 { &buy_atom } else { &sell_atom };
                                 let gen_opinion = Primitives::bind(gen_action, &gen_intensity);
                                 mgr_res_facts.push(Primitives::bind(&generalist_atom, &gen_opinion));
