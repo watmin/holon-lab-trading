@@ -317,7 +317,6 @@ fn main() {
     // Fed on EVERY candle (not just trades) to learn the full manifold.
     // Residual = how novel this candle's thought pattern is.
     let tht_subspace = OnlineSubspace::new(args.dims, 32);
-    let _subspace_baseline_residual: f64 = 1.0;
 
     // Layer 2: Panel state engram — learns the manifold of "good panel configurations."
     // Encodes each observer's (signed conviction) as a feature vector.
@@ -337,13 +336,6 @@ fn main() {
     let mut panel_engram = OnlineSubspace::with_params(panel_dim, 4, 2.0, 0.01, 3.5, 100);
     let mut panel_recalib_wins: u32 = 0;
     let mut panel_recalib_total: u32 = 0;
-
-    // Curve stability: track (a, b) parameters across recalibs.
-    // Trade only when both parameters stabilize (<10% change, 3 consecutive recalibs).
-    let _curve_a_history: VecDeque<f64> = VecDeque::new();
-    let _curve_b_history: VecDeque<f64> = VecDeque::new();
-    let curve_stable = false;
-
 
     // ─ Run database ─
     let ledger_path = match &args.ledger {
@@ -399,13 +391,6 @@ fn main() {
     let mut flip_zone_wins: VecDeque<bool> = VecDeque::new();
     let flip_zone_rolling_cap = 200usize;
 
-    // Fire-rate suppression: track how often each cached fact fires.
-    // Facts firing >90% of the time carry <0.15 bits and waste bundle capacity.
-    let _fire_rate_window = 500usize; // assess over last N candles
-    let _fire_rate_threshold = 0.90;
-    let _fire_counts: HashMap<String, usize> = HashMap::new();
-    let _fire_total: usize = 0;
-    let suppressed_facts: HashSet<String> = HashSet::new();
     let mut portfolio    = Portfolio::new(args.initial_equity, args.observe_period);
     let mut treasury  = Treasury::new("USDC", args.initial_equity, args.max_positions, args.max_utilization);
     // Seed treasury 50/50: half USDC, half WBTC at starting price.
@@ -541,7 +526,7 @@ fn main() {
         // Their discriminant learns which scale's patterns predict for their
         // vocabulary. A "full" encoding at args.window is kept for the primary
         // journal (tht_journal) which still drives flip threshold + sizing.
-        let sup_ref = if suppressed_facts.is_empty() { None } else { Some(&suppressed_facts) };
+        let sup_ref: Option<&HashSet<String>> = None;
         let n_observers = observers.len();
 
         // Expert samplers are not Send, so collect windows first
@@ -1760,7 +1745,7 @@ fn main() {
                     portfolio.trades_taken, portfolio.win_rate(),
                     portfolio.equity, ret, bnh,
                     flip_threshold,
-                    if !curve_stable { "CALIBRATING" }
+                    if !mgr_curve_valid { "CALIBRATING" }
                     else if panel_familiar { "ENGRAM" }
                     else if in_adaptation { "ADAPT" }
                     else { "STABLE" },
