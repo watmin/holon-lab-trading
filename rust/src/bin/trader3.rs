@@ -1123,75 +1123,68 @@ fn main() {
             } else {
                 true // no prior exit — ready
             };
-            let risk_allows = cached_risk_mult > 0.3; // risk rejects if multiplier too low
-            if args.asset_mode == "hold" && trader.phase != Phase::Observe
+            // ── Open position: BUY or SELL in proven band ──────────────
+            // One path for both directions. The direction determines which
+            // asset to deploy. Everything else is the same.
+            let risk_allows = cached_risk_mult > 0.3;
+            let should_open = args.asset_mode == "hold"
+                && trader.phase != Phase::Observe
                 && mgr_curve_valid && in_proven_band && market_moved && risk_allows
-                && meta_dir == Some(Outcome::Buy)
-            {
-                // Risk check: expected move must exceed swap cost
+                && (meta_dir == Some(Outcome::Buy) || meta_dir == Some(Outcome::Sell));
+
+            if should_open {
                 let expected_move = candles[i].atr_r * 6.0;
                 if expected_move > 2.0 * fee_rate {
                     let band_edge: f64 = 0.03;
-                    // Risk modulates sizing: full edge when healthy, reduced when stressed
                     let frac = ((band_edge / 2.0) * cached_risk_mult).min(max_single_position);
-                    let usdc_available = treasury.balance("USDC");
-                    let deploy = usdc_available * frac;
-                    if deploy > 10.0 {
+                    let direction = meta_dir.unwrap();
+
+                    let (from_asset, to_asset, deploy_amount, price_for_swap) = match direction {
+                        Outcome::Buy => {
+                            let avail = treasury.balance("USDC");
+                            ("USDC", "WBTC", avail * frac, btc_price)
+                        }
+                        _ => {
+                            let avail = treasury.balance("WBTC");
+                            let amount = avail * frac;
+                            ("WBTC", "USDC", amount, 1.0 / btc_price)
+                        }
+                    };
+
+                    let usdc_value = if direction == Outcome::Buy { deploy_amount }
+                                     else { deploy_amount * btc_price };
+
+                    if usdc_value > 10.0 {
                         // Snapshot before swap — counterfactual baseline
                         last_snapshot_balances = treasury.balances.clone();
                         for (a, d) in &treasury.deployed {
                             *last_snapshot_balances.entry(a.clone()).or_insert(0.0) += d;
                         }
-                        let (spent, received) = treasury.swap("USDC", "WBTC",
-                            deploy, btc_price, fee_rate);
-                        treasury.claim("WBTC", received);
-                        let entry_fee = spent * fee_rate;
-                        let pos = ManagedPosition::new(
-                            next_position_id, i, btc_price, candles[i].atr_r,
-                            Outcome::Buy, spent, received, entry_fee,
-                            k_stop, k_tp,
-                        );
-                        next_position_id += 1;
-                        hold_swaps += 1;
-                        run_db.execute(
-                            "INSERT INTO trade_ledger (step,candle_idx,timestamp,direction,entry_price,position_usd,swap_fee_pct,exit_reason)
-                             VALUES (?1,?2,?3,'Buy',?4,?5,?6,'Open')",
-                            rusqlite::params![log_step, i as i64, &candles[i].ts, btc_price, spent, fee_rate * 100.0],
-                        ).ok();
-                        positions.push(pos);
-                    }
-                }
-            }
+                        let (spent, received) = treasury.swap(
+                            from_asset, to_asset, deploy_amount, price_for_swap, fee_rate);
 
-            // ── Open SELL position: manager SELL in proven band ───────
-            // SELL = swap WBTC → USDC. Profits when BTC drops.
-            // Uses the same band, cooldown, and risk checks.
-            if args.asset_mode == "hold" && trader.phase != Phase::Observe
-                && mgr_curve_valid && in_proven_band && market_moved && risk_allows
-                && meta_dir == Some(Outcome::Sell)
-            {
-                let expected_move = candles[i].atr_r * 6.0;
-                if expected_move > 2.0 * fee_rate {
-                    let band_edge: f64 = 0.03;
-                    let frac = ((band_edge / 2.0) * cached_risk_mult).min(max_single_position);
-                    let wbtc_available = treasury.balance("WBTC");
-                    let wbtc_to_sell = wbtc_available * frac;
-                    let usdc_value = wbtc_to_sell * btc_price;
-                    if usdc_value > 10.0 {
-                        let (sold, received) = treasury.swap("WBTC", "USDC",
-                            wbtc_to_sell, 1.0 / btc_price, fee_rate);
-                        let entry_fee = sold * btc_price * fee_rate;
+                        // BUY: claim WBTC. SELL: USDC already in balance.
+                        if direction == Outcome::Buy {
+                            treasury.claim("WBTC", received);
+                        }
+
+                        let entry_fee = usdc_value * fee_rate;
+                        let (deployed_usd, wbtc_held) = match direction {
+                            Outcome::Buy => (spent, received),
+                            _ => (spent * btc_price, 0.0),
+                        };
                         let pos = ManagedPosition::new(
                             next_position_id, i, btc_price, candles[i].atr_r,
-                            Outcome::Sell, sold * btc_price, 0.0, entry_fee,
+                            direction, deployed_usd, wbtc_held, entry_fee,
                             k_stop, k_tp,
                         );
                         next_position_id += 1;
                         hold_swaps += 1;
+                        let dir_str = if direction == Outcome::Buy { "Buy" } else { "Sell" };
                         run_db.execute(
                             "INSERT INTO trade_ledger (step,candle_idx,timestamp,direction,entry_price,position_usd,swap_fee_pct,exit_reason)
-                             VALUES (?1,?2,?3,'Sell',?4,?5,?6,'Open')",
-                            rusqlite::params![log_step, i as i64, &candles[i].ts, btc_price, usdc_value, fee_rate * 100.0],
+                             VALUES (?1,?2,?3,?4,?5,?6,?7,'Open')",
+                            rusqlite::params![log_step, i as i64, &candles[i].ts, dir_str, btc_price, usdc_value, fee_rate * 100.0],
                         ).ok();
                         positions.push(pos);
                     }
