@@ -948,7 +948,8 @@ fn main() {
                             let reclaim_usdc = pos.usdc_deployed + pos.total_fees + pos.usdc_deployed * 0.01;
                             let reclaim_wbtc = reclaim_usdc / btc_price / (1.0 - fee_rate);
                             if reclaim_wbtc < pos.wbtc_held {
-                                // Partial: sell enough to reclaim, rest is runner
+                                // Partial: release from deployed, then sell
+                                treasury.release("WBTC", reclaim_wbtc);
                                 let (sold, received) = treasury.swap("WBTC", "USDC",
                                     reclaim_wbtc, 1.0 / btc_price, fee_rate);
                                 pos.wbtc_held -= sold;
@@ -958,7 +959,8 @@ fn main() {
                                 hold_swaps += 1;
                                 hold_wins += 1;
                             } else {
-                                // Not enough WBTC to reclaim — full exit
+                                // Full exit — release all, then sell
+                                treasury.release("WBTC", pos.wbtc_held);
                                 let (sold, received) = treasury.swap("WBTC", "USDC",
                                     pos.wbtc_held, 1.0 / btc_price, fee_rate);
                                 pos.usdc_reclaimed += received;
@@ -973,8 +975,9 @@ fn main() {
                             }
                         }
                         PositionExit::StopLoss | PositionExit::TakeProfit => {
-                            // Full exit (stop loss or runner TP)
+                            // Full exit — release from deployed, then sell
                             if pos.wbtc_held > 0.0 {
+                                treasury.release("WBTC", pos.wbtc_held);
                                 let (sold, received) = treasury.swap("WBTC", "USDC",
                                     pos.wbtc_held, 1.0 / btc_price, fee_rate);
                                 pos.usdc_reclaimed += received;
@@ -1035,6 +1038,8 @@ fn main() {
                     if deploy > 10.0 { // minimum position size
                         let (spent, received) = treasury.swap("USDC", "WBTC",
                             deploy, btc_price, fee_rate);
+                        // Claim the WBTC — this position owns it now
+                        treasury.claim("WBTC", received);
                         let entry_fee = spent * fee_rate;
                         let pos = ManagedPosition::new(
                             next_position_id, i, btc_price, candles[i].atr_r,

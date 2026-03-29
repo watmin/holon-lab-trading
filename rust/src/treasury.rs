@@ -87,6 +87,27 @@ impl Treasury {
         self.deployed(&self.base_asset) / total
     }
 
+    /// Claim assets for a position. Moves from available balance to deployed.
+    /// Returns the amount actually claimed (may be less than requested).
+    pub fn claim(&mut self, asset: &str, amount: f64) -> f64 {
+        let available = self.balance(asset);
+        let claimed = amount.min(available);
+        if claimed <= 0.0 { return 0.0; }
+        *self.balances.get_mut(asset).unwrap() -= claimed;
+        *self.deployed.entry(asset.to_string()).or_insert(0.0) += claimed;
+        self.n_open += 1;
+        claimed
+    }
+
+    /// Release assets from a position. Moves from deployed back to available.
+    pub fn release(&mut self, asset: &str, amount: f64) {
+        let dep = self.deployed.entry(asset.to_string()).or_insert(0.0);
+        let released = amount.min(*dep);
+        *dep -= released;
+        *self.balances.entry(asset.to_string()).or_insert(0.0) += released;
+        if self.n_open > 0 { self.n_open -= 1; }
+    }
+
     /// Swap one asset for another at a given price, minus fees.
     /// `from` asset is sold, `to` asset is bought.
     /// `price` = how many units of `from` per unit of `to` (e.g. 87000 USDC per WBTC).
