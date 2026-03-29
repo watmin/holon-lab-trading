@@ -324,7 +324,7 @@ fn main() {
         snapshot_candle: usize,
     }
     let mut exit_pending: Vec<ExitObservation> = Vec::new();
-    let exit_horizon: usize = 12; // resolve exit predictions after 12 candles (1 hour)
+    // Exit timing: derived after k_stop is defined (see below).
 
     // ─ Visual pattern memory: auto-clustering engram groups ─────────────
     // Each group is an OnlineSubspace that learns a cluster of similar visual
@@ -556,7 +556,12 @@ fn main() {
     let k_stop:  f64 = 3.0;  // stop at 3× ATR — "the market moved 3× its normal range against me"
     let k_trail: f64 = 1.5;  // trail at 1.5× ATR — lock in gains, give room for normal retracement
     let k_tp:    f64 = 6.0;  // take profit at 6× ATR — let winners run to meaningful moves
-    let min_exit_samples = 50usize; // for ledger tracking (not used for param calibration anymore)
+    let min_exit_samples = 50usize;
+    // Exit observation timing derived from stop parameter.
+    // Expected candles to move one stop-width: k_stop² (ATR × sqrt(N) scaling).
+    // Observe at half that rate (Nyquist).
+    let exit_horizon: usize = (k_stop * k_stop) as usize; // 9 at k_stop=3
+    let exit_observe_interval: usize = (exit_horizon / 2).max(1); // 4 at k_stop=3
     let mut exit_mfe_history: VecDeque<f64> = VecDeque::new();
     let mut exit_mae_history: VecDeque<f64> = VecDeque::new();
     let exit_history_cap = 500usize;
@@ -992,8 +997,8 @@ fn main() {
             for pos in positions.iter_mut() {
                 if pos.phase == PositionPhase::Closed { continue; }
 
-                // Exit expert: encode position state every 6 candles
-                if pos.candles_held > 0 && pos.candles_held % 6 == 0 {
+                // Exit expert: encode at Nyquist rate of position lifecycle
+                if pos.candles_held > 0 && pos.candles_held % exit_observe_interval == 0 {
                     let pnl_frac = pos.return_pct(btc_price);
                     let mfe_frac = (pos.high_water - pos.entry_price) / pos.entry_price;
                     let stop_dist = (btc_price - pos.trailing_stop).abs() / btc_price;
