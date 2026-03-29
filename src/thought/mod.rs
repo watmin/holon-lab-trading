@@ -169,7 +169,6 @@ const SEGMENT_STREAMS: &[(&str, fn(&Candle) -> f64)] = &[
     ("bb-lower",    |c| if c.bb_lower > 0.0 { c.bb_lower.ln() } else { 0.0 }),
     ("volume",      |c| if c.volume > 0.0 { c.volume.ln() } else { 0.0 }),
     ("rsi",         |c| c.rsi),
-    ("rsi-sma",     |_c| 0.0),  // handled separately via rolling computation
     ("macd-line",   |c| c.macd_line),
     ("macd-signal", |c| c.macd_signal),
     ("macd-hist",   |c| c.macd_hist),

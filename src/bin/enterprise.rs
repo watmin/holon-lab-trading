@@ -358,6 +358,7 @@ fn main() {
     // STABLE (0.999): rolling flip-zone accuracy >= 50% — preserve what works.
     // ADAPTING (0.995): accuracy dropped below 50% — flush stale patterns.
     // Hysteresis: need >55% to return to STABLE (prevents oscillation).
+    // dead-thoughts:allow(scaffolding) — adaptive decay gates on was_flipped, mostly inert; revisit when decay becomes an expert
     let decay_stable   = args.decay;          // CLI value (default 0.999)
     let decay_adapting = (args.decay - 0.004).max(0.990); // 0.995 for default
     let mut adaptive_decay = args.decay;
@@ -378,8 +379,7 @@ fn main() {
         treasury.balances.insert("WBTC".to_string(), seed_wbtc);
     }
     // Counterfactual: snapshot treasury before each swap.
-    // Compare actual value vs "what if we hadn't swapped?"
-    // The risk manager learns from the difference.
+    // dead-thoughts:allow(scaffolding) — alpha snapshot stale after first close; proper counterfactual in treasury.wat
     let mut last_snapshot_balances: HashMap<String, f64> = treasury.balances.clone();
     let mut pending:    VecDeque<Pending> = VecDeque::new();
 
@@ -1408,20 +1408,9 @@ fn main() {
                         } else { 0.0 };
                         let trade_pnl = pos_usd * net_ret;
 
-                        // ── Manager learns Win/Lose at resolution ─────────
-                        // The manager's question: "was this configuration profitable?"
-                        // Win = net_ret > 0 (after costs). Lose = net_ret <= 0.
-                        // The manager learns from ALL predictions — paper and live.
-                        // The reversal pattern emerges: "experts confident + wrong direction
-                        // = Lose" → manager learns to withhold when it sees that config.
-                        {
-                            let mgr_label = if net_ret > 0.0 { Outcome::Buy } else { Outcome::Sell };
-                            // Buy = Win, Sell = Lose in the manager's space.
-                            // Learn from the SAME thought the manager predicted with.
-                            if let Some(ref mgr_vec) = entry.mgr_thought {
-                                mgr_journal.observe(mgr_vec, mgr_label, 1.0);
-                            }
-                        }
+                        // Manager learns direction only, at first-crossing time (above).
+                        // wat/manager.wat: "Does NOT know about costs."
+                        // Profitability is the treasury's domain, not the manager's.
 
                         // ── Treasury: only moves money for live trades ───────
                         if is_live {
@@ -1478,17 +1467,9 @@ fn main() {
                         panel_recalib_total += 1;
                         if dir == final_out { panel_recalib_wins += 1; }
 
-                        // Manager profitability tracking: Win/Lose, not direction.
-                        if entry.raw_meta_dir.is_some() {
-                            let profitable = net_ret > 0.0;
-                            resolved_preds.push_back((entry.meta_conviction, profitable));
-                            // Don't double-push to mgr_resolved — it's already
-                            // populated from the hypothetical block with direction accuracy.
-                            if mgr_resolved.len() > 5000 { mgr_resolved.pop_front(); }
-                            if resolved_preds.len() > conviction_window {
-                                resolved_preds.pop_front();
-                            }
-                        }
+                        // resolved_preds is populated at first-crossing time (direction
+                        // accuracy only). No second push here — the calibration curve
+                        // must not mix direction and profitability signals.
 
                         // ── Risk/diagnostics: only for live trades ───────────
                         if is_live {
