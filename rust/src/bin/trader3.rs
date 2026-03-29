@@ -654,7 +654,9 @@ fn main() {
                     Some(Primitives::bind(&role, &magnitude))
                 })
                 .collect();
-            {
+            // Generalist is gated like every other voice.
+            // Same proof requirement — no special treatment.
+            if curve_valid { // generalist uses the existing tht_journal curve_valid
                 let gen_mag = mgr_scalar.encode_log(tht_pred.raw_cos.abs().max(1e-10));
                 let gen_role = if tht_pred.raw_cos >= 0.0 {
                     generalist_atom.clone()
@@ -1316,7 +1318,8 @@ fn main() {
                                     };
                                     Some(Primitives::bind(&role, &magnitude))
                                 }).collect();
-                            {
+                            // Generalist gated same as experts
+                            if curve_valid {
                                 let gen_mag = mgr_scalar.encode_log(entry.tht_pred.raw_cos.abs().max(1e-10));
                                 let gen_role = if entry.tht_pred.raw_cos >= 0.0 {
                                     generalist_atom.clone()
@@ -1410,7 +1413,8 @@ fn main() {
                                     };
                                     Primitives::bind(&role, &magnitude)
                                 }).collect();
-                            {
+                            // Generalist gated same as experts
+                            if curve_valid {
                                 let gen_mag = mgr_scalar.encode_log(entry.tht_pred.raw_cos.abs().max(1e-10));
                                 let gen_role = if entry.tht_pred.raw_cos >= 0.0 {
                                     generalist_atom.clone()
