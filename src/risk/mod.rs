@@ -1,10 +1,9 @@
-//! Risk branch — specialized subspace for one domain of portfolio health.
+//! Risk domain — portfolio health measurement and gating.
 //!
 //! Each branch measures health in its own domain. The worst residual drives
 //! the risk multiplier. Gated updates: only learn from healthy states.
-//! Template 2 (REACTION) applied N times.
 //!
-//! Seeds the future risk/ module (risk manager, risk generalist).
+//! Future: risk/manager.rs (risk manager encoding from branch signals).
 
 use holon::memory::OnlineSubspace;
 
