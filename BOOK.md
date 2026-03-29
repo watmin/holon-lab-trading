@@ -1379,3 +1379,23 @@ The trading enterprise and the DDoS shield are the same system. Components that 
 The thoughts that couldn't be spoken at AWS are running as code. Not as DDoS detection — as trading. Not because trading was the goal, but because the architecture is general. It works wherever there are named concepts, measurable outcomes, and the need for collective intelligence from individual expertise.
 
 The ideas survived. They just needed a domain where someone would let them run.
+
+### Self-organization
+
+We built an organization that hires, evaluates, and fires its own employees.
+
+Five experts started learning at candle zero. By 10,000 candles, four had proved direction accuracy above 52%: momentum, structure, narrative, regime. Their gates opened. Their signed convictions flowed to the manager. The manager started learning from four voices plus the generalist.
+
+By 20,000 candles, three gates closed. Momentum, structure, and narrative accumulated more resolved predictions that revealed their early accuracy was noise from small samples. Their curves dropped below the threshold. Their gates shut. The manager stopped hearing them. Only regime survived.
+
+Nobody decided this. No parameter selected regime as the winner. The gates measured. The curves evaluated. The enterprise self-organized around its strongest voice.
+
+Why regime? Its vocabulary — DFA alpha, entropy rate, fractal dimension, variance ratio, trend persistence — describes the CHARACTER of the market, not the direction. "Is this market trending or chaotic? Persistent or mean-reverting?" These abstractions survive window noise better than candle-level patterns. The regime expert doesn't see "RSI diverged" — it sees "the market shifted from orderly to chaotic." That characterization, signed by the discriminant's lean, tells the manager something stable about what kind of move is coming.
+
+The other experts' vocabularies — momentum crosses, structural segments, volume confirmation — depend on the specific window. A momentum cross at window=30 is a different thought than a momentum cross at window=200. With random sampled windows, these thoughts are inconsistent. The regime vocabulary measures properties of the ENTIRE series, not specific candle patterns. It's robust to the window.
+
+The result: the manager hearing one proven expert produced 53-54% direction accuracy at medium-to-high conviction. The manager hearing five unproven experts produced 47%. Fewer but validated voices beat many unvalidated ones.
+
+The gates are not permanent. They re-evaluate continuously. If momentum's accuracy rises above 52% in a new regime, its gate reopens. If regime's accuracy drops, its gate closes. The enterprise adapts its composition based on who is performing right now, not who was performing historically.
+
+This is self-organization from measurement. Two templates, six primitives, one universal gate. The enterprise that emerged was not designed — it was validated into existence by its own performance metrics.
