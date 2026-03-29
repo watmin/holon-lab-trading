@@ -1,9 +1,11 @@
 ;; ── volume expert ──────────────────────────────────────────────────
 ;;
 ;; Thinks about: participation and conviction behind price moves.
-;; Vocabulary: volume confirmation, volume analysis (OBV, spikes),
-;;             price action patterns (inside bar, gap, consecutive).
 ;; Window: sampled from [12, 2016] per candle.
+;;
+;; (require stdlib)             ; comparisons, zones
+;; (require mod/flow)           ; OBV, VWAP, A/D, MFI, CMF, buying/selling pressure
+;; (require mod/participation)  ; volume confirmation, spikes, candle patterns
 ;;
 ;; The volume expert judges whether price moves have backing.
 ;; A rally on low volume is suspect. A breakout on high volume

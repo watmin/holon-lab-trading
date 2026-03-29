@@ -1,11 +1,12 @@
 ;; ── momentum expert ─────────────────────────────────────────────────
 ;;
 ;; Thinks about: speed and direction of price change.
-;; Vocabulary: RSI, MACD, stochastic, CCI, ROC, temporal crosses.
 ;; Window: sampled from [12, 2016] per candle (discovers own scale).
 ;;
-;; The momentum expert sees short-term energy. Fast crosses, oscillator
-;; extremes, divergence between price and momentum indicators.
+;; (require stdlib)            ; comparisons, zones
+;; (require mod/oscillators)   ; RSI, stochastic, CCI, Williams %R, UltOsc, StochRSI, ROC
+;; (require mod/divergence)    ; RSI div, stochastic div, MACD div, multi-indicator div
+;; (require mod/crosses)       ; SMA crosses, MACD histogram, K/D cross, temporal lookback
 
 ;; ── Eval methods ────────────────────────────────────────────────────
 ;; eval_comparisons_cached  — (above close sma50), (crosses-above macd-line macd-signal), etc.

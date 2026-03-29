@@ -1,10 +1,12 @@
 ;; ── regime expert ──────────────────────────────────────────────────
 ;;
 ;; Thinks about: what KIND of market this is, not which direction.
-;; Vocabulary: DFA alpha, entropy rate, fractal dimension, variance
-;;             ratio, choppiness, aroon, DeMark, spectral slope,
-;;             Gutenberg-Richter b-value.
 ;; Window: sampled from [12, 2016] per candle.
+;;
+;; (require stdlib)               ; comparisons, zones
+;; (require mod/persistence)      ; DFA, Hurst, autocorrelation, ADX, regime transitions
+;; (require mod/complexity)       ; entropy, fractal dim, spectral slope, G-R, Lyapunov
+;; (require mod/microstructure)   ; choppiness, aroon, DeMark, KAMA-ER, vortex, mass index
 ;;
 ;; The regime expert is the most abstract. It doesn't see prices or
 ;; crosses. It sees PROPERTIES of the price series: "is this market
