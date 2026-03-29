@@ -160,12 +160,6 @@ struct Args {
     asset_mode: String,
 
 
-    /// Comma-separated desk configurations: "window:horizon,window:horizon,..."
-    /// Each desk runs its own thought encoder at its own time scale.
-    /// Example: "48:36,200:144,1000:576" for fast/medium/slow desks.
-    /// Empty string = single desk using --window and --horizon (legacy mode).
-    #[arg(long, default_value = "")]
-    desks: String,
 
     /// Output SQLite database for this run. Auto-generated if omitted.
     #[arg(long)]
@@ -235,36 +229,7 @@ fn main() {
     // Pre-warm position vectors for the max possible window
     for p in 0..2016_i64 { vm.get_position_vector(p); }
 
-    // ─ Multi-desk setup ──────────────────────────────────────────────────
-    // Each desk is a business unit with its own time scale.
-    // Parse --desks flag, or fall back to single desk from --window/--horizon.
-    use enterprise::desk::{Desk, DeskConfig, DeskResolved};
-    let desk_configs: Vec<(usize, usize)> = if args.desks.is_empty() {
-        vec![(args.window, args.horizon)]
-    } else {
-        args.desks.split(',').map(|s| {
-            let parts: Vec<&str> = s.split(':').collect();
-            let w: usize = parts[0].parse().expect("bad desk window");
-            let h: usize = parts[1].parse().expect("bad desk horizon");
-            (w, h)
-        }).collect()
-    };
-    let all_profiles: Vec<&'static str> = vec!["momentum", "structure", "volume", "narrative", "regime"];
-    let mut desks: Vec<Desk> = desk_configs.iter().enumerate().map(|(di, &(w, h))| {
-        let name = format!("desk-{}c", w);
-        let config = DeskConfig {
-            name,
-            window: w,
-            horizon: h,
-            observer_names: all_profiles.clone(),
-        };
-        // Pre-warm position vectors for this desk's window size
-        for p in 0..w as i64 { vm.get_position_vector(p); }
-        Desk::new(config, args.dims, args.recalib_interval, &vm)
-    }).collect();
-    eprintln!("  Desks: {}", desks.iter().map(|d| format!("{}(w={},h={})", d.config.name, d.window(), d.horizon())).collect::<Vec<_>>().join(", "));
-
-    // ─ Primary desk thought encoding (legacy — uses args.window) ─
+    // ─ Thought encoding setup ─
     let thought_vocab   = ThoughtVocab::new(&vm);
     let thought_encoder = ThoughtEncoder::new(thought_vocab);
     let (codebook_labels, codebook_vecs) = thought_encoder.fact_codebook();
@@ -669,8 +634,6 @@ fn main() {
                 (i, full.thought, full.fact_labels, observer_vecs)
             })
             .collect();
-        // The desk_predictions table logs which window was used, so the
-        // ledger builds the window→accuracy curve from experience.
 
         // ── Sequential: predict + buffer + learn + expire ────────────────────
         for (i, tht_vec, tht_facts, observer_vecs) in tht_vecs {
@@ -1954,14 +1917,8 @@ fn main() {
                         k_trail * atr_now * 100.0,
                         treasury.n_open)
                 } else { String::new() };
-                let desk_info = if desks.len() > 1 {
-                    let di: Vec<String> = desks.iter().map(|d| {
-                        format!("{}={:.1}%", d.config.name, d.rolling_accuracy(200) * 100.0)
-                    }).collect();
-                    format!(" | {}", di.join(" "))
-                } else { String::new() };
                 eprintln!(
-                    "  {}/{} ({:.0}/s ETA {:.0}s) | {} | {} | tht={:.1}% | trades={} win={:.1}% | ${:.0} ({:+.1}%) vs B&H {:+.1}% | flip@{:.3} {}{}{}",
+                    "  {}/{} ({:.0}/s ETA {:.0}s) | {} | {} | tht={:.1}% | trades={} win={:.1}% | ${:.0} ({:+.1}%) vs B&H {:+.1}% | flip@{:.3} {}{}",
                     encode_count, loop_count, rate, eta,
                     &candles[i].ts[..10],
                     trader.phase,
@@ -1974,7 +1931,6 @@ fn main() {
                     else if in_adaptation { "ADAPT" }
                     else { "STABLE" },
                     exit_info,
-                    desk_info,
                 );
                 if args.asset_mode == "hold" {
                     let mut prices = HashMap::new();
@@ -2093,19 +2049,6 @@ fn main() {
                 observer.journal.last_disc_strength,
                 observer.journal.buy.count(),
                 observer.journal.sell.count());
-        }
-        eprintln!();
-    }
-
-    // Desk summary.
-    if desks.len() > 1 {
-        eprintln!("  Desks:");
-        for desk in &desks {
-            let acc = desk.rolling_accuracy(500) * 100.0;
-            let resolved = desk.resolved_preds.len();
-            eprintln!("    {}: acc={:.1}% resolved={} labeled={} noise={} recalibs={}",
-                desk.config.name, acc, resolved, desk.labeled_count, desk.noise_count,
-                desk.generalist.recalib_count);
         }
         eprintln!();
     }
