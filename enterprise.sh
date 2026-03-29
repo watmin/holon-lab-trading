@@ -15,7 +15,7 @@ usage() {
     echo "Commands:"
     echo "  build              Build enterprise binary (release)"
     echo "  run [flags]        Build + run with given flags"
-    echo "  test <candles> [flags]  Build + run, log to orchestration_results/"
+    echo "  test <candles> [flags]  Build + run, log to enterprise_results/"
     echo "  kill               Kill running enterprise processes"
     echo ""
     echo "Examples:"
@@ -69,8 +69,8 @@ case "${1:-}" in
             name="run-$(date +%H%M%S)"
         fi
 
-        logfile="$SCRIPT_DIR/orchestration_results/${name}.log"
-        rundb="$SCRIPT_DIR/orchestration_results/${name}.db"
+        logfile="$SCRIPT_DIR/enterprise_results/${name}.log"
+        rundb="$SCRIPT_DIR/enterprise_results/${name}.db"
 
         if [[ -f "$rundb" ]]; then
             echo "ERROR: Run DB already exists: $rundb"

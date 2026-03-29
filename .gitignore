@@ -33,9 +33,9 @@ rust/target/
 htmlcov/
 
 # Large run databases (keep logs, ignore DBs over 100MB)
-orchestration_results/*.db
-orchestration_results/*.db-shm
-orchestration_results/*.db-wal
+enterprise_results/*.db
+enterprise_results/*.db-shm
+enterprise_results/*.db-wal
 rust/runs/
 runs/
 data/*.db-shm
