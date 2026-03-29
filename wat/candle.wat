@@ -135,6 +135,24 @@
 (field hour (parse-hour ts))
 (field day-of-week (parse-day ts))
 
+;; ── Causality ───────────────────────────────────────────────────────
+;;
+;; The first law: every field at candle t must be computable from
+;; candles [0, t] only. No lookahead. No future data.
+;;
+;; Moving averages: backward-looking window [t-period, t].
+;; EMA/Wilder: initialized from early candles, propagated forward.
+;; Slope/regression: fit over [t-period, t], never beyond t.
+;; Multi-timeframe: aggregate the LAST N candles, not a window around t.
+;; Z-scores: rolling mean/stddev ending at t, not full-series.
+;;
+;; Labels (oracle) inherently look ahead — they are prophetic, not causal.
+;; They must be clearly separated from indicator fields and never
+;; contaminate the computation of any indicator.
+;;
+;; The test: removing all candles after t must produce the same indicator
+;; value at t. If it doesn't, the enterprise sees the future.
+
 ;; ── What we do NOT pre-compute ──────────────────────────────────────
 ;;
 ;; - PELT changepoints: window-dependent, computed per expert at their scale
