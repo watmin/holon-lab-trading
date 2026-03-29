@@ -104,13 +104,21 @@ struct ComputedCandle {
     volume_sma_20: f64,
 
     // Multi-timeframe
+    tf_1h_close: f64,
+    tf_1h_high: f64,
+    tf_1h_low: f64,
     tf_1h_ret: f64,
     tf_1h_body: f64,
+    tf_4h_close: f64,
+    tf_4h_high: f64,
+    tf_4h_low: f64,
     tf_4h_ret: f64,
     tf_4h_body: f64,
 
     // Derived
     bb_pos: f64,
+    kelt_upper: f64,
+    kelt_lower: f64,
     kelt_pos: f64,
     squeeze: bool,
     range_pos_12: f64,
@@ -491,7 +499,7 @@ fn main() {
         let kelt_range = kelt_upper - kelt_lower;
         let kelt_pos = if kelt_range > 1e-10 { (c.close - kelt_lower) / kelt_range } else { 0.5 };
         let kelt_width = if ema20[i] > 1e-10 { atr_series[i] * 1.5 / ema20[i] } else { 0.0 };
-        let squeeze = bb_width < kelt_width * 2.0;
+        let squeeze = bb_width < kelt_width; // BB inside Keltner = squeeze
 
         // Stochastic %D = SMA(3) of %K
         let stoch_d = sma(&stoch_k_series, 3, i);
@@ -512,17 +520,26 @@ fn main() {
         let vol_accel = if vol_sma_20 > 1e-10 { c.volume / vol_sma_20 } else { 1.0 };
 
         // Multi-timeframe (backward-looking aggregation)
+        let (tf_1h_close, tf_1h_high, tf_1h_low) = if i >= 11 {
+            (c.close,
+             highs[i - 11..=i].iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b)),
+             lows[i - 11..=i].iter().fold(f64::INFINITY, |a, &b| a.min(b)))
+        } else { (c.close, c.high, c.low) };
         let tf_1h_ret = roc(&closes, 12, i);
         let tf_1h_body = if i >= 11 {
-            let r = highs[i - 11..=i].iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b))
-                - lows[i - 11..=i].iter().fold(f64::INFINITY, |a, &b| a.min(b));
-            if r > 1e-10 { (c.close - raw[i.saturating_sub(11)].open).abs() / r } else { 0.0 }
+            let r = tf_1h_high - tf_1h_low;
+            if r > 1e-10 { (c.close - raw[i - 11].open).abs() / r } else { 0.0 }
         } else { 0.0 };
+
+        let (tf_4h_close, tf_4h_high, tf_4h_low) = if i >= 47 {
+            (c.close,
+             highs[i - 47..=i].iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b)),
+             lows[i - 47..=i].iter().fold(f64::INFINITY, |a, &b| a.min(b)))
+        } else { (c.close, c.high, c.low) };
         let tf_4h_ret = roc(&closes, 48, i);
         let tf_4h_body = if i >= 47 {
-            let r = highs[i - 47..=i].iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b))
-                - lows[i - 47..=i].iter().fold(f64::INFINITY, |a, &b| a.min(b));
-            if r > 1e-10 { (c.close - raw[i.saturating_sub(47)].open).abs() / r } else { 0.0 }
+            let r = tf_4h_high - tf_4h_low;
+            if r > 1e-10 { (c.close - raw[i - 47].open).abs() / r } else { 0.0 }
         } else { 0.0 };
 
         // Oracle label (prophetic — separated from causal indicators)
@@ -553,8 +570,9 @@ fn main() {
             roc_6: roc(&closes, 6, i), roc_12: roc(&closes, 12, i),
             obv_slope_12: obv_slope,
             volume_sma_20: vol_sma_20,
-            tf_1h_ret, tf_1h_body, tf_4h_ret, tf_4h_body,
-            bb_pos, kelt_pos, squeeze,
+            tf_1h_close, tf_1h_high, tf_1h_low, tf_1h_ret, tf_1h_body,
+            tf_4h_close, tf_4h_high, tf_4h_low, tf_4h_ret, tf_4h_body,
+            bb_pos, kelt_upper, kelt_lower, kelt_pos, squeeze,
             range_pos_12: range_position(&highs, &lows, c.close, 12, i),
             range_pos_24: range_position(&highs, &lows, c.close, 24, i),
             range_pos_48: range_position(&highs, &lows, c.close, 48, i),
@@ -601,9 +619,9 @@ fn main() {
             roc_1 REAL, roc_3 REAL, roc_6 REAL, roc_12 REAL,
             obv_slope_12 REAL,
             volume_sma_20 REAL,
-            tf_1h_ret REAL, tf_1h_body REAL,
-            tf_4h_ret REAL, tf_4h_body REAL,
-            bb_pos REAL, kelt_pos REAL, squeeze INTEGER,
+            tf_1h_close REAL, tf_1h_high REAL, tf_1h_low REAL, tf_1h_ret REAL, tf_1h_body REAL,
+            tf_4h_close REAL, tf_4h_high REAL, tf_4h_low REAL, tf_4h_ret REAL, tf_4h_body REAL,
+            bb_pos REAL, kelt_upper REAL, kelt_lower REAL, kelt_pos REAL, squeeze INTEGER,
             range_pos_12 REAL, range_pos_24 REAL, range_pos_48 REAL,
             trend_consistency_6 REAL, trend_consistency_12 REAL, trend_consistency_24 REAL,
             atr_roc_6 REAL, atr_roc_12 REAL,
@@ -621,7 +639,7 @@ fn main() {
             ?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,
             ?31,?32,?33,?34,?35,?36,?37,?38,?39,?40,
             ?41,?42,?43,?44,?45,?46,?47,?48,?49,?50,
-            ?51,?52
+            ?51,?52,?53,?54,?55,?56,?57,?58,?59,?60
         )"
     ).expect("failed to prepare insert");
 
@@ -641,9 +659,9 @@ fn main() {
             c.roc_1, c.roc_3, c.roc_6, c.roc_12,
             c.obv_slope_12,
             c.volume_sma_20,
-            c.tf_1h_ret, c.tf_1h_body,
-            c.tf_4h_ret, c.tf_4h_body,
-            c.bb_pos, c.kelt_pos, c.squeeze as i32,
+            c.tf_1h_close, c.tf_1h_high, c.tf_1h_low, c.tf_1h_ret, c.tf_1h_body,
+            c.tf_4h_close, c.tf_4h_high, c.tf_4h_low, c.tf_4h_ret, c.tf_4h_body,
+            c.bb_pos, c.kelt_upper, c.kelt_lower, c.kelt_pos, c.squeeze as i32,
             c.range_pos_12, c.range_pos_24, c.range_pos_48,
             c.trend_consistency_6, c.trend_consistency_12, c.trend_consistency_24,
             c.atr_roc_6, c.atr_roc_12,
