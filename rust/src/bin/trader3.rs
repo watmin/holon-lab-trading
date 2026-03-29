@@ -1053,6 +1053,41 @@ fn main() {
                 }
             }
 
+            // ── Open SELL position: manager SELL in proven band ───────
+            // SELL = swap WBTC → USDC. Profits when BTC drops.
+            // Uses the same band, cooldown, and risk checks.
+            if args.asset_mode == "hold" && trader.phase != Phase::Observe
+                && mgr_curve_valid && in_proven_band && market_moved
+                && meta_dir == Some(Outcome::Sell)
+            {
+                let expected_move = candles[i].atr_r * 6.0;
+                if expected_move > 2.0 * fee_rate {
+                    let band_edge: f64 = 0.03;
+                    let frac = (band_edge / 2.0).min(max_single_position);
+                    let wbtc_available = treasury.balance("WBTC");
+                    let wbtc_to_sell = wbtc_available * frac;
+                    let usdc_value = wbtc_to_sell * btc_price;
+                    if usdc_value > 10.0 {
+                        let (sold, received) = treasury.swap("WBTC", "USDC",
+                            wbtc_to_sell, 1.0 / btc_price, fee_rate);
+                        let entry_fee = sold * btc_price * fee_rate;
+                        let pos = ManagedPosition::new(
+                            next_position_id, i, btc_price, candles[i].atr_r,
+                            Outcome::Sell, sold * btc_price, 0.0, entry_fee,
+                            k_stop, k_tp,
+                        );
+                        next_position_id += 1;
+                        hold_swaps += 1;
+                        run_db.execute(
+                            "INSERT INTO trade_ledger (step,candle_idx,timestamp,direction,entry_price,position_usd,swap_fee_pct,exit_reason)
+                             VALUES (?1,?2,?3,'Sell',?4,?5,?6,'Open')",
+                            rusqlite::params![log_step, i as i64, &candles[i].ts, btc_price, usdc_value, fee_rate * 100.0],
+                        ).ok();
+                        positions.push(pos);
+                    }
+                }
+            }
+
             // Position sizing: Kelly from the curve × drawdown cap.
             // The curve handles selectivity. The drawdown cap handles survival.
             // Nothing else. No graduated gate, no stability gate, no phase gate.

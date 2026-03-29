@@ -97,6 +97,19 @@ impl ManagedPosition {
         k_stop: f64,
         k_tp: f64,
     ) -> Self {
+        // BUY: stop below entry, TP above. SELL: stop above, TP below.
+        let (stop, tp, hw) = match direction {
+            Outcome::Buy => (
+                entry_price * (1.0 - k_stop * entry_atr),
+                entry_price * (1.0 + k_tp * entry_atr),
+                entry_price,
+            ),
+            _ => (
+                entry_price * (1.0 + k_stop * entry_atr), // stop ABOVE for sell
+                entry_price * (1.0 - k_tp * entry_atr),   // TP BELOW for sell
+                entry_price,
+            ),
+        };
         Self {
             id,
             entry_candle: candle_idx,
@@ -107,39 +120,60 @@ impl ManagedPosition {
             wbtc_held: wbtc_received,
             usdc_reclaimed: 0.0,
             phase: PositionPhase::Active,
-            trailing_stop: entry_price * (1.0 - k_stop * entry_atr),
-            take_profit: entry_price * (1.0 + k_tp * entry_atr),
-            high_water: entry_price,
+            trailing_stop: stop,
+            take_profit: tp,
+            high_water: hw,
             total_fees: entry_fee,
             candles_held: 0,
         }
     }
 
     /// Update position with current price. Returns exit signal if triggered.
+    /// Handles both BUY (long WBTC) and SELL (short WBTC / long USDC) positions.
     pub fn tick(&mut self, current_price: f64, k_trail: f64) -> Option<PositionExit> {
         self.candles_held += 1;
 
         if self.phase == PositionPhase::Closed { return None; }
 
-        // Update high water mark
-        if current_price > self.high_water {
-            self.high_water = current_price;
-        }
-
-        // Raise trailing stop
-        let new_stop = self.high_water * (1.0 - k_trail * self.entry_atr);
-        if new_stop > self.trailing_stop {
-            self.trailing_stop = new_stop;
-        }
-
-        // Check stop loss
-        if current_price <= self.trailing_stop {
-            return Some(PositionExit::StopLoss);
-        }
-
-        // Check take profit (only in Active phase — runners don't have TP)
-        if self.phase == PositionPhase::Active && current_price >= self.take_profit {
-            return Some(PositionExit::TakeProfit);
+        match self.direction {
+            Outcome::Buy => {
+                // BUY: profit when price goes UP
+                if current_price > self.high_water {
+                    self.high_water = current_price;
+                }
+                // Trail stop upward
+                let new_stop = self.high_water * (1.0 - k_trail * self.entry_atr);
+                if new_stop > self.trailing_stop {
+                    self.trailing_stop = new_stop;
+                }
+                // Stop: price fell below trailing stop
+                if current_price <= self.trailing_stop {
+                    return Some(PositionExit::StopLoss);
+                }
+                // TP: price rose above target
+                if self.phase == PositionPhase::Active && current_price >= self.take_profit {
+                    return Some(PositionExit::TakeProfit);
+                }
+            }
+            _ => {
+                // SELL: profit when price goes DOWN
+                if current_price < self.high_water {
+                    self.high_water = current_price; // "high water" is actually low water for sells
+                }
+                // Trail stop downward
+                let new_stop = self.high_water * (1.0 + k_trail * self.entry_atr);
+                if new_stop < self.trailing_stop {
+                    self.trailing_stop = new_stop;
+                }
+                // Stop: price rose above trailing stop
+                if current_price >= self.trailing_stop {
+                    return Some(PositionExit::StopLoss);
+                }
+                // TP: price fell below target
+                if self.phase == PositionPhase::Active && current_price <= self.take_profit {
+                    return Some(PositionExit::TakeProfit);
+                }
+            }
         }
 
         None
