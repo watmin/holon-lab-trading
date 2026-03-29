@@ -248,6 +248,12 @@ const INDICATOR_ATOMS: &[&str] = &[
     "spectral-slope",             // Power spectrum slope
     "entropy-rate",               // Sequential entropy (linguistics)
     "gr-bvalue",                  // Gutenberg-Richter b-value (seismology)
+    // vocab/oscillators module
+    "williams-r",                 // Williams %R
+    "stoch-rsi",                  // Stochastic RSI
+    "ult-osc",                    // Ultimate Oscillator
+    "roc-5", "roc-10", "roc-20", // Multi-timeframe ROC
+    "roc-accelerating", "roc-decelerating",
 ];
 
 const DIRECTION_ATOMS: &[&str] = &["up", "down", "flat"];
@@ -275,6 +281,10 @@ const ZONE_ATOMS: &[&str] = &[
     "trending-geometry", "random-walk-geometry", "mean-reverting-geometry",
     "heavy-tails", "light-tails",
     "low-entropy-rate", "high-entropy-rate",
+    // vocab/oscillators zones
+    "williams-overbought", "williams-oversold",
+    "stoch-rsi-overbought", "stoch-rsi-oversold",
+    "ult-osc-overbought", "ult-osc-oversold",
     // Risk / portfolio state
     "drawdown", "drawdown-shallow", "drawdown-moderate", "drawdown-deep", "drawdown-at-peak",
     "streak", "streak-winning", "streak-losing", "streak-long", "streak-short",
@@ -728,6 +738,8 @@ impl ThoughtEncoder {
             self.eval_stochastic(candles, &mut cached_facts, &mut labels);
             self.eval_momentum(candles, &mut cached_facts, &mut labels); // CCI, ROC
             self.eval_divergence(candles, vm, &mut owned_facts, &mut labels);
+            // vocab/oscillators: Williams %R, Stochastic RSI, Ultimate Oscillator, multi-ROC
+            self.eval_oscillators_module(candles, &mut owned_facts, &mut labels);
         }
 
         // ── EXCLUSIVE: structure ────────────────────────────────────
@@ -1646,6 +1658,66 @@ impl ThoughtEncoder {
             if let Some(v) = self.fact_cache.get("(at close consecutive-down)") {
                 facts.push(v); labels.push(format!("(at close consecutive-down {})", down_count));
             }
+        }
+    }
+
+    // ─── vocab/oscillators module ──────────────────────────────────────
+
+    fn eval_oscillators_module(
+        &self,
+        candles: &[Candle],
+        facts: &mut Vec<Vector>,
+        labels: &mut Vec<String>,
+    ) {
+        use crate::vocab::oscillators::eval_oscillators;
+        let osc = eval_oscillators(candles);
+
+        // Williams %R zone
+        if let Some(zone) = osc.williams_zone {
+            if let Some(v) = self.fact_cache.get(&format!("(at williams-r {})", zone)) {
+                facts.push(v.clone()); labels.push(format!("(at williams-r {})", zone));
+            } else {
+                // Build fact from atoms if not pre-cached
+                let fact = Primitives::bind(self.vocab.get("at"),
+                    &Primitives::bind(self.vocab.get("williams-r"), self.vocab.get(zone)));
+                facts.push(fact); labels.push(format!("(at williams-r {})", zone));
+            }
+        }
+        // Williams %R scalar
+        if let Some(wr) = osc.williams_r {
+            let v = self.scalar_enc.encode((wr + 100.0) / 100.0, ScalarMode::Linear { scale: 1.0 }); // normalize [-100,0] → [0,1]
+            facts.push(Primitives::bind(self.vocab.get("williams-r"), &v));
+            labels.push(format!("(williams-r {:.1})", wr));
+        }
+
+        // Stochastic RSI zone
+        if let Some(zone) = osc.stoch_rsi_zone {
+            let fact = Primitives::bind(self.vocab.get("at"),
+                &Primitives::bind(self.vocab.get("stoch-rsi"), self.vocab.get(zone)));
+            facts.push(fact); labels.push(format!("(at stoch-rsi {})", zone));
+        }
+        // Stochastic RSI scalar
+        if let Some(srsi) = osc.stoch_rsi {
+            let v = self.scalar_enc.encode(srsi, ScalarMode::Linear { scale: 1.0 });
+            facts.push(Primitives::bind(self.vocab.get("stoch-rsi"), &v));
+            labels.push(format!("(stoch-rsi {:.3})", srsi));
+        }
+
+        // Ultimate Oscillator zone
+        if let Some(zone) = osc.ult_osc_zone {
+            let fact = Primitives::bind(self.vocab.get("at"),
+                &Primitives::bind(self.vocab.get("ult-osc"), self.vocab.get(zone)));
+            facts.push(fact); labels.push(format!("(at ult-osc {})", zone));
+        }
+
+        // Multi-timeframe ROC: accelerating or decelerating momentum
+        if osc.roc_accelerating {
+            facts.push(self.vocab.get("roc-accelerating").clone());
+            labels.push("(roc-accelerating)".to_string());
+        }
+        if osc.roc_decelerating {
+            facts.push(self.vocab.get("roc-decelerating").clone());
+            labels.push("(roc-decelerating)".to_string());
         }
     }
 

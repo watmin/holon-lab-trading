@@ -12,7 +12,7 @@
 //! Modules add domain-specific facts on top of stdlib.
 
 // Domain modules — each implements eval methods for its atoms
-// pub mod oscillators;   // TODO: RSI, stochastic, CCI, Williams%R, UltOsc, StochRSI
+pub mod oscillators;   // Williams%R, StochRSI, UltOsc, multi-ROC
 // pub mod flow;          // TODO: OBV, VWAP, A/D, MFI, CMF
 // pub mod persistence;   // TODO: Hurst, autocorrelation, ADX zones
 // pub mod complexity;    // TODO: SampEn, permutation entropy, Lyapunov
