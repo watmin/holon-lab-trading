@@ -1448,6 +1448,20 @@ The permissions are the subscriptions. The gates control who listens, not who sp
 
 This is how real organizations work. Everyone has a voice. Not everyone has an audience. The audience is earned through proof. But the voice is never silenced — because the day an unproven voice suddenly becomes right is the day the enterprise needs to hear it. The paper trail ensures that when a gate opens, the journal behind it has been learning the whole time.
 
+### The filter is a thought
+
+The subscription filter could be a vector operation. Instead of binary include/exclude, the gate status IS part of the thought — bound with a marker that the discriminant handles.
+
+A proven expert's opinion: `(bind momentum (bind buy 0.25))`. A tentative expert's opinion: `(bind momentum (bind tentative (bind buy 0.25)))`. Both enter the manager's bundle. Both participate in the superposition. But the tentative binding makes them structurally distinct in the hyperspace.
+
+The discriminant learns what `tentative` means. Maybe it learns "tentative opinions at high conviction are actually valuable — this expert is about to prove itself." Maybe it learns "tentative opinions are noise — weight them zero." Maybe it learns "tentative momentum is noise but tentative regime is signal." The data decides. We don't engineer the policy — we name the distinction and let the geometry discover the policy.
+
+This is the deepest application of the six primitives: the filter itself is expressed in the algebra. Not code. Not a boolean. A vector. The same bind that composes expert identity with action and magnitude now composes credibility status into the thought. The discriminant — the same cosine projection that predicts direction — simultaneously learns how to weight credibility.
+
+The gate doesn't exclude. It annotates. The annotation is a thought. The thought participates in the geometry. The geometry learns the policy.
+
+Six primitives. One more thing they can express.
+
 ### The primitives
 
 Six primitives: atom, bind, bundle, cosine, journal, curve.
