@@ -193,7 +193,7 @@ fn main() {
         .build_global()
         .expect("failed to configure rayon");
 
-    eprintln!("enterprise: visual+thought journals, discriminant prediction");
+    eprintln!("enterprise: thought journals, discriminant prediction");
     let thresh_desc = if args.atr_multiplier > 0.0 {
         format!("{}×ATR", args.atr_multiplier)
     } else {
@@ -235,10 +235,6 @@ fn main() {
     // Pre-warm position vectors for the max possible window
     for p in 0..2016_i64 { vm.get_position_vector(p); }
 
-    // ─ Visual encoding setup ─
-    // Visual encoding removed. Null vector kept for Pending struct compatibility.
-    let null_vec = Vector::zeros(args.dims);
-
     // ─ Multi-desk setup ──────────────────────────────────────────────────
     // Each desk is a business unit with its own time scale.
     // Parse --desks flag, or fall back to single desk from --window/--horizon.
@@ -275,9 +271,7 @@ fn main() {
     let thought_streams = IndicatorStreams::new(args.dims, args.window + 48);
 
     // ─ Named journals ─
-    // Visual journal removed — Chapter 1 artifact. See BOOK.md.
-    // Stub journal kept for DB logging compatibility (vis_cos/vis_pred columns).
-    let mut vis_journal = Journal::new("visual-stub", args.dims, args.recalib_interval);
+    // Visual journal removed — Chapter 1 artifact, proven zero signal.
     let mut tht_journal = Journal::new("thought", args.dims, args.recalib_interval);
 
     // ─ Manager journal: thinks in expert opinions, not candle data ────
@@ -560,7 +554,6 @@ fn main() {
     let mut exit_mfe_history: VecDeque<f64> = VecDeque::new();
     let mut exit_mae_history: VecDeque<f64> = VecDeque::new();
     let exit_history_cap = 500usize;
-    let mut vis_rolling: VecDeque<bool>  = VecDeque::new();
     let mut tht_rolling: VecDeque<bool>  = VecDeque::new();
     let rolling_cap = 1000usize;
 
@@ -690,9 +683,6 @@ fn main() {
             let observer_preds: Vec<Prediction> = observer_vecs.iter().enumerate()
                 .map(|(ei, vec)| observers[ei].journal.predict(vec))
                 .collect();
-
-            let vis_vec = null_vec.clone(); // stub for Pending compatibility
-            let vis_pred = Prediction::default();
 
             // The generalist still encodes for backward compatibility
             // (flip threshold, resolved_preds tracking, DB logging).
@@ -1270,9 +1260,7 @@ fn main() {
             pending.push_back(Pending {
                 candle_idx:    i,
                 year:          candles[i].year,
-                vis_vec,
                 tht_vec,
-                vis_pred:      vis_pred.clone(),
                 tht_pred:      tht_pred.clone(),
                 raw_meta_dir:  raw_meta_dir,
                 meta_dir,
@@ -1297,7 +1285,6 @@ fn main() {
             });
 
             // Decay once per candle.
-            vis_journal.decay(adaptive_decay);
             tht_journal.decay(adaptive_decay);
             mgr_journal.decay(adaptive_decay);
             for observer in &mut observers {
@@ -1307,7 +1294,6 @@ fn main() {
             // ── Event-driven learning ─────────────────────────────────────
             // Snapshot recalib counts before scanning so we can detect if
             // any recalibration fired during this candle's learning.
-            let vis_recalib_before = vis_journal.recalib_count;
             let tht_recalib_before = tht_journal.recalib_count;
 
             let current_price = candles[i].close;
@@ -1378,7 +1364,6 @@ fn main() {
                     if let Some(o) = outcome {
                         entry.crossing_candle = Some(i);
                         let sw = signal_weight(abs_pct, &mut move_sum, &mut move_count);
-                        vis_journal.observe(&entry.vis_vec, o, sw);
                         tht_journal.observe(&entry.tht_vec, o, sw);
                         // Manager does NOT learn here. Manager learns Win/Lose at trade
                         // resolution, not Buy/Sell at threshold crossing. The manager's
@@ -1466,17 +1451,6 @@ fn main() {
             }
 
             // Log any recalibrations that fired during this candle's learning.
-            if vis_journal.recalib_count != vis_recalib_before {
-                run_db.execute(
-                    "INSERT INTO recalib_log (step,journal,cos_raw,disc_strength,buy_count,sell_count)
-                     VALUES (?1,?2,?3,?4,?5,?6)",
-                    params![
-                        encode_count as i64, "visual",
-                        vis_journal.last_cos_raw, vis_journal.last_disc_strength,
-                        vis_journal.buy.count() as i64, vis_journal.sell.count() as i64,
-                    ],
-                ).ok();
-            }
             if tht_journal.recalib_count != tht_recalib_before {
                 tht_attention = tht_journal.discriminant().map(|d| d.to_vec());
 
@@ -1621,11 +1595,6 @@ fn main() {
 
                 // Rolling accuracy per journal (non-Noise only).
                 if final_out != Outcome::Noise {
-                    if let Some(vd) = entry.vis_pred.direction {
-                        let ok = vd == final_out;
-                        vis_rolling.push_back(ok);
-                        if vis_rolling.len() > rolling_cap { vis_rolling.pop_front(); }
-                    }
                     if let Some(td) = entry.tht_pred.direction {
                         let ok = td == final_out;
                         tht_rolling.push_back(ok);
@@ -1914,11 +1883,9 @@ fn main() {
                                     params![log_step, label],
                                 ).ok(); }
                             }
-                            // Store visual + thought vectors for engram analysis.
+                            // Store thought vectors for engram analysis.
                             if entry.was_flipped {
                                 let won = (dir == final_out) as i32;
-                                let vis_bytes: Vec<u8> = entry.vis_vec.data().iter()
-                                    .map(|&v| v as u8).collect();
                                 let tht_bytes: Vec<u8> = entry.tht_vec.data().iter()
                                     .map(|&v| v as u8).collect();
                                 if args.diagnostics { run_db.execute(
@@ -1926,7 +1893,7 @@ fn main() {
                                      VALUES (?1, ?2, ?3, ?4)",
                                     params![
                                         log_step, won,
-                                        vis_bytes,
+                                        rusqlite::types::Null,
                                         tht_bytes,
                                     ],
                                 ).ok(); }
@@ -1935,11 +1902,7 @@ fn main() {
                     } // has_resolution
                 } // if let Some(dir)
 
-                // Log to DB.
-                let agree = match (entry.vis_pred.direction, entry.tht_pred.direction) {
-                    (Some(v), Some(t)) => Some((v == t) as i32),
-                    _ => None,
-                };
+                // Log to DB. Visual columns get NULLs (schema kept for backward compat).
                 run_db.execute(
                     "INSERT INTO candle_log
                      (step,candle_idx,timestamp,
@@ -1950,11 +1913,10 @@ fn main() {
                      VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)",
                     params![
                         log_step, entry.candle_idx as i64, &entry_candle.ts,
-                        entry.vis_pred.raw_cos, entry.vis_pred.conviction,
-                        entry.vis_pred.direction.map(|d| d.to_string()),
+                        0.0_f64, 0.0_f64, Option::<String>::None,
                         entry.tht_pred.raw_cos, entry.tht_pred.conviction,
                         entry.tht_pred.direction.map(|d| d.to_string()),
-                        agree,
+                        Option::<i32>::None,
                         entry.meta_dir.map(|d| d.to_string()),
                         entry.meta_conviction,
                         final_out.to_string(),
@@ -1979,8 +1941,6 @@ fn main() {
                 let elapsed = t_start.elapsed().as_secs_f64();
                 let rate    = encode_count as f64 / elapsed;
                 let eta     = (loop_count - encode_count) as f64 / rate;
-                let vis_acc = if vis_rolling.is_empty() { 0.0 }
-                    else { vis_rolling.iter().filter(|&&x| x).count() as f64 / vis_rolling.len() as f64 * 100.0 };
                 let tht_acc = if tht_rolling.is_empty() { 0.0 }
                     else { tht_rolling.iter().filter(|&&x| x).count() as f64 / tht_rolling.len() as f64 * 100.0 };
                 let ret = (trader.equity - trader.initial_equity) / trader.initial_equity * 100.0;
@@ -2001,11 +1961,11 @@ fn main() {
                     format!(" | {}", di.join(" "))
                 } else { String::new() };
                 eprintln!(
-                    "  {}/{} ({:.0}/s ETA {:.0}s) | {} | {} | vis={:.1}% tht={:.1}% | trades={} win={:.1}% | ${:.0} ({:+.1}%) vs B&H {:+.1}% | flip@{:.3} {}{}{}",
+                    "  {}/{} ({:.0}/s ETA {:.0}s) | {} | {} | tht={:.1}% | trades={} win={:.1}% | ${:.0} ({:+.1}%) vs B&H {:+.1}% | flip@{:.3} {}{}{}",
                     encode_count, loop_count, rate, eta,
                     &candles[i].ts[..10],
                     trader.phase,
-                    vis_acc, tht_acc,
+                    tht_acc,
                     trader.trades_taken, trader.win_rate(),
                     trader.equity, ret, bnh,
                     flip_threshold,
@@ -2052,10 +2012,6 @@ fn main() {
         let entry_candle = &candles[entry.candle_idx];
         match final_out { Outcome::Noise => noise_count += 1, _ => labeled_count += 1 }
 
-        let agree = match (entry.vis_pred.direction, entry.tht_pred.direction) {
-            (Some(v), Some(t)) => Some((v == t) as i32),
-            _ => None,
-        };
         run_db.execute(
             "INSERT INTO candle_log
              (step,candle_idx,timestamp,
@@ -2066,11 +2022,10 @@ fn main() {
              VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)",
             params![
                 log_step, entry.candle_idx as i64, &entry_candle.ts,
-                entry.vis_pred.raw_cos, entry.vis_pred.conviction,
-                entry.vis_pred.direction.map(|d| d.to_string()),
+                0.0_f64, 0.0_f64, Option::<String>::None,
                 entry.tht_pred.raw_cos, entry.tht_pred.conviction,
                 entry.tht_pred.direction.map(|d| d.to_string()),
-                agree,
+                Option::<i32>::None,
                 entry.meta_dir.map(|d| d.to_string()),
                 entry.meta_conviction,
                 final_out.to_string(),
@@ -2117,20 +2072,15 @@ fn main() {
         treasury.utilization() * 100.0,
         treasury.total_fees_paid, treasury.total_slippage);
     eprintln!();
-    eprintln!("  Visual journal  — buy_obs={} sell_obs={} cos_raw={:.4} disc_strength={:.4} recalibs={}",
-        vis_journal.buy.count(), vis_journal.sell.count(),
-        vis_journal.last_cos_raw, vis_journal.last_disc_strength, vis_journal.recalib_count);
     eprintln!("  Thought journal — buy_obs={} sell_obs={} cos_raw={:.4} disc_strength={:.4} recalibs={}",
         tht_journal.buy.count(), tht_journal.sell.count(),
         tht_journal.last_cos_raw, tht_journal.last_disc_strength, tht_journal.recalib_count);
     eprintln!();
 
-    let vis_acc = if vis_rolling.is_empty() { 0.0 }
-        else { vis_rolling.iter().filter(|&&x| x).count() as f64 / vis_rolling.len() as f64 * 100.0 };
     let tht_acc = if tht_rolling.is_empty() { 0.0 }
         else { tht_rolling.iter().filter(|&&x| x).count() as f64 / tht_rolling.len() as f64 * 100.0 };
-    eprintln!("  Rolling accuracy (last {}): visual={:.1}% thought={:.1}%",
-        rolling_cap, vis_acc, tht_acc);
+    eprintln!("  Rolling accuracy (last {}): thought={:.1}%",
+        rolling_cap, tht_acc);
     eprintln!();
 
     // Observer panel summary.

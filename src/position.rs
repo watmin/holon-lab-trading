@@ -6,11 +6,9 @@ use crate::journal::{Outcome, Prediction};
 pub struct Pending {
     pub candle_idx:    usize,
     pub year:          i32,
-    pub vis_vec:       Vector,
     pub tht_vec:       Vector,
 
     // ── Prediction (what the experts said) ────────────────────────────
-    pub vis_pred:      Prediction,
     pub tht_pred:      Prediction,
     pub raw_meta_dir:  Option<Outcome>,  // un-flipped direction (for auto calibration)
     pub meta_dir:      Option<Outcome>,
