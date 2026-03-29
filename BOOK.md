@@ -1302,3 +1302,19 @@ The manager can. The manager sees the expert's signed conviction as an input. Ov
 The strange loop closes through the hierarchy. The expert can't think about its own thoughts. The manager thinks about the expert's thoughts. Meta-cognition lives one level up. The architecture must support this — and it does, because each level's vocabulary is the level below's output.
 
 The flip was never wrong. It was applied at the wrong level. At the expert level, it's a market insight. At the manager level, it's emergent — learned from observing that confident experts are reliably wrong about direction but reliably right about magnitude. The enterprise discovers this. We don't hardcode it.
+
+### The language is the architecture
+
+The wat language has six primitives: atom, bind, bundle, cosine, journal, curve. Every expert, every manager, every risk assessor — built from the same six operations. The only thing that changes between levels is what you name and what you measure.
+
+An expert names market concepts: "RSI diverging," "MACD crossing," "entropy rising." It binds them with magnitudes. It bundles them into a thought. It measures with one cosine. The journal accumulates. The curve evaluates.
+
+The manager names its experts: "momentum," "structure," "regime." It binds them with intensities. It bundles them into a thought. It measures with one cosine. The journal accumulates. The curve evaluates.
+
+Same six operations. Same machinery. Different vocabulary. The architecture doesn't have layers — it has recursive applications of the same language. The expert's program and the manager's program are the same program with different nouns.
+
+Functional programming says: functions are values, composition is the mechanism. Wat says: thoughts are vectors, binding is composition, cosine is the only measurement. No mutation — state emerges from accumulation. No side effects — every operation is algebraic. The journal is a fold. The cosine is a projection. The curve is validation.
+
+The enterprise we built is a program in the wat language. Each removal of a hack — the flip, the signed direction, the majority vote, the hardcoded parameters — made the system simpler and more capable. That's the signature of finding the right abstraction. When the language fits the problem, the code gets shorter as the capability grows.
+
+Six primitives. Two templates. One tree. The rest is naming things and measuring outcomes.
