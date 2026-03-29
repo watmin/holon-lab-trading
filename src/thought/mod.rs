@@ -672,16 +672,7 @@ impl ThoughtEncoder {
         let ending_atom = self.vocab.get("ending");
 
         for &(stream_name, extractor) in SEGMENT_STREAMS {
-            let values: Vec<f64> = if stream_name == "rsi-sma" {
-                // Rolling RSI SMA (14-period)
-                (0..n_candles).map(|i| {
-                    let start = i.saturating_sub(13);
-                    let window = &candles[start..=i];
-                    window.iter().map(|c| c.rsi).sum::<f64>() / window.len() as f64
-                }).collect()
-            } else {
-                candles.iter().map(extractor).collect()
-            };
+            let values: Vec<f64> = candles.iter().map(extractor).collect();
 
             if values.len() < 5 { continue; }
 

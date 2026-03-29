@@ -24,7 +24,7 @@ use enterprise::treasury::Treasury;
 use enterprise::portfolio::{Portfolio, Phase};
 use enterprise::sizing::{kelly_frac, signal_weight};
 use enterprise::market::observer::Observer;
-use enterprise::position::{Pending, ExitReason, ExitObservation};
+use enterprise::position::{Pending, ExitReason, ExitObservation, ManagedPosition, PositionPhase, PositionExit};
 use enterprise::risk::RiskBranch;
 use enterprise::ledger::init_ledger;
 use enterprise::market::{parse_candle_hour, parse_candle_day};
@@ -298,6 +298,7 @@ fn main() {
     // Encodes each observer's (signed conviction) as a feature vector.
     // Dimensionality = number of observers. Fed after each recalib if accuracy was good.
     // Manager's vocabulary = its experts + generalist + panel-level concepts.
+    // decomplect:allow(inline-encoding) — observer/generalist atoms + min_opinion + delta assembly migrate to market/manager.rs
     let observer_atoms: Vec<Vector> = observer_names.iter()
         .map(|&name| vm.get_vector(name))
         .collect();
@@ -384,7 +385,6 @@ fn main() {
     let mut pending:    VecDeque<Pending> = VecDeque::new();
 
     // ─ Managed positions: concurrent, independently managed ──────────
-    use enterprise::position::{ManagedPosition, PositionPhase, PositionExit};
     let mut positions: Vec<ManagedPosition> = Vec::new();
     let mut next_position_id: usize = 0;
     let mut last_exit_price: f64 = 0.0;  // price when last position exited
@@ -977,6 +977,7 @@ fn main() {
                 }
             } else { None };
 
+            // dead-thoughts:allow(scaffolding) — dual accounting: open_position reserves + ManagedPosition claims separately. Unify when position lifecycle is refactored.
             // Treasury allocation: reserve capital for this position.
             let deployed_usd = if let Some(frac) = position_frac {
                 treasury.open_position(treasury.allocatable() * frac)
@@ -1093,9 +1094,9 @@ fn main() {
                         entry.crossing_candle = Some(i);
                         let sw = signal_weight(abs_pct, &mut move_sum, &mut move_count);
                         tht_journal.observe(&entry.tht_vec, o, sw);
-                        // Manager does NOT learn here. Manager learns Win/Lose at trade
-                        // resolution, not Buy/Sell at threshold crossing. The manager's
-                        // question is "should I deploy?" not "which direction?"
+                        // Manager does NOT learn here. Manager learns Buy/Sell (direction)
+                        // at first-crossing in the resolution block below.
+                        // wat/manager.wat: "Does NOT know about costs."
                         // decomplect:allow(braided-concerns) — observer learn + track + gate + log
                         // Extracts to Observer::resolve() when observer methods are built
                         for (ei, expert_vec) in entry.observer_vecs.iter().enumerate() {
@@ -1683,7 +1684,6 @@ fn main() {
     if args.exit_mode == "managed" {
         eprintln!("  Exit mode: managed (ATR-scaled per trade). K_stop={} K_trail={} K_tp={}",
             k_stop, k_trail, k_tp);
-        eprintln!("  Exit mode: managed (ATR-scaled per trade)");
     }
     eprintln!("  Labeled: {}  Noise: {} ({:.1}% noise rate)",
         labeled_count, noise_count,
