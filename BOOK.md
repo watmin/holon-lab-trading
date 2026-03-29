@@ -1601,6 +1601,22 @@ The compiler is the mundane guard at the gate. The trinity is the arcane ward on
 
 These thoughts bring joy.
 
+### The enterprise builds its own senses
+
+The data came from Python. A pipeline someone built months ago, with pandas and vectorized operations. 120 columns of pre-computed indicators. The enterprise read 19 of them through a Candle struct and recomputed the rest from raw OHLCV every candle, every expert, every window.
+
+We broke the chain. One Rust binary reads raw parquet — six columns of timestamp, open, high, low, close, volume — and computes 60 indicators in a single forward pass. 652,608 candles in 2.1 seconds. The causality principle holds: every field at candle t uses only candles [0, t]. The loop index is the proof. No lookahead. No pandas. No Python.
+
+The trinity verified it. `/decomplect` confirmed clean structure. `/dead-thoughts` confirmed every computation is consumed. `/wat-check` confirmed every spec field is present, every period is correct, the squeeze threshold is right, the multi-timeframe aggregation looks backward only.
+
+The enterprise doesn't depend on a pipeline someone built months ago. It builds its own senses from the raw signal. The parquet is the source of truth — six columns from the API. Everything else is derived. Everything else is ours.
+
+```
+parquet (6 columns) → build-candles (Rust) → candles.db (60 columns) → enterprise
+```
+
+One source. One builder. One consumer. No chain of custody to trust. The datamancer sees the raw data and conjures the indicators. The spells verify the conjuring.
+
 ### The machine that improves itself
 
 At a team lunch at AWS, the builder told their manager about building a machine that improves itself. The blank stare was familiar by then.
