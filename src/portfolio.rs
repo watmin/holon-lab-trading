@@ -137,7 +137,6 @@ impl Portfolio {
         let won = net_return > 0.0;
         self.equity += pnl;
         // Drawdown tracking
-        let _was_at_peak = self.equity >= self.peak_equity * 0.999;
         if self.equity > self.peak_equity {
             if self.dd_bottom_equity < self.peak_equity * 0.999 {
                 let dd_depth = (self.peak_equity - self.dd_bottom_equity) / self.peak_equity;

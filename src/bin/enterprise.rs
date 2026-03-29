@@ -363,6 +363,7 @@ fn main() {
 
     let mut portfolio    = Portfolio::new(args.initial_equity, args.observe_period);
     let mut treasury  = Treasury::new("USDC", args.initial_equity, args.max_positions, args.max_utilization);
+    let mut peak_treasury_equity: f64 = args.initial_equity;
     // Seed treasury 50/50: half USDC, half WBTC at starting price.
     // "I don't know which way the market will go — hold both."
     // Both directions can trade from candle 1.
@@ -689,6 +690,15 @@ fn main() {
             // ── Position management: tick all open positions ─────────
             let btc_price = candles[i].close;
             let fee_rate = args.swap_fee + args.slippage;
+            // Treasury equity: the source of truth. Replaces portfolio.equity.
+            let treasury_equity = {
+                let usdc = treasury.balance("USDC") + treasury.deployed("USDC");
+                let wbtc = treasury.balance("WBTC") + treasury.deployed("WBTC");
+                usdc + wbtc * btc_price
+            };
+            if treasury_equity > peak_treasury_equity {
+                peak_treasury_equity = treasury_equity;
+            }
             let mut closed_positions: Vec<usize> = Vec::new();
             // ── Exit expert: encode each position's state, predict, learn ──
             // Resolve pending exit observations (did holding improve the position?)
@@ -946,8 +956,8 @@ fn main() {
                         match kelly_result {
                             Some(frac) => {
                                 let frac = frac.min(1.0);
-                                let dd = if portfolio.peak_equity > 0.0 {
-                                    (portfolio.peak_equity - portfolio.equity) / portfolio.peak_equity
+                                let dd = if peak_treasury_equity > 0.0 {
+                                    (peak_treasury_equity - treasury_equity) / peak_treasury_equity
                                 } else { 0.0 };
                                 let dd_room = (args.max_drawdown - dd).max(0.0);
                                 let cap = (dd_room / (4.0 * mt)).min(1.0);
@@ -1319,7 +1329,7 @@ fn main() {
                         // Position value: real if live, hypothetical if paper
                         let pos_usd = if is_live {
                             if entry.deployed_usd > 0.0 { entry.deployed_usd }
-                            else { portfolio.equity * frac }
+                            else { treasury_equity * frac }
                         } else { 0.0 };
                         let trade_pnl = pos_usd * net_ret;
 
@@ -1364,7 +1374,7 @@ fn main() {
                                 gross_ret * 100.0,
                                 entry_cost_frac * 100.0,
                                 exit_cost_frac * 100.0,
-                                net_ret * 100.0, trade_pnl, portfolio.equity,
+                                net_ret * 100.0, trade_pnl, treasury_equity,
                                 entry.max_favorable * 100.0, entry.max_adverse * 100.0,
                                 crossing_elapsed, entry.path_candles as i64,
                                 final_out.to_string(), (net_ret > 0.0) as i32,
@@ -1387,8 +1397,8 @@ fn main() {
 
                         // ── Risk/diagnostics: only for live trades ───────────
                         if is_live {
-                                let dd = if portfolio.peak_equity > 0.0 {
-                                    (portfolio.peak_equity - portfolio.equity) / portfolio.peak_equity * 100.0
+                                let dd = if peak_treasury_equity > 0.0 {
+                                    (peak_treasury_equity - treasury_equity) / peak_treasury_equity * 100.0
                                 } else { 0.0 };
                                 let (streak_len, streak_dir) = {
                                     let mut len = 0i32;
@@ -1404,7 +1414,7 @@ fn main() {
                                     portfolio.rolling.iter().filter(|&&x| x).count() as f64
                                         / portfolio.rolling.len() as f64
                                 } else { 0.5 };
-                                let eq_pct = (portfolio.equity - portfolio.initial_equity) / portfolio.initial_equity * 100.0;
+                                let eq_pct = (treasury_equity - args.initial_equity) / args.initial_equity * 100.0;
                                 let won = (dir == final_out) as i32;
                                 if args.diagnostics { ledger.execute(
                                     "INSERT INTO risk_log (step,drawdown_pct,streak_len,streak_dir,recent_acc,equity_pct,won)
@@ -1473,7 +1483,7 @@ fn main() {
                         final_out.to_string(),
                         entry.position_frac.is_some() as i32,
                         entry.position_frac,
-                        portfolio.equity,
+                        treasury_equity,
                         entry.outcome_pct,
                     ],
                 ).ok();
@@ -1494,7 +1504,7 @@ fn main() {
                 let eta     = (loop_count - encode_count) as f64 / rate;
                 let tht_acc = if tht_rolling.is_empty() { 0.0 }
                     else { tht_rolling.iter().filter(|&&x| x).count() as f64 / tht_rolling.len() as f64 * 100.0 };
-                let ret = (portfolio.equity - portfolio.initial_equity) / portfolio.initial_equity * 100.0;
+                let ret = (treasury_equity - args.initial_equity) / args.initial_equity * 100.0;
                 let bnh = (candles[i].close - bnh_entry) / bnh_entry * 100.0;
                 let atr_now = candles[i].atr_r;
                 let exit_info = format!(" | ATR={:.2}% sl={:.2}% tp={:.2}% tr={:.2}% open={}",
@@ -1510,7 +1520,7 @@ fn main() {
                     portfolio.phase,
                     tht_acc,
                     portfolio.trades_taken, portfolio.win_rate(),
-                    portfolio.equity, ret, bnh,
+                    treasury_equity, ret, bnh,
                     flip_threshold,
                     if !mgr_curve_valid { "CALIBRATING" }
                     else if panel_familiar { "ENGRAM" }
@@ -1519,11 +1529,8 @@ fn main() {
                     exit_info,
                 );
                 if args.asset_mode == "hold" {
-                    let mut prices = HashMap::new();
-                    prices.insert("USDC".to_string(), 1.0);
-                    prices.insert("WBTC".to_string(), candles[i].close);
-                    let tv = treasury.total_value(&prices);
-                    let tv_ret = (tv - args.initial_equity) / args.initial_equity * 100.0;
+                    let tv = treasury_equity;
+                    let tv_ret = (treasury_equity - args.initial_equity) / args.initial_equity * 100.0;
                     let mut proven: Vec<&str> = observers.iter()
                         .filter(|e| e.curve_valid).map(|e| e.name).collect();
                     if curve_valid { proven.push("generalist"); }
@@ -1535,7 +1542,7 @@ fn main() {
                     let open_positions = positions.len();
                     // Counterfactual: what would the pre-swap snapshot be worth now?
                     let snapshot_value: f64 = last_snapshot_balances.iter()
-                        .map(|(a, &bal)| bal * prices.get(a).copied().unwrap_or(1.0))
+                        .map(|(a, &bal)| bal * if a == "WBTC" { btc_price } else { 1.0 })
                         .sum();
                     let alpha = tv - snapshot_value; // positive = trading beat inaction
                     eprintln!("    treasury: ${:.0} ({:+.1}%) | passive: ${:.0} | alpha: ${:+.0} | pos={} swaps={} wins={} | proven=[{}]{}",
@@ -1546,6 +1553,14 @@ fn main() {
 
         cursor = batch_end;
     }
+
+    // Final treasury equity for post-loop reporting
+    let final_price = candles[end_idx - 1].close;
+    let treasury_equity = {
+        let usdc = treasury.balance("USDC") + treasury.deployed("USDC");
+        let wbtc = treasury.balance("WBTC") + treasury.deployed("WBTC");
+        usdc + wbtc * final_price
+    };
 
     // ─ Drain remaining pending entries (log, no further learning) ────────────
     while let Some(entry) = pending.pop_front() {
@@ -1569,7 +1584,7 @@ fn main() {
                 final_out.to_string(),
                 entry.position_frac.is_some() as i32,
                 entry.position_frac,
-                portfolio.equity,
+                treasury_equity,
                 entry.outcome_pct,
             ],
         ).ok();
@@ -1580,7 +1595,7 @@ fn main() {
 
     // ─ Final summary ─────────────────────────────────────────────────────────
     let total_time = t_start.elapsed().as_secs_f64();
-    let ret        = (portfolio.equity - portfolio.initial_equity) / portfolio.initial_equity * 100.0;
+    let ret        = (treasury_equity - args.initial_equity) / args.initial_equity * 100.0;
     let bnh_final  = (candles[end_idx - 1].close - bnh_entry) / bnh_entry * 100.0;
 
     eprintln!("\n═══════════════════════════════════════════════════════════");
@@ -1598,7 +1613,7 @@ fn main() {
         noise_count as f64 / (labeled_count + noise_count).max(1) as f64 * 100.0);
     eprintln!();
     eprintln!("  Equity: ${:.2} ({:+.2}%) | B&H: {:+.2}%",
-        portfolio.equity, ret, bnh_final);
+        treasury_equity, ret, bnh_final);
     eprintln!("  Trades taken: {}  Won: {}  Win rate: {:.1}%  Skipped: {}",
         portfolio.trades_taken, portfolio.trades_won, portfolio.win_rate(), portfolio.trades_skipped);
     eprintln!("  Treasury: ${:.2} available  ${:.2} deployed  {:.1}% utilization  fees=${:.2}  slip=${:.2}",
