@@ -62,3 +62,11 @@ pub fn kelly_frac(
     let position = half_kelly_risk / move_threshold;
     Some((position, curve_a, curve_b))
 }
+
+/// Scale an observation by how large the triggering move was vs the running average.
+/// Bigger moves teach more strongly than typical moves.
+pub fn signal_weight(abs_pct: f64, move_sum: &mut f64, move_count: &mut usize) -> f64 {
+    *move_sum += abs_pct;
+    *move_count += 1;
+    abs_pct / (*move_sum / *move_count as f64)
+}

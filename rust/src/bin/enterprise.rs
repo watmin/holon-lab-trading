@@ -22,9 +22,8 @@ use btc_walk::journal::{Journal, Outcome, Prediction};
 use btc_walk::thought::{ThoughtEncoder, ThoughtVocab, IndicatorStreams};
 use btc_walk::treasury::Treasury;
 use btc_walk::portfolio::{Trader, Phase, YearStats};
-use btc_walk::sizing::kelly_frac;
+use btc_walk::sizing::{kelly_frac, signal_weight};
 use btc_walk::position::{Pending, ExitReason};
-use btc_walk::orchestration::{orchestrate, signal_weight};
 use btc_walk::run_db::init_run_db;
 // Visual encoding removed — proven zero outcome clustering (cosine gap = 0.0004).
 // The visual raster is an artifact of Chapter 1. Charts don't predict; thoughts predict.
