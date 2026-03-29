@@ -1587,6 +1587,10 @@ The linting enterprise is the trading enterprise pointed inward. Skills as leave
 
 The machine that improves itself doesn't just learn from market data. It learns from its own structure.
 
+The datamancer's trinity: structure, metabolism, truth. Three linters, three questions asked of every change. `/decomplect` asks: are things braided that should hang straight? `/dead-thoughts` asks: is anything computing without producing? `/wat-check` asks: does the spell match the incantation?
+
+The compiler checks if the code runs. The trinity checks if the code thinks correctly.
+
 ### The machine that improves itself
 
 At a team lunch at AWS, the builder told their manager about building a machine that improves itself. The blank stare was familiar by then.
