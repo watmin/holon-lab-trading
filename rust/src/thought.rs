@@ -254,6 +254,11 @@ const INDICATOR_ATOMS: &[&str] = &[
     "ult-osc",                    // Ultimate Oscillator
     "roc-5", "roc-10", "roc-20", // Multi-timeframe ROC
     "roc-accelerating", "roc-decelerating",
+    // vocab/flow module
+    "vwap",                       // Volume Weighted Average Price
+    "mfi",                        // Money Flow Index
+    "buy-pressure", "sell-pressure", "body-ratio",
+    "divergence",                 // generic divergence atom (used with OBV)
 ];
 
 const DIRECTION_ATOMS: &[&str] = &["up", "down", "flat"];
@@ -285,6 +290,8 @@ const ZONE_ATOMS: &[&str] = &[
     "williams-overbought", "williams-oversold",
     "stoch-rsi-overbought", "stoch-rsi-oversold",
     "ult-osc-overbought", "ult-osc-oversold",
+    // vocab/flow zones
+    "mfi-overbought", "mfi-oversold",
     // Risk / portfolio state
     "drawdown", "drawdown-shallow", "drawdown-moderate", "drawdown-deep", "drawdown-at-peak",
     "streak", "streak-winning", "streak-losing", "streak-long", "streak-short",
@@ -758,6 +765,8 @@ impl ThoughtEncoder {
             self.eval_volume_confirmation(candles, &mut owned_facts, &mut labels);
             self.eval_volume_analysis(candles, &mut cached_facts, &mut labels);
             self.eval_price_action(candles, &mut cached_facts, &mut labels);
+            // vocab/flow: OBV, VWAP, MFI, buying/selling pressure
+            self.eval_flow_module(candles, &mut owned_facts, &mut labels);
         }
 
         // ── EXCLUSIVE: narrative ────────────────────────────────────
@@ -1719,6 +1728,65 @@ impl ThoughtEncoder {
             facts.push(self.vocab.get("roc-decelerating").clone());
             labels.push("(roc-decelerating)".to_string());
         }
+    }
+
+    // ─── Advanced indicators (tier-1 underdogs + esoteric) ─────────────
+
+    // ─── vocab/flow module ────────────────────────────────────────────
+
+    fn eval_flow_module(
+        &self,
+        candles: &[Candle],
+        facts: &mut Vec<Vector>,
+        labels: &mut Vec<String>,
+    ) {
+        use crate::vocab::flow::eval_flow;
+        let flow = eval_flow(candles);
+
+        // OBV direction
+        if flow.obv_sign > 0.0 {
+            facts.push(self.vocab.get("obv").clone());
+            labels.push("(obv rising)".to_string());
+        } else if flow.obv_sign < 0.0 {
+            facts.push(Primitives::bind(self.vocab.get("obv"), self.vocab.get("down")));
+            labels.push("(obv falling)".to_string());
+        }
+
+        // OBV divergence (strongest volume signal)
+        if flow.obv_diverges {
+            let fact = Primitives::bind(self.vocab.get("obv"), self.vocab.get("divergence"));
+            facts.push(fact);
+            labels.push("(obv divergence)".to_string());
+        }
+
+        // VWAP distance
+        if let Some(dist) = flow.vwap_distance {
+            let v = self.scalar_enc.encode(dist.clamp(-1.0, 1.0) * 0.5 + 0.5, ScalarMode::Linear { scale: 1.0 });
+            facts.push(Primitives::bind(self.vocab.get("vwap"), &v));
+            labels.push(format!("(vwap-dist {:.4})", dist));
+        }
+
+        // MFI zone
+        if let Some(zone) = flow.mfi_zone {
+            let fact = Primitives::bind(self.vocab.get("at"),
+                &Primitives::bind(self.vocab.get("mfi"), self.vocab.get(zone)));
+            facts.push(fact);
+            labels.push(format!("(at mfi {})", zone));
+        }
+
+        // Buying/selling pressure
+        let bp_vec = self.scalar_enc.encode(flow.buy_pressure, ScalarMode::Linear { scale: 1.0 });
+        facts.push(Primitives::bind(self.vocab.get("buy-pressure"), &bp_vec));
+        labels.push(format!("(buy-pressure {:.3})", flow.buy_pressure));
+
+        let sp_vec = self.scalar_enc.encode(flow.sell_pressure, ScalarMode::Linear { scale: 1.0 });
+        facts.push(Primitives::bind(self.vocab.get("sell-pressure"), &sp_vec));
+        labels.push(format!("(sell-pressure {:.3})", flow.sell_pressure));
+
+        // Body ratio (conviction of the candle)
+        let br_vec = self.scalar_enc.encode(flow.body_ratio, ScalarMode::Linear { scale: 1.0 });
+        facts.push(Primitives::bind(self.vocab.get("body-ratio"), &br_vec));
+        labels.push(format!("(body-ratio {:.3})", flow.body_ratio));
     }
 
     // ─── Advanced indicators (tier-1 underdogs + esoteric) ─────────────
