@@ -46,24 +46,33 @@
 ;; Silence, not forced direction. The noise floor is a property of the
 ;; hyperspace geometry, not a tuned parameter.
 
-(define (encode-expert expert-atom raw-cos dims)
+(define (encode-expert expert-atom raw-cos gate-status dims)
   (let ((noise-floor (/ 3.0 (sqrt dims))))
     (if (< (abs raw-cos) noise-floor)
         nothing                                   ; silence — no opinion
-        (let ((magnitude (encode-linear (abs raw-cos) 1.0))  ; scale=1.0, theoretical [0,1]
+        (let ((magnitude (encode-linear (abs raw-cos) 1.0))
               (action    (if (>= raw-cos 0.0) (atom "buy") (atom "sell"))))
-          (bind expert-atom (bind action magnitude))))))
+          ;; Two facts. Composed, not complected.
+          ;; Fact 1: the opinion (direction + magnitude)
+          ;; Fact 2: the credibility (proven | tentative)
+          ;; The discriminant sees both and learns what each means independently.
+          (list
+            (bind expert-atom (bind action magnitude))   ; opinion
+            (bind expert-atom gate-status))))))           ; credibility
 
-;; Example: momentum says BUY at magnitude 0.25
-;; → (bind momentum (bind buy (encode-linear 0.25 1.0)))
+;; Example: proven momentum says BUY at magnitude 0.25
+;; → (bind momentum (bind buy (encode-linear 0.25 1.0)))   ; opinion
+;; → (bind momentum proven)                                  ; credibility
 ;;
-;; Example: structure says SELL at magnitude 0.18
-;; → (bind structure (bind sell (encode-linear 0.18 1.0)))
+;; Example: tentative volume at magnitude 0.08
+;; → (bind volume (bind buy (encode-linear 0.08 1.0)))      ; opinion
+;; → (bind volume tentative)                                  ; credibility
 ;;
-;; Example: volume at magnitude 0.01 (below noise floor at 20k dims)
-;; → nothing (silenced)
+;; The opinion's magnitude is NOT affected by credibility.
+;; The discriminant learns: "tentative volume buy at 0.08" may mean
+;; nothing, or it may be a signal about to prove itself. The data decides.
 ;;
-;; Additional per-expert facts (when proven):
+;; Additional per-expert facts:
 ;; → (bind (bind expert reliability) (encode-linear (- accuracy 0.4) 1.0))
 ;; → (bind (bind expert tenure) (encode-log resolved-count))
 

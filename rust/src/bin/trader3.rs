@@ -729,14 +729,19 @@ fn main() {
                 let abs_cos = ep.raw_cos.abs();
                 if abs_cos < min_opinion_magnitude { continue; } // below noise floor = silence
 
-                // bind(expert, bind(status, bind(action, magnitude)))
-                // status = proven | tentative
-                // The discriminant decides what tentative means.
+                // Two facts per expert. Composed, not complected.
+                //   Fact 1: bind(expert, bind(action, magnitude))  — the opinion
+                //   Fact 2: bind(expert, status)                    — the credibility
+                // The opinion's magnitude is not affected by credibility status.
+                // The discriminant sees both and learns what each means.
                 let magnitude = mgr_scalar.encode(abs_cos, ScalarMode::Linear { scale: 1.0 });
                 let action = if ep.raw_cos >= 0.0 { &buy_atom } else { &sell_atom };
-                let status = if experts[ei].curve_valid { &proven_atom } else { &tentative_atom };
-                let opinion = Primitives::bind(status, &Primitives::bind(action, &magnitude));
+                let opinion = Primitives::bind(action, &magnitude);
                 mgr_facts.push(Primitives::bind(&expert_atoms[ei], &opinion));
+
+                // Credibility: separate fact, orthogonal to opinion
+                let status = if experts[ei].curve_valid { &proven_atom } else { &tentative_atom };
+                mgr_facts.push(Primitives::bind(&expert_atoms[ei], status));
 
                 // Fact 2: reliability — how accurate is this expert?
                 // Linear scale 0.3: accuracy excess 0.0-0.15 gets full separation.
