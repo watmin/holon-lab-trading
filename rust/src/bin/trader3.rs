@@ -15,7 +15,7 @@ use std::time::Instant;
 use clap::Parser;
 use rayon::prelude::*;
 use rusqlite::params;
-use holon::{Primitives, VectorManager, Vector};
+use holon::{Primitives, Similarity, VectorManager, Vector};
 use holon::memory::OnlineSubspace;
 
 use btc_walk::db::load_candles;
@@ -295,6 +295,13 @@ fn main() {
     // The manager's discriminant learns which expert configurations predict.
     let mut mgr_journal = Journal::new("manager", args.dims, args.recalib_interval);
     let mgr_scalar = holon::ScalarEncoder::new(args.dims);
+    let mut prev_mgr_thought: Option<Vector> = None; // for difference computation
+    let mgr_delta_atom = vm.get_vector("panel-delta"); // what changed since last candle
+    // Temporal atoms: when is this happening?
+    let hour_atom = vm.get_vector("hour-of-day");
+    let day_atom = vm.get_vector("day-of-week");
+    // Coherence atom: how concentrated is the panel?
+    let coherence_atom = vm.get_vector("panel-coherence");
 
     // ─ Visual pattern memory: auto-clustering engram groups ─────────────
     // Each group is an OnlineSubspace that learns a cluster of similar visual
@@ -709,14 +716,66 @@ fn main() {
                 // Generalist's discriminant strength: how much signal does the holistic view have?
                 mgr_facts.push(Primitives::bind(&disc_strength_atom,
                     &mgr_scalar.encode_log(tht_journal.last_disc_strength.max(1e-10))));
+
+                // Temporal: when is this happening? Markets behave differently by time.
+                let hour = candles[i].ts.get(11..13)
+                    .and_then(|s| s.parse::<f64>().ok()).unwrap_or(12.0);
+                // Day of week from the candle's year/month/day via Zeller-like formula
+                let day_of_week = {
+                    let y: i32 = candles[i].ts[..4].parse().unwrap_or(2019);
+                    let m: i32 = candles[i].ts[5..7].parse().unwrap_or(1);
+                    let d: i32 = candles[i].ts[8..10].parse().unwrap_or(1);
+                    // Tomohiko Sakamoto's algorithm
+                    let t = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4];
+                    let y2 = if m < 3 { y - 1 } else { y };
+                    ((y2 + y2/4 - y2/100 + y2/400 + t[(m-1) as usize] + d) % 7) as f64
+                };
+                // Circular encoding: hour 23 is close to hour 0
+                mgr_facts.push(Primitives::bind(&hour_atom,
+                    &mgr_scalar.encode_log((hour + 1.0).max(1e-10)))); // +1 to avoid log(0)
+                mgr_facts.push(Primitives::bind(&day_atom,
+                    &mgr_scalar.encode_log((day_of_week + 1.0).max(1e-10))));
+
+                // Coherence: geometric measure of panel concentration.
+                // Compute pairwise cosine between proven expert thought vectors.
+                if proven_preds.len() >= 2 {
+                    let proven_vecs: Vec<&Vector> = expert_vecs.iter().enumerate()
+                        .filter(|(ei, _)| experts[*ei].curve_valid)
+                        .map(|(_, v)| v)
+                        .collect();
+                    let mut pair_sum = 0.0_f64;
+                    let mut pair_count = 0usize;
+                    for a in 0..proven_vecs.len() {
+                        for b in (a+1)..proven_vecs.len() {
+                            pair_sum += holon::Similarity::cosine(proven_vecs[a], proven_vecs[b]);
+                            pair_count += 1;
+                        }
+                    }
+                    let coherence = if pair_count > 0 { pair_sum / pair_count as f64 } else { 0.0 };
+                    mgr_facts.push(Primitives::bind(&coherence_atom,
+                        &mgr_scalar.encode_log((coherence.abs() + 0.01).max(1e-10))));
+                }
             }
+
+            // Difference: what changed since last candle?
+            // The manager sees motion, not just position.
             let mgr_refs: Vec<&Vector> = mgr_facts.iter().collect();
             let mgr_pred = if mgr_refs.is_empty() {
-                // No proven experts yet — manager can't predict. Silence.
                 Prediction::default()
             } else {
                 let mgr_thought = Primitives::bundle(&mgr_refs);
-                mgr_journal.predict(&mgr_thought)
+
+                // Compute delta from previous thought and add it
+                let final_thought = if let Some(ref prev) = prev_mgr_thought {
+                    let delta = Primitives::difference(prev, &mgr_thought);
+                    let delta_bound = Primitives::bind(&mgr_delta_atom, &delta);
+                    // Bundle the snapshot thought with the delta thought
+                    Primitives::bundle(&[&mgr_thought, &delta_bound])
+                } else {
+                    mgr_thought.clone()
+                };
+                prev_mgr_thought = Some(mgr_thought);
+                mgr_journal.predict(&final_thought)
             };
 
             // Panel state for engram (Template 2 — reaction layer)
