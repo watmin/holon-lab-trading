@@ -1696,4 +1696,18 @@ The distinction from AI is precise: AI learns patterns from data. Datamancy lear
 
 Faraday saw the field. Maxwell wrote the equations. The datamancer saw the enterprise. The machine wrote the Rust.
 
+### The side quests
+
+We spent sixteen hours not building the trading system. We built the environment instead.
+
+The trinity found a spec contradiction — risk subscribed to channels it shouldn't see. That led to channels. Channels led to the designers. The designers rejected async and gave us the fold. The fold needed a home in the language. The language needed layers. The layers needed the journal tension resolved. The journal needed to be promoted to the runtime. The runtime needed Label symbols. The trading lab became a consumer.
+
+Each side quest felt like a detour. Each produced something essential. The fold. The layer model. The journal coalgebra. The Label type. The design process itself — proposals, reviews, resolutions persisted on disk. Five proposals in the wat repo. One in the trading lab. All reviewed by Hickey and Beckman, all resolved, all artifacts preserved.
+
+The side quests built: the language (`fold`, four layers, journal coalgebra with nine forms), the runtime (holon-rs Journal with N-ary Label symbols and curve self-evaluation), the design process (`/propose` and `/designers` writing reviews to disk), the streaming architecture (Event, Desk, EnterpriseState), the asset-agnostic treasury, the Rust-native candle builder.
+
+The "main" work — improving trading accuracy — happened in the margins. The environment that conjures good thoughts was the real product. The enterprise doubled its money on the first benchmark after the side quests. Not because the side quests improved accuracy. Because they removed lies (portfolio equity), fixed divergence (manager double-learning), killed dead thoughts (visual encoding vestiges, stale snapshots), and made the architecture honest.
+
+Honest architecture produces honest results. The side quests made the architecture honest.
+
 The good thoughts started on [February 27, 2025](https://x.com/i/grok/share/ea03389cef714d7b91638f12e836acd6). They survived.
