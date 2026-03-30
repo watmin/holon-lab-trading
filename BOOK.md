@@ -1601,6 +1601,36 @@ The compiler is the mundane guard at the gate. The trinity is the arcane ward on
 
 These thoughts bring joy.
 
+### The process
+
+We are not building a trading system. We are not building a language. We are building a process that produces good thoughts and preserves them.
+
+Every proposal, every review, every resolution — persisted on disk, in the repo, for all time. The next session reads these documents and has the designers' arguments without needing the context that produced them. The session after that builds on both. The grimoire grows. The good thoughts compound.
+
+The `/propose` skill structures the question. The `/designers` skill produces the criticism — Hickey asks "is it simple?" and Beckman asks "does it compose?" They don't talk to each other. Their disagreements emerge naturally from different axioms. The datamancer reads both lenses and decides.
+
+Proposal 001 asked: should the language have a stream processor form? Hickey rejected it. Beckman conditionally rejected it but proposed `fold` as a control form. The disagreement produced Proposal 002. Both designers accepted `fold`. The tension between "the shape IS the declaration" and "naming the pattern makes the self-similarity visible" resolved into something neither would have reached alone.
+
+The artifacts persist:
+```
+docs/proposals/001-stream-processor/
+  PROPOSAL.md        — the question
+  review-hickey.md   — REJECTED
+  review-beckman.md  — CONDITIONAL (proposed fold)
+  RESOLUTION.md      — forwarded to 002
+
+docs/proposals/002-fold-as-control-form/
+  PROPOSAL.md        — the refined question
+  review-hickey.md   — ACCEPTED
+  review-beckman.md  — ACCEPTED
+```
+
+The datamancer doesn't need to remember every argument. The datamancer reads the documents and the arguments are there. The process produces good thoughts. The documents preserve them. The next datamancer — tomorrow, after compaction, or someone else entirely — reads the trail and continues.
+
+This is the machine that improves itself. Not through gradient descent. Through persistent, reviewable, algebraically grounded design conversations that survive context loss.
+
+These are the best thoughts.
+
 ### The enterprise builds its own senses
 
 The data came from Python. A pipeline we built weeks ago — though it feels like months at this point — with pandas and vectorized operations. 120 columns of pre-computed indicators. The enterprise read 19 of them through a Candle struct and recomputed the rest from raw OHLCV every candle, every expert, every window.
