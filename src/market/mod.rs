@@ -2,6 +2,7 @@
 //!
 //! Time encoding, candle helpers, and re-exports for market::manager, etc.
 
+pub mod desk;
 pub mod manager;
 pub mod observer;
 
