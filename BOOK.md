@@ -1629,6 +1629,33 @@ The datamancer doesn't need to remember every argument. The datamancer reads the
 
 This is the machine that improves itself. Not through gradient descent. Through persistent, reviewable, algebraically grounded design conversations that survive context loss.
 
+### The fold is time
+
+The enterprise is a fold. `(state, event) → state`, applied to each event in the stream. The stream might come from a parquet file. The stream might come from a websocket. The enterprise doesn't know and doesn't care.
+
+The fold IS time. Each iteration is one tick of the universe. State carries forward. What you computed this tick is available to everyone next tick. Risk computes a multiplier — the treasury reads it next tick. The treasury allocates — risk sees the result next tick. Nobody waits. Nobody blocks. The fold advances and the state carries the messages.
+
+This is async signaling without async machinery. The "latency" is one tick. The tick rate is the message delivery rate. State is the message bus. The fold is the event loop.
+
+Two mechanisms: `let*` for within-tick ordering (who sees what NOW), and state for across-tick signaling (who sees what NEXT). Both are pure. Both are deterministic. Both are debuggable — inspect the state at any tick and see exactly what every component saw.
+
+The producers are the only concurrent part. A websocket thread per asset, feeding a channel. The channel merges multiple producers into one ordered stream. The enterprise folds over whatever arrives. The producers are async. The enterprise is synchronous. The concurrency boundary is a single channel between them.
+
+```
+Producers (async, concurrent)     Enterprise (sync, deterministic)
+  BTC websocket ─┐
+  ETH websocket ──├─→ merged stream ─→ fold(on_event, state, stream)
+  Gold websocket ─┘
+```
+
+The backtest and the live system run the SAME enterprise code. Same `on_event`. Same state transitions. Same fold. The only difference is what feeds the stream: a `Vec<Candle>` from disk, or a `Receiver<Event>` from websockets.
+
+The enterprise is ignorant of its source. It processes events. It produces state. The algebra computes. The runtime folds. The producers feed. Each does its job.
+
+We proposed async channels — `put!`, `take!`, `select!`. The designers rejected it. Hickey said: "the heartbeat is your greatest asset. Don't dissolve it." Beckman said: "channels replace a clean categorical structure with an operational model that doesn't compose." Both were right. The fold was always the answer. We just needed to see it.
+
+The six primitives remain six. `fold` joins `map`, `filter`, `for-each` as a control form — the catamorphism that was always there, unnamed, at every level. The journal IS a fold over observations. The heartbeat IS a fold over events. The enterprise IS a fold over time. Naming it made the self-similarity visible.
+
 These are the best thoughts.
 
 ### The enterprise builds its own senses
