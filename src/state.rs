@@ -11,8 +11,9 @@ use holon::{Primitives, ScalarMode, VectorManager, Vector};
 
 use crate::candle::Candle;
 use crate::ledger::LogEntry;
-use crate::event::Event;
+use crate::event::EnrichedEvent;
 use crate::journal::{Label, Direction, Prediction, register_direction, register_exit};
+use crate::window_sampler::WindowSampler;
 use crate::market::observer::Observer;
 use crate::market::{parse_candle_hour, parse_candle_day};
 use crate::market::manager::{ManagerAtoms, ManagerContext, encode_manager_thought};
@@ -156,9 +157,8 @@ pub struct CandleContext<'a> {
 
 pub struct EnterpriseState {
     // ── Learning: journals + labels ──────────────────────────────────────
-    pub tht_journal: Journal,
-    pub tht_buy: Label,
-    pub tht_sell: Label,
+    // The generalist journal is observers[5] ("full" profile).
+    // Access via self.generalist().journal / self.generalist().primary_label.
 
     pub mgr_journal: Journal,
     pub mgr_buy: Label,
@@ -179,7 +179,7 @@ pub struct EnterpriseState {
     pub cached_risk_mult: f64,
     pub cached_curve_a: f64,
     pub cached_curve_b: f64,
-    pub curve_valid: bool,
+    pub kelly_curve_valid: bool,
     pub mgr_curve_valid: bool,
     pub mgr_resolved: VecDeque<(f64, bool)>,
     pub mgr_proven_band: (f64, f64),
@@ -220,7 +220,7 @@ pub struct EnterpriseState {
     pub db_batch: usize,
 
     // ── Rolling accuracy ─────────────────────────────────────────────────
-    pub tht_rolling: VecDeque<bool>,
+    // Rolling accuracy lives on the generalist observer (observers[5].resolved).
 
     // ── Conviction + flip threshold ──────────────────────────────────────
     pub conviction_history: VecDeque<f64>,
@@ -256,11 +256,8 @@ impl EnterpriseState {
         max_positions: usize,
         max_utilization: f64,
         start_idx: usize,
+        generalist_window: usize,
     ) -> Self {
-        // ── Thought journal ─────────────────────────────────────────────
-        let mut tht_journal = Journal::new("thought", dims, recalib_interval);
-        let (tht_buy, tht_sell) = register_direction(&mut tht_journal);
-
         // ── Manager journal ─────────────────────────────────────────────
         let mut mgr_journal = Journal::new("manager", dims, recalib_interval);
         let (mgr_buy, mgr_sell) = register_direction(&mut mgr_journal);
@@ -269,9 +266,9 @@ impl EnterpriseState {
         let mut exit_journal = Journal::new("exit-expert", dims, recalib_interval);
         let (exit_hold, exit_exit) = register_exit(&mut exit_journal);
 
-        // ── Observer panel ──────────────────────────────────────────────
-        let observer_names = ["momentum", "structure", "volume", "narrative", "regime"];
-        let observers: Vec<Observer> = observer_names
+        // ── Observer panel (5 specialists + 1 generalist) ───────────────
+        let observer_names = ["momentum", "structure", "volume", "narrative", "regime", "full"];
+        let mut observers: Vec<Observer> = observer_names
             .iter()
             .enumerate()
             .map(|(ei, &profile)| {
@@ -284,6 +281,10 @@ impl EnterpriseState {
                 )
             })
             .collect();
+        // The generalist ("full") uses a fixed window: min = max = generalist_window.
+        observers[5].window_sampler = WindowSampler::new(
+            dims as u64 + 5 * 7919, generalist_window, generalist_window,
+        );
 
         // ── Risk branches ───────────────────────────────────────────────
         let risk_branches = vec![
@@ -295,7 +296,7 @@ impl EnterpriseState {
         ];
 
         // ── Panel engram ────────────────────────────────────────────────
-        let panel_dim = observer_names.len() + 1; // experts + generalist
+        let panel_dim = observer_names.len(); // all observers including generalist
         let panel_engram = OnlineSubspace::with_params(panel_dim, 4, 2.0, 0.01, 3.5, 100);
 
         // ── Treasury + portfolio ────────────────────────────────────────
@@ -307,9 +308,6 @@ impl EnterpriseState {
 
         Self {
             // Learning
-            tht_journal,
-            tht_buy,
-            tht_sell,
             mgr_journal,
             mgr_buy,
             mgr_sell,
@@ -319,7 +317,7 @@ impl EnterpriseState {
             exit_exit,
             exit_pending: Vec::new(),
 
-            // Observers
+            // Observers (6: 5 specialists + generalist at index 5)
             observers,
 
             // Risk
@@ -327,7 +325,7 @@ impl EnterpriseState {
             cached_risk_mult: 0.5,
             cached_curve_a: 0.0,
             cached_curve_b: 0.0,
-            curve_valid: false,
+            kelly_curve_valid: false,
             mgr_curve_valid: false,
             mgr_resolved: VecDeque::new(),
             mgr_proven_band: (0.0, 0.0),
@@ -367,9 +365,6 @@ impl EnterpriseState {
             log_step: 0,
             db_batch: 0,
 
-            // Rolling accuracy
-            tht_rolling: VecDeque::new(),
-
             // Conviction
             conviction_history: VecDeque::new(),
             conviction_threshold: 0.0,
@@ -383,80 +378,92 @@ impl EnterpriseState {
         }
     }
 
-    // dead-thoughts:allow(scaffolding) — on_event is the streaming interface; wired when live feed replaces backtest loop
-    /// The enterprise's public interface. One event, one fold step.
+    /// The generalist's Buy label.
+    fn tht_buy(&self) -> Label { self.observers[5].primary_label }
+
+    /// The generalist's Sell label (second registered label).
+    fn tht_sell(&self) -> Label { self.observers[5].journal.labels()[1] }
+
+    /// The enterprise's public interface. One enriched event, one fold step.
     /// The enterprise doesn't know where events come from.
-    /// Backtest, websocket, test harness — same Event, same fold.
-    pub fn on_event(&mut self, event: &Event, _ctx: &CandleContext) {
+    /// Backtest, websocket, test harness — same EnrichedEvent, same fold.
+    pub fn on_event(
+        &mut self,
+        event: EnrichedEvent,
+        ctx: &CandleContext,
+    ) {
         match event {
-            Event::Candle { asset: _, candle } => {
-                // In the streaming model, encoding would happen here.
-                // For now, the backtest runner pre-encodes via on_candle().
-                // This path handles un-encoded candles (future: live feed).
-                let _ = candle; // placeholder — live encoding not yet wired
+            EnrichedEvent::Deposit { asset, amount } => {
+                self.treasury.deposit(&asset, amount);
+                return;
             }
-            Event::Deposit { asset, amount } => {
-                self.treasury.deposit(asset, *amount);
+            EnrichedEvent::Withdraw { asset, amount } => {
+                self.treasury.withdraw(&asset, amount);
+                return;
             }
-            Event::Withdraw { asset, amount } => {
-                self.treasury.withdraw(asset, *amount);
+            EnrichedEvent::Candle { candle, fact_labels: tht_facts, observer_vecs } => {
+                self.on_candle_inner(&candle, tht_facts, observer_vecs, ctx);
             }
         }
     }
 
     /// Process one candle's pre-computed results. The fold's step function.
     ///
-    /// Called once per candle in the sequential phase, after parallel encoding.
-    /// The backtest runner pre-encodes in parallel (rayon), then calls this
-    /// sequentially. A live runner would encode per-candle and call on_event.
-    pub fn on_candle(
+    /// Called from on_event for EnrichedEvent::Candle.
+    /// The backtest runner pre-encodes in parallel (rayon), then wraps
+    /// results in EnrichedEvent::Candle. The cursor is managed here.
+    fn on_candle_inner(
         &mut self,
-        i: usize,
         candle: &Candle,
-        tht_vec: Vector,
         tht_facts: Vec<String>,
         observer_vecs: Vec<Vector>,
         ctx: &CandleContext,
     ) {
+        let i = self.cursor;
+        self.cursor += 1;
         self.encode_count += 1;
 
         // ── Expert predictions: each observer speaks ─────────────────
         // No flip. The discriminant learns what predicts — including reversals.
         // The flip was a hack for a single journal. The enterprise lets each
         // expert's discriminant encode the full pattern naturally.
+        // All 6 observers (5 specialists + generalist at index 5) predict.
         let observer_preds: Vec<Prediction> = observer_vecs.iter().enumerate()
             .map(|(ei, vec)| self.observers[ei].journal.predict(vec))
             .collect();
 
-        // The generalist still encodes for backward compatibility
-        // (flip threshold, resolved_preds tracking, DB logging).
-        // But direction and conviction now come from the expert panel.
-        let tht_pred = self.tht_journal.predict(&tht_vec);
+        // The generalist's prediction (observer[5]) — used for manager encoding
+        // and backward-compatible logging.
+        let tht_pred = observer_preds[5].clone();
+        let tht_vec = observer_vecs[5].clone();
 
         // ── Manager: encodes expert opinions via manager.rs ──────────
         // Single canonical encoding path. See manager.rs and wat/manager.wat.
-        let obs_curve_valid: Vec<bool> = self.observers.iter().map(|o| o.curve_valid).collect();
-        let obs_resolved_lens: Vec<usize> = self.observers.iter().map(|o| o.resolved.len()).collect();
-        let obs_resolved_accs: Vec<f64> = self.observers.iter().map(|o| {
+        // The first 5 observers are specialists; observer[5] is the generalist.
+        // ManagerContext takes the 5 specialists for observer_* fields,
+        // and the generalist separately.
+        let obs_curve_valid: Vec<bool> = self.observers[..5].iter().map(|o| o.curve_valid).collect();
+        let obs_resolved_lens: Vec<usize> = self.observers[..5].iter().map(|o| o.resolved.len()).collect();
+        let obs_resolved_accs: Vec<f64> = self.observers[..5].iter().map(|o| {
             let len = o.resolved.len();
             if len == 0 { 0.0 } else {
                 o.resolved.iter().filter(|(_, c)| *c).count() as f64 / len as f64
             }
         }).collect();
         let mgr_ctx = ManagerContext {
-            observer_preds: &observer_preds,
-            observer_atoms: ctx.observer_atoms,
+            observer_preds: &observer_preds[..5],
+            observer_atoms: &ctx.observer_atoms[..5],
             observer_curve_valid: &obs_curve_valid,
             observer_resolved_lens: &obs_resolved_lens,
             observer_resolved_accs: &obs_resolved_accs,
-            observer_vecs: &observer_vecs,
+            observer_vecs: &observer_vecs[..5],
             generalist_pred: &tht_pred,
             generalist_atom: ctx.generalist_atom,
-            generalist_curve_valid: self.curve_valid,
+            generalist_curve_valid: self.observers[5].curve_valid,
             candle_atr: candle.atr_r,
             candle_hour: parse_candle_hour(&candle.ts),
             candle_day: parse_candle_day(&candle.ts),
-            disc_strength: self.tht_journal.last_disc_strength(),
+            disc_strength: self.observers[5].journal.last_disc_strength(),
         };
         let mgr_facts = encode_manager_thought(&mgr_ctx, ctx.mgr_atoms, ctx.mgr_scalar, ctx.min_opinion_magnitude);
 
@@ -480,9 +487,9 @@ impl EnterpriseState {
         };
 
         // Panel state for engram (Template 2 — reaction layer)
-        let mut panel_state: Vec<f64> = observer_preds.iter()
+        // All 6 observers contribute (generalist is already at index 5).
+        let panel_state: Vec<f64> = observer_preds.iter()
             .map(|ep| ep.raw_cos).collect();
-        panel_state.push(tht_pred.raw_cos); // generalist's voice
         // dead-thoughts:allow(scaffolding) — panel_familiar computed for display only; wired when panel engram drives decisions
         let panel_familiar = if self.panel_engram.n() >= 10 {
             let residual = self.panel_engram.residual(&panel_state);
@@ -850,7 +857,7 @@ impl EnterpriseState {
             match ctx.sizing {
                 "kelly" => {
                     // Fast path: evaluate cached curve params. No sorting.
-                    let kelly_result = if self.curve_valid && self.cached_curve_b > 0.0 {
+                    let kelly_result = if self.kelly_curve_valid && self.cached_curve_b > 0.0 {
                         let win_rate = (0.50 + self.cached_curve_a * (self.cached_curve_b * meta_conviction).exp()).min(0.95);
                         let edge = 2.0 * win_rate - 1.0;
                         if edge > 0.0 {
@@ -925,16 +932,19 @@ impl EnterpriseState {
         });
 
         // Decay once per candle.
-        self.tht_journal.decay(self.adaptive_decay);
+        // The generalist (observers[5]) uses adaptive decay; specialists use fixed decay.
         self.mgr_journal.decay(self.adaptive_decay);
-        for observer in &mut self.observers {
-            observer.journal.decay(ctx.decay);
+        for (oi, observer) in self.observers.iter_mut().enumerate() {
+            let d = if oi == 5 { self.adaptive_decay } else { ctx.decay };
+            observer.journal.decay(d);
         }
 
         // ── Event-driven learning ─────────────────────────────────────
         // Snapshot recalib counts before scanning so we can detect if
         // any recalibration fired during this candle's learning.
-        let tht_recalib_before = self.tht_journal.recalib_count();
+        let tht_recalib_before = self.observers[5].journal.recalib_count();
+        let tht_buy = self.tht_buy();
+        let tht_sell = self.tht_sell();
 
         let current_price = candle.close;
         for entry in self.pending.iter_mut() {
@@ -945,9 +955,9 @@ impl EnterpriseState {
             entry.path_candles = i - entry.candle_idx;
 
             // Track directional excursion relative to predicted direction.
-            let directional_pct = if entry.meta_dir == Some(self.tht_buy) {
+            let directional_pct = if entry.meta_dir == Some(tht_buy) {
                 pct
-            } else if entry.meta_dir == Some(self.tht_sell) {
+            } else if entry.meta_dir == Some(tht_sell) {
                 -pct
             } else {
                 pct.abs() // no direction → track absolute
@@ -997,8 +1007,8 @@ impl EnterpriseState {
                 } else {
                     ctx.move_threshold
                 };
-                let outcome = if pct > thresh       { Some(self.tht_buy)  }
-                              else if pct < -thresh { Some(self.tht_sell) }
+                let outcome = if pct > thresh       { Some(tht_buy)  }
+                              else if pct < -thresh { Some(tht_sell) }
                               else                  { None };
 
                 if let Some(o) = outcome {
@@ -1006,12 +1016,9 @@ impl EnterpriseState {
                     entry.crossing_ts = Some(candle.ts.clone());
                     entry.crossing_price = Some(candle.close);
                     let sw = signal_weight(abs_pct, &mut self.move_sum, &mut self.move_count);
-                    self.tht_journal.observe(&entry.tht_vec, o, sw);
-                    // Manager does NOT learn here. Manager learns Buy/Sell (direction)
-                    // at first-crossing in the resolution block below.
-                    // wat/manager.wat: "Does NOT know about costs."
                     // Observer resolution: learn, track, gate, validate, log.
-                    // Each observer resolves its prediction against the outcome.
+                    // Each observer (including generalist at index 5) resolves
+                    // its prediction against the outcome.
                     for (ei, expert_vec) in entry.observer_vecs.iter().enumerate() {
                         if let Some(log) = self.observers[ei].resolve(
                             expert_vec, &entry.observer_preds[ei], o, sw,
@@ -1033,14 +1040,14 @@ impl EnterpriseState {
         }
 
         // Log any recalibrations that fired during this candle's learning.
-        if self.tht_journal.recalib_count() != tht_recalib_before {
+        if self.observers[5].journal.recalib_count() != tht_recalib_before {
             // Pre-compute curve params for Kelly — once per recalib, not per trade.
             // Uses the generalist's resolved_preds for the curve fit.
             if let Some((_, a, b)) = kelly_frac(0.15, &self.resolved_preds, 50,
                 if ctx.atr_multiplier > 0.0 { ctx.atr_multiplier * candle.atr_r } else { ctx.move_threshold }) {
                 self.cached_curve_a = a;
                 self.cached_curve_b = b;
-                self.curve_valid = true;
+                self.kelly_curve_valid = true;
             }
             // Manager's own proof: band-based, not exponential.
             // decomplect:allow(inline-computation) — manager band proof, extracts to market/manager.rs
@@ -1088,14 +1095,14 @@ impl EnterpriseState {
             self.pending_logs.push(LogEntry::RecalibLog {
                 step: self.encode_count as i64,
                 journal: "thought".to_string(),
-                cos_raw: self.tht_journal.last_cos_raw(),
-                disc_strength: self.tht_journal.last_disc_strength(),
-                buy_count: self.tht_journal.label_count(self.tht_buy) as i64,
-                sell_count: self.tht_journal.label_count(self.tht_sell) as i64,
+                cos_raw: self.observers[5].journal.last_cos_raw(),
+                disc_strength: self.observers[5].journal.last_disc_strength(),
+                buy_count: self.observers[5].journal.label_count(tht_buy) as i64,
+                sell_count: self.observers[5].journal.label_count(tht_sell) as i64,
             });
 
             // Decode thought discriminant against the fact codebook.
-            if let Some(disc) = self.tht_journal.discriminant(self.tht_buy) {
+            if let Some(disc) = self.observers[5].journal.discriminant(tht_buy) {
                 let disc_vec = Vector::from_f64(disc);
                 let mut decoded: Vec<(String, f64)> = ctx.codebook_vecs.iter().zip(ctx.codebook_labels.iter())
                     .map(|(v, l)| (l.clone(), holon::Similarity::cosine(&disc_vec, v)))
@@ -1152,14 +1159,8 @@ impl EnterpriseState {
                 self.labeled_count += 1;
             }
 
-            // Rolling accuracy per journal (non-Noise only).
-            if let Some(outcome) = final_out {
-                if let Some(td) = entry.tht_pred.direction {
-                    let ok = td == outcome;
-                    self.tht_rolling.push_back(ok);
-                    if self.tht_rolling.len() > ctx.rolling_cap { self.tht_rolling.pop_front(); }
-                }
-
+            // Rolling accuracy: generalist tracks via observer resolved deque.
+            if let Some(_outcome) = final_out {
                 // ── Manager learns from ALL non-Noise outcomes ──────────
                 self.learn_manager_from_entry(&entry, current_price, ctx.conviction_window);
             }
@@ -1219,7 +1220,7 @@ impl EnterpriseState {
                         max_adverse_pct: entry.max_adverse * 100.0,
                         crossing_candles: crossing_elapsed,
                         horizon_candles: entry.path_candles as i64,
-                        outcome: final_out.map(|l| self.tht_journal.label_name(l).unwrap_or("?").to_string()).unwrap_or_else(|| "Noise".to_string()),
+                        outcome: final_out.map(|l| self.observers[5].journal.label_name(l).unwrap_or("?").to_string()).unwrap_or_else(|| "Noise".to_string()),
                         won: (pnl.net_ret > 0.0) as i32,
                         exit_reason: match entry.exit_reason {
                             Some(ExitReason::TrailingStop) => "TrailingStop",
@@ -1255,8 +1256,9 @@ impl EnterpriseState {
             let elapsed = ctx.t_start.elapsed().as_secs_f64();
             let rate    = self.encode_count as f64 / elapsed;
             let eta     = (ctx.loop_count - self.encode_count) as f64 / rate;
-            let tht_acc = if self.tht_rolling.is_empty() { 0.0 }
-                else { self.tht_rolling.iter().filter(|&&x| x).count() as f64 / self.tht_rolling.len() as f64 * 100.0 };
+            let gen_resolved = &self.observers[5].resolved;
+            let tht_acc = if gen_resolved.is_empty() { 0.0 }
+                else { gen_resolved.iter().filter(|(_, c)| *c).count() as f64 / gen_resolved.len() as f64 * 100.0 };
             let ret = (treasury_equity - ctx.initial_equity) / ctx.initial_equity * 100.0;
             let bnh = (candle.close - ctx.bnh_entry) / ctx.bnh_entry * 100.0;
             let atr_now = candle.atr_r;
@@ -1282,9 +1284,9 @@ impl EnterpriseState {
                 exit_info,
             );
             if ctx.asset_mode == "hold" {
-                let mut proven: Vec<&str> = self.observers.iter()
+                let proven: Vec<&str> = self.observers.iter()
                     .filter(|e| e.curve_valid).map(|e| e.name).collect();
-                if self.curve_valid { proven.push("generalist"); }
+                // generalist is in the observer list, no separate check needed
                 let proven_str = if proven.is_empty() { "none".to_string() }
                     else { proven.join(",") };
                 let band_str = if self.mgr_curve_valid {
@@ -1308,9 +1310,9 @@ impl EnterpriseState {
     ) {
         // Skip if experts have no majority — nothing to learn from a tie.
         let buys = entry.observer_preds.iter()
-            .filter(|ep| ep.direction == Some(self.tht_buy)).count();
+            .filter(|ep| ep.direction == Some(self.tht_buy())).count();
         let sells = entry.observer_preds.iter()
-            .filter(|ep| ep.direction == Some(self.tht_sell)).count();
+            .filter(|ep| ep.direction == Some(self.tht_sell())).count();
         if buys == sells { return; }
 
         // Manager learns raw price direction from intensity patterns.
@@ -1352,10 +1354,10 @@ impl EnterpriseState {
             timestamp: entry.entry_ts.clone(),
             tht_cos: entry.tht_pred.raw_cos,
             tht_conviction: entry.tht_pred.conviction,
-            tht_pred: entry.tht_pred.direction.and_then(|d| self.tht_journal.label_name(d).map(|s| s.to_string())),
+            tht_pred: entry.tht_pred.direction.and_then(|d| self.observers[5].journal.label_name(d).map(|s| s.to_string())),
             meta_pred: entry.meta_dir.and_then(|d| self.mgr_journal.label_name(d).map(|s| s.to_string())),
             meta_conviction: entry.meta_conviction,
-            actual: final_out.and_then(|l| self.tht_journal.label_name(l).map(|s| s.to_string())).unwrap_or_else(|| "Noise".to_string()),
+            actual: final_out.and_then(|l| self.observers[5].journal.label_name(l).map(|s| s.to_string())).unwrap_or_else(|| "Noise".to_string()),
             traded: entry.position_frac.is_some() as i32,
             position_frac: entry.position_frac,
             equity: treasury_equity,

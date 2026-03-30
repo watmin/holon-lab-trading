@@ -68,6 +68,8 @@ an expert that learns its own answer.
 
 **Why:** 12 = shortest meaningful technical pattern. 2016 = 7 × 288 (one week of 5m candles). Derivable from candle granularity but not documented.
 
+**Generalist fixed window:** The generalist observer uses `WindowSampler::new(seed, 48, 48)` — a degenerate sampler that always returns 48. The specialists explore [12, 2016] and discover their own scale. The generalist is anchored. SCRUTINIZE: should the generalist also explore? Its cross-vocabulary insight might be scale-dependent. A "full" profile at window=200 thinks different thoughts than at window=48. The fixed window may be suppressing the generalist's potential. Consider: make it a seventh observer with a sampled window alongside the fixed-window sixth.
+
 ## Decay parameters
 
 | Value | Location | What it controls |

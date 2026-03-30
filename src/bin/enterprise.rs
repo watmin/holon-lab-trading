@@ -238,7 +238,7 @@ fn main() {
 
     // ─ Observer/manager atoms (immutable) ─
     // decomplect:allow(inline-encoding) — observer/generalist atoms + min_opinion + delta assembly migrate to market/manager.rs
-    let observer_names = ["momentum", "structure", "volume", "narrative", "regime"];
+    let observer_names = ["momentum", "structure", "volume", "narrative", "regime", "full"];
     let observer_atoms: Vec<Vector> = observer_names.iter()
         .map(|&name| vm.get_vector(name))
         .collect();
@@ -335,6 +335,7 @@ fn main() {
         args.max_positions,
         args.max_utilization,
         start_idx,
+        args.window,
     );
 
     // Seed treasury 50/50: half USDC, half WBTC at starting price.
@@ -427,39 +428,49 @@ fn main() {
             }).collect();
 
         let batch_start = state.cursor;
-        let tht_vecs: Vec<(usize, Vector, Vec<String>, Vec<Vector>)> = (batch_start..batch_end)
+        let tht_vecs: Vec<(usize, Vec<String>, Vec<Vector>)> = (batch_start..batch_end)
             .into_par_iter()
             .map(|i| {
                 let bi = i - batch_start; // batch index
 
-                // Primary encoding at fixed window — drives the main journal + flip threshold.
+                // Primary "full" encoding at fixed window — drives the generalist
+                // observer (index 5) and provides fact_labels for diagnostics.
                 let w_start = i.saturating_sub(args.window - 1);
                 let window  = &candles[w_start..=i];
                 let full = thought_encoder.encode_view(window, &vm, "full");
 
-                // Each expert encodes at their own sampled window.
+                // Each observer encodes at their own sampled window.
+                // The generalist (index 5) reuses the full encoding above
+                // to avoid double-encoding the same view.
                 let observer_vecs: Vec<Vector> = (0..n_observers)
                     .map(|ei| {
-                        let ew = observer_windows[ei][bi];
-                        let ew_start = i.saturating_sub(ew - 1);
-                        let exp_window = &candles[ew_start..=i];
-                        thought_encoder.encode_view(exp_window, &vm, observer_names[ei]).thought
+                        if observer_names[ei] == "full" {
+                            full.thought.clone()
+                        } else {
+                            let ew = observer_windows[ei][bi];
+                            let ew_start = i.saturating_sub(ew - 1);
+                            let exp_window = &candles[ew_start..=i];
+                            thought_encoder.encode_view(exp_window, &vm, observer_names[ei]).thought
+                        }
                     })
                     .collect();
-                (i, full.thought, full.fact_labels, observer_vecs)
+                (i, full.fact_labels, observer_vecs)
             })
             .collect();
 
         // ── Sequential: predict + buffer + learn + expire ────────────────────
-        for (i, tht_vec, tht_facts, observer_vecs) in tht_vecs {
-            state.on_candle(i, &candles[i], tht_vec, tht_facts, observer_vecs, &ctx);
+        for (i, fact_labels, observer_vecs) in tht_vecs {
+            let event = enterprise::event::EnrichedEvent::Candle {
+                candle: candles[i].clone(),
+                fact_labels,
+                observer_vecs,
+            };
+            state.on_event(event, &ctx);
         }
 
         // Flush log entries accumulated during this batch.
         enterprise::ledger::flush_logs(&state.pending_logs, &ledger);
         state.pending_logs.clear();
-
-        state.cursor = batch_end;
     }
 
     // Final treasury equity for post-loop reporting
@@ -508,13 +519,19 @@ fn main() {
         state.treasury.utilization() * 100.0,
         state.treasury.total_fees_paid, state.treasury.total_slippage);
     eprintln!();
-    eprintln!("  Thought journal — buy_obs={} sell_obs={} cos_raw={:.4} disc_strength={:.4} recalibs={}",
-        state.tht_journal.label_count(state.tht_buy), state.tht_journal.label_count(state.tht_sell),
-        state.tht_journal.last_cos_raw(), state.tht_journal.last_disc_strength(), state.tht_journal.recalib_count());
+    {
+        let gen = &state.observers[5];
+        let gen_buy = gen.primary_label;
+        let gen_sell = gen.journal.labels()[1];
+        eprintln!("  Thought journal — buy_obs={} sell_obs={} cos_raw={:.4} disc_strength={:.4} recalibs={}",
+            gen.journal.label_count(gen_buy), gen.journal.label_count(gen_sell),
+            gen.journal.last_cos_raw(), gen.journal.last_disc_strength(), gen.journal.recalib_count());
+    }
     eprintln!();
 
-    let tht_acc = if state.tht_rolling.is_empty() { 0.0 }
-        else { state.tht_rolling.iter().filter(|&&x| x).count() as f64 / state.tht_rolling.len() as f64 * 100.0 };
+    let gen_resolved = &state.observers[5].resolved;
+    let tht_acc = if gen_resolved.is_empty() { 0.0 }
+        else { gen_resolved.iter().filter(|(_, c)| *c).count() as f64 / gen_resolved.len() as f64 * 100.0 };
     eprintln!("  Rolling accuracy (last {}): thought={:.1}%",
         rolling_cap, tht_acc);
     eprintln!();

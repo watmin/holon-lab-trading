@@ -5,6 +5,7 @@
 //! Backtest, websocket, test harness — same Event, same fold.
 
 use crate::candle::{Candle, load_candles};
+use holon::Vector;
 use std::path::Path;
 
 /// What the enterprise consumes. One event per fold iteration.
@@ -49,6 +50,26 @@ impl Event {
             _ => "",
         }
     }
+}
+
+/// Enriched event — carries pre-computed encoding products.
+///
+/// The backtest runner pre-encodes in parallel, then wraps the results
+/// in EnrichedEvent::Candle. A live runner would encode per-candle.
+/// The enterprise folds over EnrichedEvent, not raw Event.
+pub enum EnrichedEvent {
+    /// A candle with pre-computed thought encodings.
+    Candle {
+        candle: Candle,
+        fact_labels: Vec<String>,
+        observer_vecs: Vec<Vector>,
+    },
+
+    /// Capital deposited into the treasury.
+    Deposit { asset: String, amount: f64 },
+
+    /// Capital withdrawn from the treasury.
+    Withdraw { asset: String, amount: f64 },
 }
 
 // ─── Stream constructors ────────────────────────────────────────────────────
