@@ -467,10 +467,9 @@ fn main() {
     // ─ Drain remaining pending entries (log, no further learning) ────────────
     while let Some(entry) = state.pending.pop_front() {
         let final_out: Option<Label> = entry.first_outcome;
-        let entry_candle = &candles[entry.candle_idx];
         if final_out.is_none() { state.noise_count += 1; } else { state.labeled_count += 1; }
 
-        state.log_candle(&entry, entry_candle, final_out, treasury_equity, &ledger);
+        state.log_candle(&entry, final_out, treasury_equity, &ledger);
     }
 
     ledger.execute_batch("COMMIT").ok();

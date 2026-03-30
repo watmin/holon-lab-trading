@@ -879,9 +879,13 @@ impl EnterpriseState {
             first_outcome: None,
             outcome_pct:   0.0,
             entry_price:       candles[i].close,
+            entry_ts:          candles[i].ts.clone(),
+            entry_atr:         candles[i].atr_r,
             max_favorable:     0.0,
             max_adverse:       0.0,
-            crossing_candle:   None,
+            crossing_candles:  None,
+            crossing_ts:       None,
+            crossing_price:    None,
             path_candles:      0,
             trailing_stop:     -(ctx.k_stop * candles[i].atr_r), // stop at K× ATR from this candle
             exit_reason:       None,
@@ -903,7 +907,7 @@ impl EnterpriseState {
 
         let current_price = candles[i].close;
         for entry in self.pending.iter_mut() {
-            let entry_price = candles[entry.candle_idx].close;
+            let entry_price = entry.entry_price;
             let pct         = (current_price - entry_price) / entry_price;
             let abs_pct     = pct.abs();
 
@@ -935,7 +939,7 @@ impl EnterpriseState {
                 && self.portfolio.phase != Phase::Observe
             {
                 // This trade's ATR at entry — how volatile was the market when we entered?
-                let entry_atr = candles[entry.candle_idx].atr_r;
+                let entry_atr = entry.entry_atr;
 
                 // Raise the floor: trail follows favorable movement.
                 let trail = ctx.k_trail * entry_atr;
@@ -958,8 +962,7 @@ impl EnterpriseState {
             // Learn only on the first threshold crossing per pending entry.
             if entry.first_outcome.is_none() {
                 let thresh = if ctx.atr_multiplier > 0.0 {
-                    let entry_atr = candles[entry.candle_idx].atr_r;
-                    ctx.atr_multiplier * entry_atr
+                    ctx.atr_multiplier * entry.entry_atr
                 } else {
                     ctx.move_threshold
                 };
@@ -968,7 +971,9 @@ impl EnterpriseState {
                               else                  { None };
 
                 if let Some(o) = outcome {
-                    entry.crossing_candle = Some(i);
+                    entry.crossing_candles = Some(entry.path_candles);
+                    entry.crossing_ts = Some(candles[i].ts.clone());
+                    entry.crossing_price = Some(candles[i].close);
                     let sw = signal_weight(abs_pct, &mut self.move_sum, &mut self.move_count);
                     self.tht_journal.observe(&entry.tht_vec, o, sw);
                     // Manager does NOT learn here. Manager learns Buy/Sell (direction)
@@ -1108,12 +1113,9 @@ impl EnterpriseState {
             if entry.exit_reason.is_none() {
                 entry.exit_reason = Some(ExitReason::HorizonExpiry);
                 // Exit at current price for horizon expiry
-                let entry_price = candles[entry.candle_idx].close;
-                entry.exit_pct = (current_price - entry_price) / entry_price;
+                entry.exit_pct = (current_price - entry.entry_price) / entry.entry_price;
             }
             let final_out: Option<Label> = entry.first_outcome;
-            let entry_candle = &candles[entry.candle_idx];
-
             if final_out.is_none() {
                 self.noise_count += 1;
             } else {
@@ -1129,7 +1131,7 @@ impl EnterpriseState {
                 }
 
                 // ── Manager learns from ALL non-Noise outcomes ──────────
-                self.learn_manager_from_entry(&entry, current_price, candles, ctx.conviction_window);
+                self.learn_manager_from_entry(&entry, current_price, ctx.conviction_window);
             }
 
             // Every prediction goes to the ledger — hypothetical or real.
@@ -1159,12 +1161,11 @@ impl EnterpriseState {
 
                 // ── Ledger: ALWAYS records. Paper trail for all. ─────
                 {
-                    let exit_candle = entry.crossing_candle;
-                    let exit_ts = exit_candle.map(|ci| candles[ci].ts.clone());
-                    let exit_price = exit_candle.map(|ci| candles[ci].close)
+                    let exit_ts = entry.crossing_ts.clone();
+                    let exit_price = entry.crossing_price
                         .unwrap_or(candles[i].close);
-                    let crossing_elapsed = entry.crossing_candle
-                        .map(|ci| (ci - entry.candle_idx) as i64);
+                    let crossing_elapsed = entry.crossing_candles
+                        .map(|c| c as i64);
                     ctx.ledger.execute(
                         "INSERT INTO trade_ledger
                          (step,candle_idx,timestamp,exit_candle_idx,exit_timestamp,
@@ -1176,8 +1177,8 @@ impl EnterpriseState {
                           crossing_candles,horizon_candles,outcome,won,exit_reason)
                          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25)",
                         params![
-                            self.log_step, entry.candle_idx as i64, &entry_candle.ts,
-                            exit_candle.map(|ci| ci as i64), exit_ts,
+                            self.log_step, entry.candle_idx as i64, &entry.entry_ts,
+                            entry.crossing_candles.map(|c| (entry.candle_idx + c) as i64), exit_ts,
                             self.mgr_journal.label_name(dir).unwrap_or("?"), entry.meta_conviction,
                             entry.high_conviction as i32,
                             entry.entry_price, exit_price,
@@ -1209,7 +1210,7 @@ impl EnterpriseState {
                 }
             } // if let Some(dir)
 
-            self.log_candle(&entry, entry_candle, final_out, treasury_equity, ctx.ledger);
+            self.log_candle(&entry, final_out, treasury_equity, ctx.ledger);
             self.db_batch   += 1;
             if self.db_batch >= 5_000 {
                 ctx.ledger.execute_batch("COMMIT; BEGIN").ok();
@@ -1273,7 +1274,6 @@ impl EnterpriseState {
         &mut self,
         entry: &Pending,
         current_price: f64,
-        candles: &[Candle],
         conviction_window: usize,
     ) {
         // Skip if experts have no majority — nothing to learn from a tie.
@@ -1284,8 +1284,8 @@ impl EnterpriseState {
         if buys == sells { return; }
 
         // Manager learns raw price direction from intensity patterns.
-        let price_change = (current_price - candles[entry.candle_idx].close)
-            / candles[entry.candle_idx].close;
+        let price_change = (current_price - entry.entry_price)
+            / entry.entry_price;
         let mgr_label = if price_change > 0.0 { self.mgr_buy } else { self.mgr_sell };
 
         // Learn from the SAME thought the manager predicted with.
@@ -1313,7 +1313,6 @@ impl EnterpriseState {
     pub fn log_candle(
         &mut self,
         entry: &Pending,
-        entry_candle: &Candle,
         final_out: Option<Label>,
         treasury_equity: f64,
         ledger: &Connection,
@@ -1326,7 +1325,7 @@ impl EnterpriseState {
               actual,traded,position_frac,equity,outcome_pct)
              VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
             params![
-                self.log_step, entry.candle_idx as i64, &entry_candle.ts,
+                self.log_step, entry.candle_idx as i64, &entry.entry_ts,
                 entry.tht_pred.raw_cos, entry.tht_pred.conviction,
                 entry.tht_pred.direction.and_then(|d| self.tht_journal.label_name(d).map(|s| s.to_string())),
                 entry.meta_dir.and_then(|d| self.mgr_journal.label_name(d).map(|s| s.to_string())),

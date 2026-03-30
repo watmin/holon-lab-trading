@@ -36,9 +36,13 @@ pub struct Pending {
 
     // ── Accounting (pure measurement, no hallucination) ──────────────
     pub entry_price:       f64,
+    pub entry_ts:          String,  // timestamp at entry (for ledger)
+    pub entry_atr:         f64,    // ATR at entry (for threshold scaling)
     pub max_favorable:     f64,    // best price move in our direction
     pub max_adverse:       f64,    // worst price move against us (negative)
-    pub crossing_candle:   Option<usize>, // candle index when threshold first crossed
+    pub crossing_candles:  Option<usize>,  // candles elapsed at first crossing
+    pub crossing_ts:       Option<String>, // timestamp at first crossing
+    pub crossing_price:    Option<f64>,    // price at first crossing
     pub path_candles:      usize,  // candles elapsed since entry
 
     // ── Trade management (the enterprise) ────────────────────────────
