@@ -61,13 +61,24 @@
 (atom "loss-density")      ; fraction of recent trades that lost
 
 ;; Correlation specialist
-;;   Vocabulary: position concentration, expert agreement patterns
-;;   Learns: what does "normal diversification" look like?
-;;   Anomaly: all positions correlated (concentrated risk)
+;;   Vocabulary: trade outcome patterns, loss clustering
+;;   Learns: what does "normal loss distribution" look like?
+;;   Anomaly: losses clustering (serial correlation in outcomes)
 (atom "risk-correlation")
-(atom "position-count")    ; how many open positions
-(atom "position-coherence"); cosine similarity between open positions
-(atom "directional-tilt")  ; net long/short exposure
+(atom "loss-pattern")      ; autocorrelation of win/loss sequence
+(atom "loss-density")      ; fraction of recent trades that lost
+(atom "consec-loss")       ; consecutive losing streak length
+(atom "trade-density")     ; trade frequency (trades per 1000 candles)
+(atom "streak")            ; direction of outcome clustering
+
+;; Panel specialist
+;;   Vocabulary: equity curve, streak, recent accuracy, trade density
+;;   Learns: what does "normal panel output" look like?
+;;   Anomaly: panel behavior deviating from healthy patterns
+(atom "risk-panel")
+(atom "equity-curve")      ; return since inception
+(atom "recent-accuracy")   ; overall win rate
+(atom "trade-frequency")   ; sqrt(trades) / 30
 
 ;; ── Risk generalist (#14) ───────────────────────────────────────────
 ;;

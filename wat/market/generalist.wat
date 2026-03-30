@@ -49,9 +49,10 @@
 
 ;; ── Role in the enterprise ──────────────────────────────────────────
 ;;
-;; The generalist reports to the manager as one of 6 voices:
-;;   (bind generalist-atom (encode-log |conviction|))  ; BUY
-;;   (bind (permute generalist-atom) (encode-log |conviction|))  ; SELL
+;; The generalist reports to the manager as one of 6 voices,
+;; using the canonical per-expert encoding from manager.wat:
+;;   (bind generalist-atom (bind (atom "buy") (encode-linear |conviction| 1.0)))   ; BUY
+;;   (bind generalist-atom (bind (atom "sell") (encode-linear |conviction| 1.0)))  ; SELL
 ;;
 ;; It's gated by its own curve_valid — currently using tht_journal's
 ;; Kelly fit. If the generalist's direction accuracy doesn't validate,

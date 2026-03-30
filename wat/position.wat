@@ -58,10 +58,12 @@
 
 ;; ── Cooldown ───────────────────────────────────────────────────────
 ;;
-;; After a position is stopped out, the manager waits N candles before
-;; opening a new position in the same direction. Prevents oscillation.
-;; N = derived from the band's hold duration distribution, not hardcoded.
-;; Starting value: the horizon (36 candles).
+;; After a position exits, the manager waits for market movement before
+;; re-entering. Cooldown is market-driven, not timer-driven:
+;;   move_since_exit > k_stop × last_exit_atr
+;; The market must move meaningfully (one stop-loss worth of ATR) before
+;; the enterprise considers a new position. This prevents oscillation
+;; while respecting the market's actual pace.
 
 ;; ── Multiple positions ─────────────────────────────────────────────
 ;;

@@ -470,27 +470,7 @@ fn main() {
         let entry_candle = &candles[entry.candle_idx];
         if final_out.is_none() { state.noise_count += 1; } else { state.labeled_count += 1; }
 
-        ledger.execute(
-            "INSERT INTO candle_log
-             (step,candle_idx,timestamp,
-              tht_cos,tht_conviction,tht_pred,
-              meta_pred,meta_conviction,
-              actual,traded,position_frac,equity,outcome_pct)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
-            params![
-                state.log_step, entry.candle_idx as i64, &entry_candle.ts,
-                entry.tht_pred.raw_cos, entry.tht_pred.conviction,
-                entry.tht_pred.direction.and_then(|d| state.tht_journal.label_name(d).map(|s| s.to_string())),
-                entry.meta_dir.and_then(|d| state.mgr_journal.label_name(d).map(|s| s.to_string())),
-                entry.meta_conviction,
-                final_out.and_then(|l| state.tht_journal.label_name(l).map(|s| s.to_string())).unwrap_or_else(|| "Noise".to_string()),
-                entry.position_frac.is_some() as i32,
-                entry.position_frac,
-                treasury_equity,
-                entry.outcome_pct,
-            ],
-        ).ok();
-        state.log_step += 1;
+        state.log_candle(&entry, entry_candle, final_out, treasury_equity, &ledger);
     }
 
     ledger.execute_batch("COMMIT").ok();

@@ -21,6 +21,47 @@ use crate::risk::RiskBranch;
 use crate::sizing::{kelly_frac, signal_weight};
 use crate::treasury::Treasury;
 
+// ─── TradePnl ─────────────────────────────────────────────────────────────
+
+/// Pure accounting result for a resolved trade. No side effects.
+/// Computed once, consumed by treasury settlement and ledger logging.
+pub struct TradePnl {
+    pub gross_ret: f64,
+    pub net_ret: f64,
+    pub entry_cost_frac: f64,
+    pub exit_cost_frac: f64,
+    pub pos_usd: f64,
+    pub trade_pnl: f64,
+}
+
+impl TradePnl {
+    /// Compute P&L for a resolved entry. Pure arithmetic.
+    pub fn compute(
+        trade_pct: f64,
+        is_buy: bool,
+        swap_fee: f64,
+        slippage: f64,
+        is_live: bool,
+        deployed_usd: f64,
+        treasury_equity: f64,
+        frac: f64,
+    ) -> Self {
+        let gross_ret = if is_buy { trade_pct } else { -trade_pct };
+        let per_swap = swap_fee + slippage;
+        let after_entry = 1.0 - per_swap;
+        let gross_value = after_entry * (1.0 + gross_ret);
+        let after_exit = gross_value * (1.0 - per_swap);
+        let net_ret = after_exit - 1.0;
+        let entry_cost_frac = per_swap;
+        let exit_cost_frac = gross_value * per_swap;
+        let pos_usd = if is_live {
+            if deployed_usd > 0.0 { deployed_usd } else { treasury_equity * frac }
+        } else { 0.0 };
+        let trade_pnl = pos_usd * net_ret;
+        Self { gross_ret, net_ret, entry_cost_frac, exit_cost_frac, pos_usd, trade_pnl }
+    }
+}
+
 // ─── ExitAtoms ─────────────────────────────────────────────────────────────
 
 /// Immutable atom vectors for the exit expert encoding.
@@ -1088,56 +1129,7 @@ impl EnterpriseState {
                 }
 
                 // ── Manager learns from ALL non-Noise outcomes ──────────
-                // The manager doesn't need meta_dir to learn. It needs to
-                // see the expert configuration + whether following the experts
-                // would have been profitable. Breaks the deadlock: the manager
-                // learns even when it has no opinion of its own yet.
-                {
-                    // Hypothetical: if we followed the majority expert direction,
-                    // would it have been profitable after costs?
-                    let expert_majority = {
-                        let buys = entry.observer_preds.iter()
-                            .filter(|ep| ep.direction == Some(self.tht_buy)).count();
-                        let sells = entry.observer_preds.iter()
-                            .filter(|ep| ep.direction == Some(self.tht_sell)).count();
-                        if buys > sells { Some(self.tht_buy) }
-                        else if sells > buys { Some(self.tht_sell) }
-                        else { None }
-                    };
-                    if expert_majority.is_some() {
-                        // Manager learns raw price direction from intensity patterns.
-                        // Not "was the expert majority right?" but "did the price go up or down?"
-                        // The manager maps intensity patterns → direction.
-                        // Both sides are learned: the same intensity pattern that preceded UP
-                        // teaches the Buy accumulator; the same pattern that preceded DOWN
-                        // teaches the Sell accumulator. The discriminant separates.
-                        let price_change = (current_price - candles[entry.candle_idx].close)
-                            / candles[entry.candle_idx].close;
-                        let mgr_label = if price_change > 0.0 { self.mgr_buy } else { self.mgr_sell };
-
-                        // Learn from the SAME thought the manager predicted with.
-                        // Stored at prediction time, delta-enriched. One encoding path.
-                        if let Some(ref mgr_vec) = entry.mgr_thought {
-                            self.mgr_journal.observe(mgr_vec, mgr_label, 1.0);
-                        }
-
-                        // Track for proof gate: did the manager predict the right direction?
-                        // The manager predicts Buy (price up) or Sell (price down) from
-                        // intensity patterns. If its prediction matches the actual direction,
-                        // that's a correct call — proof the intensity pattern is useful.
-                        let mgr_correct = if let Some(mgr_dir) = entry.meta_dir {
-                            mgr_dir == mgr_label // manager predicted the actual direction
-                        } else {
-                            false // no prediction = not correct
-                        };
-                        self.mgr_resolved.push_back((entry.meta_conviction, mgr_correct));
-                        if self.mgr_resolved.len() > 5000 { self.mgr_resolved.pop_front(); }
-                        self.resolved_preds.push_back((entry.meta_conviction, mgr_correct));
-                        if self.resolved_preds.len() > ctx.conviction_window {
-                            self.resolved_preds.pop_front();
-                        }
-                    }
-                }
+                self.learn_manager_from_entry(&entry, current_price, candles, ctx.conviction_window);
             }
 
             // Every prediction goes to the ledger — hypothetical or real.
@@ -1147,42 +1139,26 @@ impl EnterpriseState {
                 let frac = entry.position_frac.unwrap_or(0.0);
                 let is_live = frac > 0.0; // treasury committed capital
 
-                let trade_pct = entry.exit_pct;
+                // ── Accounting: pure computation ─────────────────────
+                let pnl = TradePnl::compute(
+                    entry.exit_pct, dir == self.mgr_buy,
+                    ctx.swap_fee, ctx.slippage,
+                    is_live, entry.deployed_usd, treasury_equity, frac,
+                );
+
+                // ── Treasury: only moves money for live trades ───────
+                if is_live {
+                    let trade_dir = if dir == self.mgr_buy { Direction::Long } else { Direction::Short };
+                    self.portfolio.record_trade(entry.exit_pct, frac, trade_dir, entry.year,
+                                        ctx.swap_fee, ctx.slippage);
+                    self.treasury.close_position(entry.deployed_usd,
+                        pnl.pos_usd * pnl.gross_ret,
+                        pnl.pos_usd * (ctx.swap_fee * 2.0),
+                        pnl.pos_usd * (ctx.slippage * 2.0));
+                }
+
+                // ── Ledger: ALWAYS records. Paper trail for all. ─────
                 {
-                    // ── Accounting: compute P&L (real or hypothetical) ────
-                    let gross_ret = if dir == self.mgr_buy { trade_pct }
-                        else { -trade_pct };
-                    let per_swap = ctx.swap_fee + ctx.slippage;
-                    let after_entry = 1.0 - per_swap;
-                    let gross_value = after_entry * (1.0 + gross_ret);
-                    let after_exit = gross_value * (1.0 - per_swap);
-                    let net_ret = after_exit - 1.0;
-                    let entry_cost_frac = per_swap;
-                    let exit_cost_frac = gross_value * per_swap;
-
-                    // Position value: real if live, hypothetical if paper
-                    let pos_usd = if is_live {
-                        if entry.deployed_usd > 0.0 { entry.deployed_usd }
-                        else { treasury_equity * frac }
-                    } else { 0.0 };
-                    let trade_pnl = pos_usd * net_ret;
-
-                    // Manager learns direction only, at first-crossing time (above).
-                    // wat/manager.wat: "Does NOT know about costs."
-                    // Profitability is the treasury's domain, not the manager's.
-
-                    // ── Treasury: only moves money for live trades ───────
-                    if is_live {
-                        let trade_fees = pos_usd * (ctx.swap_fee * 2.0);
-                        let trade_slip = pos_usd * (ctx.slippage * 2.0);
-                        let trade_dir = if dir == self.mgr_buy { Direction::Long } else { Direction::Short };
-                        self.portfolio.record_trade(trade_pct, frac, trade_dir, entry.year,
-                                            ctx.swap_fee, ctx.slippage);
-                        self.treasury.close_position(entry.deployed_usd,
-                            pos_usd * gross_ret, trade_fees, trade_slip);
-                    }
-
-                    // ── Ledger: ALWAYS records. Paper trail for all. ─────
                     let exit_candle = entry.crossing_candle;
                     let exit_ts = exit_candle.map(|ci| candles[ci].ts.clone());
                     let exit_price = exit_candle.map(|ci| candles[ci].close)
@@ -1205,14 +1181,14 @@ impl EnterpriseState {
                             self.mgr_journal.label_name(dir).unwrap_or("?"), entry.meta_conviction,
                             entry.high_conviction as i32,
                             entry.entry_price, exit_price,
-                            frac, pos_usd,
-                            gross_ret * 100.0,
-                            entry_cost_frac * 100.0,
-                            exit_cost_frac * 100.0,
-                            net_ret * 100.0, trade_pnl, treasury_equity,
+                            frac, pnl.pos_usd,
+                            pnl.gross_ret * 100.0,
+                            pnl.entry_cost_frac * 100.0,
+                            pnl.exit_cost_frac * 100.0,
+                            pnl.net_ret * 100.0, pnl.trade_pnl, treasury_equity,
                             entry.max_favorable * 100.0, entry.max_adverse * 100.0,
                             crossing_elapsed, entry.path_candles as i64,
-                            final_out.map(|l| self.tht_journal.label_name(l).unwrap_or("?").to_string()).unwrap_or_else(|| "Noise".to_string()), (net_ret > 0.0) as i32,
+                            final_out.map(|l| self.tht_journal.label_name(l).unwrap_or("?").to_string()).unwrap_or_else(|| "Noise".to_string()), (pnl.net_ret > 0.0) as i32,
                             match entry.exit_reason {
                                 Some(ExitReason::TrailingStop) => "TrailingStop",
                                 Some(ExitReason::TakeProfit) => "TakeProfit",
@@ -1221,108 +1197,19 @@ impl EnterpriseState {
                             },
                         ],
                     ).ok();
+                }
 
-                    // Panel tracking (all predictions, not just live)
-                    self.panel_recalib_total += 1;
-                    if final_out == Some(dir) { self.panel_recalib_wins += 1; }
+                // Panel tracking (all predictions, not just live)
+                self.panel_recalib_total += 1;
+                if final_out == Some(dir) { self.panel_recalib_wins += 1; }
 
-                    // resolved_preds is populated at first-crossing time (direction
-                    // accuracy only). No second push here — the calibration curve
-                    // must not mix direction and profitability signals.
-
-                    // ── Risk/diagnostics: only for live trades ───────────
-                    if is_live {
-                            let dd = if self.peak_treasury_equity > 0.0 {
-                                (self.peak_treasury_equity - treasury_equity) / self.peak_treasury_equity * 100.0
-                            } else { 0.0 };
-                            let (streak_len, streak_dir) = {
-                                let mut len = 0i32;
-                                if let Some(&last) = self.portfolio.rolling.back() {
-                                    for &o in self.portfolio.rolling.iter().rev() {
-                                        if o == last { len += 1; } else { break; }
-                                    }
-                                }
-                                let dir = if self.portfolio.rolling.back() == Some(&true) { "winning" } else { "losing" };
-                                (len, dir)
-                            };
-                            let recent_acc = if self.portfolio.rolling.len() >= 5 {
-                                self.portfolio.rolling.iter().filter(|&&x| x).count() as f64
-                                    / self.portfolio.rolling.len() as f64
-                            } else { 0.5 };
-                            let eq_pct = (treasury_equity - ctx.initial_equity) / ctx.initial_equity * 100.0;
-                            let won = (final_out == Some(dir)) as i32;
-                            if ctx.diagnostics { ctx.ledger.execute(
-                                "INSERT INTO risk_log (step,drawdown_pct,streak_len,streak_dir,recent_acc,equity_pct,won)
-                                 VALUES (?1,?2,?3,?4,?5,?6,?7)",
-                                params![self.log_step, dd, streak_len, streak_dir, recent_acc, eq_pct, won],
-                            ).ok(); }
-                        // Track flip-zone trade outcomes.
-                        if entry.high_conviction {
-                            // Adaptive decay state machine.
-                            let won = final_out == Some(dir);
-                            self.highconv_wins.push_back(won);
-                            if self.highconv_wins.len() > ctx.highconv_rolling_cap {
-                                self.highconv_wins.pop_front();
-                            }
-                            if self.highconv_wins.len() >= 30 {
-                                let wr = self.highconv_wins.iter().filter(|&&w| w).count() as f64
-                                       / self.highconv_wins.len() as f64;
-                                if !self.in_adaptation && wr < 0.50 {
-                                    self.in_adaptation = true;
-                                    self.adaptive_decay = ctx.decay_adapting;
-                                } else if self.in_adaptation && wr > 0.55 {
-                                    self.in_adaptation = false;
-                                    self.adaptive_decay = ctx.decay_stable;
-                                }
-                            }
-                        }
-                        // Log which facts were present for this trade.
-                        for label in &entry.fact_labels {
-                            if ctx.diagnostics { ctx.ledger.execute(
-                                "INSERT INTO trade_facts (step, fact_label) VALUES (?1, ?2)",
-                                params![self.log_step, label],
-                            ).ok(); }
-                        }
-                        // Store thought vectors for engram analysis.
-                        if entry.high_conviction {
-                            let won = (final_out == Some(dir)) as i32;
-                            let tht_bytes: Vec<u8> = entry.tht_vec.data().iter()
-                                .map(|&v| v as u8).collect();
-                            if ctx.diagnostics { ctx.ledger.execute(
-                                "INSERT INTO trade_vectors (step, won, tht_data)
-                                 VALUES (?1, ?2, ?3)",
-                                params![
-                                    self.log_step, won,
-                                    tht_bytes,
-                                ],
-                            ).ok(); }
-                        }
-                    } // is_live
+                // ── Risk/diagnostics: only for live trades ───────────
+                if is_live {
+                    self.update_risk_from_trade(&entry, dir, final_out, treasury_equity, ctx);
                 }
             } // if let Some(dir)
 
-            // Log to ledger.
-            ctx.ledger.execute(
-                "INSERT INTO candle_log
-                 (step,candle_idx,timestamp,
-                  tht_cos,tht_conviction,tht_pred,
-                  meta_pred,meta_conviction,
-                  actual,traded,position_frac,equity,outcome_pct)
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
-                params![
-                    self.log_step, entry.candle_idx as i64, &entry_candle.ts,
-                    entry.tht_pred.raw_cos, entry.tht_pred.conviction,
-                    entry.tht_pred.direction.and_then(|d| self.tht_journal.label_name(d).map(|s| s.to_string())),
-                    entry.meta_dir.and_then(|d| self.mgr_journal.label_name(d).map(|s| s.to_string())),
-                    entry.meta_conviction,
-                    final_out.and_then(|l| self.tht_journal.label_name(l).map(|s| s.to_string())).unwrap_or_else(|| "Noise".to_string()),
-                    entry.position_frac.is_some() as i32,
-                    entry.position_frac,
-                    treasury_equity,
-                    entry.outcome_pct,
-                ],
-            ).ok();
-            self.log_step   += 1;
+            self.log_candle(&entry, entry_candle, final_out, treasury_equity, ctx.ledger);
             self.db_batch   += 1;
             if self.db_batch >= 5_000 {
                 ctx.ledger.execute_batch("COMMIT; BEGIN").ok();
@@ -1375,6 +1262,159 @@ impl EnterpriseState {
                 eprintln!("    treasury: ${:.0} ({:+.1}%) | pos={} swaps={} wins={} | proven=[{}]{}",
                     treasury_equity, ret, self.positions.len(), self.hold_swaps, self.hold_wins, proven_str, band_str);
             }
+        }
+    }
+
+    // ─── Resolution helpers (extracted from on_candle resolution loop) ─────
+
+    /// Manager learns direction from expert intensity patterns.
+    /// Called once per non-Noise resolved entry.
+    fn learn_manager_from_entry(
+        &mut self,
+        entry: &Pending,
+        current_price: f64,
+        candles: &[Candle],
+        conviction_window: usize,
+    ) {
+        // Skip if experts have no majority — nothing to learn from a tie.
+        let buys = entry.observer_preds.iter()
+            .filter(|ep| ep.direction == Some(self.tht_buy)).count();
+        let sells = entry.observer_preds.iter()
+            .filter(|ep| ep.direction == Some(self.tht_sell)).count();
+        if buys == sells { return; }
+
+        // Manager learns raw price direction from intensity patterns.
+        let price_change = (current_price - candles[entry.candle_idx].close)
+            / candles[entry.candle_idx].close;
+        let mgr_label = if price_change > 0.0 { self.mgr_buy } else { self.mgr_sell };
+
+        // Learn from the SAME thought the manager predicted with.
+        // Stored at prediction time, delta-enriched. One encoding path.
+        if let Some(ref mgr_vec) = entry.mgr_thought {
+            self.mgr_journal.observe(mgr_vec, mgr_label, 1.0);
+        }
+
+        // Track for proof gate: did the manager predict the right direction?
+        let mgr_correct = if let Some(mgr_dir) = entry.meta_dir {
+            mgr_dir == mgr_label
+        } else {
+            false
+        };
+        self.mgr_resolved.push_back((entry.meta_conviction, mgr_correct));
+        if self.mgr_resolved.len() > 5000 { self.mgr_resolved.pop_front(); }
+        self.resolved_preds.push_back((entry.meta_conviction, mgr_correct));
+        if self.resolved_preds.len() > conviction_window {
+            self.resolved_preds.pop_front();
+        }
+    }
+
+    /// Log a resolved entry to candle_log. Called from on_candle resolution
+    /// and from enterprise.rs post-loop drain. One INSERT, one definition.
+    pub fn log_candle(
+        &mut self,
+        entry: &Pending,
+        entry_candle: &Candle,
+        final_out: Option<Label>,
+        treasury_equity: f64,
+        ledger: &Connection,
+    ) {
+        ledger.execute(
+            "INSERT INTO candle_log
+             (step,candle_idx,timestamp,
+              tht_cos,tht_conviction,tht_pred,
+              meta_pred,meta_conviction,
+              actual,traded,position_frac,equity,outcome_pct)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+            params![
+                self.log_step, entry.candle_idx as i64, &entry_candle.ts,
+                entry.tht_pred.raw_cos, entry.tht_pred.conviction,
+                entry.tht_pred.direction.and_then(|d| self.tht_journal.label_name(d).map(|s| s.to_string())),
+                entry.meta_dir.and_then(|d| self.mgr_journal.label_name(d).map(|s| s.to_string())),
+                entry.meta_conviction,
+                final_out.and_then(|l| self.tht_journal.label_name(l).map(|s| s.to_string())).unwrap_or_else(|| "Noise".to_string()),
+                entry.position_frac.is_some() as i32,
+                entry.position_frac,
+                treasury_equity,
+                entry.outcome_pct,
+            ],
+        ).ok();
+        self.log_step += 1;
+    }
+
+    /// Risk diagnostics + adaptive decay for a resolved live trade.
+    fn update_risk_from_trade(
+        &mut self,
+        entry: &Pending,
+        dir: Label,
+        final_out: Option<Label>,
+        treasury_equity: f64,
+        ctx: &CandleContext,
+    ) {
+        let dd = if self.peak_treasury_equity > 0.0 {
+            (self.peak_treasury_equity - treasury_equity) / self.peak_treasury_equity * 100.0
+        } else { 0.0 };
+        let (streak_len, streak_dir) = {
+            let mut len = 0i32;
+            if let Some(&last) = self.portfolio.rolling.back() {
+                for &o in self.portfolio.rolling.iter().rev() {
+                    if o == last { len += 1; } else { break; }
+                }
+            }
+            let dir = if self.portfolio.rolling.back() == Some(&true) { "winning" } else { "losing" };
+            (len, dir)
+        };
+        let recent_acc = if self.portfolio.rolling.len() >= 5 {
+            self.portfolio.rolling.iter().filter(|&&x| x).count() as f64
+                / self.portfolio.rolling.len() as f64
+        } else { 0.5 };
+        let eq_pct = (treasury_equity - ctx.initial_equity) / ctx.initial_equity * 100.0;
+        let won = (final_out == Some(dir)) as i32;
+        if ctx.diagnostics { ctx.ledger.execute(
+            "INSERT INTO risk_log (step,drawdown_pct,streak_len,streak_dir,recent_acc,equity_pct,won)
+             VALUES (?1,?2,?3,?4,?5,?6,?7)",
+            params![self.log_step, dd, streak_len, streak_dir, recent_acc, eq_pct, won],
+        ).ok(); }
+
+        // Adaptive decay state machine
+        if entry.high_conviction {
+            let won = final_out == Some(dir);
+            self.highconv_wins.push_back(won);
+            if self.highconv_wins.len() > ctx.highconv_rolling_cap {
+                self.highconv_wins.pop_front();
+            }
+            if self.highconv_wins.len() >= 30 {
+                let wr = self.highconv_wins.iter().filter(|&&w| w).count() as f64
+                       / self.highconv_wins.len() as f64;
+                if !self.in_adaptation && wr < 0.50 {
+                    self.in_adaptation = true;
+                    self.adaptive_decay = ctx.decay_adapting;
+                } else if self.in_adaptation && wr > 0.55 {
+                    self.in_adaptation = false;
+                    self.adaptive_decay = ctx.decay_stable;
+                }
+            }
+        }
+
+        // Log which facts were present for this trade.
+        if ctx.diagnostics {
+            for label in &entry.fact_labels {
+                ctx.ledger.execute(
+                    "INSERT INTO trade_facts (step, fact_label) VALUES (?1, ?2)",
+                    params![self.log_step, label],
+                ).ok();
+            }
+        }
+
+        // Store thought vectors for engram analysis.
+        if entry.high_conviction && ctx.diagnostics {
+            let won = (final_out == Some(dir)) as i32;
+            let tht_bytes: Vec<u8> = entry.tht_vec.data().iter()
+                .map(|&v| v as u8).collect();
+            ctx.ledger.execute(
+                "INSERT INTO trade_vectors (step, won, tht_data)
+                 VALUES (?1, ?2, ?3)",
+                params![self.log_step, won, tht_bytes],
+            ).ok();
         }
     }
 }

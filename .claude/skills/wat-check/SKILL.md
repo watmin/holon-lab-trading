@@ -25,14 +25,14 @@ First, read the language core: `~/work/holon/wat/core/primitives.wat`. Verify th
 Then, for a given application wat file (default: all in `wat/`), read the spec and find its implementation counterpart:
 
 ```
-wat/manager.wat      → src/market/manager.rs + enterprise.rs (manager sections)
-wat/risk.wat         → src/risk/ + enterprise.rs (risk sections)
-wat/treasury.wat     → src/treasury.rs + enterprise.rs (treasury sections)
-wat/ledger.wat       → src/ledger.rs
-wat/position.wat     → src/position.rs + enterprise.rs (position sections)
-wat/generalist.wat   → enterprise.rs (generalist sections)
-wat/expert/*.wat     → src/market/observer.rs + src/thought/mod.rs
-wat/vocab.wat        → src/vocab/mod.rs + src/vocab/*.rs
+wat/market/manager.wat        → src/market/manager.rs + enterprise.rs (manager sections)
+wat/market/generalist.wat     → enterprise.rs (generalist sections)
+wat/market/observer/*.wat     → src/market/observer.rs + src/thought/mod.rs
+wat/risk.wat                  → src/risk/ + enterprise.rs (risk sections)
+wat/treasury.wat              → src/treasury.rs + enterprise.rs (treasury sections)
+wat/ledger.wat                → src/ledger.rs
+wat/position.wat              → src/position.rs + enterprise.rs (position sections)
+wat/vocab.wat                 → src/vocab/mod.rs + src/vocab/*.rs
 ```
 
 For each spec section, verify:

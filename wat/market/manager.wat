@@ -38,9 +38,9 @@
 ;; Each proven expert contributes one fact to the manager's thought.
 ;; GATED: only proven experts are included. Silence, not noise.
 ;;
-;; The encoding is signed: BUY lean uses the expert atom as-is.
-;; SELL lean uses (permute expert-atom 1). This makes BUY@0.25
-;; orthogonal to SELL@0.25 in the hyperspace.
+;; The encoding is signed: BUY lean binds (atom "buy") with magnitude.
+;; SELL lean binds (atom "sell") with magnitude. Separate action atoms
+;; make BUY@0.25 orthogonal to SELL@0.25 in the hyperspace.
 
 ;; Guard: below 3σ noise floor (3/sqrt(dims)), the expert has no opinion.
 ;; Silence, not forced direction. The noise floor is a property of the
@@ -142,17 +142,22 @@
 ;;   (if (> price-at-horizon entry-price) buy sell)
 ;;   1.0)
 ;;
-;; (resolve manager-journal conviction correct)  ; for curve fitting
+;; Guard: manager skips learning when the expert panel is tied
+;; (buys == sells). Nothing to learn from a directionless panel.
+;;
+;; Manager tracks (conviction, correct?) pairs in mgr_resolved.
+;; No coalgebra resolve/curve — proof is via sigma-band scan.
 
 ;; ── Gate ─────────────────────────────────────────────────────────────
 ;;
-;; The manager's own proof: does its conviction-accuracy curve validate?
-;; The treasury deploys only when the manager has proven profitable
-;; direction prediction from the intensity patterns.
+;; The manager's proof: sigma-band scan over resolved predictions.
+;; Scan conviction bands [k*σ, (k+4)*σ] for k in 3..18, where σ = 1/sqrt(dims).
+;; Find the band with accuracy > 0.51 and at least 200 samples.
+;; The treasury deploys only in the proven band.
 ;;
-;; (let ((a b) (curve manager-journal))
-;;   (gate manager-journal (a b) 0.52))
-;; → (if proven (emit direction conviction) silence)
+;; (let ((best-band best-acc) (scan-sigma-bands mgr-resolved dims))
+;;   (if (> best-acc 0.51) (gate proven-band) silence))
+;; → The manager acts only when conviction falls inside its proven band.
 
 ;; ── What the manager does NOT do ────────────────────────────────────
 ;;
