@@ -7,7 +7,6 @@
 /// The manager reads expert opinions and decides.
 /// Risk modulates sizing. Treasury executes. Positions manage themselves.
 /// The ledger records everything. The DB is the debugger.
-use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -15,20 +14,17 @@ use clap::Parser;
 use rayon::prelude::*;
 use rusqlite::params;
 use holon::{Primitives, ScalarMode, VectorManager, Vector};
-use holon::memory::OnlineSubspace;
 
 use enterprise::candle::load_candles;
-use enterprise::journal::{Journal, Label, Direction, Prediction, register_direction, register_exit};
+use enterprise::journal::{Label, Direction, Prediction};
 use enterprise::thought::{ThoughtEncoder, ThoughtVocab};
-use enterprise::treasury::Treasury;
-use enterprise::portfolio::{Portfolio, Phase};
+use enterprise::portfolio::Phase;
 use enterprise::sizing::{kelly_frac, signal_weight};
-use enterprise::market::observer::Observer;
 use enterprise::position::{Pending, ExitReason, ExitObservation, ManagedPosition, PositionPhase, PositionExit};
-use enterprise::risk::RiskBranch;
 use enterprise::ledger::init_ledger;
 use enterprise::market::{parse_candle_hour, parse_candle_day};
 use enterprise::market::manager::{ManagerAtoms, ManagerContext, encode_manager_thought};
+use enterprise::state::EnterpriseState;
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -207,12 +203,10 @@ fn main() {
     eprintln!("\n  Loading candles from {:?}...", args.db_path);
     let t0 = Instant::now();
     let candles = load_candles(&args.db_path, "label_oracle_10");
-    // The event stream wraps the candles. The heartbeat still uses candles[]
-    // directly for now. When fn on_event() is extracted, the event stream
-    // becomes the primary input and candles[] becomes the history buffer.
-    let _events = enterprise::event::stream_from_candles(&candles, &args.quote_asset);
-    eprintln!("  Loaded {} candles ({} events) in {:.1}s",
-        candles.len(), _events.len(), t0.elapsed().as_secs_f64());
+    // When fn on_event() is extracted, candles become events via
+    // enterprise::event::stream_from_candles(). For now, heartbeat uses candles[] directly.
+    eprintln!("  Loaded {} candles in {:.1}s",
+        candles.len(), t0.elapsed().as_secs_f64());
 
     let vm = VectorManager::new(args.dims);
 
@@ -224,26 +218,12 @@ fn main() {
     let thought_encoder = ThoughtEncoder::new(thought_vocab);
     let (codebook_labels, codebook_vecs) = thought_encoder.fact_codebook();
 
-    // ─ Named journals ─
-    // Visual journal removed — Chapter 1 artifact, proven zero signal.
-    let mut tht_journal = Journal::new("thought", args.dims, args.recalib_interval);
-    let (tht_buy, tht_sell) = register_direction(&mut tht_journal);
-
-    // ─ Manager journal: thinks in expert opinions, not candle data ────
-    // The manager's vocabulary = its observers. Each expert is an atom.
-    // The manager's thought = bundle(bind(expert_atom, scalar(conviction))).
-    // The manager's discriminant learns which expert configurations predict.
-    let mut mgr_journal = Journal::new("manager", args.dims, args.recalib_interval);
-    let (mgr_buy, mgr_sell) = register_direction(&mut mgr_journal);
+    // ─ Immutable encoding setup ─
     let mgr_scalar = holon::ScalarEncoder::new(args.dims);
-    let mut prev_mgr_thought: Option<Vector> = None; // for difference computation
     let mgr_atoms = ManagerAtoms::new(&vm);
 
-    // ─ Exit expert: learns when to hold vs exit positions ─────────
+    // ─ Exit expert atoms (immutable) ─
     // decomplect:allow(inline-encoding) — exit expert atoms + encoding grow here until market/exit.rs
-    // dead-thoughts:allow(scaffolding) — exit expert learns but never predicts yet. Wired when exit expert activates.
-    let mut exit_journal = Journal::new("exit-expert", args.dims, args.recalib_interval);
-    let (exit_hold, exit_exit) = register_exit(&mut exit_journal);
     let exit_scalar = holon::ScalarEncoder::new(args.dims);
     let pos_pnl_atom = vm.get_vector("position-pnl");
     let pos_hold_atom = vm.get_vector("position-hold");
@@ -253,74 +233,18 @@ fn main() {
     let pos_stop_dist_atom = vm.get_vector("position-stop-dist");
     let pos_phase_atom = vm.get_vector("position-phase");
     let pos_dir_atom = vm.get_vector("position-direction");
-    let mut exit_pending: Vec<ExitObservation> = Vec::new();
-    // Exit timing: derived after k_stop is defined (see below).
 
-    // ─ Visual pattern memory: auto-clustering engram groups ─────────────
-    // Each group is an OnlineSubspace that learns a cluster of similar visual
-    // patterns from winning flip-zone trades. New groups auto-discovered when
-    // a winning visual vector doesn't match any existing group.
-    // Visual pattern grouping removed — visual encoding proven zero signal.
-    // The old code accumulated unbounded PatternGroups with zero-vector centroids
-    // (since vis_vec is always null), causing O(n_groups × dims) per flipped trade.
-
-    // ─ Risk branch: five specialized subspaces ─────────────────────────
-    // Each measures health in its own domain. The worst residual drives
-    // the risk multiplier. Gated updates: only learn from healthy states.
-    let mut risk_branches: Vec<RiskBranch> = vec![
-        RiskBranch::new("drawdown",    args.dims),
-        RiskBranch::new("accuracy",    args.dims),
-        RiskBranch::new("volatility",  args.dims),
-        RiskBranch::new("correlation", args.dims),
-        RiskBranch::new("panel",       args.dims),
-    ];
-
-    // Risk scalar encoder — separate from thought encoder's scalar encoder
-    let risk_scalar = holon::ScalarEncoder::new(args.dims);
-    let mut cached_risk_mult: f64 = 0.5;
-    // Cached curve params — recomputed at recalib intervals, not per trade.
-    let mut cached_curve_a: f64 = 0.0;
-    let mut cached_curve_b: f64 = 0.0;
-    let mut curve_valid = false;
-    let mut mgr_curve_valid = false;  // manager must prove its own edge
-    let mut mgr_resolved: VecDeque<(f64, bool)> = VecDeque::new();
-    // Band-based proof: the conviction range where the manager has proven edge.
-    // The manager acts only when conviction falls in this band.
-    let mut mgr_proven_band: (f64, f64) = (0.0, 0.0); // (low, high) — empty when not proven
-
-    // ─ Observer panel: N traders, each with own vocabulary and own window ─
-    // Each expert thinks different thoughts at their own time scale.
-    // The manager aggregates their predictions — it does not encode.
-    let observer_names = ["momentum", "structure", "volume", "narrative", "regime"];
-    let mut observers: Vec<Observer> = observer_names.iter().enumerate().map(|(ei, &profile)| {
-        // Each expert gets a different seed: they explore independently.
-        Observer::new(profile, args.dims, args.recalib_interval,
-            args.dims as u64 + ei as u64 * 7919, &["Buy", "Sell"])
-    }).collect();
-
-    // ─ Dual thought journals: slow (deep memory) + fast (regime-adaptive) ─
-    // Both learn from the same input. An OnlineSubspace monitors thought vector
-    // residuals to blend between them: low residual → trust slow, high → trust fast.
-
-    // Layer 2: Panel state engram — learns the manifold of "good panel configurations."
-    // Encodes each observer's (signed conviction) as a feature vector.
-    // Dimensionality = number of observers. Fed after each recalib if accuracy was good.
-    // Manager's vocabulary = its experts + generalist + panel-level concepts.
+    // ─ Observer/manager atoms (immutable) ─
     // decomplect:allow(inline-encoding) — observer/generalist atoms + min_opinion + delta assembly migrate to market/manager.rs
+    let observer_names = ["momentum", "structure", "volume", "narrative", "regime"];
     let observer_atoms: Vec<Vector> = observer_names.iter()
         .map(|&name| vm.get_vector(name))
         .collect();
     let generalist_atom = vm.get_vector("generalist");
-    // Minimum magnitude to emit an opinion. Below this, the cosine
-    // projection is indistinguishable from random alignment — noise.
-    // Derived from dimensionality: 3σ where σ = 1/sqrt(dims).
-    // At 20k dims: 3/141.4 ≈ 0.021. Not a magic number — a property
-    // of the hyperspace.
     let min_opinion_magnitude: f64 = 3.0 / (args.dims as f64).sqrt();
-    let panel_dim = observer_names.len() + 1; // experts + generalist
-    let mut panel_engram = OnlineSubspace::with_params(panel_dim, 4, 2.0, 0.01, 3.5, 100);
-    let mut panel_recalib_wins: u32 = 0;
-    let mut panel_recalib_total: u32 = 0;
+
+    // Risk scalar encoder — separate from thought encoder's scalar encoder
+    let risk_scalar = holon::ScalarEncoder::new(args.dims);
 
     // ─ Run database ─
     let ledger_path = match &args.ledger {
@@ -362,69 +286,22 @@ fn main() {
     }
     eprintln!("  Run database: {}", ledger_path);
 
-    // ─ Portfolio and tracking ─
+    // ─ Config constants (immutable after setup) ─
     // Adaptive decay: fast forgetting during regime transitions, slow during stable periods.
-    // STABLE (0.999): rolling flip-zone accuracy >= 50% — preserve what works.
-    // ADAPTING (0.995): accuracy dropped below 50% — flush stale patterns.
-    // Hysteresis: need >55% to return to STABLE (prevents oscillation).
-    // dead-thoughts:allow(scaffolding) — adaptive decay gates on high_conviction, mostly inert; revisit when decay becomes an expert
     let decay_stable   = args.decay;          // CLI value (default 0.999)
     let decay_adapting = (args.decay - 0.004).max(0.990); // 0.995 for default
-    let mut adaptive_decay = args.decay;
-    let mut in_adaptation = false;
-    let mut highconv_wins: VecDeque<bool> = VecDeque::new();
     let highconv_rolling_cap = 200usize;
-
-    let mut portfolio    = Portfolio::new(args.initial_equity, args.observe_period);
-    let mut treasury  = Treasury::new(&args.base_asset, args.initial_equity, args.max_positions, args.max_utilization);
-    let mut peak_treasury_equity: f64 = args.initial_equity;
-    // Seed treasury 50/50: half USDC, half WBTC at starting price.
-    // "I don't know which way the market will go — hold both."
-    // Both directions can trade from candle 1.
-    let seed_price = candles[args.window - 1].close;
-    {
-        let half = args.initial_equity / 2.0;
-        let seed_quote = half / seed_price;
-        *treasury.balances.get_mut(&args.base_asset).unwrap() = half;
-        treasury.balances.insert(args.quote_asset.clone(), seed_quote);
-    }
-    let mut pending:    VecDeque<Pending> = VecDeque::new();
-
-    // ─ Managed positions: concurrent, independently managed ──────────
-    let mut positions: Vec<ManagedPosition> = Vec::new();
-    let mut next_position_id: usize = 0;
-    let mut last_exit_price: f64 = 0.0;  // price when last position exited
-    let mut last_exit_atr: f64 = 0.0;    // ATR when last position exited
     let max_single_position: f64 = 0.20; // max 20% of equity in one position
 
     // ─ Exit parameters (managed mode) ──────────────────────────────────
-    // No averaging. No percentiles. Each trade gets its own stop from the
-    // market state AT ENTRY TIME. ATR tells you how much this market is
-    // moving right now. The stop breathes with the market.
-    //
-    // Stop = K_stop × ATR_ratio at entry. Wide when volatile, tight when quiet.
-    // Trail = K_trail × ATR_ratio at entry. Same principle.
-    // Take profit = K_tp × ATR_ratio at entry. Capture proportional to volatility.
-    //
-    // During observe period: no managed exits. "I don't know" = don't act.
-    // After observe: each trade's parameters come from its own entry candle.
-    let k_stop:  f64 = 3.0;  // stop at 3× ATR — "the market moved 3× its normal range against me"
-    let k_trail: f64 = 1.5;  // trail at 1.5× ATR — lock in gains, give room for normal retracement
-    let k_tp:    f64 = 6.0;  // take profit at 6× ATR — let winners run to meaningful moves
-    // Exit observation timing derived from stop parameter.
-    // Expected candles to move one stop-width: k_stop² (ATR × sqrt(N) scaling).
-    // Observe at half that rate (Nyquist).
-    let exit_horizon: usize = (k_stop * k_stop) as usize; // 9 at k_stop=3
-    let exit_observe_interval: usize = (exit_horizon / 2).max(1); // 4 at k_stop=3
-    let mut tht_rolling: VecDeque<bool>  = VecDeque::new();
+    let k_stop:  f64 = 3.0;
+    let k_trail: f64 = 1.5;
+    let k_tp:    f64 = 6.0;
+    let exit_horizon: usize = (k_stop * k_stop) as usize;
+    let exit_observe_interval: usize = (exit_horizon / 2).max(1);
     let rolling_cap = 1000usize;
 
-    // ─ Hold-mode state: which asset does the treasury hold? ────────────
-    // Starts in USDC. BUY signal = swap to WBTC. SELL signal = swap to USDC.
-    // Position persists between signals. WBTC appreciates with the market.
-    let mut hold_swaps: usize = 0;
-    let mut hold_wins: usize = 0;
-
+    // ─ Loop config ─
     let total_candles = candles.len();
     let start_idx     = args.window - 1;
     let end_idx       = if args.max_candles > 0 {
@@ -436,70 +313,69 @@ fn main() {
     let progress_every = if loop_count <= 5_000 { 500 }
                         else if loop_count <= 50_000 { 2_000 }
                         else { 10_000 };
-
     let bnh_entry     = candles[start_idx].close;
-    let mut encode_count  = 0usize;
-    let mut labeled_count = 0usize;
-    let mut noise_count   = 0usize;
-    let mut move_sum      = 0.0_f64;
-    let mut move_count    = 0usize;
-    let mut log_step      = 0i64;
-    let mut db_batch      = 0usize;
     let t_start = Instant::now();
 
-    // Dynamic flip threshold: derived from the conviction distribution.
-    // Updated every recalib_interval candles after a warmup window.
-    // Represents the args.conviction_quantile percentile of recent meta_conviction values.
-    // Rolling conviction history for dynamic threshold computation.
-    // Window = ~3 months of 5m candles: large enough to be stable across
-    // week-to-week regime noise, small enough to adapt to structural shifts.
+    // Dynamic flip threshold config.
     let conviction_warmup = args.recalib_interval * 2;
-    // Conviction window: starts at 2000 (statistically robust minimum).
-    // Shrinks when curve is stable, grows when unstable.
-    // The curve stability tracking we built decides the window size.
     let conviction_window: usize = 2000;
-    let mut conviction_history: VecDeque<f64> = VecDeque::new();
-    let mut conviction_threshold: f64 = 0.0; // 0 until warmup complete
 
-    // Auto flip mode: track resolved predictions to build calibration curve.
-    // Each entry records (conviction, was_the_flipped_prediction_correct).
-    let mut resolved_preds: VecDeque<(f64, bool)> = VecDeque::new();
-
-    // Self-derived min_edge: track flip-zone win rate per recalib window.
-    // min_edge = 0.50 + 2σ where σ = stddev of recent window win rates.
     let kill_file = std::path::Path::new("trader-stop");
-    let mut cursor = start_idx;
+
+    // ─ Mutable state: one struct, one owner ─
+    let mut state = EnterpriseState::new(
+        args.dims,
+        args.recalib_interval,
+        args.initial_equity,
+        args.observe_period,
+        args.decay,
+        &args.base_asset,
+        args.max_positions,
+        args.max_utilization,
+        start_idx,
+    );
+
+    // Seed treasury 50/50: half USDC, half WBTC at starting price.
+    // "I don't know which way the market will go — hold both."
+    let seed_price = candles[args.window - 1].close;
+    {
+        let half = args.initial_equity / 2.0;
+        let seed_quote = half / seed_price;
+        *state.treasury.balances.get_mut(&args.base_asset).unwrap() = half;
+        state.treasury.balances.insert(args.quote_asset.clone(), seed_quote);
+    }
 
     ledger.execute_batch("BEGIN").ok();
 
     eprintln!("\n  Walk-forward: {} candles from index {}...", loop_count, start_idx);
 
-    while cursor < end_idx {
+    while state.cursor < end_idx {
         if kill_file.exists() {
             eprintln!("\n  Kill file — aborting.");
             std::fs::remove_file(kill_file).ok();
             break;
         }
 
-        let batch_end = (cursor + BATCH_SIZE).min(end_idx);
+        let batch_end = (state.cursor + BATCH_SIZE).min(end_idx);
         // ── Parallel: each observer encodes at their own sampled window ────
         // The manager doesn't encode — it reads expert predictions.
         // Each expert samples their own window from [12, 2016] per candle.
         // Their discriminant learns which scale's patterns predict for their
         // vocabulary. A "full" encoding at args.window is kept for the primary
         // journal (tht_journal) which still drives flip threshold + sizing.
-        let n_observers = observers.len();
+        let n_observers = state.observers.len();
 
         // Expert samplers are not Send, so collect windows first
-        let observer_windows: Vec<Vec<usize>> = observers.iter()
+        let observer_windows: Vec<Vec<usize>> = state.observers.iter()
             .map(|exp| {
-                (cursor..batch_end).map(|i| exp.window_sampler.sample(i).min(i + 1)).collect()
+                (state.cursor..batch_end).map(|i| exp.window_sampler.sample(i).min(i + 1)).collect()
             }).collect();
 
-        let tht_vecs: Vec<(usize, Vector, Vec<String>, Vec<Vector>)> = (cursor..batch_end)
+        let batch_start = state.cursor;
+        let tht_vecs: Vec<(usize, Vector, Vec<String>, Vec<Vector>)> = (batch_start..batch_end)
             .into_par_iter()
             .map(|i| {
-                let bi = i - cursor; // batch index
+                let bi = i - batch_start; // batch index
 
                 // Primary encoding at fixed window — drives the main journal + flip threshold.
                 let w_start = i.saturating_sub(args.window - 1);
@@ -521,26 +397,26 @@ fn main() {
 
         // ── Sequential: predict + buffer + learn + expire ────────────────────
         for (i, tht_vec, tht_facts, observer_vecs) in tht_vecs {
-            encode_count += 1;
+            state.encode_count += 1;
 
             // ── Expert predictions: each observer speaks ─────────────────
             // No flip. The discriminant learns what predicts — including reversals.
             // The flip was a hack for a single journal. The enterprise lets each
             // expert's discriminant encode the full pattern naturally.
             let observer_preds: Vec<Prediction> = observer_vecs.iter().enumerate()
-                .map(|(ei, vec)| observers[ei].journal.predict(vec))
+                .map(|(ei, vec)| state.observers[ei].journal.predict(vec))
                 .collect();
 
             // The generalist still encodes for backward compatibility
             // (flip threshold, resolved_preds tracking, DB logging).
             // But direction and conviction now come from the expert panel.
-            let tht_pred = tht_journal.predict(&tht_vec);
+            let tht_pred = state.tht_journal.predict(&tht_vec);
 
             // ── Manager: encodes expert opinions via manager.rs ──────────
             // Single canonical encoding path. See manager.rs and wat/manager.wat.
-            let obs_curve_valid: Vec<bool> = observers.iter().map(|o| o.curve_valid).collect();
-            let obs_resolved_lens: Vec<usize> = observers.iter().map(|o| o.resolved.len()).collect();
-            let obs_resolved_accs: Vec<f64> = observers.iter().map(|o| {
+            let obs_curve_valid: Vec<bool> = state.observers.iter().map(|o| o.curve_valid).collect();
+            let obs_resolved_lens: Vec<usize> = state.observers.iter().map(|o| o.resolved.len()).collect();
+            let obs_resolved_accs: Vec<f64> = state.observers.iter().map(|o| {
                 let len = o.resolved.len();
                 if len == 0 { 0.0 } else {
                     o.resolved.iter().filter(|(_, c)| *c).count() as f64 / len as f64
@@ -555,11 +431,11 @@ fn main() {
                 observer_vecs: &observer_vecs,
                 generalist_pred: &tht_pred,
                 generalist_atom: &generalist_atom,
-                generalist_curve_valid: curve_valid,
+                generalist_curve_valid: state.curve_valid,
                 candle_atr: candles[i].atr_r,
                 candle_hour: parse_candle_hour(&candles[i].ts),
                 candle_day: parse_candle_day(&candles[i].ts),
-                disc_strength: tht_journal.last_disc_strength(),
+                disc_strength: state.tht_journal.last_disc_strength(),
             };
             let mgr_facts = encode_manager_thought(&mgr_ctx, &mgr_atoms, &mgr_scalar, min_opinion_magnitude);
 
@@ -570,15 +446,15 @@ fn main() {
                 (Prediction::default(), None)
             } else {
                 let mgr_thought = Primitives::bundle(&mgr_refs);
-                let final_thought = if let Some(ref prev) = prev_mgr_thought {
+                let final_thought = if let Some(ref prev) = state.prev_mgr_thought {
                     let delta = Primitives::difference(prev, &mgr_thought);
                     let delta_bound = Primitives::bind(&mgr_atoms.delta, &delta);
                     Primitives::bundle(&[&mgr_thought, &delta_bound])
                 } else {
                     mgr_thought.clone()
                 };
-                prev_mgr_thought = Some(mgr_thought);
-                let pred = mgr_journal.predict(&final_thought);
+                state.prev_mgr_thought = Some(mgr_thought);
+                let pred = state.mgr_journal.predict(&final_thought);
                 (pred, Some(final_thought))
             };
 
@@ -587,9 +463,9 @@ fn main() {
                 .map(|ep| ep.raw_cos).collect();
             panel_state.push(tht_pred.raw_cos); // generalist's voice
             // dead-thoughts:allow(scaffolding) — panel_familiar computed for display only; wired when panel engram drives decisions
-            let panel_familiar = if panel_engram.n() >= 10 {
-                let residual = panel_engram.residual(&panel_state);
-                let threshold = panel_engram.threshold();
+            let panel_familiar = if state.panel_engram.n() >= 10 {
+                let residual = state.panel_engram.residual(&panel_state);
+                let threshold = state.panel_engram.threshold();
                 residual < threshold
             } else {
                 false
@@ -603,24 +479,24 @@ fn main() {
             // Window spans recalib_interval * 100 candles (~6 months at 5m).
             // Large enough to be stable across week-to-week regime noise;
             // small enough to adapt as market structure shifts over quarters.
-            conviction_history.push_back(meta_conviction);
-            if conviction_history.len() > conviction_window {
-                conviction_history.pop_front();
+            state.conviction_history.push_back(meta_conviction);
+            if state.conviction_history.len() > conviction_window {
+                state.conviction_history.pop_front();
             }
             // Recompute flip threshold every recalib_interval candles, after warmup.
             // decomplect:allow(inline-computation) — flip threshold curve fitting, extracts to sizing module
-            if conviction_history.len() >= conviction_warmup
-                && encode_count % args.recalib_interval == 0
+            if state.conviction_history.len() >= conviction_warmup
+                && state.encode_count % args.recalib_interval == 0
             {
                 match args.conviction_mode.as_str() {
                     "quantile" if args.conviction_quantile > 0.0 => {
-                        let mut sorted: Vec<f64> = conviction_history.iter().copied().collect();
+                        let mut sorted: Vec<f64> = state.conviction_history.iter().copied().collect();
                         sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
                         let idx = ((sorted.len() as f64 * args.conviction_quantile) as usize)
                             .min(sorted.len() - 1);
-                        conviction_threshold = sorted[idx];
+                        state.conviction_threshold = sorted[idx];
                     }
-                    "auto" if resolved_preds.len() >= conviction_warmup * 5 => {
+                    "auto" if state.resolved_preds.len() >= conviction_warmup * 5 => {
                         // Need 5× warmup (~5000 resolved) for stable exponential fit.
                         // Fit the exponential conviction-accuracy curve:
                         //   accuracy = 0.50 + a × exp(b × conviction)
@@ -629,7 +505,7 @@ fn main() {
                         // Bin resolved predictions, compute per-bin accuracy,
                         // log-linear regression on bins where accuracy > 0.50.
                         let n_bins = 20usize;
-                        let mut sorted: Vec<(f64, bool)> = resolved_preds.iter().copied().collect();
+                        let mut sorted: Vec<(f64, bool)> = state.resolved_preds.iter().copied().collect();
                         sorted.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
                         let bin_size = sorted.len() / n_bins;
                         if bin_size >= 20 {
@@ -671,7 +547,7 @@ fn main() {
                                         if target > 0.0 {
                                             let new_thresh = target.ln() / b;
                                             if new_thresh > 0.0 && new_thresh < 1.0 {
-                                                conviction_threshold = new_thresh;
+                                                state.conviction_threshold = new_thresh;
                                             }
                                         }
                                     }
@@ -681,12 +557,12 @@ fn main() {
                     }
                     // Fallback: during auto warmup, use quantile if available.
                     "auto" if args.conviction_quantile > 0.0
-                        && conviction_history.len() >= conviction_warmup => {
-                        let mut sorted: Vec<f64> = conviction_history.iter().copied().collect();
+                        && state.conviction_history.len() >= conviction_warmup => {
+                        let mut sorted: Vec<f64> = state.conviction_history.iter().copied().collect();
                         sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
                         let idx = ((sorted.len() as f64 * args.conviction_quantile) as usize)
                             .min(sorted.len() - 1);
-                        conviction_threshold = sorted[idx];
+                        state.conviction_threshold = sorted[idx];
                     }
                     _ => {}
                 }
@@ -702,30 +578,34 @@ fn main() {
             let quote_price = candles[i].close;
             let fee_rate = args.swap_fee + args.slippage;
             // Treasury equity: the source of truth. Token-agnostic.
-            let prices = treasury.price_map(&[(&args.quote_asset, quote_price)]);
-            let treasury_equity = treasury.total_value(&prices);
-            if treasury_equity > peak_treasury_equity {
-                peak_treasury_equity = treasury_equity;
+            let prices = state.treasury.price_map(&[(&args.quote_asset, quote_price)]);
+            let treasury_equity = state.treasury.total_value(&prices);
+            if treasury_equity > state.peak_treasury_equity {
+                state.peak_treasury_equity = treasury_equity;
             }
-            let mut closed_positions: Vec<usize> = Vec::new();
             // ── Exit expert: encode each position's state, predict, learn ──
             // Resolve pending exit observations (did holding improve the position?)
-            exit_pending.retain(|obs| {
-                if i - obs.snapshot_candle >= exit_horizon {
-                    // Find the position and check if P&L improved
-                    if let Some(pos) = positions.iter().find(|p| p.id == obs.pos_id) {
+            // Two-phase: collect resolved, then learn + drain. Avoids borrow conflict
+            // between exit_pending (mut), positions (shared), and exit_journal (mut).
+            {
+                let mut resolved_exit_indices: Vec<usize> = Vec::new();
+                for (idx, obs) in state.exit_pending.iter().enumerate() {
+                    if i - obs.snapshot_candle >= exit_horizon {
+                        resolved_exit_indices.push(idx);
+                    }
+                }
+                for &idx in resolved_exit_indices.iter().rev() {
+                    let obs = state.exit_pending.remove(idx);
+                    if let Some(pos) = state.positions.iter().find(|p| p.id == obs.pos_id) {
                         let current_pnl = pos.return_pct(quote_price);
                         let improved = current_pnl > obs.snapshot_pnl;
-                        let label = if improved { exit_hold } else { exit_exit }; // Hold was right vs Exit was right
-                        exit_journal.observe(&obs.thought, label, 1.0);
+                        let label = if improved { state.exit_hold } else { state.exit_exit };
+                        state.exit_journal.observe(&obs.thought, label, 1.0);
                     }
-                    false // remove resolved observation
-                } else {
-                    true // keep pending
                 }
-            });
+            }
 
-            for pos in positions.iter_mut() {
+            for pos in state.positions.iter_mut() {
                 if pos.phase == PositionPhase::Closed { continue; }
 
                 // Exit expert: encode at Nyquist rate of position lifecycle
@@ -745,7 +625,7 @@ fn main() {
                     ]);
 
                     // Buffer observation for resolution
-                    exit_pending.push(ExitObservation {
+                    state.exit_pending.push(ExitObservation {
                         thought: exit_thought.clone(),
                         pos_id: pos.id,
                         snapshot_pnl: pnl_frac,
@@ -762,47 +642,45 @@ fn main() {
                             let reclaim_quote = reclaim_base / quote_price / (1.0 - fee_rate);
                             if reclaim_quote < pos.quote_held {
                                 // Partial: release from deployed, then sell
-                                treasury.release(&args.quote_asset, reclaim_quote);
-                                let (sold, received) = treasury.swap(&args.quote_asset, &args.base_asset,
+                                state.treasury.release(&args.quote_asset, reclaim_quote);
+                                let (sold, received) = state.treasury.swap(&args.quote_asset, &args.base_asset,
                                     reclaim_quote, 1.0 / quote_price, fee_rate);
                                 pos.quote_held -= sold;
                                 pos.base_reclaimed += received;
                                 pos.total_fees += sold * quote_price * fee_rate;
                                 pos.phase = PositionPhase::Runner;
-                                hold_swaps += 1;
-                                hold_wins += 1;
+                                state.hold_swaps += 1;
+                                state.hold_wins += 1;
                             } else {
                                 // Full exit — release all, then sell
-                                treasury.release(&args.quote_asset, pos.quote_held);
-                                let (sold, received) = treasury.swap(&args.quote_asset, &args.base_asset,
+                                state.treasury.release(&args.quote_asset, pos.quote_held);
+                                let (sold, received) = state.treasury.swap(&args.quote_asset, &args.base_asset,
                                     pos.quote_held, 1.0 / quote_price, fee_rate);
                                 pos.base_reclaimed += received;
                                 pos.total_fees += sold * quote_price * fee_rate;
                                 pos.quote_held = 0.0;
                                 pos.phase = PositionPhase::Closed;
-                                hold_swaps += 1;
-                                if pos.return_pct(quote_price) > 0.0 { hold_wins += 1; }
-                                closed_positions.push(pos.id);
-                                last_exit_price = quote_price;
-                                last_exit_atr = candles[i].atr_r;
+                                state.hold_swaps += 1;
+                                if pos.return_pct(quote_price) > 0.0 { state.hold_wins += 1; }
+                                state.last_exit_price = quote_price;
+                                state.last_exit_atr = candles[i].atr_r;
                             }
                         }
                         PositionExit::StopLoss | PositionExit::TakeProfit => {
                             // Full exit — release from deployed, then sell
                             if pos.quote_held > 0.0 {
-                                treasury.release(&args.quote_asset, pos.quote_held);
-                                let (sold, received) = treasury.swap(&args.quote_asset, &args.base_asset,
+                                state.treasury.release(&args.quote_asset, pos.quote_held);
+                                let (sold, received) = state.treasury.swap(&args.quote_asset, &args.base_asset,
                                     pos.quote_held, 1.0 / quote_price, fee_rate);
                                 pos.base_reclaimed += received;
                                 pos.total_fees += sold * quote_price * fee_rate;
                             }
                             pos.quote_held = 0.0;
                             pos.phase = PositionPhase::Closed;
-                            hold_swaps += 1;
-                            if pos.return_pct(quote_price) > 0.0 { hold_wins += 1; }
-                            closed_positions.push(pos.id);
-                            last_exit_price = quote_price;
-                            last_exit_atr = candles[i].atr_r;
+                            state.hold_swaps += 1;
+                            if pos.return_pct(quote_price) > 0.0 { state.hold_wins += 1; }
+                            state.last_exit_price = quote_price;
+                            state.last_exit_atr = candles[i].atr_r;
                         }
                     }
                     // Log to ledger
@@ -817,7 +695,7 @@ fn main() {
                         "INSERT INTO trade_ledger (step,candle_idx,timestamp,direction,entry_price,exit_price,gross_return_pct,position_usd,swap_fee_pct,horizon_candles,won,exit_reason)
                          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
                         rusqlite::params![
-                            log_step, i as i64, &candles[i].ts,
+                            state.log_step, i as i64, &candles[i].ts,
                             exit_dir, pos.entry_price, quote_price,
                             ret * 100.0, pos.base_deployed,
                             fee_rate * 100.0, pos.candles_held as i64,
@@ -828,43 +706,43 @@ fn main() {
                 }
             }
             // Remove closed positions
-            positions.retain(|p| p.phase != PositionPhase::Closed);
+            state.positions.retain(|p| p.phase != PositionPhase::Closed);
 
             // ── Open new position: manager BUY in proven band ────────
-            let in_proven_band = meta_conviction >= mgr_proven_band.0
-                && meta_conviction < mgr_proven_band.1;
+            let in_proven_band = meta_conviction >= state.mgr_proven_band.0
+                && meta_conviction < state.mgr_proven_band.1;
             // Cooldown: has the market moved enough since last exit?
             // Not a timer — a condition. The market tells us when it's ready.
-            let market_moved = if last_exit_price > 0.0 {
-                let move_since_exit = (quote_price - last_exit_price).abs() / last_exit_price;
-                move_since_exit > k_stop * last_exit_atr
+            let market_moved = if state.last_exit_price > 0.0 {
+                let move_since_exit = (quote_price - state.last_exit_price).abs() / state.last_exit_price;
+                move_since_exit > k_stop * state.last_exit_atr
             } else {
                 true // no prior exit — ready
             };
             // ── Open position: BUY or SELL in proven band ──────────────
             // One path for both directions. The direction determines which
             // asset to deploy. Everything else is the same.
-            let risk_allows = cached_risk_mult > 0.3;
+            let risk_allows = state.cached_risk_mult > 0.3;
             let should_open = args.asset_mode == "hold"
-                && portfolio.phase != Phase::Observe
-                && mgr_curve_valid && in_proven_band && market_moved && risk_allows
-                && (meta_dir == Some(mgr_buy) || meta_dir == Some(mgr_sell));
+                && state.portfolio.phase != Phase::Observe
+                && state.mgr_curve_valid && in_proven_band && market_moved && risk_allows
+                && (meta_dir == Some(state.mgr_buy) || meta_dir == Some(state.mgr_sell));
 
             if should_open {
                 let expected_move = candles[i].atr_r * 6.0;
                 if expected_move > 2.0 * fee_rate {
                     let band_edge: f64 = 0.03;
-                    let frac = ((band_edge / 2.0) * cached_risk_mult).min(max_single_position);
+                    let frac = ((band_edge / 2.0) * state.cached_risk_mult).min(max_single_position);
                     let dir_label = meta_dir.unwrap();
-                    let direction = if dir_label == mgr_buy { Direction::Long } else { Direction::Short };
+                    let direction = if dir_label == state.mgr_buy { Direction::Long } else { Direction::Short };
 
                     let (from_asset, to_asset, deploy_amount, price_for_swap) = match direction {
                         Direction::Long => {
-                            let avail = treasury.balance(&args.base_asset);
+                            let avail = state.treasury.balance(&args.base_asset);
                             (args.base_asset.as_str(), args.quote_asset.as_str(), avail * frac, quote_price)
                         }
                         Direction::Short => {
-                            let avail = treasury.balance(&args.quote_asset);
+                            let avail = state.treasury.balance(&args.quote_asset);
                             let amount = avail * frac;
                             (args.quote_asset.as_str(), args.base_asset.as_str(), amount, 1.0 / quote_price)
                         }
@@ -874,12 +752,12 @@ fn main() {
                                      else { deploy_amount * quote_price };
 
                     if base_value > 10.0 {
-                        let (spent, received) = treasury.swap(
+                        let (spent, received) = state.treasury.swap(
                             from_asset, to_asset, deploy_amount, price_for_swap, fee_rate);
 
                         // BUY: claim WBTC. SELL: USDC already in balance.
                         if direction == Direction::Long {
-                            treasury.claim(&args.quote_asset, received);
+                            state.treasury.claim(&args.quote_asset, received);
                         }
 
                         let entry_fee = base_value * fee_rate;
@@ -888,19 +766,19 @@ fn main() {
                             Direction::Short => (spent * quote_price, 0.0),
                         };
                         let pos = ManagedPosition::new(
-                            next_position_id, i, quote_price, candles[i].atr_r,
+                            state.next_position_id, i, quote_price, candles[i].atr_r,
                             direction, deployed_usd, quote_held, entry_fee,
                             k_stop, k_tp,
                         );
-                        next_position_id += 1;
-                        hold_swaps += 1;
+                        state.next_position_id += 1;
+                        state.hold_swaps += 1;
                         let dir_str = if direction == Direction::Long { "Buy" } else { "Sell" };
                         ledger.execute(
                             "INSERT INTO trade_ledger (step,candle_idx,timestamp,direction,entry_price,position_usd,swap_fee_pct,exit_reason)
                              VALUES (?1,?2,?3,?4,?5,?6,?7,'Open')",
-                            rusqlite::params![log_step, i as i64, &candles[i].ts, dir_str, quote_price, base_value, fee_rate * 100.0],
+                            rusqlite::params![state.log_step, i as i64, &candles[i].ts, dir_str, quote_price, base_value, fee_rate * 100.0],
                         ).ok();
-                        positions.push(pos);
+                        state.positions.push(pos);
                     }
                 }
             }
@@ -910,11 +788,11 @@ fn main() {
             // Nothing else. No graduated gate, no stability gate, no phase gate.
             // Risk branch: compute only at recalib intervals (not every candle).
             // Between recalibs, reuse the last risk_mult.
-            if encode_count % args.recalib_interval == 0 || encode_count < 100 {
-                let branch_features = portfolio.risk_branch_wat(&vm, &risk_scalar);
+            if state.encode_count % args.recalib_interval == 0 || state.encode_count < 100 {
+                let branch_features = state.portfolio.risk_branch_wat(&vm, &risk_scalar);
                 let mut worst_ratio = 1.0_f64;
-                let healthy = portfolio.is_healthy() && portfolio.trades_taken >= 20;
-                for (bi, branch) in risk_branches.iter_mut().enumerate() {
+                let healthy = state.portfolio.is_healthy() && state.portfolio.trades_taken >= 20;
+                for (bi, branch) in state.risk_branches.iter_mut().enumerate() {
                     let features = &branch_features[bi];
                     if branch.subspace.n() >= 10 {
                         let residual = branch.subspace.residual(features);
@@ -925,11 +803,11 @@ fn main() {
                     }
                     if healthy { branch.subspace.update(features); }
                 }
-                cached_risk_mult = if risk_branches[0].subspace.n() >= 10 {
+                state.cached_risk_mult = if state.risk_branches[0].subspace.n() >= 10 {
                     worst_ratio
                 } else { 0.5 };
             }
-            let risk_mult = cached_risk_mult;
+            let risk_mult = state.cached_risk_mult;
 
             // The treasury doesn't move until the portfolio has proven edge.
             // Two requirements:
@@ -937,10 +815,10 @@ fn main() {
             // 2. Curve is valid (the conviction-accuracy relationship exists)
             // Before both are met, predictions are hypothetical — recorded in the
             // ledger but the treasury withholds capital.
-            let portfolio_proven = portfolio.phase != Phase::Observe && mgr_curve_valid;
+            let portfolio_proven = state.portfolio.phase != Phase::Observe && state.mgr_curve_valid;
             let position_frac = if meta_dir.is_some()
                 && portfolio_proven
-                && (conviction_threshold <= 0.0 || meta_conviction >= conviction_threshold)
+                && (state.conviction_threshold <= 0.0 || meta_conviction >= state.conviction_threshold)
             {
                 let mt = if args.atr_multiplier > 0.0 {
                     args.atr_multiplier * candles[i].atr_r
@@ -949,8 +827,8 @@ fn main() {
                 match args.sizing.as_str() {
                     "kelly" => {
                         // Fast path: evaluate cached curve params. No sorting.
-                        let kelly_result = if curve_valid && cached_curve_b > 0.0 {
-                            let win_rate = (0.50 + cached_curve_a * (cached_curve_b * meta_conviction).exp()).min(0.95);
+                        let kelly_result = if state.curve_valid && state.cached_curve_b > 0.0 {
+                            let win_rate = (0.50 + state.cached_curve_a * (state.cached_curve_b * meta_conviction).exp()).min(0.95);
                             let edge = 2.0 * win_rate - 1.0;
                             if edge > 0.0 {
                                 let half_kelly_risk = edge / 2.0;
@@ -960,8 +838,8 @@ fn main() {
                         match kelly_result {
                             Some(frac) => {
                                 let frac = frac.min(1.0);
-                                let dd = if peak_treasury_equity > 0.0 {
-                                    (peak_treasury_equity - treasury_equity) / peak_treasury_equity
+                                let dd = if state.peak_treasury_equity > 0.0 {
+                                    (state.peak_treasury_equity - treasury_equity) / state.peak_treasury_equity
                                 } else { 0.0 };
                                 let dd_room = (args.max_drawdown - dd).max(0.0);
                                 let cap = (dd_room / (4.0 * mt)).min(1.0);
@@ -976,10 +854,10 @@ fn main() {
                     }
                     _ => {
                         // Legacy sizing with flip zone gate
-                        if conviction_threshold > 0.0 && meta_conviction < conviction_threshold {
+                        if state.conviction_threshold > 0.0 && meta_conviction < state.conviction_threshold {
                             None
                         } else {
-                            portfolio.position_frac(meta_conviction, args.min_conviction, conviction_threshold)
+                            state.portfolio.position_frac(meta_conviction, args.min_conviction, state.conviction_threshold)
                         }
                     }
                 }
@@ -988,19 +866,19 @@ fn main() {
             // decomplect:allow(braided-concerns) — open_position reserves capital on Pending path, ManagedPosition claims/swaps separately. Two accounting paths for one trade. Unify when position lifecycle is refactored.
             // Treasury allocation: reserve capital for this position.
             let deployed_usd = if let Some(frac) = position_frac {
-                treasury.open_position(treasury.allocatable() * frac)
+                state.treasury.open_position(state.treasury.allocatable() * frac)
             } else {
                 0.0
             };
 
-            pending.push_back(Pending {
+            state.pending.push_back(Pending {
                 candle_idx:    i,
                 year:          candles[i].year,
                 tht_vec,
                 tht_pred:      tht_pred.clone(),
                 raw_meta_dir:  raw_meta_dir,
                 meta_dir,
-                high_conviction:   conviction_threshold > 0.0 && meta_conviction >= conviction_threshold,
+                high_conviction:   state.conviction_threshold > 0.0 && meta_conviction >= state.conviction_threshold,
                 meta_conviction,
                 position_frac,
                 observer_vecs,
@@ -1022,19 +900,19 @@ fn main() {
             });
 
             // Decay once per candle.
-            tht_journal.decay(adaptive_decay);
-            mgr_journal.decay(adaptive_decay);
-            for observer in &mut observers {
+            state.tht_journal.decay(state.adaptive_decay);
+            state.mgr_journal.decay(state.adaptive_decay);
+            for observer in &mut state.observers {
                 observer.journal.decay(args.decay);
             }
 
             // ── Event-driven learning ─────────────────────────────────────
             // Snapshot recalib counts before scanning so we can detect if
             // any recalibration fired during this candle's learning.
-            let tht_recalib_before = tht_journal.recalib_count();
+            let tht_recalib_before = state.tht_journal.recalib_count();
 
             let current_price = candles[i].close;
-            for entry in pending.iter_mut() {
+            for entry in state.pending.iter_mut() {
                 let entry_price = candles[entry.candle_idx].close;
                 let pct         = (current_price - entry_price) / entry_price;
                 let abs_pct     = pct.abs();
@@ -1043,9 +921,9 @@ fn main() {
                 entry.path_candles = i - entry.candle_idx;
 
                 // Track directional excursion relative to predicted direction.
-                let directional_pct = if entry.meta_dir == Some(tht_buy) {
+                let directional_pct = if entry.meta_dir == Some(state.tht_buy) {
                     pct
-                } else if entry.meta_dir == Some(tht_sell) {
+                } else if entry.meta_dir == Some(state.tht_sell) {
                     -pct
                 } else {
                     pct.abs() // no direction → track absolute
@@ -1065,7 +943,7 @@ fn main() {
                 // Managed exits: the market closes the trade, not the clock.
                 if entry.exit_reason.is_none()
                     && entry.position_frac.is_some()
-                    && portfolio.phase != Phase::Observe
+                    && state.portfolio.phase != Phase::Observe
                 {
                     // This trade's ATR at entry — how volatile was the market when we entered?
                     let entry_atr = candles[entry.candle_idx].atr_r;
@@ -1096,29 +974,29 @@ fn main() {
                     } else {
                         args.move_threshold
                     };
-                    let outcome = if pct > thresh       { Some(tht_buy)  }
-                                  else if pct < -thresh { Some(tht_sell) }
+                    let outcome = if pct > thresh       { Some(state.tht_buy)  }
+                                  else if pct < -thresh { Some(state.tht_sell) }
                                   else                  { None };
 
                     if let Some(o) = outcome {
                         entry.crossing_candle = Some(i);
-                        let sw = signal_weight(abs_pct, &mut move_sum, &mut move_count);
-                        tht_journal.observe(&entry.tht_vec, o, sw);
+                        let sw = signal_weight(abs_pct, &mut state.move_sum, &mut state.move_count);
+                        state.tht_journal.observe(&entry.tht_vec, o, sw);
                         // Manager does NOT learn here. Manager learns Buy/Sell (direction)
                         // at first-crossing in the resolution block below.
                         // wat/manager.wat: "Does NOT know about costs."
                         // Observer resolution: learn, track, gate, validate, log.
                         // Each observer resolves its prediction against the outcome.
                         for (ei, expert_vec) in entry.observer_vecs.iter().enumerate() {
-                            if let Some(log) = observers[ei].resolve(
+                            if let Some(log) = state.observers[ei].resolve(
                                 expert_vec, &entry.observer_preds[ei], o, sw,
                                 args.conviction_quantile, conviction_window,
                             ) {
                                 if args.diagnostics { ledger.execute(
                                     "INSERT INTO observer_log (step,observer,conviction,direction,correct)
                                      VALUES (?1,?2,?3,?4,?5)",
-                                    params![log_step, log.name, log.conviction,
-                                            observers[ei].journal.label_name(log.direction).unwrap_or("?"), log.correct as i32],
+                                    params![state.log_step, log.name, log.conviction,
+                                            state.observers[ei].journal.label_name(log.direction).unwrap_or("?"), log.correct as i32],
                                 ).ok(); }
                             }
                         }
@@ -1129,21 +1007,21 @@ fn main() {
             }
 
             // Log any recalibrations that fired during this candle's learning.
-            if tht_journal.recalib_count() != tht_recalib_before {
+            if state.tht_journal.recalib_count() != tht_recalib_before {
                 // Pre-compute curve params for Kelly — once per recalib, not per trade.
                 // Uses the generalist's resolved_preds for the curve fit.
-                if let Some((_, a, b)) = kelly_frac(0.15, &resolved_preds, 50,
+                if let Some((_, a, b)) = kelly_frac(0.15, &state.resolved_preds, 50,
                     if args.atr_multiplier > 0.0 { args.atr_multiplier * candles[i].atr_r } else { args.move_threshold }) {
-                    cached_curve_a = a;
-                    cached_curve_b = b;
-                    curve_valid = true;
+                    state.cached_curve_a = a;
+                    state.cached_curve_b = b;
+                    state.curve_valid = true;
                 }
                 // Manager's own proof: band-based, not exponential.
                 // decomplect:allow(inline-computation) — manager band proof, extracts to market/manager.rs
                 // Find the conviction band where accuracy > 51% with 500+ samples.
                 // The sweet spot is at 5-10σ (geometric property of dims).
                 // The manager acts only in its proven band.
-                if mgr_resolved.len() >= 500 {
+                if state.mgr_resolved.len() >= 500 {
                     let sigma = 1.0 / (args.dims as f64).sqrt();
                     // Scan bands: [k*sigma, (k+2)*sigma] for k in 3..20
                     let mut best_acc = 0.5_f64;
@@ -1152,7 +1030,7 @@ fn main() {
                     for k in (3..18).step_by(1) {
                         let lo = k as f64 * sigma;
                         let hi = (k + 4) as f64 * sigma; // 4σ wide bands
-                        let in_band: Vec<&(f64, bool)> = mgr_resolved.iter()
+                        let in_band: Vec<&(f64, bool)> = state.mgr_resolved.iter()
                             .filter(|(c, _)| *c >= lo && *c < hi).collect();
                         let n = in_band.len();
                         if n >= 200 {
@@ -1165,36 +1043,36 @@ fn main() {
                         }
                     }
                     if best_acc > 0.51 && best_n >= 200 {
-                        mgr_curve_valid = true;
-                        mgr_proven_band = best_band;
+                        state.mgr_curve_valid = true;
+                        state.mgr_proven_band = best_band;
                     } else {
-                        mgr_curve_valid = false;
-                        mgr_proven_band = (0.0, 0.0);
+                        state.mgr_curve_valid = false;
+                        state.mgr_proven_band = (0.0, 0.0);
                     }
                 }
 
                 // Feed panel engram: if recent panel accuracy was good, store current state.
-                if panel_recalib_total >= 10 {
-                    let acc = panel_recalib_wins as f64 / panel_recalib_total as f64;
+                if state.panel_recalib_total >= 10 {
+                    let acc = state.panel_recalib_wins as f64 / state.panel_recalib_total as f64;
                     if acc > 0.55 {
-                        panel_engram.update(&panel_state);
+                        state.panel_engram.update(&panel_state);
                     }
                 }
-                panel_recalib_wins = 0;
-                panel_recalib_total = 0;
+                state.panel_recalib_wins = 0;
+                state.panel_recalib_total = 0;
 
                 ledger.execute(
                     "INSERT INTO recalib_log (step,journal,cos_raw,disc_strength,buy_count,sell_count)
                      VALUES (?1,?2,?3,?4,?5,?6)",
                     params![
-                        encode_count as i64, "thought",
-                        tht_journal.last_cos_raw(), tht_journal.last_disc_strength(),
-                        tht_journal.label_count(tht_buy) as i64, tht_journal.label_count(tht_sell) as i64,
+                        state.encode_count as i64, "thought",
+                        state.tht_journal.last_cos_raw(), state.tht_journal.last_disc_strength(),
+                        state.tht_journal.label_count(state.tht_buy) as i64, state.tht_journal.label_count(state.tht_sell) as i64,
                     ],
                 ).ok();
 
                 // Decode thought discriminant against the fact codebook.
-                if let Some(disc) = tht_journal.discriminant(tht_buy) {
+                if let Some(disc) = state.tht_journal.discriminant(state.tht_buy) {
                     let disc_vec = Vector::from_f64(disc);
                     let mut decoded: Vec<(String, f64)> = codebook_vecs.iter().zip(codebook_labels.iter())
                         .map(|(v, l)| (l.clone(), holon::Similarity::cosine(&disc_vec, v)))
@@ -1205,7 +1083,7 @@ fn main() {
                             "INSERT INTO disc_decode (step,journal,rank,fact_label,cosine)
                              VALUES (?1,?2,?3,?4,?5)",
                             params![
-                                encode_count as i64, "thought",
+                                state.encode_count as i64, "thought",
                                 (rank + 1) as i64, label, cos,
                             ],
                         ).ok();
@@ -1220,7 +1098,7 @@ fn main() {
             // learning labels. Safety max (10× horizon) prevents unbounded queue growth.
             let max_pending_age = args.horizon * 10;
             let mut resolved_indices: Vec<usize> = Vec::new();
-            for (qi, entry) in pending.iter().enumerate() {
+            for (qi, entry) in state.pending.iter().enumerate() {
                 let age = i - entry.candle_idx;
                 let safety_expired = age >= max_pending_age;
                 let market_exited = entry.exit_reason.is_some();
@@ -1232,7 +1110,7 @@ fn main() {
             let mut resolved_entries: Vec<Pending> = Vec::new();
             for &qi in resolved_indices.iter().rev() {
                 // VecDeque::remove returns Option, but we just found these indices
-                if let Some(entry) = pending.remove(qi) {
+                if let Some(entry) = state.pending.remove(qi) {
                     resolved_entries.push(entry);
                 }
             }
@@ -1250,17 +1128,17 @@ fn main() {
                 let entry_candle = &candles[entry.candle_idx];
 
                 if final_out.is_none() {
-                    noise_count += 1;
+                    state.noise_count += 1;
                 } else {
-                    labeled_count += 1;
+                    state.labeled_count += 1;
                 }
 
                 // Rolling accuracy per journal (non-Noise only).
                 if let Some(outcome) = final_out {
                     if let Some(td) = entry.tht_pred.direction {
                         let ok = td == outcome;
-                        tht_rolling.push_back(ok);
-                        if tht_rolling.len() > rolling_cap { tht_rolling.pop_front(); }
+                        state.tht_rolling.push_back(ok);
+                        if state.tht_rolling.len() > rolling_cap { state.tht_rolling.pop_front(); }
                     }
 
                     // ── Manager learns from ALL non-Noise outcomes ──────────
@@ -1273,11 +1151,11 @@ fn main() {
                         // would it have been profitable after costs?
                         let expert_majority = {
                             let buys = entry.observer_preds.iter()
-                                .filter(|ep| ep.direction == Some(tht_buy)).count();
+                                .filter(|ep| ep.direction == Some(state.tht_buy)).count();
                             let sells = entry.observer_preds.iter()
-                                .filter(|ep| ep.direction == Some(tht_sell)).count();
-                            if buys > sells { Some(tht_buy) }
-                            else if sells > buys { Some(tht_sell) }
+                                .filter(|ep| ep.direction == Some(state.tht_sell)).count();
+                            if buys > sells { Some(state.tht_buy) }
+                            else if sells > buys { Some(state.tht_sell) }
                             else { None }
                         };
                         if expert_majority.is_some() {
@@ -1289,12 +1167,12 @@ fn main() {
                             // teaches the Sell accumulator. The discriminant separates.
                             let price_change = (current_price - candles[entry.candle_idx].close)
                                 / candles[entry.candle_idx].close;
-                            let mgr_label = if price_change > 0.0 { mgr_buy } else { mgr_sell };
+                            let mgr_label = if price_change > 0.0 { state.mgr_buy } else { state.mgr_sell };
 
                             // Learn from the SAME thought the manager predicted with.
                             // Stored at prediction time, delta-enriched. One encoding path.
                             if let Some(ref mgr_vec) = entry.mgr_thought {
-                                mgr_journal.observe(mgr_vec, mgr_label, 1.0);
+                                state.mgr_journal.observe(mgr_vec, mgr_label, 1.0);
                             }
 
                             // Track for proof gate: did the manager predict the right direction?
@@ -1306,11 +1184,11 @@ fn main() {
                             } else {
                                 false // no prediction = not correct
                             };
-                            mgr_resolved.push_back((entry.meta_conviction, mgr_correct));
-                            if mgr_resolved.len() > 5000 { mgr_resolved.pop_front(); }
-                            resolved_preds.push_back((entry.meta_conviction, mgr_correct));
-                            if resolved_preds.len() > conviction_window {
-                                resolved_preds.pop_front();
+                            state.mgr_resolved.push_back((entry.meta_conviction, mgr_correct));
+                            if state.mgr_resolved.len() > 5000 { state.mgr_resolved.pop_front(); }
+                            state.resolved_preds.push_back((entry.meta_conviction, mgr_correct));
+                            if state.resolved_preds.len() > conviction_window {
+                                state.resolved_preds.pop_front();
                             }
                         }
                     }
@@ -1326,7 +1204,7 @@ fn main() {
                     let trade_pct = entry.exit_pct;
                     {
                         // ── Accounting: compute P&L (real or hypothetical) ────
-                        let gross_ret = if dir == mgr_buy { trade_pct }
+                        let gross_ret = if dir == state.mgr_buy { trade_pct }
                             else { -trade_pct };
                         let per_swap = args.swap_fee + args.slippage;
                         let after_entry = 1.0 - per_swap;
@@ -1351,10 +1229,10 @@ fn main() {
                         if is_live {
                             let trade_fees = pos_usd * (args.swap_fee * 2.0);
                             let trade_slip = pos_usd * (args.slippage * 2.0);
-                            let trade_dir = if dir == mgr_buy { Direction::Long } else { Direction::Short };
-                            portfolio.record_trade(trade_pct, frac, trade_dir, entry.year,
+                            let trade_dir = if dir == state.mgr_buy { Direction::Long } else { Direction::Short };
+                            state.portfolio.record_trade(trade_pct, frac, trade_dir, entry.year,
                                                 args.swap_fee, args.slippage);
-                            treasury.close_position(entry.deployed_usd,
+                            state.treasury.close_position(entry.deployed_usd,
                                 pos_usd * gross_ret, trade_fees, trade_slip);
                         }
 
@@ -1376,9 +1254,9 @@ fn main() {
                               crossing_candles,horizon_candles,outcome,won,exit_reason)
                              VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25)",
                             params![
-                                log_step, entry.candle_idx as i64, &entry_candle.ts,
+                                state.log_step, entry.candle_idx as i64, &entry_candle.ts,
                                 exit_candle.map(|ci| ci as i64), exit_ts,
-                                mgr_journal.label_name(dir).unwrap_or("?"), entry.meta_conviction,
+                                state.mgr_journal.label_name(dir).unwrap_or("?"), entry.meta_conviction,
                                 entry.high_conviction as i32,
                                 entry.entry_price, exit_price,
                                 frac, pos_usd,
@@ -1388,7 +1266,7 @@ fn main() {
                                 net_ret * 100.0, trade_pnl, treasury_equity,
                                 entry.max_favorable * 100.0, entry.max_adverse * 100.0,
                                 crossing_elapsed, entry.path_candles as i64,
-                                final_out.map(|l| tht_journal.label_name(l).unwrap_or("?").to_string()).unwrap_or_else(|| "Noise".to_string()), (net_ret > 0.0) as i32,
+                                final_out.map(|l| state.tht_journal.label_name(l).unwrap_or("?").to_string()).unwrap_or_else(|| "Noise".to_string()), (net_ret > 0.0) as i32,
                                 match entry.exit_reason {
                                     Some(ExitReason::TrailingStop) => "TrailingStop",
                                     Some(ExitReason::TakeProfit) => "TakeProfit",
@@ -1399,8 +1277,8 @@ fn main() {
                         ).ok();
 
                         // Panel tracking (all predictions, not just live)
-                        panel_recalib_total += 1;
-                        if final_out == Some(dir) { panel_recalib_wins += 1; }
+                        state.panel_recalib_total += 1;
+                        if final_out == Some(dir) { state.panel_recalib_wins += 1; }
 
                         // resolved_preds is populated at first-crossing time (direction
                         // accuracy only). No second push here — the calibration curve
@@ -1408,47 +1286,47 @@ fn main() {
 
                         // ── Risk/diagnostics: only for live trades ───────────
                         if is_live {
-                                let dd = if peak_treasury_equity > 0.0 {
-                                    (peak_treasury_equity - treasury_equity) / peak_treasury_equity * 100.0
+                                let dd = if state.peak_treasury_equity > 0.0 {
+                                    (state.peak_treasury_equity - treasury_equity) / state.peak_treasury_equity * 100.0
                                 } else { 0.0 };
                                 let (streak_len, streak_dir) = {
                                     let mut len = 0i32;
-                                    if let Some(&last) = portfolio.rolling.back() {
-                                        for &o in portfolio.rolling.iter().rev() {
+                                    if let Some(&last) = state.portfolio.rolling.back() {
+                                        for &o in state.portfolio.rolling.iter().rev() {
                                             if o == last { len += 1; } else { break; }
                                         }
                                     }
-                                    let dir = if portfolio.rolling.back() == Some(&true) { "winning" } else { "losing" };
+                                    let dir = if state.portfolio.rolling.back() == Some(&true) { "winning" } else { "losing" };
                                     (len, dir)
                                 };
-                                let recent_acc = if portfolio.rolling.len() >= 5 {
-                                    portfolio.rolling.iter().filter(|&&x| x).count() as f64
-                                        / portfolio.rolling.len() as f64
+                                let recent_acc = if state.portfolio.rolling.len() >= 5 {
+                                    state.portfolio.rolling.iter().filter(|&&x| x).count() as f64
+                                        / state.portfolio.rolling.len() as f64
                                 } else { 0.5 };
                                 let eq_pct = (treasury_equity - args.initial_equity) / args.initial_equity * 100.0;
                                 let won = (final_out == Some(dir)) as i32;
                                 if args.diagnostics { ledger.execute(
                                     "INSERT INTO risk_log (step,drawdown_pct,streak_len,streak_dir,recent_acc,equity_pct,won)
                                      VALUES (?1,?2,?3,?4,?5,?6,?7)",
-                                    params![log_step, dd, streak_len, streak_dir, recent_acc, eq_pct, won],
+                                    params![state.log_step, dd, streak_len, streak_dir, recent_acc, eq_pct, won],
                                 ).ok(); }
                             // Track flip-zone trade outcomes.
                             if entry.high_conviction {
                                 // Adaptive decay state machine.
                                 let won = final_out == Some(dir);
-                                highconv_wins.push_back(won);
-                                if highconv_wins.len() > highconv_rolling_cap {
-                                    highconv_wins.pop_front();
+                                state.highconv_wins.push_back(won);
+                                if state.highconv_wins.len() > highconv_rolling_cap {
+                                    state.highconv_wins.pop_front();
                                 }
-                                if highconv_wins.len() >= 30 {
-                                    let wr = highconv_wins.iter().filter(|&&w| w).count() as f64
-                                           / highconv_wins.len() as f64;
-                                    if !in_adaptation && wr < 0.50 {
-                                        in_adaptation = true;
-                                        adaptive_decay = decay_adapting;
-                                    } else if in_adaptation && wr > 0.55 {
-                                        in_adaptation = false;
-                                        adaptive_decay = decay_stable;
+                                if state.highconv_wins.len() >= 30 {
+                                    let wr = state.highconv_wins.iter().filter(|&&w| w).count() as f64
+                                           / state.highconv_wins.len() as f64;
+                                    if !state.in_adaptation && wr < 0.50 {
+                                        state.in_adaptation = true;
+                                        state.adaptive_decay = decay_adapting;
+                                    } else if state.in_adaptation && wr > 0.55 {
+                                        state.in_adaptation = false;
+                                        state.adaptive_decay = decay_stable;
                                     }
                                 }
                             }
@@ -1456,7 +1334,7 @@ fn main() {
                             for label in &entry.fact_labels {
                                 if args.diagnostics { ledger.execute(
                                     "INSERT INTO trade_facts (step, fact_label) VALUES (?1, ?2)",
-                                    params![log_step, label],
+                                    params![state.log_step, label],
                                 ).ok(); }
                             }
                             // Store thought vectors for engram analysis.
@@ -1468,7 +1346,7 @@ fn main() {
                                     "INSERT INTO trade_vectors (step, won, tht_data)
                                      VALUES (?1, ?2, ?3)",
                                     params![
-                                        log_step, won,
+                                        state.log_step, won,
                                         tht_bytes,
                                     ],
                                 ).ok(); }
@@ -1486,35 +1364,35 @@ fn main() {
                       actual,traded,position_frac,equity,outcome_pct)
                      VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
                     params![
-                        log_step, entry.candle_idx as i64, &entry_candle.ts,
+                        state.log_step, entry.candle_idx as i64, &entry_candle.ts,
                         entry.tht_pred.raw_cos, entry.tht_pred.conviction,
-                        entry.tht_pred.direction.and_then(|d| tht_journal.label_name(d).map(|s| s.to_string())),
-                        entry.meta_dir.and_then(|d| mgr_journal.label_name(d).map(|s| s.to_string())),
+                        entry.tht_pred.direction.and_then(|d| state.tht_journal.label_name(d).map(|s| s.to_string())),
+                        entry.meta_dir.and_then(|d| state.mgr_journal.label_name(d).map(|s| s.to_string())),
                         entry.meta_conviction,
-                        final_out.and_then(|l| tht_journal.label_name(l).map(|s| s.to_string())).unwrap_or_else(|| "Noise".to_string()),
+                        final_out.and_then(|l| state.tht_journal.label_name(l).map(|s| s.to_string())).unwrap_or_else(|| "Noise".to_string()),
                         entry.position_frac.is_some() as i32,
                         entry.position_frac,
                         treasury_equity,
                         entry.outcome_pct,
                     ],
                 ).ok();
-                log_step   += 1;
-                db_batch   += 1;
-                if db_batch >= 5_000 {
+                state.log_step   += 1;
+                state.db_batch   += 1;
+                if state.db_batch >= 5_000 {
                     ledger.execute_batch("COMMIT; BEGIN").ok();
-                    db_batch = 0;
+                    state.db_batch = 0;
                 }
 
-                portfolio.tick_observe();
+                state.portfolio.tick_observe();
             }
 
             // ── Progress line ─────────────────────────────────────────────
-            if encode_count % progress_every == 0 {
+            if state.encode_count % progress_every == 0 {
                 let elapsed = t_start.elapsed().as_secs_f64();
-                let rate    = encode_count as f64 / elapsed;
-                let eta     = (loop_count - encode_count) as f64 / rate;
-                let tht_acc = if tht_rolling.is_empty() { 0.0 }
-                    else { tht_rolling.iter().filter(|&&x| x).count() as f64 / tht_rolling.len() as f64 * 100.0 };
+                let rate    = state.encode_count as f64 / elapsed;
+                let eta     = (loop_count - state.encode_count) as f64 / rate;
+                let tht_acc = if state.tht_rolling.is_empty() { 0.0 }
+                    else { state.tht_rolling.iter().filter(|&&x| x).count() as f64 / state.tht_rolling.len() as f64 * 100.0 };
                 let ret = (treasury_equity - args.initial_equity) / args.initial_equity * 100.0;
                 let bnh = (candles[i].close - bnh_entry) / bnh_entry * 100.0;
                 let atr_now = candles[i].atr_r;
@@ -1523,53 +1401,53 @@ fn main() {
                     k_stop * atr_now * 100.0,
                     k_tp * atr_now * 100.0,
                     k_trail * atr_now * 100.0,
-                    treasury.n_open);
+                    state.treasury.n_open);
                 eprintln!(
                     "  {}/{} ({:.0}/s ETA {:.0}s) | {} | {} | tht={:.1}% | trades={} win={:.1}% | ${:.0} ({:+.1}%) vs B&H {:+.1}% | flip@{:.3} {}{}",
-                    encode_count, loop_count, rate, eta,
+                    state.encode_count, loop_count, rate, eta,
                     &candles[i].ts[..10],
-                    portfolio.phase,
+                    state.portfolio.phase,
                     tht_acc,
-                    portfolio.trades_taken, portfolio.win_rate(),
+                    state.portfolio.trades_taken, state.portfolio.win_rate(),
                     treasury_equity, ret, bnh,
-                    conviction_threshold,
-                    if !mgr_curve_valid { "CALIBRATING" }
+                    state.conviction_threshold,
+                    if !state.mgr_curve_valid { "CALIBRATING" }
                     else if panel_familiar { "ENGRAM" }
-                    else if in_adaptation { "ADAPT" }
+                    else if state.in_adaptation { "ADAPT" }
                     else { "STABLE" },
                     exit_info,
                 );
                 if args.asset_mode == "hold" {
                     let tv = treasury_equity;
                     let tv_ret = (treasury_equity - args.initial_equity) / args.initial_equity * 100.0;
-                    let mut proven: Vec<&str> = observers.iter()
+                    let mut proven: Vec<&str> = state.observers.iter()
                         .filter(|e| e.curve_valid).map(|e| e.name).collect();
-                    if curve_valid { proven.push("generalist"); }
+                    if state.curve_valid { proven.push("generalist"); }
                     let proven_str = if proven.is_empty() { "none".to_string() }
                         else { proven.join(",") };
-                    let band_str = if mgr_curve_valid {
-                        format!(" band=[{:.3},{:.3}]", mgr_proven_band.0, mgr_proven_band.1)
+                    let band_str = if state.mgr_curve_valid {
+                        format!(" band=[{:.3},{:.3}]", state.mgr_proven_band.0, state.mgr_proven_band.1)
                     } else { " band=none".to_string() };
-                    let open_positions = positions.len();
+                    let open_positions = state.positions.len();
                     eprintln!("    treasury: ${:.0} ({:+.1}%) | pos={} swaps={} wins={} | proven=[{}]{}",
-                        tv, tv_ret, open_positions, hold_swaps, hold_wins, proven_str, band_str);
+                        tv, tv_ret, open_positions, state.hold_swaps, state.hold_wins, proven_str, band_str);
                 }
             }
         }
 
-        cursor = batch_end;
+        state.cursor = batch_end;
     }
 
     // Final treasury equity for post-loop reporting
     let final_price = candles[end_idx - 1].close;
-    let prices = treasury.price_map(&[(&args.quote_asset, final_price)]);
-    let treasury_equity = treasury.total_value(&prices);
+    let prices = state.treasury.price_map(&[(&args.quote_asset, final_price)]);
+    let treasury_equity = state.treasury.total_value(&prices);
 
     // ─ Drain remaining pending entries (log, no further learning) ────────────
-    while let Some(entry) = pending.pop_front() {
+    while let Some(entry) = state.pending.pop_front() {
         let final_out: Option<Label> = entry.first_outcome;
         let entry_candle = &candles[entry.candle_idx];
-        if final_out.is_none() { noise_count += 1; } else { labeled_count += 1; }
+        if final_out.is_none() { state.noise_count += 1; } else { state.labeled_count += 1; }
 
         ledger.execute(
             "INSERT INTO candle_log
@@ -1579,19 +1457,19 @@ fn main() {
               actual,traded,position_frac,equity,outcome_pct)
              VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
             params![
-                log_step, entry.candle_idx as i64, &entry_candle.ts,
+                state.log_step, entry.candle_idx as i64, &entry_candle.ts,
                 entry.tht_pred.raw_cos, entry.tht_pred.conviction,
-                entry.tht_pred.direction.and_then(|d| tht_journal.label_name(d).map(|s| s.to_string())),
-                entry.meta_dir.and_then(|d| mgr_journal.label_name(d).map(|s| s.to_string())),
+                entry.tht_pred.direction.and_then(|d| state.tht_journal.label_name(d).map(|s| s.to_string())),
+                entry.meta_dir.and_then(|d| state.mgr_journal.label_name(d).map(|s| s.to_string())),
                 entry.meta_conviction,
-                final_out.and_then(|l| tht_journal.label_name(l).map(|s| s.to_string())).unwrap_or_else(|| "Noise".to_string()),
+                final_out.and_then(|l| state.tht_journal.label_name(l).map(|s| s.to_string())).unwrap_or_else(|| "Noise".to_string()),
                 entry.position_frac.is_some() as i32,
                 entry.position_frac,
                 treasury_equity,
                 entry.outcome_pct,
             ],
         ).ok();
-        log_step += 1;
+        state.log_step += 1;
     }
 
     ledger.execute_batch("COMMIT").ok();
@@ -1603,7 +1481,7 @@ fn main() {
 
     eprintln!("\n═══════════════════════════════════════════════════════════");
     eprintln!("  enterprise complete — {} candles in {:.1}s ({:.0}/s)",
-        encode_count, total_time, encode_count as f64 / total_time);
+        state.encode_count, total_time, state.encode_count as f64 / total_time);
     eprintln!("  Orchestration: {}", "enterprise");
     if args.swap_fee > 0.0 || args.slippage > 0.0 {
         let rt = 2.0 * (args.swap_fee + args.slippage) * 100.0;
@@ -1612,33 +1490,33 @@ fn main() {
     }
     eprintln!("  Exit: ATR-scaled (K_stop={} K_trail={} K_tp={})", k_stop, k_trail, k_tp);
     eprintln!("  Labeled: {}  Noise: {} ({:.1}% noise rate)",
-        labeled_count, noise_count,
-        noise_count as f64 / (labeled_count + noise_count).max(1) as f64 * 100.0);
+        state.labeled_count, state.noise_count,
+        state.noise_count as f64 / (state.labeled_count + state.noise_count).max(1) as f64 * 100.0);
     eprintln!();
     eprintln!("  Equity: ${:.2} ({:+.2}%) | B&H: {:+.2}%",
         treasury_equity, ret, bnh_final);
     eprintln!("  Trades taken: {}  Won: {}  Win rate: {:.1}%  Skipped: {}",
-        portfolio.trades_taken, portfolio.trades_won, portfolio.win_rate(), portfolio.trades_skipped);
+        state.portfolio.trades_taken, state.portfolio.trades_won, state.portfolio.win_rate(), state.portfolio.trades_skipped);
     eprintln!("  Treasury: ${:.2} available  ${:.2} deployed  {:.1}% utilization  fees=${:.2}  slip=${:.2}",
-        treasury.balance(&args.base_asset), treasury.deployed(&args.base_asset),
-        treasury.utilization() * 100.0,
-        treasury.total_fees_paid, treasury.total_slippage);
+        state.treasury.balance(&args.base_asset), state.treasury.deployed(&args.base_asset),
+        state.treasury.utilization() * 100.0,
+        state.treasury.total_fees_paid, state.treasury.total_slippage);
     eprintln!();
     eprintln!("  Thought journal — buy_obs={} sell_obs={} cos_raw={:.4} disc_strength={:.4} recalibs={}",
-        tht_journal.label_count(tht_buy), tht_journal.label_count(tht_sell),
-        tht_journal.last_cos_raw(), tht_journal.last_disc_strength(), tht_journal.recalib_count());
+        state.tht_journal.label_count(state.tht_buy), state.tht_journal.label_count(state.tht_sell),
+        state.tht_journal.last_cos_raw(), state.tht_journal.last_disc_strength(), state.tht_journal.recalib_count());
     eprintln!();
 
-    let tht_acc = if tht_rolling.is_empty() { 0.0 }
-        else { tht_rolling.iter().filter(|&&x| x).count() as f64 / tht_rolling.len() as f64 * 100.0 };
+    let tht_acc = if state.tht_rolling.is_empty() { 0.0 }
+        else { state.tht_rolling.iter().filter(|&&x| x).count() as f64 / state.tht_rolling.len() as f64 * 100.0 };
     eprintln!("  Rolling accuracy (last {}): thought={:.1}%",
         rolling_cap, tht_acc);
     eprintln!();
 
     // Observer panel summary.
-    if !observers.is_empty() {
+    if !state.observers.is_empty() {
         eprintln!("  Observer panel:");
-        for observer in &observers {
+        for observer in &state.observers {
             eprintln!("    {}: recalibs={} disc_str={:.4} buy={} sell={}",
                 observer.name,
                 observer.journal.recalib_count(),
@@ -1657,6 +1535,6 @@ fn main() {
     // diverges from treasury value in hold mode. Treasury is the source of truth.
     // TODO: compute by-year from the treasury's value snapshots or the ledger DB.
 
-    eprintln!("  Run DB: {} ({} rows)", ledger_path, log_step);
+    eprintln!("  Run DB: {} ({} rows)", ledger_path, state.log_step);
     eprintln!("═══════════════════════════════════════════════════════════");
 }
