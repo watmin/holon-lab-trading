@@ -453,7 +453,7 @@ fn main() {
 
         // ── Sequential: predict + buffer + learn + expire ────────────────────
         for (i, tht_vec, tht_facts, observer_vecs) in tht_vecs {
-            state.on_candle(i, &candles, tht_vec, tht_facts, observer_vecs, &ctx);
+            state.on_candle(i, &candles[i], tht_vec, tht_facts, observer_vecs, &ctx);
         }
 
         state.cursor = batch_end;

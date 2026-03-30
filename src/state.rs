@@ -11,6 +11,7 @@ use holon::memory::{Journal, OnlineSubspace};
 use holon::{Primitives, ScalarMode, VectorManager, Vector};
 
 use crate::candle::Candle;
+use crate::event::Event;
 use crate::journal::{Label, Direction, Prediction, register_direction, register_exit};
 use crate::market::observer::Observer;
 use crate::market::{parse_candle_hour, parse_candle_day};
@@ -379,15 +380,37 @@ impl EnterpriseState {
         }
     }
 
+    /// The enterprise's public interface. One event, one fold step.
+    /// The enterprise doesn't know where events come from.
+    /// Backtest, websocket, test harness — same Event, same fold.
+    pub fn on_event(&mut self, event: &Event, _ctx: &CandleContext) {
+        match event {
+            Event::Candle { asset: _, candle } => {
+                // In the streaming model, encoding would happen here.
+                // For now, the backtest runner pre-encodes via on_candle().
+                // This path handles un-encoded candles (future: live feed).
+                let _ = candle; // placeholder — live encoding not yet wired
+            }
+            Event::Deposit { asset, amount } => {
+                *self.treasury.balances.entry(asset.clone()).or_insert(0.0) += amount;
+            }
+            Event::Withdraw { asset, amount } => {
+                if let Some(bal) = self.treasury.balances.get_mut(asset) {
+                    *bal = (*bal - amount).max(0.0);
+                }
+            }
+        }
+    }
+
     /// Process one candle's pre-computed results. The fold's step function.
     ///
     /// Called once per candle in the sequential phase, after parallel encoding.
-    /// All mutable state lives on `self`. All immutable config comes via `ctx`.
-    /// `candles` is the full history (for lookback by pending entries).
+    /// The backtest runner pre-encodes in parallel (rayon), then calls this
+    /// sequentially. A live runner would encode per-candle and call on_event.
     pub fn on_candle(
         &mut self,
         i: usize,
-        candles: &[Candle],
+        candle: &Candle,
         tht_vec: Vector,
         tht_facts: Vec<String>,
         observer_vecs: Vec<Vector>,
@@ -428,9 +451,9 @@ impl EnterpriseState {
             generalist_pred: &tht_pred,
             generalist_atom: ctx.generalist_atom,
             generalist_curve_valid: self.curve_valid,
-            candle_atr: candles[i].atr_r,
-            candle_hour: parse_candle_hour(&candles[i].ts),
-            candle_day: parse_candle_day(&candles[i].ts),
+            candle_atr: candle.atr_r,
+            candle_hour: parse_candle_hour(&candle.ts),
+            candle_day: parse_candle_day(&candle.ts),
             disc_strength: self.tht_journal.last_disc_strength(),
         };
         let mgr_facts = encode_manager_thought(&mgr_ctx, ctx.mgr_atoms, ctx.mgr_scalar, ctx.min_opinion_magnitude);
@@ -567,7 +590,7 @@ impl EnterpriseState {
         // No flip. The enterprise doesn't invert its own decisions.
 
         // ── Position management: tick all open positions ─────────
-        let quote_price = candles[i].close;
+        let quote_price = candle.close;
         let fee_rate = ctx.swap_fee + ctx.slippage;
         // Treasury equity: the source of truth. Token-agnostic.
         let prices = self.treasury.price_map(&[(ctx.quote_asset, quote_price)]);
@@ -610,7 +633,7 @@ impl EnterpriseState {
                     &Primitives::bind(&ctx.exit_atoms.hold, &ctx.exit_scalar.encode_log(pos.candles_held as f64)),
                     &Primitives::bind(&ctx.exit_atoms.mfe, &ctx.exit_scalar.encode(mfe_frac.clamp(0.0, 1.0), ScalarMode::Linear { scale: 1.0 })),
                     &Primitives::bind(&ctx.exit_atoms.atr_entry, &ctx.exit_scalar.encode_log(pos.entry_atr.max(1e-10))),
-                    &Primitives::bind(&ctx.exit_atoms.atr_now, &ctx.exit_scalar.encode_log(candles[i].atr_r.max(1e-10))),
+                    &Primitives::bind(&ctx.exit_atoms.atr_now, &ctx.exit_scalar.encode_log(candle.atr_r.max(1e-10))),
                     &Primitives::bind(&ctx.exit_atoms.stop_dist, &ctx.exit_scalar.encode(stop_dist.clamp(0.0, 1.0), ScalarMode::Linear { scale: 1.0 })),
                     &Primitives::bind(&ctx.exit_atoms.phase, if pos.phase == PositionPhase::Runner { &ctx.exit_atoms.runner } else { &ctx.exit_atoms.active }),
                     &Primitives::bind(&ctx.exit_atoms.direction, if pos.direction == Direction::Long { &ctx.exit_atoms.buy } else { &ctx.exit_atoms.sell }),
@@ -655,7 +678,7 @@ impl EnterpriseState {
                             self.hold_swaps += 1;
                             if pos.return_pct(quote_price) > 0.0 { self.hold_wins += 1; }
                             self.last_exit_price = quote_price;
-                            self.last_exit_atr = candles[i].atr_r;
+                            self.last_exit_atr = candle.atr_r;
                         }
                     }
                     PositionExit::StopLoss | PositionExit::TakeProfit => {
@@ -672,7 +695,7 @@ impl EnterpriseState {
                         self.hold_swaps += 1;
                         if pos.return_pct(quote_price) > 0.0 { self.hold_wins += 1; }
                         self.last_exit_price = quote_price;
-                        self.last_exit_atr = candles[i].atr_r;
+                        self.last_exit_atr = candle.atr_r;
                     }
                 }
                 // Log to ledger
@@ -687,7 +710,7 @@ impl EnterpriseState {
                     "INSERT INTO trade_ledger (step,candle_idx,timestamp,direction,entry_price,exit_price,gross_return_pct,position_usd,swap_fee_pct,horizon_candles,won,exit_reason)
                      VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
                     rusqlite::params![
-                        self.log_step, i as i64, &candles[i].ts,
+                        self.log_step, i as i64, &candle.ts,
                         exit_dir, pos.entry_price, quote_price,
                         ret * 100.0, pos.base_deployed,
                         fee_rate * 100.0, pos.candles_held as i64,
@@ -721,7 +744,7 @@ impl EnterpriseState {
             && (meta_dir == Some(self.mgr_buy) || meta_dir == Some(self.mgr_sell));
 
         if should_open {
-            let expected_move = candles[i].atr_r * 6.0;
+            let expected_move = candle.atr_r * 6.0;
             if expected_move > 2.0 * fee_rate {
                 let band_edge: f64 = 0.03;
                 let frac = ((band_edge / 2.0) * self.cached_risk_mult).min(ctx.max_single_position);
@@ -758,7 +781,7 @@ impl EnterpriseState {
                         Direction::Short => (spent * quote_price, 0.0),
                     };
                     let pos = ManagedPosition::new(
-                        self.next_position_id, i, quote_price, candles[i].atr_r,
+                        self.next_position_id, i, quote_price, candle.atr_r,
                         direction, deployed_usd, quote_held, entry_fee,
                         ctx.k_stop, ctx.k_tp,
                     );
@@ -768,7 +791,7 @@ impl EnterpriseState {
                     ctx.ledger.execute(
                         "INSERT INTO trade_ledger (step,candle_idx,timestamp,direction,entry_price,position_usd,swap_fee_pct,exit_reason)
                          VALUES (?1,?2,?3,?4,?5,?6,?7,'Open')",
-                        rusqlite::params![self.log_step, i as i64, &candles[i].ts, dir_str, quote_price, base_value, fee_rate * 100.0],
+                        rusqlite::params![self.log_step, i as i64, &candle.ts, dir_str, quote_price, base_value, fee_rate * 100.0],
                     ).ok();
                     self.positions.push(pos);
                 }
@@ -813,7 +836,7 @@ impl EnterpriseState {
             && (self.conviction_threshold <= 0.0 || meta_conviction >= self.conviction_threshold)
         {
             let mt = if ctx.atr_multiplier > 0.0 {
-                ctx.atr_multiplier * candles[i].atr_r
+                ctx.atr_multiplier * candle.atr_r
             } else { ctx.move_threshold };
 
             match ctx.sizing {
@@ -865,7 +888,7 @@ impl EnterpriseState {
 
         self.pending.push_back(Pending {
             candle_idx:    i,
-            year:          candles[i].year,
+            year:          candle.year,
             tht_vec,
             tht_pred:      tht_pred.clone(),
             meta_dir,
@@ -878,16 +901,16 @@ impl EnterpriseState {
             fact_labels:   if ctx.diagnostics { tht_facts } else { Vec::new() },
             first_outcome: None,
             outcome_pct:   0.0,
-            entry_price:       candles[i].close,
-            entry_ts:          candles[i].ts.clone(),
-            entry_atr:         candles[i].atr_r,
+            entry_price:       candle.close,
+            entry_ts:          candle.ts.clone(),
+            entry_atr:         candle.atr_r,
             max_favorable:     0.0,
             max_adverse:       0.0,
             crossing_candles:  None,
             crossing_ts:       None,
             crossing_price:    None,
             path_candles:      0,
-            trailing_stop:     -(ctx.k_stop * candles[i].atr_r), // stop at K× ATR from this candle
+            trailing_stop:     -(ctx.k_stop * candle.atr_r), // stop at K× ATR from this candle
             exit_reason:       None,
             exit_pct:          0.0,
             deployed_usd,
@@ -905,7 +928,7 @@ impl EnterpriseState {
         // any recalibration fired during this candle's learning.
         let tht_recalib_before = self.tht_journal.recalib_count();
 
-        let current_price = candles[i].close;
+        let current_price = candle.close;
         for entry in self.pending.iter_mut() {
             let entry_price = entry.entry_price;
             let pct         = (current_price - entry_price) / entry_price;
@@ -972,8 +995,8 @@ impl EnterpriseState {
 
                 if let Some(o) = outcome {
                     entry.crossing_candles = Some(entry.path_candles);
-                    entry.crossing_ts = Some(candles[i].ts.clone());
-                    entry.crossing_price = Some(candles[i].close);
+                    entry.crossing_ts = Some(candle.ts.clone());
+                    entry.crossing_price = Some(candle.close);
                     let sw = signal_weight(abs_pct, &mut self.move_sum, &mut self.move_count);
                     self.tht_journal.observe(&entry.tht_vec, o, sw);
                     // Manager does NOT learn here. Manager learns Buy/Sell (direction)
@@ -1005,7 +1028,7 @@ impl EnterpriseState {
             // Pre-compute curve params for Kelly — once per recalib, not per trade.
             // Uses the generalist's resolved_preds for the curve fit.
             if let Some((_, a, b)) = kelly_frac(0.15, &self.resolved_preds, 50,
-                if ctx.atr_multiplier > 0.0 { ctx.atr_multiplier * candles[i].atr_r } else { ctx.move_threshold }) {
+                if ctx.atr_multiplier > 0.0 { ctx.atr_multiplier * candle.atr_r } else { ctx.move_threshold }) {
                 self.cached_curve_a = a;
                 self.cached_curve_b = b;
                 self.curve_valid = true;
@@ -1163,7 +1186,7 @@ impl EnterpriseState {
                 {
                     let exit_ts = entry.crossing_ts.clone();
                     let exit_price = entry.crossing_price
-                        .unwrap_or(candles[i].close);
+                        .unwrap_or(candle.close);
                     let crossing_elapsed = entry.crossing_candles
                         .map(|c| c as i64);
                     ctx.ledger.execute(
@@ -1228,8 +1251,8 @@ impl EnterpriseState {
             let tht_acc = if self.tht_rolling.is_empty() { 0.0 }
                 else { self.tht_rolling.iter().filter(|&&x| x).count() as f64 / self.tht_rolling.len() as f64 * 100.0 };
             let ret = (treasury_equity - ctx.initial_equity) / ctx.initial_equity * 100.0;
-            let bnh = (candles[i].close - ctx.bnh_entry) / ctx.bnh_entry * 100.0;
-            let atr_now = candles[i].atr_r;
+            let bnh = (candle.close - ctx.bnh_entry) / ctx.bnh_entry * 100.0;
+            let atr_now = candle.atr_r;
             let exit_info = format!(" | ATR={:.2}% sl={:.2}% tp={:.2}% tr={:.2}% open={}",
                 atr_now * 100.0,
                 ctx.k_stop * atr_now * 100.0,
@@ -1239,7 +1262,7 @@ impl EnterpriseState {
             eprintln!(
                 "  {}/{} ({:.0}/s ETA {:.0}s) | {} | {} | tht={:.1}% | trades={} win={:.1}% | ${:.0} ({:+.1}%) vs B&H {:+.1}% | flip@{:.3} {}{}",
                 self.encode_count, ctx.loop_count, rate, eta,
-                &candles[i].ts[..10],
+                &candle.ts[..10],
                 self.portfolio.phase,
                 tht_acc,
                 self.portfolio.trades_taken, self.portfolio.win_rate(),
