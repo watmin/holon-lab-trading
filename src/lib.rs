@@ -1,4 +1,5 @@
 pub mod candle;
+pub mod event;
 pub mod journal;
 pub mod market;
 pub mod portfolio;

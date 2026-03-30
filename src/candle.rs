@@ -2,6 +2,7 @@ use rusqlite::Connection;
 use std::path::Path;
 
 #[allow(dead_code)]
+#[derive(Clone, Debug)]
 pub struct Candle {
     // Raw OHLCV
     pub ts: String,
