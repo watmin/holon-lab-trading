@@ -343,8 +343,8 @@ fn main() {
     {
         let half = args.initial_equity / 2.0;
         let seed_quote = half / seed_price;
-        *state.treasury.balances.get_mut(&args.base_asset).unwrap() = half;
-        state.treasury.balances.insert(args.quote_asset.clone(), seed_quote);
+        state.treasury.withdraw(&args.base_asset, half);
+        state.treasury.deposit(&args.quote_asset, seed_quote);
     }
 
     ledger.execute_batch("BEGIN").ok();
@@ -398,7 +398,6 @@ fn main() {
         min_opinion_magnitude,
         codebook_labels: &codebook_labels,
         codebook_vecs: &codebook_vecs,
-        ledger: &ledger,
         bnh_entry,
         loop_count,
         progress_every,
@@ -456,6 +455,10 @@ fn main() {
             state.on_candle(i, &candles[i], tht_vec, tht_facts, observer_vecs, &ctx);
         }
 
+        // Flush log entries accumulated during this batch.
+        enterprise::ledger::flush_logs(&state.pending_logs, &ledger);
+        state.pending_logs.clear();
+
         state.cursor = batch_end;
     }
 
@@ -469,9 +472,12 @@ fn main() {
         let final_out: Option<Label> = entry.first_outcome;
         if final_out.is_none() { state.noise_count += 1; } else { state.labeled_count += 1; }
 
-        state.log_candle(&entry, final_out, treasury_equity, &ledger);
+        state.log_candle(&entry, final_out, treasury_equity);
     }
 
+    // Flush any remaining log entries, then commit.
+    enterprise::ledger::flush_logs(&state.pending_logs, &ledger);
+    state.pending_logs.clear();
     ledger.execute_batch("COMMIT").ok();
 
     // ─ Final summary ─────────────────────────────────────────────────────────

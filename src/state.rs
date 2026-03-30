@@ -6,11 +6,11 @@
 
 use std::collections::VecDeque;
 
-use rusqlite::{params, Connection};
 use holon::memory::{Journal, OnlineSubspace};
 use holon::{Primitives, ScalarMode, VectorManager, Vector};
 
 use crate::candle::Candle;
+use crate::ledger::LogEntry;
 use crate::event::Event;
 use crate::journal::{Label, Direction, Prediction, register_direction, register_exit};
 use crate::market::observer::Observer;
@@ -145,9 +145,6 @@ pub struct CandleContext<'a> {
     pub codebook_labels: &'a [String],
     pub codebook_vecs: &'a [Vector],
 
-    // ── Ledger (DB connection) ──────────────────────────────────────────
-    pub ledger: &'a Connection,
-
     // ── Progress display ────────────────────────────────────────────────
     pub bnh_entry: f64,
     pub loop_count: usize,
@@ -229,6 +226,9 @@ pub struct EnterpriseState {
     pub conviction_history: VecDeque<f64>,
     pub conviction_threshold: f64,
     pub resolved_preds: VecDeque<(f64, bool)>,
+
+    // ── Pending log entries (flushed by caller) ───────────────────────────
+    pub pending_logs: Vec<LogEntry>,
 
     // ── Loop cursor ──────────────────────────────────────────────────────
     pub cursor: usize,
@@ -375,11 +375,15 @@ impl EnterpriseState {
             conviction_threshold: 0.0,
             resolved_preds: VecDeque::new(),
 
+            // Pending logs
+            pending_logs: Vec::new(),
+
             // Loop cursor
             cursor: start_idx,
         }
     }
 
+    // dead-thoughts:allow(scaffolding) — on_event is the streaming interface; wired when live feed replaces backtest loop
     /// The enterprise's public interface. One event, one fold step.
     /// The enterprise doesn't know where events come from.
     /// Backtest, websocket, test harness — same Event, same fold.
@@ -392,12 +396,10 @@ impl EnterpriseState {
                 let _ = candle; // placeholder — live encoding not yet wired
             }
             Event::Deposit { asset, amount } => {
-                *self.treasury.balances.entry(asset.clone()).or_insert(0.0) += amount;
+                self.treasury.deposit(asset, *amount);
             }
             Event::Withdraw { asset, amount } => {
-                if let Some(bal) = self.treasury.balances.get_mut(asset) {
-                    *bal = (*bal - amount).max(0.0);
-                }
+                self.treasury.withdraw(asset, *amount);
             }
         }
     }
@@ -706,18 +708,20 @@ impl EnterpriseState {
                     (PositionExit::TakeProfit, _) => "PartialProfit",
                     (PositionExit::StopLoss, _) => "StopLoss",
                 };
-                ctx.ledger.execute(
-                    "INSERT INTO trade_ledger (step,candle_idx,timestamp,direction,entry_price,exit_price,gross_return_pct,position_usd,swap_fee_pct,horizon_candles,won,exit_reason)
-                     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
-                    rusqlite::params![
-                        self.log_step, i as i64, &candle.ts,
-                        exit_dir, pos.entry_price, quote_price,
-                        ret * 100.0, pos.base_deployed,
-                        fee_rate * 100.0, pos.candles_held as i64,
-                        (ret > 0.0) as i32,
-                        exit_type,
-                    ],
-                ).ok();
+                self.pending_logs.push(LogEntry::PositionExit {
+                    step: self.log_step,
+                    candle_idx: i as i64,
+                    timestamp: candle.ts.clone(),
+                    direction: exit_dir.to_string(),
+                    entry_price: pos.entry_price,
+                    exit_price: quote_price,
+                    gross_return_pct: ret * 100.0,
+                    position_usd: pos.base_deployed,
+                    swap_fee_pct: fee_rate * 100.0,
+                    horizon_candles: pos.candles_held as i64,
+                    won: (ret > 0.0) as i32,
+                    exit_reason: exit_type.to_string(),
+                });
             }
         }
         // Remove closed positions
@@ -788,11 +792,15 @@ impl EnterpriseState {
                     self.next_position_id += 1;
                     self.hold_swaps += 1;
                     let dir_str = if direction == Direction::Long { "Buy" } else { "Sell" };
-                    ctx.ledger.execute(
-                        "INSERT INTO trade_ledger (step,candle_idx,timestamp,direction,entry_price,position_usd,swap_fee_pct,exit_reason)
-                         VALUES (?1,?2,?3,?4,?5,?6,?7,'Open')",
-                        rusqlite::params![self.log_step, i as i64, &candle.ts, dir_str, quote_price, base_value, fee_rate * 100.0],
-                    ).ok();
+                    self.pending_logs.push(LogEntry::PositionOpen {
+                        step: self.log_step,
+                        candle_idx: i as i64,
+                        timestamp: candle.ts.clone(),
+                        direction: dir_str.to_string(),
+                        entry_price: quote_price,
+                        position_usd: base_value,
+                        swap_fee_pct: fee_rate * 100.0,
+                    });
                     self.positions.push(pos);
                 }
             }
@@ -1009,12 +1017,13 @@ impl EnterpriseState {
                             expert_vec, &entry.observer_preds[ei], o, sw,
                             ctx.conviction_quantile, ctx.conviction_window,
                         ) {
-                            if ctx.diagnostics { ctx.ledger.execute(
-                                "INSERT INTO observer_log (step,observer,conviction,direction,correct)
-                                 VALUES (?1,?2,?3,?4,?5)",
-                                params![self.log_step, log.name, log.conviction,
-                                        self.observers[ei].journal.label_name(log.direction).unwrap_or("?"), log.correct as i32],
-                            ).ok(); }
+                            if ctx.diagnostics { self.pending_logs.push(LogEntry::ObserverLog {
+                                step: self.log_step,
+                                observer: log.name.to_string(),
+                                conviction: log.conviction,
+                                direction: self.observers[ei].journal.label_name(log.direction).unwrap_or("?").to_string(),
+                                correct: log.correct as i32,
+                            }); }
                         }
                     }
                     entry.first_outcome = Some(o);
@@ -1076,15 +1085,14 @@ impl EnterpriseState {
             self.panel_recalib_wins = 0;
             self.panel_recalib_total = 0;
 
-            ctx.ledger.execute(
-                "INSERT INTO recalib_log (step,journal,cos_raw,disc_strength,buy_count,sell_count)
-                 VALUES (?1,?2,?3,?4,?5,?6)",
-                params![
-                    self.encode_count as i64, "thought",
-                    self.tht_journal.last_cos_raw(), self.tht_journal.last_disc_strength(),
-                    self.tht_journal.label_count(self.tht_buy) as i64, self.tht_journal.label_count(self.tht_sell) as i64,
-                ],
-            ).ok();
+            self.pending_logs.push(LogEntry::RecalibLog {
+                step: self.encode_count as i64,
+                journal: "thought".to_string(),
+                cos_raw: self.tht_journal.last_cos_raw(),
+                disc_strength: self.tht_journal.last_disc_strength(),
+                buy_count: self.tht_journal.label_count(self.tht_buy) as i64,
+                sell_count: self.tht_journal.label_count(self.tht_sell) as i64,
+            });
 
             // Decode thought discriminant against the fact codebook.
             if let Some(disc) = self.tht_journal.discriminant(self.tht_buy) {
@@ -1094,14 +1102,13 @@ impl EnterpriseState {
                     .collect();
                 decoded.sort_by(|a, b| b.1.abs().partial_cmp(&a.1.abs()).unwrap());
                 for (rank, (label, cos)) in decoded.iter().take(20).enumerate() {
-                    ctx.ledger.execute(
-                        "INSERT INTO disc_decode (step,journal,rank,fact_label,cosine)
-                         VALUES (?1,?2,?3,?4,?5)",
-                        params![
-                            self.encode_count as i64, "thought",
-                            (rank + 1) as i64, label, cos,
-                        ],
-                    ).ok();
+                    self.pending_logs.push(LogEntry::DiscDecode {
+                        step: self.encode_count as i64,
+                        journal: "thought".to_string(),
+                        rank: (rank + 1) as i64,
+                        fact_label: label.clone(),
+                        cosine: *cos,
+                    });
                 }
             }
 
@@ -1189,38 +1196,38 @@ impl EnterpriseState {
                         .unwrap_or(candle.close);
                     let crossing_elapsed = entry.crossing_candles
                         .map(|c| c as i64);
-                    ctx.ledger.execute(
-                        "INSERT INTO trade_ledger
-                         (step,candle_idx,timestamp,exit_candle_idx,exit_timestamp,
-                          direction,conviction,high_conviction,
-                          entry_price,exit_price,position_frac,position_usd,
-                          gross_return_pct,swap_fee_pct,slippage_pct,net_return_pct,
-                          pnl_usd,equity_after,
-                          max_favorable_pct,max_adverse_pct,
-                          crossing_candles,horizon_candles,outcome,won,exit_reason)
-                         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25)",
-                        params![
-                            self.log_step, entry.candle_idx as i64, &entry.entry_ts,
-                            entry.crossing_candles.map(|c| (entry.candle_idx + c) as i64), exit_ts,
-                            self.mgr_journal.label_name(dir).unwrap_or("?"), entry.meta_conviction,
-                            entry.high_conviction as i32,
-                            entry.entry_price, exit_price,
-                            frac, pnl.pos_usd,
-                            pnl.gross_ret * 100.0,
-                            pnl.entry_cost_frac * 100.0,
-                            pnl.exit_cost_frac * 100.0,
-                            pnl.net_ret * 100.0, pnl.trade_pnl, treasury_equity,
-                            entry.max_favorable * 100.0, entry.max_adverse * 100.0,
-                            crossing_elapsed, entry.path_candles as i64,
-                            final_out.map(|l| self.tht_journal.label_name(l).unwrap_or("?").to_string()).unwrap_or_else(|| "Noise".to_string()), (pnl.net_ret > 0.0) as i32,
-                            match entry.exit_reason {
-                                Some(ExitReason::TrailingStop) => "TrailingStop",
-                                Some(ExitReason::TakeProfit) => "TakeProfit",
-                                Some(ExitReason::HorizonExpiry) => "HorizonExpiry",
-                                None => "HorizonExpiry",
-                            },
-                        ],
-                    ).ok();
+                    self.pending_logs.push(LogEntry::TradeLedger {
+                        step: self.log_step,
+                        candle_idx: entry.candle_idx as i64,
+                        timestamp: entry.entry_ts.clone(),
+                        exit_candle_idx: entry.crossing_candles.map(|c| (entry.candle_idx + c) as i64),
+                        exit_timestamp: exit_ts,
+                        direction: self.mgr_journal.label_name(dir).unwrap_or("?").to_string(),
+                        conviction: entry.meta_conviction,
+                        high_conviction: entry.high_conviction as i32,
+                        entry_price: entry.entry_price,
+                        exit_price,
+                        position_frac: frac,
+                        position_usd: pnl.pos_usd,
+                        gross_return_pct: pnl.gross_ret * 100.0,
+                        swap_fee_pct: pnl.entry_cost_frac * 100.0,
+                        slippage_pct: pnl.exit_cost_frac * 100.0,
+                        net_return_pct: pnl.net_ret * 100.0,
+                        pnl_usd: pnl.trade_pnl,
+                        equity_after: treasury_equity,
+                        max_favorable_pct: entry.max_favorable * 100.0,
+                        max_adverse_pct: entry.max_adverse * 100.0,
+                        crossing_candles: crossing_elapsed,
+                        horizon_candles: entry.path_candles as i64,
+                        outcome: final_out.map(|l| self.tht_journal.label_name(l).unwrap_or("?").to_string()).unwrap_or_else(|| "Noise".to_string()),
+                        won: (pnl.net_ret > 0.0) as i32,
+                        exit_reason: match entry.exit_reason {
+                            Some(ExitReason::TrailingStop) => "TrailingStop",
+                            Some(ExitReason::TakeProfit) => "TakeProfit",
+                            Some(ExitReason::HorizonExpiry) => "HorizonExpiry",
+                            None => "HorizonExpiry",
+                        }.to_string(),
+                    });
                 }
 
                 // Panel tracking (all predictions, not just live)
@@ -1233,10 +1240,10 @@ impl EnterpriseState {
                 }
             } // if let Some(dir)
 
-            self.log_candle(&entry, final_out, treasury_equity, ctx.ledger);
+            self.log_candle(&entry, final_out, treasury_equity);
             self.db_batch   += 1;
             if self.db_batch >= 5_000 {
-                ctx.ledger.execute_batch("COMMIT; BEGIN").ok();
+                self.pending_logs.push(LogEntry::BatchCommit);
                 self.db_batch = 0;
             }
 
@@ -1332,34 +1339,28 @@ impl EnterpriseState {
     }
 
     /// Log a resolved entry to candle_log. Called from on_candle resolution
-    /// and from enterprise.rs post-loop drain. One INSERT, one definition.
+    /// and from enterprise.rs post-loop drain. One LogEntry, one definition.
     pub fn log_candle(
         &mut self,
         entry: &Pending,
         final_out: Option<Label>,
         treasury_equity: f64,
-        ledger: &Connection,
     ) {
-        ledger.execute(
-            "INSERT INTO candle_log
-             (step,candle_idx,timestamp,
-              tht_cos,tht_conviction,tht_pred,
-              meta_pred,meta_conviction,
-              actual,traded,position_frac,equity,outcome_pct)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
-            params![
-                self.log_step, entry.candle_idx as i64, &entry.entry_ts,
-                entry.tht_pred.raw_cos, entry.tht_pred.conviction,
-                entry.tht_pred.direction.and_then(|d| self.tht_journal.label_name(d).map(|s| s.to_string())),
-                entry.meta_dir.and_then(|d| self.mgr_journal.label_name(d).map(|s| s.to_string())),
-                entry.meta_conviction,
-                final_out.and_then(|l| self.tht_journal.label_name(l).map(|s| s.to_string())).unwrap_or_else(|| "Noise".to_string()),
-                entry.position_frac.is_some() as i32,
-                entry.position_frac,
-                treasury_equity,
-                entry.outcome_pct,
-            ],
-        ).ok();
+        self.pending_logs.push(LogEntry::CandleLog {
+            step: self.log_step,
+            candle_idx: entry.candle_idx as i64,
+            timestamp: entry.entry_ts.clone(),
+            tht_cos: entry.tht_pred.raw_cos,
+            tht_conviction: entry.tht_pred.conviction,
+            tht_pred: entry.tht_pred.direction.and_then(|d| self.tht_journal.label_name(d).map(|s| s.to_string())),
+            meta_pred: entry.meta_dir.and_then(|d| self.mgr_journal.label_name(d).map(|s| s.to_string())),
+            meta_conviction: entry.meta_conviction,
+            actual: final_out.and_then(|l| self.tht_journal.label_name(l).map(|s| s.to_string())).unwrap_or_else(|| "Noise".to_string()),
+            traded: entry.position_frac.is_some() as i32,
+            position_frac: entry.position_frac,
+            equity: treasury_equity,
+            outcome_pct: entry.outcome_pct,
+        });
         self.log_step += 1;
     }
 
@@ -1391,11 +1392,15 @@ impl EnterpriseState {
         } else { 0.5 };
         let eq_pct = (treasury_equity - ctx.initial_equity) / ctx.initial_equity * 100.0;
         let won = (final_out == Some(dir)) as i32;
-        if ctx.diagnostics { ctx.ledger.execute(
-            "INSERT INTO risk_log (step,drawdown_pct,streak_len,streak_dir,recent_acc,equity_pct,won)
-             VALUES (?1,?2,?3,?4,?5,?6,?7)",
-            params![self.log_step, dd, streak_len, streak_dir, recent_acc, eq_pct, won],
-        ).ok(); }
+        if ctx.diagnostics { self.pending_logs.push(LogEntry::RiskLog {
+            step: self.log_step,
+            drawdown_pct: dd,
+            streak_len,
+            streak_dir: streak_dir.to_string(),
+            recent_acc,
+            equity_pct: eq_pct,
+            won,
+        }); }
 
         // Adaptive decay state machine
         if entry.high_conviction {
@@ -1420,10 +1425,10 @@ impl EnterpriseState {
         // Log which facts were present for this trade.
         if ctx.diagnostics {
             for label in &entry.fact_labels {
-                ctx.ledger.execute(
-                    "INSERT INTO trade_facts (step, fact_label) VALUES (?1, ?2)",
-                    params![self.log_step, label],
-                ).ok();
+                self.pending_logs.push(LogEntry::TradeFact {
+                    step: self.log_step,
+                    fact_label: label.clone(),
+                });
             }
         }
 
@@ -1432,11 +1437,11 @@ impl EnterpriseState {
             let won = (final_out == Some(dir)) as i32;
             let tht_bytes: Vec<u8> = entry.tht_vec.data().iter()
                 .map(|&v| v as u8).collect();
-            ctx.ledger.execute(
-                "INSERT INTO trade_vectors (step, won, tht_data)
-                 VALUES (?1, ?2, ?3)",
-                params![self.log_step, won, tht_bytes],
-            ).ok();
+            self.pending_logs.push(LogEntry::TradeVector {
+                step: self.log_step,
+                won,
+                tht_data: tht_bytes,
+            });
         }
     }
 }

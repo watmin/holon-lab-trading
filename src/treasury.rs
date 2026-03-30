@@ -33,6 +33,17 @@ impl Treasury {
         }
     }
 
+    /// Deposit capital into the treasury.
+    pub fn deposit(&mut self, asset: &str, amount: f64) {
+        *self.balances.entry(asset.to_string()).or_insert(0.0) += amount;
+    }
+
+    /// Withdraw capital from available balance. Cannot touch deployed.
+    pub fn withdraw(&mut self, asset: &str, amount: f64) {
+        let bal = self.balances.entry(asset.to_string()).or_insert(0.0);
+        *bal = (*bal - amount).max(0.0);
+    }
+
     /// Balance of an asset (available, not deployed).
     pub fn balance(&self, asset: &str) -> f64 {
         *self.balances.get(asset).unwrap_or(&0.0)
