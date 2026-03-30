@@ -11,9 +11,31 @@ Unanimous. The indicator engine is a stream transformation that precedes the fol
 Accepted. `RawCandle` (6 fields: ts, open, high, low, close, volume) is the input from any source. `Candle { raw: RawCandle, ...derived fields }` is the output of the indicator engine. The type system enforces the pipeline boundary. The compiler catches un-enriched candles.
 
 ### Per-indicator state, not shared ring buffer
-Accepted per Hickey. Each indicator is a reducing function carrying its own minimal state. SMA carries 20 values. RSI carries 2 floats. ATR carries 1 float. The engine composes reducers. A small shared `VecDeque<RawCandle>` (capped at ~200) provides the read-only history that window-based indicators need. It's input to the reducers, not mutable shared state.
+Accepted per Hickey. Each indicator is a reducing function carrying its own minimal state. SMA carries 20 values. RSI carries 2 floats. ATR carries 1 float. The engine composes reducers.
 
 Dependency order per Beckman: RSI before StochRSI, ATR before Keltner. The update method makes the order explicit.
+
+### Two buffers, two stages, two sizes
+
+The pipeline has two distinct history requirements at two different stages:
+
+**Buffer 1 — Raw OHLCV history (~200 candles)**
+Owned by the `IndicatorEngine`. A `VecDeque<RawCandle>` capped at ~200 (the longest indicator lookback, SMA200). Read-only input to the window-based reducers (SMA, BB, range position, trend consistency). Incremental reducers (RSI, ATR, OBV) don't touch it — they carry their own minimal state. This buffer exists per-asset. It feeds the transducer stage.
+
+**Buffer 2 — Full Candle history (~2016 candles)**
+Owned by the runner (the encoding layer). A `VecDeque<Candle>` capped at ~2016 (the longest observer window). The thought encoder needs a window of *enriched* candles (with all 54 derived indicators) to produce thought vectors. Observer[3] (narrative) at window=200 needs 200 full Candles. The generalist at window=48 needs 48. The max sampled window is 2016.
+
+The two buffers sit at different stages of the pipeline:
+
+```
+raw OHLCV → [Buffer 1: 200 raw] → IndicatorEngine → full Candle
+                                                        ↓
+                                   [Buffer 2: 2016 full] → ThoughtEncoder → EnrichedEvent → fold
+```
+
+Buffer 1 is the transducer's concern. Buffer 2 is the encoding functor's concern. The fold sees neither — it receives one EnrichedEvent at a time. Each asset has its own Buffer 1 and its own Buffer 2. The buffers are independent per-asset, just like the transducers and encoders.
+
+This is why the indicator engine alone is not enough for streaming. The thought encoder also needs history — but history of *computed* candles, not raw OHLCV. The two buffers are different types at different stages serving different consumers.
 
 ### Struct, not map
 Override on Hickey's open map recommendation. In Rust, a struct with 54 named fields is zero-cost — no heap allocation, no hashing, no runtime lookup. A `BTreeMap<String, f64>` would mean 54 heap-allocated strings and a tree walk per access in the hot path. The struct IS the open map in Rust — adding a field triggers compiler errors at every site that needs updating. Beckman's typed pipeline wins in this language.
