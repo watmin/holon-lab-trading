@@ -23,7 +23,7 @@ pub struct Pending {
     pub tht_pred:      Prediction,
     pub raw_meta_dir:  Option<Label>,  // un-flipped direction (for auto calibration)
     pub meta_dir:      Option<Label>,
-    pub was_flipped:   bool,             // true if flip was active when this entry was created
+    pub high_conviction:   bool,             // true if flip was active when this entry was created
     pub meta_conviction: f64,
     pub position_frac: Option<f64>,
     pub observer_vecs:   Vec<Vector>,       // per-observer thought vectors

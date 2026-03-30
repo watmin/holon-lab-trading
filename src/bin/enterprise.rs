@@ -7,7 +7,7 @@
 /// The manager reads expert opinions and decides.
 /// Risk modulates sizing. Treasury executes. Positions manage themselves.
 /// The ledger records everything. The DB is the debugger.
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -96,14 +96,14 @@ struct Args {
     /// than 85% of its other predictions). 0.0 = disabled. The threshold is
     /// computed from the conviction distribution and updated every recalib_interval
     /// candles — no fixed magic value needed.
-    /// Ignored when flip_mode = "auto".
+    /// Ignored when conviction_mode = "auto".
     #[arg(long, default_value_t = 0.85)]
-    flip_quantile: f64,
+    conviction_quantile: f64,
 
-    /// "quantile" = use flip_quantile percentile. "auto" = find the conviction
+    /// "quantile" = use conviction_quantile percentile. "auto" = find the conviction
     /// level where cumulative win rate from the top first drops below min_edge.
     #[arg(long, default_value = "quantile")]
-    flip_mode: String,
+    conviction_mode: String,
 
     /// Minimum acceptable win rate for trading. This is the ONE economic input.
     /// The system finds the conviction threshold where flipped accuracy >= this value.
@@ -183,9 +183,9 @@ fn main() {
     } else {
         format!("{:.3}%", args.move_threshold * 100.0)
     };
-    let flip_desc = match args.flip_mode.as_str() {
+    let flip_desc = match args.conviction_mode.as_str() {
         "auto" => format!("auto(min_edge={:.2})", args.min_edge),
-        _ => format!("q{:.0}", args.flip_quantile * 100.0),
+        _ => format!("q{:.0}", args.conviction_quantile * 100.0),
     };
     eprintln!("  {}D  window={}  horizon={}  threshold={}  decay={}  flip={}",
         args.dims, args.window, args.horizon, thresh_desc, args.decay, flip_desc);
@@ -334,13 +334,13 @@ fn main() {
             ("horizon",         &args.horizon.to_string()),
             ("move_threshold",  &args.move_threshold.to_string()),
             ("atr_multiplier",  &args.atr_multiplier.to_string()),
-            ("flip_mode",       &args.flip_mode),
+            ("conviction_mode",       &args.conviction_mode),
             ("min_edge",        &args.min_edge.to_string()),
             ("decay",           &args.decay.to_string()),
             ("observe_period",  &args.observe_period.to_string()),
             ("recalib_interval",&args.recalib_interval.to_string()),
             ("min_conviction",  &args.min_conviction.to_string()),
-            ("flip_quantile",   &args.flip_quantile.to_string()),
+            ("conviction_quantile",   &args.conviction_quantile.to_string()),
             ("max_candles",     &args.max_candles.to_string()),
             ("swap_fee",        &args.swap_fee.to_string()),
             ("slippage",        &args.slippage.to_string()),
@@ -356,13 +356,13 @@ fn main() {
     // STABLE (0.999): rolling flip-zone accuracy >= 50% — preserve what works.
     // ADAPTING (0.995): accuracy dropped below 50% — flush stale patterns.
     // Hysteresis: need >55% to return to STABLE (prevents oscillation).
-    // dead-thoughts:allow(scaffolding) — adaptive decay gates on was_flipped, mostly inert; revisit when decay becomes an expert
+    // dead-thoughts:allow(scaffolding) — adaptive decay gates on high_conviction, mostly inert; revisit when decay becomes an expert
     let decay_stable   = args.decay;          // CLI value (default 0.999)
     let decay_adapting = (args.decay - 0.004).max(0.990); // 0.995 for default
     let mut adaptive_decay = args.decay;
     let mut in_adaptation = false;
-    let mut flip_zone_wins: VecDeque<bool> = VecDeque::new();
-    let flip_zone_rolling_cap = 200usize;
+    let mut highconv_wins: VecDeque<bool> = VecDeque::new();
+    let highconv_rolling_cap = 200usize;
 
     let mut portfolio    = Portfolio::new(args.initial_equity, args.observe_period);
     let mut treasury  = Treasury::new("USDC", args.initial_equity, args.max_positions, args.max_utilization);
@@ -377,9 +377,6 @@ fn main() {
         *treasury.balances.get_mut("USDC").unwrap() = half;
         treasury.balances.insert("WBTC".to_string(), seed_wbtc);
     }
-    // Counterfactual: snapshot treasury before each swap.
-    // dead-thoughts:allow(scaffolding) — alpha snapshot stale after first close; proper counterfactual in treasury.wat
-    let mut last_snapshot_balances: HashMap<String, f64> = treasury.balances.clone();
     let mut pending:    VecDeque<Pending> = VecDeque::new();
 
     // ─ Managed positions: concurrent, independently managed ──────────
@@ -441,17 +438,17 @@ fn main() {
 
     // Dynamic flip threshold: derived from the conviction distribution.
     // Updated every recalib_interval candles after a warmup window.
-    // Represents the args.flip_quantile percentile of recent meta_conviction values.
+    // Represents the args.conviction_quantile percentile of recent meta_conviction values.
     // Rolling conviction history for dynamic threshold computation.
     // Window = ~3 months of 5m candles: large enough to be stable across
     // week-to-week regime noise, small enough to adapt to structural shifts.
-    let flip_warmup = args.recalib_interval * 2;
+    let conviction_warmup = args.recalib_interval * 2;
     // Conviction window: starts at 2000 (statistically robust minimum).
     // Shrinks when curve is stable, grows when unstable.
     // The curve stability tracking we built decides the window size.
     let conviction_window: usize = 2000;
     let mut conviction_history: VecDeque<f64> = VecDeque::new();
-    let mut flip_threshold: f64 = 0.0; // 0 until warmup complete
+    let mut conviction_threshold: f64 = 0.0; // 0 until warmup complete
 
     // Auto flip mode: track resolved predictions to build calibration curve.
     // Each entry records (conviction, was_the_flipped_prediction_correct).
@@ -601,18 +598,18 @@ fn main() {
             }
             // Recompute flip threshold every recalib_interval candles, after warmup.
             // decomplect:allow(inline-computation) — flip threshold curve fitting, extracts to sizing module
-            if conviction_history.len() >= flip_warmup
+            if conviction_history.len() >= conviction_warmup
                 && encode_count % args.recalib_interval == 0
             {
-                match args.flip_mode.as_str() {
-                    "quantile" if args.flip_quantile > 0.0 => {
+                match args.conviction_mode.as_str() {
+                    "quantile" if args.conviction_quantile > 0.0 => {
                         let mut sorted: Vec<f64> = conviction_history.iter().copied().collect();
                         sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
-                        let idx = ((sorted.len() as f64 * args.flip_quantile) as usize)
+                        let idx = ((sorted.len() as f64 * args.conviction_quantile) as usize)
                             .min(sorted.len() - 1);
-                        flip_threshold = sorted[idx];
+                        conviction_threshold = sorted[idx];
                     }
-                    "auto" if resolved_preds.len() >= flip_warmup * 5 => {
+                    "auto" if resolved_preds.len() >= conviction_warmup * 5 => {
                         // Need 5× warmup (~5000 resolved) for stable exponential fit.
                         // Fit the exponential conviction-accuracy curve:
                         //   accuracy = 0.50 + a × exp(b × conviction)
@@ -663,7 +660,7 @@ fn main() {
                                         if target > 0.0 {
                                             let new_thresh = target.ln() / b;
                                             if new_thresh > 0.0 && new_thresh < 1.0 {
-                                                flip_threshold = new_thresh;
+                                                conviction_threshold = new_thresh;
                                             }
                                         }
                                     }
@@ -672,13 +669,13 @@ fn main() {
                         }
                     }
                     // Fallback: during auto warmup, use quantile if available.
-                    "auto" if args.flip_quantile > 0.0
-                        && conviction_history.len() >= flip_warmup => {
+                    "auto" if args.conviction_quantile > 0.0
+                        && conviction_history.len() >= conviction_warmup => {
                         let mut sorted: Vec<f64> = conviction_history.iter().copied().collect();
                         sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
-                        let idx = ((sorted.len() as f64 * args.flip_quantile) as usize)
+                        let idx = ((sorted.len() as f64 * args.conviction_quantile) as usize)
                             .min(sorted.len() - 1);
-                        flip_threshold = sorted[idx];
+                        conviction_threshold = sorted[idx];
                     }
                     _ => {}
                 }
@@ -869,11 +866,6 @@ fn main() {
                                      else { deploy_amount * btc_price };
 
                     if usdc_value > 10.0 {
-                        // Snapshot before swap — counterfactual baseline
-                        last_snapshot_balances = treasury.balances.clone();
-                        for (a, d) in &treasury.deployed {
-                            *last_snapshot_balances.entry(a.clone()).or_insert(0.0) += d;
-                        }
                         let (spent, received) = treasury.swap(
                             from_asset, to_asset, deploy_amount, price_for_swap, fee_rate);
 
@@ -940,7 +932,7 @@ fn main() {
             let portfolio_proven = portfolio.phase != Phase::Observe && mgr_curve_valid;
             let position_frac = if meta_dir.is_some()
                 && portfolio_proven
-                && (flip_threshold <= 0.0 || meta_conviction >= flip_threshold)
+                && (conviction_threshold <= 0.0 || meta_conviction >= conviction_threshold)
             {
                 let mt = if args.atr_multiplier > 0.0 {
                     args.atr_multiplier * candles[i].atr_r
@@ -976,16 +968,16 @@ fn main() {
                     }
                     _ => {
                         // Legacy sizing with flip zone gate
-                        if flip_threshold > 0.0 && meta_conviction < flip_threshold {
+                        if conviction_threshold > 0.0 && meta_conviction < conviction_threshold {
                             None
                         } else {
-                            portfolio.position_frac(meta_conviction, args.min_conviction, flip_threshold)
+                            portfolio.position_frac(meta_conviction, args.min_conviction, conviction_threshold)
                         }
                     }
                 }
             } else { None };
 
-            // dead-thoughts:allow(scaffolding) — dual accounting: open_position reserves + ManagedPosition claims separately. Unify when position lifecycle is refactored.
+            // decomplect:allow(braided-concerns) — open_position reserves capital on Pending path, ManagedPosition claims/swaps separately. Two accounting paths for one trade. Unify when position lifecycle is refactored.
             // Treasury allocation: reserve capital for this position.
             let deployed_usd = if let Some(frac) = position_frac {
                 treasury.open_position(treasury.allocatable() * frac)
@@ -1000,7 +992,7 @@ fn main() {
                 tht_pred:      tht_pred.clone(),
                 raw_meta_dir:  raw_meta_dir,
                 meta_dir,
-                was_flipped:   flip_threshold > 0.0 && meta_conviction >= flip_threshold,
+                high_conviction:   conviction_threshold > 0.0 && meta_conviction >= conviction_threshold,
                 meta_conviction,
                 position_frac,
                 observer_vecs,
@@ -1112,7 +1104,7 @@ fn main() {
                         for (ei, expert_vec) in entry.observer_vecs.iter().enumerate() {
                             if let Some(log) = observers[ei].resolve(
                                 expert_vec, &entry.observer_preds[ei], o, sw,
-                                args.flip_quantile, conviction_window,
+                                args.conviction_quantile, conviction_window,
                             ) {
                                 if args.diagnostics { ledger.execute(
                                     "INSERT INTO observer_log (step,observer,conviction,direction,correct)
@@ -1368,7 +1360,7 @@ fn main() {
                         ledger.execute(
                             "INSERT INTO trade_ledger
                              (step,candle_idx,timestamp,exit_candle_idx,exit_timestamp,
-                              direction,conviction,was_flipped,
+                              direction,conviction,high_conviction,
                               entry_price,exit_price,position_frac,position_usd,
                               gross_return_pct,swap_fee_pct,slippage_pct,net_return_pct,
                               pnl_usd,equity_after,
@@ -1379,7 +1371,7 @@ fn main() {
                                 log_step, entry.candle_idx as i64, &entry_candle.ts,
                                 exit_candle.map(|ci| ci as i64), exit_ts,
                                 mgr_journal.label_name(dir).unwrap_or("?"), entry.meta_conviction,
-                                entry.was_flipped as i32,
+                                entry.high_conviction as i32,
                                 entry.entry_price, exit_price,
                                 frac, pos_usd,
                                 gross_ret * 100.0,
@@ -1433,16 +1425,16 @@ fn main() {
                                     params![log_step, dd, streak_len, streak_dir, recent_acc, eq_pct, won],
                                 ).ok(); }
                             // Track flip-zone trade outcomes.
-                            if entry.was_flipped {
+                            if entry.high_conviction {
                                 // Adaptive decay state machine.
                                 let won = final_out == Some(dir);
-                                flip_zone_wins.push_back(won);
-                                if flip_zone_wins.len() > flip_zone_rolling_cap {
-                                    flip_zone_wins.pop_front();
+                                highconv_wins.push_back(won);
+                                if highconv_wins.len() > highconv_rolling_cap {
+                                    highconv_wins.pop_front();
                                 }
-                                if flip_zone_wins.len() >= 30 {
-                                    let wr = flip_zone_wins.iter().filter(|&&w| w).count() as f64
-                                           / flip_zone_wins.len() as f64;
+                                if highconv_wins.len() >= 30 {
+                                    let wr = highconv_wins.iter().filter(|&&w| w).count() as f64
+                                           / highconv_wins.len() as f64;
                                     if !in_adaptation && wr < 0.50 {
                                         in_adaptation = true;
                                         adaptive_decay = decay_adapting;
@@ -1460,7 +1452,7 @@ fn main() {
                                 ).ok(); }
                             }
                             // Store thought vectors for engram analysis.
-                            if entry.was_flipped {
+                            if entry.high_conviction {
                                 let won = (final_out == Some(dir)) as i32;
                                 let tht_bytes: Vec<u8> = entry.tht_vec.data().iter()
                                     .map(|&v| v as u8).collect();
@@ -1532,7 +1524,7 @@ fn main() {
                     tht_acc,
                     portfolio.trades_taken, portfolio.win_rate(),
                     treasury_equity, ret, bnh,
-                    flip_threshold,
+                    conviction_threshold,
                     if !mgr_curve_valid { "CALIBRATING" }
                     else if panel_familiar { "ENGRAM" }
                     else if in_adaptation { "ADAPT" }
@@ -1551,13 +1543,8 @@ fn main() {
                         format!(" band=[{:.3},{:.3}]", mgr_proven_band.0, mgr_proven_band.1)
                     } else { " band=none".to_string() };
                     let open_positions = positions.len();
-                    // Counterfactual: what would the pre-swap snapshot be worth now?
-                    let snapshot_value: f64 = last_snapshot_balances.iter()
-                        .map(|(a, &bal)| bal * if a == "WBTC" { btc_price } else { 1.0 })
-                        .sum();
-                    let alpha = tv - snapshot_value; // positive = trading beat inaction
-                    eprintln!("    treasury: ${:.0} ({:+.1}%) | passive: ${:.0} | alpha: ${:+.0} | pos={} swaps={} wins={} | proven=[{}]{}",
-                        tv, tv_ret, snapshot_value, alpha, open_positions, hold_swaps, hold_wins, proven_str, band_str);
+                    eprintln!("    treasury: ${:.0} ({:+.1}%) | pos={} swaps={} wins={} | proven=[{}]{}",
+                        tv, tv_ret, open_positions, hold_swaps, hold_wins, proven_str, band_str);
                 }
             }
         }
@@ -1661,18 +1648,9 @@ fn main() {
         eprintln!();
     }
 
-    // By-year breakdown.
-    let mut years: Vec<i32> = portfolio.by_year.keys().copied().collect();
-    years.sort();
-    if !years.is_empty() {
-        eprintln!("  By year:");
-        for y in years {
-            let ys = &portfolio.by_year[&y];
-            let wr = if ys.trades > 0 { ys.wins as f64 / ys.trades as f64 * 100.0 } else { 0.0 };
-            eprintln!("    {}: {} trades  {:.1}% win  {:+.2}$ P&L", y, ys.trades, wr, ys.pnl);
-        }
-        eprintln!();
-    }
+    // By-year breakdown removed — portfolio.by_year tracks trade P&L which
+    // diverges from treasury value in hold mode. Treasury is the source of truth.
+    // TODO: compute by-year from the treasury's value snapshots or the ledger DB.
 
     eprintln!("  Run DB: {} ({} rows)", ledger_path, log_step);
     eprintln!("═══════════════════════════════════════════════════════════");

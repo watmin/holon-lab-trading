@@ -33,7 +33,7 @@ pub struct Observer {
     pub last_recalib_count: usize,
     pub window_sampler: WindowSampler,
     pub conviction_history: VecDeque<f64>,
-    pub flip_threshold: f64,
+    pub conviction_threshold: f64,
     /// The primary label for discriminant access (first registered label).
     pub primary_label: Label,
     /// Proof gate: the expert must prove direction accuracy before
@@ -60,14 +60,14 @@ impl Observer {
             last_recalib_count: 0,
             window_sampler: WindowSampler::new(seed, 12, 2016),
             conviction_history: VecDeque::new(),
-            flip_threshold: 0.0,
+            conviction_threshold: 0.0,
             curve_valid: false,
         }
     }
 
     /// Resolve a prediction against an observed outcome.
     /// Handles: learning, accuracy tracking, engram gating, curve validation,
-    /// flip threshold update, and resolved prediction tracking.
+    /// conviction threshold update, and resolved prediction tracking.
     /// Returns a log record if the observer had a directional prediction.
     pub fn resolve(
         &mut self,
@@ -75,7 +75,7 @@ impl Observer {
         prediction: &Prediction,
         outcome: Label,
         signal_weight: f64,
-        flip_quantile: f64,
+        conviction_quantile: f64,
         conviction_window: usize,
     ) -> Option<ResolveLog> {
         // 1. Learn: accumulate this observation
@@ -124,15 +124,15 @@ impl Observer {
         {
             let mut sorted: Vec<f64> = self.conviction_history.iter().copied().collect();
             sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
-            let idx = ((sorted.len() as f64 * flip_quantile) as usize)
+            let idx = ((sorted.len() as f64 * conviction_quantile) as usize)
                 .min(sorted.len() - 1);
-            self.flip_threshold = sorted[idx];
+            self.conviction_threshold = sorted[idx];
         }
 
         // 6. Proof gate: does this expert have direction edge?
         if self.resolved.len() >= 100 {
             let high_conv: Vec<&(f64, bool)> = self.resolved.iter()
-                .filter(|(c, _)| *c >= self.flip_threshold * 0.8)
+                .filter(|(c, _)| *c >= self.conviction_threshold * 0.8)
                 .collect();
             if high_conv.len() >= 20 {
                 let acc = high_conv.iter().filter(|(_, c)| *c).count() as f64
