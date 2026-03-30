@@ -53,16 +53,22 @@ impl Event {
 
 // ─── Stream constructors ────────────────────────────────────────────────────
 
-/// Load a single asset's candles from a DB and produce an event stream.
-/// The simplest stream: one asset, one source.
-pub fn stream_from_db(db_path: &Path, asset: &str, label_col: &str) -> Vec<Event> {
-    load_candles(db_path, label_col)
-        .into_iter()
+/// Convert already-loaded candles into an event stream.
+/// Zero-copy of the candle data — wraps each candle with an asset tag.
+pub fn stream_from_candles(candles: &[Candle], asset: &str) -> Vec<Event> {
+    candles.iter()
         .map(|candle| Event::Candle {
             asset: asset.to_string(),
-            candle,
+            candle: candle.clone(),
         })
         .collect()
+}
+
+/// Load a single asset's candles from a DB and produce an event stream.
+/// Convenience: loads + wraps in one call.
+pub fn stream_from_db(db_path: &Path, asset: &str, label_col: &str) -> Vec<Event> {
+    let candles = load_candles(db_path, label_col);
+    stream_from_candles(&candles, asset)
 }
 
 /// Merge multiple event streams by timestamp.
@@ -83,7 +89,6 @@ pub fn with_recurring_deposits(
     amount: f64,
     interval: usize,
 ) -> Vec<Event> {
-    let _candle_count = events.iter().filter(|e| matches!(e, Event::Candle { .. })).count();
     let mut deposits = Vec::new();
 
     // Find candle timestamps at deposit intervals

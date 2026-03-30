@@ -203,11 +203,16 @@ fn main() {
             2.0 * (args.swap_fee + args.slippage) * 100.0);
     }
 
-    // ─ Load candles ─
+    // ─ Load candles and build event stream ─
     eprintln!("\n  Loading candles from {:?}...", args.db_path);
     let t0 = Instant::now();
     let candles = load_candles(&args.db_path, "label_oracle_10");
-    eprintln!("  Loaded {} candles in {:.1}s", candles.len(), t0.elapsed().as_secs_f64());
+    // The event stream wraps the candles. The heartbeat still uses candles[]
+    // directly for now. When fn on_event() is extracted, the event stream
+    // becomes the primary input and candles[] becomes the history buffer.
+    let _events = enterprise::event::stream_from_candles(&candles, &args.quote_asset);
+    eprintln!("  Loaded {} candles ({} events) in {:.1}s",
+        candles.len(), _events.len(), t0.elapsed().as_secs_f64());
 
     let vm = VectorManager::new(args.dims);
 
