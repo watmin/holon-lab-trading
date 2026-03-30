@@ -112,9 +112,12 @@
 ;; Alpha > 0 → risk loosens.
 ;; This is the counterfactual comparison — the ultimate risk measure.
 ;;
+;; (define profitable   (register risk-alpha-journal "Profitable"))
+;; (define unprofitable (register risk-alpha-journal "Unprofitable"))
+;;
 ;; (observe risk-alpha-journal
 ;;   (bundle
 ;;     (bind alpha-atom (encode-linear alpha 1.0))
 ;;     (bind action-count (encode-log recent-swaps))
 ;;     (bind portfolio-state treasury-snapshot))
-;;   (if (> alpha 0) Buy Sell))
+;;   (if (> alpha 0) profitable unprofitable))

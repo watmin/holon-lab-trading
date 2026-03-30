@@ -9,7 +9,7 @@ use std::collections::VecDeque;
 use holon::Vector;
 use holon::memory::OnlineSubspace;
 
-use crate::journal::{Journal, Outcome, Prediction};
+use crate::journal::{Journal, Label, Prediction};
 use crate::window_sampler::WindowSampler;
 
 /// Data returned from resolve() for diagnostic logging.
@@ -17,7 +17,7 @@ use crate::window_sampler::WindowSampler;
 pub struct ResolveLog {
     pub name: &'static str,
     pub conviction: f64,
-    pub direction: Outcome,
+    pub direction: Label,
     pub correct: bool,
 }
 
@@ -34,17 +34,25 @@ pub struct Observer {
     pub window_sampler: WindowSampler,
     pub conviction_history: VecDeque<f64>,
     pub flip_threshold: f64,
+    /// The primary label for discriminant access (first registered label).
+    pub primary_label: Label,
     /// Proof gate: the expert must prove direction accuracy before
     /// its opinion flows upstream. Silence, not noise.
     pub curve_valid: bool,
 }
 
 impl Observer {
-    pub fn new(profile: &'static str, dims: usize, recalib_interval: usize, seed: u64) -> Self {
+    pub fn new(profile: &'static str, dims: usize, recalib_interval: usize, seed: u64, labels: &[&str]) -> Self {
+        let mut journal = Journal::new(profile, dims, recalib_interval);
+        let primary_label = journal.register(labels[0]);
+        for label in &labels[1..] {
+            journal.register(label);
+        }
         Self {
             name: profile,
             profile,
-            journal: Journal::new(profile, dims, recalib_interval),
+            journal,
+            primary_label,
             resolved: VecDeque::new(),
             good_state_subspace: OnlineSubspace::new(dims, 8),
             recalib_wins: 0,
@@ -65,7 +73,7 @@ impl Observer {
         &mut self,
         thought_vec: &Vector,
         prediction: &Prediction,
-        outcome: Outcome,
+        outcome: Label,
         signal_weight: f64,
         flip_quantile: f64,
         conviction_window: usize,
@@ -81,12 +89,12 @@ impl Observer {
 
         // 3. Engram gating: if expert just recalibrated with good accuracy,
         //    snapshot the discriminant as a "good state"
-        if self.journal.recalib_count > self.last_recalib_count {
-            self.last_recalib_count = self.journal.recalib_count;
+        if self.journal.recalib_count() > self.last_recalib_count {
+            self.last_recalib_count = self.journal.recalib_count();
             if self.recalib_total >= 20 {
                 let acc = self.recalib_wins as f64 / self.recalib_total as f64;
                 if acc > 0.55 {
-                    if let Some(disc) = self.journal.discriminant() {
+                    if let Some(disc) = self.journal.discriminant(self.primary_label) {
                         let disc_owned = disc.to_vec();
                         self.good_state_subspace.update(&disc_owned);
                     }

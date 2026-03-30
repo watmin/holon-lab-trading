@@ -2,7 +2,7 @@ use std::collections::{HashMap, VecDeque};
 use std::fmt;
 
 use holon::{Primitives, VectorManager, Vector};
-use crate::journal::Outcome;
+use crate::journal::Direction;
 
 // ─── Portfolio (phase + equity) ─────────────────────────────────────────────────
 
@@ -117,12 +117,11 @@ impl Portfolio {
     ///
     /// Long (Buy): profit when price goes up (outcome_pct > 0).
     /// Short (Sell): profit when price goes down (outcome_pct < 0), i.e. -outcome_pct > 0.
-    pub fn record_trade(&mut self, outcome_pct: f64, frac: f64, direction: Outcome, year: i32,
+    pub fn record_trade(&mut self, outcome_pct: f64, frac: f64, direction: Direction, year: i32,
                      swap_fee: f64, slippage: f64) {
         let directional_return = match direction {
-            Outcome::Buy   =>  outcome_pct,
-            Outcome::Sell  => -outcome_pct,
-            Outcome::Noise => return,
+            Direction::Long  =>  outcome_pct,
+            Direction::Short => -outcome_pct,
         };
         // Two-sided fee model: fees apply at each swap independently.
         // Entry: deploy × (1 - entry_cost) = actual position

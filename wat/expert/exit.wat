@@ -48,9 +48,13 @@
 ;; the position state and predicts: "will this position be worth MORE
 ;; or LESS in N candles?"
 ;;
-;; Label (after N candles):
-;;   Buy = the position improved (hold was correct)
-;;   Sell = the position deteriorated (should have exited)
+;; Labels (symbols, not the old Outcome enum):
+;;   (define hold (register exit-journal "Hold"))
+;;   (define exit (register exit-journal "Exit"))
+;;
+;; After N candles:
+;;   Hold = the position improved (holding was correct)
+;;   Exit = the position deteriorated (should have exited)
 ;;
 ;; The exit expert's discriminant learns which position states precede
 ;; improvement vs deterioration.
@@ -59,7 +63,7 @@
 ;;
 ;; On each candle, for each open position:
 ;;   1. Encode position state
-;;   2. Exit expert predicts: Hold (Buy) or Exit (Sell)
+;;   2. Exit expert predicts: Hold or Exit
 ;;   3. If Exit with conviction above threshold:
 ;;      - Active position: force close (don't wait for stop)
 ;;      - Runner: tighten the trail (reduce k_trail for this position)

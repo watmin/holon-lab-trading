@@ -18,7 +18,7 @@ use holon::{Primitives, ScalarMode, VectorManager, Vector};
 use holon::memory::OnlineSubspace;
 
 use enterprise::candle::load_candles;
-use enterprise::journal::{Journal, Outcome, Prediction};
+use enterprise::journal::{Journal, Label, Direction, Prediction, register_direction, register_exit};
 use enterprise::thought::{ThoughtEncoder, ThoughtVocab};
 use enterprise::treasury::Treasury;
 use enterprise::portfolio::{Portfolio, Phase};
@@ -216,12 +216,14 @@ fn main() {
     // ─ Named journals ─
     // Visual journal removed — Chapter 1 artifact, proven zero signal.
     let mut tht_journal = Journal::new("thought", args.dims, args.recalib_interval);
+    let (tht_buy, tht_sell) = register_direction(&mut tht_journal);
 
     // ─ Manager journal: thinks in expert opinions, not candle data ────
     // The manager's vocabulary = its observers. Each expert is an atom.
     // The manager's thought = bundle(bind(expert_atom, scalar(conviction))).
     // The manager's discriminant learns which expert configurations predict.
     let mut mgr_journal = Journal::new("manager", args.dims, args.recalib_interval);
+    let (mgr_buy, mgr_sell) = register_direction(&mut mgr_journal);
     let mgr_scalar = holon::ScalarEncoder::new(args.dims);
     let mut prev_mgr_thought: Option<Vector> = None; // for difference computation
     let mgr_atoms = ManagerAtoms::new(&vm);
@@ -230,6 +232,7 @@ fn main() {
     // decomplect:allow(inline-encoding) — exit expert atoms + encoding grow here until market/exit.rs
     // dead-thoughts:allow(scaffolding) — exit expert learns but never predicts yet. Wired when exit expert activates.
     let mut exit_journal = Journal::new("exit-expert", args.dims, args.recalib_interval);
+    let (exit_hold, exit_exit) = register_exit(&mut exit_journal);
     let exit_scalar = holon::ScalarEncoder::new(args.dims);
     let pos_pnl_atom = vm.get_vector("position-pnl");
     let pos_hold_atom = vm.get_vector("position-hold");
@@ -281,7 +284,7 @@ fn main() {
     let mut observers: Vec<Observer> = observer_names.iter().enumerate().map(|(ei, &profile)| {
         // Each expert gets a different seed: they explore independently.
         Observer::new(profile, args.dims, args.recalib_interval,
-            args.dims as u64 + ei as u64 * 7919)
+            args.dims as u64 + ei as u64 * 7919, &["Buy", "Sell"])
     }).collect();
 
     // ─ Dual thought journals: slow (deep memory) + fast (regime-adaptive) ─
@@ -548,7 +551,7 @@ fn main() {
                 candle_atr: candles[i].atr_r,
                 candle_hour: parse_candle_hour(&candles[i].ts),
                 candle_day: parse_candle_day(&candles[i].ts),
-                disc_strength: tht_journal.last_disc_strength,
+                disc_strength: tht_journal.last_disc_strength(),
             };
             let mgr_facts = encode_manager_thought(&mgr_ctx, &mgr_atoms, &mgr_scalar, min_opinion_magnitude);
 
@@ -708,7 +711,7 @@ fn main() {
                     if let Some(pos) = positions.iter().find(|p| p.id == obs.pos_id) {
                         let current_pnl = pos.return_pct(btc_price);
                         let improved = current_pnl > obs.snapshot_pnl;
-                        let label = if improved { Outcome::Buy } else { Outcome::Sell }; // Buy=Hold was right
+                        let label = if improved { exit_hold } else { exit_exit }; // Hold was right vs Exit was right
                         exit_journal.observe(&obs.thought, label, 1.0);
                     }
                     false // remove resolved observation
@@ -733,7 +736,7 @@ fn main() {
                         &Primitives::bind(&pos_atr_now_atom, &exit_scalar.encode_log(candles[i].atr_r.max(1e-10))),
                         &Primitives::bind(&pos_stop_dist_atom, &exit_scalar.encode(stop_dist.clamp(0.0, 1.0), ScalarMode::Linear { scale: 1.0 })),
                         &Primitives::bind(&pos_phase_atom, &vm.get_vector(if pos.phase == PositionPhase::Runner { "runner" } else { "active" })),
-                        &Primitives::bind(&pos_dir_atom, &vm.get_vector(if pos.direction == Outcome::Buy { "buy" } else { "sell" })),
+                        &Primitives::bind(&pos_dir_atom, &vm.get_vector(if pos.direction == Direction::Long { "buy" } else { "sell" })),
                     ]);
 
                     // Buffer observation for resolution
@@ -799,7 +802,7 @@ fn main() {
                     }
                     // Log to ledger
                     let ret = pos.return_pct(btc_price);
-                    let exit_dir = match pos.direction { Outcome::Buy => "Buy", _ => "Sell" };
+                    let exit_dir = match pos.direction { Direction::Long => "Buy", Direction::Short => "Sell" };
                     let exit_type = match (exit, pos.phase) {
                         (PositionExit::TakeProfit, PositionPhase::Runner) => "RunnerTP",
                         (PositionExit::TakeProfit, _) => "PartialProfit",
@@ -840,28 +843,29 @@ fn main() {
             let should_open = args.asset_mode == "hold"
                 && portfolio.phase != Phase::Observe
                 && mgr_curve_valid && in_proven_band && market_moved && risk_allows
-                && (meta_dir == Some(Outcome::Buy) || meta_dir == Some(Outcome::Sell));
+                && (meta_dir == Some(mgr_buy) || meta_dir == Some(mgr_sell));
 
             if should_open {
                 let expected_move = candles[i].atr_r * 6.0;
                 if expected_move > 2.0 * fee_rate {
                     let band_edge: f64 = 0.03;
                     let frac = ((band_edge / 2.0) * cached_risk_mult).min(max_single_position);
-                    let direction = meta_dir.unwrap();
+                    let dir_label = meta_dir.unwrap();
+                    let direction = if dir_label == mgr_buy { Direction::Long } else { Direction::Short };
 
                     let (from_asset, to_asset, deploy_amount, price_for_swap) = match direction {
-                        Outcome::Buy => {
+                        Direction::Long => {
                             let avail = treasury.balance("USDC");
                             ("USDC", "WBTC", avail * frac, btc_price)
                         }
-                        _ => {
+                        Direction::Short => {
                             let avail = treasury.balance("WBTC");
                             let amount = avail * frac;
                             ("WBTC", "USDC", amount, 1.0 / btc_price)
                         }
                     };
 
-                    let usdc_value = if direction == Outcome::Buy { deploy_amount }
+                    let usdc_value = if direction == Direction::Long { deploy_amount }
                                      else { deploy_amount * btc_price };
 
                     if usdc_value > 10.0 {
@@ -874,14 +878,14 @@ fn main() {
                             from_asset, to_asset, deploy_amount, price_for_swap, fee_rate);
 
                         // BUY: claim WBTC. SELL: USDC already in balance.
-                        if direction == Outcome::Buy {
+                        if direction == Direction::Long {
                             treasury.claim("WBTC", received);
                         }
 
                         let entry_fee = usdc_value * fee_rate;
                         let (deployed_usd, wbtc_held) = match direction {
-                            Outcome::Buy => (spent, received),
-                            _ => (spent * btc_price, 0.0),
+                            Direction::Long => (spent, received),
+                            Direction::Short => (spent * btc_price, 0.0),
                         };
                         let pos = ManagedPosition::new(
                             next_position_id, i, btc_price, candles[i].atr_r,
@@ -890,7 +894,7 @@ fn main() {
                         );
                         next_position_id += 1;
                         hold_swaps += 1;
-                        let dir_str = if direction == Outcome::Buy { "Buy" } else { "Sell" };
+                        let dir_str = if direction == Direction::Long { "Buy" } else { "Sell" };
                         ledger.execute(
                             "INSERT INTO trade_ledger (step,candle_idx,timestamp,direction,entry_price,position_usd,swap_fee_pct,exit_reason)
                              VALUES (?1,?2,?3,?4,?5,?6,?7,'Open')",
@@ -1027,7 +1031,7 @@ fn main() {
             // ── Event-driven learning ─────────────────────────────────────
             // Snapshot recalib counts before scanning so we can detect if
             // any recalibration fired during this candle's learning.
-            let tht_recalib_before = tht_journal.recalib_count;
+            let tht_recalib_before = tht_journal.recalib_count();
 
             let current_price = candles[i].close;
             for entry in pending.iter_mut() {
@@ -1039,10 +1043,12 @@ fn main() {
                 entry.path_candles = i - entry.candle_idx;
 
                 // Track directional excursion relative to predicted direction.
-                let directional_pct = match entry.meta_dir {
-                    Some(Outcome::Buy)  =>  pct,
-                    Some(Outcome::Sell) => -pct,
-                    _ => pct.abs(), // no direction → track absolute
+                let directional_pct = if entry.meta_dir == Some(tht_buy) {
+                    pct
+                } else if entry.meta_dir == Some(tht_sell) {
+                    -pct
+                } else {
+                    pct.abs() // no direction → track absolute
                 };
                 if directional_pct > entry.max_favorable {
                     entry.max_favorable = directional_pct;
@@ -1090,8 +1096,8 @@ fn main() {
                     } else {
                         args.move_threshold
                     };
-                    let outcome = if pct > thresh       { Some(Outcome::Buy)  }
-                                  else if pct < -thresh { Some(Outcome::Sell) }
+                    let outcome = if pct > thresh       { Some(tht_buy)  }
+                                  else if pct < -thresh { Some(tht_sell) }
                                   else                  { None };
 
                     if let Some(o) = outcome {
@@ -1112,7 +1118,7 @@ fn main() {
                                     "INSERT INTO observer_log (step,observer,conviction,direction,correct)
                                      VALUES (?1,?2,?3,?4,?5)",
                                     params![log_step, log.name, log.conviction,
-                                            log.direction.to_string(), log.correct as i32],
+                                            observers[ei].journal.label_name(log.direction).unwrap_or("?"), log.correct as i32],
                                 ).ok(); }
                             }
                         }
@@ -1123,7 +1129,7 @@ fn main() {
             }
 
             // Log any recalibrations that fired during this candle's learning.
-            if tht_journal.recalib_count != tht_recalib_before {
+            if tht_journal.recalib_count() != tht_recalib_before {
                 // Pre-compute curve params for Kelly — once per recalib, not per trade.
                 // Uses the generalist's resolved_preds for the curve fit.
                 if let Some((_, a, b)) = kelly_frac(0.15, &resolved_preds, 50,
@@ -1182,22 +1188,28 @@ fn main() {
                      VALUES (?1,?2,?3,?4,?5,?6)",
                     params![
                         encode_count as i64, "thought",
-                        tht_journal.last_cos_raw, tht_journal.last_disc_strength,
-                        tht_journal.buy.count() as i64, tht_journal.sell.count() as i64,
+                        tht_journal.last_cos_raw(), tht_journal.last_disc_strength(),
+                        tht_journal.label_count(tht_buy) as i64, tht_journal.label_count(tht_sell) as i64,
                     ],
                 ).ok();
 
                 // Decode thought discriminant against the fact codebook.
-                let decoded = tht_journal.decode_discriminant(&codebook_vecs, &codebook_labels);
-                for (rank, (label, cos)) in decoded.iter().take(20).enumerate() {
-                    ledger.execute(
-                        "INSERT INTO disc_decode (step,journal,rank,fact_label,cosine)
-                         VALUES (?1,?2,?3,?4,?5)",
-                        params![
-                            encode_count as i64, "thought",
-                            (rank + 1) as i64, label, cos,
-                        ],
-                    ).ok();
+                if let Some(disc) = tht_journal.discriminant(tht_buy) {
+                    let disc_vec = Vector::from_f64(disc);
+                    let mut decoded: Vec<(String, f64)> = codebook_vecs.iter().zip(codebook_labels.iter())
+                        .map(|(v, l)| (l.clone(), holon::Similarity::cosine(&disc_vec, v)))
+                        .collect();
+                    decoded.sort_by(|a, b| b.1.abs().partial_cmp(&a.1.abs()).unwrap());
+                    for (rank, (label, cos)) in decoded.iter().take(20).enumerate() {
+                        ledger.execute(
+                            "INSERT INTO disc_decode (step,journal,rank,fact_label,cosine)
+                             VALUES (?1,?2,?3,?4,?5)",
+                            params![
+                                encode_count as i64, "thought",
+                                (rank + 1) as i64, label, cos,
+                            ],
+                        ).ok();
+                    }
                 }
 
             }
@@ -1234,18 +1246,19 @@ fn main() {
                     let entry_price = candles[entry.candle_idx].close;
                     entry.exit_pct = (current_price - entry_price) / entry_price;
                 }
-                let final_out   = entry.first_outcome.unwrap_or(Outcome::Noise);
+                let final_out: Option<Label> = entry.first_outcome;
                 let entry_candle = &candles[entry.candle_idx];
 
-                match final_out {
-                    Outcome::Noise => noise_count  += 1,
-                    _              => labeled_count += 1,
+                if final_out.is_none() {
+                    noise_count += 1;
+                } else {
+                    labeled_count += 1;
                 }
 
                 // Rolling accuracy per journal (non-Noise only).
-                if final_out != Outcome::Noise {
+                if let Some(outcome) = final_out {
                     if let Some(td) = entry.tht_pred.direction {
-                        let ok = td == final_out;
+                        let ok = td == outcome;
                         tht_rolling.push_back(ok);
                         if tht_rolling.len() > rolling_cap { tht_rolling.pop_front(); }
                     }
@@ -1260,11 +1273,11 @@ fn main() {
                         // would it have been profitable after costs?
                         let expert_majority = {
                             let buys = entry.observer_preds.iter()
-                                .filter(|ep| ep.direction == Some(Outcome::Buy)).count();
+                                .filter(|ep| ep.direction == Some(tht_buy)).count();
                             let sells = entry.observer_preds.iter()
-                                .filter(|ep| ep.direction == Some(Outcome::Sell)).count();
-                            if buys > sells { Some(Outcome::Buy) }
-                            else if sells > buys { Some(Outcome::Sell) }
+                                .filter(|ep| ep.direction == Some(tht_sell)).count();
+                            if buys > sells { Some(tht_buy) }
+                            else if sells > buys { Some(tht_sell) }
                             else { None }
                         };
                         if expert_majority.is_some() {
@@ -1276,7 +1289,7 @@ fn main() {
                             // teaches the Sell accumulator. The discriminant separates.
                             let price_change = (current_price - candles[entry.candle_idx].close)
                                 / candles[entry.candle_idx].close;
-                            let mgr_label = if price_change > 0.0 { Outcome::Buy } else { Outcome::Sell };
+                            let mgr_label = if price_change > 0.0 { mgr_buy } else { mgr_sell };
 
                             // Learn from the SAME thought the manager predicted with.
                             // Stored at prediction time, delta-enriched. One encoding path.
@@ -1313,11 +1326,8 @@ fn main() {
                     let trade_pct = entry.exit_pct;
                     {
                         // ── Accounting: compute P&L (real or hypothetical) ────
-                        let gross_ret = match dir {
-                            Outcome::Buy  =>  trade_pct,
-                            Outcome::Sell => -trade_pct,
-                            Outcome::Noise => 0.0,
-                        };
+                        let gross_ret = if dir == mgr_buy { trade_pct }
+                            else { -trade_pct };
                         let per_swap = args.swap_fee + args.slippage;
                         let after_entry = 1.0 - per_swap;
                         let gross_value = after_entry * (1.0 + gross_ret);
@@ -1341,7 +1351,8 @@ fn main() {
                         if is_live {
                             let trade_fees = pos_usd * (args.swap_fee * 2.0);
                             let trade_slip = pos_usd * (args.slippage * 2.0);
-                            portfolio.record_trade(trade_pct, frac, dir, entry.year,
+                            let trade_dir = if dir == mgr_buy { Direction::Long } else { Direction::Short };
+                            portfolio.record_trade(trade_pct, frac, trade_dir, entry.year,
                                                 args.swap_fee, args.slippage);
                             treasury.close_position(entry.deployed_usd,
                                 pos_usd * gross_ret, trade_fees, trade_slip);
@@ -1367,7 +1378,7 @@ fn main() {
                             params![
                                 log_step, entry.candle_idx as i64, &entry_candle.ts,
                                 exit_candle.map(|ci| ci as i64), exit_ts,
-                                dir.to_string(), entry.meta_conviction,
+                                mgr_journal.label_name(dir).unwrap_or("?"), entry.meta_conviction,
                                 entry.was_flipped as i32,
                                 entry.entry_price, exit_price,
                                 frac, pos_usd,
@@ -1377,7 +1388,7 @@ fn main() {
                                 net_ret * 100.0, trade_pnl, treasury_equity,
                                 entry.max_favorable * 100.0, entry.max_adverse * 100.0,
                                 crossing_elapsed, entry.path_candles as i64,
-                                final_out.to_string(), (net_ret > 0.0) as i32,
+                                final_out.map(|l| tht_journal.label_name(l).unwrap_or("?").to_string()).unwrap_or_else(|| "Noise".to_string()), (net_ret > 0.0) as i32,
                                 match entry.exit_reason {
                                     Some(ExitReason::TrailingStop) => "TrailingStop",
                                     Some(ExitReason::TakeProfit) => "TakeProfit",
@@ -1389,7 +1400,7 @@ fn main() {
 
                         // Panel tracking (all predictions, not just live)
                         panel_recalib_total += 1;
-                        if dir == final_out { panel_recalib_wins += 1; }
+                        if final_out == Some(dir) { panel_recalib_wins += 1; }
 
                         // resolved_preds is populated at first-crossing time (direction
                         // accuracy only). No second push here — the calibration curve
@@ -1415,7 +1426,7 @@ fn main() {
                                         / portfolio.rolling.len() as f64
                                 } else { 0.5 };
                                 let eq_pct = (treasury_equity - args.initial_equity) / args.initial_equity * 100.0;
-                                let won = (dir == final_out) as i32;
+                                let won = (final_out == Some(dir)) as i32;
                                 if args.diagnostics { ledger.execute(
                                     "INSERT INTO risk_log (step,drawdown_pct,streak_len,streak_dir,recent_acc,equity_pct,won)
                                      VALUES (?1,?2,?3,?4,?5,?6,?7)",
@@ -1424,7 +1435,7 @@ fn main() {
                             // Track flip-zone trade outcomes.
                             if entry.was_flipped {
                                 // Adaptive decay state machine.
-                                let won = dir == final_out;
+                                let won = final_out == Some(dir);
                                 flip_zone_wins.push_back(won);
                                 if flip_zone_wins.len() > flip_zone_rolling_cap {
                                     flip_zone_wins.pop_front();
@@ -1450,7 +1461,7 @@ fn main() {
                             }
                             // Store thought vectors for engram analysis.
                             if entry.was_flipped {
-                                let won = (dir == final_out) as i32;
+                                let won = (final_out == Some(dir)) as i32;
                                 let tht_bytes: Vec<u8> = entry.tht_vec.data().iter()
                                     .map(|&v| v as u8).collect();
                                 if args.diagnostics { ledger.execute(
@@ -1477,10 +1488,10 @@ fn main() {
                     params![
                         log_step, entry.candle_idx as i64, &entry_candle.ts,
                         entry.tht_pred.raw_cos, entry.tht_pred.conviction,
-                        entry.tht_pred.direction.map(|d| d.to_string()),
-                        entry.meta_dir.map(|d| d.to_string()),
+                        entry.tht_pred.direction.and_then(|d| tht_journal.label_name(d).map(|s| s.to_string())),
+                        entry.meta_dir.and_then(|d| mgr_journal.label_name(d).map(|s| s.to_string())),
                         entry.meta_conviction,
-                        final_out.to_string(),
+                        final_out.and_then(|l| tht_journal.label_name(l).map(|s| s.to_string())).unwrap_or_else(|| "Noise".to_string()),
                         entry.position_frac.is_some() as i32,
                         entry.position_frac,
                         treasury_equity,
@@ -1564,9 +1575,9 @@ fn main() {
 
     // ─ Drain remaining pending entries (log, no further learning) ────────────
     while let Some(entry) = pending.pop_front() {
-        let final_out    = entry.first_outcome.unwrap_or(Outcome::Noise);
+        let final_out: Option<Label> = entry.first_outcome;
         let entry_candle = &candles[entry.candle_idx];
-        match final_out { Outcome::Noise => noise_count += 1, _ => labeled_count += 1 }
+        if final_out.is_none() { noise_count += 1; } else { labeled_count += 1; }
 
         ledger.execute(
             "INSERT INTO candle_log
@@ -1578,10 +1589,10 @@ fn main() {
             params![
                 log_step, entry.candle_idx as i64, &entry_candle.ts,
                 entry.tht_pred.raw_cos, entry.tht_pred.conviction,
-                entry.tht_pred.direction.map(|d| d.to_string()),
-                entry.meta_dir.map(|d| d.to_string()),
+                entry.tht_pred.direction.and_then(|d| tht_journal.label_name(d).map(|s| s.to_string())),
+                entry.meta_dir.and_then(|d| mgr_journal.label_name(d).map(|s| s.to_string())),
                 entry.meta_conviction,
-                final_out.to_string(),
+                final_out.and_then(|l| tht_journal.label_name(l).map(|s| s.to_string())).unwrap_or_else(|| "Noise".to_string()),
                 entry.position_frac.is_some() as i32,
                 entry.position_frac,
                 treasury_equity,
@@ -1622,8 +1633,8 @@ fn main() {
         treasury.total_fees_paid, treasury.total_slippage);
     eprintln!();
     eprintln!("  Thought journal — buy_obs={} sell_obs={} cos_raw={:.4} disc_strength={:.4} recalibs={}",
-        tht_journal.buy.count(), tht_journal.sell.count(),
-        tht_journal.last_cos_raw, tht_journal.last_disc_strength, tht_journal.recalib_count);
+        tht_journal.label_count(tht_buy), tht_journal.label_count(tht_sell),
+        tht_journal.last_cos_raw(), tht_journal.last_disc_strength(), tht_journal.recalib_count());
     eprintln!();
 
     let tht_acc = if tht_rolling.is_empty() { 0.0 }
@@ -1638,10 +1649,14 @@ fn main() {
         for observer in &observers {
             eprintln!("    {}: recalibs={} disc_str={:.4} buy={} sell={}",
                 observer.name,
-                observer.journal.recalib_count,
-                observer.journal.last_disc_strength,
-                observer.journal.buy.count(),
-                observer.journal.sell.count());
+                observer.journal.recalib_count(),
+                observer.journal.last_disc_strength(),
+                observer.journal.label_count(observer.primary_label),
+                {
+                    // sell is always the second registered label (index 1)
+                    let labels = observer.journal.labels();
+                    if labels.len() > 1 { observer.journal.label_count(labels[1]) } else { 0 }
+                });
         }
         eprintln!();
     }

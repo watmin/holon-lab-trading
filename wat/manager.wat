@@ -122,6 +122,14 @@
         (delta         (motion (bundle expert-facts shape context) prev-thought)))
     (bundle expert-facts shape context delta)))
 
+;; ── Labels ──────────────────────────────────────────────────────────
+;;
+;; Labels are symbols — registered once, used as cheap integer handles.
+;; The manager's question is direction: did price go up or down?
+;;
+;; (define buy  (register manager-journal "Buy"))
+;; (define sell (register manager-journal "Sell"))
+
 ;; ── Learning ────────────────────────────────────────────────────────
 ;;
 ;; Label = raw price direction at horizon.
@@ -131,8 +139,10 @@
 ;; where experts said BUY but the price went DOWN.
 ;;
 ;; (observe manager-journal manager-thought
-;;   (if (> price-at-horizon entry-price) Buy Sell)
+;;   (if (> price-at-horizon entry-price) buy sell)
 ;;   1.0)
+;;
+;; (resolve manager-journal conviction correct)  ; for curve fitting
 
 ;; ── Gate ─────────────────────────────────────────────────────────────
 ;;
@@ -140,7 +150,8 @@
 ;; The treasury deploys only when the manager has proven profitable
 ;; direction prediction from the intensity patterns.
 ;;
-;; (gate manager-journal manager-curve 0.52)
+;; (let ((a b) (curve manager-journal))
+;;   (gate manager-journal (a b) 0.52))
 ;; → (if proven (emit direction conviction) silence)
 
 ;; ── What the manager does NOT do ────────────────────────────────────
@@ -150,3 +161,14 @@
 ;; - Does NOT flip predictions (the flip emerges from the geometry)
 ;; - Does NOT average expert opinions (the shape matters, not the mean)
 ;; - Does NOT know about costs (that's the treasury's domain)
+
+;; ── Derived thresholds (application-level, not stdlib) ──────────────
+;;
+;; These interpret the geometry for trading. The formula k/sqrt(dims)
+;; is trivial — the application chooses k.
+
+(define (noise-floor dims)
+  (/ 3.0 (sqrt dims)))    ;; 3σ — below this, cosine is random noise
+
+(define (sweet-spot dims)
+  (/ 5.0 (sqrt dims)))    ;; 5σ — conviction level where signal emerges

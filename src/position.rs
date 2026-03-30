@@ -1,5 +1,5 @@
 use holon::Vector;
-use crate::journal::{Outcome, Prediction};
+use crate::journal::{Direction, Label, Prediction};
 
 // ─── Exit observation ───────────────────────────────────────────────────────
 
@@ -21,8 +21,8 @@ pub struct Pending {
 
     // ── Prediction (what the experts said) ────────────────────────────
     pub tht_pred:      Prediction,
-    pub raw_meta_dir:  Option<Outcome>,  // un-flipped direction (for auto calibration)
-    pub meta_dir:      Option<Outcome>,
+    pub raw_meta_dir:  Option<Label>,  // un-flipped direction (for auto calibration)
+    pub meta_dir:      Option<Label>,
     pub was_flipped:   bool,             // true if flip was active when this entry was created
     pub meta_conviction: f64,
     pub position_frac: Option<f64>,
@@ -32,7 +32,7 @@ pub struct Pending {
     pub fact_labels:   Vec<String>,      // thought facts present at this candle
 
     // ── Learning (event-driven, first crossing only) ─────────────────
-    pub first_outcome: Option<Outcome>, // set on first threshold crossing; drives learning
+    pub first_outcome: Option<Label>, // set on first threshold crossing; drives learning
     pub outcome_pct:   f64,             // price change at first crossing (for DB)
 
     // ── Accounting (pure measurement, no hallucination) ──────────────
@@ -75,7 +75,7 @@ pub struct ManagedPosition {
     pub entry_candle:   usize,
     pub entry_price:    f64,
     pub entry_atr:      f64,        // ATR at entry — scales stop/TP
-    pub direction:      Outcome,    // Buy (long WBTC) or Sell (back to USDC)
+    pub direction:      Direction,    // Buy (long WBTC) or Sell (back to USDC)
 
     // Capital
     pub usdc_deployed:  f64,        // USDC spent to enter
@@ -99,7 +99,7 @@ impl ManagedPosition {
         candle_idx: usize,
         entry_price: f64,
         entry_atr: f64,
-        direction: Outcome,
+        direction: Direction,
         usdc_deployed: f64,
         wbtc_received: f64,
         entry_fee: f64,
@@ -108,7 +108,7 @@ impl ManagedPosition {
     ) -> Self {
         // BUY: stop below entry, TP above. SELL: stop above, TP below.
         let (stop, tp, hw) = match direction {
-            Outcome::Buy => (
+            Direction::Long => (
                 entry_price * (1.0 - k_stop * entry_atr),
                 entry_price * (1.0 + k_tp * entry_atr),
                 entry_price,
@@ -145,7 +145,7 @@ impl ManagedPosition {
         if self.phase == PositionPhase::Closed { return None; }
 
         match self.direction {
-            Outcome::Buy => {
+            Direction::Long => {
                 // BUY: profit when price goes UP
                 if current_price > self.high_water {
                     self.high_water = current_price;
@@ -191,7 +191,7 @@ impl ManagedPosition {
     /// Current unrealized P&L in USDC
     pub fn unrealized_pnl(&self, current_price: f64) -> f64 {
         match self.direction {
-            Outcome::Buy => {
+            Direction::Long => {
                 // BUY: we hold WBTC, value = wbtc × price
                 let wbtc_value = self.wbtc_held * current_price;
                 wbtc_value - self.usdc_deployed + self.usdc_reclaimed - self.total_fees
@@ -210,7 +210,7 @@ impl ManagedPosition {
     pub fn return_pct(&self, current_price: f64) -> f64 {
         if self.usdc_deployed <= 0.0 { return 0.0; }
         match self.direction {
-            Outcome::Buy => {
+            Direction::Long => {
                 let wbtc_value = self.wbtc_held * current_price;
                 (wbtc_value + self.usdc_reclaimed - self.total_fees) / self.usdc_deployed - 1.0
             }
