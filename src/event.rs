@@ -4,7 +4,8 @@
 //! Every input is an Event. The enterprise doesn't know where events come from.
 //! Backtest, websocket, test harness — same Event, same fold.
 
-use crate::candle::Candle;
+use crate::candle::{Candle, load_candles};
+use std::path::Path;
 
 /// What the enterprise consumes. One event per fold iteration.
 #[derive(Clone, Debug)]
@@ -48,4 +49,64 @@ impl Event {
             _ => "",
         }
     }
+}
+
+// ─── Stream constructors ────────────────────────────────────────────────────
+
+/// Load a single asset's candles from a DB and produce an event stream.
+/// The simplest stream: one asset, one source.
+pub fn stream_from_db(db_path: &Path, asset: &str, label_col: &str) -> Vec<Event> {
+    load_candles(db_path, label_col)
+        .into_iter()
+        .map(|candle| Event::Candle {
+            asset: asset.to_string(),
+            candle,
+        })
+        .collect()
+}
+
+/// Merge multiple event streams by timestamp.
+/// The merged stream is sorted — the enterprise processes events in time order.
+/// This is the bridge to multi-asset: each asset's stream is merged into one.
+pub fn merge_streams(streams: Vec<Vec<Event>>) -> Vec<Event> {
+    let mut merged: Vec<Event> = streams.into_iter().flatten().collect();
+    merged.sort_by(|a, b| a.timestamp().cmp(b.timestamp()));
+    merged
+}
+
+/// Inject recurring deposits into a stream.
+/// Every `interval` candles, deposit `amount` of `asset`.
+/// The system evolves with new capital arriving over time.
+pub fn with_recurring_deposits(
+    mut events: Vec<Event>,
+    asset: &str,
+    amount: f64,
+    interval: usize,
+) -> Vec<Event> {
+    let _candle_count = events.iter().filter(|e| matches!(e, Event::Candle { .. })).count();
+    let mut deposits = Vec::new();
+
+    // Find candle timestamps at deposit intervals
+    let mut candle_idx = 0;
+    for event in &events {
+        if let Event::Candle { candle: _, .. } = event {
+            candle_idx += 1;
+            if candle_idx % interval == 0 {
+                deposits.push(Event::Deposit {
+                    asset: asset.to_string(),
+                    amount,
+                });
+                // We'll insert after this candle's timestamp
+            }
+        }
+    }
+
+    // For now, append deposits at end and re-sort
+    // (proper interleaving would insert at the right timestamp)
+    if !deposits.is_empty() {
+        events.extend(deposits);
+        events.sort_by(|a, b| a.timestamp().cmp(b.timestamp()));
+    }
+
+    events
 }
