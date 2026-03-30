@@ -8,13 +8,21 @@ argument-hint: [wat-file]
 
 > The spec is the source of truth for what the enterprise SHOULD do. The Rust implements it. When code and spec diverge, update the one that's wrong. — CLAUDE.md
 
-The wat files in `wat/` are the domain specifications. They describe what each component thinks, how it encodes, what it learns, what labels it uses, what it does NOT do. The Rust in `src/` implements them.
+Two layers of specification:
 
-This skill finds divergence between spec and implementation.
+**Language layer** (`~/work/holon/wat/`): the wat repo defines the core primitives and stdlib. This is the language definition — the source of truth for what the primitives ARE. Always read `~/work/holon/wat/core/primitives.wat` and relevant `~/work/holon/wat/std/*.wat` files.
+
+**Application layer** (`wat/` in this repo): domain specifications for the trading enterprise. These use the language primitives to describe what each component thinks.
+
+The Rust in `src/` implements both layers — `holon-rs` implements the language, `src/` implements the application.
+
+This skill finds divergence between specs and implementation at BOTH layers.
 
 ## How to check
 
-For a given wat file (default: all in `wat/`), read the spec and find its implementation counterpart:
+First, read the language core: `~/work/holon/wat/core/primitives.wat`. Verify the Rust code uses the primitives as defined (correct forms, correct types, Labels as symbols, journal coalgebra interface).
+
+Then, for a given application wat file (default: all in `wat/`), read the spec and find its implementation counterpart:
 
 ```
 wat/manager.wat      → src/market/manager.rs + enterprise.rs (manager sections)
