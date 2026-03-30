@@ -149,7 +149,13 @@ struct Args {
     #[arg(long, default_value = "hold")]
     asset_mode: String,
 
+    /// Base asset — the unit of account. Always priced at 1.0.
+    #[arg(long, default_value = "USDC")]
+    base_asset: String,
 
+    /// Quote asset — what the desk trades. Priced by the candle stream.
+    #[arg(long, default_value = "WBTC")]
+    quote_asset: String,
 
     /// Output SQLite ledger for this run. Auto-generated if omitted.
     #[arg(long)]
@@ -365,7 +371,7 @@ fn main() {
     let highconv_rolling_cap = 200usize;
 
     let mut portfolio    = Portfolio::new(args.initial_equity, args.observe_period);
-    let mut treasury  = Treasury::new("USDC", args.initial_equity, args.max_positions, args.max_utilization);
+    let mut treasury  = Treasury::new(&args.base_asset, args.initial_equity, args.max_positions, args.max_utilization);
     let mut peak_treasury_equity: f64 = args.initial_equity;
     // Seed treasury 50/50: half USDC, half WBTC at starting price.
     // "I don't know which way the market will go — hold both."
@@ -373,9 +379,9 @@ fn main() {
     let seed_price = candles[args.window - 1].close;
     {
         let half = args.initial_equity / 2.0;
-        let seed_wbtc = half / seed_price;
-        *treasury.balances.get_mut("USDC").unwrap() = half;
-        treasury.balances.insert("WBTC".to_string(), seed_wbtc);
+        let seed_quote = half / seed_price;
+        *treasury.balances.get_mut(&args.base_asset).unwrap() = half;
+        treasury.balances.insert(args.quote_asset.clone(), seed_quote);
     }
     let mut pending:    VecDeque<Pending> = VecDeque::new();
 
@@ -688,14 +694,11 @@ fn main() {
             let meta_dir = raw_meta_dir;
 
             // ── Position management: tick all open positions ─────────
-            let btc_price = candles[i].close;
+            let quote_price = candles[i].close;
             let fee_rate = args.swap_fee + args.slippage;
-            // Treasury equity: the source of truth. Replaces portfolio.equity.
-            let treasury_equity = {
-                let usdc = treasury.balance("USDC") + treasury.deployed("USDC");
-                let wbtc = treasury.balance("WBTC") + treasury.deployed("WBTC");
-                usdc + wbtc * btc_price
-            };
+            // Treasury equity: the source of truth. Token-agnostic.
+            let prices = treasury.price_map(&[(&args.quote_asset, quote_price)]);
+            let treasury_equity = treasury.total_value(&prices);
             if treasury_equity > peak_treasury_equity {
                 peak_treasury_equity = treasury_equity;
             }
@@ -706,7 +709,7 @@ fn main() {
                 if i - obs.snapshot_candle >= exit_horizon {
                     // Find the position and check if P&L improved
                     if let Some(pos) = positions.iter().find(|p| p.id == obs.pos_id) {
-                        let current_pnl = pos.return_pct(btc_price);
+                        let current_pnl = pos.return_pct(quote_price);
                         let improved = current_pnl > obs.snapshot_pnl;
                         let label = if improved { exit_hold } else { exit_exit }; // Hold was right vs Exit was right
                         exit_journal.observe(&obs.thought, label, 1.0);
@@ -722,9 +725,9 @@ fn main() {
 
                 // Exit expert: encode at Nyquist rate of position lifecycle
                 if pos.candles_held > 0 && pos.candles_held % exit_observe_interval == 0 {
-                    let pnl_frac = pos.return_pct(btc_price);
+                    let pnl_frac = pos.return_pct(quote_price);
                     let mfe_frac = (pos.high_water - pos.entry_price) / pos.entry_price;
-                    let stop_dist = (btc_price - pos.trailing_stop).abs() / btc_price;
+                    let stop_dist = (quote_price - pos.trailing_stop).abs() / quote_price;
                     let exit_thought = Primitives::bundle(&[
                         &Primitives::bind(&pos_pnl_atom, &exit_scalar.encode(pnl_frac.clamp(-1.0, 1.0) * 0.5 + 0.5, ScalarMode::Linear { scale: 1.0 })),
                         &Primitives::bind(&pos_hold_atom, &exit_scalar.encode_log(pos.candles_held as f64)),
@@ -746,59 +749,59 @@ fn main() {
 
                 }
 
-                if let Some(exit) = pos.tick(btc_price, k_trail) {
+                if let Some(exit) = pos.tick(quote_price, k_trail) {
                     match exit {
                         PositionExit::TakeProfit if pos.phase == PositionPhase::Active => {
                             // Partial exit: reclaim capital + fees + minimum profit
-                            let reclaim_usdc = pos.usdc_deployed + pos.total_fees + pos.usdc_deployed * 0.01;
-                            let reclaim_wbtc = reclaim_usdc / btc_price / (1.0 - fee_rate);
-                            if reclaim_wbtc < pos.wbtc_held {
+                            let reclaim_base = pos.base_deployed + pos.total_fees + pos.base_deployed * 0.01;
+                            let reclaim_quote = reclaim_base / quote_price / (1.0 - fee_rate);
+                            if reclaim_quote < pos.quote_held {
                                 // Partial: release from deployed, then sell
-                                treasury.release("WBTC", reclaim_wbtc);
-                                let (sold, received) = treasury.swap("WBTC", "USDC",
-                                    reclaim_wbtc, 1.0 / btc_price, fee_rate);
-                                pos.wbtc_held -= sold;
-                                pos.usdc_reclaimed += received;
-                                pos.total_fees += sold * btc_price * fee_rate;
+                                treasury.release(&args.quote_asset, reclaim_quote);
+                                let (sold, received) = treasury.swap(&args.quote_asset, &args.base_asset,
+                                    reclaim_quote, 1.0 / quote_price, fee_rate);
+                                pos.quote_held -= sold;
+                                pos.base_reclaimed += received;
+                                pos.total_fees += sold * quote_price * fee_rate;
                                 pos.phase = PositionPhase::Runner;
                                 hold_swaps += 1;
                                 hold_wins += 1;
                             } else {
                                 // Full exit — release all, then sell
-                                treasury.release("WBTC", pos.wbtc_held);
-                                let (sold, received) = treasury.swap("WBTC", "USDC",
-                                    pos.wbtc_held, 1.0 / btc_price, fee_rate);
-                                pos.usdc_reclaimed += received;
-                                pos.total_fees += sold * btc_price * fee_rate;
-                                pos.wbtc_held = 0.0;
+                                treasury.release(&args.quote_asset, pos.quote_held);
+                                let (sold, received) = treasury.swap(&args.quote_asset, &args.base_asset,
+                                    pos.quote_held, 1.0 / quote_price, fee_rate);
+                                pos.base_reclaimed += received;
+                                pos.total_fees += sold * quote_price * fee_rate;
+                                pos.quote_held = 0.0;
                                 pos.phase = PositionPhase::Closed;
                                 hold_swaps += 1;
-                                if pos.return_pct(btc_price) > 0.0 { hold_wins += 1; }
+                                if pos.return_pct(quote_price) > 0.0 { hold_wins += 1; }
                                 closed_positions.push(pos.id);
-                                last_exit_price = btc_price;
+                                last_exit_price = quote_price;
                                 last_exit_atr = candles[i].atr_r;
                             }
                         }
                         PositionExit::StopLoss | PositionExit::TakeProfit => {
                             // Full exit — release from deployed, then sell
-                            if pos.wbtc_held > 0.0 {
-                                treasury.release("WBTC", pos.wbtc_held);
-                                let (sold, received) = treasury.swap("WBTC", "USDC",
-                                    pos.wbtc_held, 1.0 / btc_price, fee_rate);
-                                pos.usdc_reclaimed += received;
-                                pos.total_fees += sold * btc_price * fee_rate;
+                            if pos.quote_held > 0.0 {
+                                treasury.release(&args.quote_asset, pos.quote_held);
+                                let (sold, received) = treasury.swap(&args.quote_asset, &args.base_asset,
+                                    pos.quote_held, 1.0 / quote_price, fee_rate);
+                                pos.base_reclaimed += received;
+                                pos.total_fees += sold * quote_price * fee_rate;
                             }
-                            pos.wbtc_held = 0.0;
+                            pos.quote_held = 0.0;
                             pos.phase = PositionPhase::Closed;
                             hold_swaps += 1;
-                            if pos.return_pct(btc_price) > 0.0 { hold_wins += 1; }
+                            if pos.return_pct(quote_price) > 0.0 { hold_wins += 1; }
                             closed_positions.push(pos.id);
-                            last_exit_price = btc_price;
+                            last_exit_price = quote_price;
                             last_exit_atr = candles[i].atr_r;
                         }
                     }
                     // Log to ledger
-                    let ret = pos.return_pct(btc_price);
+                    let ret = pos.return_pct(quote_price);
                     let exit_dir = match pos.direction { Direction::Long => "Buy", Direction::Short => "Sell" };
                     let exit_type = match (exit, pos.phase) {
                         (PositionExit::TakeProfit, PositionPhase::Runner) => "RunnerTP",
@@ -810,8 +813,8 @@ fn main() {
                          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
                         rusqlite::params![
                             log_step, i as i64, &candles[i].ts,
-                            exit_dir, pos.entry_price, btc_price,
-                            ret * 100.0, pos.usdc_deployed,
+                            exit_dir, pos.entry_price, quote_price,
+                            ret * 100.0, pos.base_deployed,
                             fee_rate * 100.0, pos.candles_held as i64,
                             (ret > 0.0) as i32,
                             exit_type,
@@ -828,7 +831,7 @@ fn main() {
             // Cooldown: has the market moved enough since last exit?
             // Not a timer — a condition. The market tells us when it's ready.
             let market_moved = if last_exit_price > 0.0 {
-                let move_since_exit = (btc_price - last_exit_price).abs() / last_exit_price;
+                let move_since_exit = (quote_price - last_exit_price).abs() / last_exit_price;
                 move_since_exit > k_stop * last_exit_atr
             } else {
                 true // no prior exit — ready
@@ -852,36 +855,36 @@ fn main() {
 
                     let (from_asset, to_asset, deploy_amount, price_for_swap) = match direction {
                         Direction::Long => {
-                            let avail = treasury.balance("USDC");
-                            ("USDC", "WBTC", avail * frac, btc_price)
+                            let avail = treasury.balance(&args.base_asset);
+                            (args.base_asset.as_str(), args.quote_asset.as_str(), avail * frac, quote_price)
                         }
                         Direction::Short => {
-                            let avail = treasury.balance("WBTC");
+                            let avail = treasury.balance(&args.quote_asset);
                             let amount = avail * frac;
-                            ("WBTC", "USDC", amount, 1.0 / btc_price)
+                            (args.quote_asset.as_str(), args.base_asset.as_str(), amount, 1.0 / quote_price)
                         }
                     };
 
-                    let usdc_value = if direction == Direction::Long { deploy_amount }
-                                     else { deploy_amount * btc_price };
+                    let base_value = if direction == Direction::Long { deploy_amount }
+                                     else { deploy_amount * quote_price };
 
-                    if usdc_value > 10.0 {
+                    if base_value > 10.0 {
                         let (spent, received) = treasury.swap(
                             from_asset, to_asset, deploy_amount, price_for_swap, fee_rate);
 
                         // BUY: claim WBTC. SELL: USDC already in balance.
                         if direction == Direction::Long {
-                            treasury.claim("WBTC", received);
+                            treasury.claim(&args.quote_asset, received);
                         }
 
-                        let entry_fee = usdc_value * fee_rate;
-                        let (deployed_usd, wbtc_held) = match direction {
+                        let entry_fee = base_value * fee_rate;
+                        let (deployed_usd, quote_held) = match direction {
                             Direction::Long => (spent, received),
-                            Direction::Short => (spent * btc_price, 0.0),
+                            Direction::Short => (spent * quote_price, 0.0),
                         };
                         let pos = ManagedPosition::new(
-                            next_position_id, i, btc_price, candles[i].atr_r,
-                            direction, deployed_usd, wbtc_held, entry_fee,
+                            next_position_id, i, quote_price, candles[i].atr_r,
+                            direction, deployed_usd, quote_held, entry_fee,
                             k_stop, k_tp,
                         );
                         next_position_id += 1;
@@ -890,7 +893,7 @@ fn main() {
                         ledger.execute(
                             "INSERT INTO trade_ledger (step,candle_idx,timestamp,direction,entry_price,position_usd,swap_fee_pct,exit_reason)
                              VALUES (?1,?2,?3,?4,?5,?6,?7,'Open')",
-                            rusqlite::params![log_step, i as i64, &candles[i].ts, dir_str, btc_price, usdc_value, fee_rate * 100.0],
+                            rusqlite::params![log_step, i as i64, &candles[i].ts, dir_str, quote_price, base_value, fee_rate * 100.0],
                         ).ok();
                         positions.push(pos);
                     }
@@ -1554,11 +1557,8 @@ fn main() {
 
     // Final treasury equity for post-loop reporting
     let final_price = candles[end_idx - 1].close;
-    let treasury_equity = {
-        let usdc = treasury.balance("USDC") + treasury.deployed("USDC");
-        let wbtc = treasury.balance("WBTC") + treasury.deployed("WBTC");
-        usdc + wbtc * final_price
-    };
+    let prices = treasury.price_map(&[(&args.quote_asset, final_price)]);
+    let treasury_equity = treasury.total_value(&prices);
 
     // ─ Drain remaining pending entries (log, no further learning) ────────────
     while let Some(entry) = pending.pop_front() {
@@ -1615,7 +1615,7 @@ fn main() {
     eprintln!("  Trades taken: {}  Won: {}  Win rate: {:.1}%  Skipped: {}",
         portfolio.trades_taken, portfolio.trades_won, portfolio.win_rate(), portfolio.trades_skipped);
     eprintln!("  Treasury: ${:.2} available  ${:.2} deployed  {:.1}% utilization  fees=${:.2}  slip=${:.2}",
-        treasury.balance("USDC"), treasury.deployed("USDC"),
+        treasury.balance(&args.base_asset), treasury.deployed(&args.base_asset),
         treasury.utilization() * 100.0,
         treasury.total_fees_paid, treasury.total_slippage);
     eprintln!();

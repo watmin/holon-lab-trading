@@ -137,6 +137,18 @@ impl Treasury {
     }
 
     /// Total portfolio value in a given denomination.
+    /// Build a price map from asset prices. Base asset is always 1.0.
+    /// For single-asset: pass one price for the non-base asset.
+    /// For multi-asset: each desk provides its asset's price.
+    pub fn price_map(&self, asset_prices: &[(&str, f64)]) -> HashMap<String, f64> {
+        let mut prices = HashMap::new();
+        prices.insert(self.base_asset.clone(), 1.0);
+        for &(asset, price) in asset_prices {
+            prices.insert(asset.to_string(), price);
+        }
+        prices
+    }
+
     /// Requires a price map: asset → price_in_base_asset.
     pub fn total_value(&self, prices: &HashMap<String, f64>) -> f64 {
         let mut total = 0.0;
