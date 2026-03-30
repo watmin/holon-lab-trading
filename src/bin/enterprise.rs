@@ -417,8 +417,8 @@ fn main() {
         // The manager doesn't encode — it reads expert predictions.
         // Each expert samples their own window from [12, 2016] per candle.
         // Their discriminant learns which scale's patterns predict for their
-        // vocabulary. A "full" encoding at args.window is kept for the primary
-        // journal (tht_journal) which still drives flip threshold + sizing.
+        // vocabulary. Observer[5] ("full") encodes at fixed args.window —
+        // the generalist's cross-vocabulary view.
         let n_observers = state.observers.len();
 
         // Expert samplers are not Send, so collect windows first
