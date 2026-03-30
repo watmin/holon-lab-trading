@@ -55,11 +55,10 @@
 
 ;; ── Portfolio seeding ───────────────────────────────────────────────
 ;;
-;; Initial state: 50/50 split between base asset and target asset.
+;; Initial state: 50/50 split between base asset and quote asset.
 ;; "I don't know which way the market will go — hold both."
-;; Both BUY and SELL positions can open from candle 1.
-;;
-;; The seed ratio is a starting condition, not a parameter.
+;; Both BUY (add to quote) and SELL (back to base) positions can
+;; open from candle 1. The seed ratio is a starting condition.
 ;; The enterprise evolves the allocation through trading.
 
 ;; ── What the treasury does NOT do ───────────────────────────────────

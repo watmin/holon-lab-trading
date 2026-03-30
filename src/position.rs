@@ -21,9 +21,8 @@ pub struct Pending {
 
     // ── Prediction (what the experts said) ────────────────────────────
     pub tht_pred:      Prediction,
-    pub raw_meta_dir:  Option<Label>,  // un-flipped direction (for auto calibration)
-    pub meta_dir:      Option<Label>,
-    pub high_conviction:   bool,             // true if flip was active when this entry was created
+    pub meta_dir:      Option<Label>,   // manager's direction call
+    pub high_conviction:   bool,             // true if conviction >= threshold
     pub meta_conviction: f64,
     pub position_frac: Option<f64>,
     pub observer_vecs:   Vec<Vector>,       // per-observer thought vectors
@@ -39,7 +38,6 @@ pub struct Pending {
     pub entry_price:       f64,
     pub max_favorable:     f64,    // best price move in our direction
     pub max_adverse:       f64,    // worst price move against us (negative)
-    pub peak_abs_pct:      f64,    // max |price change| seen while pending
     pub crossing_candle:   Option<usize>, // candle index when threshold first crossed
     pub path_candles:      usize,  // candles elapsed since entry
 
@@ -186,24 +184,6 @@ impl ManagedPosition {
         }
 
         None
-    }
-
-    /// Current unrealized P&L in USDC
-    pub fn unrealized_pnl(&self, current_price: f64) -> f64 {
-        match self.direction {
-            Direction::Long => {
-                // BUY: we hold WBTC, value = wbtc × price
-                let wbtc_value = self.quote_held * current_price;
-                wbtc_value - self.base_deployed + self.base_reclaimed - self.total_fees
-            }
-            _ => {
-                // SELL: we sold WBTC for USDC. Profit if price dropped.
-                // We deployed base_deployed worth of WBTC at entry_price.
-                // If price dropped, buying back costs less → profit.
-                let buyback_cost = self.quote_held * current_price; // cost to buy back remaining WBTC
-                self.base_reclaimed - buyback_cost - self.total_fees
-            }
-        }
     }
 
     /// Current return as fraction of deployed capital

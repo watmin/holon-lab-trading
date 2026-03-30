@@ -10,9 +10,9 @@
 ;; relative to trading sessions and days of the week.
 
 ;; ── Eval methods ────────────────────────────────────────────────────
-;; eval_segment_narrative   — PELT changepoints → 17 indicator streams → segments
-;; eval_temporal            — lookback through segments for cross timing
+;; eval_temporal            — lookback through PELT segments for cross timing
 ;; eval_calendar            — day of week, 4-hour block, trading session
+;; eval_timeframe_narrative — multi-timeframe return and body ratio
 
 ;; ── Example thoughts ────────────────────────────────────────────────
 ;;
@@ -51,10 +51,11 @@
 ;; change with window size).
 
 ;; ── What narrative does NOT see ─────────────────────────────────────
-;; - Comparisons (momentum, structure)
+;; - Comparisons (momentum, structure only)
+;; - PELT segment narrative (structure only)
 ;; - Oscillator zones (momentum)
 ;; - RSI divergence (momentum)
 ;; - Volume (volume)
 ;; - Ichimoku / Fibonacci / Keltner (structure)
 ;; - Range position (structure)
-;; - Advanced regime indicators (regime, momentum, structure)
+;; - Advanced regime indicators (regime only)

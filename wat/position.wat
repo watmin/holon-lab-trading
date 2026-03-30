@@ -48,11 +48,13 @@
 
 ;; ── Sizing ─────────────────────────────────────────────────────────
 ;;
-;; fraction = kelly(band_accuracy, move_threshold)
+;; fraction = (band_edge / 2) × risk_multiplier
+;; band_edge = 3% (proven band conviction edge)
+;; risk_multiplier = min residual ratio across risk branches
 ;; Bounded by:
-;;   - max single position: 20% of total equity
-;;   - max total deployment: max_utilization of treasury
-;;   - minimum position: must be large enough that fee is < 1% of position
+;;   - max single position: max_single_position (CLI arg, default 20%)
+;;   - risk gate: risk branches modulate via residual ratio
+;;   - fee gate: expected_move > 2 × fee_rate
 
 ;; ── Cooldown ───────────────────────────────────────────────────────
 ;;

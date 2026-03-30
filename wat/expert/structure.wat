@@ -16,7 +16,7 @@
 ;; eval_ichimoku            — cloud zones (above/below/in), tenkan/kijun crosses
 ;; eval_fibonacci           — swing detection → fib retracement levels
 ;; eval_keltner             — Keltner channels, BB-inside-Keltner squeeze
-;; eval_advanced            — DFA, entropy, fractal dim, variance ratio, aroon
+;; eval_timeframe_structure — multi-timeframe range position and body ratio
 
 ;; ── Example thoughts ────────────────────────────────────────────────
 ;;

@@ -15,7 +15,7 @@
 ;; than candle-level patterns.
 
 ;; ── Eval methods ────────────────────────────────────────────────────
-;; eval_advanced — the ONLY method, but it produces many facts:
+;; eval_regime_module — complexity and microstructure indicators:
 ;;   - KAMA efficiency ratio → efficient-trend / inefficient-chop
 ;;   - Choppiness index → chop-trending / chop-choppy / chop-extreme
 ;;   - DFA alpha → persistent-dfa / anti-persistent-dfa / random-walk-dfa
@@ -25,7 +25,8 @@
 ;;   - Fractal dimension → trending-geometry / random-walk / mean-reverting
 ;;   - Gutenberg-Richter b-value → heavy-tails / light-tails
 ;;   - Entropy rate → low-entropy / high-entropy
-;;   - Spectral slope (quantitative, not zoned)
+;;
+;; eval_persistence_module — Hurst exponent, autocorrelation, ADX zones
 
 ;; ── Example thoughts ────────────────────────────────────────────────
 ;;
@@ -55,25 +56,20 @@
 ;; are about the NATURE of the sequence, not the values at specific
 ;; positions. This abstraction is more robust to window noise.
 
-;; ── DISCOVERY ───────────────────────────────────────────────────────
+;; ── RESOLVED ────────────────────────────────────────────────────────
 ;;
-;; 1. Regime shares eval_advanced with momentum and structure.
-;;    All three experts see DFA, entropy, fractal dim, etc.
-;;    This means the manager sees these regime indicators through
-;;    THREE different experts' signed convictions. If regime is the
-;;    expert whose VOCABULARY is most aligned with these indicators,
-;;    it should OWN them exclusively. Momentum and structure have
-;;    their own primary vocabularies — they don't need regime facts.
+;; 1. Regime now EXCLUSIVELY owns eval_regime_module and eval_persistence_module.
+;;    Momentum and structure no longer see DFA, entropy, fractal dim, etc.
+;;    Comparisons restricted to momentum+structure only. Regime's purity
+;;    is preserved — no window-dependent noise.
 ;;
 ;; 2. Regime has NO comparisons, NO segments, NO calendar, NO volume.
-;;    It's the purest abstract characterization. This purity may be
-;;    WHY it's the most gate-stable expert. No window-dependent noise.
+;;    It's the purest abstract characterization. This purity is WHY
+;;    it's the most gate-stable expert. No window-dependent noise.
 ;;
-;; 3. Should regime get additional abstract properties?
-;;    - Autocorrelation of returns (available in holon as autocorrelate)
-;;    - Hurst exponent (related to DFA but different computation)
-;;    - Market microstructure: bid-ask proxy from wick analysis?
-;;    - Correlation with traditional markets (if available)
+;; 3. Additional abstract properties added via eval_persistence_module:
+;;    - Hurst exponent, autocorrelation of returns, ADX zones.
+;;    Still aspirational: spectral slope, market microstructure.
 
 ;; ── What regime does NOT see ────────────────────────────────────────
 ;; - Comparisons (momentum, structure)

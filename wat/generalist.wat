@@ -11,22 +11,27 @@
 
 ;; ── Eval methods ────────────────────────────────────────────────────
 ;; ALL of them. The "full" profile fires every eval method:
-;;   eval_comparisons_cached
-;;   eval_segment_narrative
-;;   eval_temporal
-;;   eval_rsi_sma_cached
-;;   eval_calendar
-;;   eval_divergence
-;;   eval_volume_confirmation
-;;   eval_range_position
-;;   eval_ichimoku
-;;   eval_stochastic
-;;   eval_fibonacci
-;;   eval_volume_analysis
-;;   eval_keltner
-;;   eval_momentum
-;;   eval_price_action
-;;   eval_advanced
+;;   eval_comparisons_cached   (momentum, structure)
+;;   eval_rsi_sma_cached       (momentum)
+;;   eval_stochastic           (momentum)
+;;   eval_momentum             (momentum)
+;;   eval_divergence           (momentum)
+;;   eval_oscillators_module   (momentum)
+;;   eval_segment_narrative    (structure)
+;;   eval_range_position       (structure)
+;;   eval_ichimoku             (structure)
+;;   eval_fibonacci            (structure)
+;;   eval_keltner              (structure)
+;;   eval_timeframe_structure  (structure)
+;;   eval_volume_confirmation  (volume)
+;;   eval_volume_analysis      (volume)
+;;   eval_price_action         (volume)
+;;   eval_flow_module          (volume)
+;;   eval_temporal             (narrative)
+;;   eval_calendar             (narrative)
+;;   eval_timeframe_narrative  (narrative)
+;;   eval_regime_module        (regime)
+;;   eval_persistence_module   (regime)
 
 ;; ── ~150 facts per candle ───────────────────────────────────────────
 ;;

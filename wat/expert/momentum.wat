@@ -10,12 +10,11 @@
 
 ;; ── Eval methods ────────────────────────────────────────────────────
 ;; eval_comparisons_cached  — (above close sma50), (crosses-above macd-line macd-signal), etc.
-;; eval_temporal            — lookback through PELT segments for cross timing
 ;; eval_rsi_sma_cached      — (above rsi rsi-sma), (crosses-below rsi rsi-sma)
 ;; eval_divergence          — RSI divergence via PELT peak detection
 ;; eval_stochastic          — (at stoch-k stoch-overbought), %K/%D crosses
 ;; eval_momentum            — CCI zones (overbought/oversold), ROC
-;; eval_advanced            — DeMark, choppiness, DFA, variance ratio, aroon, fractal dim, entropy
+;; eval_oscillators_module  — Williams %R, StochRSI, UltOsc, multi-ROC
 
 ;; ── Example thoughts ────────────────────────────────────────────────
 ;;
@@ -33,8 +32,7 @@
 ;; - Oscillator zones: RSI overbought/oversold, stochastic zones, CCI zones
 ;; - Crosses: MACD crossing signal, RSI crossing its SMA (temporal lookback)
 ;; - Divergence: RSI diverging from price (PELT structural peaks)
-;; - Regime: DFA alpha (trending/random/mean-reverting), variance ratio,
-;;   entropy rate, choppiness index, aroon, fractal dimension
+;; - Oscillators: Williams %R, StochRSI, UltOsc, multi-ROC
 
 ;; ── What momentum does NOT see ──────────────────────────────────────
 ;; - Calendar / time of day (that's narrative)
@@ -45,11 +43,8 @@
 ;; - Keltner / squeeze (that's structure)
 ;; - Volume confirmation / analysis / price action (that's volume)
 
-;; ── DISCOVERY ───────────────────────────────────────────────────────
-;; Momentum shares eval_advanced with structure and regime. This means
-;; DFA alpha, entropy rate, fractal dimension appear in THREE experts.
-;; Is this intentional? The same fact in multiple experts' bundles
-;; means the manager sees it three times (via three signed convictions).
-;; This may dilute the signal or reinforce it depending on whether
-;; the three experts agree. Worth investigating: should advanced
-;; indicators belong to regime ONLY?
+;; ── RESOLVED ────────────────────────────────────────────────────────
+;; Advanced regime indicators (DFA, entropy, fractal dim, variance ratio,
+;; aroon, choppiness) now belong to regime ONLY. Momentum no longer sees
+;; them. The comparison dispatch was also restricted: only momentum and
+;; structure see comparisons. Volume, narrative, and regime do not.

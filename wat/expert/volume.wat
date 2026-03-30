@@ -15,6 +15,7 @@
 ;; eval_volume_confirmation — current volume vs window average, direction match
 ;; eval_volume_analysis     — OBV direction, volume SMA, spike/drought zones
 ;; eval_price_action        — inside bar, outside bar, gaps, consecutive candles
+;; eval_flow_module         — OBV slope, VWAP deviation, MFI zones, buying/selling pressure
 
 ;; ── Example thoughts ────────────────────────────────────────────────
 ;;
