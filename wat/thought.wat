@@ -9,7 +9,7 @@
 (require core/primitives)
 (require core/structural)
 (require vocab)
-(require std-candidates)
+(require std/facts)
 
 ;; -- Atom groups ------------------------------------------------------------
 

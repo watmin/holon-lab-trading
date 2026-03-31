@@ -7,7 +7,7 @@
 (require core/primitives)
 (require core/structural)
 (require std/memory)
-(require std-candidates)
+(require std/statistics)
 
 ;; ── Five specialists ────────────────────────────────────────────────
 ;;

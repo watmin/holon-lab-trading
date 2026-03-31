@@ -220,3 +220,14 @@
 ;; - Does NOT encode candle→thought (that's the encoding functor, outside)
 ;;   (But it DOES encode manager thoughts, exit expert thoughts, and risk features)
 ;; - Does NOT write to the database (pending-logs, caller flushes)
+
+;; ── Open questions (from std-candidates graduation) ─────────────────
+;;
+;; zero-vector: The identity element of bundle needs dims because vectors
+;; are fixed-dimensionality. (bundle) alone cannot know the size.
+;; The Rust creates vec![0.0; dims]. No wat equivalent exists yet.
+;;
+;; Designer question: Should (bundle) with no args be a lazy identity
+;; that adopts the dimensionality of the next bundle call? If so,
+;; zero-vector becomes (bundle) and dims is unnecessary.
+;; This is an algebra question: does the monoid identity know its size?

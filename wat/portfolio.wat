@@ -7,7 +7,7 @@
 (require core/primitives)
 (require core/structural)
 (require risk)
-(require std-candidates)
+(require std/statistics)
 
 ;; -- Phase lifecycle --------------------------------------------------------
 

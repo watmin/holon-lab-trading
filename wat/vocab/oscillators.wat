@@ -7,7 +7,7 @@
 ;; Expert profile: momentum
 
 (require vocab/mod)
-(require std-candidates)
+(require std/facts)
 
 ;; ── Atoms introduced ───────────────────────────────────────────
 

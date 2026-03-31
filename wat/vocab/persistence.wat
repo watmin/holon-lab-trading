@@ -8,7 +8,8 @@
 ;; Expert profile: regime
 
 (require vocab/mod)
-(require std-candidates)
+(require std/facts)
+(require std/statistics)
 
 ;; ── Atoms introduced ───────────────────────────────────────────
 

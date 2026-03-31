@@ -10,7 +10,7 @@
 ;; It reads expert predictions passed by the fold. The fold decides
 ;; which experts to include (proof gates filter upstream).
 
-(require std-candidates)
+(require std/statistics)
 
 ;; ── Manager's atoms ─────────────────────────────────────────────────
 

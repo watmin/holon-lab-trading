@@ -8,7 +8,7 @@
 ;;                  narrative (eval-timeframe-narrative)
 
 (require vocab/mod)
-(require std-candidates)
+(require std/facts)
 
 ;; ── Atoms introduced ───────────────────────────────────────────
 
