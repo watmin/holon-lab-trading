@@ -47,9 +47,6 @@
   ;; candles-ago is measured from the window end, not from now.
   ;; The encoder uses this for temporal binding.
 
-  ; rune:gaze(phantom) — ln is not in the wat language
-  ; rune:gaze(phantom) — append is not in the wat language
-  ; rune:gaze(phantom) — len is not in the wat language
   ; rune:gaze(phantom) — segment-direction is not in the wat language
   ; rune:gaze(phantom) — find-peaks is not in the wat language
   ; rune:gaze(phantom) — find-troughs is not in the wat language

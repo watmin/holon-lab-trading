@@ -29,11 +29,9 @@
 
 ; rune:gaze(phantom) — log-returns is not in the wat language
 ; rune:gaze(phantom) — last-n is not in the wat language
-; rune:gaze(phantom) — ln is not in the wat language
 ; rune:gaze(phantom) — range is not in the wat language
 ; rune:gaze(phantom) — cumulative-deviation is not in the wat language
 ; rune:gaze(phantom) — std is not in the wat language
-; rune:gaze(phantom) — len is not in the wat language
 (define (hurst-estimate candles lookback)
   "Simplified Hurst via rescaled range. Returns [0, 1] or None."
   (let ((returns (log-returns (last-n candles lookback))))
@@ -67,7 +65,6 @@
 
 ; rune:gaze(phantom) — fact/scalar is not in the wat language
 ; rune:gaze(phantom) — fact/zone is not in the wat language
-; rune:gaze(phantom) — clamp is not in the wat language
 ; rune:gaze(phantom) — adx-zone is not in the wat language
 (define (eval-persistence candles)
   "Trend persistence facts."

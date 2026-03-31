@@ -51,9 +51,7 @@
 ;; Adapts to the data's own scale. More variance = more penalty needed
 ;; to claim a changepoint is real.
 
-; rune:gaze(phantom) — len is not in the wat language
 ; rune:gaze(phantom) — variance is not in the wat language
-; rune:gaze(phantom) — ln is not in the wat language
 (define (bic-penalty values)
   "Bayesian Information Criterion penalty for PELT.
    Returns 1e10 for degenerate inputs (n < 2 or zero variance)."
@@ -68,9 +66,6 @@
 ;; Most recent segment direction. The thought layer's main consumer.
 ;; "up", "down", or None if the series is too short or flat.
 
-; rune:gaze(phantom) — last is not in the wat language
-; rune:gaze(phantom) — nth is not in the wat language
-; rune:gaze(phantom) — cond is not in the wat language
 (define (most-recent-segment-dir values)
   "Direction of the last PELT segment. Uses BIC penalty.
    Returns 'up', 'down', or None."

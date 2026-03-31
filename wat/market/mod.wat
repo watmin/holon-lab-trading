@@ -17,7 +17,6 @@
 ;; These parse the numeric values from the timestamp string.
 
 ; rune:gaze(phantom) — parse-f64 is not in the wat language
-; rune:gaze(phantom) — substring is not in the wat language
 (define (parse-candle-hour ts)
   "Extract hour-of-day from candle timestamp. Returns f64 in [0, 23].
    Falls back to 12.0 on parse failure."
@@ -31,7 +30,6 @@
   ;; Adjust year if month < 3.
   ;; (y + y/4 - y/100 + y/400 + t[m-1] + d) mod 7
   ; rune:gaze(phantom) — parse-i32 is not in the wat language
-  ; rune:gaze(phantom) — nth is not in the wat language
   (let ((y (or (parse-i32 (substring ts 0 4)) 2019))
         (m (or (parse-i32 (substring ts 5 7)) 1))
         (d (or (parse-i32 (substring ts 8 10)) 1))

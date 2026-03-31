@@ -78,7 +78,6 @@
   (let* ((observer-preds
            (map (lambda (obs vec) (predict (:journal obs) vec))
                 (:observers state) observer-vecs))
-         ; rune:gaze(phantom) — nth is not in the wat language
          (generalist-pred (nth observer-preds 5))
          (generalist-vec  (nth observer-vecs 5))
 

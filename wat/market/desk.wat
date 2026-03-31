@@ -71,8 +71,6 @@
 
 ;; -- Observe ----------------------------------------------------------------
 
-; rune:gaze(phantom) — cond is not in the wat language
-; rune:gaze(phantom) — set! is not in the wat language
 (define (observe-candle desk asset candle)
   "Feed a candle to the appropriate side. Returns true if desk cares about this asset."
   (cond

@@ -69,7 +69,6 @@
 ; rune:gaze(phantom) — zero-vector is not in the wat language
 ; rune:gaze(phantom) — stddev is not in the wat language
 ; rune:gaze(phantom) — mean is not in the wat language
-; rune:gaze(phantom) — min is not in the wat language
 ; rune:gaze(phantom) — skewness is not in the wat language
 (define (encode-volatility portfolio)
   (let ((returns (last-n-returns portfolio 50)))
@@ -108,7 +107,6 @@
             (bind (atom "loss-density")  (encode-linear loss-frac 2.0))
             (bind (atom "consec-loss")   (encode-linear (/ consec 10.0) 2.0))
             (bind (atom "trade-density") (encode-linear trade-density 2.0))
-            ; rune:gaze(phantom) — signum is not in the wat language
             (bind (atom "streak")        (encode-linear (signum autocorr) 2.0)))))))
 
 ;; ── Panel ───────────────────────────────────────────────────────────
@@ -133,7 +131,6 @@
 
 ;; ── Risk multiplier ─────────────────────────────────────────────────
 
-; rune:gaze(phantom) — list is not in the wat language
 (define branches (list drawdown-branch accuracy-branch volatility-branch
                       correlation-branch panel-branch))
 
@@ -146,7 +143,6 @@
                    (for-each update branches states)))
          ; rune:gaze(phantom) — fold-left is not in the wat language
          ; rune:gaze(phantom) — n is not in the wat language
-         ; rune:gaze(phantom) — max is not in the wat language
          (worst-ratio
            (fold-left
              (lambda (acc branch features)

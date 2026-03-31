@@ -20,7 +20,6 @@
 
 ;; ── Queries ─────────────────────────────────────────────────────────
 
-; rune:gaze(phantom) — get is not in the wat language
 (define (balance treasury asset)
   (get (:balances treasury) asset 0.0))
 
@@ -35,8 +34,6 @@
     (if (<= total-base 0.0) 0.0
         (/ (deployed treasury (:base-asset treasury)) total-base))))
 
-; rune:gaze(phantom) — min is not in the wat language
-; rune:gaze(phantom) — max is not in the wat language
 (define (allocatable treasury)
   (if (>= (:n-open treasury) (:max-positions treasury))
       0.0
@@ -46,7 +43,6 @@
         (min (max 0.0 (- max-deploy deployed-base))
              (balance treasury (:base-asset treasury))))))
 
-; rune:gaze(phantom) — keys is not in the wat language
 (define (total-value treasury prices)
   "Sum all assets at current prices. Base asset = 1.0."
   (fold (lambda (sum asset)
@@ -55,8 +51,6 @@
         0.0
         (keys (:balances treasury))))
 
-; rune:gaze(phantom) — assoc is not in the wat language
-; rune:gaze(phantom) — first is not in the wat language
 ; rune:gaze(phantom) — second is not in the wat language
 (define (price-map treasury asset-prices)
   "Build prices from (asset, price) pairs. Base asset always 1.0."
@@ -67,20 +61,17 @@
 
 ;; ── Mutations ───────────────────────────────────────────────────────
 
-; rune:gaze(phantom) — assoc is not in the wat language
 (define (deposit treasury asset amount)
   (update treasury :balances
     (assoc (:balances treasury) asset
            (+ (balance treasury asset) amount))))
 
 ;; rune:forge(escape) — silently clamps to 0.0 on overdraw
-; rune:gaze(phantom) — max is not in the wat language
 (define (withdraw treasury asset amount)
   (update treasury :balances
     (assoc (:balances treasury) asset
            (max 0.0 (- (balance treasury asset) amount)))))
 
-; rune:gaze(phantom) — min is not in the wat language
 (define (swap treasury from to amount-from price fee-rate)
   "Sell `from`, buy `to` at `price`, minus fees. Returns (spent, received)."
   (let ((spend     (min amount-from (balance treasury from)))
@@ -108,7 +99,6 @@
     ;; Mutates: base balance down, base deployed up, n-open incremented
     reserved))
 
-; rune:gaze(phantom) — max is not in the wat language
 (define (close-position treasury deployed-amount pnl fees slippage)
   "Close a position. Return capital ± P&L to available balance."
   (let ((returned (max 0.0 (- (+ deployed-amount pnl) fees slippage))))

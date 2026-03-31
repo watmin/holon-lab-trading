@@ -26,7 +26,6 @@
 ; rune:gaze(phantom) — fact/comparison is not in the wat language
 ; rune:gaze(phantom) — fact/scalar is not in the wat language
 ; rune:gaze(phantom) — fact/zone is not in the wat language
-; rune:gaze(phantom) — clamp is not in the wat language
 (define (eval-keltner candles)
   "Keltner, Bollinger position, and squeeze facts.
    Returns empty if Keltner bands are zero (insufficient data)."

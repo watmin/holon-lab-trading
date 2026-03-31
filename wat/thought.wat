@@ -26,7 +26,6 @@
   atoms                  ; (map string Vector) — name -> pre-allocated atom vector
   dims)                  ; usize
 
-; rune:gaze(phantom) — assoc is not in the wat language
 ; rune:gaze(phantom) — get-vector is not in the wat language
 ; rune:gaze(phantom) — dimensions is not in the wat language
 (define (new-thought-vocab vm)
@@ -39,7 +38,6 @@
     :dims (dimensions vm)))
 
 ; rune:gaze(phantom) — vocab-get is not in the wat language
-; rune:gaze(phantom) — get is not in the wat language
 (define (vocab-get vocab name)
   "Look up an atom vector by name. Panics on unknown atom."
   (get (:atoms vocab) name))
@@ -88,9 +86,7 @@
 ;;   Scalar      { indicator, value, scale } -> bind(atom(indicator), encode-linear(value, scale))
 ;;   Bare        { label }                 -> lookup in cache, or raw atom
 
-; rune:gaze(phantom) — push! is not in the wat language
 ; rune:gaze(phantom) — cache-get is not in the wat language
-; rune:gaze(phantom) — format is not in the wat language
 (define (encode-facts encoder module-facts facts owned-facts labels)
   "Render vocab module facts into vectors."
   (for-each (lambda (fact)
@@ -163,7 +159,6 @@
 
     ;; Bundle all facts into one thought vector
     (thought-result
-      ; rune:gaze(phantom) — empty? is not in the wat language
       ; rune:gaze(phantom) — zeros is not in the wat language
       :thought (if (empty? all-facts) (zeros dims) (bundle all-facts))
       :fact-labels labels)))

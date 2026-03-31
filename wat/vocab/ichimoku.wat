@@ -30,7 +30,6 @@
 
 ; rune:gaze(phantom) — fact/comparison is not in the wat language
 ; rune:gaze(phantom) — fact/zone is not in the wat language
-; rune:gaze(phantom) — cond is not in the wat language
 (define (eval-ichimoku candles)
   "Ichimoku cloud facts. Returns Some(Vec<Fact>) or None if < 26 candles."
 
