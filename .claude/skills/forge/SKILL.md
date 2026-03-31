@@ -77,6 +77,18 @@ Report findings as: the function, what the forge reveals, and what a well-forged
 - Not gaze. Gaze checks communication (does it read well?). Forge checks composition (does it hold together?).
 - Not a type system redesign. The forge works with the types you have. It asks: are you using them honestly?
 
+## Runes
+
+Skip findings annotated with `rune:forge(category)` in a comment at the site. The annotation must include a reason after the dash. Report the rune so the human knows it exists, but don't flag it as a finding.
+
+Runes suppress bad thoughts without denying their presence. A rune tells the ward: the datamancer has been here. This is conscious.
+
+```rust
+// rune:forge(escape) — the fold's IO was extracted; this coupling is measured
+```
+
+Categories: `escape` (algebraic leak is known and measured), `coupling` (hidden dependency is intentional), `bare-type` (using f64/str instead of newtype is acceptable here), `premature` (single-use helper earns its place for clarity).
+
 ## The principle
 
 Hickey said: simplicity is a prerequisite for reliability. Beckman said: composability is a prerequisite for understanding. The forge tests both. A well-forged function is simple AND composable. It survives the fire of "what if I use this in a context the author didn't imagine?" Because a forged function doesn't know its context. It knows its inputs and its outputs. Everything else is someone else's concern.

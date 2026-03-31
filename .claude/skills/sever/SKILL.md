@@ -92,15 +92,17 @@ Flat modules stay flat until they need a sibling. Promote `foo.rs` to `foo/mod.r
 
 - **The main loop itself.** The heartbeat is the enterprise's pulse. It is the one place where all the modules meet. That meeting IS the orchestration. Don't extract it into abstraction — the heartbeat's clarity comes from being readable top-to-bottom, not from being hidden behind traits.
 
-## Accepted findings
+## Runes
 
-Skip findings annotated with `decomplect:allow(category)` in a comment at the site. The annotation must include a reason. Report the annotation so the human knows it exists, but don't flag it as a finding.
+Skip findings annotated with `rune:sever(category)` in a comment at the site. The annotation must include a reason after the dash. Report the rune so the human knows it exists, but don't flag it as a finding.
+
+Runes suppress bad thoughts without denying their presence. A rune tells the ward: the datamancer has been here. This is conscious.
 
 ```rust
-// decomplect:allow(inline-encoding) — exit expert grows here until it needs its own module
+// rune:sever(braided) — open_position reserves capital on Pending path, ManagedPosition claims separately
 ```
 
-Categories: `inline-encoding`, `braided-concerns`, `wrong-struct`, `inline-computation`, `duplicated-encoding`.
+Categories: `inline-encoding`, `braided`, `wrong-struct`, `inline-computation`, `duplicated-encoding`.
 
 ## The test
 

@@ -41,12 +41,14 @@ Later: IndicatorStreams (40 lines), suppressed_facts (always empty HashSet passe
 
 Dead thoughts don't just waste space. They waste cycles, they lie to you, and they hide behind the compiler's silence.
 
-## Accepted findings
+## Runes
 
-Skip findings annotated with `dead-thoughts:allow(category)` in a comment at the site. The annotation must include a reason. Report the annotation so the human knows it exists, but don't flag it as a finding.
+Skip findings annotated with `rune:reap(category)` in a comment at the site. The annotation must include a reason after the dash. Report the rune so the human knows it exists, but don't flag it as a finding.
+
+Runes suppress bad thoughts without denying their presence. A rune tells the ward: the datamancer has been here. This is conscious.
 
 ```rust
-// dead-thoughts:allow(scaffolding) — wired when exit expert activates
+// rune:reap(scaffolding) — exit journal learns but doesn't predict yet; wired when exit expert modulates trails
 let exit_pending: Vec<ExitObservation> = Vec::new();
 ```
 

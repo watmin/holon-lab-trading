@@ -10,15 +10,15 @@ The datamancer's defense. Run all five guard spells in parallel against the targ
 
 Launch FIVE SEPARATE background agents in a SINGLE message. Not one agent doing five things — five independent agents running in parallel. Each agent reads its own skill file and reports independently.
 
-1. **`/sever`** — read `.claude/skills/sever/SKILL.md`, scan the target file(s). Cuts tangled threads. Finds braided concerns, misplaced logic, duplicated encoding. Recognize `decomplect:allow()` annotations.
+1. **`/sever`** — read `.claude/skills/sever/SKILL.md`, scan the target file(s). Cuts tangled threads. Finds braided concerns, misplaced logic, duplicated encoding. Recognize `rune:sever()` runes.
 
-2. **`/reap`** — read `.claude/skills/reap/SKILL.md`, scan the target file(s). Harvests what no longer lives. Finds dead code, unused structs, write-only fields. Recognize `dead-thoughts:allow()` annotations.
+2. **`/reap`** — read `.claude/skills/reap/SKILL.md`, scan the target file(s). Harvests what no longer lives. Finds dead code, unused structs, write-only fields. Recognize `rune:reap()` runes.
 
-3. **`/scry`** — read `.claude/skills/scry/SKILL.md`, check the relevant wat spec against its implementation counterpart. Divines truth from intention. Finds divergences between spec and code.
+3. **`/scry`** — read `.claude/skills/scry/SKILL.md`, check the relevant wat spec against its implementation counterpart. Divines truth from intention. Finds divergences between spec and code. Recognize `rune:scry()` runes.
 
-4. **`/gaze`** — read `.claude/skills/gaze/SKILL.md`, scan the target file(s). Sees the form. Finds names that mumble, functions that don't fit in the mind, comments that lie, structure that hides intent.
+4. **`/gaze`** — read `.claude/skills/gaze/SKILL.md`, scan the target file(s). Sees the form. Finds names that mumble, functions that don't fit in the mind, comments that lie, structure that hides intent. Recognize `rune:gaze()` runes.
 
-5. **`/forge`** — read `.claude/skills/forge/SKILL.md`, scan the target file(s). Tests the craft. Hickey's heat removes impurity, Beckman's hammer tests composition. Values not places, types that enforce, abstractions at the right level, functions that compose.
+5. **`/forge`** — read `.claude/skills/forge/SKILL.md`, scan the target file(s). Tests the craft. Hickey's heat removes impurity, Beckman's hammer tests composition. Values not places, types that enforce, abstractions at the right level, functions that compose. Recognize `rune:forge()` runes.
 
 All five run as background agents. Wait for all to complete. Report the combined result.
 
@@ -34,7 +34,7 @@ When a file is given, all five scan that file.
 
 ## The expected result
 
-Clean bills from all five, with accepted annotations acknowledged. If any ward finds something, fix it before proceeding. The wards must pass before good thoughts can begin.
+Clean bills from all five, with runes acknowledged. If any ward finds something, fix it before proceeding. The wards must pass before good thoughts can begin.
 
 ## The principle
 

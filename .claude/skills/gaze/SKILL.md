@@ -77,6 +77,18 @@ Report findings as: the line, what you see, and what it would look like if it sp
 - Not dead-thoughts. Metabolism is a different ward.
 - Not a style guide. There are no rules. There is only: does this communicate?
 
+## Runes
+
+Skip findings annotated with `rune:gaze(category)` in a comment at the site. The annotation must include a reason after the dash. Report the rune so the human knows it exists, but don't flag it as a finding.
+
+Runes suppress bad thoughts without denying their presence. A rune tells the ward: the datamancer has been here. This is conscious.
+
+```rust
+// rune:gaze(naming) — ctx is acceptable when the type is CandleContext
+```
+
+Categories: `naming` (short/unclear name is intentional), `length` (long function has a reason), `complexity` (nested depth is justified).
+
 ## The principle
 
 Sandi Metz said: code that is easy to change is code that is easy to understand. Code that is easy to understand is code that communicates its intent. The gaze measures communication. The spark is the reward.

@@ -56,9 +56,17 @@ For each divergence:
 - **Code does:** (cite file:line and what it actually does)
 - **Verdict:** spec is right and code should change, OR code evolved past the spec and spec should update
 
-## Accepted divergences
+## Runes
 
-Skip divergences annotated with `wat-check:allow(category)` in the code. Categories: `aspirational` (spec describes future work), `evolved` (code intentionally diverges, spec needs update).
+Skip divergences annotated with `rune:scry(category)` in the code. Report the rune so the human knows it exists, but don't flag it as a finding.
+
+Runes suppress bad thoughts without denying their presence. A rune tells the ward: the datamancer has been here. This is conscious.
+
+```rust
+// rune:scry(aspirational) — risk manager with Journal-based learning not yet implemented
+```
+
+Categories: `aspirational` (spec describes future work), `evolved` (code intentionally diverges, spec needs update).
 
 ## The principle
 
