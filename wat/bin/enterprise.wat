@@ -10,7 +10,7 @@
 (require core/primitives)
 (require core/structural)
 (require std/memory)
-(require std/patterns)
+(require patterns)
 
 ;; ── The state ───────────────────────────────────────────────────────
 

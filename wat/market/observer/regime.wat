@@ -6,8 +6,8 @@
 
 (require core/primitives)
 (require core/structural)
-(require std/common)
-(require std/patterns)
+(require common)
+(require patterns)
 
 ;; ── Vocabulary ──────────────────────────────────────────────────────
 ;;

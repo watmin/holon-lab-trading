@@ -10,7 +10,7 @@
 ;; Expert profile: regime (exclusive)
 
 (require vocab/mod)
-(require std/facts)
+(require facts)
 
 ;; ── Atoms introduced ───────────────────────────────────────────
 

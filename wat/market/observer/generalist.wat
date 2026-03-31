@@ -11,7 +11,7 @@
 
 (require core/primitives)
 (require core/structural)
-(require std/patterns)
+(require patterns)
 
 ;; ── The expert ──────────────────────────────────────────────────────
 

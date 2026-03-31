@@ -6,7 +6,7 @@
 ;; Expert profile: volume
 
 (require vocab/mod)
-(require std/facts)
+(require facts)
 
 ;; ── Atoms introduced ───────────────────────────────────────────
 
