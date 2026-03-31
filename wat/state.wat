@@ -44,10 +44,9 @@
 
 ;; -- ExitAtoms --------------------------------------------------------------
 
-;; rune:scry(stale-spec) -- exit.wat declares position-mae (max adverse
-;; excursion) atom but the exit expert encoding omits it. The 8 encoded
-;; facts are: pnl, hold, mfe, atr_entry, atr_now, stop_dist, phase, direction.
-;; MAE was designed but never wired.
+;; rune:scry(aspirational) — exit.wat declares position-mae but Rust encodes
+;; only 8 facts. MAE data exists on Pending.max_adverse — wire when exit
+;; expert is extracted to market/exit.rs.
 
 ;; rune:scry(aspirational) -- exit.wat specifies the exit expert modulates
 ;; k_trail per position per candle. Code only buffers ExitObservation and

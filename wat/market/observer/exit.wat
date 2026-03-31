@@ -12,8 +12,8 @@
 
 ;; ── Encoding ────────────────────────────────────────────────────────
 
-;; rune:scry(stale-spec) — position-mae declared here but not yet
-;; encoded in the Rust implementation.
+;; rune:scry(aspirational) — position-mae declared below but not yet
+;; encoded in the Rust. The data exists on Pending.max_adverse.
 (define (return-pct pos current-price)
   "Signed return of a position: (current - entry) / entry.
    Positive when price moved in the position's favor."

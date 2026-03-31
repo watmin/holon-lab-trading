@@ -160,13 +160,10 @@
 ;; ── Gate ─────────────────────────────────────────────────────────────
 ;;
 ;; The manager's proof: sigma-band scan over resolved predictions.
+;; Outer gate: mgr_resolved.len() >= 500 (enough statistical mass).
 ;; Scan conviction bands [k*σ, (k+4)*σ] for k in 3..18, where σ = 1/sqrt(dims).
-;; Find the band with accuracy > 0.51 and at least 200 samples.
+;; Find the band with accuracy > 0.51 and at least 200 samples per band.
 ;; The treasury deploys only in the proven band.
-;;
-;; rune:scry(evolved) — code requires mgr_resolved.len() >= 500 before scanning bands
-;; (spec only mentions per-band minimum of 200). The 500 total is an outer gate ensuring
-;; enough statistical mass before any band search begins. Spec needs update.
 ;;
 ;; (let ((best-band best-acc) (scan-sigma-bands mgr-resolved dims))
 ;;   (if (> best-acc 0.51) (gate proven-band) silence))
