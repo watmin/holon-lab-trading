@@ -59,9 +59,12 @@
 
 ;; rune:forge(coupling) — zero-vector needs dims because vectors are fixed-dimensionality.
 ;; (bundle) alone cannot know the size. The Rust creates vec![0.0; dims].
+;; rune:gaze(phantom) — no wat form creates a sized zero vector. This is
+;; the lazy-identity question for the designers. For now, the Rust handles it.
 (define (zero-vector dims)
   "The identity element of bundle. dims zeros."
-  (list-fill dims 0.0))
+  ;; Implementation: vec![0.0; dims] in Rust. No wat equivalent exists yet.
+  )
 
 ;; ── Host language gaps (5 phantom runes) ────────────────────────────
 ;;
