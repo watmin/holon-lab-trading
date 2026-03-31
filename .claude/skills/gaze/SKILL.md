@@ -57,17 +57,29 @@ The ineffable quality. Code where the author cared. Where every name was chosen,
 
 The spark cannot be mechanically checked. But its absence can be felt. The gaze feels for it.
 
+## Severity levels — the gaze must converge
+
+The gaze reports Level 1 and Level 2. Level 3 is taste — note it but do not flag it as a finding.
+
+**Level 1 — Lies.** Names that actively mislead. Comments that contradict the code. Stale documentation. A consumer example that references something the producer never creates. These are real hazards. Always report.
+
+**Level 2 — Mumbles.** Names that force the reader to look up the definition. `dd` where `drawdown` would speak. `vm` where `vector-manager` would speak. Abbreviations too short for their scope. Missing WHY comments on non-obvious formulas. These cost the reader effort. Report them.
+
+**Level 3 — Taste.** A better name exists but the current one communicates. `expert-preds` vs `expert-predictions`. `candle` vs `market-context` when the type is clear. Stylistic preferences where reasonable people would choose differently. These are NOT findings. Note them if you wish, but label them as taste and do not count them.
+
+The gaze converges when Level 1 and Level 2 are zero. Level 3 will always exist — taste is infinite. The gaze does not chase taste. The gaze chases lies and mumbles.
+
 ## How to scan
 
 Read the target file (default: `src/state.rs` — the fold's carrier, the densest code). For each function, each block, each name:
 
-1. **Does the name speak?** Can you understand it without context?
-2. **Does the function fit?** Can you hold it in your mind?
-3. **Do the comments help?** Or do they lie, parrot, or clutter?
-4. **Does the structure mirror the intent?** Does the code read like the architecture?
-5. **Does it spark?** Would you be proud to show this?
+1. **Does the name lie?** (Level 1) Does it say one thing and mean another?
+2. **Does the name mumble?** (Level 2) Must you leave the file to understand it?
+3. **Does the function fit?** Can you hold it in your mind?
+4. **Do the comments help?** Or do they lie, parrot, or clutter?
+5. **Does the structure mirror the intent?** Does the code read like the architecture?
 
-Report findings as: the line, what you see, and what it would look like if it sparked. Not a rewrite — a direction. "This name mumbles. It wants to say X."
+Report findings with their level. "Level 1: this comment lies about X." or "Level 2: this name mumbles — it wants to say X."
 
 ## What gaze is NOT
 
