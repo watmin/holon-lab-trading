@@ -26,7 +26,6 @@ pub struct Observer {
     pub profile: &'static str,
     pub journal: Journal,
     pub resolved: VecDeque<(f64, bool)>,  // (conviction, correct)
-    // dead-thoughts:allow(scaffolding) — updated but never queried; wired when observer recognizes its own good states
     pub good_state_subspace: OnlineSubspace,
     pub recalib_wins: u32,
     pub recalib_total: u32,

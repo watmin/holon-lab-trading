@@ -8,7 +8,6 @@ use crate::candle::{Candle, load_candles};
 use holon::Vector;
 use std::path::Path;
 
-// dead-thoughts:allow(scaffolding) — Event + stream constructors are the multi-asset streaming interface; wired when desks dispatch merged streams
 /// Raw event before encoding. Used by stream constructors (merge_streams, with_recurring_deposits).
 /// The fold consumes EnrichedEvent, not Event. Event is the source vocabulary; EnrichedEvent is the fold's input.
 #[derive(Clone, Debug)]
@@ -67,7 +66,6 @@ pub enum EnrichedEvent {
         observer_vecs: Vec<Vector>,
     },
 
-    // dead-thoughts:allow(scaffolding) — Deposit/Withdraw constructed by live feed or multi-asset recurring deposits
     /// Capital deposited into the treasury.
     Deposit { asset: String, amount: f64 },
 

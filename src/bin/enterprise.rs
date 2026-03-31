@@ -219,7 +219,6 @@ fn main() {
     let mgr_atoms = ManagerAtoms::new(&vm);
 
     // ─ Exit expert atoms (immutable) ─
-    // decomplect:allow(inline-encoding) — exit expert atoms + encoding grow here until market/exit.rs
     let exit_scalar = holon::ScalarEncoder::new(args.dims);
     let exit_atoms = ExitAtoms {
         pnl: vm.get_vector("position-pnl"),
@@ -237,7 +236,6 @@ fn main() {
     };
 
     // ─ Observer/manager atoms (immutable) ─
-    // decomplect:allow(inline-encoding) — observer/generalist atoms + min_opinion + delta assembly migrate to market/manager.rs
     let observer_names = ["momentum", "structure", "volume", "narrative", "regime", "full"];
     let observer_atoms: Vec<Vector> = observer_names.iter()
         .map(|&name| vm.get_vector(name))

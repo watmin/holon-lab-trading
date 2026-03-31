@@ -165,7 +165,6 @@ pub struct EnterpriseState {
     pub mgr_sell: Label,
     pub prev_mgr_thought: Option<Vector>,
 
-    // dead-thoughts:allow(scaffolding) — exit journal learns but doesn't predict yet; wired when exit expert modulates trails
     pub exit_journal: Journal,
     pub exit_hold: Label,
     pub exit_exit: Label,
@@ -490,7 +489,6 @@ impl EnterpriseState {
         // All 6 observers contribute (generalist is already at index 5).
         let panel_state: Vec<f64> = observer_preds.iter()
             .map(|ep| ep.raw_cos).collect();
-        // dead-thoughts:allow(scaffolding) — panel_familiar computed for display only; wired when panel engram drives decisions
         let panel_familiar = if self.panel_engram.n() >= 10 {
             let residual = self.panel_engram.residual(&panel_state);
             let threshold = self.panel_engram.threshold();
@@ -512,7 +510,6 @@ impl EnterpriseState {
             self.conviction_history.pop_front();
         }
         // Recompute flip threshold every recalib_interval candles, after warmup.
-        // decomplect:allow(inline-computation) — flip threshold curve fitting, extracts to sizing module
         if self.conviction_history.len() >= ctx.conviction_warmup
             && self.encode_count % ctx.recalib_interval == 0
         {
@@ -893,7 +890,6 @@ impl EnterpriseState {
             }
         } else { None };
 
-        // decomplect:allow(braided-concerns) — open_position reserves capital on Pending path, ManagedPosition claims/swaps separately. Two accounting paths for one trade. Unify when position lifecycle is refactored.
         // Treasury allocation: reserve capital for this position.
         let deployed_usd = if let Some(frac) = position_frac {
             self.treasury.open_position(self.treasury.allocatable() * frac)
@@ -1050,7 +1046,6 @@ impl EnterpriseState {
                 self.kelly_curve_valid = true;
             }
             // Manager's own proof: band-based, not exponential.
-            // decomplect:allow(inline-computation) — manager band proof, extracts to market/manager.rs
             // Find the conviction band where accuracy > 51% with 500+ samples.
             // The sweet spot is at 5-10σ (geometric property of dims).
             // The manager acts only in its proven band.
