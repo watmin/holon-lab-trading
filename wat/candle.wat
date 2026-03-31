@@ -4,23 +4,15 @@
 ;; The enterprise builds its own senses from OHLCV.
 
 (require core/structural)
+(require std/fields)
 
 ;; ── Raw input ───────────────────────────────────────────────────────
 
 (struct raw-candle ts open high low close volume)
 
 ;; Everything below is derived from raw-candle by the indicator engine.
-;; (field name computation) declares what each indicator IS and how
-;; it's computed. These become the streaming indicator reducers
-;; (proposal 004).
-
-;; ── Indicator vocabulary ───────────────────────────────────────────
-;;
-;; rune:gaze(phantom) — field is not in the wat language. 55 uses below.
-;; (field name computation) declares a named indicator on the Candle struct.
-;; Each field is computed by the indicator engine from raw OHLCV.
-;; This form needs a /propose structural to become real.
-;; Evidence: 55 uses, one file, any streaming system needs derived fields.
+;; (field raw-candle name computation) declares what each indicator IS
+;; and how it's computed. Dependency order — no forward references.
 
 ;; ── Streaming reducers ────────────────────────────────────────────
 ;;
@@ -164,31 +156,31 @@
 ;; ── Indicators ──────────────────────────────────────────────────────
 
 ;; Moving averages
-(field sma20    (sma close 20))
-(field sma50    (sma close 50))
-(field sma200   (sma close 200))
+(field raw-candle sma20    (sma close 20))
+(field raw-candle sma50    (sma close 50))
+(field raw-candle sma200   (sma close 200))
 
 ;; Bollinger Bands (20-period, 2σ)
-(field bb-upper (+ sma20 (* 2.0 (stddev close 20))))
-(field bb-lower (- sma20 (* 2.0 (stddev close 20))))
-(field bb-width (/ (- bb-upper bb-lower) sma20))   ; normalized width
+(field raw-candle bb-upper (+ sma20 (* 2.0 (stddev close 20))))
+(field raw-candle bb-lower (- sma20 (* 2.0 (stddev close 20))))
+(field raw-candle bb-width (/ (- bb-upper bb-lower) sma20))   ; normalized width
 
 ;; RSI (14-period Wilder smoothing)
-(field rsi (wilder-rsi close 14))
+(field raw-candle rsi (wilder-rsi close 14))
 
 ;; MACD (12, 26, 9)
-(field macd-line   (- (ema close 12) (ema close 26)))
-(field macd-signal (ema macd-line 9))
-(field macd-hist   (- macd-line macd-signal))
+(field raw-candle macd-line   (- (ema close 12) (ema close 26)))
+(field raw-candle macd-signal (ema macd-line 9))
+(field raw-candle macd-hist   (- macd-line macd-signal))
 
 ;; DMI / ADX (14-period)
-(field dmi-plus  (wilder-dmi-plus 14))
-(field dmi-minus (wilder-dmi-minus 14))
-(field adx       (wilder-adx 14))
+(field raw-candle dmi-plus  (wilder-dmi-plus 14))
+(field raw-candle dmi-minus (wilder-dmi-minus 14))
+(field raw-candle adx       (wilder-adx 14))
 
 ;; ATR (14-period, as ratio of close)
-(field atr   (wilder-atr 14))
-(field atr-r (/ atr close))
+(field raw-candle atr   (wilder-atr 14))
+(field raw-candle atr-r (/ atr close))
 
 ;; ── New indicators (missing from current struct) ────────────────────
 ;;
@@ -197,29 +189,29 @@
 ;; storing on the Candle struct is faster and cleaner.
 
 ;; Stochastic (14-period)
-(field stoch-k (stochastic-k 14))
-(field stoch-d (sma stoch-k 3))
+(field raw-candle stoch-k (stochastic-k 14))
+(field raw-candle stoch-d (sma stoch-k 3))
 
 ;; Williams %R (14-period)
-(field williams-r (williams-r 14))
+(field raw-candle williams-r (williams-r 14))
 
 ;; CCI (20-period)
-(field cci (cci 20))
+(field raw-candle cci (cci 20))
 
 ;; Money Flow Index (14-period)
-(field mfi (mfi 14))
+(field raw-candle mfi (mfi 14))
 
 ;; Rate of change at multiple scales
-(field roc-1  (roc close 1))
-(field roc-3  (roc close 3))
-(field roc-6  (roc close 6))
-(field roc-12 (roc close 12))
+(field raw-candle roc-1  (roc close 1))
+(field raw-candle roc-3  (roc close 3))
+(field raw-candle roc-6  (roc close 6))
+(field raw-candle roc-12 (roc close 12))
 
 ;; OBV slope (12-period linear regression slope of OBV)
-(field obv-slope-12 (slope (obv) 12))
+(field raw-candle obv-slope-12 (slope (obv) 12))
 
 ;; Volume SMA for relative volume
-(field volume-sma-20 (sma volume 20))
+(field raw-candle volume-sma-20 (sma volume 20))
 
 ;; ── Multi-timeframe ─────────────────────────────────────────────────
 ;;
@@ -228,18 +220,18 @@
 ;; Computed by aggregating raw candles, not by loading a separate DB.
 
 ;; 1-hour aggregation (12 candles)
-(field tf-1h-close  (last-close 12))
-(field tf-1h-high   (max-high 12))
-(field tf-1h-low    (min-low 12))
-(field tf-1h-ret    (ret-pct 12))         ; return over last hour
-(field tf-1h-body   (body-ratio 12))      ; |close-open|/range
+(field raw-candle tf-1h-close  (last-close 12))
+(field raw-candle tf-1h-high   (max-high 12))
+(field raw-candle tf-1h-low    (min-low 12))
+(field raw-candle tf-1h-ret    (ret-pct 12))         ; return over last hour
+(field raw-candle tf-1h-body   (body-ratio 12))      ; |close-open|/range
 
 ;; 4-hour aggregation (48 candles)
-(field tf-4h-close  (last-close 48))
-(field tf-4h-high   (max-high 48))
-(field tf-4h-low    (min-low 48))
-(field tf-4h-ret    (ret-pct 48))
-(field tf-4h-body   (body-ratio 48))
+(field raw-candle tf-4h-close  (last-close 48))
+(field raw-candle tf-4h-high   (max-high 48))
+(field raw-candle tf-4h-low    (min-low 48))
+(field raw-candle tf-4h-ret    (ret-pct 48))
+(field raw-candle tf-4h-body   (body-ratio 48))
 
 ;; ── Derived features ────────────────────────────────────────────────
 ;;
@@ -247,34 +239,34 @@
 ;; Pre-computing saves redundant work across expert profiles.
 
 ;; Bollinger position: where is close within the bands? [0,1]
-(field bb-pos (/ (- close bb-lower) (- bb-upper bb-lower)))
+(field raw-candle bb-pos (/ (- close bb-lower) (- bb-upper bb-lower)))
 
 ;; Keltner position + squeeze
-(field kelt-upper (+ (ema close 20) (* 1.5 atr)))
-(field kelt-lower (- (ema close 20) (* 1.5 atr)))
-(field kelt-pos   (/ (- close kelt-lower) (- kelt-upper kelt-lower)))
-(field squeeze    (< bb-width (* 1.5 (/ atr (ema close 20)))))
+(field raw-candle kelt-upper (+ (ema close 20) (* 1.5 atr)))
+(field raw-candle kelt-lower (- (ema close 20) (* 1.5 atr)))
+(field raw-candle kelt-pos   (/ (- close kelt-lower) (- kelt-upper kelt-lower)))
+(field raw-candle squeeze    (< bb-width (* 1.5 (/ atr (ema close 20)))))
 
 ;; Range position at multiple scales
-(field range-pos-12 (range-position 12))
-(field range-pos-24 (range-position 24))
-(field range-pos-48 (range-position 48))
+(field raw-candle range-pos-12 (range-position 12))
+(field raw-candle range-pos-24 (range-position 24))
+(field raw-candle range-pos-48 (range-position 48))
 
 ;; Trend consistency: what fraction of last N candles closed in the same direction?
-(field trend-consistency-6  (trend-consistency 6))
-(field trend-consistency-12 (trend-consistency 12))
-(field trend-consistency-24 (trend-consistency 24))
+(field raw-candle trend-consistency-6  (trend-consistency 6))
+(field raw-candle trend-consistency-12 (trend-consistency 12))
+(field raw-candle trend-consistency-24 (trend-consistency 24))
 
 ;; Volatility acceleration
-(field atr-roc-6  (roc atr 6))
-(field atr-roc-12 (roc atr 12))
+(field raw-candle atr-roc-6  (roc atr 6))
+(field raw-candle atr-roc-12 (roc atr 12))
 
 ;; Volume acceleration
-(field vol-accel (/ volume volume-sma-20))
+(field raw-candle vol-accel (/ volume volume-sma-20))
 
 ;; Time (for circular encoding)
-(field hour (parse-hour ts))
-(field day-of-week (parse-day ts))
+(field raw-candle hour (parse-hour ts))
+(field raw-candle day-of-week (parse-day ts))
 
 ;; ── Causality ───────────────────────────────────────────────────────
 ;;
