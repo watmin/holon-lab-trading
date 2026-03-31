@@ -7,8 +7,8 @@
 ;; up-moves vs down-moves. The flip emerges geometrically.
 ;;
 ;; The manager does NOT encode candles. It does NOT see indicators.
-;; It subscribes to expert channels with a gate filter (see channels.wat).
-;; The filter is the manager's policy choice.
+;; It reads expert predictions passed by the fold. The fold decides
+;; which experts to include (proof gates filter upstream).
 
 ;; ── Manager's atoms ─────────────────────────────────────────────────
 
@@ -123,12 +123,10 @@
     (bundle expert-facts shape context delta)))
 
 ;; ── Labels ──────────────────────────────────────────────────────────
-;;
-;; Labels are symbols — registered once, used as cheap integer handles.
-;; The manager's question is direction: did price go up or down?
-;;
-;; (define buy  (register manager-journal "Buy"))
-;; (define sell (register manager-journal "Sell"))
+
+(define manager-journal (journal "manager" dims refit-interval))
+(define buy  (register manager-journal "Buy"))
+(define sell (register manager-journal "Sell"))
 
 ;; ── Learning ────────────────────────────────────────────────────────
 ;;
