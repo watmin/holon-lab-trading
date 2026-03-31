@@ -111,6 +111,10 @@
 ;;      (conviction-in-band?)
 ;;      (risk-allows?)
 ;;      (market-moved-since-exit?))
+;;
+;; rune:scry(evolved) — code adds gates not listed here: portfolio phase != Observe,
+;; asset-mode == "hold", meta_dir is Buy or Sell, and expected_move > 2*fee_rate
+;; (profitability gate). Spec lists 4 conditions; code enforces 8. Spec needs update.
 
 ;; rune:scry(aspirational) — alpha tracking not yet implemented.
 ;; Snapshot before each swap, compare actual vs counterfactual inaction.

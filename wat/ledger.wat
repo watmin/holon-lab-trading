@@ -61,6 +61,11 @@
         :batch-commit           (commit conn)))
     entries))
 
+;; rune:scry(evolved) — code has two additional LogEntry variants not declared here:
+;; PositionOpen (logs entry-time swap details) and PositionExit (logs exit-time swap
+;; details). These were added for real-time position lifecycle tracking in hold mode.
+;; Spec needs update.
+
 ;; ── Contract ────────────────────────────────────────────────────────
 ;;
 ;; 1. The ledger never drops a message.
