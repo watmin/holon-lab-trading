@@ -8,6 +8,7 @@ use crate::candle::{Candle, load_candles};
 use holon::Vector;
 use std::path::Path;
 
+// rune:reap(scaffolding) — Event enum and all stream constructors (stream_from_candles, stream_from_db, merge_streams, with_recurring_deposits) are never used outside this file. The enterprise folds over EnrichedEvent, not Event. Wired when streaming interface replaces backtest loop.
 /// Raw event before encoding. Used by stream constructors (merge_streams, with_recurring_deposits).
 /// The fold consumes EnrichedEvent, not Event. Event is the source vocabulary; EnrichedEvent is the fold's input.
 #[derive(Clone, Debug)]
@@ -66,6 +67,7 @@ pub enum EnrichedEvent {
         observer_vecs: Vec<Vector>,
     },
 
+    // rune:reap(scaffolding) — Deposit and Withdraw variants are matched in on_event but never constructed anywhere. Wired when streaming interface supports capital events.
     /// Capital deposited into the treasury.
     Deposit { asset: String, amount: f64 },
 

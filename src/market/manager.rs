@@ -80,6 +80,7 @@ pub fn encode_manager_thought(
     let mut facts: Vec<Vector> = Vec::new();
 
     // Per-expert: opinion + credibility + reliability + tenure
+    // rune:gaze(naming) — ei/ep want to say expert_idx/expert_pred; loop body spans 30 lines
     for (ei, ep) in ctx.observer_preds.iter().enumerate() {
         let abs_cos = ep.raw_cos.abs();
         if abs_cos < min_opinion { continue; }

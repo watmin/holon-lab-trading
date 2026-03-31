@@ -94,6 +94,7 @@ struct Args {
 
     /// "quantile" = use conviction_quantile percentile. "auto" = find the conviction
     /// level where cumulative win rate from the top first drops below min_edge.
+    // rune:forge(bare-type) — conviction_mode is "quantile"|"auto"; a two-variant enum would make invalid states unrepresentable
     #[arg(long, default_value = "quantile")]
     conviction_mode: String,
 
@@ -106,6 +107,7 @@ struct Args {
     min_edge: f64,
 
     /// "legacy" = phase-based with 5% cap. "kelly" = half-Kelly from calibration curve.
+    // rune:forge(bare-type) — sizing is "legacy"|"kelly"; an enum would enforce valid variants at parse time
     #[arg(long, default_value = "legacy")]
     sizing: String,
 
@@ -138,6 +140,7 @@ struct Args {
     /// "hold" = treasury holds WBTC between BUY signals. BUY = swap USDC→WBTC,
     /// SELL = swap WBTC→USDC. One swap per signal (0.35% cost). WBTC appreciates
     /// between signals. The position persists.
+    // rune:forge(bare-type) — asset_mode is "round-trip"|"hold"; an enum would prevent silent typos
     #[arg(long, default_value = "hold")]
     asset_mode: String,
 
@@ -218,6 +221,7 @@ fn main() {
     let mgr_scalar = holon::ScalarEncoder::new(args.dims);
     let mgr_atoms = ManagerAtoms::new(&vm);
 
+    // rune:sever(inline-encoding) — ExitAtoms constructed inline with vm.get_vector() calls; should have ExitAtoms::new(&vm) like ManagerAtoms
     // ─ Exit expert atoms (immutable) ─
     let exit_scalar = holon::ScalarEncoder::new(args.dims);
     let exit_atoms = ExitAtoms {
@@ -241,6 +245,7 @@ fn main() {
         .map(|&name| vm.get_vector(name))
         .collect();
     let generalist_atom = vm.get_vector("generalist");
+    // rune:gaze(naming) — missing WHY: 3/sqrt(D) is the expected noise floor for random cosine similarity in D dimensions
     let min_opinion_magnitude: f64 = 3.0 / (args.dims as f64).sqrt();
 
     // Risk scalar encoder — separate from thought encoder's scalar encoder

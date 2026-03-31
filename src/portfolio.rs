@@ -40,6 +40,7 @@ pub struct Portfolio {
     pub completed_drawdowns: VecDeque<f64>,  // max depth of each completed dd (20)
 }
 
+// rune:reap(unused-struct) — YearStats populated every trade but never read. By-year breakdown display was removed (enterprise.rs line 560). by_year HashMap and Pending.year are dead downstream.
 #[derive(Default)]
 pub struct YearStats { pub trades: usize, pub wins: usize, pub pnl: f64 }
 
@@ -81,6 +82,7 @@ impl Portfolio {
     /// `conviction >= flip_threshold` the prediction has been flipped (reversal
     /// signal) and we scale the position proportionally — higher conviction means
     /// a stronger reversal, so we bet more. Below the threshold, use base sizing.
+    // rune:forge(bare-type) — graduated thresholds (0.005, 0.01, 0.02, 0.05, 0.10) are magic f64 constants; the sizing curve is baked into code rather than derived from data
     pub fn position_frac(&self, conviction: f64, min_conviction: f64, flip_threshold: f64) -> Option<f64> {
         if self.phase == Phase::Observe  { return None; }
         if conviction < min_conviction   { return None; }
@@ -117,6 +119,7 @@ impl Portfolio {
     ///
     /// Long (Buy): profit when price goes up (outcome_pct > 0).
     /// Short (Sell): profit when price goes down (outcome_pct < 0), i.e. -outcome_pct > 0.
+    // rune:forge(escape) — mutates 15+ fields (equity, peak, drawdown, rolling, year_stats, phase). Accounting, drawdown tracking, and phase transitions are three concerns in one &mut self.
     pub fn record_trade(&mut self, outcome_pct: f64, frac: f64, direction: Direction, year: i32,
                      swap_fee: f64, slippage: f64) {
         let directional_return = match direction {
@@ -172,6 +175,19 @@ impl Portfolio {
         self.check_phase();
     }
 
+    // rune:sever(wrong-struct) — risk encoding (bind/bundle with VectorManager+ScalarEncoder) lives on Portfolio but belongs in risk/ module; Portfolio is state, not an encoder
+    // rune:forge(coupling) — takes &VectorManager and &ScalarEncoder to produce Vec<f64>; this is encoding logic wearing a Portfolio method's clothes. A pure fn(PortfolioSnapshot, &VM, &Scalar) -> [Vec<f64>; 5] would compose without &self.
+    // rune:scry(evolved) — risk.wat drawdown specialist declares atoms drawdown-depth,
+    // drawdown-recovering, drawdown-deepening. Code uses drawdown, drawdown-velocity,
+    // recovery-progress, drawdown-duration, dd-historical — a richer vocabulary that
+    // evolved past the spec. Spec needs update.
+    //
+    // rune:scry(evolved) — risk.wat volatility specialist declares only trade-sharpe and
+    // worst-trade. Code adds pnl-vol, return-skew, equity-curve — three additional facts
+    // that evolved past the spec. Spec needs update.
+    //
+    // rune:scry(evolved) — risk.wat accuracy specialist does not mention acc-divergence
+    // (wr10 - wr200). Code adds this fifth fact. Spec needs update.
     /// Five risk WAT vectors — named atoms bound with scalar magnitudes.
     /// Each branch gets a bundled thought vector at full dimensionality.
     pub fn risk_branch_wat(&self, vm: &VectorManager, scalar: &holon::ScalarEncoder) -> [Vec<f64>; 5] {
@@ -190,6 +206,7 @@ impl Portfolio {
         };
 
         // ── Now build the original features as named thoughts ────────
+        // rune:gaze(naming) — dd wants to say drawdown_depth; dd_vel wants to say drawdown_velocity
         let dd = if self.peak_equity > 0.0 { (self.peak_equity - self.equity) / self.peak_equity } else { 0.0 };
         let dd_vel = if self.equity_at_trade.len() >= 5 {
             let eq5 = self.equity_at_trade[self.equity_at_trade.len() - 5];
@@ -240,6 +257,7 @@ impl Portfolio {
 
         let corr_branch = if self.rolling.len() >= 20 {
             let seq: Vec<f64> = self.rolling.iter().rev().take(50).map(|&w| if w { 1.0 } else { -1.0 }).collect();
+            // rune:gaze(naming) — sm/sv/ac/ld/consec want to say seq_mean/seq_variance/autocorrelation/loss_density/consecutive_losses
             let sm = seq.iter().sum::<f64>() / seq.len() as f64;
             let sv = seq.iter().map(|v| (v - sm).powi(2)).sum::<f64>() / seq.len() as f64;
             let ac = if sv > 1e-10 { let mut c = 0.0; for i in 0..seq.len()-1 { c += (seq[i]-sm)*(seq[i+1]-sm); } c / ((seq.len()-1) as f64 * sv) } else { 0.0 };
@@ -257,6 +275,7 @@ impl Portfolio {
         let eq_pct = (self.equity - self.initial_equity) / self.initial_equity;
         let mut streak_val = 0.0_f64;
         if let Some(&last) = self.rolling.back() { for &o in self.rolling.iter().rev() { if o == last { streak_val += if last { 1.0 } else { -1.0 }; } else { break; } } }
+        // rune:gaze(naming) — wr_all wants to say win_rate_all
         let wr_all = if self.trades_taken > 0 { self.trades_won as f64 / self.trades_taken as f64 } else { 0.5 };
         let panel_branch = bundle_f64(vec![
             thought("equity-curve",    eq_pct,                                  2.0),

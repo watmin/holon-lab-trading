@@ -6,6 +6,17 @@ use std::collections::HashMap;
 // The risk managers read this to see total exposure, concentration, liquidity.
 // Pure accounting. No predictions. No thoughts. A ledger.
 
+// rune:scry(aspirational) — treasury.wat specifies alpha tracking: cumulative trading value
+// vs counterfactual inaction (snapshot before each swap, compare after). Treasury struct has
+// no alpha field, no snapshot field, no counterfactual comparison. Risk alpha-journal depends
+// on this.
+
+// rune:scry(stale-spec) — treasury.wat specifies 50/50 portfolio seeding (split between base
+// and quote asset at startup). Code seeds 100% in base asset (USDC). The 50/50 seed was a
+// design idea that was never implemented — the enterprise starts fully in cash and builds
+// exposure through trading. Spec should update to reflect this.
+
+// rune:forge(bare-type) — balances and deployed are HashMap<String, f64>; asset names are bare strings, amounts are bare f64. An Asset newtype and Amount(f64) would prevent mixing asset with amount or misspelling an asset key.
 pub struct Treasury {
     pub balances:         HashMap<String, f64>,  // asset → amount (e.g. "USDC" → 10000.0, "WBTC" → 0.15)
     pub deployed:         HashMap<String, f64>,  // asset → amount locked in active positions
@@ -39,6 +50,7 @@ impl Treasury {
     }
 
     /// Withdraw capital from available balance. Cannot touch deployed.
+    // rune:forge(escape) — silently clamps to 0.0 on overdraw; caller cannot distinguish success from insufficient funds. Should return the actual amount withdrawn.
     pub fn withdraw(&mut self, asset: &str, amount: f64) {
         let bal = self.balances.entry(asset.to_string()).or_insert(0.0);
         *bal = (*bal - amount).max(0.0);

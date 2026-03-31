@@ -96,6 +96,7 @@ pub struct ManagedPosition {
 }
 
 impl ManagedPosition {
+    // rune:forge(bare-type) — 10 parameters, 7 are bare f64 with different semantics (price, ATR ratio, USD amount, fee amount, multiplier). Swapping entry_price with entry_atr compiles but silently corrupts all stop/TP math.
     pub fn new(
         id: usize,
         candle_idx: usize,
@@ -109,6 +110,7 @@ impl ManagedPosition {
         k_tp: f64,
     ) -> Self {
         // BUY: stop below entry, TP above. SELL: stop above, TP below.
+        // rune:forge(bare-type) — wildcard `_` hides Direction::Short; if a third variant arrives, this arm silently catches it
         let (stop, tp, hw) = match direction {
             Direction::Long => (
                 entry_price * (1.0 - k_stop * entry_atr),
@@ -141,6 +143,7 @@ impl ManagedPosition {
 
     /// Update position with current price. Returns exit signal if triggered.
     /// Handles both BUY (long WBTC) and SELL (short WBTC / long USDC) positions.
+    // rune:forge(bare-type) — k_trail is bare f64; same scale as entry_atr but nothing prevents passing a price. A TrailFactor newtype would close this.
     pub fn tick(&mut self, current_price: f64, k_trail: f64) -> Option<PositionExit> {
         self.candles_held += 1;
 
@@ -166,10 +169,12 @@ impl ManagedPosition {
                     return Some(PositionExit::TakeProfit);
                 }
             }
+            // rune:forge(bare-type) — wildcard `_` hides Direction::Short; match exhaustively to let the compiler guard new variants
             _ => {
                 // SELL: profit when price goes DOWN
+                // rune:gaze(naming) — high_water tracks the extreme in our favor; for shorts that's the LOW. Name lies to short-side readers.
                 if current_price < self.high_water {
-                    self.high_water = current_price; // "high water" is actually low water for sells
+                    self.high_water = current_price;
                 }
                 // Trail stop downward
                 let new_stop = self.high_water * (1.0 + k_trail * self.entry_atr);
@@ -198,6 +203,7 @@ impl ManagedPosition {
                 let wbtc_value = self.quote_held * current_price;
                 (wbtc_value + self.base_reclaimed - self.total_fees) / self.base_deployed - 1.0
             }
+            // rune:forge(bare-type) — wildcard `_` hides Direction::Short; match exhaustively
             _ => {
                 // SELL: profit = (entry_price - current_price) / entry_price
                 // Simplified: we deployed USDC equivalent, price moved

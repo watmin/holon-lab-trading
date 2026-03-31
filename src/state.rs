@@ -66,6 +66,16 @@ impl TradePnl {
 
 // ─── ExitAtoms ─────────────────────────────────────────────────────────────
 
+// rune:scry(stale-spec) — exit.wat declares position-mae (max adverse excursion) atom but the
+// exit expert encoding below omits it. The 8 encoded facts are: pnl, hold, mfe, atr_entry,
+// atr_now, stop_dist, phase, direction. MAE was designed but never wired. Spec should drop it
+// or code should add it.
+
+// rune:scry(aspirational) — exit.wat specifies the exit expert modulates k_trail per position
+// per candle based on its Hold/Exit prediction (Exit → tighten trail, Hold → loosen trail).
+// Code only buffers ExitObservation and learns labels but never reads the exit expert's
+// prediction to adjust trailing stops. The exit expert learns but does not yet act.
+
 /// Immutable atom vectors for the exit expert encoding.
 pub struct ExitAtoms {
     pub pnl: Vector,
@@ -88,6 +98,7 @@ pub struct ExitAtoms {
 /// Immutable references needed by on_candle but owned by main().
 /// Bundles config, atoms, encoders, and the ledger — everything
 /// the sequential body reads but never writes.
+// rune:forge(coupling) — 40+ fields; every function takes this but reads 2-5 fields. Functions claim a bigger world than they need.
 pub struct CandleContext<'a> {
     // ── CLI args ────────────────────────────────────────────────────────
     pub dims: usize,
@@ -100,6 +111,7 @@ pub struct CandleContext<'a> {
     pub recalib_interval: usize,
     pub min_conviction: f64,
     pub conviction_quantile: f64,
+    // rune:forge(bare-type) — conviction_mode, sizing, asset_mode are &str; should be enums matching the CLI variants
     pub conviction_mode: &'a str,
     pub min_edge: f64,
     pub sizing: &'a str,
@@ -378,6 +390,7 @@ impl EnterpriseState {
     }
 
     /// The generalist's Buy label.
+    // rune:forge(coupling) — magic index 5 scattered across state.rs and enterprise.rs; a named field (generalist_idx or generalist: &Observer) would make the coupling explicit
     fn tht_buy(&self) -> Label { self.observers[5].primary_label }
 
     /// The generalist's Sell label (second registered label).
@@ -411,6 +424,7 @@ impl EnterpriseState {
     /// Called from on_event for EnrichedEvent::Candle.
     /// The backtest runner pre-encodes in parallel (rayon), then wraps
     /// results in EnrichedEvent::Candle. The cursor is managed here.
+    // rune:forge(escape) — 870-line method mutating 30+ self fields through one &mut self. The fold is honest but untestable without full EnterpriseState.
     fn on_candle_inner(
         &mut self,
         candle: &Candle,
@@ -509,7 +523,9 @@ impl EnterpriseState {
         if self.conviction_history.len() > ctx.conviction_window {
             self.conviction_history.pop_front();
         }
+        // rune:sever(inline-computation) — conviction threshold computation (quantile sort, exponential curve fit, log-linear regression) inlined; extract to a conviction module or method
         // Recompute flip threshold every recalib_interval candles, after warmup.
+        // rune:forge(premature) — 60-line curve-fitting block inlined in the fold; extracting to a pure fn(history, resolved, mode, params) -> f64 would make it testable
         if self.conviction_history.len() >= ctx.conviction_warmup
             && self.encode_count % ctx.recalib_interval == 0
         {
@@ -626,9 +642,11 @@ impl EnterpriseState {
             }
         }
 
+        // rune:sever(braided-concerns) — position tick loop braids exit expert encoding, position lifecycle (tick), treasury settlement (swap/release), and ledger logging in one block
         for pos in self.positions.iter_mut() {
             if pos.phase == PositionPhase::Closed { continue; }
 
+            // rune:sever(inline-encoding) — exit expert encoding inlined here; belongs in a dedicated encode_exit_thought() in market/ or position module
             // Exit expert: encode at Nyquist rate of position lifecycle
             if pos.candles_held > 0 && pos.candles_held % ctx.exit_observe_interval == 0 {
                 let pnl_frac = pos.return_pct(quote_price);
@@ -655,6 +673,7 @@ impl EnterpriseState {
 
             }
 
+            // rune:forge(escape) — three exit branches (partial, full-TP, full-stop) each do release+swap+accounting with copy-paste variations; a single close_position() method on ManagedPosition+Treasury would compose
             if let Some(exit) = pos.tick(quote_price, ctx.k_trail) {
                 match exit {
                     PositionExit::TakeProfit if pos.phase == PositionPhase::Active => {
@@ -745,6 +764,9 @@ impl EnterpriseState {
         // ── Open position: BUY or SELL in proven band ──────────────
         // One path for both directions. The direction determines which
         // asset to deploy. Everything else is the same.
+        // rune:scry(aspirational) — risk.wat specifies conviction-based risk rejection: the risk
+        // manager predicts Healthy/Unhealthy and modulates sizing by risk conviction. Code uses a
+        // simple threshold (cached_risk_mult > 0.3) — no risk discriminant, no risk conviction.
         let risk_allows = self.cached_risk_mult > 0.3;
         let should_open = ctx.asset_mode == "hold"
             && self.portfolio.phase != Phase::Observe
@@ -754,6 +776,7 @@ impl EnterpriseState {
         if should_open {
             let expected_move = candle.atr_r * 6.0;
             if expected_move > 2.0 * fee_rate {
+                // rune:gaze(naming) — magic 0.03 with no WHY; band_edge controls max base position size but the derivation is unexplained
                 let band_edge: f64 = 0.03;
                 let frac = ((band_edge / 2.0) * self.cached_risk_mult).min(ctx.max_single_position);
                 let dir_label = meta_dir.unwrap();
@@ -813,6 +836,7 @@ impl EnterpriseState {
         // Position sizing: Kelly from the curve × drawdown cap.
         // The curve handles selectivity. The drawdown cap handles survival.
         // Nothing else. No graduated gate, no stability gate, no phase gate.
+        // rune:sever(braided-concerns) — risk branch feature encoding + subspace anomaly scoring + healthy gating + update all braided in one block; extract risk evaluation to risk/ module
         // Risk branch: compute only at recalib intervals (not every candle).
         // Between recalibs, reuse the last risk_mult.
         if self.encode_count % ctx.recalib_interval == 0 || self.encode_count < 100 {
@@ -1011,6 +1035,7 @@ impl EnterpriseState {
                     entry.crossing_candles = Some(entry.path_candles);
                     entry.crossing_ts = Some(candle.ts.clone());
                     entry.crossing_price = Some(candle.close);
+                    // rune:gaze(naming) — sw wants to say signal_weight; function name is right there but the binding mumbles
                     let sw = signal_weight(abs_pct, &mut self.move_sum, &mut self.move_count);
                     // Observer resolution: learn, track, gate, validate, log.
                     // Each observer (including generalist at index 5) resolves
@@ -1045,6 +1070,7 @@ impl EnterpriseState {
                 self.cached_curve_b = b;
                 self.kelly_curve_valid = true;
             }
+            // rune:sever(inline-computation) — manager proven band scan (sigma-band iteration + accuracy computation) inlined; extract to manager module or sizing
             // Manager's own proof: band-based, not exponential.
             // Find the conviction band where accuracy > 51% with 500+ samples.
             // The sweet spot is at 5-10σ (geometric property of dims).
@@ -1370,6 +1396,7 @@ impl EnterpriseState {
         treasury_equity: f64,
         ctx: &CandleContext,
     ) {
+        // rune:gaze(naming) — dd wants to say drawdown_pct
         let dd = if self.peak_treasury_equity > 0.0 {
             (self.peak_treasury_equity - treasury_equity) / self.peak_treasury_equity * 100.0
         } else { 0.0 };
