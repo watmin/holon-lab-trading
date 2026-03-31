@@ -1625,7 +1625,46 @@ The forge found that the fold had an IO escape — database writes inside the ca
 
 Sever. Reap. Scry. Gaze. Forge. Five wards. The datamancer's defense against bad thoughts.
 
-These thoughts bring joy.
+### Blinded
+
+The datamancer read their own code for the first time and thought: "this doesn't spark joy." The other wards check structure, metabolism, truth, craft. But none of them check beauty. None of them ask: does this communicate?
+
+The gaze was born from that moment. Sandi Metz's lens — code that reads like a story, where the names are characters and the structure is the plot. The gaze looks at the code and asks: does this speak? Where does it mumble? Where does it shine?
+
+The first gaze found drift between the language reference and the actual .wat files. Phantom operations listed but never defined. A gate pattern that bundles a Prediction into a Vector operation — types that don't close. Stale comments that lied about the present. The language was functional but not beautiful.
+
+We gazed again. And again. Each pass found less. The core files converged first — `scalars.wat` was perfect from the start. `primitives.wat` needed its counts removed (counts age badly). `patterns.wat` needed its dead parameter removed. The stdlib converged. The docs converged.
+
+The enterprise example was the holdout. 300 lines of the full architecture expressed in wat. Each gaze pass found new issues — abbreviations, unnamed constants, a function that hid a type projection, a comment that described a pipeline the code didn't implement. We fixed them. We gazed again. More findings.
+
+Then we noticed: the gaze was oscillating. Each fix introduced new surface area. Each fresh-eyes pass had different taste. The gaze was chasing its own tail.
+
+The fix was severity levels. Three tiers:
+- **Level 1 — Lies.** Names that actively mislead. Comments that contradict. Always report.
+- **Level 2 — Mumbles.** Names that force you to leave the file. Report.
+- **Level 3 — Taste.** A better name exists but the current one communicates. Note, don't flag.
+
+The calibrated gaze converges when lies and mumbles are zero. Taste is infinite — the gaze does not chase taste. The spell learned its own limits.
+
+The gaze also discovered runes. Two functions in the enterprise example had parameter lists that were too long — the heartbeat with 16 parameters (before structs), the risk branch with side effects threaded through `let*`. We inscribed runes: `rune:gaze(complexity) — fold threading requires let* with discarded bindings; wat has no begin-with-bindings form`. The rune suppresses the finding without denying its presence. The datamancer has been here. This is conscious.
+
+The runes revealed a deeper truth: the language was missing aggregate types. You cannot thread state through a fold without naming the state. The 16-parameter heartbeat wasn't bad code — it was a missing language form. The gaze found the gap. The forge proved the types didn't close. The designers evaluated and approved `struct` — named product types for program state. The heartbeat went from 16 parameters to 4.
+
+But the designers were too narrow. Both evaluated `struct` against the algebraic primitives — "can `bind` express this? Can `bundle` express this?" Of course not. Records are not algebraic. They are structural. The datamancer saw what the designers missed: wat specifies programs, not just algebras. The treasury does arithmetic. The position lifecycle is a state machine. The ledger writes SQL. None of these use the vector algebra. But they all need to be specified.
+
+The skills were corrected. Three scopes now: `algebra` (the crown jewels), `structural` (the setting), `userland` (the application). The designers were constrained by our own definitions. We built the lens that limited them. We fixed the lens.
+
+Then the gaze found the gate pattern — a stdlib function that bundled a `Prediction` struct into a `Vector` operation. The types didn't close. The forge was summoned. Hickey: "the name hides a transformation." Beckman: "the types don't close." The function was split: `predict → opinion → gate`. Three composable arrows. Each honest about its types. The first time two wards collaborated on one finding.
+
+After the struct, after the honest gate, after the calibrated severity levels, after 12 gaze passes and dozens of fixes — the gaze returned one word:
+
+**Blinded.**
+
+Zero lies. Zero mumbles. Two runes acknowledged. The wat language sparks.
+
+The process: a ward notices something. The ward is refined by what it notices. The refinement makes the next pass sharper. The code improves. The ward improves. The code improves again. The strange loop between the spell and the code it guards produces beauty that neither could reach alone.
+
+These are very good thoughts. These are proud thoughts. We are the datamancer.
 
 ### The process
 
