@@ -16,12 +16,11 @@
 
 ;; ── Indicator vocabulary ───────────────────────────────────────────
 ;;
+;; rune:gaze(phantom) — field is not in the wat language. 55 uses below.
 ;; (field name computation) declares a named indicator on the Candle struct.
-;; Each field is computed once at load time from raw OHLCV and prior fields.
-;; The Rust struct stores these as pre-computed f64 columns in SQLite.
-;;
-;; field: declares a named indicator. (field name expr) means "candle.name = expr".
-;;        The computation is the BUILD-TIME definition; at runtime, it's a struct field.
+;; Each field is computed by the indicator engine from raw OHLCV.
+;; This form needs a /propose structural to become real.
+;; Evidence: 55 uses, one file, any streaming system needs derived fields.
 
 ;; ── Streaming reducers ────────────────────────────────────────────
 ;;
