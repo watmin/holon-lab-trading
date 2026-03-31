@@ -36,7 +36,8 @@
 ;; Any program analyzing distributions needs these.
 
 (define (mean xs)
-  (/ (fold + 0.0 xs) (len xs)))
+  (if (empty? xs) 0.0
+      (/ (fold + 0.0 xs) (len xs))))
 
 (define (variance xs)
   (let ((m (mean xs)))
@@ -56,9 +57,9 @@
 
 ;; ── Collection gaps (1 phantom rune dissolved if promoted) ──────────
 
-(define (zero-vector dims)
+(define (zero-vector)
   "The identity element of bundle. All zeros."
-  (bundle))  ; empty bundle = zero vector
+  (bundle))  ; empty bundle = zero vector in the ambient dimensionality
 
 ;; ── Host language gaps (5 phantom runes) ────────────────────────────
 ;;
