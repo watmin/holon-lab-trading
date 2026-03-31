@@ -74,6 +74,19 @@
 ;; unzip: split list of pairs into pair of lists
 ;; member?: is this element in the list?
 
+;; ── Questions for designers ──────────────────────────────────────────
+;;
+;; 1. Should (bundle) with no args be a lazy identity that adopts the
+;;    dimensionality of the next bundle call? Currently zero-vector
+;;    requires dims because vectors are fixed-size. But if the identity
+;;    is lazy, zero-vector becomes (bundle) and dims is unnecessary.
+;;    This is an algebra question: does the monoid identity know its size?
+;;
+;; 2. Fact constructors take bare strings where the domain has distinct
+;;    concepts (indicator vs zone, predicate vs operand). Should wat
+;;    have tagged strings or newtypes to distinguish them? Or is the
+;;    docstring sufficient guard for a specification language?
+
 ;; ── Pending promotion inventory ─────────────────────────────────────
 ;;
 ;; | Form | Runes dissolved | Generic? | Status |
