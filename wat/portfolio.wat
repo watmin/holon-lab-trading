@@ -163,31 +163,9 @@
                    (update portfolio :phase :tentative))
     :observe portfolio))
 
-;; -- Risk branch encoding ---------------------------------------------------
-
-;; rune:sever(wrong-struct) -- risk encoding lives on Portfolio but belongs
-;; in risk/ module. Portfolio is state, not an encoder.
-;; rune:forge(coupling) -- takes &VectorManager and &ScalarEncoder; this is
-;; encoding logic wearing a Portfolio method's clothes.
-
-;; Returns [dd-branch acc-branch vol-branch corr-branch panel-branch]
-;; Each branch is a bundled vector of named atoms bound with scalar magnitudes.
-;; See risk.wat for the full vocabulary of all five branches.
-(define (risk-branch-wat portfolio vm scalar)
-  "Five risk WAT vectors. Named atoms bound with scalar magnitudes."
-  (let ((thought (lambda (name value scale)
-                   (bind (atom name) (encode-linear value scale)))))
-
-    ;; drawdown branch: dd, dd-velocity, recovery, duration, historical
-    ;; accuracy branch: wr-10, wr-50, wr-200, trajectory, divergence
-    ;; volatility branch: pnl-vol, sharpe, worst-trade, skew, equity-curve
-    ;; correlation branch: loss-pattern, loss-density, consec-loss, trade-density, streak
-    ;; panel branch: equity-curve, streak, recent-accuracy, trade-density, trade-frequency
-    (map bundle [dd-branch acc-branch vol-branch corr-branch panel-branch])))
-
 ;; -- What portfolio does NOT do ---------------------------------------------
 ;; - Does NOT predict direction (that's the observers + manager)
 ;; - Does NOT hold positions (that's managed-position)
 ;; - Does NOT execute trades (that's the treasury)
-;; - Does NOT own the risk branches (that's risk/mod.rs)
-;; - It counts. It phases. It encodes risk state for others to consume.
+;; - Does NOT encode risk features (that's risk/mod — see risk-branch-features)
+;; - It counts. It phases. Risk reads it as data.
