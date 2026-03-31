@@ -38,33 +38,39 @@
 
 ;; ── Construction ────────────────────────────────────────────────────
 
-;; rune:forge(bare-type) — 10 parameters, 7 are bare f64 with different
-;; semantics. Swapping entry-price with entry-atr compiles silently.
-(define (new-position id candle-idx entry-price entry-atr direction
-                      base-deployed quote-received entry-fee k-stop k-tp)
-  "BUY: stop below entry, TP above. SELL: inverted."
-  (let ((stop (match direction
-                :long  (* entry-price (- 1.0 (* k-stop entry-atr)))
-                :short (* entry-price (+ 1.0 (* k-stop entry-atr)))))
-        (tp   (match direction
-                :long  (* entry-price (+ 1.0 (* k-tp entry-atr)))
-                :short (* entry-price (- 1.0 (* k-tp entry-atr))))))
+(struct position-entry
+  id candle-idx entry-price entry-atr direction
+  base-deployed quote-received entry-fee k-stop k-tp)
+
+(define (new-position entry)
+  "BUY: stop below entry, TP above. SELL: inverted.
+   Takes a position-entry struct — no bare f64 parameter confusion."
+  (let ((price (:entry-price entry))
+        (atr   (:entry-atr entry))
+        (dir   (:direction entry))
+        (stop  (match dir
+                 :long  (* price (- 1.0 (* (:k-stop entry) atr)))
+                 :short (* price (+ 1.0 (* (:k-stop entry) atr)))))
+        (tp    (match dir
+                 :long  (* price (+ 1.0 (* (:k-tp entry) atr)))
+                 :short (* price (- 1.0 (* (:k-tp entry) atr))))))
     (managed-position
-      :id id :entry-candle candle-idx
-      :entry-price entry-price :entry-atr entry-atr
-      :direction direction
-      :base-deployed base-deployed
-      :quote-held quote-received
+      :id (:id entry) :entry-candle (:candle-idx entry)
+      :entry-price price :entry-atr atr
+      :direction dir
+      :base-deployed (:base-deployed entry)
+      :quote-held (:quote-received entry)
       :base-reclaimed 0.0
       :phase :active
       :trailing-stop stop :take-profit tp
-      :best-price entry-price
-      :total-fees entry-fee :candles-held 0)))
+      :best-price price
+      :total-fees (:entry-fee entry) :candles-held 0)))
 
 ;; ── Tick ────────────────────────────────────────────────────────────
 
-;; rune:forge(bare-type) — k-trail is bare f64; a TrailFactor newtype
-;; would prevent passing a price where a multiplier is expected.
+;; k-trail: ATR multiplier for trailing stop distance.
+;; In Rust, a TrailFactor newtype would prevent passing a price
+;; where a multiplier is expected. The wat names the intent.
 (define (tick pos current-price k-trail)
   "Update position with current price. Returns :stop-loss | :take-profit | nothing."
   (if (= (:phase pos) :closed) nothing

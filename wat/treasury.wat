@@ -65,11 +65,14 @@
     (assoc (:balances treasury) asset
            (+ (balance treasury asset) amount))))
 
-;; rune:forge(escape) — silently clamps to 0.0 on overdraw
 (define (withdraw treasury asset amount)
-  (update treasury :balances
-    (assoc (:balances treasury) asset
-           (max 0.0 (- (balance treasury asset) amount)))))
+  "Withdraw from available balance. Returns (treasury, actual-withdrawn).
+   Cannot withdraw more than available. Cannot touch deployed."
+  (let ((available (balance treasury asset))
+        (actual    (min amount available)))
+    (list (update treasury :balances
+            (assoc (:balances treasury) asset (- available actual)))
+          actual)))
 
 (define (swap treasury from to amount-from price fee-rate)
   "Sell `from`, buy `to` at `price`, minus fees. Returns (spent, received)."

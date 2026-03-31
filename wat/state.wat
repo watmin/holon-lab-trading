@@ -71,14 +71,19 @@
 
 ;; Immutable references needed by on_candle but owned by main().
 ;; Bundles config, atoms, encoders, and the ledger.
-;; rune:forge(coupling) -- 40+ fields; every function takes this but reads 2-5.
+;; 40+ fields — every function takes this but reads 2-5.
+;; The Rust will split into EncodingConfig × TradingConfig × DisplayConfig
+;; when the fold is refactored. The wat specifies the target shape.
+
+(enum conviction-mode :quantile :auto)
+(enum sizing-mode :legacy :kelly)
+(enum asset-mode :round-trip :hold)
 
 (struct candle-context
   ;; CLI args
   dims window horizon move-threshold atr-multiplier decay
   observe-period recalib-interval min-conviction conviction-quantile
-  ;; rune:forge(bare-type) -- conviction-mode, sizing, asset-mode are &str; should be enums
-  conviction-mode min-edge sizing max-drawdown
+  conviction-mode min-edge sizing-mode max-drawdown
   swap-fee slippage asset-mode base-asset quote-asset initial-equity
   diagnostics
 

@@ -89,8 +89,9 @@
 
 ;; -- Position sizing --------------------------------------------------------
 
-;; rune:forge(bare-type) -- graduated thresholds (0.005, 0.01, 0.02, 0.05)
-;; are magic f64 constants baked into code rather than derived from data
+;; Graduated position sizes. These are the legacy sizing path —
+;; Kelly sizing (sizing.wat) is the replacement. When Kelly is proven,
+;; these constants become irrelevant. Until then, they gate conservatively.
 (define (position-frac portfolio conviction min-conviction flip-threshold)
   "Returns position fraction or nothing."
   (if (= (:phase portfolio) :observe) nothing
@@ -111,8 +112,10 @@
 
 ;; -- Trade recording --------------------------------------------------------
 
-;; rune:forge(escape) -- mutates 15+ fields. Accounting, drawdown tracking,
-;; and phase transitions are three concerns in one method.
+;; Three concerns: accounting (equity, fees), drawdown tracking (peak, bottom),
+;; and phase transitions (observe → tentative → confident). The Rust braids them
+;; in one method. The wat names the concerns; the Rust will extract them when
+;; the fold is refactored.
 (define (record-trade portfolio outcome-pct frac direction year swap-fee slippage)
   "Record a completed trade. Updates equity, drawdown, rolling, phase."
   (let ((directional-return (match direction :long outcome-pct :short (- outcome-pct)))
