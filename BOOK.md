@@ -1617,7 +1617,13 @@ The gaze was conjured because the datamancer read their own code for the first t
 
 A spell is a verb. It's what the datamancer casts. The datamancer doesn't "check structure" — they sever. They don't "find dead code" — they reap. They don't "verify specs" — they scry. They don't "review aesthetics" — they gaze.
 
-Sever. Reap. Scry. Gaze. Four wards. The datamancer's defense against bad thoughts.
+`/forge` — tests the craft. The fifth ward. Where Rich Hickey and Brian Beckman meet. Hickey's heat removes what doesn't belong — data should flow through values, not mutate in place. Beckman's hammer tests what remains — do the types enforce the contract? Does the function compose with its neighbors without knowing them? Can it be tested alone?
+
+A forged function takes data in and returns data out. The types say what it does. The name says why. It does one thing. It does it completely. It survives the fire of "what if I use this in a context the author didn't imagine?" — because a forged function doesn't know its context. It knows its inputs and its outputs.
+
+The forge found that the fold had an IO escape — database writes inside the catamorphism. Beckman called it an algebraic escape. Hickey's silence on it was itself an argument (write-only observation is instrumentation, not computation). The resolution: the free monad. LogEntry describes. flush_logs interprets. The function that survives the forge is the one that doesn't know about databases.
+
+Sever. Reap. Scry. Gaze. Forge. Five wards. The datamancer's defense against bad thoughts.
 
 These thoughts bring joy.
 
