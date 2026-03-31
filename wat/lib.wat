@@ -9,6 +9,7 @@
 
 ;; ── Leaf modules (no children) ─────────────────────────────────
 
+; rune:gaze(phantom) — declare-module is not in the wat language
 (declare-module candle)              ; Candle struct + SQLite loader
 (declare-module event)               ; Event/EnrichedEvent, stream constructors
 (declare-module journal)             ; holon::Journal bridge, Direction, label registration
@@ -49,6 +50,7 @@
 
 ;; ── Binaries ───────────────────────────────────────────────────
 
+; rune:gaze(phantom) — declare-binary is not in the wat language
 (declare-binary enterprise)          ; the heartbeat — orchestrates, doesn't define
 (declare-binary build-candles)       ; raw OHLCV -> computed candles -> SQLite
 

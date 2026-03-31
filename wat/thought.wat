@@ -30,6 +30,7 @@
 ;; get-vector: VectorManager method. Returns (or creates) the deterministic
 ;; atom vector for a name. Same seed → same vector everywhere.
 ;; dimensions: VectorManager method. Returns the dimensionality (e.g. 4096).
+; rune:gaze(phantom) — vm-get is not in the wat language
 (define (get-vector vm name) (vm-get vm name))
 (define (dimensions vm) (:dims vm))
 

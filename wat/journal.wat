@@ -19,6 +19,7 @@
 ;; Re-export from holon substrate. Journal, Label, and Prediction are
 ;; substrate types used directly — the enterprise wraps none of them.
 ;; In Rust: `use holon::memory::{Journal, Label, Prediction};`
+; rune:gaze(phantom) — use is not in the wat language
 (use holon/memory [Journal Label Prediction])
 
 ;; ── Direction ──────────────────────────────────────────────────
@@ -29,6 +30,7 @@
 
 ;; Direction: a two-variant sum type. Long = facing up, Short = facing down.
 ;; In Rust: `pub enum Direction { Long, Short }`
+; rune:gaze(phantom) — variants is not in the wat language
 (define Direction (variants Long Short))
 
 (define (display direction)

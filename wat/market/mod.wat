@@ -6,6 +6,7 @@
 ;; ── Re-exports ─────────────────────────────────────────────────
 
 ;; Submodule declarations. In Rust: `pub mod desk; pub mod manager; pub mod observer;`
+; rune:gaze(phantom) — declare-module is not in the wat language
 (declare-module desk)        ; trading pair's expert panel
 (declare-module manager)     ; manager encoding
 (declare-module observer)    ; Observer struct
