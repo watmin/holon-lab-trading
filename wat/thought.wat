@@ -27,11 +27,10 @@
   atoms                  ; (map string Vector) — name -> pre-allocated atom vector
   dims)                  ; usize
 
-;; get-vector: VectorManager method. Returns (or creates) the deterministic
-;; atom vector for a name. Same seed → same vector everywhere.
-;; dimensions: VectorManager method. Returns the dimensionality (e.g. 4096).
-; rune:gaze(phantom) — vm-get is not in the wat language
-(define (get-vector vm name) (vm-get vm name))
+;; get-vector: deterministic atom allocation. Same name → same vector.
+;; In wat, this IS (atom name). The VectorManager is the Rust cache
+;; that makes atom allocation O(1) after the first call.
+(define (get-vector vm name) (atom name))
 (define (dimensions vm) (:dims vm))
 
 (define (new-thought-vocab vm)

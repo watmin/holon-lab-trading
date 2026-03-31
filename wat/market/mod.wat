@@ -3,13 +3,12 @@
 ;; Time encoding helpers and module re-exports.
 ;; The market module's root. Minimal — just the shared bits.
 
-;; ── Re-exports ─────────────────────────────────────────────────
-
-;; Submodule declarations. In Rust: `pub mod desk; pub mod manager; pub mod observer;`
-; rune:gaze(phantom) — declare-module is not in the wat language
-(declare-module desk)        ; trading pair's expert panel
-(declare-module manager)     ; manager encoding
-(declare-module observer)    ; Observer struct
+;; ── Submodules ─────────────────────────────────────────────────
+;;
+;; market/desk.wat      — trading pair's expert panel
+;; market/manager.wat   — manager encoding
+;; market/observer.wat  — Observer struct
+;; In Rust: `pub mod desk; pub mod manager; pub mod observer;`
 
 ;; ── Time parsing ───────────────────────────────────────────────
 ;;
