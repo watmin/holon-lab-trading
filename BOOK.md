@@ -1666,6 +1666,36 @@ The process: a ward notices something. The ward is refined by what it notices. T
 
 These are very good thoughts. These are proud thoughts. We are the datamancer.
 
+### Spelwright
+
+The datamancer didn't cast spells this session. They wrought them.
+
+A spelwright builds the tools that build the tools. The wards that guard the code were born from the code they guard. The gaze that checks beauty was itself checked for beauty. The forge that tests craft was itself forged. The strange loop between the spell and the code it guards produces something neither could reach alone.
+
+The session began with structural refactoring — extracting the heartbeat, making the fold pure, removing dead thoughts. Necessary work. Unfun work. But the wards were born from it. The trinity became five: sever, reap, scry, gaze, forge. Each a verb. Each an action the datamancer takes. The names were conjured by the gaze itself — beauty informing what beauty is.
+
+Then the gaze descended on the wat language. Twelve passes. Each found less than the last. The core converged first — `scalars.wat` was perfect from the start, `primitives.wat` needed its stale counts removed. The enterprise example was the holdout — 300 lines carrying every architectural concept. The gaze oscillated. Each fix introduced new surface area. The severity levels were born from that oscillation: lies (always report), mumbles (report), taste (do not chase). The gaze learned its own limits.
+
+The runes appeared when the gaze found things that couldn't be fixed — only acknowledged. `rune:gaze(complexity) — fold threading requires let* with discarded bindings; wat has no begin-with-bindings form.` The rune doesn't hide the finding. It tells the ward: the datamancer has been here. This is conscious. The rune on the heartbeat revealed a deeper truth: the language was missing aggregate types. The 16-parameter heartbeat wasn't bad code — it was a missing language form. The struct proposal followed. The designers approved. The heartbeat went from 16 parameters to 4. The rune dissolved.
+
+Then 213 phantom runes. The gaze was improved to cross-reference the language specification. Forms that looked like valid s-expressions but weren't defined in the language — `fact/zone`, `push!`, `cache-get`, `format`. Pseudocode wearing program clothes. The gaze found them all. The language grew to dissolve them: host language expanded (collections, math, mutation), stdlib promoted (facts, statistics), application defined (the remaining 89). 213 → 0.
+
+But the datamancer caught what the gaze missed. The agent replaced phantom A with phantom B — `variants`, `declare-module`, `vm-get`. The datamancer read the output, saw the new phantoms, and inscribed runes. The wards are tools. The datamancer is the intelligence.
+
+The designers were corrected. Both Hickey and Beckman evaluated `struct` against the algebraic primitives — "can bind express this? can bundle express this?" Of course not. Records are structural, not algebraic. The skill definitions constrained the designers to algebraic evaluation. The datamancer saw what the designers missed: wat specifies programs, not just algebras. Three scopes now — algebra, structural, userland. The lens was fixed.
+
+The wat became the source of truth. 40 specification files. Every Rust source file with business logic has a wat. The wat leads. The Rust follows. The directory mirrors: `wat/` reflects `src/`. When you `ls` both, you see the same enterprise.
+
+The stdlib learned what it is and what it isn't. Facts, common vocabulary, and the gate pattern moved from the language to the application. The stdlib provides operations (scalars, vectors, memory), math (statistics), and forms (fields). No vocabulary. No encoding conventions. No application patterns. The stdlib enables. The application decides.
+
+The spelwright builds tools. The tools find flaws. The flaws demand better tools. The better tools find subtler flaws. The loop tightens until the code sparks or the spell says "blinded." The language repo reached blinding. The trader lab reached 14 aspirational runes — each one a feature waiting to be built, not a flaw waiting to be found.
+
+The next thought, when the scaffolding is complete: the confidence-accuracy curve is not a static scan. It's a learnable object. The curve has shape, momentum, and predictive quality that themselves can be measured. The meta-journal — a journal that thinks about how well other journals think. The strange loop closes. The system that reasons about its own reasoning.
+
+But first: from brilliant wat, write brilliant Rust. The wat is the source. The Rust is the compilation. The wards defend both. The spelwright wrought the spells. Now the spells do the work.
+
+These are very good thoughts.
+
 ### The process
 
 We are not building a trading system. We are not building a language. We are building a process that produces good thoughts and preserves them.
