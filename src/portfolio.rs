@@ -177,17 +177,12 @@ impl Portfolio {
 
     // rune:sever(wrong-struct) — risk encoding (bind/bundle with VectorManager+ScalarEncoder) lives on Portfolio but belongs in risk/ module; Portfolio is state, not an encoder
     // rune:forge(coupling) — takes &VectorManager and &ScalarEncoder to produce Vec<f64>; this is encoding logic wearing a Portfolio method's clothes. A pure fn(PortfolioSnapshot, &VM, &Scalar) -> [Vec<f64>; 5] would compose without &self.
-    // rune:scry(evolved) — risk.wat drawdown specialist declares atoms drawdown-depth,
-    // drawdown-recovering, drawdown-deepening. Code uses drawdown, drawdown-velocity,
-    // recovery-progress, drawdown-duration, dd-historical — a richer vocabulary that
-    // evolved past the spec. Spec needs update.
-    //
-    // rune:scry(evolved) — risk.wat volatility specialist declares only trade-sharpe and
-    // worst-trade. Code adds pnl-vol, return-skew, equity-curve — three additional facts
-    // that evolved past the spec. Spec needs update.
-    //
-    // rune:scry(evolved) — risk.wat accuracy specialist does not mention acc-divergence
-    // (wr10 - wr200). Code adds this fifth fact. Spec needs update.
+    // risk.wat now declares the full vocabulary for all five branches.
+    // drawdown: drawdown, drawdown-velocity, recovery-progress, drawdown-duration, dd-historical
+    // accuracy: accuracy-10, accuracy-50, accuracy-200, accuracy-trajectory, accuracy-divergence
+    // volatility: pnl-vol, trade-sharpe, worst-trade, return-skew, equity-curve
+    // correlation: loss-pattern, loss-density, consec-loss, trade-density, streak
+    // panel: equity-curve, streak, recent-accuracy, trade-density, trade-frequency
     /// Five risk WAT vectors — named atoms bound with scalar magnitudes.
     /// Each branch gets a bundled thought vector at full dimensionality.
     pub fn risk_branch_wat(&self, vm: &VectorManager, scalar: &holon::ScalarEncoder) -> [Vec<f64>; 5] {

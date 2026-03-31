@@ -11,10 +11,8 @@ use std::collections::HashMap;
 // no alpha field, no snapshot field, no counterfactual comparison. Risk alpha-journal depends
 // on this.
 
-// rune:scry(stale-spec) — treasury.wat specifies 50/50 portfolio seeding (split between base
-// and quote asset at startup). Code seeds 100% in base asset (USDC). The 50/50 seed was a
-// design idea that was never implemented — the enterprise starts fully in cash and builds
-// exposure through trading. Spec should update to reflect this.
+// Treasury seeds 100% in base asset (USDC). The enterprise starts fully in cash
+// and builds exposure through trading.
 
 // rune:forge(bare-type) — balances and deployed are HashMap<String, f64>; asset names are bare strings, amounts are bare f64. An Asset newtype and Amount(f64) would prevent mixing asset with amount or misspelling an asset key.
 pub struct Treasury {
