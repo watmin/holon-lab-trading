@@ -83,7 +83,6 @@
 ;; Emergent properties of the expert collective. These tell the
 ;; manager about the PATTERN of agreement, not just who said what.
 
-; rune:gaze(phantom) — length is not in the wat language
 ; rune:gaze(phantom) — mean-pairwise-cosine is not in the wat language
 (define (panel-shape proven-experts)
   (let* ((buys    (count (lambda (e) (> (cos e) 0)) proven-experts))

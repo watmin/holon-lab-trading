@@ -30,7 +30,6 @@
   age                    ; usize -- candles since last update (0 = just updated)
   staleness-limit)       ; usize -- MAX means always fresh (stablecoin)
 
-; rune:gaze(phantom) — some? is not in the wat language
 (define (side-fresh? side)
   "Is this side fresh enough to act on?"
   (or (= (:staleness-limit side) MAX)    ; stablecoin: always fresh

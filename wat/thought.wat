@@ -71,7 +71,6 @@
                    :scalar-enc (new-scalar-encoder (dims vocab))
                    :fact-cache (build-fact-cache vocab)))
 
-; rune:gaze(phantom) — unzip is not in the wat language
 (define (fact-codebook encoder)
   "Return (labels, vectors) pairs for all cached facts. Used for discriminant decoding."
   (unzip (:fact-cache encoder)))
@@ -116,7 +115,6 @@
 
 (define (encode-view encoder candles vm expert)
   "Encode a window of candles through the expert's vocabulary lens."
-  ; rune:gaze(phantom) — member? is not in the wat language
   (let ((is (lambda (profiles) (or (= expert "full") (member? expert profiles)))))
 
     ;; SHARED: comparisons (momentum + structure only)
@@ -160,7 +158,6 @@
 
     ;; Bundle all facts into one thought vector
     (thought-result
-      ; rune:gaze(phantom) — zeros is not in the wat language
       :thought (if (empty? all-facts) (zeros dims) (bundle all-facts))
       :fact-labels labels)))
 

@@ -51,7 +51,6 @@
         0.0
         (keys (:balances treasury))))
 
-; rune:gaze(phantom) — second is not in the wat language
 (define (price-map treasury asset-prices)
   "Build prices from (asset, price) pairs. Base asset always 1.0."
   (fold (lambda (prices pair)

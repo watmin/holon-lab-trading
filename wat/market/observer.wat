@@ -32,7 +32,6 @@
 ;; -- Construction -----------------------------------------------------------
 
 ; rune:gaze(phantom) — new-journal is not in the wat language
-; rune:gaze(phantom) — deque is not in the wat language
 ; rune:gaze(phantom) — new-online-subspace is not in the wat language
 ; rune:gaze(phantom) — new-window-sampler is not in the wat language
 (define (new-observer profile dims recalib-interval seed labels)
@@ -72,7 +71,6 @@
   ;; 3. Engram gating: if expert just recalibrated with good accuracy,
   ;;    snapshot the discriminant as a "good state"
   ; rune:gaze(phantom) — recalib-count is not in the wat language
-  ; rune:gaze(phantom) — when-let is not in the wat language
   ; rune:gaze(phantom) — discriminant is not in the wat language
   (when (> (recalib-count (:journal observer)) (:last-recalib-count observer))
     (set! (:last-recalib-count observer) (recalib-count (:journal observer)))
@@ -84,9 +82,6 @@
     (set! (:recalib-total observer) 0))
 
   ;; 4-7 only if observer had a directional prediction
-  ; rune:gaze(phantom) — push-back is not in the wat language
-  ; rune:gaze(phantom) — pop-front is not in the wat language
-  ; rune:gaze(phantom) — quantile is not in the wat language
   ; rune:gaze(phantom) — accuracy is not in the wat language
   (when-let ((pred-dir (:direction prediction)))
     (let ((correct (= pred-dir outcome)))

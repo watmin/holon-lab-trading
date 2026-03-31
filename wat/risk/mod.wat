@@ -66,7 +66,6 @@
 (define volatility-branch (online-subspace dims 8))
 
 ; rune:gaze(phantom) — last-n-returns is not in the wat language
-; rune:gaze(phantom) — length is not in the wat language
 (define (encode-volatility portfolio)
   (let ((returns (last-n-returns portfolio 50)))
     (if (< (length returns) 5)
@@ -138,7 +137,6 @@
                        (encode-panel portfolio)))
          (_      (when (healthy? portfolio)
                    (for-each update branches states)))
-         ; rune:gaze(phantom) — fold-left is not in the wat language
          ; rune:gaze(phantom) — n is not in the wat language
          (worst-ratio
            (fold-left

@@ -30,8 +30,6 @@
 ;; Returns None if std < 1e-15 or R/S <= 0.
 
 ; rune:gaze(phantom) — log-returns is not in the wat language
-; rune:gaze(phantom) — last-n is not in the wat language
-; rune:gaze(phantom) — range is not in the wat language
 ; rune:gaze(phantom) — cumulative-deviation is not in the wat language
 ; rune:gaze(phantom) — std is not in the wat language
 (define (hurst-estimate candles lookback)
