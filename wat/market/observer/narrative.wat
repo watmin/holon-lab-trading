@@ -42,9 +42,10 @@
 
 ;; ── The expert ──────────────────────────────────────────────────────
 
-; rune:gaze(phantom) — expert is not in the wat language
+;; expert: shorthand for (new-observer profile dims refit-interval seed labels).
+;; See market/observer.wat for the Observer struct.
 (define narrative
-  (expert "narrative" :narrative dims refit-interval))
+  (new-observer "narrative" dims refit-interval :seed-narrative ["Buy" "Sell"]))
 
 ;; ── DISCOVERY ───────────────────────────────────────────────────────
 ;; Narrative is the only expert with calendar awareness. The manager

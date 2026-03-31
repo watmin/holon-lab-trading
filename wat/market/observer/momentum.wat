@@ -32,9 +32,10 @@
 
 ;; ── The expert ──────────────────────────────────────────────────────
 
-; rune:gaze(phantom) — expert is not in the wat language
+;; expert: shorthand for (new-observer profile dims refit-interval seed labels).
+;; See market/observer.wat for the Observer struct.
 (define momentum
-  (expert "momentum" :momentum dims refit-interval))
+  (new-observer "momentum" dims refit-interval :seed-momentum ["Buy" "Sell"]))
 
 ;; ── What momentum does NOT see ──────────────────────────────────────
 ;; - Calendar / time of day (narrative)

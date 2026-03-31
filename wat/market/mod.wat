@@ -5,10 +5,10 @@
 
 ;; ── Re-exports ─────────────────────────────────────────────────
 
-; rune:gaze(phantom) — module is not in the wat language
-(module desk)                ; trading pair's expert panel
-(module manager)             ; manager encoding
-(module observer)            ; Observer struct
+;; Submodule declarations. In Rust: `pub mod desk; pub mod manager; pub mod observer;`
+(declare-module desk)        ; trading pair's expert panel
+(declare-module manager)     ; manager encoding
+(declare-module observer)    ; Observer struct
 
 ;; ── Time parsing ───────────────────────────────────────────────
 ;;
@@ -16,7 +16,10 @@
 ;; The enterprise encodes time circularly (hour-of-day, day-of-week).
 ;; These parse the numeric values from the timestamp string.
 
-; rune:gaze(phantom) — parse-f64 is not in the wat language
+;; parse-f64: parse a string slice as f64. Returns the number or #f on failure.
+;; In Rust: str::parse::<f64>().ok()
+(define (parse-f64 s) (string->number s))
+
 (define (parse-candle-hour ts)
   "Extract hour-of-day from candle timestamp. Returns f64 in [0, 23].
    Falls back to 12.0 on parse failure."
@@ -29,7 +32,10 @@
   ;; Lookup table: [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4]
   ;; Adjust year if month < 3.
   ;; (y + y/4 - y/100 + y/400 + t[m-1] + d) mod 7
-  ; rune:gaze(phantom) — parse-i32 is not in the wat language
+  ;; parse-i32: parse a string slice as i32. Returns the number or #f on failure.
+  ;; In Rust: str::parse::<i32>().ok()
+  (define (parse-i32 s) (string->integer s))
+
   (let ((y (or (parse-i32 (substring ts 0 4)) 2019))
         (m (or (parse-i32 (substring ts 5 7)) 1))
         (d (or (parse-i32 (substring ts 8 10)) 1))

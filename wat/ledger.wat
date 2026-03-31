@@ -66,11 +66,13 @@
         (observer-log fields)   (insert conn "observer_log" fields)
         (risk-log fields)       (insert conn "risk_log" fields)
         (trade-fact fields)     (insert conn "trade_facts" fields)
-        ; rune:gaze(phantom) — insert is not in the wat language
+        ;; insert: execute a parameterized SQL INSERT into the named table.
+        ;; In Rust: conn.execute("INSERT INTO table (...) VALUES (?...)", params)
         (trade-vector fields)   (insert conn "trade_vectors" fields)
         (position-open fields)  (insert conn "position_open" fields)
         (position-exit fields)  (insert conn "position_exit" fields)
-        ; rune:gaze(phantom) — commit is not in the wat language
+        ;; commit: flush the current SQLite transaction.
+        ;; In Rust: tx.commit()
         :batch-commit           (commit conn)))
     entries))
 

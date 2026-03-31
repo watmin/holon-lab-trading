@@ -47,11 +47,51 @@
   ;; candles-ago is measured from the window end, not from now.
   ;; The encoder uses this for temporal binding.
 
-  ; rune:gaze(phantom) — segment-direction is not in the wat language
-  ; rune:gaze(phantom) — find-peaks is not in the wat language
-  ; rune:gaze(phantom) — find-troughs is not in the wat language
-  ; rune:gaze(phantom) — check-bearish-pairs is not in the wat language
-  ; rune:gaze(phantom) — check-bullish-pairs is not in the wat language
+  (define (segment-direction boundaries i close-ln)
+    "Direction of segment i: +1 (up), -1 (down), 0 (flat).
+     Compares value at segment end to segment start."
+    (let ((change (- (nth close-ln (- (nth boundaries (+ i 1)) 1))
+                     (nth close-ln (nth boundaries i)))))
+      (cond ((> change 1e-10)  1)
+            ((< change -1e-10) -1)
+            (else              0))))
+
+  (define (find-peaks seg-dirs boundaries)
+    "Indices where an up-segment meets a down-segment (structural highs)."
+    (filter-map (lambda (i) (when (and (= (nth seg-dirs i) 1)
+                                       (= (nth seg-dirs (+ i 1)) -1))
+                              (- (nth boundaries (+ i 1)) 1)))
+                (range 0 (- (len seg-dirs) 1))))
+
+  (define (find-troughs seg-dirs boundaries)
+    "Indices where a down-segment meets an up-segment (structural lows)."
+    (filter-map (lambda (i) (when (and (= (nth seg-dirs i) -1)
+                                       (= (nth seg-dirs (+ i 1)) 1))
+                              (- (nth boundaries (+ i 1)) 1)))
+                (range 0 (- (len seg-dirs) 1))))
+
+  (define (check-bearish-pairs peaks candles n)
+    "Consecutive peaks where price makes higher high but RSI makes lower high."
+    (filter-map (lambda (pair)
+      (let ((prev (first pair)) (curr (second pair)))
+        (when (and (> (:close (nth candles curr)) (:close (nth candles prev)))
+                   (< (:rsi (nth candles curr)) (:rsi (nth candles prev))))
+          (divergence :kind "bearish" :indicator "rsi"
+                      :price-dir "up" :indicator-dir "down"
+                      :candles-ago (- n 1 curr)))))
+      (windows 2 peaks)))
+
+  (define (check-bullish-pairs troughs candles n)
+    "Consecutive troughs where price makes lower low but RSI makes higher low."
+    (filter-map (lambda (pair)
+      (let ((prev (first pair)) (curr (second pair)))
+        (when (and (< (:close (nth candles curr)) (:close (nth candles prev)))
+                   (> (:rsi (nth candles curr)) (:rsi (nth candles prev))))
+          (divergence :kind "bullish" :indicator "rsi"
+                      :price-dir "down" :indicator-dir "up"
+                      :candles-ago (- n 1 curr)))))
+      (windows 2 troughs)))
+
   (let ((close-ln (map ln (map close candles)))
         (cps (pelt-changepoints close-ln (bic-penalty close-ln)))
         (boundaries (append [0] cps [(len close-ln)]))

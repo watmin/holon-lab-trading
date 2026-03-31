@@ -14,31 +14,153 @@
 ;; it's computed. These become the streaming indicator reducers
 ;; (proposal 004).
 
-; rune:gaze(phantom) — field is not in the wat language
-; rune:gaze(phantom) — sma is not in the wat language
-; rune:gaze(phantom) — stddev is not in the wat language
-; rune:gaze(phantom) — wilder-rsi is not in the wat language
-; rune:gaze(phantom) — ema is not in the wat language
-; rune:gaze(phantom) — wilder-dmi-plus is not in the wat language
-; rune:gaze(phantom) — wilder-dmi-minus is not in the wat language
-; rune:gaze(phantom) — wilder-adx is not in the wat language
-; rune:gaze(phantom) — wilder-atr is not in the wat language
-; rune:gaze(phantom) — stochastic-k is not in the wat language
-; rune:gaze(phantom) — williams-r is not in the wat language
-; rune:gaze(phantom) — cci is not in the wat language
-; rune:gaze(phantom) — mfi is not in the wat language
-; rune:gaze(phantom) — roc is not in the wat language
-; rune:gaze(phantom) — slope is not in the wat language
-; rune:gaze(phantom) — obv is not in the wat language
-; rune:gaze(phantom) — last-close is not in the wat language
-; rune:gaze(phantom) — max-high is not in the wat language
-; rune:gaze(phantom) — min-low is not in the wat language
-; rune:gaze(phantom) — ret-pct is not in the wat language
-; rune:gaze(phantom) — body-ratio is not in the wat language
-; rune:gaze(phantom) — range-position is not in the wat language
-; rune:gaze(phantom) — trend-consistency is not in the wat language
-; rune:gaze(phantom) — parse-hour is not in the wat language
-; rune:gaze(phantom) — parse-day is not in the wat language
+;; ── Indicator vocabulary ───────────────────────────────────────────
+;;
+;; (field name computation) declares a named indicator on the Candle struct.
+;; Each field is computed once at load time from raw OHLCV and prior fields.
+;; The Rust struct stores these as pre-computed f64 columns in SQLite.
+;;
+;; field: declares a named indicator. (field name expr) means "candle.name = expr".
+;;        The computation is the BUILD-TIME definition; at runtime, it's a struct field.
+
+;; ── Streaming reducers ────────────────────────────────────────────
+;;
+;; These are windowed computations over the candle history [0, t].
+;; Each takes a source series and a period, maintaining state across candles.
+;; The Python DB pre-computes them; the Rust loads pre-computed values.
+
+(define (sma series period)
+  "Simple moving average: mean of last `period` values of `series`."
+  (/ (sum (last-n series period)) period))
+
+(define (ema series period)
+  "Exponential moving average. alpha = 2/(period+1). Recursive: ema_t = alpha*x + (1-alpha)*ema_{t-1}."
+  (let ((alpha (/ 2.0 (+ period 1))))
+    (+ (* alpha (current series)) (* (- 1.0 alpha) (prev-ema)))))
+
+(define (stddev series period)
+  "Standard deviation of last `period` values."
+  (sqrt (/ (sum (map (lambda (x) (expt (- x (sma series period)) 2))
+                     (last-n series period)))
+           period)))
+
+(define (wilder-rsi series period)
+  "Wilder RSI. Smoothed avg-gain / avg-loss ratio, mapped to [0, 100].
+   Uses Wilder smoothing: avg_t = ((period-1)*avg_{t-1} + current) / period."
+  (let ((avg-gain (wilder-smooth gains period))
+        (avg-loss (wilder-smooth losses period)))
+    (- 100.0 (/ 100.0 (+ 1.0 (/ avg-gain (max avg-loss 1e-10)))))))
+
+(define (wilder-dmi-plus period)
+  "Wilder +DI: smoothed +DM / ATR * 100. +DM = max(high-prev_high, 0) when > -DM."
+  (/ (* (wilder-smooth plus-dm period) 100.0) (wilder-atr period)))
+
+(define (wilder-dmi-minus period)
+  "Wilder -DI: smoothed -DM / ATR * 100. -DM = max(prev_low-low, 0) when > +DM."
+  (/ (* (wilder-smooth minus-dm period) 100.0) (wilder-atr period)))
+
+(define (wilder-adx period)
+  "Average Directional Index: Wilder-smoothed |+DI - -DI| / (+DI + -DI) * 100."
+  (wilder-smooth (/ (* (abs (- (wilder-dmi-plus period) (wilder-dmi-minus period))) 100.0)
+                    (max (+ (wilder-dmi-plus period) (wilder-dmi-minus period)) 1e-10))
+                 period))
+
+(define (wilder-atr period)
+  "Average True Range: Wilder-smoothed true range. TR = max(high-low, |high-prev_close|, |low-prev_close|)."
+  (wilder-smooth true-range period))
+
+(define (stochastic-k period)
+  "Stochastic %K: (close - min-low) / (max-high - min-low) * 100 over `period` candles."
+  (let ((lo (min-low period))
+        (hi (max-high period)))
+    (* (/ (- close lo) (max (- hi lo) 1e-10)) 100.0)))
+
+(define (williams-r period)
+  "Williams %R: (max-high - close) / (max-high - min-low) * -100 over `period` candles."
+  (let ((lo (min-low period))
+        (hi (max-high period)))
+    (* (/ (- hi close) (max (- hi lo) 1e-10)) -100.0)))
+
+(define (cci period)
+  "Commodity Channel Index: (typical - SMA(typical)) / (0.015 * mean-deviation) over `period`."
+  (let ((typical (/ (+ high low close) 3.0)))
+    (/ (- typical (sma typical period))
+       (* 0.015 (mean-abs-deviation typical period)))))
+
+(define (mfi period)
+  "Money Flow Index: RSI formula applied to money flow (typical * volume) over `period`."
+  (let ((typical (/ (+ high low close) 3.0))
+        (mf (* typical volume)))
+    (wilder-rsi mf period)))
+
+(define (roc series period)
+  "Rate of change: (current - prev) / prev * 100, looking back `period` candles."
+  (* (/ (- (current series) (nth-back series period))
+        (max (abs (nth-back series period)) 1e-10))
+     100.0))
+
+(define (slope series period)
+  "Linear regression slope of `series` over last `period` values.
+   Least-squares fit: slope = cov(t, y) / var(t)."
+  (let ((ys (last-n series period))
+        (xs (range 0 period)))
+    (/ (covariance xs ys) (variance xs))))
+
+(define (obv)
+  "On-Balance Volume: cumulative sum of signed volume.
+   +volume when close > prev_close, -volume when close < prev_close."
+  (cumulative-sum (map (lambda (c) (if (> (:close c) (:prev-close c))
+                                       (:volume c) (- (:volume c))))
+                       candles)))
+
+;; ── Multi-timeframe aggregators ───────────────────────────────────
+
+(define (last-close n)
+  "Close price of the candle `n` periods ago."
+  (nth-back close n))
+
+(define (max-high n)
+  "Maximum high over the last `n` candles."
+  (max (map high (last-n candles n))))
+
+(define (min-low n)
+  "Minimum low over the last `n` candles."
+  (min (map low (last-n candles n))))
+
+(define (ret-pct n)
+  "Return percentage over last `n` candles: (close - close_n_ago) / close_n_ago."
+  (/ (- close (nth-back close n)) (max (abs (nth-back close n)) 1e-10)))
+
+(define (body-ratio n)
+  "Body-to-range ratio over last `n` candles: |close - open_n_ago| / (max_high - min_low)."
+  (let ((hi (max-high n)) (lo (min-low n)))
+    (/ (abs (- close (nth-back open n))) (max (- hi lo) 1e-10))))
+
+(define (range-position n)
+  "Where close sits within the [min-low, max-high] range over `n` candles. [0, 1]."
+  (let ((hi (max-high n)) (lo (min-low n)))
+    (/ (- close lo) (max (- hi lo) 1e-10))))
+
+(define (trend-consistency n)
+  "Fraction of last `n` candles that closed in the majority direction.
+   1.0 = all same direction. 0.5 = split."
+  (let ((ups (count (lambda (c) (> (:close c) (:open c))) (last-n candles n))))
+    (/ (max ups (- n ups)) n)))
+
+;; ── Timestamp parsing ─────────────────────────────────────────────
+
+(define (parse-hour ts)
+  "Extract hour-of-day from timestamp string 'YYYY-MM-DD HH:MM:SS'. Returns f64 [0, 23]."
+  (or (parse-f64 (substring ts 11 13)) 12.0))
+
+(define (parse-day ts)
+  "Day-of-week from timestamp. 0=Sunday..6=Saturday. Zeller formula."
+  (let ((y (or (parse-i32 (substring ts 0 4)) 2019))
+        (m (or (parse-i32 (substring ts 5 7)) 1))
+        (d (or (parse-i32 (substring ts 8 10)) 1))
+        (t [0 3 2 5 0 3 5 1 4 6 2 4])
+        (y2 (if (< m 3) (- y 1) y)))
+    (mod (+ y2 (/ y2 4) (- (/ y2 100)) (/ y2 400) (nth t (- m 1)) d) 7)))
 
 ;; ── Indicators ──────────────────────────────────────────────────────
 

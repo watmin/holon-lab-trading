@@ -14,7 +14,11 @@
 
 ;; rune:scry(stale-spec) — position-mae declared here but not yet
 ;; encoded in the Rust implementation.
-; rune:gaze(phantom) — return-pct is not in the wat language
+(define (return-pct pos current-price)
+  "Signed return of a position: (current - entry) / entry.
+   Positive when price moved in the position's favor."
+  (/ (- current-price (:entry-price pos)) (:entry-price pos)))
+
 (define (encode-position pos current-price current-atr)
   (bundle
     (bind (atom "position-pnl")       (encode-linear (return-pct pos current-price) 1.0))

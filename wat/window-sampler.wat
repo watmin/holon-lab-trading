@@ -29,7 +29,19 @@
   ;; Hash: mix candle index with seed (three-round multiply-xorshift)
   ;; Map hash to [0, 1) uniformly
   ;; Log-uniform: exp(uniform(ln(min), ln(max)))
-  ; rune:gaze(phantom) — hash-to-uniform is not in the wat language
+  ;; hash-to-uniform: deterministic hash of (seed, index) → [0, 1).
+  ;; Three-round multiply-xorshift mix, then divide by u64::MAX.
+  ;; In Rust: splitmix64-style hash.
+  (define (hash-to-uniform seed idx)
+    (let* ((h (bitxor seed idx))
+           (h (* h 0x9E3779B97F4A7C15))
+           (h (bitxor h (>> h 30)))
+           (h (* h 0xBF58476D1CE4E5B9))
+           (h (bitxor h (>> h 27)))
+           (h (* h 0x94D049BB133111EB))
+           (h (bitxor h (>> h 31))))
+      (/ (to-f64 h) (to-f64 u64-max))))
+
   (let ((u (hash-to-uniform (:seed sampler) candle-idx))
         (ln-min (ln (:min-window sampler)))
         (ln-max (ln (:max-window sampler)))

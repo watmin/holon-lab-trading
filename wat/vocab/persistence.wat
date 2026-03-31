@@ -29,9 +29,24 @@
 ;; H = ln(R/S) / ln(N) where R/S = (max_cum - min_cum) / std
 ;; Returns None if std < 1e-15 or R/S <= 0.
 
-; rune:gaze(phantom) — log-returns is not in the wat language
-; rune:gaze(phantom) — cumulative-deviation is not in the wat language
-; rune:gaze(phantom) — std is not in the wat language
+(define (log-returns candles)
+  "Successive log-ratios: ln(close_i / close_{i-1}) for i in [1, n)."
+  (map (lambda (i) (ln (/ (:close (nth candles i))
+                          (:close (nth candles (- i 1))))))
+       (range 1 (len candles))))
+
+(define (cumulative-deviation returns)
+  "Running sum of (return - mean). Returns the full cumulative series.
+   Range of this series is used in Hurst's R/S statistic."
+  (let ((mean (/ (sum returns) (len returns))))
+    (scan + 0 (map (lambda (r) (- r mean)) returns))))
+
+(define (std series)
+  "Population standard deviation: sqrt(mean(x - mean)^2)."
+  (let ((mean (/ (sum series) (len series))))
+    (sqrt (/ (sum (map (lambda (x) (expt (- x mean) 2)) series))
+             (len series)))))
+
 (define (hurst-estimate candles lookback)
   "Simplified Hurst via rescaled range. Returns [0, 1] or None."
   (let ((returns (log-returns (last-n candles lookback))))
@@ -45,8 +60,17 @@
 ;; Lookback: min(window_length, 50). Minimum 5 candles.
 ;; Returns None if variance < 1e-15.
 
-; rune:gaze(phantom) — covariance is not in the wat language
-; rune:gaze(phantom) — lag-1 is not in the wat language
+(define (covariance xs ys)
+  "Sample covariance: mean((x - mean_x)(y - mean_y))."
+  (let ((mx (/ (sum xs) (len xs)))
+        (my (/ (sum ys) (len ys))))
+    (/ (sum (map (lambda (x y) (* (- x mx) (- y my))) xs ys))
+       (len xs))))
+
+(define (lag-1 returns)
+  "Shift a series by one step: returns[0..n-1]. For lag-1 autocorrelation."
+  (take (- (len returns) 1) returns))
+
 (define (autocorrelation-lag1 candles lookback)
   "Lag-1 return autocorrelation. Returns [-1, 1] or None."
   (/ (covariance returns (lag-1 returns))
@@ -62,7 +86,13 @@
 
 ;; ── Facts produced ─────────────────────────────────────────────
 
-; rune:gaze(phantom) — adx-zone is not in the wat language
+(define (adx-zone adx)
+  "Classify ADX into trend strength zone.
+   > 25: strong-trend. < 20: weak-trend. Else: moderate-trend."
+  (cond ((> adx 25.0) "strong-trend")
+        ((< adx 20.0) "weak-trend")
+        (else          "moderate-trend")))
+
 (define (eval-persistence candles)
   "Trend persistence facts."
 
@@ -88,8 +118,8 @@
 
   ;; ADX zone — pre-computed, always emitted
   ;; Zone: (at adx strong-trend | weak-trend | moderate-trend)
-  ; rune:gaze(phantom) — . (dot accessor) is not in the wat language
-  (fact/zone "adx" (adx-zone (. now adx))))
+  ;; Access last candle's pre-computed adx field
+  (fact/zone "adx" (adx-zone (:adx (last candles)))))
 
 ;; ── What persistence does NOT do ───────────────────────────────
 ;; - Does NOT detect direction (it measures character of the series)

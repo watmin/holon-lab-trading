@@ -3,53 +3,54 @@
 ;; What modules exist and how they compose.
 ;; The enterprise is a tree. This declares the branches.
 
-; rune:gaze(phantom) — module is not in the wat language
-; rune:gaze(phantom) — binary is not in the wat language
+;; declare-module: declares a compilation unit (a Rust `pub mod`).
+;; declare-binary: declares an executable entry point (a Rust `[[bin]]`).
+;; These are crate-structure declarations, not runtime constructs.
 
 ;; ── Leaf modules (no children) ─────────────────────────────────
 
-(module candle)              ; Candle struct + SQLite loader
-(module event)               ; Event/EnrichedEvent, stream constructors
-(module journal)             ; holon::Journal bridge, Direction, label registration
-(module portfolio)           ; Portfolio struct (equity, phase, risk branches)
-(module position)            ; Pending, ExitObservation, ManagedPosition
-(module ledger)              ; run DB schema (the ledger that counts)
-(module sizing)              ; Kelly criterion, signal weight
-(module state)               ; CandleContext, TradePnl, ExitAtoms
-(module treasury)            ; asset map (claim/release/swap)
-(module window-sampler)      ; deterministic log-uniform window sampling
+(declare-module candle)              ; Candle struct + SQLite loader
+(declare-module event)               ; Event/EnrichedEvent, stream constructors
+(declare-module journal)             ; holon::Journal bridge, Direction, label registration
+(declare-module portfolio)           ; Portfolio struct (equity, phase, risk branches)
+(declare-module position)            ; Pending, ExitObservation, ManagedPosition
+(declare-module ledger)              ; run DB schema (the ledger that counts)
+(declare-module sizing)              ; Kelly criterion, signal weight
+(declare-module state)               ; CandleContext, TradePnl, ExitAtoms
+(declare-module treasury)            ; asset map (claim/release/swap)
+(declare-module window-sampler)      ; deterministic log-uniform window sampling
 
 ;; ── Branch modules (contain children) ──────────────────────────
 
-(module thought              ; Layer 0: candle -> thoughts
-  (module pelt))             ;   PELT changepoint detection
+(declare-module thought              ; Layer 0: candle -> thoughts
+  (declare-module pelt))             ;   PELT changepoint detection
 
-(module market               ; Market domain
-  (module desk)              ;   trading pair's expert panel
-  (module manager)           ;   manager encoding
-  (module observer))         ;   Observer struct
+(declare-module market               ; Market domain
+  (declare-module desk)              ;   trading pair's expert panel
+  (declare-module manager)           ;   manager encoding
+  (declare-module observer))         ;   Observer struct
 
-(module risk                 ; Risk branches
-  (module mod))              ;   RiskBranch struct
+(declare-module risk                 ; Risk branches
+  (declare-module mod))              ;   RiskBranch struct
 
-(module vocab                ; Thought vocabulary
-  (module oscillators)       ;   Williams %R, StochRSI, UltOsc, multi-ROC
-  (module flow)              ;   OBV, VWAP, MFI, buying/selling pressure
-  (module persistence)       ;   Hurst, autocorrelation, ADX zones
-  (module regime)            ;   KAMA ER, chop, DFA, DeMark, Aroon, fractal, entropy, GR
-  (module stochastic)        ;   Stochastic %K/%D, crossovers
-  (module momentum)          ;   CCI zones
-  (module fibonacci)         ;   Fibonacci retracement proximity
-  (module ichimoku)          ;   Ichimoku Cloud system
-  (module keltner)           ;   Keltner Channels, BB position, squeeze
-  (module price-action)      ;   Inside/outside bars, gaps, consecutive
-  (module divergence)        ;   RSI divergence via PELT peaks/troughs
-  (module timeframe))        ;   Inter-timeframe structure and narrative
+(declare-module vocab                ; Thought vocabulary
+  (declare-module oscillators)       ;   Williams %R, StochRSI, UltOsc, multi-ROC
+  (declare-module flow)              ;   OBV, VWAP, MFI, buying/selling pressure
+  (declare-module persistence)       ;   Hurst, autocorrelation, ADX zones
+  (declare-module regime)            ;   KAMA ER, chop, DFA, DeMark, Aroon, fractal, entropy, GR
+  (declare-module stochastic)        ;   Stochastic %K/%D, crossovers
+  (declare-module momentum)          ;   CCI zones
+  (declare-module fibonacci)         ;   Fibonacci retracement proximity
+  (declare-module ichimoku)          ;   Ichimoku Cloud system
+  (declare-module keltner)           ;   Keltner Channels, BB position, squeeze
+  (declare-module price-action)      ;   Inside/outside bars, gaps, consecutive
+  (declare-module divergence)        ;   RSI divergence via PELT peaks/troughs
+  (declare-module timeframe))        ;   Inter-timeframe structure and narrative
 
 ;; ── Binaries ───────────────────────────────────────────────────
 
-(binary enterprise)          ; the heartbeat — orchestrates, doesn't define
-(binary build-candles)       ; raw OHLCV -> computed candles -> SQLite
+(declare-binary enterprise)          ; the heartbeat — orchestrates, doesn't define
+(declare-binary build-candles)       ; raw OHLCV -> computed candles -> SQLite
 
 ;; ── Dependency graph ───────────────────────────────────────────
 ;;

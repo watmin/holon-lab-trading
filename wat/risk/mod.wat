@@ -14,9 +14,25 @@
 ;; Each is an OnlineSubspace. They measure ANOMALY not DIRECTION.
 ;; Gated updates: only learn from healthy states.
 
-; rune:gaze(phantom) — drawdown is not in the wat language
-; rune:gaze(phantom) — win-rate-last-n is not in the wat language
-; rune:gaze(phantom) — recent-return-mean is not in the wat language
+(define (drawdown portfolio)
+  "Current drawdown: (peak - equity) / peak. 0 when at or above peak."
+  (if (> (:peak-equity portfolio) 0.0)
+      (/ (- (:peak-equity portfolio) (:equity portfolio))
+         (:peak-equity portfolio))
+      0.0))
+
+(define (win-rate-last-n portfolio n)
+  "Win rate over the last N trades from the rolling deque."
+  (let ((recent (take-last n (:rolling portfolio))))
+    (if (empty? recent) 0.5
+        (/ (count true recent) (len recent)))))
+
+(define (recent-return-mean portfolio n)
+  "Mean return over the last N trades."
+  (let ((returns (take-last n (:trade-returns portfolio))))
+    (if (empty? returns) 0.0
+        (/ (sum returns) (len returns)))))
+
 (define (healthy? portfolio)
   "Gates subspace updates. All four conditions must hold."
   (and (< (drawdown portfolio) 0.02)
@@ -28,9 +44,31 @@
 
 (define drawdown-branch (online-subspace dims 8))
 
-; rune:gaze(phantom) — drawdown-velocity is not in the wat language
-; rune:gaze(phantom) — recovery-progress is not in the wat language
-; rune:gaze(phantom) — historical-worst-drawdown is not in the wat language
+(define (drawdown-velocity portfolio)
+  "Rate of drawdown change: current dd minus dd 5 trades ago."
+  (let ((dd (drawdown portfolio))
+        (eq5 (if (>= (len (:equity-at-trade portfolio)) 5)
+                 (nth-back (:equity-at-trade portfolio) 5)
+                 (:equity portfolio))))
+    (- dd (if (> (:peak-equity portfolio) 0.0)
+              (/ (- (:peak-equity portfolio) eq5) (:peak-equity portfolio))
+              0.0))))
+
+(define (recovery-progress portfolio)
+  "How far equity has recovered from drawdown bottom toward peak. [0, 1].
+   1.0 when at peak or drawdown < 0.5%."
+  (let ((dd (drawdown portfolio)))
+    (if (or (<= (:peak-equity portfolio) (:dd-bottom-equity portfolio))
+            (< dd 0.005))
+        1.0
+        (clamp (/ (- (:equity portfolio) (:dd-bottom-equity portfolio))
+                  (- (:peak-equity portfolio) (:dd-bottom-equity portfolio)))
+               0.0 1.0))))
+
+(define (historical-worst-drawdown portfolio)
+  "Deepest completed drawdown from the rolling history."
+  (fold max 0.0 (:completed-drawdowns portfolio)))
+
 (define (encode-drawdown portfolio)
   (let ((dd      (drawdown portfolio))
         (dd-vel  (drawdown-velocity portfolio))
@@ -65,7 +103,10 @@
 
 (define volatility-branch (online-subspace dims 8))
 
-; rune:gaze(phantom) — last-n-returns is not in the wat language
+(define (last-n-returns portfolio n)
+  "Last N trade returns from the rolling deque."
+  (take-last n (:trade-returns portfolio)))
+
 (define (encode-volatility portfolio)
   (let ((returns (last-n-returns portfolio 50)))
     (if (< (length returns) 5)
@@ -86,10 +127,31 @@
 
 (define correlation-branch (online-subspace dims 8))
 
-; rune:gaze(phantom) — last-n-outcomes is not in the wat language
-; rune:gaze(phantom) — autocorrelation is not in the wat language
-; rune:gaze(phantom) — count-losses is not in the wat language
-; rune:gaze(phantom) — consecutive-losses is not in the wat language
+(define (last-n-outcomes portfolio n)
+  "Last N trade outcomes as +1.0 (win) / -1.0 (loss) from the rolling deque."
+  (map (lambda (won) (if won 1.0 -1.0))
+       (take-last n (:rolling portfolio))))
+
+(define (autocorrelation seq)
+  "Lag-1 autocorrelation of a numeric sequence.
+   cov(x_t, x_{t+1}) / var(x). Returns 0 if variance < 1e-10."
+  (let* ((mean (/ (sum seq) (len seq)))
+         (var  (/ (sum (map (lambda (x) (expt (- x mean) 2)) seq)) (len seq))))
+    (if (< var 1e-10) 0.0
+        (/ (sum (map (lambda (i) (* (- (nth seq i) mean) (- (nth seq (+ i 1)) mean)))
+                     (range 0 (- (len seq) 1))))
+           (* (- (len seq) 1) var)))))
+
+(define (count-losses outcomes)
+  "Count -1.0 entries in an outcome sequence."
+  (count (lambda (x) (< x 0.0)) outcomes))
+
+(define (consecutive-losses portfolio)
+  "Length of the current losing streak from the end of the rolling deque."
+  (let loop ((seq (reverse (:rolling portfolio))) (n 0))
+    (if (or (empty? seq) (first seq)) n
+        (loop (rest seq) (+ n 1)))))
+
 (define (encode-correlation portfolio)
   (let ((seq (last-n-outcomes portfolio 50)))
     (if (< (length seq) 20)
@@ -109,8 +171,19 @@
 
 (define panel-branch (online-subspace dims 8))
 
-; rune:gaze(phantom) — streak-value is not in the wat language
-; rune:gaze(phantom) — win-rate is not in the wat language
+(define (streak-value portfolio)
+  "Signed streak length: +N for consecutive wins, -N for consecutive losses."
+  (if (empty? (:rolling portfolio)) 0.0
+      (let ((last-outcome (last (:rolling portfolio))))
+        (let loop ((seq (reverse (:rolling portfolio))) (n 0.0))
+          (if (or (empty? seq) (not (= (first seq) last-outcome))) n
+              (loop (rest seq) (+ n (if last-outcome 1.0 -1.0))))))))
+
+(define (win-rate portfolio)
+  "Lifetime win rate as a fraction [0, 1]."
+  (if (= (:trades-taken portfolio) 0) 0.5
+      (/ (:trades-won portfolio) (:trades-taken portfolio))))
+
 (define (encode-panel portfolio)
   (let ((equity-pct (/ (- (:equity portfolio) (:initial-equity portfolio))
                        (:initial-equity portfolio)))
@@ -137,7 +210,8 @@
                        (encode-panel portfolio)))
          (_      (when (healthy? portfolio)
                    (for-each update branches states)))
-         ; rune:gaze(phantom) — n is not in the wat language
+         ;; n: number of observations the subspace has seen (its training count).
+         ;; Branches with < 10 observations are untrained — skip them.
          (worst-ratio
            (fold-left
              (lambda (acc branch features)

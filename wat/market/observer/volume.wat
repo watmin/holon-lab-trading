@@ -37,9 +37,10 @@
 
 ;; ── The expert ──────────────────────────────────────────────────────
 
-; rune:gaze(phantom) — expert is not in the wat language
+;; expert: shorthand for (new-observer profile dims refit-interval seed labels).
+;; See market/observer.wat for the Observer struct.
 (define volume
-  (expert "volume" :volume dims refit-interval))
+  (new-observer "volume" dims refit-interval :seed-volume ["Buy" "Sell"]))
 
 ;; ── DISCOVERY ───────────────────────────────────────────────────────
 ;; Volume is the THINNEST expert vocabulary. Only 4 eval methods.

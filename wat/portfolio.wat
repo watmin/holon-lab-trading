@@ -80,7 +80,12 @@
     (if (empty? recent) 0.5
         (/ (count true recent) (len recent)))))
 
-; rune:gaze(phantom) — drawdown is not in the wat language
+(define (drawdown portfolio)
+  "Current drawdown: (peak - equity) / peak. 0 when at or above peak."
+  (if (> (:peak-equity portfolio) 0.0)
+      (/ (- (:peak-equity portfolio) (:equity portfolio))
+         (:peak-equity portfolio))
+      0.0))
 
 (define (is-healthy? portfolio)
   "Gates subspace updates. All three must hold."

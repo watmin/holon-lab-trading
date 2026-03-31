@@ -67,7 +67,14 @@
   "Wrap loaded candles into an event stream. Zero-copy of candle data."
   (map (lambda (c) (event/candle :asset asset :candle c)) candles))
 
-; rune:gaze(phantom) — load-candles is not in the wat language
+;; load-candles: read all candles from SQLite, ordered by timestamp.
+;; In Rust: candle::load_candles(db_path, label_col) -> Vec<Candle>
+(define (load-candles db-path label-col)
+  "Load candles from SQLite DB. Returns Vec<Candle> sorted by ts."
+  (sql-query db-path
+    (format "SELECT * FROM candles ORDER BY ts")
+    (lambda (row) (candle-from-row row label-col))))
+
 (define (stream-from-db db-path asset label-col)
   "Load a single asset's candles from DB and produce an event stream."
   (stream-from-candles (load-candles db-path label-col) asset))

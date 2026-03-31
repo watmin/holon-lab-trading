@@ -21,8 +21,32 @@
 ;;
 ;; Returns (position-frac, curve-a, curve-b) or nothing.
 
-; rune:gaze(phantom) — log-linear-regression is not in the wat language
-; rune:gaze(phantom) — bin is not in the wat language
+(define (bin resolved n-bins)
+  "Sort resolved predictions by conviction, split into n equal-size bins.
+   Returns list of (mean-conviction, accuracy) per bin."
+  (let ((sorted (sort-by first resolved))
+        (size (/ (len sorted) n-bins)))
+    (map (lambda (chunk)
+           (list (mean (map first chunk))
+                 (/ (count second chunk) (len chunk))))
+         (partition size sorted))))
+
+(define (log-linear-regression points)
+  "Fit accuracy = 0.50 + a * exp(b * conviction) via OLS on log-transformed bins.
+   Keeps only bins with accuracy > 0.505. Returns {:a a :b b} or nothing.
+   The log transform: ln(accuracy - 0.50) = ln(a) + b * conviction."
+  (let ((valid (filter (lambda (p) (> (second p) 0.505)) points)))
+    (if (< (len valid) 3) nothing
+        (let* ((xs (map first valid))
+               (ys (map (lambda (p) (ln (- (second p) 0.50))) valid))
+               (mx (mean xs))
+               (my (mean ys))
+               (cov (sum (map (lambda (x y) (* (- x mx) (- y my))) xs ys)))
+               (var (sum (map (lambda (x) (expt (- x mx) 2)) xs)))
+               (b (/ cov var))
+               (a (exp (- my (* b mx)))))
+          (some {:a a :b b})))))
+
 (define (kelly-frac conviction resolved min-sample move-threshold)
   "Half-Kelly position fraction from exponential conviction-accuracy curve."
   (if (< (len resolved) 500) nothing

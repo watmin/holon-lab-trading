@@ -83,7 +83,15 @@
 ;; Emergent properties of the expert collective. These tell the
 ;; manager about the PATTERN of agreement, not just who said what.
 
-; rune:gaze(phantom) — mean-pairwise-cosine is not in the wat language
+(define (mean-pairwise-cosine vecs)
+  "Mean cosine similarity across all unique pairs of vectors.
+   Measures how geometrically aligned the expert thoughts are.
+   N*(N-1)/2 pairs. Returns 0 if fewer than 2 vectors."
+  (if (< (len vecs) 2) 0.0
+      (let ((pairs (combinations 2 vecs)))
+        (/ (sum (map (lambda (p) (cosine (first p) (second p))) pairs))
+           (len pairs)))))
+
 (define (panel-shape proven-experts)
   (let* ((buys    (count (lambda (e) (> (cos e) 0)) proven-experts))
          (total   (length proven-experts))

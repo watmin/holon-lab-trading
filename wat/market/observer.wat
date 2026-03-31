@@ -67,8 +67,11 @@
 
   ;; 3. Engram gating: if expert just recalibrated with good accuracy,
   ;;    snapshot the discriminant as a "good state"
-  ; rune:gaze(phantom) — recalib-count is not in the wat language
-  ; rune:gaze(phantom) — discriminant is not in the wat language
+  ;; recalib-count: Journal method. Returns how many times the journal
+  ;; has recalibrated (rebuilt prototypes). Integer, monotonically increasing.
+  ;; discriminant: Journal method. Returns the difference vector between
+  ;; two label prototypes: discriminant(label) = prototype(label) - prototype(other).
+  ;; The discriminant IS the journal's learned separation. None if < 2 labels registered.
   (when (> (recalib-count (:journal observer)) (:last-recalib-count observer))
     (set! (:last-recalib-count observer) (recalib-count (:journal observer)))
     (when (and (>= (:recalib-total observer) 20)
@@ -79,7 +82,12 @@
     (set! (:recalib-total observer) 0))
 
   ;; 4-7 only if observer had a directional prediction
-  ; rune:gaze(phantom) — accuracy is not in the wat language
+  ;; accuracy: fraction of correct predictions in a sequence of (conviction, correct) pairs.
+  (define (accuracy resolved)
+    "Win rate of a resolved-prediction sequence: count(correct) / total."
+    (/ (count (lambda (r) (second r)) resolved)
+       (len resolved)))
+
   (when-let ((pred-dir (:direction prediction)))
     (let ((correct (= pred-dir outcome)))
 

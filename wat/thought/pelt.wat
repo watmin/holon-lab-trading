@@ -37,13 +37,35 @@
   ;;
   ;; The pruning step is what makes PELT O(n) on average instead of O(n^2).
 
-  ; rune:gaze(phantom) — cumulative-sum is not in the wat language
-  ; rune:gaze(phantom) — cumulative-sum-of-squares is not in the wat language
-  ; rune:gaze(phantom) — backtrace is not in the wat language
-  ; rune:gaze(phantom) — dynamic-program is not in the wat language
+  ;; The PELT dynamic program is too complex for a pure wat expression
+  ;; (mutable candidate set, pruning, backtrace). The wat specifies the
+  ;; contract; the Rust implements the O(n) algorithm.
+  ;;
+  ;; cumulative-sum: prefix sums of values. cum[i+1] = cum[i] + values[i].
+  ;; cumulative-sum-of-squares: prefix sums of values^2.
+  ;; dynamic-program: for each t, find best predecessor s minimizing
+  ;;   cost[s] + seg-cost(s,t) + penalty. Prune candidates where
+  ;;   cost[s] + seg-cost(s,t) > cost[t] + penalty. The pruning
+  ;;   gives O(n) average complexity.
+  ;; backtrace: follow the last-change pointers from n back to 0,
+  ;;   collecting changepoint indices.
+  ;;
+  ;; seg-cost(s, t) = sum(x^2, s..t) - (sum(x, s..t))^2 / (t - s)
+  ;;   Gaussian likelihood: residual sum of squares after removing mean.
+
+  (define (cumulative-sum values)
+    (scan + 0 values))
+
+  (define (cumulative-sum-of-squares values)
+    (scan + 0 (map (lambda (x) (* x x)) values)))
+
+  ;; The dynamic program + backtrace is a single imperative algorithm.
+  ;; Contract: returns sorted changepoint indices where the series
+  ;; changes character. Empty if n < 3.
+  ;; See src/thought/pelt.rs for the Rust implementation.
   (let ((cum-sum (cumulative-sum values))
         (cum-sq  (cumulative-sum-of-squares values)))
-    (backtrace (dynamic-program cum-sum cum-sq penalty))))
+    (pelt-dp-backtrace cum-sum cum-sq penalty)))
 
 ;; ── Penalty ────────────────────────────────────────────────────
 
@@ -51,7 +73,12 @@
 ;; Adapts to the data's own scale. More variance = more penalty needed
 ;; to claim a changepoint is real.
 
-; rune:gaze(phantom) — variance is not in the wat language
+(define (variance values)
+  "Population variance: mean((x - mean)^2)."
+  (let ((n (len values))
+        (mean (/ (sum values) (len values))))
+    (/ (sum (map (lambda (x) (expt (- x mean) 2)) values)) n)))
+
 (define (bic-penalty values)
   "Bayesian Information Criterion penalty for PELT.
    Returns 1e10 for degenerate inputs (n < 2 or zero variance)."

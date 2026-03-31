@@ -28,9 +28,10 @@
 
 ;; ── The expert ──────────────────────────────────────────────────────
 
-; rune:gaze(phantom) — expert is not in the wat language
+;; expert: shorthand for (new-observer profile dims refit-interval seed labels).
+;; See market/observer.wat for the Observer struct.
 (define structure
-  (expert "structure" :structure dims refit-interval))
+  (new-observer "structure" dims refit-interval :seed-structure ["Buy" "Sell"]))
 
 ;; ── What structure does NOT see ─────────────────────────────────────
 ;; - RSI/stochastic/CCI zones (momentum)

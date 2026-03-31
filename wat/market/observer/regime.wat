@@ -64,9 +64,10 @@
 
 ;; ── The expert ──────────────────────────────────────────────────────
 
-; rune:gaze(phantom) — expert is not in the wat language
+;; expert: shorthand for (new-observer profile dims refit-interval seed labels).
+;; See market/observer.wat for the Observer struct.
 (define regime
-  (expert "regime" :regime dims refit-interval))
+  (new-observer "regime" dims refit-interval :seed-regime ["Buy" "Sell"]))
 
 ;; ── RESOLVED ────────────────────────────────────────────────────────
 ;; Regime EXCLUSIVELY owns eval_regime and eval_persistence.

@@ -15,9 +15,10 @@
 
 ;; ── The expert ──────────────────────────────────────────────────────
 
-; rune:gaze(phantom) — expert is not in the wat language
+;; expert: shorthand for (new-observer profile dims refit-interval seed labels).
+;; See market/observer.wat for the Observer struct.
 (define generalist
-  (expert "generalist" :full dims refit-interval))
+  (new-observer "generalist" dims refit-interval :seed-generalist ["Buy" "Sell"]))
 
 ;; Fixed window: WindowSampler(min=48, max=48) — always the same depth.
 ;; The specialists explore [12, 2016] and discover their own scale.

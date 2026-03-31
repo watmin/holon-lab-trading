@@ -85,8 +85,10 @@
   ;; Encodes expert opinions as signed convictions with credibility.
   ;; Then DELTA-ENRICHES: binds difference(prev-thought, current-thought)
   ;; so the manager sees MOTION, not just position.
-         ; rune:gaze(phantom) — encode-manager-thought is not in the wat language
-         (mgr-facts    (encode-manager-thought observer-preds candle state ctx))
+         ;; encode-manager-thought: defined in market/manager.wat as manager-thought.
+         ;; Encodes observer predictions as signed convictions with credibility,
+         ;; plus panel shape, market context, and motion delta.
+         (mgr-facts    (manager-thought observer-preds candle state ctx))
          (mgr-thought  (bundle mgr-facts))
          (delta        (when (:prev-mgr-thought state)
                          (bind (:delta-atom ctx)
@@ -122,7 +124,8 @@
   ;; healthy states (drawdown < 2%, accuracy > 55%, positive returns,
   ;; 20+ trades). Risk multiplier = min(threshold/residual) across
   ;; branches, floored at 0.1.
-         ; rune:gaze(phantom) — risk-multiplier is not in the wat language
+         ;; risk-multiplier: defined in risk/mod.wat. Updates branches when healthy,
+         ;; returns min(threshold/residual) across all branches, floored at 0.1.
          (risk-mult (risk-multiplier (:portfolio state)))
 
   ;; ─── 7. Position opening ──────────────────────────────────────────

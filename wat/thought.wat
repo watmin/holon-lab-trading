@@ -27,8 +27,12 @@
   atoms                  ; (map string Vector) — name -> pre-allocated atom vector
   dims)                  ; usize
 
-; rune:gaze(phantom) — get-vector is not in the wat language
-; rune:gaze(phantom) — dimensions is not in the wat language
+;; get-vector: VectorManager method. Returns (or creates) the deterministic
+;; atom vector for a name. Same seed → same vector everywhere.
+;; dimensions: VectorManager method. Returns the dimensionality (e.g. 4096).
+(define (get-vector vm name) (vm-get vm name))
+(define (dimensions vm) (:dims vm))
+
 (define (new-thought-vocab vm)
   "Pre-allocate all atom vectors from the VectorManager."
   (thought-vocab
@@ -38,7 +42,6 @@
                  {} all-atom-groups)
     :dims (dimensions vm)))
 
-; rune:gaze(phantom) — vocab-get is not in the wat language
 (define (vocab-get vocab name)
   "Look up an atom vector by name. Panics on unknown atom."
   (get (:atoms vocab) name))
@@ -63,7 +66,19 @@
 ;;   - rsi-sma facts: (pred rsi rsi-sma) for 4 predicates
 ;;   - session facts: (at-session session) for 4 sessions
 
-; rune:gaze(phantom) — build-fact-cache is not in the wat language
+(define (build-fact-cache vocab)
+  "Pre-compute all static facts as vectors. Returns a map of label -> Vector.
+   Caches: comparison facts (pred, a, b) for 29 pairs x 6 predicates,
+   fibonacci proximity facts, zone facts, RSI-SMA facts, session facts.
+   Each cached fact is bind(pred, bind(a, b)) — a pre-computed triple binding."
+  ;; Implementation: iterate COMPARISON_PAIRS x PREDICATES, STREAM_ZONE_CHECKS,
+  ;; FIBONACCI_LEVELS, RSI_SMA_CHECKS, and SESSIONS. For each, compute
+  ;; the binding and store under a string key like "(above close sma50)".
+  ;; ~500 entries total. Computed once at startup.
+  (fold (lambda (cache entry)
+          (assoc cache (:label entry) (fact-binary vocab (:pred entry) (:a entry) (:b entry))))
+        {} all-fact-entries))
+
 (define (new-thought-encoder vocab)
   "Pre-compute the fact cache."
   (thought-encoder :vocab vocab
@@ -85,7 +100,10 @@
 ;;   Scalar      { indicator, value, scale } -> bind(atom(indicator), encode-linear(value, scale))
 ;;   Bare        { label }                 -> lookup in cache, or raw atom
 
-; rune:gaze(phantom) — cache-get is not in the wat language
+(define (cache-get encoder label)
+  "Look up a pre-computed fact vector by label string. Returns vector or #f."
+  (get (:fact-cache encoder) label))
+
 (define (encode-facts encoder module-facts facts owned-facts labels)
   "Render vocab module facts into vectors."
   (for-each (lambda (fact)
@@ -103,7 +121,11 @@
   (bind (vocab-get vocab pred) (bind (vocab-get vocab a) (vocab-get vocab b))))
 
 ;; Temporal binding: (since fact N) -> bind(fact_vec, position_vector(N))
-; rune:gaze(phantom) — get-position-vector is not in the wat language
+(define (get-position-vector vm n)
+  "Get a deterministic position vector for index N. Used for temporal binding.
+   Position vectors are orthogonal markers for 'how long ago' in the sequence."
+  (get-vector vm (format "pos-~a" n)))
+
 (define (fact-since vm fact n)
   (bind fact (get-position-vector vm n)))
 

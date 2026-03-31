@@ -16,8 +16,10 @@
 ;; Prediction: a journal's output — (label, conviction) pairs.
 ;;
 ;; The enterprise wraps none of this. It uses them directly.
-; rune:gaze(phantom) — re-export is not in the wat language
-(re-export holon/memory [Journal Label Prediction])
+;; Re-export from holon substrate. Journal, Label, and Prediction are
+;; substrate types used directly — the enterprise wraps none of them.
+;; In Rust: `use holon::memory::{Journal, Label, Prediction};`
+(use holon/memory [Journal Label Prediction])
 
 ;; ── Direction ──────────────────────────────────────────────────
 
@@ -25,8 +27,9 @@
 ;; Long displays as "Buy", Short as "Sell".
 ;; NOT a journal label. Positions have direction. Journals have labels.
 
-; rune:gaze(phantom) — enum is not in the wat language
-(enum Direction [Long Short])
+;; Direction: a two-variant sum type. Long = facing up, Short = facing down.
+;; In Rust: `pub enum Direction { Long, Short }`
+(define Direction (variants Long Short))
 
 (define (display direction)
   (match direction
