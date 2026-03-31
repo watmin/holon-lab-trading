@@ -31,18 +31,12 @@
   trades-skipped
   rolling                ; (deque bool) — recent trade outcomes, cap 500
   rolling-cap            ; 500
-  by-year                ; (map year year-stats) — rune:reap(unused-struct)
-
   ;; Risk vocabulary infrastructure
   equity-at-trade        ; (deque f64) — equity after each trade, cap 500
   trade-returns          ; (deque f64) — directional return per trade, cap 500
   dd-bottom-equity       ; deepest point of current drawdown
   trades-since-bottom    ; trades since drawdown bottom
   completed-drawdowns)   ; (deque f64) — max depth of each completed dd, cap 20
-
-;; rune:reap(unused-struct) — by_year populated every trade but never read
-(struct year-stats
-  trades wins pnl)
 
 ;; -- Construction -----------------------------------------------------------
 
