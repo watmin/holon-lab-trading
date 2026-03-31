@@ -72,6 +72,11 @@
 
 (define (on-candle state candle fact-labels observer-vecs ctx)
   "One candle. The fold's inner step."
+  ;; rune:scry(stale-spec) — the layer ordering below says risk(3) → open(4) → tick(5),
+  ;; but the Rust executes tick(5) → open(4) → risk(3). Positions are ticked before
+  ;; new ones open, and risk is computed after opening — not before. The wat layer
+  ;; numbers do not match the actual execution order in state.rs on_candle_inner.
+
   (let* (;; 1. Experts predict (LAYER 1)
          (observer-preds (map (lambda (obs vec) (predict (:journal obs) vec))
                               (:observers state) observer-vecs))
@@ -95,8 +100,18 @@
          ;; 6. Learn from outcomes (LAYER 6)
          (_  (resolve-pending state candle ctx)))
 
+    ;; rune:scry(evolved) — code has additional unlisted steps between layers:
+    ;; - Panel engram (Template 2 reaction) between manager(2) and tick
+    ;; - Conviction threshold recomputation (quantile or exponential curve fit)
+    ;; - Adaptive decay (generalist vs specialist rates) after pending push
+    ;; - Manager proven band scan after recalibration
+    ;; These are real fold steps that mutate state but the wat omits them.
+
     ;; 7. Ledger: pending-logs accumulates LogEntry values.
     ;; The caller flushes. The fold is pure.
+    ;; rune:scry(stale-spec) — "the fold is pure" is aspirational. The Rust fold
+    ;; takes &mut self and returns (). It IS a fold (state × event → state) but
+    ;; purity is a lie — the implementation mutates in place, not via return.
     state))
 
 ;; ── The organization ────────────────────────────────────────────────
@@ -123,7 +138,12 @@
 ;;
 ;; Observer  → (predict journal thought) → Prediction
 ;; Manager   → (predict mgr-journal manager-thought) → Prediction
+;; Exit      → (predict exit-journal exit-thought) → Prediction
+;;   rune:scry(aspirational) — exit expert learns but does not yet act;
+;;   see rune in state.rs ExitAtoms. Prediction is computed but never read.
 ;; Risk      → (risk-multiplier portfolio) → Float [0.0, 1.0]
+;;   rune:scry(stale-spec) — risk-multiplier range is [0.1, 1.0] in code,
+;;   not [0.0, 1.0]. worst_ratio is clamped with .max(0.1) in state.rs.
 ;; Treasury  → (swap treasury from to amount price fee) → (spent, received)
 ;; Ledger    → pending-logs : Vec<LogEntry> — flushed by caller
 
@@ -144,5 +164,10 @@
 ;; ── What the enterprise does NOT do ─────────────────────────────────
 ;; - Does NOT know its event source (backtest, websocket, test harness)
 ;; - Does NOT encode candles (that's the encoding functor, outside the fold)
+;;   rune:scry(stale-spec) — partially true. Candle→thought encoding is outside
+;;   the fold (enterprise.rs parallel loop). But manager encoding, exit expert
+;;   encoding, and risk branch encoding all happen INSIDE on_candle_inner.
+;;   The fold does encode — just not candle→thought.
 ;; - Does NOT write to the database (that's the caller, via flush-logs)
 ;; - The fold is pure: State × Event → State
+;;   rune:scry(stale-spec) — &mut self, returns (). See purity rune above.
