@@ -98,8 +98,7 @@
 
       ;; 5. Update conviction history + threshold
       (push-back (:conviction-history observer) (:conviction prediction))
-      ;; rune:gaze(naming) -- magic 2000 hardcoded while conviction-window is a parameter
-      (when (> (len (:conviction-history observer)) 2000)
+      (when (> (len (:conviction-history observer)) conviction-window)
         (pop-front (:conviction-history observer)))
       (when (and (>= (len (:conviction-history observer)) 200)
                 (= (mod (len (:resolved observer)) 50) 0))

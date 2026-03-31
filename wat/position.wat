@@ -11,11 +11,11 @@
 (struct managed-position
   id entry-candle entry-price entry-atr direction
   base-deployed quote-held base-reclaimed
-  phase trailing-stop take-profit high-water
+  phase trailing-stop take-profit best-price
   total-fees candles-held)
 
-;; rune:gaze(naming) — high-water tracks the extreme in our favor;
-;; for shorts that's the LOW. The name lies to short-side readers.
+;; best-price: the most favorable price seen since entry.
+;; For longs: the highest price. For shorts: the lowest price.
 
 ;; phase:     :active | :runner | :closed
 ;; direction: :long | :short
@@ -58,7 +58,7 @@
       :base-reclaimed 0.0
       :phase :active
       :trailing-stop stop :take-profit tp
-      :high-water entry-price
+      :best-price entry-price
       :total-fees entry-fee :candles-held 0)))
 
 ;; ── Tick ────────────────────────────────────────────────────────────
@@ -70,16 +70,16 @@
   (if (= (:phase pos) :closed) nothing
     (match (:direction pos)
       :long
-        (let ((high-water (max (:high-water pos) current-price))
-              (new-stop   (* high-water (- 1.0 (* k-trail (:entry-atr pos))))))
+        (let ((best-price (max (:best-price pos) current-price))
+              (new-stop   (* best-price (- 1.0 (* k-trail (:entry-atr pos))))))
           (let ((trailing-stop (max (:trailing-stop pos) new-stop)))
             (if (<= current-price trailing-stop) :stop-loss
               (if (and (= (:phase pos) :active) (>= current-price (:take-profit pos)))
                   :take-profit
                   nothing))))
       :short
-        (let ((high-water (min (:high-water pos) current-price))
-              (new-stop   (* high-water (+ 1.0 (* k-trail (:entry-atr pos))))))
+        (let ((best-price (min (:best-price pos) current-price))
+              (new-stop   (* best-price (+ 1.0 (* k-trail (:entry-atr pos))))))
           (let ((trailing-stop (min (:trailing-stop pos) new-stop)))
             (if (>= current-price trailing-stop) :stop-loss
               (if (and (= (:phase pos) :active) (<= current-price (:take-profit pos)))
