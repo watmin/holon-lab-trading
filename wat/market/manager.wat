@@ -10,6 +10,8 @@
 ;; It reads expert predictions passed by the fold. The fold decides
 ;; which experts to include (proof gates filter upstream).
 
+(require std-candidates)
+
 ;; ── Manager's atoms ─────────────────────────────────────────────────
 
 ;; Expert identity atoms (one per expert)
@@ -82,8 +84,6 @@
 ;; manager about the PATTERN of agreement, not just who said what.
 
 ; rune:gaze(phantom) — length is not in the wat language
-; rune:gaze(phantom) — mean is not in the wat language
-; rune:gaze(phantom) — stddev is not in the wat language
 ; rune:gaze(phantom) — mean-pairwise-cosine is not in the wat language
 (define (panel-shape proven-experts)
   (let* ((buys    (count (lambda (e) (> (cos e) 0)) proven-experts))

@@ -8,6 +8,7 @@
 ;; Expert profile: regime
 
 (require vocab/mod)
+(require std-candidates)
 
 ;; ── Atoms introduced ───────────────────────────────────────────
 
@@ -47,7 +48,6 @@
 
 ; rune:gaze(phantom) — covariance is not in the wat language
 ; rune:gaze(phantom) — lag-1 is not in the wat language
-; rune:gaze(phantom) — variance is not in the wat language
 (define (autocorrelation-lag1 candles lookback)
   "Lag-1 return autocorrelation. Returns [-1, 1] or None."
   (/ (covariance returns (lag-1 returns))
@@ -63,8 +63,6 @@
 
 ;; ── Facts produced ─────────────────────────────────────────────
 
-; rune:gaze(phantom) — fact/scalar is not in the wat language
-; rune:gaze(phantom) — fact/zone is not in the wat language
 ; rune:gaze(phantom) — adx-zone is not in the wat language
 (define (eval-persistence candles)
   "Trend persistence facts."

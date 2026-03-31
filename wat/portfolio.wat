@@ -7,6 +7,7 @@
 (require core/primitives)
 (require core/structural)
 (require risk)
+(require std-candidates)
 
 ;; -- Phase lifecycle --------------------------------------------------------
 
@@ -80,7 +81,6 @@
         (/ (count true recent) (len recent)))))
 
 ; rune:gaze(phantom) — drawdown is not in the wat language
-; rune:gaze(phantom) — mean is not in the wat language
 
 (define (is-healthy? portfolio)
   "Gates subspace updates. All three must hold."

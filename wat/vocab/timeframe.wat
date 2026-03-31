@@ -8,6 +8,7 @@
 ;;                  narrative (eval-timeframe-narrative)
 
 (require vocab/mod)
+(require std-candidates)
 
 ;; ── Atoms introduced ───────────────────────────────────────────
 
@@ -22,9 +23,6 @@
 
 ;; ── Structure facts ────────────────────────────────────────────
 
-; rune:gaze(phantom) — fact/scalar is not in the wat language
-; rune:gaze(phantom) — fact/zone is not in the wat language
-; rune:gaze(phantom) — fact/bare is not in the wat language
 (define (eval-timeframe-structure candles)
   "Multi-timeframe geometry. Pre-computed values from Candle."
 

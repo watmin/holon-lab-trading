@@ -6,6 +6,7 @@
 ;; Expert profile: volume
 
 (require vocab/mod)
+(require std-candidates)
 
 ;; ── Atoms introduced ───────────────────────────────────────────
 
@@ -16,7 +17,6 @@
 
 ;; ── Facts produced ─────────────────────────────────────────────
 
-; rune:gaze(phantom) — fact/zone is not in the wat language
 (define (eval-price-action candles)
   "Price action pattern facts. Minimum 3 candles."
 

@@ -7,6 +7,7 @@
 (require core/primitives)
 (require core/structural)
 (require std/memory)
+(require std-candidates)
 
 ;; ── Five specialists ────────────────────────────────────────────────
 ;;
@@ -66,10 +67,6 @@
 
 ; rune:gaze(phantom) — last-n-returns is not in the wat language
 ; rune:gaze(phantom) — length is not in the wat language
-; rune:gaze(phantom) — zero-vector is not in the wat language
-; rune:gaze(phantom) — stddev is not in the wat language
-; rune:gaze(phantom) — mean is not in the wat language
-; rune:gaze(phantom) — skewness is not in the wat language
 (define (encode-volatility portfolio)
   (let ((returns (last-n-returns portfolio 50)))
     (if (< (length returns) 5)

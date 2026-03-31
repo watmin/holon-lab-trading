@@ -10,6 +10,7 @@
 ;; Expert profile: regime (exclusive)
 
 (require vocab/mod)
+(require std-candidates)
 
 ;; ── Atoms introduced ───────────────────────────────────────────
 
@@ -34,8 +35,6 @@
 
 ;; ── Facts produced ─────────────────────────────────────────────
 
-; rune:gaze(phantom) — fact/zone is not in the wat language
-; rune:gaze(phantom) — fact/scalar is not in the wat language
 (define (eval-regime candles)
   "Market regime facts. Minimum 20 candles."
 

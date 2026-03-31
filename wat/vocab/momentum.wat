@@ -6,6 +6,7 @@
 ;; Expert profile: momentum
 
 (require vocab/mod)
+(require std-candidates)
 
 ;; ── Atoms introduced ───────────────────────────────────────────
 
@@ -14,7 +15,6 @@
 
 ;; ── Facts produced ─────────────────────────────────────────────
 
-; rune:gaze(phantom) — fact/zone is not in the wat language
 (define (eval-momentum candles)
   "CCI zone facts."
 
