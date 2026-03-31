@@ -69,15 +69,32 @@ The gaze reports Level 1 and Level 2. Level 3 is taste — note it but do not fl
 
 The gaze converges when Level 1 and Level 2 are zero. Level 3 will always exist — taste is infinite. The gaze does not chase taste. The gaze chases lies and mumbles.
 
+## When scanning wat files
+
+**CRITICAL:** When gazing upon `.wat` files, first read the language specification:
+- `/home/watmin/work/holon/wat/core/primitives.wat` — the two algebras
+- `/home/watmin/work/holon/wat/core/structural.wat` — struct, projection, update
+- `/home/watmin/work/holon/wat/LANGUAGE.md` — host language forms, grammar
+
+Every form used in a wat file must exist in the language. A form that looks like valid s-expression but is not defined in the language is a **Level 1 lie** — it promises functionality the language does not provide. Examples of phantom forms:
+- `push!` — Rust idiom, not Lisp
+- `fact/zone`, `fact/scalar` — invented, not in the language
+- `cache-get`, `vocab-get` — implementation functions, not language forms
+- `format` — not declared in the host language section
+- `cond` — not in the host language section (use `if` or `match`)
+
+The wat language provides: atom, bind, bundle, cosine, journal, register, observe, predict, decay, resolve, curve, struct, keyword access, update, and host forms (let, define, if, when, match, map, filter, fold, etc.). Anything else is a phantom.
+
 ## How to scan
 
 Read the target file (default: `src/state.rs` — the fold's carrier, the densest code). For each function, each block, each name:
 
 1. **Does the name lie?** (Level 1) Does it say one thing and mean another?
 2. **Does the name mumble?** (Level 2) Must you leave the file to understand it?
-3. **Does the function fit?** Can you hold it in your mind?
-4. **Do the comments help?** Or do they lie, parrot, or clutter?
-5. **Does the structure mirror the intent?** Does the code read like the architecture?
+3. **Does the form exist?** (Level 1, wat files only) Is this a real language form or a phantom?
+4. **Does the function fit?** Can you hold it in your mind?
+5. **Do the comments help?** Or do they lie, parrot, or clutter?
+6. **Does the structure mirror the intent?** Does the code read like the architecture?
 
 Report findings with their level. "Level 1: this comment lies about X." or "Level 2: this name mumbles — it wants to say X."
 
