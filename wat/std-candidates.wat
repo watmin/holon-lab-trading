@@ -57,9 +57,11 @@
 
 ;; ── Collection gaps (1 phantom rune dissolved if promoted) ──────────
 
-(define (zero-vector)
-  "The identity element of bundle. All zeros."
-  (bundle))  ; empty bundle = zero vector in the ambient dimensionality
+;; rune:forge(coupling) — zero-vector needs dims because vectors are fixed-dimensionality.
+;; (bundle) alone cannot know the size. The Rust creates vec![0.0; dims].
+(define (zero-vector dims)
+  "The identity element of bundle. dims zeros."
+  (list-fill dims 0.0))
 
 ;; ── Host language gaps (5 phantom runes) ────────────────────────────
 ;;
