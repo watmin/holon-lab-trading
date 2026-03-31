@@ -81,9 +81,14 @@ src/window_sampler.rs     — deterministic log-uniform window sampling
 
 The `wat/` directory contains domain specifications in s-expression format. These are the source of truth for what the enterprise SHOULD do. The Rust implements them. When code and spec diverge, update the one that's wrong.
 
-## Skills
+## Wards
 
-- `/decomplect` — find and resolve complected code. Our personal sanity checker.
+Four spells that defend against bad thoughts. Run `/wards` to cast all four.
+
+- `/sever` (decomplect) — cuts tangled threads. Braided concerns, misplaced logic, duplicated encoding.
+- `/reap` (dead-thoughts) — harvests what no longer lives. Dead code, unused structs, write-only fields.
+- `/scry` (wat-check) — divines truth from intention. Spec vs code divergences.
+- `/gaze` — sees the form. Names that mumble, functions that don't fit, comments that lie.
 
 ## Standard Test
 
