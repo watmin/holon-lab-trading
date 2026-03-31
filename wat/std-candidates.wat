@@ -30,7 +30,7 @@
   "This named condition is present."
   (atom label))
 
-;; ── Statistics (8 phantom runes dissolved if promoted) ──────────────
+;; ── Statistics (9 phantom runes dissolved if promoted) ──────────────
 ;;
 ;; Standard statistical functions over numeric lists.
 ;; Any program analyzing distributions needs these.
@@ -54,7 +54,7 @@
                  0.0 xs)
            (len xs)))))
 
-;; ── Collection gaps (3 phantom runes dissolved if promoted) ─────────
+;; ── Collection gaps (1 phantom rune dissolved if promoted) ──────────
 
 (define (zero-vector dims)
   "The identity element of bundle. All zeros."
