@@ -23,25 +23,25 @@
 ;; (at indicator zone)
 ;; Example: (at dfa-alpha persistent-dfa)
 ;; Encoding: bind(at, bind(indicator-atom, zone-atom))
-(deftype Zone [indicator zone])
+(struct Zone [indicator zone])
 
 ;; Comparison: "A is above/below B"
 ;; (above A B) or (below A B)
 ;; Example: (above close tenkan-sen)
 ;; Encoding: bind(pred-atom, bind(a-atom, b-atom))
-(deftype Comparison [predicate a b])
+(struct Comparison [predicate a b])
 
 ;; Scalar: "this indicator has this continuous value"
 ;; (indicator value)
 ;; Example: (williams-r -45.2)
 ;; Encoding: bind(indicator-atom, encode-linear(value, scale))
-(deftype Scalar [indicator value scale])
+(struct Scalar [indicator value scale])
 
 ;; Bare: "this named condition is present"
 ;; (condition)
 ;; Example: (roc-accelerating)
 ;; Encoding: atom lookup — the condition IS the vector
-(deftype Bare [label])
+(struct Bare [label])
 
 ;; ── The Contract ────────────────────────────────────────────────
 ;;

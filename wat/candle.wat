@@ -1,26 +1,20 @@
 ;; ── candle.wat — the enterprise's sensory input ─────────────────────
 ;;
-;; Raw price data in. Named indicators out. Computed in Rust.
-;; No Python. No pre-baked DB. The enterprise builds its own senses.
-;;
-;; The candle source reads raw OHLCV and computes every indicator
-;; the enterprise needs. Each indicator is a named field on the Candle
-;; struct — available to all vocab modules and the thought encoder.
-;;
-;; The principle: compute once, use everywhere. The DB is a cache of
-;; computed indicators, not a dependency on an external pipeline.
+;; Raw price data in. Named indicators out.
+;; The enterprise builds its own senses from OHLCV.
+
+(require core/structural)
 
 ;; ── Raw input ───────────────────────────────────────────────────────
-;;
-;; Source: 5-minute BTC/USDC candles.
-;; Fields: timestamp, open, high, low, close, volume.
-;; Format: parquet (data/btc_5m_raw.parquet) or CSV.
-;; The enterprise reads raw and derives everything else.
 
-;; ── Core indicators (current) ───────────────────────────────────────
-;;
-;; These are what the Candle struct carries today.
-;; All computed from raw OHLCV. No external dependencies.
+(struct raw-candle ts open high low close volume)
+
+;; Everything below is derived from raw-candle by the indicator engine.
+;; (field name computation) declares what each indicator IS and how
+;; it's computed. These become the streaming indicator reducers
+;; (proposal 004).
+
+;; ── Indicators ──────────────────────────────────────────────────────
 
 ;; Moving averages
 (field sma20    (sma close 20))
