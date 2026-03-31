@@ -31,21 +31,18 @@
 
 ;; -- Construction -----------------------------------------------------------
 
-; rune:gaze(phantom) — new-journal is not in the wat language
-; rune:gaze(phantom) — new-online-subspace is not in the wat language
-; rune:gaze(phantom) — new-window-sampler is not in the wat language
 (define (new-observer profile dims recalib-interval seed labels)
   "Create an observer with its own journal and window sampler."
-  (let ((journal (new-journal profile dims recalib-interval))
-        (primary-label (register journal (first labels))))
+  (let ((jrnl (journal profile dims recalib-interval))
+        (primary-label (register jrnl (first labels))))
     ;; Register remaining labels
-    (for-each (lambda (l) (register journal l)) (rest labels))
+    (for-each (lambda (l) (register jrnl l)) (rest labels))
     (observer
       :name profile :profile profile
-      :journal journal :primary-label primary-label
-      :resolved (deque) :good-state-subspace (new-online-subspace dims 8)
+      :journal jrnl :primary-label primary-label
+      :resolved (deque) :good-state-subspace (online-subspace dims 8)
       :recalib-wins 0 :recalib-total 0 :last-recalib-count 0
-      :window-sampler (new-window-sampler seed 12 2016)
+      :window-sampler (window-sampler seed 12 2016)
       :conviction-history (deque) :conviction-threshold 0.0
       :curve-valid false)))
 

@@ -63,12 +63,11 @@
 ;;   - rsi-sma facts: (pred rsi rsi-sma) for 4 predicates
 ;;   - session facts: (at-session session) for 4 sessions
 
-; rune:gaze(phantom) — new-scalar-encoder is not in the wat language
 ; rune:gaze(phantom) — build-fact-cache is not in the wat language
 (define (new-thought-encoder vocab)
   "Pre-compute the fact cache."
   (thought-encoder :vocab vocab
-                   :scalar-enc (new-scalar-encoder (dims vocab))
+                   :scalar-enc (scalar-encoder (:dims vocab))
                    :fact-cache (build-fact-cache vocab)))
 
 (define (fact-codebook encoder)
