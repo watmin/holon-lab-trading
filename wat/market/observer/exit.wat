@@ -1,90 +1,71 @@
 ;; ── exit expert ────────────────────────────────────────────────────
 ;;
-;; Thinks about: open positions. Should this position hold, tighten, or exit?
-;; Vocabulary: position state (P&L, hold duration, ATR at entry, MFE, MAE,
-;;             phase, trailing stop distance from current price).
-;; Label: did holding longer result in better or worse outcome?
+;; Thinks about: open positions. Should this position hold or exit?
+;; Not a market expert. Sees position state, not candles or indicators.
+;; Template 1 (PREDICTION): learns which position states precede
+;; improvement vs deterioration.
+
+(require core/primitives)
+(require core/structural)
+(require std/common)
+(require std/patterns)
+
+;; ── Vocabulary ──────────────────────────────────────────────────────
 ;;
-;; The exit expert is NOT a market expert. It doesn't see candles or
-;; indicators. It sees the POSITION'S state and learns when to act.
+;; Position state encoding (one thought per open position per sample):
 ;;
-;; Template 1 (PREDICTION): "will this position improve or deteriorate?"
-;; The discriminant separates position states that precede improvement
-;; from those that precede deterioration.
+;; (define (encode-position pos current-price current-atr)
+;;   (bundle
+;;     (bind (atom "position-pnl")       (encode-linear (return-pct pos current-price) 1.0))
+;;     (bind (atom "position-hold")      (encode-log (candles-held pos)))
+;;     (bind (atom "position-mfe")       (encode-linear (/ (- (high-water pos) (entry-price pos))
+;;                                                         (entry-price pos)) 1.0))
+;;     (bind (atom "position-mae")       (encode-linear (max-adverse pos) 1.0))
+;;     (bind (atom "position-atr-entry") (encode-log (entry-atr pos)))
+;;     (bind (atom "position-atr-now")   (encode-log current-atr))
+;;     (bind (atom "position-stop-dist") (encode-linear
+;;       (/ (abs (- current-price (trailing-stop pos))) current-price) 1.0))
+;;     (bind (atom "position-phase")     (atom (if (runner? pos) "runner" "active")))
+;;     (bind (atom "position-direction") (atom (if (buy? pos) "buy" "sell")))))
 
-;; ── Atoms ───────────────────────────────────────────────────────────
+;; ── Labels ──────────────────────────────────────────────────────────
 
-(atom "position-pnl")          ; current unrealized P&L as fraction
-(atom "position-hold")         ; candles held (encode-log — orders of magnitude)
-(atom "position-mfe")          ; max favorable excursion so far
-(atom "position-mae")          ; max adverse excursion so far
-(atom "position-atr-entry")    ; ATR at entry (market volatility when entered)
-(atom "position-atr-now")      ; ATR right now (has volatility changed?)
-(atom "position-stop-dist")    ; distance from current price to trailing stop
-(atom "position-phase")        ; active | runner
-(atom "position-direction")    ; buy | sell
-
-;; ── Encoding ────────────────────────────────────────────────────────
-;;
-;; Each open position encodes its state as a thought vector:
-
-(define (encode-position pos current-price current-atr)
-  (bundle
-    (bind position-pnl (encode-linear (return-pct pos current-price) 1.0))
-    (bind position-hold (encode-log (candles-held pos)))
-    (bind position-mfe (encode-linear (/ (- (high-water pos) (entry-price pos))
-                                         (entry-price pos)) 1.0))
-    (bind position-mae (encode-linear (max-adverse pos) 1.0))
-    (bind position-atr-entry (encode-log (entry-atr pos)))
-    (bind position-atr-now (encode-log current-atr))
-    (bind position-stop-dist (encode-linear
-      (/ (abs (- current-price (trailing-stop pos))) current-price) 1.0))
-    (bind position-phase (atom (if (runner? pos) "runner" "active")))
-    (bind position-direction (atom (if (buy? pos) "buy" "sell")))))
+(define exit-journal (journal "exit" dims refit-interval))
+(define hold-label   (register exit-journal "Hold"))
+(define exit-label   (register exit-journal "Exit"))
 
 ;; ── Learning ────────────────────────────────────────────────────────
 ;;
-;; Every N candles while a position is open, the exit expert encodes
-;; the position state and predicts: "will this position be worth MORE
-;; or LESS in N candles?"
+;; Every exit-observe-interval candles while a position is open:
+;;   1. Encode position state → thought
+;;   2. Record snapshot P&L
+;;   After exit-observe-interval more candles:
+;;     Hold = position improved (holding was correct)
+;;     Exit = position deteriorated (should have exited)
 ;;
-;; Labels (symbols, not the old Outcome enum):
-;;   (define hold (register exit-journal "Hold"))
-;;   (define exit (register exit-journal "Exit"))
-;;
-;; After N candles:
-;;   Hold = the position improved (holding was correct)
-;;   Exit = the position deteriorated (should have exited)
-;;
-;; The exit expert's discriminant learns which position states precede
-;; improvement vs deterioration.
+;; (observe exit-journal thought
+;;   (if (> (pnl-at-resolution) (pnl-at-snapshot)) hold-label exit-label)
+;;   1.0)
 
 ;; ── Application ─────────────────────────────────────────────────────
 ;;
 ;; On each candle, for each open position:
-;;   1. Encode position state
-;;   2. Exit expert predicts: Hold or Exit
-;;   3. If Exit with conviction above threshold:
-;;      - Active position: force close (don't wait for stop)
-;;      - Runner: tighten the trail (reduce k_trail for this position)
-;;   4. If Hold with high conviction:
-;;      - Runner: loosen the trail (increase k_trail, let it breathe)
+;;   (let ((prediction (predict exit-journal (encode-position pos price atr))))
+;;     (match (:direction prediction)
+;;       Exit  → (if (runner? pos) (tighten-trail pos) (force-close pos))
+;;       Hold  → (if (runner? pos) (loosen-trail pos)  (noop))))
 ;;
-;; The exit expert modulates the TRAIL DISTANCE per position per candle.
-;; It doesn't override the stop — it adjusts how tight the stop follows.
-;; Tight = aggressive profit taking. Loose = let runners run.
+;; Tight trail = aggressive profit taking. Loose trail = let runners run.
 
-;; ── Gate ─────────────────────────────────────────────────────────────
+;; ── Gate ────────────────────────────────────────────────────────────
 ;;
-;; The exit expert must prove itself before modulating trails.
-;; Proof: its Hold predictions are correct >52% of the time
-;; (positions that it said Hold did indeed improve).
-;; Before proof: positions use the default k_trail (1.5 × ATR).
+;; Before proof: positions use default k-trail.
+;; Proof: Hold predictions correct > 52% of the time.
+;; (gate (opinion prediction exit-atom) exit-atom (curve-valid? exit-journal))
 
 ;; ── What the exit expert does NOT do ────────────────────────────────
-;;
-;; - Does NOT decide entry (that's the market manager)
+;; - Does NOT decide entry (that's the manager)
 ;; - Does NOT see market indicators (that's the market experts)
-;; - Does NOT know about other positions (that's the risk manager)
+;; - Does NOT know about other positions (that's risk)
 ;; - Does NOT override the stop loss (the stop is the safety net)
-;; - It adjusts the TRAIL, not the stop
+;; - Adjusts the TRAIL, not the stop

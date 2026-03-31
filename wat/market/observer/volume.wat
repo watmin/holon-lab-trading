@@ -1,43 +1,50 @@
 ;; ── volume expert ──────────────────────────────────────────────────
 ;;
 ;; Thinks about: participation and conviction behind price moves.
-;; Window: sampled from [12, 2016] per candle.
-;;
-;; (require stdlib)             ; comparisons, zones
-;; (require mod/flow)           ; OBV, VWAP, A/D, MFI, CMF, buying/selling pressure
-;; (require mod/participation)  ; volume confirmation, spikes, candle patterns
-;;
-;; The volume expert judges whether price moves have backing.
-;; A rally on low volume is suspect. A breakout on high volume
-;; is confirmed. Volume is the market's conviction about its own moves.
+;; Window: sampled from [min-window, max-window] per candle.
 
-;; ── Eval methods ────────────────────────────────────────────────────
-;; eval_volume_confirmation — current volume vs window average, direction match
-;; eval_volume_analysis     — OBV direction, volume SMA, spike/drought zones
-;; eval_price_action        — inside bar, outside bar, gaps, consecutive candles
-;; eval_flow_module         — OBV slope, VWAP deviation, MFI zones, buying/selling pressure
+(require core/primitives)
+(require core/structural)
+(require std/common)
+(require std/patterns)
 
-;; ── Example thoughts ────────────────────────────────────────────────
+;; ── Vocabulary ──────────────────────────────────────────────────────
 ;;
-;; (bundle
-;;   (bind at (bind volume volume-spike))    ; volume is 2x+ above average
-;;   (bind at (bind close inside-bar))        ; price compressed (inside bar)
-;;   (bind at (bind close gap-up))            ; gap up from previous close
-;;   (bind at (bind close consecutive-up))    ; 3+ consecutive green candles
-;;   ...)
+;; Flow (vocab/flow module):
+;;   (bind :vwap   (encode-linear (vwap-distance candles) 1.0))  ; price vs volume-weighted average
+;;   (bind :at     (bind :mfi :mfi-overbought))                  ; money flow > 80
+;;   (bind :at     (bind :mfi :mfi-oversold))                    ; money flow < 20
+;;   (bind :buy-pressure  (encode-linear bp 1.0))                ; lower wick / range
+;;   (bind :sell-pressure (encode-linear sp 1.0))                ; upper wick / range
+;;   (bind :body-ratio    (encode-linear br 1.0))                ; body / range
+;;   (bind :at     (bind :volume :volume-spike))                 ; vol_accel > 2.0
+;;   (bind :at     (bind :volume :volume-drought))               ; vol_accel < 0.3
+;;
+;; OBV (special encoding — bind patterns, not Fact interface):
+;;   (bind :obv-direction (atom (if (> obv-slope 0) "up" "down")))
+;;   (bind :obv-diverges  (atom "true"))                         ; OBV vs price disagree
+;;
+;; Participation (vocab/price_action module):
+;;   (bind :at (bind :close :inside-bar))                        ; range compressed
+;;   (bind :at (bind :close :outside-bar))                       ; range engulfs previous
+;;   (bind :at (bind :close :gap-up))                            ; gap from previous close
+;;   (bind :at (bind :close :gap-down))
+;;   (bind :at (bind :close :consecutive-up))                    ; 3+ green candles
+;;   (bind :at (bind :close :consecutive-down))                  ; 3+ red candles
+;;
+;; Volume confirmation (eval_volume_confirmation):
+;;   current volume vs window average, direction match
+
+;; ── The expert ──────────────────────────────────────────────────────
+
+(define volume
+  (expert "volume" :volume dims refit-interval))
 
 ;; ── DISCOVERY ───────────────────────────────────────────────────────
 ;; Volume is the THINNEST expert vocabulary. Only 4 eval methods.
-;; The other experts have 5-7 each. Volume rarely proves its gate
-;; (appeared in proven list only once in the 100k run, at 50k).
-;;
-;; Questions:
-;; 1. Is volume inherently less predictive, or is the vocabulary too thin?
-;; 2. Should volume get OBV divergence detection (OBV trending opposite to price)?
-;; 3. Should volume get VWAP (volume-weighted average price) as a comparison target?
-;; 4. Should volume see money flow (buying vs selling volume)?
-;; 5. Should price action (inside bar, gaps) stay with volume or move to structure?
-;;    Inside bars are geometric (structure) but validated by volume (volume).
+;; Rarely proves its gate (appeared once in 100k run, at 50k).
+;; Is the vocabulary too thin, or is volume inherently less predictive?
+;; Inside bars are geometric (structure) but validated by volume (volume).
 
 ;; ── What volume does NOT see ────────────────────────────────────────
 ;; - Comparisons (momentum, structure)
@@ -46,4 +53,4 @@
 ;; - Oscillators (momentum)
 ;; - Cloud/fib/keltner (structure)
 ;; - Calendar (narrative)
-;; - Advanced regime indicators (regime, momentum, structure)
+;; - Regime indicators (regime)

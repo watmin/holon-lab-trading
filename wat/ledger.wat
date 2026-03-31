@@ -1,35 +1,65 @@
 ;; ── ledger.wat — the enterprise's memory ────────────────────────────
 ;;
-;; The ledger subscribes to ALL channels with filter (always).
-;; It records every thought, every decision, every outcome.
-;; It hallucinates nothing. Every number is measured.
-;;
-;; The ledger is the DB. The DB is the debugger. The state is the breakpoint.
+;; Subscribes to ALL channels with filter (always).
+;; Records every thought, every decision, every outcome.
+;; Hallucinates nothing. Every number is measured.
 
-;; ── Subscription ────────────────────────────────────────────────────
-;;
-;; (subscribe "ledger" → "*" :filter (always) :process (record))
-;;
-;; The wildcard subscription: every channel, every message.
-;; The ledger is the only subscriber that sees EVERYTHING.
-;; Not even risk sees everything — risk sees expert + treasury channels.
-;; The ledger sees expert + manager + risk + treasury + position channels.
+(require core/structural)
 
 ;; ── Tables ──────────────────────────────────────────────────────────
+
+(struct candle-log
+  step candle-idx timestamp
+  tht-cos tht-conviction tht-pred
+  meta-pred meta-conviction
+  actual traded position-frac equity outcome-pct)
+
+(struct trade-ledger
+  step candle-idx timestamp exit-candle-idx exit-timestamp
+  direction conviction high-conviction
+  entry-price exit-price position-frac position-usd
+  gross-return-pct swap-fee-pct slippage-pct net-return-pct
+  pnl-usd equity-after
+  max-favorable-pct max-adverse-pct
+  crossing-candles horizon-candles outcome won exit-reason)
+
+(struct recalib-log
+  step journal cos-raw disc-strength buy-count sell-count)
+
+(struct disc-decode
+  step journal rank fact-label cosine)
+
+(struct observer-log
+  step observer conviction direction correct)
+
+(struct risk-log
+  step drawdown-pct streak-len streak-dir recent-acc equity-pct won)
+
+(struct trade-fact
+  step fact-label)
+
+(struct trade-vector
+  step won tht-data)
+
+;; ── Interpreter ─────────────────────────────────────────────────────
 ;;
-;; candle_log:       per-candle state (thought + manager prediction, outcome)
-;; trade_ledger:     per-position lifecycle (entry, exits, P&L, costs)
-;; recalib_log:      per-recalibration state (disc_strength, cos_raw)
-;; disc_decode:      top discriminant facts at each recalibration
-;; observer_log:     per-observer predictions (diagnostics)
-;; risk_log:         per-trade risk state (diagnostics)
-;; trade_facts:      fact attribution for traded candles (diagnostics)
-;; trade_vectors:    thought vectors for engram analysis (diagnostics)
+;; The fold says WHAT happened (LogEntry). The interpreter says WHEN to write.
+;; Beckman's free monad: separate description from interpretation.
 ;;
-;; Future:
-;; channel_log:      every message on every channel (full enterprise trace)
-;; alpha_log:        per-swap counterfactual comparison
-;; exit_log:         per-position exit expert observations
+;; (define (flush-logs entries conn)
+;;   (for-each
+;;     (lambda (entry)
+;;       (match entry
+;;         (candle-log fields ...)     → INSERT INTO candle_log
+;;         (trade-ledger fields ...)   → INSERT INTO trade_ledger
+;;         (recalib-log fields ...)    → INSERT INTO recalib_log
+;;         (disc-decode fields ...)    → INSERT INTO disc_decode
+;;         (observer-log fields ...)   → INSERT INTO observer_log
+;;         (risk-log fields ...)       → INSERT INTO risk_log
+;;         (trade-fact fields ...)     → INSERT INTO trade_facts
+;;         (trade-vector fields ...)   → INSERT INTO trade_vectors
+;;         batch-commit               → COMMIT))
+;;     entries))
 
 ;; ── Contract ────────────────────────────────────────────────────────
 ;;
@@ -40,5 +70,10 @@
 ;; 5. The ledger is queryable (SQL).
 ;; 6. The ledger is the source of truth for all debugging.
 ;; 7. The ledger distinguishes sources: learning vs managed, paper vs live.
-;;
-;; "The enterprise's ledger is its debugger."
+
+;; ── What the ledger does NOT do ─────────────────────────────────────
+;; - Does NOT filter messages (it sees everything)
+;; - Does NOT transform data (it records verbatim)
+;; - Does NOT make decisions (it is passive)
+;; - Does NOT predict (it measures)
+;; - "The enterprise's ledger is its debugger."

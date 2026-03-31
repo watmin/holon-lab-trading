@@ -1,78 +1,81 @@
-;; ── position.wat ───────────────────────────────────────────────────
+;; ── position.wat — managed allocations from the treasury ────────────
 ;;
-;; A position is a managed allocation from the treasury.
-;; Not a binary swap — a fraction of capital with its own lifecycle.
-;;
-;; Entry → Management → Partial exit → Runner → Final exit
-;;
-;; Each position tracks:
-;;   - entry price, entry time, allocated USDC, received WBTC
-;;   - ATR at entry (sets stop/TP scale)
-;;   - trailing stop (rises with favorable movement)
-;;   - take profit target
-;;   - partial exit status (capital reclaimed? running on house money?)
-;;   - current P&L
+;; A position is a fraction of capital with its own lifecycle.
+;; Entry → Management → Partial exit → Runner → Final exit.
 
-;; ── Lifecycle ──────────────────────────────────────────────────────
+(require core/primitives)
+(require core/structural)
+
+;; ── Types ───────────────────────────────────────────────────────────
+
+(struct managed-position
+  id entry-candle entry-price entry-atr direction
+  base-deployed quote-held base-reclaimed
+  phase trailing-stop take-profit high-water
+  total-fees candles-held)
+
+;; phase: Active | Runner | Closed
+;; direction: Long | Short (from journal Direction)
+
+(struct pending
+  candle-idx year tht-vec
+  tht-pred meta-dir high-conviction meta-conviction
+  position-frac observer-vecs observer-preds mgr-thought fact-labels
+  first-outcome outcome-pct
+  entry-price entry-ts entry-atr
+  max-favorable max-adverse
+  crossing-candles crossing-ts crossing-price path-candles
+  trailing-stop exit-reason exit-pct
+  deployed-usd)
+
+(struct exit-observation
+  thought pos-id snapshot-pnl snapshot-candle)
+
+;; ── Lifecycle ───────────────────────────────────────────────────────
 ;;
-;; 1. ENTRY: manager says BUY with conviction in proven band.
-;;    Treasury allocates fraction of available USDC (Kelly from band accuracy).
-;;    Swap USDC → WBTC at current price minus fee.
+;; 1. ENTRY: manager says direction with conviction in proven band.
+;;    (let ((amount (* (allocatable treasury) kelly-fraction)))
+;;      (claim treasury (:base-asset treasury) amount)
+;;      (swap treasury "USDC" "WBTC" amount price fee-rate))
 ;;
-;; 2. MANAGEMENT (every candle while position is open):
-;;    - Update trailing stop: max(trailing_stop, current_price - trail_distance)
-;;    - trail_distance = K_trail × ATR_at_entry
-;;    - Check stop: if current_price <= trailing_stop → exit
-;;    - Check take profit: if current_price >= entry_price × (1 + K_tp × ATR_at_entry) → partial exit
+;; 2. MANAGEMENT (every candle):
+;;    (let ((trail-dist (* k-trail (:entry-atr pos))))
+;;      (update pos :trailing-stop (max (:trailing-stop pos)
+;;                                      (- (price candle) trail-dist)))
+;;      (update pos :high-water    (max (:high-water pos) (price candle)))
+;;      (update pos :candles-held  (+ (:candles-held pos) 1)))
 ;;
 ;; 3. PARTIAL EXIT (first target hit):
-;;    - Sell enough WBTC to reclaim: entry_usdc + swap_fees + min_profit
-;;    - Remaining WBTC = house money. Free ride.
-;;    - Trailing stop continues on the runner.
+;;    Sell enough WBTC to reclaim: entry USDC + fees + min-profit.
+;;    Remaining = house money. Free ride.
+;;    (update pos :phase :runner)
 ;;
-;; 4. RUNNER (after partial exit):
-;;    - Only the trailing stop manages this position.
-;;    - The runner can ride indefinitely.
-;;    - When trailing stop hits → final exit. All WBTC → USDC.
+;; 4. RUNNER: only trailing stop manages. Can ride indefinitely.
 ;;
-;; 5. FINAL EXIT:
-;;    - Swap remaining WBTC → USDC.
-;;    - Record in ledger: entry, exits, fees, P&L, hold duration.
+;; 5. FINAL EXIT: trailing stop hit.
+;;    (release treasury "WBTC" (:quote-held pos))
+;;    (swap treasury "WBTC" "USDC" (:quote-held pos) price fee-rate)
 
-;; ── Risk rejection ─────────────────────────────────────────────────
+;; ── Sizing ──────────────────────────────────────────────────────────
 ;;
-;; Before opening a position, the risk manager checks:
-;;   (> (expected-move atr horizon) (* 2 swap-fee))
-;; "Is the expected price movement larger than the round-trip cost?"
-;; If not, reject. The trade can't cover its fees.
+;; (define (position-size band-edge risk-mult)
+;;   "Half-Kelly, modulated by risk."
+;;   (* (/ band-edge 2.0) risk-mult))
+;;
+;; Bounded by: max-single-position, risk gate, fee gate.
+;; Fee gate: (> (expected-move atr horizon) (* 2 swap-fee))
 
-;; ── Sizing ─────────────────────────────────────────────────────────
+;; ── Cooldown ────────────────────────────────────────────────────────
 ;;
-;; fraction = (band_edge / 2) × risk_multiplier
-;; band_edge = 3% (proven band conviction edge)
-;; risk_multiplier = min residual ratio across risk branches
-;; Bounded by:
-;;   - max single position: max_single_position (CLI arg, default 20%)
-;;   - risk gate: risk branches modulate via residual ratio
-;;   - fee gate: expected_move > 2 × fee_rate
+;; After exit, wait for market movement before re-entering:
+;; (> (abs (- (price candle) last-exit-price))
+;;    (* k-stop last-exit-atr))
+;;
+;; The market must move one stop-loss worth of ATR. Market-driven,
+;; not timer-driven. Prevents oscillation.
 
-;; ── Cooldown ───────────────────────────────────────────────────────
-;;
-;; After a position exits, the manager waits for market movement before
-;; re-entering. Cooldown is market-driven, not timer-driven:
-;;   move_since_exit > k_stop × last_exit_atr
-;; The market must move meaningfully (one stop-loss worth of ATR) before
-;; the enterprise considers a new position. This prevents oscillation
-;; while respecting the market's actual pace.
-
-;; ── Multiple positions ─────────────────────────────────────────────
-;;
-;; The treasury can have multiple open positions simultaneously.
-;; Each entered at a different time, different price, different ATR.
-;; Each managed independently. The aggregate WBTC exposure is the
-;; sum of all open positions' WBTC balances.
-;;
-;; The risk manager sees aggregate exposure and can:
-;;   - Reject new positions if total deployment > max_utilization
-;;   - Reduce sizing if correlation between positions is high
-;;   - Force close if aggregate drawdown exceeds threshold
+;; ── What positions do NOT do ────────────────────────────────────────
+;; - Do NOT decide entry (that's the manager + treasury)
+;; - Do NOT assess portfolio risk (that's the risk branch)
+;; - Do NOT record themselves (that's the ledger)
+;; - Each position is independent. Aggregate exposure is risk's concern.
