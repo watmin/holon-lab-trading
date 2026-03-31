@@ -40,9 +40,10 @@
       (/ (fold + 0.0 xs) (len xs))))
 
 (define (variance xs)
-  (let ((m (mean xs)))
-    (/ (fold (lambda (sum x) (+ sum (* (- x m) (- x m)))) 0.0 xs)
-       (len xs))))
+  (if (empty? xs) 0.0
+      (let ((m (mean xs)))
+        (/ (fold (lambda (sum x) (+ sum (* (- x m) (- x m)))) 0.0 xs)
+           (len xs)))))
 
 (define (stddev xs)
   (sqrt (variance xs)))
