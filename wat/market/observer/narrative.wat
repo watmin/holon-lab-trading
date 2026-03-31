@@ -52,7 +52,7 @@
 
 ;; ── What narrative does NOT see ─────────────────────────────────────
 ;; - Comparisons (momentum, structure only)
-;; - PELT segment narrative (structure only)
+;; - eval_segment_narrative (structure only) — narrative uses PELT for temporal lookback, not segment encoding
 ;; - Oscillator zones (momentum)
 ;; - RSI divergence (momentum)
 ;; - Volume (volume)

@@ -2,7 +2,7 @@
 ;;
 ;; Thinks about: geometric shape of price action.
 ;; Vocabulary: PELT segments, Ichimoku cloud, Fibonacci, Keltner,
-;;             range position, comparisons, advanced regime indicators.
+;;             range position, comparisons.
 ;; Window: sampled from [12, 2016] per candle.
 ;;
 ;; The structure expert sees spatial patterns — levels, channels,

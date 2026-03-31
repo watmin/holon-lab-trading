@@ -27,7 +27,7 @@
 ;;   ...)
 
 ;; ── DISCOVERY ───────────────────────────────────────────────────────
-;; Volume is the THINNEST expert vocabulary. Only 3 eval methods.
+;; Volume is the THINNEST expert vocabulary. Only 4 eval methods.
 ;; The other experts have 5-7 each. Volume rarely proves its gate
 ;; (appeared in proven list only once in the 100k run, at 50k).
 ;;

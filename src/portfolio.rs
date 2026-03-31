@@ -202,9 +202,9 @@ impl Portfolio {
         let hist_worst = self.completed_drawdowns.iter().copied().fold(0.0_f64, f64::max);
         let dd_branch = bundle_f64(vec![
             thought("drawdown",         dd,                                          1.0),
-            thought("dd-velocity",      dd_vel,                                      0.2),
+            thought("drawdown-velocity", dd_vel,                                      0.2),
             thought("recovery-progress",recovery,                                    2.0),
-            thought("dd-duration",      self.trades_since_bottom as f64 / 100.0,     2.0),
+            thought("drawdown-duration", self.trades_since_bottom as f64 / 100.0,     2.0),
             thought("dd-historical",    if hist_worst > 0.001 { dd / hist_worst } else { 0.0 }, 2.0),
         ]);
 
@@ -212,10 +212,10 @@ impl Portfolio {
         let wr50 = self.win_rate_last_n(50);
         let wr200 = self.win_rate_last_n(200);
         let acc_branch = bundle_f64(vec![
-            thought("acc-10",          wr10,           2.0),
-            thought("acc-50",          wr50,           2.0),
-            thought("acc-200",         wr200,          2.0),
-            thought("acc-trajectory",  wr10 - wr50,    0.5),
+            thought("accuracy-10",     wr10,           2.0),
+            thought("accuracy-50",     wr50,           2.0),
+            thought("accuracy-200",    wr200,          2.0),
+            thought("accuracy-trajectory", wr10 - wr50, 0.5),
             thought("acc-divergence",  wr10 - wr200,   0.5),
         ]);
 

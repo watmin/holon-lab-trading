@@ -128,8 +128,8 @@ const ZONE_ATOMS: &[&str] = &[
     // Risk / portfolio state — role atoms used by portfolio.rs risk_branch_wat()
     // Scalar values are encoded continuously via bind(atom, encode_linear(value)).
     // No categorical zone qualifiers — the discriminant finds the zones.
-    "drawdown", "dd-velocity", "recovery-progress", "dd-duration", "dd-historical",
-    "acc-10", "acc-50", "acc-200", "acc-trajectory", "acc-divergence",
+    "drawdown", "drawdown-velocity", "recovery-progress", "drawdown-duration", "dd-historical",
+    "accuracy-10", "accuracy-50", "accuracy-200", "accuracy-trajectory", "acc-divergence",
     "pnl-vol", "trade-sharpe", "worst-trade", "return-skew",
     "loss-pattern", "loss-density", "consec-loss",
     "equity-curve", "streak", "recent-accuracy", "trade-density", "trade-frequency",

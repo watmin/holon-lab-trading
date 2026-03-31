@@ -35,21 +35,21 @@
 ;;   Learns: what does "normal drawdown recovery" look like?
 ;;   Anomaly: drawdown that doesn't match the recovery pattern
 (atom "risk-drawdown")
-(atom "dd-depth")          ; (encode-linear depth 1.0)
-(atom "dd-duration")       ; (encode-log candles-since-peak)
-(atom "dd-velocity")       ; (encode-linear dd-change-rate 1.0)
-(atom "dd-recovering")     ; boolean: equity rising from bottom
-(atom "dd-deepening")      ; boolean: equity still falling
+(atom "drawdown-depth")    ; (encode-linear depth 1.0)
+(atom "drawdown-duration") ; (encode-log candles-since-peak)
+(atom "drawdown-velocity") ; (encode-linear dd-change-rate 1.0)
+(atom "drawdown-recovering") ; boolean: equity rising from bottom
+(atom "drawdown-deepening")  ; boolean: equity still falling
 
 ;; Accuracy specialist
 ;;   Vocabulary: rolling win rates at multiple scales
 ;;   Learns: what does "normal accuracy" look like?
 ;;   Anomaly: accuracy regime change
 (atom "risk-accuracy")
-(atom "acc-10")            ; 10-trade rolling accuracy
-(atom "acc-50")            ; 50-trade rolling accuracy
-(atom "acc-200")           ; 200-trade rolling accuracy
-(atom "acc-trajectory")    ; (encode-linear (acc-10 - acc-50) 1.0) — improving or degrading?
+(atom "accuracy-10")       ; 10-trade rolling accuracy
+(atom "accuracy-50")       ; 50-trade rolling accuracy
+(atom "accuracy-200")      ; 200-trade rolling accuracy
+(atom "accuracy-trajectory") ; (encode-linear (accuracy-10 - accuracy-50) 1.0) — improving or degrading?
 
 ;; Volatility specialist
 ;;   Vocabulary: trade return distribution shape
@@ -58,7 +58,6 @@
 (atom "risk-volatility")
 (atom "trade-sharpe")      ; recent trade Sharpe ratio
 (atom "worst-trade")       ; worst trade in last N
-(atom "loss-density")      ; fraction of recent trades that lost
 
 ;; Correlation specialist
 ;;   Vocabulary: trade outcome patterns, loss clustering

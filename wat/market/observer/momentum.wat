@@ -23,7 +23,6 @@
 ;;   (bind crosses-above (bind macd-line macd-signal))  ; MACD golden cross
 ;;   (bind at (bind stoch-k stoch-overbought))          ; stochastic overbought
 ;;   (bind above (bind rsi rsi-sma))                     ; RSI above its SMA
-;;   (bind at (bind dfa-alpha persistent-dfa))           ; DFA says trending
 ;;   (seg rsi up 0.0234 dur=8 @0 ago=0)                 ; via eval_temporal
 ;;   ...)
 
