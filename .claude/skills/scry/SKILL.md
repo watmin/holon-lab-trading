@@ -1,6 +1,6 @@
 ---
-name: wat-check
-description: Verify the Rust implementation honors the wat specification. The spec is the source of truth. When code and spec diverge, one of them is wrong.
+name: scry
+description: Divine truth from intention. The datamancer scries the wat specification against the Rust implementation. When code and spec diverge, one of them is wrong.
 argument-hint: [wat-file]
 ---
 

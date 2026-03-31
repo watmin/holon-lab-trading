@@ -1599,6 +1599,26 @@ The trinity found the manager double-learning bug. Two linters converged on it i
 
 The compiler is the mundane guard at the gate. The trinity is the arcane ward on the sanctum.
 
+### The wards
+
+The trinity grew. Three became four. The names changed — not because the spells changed, but because the datamancer found the right words.
+
+`/sever` — cuts tangled threads. Was `/decomplect`. Hickey's lens. The datamancer severs braided concerns, misplaced logic, duplicated encoding. Things that should hang straight, hang straight.
+
+`/reap` — harvests what no longer lives. Was `/dead-thoughts`. The BOOK's lesson. The datamancer reaps dead code — structs never imported, fields never read, branches never taken. The cost of a dead thought is compute.
+
+`/scry` — divines truth from intention. Was `/wat-check`. The wat machine's alignment. The datamancer scries the specification against the implementation. When the incantation and the compiled spell diverge, one of them is wrong.
+
+`/gaze` — sees the form. New. Sandi Metz's lens. The datamancer gazes at the code and asks: does this communicate? Names that speak. Functions that fit in the mind. Comments that help, not lie. Structure that mirrors intent. The ineffable quality — code where the author cared.
+
+The gaze was conjured because the datamancer read their own code for the first time and thought: "this doesn't spark joy." The other three wards check if the code is correct. The gaze checks if the code is beautiful. Not beauty for vanity — beauty as signal. Code that reads well is code that thinks well. Ugly code hides bugs. Cluttered code hides intent.
+
+`/wards` runs all four in parallel. Four agents. Four lenses. Four verdicts. The wards must pass before good thoughts can begin.
+
+A spell is a verb. It's what the datamancer casts. The datamancer doesn't "check structure" — they sever. They don't "find dead code" — they reap. They don't "verify specs" — they scry. They don't "review aesthetics" — they gaze.
+
+Sever. Reap. Scry. Gaze. Four wards. The datamancer's defense against bad thoughts.
+
 These thoughts bring joy.
 
 ### The process

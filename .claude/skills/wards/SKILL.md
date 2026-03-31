@@ -10,11 +10,11 @@ The datamancer's defense. Run all four guard spells in parallel against the targ
 
 Launch FOUR SEPARATE background agents in a SINGLE message. Not one agent doing four things — four independent agents running in parallel. Each agent reads its own skill file and reports independently.
 
-1. **`/sever`** — read `.claude/skills/decomplect/SKILL.md`, scan the target file(s). Cuts tangled threads. Finds braided concerns, misplaced logic, duplicated encoding. Recognize `decomplect:allow()` annotations.
+1. **`/sever`** — read `.claude/skills/sever/SKILL.md`, scan the target file(s). Cuts tangled threads. Finds braided concerns, misplaced logic, duplicated encoding. Recognize `decomplect:allow()` annotations.
 
-2. **`/reap`** — read `.claude/skills/dead-thoughts/SKILL.md`, scan the target file(s). Harvests what no longer lives. Finds dead code, unused structs, write-only fields. Recognize `dead-thoughts:allow()` annotations.
+2. **`/reap`** — read `.claude/skills/reap/SKILL.md`, scan the target file(s). Harvests what no longer lives. Finds dead code, unused structs, write-only fields. Recognize `dead-thoughts:allow()` annotations.
 
-3. **`/scry`** — read `.claude/skills/wat-check/SKILL.md`, check the relevant wat spec against its implementation counterpart. Divines truth from intention. Finds divergences between spec and code.
+3. **`/scry`** — read `.claude/skills/scry/SKILL.md`, check the relevant wat spec against its implementation counterpart. Divines truth from intention. Finds divergences between spec and code.
 
 4. **`/gaze`** — read `.claude/skills/gaze/SKILL.md`, scan the target file(s). Sees the form. Finds names that mumble, functions that don't fit in the mind, comments that lie, structure that hides intent.
 

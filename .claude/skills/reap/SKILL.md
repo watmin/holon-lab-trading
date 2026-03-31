@@ -1,6 +1,6 @@
 ---
-name: dead-thoughts
-description: Find code that computes but whose results are never consumed. The cost of a dead thought is compute.
+name: reap
+description: Harvest what no longer lives. The datamancer reaps dead code — structs never imported, fields never read, branches never taken. The cost of a dead thought is compute.
 argument-hint: [file-path]
 ---
 

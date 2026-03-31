@@ -1,6 +1,6 @@
 ---
-name: decomplect
-description: Defend the architecture from complection. The codebase was a mess because we let it get there trying to get here. We are here now. Good thoughts must survive.
+name: sever
+description: Cut tangled threads. The datamancer severs braided concerns, misplaced logic, duplicated encoding. Hickey's lens.
 argument-hint: [file-path]
 ---
 
