@@ -101,22 +101,18 @@
 
 ;; ── Sizing ──────────────────────────────────────────────────────────
 
-;; rune:scry(evolved) — code adds .min(max_single_position) cap not declared here.
-;; Sizing is capped at a configurable maximum. Spec needs update.
-(define (position-size band-edge risk-mult)
-  "Half-Kelly, modulated by risk."
-  (* (/ band-edge 2.0) risk-mult))
+(define (position-size band-edge risk-mult max-single-position)
+  "Half-Kelly, modulated by risk, capped at max-single-position."
+  (min (* (/ band-edge 2.0) risk-mult)
+       max-single-position))
 
 ;; ── Cooldown ────────────────────────────────────────────────────────
 
-;; rune:scry(stale-spec) — code normalizes the price difference by last-exit-price
-;; (computing a percentage move), not an absolute difference. Since entry-atr is
-;; already a ratio (atr/close), the normalization is necessary. Spec should read:
-;; (> (/ (abs (- current-price last-exit-price)) last-exit-price) (* k-stop last-exit-atr))
 (define (market-moved? current-price last-exit-price last-exit-atr k-stop)
-  "Has the market moved enough since the last exit to justify re-entry?"
+  "Has the market moved enough since the last exit to justify re-entry?
+   Price difference normalized by last-exit-price (percentage move)."
   (or (= last-exit-price 0)
-      (> (abs (- current-price last-exit-price))
+      (> (/ (abs (- current-price last-exit-price)) last-exit-price)
          (* k-stop last-exit-atr))))
 
 ;; ── What positions do NOT do ────────────────────────────────────────

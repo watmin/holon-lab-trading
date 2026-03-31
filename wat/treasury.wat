@@ -106,15 +106,15 @@
 
 ;; ── Execution gate ──────────────────────────────────────────────────
 ;;
-;; The treasury's final gate before acting:
-;; (and (band-valid?)
-;;      (conviction-in-band?)
-;;      (risk-allows?)
-;;      (market-moved-since-exit?))
-;;
-;; rune:scry(evolved) — code adds gates not listed here: portfolio phase != Observe,
-;; asset-mode == "hold", meta_dir is Buy or Sell, and expected_move > 2*fee_rate
-;; (profitability gate). Spec lists 4 conditions; code enforces 8. Spec needs update.
+;; The treasury's final gate before acting (all 8 must hold):
+;; (and (= asset-mode "hold")                          ; 1. hold mode
+;;      (!= (phase portfolio) :observe)                ; 2. past observe period
+;;      (curve-valid? manager)                         ; 3. conviction-accuracy curve exists
+;;      (in-proven-band? meta-conviction)              ; 4. conviction in proven band
+;;      (market-moved-since-exit?)                     ; 5. cooldown satisfied
+;;      (risk-allows?)                                 ; 6. cached-risk-mult > 0.3
+;;      (or (= meta-dir :buy) (= meta-dir :sell))     ; 7. manager has a directional opinion
+;;      (> expected-move (* 2.0 fee-rate)))            ; 8. profitability gate
 
 ;; rune:scry(aspirational) — alpha tracking not yet implemented.
 ;; Snapshot before each swap, compare actual vs counterfactual inaction.

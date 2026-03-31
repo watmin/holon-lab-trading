@@ -85,7 +85,3 @@
 ;; - Cloud / fibonacci / keltner (structure)
 ;; - Volume (volume)
 ;; - Calendar (narrative)
-;; rune:scry(stale-spec) — "Range position (structure)" was listed here but regime
-;; DOES see multi-scale range position (range-pos-12/24/48) — declared in the spec
-;; body above and implemented in vocab/regime.rs. The exclusion list contradicts
-;; both the spec and the code.

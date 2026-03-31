@@ -40,6 +40,15 @@
 (struct trade-vector
   step won tht-data)
 
+(struct position-open
+  step candle-idx timestamp
+  direction entry-price position-usd swap-fee-pct)
+
+(struct position-exit
+  step candle-idx timestamp
+  direction entry-price exit-price gross-return-pct
+  position-usd swap-fee-pct horizon-candles won exit-reason)
+
 ;; ── Interpreter ─────────────────────────────────────────────────────
 ;;
 ;; The fold says WHAT happened (LogEntry values on pending-logs).
@@ -58,13 +67,10 @@
         (risk-log fields)       (insert conn "risk_log" fields)
         (trade-fact fields)     (insert conn "trade_facts" fields)
         (trade-vector fields)   (insert conn "trade_vectors" fields)
+        (position-open fields)  (insert conn "position_open" fields)
+        (position-exit fields)  (insert conn "position_exit" fields)
         :batch-commit           (commit conn)))
     entries))
-
-;; rune:scry(evolved) — code has two additional LogEntry variants not declared here:
-;; PositionOpen (logs entry-time swap details) and PositionExit (logs exit-time swap
-;; details). These were added for real-time position lifecycle tracking in hold mode.
-;; Spec needs update.
 
 ;; ── Contract ────────────────────────────────────────────────────────
 ;;

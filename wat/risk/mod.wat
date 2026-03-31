@@ -13,12 +13,12 @@
 ;; Each is an OnlineSubspace. They measure ANOMALY not DIRECTION.
 ;; Gated updates: only learn from healthy states.
 
-;; rune:scry(evolved) — code adds a third condition (ret_mean > 0.0) and an outer
-;; gate (trades_taken >= 20) not declared here. Code: dd < 0.02 && wr50 > 0.55 &&
-;; ret_mean > 0.0 && trades_taken >= 20. Spec needs update.
 (define (healthy? portfolio)
-  (and (< (drawdown portfolio) max-healthy-drawdown)
-       (> (rolling-accuracy portfolio) min-healthy-accuracy)))
+  "Gates subspace updates. All four conditions must hold."
+  (and (< (drawdown portfolio) 0.02)
+       (> (win-rate-last-n portfolio 50) 0.55)
+       (> (recent-return-mean portfolio 50) 0.0)
+       (>= (:trades-taken portfolio) 20)))
 
 ;; ── Drawdown ────────────────────────────────────────────────────────
 
@@ -37,8 +37,7 @@
       (bind (atom "drawdown-velocity") (encode-linear dd-vel 0.2))
       (bind (atom "recovery-progress") (encode-linear recover 2.0))
       (bind (atom "drawdown-duration") (encode-linear dur 2.0))
-      ;; rune:scry(stale-spec) — atom is "dd-historical" in code, not "drawdown-historical"
-      (bind (atom "drawdown-historical") (encode-linear hist 2.0)))))
+      (bind (atom "dd-historical") (encode-linear hist 2.0)))))
 
 ;; ── Accuracy ────────────────────────────────────────────────────────
 
@@ -53,8 +52,7 @@
       (bind (atom "accuracy-50")         (encode-linear wr50 2.0))
       (bind (atom "accuracy-200")        (encode-linear wr200 2.0))
       (bind (atom "accuracy-trajectory") (encode-linear (- wr10 wr50) 0.5))
-      ;; rune:scry(stale-spec) — atom is "acc-divergence" in code, not "accuracy-divergence"
-      (bind (atom "accuracy-divergence") (encode-linear (- wr10 wr200) 0.5)))))
+      (bind (atom "acc-divergence") (encode-linear (- wr10 wr200) 0.5)))))
 
 ;; ── Volatility ──────────────────────────────────────────────────────
 
@@ -118,24 +116,25 @@
 (define branches (list drawdown-branch accuracy-branch volatility-branch
                       correlation-branch panel-branch))
 
-;; rune:scry(evolved) — code computes per-branch ratio = threshold/residual (floored
-;; at 0.1), takes the MIN across all branches. Spec says max-thresh/max-residual
-;; which is a different aggregation. Code also gates updates on trades_taken >= 20.
-;; Spec needs update to match the per-branch-min logic.
 (define (risk-multiplier portfolio)
-  "Update branches when healthy, then measure worst residual vs threshold."
+  "Update branches when healthy, then take the MIN per-branch ratio."
   (let* ((states (list (encode-drawdown portfolio) (encode-accuracy portfolio)
                        (encode-volatility portfolio) (encode-correlation portfolio)
                        (encode-panel portfolio)))
          (_      (when (healthy? portfolio)
                    (for-each update branches states)))
-         (residuals  (map residual branches states))
-         (thresholds (map threshold branches))
-         (worst      (apply max residuals))
-         (max-thresh (apply max thresholds)))
-    (if (> worst max-thresh)
-        (/ max-thresh worst)
-        1.0)))
+         (worst-ratio
+           (fold-left
+             (lambda (acc branch features)
+               (if (< (n branch) 10) acc
+                 (let* ((residual  (residual branch features))
+                        (threshold (threshold branch))
+                        (ratio     (if (< residual threshold) 1.0
+                                       (max 0.1 (/ threshold residual)))))
+                   (min acc ratio))))
+             1.0
+             branches states)))
+    worst-ratio))
 
 ;; ── Aspirational ────────────────────────────────────────────────────
 ;;
