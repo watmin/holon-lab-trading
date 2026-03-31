@@ -1,6 +1,5 @@
 ;; ── ledger.wat — the enterprise's memory ────────────────────────────
 ;;
-;; Subscribes to ALL channels with filter (always).
 ;; Records every thought, every decision, every outcome.
 ;; Hallucinates nothing. Every number is measured.
 
@@ -43,23 +42,24 @@
 
 ;; ── Interpreter ─────────────────────────────────────────────────────
 ;;
-;; The fold says WHAT happened (LogEntry). The interpreter says WHEN to write.
+;; The fold says WHAT happened (LogEntry values on pending-logs).
+;; The interpreter says WHERE to write (the caller flushes to DB).
 ;; Beckman's free monad: separate description from interpretation.
-;;
-;; (define (flush-logs entries conn)
-;;   (for-each
-;;     (lambda (entry)
-;;       (match entry
-;;         (candle-log fields ...)     → INSERT INTO candle_log
-;;         (trade-ledger fields ...)   → INSERT INTO trade_ledger
-;;         (recalib-log fields ...)    → INSERT INTO recalib_log
-;;         (disc-decode fields ...)    → INSERT INTO disc_decode
-;;         (observer-log fields ...)   → INSERT INTO observer_log
-;;         (risk-log fields ...)       → INSERT INTO risk_log
-;;         (trade-fact fields ...)     → INSERT INTO trade_facts
-;;         (trade-vector fields ...)   → INSERT INTO trade_vectors
-;;         batch-commit               → COMMIT))
-;;     entries))
+
+(define (flush-logs entries conn)
+  (for-each
+    (lambda (entry)
+      (match entry
+        (candle-log fields)     (insert conn "candle_log" fields)
+        (trade-ledger fields)   (insert conn "trade_ledger" fields)
+        (recalib-log fields)    (insert conn "recalib_log" fields)
+        (disc-decode fields)    (insert conn "disc_decode" fields)
+        (observer-log fields)   (insert conn "observer_log" fields)
+        (risk-log fields)       (insert conn "risk_log" fields)
+        (trade-fact fields)     (insert conn "trade_facts" fields)
+        (trade-vector fields)   (insert conn "trade_vectors" fields)
+        :batch-commit           (commit conn)))
+    entries))
 
 ;; ── Contract ────────────────────────────────────────────────────────
 ;;
@@ -72,8 +72,8 @@
 ;; 7. The ledger distinguishes sources: learning vs managed, paper vs live.
 
 ;; ── What the ledger does NOT do ─────────────────────────────────────
-;; - Does NOT filter messages (it sees everything)
-;; - Does NOT transform data (it records verbatim)
-;; - Does NOT make decisions (it is passive)
+;; - Does NOT filter (it sees everything)
+;; - Does NOT transform (it records verbatim)
+;; - Does NOT decide (it is passive)
 ;; - Does NOT predict (it measures)
 ;; - "The enterprise's ledger is its debugger."

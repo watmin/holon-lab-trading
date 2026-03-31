@@ -1,8 +1,9 @@
 ;; ── treasury.wat — the root of the enterprise ──────────────────────
 ;;
 ;; Pure accounting. Does not think. Does not predict.
-;; Counts. Swaps. Records. Measures alpha.
+;; Counts. Swaps. Records.
 
+(require core/primitives)
 (require core/structural)
 
 ;; ── State ───────────────────────────────────────────────────────────
@@ -11,54 +12,108 @@
   balances            ; (map asset amount) — available to deploy
   deployed            ; (map asset amount) — claimed by open positions
   n-open              ; active position count
-  max-positions       ; capacity limit
+  max-positions
   max-utilization     ; max fraction of base asset deployed
-  total-fees-paid     ; cumulative venue costs
-  total-slippage      ; cumulative slippage costs
-  base-asset)         ; quote currency for P&L (e.g. "USDC")
+  total-fees-paid
+  total-slippage
+  base-asset)         ; unit of account (e.g. "USDC")
 
-;; ── Operations ──────────────────────────────────────────────────────
+;; ── Queries ─────────────────────────────────────────────────────────
 
-;; (define (swap treasury from to amount price fee-rate)
-;;   "Convert between assets. Updates balances, records fee."
-;;   → (from-spent to-received))
+(define (balance treasury asset)
+  (get (:balances treasury) asset 0.0))
 
-;; (define (claim treasury asset amount)
-;;   "Move available → deployed. Position owns it."
-;;   (update treasury :balances  (- (:balances treasury asset) amount))
-;;   (update treasury :deployed  (+ (:deployed treasury asset) amount)))
+(define (deployed treasury asset)
+  (get (:deployed treasury) asset 0.0))
 
-;; (define (release treasury asset amount)
-;;   "Move deployed → available. Position done."
-;;   (update treasury :deployed  (- (:deployed treasury asset) amount))
-;;   (update treasury :balances  (+ (:balances treasury asset) amount)))
+(define (total treasury asset)
+  (+ (balance treasury asset) (deployed treasury asset)))
 
-;; (define (allocatable treasury)
-;;   "How much base asset can be deployed to a new position?"
-;;   (if (>= (:n-open treasury) (:max-positions treasury))
-;;       0.0
-;;       (max 0.0 (- (* (total (:base-asset treasury)) (:max-utilization treasury))
-;;                    (:deployed treasury (:base-asset treasury))))))
+(define (utilization treasury)
+  (let ((total-base (total treasury (:base-asset treasury))))
+    (if (<= total-base 0.0) 0.0
+        (/ (deployed treasury (:base-asset treasury)) total-base))))
 
-;; (define (total-value treasury prices)
-;;   "Sum of all assets at current prices."
-;;   (apply + (map (lambda (asset) (* (+ (balance asset) (deployed asset))
-;;                                    (price-of asset prices)))
-;;                 (keys (:balances treasury)))))
+(define (allocatable treasury)
+  (if (>= (:n-open treasury) (:max-positions treasury))
+      0.0
+      (let ((total-base (total treasury (:base-asset treasury)))
+            (max-deploy (* total-base (:max-utilization treasury)))
+            (deployed-base (deployed treasury (:base-asset treasury))))
+        (min (max 0.0 (- max-deploy deployed-base))
+             (balance treasury (:base-asset treasury))))))
+
+(define (total-value treasury prices)
+  "Sum all assets at current prices. Base asset = 1.0."
+  (fold (lambda (sum asset)
+          (+ sum (* (total treasury asset)
+                    (get prices asset 1.0))))
+        0.0
+        (keys (:balances treasury))))
+
+(define (price-map treasury asset-prices)
+  "Build prices from (asset, price) pairs. Base asset always 1.0."
+  (fold (lambda (prices pair)
+          (assoc prices (first pair) (second pair)))
+        {(:base-asset treasury) 1.0}
+        asset-prices))
+
+;; ── Mutations ───────────────────────────────────────────────────────
+
+(define (deposit treasury asset amount)
+  (update treasury :balances
+    (assoc (:balances treasury) asset
+           (+ (balance treasury asset) amount))))
+
+;; rune:forge(escape) — silently clamps to 0.0 on overdraw
+(define (withdraw treasury asset amount)
+  (update treasury :balances
+    (assoc (:balances treasury) asset
+           (max 0.0 (- (balance treasury asset) amount)))))
+
+(define (swap treasury from to amount-from price fee-rate)
+  "Sell `from`, buy `to` at `price`, minus fees. Returns (spent, received)."
+  (let ((spend     (min amount-from (balance treasury from)))
+        (after-fee (* spend (- 1.0 fee-rate)))
+        (received  (/ after-fee price))
+        (fee       (* spend fee-rate)))
+    ;; Mutates: from balance down, to balance up, fees recorded
+    ;; Returns: (spend received)
+    ))
+
+(define (claim treasury asset amount)
+  "Move available → deployed. Position owns it. Returns amount claimed."
+  (let ((claimed (min amount (balance treasury asset))))
+    ;; Mutates: balance down, deployed up, n-open incremented
+    claimed))
+
+(define (release treasury asset amount)
+  "Move deployed → available. Position done."
+  ;; Mutates: deployed down, balance up, n-open decremented
+  )
+
+(define (open-position treasury amount)
+  "Reserve base asset for a new trade. Returns amount reserved."
+  (let ((reserved (min amount (allocatable treasury))))
+    ;; Mutates: base balance down, base deployed up, n-open incremented
+    reserved))
+
+(define (close-position treasury deployed-amount pnl fees slippage)
+  "Close a position. Return capital ± P&L to available balance."
+  (let ((returned (max 0.0 (- (+ deployed-amount pnl) fees slippage))))
+    ;; Mutates: deployed down, balance up by returned, fees/slippage recorded
+    ))
 
 ;; ── Execution gate ──────────────────────────────────────────────────
 ;;
-;; The treasury's filter is the enterprise's final gate:
+;; The treasury's final gate before acting:
 ;; (and (band-valid?)
 ;;      (conviction-in-band?)
 ;;      (risk-allows?)
 ;;      (market-moved-since-exit?))
 
-;; ── Portfolio seeding ───────────────────────────────────────────────
-;;
-;; rune:scry(stale-spec) — originally specified 50/50 split between base
-;; and quote asset. Implementation seeds 100% in base asset (USDC).
-;; The enterprise starts fully in cash and builds exposure through trading.
+;; rune:scry(aspirational) — alpha tracking not yet implemented.
+;; Snapshot before each swap, compare actual vs counterfactual inaction.
 
 ;; ── What the treasury does NOT do ───────────────────────────────────
 ;; - Does NOT predict direction (that's the manager)
