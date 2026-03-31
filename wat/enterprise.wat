@@ -1,156 +1,148 @@
-;; ── enterprise.wat — the organization ────────────────────────────────
+;; ── enterprise.wat — the fold ────────────────────────────────────────
 ;;
-;; The enterprise manages wealth across assets.
-;; Each role has one job. Each speaks one language. Each listens to one language.
-;; Nobody crosses boundaries except through defined interfaces.
-;;
-;; The treasury has the action call. Nobody else moves money.
+;; The enterprise is a fold over Stream<EnrichedEvent>.
+;; (state, event) → state. One struct. One step function.
+;; The enterprise doesn't know where events come from.
 
-;; ── The Organization ────────────────────────────────────────────────
+(require core/primitives)
+(require core/structural)
+(require std/memory)
+(require std/patterns)
+
+;; ── The state ───────────────────────────────────────────────────────
+
+(struct enterprise-state
+  ;; Learning
+  mgr-journal mgr-buy mgr-sell prev-mgr-thought
+  exit-journal exit-hold exit-exit exit-pending
+
+  ;; Observers (6: momentum, structure, volume, narrative, regime, full)
+  observers
+
+  ;; Risk
+  risk-branches cached-risk-mult
+  cached-curve-a cached-curve-b kelly-curve-valid
+  mgr-curve-valid mgr-resolved mgr-proven-band
+
+  ;; Panel engram
+  panel-engram panel-recalib-wins panel-recalib-total
+
+  ;; Treasury + portfolio
+  treasury portfolio peak-treasury-equity
+
+  ;; Positions
+  pending positions next-position-id
+  last-exit-price last-exit-atr
+
+  ;; Hold-mode
+  hold-swaps hold-wins
+
+  ;; Adaptive decay
+  adaptive-decay in-adaptation highconv-wins
+
+  ;; Tracking
+  encode-count labeled-count noise-count
+  move-sum move-count log-step db-batch
+
+  ;; Conviction
+  conviction-threshold conviction-history
+  resolved-preds pending-logs cursor)
+
+;; ── The event ───────────────────────────────────────────────────────
+
+(struct enriched-event-candle
+  candle fact-labels observer-vecs)
+
+;; rune:reap(scaffolding) — Deposit/Withdraw variants exist but are
+;; never constructed in the current backtest runner.
+
+;; ── The fold step ───────────────────────────────────────────────────
+
+(define (on-event state event ctx)
+  "The enterprise processes one event. The fold IS the heartbeat."
+  (match event
+    (enriched-event-candle candle fact-labels observer-vecs)
+      (on-candle state candle fact-labels observer-vecs ctx)
+    :deposit
+      (update state :treasury (deposit (:treasury state) (:asset event) (:amount event)))
+    :withdraw
+      (update state :treasury (withdraw (:treasury state) (:asset event) (:amount event)))))
+
+;; ── The candle step ─────────────────────────────────────────────────
+
+(define (on-candle state candle fact-labels observer-vecs ctx)
+  "One candle. The fold's inner step."
+  (let* (;; 1. Experts predict (LAYER 1)
+         (observer-preds (map (lambda (obs vec) (predict (:journal obs) vec))
+                              (:observers state) observer-vecs))
+         (generalist-pred (nth observer-preds 5))
+
+         ;; 2. Manager reads expert opinions (LAYER 2)
+         (manager-thought (encode-manager-thought observer-preds candle state ctx))
+         (manager-pred    (predict (:mgr-journal state) manager-thought))
+
+         ;; 3. Risk assesses portfolio health (LAYER 3)
+         (risk-mult (risk-multiplier (:portfolio state)))
+
+         ;; 4. Treasury decides and executes (LAYER 4)
+         ;; rune:scry(evolved) — code has 8 gate conditions, see treasury.wat
+         (_  (when (should-open? state manager-pred risk-mult candle ctx)
+               (open-managed-position state manager-pred candle ctx)))
+
+         ;; 5. Manage open positions (LAYER 5)
+         (_  (tick-positions state candle ctx))
+
+         ;; 6. Learn from outcomes (LAYER 6)
+         (_  (resolve-pending state candle ctx)))
+
+    ;; 7. Ledger: pending-logs accumulates LogEntry values.
+    ;; The caller flushes. The fold is pure.
+    state))
+
+;; ── The organization ────────────────────────────────────────────────
 ;;
-;;  Treasury (CEO)
+;;  Treasury (root — holds assets, executes swaps)
 ;;  │
-;;  ├── Risk (CFO)
-;;  │   └── Sees: total portfolio state, cross-desk correlation,
-;;  │        concentration, overall drawdown/Sharpe.
-;;  │        Produces: risk multiplier (0 to 1).
-;;  │        Does NOT see candles. Does NOT see indicators.
+;;  ├── Manager (branch — reads expert opinions, learns configurations)
+;;  │   ├── Momentum observer      (leaf — speed and direction)
+;;  │   ├── Structure observer     (leaf — geometric shape)
+;;  │   ├── Volume observer        (leaf — participation)
+;;  │   ├── Narrative observer     (leaf — story and timing)
+;;  │   ├── Regime observer        (leaf — market character)
+;;  │   └── Generalist observer    (leaf — all facts, fixed window)
 ;;  │
-;;  ├── Ledger (Secretary)
-;;  │   └── Sees: everything. Decides: nothing. Records: everything.
+;;  ├── Exit expert (leaf — position state → hold/exit)
 ;;  │
-;;  ├── BTC Desk (Department Head)
-;;  │   ├── Manager
-;;  │   │   └── Reads observer opinions → deploy/withhold + conviction
-;;  │   ├── Generalist
-;;  │   │   └── All thoughts at this desk's time scale
-;;  │   └── Observers
-;;  │       ├── Momentum (oscillators, divergence, ROC)
-;;  │       ├── Structure (PELT segments, ichimoku, fibonacci, timeframe geometry)
-;;  │       ├── Volume (flow, pressure, OBV)
-;;  │       ├── Narrative (temporal, calendar, timeframe direction)
-;;  │       └── Regime (persistence, entropy, fractal, DFA)
+;;  ├── Risk branches (5 × OnlineSubspace — anomaly, not direction)
+;;  │   ├── Drawdown, Accuracy, Volatility, Correlation, Panel
+;;  │   └── rune:scry(aspirational) — risk manager with Journal not yet built
 ;;  │
-;;  ├── ETH Desk
-;;  │   └── (same shape as BTC Desk, different candle stream)
-;;  │
-;;  ├── Gold Desk
-;;  │   └── (same shape)
-;;  │
-;;  └── ... N desks, one per asset the treasury wants exposure to
+;;  └── Ledger (records everything, decides nothing)
 
 ;; ── Interfaces ──────────────────────────────────────────────────────
 ;;
-;; Each component speaks exactly one output language:
-;;
-;; Observer  → (direction, conviction)
-;; Manager   → (deploy/withhold, conviction)
-;; Desk      → (asset, direction, conviction)  ; the manager's output + asset identity
-;; Risk      → (risk-multiplier)               ; 0.0 = stop everything, 1.0 = full go
-;; Treasury  → (swap asset-a asset-b amount)   ; the action
-;; Ledger    → (record)                        ; the trace
-;;
-;; The treasury's decision:
-;;   for each desk:
-;;     allocation = desk.conviction × risk.multiplier × kelly(desk.curve)
-;;     if allocation > threshold:
-;;       (swap base-asset desk-asset amount)
+;; Observer  → (predict journal thought) → Prediction
+;; Manager   → (predict mgr-journal manager-thought) → Prediction
+;; Risk      → (risk-multiplier portfolio) → Float [0.0, 1.0]
+;; Treasury  → (swap treasury from to amount price fee) → (spent, received)
+;; Ledger    → pending-logs : Vec<LogEntry> — flushed by caller
 
-;; ── Risk ────────────────────────────────────────────────────────────
+;; ── Multi-desk (future) ─────────────────────────────────────────────
 ;;
-;; Risk is NOT per-desk. Risk is about the TREASURY.
-;; "Is the total portfolio healthy?" not "is the BTC desk healthy?"
+;; rune:scry(aspirational) — the architecture supports N desks:
 ;;
-;; A desk can be losing while the portfolio is fine — another desk
-;; is winning. Risk sees the whole picture.
+;;  Treasury (shared root)
+;;  ├── BTC Desk (own observers, own manager, own risk, own portfolio)
+;;  ├── ETH Desk (same shape, different candle stream)
+;;  └── Cross-desk risk (Template 2 on treasury-level observables)
 ;;
-;; Risk inputs:
-;;   - Total treasury equity and drawdown (from treasury)
-;;   - Per-desk allocation concentration (from treasury)
-;;   - Cross-desk correlation (from desk conviction histories)
-;;   - Overall Sharpe from the ledger
-;;   - Equity curve shape (rising/falling/flat)
-;;
-;; Risk does NOT see:
-;;   - Candle data
-;;   - Indicator values
-;;   - Observer opinions
-;;   - Individual trade details
-;;
-;; Risk uses Template 2 (REACTION): OnlineSubspace learns healthy
-;; portfolio states. Residual measures distance from healthy.
-;; The risk multiplier scales with familiarity.
+;; Each desk is a self-contained fold. The treasury is shared.
+;; Per-asset indicator engines feed per-asset encoding functors
+;; into a merged event stream consumed by the shared fold.
+;; See proposal 004 (streaming indicators).
 
-;; ── Desks ───────────────────────────────────────────────────────────
-;;
-;; Each desk is the enterprise we already built.
-;; Same observers. Same manager. Same proof gates.
-;; Different candle stream. Different asset.
-;;
-;; Desks do NOT know about:
-;;   - Other desks
-;;   - The treasury's total state
-;;   - Risk assessment
-;;   - How much capital they've been allocated
-;;
-;; Desks produce:
-;;   - Direction (Buy or Sell this asset)
-;;   - Conviction (how strongly)
-;;   - Proof (is the manager's curve valid?)
-;;
-;; The desk is an island. It thinks about one market.
-;; The treasury decides whether to listen.
-
-;; ── Treasury ────────────────────────────────────────────────────────
-;;
-;; The treasury is the CEO. It holds the assets. It makes the call.
-;;
-;; Treasury reads:
-;;   - Each desk's (direction, conviction, proof)
-;;   - Risk's (multiplier)
-;;   - Its own state (balances, utilization, fees paid)
-;;
-;; Treasury decides:
-;;   - Which desks to fund (proof gate: only proven desks)
-;;   - How much to allocate per desk (Kelly × risk × concentration cap)
-;;   - When to swap (desk says deploy, risk says healthy, treasury executes)
-;;
-;; Treasury does NOT:
-;;   - Think about markets (that's the desks)
-;;   - Assess risk (that's the risk team)
-;;   - Record history (that's the ledger)
-;;   - Predict anything (it executes decisions, it doesn't make predictions)
-;;
-;; The treasury's one question: "given what my desks recommend and
-;; what risk says, how should I allocate capital right now?"
-
-;; ── Alpha ───────────────────────────────────────────────────────────
-;;
-;; Per-desk alpha: did this desk's actions beat holding the asset?
-;; Total alpha: did the enterprise beat holding a diversified basket?
-;;
-;; The ledger tracks both. The treasury reads both.
-;; A desk with negative alpha gets less allocation.
-;; A desk with positive alpha gets more.
-;; The enterprise self-organizes around what works.
-
-;; ── What the current code has vs what this spec describes ───────────
-;;
-;; Has:
-;;   - One desk (BTC) with 5 observers + generalist + manager
-;;   - Treasury with generic asset map
-;;   - Risk branches (per-desk, should be per-treasury)
-;;   - Ledger recording everything
-;;
-;; Needs:
-;;   - Desk abstraction (parameterized by asset + candle source)
-;;   - Risk reads treasury state, not desk state
-;;   - Treasury reads desk recommendations and risk assessment
-;;   - Multiple desks running concurrently on different candle streams
-;;   - Cross-desk correlation in risk assessment
-;;   - Per-desk alpha tracking
-;;
-;; The architecture supports this. The Fact interface is asset-agnostic.
-;; The observer struct is asset-agnostic. The manager encoding is
-;; asset-agnostic. The treasury is already a HashMap<String, f64>.
-;; The heartbeat loop is the only thing that assumes one asset.
+;; ── What the enterprise does NOT do ─────────────────────────────────
+;; - Does NOT know its event source (backtest, websocket, test harness)
+;; - Does NOT encode candles (that's the encoding functor, outside the fold)
+;; - Does NOT write to the database (that's the caller, via flush-logs)
+;; - The fold is pure: State × Event → State
