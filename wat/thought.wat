@@ -26,6 +26,9 @@
   atoms                  ; (map string Vector) — name -> pre-allocated atom vector
   dims)                  ; usize
 
+; rune:gaze(phantom) — assoc is not in the wat language
+; rune:gaze(phantom) — get-vector is not in the wat language
+; rune:gaze(phantom) — dimensions is not in the wat language
 (define (new-thought-vocab vm)
   "Pre-allocate all atom vectors from the VectorManager."
   (thought-vocab
@@ -35,6 +38,8 @@
                  {} all-atom-groups)
     :dims (dimensions vm)))
 
+; rune:gaze(phantom) — vocab-get is not in the wat language
+; rune:gaze(phantom) — get is not in the wat language
 (define (vocab-get vocab name)
   "Look up an atom vector by name. Panics on unknown atom."
   (get (:atoms vocab) name))
@@ -59,12 +64,15 @@
 ;;   - rsi-sma facts: (pred rsi rsi-sma) for 4 predicates
 ;;   - session facts: (at-session session) for 4 sessions
 
+; rune:gaze(phantom) — new-scalar-encoder is not in the wat language
+; rune:gaze(phantom) — build-fact-cache is not in the wat language
 (define (new-thought-encoder vocab)
   "Pre-compute the fact cache."
   (thought-encoder :vocab vocab
                    :scalar-enc (new-scalar-encoder (dims vocab))
                    :fact-cache (build-fact-cache vocab)))
 
+; rune:gaze(phantom) — unzip is not in the wat language
 (define (fact-codebook encoder)
   "Return (labels, vectors) pairs for all cached facts. Used for discriminant decoding."
   (unzip (:fact-cache encoder)))
@@ -80,6 +88,9 @@
 ;;   Scalar      { indicator, value, scale } -> bind(atom(indicator), encode-linear(value, scale))
 ;;   Bare        { label }                 -> lookup in cache, or raw atom
 
+; rune:gaze(phantom) — push! is not in the wat language
+; rune:gaze(phantom) — cache-get is not in the wat language
+; rune:gaze(phantom) — format is not in the wat language
 (define (encode-facts encoder module-facts facts owned-facts labels)
   "Render vocab module facts into vectors."
   (for-each (lambda (fact)
@@ -97,6 +108,7 @@
   (bind (vocab-get vocab pred) (bind (vocab-get vocab a) (vocab-get vocab b))))
 
 ;; Temporal binding: (since fact N) -> bind(fact_vec, position_vector(N))
+; rune:gaze(phantom) — get-position-vector is not in the wat language
 (define (fact-since vm fact n)
   (bind fact (get-position-vector vm n)))
 
@@ -107,6 +119,7 @@
 
 (define (encode-view encoder candles vm expert)
   "Encode a window of candles through the expert's vocabulary lens."
+  ; rune:gaze(phantom) — member? is not in the wat language
   (let ((is (lambda (profiles) (or (= expert "full") (member? expert profiles)))))
 
     ;; SHARED: comparisons (momentum + structure only)
@@ -150,6 +163,8 @@
 
     ;; Bundle all facts into one thought vector
     (thought-result
+      ; rune:gaze(phantom) — empty? is not in the wat language
+      ; rune:gaze(phantom) — zeros is not in the wat language
       :thought (if (empty? all-facts) (zeros dims) (bundle all-facts))
       :fact-labels labels)))
 

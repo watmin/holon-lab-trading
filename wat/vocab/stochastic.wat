@@ -16,6 +16,8 @@
 
 ;; ── Facts produced ─────────────────────────────────────────────
 
+; rune:gaze(phantom) — fact/comparison is not in the wat language
+; rune:gaze(phantom) — fact/zone is not in the wat language
 (define (eval-stochastic candles)
   "Stochastic oscillator facts. Returns Some(Vec<Fact>) or None if < 2 candles."
 

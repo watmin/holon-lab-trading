@@ -15,6 +15,7 @@
 
 ;; ── The expert ──────────────────────────────────────────────────────
 
+; rune:gaze(phantom) — expert is not in the wat language
 (define generalist
   (expert "generalist" :full dims refit-interval))
 

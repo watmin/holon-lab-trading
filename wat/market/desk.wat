@@ -30,6 +30,7 @@
   age                    ; usize -- candles since last update (0 = just updated)
   staleness-limit)       ; usize -- MAX means always fresh (stablecoin)
 
+; rune:gaze(phantom) — some? is not in the wat language
 (define (side-fresh? side)
   "Is this side fresh enough to act on?"
   (or (= (:staleness-limit side) MAX)    ; stablecoin: always fresh
@@ -70,6 +71,8 @@
 
 ;; -- Observe ----------------------------------------------------------------
 
+; rune:gaze(phantom) — cond is not in the wat language
+; rune:gaze(phantom) — set! is not in the wat language
 (define (observe-candle desk asset candle)
   "Feed a candle to the appropriate side. Returns true if desk cares about this asset."
   (cond

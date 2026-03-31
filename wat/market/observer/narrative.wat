@@ -42,6 +42,7 @@
 
 ;; ── The expert ──────────────────────────────────────────────────────
 
+; rune:gaze(phantom) — expert is not in the wat language
 (define narrative
   (expert "narrative" :narrative dims refit-interval))
 

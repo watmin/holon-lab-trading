@@ -27,6 +27,13 @@
 ;; H = ln(R/S) / ln(N) where R/S = (max_cum - min_cum) / std
 ;; Returns None if std < 1e-15 or R/S <= 0.
 
+; rune:gaze(phantom) — log-returns is not in the wat language
+; rune:gaze(phantom) — last-n is not in the wat language
+; rune:gaze(phantom) — ln is not in the wat language
+; rune:gaze(phantom) — range is not in the wat language
+; rune:gaze(phantom) — cumulative-deviation is not in the wat language
+; rune:gaze(phantom) — std is not in the wat language
+; rune:gaze(phantom) — len is not in the wat language
 (define (hurst-estimate candles lookback)
   "Simplified Hurst via rescaled range. Returns [0, 1] or None."
   (let ((returns (log-returns (last-n candles lookback))))
@@ -40,6 +47,9 @@
 ;; Lookback: min(window_length, 50). Minimum 5 candles.
 ;; Returns None if variance < 1e-15.
 
+; rune:gaze(phantom) — covariance is not in the wat language
+; rune:gaze(phantom) — lag-1 is not in the wat language
+; rune:gaze(phantom) — variance is not in the wat language
 (define (autocorrelation-lag1 candles lookback)
   "Lag-1 return autocorrelation. Returns [-1, 1] or None."
   (/ (covariance returns (lag-1 returns))
@@ -55,6 +65,10 @@
 
 ;; ── Facts produced ─────────────────────────────────────────────
 
+; rune:gaze(phantom) — fact/scalar is not in the wat language
+; rune:gaze(phantom) — fact/zone is not in the wat language
+; rune:gaze(phantom) — clamp is not in the wat language
+; rune:gaze(phantom) — adx-zone is not in the wat language
 (define (eval-persistence candles)
   "Trend persistence facts."
 
@@ -80,6 +94,7 @@
 
   ;; ADX zone — pre-computed, always emitted
   ;; Zone: (at adx strong-trend | weak-trend | moderate-trend)
+  ; rune:gaze(phantom) — . (dot accessor) is not in the wat language
   (fact/zone "adx" (adx-zone (. now adx))))
 
 ;; ── What persistence does NOT do ───────────────────────────────

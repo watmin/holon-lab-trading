@@ -46,6 +46,7 @@
 ;; Silence, not forced direction. The noise floor is a property of the
 ;; hyperspace geometry, not a tuned parameter.
 
+; rune:gaze(phantom) — list is not in the wat language
 (define (encode-expert expert-atom raw-cos gate-status dims)
   (let ((noise-floor (/ 3.0 (sqrt dims))))
     (if (< (abs raw-cos) noise-floor)
@@ -81,6 +82,12 @@
 ;; Emergent properties of the expert collective. These tell the
 ;; manager about the PATTERN of agreement, not just who said what.
 
+; rune:gaze(phantom) — count is not in the wat language
+; rune:gaze(phantom) — length is not in the wat language
+; rune:gaze(phantom) — max is not in the wat language
+; rune:gaze(phantom) — mean is not in the wat language
+; rune:gaze(phantom) — stddev is not in the wat language
+; rune:gaze(phantom) — mean-pairwise-cosine is not in the wat language
 (define (panel-shape proven-experts)
   (let* ((buys    (count (lambda (e) (> (cos e) 0)) proven-experts))
          (total   (length proven-experts))

@@ -78,6 +78,7 @@
   (let* ((observer-preds
            (map (lambda (obs vec) (predict (:journal obs) vec))
                 (:observers state) observer-vecs))
+         ; rune:gaze(phantom) — nth is not in the wat language
          (generalist-pred (nth observer-preds 5))
          (generalist-vec  (nth observer-vecs 5))
 
@@ -85,6 +86,7 @@
   ;; Encodes expert opinions as signed convictions with credibility.
   ;; Then DELTA-ENRICHES: binds difference(prev-thought, current-thought)
   ;; so the manager sees MOTION, not just position.
+         ; rune:gaze(phantom) — encode-manager-thought is not in the wat language
          (mgr-facts    (encode-manager-thought observer-preds candle state ctx))
          (mgr-thought  (bundle mgr-facts))
          (delta        (when (:prev-mgr-thought state)
@@ -121,6 +123,7 @@
   ;; healthy states (drawdown < 2%, accuracy > 55%, positive returns,
   ;; 20+ trades). Risk multiplier = min(threshold/residual) across
   ;; branches, floored at 0.1.
+         ; rune:gaze(phantom) — risk-multiplier is not in the wat language
          (risk-mult (risk-multiplier (:portfolio state)))
 
   ;; ─── 7. Position opening ──────────────────────────────────────────

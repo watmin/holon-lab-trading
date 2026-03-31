@@ -14,6 +14,7 @@
 
 ;; rune:scry(stale-spec) — position-mae declared here but not yet
 ;; encoded in the Rust implementation.
+; rune:gaze(phantom) — return-pct is not in the wat language
 (define (encode-position pos current-price current-atr)
   (bundle
     (bind (atom "position-pnl")       (encode-linear (return-pct pos current-price) 1.0))

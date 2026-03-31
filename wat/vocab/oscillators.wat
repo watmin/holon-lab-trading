@@ -18,6 +18,11 @@
 
 ;; ── Facts produced ─────────────────────────────────────────────
 
+; rune:gaze(phantom) — fact/zone is not in the wat language
+; rune:gaze(phantom) — fact/scalar is not in the wat language
+; rune:gaze(phantom) — fact/bare is not in the wat language
+; rune:gaze(phantom) — cond is not in the wat language
+; rune:gaze(phantom) — len is not in the wat language
 (define (eval-oscillators candles)
   "Momentum oscillator facts from a candle window."
 

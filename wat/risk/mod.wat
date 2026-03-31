@@ -13,6 +13,9 @@
 ;; Each is an OnlineSubspace. They measure ANOMALY not DIRECTION.
 ;; Gated updates: only learn from healthy states.
 
+; rune:gaze(phantom) — drawdown is not in the wat language
+; rune:gaze(phantom) — win-rate-last-n is not in the wat language
+; rune:gaze(phantom) — recent-return-mean is not in the wat language
 (define (healthy? portfolio)
   "Gates subspace updates. All four conditions must hold."
   (and (< (drawdown portfolio) 0.02)
@@ -24,6 +27,9 @@
 
 (define drawdown-branch (online-subspace dims 8))
 
+; rune:gaze(phantom) — drawdown-velocity is not in the wat language
+; rune:gaze(phantom) — recovery-progress is not in the wat language
+; rune:gaze(phantom) — historical-worst-drawdown is not in the wat language
 (define (encode-drawdown portfolio)
   (let ((dd      (drawdown portfolio))
         (dd-vel  (drawdown-velocity portfolio))
@@ -58,6 +64,13 @@
 
 (define volatility-branch (online-subspace dims 8))
 
+; rune:gaze(phantom) — last-n-returns is not in the wat language
+; rune:gaze(phantom) — length is not in the wat language
+; rune:gaze(phantom) — zero-vector is not in the wat language
+; rune:gaze(phantom) — stddev is not in the wat language
+; rune:gaze(phantom) — mean is not in the wat language
+; rune:gaze(phantom) — min is not in the wat language
+; rune:gaze(phantom) — skewness is not in the wat language
 (define (encode-volatility portfolio)
   (let ((returns (last-n-returns portfolio 50)))
     (if (< (length returns) 5)
@@ -78,6 +91,10 @@
 
 (define correlation-branch (online-subspace dims 8))
 
+; rune:gaze(phantom) — last-n-outcomes is not in the wat language
+; rune:gaze(phantom) — autocorrelation is not in the wat language
+; rune:gaze(phantom) — count-losses is not in the wat language
+; rune:gaze(phantom) — consecutive-losses is not in the wat language
 (define (encode-correlation portfolio)
   (let ((seq (last-n-outcomes portfolio 50)))
     (if (< (length seq) 20)
@@ -91,12 +108,15 @@
             (bind (atom "loss-density")  (encode-linear loss-frac 2.0))
             (bind (atom "consec-loss")   (encode-linear (/ consec 10.0) 2.0))
             (bind (atom "trade-density") (encode-linear trade-density 2.0))
+            ; rune:gaze(phantom) — signum is not in the wat language
             (bind (atom "streak")        (encode-linear (signum autocorr) 2.0)))))))
 
 ;; ── Panel ───────────────────────────────────────────────────────────
 
 (define panel-branch (online-subspace dims 8))
 
+; rune:gaze(phantom) — streak-value is not in the wat language
+; rune:gaze(phantom) — win-rate is not in the wat language
 (define (encode-panel portfolio)
   (let ((equity-pct (/ (- (:equity portfolio) (:initial-equity portfolio))
                        (:initial-equity portfolio)))
@@ -113,6 +133,7 @@
 
 ;; ── Risk multiplier ─────────────────────────────────────────────────
 
+; rune:gaze(phantom) — list is not in the wat language
 (define branches (list drawdown-branch accuracy-branch volatility-branch
                       correlation-branch panel-branch))
 
@@ -123,6 +144,9 @@
                        (encode-panel portfolio)))
          (_      (when (healthy? portfolio)
                    (for-each update branches states)))
+         ; rune:gaze(phantom) — fold-left is not in the wat language
+         ; rune:gaze(phantom) — n is not in the wat language
+         ; rune:gaze(phantom) — max is not in the wat language
          (worst-ratio
            (fold-left
              (lambda (acc branch features)

@@ -21,6 +21,11 @@
 ;;
 ;; Returns (position-frac, curve-a, curve-b) or nothing.
 
+; rune:gaze(phantom) — len is not in the wat language
+; rune:gaze(phantom) — log-linear-regression is not in the wat language
+; rune:gaze(phantom) — bin is not in the wat language
+; rune:gaze(phantom) — min is not in the wat language
+; rune:gaze(phantom) — exp is not in the wat language
 (define (kelly-frac conviction resolved min-sample move-threshold)
   "Half-Kelly position fraction from exponential conviction-accuracy curve."
   (if (< (len resolved) 500) nothing
@@ -46,6 +51,7 @@
   "Scale an observation by how large the triggering move was vs running average.
    Bigger moves teach more strongly than typical moves.
    Mutates move-sum and move-count (running accumulators)."
+  ; rune:gaze(phantom) — set! is not in the wat language
   (set! move-sum (+ move-sum abs-pct))
   (set! move-count (+ move-count 1))
   (/ abs-pct (/ move-sum move-count)))

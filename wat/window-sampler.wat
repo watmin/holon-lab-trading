@@ -29,6 +29,11 @@
   ;; Hash: mix candle index with seed (three-round multiply-xorshift)
   ;; Map hash to [0, 1) uniformly
   ;; Log-uniform: exp(uniform(ln(min), ln(max)))
+  ; rune:gaze(phantom) — hash-to-uniform is not in the wat language
+  ; rune:gaze(phantom) — ln is not in the wat language
+  ; rune:gaze(phantom) — clamp is not in the wat language
+  ; rune:gaze(phantom) — round is not in the wat language
+  ; rune:gaze(phantom) — exp is not in the wat language
   (let ((u (hash-to-uniform (:seed sampler) candle-idx))
         (ln-min (ln (:min-window sampler)))
         (ln-max (ln (:max-window sampler)))
@@ -37,6 +42,7 @@
 
 ;; -- Horizon ----------------------------------------------------------------
 
+; rune:gaze(phantom) — max is not in the wat language
 (define (horizon-for sampler window)
   "The horizon for a given window: 75% of window size.
    Starting heuristic -- the horizon expert will learn the real ratio.

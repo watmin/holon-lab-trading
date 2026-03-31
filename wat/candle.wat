@@ -14,6 +14,32 @@
 ;; it's computed. These become the streaming indicator reducers
 ;; (proposal 004).
 
+; rune:gaze(phantom) — field is not in the wat language
+; rune:gaze(phantom) — sma is not in the wat language
+; rune:gaze(phantom) — stddev is not in the wat language
+; rune:gaze(phantom) — wilder-rsi is not in the wat language
+; rune:gaze(phantom) — ema is not in the wat language
+; rune:gaze(phantom) — wilder-dmi-plus is not in the wat language
+; rune:gaze(phantom) — wilder-dmi-minus is not in the wat language
+; rune:gaze(phantom) — wilder-adx is not in the wat language
+; rune:gaze(phantom) — wilder-atr is not in the wat language
+; rune:gaze(phantom) — stochastic-k is not in the wat language
+; rune:gaze(phantom) — williams-r is not in the wat language
+; rune:gaze(phantom) — cci is not in the wat language
+; rune:gaze(phantom) — mfi is not in the wat language
+; rune:gaze(phantom) — roc is not in the wat language
+; rune:gaze(phantom) — slope is not in the wat language
+; rune:gaze(phantom) — obv is not in the wat language
+; rune:gaze(phantom) — last-close is not in the wat language
+; rune:gaze(phantom) — max-high is not in the wat language
+; rune:gaze(phantom) — min-low is not in the wat language
+; rune:gaze(phantom) — ret-pct is not in the wat language
+; rune:gaze(phantom) — body-ratio is not in the wat language
+; rune:gaze(phantom) — range-position is not in the wat language
+; rune:gaze(phantom) — trend-consistency is not in the wat language
+; rune:gaze(phantom) — parse-hour is not in the wat language
+; rune:gaze(phantom) — parse-day is not in the wat language
+
 ;; ── Indicators ──────────────────────────────────────────────────────
 
 ;; Moving averages

@@ -3,6 +3,9 @@
 ;; What modules exist and how they compose.
 ;; The enterprise is a tree. This declares the branches.
 
+; rune:gaze(phantom) — module is not in the wat language
+; rune:gaze(phantom) — binary is not in the wat language
+
 ;; ── Leaf modules (no children) ─────────────────────────────────
 
 (module candle)              ; Candle struct + SQLite loader

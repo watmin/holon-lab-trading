@@ -14,6 +14,7 @@
 
 ;; ── Facts produced ─────────────────────────────────────────────
 
+; rune:gaze(phantom) — fact/zone is not in the wat language
 (define (eval-momentum candles)
   "CCI zone facts."
 

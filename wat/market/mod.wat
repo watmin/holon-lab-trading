@@ -5,6 +5,7 @@
 
 ;; ── Re-exports ─────────────────────────────────────────────────
 
+; rune:gaze(phantom) — module is not in the wat language
 (module desk)                ; trading pair's expert panel
 (module manager)             ; manager encoding
 (module observer)            ; Observer struct
@@ -15,6 +16,8 @@
 ;; The enterprise encodes time circularly (hour-of-day, day-of-week).
 ;; These parse the numeric values from the timestamp string.
 
+; rune:gaze(phantom) — parse-f64 is not in the wat language
+; rune:gaze(phantom) — substring is not in the wat language
 (define (parse-candle-hour ts)
   "Extract hour-of-day from candle timestamp. Returns f64 in [0, 23].
    Falls back to 12.0 on parse failure."
@@ -27,6 +30,8 @@
   ;; Lookup table: [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4]
   ;; Adjust year if month < 3.
   ;; (y + y/4 - y/100 + y/400 + t[m-1] + d) mod 7
+  ; rune:gaze(phantom) — parse-i32 is not in the wat language
+  ; rune:gaze(phantom) — nth is not in the wat language
   (let ((y (or (parse-i32 (substring ts 0 4)) 2019))
         (m (or (parse-i32 (substring ts 5 7)) 1))
         (d (or (parse-i32 (substring ts 8 10)) 1))

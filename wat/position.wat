@@ -65,6 +65,8 @@
 
 ;; rune:forge(bare-type) — k-trail is bare f64; a TrailFactor newtype
 ;; would prevent passing a price where a multiplier is expected.
+; rune:gaze(phantom) — max is not in the wat language
+; rune:gaze(phantom) — min is not in the wat language
 (define (tick pos current-price k-trail)
   "Update position with current price. Returns :stop-loss | :take-profit | nothing."
   (if (= (:phase pos) :closed) nothing
@@ -101,6 +103,7 @@
 
 ;; ── Sizing ──────────────────────────────────────────────────────────
 
+; rune:gaze(phantom) — min is not in the wat language
 (define (position-size band-edge risk-mult max-single-position)
   "Half-Kelly, modulated by risk, capped at max-single-position."
   (min (* (/ band-edge 2.0) risk-mult)

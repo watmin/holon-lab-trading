@@ -32,6 +32,7 @@
 
 ;; ── The expert ──────────────────────────────────────────────────────
 
+; rune:gaze(phantom) — expert is not in the wat language
 (define momentum
   (expert "momentum" :momentum dims refit-interval))
 

@@ -16,6 +16,7 @@
 
 ;; ── Facts produced ─────────────────────────────────────────────
 
+; rune:gaze(phantom) — fact/zone is not in the wat language
 (define (eval-price-action candles)
   "Price action pattern facts. Minimum 3 candles."
 

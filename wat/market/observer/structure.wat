@@ -28,6 +28,7 @@
 
 ;; ── The expert ──────────────────────────────────────────────────────
 
+; rune:gaze(phantom) — expert is not in the wat language
 (define structure
   (expert "structure" :structure dims refit-interval))
 

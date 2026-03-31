@@ -67,10 +67,13 @@
   "Wrap loaded candles into an event stream. Zero-copy of candle data."
   (map (lambda (c) (event/candle :asset asset :candle c)) candles))
 
+; rune:gaze(phantom) — load-candles is not in the wat language
 (define (stream-from-db db-path asset label-col)
   "Load a single asset's candles from DB and produce an event stream."
   (stream-from-candles (load-candles db-path label-col) asset))
 
+; rune:gaze(phantom) — sort-by is not in the wat language
+; rune:gaze(phantom) — flatten is not in the wat language
 (define (merge-streams streams)
   "Merge multiple event streams by timestamp. Sorted -- enterprise processes in time order.
    This is the bridge to multi-asset: each asset's stream is merged into one."

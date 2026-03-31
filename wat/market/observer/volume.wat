@@ -37,6 +37,7 @@
 
 ;; ── The expert ──────────────────────────────────────────────────────
 
+; rune:gaze(phantom) — expert is not in the wat language
 (define volume
   (expert "volume" :volume dims refit-interval))
 

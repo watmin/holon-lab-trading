@@ -16,6 +16,7 @@
 ;; Prediction: a journal's output — (label, conviction) pairs.
 ;;
 ;; The enterprise wraps none of this. It uses them directly.
+; rune:gaze(phantom) — re-export is not in the wat language
 (re-export holon/memory [Journal Label Prediction])
 
 ;; ── Direction ──────────────────────────────────────────────────
@@ -24,6 +25,7 @@
 ;; Long displays as "Buy", Short as "Sell".
 ;; NOT a journal label. Positions have direction. Journals have labels.
 
+; rune:gaze(phantom) — enum is not in the wat language
 (enum Direction [Long Short])
 
 (define (display direction)

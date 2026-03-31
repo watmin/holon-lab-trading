@@ -62,6 +62,9 @@
 
 ;; -- Queries ----------------------------------------------------------------
 
+; rune:gaze(phantom) — empty? is not in the wat language
+; rune:gaze(phantom) — count is not in the wat language
+; rune:gaze(phantom) — len is not in the wat language
 (define (rolling-acc portfolio)
   "Fraction of recent trades that won."
   (if (empty? (:rolling portfolio)) 0.5
@@ -73,12 +76,15 @@
   (if (= (:trades-taken portfolio) 0) 0.0
       (* (/ (:trades-won portfolio) (:trades-taken portfolio)) 100.0)))
 
+; rune:gaze(phantom) — take-last is not in the wat language
 (define (win-rate-last-n portfolio n)
   "Win rate over the last N trades."
   (let ((recent (take-last n (:rolling portfolio))))
     (if (empty? recent) 0.5
         (/ (count true recent) (len recent)))))
 
+; rune:gaze(phantom) — drawdown is not in the wat language
+; rune:gaze(phantom) — mean is not in the wat language
 (define (is-healthy? portfolio)
   "Gates subspace updates. All three must hold."
   (and (< (drawdown portfolio) 0.02)
@@ -91,6 +97,9 @@
 ;; are magic f64 constants baked into code rather than derived from data
 (define (position-frac portfolio conviction min-conviction flip-threshold)
   "Returns position fraction or nothing."
+  ; rune:gaze(phantom) — cond is not in the wat language
+  ; rune:gaze(phantom) — max is not in the wat language
+  ; rune:gaze(phantom) — min is not in the wat language
   (if (= (:phase portfolio) :observe) nothing
   (if (< conviction min-conviction) nothing
   (let ((base (match (:phase portfolio)

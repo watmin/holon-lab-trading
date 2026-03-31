@@ -64,6 +64,7 @@
 
 ;; ── The expert ──────────────────────────────────────────────────────
 
+; rune:gaze(phantom) — expert is not in the wat language
 (define regime
   (expert "regime" :regime dims refit-interval))
 

@@ -24,6 +24,7 @@
 
 ;; ── Facts produced ─────────────────────────────────────────────
 
+; rune:gaze(phantom) — fact/comparison is not in the wat language
 (define (eval-fibonacci candles)
   "Fibonacci proximity facts. Returns Some(Vec<Fact>) or None if < 10 candles."
 
