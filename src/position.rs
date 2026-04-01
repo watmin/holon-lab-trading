@@ -88,7 +88,7 @@ pub struct ManagedPosition {
     pub phase:          PositionPhase,
     pub trailing_stop:  f64,        // absolute price level
     pub take_profit:    f64,        // absolute price level (first target)
-    pub high_water:     f64,        // highest price seen since entry
+    pub best_price:     f64,        // highest price seen since entry
 
     // Accounting
     pub total_fees:     f64,        // cumulative fees paid (entry + partials + exit)
@@ -135,7 +135,7 @@ impl ManagedPosition {
             phase: PositionPhase::Active,
             trailing_stop: stop,
             take_profit: tp,
-            high_water: hw,
+            best_price: hw,
             total_fees: entry_fee,
             candles_held: 0,
         }
@@ -152,11 +152,11 @@ impl ManagedPosition {
         match self.direction {
             Direction::Long => {
                 // BUY: profit when price goes UP
-                if current_price > self.high_water {
-                    self.high_water = current_price;
+                if current_price > self.best_price {
+                    self.best_price = current_price;
                 }
                 // Trail stop upward
-                let new_stop = self.high_water * (1.0 - k_trail * self.entry_atr);
+                let new_stop = self.best_price * (1.0 - k_trail * self.entry_atr);
                 if new_stop > self.trailing_stop {
                     self.trailing_stop = new_stop;
                 }
@@ -172,12 +172,12 @@ impl ManagedPosition {
             // rune:forge(bare-type) — wildcard `_` hides Direction::Short; match exhaustively to let the compiler guard new variants
             _ => {
                 // SELL: profit when price goes DOWN
-                // rune:gaze(naming) — high_water tracks the extreme in our favor; for shorts that's the LOW. Name lies to short-side readers.
-                if current_price < self.high_water {
-                    self.high_water = current_price;
+                // rune:gaze(naming) — best_price tracks the extreme in our favor; for shorts that's the LOW. Name lies to short-side readers.
+                if current_price < self.best_price {
+                    self.best_price = current_price;
                 }
                 // Trail stop downward
-                let new_stop = self.high_water * (1.0 + k_trail * self.entry_atr);
+                let new_stop = self.best_price * (1.0 + k_trail * self.entry_atr);
                 if new_stop < self.trailing_stop {
                     self.trailing_stop = new_stop;
                 }

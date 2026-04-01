@@ -500,7 +500,7 @@ impl ThoughtEncoder {
     /// Encode with a windowed view of the streams.
     /// `expert` selects which thought vocabulary to activate:
     ///   "full" = all, "momentum"/"structure"/"volume"/"narrative" = subsets.
-    pub fn encode_view(
+    pub fn encode_thought(
         &self,
         candles: &[Candle],
         vm: &VectorManager,

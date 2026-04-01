@@ -23,7 +23,7 @@ pub struct ResolveLog {
 
 pub struct Observer {
     pub name: &'static str,
-    pub profile: &'static str,
+    pub lens: &'static str,
     pub journal: Journal,
     pub resolved: VecDeque<(f64, bool)>,  // (conviction, correct)
     pub good_state_subspace: OnlineSubspace,
@@ -41,15 +41,15 @@ pub struct Observer {
 }
 
 impl Observer {
-    pub fn new(profile: &'static str, dims: usize, recalib_interval: usize, seed: u64, labels: &[&str]) -> Self {
-        let mut journal = Journal::new(profile, dims, recalib_interval);
+    pub fn new(lens: &'static str, dims: usize, recalib_interval: usize, seed: u64, labels: &[&str]) -> Self {
+        let mut journal = Journal::new(lens, dims, recalib_interval);
         let primary_label = journal.register(labels[0]);
         for label in &labels[1..] {
             journal.register(label);
         }
         Self {
-            name: profile,
-            profile,
+            name: lens,
+            lens,
             journal,
             primary_label,
             resolved: VecDeque::new(),

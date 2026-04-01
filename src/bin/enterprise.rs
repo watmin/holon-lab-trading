@@ -440,7 +440,7 @@ fn main() {
                 // observer (index 5) and provides fact_labels for diagnostics.
                 let w_start = i.saturating_sub(args.window - 1);
                 let window  = &candles[w_start..=i];
-                let full = thought_encoder.encode_view(window, &vm, "full");
+                let full = thought_encoder.encode_thought(window, &vm, "full");
 
                 // Each observer encodes at their own sampled window.
                 // The generalist (index 5) reuses the full encoding above
@@ -453,7 +453,7 @@ fn main() {
                             let ew = observer_windows[ei][bi];
                             let ew_start = i.saturating_sub(ew - 1);
                             let exp_window = &candles[ew_start..=i];
-                            thought_encoder.encode_view(exp_window, &vm, observer_names[ei]).thought
+                            thought_encoder.encode_thought(exp_window, &vm, observer_names[ei]).thought
                         }
                     })
                     .collect();

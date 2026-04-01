@@ -282,9 +282,9 @@ impl EnterpriseState {
         let mut observers: Vec<Observer> = observer_names
             .iter()
             .enumerate()
-            .map(|(ei, &profile)| {
+            .map(|(ei, &lens)| {
                 Observer::new(
-                    profile,
+                    lens,
                     dims,
                     recalib_interval,
                     dims as u64 + ei as u64 * 7919,
@@ -650,7 +650,7 @@ impl EnterpriseState {
             // Exit expert: encode at Nyquist rate of position lifecycle
             if pos.candles_held > 0 && pos.candles_held % ctx.exit_observe_interval == 0 {
                 let pnl_frac = pos.return_pct(quote_price);
-                let mfe_frac = (pos.high_water - pos.entry_price) / pos.entry_price;
+                let mfe_frac = (pos.best_price - pos.entry_price) / pos.entry_price;
                 let stop_dist = (quote_price - pos.trailing_stop).abs() / quote_price;
                 let exit_thought = Primitives::bundle(&[
                     &Primitives::bind(&ctx.exit_atoms.pnl, &ctx.exit_scalar.encode(pnl_frac.clamp(-1.0, 1.0) * 0.5 + 0.5, ScalarMode::Linear { scale: 1.0 })),
