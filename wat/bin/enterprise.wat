@@ -75,7 +75,7 @@
 (define (on-candle state candle fact-labels observer-vecs ctx)
   "One candle. The fold's inner step. Order matches state.rs on_candle_inner."
 
-  ;; ─── 1. Expert predictions ────────────────────────────────────────
+  ;; ─── 1. Observer predictions ──────────────────────────────────────
   ;; Each observer predicts from its pre-encoded thought vector.
   ;; The generalist is observers[5] with profile "full".
   (let* ((observer-preds
@@ -115,7 +115,7 @@
 
   ;; ─── 5. Position tick + exit expert ───────────────────────────────
   ;; For each open managed position:
-  ;;   a. Exit expert encodes position state (9 bound facts)
+  ;;   a. Exit observer encodes position state (8 bound facts)
   ;;   b. Exit expert buffers observation for deferred learning
   ;;   c. Position ticks (trailing stop, high-water mark)
   ;;   d. On exit signal: treasury swap, fee accounting, ledger log
