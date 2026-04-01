@@ -31,7 +31,7 @@
   "Mean return over the last N trades."
   (let ((returns (take-last n (:trade-returns portfolio))))
     (if (empty? returns) 0.0
-        (/ (sum returns) (len returns)))))
+        (/ (fold + 0.0 returns) (len returns)))))
 
 (define (healthy? portfolio)
   "Gates subspace updates. All four conditions must hold."
@@ -48,7 +48,8 @@
   "Rate of drawdown change: current dd minus dd 5 trades ago."
   (let ((dd (drawdown portfolio))
         (eq5 (if (>= (len (:equity-at-trade portfolio)) 5)
-                 (nth-back (:equity-at-trade portfolio) 5)
+                 (nth (:equity-at-trade portfolio)
+                       (- (len (:equity-at-trade portfolio)) 5))
                  (:equity portfolio))))
     (- dd (if (> (:peak-equity portfolio) 0.0)
               (/ (- (:peak-equity portfolio) eq5) (:peak-equity portfolio))
@@ -110,7 +111,7 @@
 (define (encode-volatility portfolio)
   (let ((returns (last-n-returns portfolio 50)))
     (if (< (length returns) 5)
-        (zero-vector dims)
+        (zeros dims)
         (let ((vol    (stddev returns))
               (mean   (mean returns))
               (sharpe (if (> vol 0.0) (/ mean vol) 0.0))
@@ -135,11 +136,13 @@
 (define (autocorrelation seq)
   "Lag-1 autocorrelation of a numeric sequence.
    cov(x_t, x_{t+1}) / var(x). Returns 0 if variance < 1e-10."
-  (let* ((mean (/ (sum seq) (len seq)))
-         (var  (/ (sum (map (lambda (x) (expt (- x mean) 2)) seq)) (len seq))))
+  (let* ((mean (/ (fold + 0.0 seq) (len seq)))
+         (var  (/ (fold + 0.0 (map (lambda (x) (* (- x mean) (- x mean))) seq))
+                  (len seq))))
     (if (< var 1e-10) 0.0
-        (/ (sum (map (lambda (i) (* (- (nth seq i) mean) (- (nth seq (+ i 1)) mean)))
-                     (range 0 (- (len seq) 1))))
+        (/ (fold + 0.0
+             (map (lambda (i) (* (- (nth seq i) mean) (- (nth seq (+ i 1)) mean)))
+                  (range 0 (- (len seq) 1))))
            (* (- (len seq) 1) var)))))
 
 (define (count-losses outcomes)
@@ -155,7 +158,7 @@
 (define (encode-correlation portfolio)
   (let ((seq (last-n-outcomes portfolio 50)))
     (if (< (length seq) 20)
-        (zero-vector dims)
+        (zeros dims)
         (let ((autocorr       (autocorrelation seq))
               (loss-frac      (/ (count-losses (last-n-outcomes portfolio 20)) 20.0))
               (consec         (consecutive-losses portfolio))

@@ -25,38 +25,41 @@
   "Sort resolved predictions by conviction, split into n equal-size bins.
    Returns list of (mean-conviction, accuracy) per bin."
   (let ((sorted (sort-by first resolved))
-        (size (/ (len sorted) n-bins)))
-    (map (lambda (chunk)
-           (list (mean (map first chunk))
-                 (/ (count second chunk) (len chunk))))
-         (partition size sorted))))
+        (size   (/ (len sorted) n-bins)))
+    (map (lambda (i)
+           (let ((chunk (map (lambda (j) (nth sorted j))
+                             (range (* i size) (min (* (+ i 1) size) (len sorted))))))
+             (list (mean (map first chunk))
+                   (/ (count (lambda (x) (second x)) chunk) (len chunk)))))
+         (range 0 n-bins))))
 
 (define (log-linear-regression points)
   "Fit accuracy = 0.50 + a * exp(b * conviction) via OLS on log-transformed bins.
-   Keeps only bins with accuracy > 0.505. Returns {:a a :b b} or nothing.
+   Keeps only bins with accuracy > 0.505. Returns (a, b) or #f.
    The log transform: ln(accuracy - 0.50) = ln(a) + b * conviction."
   (let ((valid (filter (lambda (p) (> (second p) 0.505)) points)))
-    (if (< (len valid) 3) nothing
-        (let* ((xs (map first valid))
-               (ys (map (lambda (p) (ln (- (second p) 0.50))) valid))
-               (mx (mean xs))
-               (my (mean ys))
-               (cov (sum (map (lambda (x y) (* (- x mx) (- y my))) xs ys)))
-               (var (sum (map (lambda (x) (expt (- x mx) 2)) xs)))
-               (b (/ cov var))
-               (a (exp (- my (* b mx)))))
-          (some {:a a :b b})))))
+    (when (>= (len valid) 3)
+      (let* ((xs  (map first valid))
+             (ys  (map (lambda (p) (ln (- (second p) 0.50))) valid))
+             (mx  (mean xs))
+             (my  (mean ys))
+             (cov (fold + 0.0 (map (lambda (x y) (* (- x mx) (- y my))) xs ys)))
+             (var (fold + 0.0 (map (lambda (x) (* (- x mx) (- x mx))) xs)))
+             (b   (/ cov var))
+             (a   (exp (- my (* b mx)))))
+        (list a b)))))
 
-(define (kelly-frac conviction resolved min-sample move-threshold)
-  "Half-Kelly position fraction from exponential conviction-accuracy curve."
-  (if (< (len resolved) 500) nothing
-    (let ((points (log-linear-regression (bin resolved 20)))
-          (win-rate (min 0.95 (+ 0.50 (* (:a points) (exp (* (:b points) conviction))))))
-          (edge (- (* 2.0 win-rate) 1.0)))
-      (if (<= edge 0.0) nothing
-          (let ((half-kelly (/ edge 2.0))
-                (position (/ half-kelly move-threshold)))
-            (some (position (:a points) (:b points))))))))
+(define (kelly-frac conviction resolved n-bins move-threshold)
+  "Half-Kelly position fraction from exponential conviction-accuracy curve.
+   Returns (position-frac, a, b) or #f."
+  (when (>= (len resolved) 500)
+    (when-let ((curve (log-linear-regression (bin resolved n-bins))))
+      (let* ((a        (first curve))
+             (b        (second curve))
+             (win-rate (min 0.95 (+ 0.50 (* a (exp (* b conviction))))))
+             (edge     (- (* 2.0 win-rate) 1.0)))
+        (when (> edge 0.0)
+          (list (/ (/ edge 2.0) move-threshold) a b))))))
 
 ;; The curve fitting:
 ;;   1. Sort resolved by conviction

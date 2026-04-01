@@ -49,7 +49,6 @@
     :observe-left observe-period
     :trades-taken 0 :trades-won 0 :trades-skipped 0
     :rolling (deque) :rolling-cap 500
-    :by-year {}
     :equity-at-trade (deque) :trade-returns (deque)
     :dd-bottom-equity initial-equity
     :trades-since-bottom 0
@@ -60,7 +59,7 @@
 (define (rolling-acc portfolio)
   "Fraction of recent trades that won."
   (if (empty? (:rolling portfolio)) 0.5
-      (/ (count true (:rolling portfolio))
+      (/ (count (lambda (x) x) (:rolling portfolio))
          (len (:rolling portfolio)))))
 
 (define (win-rate portfolio)
@@ -72,7 +71,7 @@
   "Win rate over the last N trades."
   (let ((recent (take-last n (:rolling portfolio))))
     (if (empty? recent) 0.5
-        (/ (count true recent) (len recent)))))
+        (/ (count (lambda (x) x) recent) (len recent)))))
 
 (define (drawdown portfolio)
   "Current drawdown: (peak - equity) / peak. 0 when at or above peak."
@@ -93,9 +92,9 @@
 ;; Kelly sizing (sizing.wat) is the replacement. When Kelly is proven,
 ;; these constants become irrelevant. Until then, they gate conservatively.
 (define (position-frac portfolio conviction min-conviction flip-threshold)
-  "Returns position fraction or nothing."
-  (if (= (:phase portfolio) :observe) nothing
-  (if (< conviction min-conviction) nothing
+  "Returns position fraction or #f."
+  (if (= (:phase portfolio) :observe) #f
+  (if (< conviction min-conviction) #f
   (let ((base (match (:phase portfolio)
                 :tentative 0.005
                 :confident (let ((conf (max 0.0 (- (rolling-acc portfolio) 0.5))))
@@ -104,7 +103,7 @@
                                    (else (min 0.02 (* conf 0.10))))))))
     ;; Below flip threshold: no trade (noise zone)
     (if (and (> flip-threshold 0.0) (< conviction flip-threshold))
-        nothing
+        #f
         ;; Scale by conviction ratio, cap at 5%
         (if (> flip-threshold 0.0)
             (min 0.05 (* base (/ conviction flip-threshold)))
