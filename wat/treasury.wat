@@ -83,9 +83,9 @@
         (fee       (* spend fee-rate)))
     (list
       (update treasury
-        :balances        (assoc (assoc (:balances treasury)
-                                  from (- (balance treasury from) spend))
-                                  to   (+ (balance treasury to) received))
+        :balances        (assoc (:balances treasury)
+                           from (- (balance treasury from) spend)
+                           to   (+ (balance treasury to) received))
         :total-fees-paid (+ (:total-fees-paid treasury) fee))
       spend received)))
 
