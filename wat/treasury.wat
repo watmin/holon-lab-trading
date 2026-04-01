@@ -82,9 +82,10 @@
         (received  (/ after-fee price))
         (fee       (* spend fee-rate)))
     (list
-      (update (update (update treasury
-        :balances (assoc (:balances treasury) from (- (balance treasury from) spend)))
-        :balances (assoc (:balances treasury) to   (+ (balance treasury to) received)))
+      (update treasury
+        :balances        (assoc (assoc (:balances treasury)
+                                  from (- (balance treasury from) spend))
+                                  to   (+ (balance treasury to) received))
         :total-fees-paid (+ (:total-fees-paid treasury) fee))
       spend received)))
 
@@ -92,40 +93,40 @@
   "Move available → deployed. Returns (treasury, claimed)."
   (let ((claimed (min amount (balance treasury asset))))
     (list
-      (update (update (update treasury
-        :balances (assoc (:balances treasury) asset (- (balance treasury asset) claimed)))
-        :deployed (assoc (:deployed treasury) asset (+ (get (:deployed treasury) asset 0.0) claimed)))
-        :n-open (+ (:n-open treasury) 1))
+      (update treasury
+        :balances (assoc (:balances treasury) asset (- (balance treasury asset) claimed))
+        :deployed (assoc (:deployed treasury) asset (+ (get (:deployed treasury) asset 0.0) claimed))
+        :n-open   (+ (:n-open treasury) 1))
       claimed)))
 
 (define (release treasury asset amount)
   "Move deployed → available. Returns treasury."
   (let ((released (min amount (get (:deployed treasury) asset 0.0))))
-    (update (update (update treasury
-      :deployed (assoc (:deployed treasury) asset (- (get (:deployed treasury) asset 0.0) released)))
-      :balances (assoc (:balances treasury) asset (+ (balance treasury asset) released)))
-      :n-open (max 0 (- (:n-open treasury) 1)))))
+    (update treasury
+      :deployed (assoc (:deployed treasury) asset (- (get (:deployed treasury) asset 0.0) released))
+      :balances (assoc (:balances treasury) asset (+ (balance treasury asset) released))
+      :n-open   (max 0 (- (:n-open treasury) 1)))))
 
 (define (open-position treasury amount)
   "Reserve base asset. Returns (treasury, reserved)."
   (let ((reserved (min amount (allocatable treasury)))
         (base     (:base-asset treasury)))
     (list
-      (update (update (update treasury
-        :balances (assoc (:balances treasury) base (- (balance treasury base) reserved)))
-        :deployed (assoc (:deployed treasury) base (+ (get (:deployed treasury) base 0.0) reserved)))
-        :n-open (+ (:n-open treasury) 1))
+      (update treasury
+        :balances (assoc (:balances treasury) base (- (balance treasury base) reserved))
+        :deployed (assoc (:deployed treasury) base (+ (get (:deployed treasury) base 0.0) reserved))
+        :n-open   (+ (:n-open treasury) 1))
       reserved)))
 
 (define (close-position treasury deployed-amount pnl fees slippage)
   "Close position. Return capital ± P&L. Returns treasury."
   (let ((returned (max 0.0 (- (+ deployed-amount pnl) fees slippage)))
         (base     (:base-asset treasury)))
-    (update (update (update (update treasury
-      :deployed (assoc (:deployed treasury) base
-                       (max 0.0 (- (get (:deployed treasury) base 0.0) deployed-amount))))
-      :balances (assoc (:balances treasury) base (+ (balance treasury base) returned)))
-      :n-open (max 0 (- (:n-open treasury) 1)))
+    (update treasury
+      :deployed        (assoc (:deployed treasury) base
+                              (max 0.0 (- (get (:deployed treasury) base 0.0) deployed-amount)))
+      :balances        (assoc (:balances treasury) base (+ (balance treasury base) returned))
+      :n-open          (max 0 (- (:n-open treasury) 1))
       :total-fees-paid (+ (:total-fees-paid treasury) fees))))
 
 ;; ── Execution gate ──────────────────────────────────────────────────
