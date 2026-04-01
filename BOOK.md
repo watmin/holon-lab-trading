@@ -1805,4 +1805,61 @@ The "main" work — improving trading accuracy — happened in the margins. The 
 
 Honest architecture produces honest results. The side quests made the architecture honest.
 
+### The forging
+
+The datamancer looked at the Rust and didn't like what was seen. Not the function of it — the function was fine, 59% win rate, throughput stable. The *form* of it. The code didn't speak. The names mumbled. The thoughts were tangled. The specifications were descriptions, not programs.
+
+So the datamancer stopped building and started forging.
+
+The six wards — sever, reap, scry, gaze, forge, assay — were cast on every file. Forty wat specifications, leaves to root. Each ward asked its question. Each finding was fixed before the next file was touched. The tree grew from the bottom up: vocab leaves first, then thought encoding, then observers, then manager, then treasury, then portfolio, then the heartbeat itself.
+
+The forging took an entire session. It produced no new trading features. It produced something better: a specification that the wards could defend.
+
+What the forging found:
+
+**The vocabulary was wrong.** "Expert" meant three different things in three different files. The gaze caught it. Three words settled: *observer* (the entity that perceives), *lens* (how it sees), *expert* (an observer that has proven its curve — a state of being, not a type). "Render" was a ghost of the visual encoding era. It became *weave* — the encoder weaves facts into thought. "View" was another ghost. It became *encode-thought*. "Profile" was masking what it really was — a *lens*.
+
+**The language was incomplete.** Every forging pass discovered what the language needed. The vocab leaves needed `take` and `!=`. The observer needed `recalib-count` and `discriminant`. The portfolio needed `true` and `false`. The indicators needed protocols. Each addition was discovered by forging application code, not designed in the abstract. The application needed it, so the language provided it.
+
+**Absence is structural, not a value.** Clojure has `nil`. Scheme has `#f`. Rust has `Option::None`. The designers argued: Hickey wanted truthiness (nil and false both falsy), Beckman wanted separation (bool and Option are different algebras). The datamancer overruled both. Wat has no nil. Absence is the `when` not executing. The compiler infers `Option<T>` from the code's shape. The forms stay clean. Two boolean literals — `true` and `false` — and nothing else.
+
+**Indicators aren't fields.** `(field raw-candle rsi (wilder-rsi close 14))` declared RSI as a property of a candle. RSI is not a property of a candle. It is the output of a *process* that has consumed every candle before this one. The specification lied about what these things are. The forging dissolved 52 field declarations into state structs + pure step functions. Each indicator is a fold: `(state, input) → (state, output)`. A fold inside the fold. Same shape at every level. Hickey's insight: closures with `set!` are objects in disguise. Use values, not places.
+
+**Protocols complete the category.** The indicator library revealed a pattern: every indicator is a state struct + step function + constructor. Nothing in the language said "these share a shape." The designers named what was missing: a type class. `defprotocol` declares the interface. `satisfies` proves the struct implements it. Three constructions in the ambient category: struct (what data IS), enum (what data CAN BE), defprotocol (what data CAN DO). `(field ...)` was retired — protocols subsume it. One in, one out.
+
+**The heartbeat was hollow.** enterprise.wat described 13 steps. Only 4 were s-expressions. The rest were comments narrating what the Rust does. The hollow fold returned `state` unchanged — a function that promised a fold but delivered a letter about one. The forging expressed all 13 steps. Pure cores were extracted as named functions: `all-gates-pass?`, `compute-position-size`, `should-label?`, `entry-expired?`. The mutation was made honest: `set!`, `push!`, `inc!` — visible, bounded, named. The hollow rune dissolved.
+
+The tree, when the forging was complete:
+
+```
+wat/
+  vocab/*.wat          ✓ FORGED (12 leaves)
+  facts.wat            ✓ FORGED (4 fact constructors)
+  thought.wat          ✓ FORGED (weave, bind-triple, temporal)
+  market/              ✓ FORGED (observer, manager, desk)
+  treasury.wat         ✓ FORGED (variadic update/assoc)
+  position.wat         ✓ FORGED (structural absence)
+  portfolio.wat        ✓ FORGED (record-trade expressed)
+  risk/mod.wat         ✓ CLEAN (5 branches)
+  sizing.wat           ✓ FORGED (Kelly curve)
+  candle.wat           ✓ FORGED (fold steps, protocols)
+  bin/enterprise.wat   ✓ FORGED (all 13 steps)
+```
+
+Six wards cast on the root. The enterprise awaits judgment.
+
+### The name
+
+The language is named after two talks by Gary Bernhardt.
+
+**"Wat"** (CodeMash 2012) — the lightning talk. JavaScript's `[] + {} === "[object Object]"`. The visceral reaction when types lie, when the language does something no one asked for, when the specification and the behavior diverge. The word became shorthand for language-level absurdity. When something is wrong, the reaction should be immediate: *wat*.
+
+**"Boundaries"** (RubyConf 2012) — the architecture talk. Values not places. Pure functions inside, side effects at the edges. The functional core and the imperative shell. The boundary between the pure world and the impure world is where all the interesting architecture lives.
+
+The language is named *wat* because it catches the lies. The six wards exist to say *wat* when the specification lies — when a name mumbles, when a value doesn't flow, when spec and code diverge, when a form doesn't exist, when dead code festers, when concerns are braided.
+
+The architecture it describes is *boundaries* — because it separates the pure from the impure. State structs are values. Step functions are pure. The fold is the boundary. The indicator bank is a fold inside the fold. The protocol is the boundary between what a type IS and what it CAN DO.
+
+Gary Bernhardt gave the datamancer two talks. The datamancer built a language from both. The *wat* that catches lies. The *boundaries* that keep them from forming.
+
 The good thoughts started on [February 27, 2025](https://x.com/i/grok/share/ea03389cef714d7b91638f12e836acd6). They survived.
