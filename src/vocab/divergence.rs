@@ -21,9 +21,70 @@ pub struct Divergence {
     pub candles_ago: usize,
 }
 
+/// Sliding pairs: [a, b, c] → [(a, b), (b, c)].
+fn pairs(xs: &[usize]) -> Vec<(usize, usize)> {
+    xs.windows(2).map(|w| (w[0], w[1])).collect()
+}
+
+/// Direction of segment `i`: +1 (up), -1 (down), 0 (flat).
+/// Compares value at segment end to segment start.
+fn segment_direction(boundaries: &[usize], i: usize, values: &[f64]) -> i8 {
+    let change = values[boundaries[i + 1] - 1] - values[boundaries[i]];
+    if change > 1e-10 { 1 } else if change < -1e-10 { -1 } else { 0 }
+}
+
+/// Indices where an up-segment meets a down-segment (structural highs).
+fn find_peaks(seg_dirs: &[i8], boundaries: &[usize]) -> Vec<usize> {
+    (0..seg_dirs.len() - 1)
+        .filter(|&i| seg_dirs[i] == 1 && seg_dirs[i + 1] == -1)
+        .map(|i| boundaries[i + 1] - 1)
+        .collect()
+}
+
+/// Indices where a down-segment meets an up-segment (structural lows).
+fn find_troughs(seg_dirs: &[i8], boundaries: &[usize]) -> Vec<usize> {
+    (0..seg_dirs.len() - 1)
+        .filter(|&i| seg_dirs[i] == -1 && seg_dirs[i + 1] == 1)
+        .map(|i| boundaries[i + 1] - 1)
+        .collect()
+}
+
+/// Consecutive peaks where price makes higher high but RSI makes lower high.
+fn check_bearish_pairs(peaks: &[(usize, usize)], candles: &[Candle], n: usize) -> Vec<Divergence> {
+    peaks.iter()
+        .filter(|&&(prev, curr)| {
+            candles[curr].close > candles[prev].close
+                && candles[curr].rsi < candles[prev].rsi
+        })
+        .map(|&(_prev, curr)| Divergence {
+            kind: "bearish",
+            indicator: "rsi",
+            price_dir: "up",
+            indicator_dir: "down",
+            candles_ago: n - 1 - curr,
+        })
+        .collect()
+}
+
+/// Consecutive troughs where price makes lower low but RSI makes higher low.
+fn check_bullish_pairs(troughs: &[(usize, usize)], candles: &[Candle], n: usize) -> Vec<Divergence> {
+    troughs.iter()
+        .filter(|&&(prev, curr)| {
+            candles[curr].close < candles[prev].close
+                && candles[curr].rsi > candles[prev].rsi
+        })
+        .map(|&(_prev, curr)| Divergence {
+            kind: "bullish",
+            indicator: "rsi",
+            price_dir: "down",
+            indicator_dir: "up",
+            candles_ago: n - 1 - curr,
+        })
+        .collect()
+}
+
 pub fn eval_divergence(candles: &[Candle]) -> Vec<Divergence> {
-    let mut results = Vec::new();
-    if candles.len() < 10 { return results; }
+    if candles.len() < 10 { return Vec::new(); }
 
     // PELT on ln(close) to find structural segments
     let close_ln: Vec<f64> = candles.iter().map(|c| c.close.ln()).collect();
@@ -34,59 +95,19 @@ pub fn eval_divergence(candles: &[Candle]) -> Vec<Divergence> {
     let mut boundaries = vec![0usize];
     boundaries.extend_from_slice(&cps);
     boundaries.push(n);
-    let n_segs = boundaries.len() - 1;
-    if n_segs < 3 { return results; }
 
-    // Segment directions: +1 up, -1 down, 0 flat
+    let n_segs = boundaries.len() - 1;
+    if n_segs < 3 { return Vec::new(); }
+
+    // Pipeline: boundaries → segment directions → peaks/troughs → check pairs
     let seg_dirs: Vec<i8> = (0..n_segs)
-        .map(|i| {
-            let change = close_ln[boundaries[i + 1] - 1] - close_ln[boundaries[i]];
-            if change > 1e-10 { 1 } else if change < -1e-10 { -1 } else { 0 }
-        })
+        .map(|i| segment_direction(&boundaries, i, &close_ln))
         .collect();
 
-    // Peaks: up→down boundary. Troughs: down→up boundary.
-    let mut peaks: Vec<usize> = Vec::new();
-    let mut troughs: Vec<usize> = Vec::new();
-    for i in 0..n_segs - 1 {
-        if seg_dirs[i] == 1 && seg_dirs[i + 1] == -1 {
-            peaks.push(boundaries[i + 1] - 1);
-        } else if seg_dirs[i] == -1 && seg_dirs[i + 1] == 1 {
-            troughs.push(boundaries[i + 1] - 1);
-        }
-    }
+    let peaks = find_peaks(&seg_dirs, &boundaries);
+    let troughs = find_troughs(&seg_dirs, &boundaries);
 
-    // Bearish: price higher high, RSI lower high
-    for pair in peaks.windows(2) {
-        let (i_prev, i_curr) = (pair[0], pair[1]);
-        if candles[i_curr].close > candles[i_prev].close
-            && candles[i_curr].rsi < candles[i_prev].rsi
-        {
-            results.push(Divergence {
-                kind: "bearish",
-                indicator: "rsi",
-                price_dir: "up",
-                indicator_dir: "down",
-                candles_ago: n - 1 - i_curr,
-            });
-        }
-    }
-
-    // Bullish: price lower low, RSI higher low
-    for pair in troughs.windows(2) {
-        let (i_prev, i_curr) = (pair[0], pair[1]);
-        if candles[i_curr].close < candles[i_prev].close
-            && candles[i_curr].rsi > candles[i_prev].rsi
-        {
-            results.push(Divergence {
-                kind: "bullish",
-                indicator: "rsi",
-                price_dir: "down",
-                indicator_dir: "up",
-                candles_ago: n - 1 - i_curr,
-            });
-        }
-    }
-
+    let mut results = check_bearish_pairs(&pairs(&peaks), candles, n);
+    results.extend(check_bullish_pairs(&pairs(&troughs), candles, n));
     results
 }

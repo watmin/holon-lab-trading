@@ -6,6 +6,24 @@
 use crate::candle::Candle;
 use super::Fact;
 
+/// Count consecutive green candles (close > open) from the most recent candle backwards.
+fn consecutive_up(candles: &[Candle]) -> usize {
+    let mut count = 0;
+    for c in candles.iter().rev() {
+        if c.close > c.open { count += 1; } else { break; }
+    }
+    count
+}
+
+/// Count consecutive red candles (close < open) from the most recent candle backwards.
+fn consecutive_down(candles: &[Candle]) -> usize {
+    let mut count = 0;
+    for c in candles.iter().rev() {
+        if c.close < c.open { count += 1; } else { break; }
+    }
+    count
+}
+
 pub fn eval_price_action(candles: &[Candle]) -> Vec<Fact<'static>> {
     let n = candles.len();
     let mut facts: Vec<Fact<'static>> = Vec::new();
@@ -31,14 +49,8 @@ pub fn eval_price_action(candles: &[Candle]) -> Vec<Fact<'static>> {
     }
 
     // Consecutive same-direction candles
-    let mut up_count = 0usize;
-    let mut down_count = 0usize;
-    for i in (0..n).rev() {
-        if candles[i].close > candles[i].open { up_count += 1; } else { break; }
-    }
-    for i in (0..n).rev() {
-        if candles[i].close < candles[i].open { down_count += 1; } else { break; }
-    }
+    let up_count = consecutive_up(candles);
+    let down_count = consecutive_down(candles);
     if up_count >= 3 {
         facts.push(Fact::Zone { indicator: "close", zone: "consecutive-up" });
     }

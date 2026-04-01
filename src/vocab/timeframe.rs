@@ -8,6 +8,23 @@
 use crate::candle::Candle;
 use super::Fact;
 
+/// Classify a return into a direction zone: up-strong / up-mild / down-strong / down-mild.
+fn direction_zone(prefix: &str, ret: f64, threshold: f64) -> &'static str {
+    // Leak the formatted strings into static lifetime — there are only 4 per prefix
+    // and they live for the program's duration. Instead, match on known prefixes.
+    match (prefix, ret > threshold, ret > 0.0, ret < -threshold) {
+        ("tf-1h", true, _, _) => "tf-1h-up-strong",
+        ("tf-1h", _, true, _) => "tf-1h-up-mild",
+        ("tf-1h", _, _, true) => "tf-1h-down-strong",
+        ("tf-1h", _, _, _)    => "tf-1h-down-mild",
+        ("tf-4h", true, _, _) => "tf-4h-up-strong",
+        ("tf-4h", _, true, _) => "tf-4h-up-mild",
+        ("tf-4h", _, _, true) => "tf-4h-down-strong",
+        ("tf-4h", _, _, _)    => "tf-4h-down-mild",
+        _ => "unknown",
+    }
+}
+
 /// Structure thoughts: where is price in the multi-timeframe geometry?
 pub fn eval_timeframe_structure(candles: &[Candle]) -> Vec<Fact<'static>> {
     let mut facts: Vec<Fact<'static>> = Vec::new();
@@ -45,20 +62,14 @@ pub fn eval_timeframe_narrative(candles: &[Candle]) -> Vec<Fact<'static>> {
 
     // 1-hour return direction and magnitude
     if now.tf_1h_ret.abs() > 1e-10 {
-        let zone = if now.tf_1h_ret > 0.005 { "tf-1h-up-strong" }
-            else if now.tf_1h_ret > 0.0 { "tf-1h-up-mild" }
-            else if now.tf_1h_ret < -0.005 { "tf-1h-down-strong" }
-            else { "tf-1h-down-mild" };
+        let zone = direction_zone("tf-1h", now.tf_1h_ret, 0.005);
         facts.push(Fact::Zone { indicator: "tf-1h", zone });
         facts.push(Fact::Scalar { indicator: "tf-1h-ret", value: now.tf_1h_ret.clamp(-0.05, 0.05) * 10.0 + 0.5, scale: 1.0 });
     }
 
     // 4-hour return direction and magnitude
     if now.tf_4h_ret.abs() > 1e-10 {
-        let zone = if now.tf_4h_ret > 0.01 { "tf-4h-up-strong" }
-            else if now.tf_4h_ret > 0.0 { "tf-4h-up-mild" }
-            else if now.tf_4h_ret < -0.01 { "tf-4h-down-strong" }
-            else { "tf-4h-down-mild" };
+        let zone = direction_zone("tf-4h", now.tf_4h_ret, 0.01);
         facts.push(Fact::Zone { indicator: "tf-4h", zone });
         facts.push(Fact::Scalar { indicator: "tf-4h-ret", value: now.tf_4h_ret.clamp(-0.05, 0.05) * 10.0 + 0.5, scale: 1.0 });
     }
