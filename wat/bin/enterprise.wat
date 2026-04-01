@@ -67,17 +67,62 @@
     :deposit  (deposit (:treasury state) (:asset event) (:amount event))
     :withdraw (withdraw (:treasury state) (:asset event) (:amount event))))
 
-;; ── The candle step (honest execution order) ────────────────────────
+;; ── Pure gates and decisions ────────────────────────────────────────
+;;
+;; The forgeable cores. Each is a pure function — data in, data out.
+;; The fold calls these. The mutation wraps them.
 
-;; rune:assay(hollow) — on-candle expresses steps 1-3 and 6. Steps 4-5, 7-13 are
-;; prose descriptions, not s-expressions. The fold step returns state unchanged.
-;; 30% expressed, 70% narrated. The forge cannot test the narrated joints.
+(define (conviction-threshold-quantile history quantile)
+  "Percentile of conviction history."
+  (let ((sorted (sort history)))
+    (nth sorted (min (- (len sorted) 1)
+                     (round (* (len sorted) quantile))))))
+
+(define (all-gates-pass? state manager-pred risk-mult candle ctx)
+  "8 conditions, ALL must hold. Pure predicate — no mutation."
+  (let ((meta-dir        (:direction manager-pred))
+        (meta-conviction (:conviction manager-pred))
+        (fee-rate        (+ (:swap-fee ctx) (:slippage ctx))))
+    (and (= (:asset-mode ctx) "hold")
+         (!= (:phase (:portfolio state)) :observe)
+         (:mgr-curve-valid state)
+         (>= meta-conviction (first (:mgr-proven-band state)))
+         (<  meta-conviction (second (:mgr-proven-band state)))
+         (market-moved? (:close candle) (:last-exit-price state)
+                        (:last-exit-atr state) (:k-stop ctx))
+         (> (:cached-risk-mult state) 0.3)
+         (or (= meta-dir (:mgr-buy state)) (= meta-dir (:mgr-sell state)))
+         (> (* (:atr-r candle) 6.0) (* 2.0 fee-rate)))))
+
+(define (compute-position-size band-edge risk-mult max-single)
+  "Half-Kelly modulated by risk, capped."
+  (min (* (/ band-edge 2.0) risk-mult) max-single))
+
+(define (trade-direction manager-pred mgr-buy)
+  "Manager direction → position direction."
+  (if (= (:direction manager-pred) mgr-buy) :long :short))
+
+(define (should-label? entry candle ctx)
+  "Has the price crossed the move threshold since entry?"
+  (let ((move (/ (abs (- (:close candle) (:entry-price entry)))
+                 (:entry-price entry))))
+    (and (not (:first-outcome entry))
+         (> move (:move-threshold ctx)))))
+
+(define (entry-label entry candle mgr-buy mgr-sell)
+  "Buy if price went up, Sell if price went down."
+  (if (> (:close candle) (:entry-price entry)) mgr-buy mgr-sell))
+
+(define (entry-expired? entry candle-idx ctx)
+  "Safety valve: pending entries expire at 10× horizon."
+  (> (- candle-idx (:candle-idx entry)) (* 10 (:horizon ctx))))
+
+;; ── The candle step ────────────────────────────────────────────────
+
 (define (on-candle state candle fact-labels observer-vecs ctx)
-  "One candle. The fold's inner step. Order matches state.rs on_candle_inner."
+  "One candle. The fold's inner step."
 
   ;; ─── 1. Observer predictions ──────────────────────────────────────
-  ;; Each observer predicts from its pre-encoded thought vector.
-  ;; The generalist is observers[5] with profile "full".
   (let* ((observer-preds
            (map (lambda (obs vec) (predict (:journal obs) vec))
                 (:observers state) observer-vecs))
@@ -85,122 +130,200 @@
          (generalist-vec  (nth observer-vecs 5))
 
   ;; ─── 2. Manager encoding + prediction ─────────────────────────────
-  ;; Encodes expert opinions as signed convictions with credibility.
-  ;; Then DELTA-ENRICHES: binds difference(prev-thought, current-thought)
-  ;; so the manager sees MOTION, not just position.
-         ;; encode-manager-thought: defined in market/manager.wat as manager-thought.
-         ;; Encodes observer predictions as signed convictions with credibility,
-         ;; plus panel shape, market context, and motion delta.
-         (mgr-facts    (manager-thought observer-preds candle state ctx))
+         (mgr-facts    (encode-manager-thought
+                         (:mgr-atoms ctx) (manager-context state observer-preds
+                           observer-vecs candle ctx)
+                         (:dims ctx) (:prev-mgr-thought state)))
          (mgr-thought  (bundle mgr-facts))
-         (delta        (when (:prev-mgr-thought state)
-                         (bind (:delta-atom ctx)
-                               (difference (:prev-mgr-thought state) mgr-thought))))
-         (final-thought (if delta (bundle mgr-thought delta) mgr-thought))
-         (manager-pred  (predict (:mgr-journal state) final-thought))
+         (manager-pred (predict (:mgr-journal state) mgr-thought))
+         (meta-dir        (:direction manager-pred))
+         (meta-conviction (:conviction manager-pred))
 
   ;; ─── 3. Panel engram ──────────────────────────────────────────────
-  ;; Template 2 reaction: learns what "good panel state" looks like.
-  ;; panel-familiar = residual < threshold. Display only (for now).
          (panel-state   (map :raw-cosine observer-preds))
          (panel-familiar (< (residual (:panel-engram state) panel-state)
                             (threshold (:panel-engram state))))
 
-  ;; ─── 4. Conviction threshold ──────────────────────────────────────
-  ;; Recomputed periodically. Two modes:
-  ;;   "quantile" — percentile of conviction history
-  ;;   "auto" — exponential curve fit (20 bins, log-linear regression)
-  ;; This determines what conviction level counts as "high."
-         ;; (recompute-conviction-threshold state ctx)
-
-  ;; ─── 5. Position tick + exit expert ───────────────────────────────
-  ;; For each open managed position:
-  ;;   a. Exit observer encodes position state (8 bound facts)
-  ;;   b. Exit expert buffers observation for deferred learning
-  ;;   c. Position ticks (trailing stop, high-water mark)
-  ;;   d. On exit signal: treasury swap, fee accounting, ledger log
-         ;; (tick-positions state candle ctx)
-
   ;; ─── 6. Risk evaluation ───────────────────────────────────────────
-  ;; Portfolio → 5 risk branch feature vectors (drawdown, accuracy,
-  ;; volatility, correlation, panel). Gated update: only learn from
-  ;; healthy states (drawdown < 2%, accuracy > 55%, positive returns,
-  ;; 20+ trades). Risk multiplier = min(threshold/residual) across
-  ;; branches, floored at 0.1.
-         ;; risk-multiplier: defined in risk/mod.wat. Updates branches when healthy,
-         ;; returns min(threshold/residual) across all branches, floored at 0.1.
-         (risk-mult (risk-multiplier (:portfolio state)))
+         (risk-mult (risk-multiplier (:portfolio state))))
 
-  ;; ─── 7. Position opening ──────────────────────────────────────────
-  ;; 8 gate conditions, ALL must pass:
-  ;;   1. asset-mode == "hold"
-  ;;   2. portfolio phase != Observe
-  ;;   3. manager curve valid (proven band exists)
-  ;;   4. conviction in proven band
-  ;;   5. market moved since last exit (k-stop × last-exit-atr)
-  ;;   6. risk allows (cached-risk-mult > 0.3)
-  ;;   7. manager direction is Buy or Sell (not silence)
-  ;;   8. expected move > 2 × fee rate (profitability gate)
-         ;; (when (all-gates-pass? state manager-pred risk-mult candle ctx)
-         ;;   (open-managed-position state manager-pred candle ctx))
+    ;; ─── 4. Conviction tracking ───────────────────────────────────────
+    (push-back (:conviction-history state) meta-conviction)
+    (when (> (len (:conviction-history state)) (:conviction-window ctx))
+      (pop-front (:conviction-history state)))
 
-  ;; ─── 8. Sizing ────────────────────────────────────────────────────
-  ;; How much capital: (* (/ band-edge 2.0) risk-mult)
-  ;; Capped by max-single-position. This is half-Kelly modulated by risk.
-  ;; The most important economic decision in the fold.
-         ;; (position-size band-edge risk-mult)
+    (when (and (>= (len (:conviction-history state)) (:conviction-warmup ctx))
+               (= (mod (:encode-count state) (:recalib-interval ctx)) 0))
+      (match (:conviction-mode ctx)
+        :quantile
+          (set! (:conviction-threshold state)
+                (conviction-threshold-quantile (:conviction-history state)
+                                               (:conviction-quantile ctx)))
+        :auto
+          ;; rune:assay(prose) — auto mode fits exponential curve via log-linear
+          ;; regression on 20 binned resolved predictions. See sizing.wat
+          ;; kelly-frac for the shared curve-fitting algorithm.
+          (when-let ((curve (log-linear-regression
+                      (bin (:resolved-preds state) 20))))
+            (let* ((a (first curve)) (b (second curve)))
+              (when (and (> b 0.0) (> (:min-edge ctx) 0.50))
+                (let ((target (/ (- (:min-edge ctx) 0.50) a)))
+                  (when (> target 0.0)
+                    (let ((thresh (/ (ln target) b)))
+                      (when (and (> thresh 0.0) (< thresh 1.0))
+                        (set! (:conviction-threshold state) thresh))))))))))
 
-  ;; ─── 9. Pending push ─────────────────────────────────────────────
-  ;; Store entry state for deferred learning. 25+ fields on Pending.
-  ;; Includes: entry price, ATR, all observer vectors and predictions,
-  ;; the complete manager thought (for one-encoding-path learning).
+    ;; ─── 5. Position tick ─────────────────────────────────────────────
+    (for-each (lambda (pos)
+      ;; Exit observer encodes + buffers observation
+      (let ((exit-thought (encode-position pos (:close candle) (:atr-r candle))))
+        (when (= (mod (:candles-held pos) (:exit-observe-interval ctx)) 0)
+          (push-back (:exit-pending state)
+            (exit-observation :thought exit-thought
+                              :pos-id (:id pos)
+                              :snapshot-pnl (return-pct pos (:close candle))
+                              :snapshot-candle (:encode-count state)))))
 
-  ;; ─── 10. Decay ────────────────────────────────────────────────────
-  ;; All journals decay once per candle.
-  ;; Generalist: adaptive-decay (regime-responsive).
-  ;; Specialists: fixed decay rate.
-         ;; (for-each (lambda (obs) (decay (:journal obs) decay-rate)) (:observers state))
-         ;; (decay (:mgr-journal state) adaptive-decay)
+      ;; Tick trailing stop + take profit
+      (let ((signal (tick pos (:close candle) (:k-trail ctx))))
+        (when signal
+          ;; Treasury settles the exit
+          (let ((pnl (compute-trade-pnl
+                        (return-pct pos (:close candle))
+                        (= (:direction pos) :long)
+                        (:swap-fee ctx) (:slippage ctx)
+                        (= (:asset-mode ctx) "hold")
+                        (:base-deployed pos)
+                        (:equity (:portfolio state))
+                        0.0)))
+            (close-position (:treasury state) (:base-deployed pos)
+                            (:trade-pnl pnl) (:total-fees pos) 0.0)
+            (record-trade (:portfolio state) (:outcome-pct pnl)
+                          0.0 (:direction pos) (:swap-fee ctx) (:slippage ctx))
+            (set! (:last-exit-price state) (:close candle))
+            (set! (:last-exit-atr state) (:atr-r candle))
+            (set! (:phase pos) :closed)))))
+      (:positions state))
 
-  ;; ─── 11. Event-driven learning ────────────────────────────────────
-  ;; For each pending entry, every candle:
-  ;;   a. Track directional excursion (MFE, MAE)
-  ;;   b. Manage trailing stop and take-profit per entry
-  ;;   c. On first threshold crossing:
-  ;;      - Label = Buy if price up, Sell if price down
-  ;;      - All 6 observers learn (observe journal vec label signal-weight)
-  ;;      - signal-weight scales by move magnitude
-  ;;      - Record crossing metadata (candles, timestamp, price)
+    ;; ─── 7-8. Position opening + sizing ───────────────────────────────
+    (when (all-gates-pass? state manager-pred risk-mult candle ctx)
+      (let* ((frac (compute-position-size 0.03 risk-mult (:max-single-position ctx)))
+             (direction (trade-direction manager-pred (:mgr-buy state)))
+             (deploy (* (:equity (:portfolio state)) frac)))
+        (when (> deploy 10.0)
+          (let ((pos (new-position
+                       (position-entry
+                         :id (:next-position-id state)
+                         :candle-idx (:encode-count state)
+                         :entry-price (:close candle)
+                         :entry-atr (:atr-r candle)
+                         :direction direction
+                         :base-deployed deploy
+                         :quote-received 0.0
+                         :entry-fee (* deploy (+ (:swap-fee ctx) (:slippage ctx)))
+                         :k-stop (:k-stop ctx)
+                         :k-tp (:k-tp ctx)))))
+            (push! (:positions state) pos)
+            (inc! (:next-position-id state))
+            (inc! (:hold-swaps state))
 
-  ;; ─── 12. Resolution ───────────────────────────────────────────────
-  ;; Pending entries expire at 10× horizon (safety valve).
-  ;; On resolution:
-  ;;   a. Manager learns direction from stored thought
-  ;;      (observe mgr-journal stored-thought price-direction-label 1.0)
-  ;;   b. Track manager accuracy in mgr-resolved deque
-  ;;   c. TradePnl computed (pure accounting)
-  ;;   d. Treasury settles (close-position)
-  ;;   e. Ledger logs trade
-  ;;   f. Risk diagnostics (adaptive decay state machine)
-  ;;   g. On recalibration: refit Kelly curve, scan proven band,
-  ;;      feed panel engram, decode discriminant
+    ;; ─── 9. Pending push ──────────────────────────────────────────────
+            (push! (:pending state)
+              (pending :candle-idx (:encode-count state)
+                       :tht-vec mgr-thought
+                       :tht-pred manager-pred
+                       :meta-dir meta-dir
+                       :meta-conviction meta-conviction
+                       :entry-price (:close candle)
+                       :entry-atr (:atr-r candle)
+                       :observer-vecs observer-vecs
+                       :observer-preds observer-preds
+                       :mgr-thought mgr-thought
+                       :fact-labels fact-labels))))))
 
-  ;; ─── 13. Log ──────────────────────────────────────────────────────
-  ;; pending-logs accumulates LogEntry values. The caller flushes.
-         )
+    ;; ─── 10. Decay ──────────────────────────────────────────────────
+    (for-each (lambda (obs)
+      (decay (:journal obs) (:decay ctx)))
+      (:observers state))
+    (decay (:mgr-journal state) (:adaptive-decay state))
+
+    ;; ─── 11. Event-driven learning ──────────────────────────────────
+    (for-each (lambda (entry)
+      ;; Track excursion
+      (let ((move-pct (/ (- (:close candle) (:entry-price entry))
+                         (:entry-price entry))))
+        (set! (:max-favorable entry) (max (:max-favorable entry) move-pct))
+        (set! (:max-adverse entry)   (min (:max-adverse entry) move-pct)))
+
+      ;; First threshold crossing → label + learn
+      (when (should-label? entry candle ctx)
+        (let ((label    (entry-label entry candle (:mgr-buy state) (:mgr-sell state)))
+              (abs-move (/ (abs (- (:close candle) (:entry-price entry)))
+                           (:entry-price entry)))
+              (sw       (signal-weight abs-move (:move-sum state) (:move-count state))))
+          (set! (:first-outcome entry) label)
+          ;; All 6 observers learn
+          (for-each (lambda (obs vec)
+            (observe (:journal obs) vec label sw))
+            (:observers state) (:observer-vecs entry))
+          (inc! (:labeled-count state)))))
+      (:pending state))
+
+    ;; ─── 12. Resolution ─────────────────────────────────────────────
+    (for-each (lambda (entry)
+      (when (entry-expired? entry (:encode-count state) ctx)
+        ;; Manager learns from stored thought
+        (let ((price-label (if (> (:close candle) (:entry-price entry))
+                               (:mgr-buy state) (:mgr-sell state))))
+          (observe (:mgr-journal state) (:mgr-thought entry) price-label 1.0))
+
+        ;; Track manager accuracy
+        (push-back (:mgr-resolved state)
+          (list (:meta-conviction entry)
+                (= (:first-outcome entry) price-label)))
+
+        ;; Resolve each observer
+        (for-each (lambda (obs pred)
+          (resolve obs (:tht-vec entry) pred price-label 1.0
+                   (:conviction-quantile ctx) (:conviction-window ctx)))
+          (:observers state) (:observer-preds entry))
+
+        ;; Accounting
+        (let ((pnl (compute-trade-pnl
+                      (/ (- (:close candle) (:entry-price entry))
+                         (:entry-price entry))
+                      (= (:meta-dir entry) (:mgr-buy state))
+                      (:swap-fee ctx) (:slippage ctx)
+                      (= (:asset-mode ctx) "hold")
+                      0.0 (:equity (:portfolio state)) 0.0)))
+          (record-trade (:portfolio state) (:net-ret pnl)
+                        0.0 (if (= (:meta-dir entry) (:mgr-buy state)) :long :short)
+                        (:swap-fee ctx) (:slippage ctx)))))
+      (:pending state))
+
+    ;; Remove resolved entries
+    (set! (:pending state)
+      (filter (lambda (e) (not (entry-expired? e (:encode-count state) ctx)))
+              (:pending state)))
+
+    ;; ─── 13. State bookkeeping ──────────────────────────────────────
+    (set! (:prev-mgr-thought state) mgr-thought)
+    (inc! (:encode-count state))
+    (set! (:cached-risk-mult state) risk-mult)
+
     state))
 
 ;; ── The organization ────────────────────────────────────────────────
 ;;
 ;;  Treasury (root — holds assets, executes swaps)
-;;  ├── Manager (branch — reads expert opinions, learns configurations)
+;;  ├── Manager (branch — reads observer opinions, learns configurations)
 ;;  │   ├── Momentum      (leaf — speed and direction)
 ;;  │   ├── Structure     (leaf — geometric shape)
 ;;  │   ├── Volume        (leaf — participation)
 ;;  │   ├── Narrative     (leaf — story and timing)
 ;;  │   ├── Regime        (leaf — market character)
 ;;  │   └── Generalist    (leaf — all facts, fixed window)
-;;  ├── Exit expert (leaf — position state → hold/exit)
+;;  ├── Exit observer (leaf — position state → hold/exit)
 ;;  │   rune:scry(aspirational) — learns but does not yet act
 ;;  ├── Risk branches (5 × OnlineSubspace — anomaly, not direction)
 ;;  │   rune:scry(aspirational) — risk manager with Journal not yet built
@@ -219,21 +342,9 @@
 ;; rune:scry(aspirational) — the architecture supports N desks:
 ;;   Treasury (shared) → BTC Desk | ETH Desk | ...
 ;;   Cross-desk risk (Template 2 on treasury-level observables)
-;;   See proposal 004 (streaming indicators).
 
 ;; ── What the enterprise does NOT do ─────────────────────────────────
 ;; - Does NOT know its event source (backtest, websocket, test harness)
 ;; - Does NOT encode candle→thought (that's the encoding functor, outside)
-;;   (But it DOES encode manager thoughts, exit expert thoughts, and risk features)
+;;   (But it DOES encode manager thoughts, exit observer thoughts, and risk features)
 ;; - Does NOT write to the database (pending-logs, caller flushes)
-
-;; ── Open questions (from std-candidates graduation) ─────────────────
-;;
-;; zero-vector: The identity element of bundle needs dims because vectors
-;; are fixed-dimensionality. (bundle) alone cannot know the size.
-;; The Rust creates vec![0.0; dims]. No wat equivalent exists yet.
-;;
-;; Designer question: Should (bundle) with no args be a lazy identity
-;; that adopts the dimensionality of the next bundle call? If so,
-;; zero-vector becomes (bundle) and dims is unnecessary.
-;; This is an algebra question: does the monoid identity know its size?
