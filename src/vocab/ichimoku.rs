@@ -66,15 +66,19 @@ pub fn eval_ichimoku(candles: &[Candle]) -> Option<Vec<Fact<'static>>> {
     facts.push(Fact::Zone { indicator: "close", zone: cloud_zone });
 
     // Tenkan-kijun cross (check prev candle)
+    // Previous tenkan/kijun: same period windows, shifted back one candle.
+    // prev_candles = candles[0..n-1] — everything except the current candle.
     if n >= 27 {
+        let prev = &candles[..n-1];
+        let pn = prev.len();
         let prev_tenkan = {
-            let w = &candles[n.saturating_sub(10)..n-1];
+            let w = &prev[pn.saturating_sub(9)..];
             let hi = w.iter().map(|c| c.high).fold(f64::NEG_INFINITY, f64::max);
             let lo = w.iter().map(|c| c.low).fold(f64::INFINITY, f64::min);
             (hi + lo) / 2.0
         };
         let prev_kijun = {
-            let w = &candles[n.saturating_sub(27)..n-1];
+            let w = &prev[pn.saturating_sub(26)..];
             let hi = w.iter().map(|c| c.high).fold(f64::NEG_INFINITY, f64::max);
             let lo = w.iter().map(|c| c.low).fold(f64::INFINITY, f64::min);
             (hi + lo) / 2.0

@@ -58,7 +58,9 @@ pub fn eval_oscillators(candles: &[Candle]) -> Vec<Fact<'static>> {
     }
     facts.push(Fact::Scalar { indicator: "williams-r", value: (wr + 100.0) / 100.0, scale: 1.0 });
 
-    // Stochastic — pre-computed on Candle (stoch_k is the raw %K)
+    // Stochastic RSI — pre-computed stoch_k on Candle, emitted as "stoch-rsi"
+    // Note: this is stoch_%K used as an RSI-like oscillator, not the stochastic
+    // from stochastic.wat (which emits "stoch-k" / "stoch-d" with cross-detection).
     let sk = now.stoch_k;
     if sk > 80.0 {
         facts.push(Fact::Zone { indicator: "stoch-rsi", zone: "stoch-rsi-overbought" });
