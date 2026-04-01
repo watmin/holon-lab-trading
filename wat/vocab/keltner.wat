@@ -5,58 +5,36 @@
 ;;
 ;; Expert profile: structure
 
-(require vocab/mod)
 (require facts)
-
-;; ── Atoms introduced ───────────────────────────────────────────
-
-;; Indicators:   close, keltner-upper, keltner-lower, kelt-pos, bb-pos, volatility
-;; Predicates:   above, below
-;; Zones:        squeeze
-
-;; ── Channel definitions (from candle.wat) ──────────────────────
-;;
-;; Keltner: EMA(20) +/- 1.5 * ATR(14)
-;; Bollinger: SMA(20) +/- 2 * StdDev(20)
-;; Keltner position: (close - lower) / (upper - lower) — [0, 1]
-;; Bollinger position: (close - bb_lower) / (bb_upper - bb_lower) — [0, 1]
-;; Squeeze: BB width < Keltner width — volatility compression
-
-;; ── Facts produced ─────────────────────────────────────────────
 
 (define (eval-keltner candles)
   "Keltner, Bollinger position, and squeeze facts.
    Returns empty if Keltner bands are zero (insufficient data)."
+  (let ((now (last candles)))
+    (when (and (> (:kelt-upper now) 0.0) (> (:kelt-lower now) 0.0))
+      (let ((close    (:close now))
+            (ku       (:kelt-upper now))
+            (kl       (:kelt-lower now))
+            (kp       (:kelt-pos now))
+            (bp       (:bb-pos now))
+            (sq       (:squeeze now)))
+        (append
+          ;; Close vs Keltner bands — breakout detection
+          (cond
+            ((> close ku) (list (fact/comparison "above" "close" "keltner-upper")))
+            ((< close kl) (list (fact/comparison "below" "close" "keltner-lower")))
+            (else (list)))
 
-  ;; Close vs Keltner bands
-  ;; Comparison: (above close keltner-upper) — breakout above
-  ;;              (below close keltner-lower) — breakout below
-  ;; Only emitted on breakout. No fact when inside channel.
-  (when (> close kelt-upper)
-    (fact/comparison "above" "close" "keltner-upper"))
-  (when (< close kelt-lower)
-    (fact/comparison "below" "close" "keltner-lower"))
+          ;; Channel position scalars
+          (list (fact/scalar "kelt-pos" (clamp kp 0.0 1.0) 1.0)
+                (fact/scalar "bb-pos"   (clamp bp 0.0 1.0) 1.0))
 
-  ;; Keltner position — where is price within the channel?
-  ;; Scalar: (kelt-pos value) clamped [0, 1], scale 1.0
-  (fact/scalar "kelt-pos" (clamp kelt-pos 0.0 1.0) 1.0)
-
-  ;; Bollinger position — where is price within the bands?
-  ;; Scalar: (bb-pos value) clamped [0, 1], scale 1.0
-  ;; 0.0 = lower band. 1.0 = upper band.
-  (fact/scalar "bb-pos" (clamp bb-pos 0.0 1.0) 1.0)
-
-  ;; Squeeze — BB inside Keltner means low volatility compression
-  ;; Zone: (at volatility squeeze)
-  ;; Binary. No threshold — it's a geometric containment test.
-  (when squeeze
-    (fact/zone "volatility" "squeeze")))
-
-;; ── Guard: kelt_upper > 0 AND kelt_lower > 0 ──────────────────
-;; During warmup, Keltner bands are zero. No facts emitted.
+          ;; Squeeze — BB inside Keltner means volatility compression
+          (if sq
+              (list (fact/zone "volatility" "squeeze"))
+              (list)))))))
 
 ;; ── What keltner does NOT do ───────────────────────────────────
 ;; - Does NOT compute bands (pre-computed on Candle)
 ;; - Does NOT detect band walks (consecutive touches — future work)
-;; - Does NOT import holon or create vectors
 ;; - Pure function. Candles in, facts out.

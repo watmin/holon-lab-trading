@@ -8,13 +8,12 @@
 ;;
 ;; Expert profile: momentum
 
-(require vocab/mod)
 (require thought/pelt)
 
-;; ── Atoms introduced ───────────────────────────────────────────
-
-;; None. Divergence returns a custom struct, not Fact data.
-;; The encoder handles Divergence objects with custom bind patterns.
+(define (pairs xs)
+  "Sliding pairs: [a,b,c] → [(a,b), (b,c)]."
+  (map (lambda (i) (list (nth xs i) (nth xs (+ i 1))))
+       (range 0 (- (len xs) 1))))
 
 ;; ── Divergence struct ──────────────────────────────────────────
 
@@ -79,7 +78,7 @@
           (divergence :kind "bearish" :indicator "rsi"
                       :price-dir "up" :indicator-dir "down"
                       :candles-ago (- n 1 curr)))))
-      (windows 2 peaks)))
+      (pairs peaks)))
 
   (define (check-bullish-pairs troughs candles n)
     "Consecutive troughs where price makes lower low but RSI makes higher low."
@@ -90,20 +89,20 @@
           (divergence :kind "bullish" :indicator "rsi"
                       :price-dir "down" :indicator-dir "up"
                       :candles-ago (- n 1 curr)))))
-      (windows 2 troughs)))
+      (pairs troughs)))
 
-  (let ((close-ln (map ln (map close candles)))
-        (cps (pelt-changepoints close-ln (bic-penalty close-ln)))
+  (let ((close-ln (map (lambda (c) (ln (:close c))) candles))
+        (n        (len candles))
+        (cps      (pelt-changepoints close-ln (bic-penalty close-ln)))
         (boundaries (append [0] cps [(len close-ln)]))
-        (seg-dirs (map segment-direction boundaries))
-        (peaks (find-peaks seg-dirs boundaries))
-        (troughs (find-troughs seg-dirs boundaries)))
+        (seg-dirs (map (lambda (i) (segment-direction boundaries i close-ln))
+                       (range 0 (- (len boundaries) 1))))
+        (peaks    (find-peaks seg-dirs boundaries))
+        (troughs  (find-troughs seg-dirs boundaries)))
 
-    ;; Check consecutive peak pairs for bearish divergence
-    ;; Check consecutive trough pairs for bullish divergence
     (append
-      (check-bearish-pairs peaks candles)
-      (check-bullish-pairs troughs candles))))
+      (check-bearish-pairs peaks candles n)
+      (check-bullish-pairs troughs candles n))))
 
 ;; ── Minimum window: 10 candles ─────────────────────────────────
 ;; Needs at least 3 segments to find a peak pair.
@@ -118,5 +117,5 @@
 ;; - Does NOT encode (returns Divergence structs, not vectors)
 ;; - Does NOT score divergence strength (it's binary: detected or not)
 ;; - Does NOT check MACD, OBV, or other indicators (RSI only, for now)
-;; - Does NOT import holon or create vectors
+;; - Requires thought/pelt for PELT changepoint detection
 ;; - Pure function. Candles in, divergences out.

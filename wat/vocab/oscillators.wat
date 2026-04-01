@@ -6,66 +6,59 @@
 ;;
 ;; Expert profile: momentum
 
-(require vocab/mod)
 (require facts)
 
-;; ── Atoms introduced ───────────────────────────────────────────
+(define (ultimate-oscillator candles p1 p2 p3)
+  "Weighted average of three timeframes. Returns None if window < p3+1.
+   uo = 100 * (4*avg7 + 2*avg14 + 1*avg28) / 7
+   where avg = buying_pressure / true_range over period."
+  (when (>= (len candles) (+ p3 1))
+    ;; rune:scry(aspirational) — accumulation loop over candle pairs
+    ;; Each candle contributes to periods it falls within.
+    ;; buying_pressure = close - min(low, prev_close)
+    ;; true_range      = max(high, prev_close) - min(low, prev_close)
+    None))
 
-;; Indicators:   williams-r, stoch-rsi, ult-osc
-;; Zones:        williams-overbought, williams-oversold,
-;;               stoch-rsi-overbought, stoch-rsi-oversold,
-;;               ult-osc-overbought, ult-osc-oversold
-;; Bare:         roc-accelerating, roc-decelerating
-
-;; ── Facts produced ─────────────────────────────────────────────
 (define (eval-oscillators candles)
   "Momentum oscillator facts from a candle window."
+  (let ((now (last candles)))
+    (let ((wr     (:williams-r now))
+          (sk     (:stoch-k now))
+          (roc-1  (:roc-1 now))
+          (roc-3  (:roc-3 now))
+          (roc-6  (:roc-6 now))
+          (roc-12 (:roc-12 now)))
+      (append
+        ;; Williams %R — zone + scalar
+        (cond
+          ((> wr -20.0) (list (fact/zone "williams-r" "williams-overbought")))
+          ((< wr -80.0) (list (fact/zone "williams-r" "williams-oversold")))
+          (else (list)))
+        (list (fact/scalar "williams-r" (/ (+ wr 100.0) 100.0) 1.0))
 
-  ;; Williams %R — pre-computed on Candle
-  ;; Zone: (at williams-r williams-overbought) when %R > -20
-  ;;        (at williams-r williams-oversold)   when %R < -80
-  ;; Scalar: (williams-r value) where value = (wr + 100) / 100, scale 1.0
-  ;; Thresholds: -20 (overbought), -80 (oversold). Standard Williams %R levels.
-  (fact/zone "williams-r" (cond
-    ((> wr -20.0) "williams-overbought")
-    ((< wr -80.0) "williams-oversold")))
-  (fact/scalar "williams-r" (/ (+ wr 100.0) 100.0) 1.0)
+        ;; Stochastic %K — zone + scalar
+        (cond
+          ((> sk 80.0) (list (fact/zone "stoch-rsi" "stoch-rsi-overbought")))
+          ((< sk 20.0) (list (fact/zone "stoch-rsi" "stoch-rsi-oversold")))
+          (else (list)))
+        (list (fact/scalar "stoch-rsi" (/ sk 100.0) 1.0))
 
-  ;; Stochastic — pre-computed stoch_k on Candle (raw %K, not smoothed)
-  ;; Zone: (at stoch-rsi stoch-rsi-overbought) when %K > 80
-  ;;        (at stoch-rsi stoch-rsi-oversold)   when %K < 20
-  ;; Scalar: (stoch-rsi value) where value = sk / 100, scale 1.0
-  ;; Thresholds: 80/20. Standard stochastic overbought/oversold.
-  (fact/zone "stoch-rsi" (cond
-    ((> sk 80.0) "stoch-rsi-overbought")
-    ((< sk 20.0) "stoch-rsi-oversold")))
-  (fact/scalar "stoch-rsi" (/ sk 100.0) 1.0)
+        ;; Ultimate Oscillator — window-dependent
+        (when-let ((uo (ultimate-oscillator candles 7 14 28)))
+          (cond
+            ((> uo 70.0) (list (fact/zone "ult-osc" "ult-osc-overbought")))
+            ((< uo 30.0) (list (fact/zone "ult-osc" "ult-osc-oversold")))
+            (else (list))))
 
-  ;; Ultimate Oscillator — window-dependent, computed from raw candles
-  ;; Three timeframes (7, 14, 28) weighted 4:2:1.
-  ;; uo = 100 * (4*avg7 + 2*avg14 + 1*avg28) / 7
-  ;; where avg = buying_pressure / true_range over period.
-  ;; Zone: (at ult-osc ult-osc-overbought) when uo > 70
-  ;;        (at ult-osc ult-osc-oversold)   when uo < 30
-  ;; Thresholds: 70/30. Standard UO levels.
-  ;; Returns None if window < 29 candles.
-  (when (>= (len candles) 29)
-    (fact/zone "ult-osc" (cond
-      ((> uo 70.0) "ult-osc-overbought")
-      ((< uo 30.0) "ult-osc-oversold"))))
-
-  ;; Multi-timeframe ROC — pre-computed roc_1, roc_3, roc_6, roc_12
-  ;; Accelerating: roc_1 > roc_3 > roc_6 > roc_12 (cascading momentum)
-  ;; Decelerating: roc_1 < roc_3 < roc_6 < roc_12 (momentum fading)
-  ;; Bare: (roc-accelerating) or (roc-decelerating)
-  ;; No thresholds. Pure ordering test.
-  (when (and (> roc-1 roc-3) (> roc-3 roc-6) (> roc-6 roc-12))
-    (fact/bare "roc-accelerating"))
-  (when (and (< roc-1 roc-3) (< roc-3 roc-6) (< roc-6 roc-12))
-    (fact/bare "roc-decelerating")))
+        ;; Multi-timeframe ROC — cascading momentum test
+        (if (and (> roc-1 roc-3) (> roc-3 roc-6) (> roc-6 roc-12))
+            (list (fact/bare "roc-accelerating"))
+            (list))
+        (if (and (< roc-1 roc-3) (< roc-3 roc-6) (< roc-6 roc-12))
+            (list (fact/bare "roc-decelerating"))
+            (list))))))
 
 ;; ── What oscillators does NOT do ───────────────────────────────
 ;; - Does NOT compute RSI (that's the segment narrative in thought/mod.rs)
 ;; - Does NOT detect crosses (that's stochastic.wat)
-;; - Does NOT import holon or create vectors
 ;; - Pure function. Candles in, facts out.

@@ -9,165 +9,286 @@
 ;;
 ;; Expert profile: regime (exclusive)
 
-(require vocab/mod)
 (require facts)
 
-;; ── Atoms introduced ───────────────────────────────────────────
+;; ── Helpers ────────────────────────────────────────────────────
 
-;; Indicators:   kama-er, chop, dfa-alpha, variance-ratio, td-count,
-;;               aroon-up, fractal-dim, entropy-rate, gr-bvalue,
-;;               trend-consistency-6, trend-consistency-12, trend-consistency-24,
-;;               atr-roc-6, atr-roc-12,
-;;               range-pos-12, range-pos-24, range-pos-48,
-;;               trend, volatility
-;;
-;; Zones:        efficient-trend, inefficient-chop, moderate-efficiency,
-;;               chop-trending, chop-choppy, chop-extreme, chop-transition,
-;;               persistent-dfa, anti-persistent-dfa, random-walk-dfa,
-;;               vr-momentum, vr-mean-revert, vr-neutral,
-;;               td-exhausted, td-mature, td-building, td-inactive,
-;;               aroon-strong-up, aroon-strong-down, aroon-stale, aroon-consolidating,
-;;               trending-geometry, mean-reverting-geometry, random-walk-geometry,
-;;               low-entropy-rate, high-entropy-rate,
-;;               heavy-tails, light-tails,
-;;               trend-strong, trend-choppy,
-;;               vol-expanding, vol-contracting
+(define (log-returns closes)
+  "Successive log-ratios from a close price series."
+  (map (lambda (i) (ln (/ (nth closes i) (nth closes (- i 1)))))
+       (range 1 (len closes))))
+
+(define (linreg-slope xs ys)
+  "Simple linear regression slope. Returns None if degenerate."
+  (let ((n   (len xs))
+        (sx  (fold + 0.0 xs))
+        (sy  (fold + 0.0 ys))
+        (sxx (fold + 0.0 (map (lambda (x) (* x x)) xs)))
+        (sxy (fold + 0.0 (map * xs ys)))
+        (denom (- (* n sxx) (* sx sx))))
+    (when (> (abs denom) 1e-10)
+      (/ (- (* n sxy) (* sx sy)) denom))))
+
+;; ── KAMA Efficiency Ratio ──────────────────────────────────────
+
+(define (kama-er closes)
+  "ER = |net_move| / sum(|step_move|) over 10 periods."
+  (let ((n  (len closes))
+        (period (min 10 (- n 1)))
+        (net    (abs (- (nth closes (- n 1)) (nth closes (- n 1 period)))))
+        (steps  (fold + 0.0
+                  (map (lambda (i) (abs (- (nth closes i) (nth closes (- i 1)))))
+                       (range (- n period) n)))))
+    (if (> steps 1e-10) (/ net steps) 0.0)))
+
+;; ── Choppiness Index ───────────────────────────────────────────
+
+(define (choppiness-index candles)
+  "100 * log10(ATR_sum / range) / log10(period). Uses 14 periods."
+  (let ((period (min 14 (- (len candles) 1)))
+        (slice  (last-n candles period)))
+    (let ((atr-sum (fold + 0.0
+                     (map (lambda (i)
+                            (let ((c    (nth slice i))
+                                  (prev (nth slice (- i 1))))
+                              (max (- (:high c) (:low c))
+                                   (abs (- (:high c) (:close prev)))
+                                   (abs (- (:low c) (:close prev))))))
+                          (range 1 period))))
+          (hi (fold max (:high (first slice)) (map :high (rest slice))))
+          (lo (fold min (:low (first slice))  (map :low (rest slice))))
+          (range (- hi lo)))
+      (if (> range 1e-10)
+          (* 100.0 (/ (ln (/ atr-sum range)) (ln period)))
+          100.0))))
+
+;; ── DFA Alpha ──────────────────────────────────────────────────
+
+(define (dfa-alpha returns)
+  "Detrended fluctuation analysis. Log-log slope at scales [4,6,8,12,16].
+   Returns None if insufficient data or scales."
+  (when (>= (len returns) 16)
+    (let ((mean (/ (fold + 0.0 returns) (len returns)))
+          (integrated (fold-left
+                        (lambda (acc r) (append acc (list (+ (last acc) (- r mean)))))
+                        (list 0.0)
+                        returns))
+          (scales (filter (lambda (s) (<= s (len integrated))) [4 6 8 12 16])))
+      (when (>= (len scales) 3)
+        ;; rune:scry(aspirational) — per-scale DFA fluctuation computation
+        ;; For each scale: segment integrated series, detrend each segment,
+        ;; compute RMS. Log-log regression of fluctuation vs scale gives alpha.
+        None))))
+
+;; ── Variance Ratio ─────────────────────────────────────────────
+
+(define (variance-ratio returns k)
+  "VR(k) = var(k-period returns) / (k * var(1-period returns)).
+   VR > 1: momentum. VR < 1: mean-reversion. Returns None if degenerate."
+  (when (>= (len returns) 10)
+    (let ((var1 (/ (fold + 0.0 (map (lambda (r) (* r r)) returns))
+                   (len returns))))
+      (when (> var1 1e-20)
+        (let ((k-returns (map (lambda (i)
+                                (fold + 0.0 (map (lambda (j) (nth returns (+ i j)))
+                                                  (range 0 k))))
+                              (range 0 (+ (- (len returns) k) 1))))
+              (var-k (/ (/ (fold + 0.0 (map (lambda (r) (* r r)) k-returns))
+                           (len k-returns))
+                        k)))
+          (/ var-k var1))))))
+
+;; ── DeMark TD Sequential ──────────────────────────────────────
+
+(define (td-count closes)
+  "Consecutive closes above/below close[i-4]. Resets on direction change."
+  (fold-left
+    (lambda (count i)
+      (cond ((> (nth closes i) (nth closes (- i 4)))
+             (if (> count 0) (+ count 1) 1))
+            ((< (nth closes i) (nth closes (- i 4)))
+             (if (< count 0) (- count 1) -1))
+            (else 0)))
+    0
+    (range 4 (len closes))))
+
+;; ── Aroon ──────────────────────────────────────────────────────
+
+(define (aroon candles period)
+  "Aroon up/down as (up, down) pair. Returns None if insufficient data."
+  (when (> (len candles) period)
+    (let ((slice (last-n candles (+ period 1))))
+      (let ((hi-idx (fold-left (lambda (best i)
+                                 (if (>= (:high (nth slice i)) (:high (nth slice best))) i best))
+                               0 (range 0 (+ period 1))))
+            (lo-idx (fold-left (lambda (best i)
+                                 (if (<= (:low (nth slice i)) (:low (nth slice best))) i best))
+                               0 (range 0 (+ period 1)))))
+        (list (* 100.0 (/ hi-idx period))
+              (* 100.0 (/ lo-idx period)))))))
+
+;; ── Fractal Dimension (Katz) ───────────────────────────────────
+
+(define (fractal-dimension closes)
+  "FD = ln(N) / (ln(N) + ln(max_dist/path_len)). Returns None if degenerate."
+  (let ((n (len closes))
+        (path-len (fold + 0.0
+                    (map (lambda (i) (sqrt (+ (* (- (nth closes i) (nth closes (- i 1)))
+                                                 (- (nth closes i) (nth closes (- i 1))))
+                                              1.0)))
+                         (range 1 n))))
+        (max-dist (fold max 0.0
+                    (map (lambda (c) (abs (- c (first closes)))) closes))))
+    (when (and (> path-len 1e-10) (> max-dist 1e-10))
+      (clamp (/ (ln n) (+ (ln n) (ln (/ max-dist path-len)))) 1.0 2.0))))
+
+;; ── Entropy Rate ───────────────────────────────────────────────
+
+(define (entropy-rate returns)
+  "Bigram conditional entropy of return classes (up/flat/down).
+   Normalized by ln(3). Returns None if < 20 returns."
+  (when (>= (len returns) 20)
+    (let ((classes (map (lambda (r)
+                          (cond ((> r 0.0001) 2)
+                                ((< r -0.0001) 0)
+                                (else 1)))
+                        returns)))
+      ;; rune:scry(aspirational) — bigram transition matrix accumulation
+      ;; Build 3x3 transition count matrix, compute conditional entropy.
+      None)))
+
+;; ── Gutenberg-Richter b-value ──────────────────────────────────
+
+(define (gr-bvalue returns)
+  "Seismology: frequency-magnitude relationship. b < 1 = heavy tails.
+   Returns None if < 20 returns or insufficient thresholds."
+  (when (>= (len returns) 20)
+    (let ((abs-returns (sort (map abs returns)))
+          (nr (len abs-returns))
+          (thresholds (map (lambda (i) (nth abs-returns (/ (* nr i) 5)))
+                           (range 1 5))))
+      ;; Log-log regression of exceedance count vs threshold
+      (let ((points (filter-map
+                      (lambda (t)
+                        (when (> t 1e-10)
+                          (let ((count (len (filter (lambda (r) (>= r t)) abs-returns))))
+                            (when (> count 0)
+                              (list (ln t) (ln count))))))
+                      thresholds)))
+        (when (>= (len points) 3)
+          (let ((log-m (map first points))
+                (log-n (map second points)))
+            (when-let ((slope (linreg-slope log-m log-n)))
+              (- slope))))))))
 
 ;; ── Facts produced ─────────────────────────────────────────────
 
 (define (eval-regime candles)
   "Market regime facts. Minimum 20 candles."
+  (when (>= (len candles) 20)
+    (let ((n       (len candles))
+          (now     (last candles))
+          (closes  (map :close candles))
+          (returns (log-returns closes)))
+      (append
+        ;; KAMA Efficiency Ratio
+        (let ((er (kama-er closes)))
+          (list (fact/zone "kama-er"
+                  (cond ((> er 0.6) "efficient-trend")
+                        ((< er 0.3) "inefficient-chop")
+                        (else       "moderate-efficiency")))))
 
-  ;; ── KAMA Efficiency Ratio ──────────────────────────────────
-  ;; ER = |net_move| / sum(|step_move|) over 10 periods.
-  ;; 1.0 = perfectly trending. 0.0 = perfectly choppy.
-  ;; Zone thresholds: > 0.6 efficient, < 0.3 inefficient. Empirical.
-  (fact/zone "kama-er" (cond
-    ((> er 0.6) "efficient-trend")
-    ((< er 0.3) "inefficient-chop")
-    (else       "moderate-efficiency")))
+        ;; Choppiness Index
+        (let ((chop (choppiness-index candles)))
+          (list (fact/zone "chop"
+                  (cond ((< chop 38.2) "chop-trending")
+                        ((> chop 75.0) "chop-extreme")
+                        ((> chop 61.8) "chop-choppy")
+                        (else          "chop-transition")))))
 
-  ;; ── Choppiness Index (14-period) ───────────────────────────
-  ;; 100 * log10(ATR_sum / range) / log10(period).
-  ;; Low = trending. High = choppy.
-  ;; Zone thresholds: < 38.2 trending, > 61.8 choppy, > 75 extreme.
-  ;; 38.2 and 61.8 are Fibonacci ratios. Empirical/traditional.
-  (fact/zone "chop" (cond
-    ((< chop 38.2) "chop-trending")
-    ((> chop 75.0) "chop-extreme")
-    ((> chop 61.8) "chop-choppy")
-    (else          "chop-transition")))
+        ;; DFA Alpha
+        (when-let ((alpha (dfa-alpha returns)))
+          (list (fact/zone "dfa-alpha"
+                  (cond ((> alpha 0.6) "persistent-dfa")
+                        ((< alpha 0.4) "anti-persistent-dfa")
+                        (else          "random-walk-dfa")))))
 
-  ;; ── DFA Alpha (detrended fluctuation analysis) ─────────────
-  ;; Log-log slope of fluctuation vs scale at scales [4, 6, 8, 12, 16].
-  ;; Alpha > 0.6: persistent (trends). Alpha < 0.4: anti-persistent.
-  ;; Clamped to [0, 1.5]. Needs >= 16 returns, >= 3 valid scales.
-  ;; Thresholds: 0.6/0.4. Modest separation from 0.5 random walk.
-  (when (>= (len returns) 16)
-    (fact/zone "dfa-alpha" (cond
-      ((> alpha 0.6) "persistent-dfa")
-      ((< alpha 0.4) "anti-persistent-dfa")
-      (else          "random-walk-dfa"))))
+        ;; Variance Ratio (k=5)
+        (when-let ((vr (variance-ratio returns 5)))
+          (list (fact/zone "variance-ratio"
+                  (cond ((> vr 1.3) "vr-momentum")
+                        ((< vr 0.7) "vr-mean-revert")
+                        (else       "vr-neutral")))))
 
-  ;; ── Variance Ratio (k=5) ──────────────────────────────────
-  ;; VR = var(k-period returns) / (k * var(1-period returns)).
-  ;; VR > 1: momentum. VR < 1: mean-reversion. VR = 1: random walk.
-  ;; Needs >= 10 returns.
-  ;; Thresholds: > 1.3 momentum, < 0.7 mean-revert. Empirical.
-  (when (>= (len returns) 10)
-    (fact/zone "variance-ratio" (cond
-      ((> vr 1.3) "vr-momentum")
-      ((< vr 0.7) "vr-mean-revert")
-      (else       "vr-neutral"))))
+        ;; DeMark TD Sequential
+        (if (>= n 5)
+            (let ((count (td-count closes)))
+              (list (fact/zone "td-count"
+                      (cond ((>= (abs count) 9) "td-exhausted")
+                            ((>= (abs count) 7) "td-mature")
+                            ((>= (abs count) 4) "td-building")
+                            (else               "td-inactive")))))
+            (list))
 
-  ;; ── DeMark TD Sequential ──────────────────────────────────
-  ;; Counts consecutive closes above/below close[i-4].
-  ;; Resets on direction change. Counts up (positive) or down (negative).
-  ;; Needs >= 5 candles.
-  ;; Thresholds: >= 9 exhausted, >= 7 mature, >= 4 building. TD standard levels.
-  (when (>= n 5)
-    (fact/zone "td-count" (cond
-      ((>= abs-count 9) "td-exhausted")
-      ((>= abs-count 7) "td-mature")
-      ((>= abs-count 4) "td-building")
-      (else             "td-inactive"))))
+        ;; Aroon (25-period)
+        (when-let ((ar (aroon candles (min 25 (- n 1)))))
+          (let ((aroon-up   (first ar))
+                (aroon-down (second ar)))
+            (list (fact/zone "aroon-up"
+                    (cond ((and (> aroon-up 80) (< aroon-down 30)) "aroon-strong-up")
+                          ((and (> aroon-down 80) (< aroon-up 30)) "aroon-strong-down")
+                          ((and (< aroon-up 20) (< aroon-down 20)) "aroon-stale")
+                          (else                                     "aroon-consolidating"))))))
 
-  ;; ── Aroon (25-period) ─────────────────────────────────────
-  ;; aroon_up   = 100 * (periods_since_highest_high / 25)
-  ;; aroon_down = 100 * (periods_since_lowest_low / 25)
-  ;; Thresholds: up>80 & down<30 = strong up. down>80 & up<30 = strong down.
-  ;; Both < 20 = stale. Else consolidating. Standard Aroon interpretation.
-  (fact/zone "aroon-up" (cond
-    ((and (> aroon-up 80) (< aroon-down 30)) "aroon-strong-up")
-    ((and (> aroon-down 80) (< aroon-up 30)) "aroon-strong-down")
-    ((and (< aroon-up 20) (< aroon-down 20)) "aroon-stale")
-    (else                                     "aroon-consolidating")))
+        ;; Fractal Dimension (Katz)
+        (when-let ((fd (fractal-dimension closes)))
+          (list (fact/zone "fractal-dim"
+                  (cond ((< fd 1.3) "trending-geometry")
+                        ((> fd 1.7) "mean-reverting-geometry")
+                        (else       "random-walk-geometry")))))
 
-  ;; ── Fractal Dimension (Katz) ──────────────────────────────
-  ;; FD = ln(N) / (ln(N) + ln(max_dist / path_len)).
-  ;; FD near 1.0: straight line (trending). FD near 2.0: space-filling (noisy).
-  ;; Clamped to [1.0, 2.0].
-  ;; Thresholds: < 1.3 trending, > 1.7 mean-reverting. Geometric.
-  (fact/zone "fractal-dim" (cond
-    ((< fd 1.3) "trending-geometry")
-    ((> fd 1.7) "mean-reverting-geometry")
-    (else       "random-walk-geometry")))
+        ;; Entropy Rate
+        (when-let ((h-norm (entropy-rate returns)))
+          (list (fact/zone "entropy-rate"
+                  (cond ((< h-norm 0.7) "low-entropy-rate")
+                        (else           "high-entropy-rate")))))
 
-  ;; ── Entropy Rate (bigram conditional entropy) ──────────────
-  ;; Classify returns as up/flat/down. Build transition matrix.
-  ;; H_cond = -sum(P(i)*P(j|i)*ln(P(j|i))). Normalize by ln(3).
-  ;; Low entropy = predictable transitions. High = random.
-  ;; Needs >= 20 returns.
-  ;; Threshold: < 0.7 low-entropy. Empirical.
-  ;; Return classification: > 0.01% = up, < -0.01% = down, else flat.
-  (when (>= (len returns) 20)
-    (fact/zone "entropy-rate" (cond
-      ((< h-norm 0.7) "low-entropy-rate")
-      (else           "high-entropy-rate"))))
+        ;; Gutenberg-Richter b-value
+        (when-let ((b (gr-bvalue returns)))
+          (list (fact/zone "gr-bvalue"
+                  (cond ((< b 1.0) "heavy-tails")
+                        (else      "light-tails")))))
 
-  ;; ── Gutenberg-Richter b-value ─────────────────────────────
-  ;; Seismology: frequency-magnitude relationship of return "quakes".
-  ;; b < 1: heavy tails (extreme moves more likely). b > 1: light tails.
-  ;; Log-log regression of exceedance count vs threshold.
-  ;; Needs >= 20 returns, >= 3 valid thresholds.
-  (when (>= (len returns) 20)
-    (fact/zone "gr-bvalue" (cond
-      ((< b 1.0) "heavy-tails")
-      (else      "light-tails"))))
+        ;; ── Pre-computed scalars from Candle ──────────────────
 
-  ;; ── Pre-computed scalars from Candle ──────────────────────
+        ;; Trend consistency at multiple scales
+        (list (fact/scalar "trend-consistency-6"  (:trend-consistency-6 now)  1.0)
+              (fact/scalar "trend-consistency-12" (:trend-consistency-12 now) 1.0)
+              (fact/scalar "trend-consistency-24" (:trend-consistency-24 now) 1.0))
 
-  ;; Trend consistency — fraction of up-closes over recent periods
-  ;; Scalar: scale 1.0. Values naturally [0, 1].
-  (fact/scalar "trend-consistency-6"  tc6  1.0)
-  (fact/scalar "trend-consistency-12" tc12 1.0)
-  (fact/scalar "trend-consistency-24" tc24 1.0)
+        ;; Trend agreement across scales
+        (cond
+          ((and (> (:trend-consistency-6 now) 0.8) (> (:trend-consistency-12 now) 0.7))
+           (list (fact/zone "trend" "trend-strong")))
+          ((and (< (:trend-consistency-6 now) 0.35) (< (:trend-consistency-12 now) 0.4))
+           (list (fact/zone "trend" "trend-choppy")))
+          (else (list)))
 
-  ;; Trend agreement across scales
-  ;; Zone: (at trend trend-strong) when tc6 > 0.8 AND tc12 > 0.7
-  ;;        (at trend trend-choppy) when tc6 < 0.35 AND tc12 < 0.4
-  ;; Thresholds: empirical. Strong = consistent at multiple scales.
-  (when (and (> tc6 0.8) (> tc12 0.7))
-    (fact/zone "trend" "trend-strong"))
-  (when (and (< tc6 0.35) (< tc12 0.4))
-    (fact/zone "trend" "trend-choppy"))
+        ;; Volatility acceleration — ATR rate of change
+        (list (fact/scalar "atr-roc-6"
+                (+ (* (clamp (:atr-roc-6 now) -1.0 1.0) 0.5) 0.5)  1.0)
+              (fact/scalar "atr-roc-12"
+                (+ (* (clamp (:atr-roc-12 now) -1.0 1.0) 0.5) 0.5) 1.0))
 
-  ;; Volatility acceleration — ATR rate of change
-  ;; Scalar: clamped [-1,1] mapped to [0,1], scale 1.0
-  (fact/scalar "atr-roc-6"  (+ (* (clamp atr-roc-6 -1.0 1.0) 0.5) 0.5)  1.0)
-  (fact/scalar "atr-roc-12" (+ (* (clamp atr-roc-12 -1.0 1.0) 0.5) 0.5) 1.0)
+        (cond
+          ((> (:atr-roc-6 now) 0.2)   (list (fact/zone "volatility" "vol-expanding")))
+          ((< (:atr-roc-6 now) -0.15)  (list (fact/zone "volatility" "vol-contracting")))
+          (else (list)))
 
-  ;; Zone: (at volatility vol-expanding)   when atr-roc-6 > 0.2
-  ;;        (at volatility vol-contracting) when atr-roc-6 < -0.15
-  ;; Thresholds: 0.2 / -0.15. Asymmetric — expansion is more notable.
-  (when (> atr-roc-6  0.2)  (fact/zone "volatility" "vol-expanding"))
-  (when (< atr-roc-6 -0.15) (fact/zone "volatility" "vol-contracting"))
-
-  ;; Range position — where is price in the N-candle range? [0, 1]
-  ;; Scalar: pre-computed, scale 1.0
-  (fact/scalar "range-pos-12" rp12 1.0)
-  (fact/scalar "range-pos-24" rp24 1.0)
-  (fact/scalar "range-pos-48" rp48 1.0))
+        ;; Range position at multiple scales
+        (list (fact/scalar "range-pos-12" (:range-pos-12 now) 1.0)
+              (fact/scalar "range-pos-24" (:range-pos-24 now) 1.0)
+              (fact/scalar "range-pos-48" (:range-pos-48 now) 1.0))))))
 
 ;; ── Magic numbers (honest accounting) ──────────────────────────
 ;;
@@ -187,6 +308,5 @@
 ;; ── What regime does NOT do ────────────────────────────────────
 ;; - Does NOT predict direction (it measures character)
 ;; - Does NOT compute Hurst or autocorrelation (that's persistence.wat)
-;; - Does NOT import holon or create vectors
 ;; - The fattest module. Eight independent measurements.
 ;; - Pure function. Candles in, facts out.
