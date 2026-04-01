@@ -9,6 +9,10 @@
 ;; Vocab modules read from the bank, not from a 52-field struct.
 ;;
 ;; See proposal 005 (streaming indicator folds) for the design.
+;;
+;; rune:reap(scaffolding) — this file specifies the streaming fold architecture.
+;; The Rust still uses a 52-field pre-computed Candle struct from SQLite.
+;; This becomes live when the streaming interface replaces the batch loader.
 
 (require core/structural)
 
@@ -28,8 +32,8 @@
   (new [params] "Create initial state."))
 
 (defprotocol candle-indicator
-  "An indicator that reads high, low, close per candle."
-  (step [state high low close] "Advance by one candle. Returns (state, output).")
+  "An indicator that reads from a raw candle. Destructures what it needs."
+  (step [state candle] "Advance by one raw-candle. Returns (state, output).")
   (new [params] "Create initial state."))
 
 ;; ── Primitive state machines ───────────────────────────────────────
@@ -132,18 +136,19 @@
 (define (new-atr period)
   (atr-state :wilder (new-wilder period) :prev-close 0.0 :started false))
 
-(define (atr-step state high low close)
-  "Feed H, L, C. Returns (new-state, atr-value)."
-  (if (not (:started state))
-      (let ((result (wilder-step (:wilder state) (- high low))))
-        (list (update state :wilder (first result) :started true :prev-close close)
-              (second result)))
-      (let ((tr (max (- high low)
-                     (abs (- high (:prev-close state)))
-                     (abs (- low (:prev-close state))))))
-        (let ((result (wilder-step (:wilder state) tr)))
-          (list (update state :wilder (first result) :prev-close close)
-                (second result))))))
+(define (atr-step state candle)
+  "Feed a candle. Returns (new-state, atr-value)."
+  (let ((high (:high candle)) (low (:low candle)) (close (:close candle)))
+    (if (not (:started state))
+        (let ((result (wilder-step (:wilder state) (- high low))))
+          (list (update state :wilder (first result) :started true :prev-close close)
+                (second result)))
+        (let ((tr (max (- high low)
+                       (abs (- high (:prev-close state)))
+                       (abs (- low (:prev-close state))))))
+          (let ((result (wilder-step (:wilder state) tr)))
+            (list (update state :wilder (first result) :prev-close close)
+                  (second result)))))))
 
 ;; MACD: two EMAs + signal EMA. O(1).
 (struct macd-state ema12 ema26 signal)
@@ -168,13 +173,14 @@
              :atr-wilder (new-wilder period) :adx-wilder (new-wilder period)
              :prev-high 0.0 :prev-low 0.0 :prev-close 0.0 :started false))
 
-(define (dmi-step state high low close)
-  "Feed H, L, C. Returns (new-state, (dmi-plus, dmi-minus, adx))."
-  (if (not (:started state))
-      (list (update state :started true :prev-high high :prev-low low :prev-close close)
-            (list 0.0 0.0 0.0))
-      (let* ((up-move   (- high (:prev-high state)))
-             (down-move (- (:prev-low state) low))
+(define (dmi-step state candle)
+  "Feed a candle. Returns (new-state, (dmi-plus, dmi-minus, adx))."
+  (let ((high (:high candle)) (low (:low candle)) (close (:close candle)))
+    (if (not (:started state))
+        (list (update state :started true :prev-high high :prev-low low :prev-close close)
+              (list 0.0 0.0 0.0))
+        (let* ((up-move   (- high (:prev-high state)))
+               (down-move (- (:prev-low state) low))
              (plus-dm   (if (and (> up-move down-move) (> up-move 0.0)) up-move 0.0))
              (minus-dm  (if (and (> down-move up-move) (> down-move 0.0)) down-move 0.0))
              (tr        (max (- high low)
@@ -193,7 +199,7 @@
                 :plus-wilder (first p-result) :minus-wilder (first m-result)
                 :atr-wilder (first a-result) :adx-wilder (first adx-result)
                 :prev-high high :prev-low low :prev-close close)
-              (list dmi-plus dmi-minus (second adx-result))))))
+              (list dmi-plus dmi-minus (second adx-result)))))))
 
 ;; Stochastic %K: sliding window min/max. O(period).
 (struct stoch-state high-buf low-buf period)
@@ -201,16 +207,17 @@
 (define (new-stoch period)
   (stoch-state :high-buf (deque) :low-buf (deque) :period period))
 
-(define (stoch-step state high low close)
-  "Feed H, L, C. Returns (new-state, stoch-k)."
-  (let ((hbuf (push-back (:high-buf state) high))
-        (lbuf (push-back (:low-buf state) low)))
-    (let ((hbuf (if (> (len hbuf) (:period state)) (pop-front hbuf) hbuf))
-          (lbuf (if (> (len lbuf) (:period state)) (pop-front lbuf) lbuf))
-          (hi   (fold max (first hbuf) (rest hbuf)))
-          (lo   (fold min (first lbuf) (rest lbuf))))
-      (list (update state :high-buf hbuf :low-buf lbuf)
-            (* (/ (- close lo) (max (- hi lo) 1e-10)) 100.0)))))
+(define (stoch-step state candle)
+  "Feed a candle. Returns (new-state, stoch-k)."
+  (let ((high (:high candle)) (low (:low candle)) (close (:close candle)))
+    (let ((hbuf (push-back (:high-buf state) high))
+          (lbuf (push-back (:low-buf state) low)))
+      (let ((hbuf (if (> (len hbuf) (:period state)) (pop-front hbuf) hbuf))
+            (lbuf (if (> (len lbuf) (:period state)) (pop-front lbuf) lbuf))
+            (hi   (fold max (first hbuf) (rest hbuf)))
+            (lo   (fold min (first lbuf) (rest lbuf))))
+        (list (update state :high-buf hbuf :low-buf lbuf)
+              (* (/ (- close lo) (max (- hi lo) 1e-10)) 100.0))))))
 
 ;; ── Protocol satisfaction ───────────────────────────────────────────
 ;;
@@ -304,10 +311,8 @@
 (define (tick-indicators bank candle)
   "Step all indicators with one candle. Returns new bank."
   (let* ((close  (:close candle))
-         (high   (:high candle))
-         (low    (:low candle))
          (volume (:volume candle))
-         ;; Step each state machine
+         ;; Scalar indicators — fed individual values
          (sma20-r  (sma-step (:sma20 bank) close))
          (sma50-r  (sma-step (:sma50 bank) close))
          (sma200-r (sma-step (:sma200 bank) close))
@@ -315,9 +320,11 @@
          (ema20-r  (ema-step (:ema20 bank) close))
          (rsi-r    (rsi-step (:rsi bank) close))
          (macd-r   (macd-step (:macd bank) close))
-         (dmi-r    (dmi-step (:dmi bank) high low close))
-         (atr-r    (atr-step (:atr bank) high low close))
-         (stoch-r  (stoch-step (:stoch bank) high low close))
+         ;; Candle indicators — fed the whole candle
+         (dmi-r    (dmi-step (:dmi bank) candle))
+         (atr-r    (atr-step (:atr bank) candle))
+         (stoch-r  (stoch-step (:stoch bank) candle))
+         ;; Derived scalars
          (stoch-d-r (sma-step (:stoch-d-sma bank) (second stoch-r)))
          (vol-r    (sma-step (:volume-sma20 bank) volume))
          ;; Extract values
