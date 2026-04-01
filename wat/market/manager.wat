@@ -67,12 +67,11 @@
   (/ 3.0 (sqrt dims)))
 
 (define (encode-observer-opinion atoms observer-atom pred curve-valid
-                                  resolved-len resolved-acc dims)
+                                  resolved-len resolved-acc min-opinion)
   "Encode one observer's contribution to the manager's thought.
    Returns a list of facts (may be empty if below noise floor)."
-  (let ((raw-cos (:raw-cosine pred))
-        (min-op  (noise-floor dims)))
-    (if (< (abs raw-cos) min-op)
+  (let ((raw-cos (:raw-cosine pred)))
+    (if (< (abs raw-cos) min-opinion)
         (list)  ;; silence — no opinion
         (let ((magnitude (encode-linear (abs raw-cos) 1.0))
               (action    (if (>= raw-cos 0.0) (:buy atoms) (:sell atoms)))
@@ -157,7 +156,8 @@
 (define (encode-manager-thought atoms ctx dims prev-thought)
   "Encode the manager's thought from observer opinions.
    Returns a list of fact vectors ready for bundling."
-  (let ((observer-facts
+  (let ((min-opinion (noise-floor dims))
+        (observer-facts
           (fold-left (lambda (facts i)
             (append facts
               (encode-observer-opinion atoms
@@ -166,7 +166,7 @@
                 (nth (:observer-curve-valid ctx) i)
                 (nth (:observer-resolved-lens ctx) i)
                 (nth (:observer-resolved-accs ctx) i)
-                dims)))
+                min-opinion)))
             (list)
             (range 0 (len (:observer-preds ctx)))))
         ;; Generalist — same encoding, just from generalist fields
@@ -176,7 +176,7 @@
             (:generalist-pred ctx)
             (:generalist-curve-valid ctx)
             0 0.0  ;; generalist doesn't track per-observer reliability/tenure
-            dims))
+            min-opinion))
         (shape   (panel-shape atoms ctx dims))
         (context (market-context atoms ctx))
         (current (bundle (append observer-facts generalist-facts shape context))))
