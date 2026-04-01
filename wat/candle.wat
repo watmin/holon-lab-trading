@@ -16,6 +16,22 @@
 
 (struct raw-candle ts open high low close volume)
 
+;; ── The indicator protocol ─────────────────────────────────────────
+;;
+;; Every indicator satisfies this contract:
+;;   step  — advance state by one input, return (new-state, output)
+;;   new   — create initial state from parameters
+
+(defprotocol scalar-indicator
+  "A scalar stream processor. State in, state out."
+  (step [state input] "Advance by one input. Returns (state, output).")
+  (new [params] "Create initial state."))
+
+(defprotocol candle-indicator
+  "An indicator that reads high, low, close per candle."
+  (step [state high low close] "Advance by one candle. Returns (state, output).")
+  (new [params] "Create initial state."))
+
 ;; ── Primitive state machines ───────────────────────────────────────
 
 ;; SMA: sliding window average. O(period) memory.
@@ -195,6 +211,49 @@
           (lo   (fold min (first lbuf) (rest lbuf))))
       (list (update state :high-buf hbuf :low-buf lbuf)
             (* (/ (- close lo) (max (- hi lo) 1e-10)) 100.0)))))
+
+;; ── Protocol satisfaction ───────────────────────────────────────────
+;;
+;; Each indicator proves it satisfies the contract.
+;; The mapping IS the specification. Explicit, exhaustive.
+
+;; Scalar indicators: (state, f64) → (state, f64)
+(satisfies sma-state scalar-indicator
+  :step sma-step
+  :new  new-sma)
+
+(satisfies ema-state scalar-indicator
+  :step ema-step
+  :new  new-ema)
+
+(satisfies wilder-state scalar-indicator
+  :step wilder-step
+  :new  new-wilder)
+
+(satisfies stddev-state scalar-indicator
+  :step stddev-step
+  :new  new-stddev)
+
+(satisfies rsi-state scalar-indicator
+  :step rsi-step
+  :new  new-rsi)
+
+(satisfies macd-state scalar-indicator
+  :step macd-step
+  :new  new-macd)
+
+;; Candle indicators: (state, high, low, close) → (state, output)
+(satisfies atr-state candle-indicator
+  :step atr-step
+  :new  new-atr)
+
+(satisfies dmi-state candle-indicator
+  :step dmi-step
+  :new  new-dmi)
+
+(satisfies stoch-state candle-indicator
+  :step stoch-step
+  :new  new-stoch)
 
 ;; ── The indicator bank ─────────────────────────────────────────────
 ;;
