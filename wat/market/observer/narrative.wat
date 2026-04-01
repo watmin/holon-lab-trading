@@ -26,7 +26,7 @@
 ;;
 ;; (fact/bare "monday")                                 ; day of week
 ;; (fact/bare "us")                                     ; trading session
-;; (fact/scalar "hour" (encode-circular hour 24.0))     ; circular hour
+;; (bind (atom "hour") (encode-circular hour 24.0))     ; circular hour (not fact/scalar — uses encode-circular)
 ;; (fact/zone "tf-1h" "tf-1h-up-strong")                ; 1h bullish
 ;; (fact/bare "tf-all-agree")                            ; all timeframes aligned
 ;; (fact/bare "tf-4h-agrees")                            ; 4h agrees with 5m
