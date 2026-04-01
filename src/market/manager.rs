@@ -126,15 +126,13 @@ fn encode_observer_opinion(
 }
 
 /// Panel-level facts from proven observer predictions.
-/// Needs 2+ proven observers. Takes only what it reads.
+/// Needs 2+ proven observers.
 fn panel_shape(
     atoms: &ManagerAtoms,
     scalar: &holon::ScalarEncoder,
-    curve_valid: &[bool],
-    preds: &[Prediction],
-    vecs: &[Vector],
+    ctx: &ManagerContext,
 ) -> Vec<Vector> {
-    let proven_indices: Vec<usize> = curve_valid.iter().enumerate()
+    let proven_indices: Vec<usize> = ctx.observer_curve_valid.iter().enumerate()
         .filter(|(_, &valid)| valid)
         .map(|(i, _)| i)
         .collect();
@@ -144,7 +142,7 @@ fn panel_shape(
     }
 
     let proven_preds: Vec<&Prediction> = proven_indices.iter()
-        .map(|&i| &preds[i])
+        .map(|&i| &ctx.observer_preds[i])
         .collect();
     let total = proven_preds.len();
     let buys = proven_preds.iter().filter(|p| p.raw_cos > 0.0).count();
@@ -170,7 +168,7 @@ fn panel_shape(
 
     // Coherence — mean pairwise cosine between proven thought vectors
     let proven_vecs: Vec<&Vector> = proven_indices.iter()
-        .map(|&i| &vecs[i])
+        .map(|&i| &ctx.observer_vecs[i])
         .collect();
     if proven_vecs.len() >= 2 {
         let mut pair_sum = 0.0_f64;
@@ -190,24 +188,20 @@ fn panel_shape(
 }
 
 /// Market-level context facts: volatility, discriminant quality, time.
-/// Takes only the 4 scalars it needs — testable without ManagerContext.
 fn market_context(
     atoms: &ManagerAtoms,
     scalar: &holon::ScalarEncoder,
-    atr: f64,
-    disc_strength: f64,
-    hour: f64,
-    day: f64,
+    ctx: &ManagerContext,
 ) -> Vec<Vector> {
     vec![
         Primitives::bind(&atoms.volatility,
-            &scalar.encode_log(atr.max(1e-10))),
+            &scalar.encode_log(ctx.candle_atr.max(1e-10))),
         Primitives::bind(&atoms.disc_strength,
-            &scalar.encode_log(disc_strength.max(1e-10))),
+            &scalar.encode_log(ctx.disc_strength.max(1e-10))),
         Primitives::bind(&atoms.hour,
-            &scalar.encode(hour, ScalarMode::Circular { period: 24.0 })),
+            &scalar.encode(ctx.candle_hour, ScalarMode::Circular { period: 24.0 })),
         Primitives::bind(&atoms.day,
-            &scalar.encode(day, ScalarMode::Circular { period: 7.0 })),
+            &scalar.encode(ctx.candle_day, ScalarMode::Circular { period: 7.0 })),
     ]
 }
 
@@ -246,12 +240,10 @@ pub fn encode_manager_thought(
     ));
 
     // Panel shape
-    facts.extend(panel_shape(atoms, scalar,
-        ctx.observer_curve_valid, ctx.observer_preds, ctx.observer_vecs));
+    facts.extend(panel_shape(atoms, scalar, ctx));
 
     // Market context
-    facts.extend(market_context(atoms, scalar,
-        ctx.candle_atr, ctx.disc_strength, ctx.candle_hour, ctx.candle_day));
+    facts.extend(market_context(atoms, scalar, ctx));
 
     facts
 }
