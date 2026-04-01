@@ -115,8 +115,7 @@ impl Observer {
 
         // 5. Update conviction history + flip threshold
         self.conviction_history.push_back(prediction.conviction);
-        // rune:gaze(naming) — magic 2000 hardcoded while conviction_window is a parameter; should be a named constant or use the parameter
-        if self.conviction_history.len() > 2000 {
+        if self.conviction_history.len() > conviction_window {
             self.conviction_history.pop_front();
         }
         if self.conviction_history.len() >= 200
