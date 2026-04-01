@@ -69,6 +69,9 @@
 
 ;; ── The candle step (honest execution order) ────────────────────────
 
+;; rune:assay(hollow) — on-candle expresses steps 1-3 and 6. Steps 4-5, 7-13 are
+;; prose descriptions, not s-expressions. The fold step returns state unchanged.
+;; 30% expressed, 70% narrated. The forge cannot test the narrated joints.
 (define (on-candle state candle fact-labels observer-vecs ctx)
   "One candle. The fold's inner step. Order matches state.rs on_candle_inner."
 
