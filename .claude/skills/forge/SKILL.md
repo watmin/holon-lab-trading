@@ -49,7 +49,7 @@ Beckman: "Does this abstraction close? Can I compose through it?"
 Functions compose when the output of one is the input of the next. The forge checks the joints.
 
 - Can this function be tested in isolation? If it needs the full enterprise state to test, it's welded to the frame.
-- Does the function signature tell you its world? If it takes `&CandleContext` (30 fields) but reads 2, it's claiming a bigger world than it needs.
+- Does the function signature tell you its world? Distinguish **context passing** from **hidden coupling**. Taking `&ManagerContext` and reading 3 of 12 fields is honest — the context is immutable, assembled by the caller, and the function projects what it needs. That's the wat pattern: pass ctx, project with `:field`. Destructuring the context into bare parameters at the call site makes the caller noisier and the function less composable (adding a field changes the signature AND all call sites). Hidden coupling is different: reaching into `&mut self` or global state the caller doesn't see. THAT is claiming a bigger world.
 - Are there algebraic escapes? A "pure" function that writes to a log, a "stateless" computation that reads a global — the forge finds where the algebra leaks.
 - Do the stages compose? `transducer → functor → fold` should be `A → B → C` with clean boundaries. If stage 2 reaches back into stage 1's state, the composition is broken.
 
