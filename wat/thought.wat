@@ -2,7 +2,7 @@
 ;;
 ;; The thought layer transforms raw candle data into hyperdimensional vectors.
 ;; ThoughtVocab holds pre-allocated atoms. ThoughtEncoder weaves facts into
-;; geometry. encode-thought dispatches by profile.
+;; geometry. encode-thought dispatches by lens.
 ;;
 ;; Modules return Fact data. The encoder weaves to geometry. No wrappers.
 
@@ -168,15 +168,15 @@
 
 ;; -- encode_view dispatch ---------------------------------------------------
 
-;; The main entry point. Selects which eval methods to run based on profile.
-;; "full" = all methods (generalist). Named profiles select subsets.
+;; The main entry point. Selects which eval methods to run based on lens.
+;; "full" = all methods (generalist). Named lenses select subsets.
 
-(define (encode-thought encoder candles vm profile)
-  "Encode a window of candles through the profile's vocabulary lens.
-   Each profile selects which eval functions to run.
+(define (encode-thought encoder candles vm lens)
+  "Encode a window of candles through a vocabulary lens.
+   Each lens selects which eval functions to run.
    Vocab modules return Fact data → encode-facts weaves to geometry.
    Inline evals push directly to the fact vectors."
-  (let ((is    (lambda (profiles) (or (= profile "full") (member? profile profiles))))
+  (let ((is    (lambda (lenses) (or (= lens "full") (member? lens lenses))))
         (facts (list))
         (owned (list))
         (labels (list))
@@ -316,5 +316,5 @@
 ;; - Does NOT learn (that's the Journal)
 ;; - Does NOT predict (that's the Observer's journal)
 ;; - Does NOT decide trades (that's downstream)
-;; - Does NOT see other profiles' thoughts (profiles are independent)
+;; - Does NOT see other observers' thoughts (observers are independent)
 ;; - It encodes. It weaves. It bundles. That's all.

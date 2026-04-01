@@ -1,4 +1,4 @@
-;; rune:assay(prose) — vocab/mod describes the Fact interface and observer profiles
+;; rune:assay(prose) — vocab/mod describes the Fact interface and observer lenss
 ;; but does not express dispatch, rendering, or module registration as s-expressions.
 ;; The contract is specified; the Rust implements the wiring.
 
@@ -69,25 +69,25 @@
 ;;
 ;; Adding a new module:
 ;;   1. Write eval_foo(candles) -> Vec<Fact>
-;;   2. Add one line to the profile dispatch
+;;   2. Add one line to the lens dispatch
 ;;   3. The encoder never changes
 
-;; ── Observer profiles ─────────────────────────────────────────────
+;; ── Observer lenss ─────────────────────────────────────────────
 ;;
 ;; Each observer is a list of modules. The dispatch calls each module
 ;; and pipes the facts through the encoder. The observer doesn't know
 ;; how encoding works. The encoder doesn't know which observer called.
 ;;
-;; (defprofile "momentum"
+;; (deflens "momentum"
 ;;   [eval-oscillators eval-momentum eval-divergence])
 ;;
-;; (defprofile "regime"
+;; (deflens "regime"
 ;;   [eval-regime eval-persistence])
 ;;
-;; (defprofile "structure"
+;; (deflens "structure"
 ;;   [eval-ichimoku eval-fibonacci eval-keltner])
 ;;
-;; The profile IS the observer's vocabulary.
+;; The lens IS the observer's vocabulary.
 ;; The vocabulary IS the program.
 ;; The curve judges the program.
 
@@ -97,7 +97,7 @@
 ;; the answer is:
 ;;   1. Create vocab/microstructure.rs
 ;;   2. fn eval_microstructure(candles) -> Vec<Fact>
-;;   3. Add one line to the profile dispatch
+;;   3. Add one line to the lens dispatch
 ;;
 ;; No wrapper. No boilerplate. No touching the encoder.
 ;; The environment invites good thoughts by making them cheap.

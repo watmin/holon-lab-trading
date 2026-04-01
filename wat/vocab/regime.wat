@@ -7,7 +7,7 @@
 ;; The fattest module. Eight independent regime measures plus
 ;; pre-computed trend/volatility/range scalars.
 ;;
-;; Profile: regime (exclusive)
+;; Lens: regime (exclusive)
 
 (require facts)
 

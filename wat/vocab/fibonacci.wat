@@ -4,7 +4,7 @@
 ;; Window-dependent — swing range is the observer's window,
 ;; not pre-computed on Candle.
 ;;
-;; Profile: structure
+;; Lens: structure
 
 (require facts)
 

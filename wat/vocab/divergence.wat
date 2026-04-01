@@ -6,7 +6,7 @@
 ;; Bearish divergence: price makes higher high, RSI makes lower high.
 ;; Bullish divergence: price makes lower low, RSI makes higher low.
 ;;
-;; Profile: momentum
+;; Lens: momentum
 
 (require thought/pelt)
 

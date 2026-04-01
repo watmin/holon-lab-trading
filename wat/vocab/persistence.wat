@@ -5,7 +5,7 @@
 ;;
 ;; Hurst exponent, lag-1 autocorrelation, ADX zone classification.
 ;;
-;; Profile: regime
+;; Lens: regime
 
 (require facts)
 

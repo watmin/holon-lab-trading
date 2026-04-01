@@ -3,7 +3,7 @@
 ;; Band position scalars and squeeze detection.
 ;; All values pre-computed on the Candle struct.
 ;;
-;; Profile: structure
+;; Lens: structure
 
 (require facts)
 
