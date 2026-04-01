@@ -1,189 +1,224 @@
 ;; ── manager.wat ─────────────────────────────────────────────────────
 ;;
-;; The manager thinks in expert opinions, not candle data.
-;; Its vocabulary = its experts + panel shape + market context + time.
+;; The manager thinks in observer opinions, not candle data.
+;; Its vocabulary = its observers + panel shape + market context + time.
 ;; Its label = raw price direction (Buy if price up, Sell if price down).
 ;; Its discriminant learns which SHAPES of signed opinion precede
 ;; up-moves vs down-moves. The flip emerges geometrically.
 ;;
 ;; The manager does NOT encode candles. It does NOT see indicators.
-;; It reads expert predictions passed by the fold. The fold decides
-;; which experts to include (proof gates filter upstream).
+;; It reads observer predictions passed by the fold. The fold decides
+;; which observers to include (proof gates filter upstream).
 
+(require core/primitives)
+(require core/structural)
 (require std/statistics)
 
-;; ── Manager's atoms ─────────────────────────────────────────────────
+;; ── Manager atoms ──────────────────────────────────────────────────
 
-;; Expert identity atoms (one per expert)
-(atom "momentum")
-(atom "structure")
-(atom "volume")
-(atom "narrative")
-(atom "regime")
-(atom "generalist")
+(struct manager-atoms
+  buy sell                      ; direction atoms
+  proven tentative              ; credibility atoms
+  reliability tenure            ; per-observer quality atoms
+  agreement energy divergence coherence  ; panel shape atoms
+  volatility disc-strength      ; market context atoms
+  hour day                      ; time atoms
+  delta)                        ; motion atom
 
-;; Panel-level atoms (emergent properties of the collective)
-(atom "panel-agreement")    ; fraction of proven experts aligned on direction
-(atom "panel-energy")       ; mean conviction magnitude across proven experts
-(atom "panel-divergence")   ; spread of conviction magnitudes
-(atom "panel-coherence")    ; geometric similarity between expert thought vectors
-(atom "panel-delta")        ; what changed since last candle (via difference)
+(define (new-manager-atoms vm)
+  (manager-atoms
+    :buy (atom "buy") :sell (atom "sell")
+    :proven (atom "proven") :tentative (atom "tentative")
+    :reliability (atom "expert-reliability") :tenure (atom "expert-tenure")
+    :agreement (atom "panel-agreement") :energy (atom "panel-energy")
+    :divergence (atom "panel-divergence") :coherence (atom "panel-coherence")
+    :volatility (atom "market-volatility") :disc-strength (atom "disc-strength")
+    :hour (atom "hour-of-day") :day (atom "day-of-week")
+    :delta (atom "panel-delta")))
 
-;; Context atoms
-(atom "market-volatility")  ; ATR right now
-(atom "disc-strength")      ; generalist's discriminant quality
-(atom "hour-of-day")        ; which 4-hour block (h00..h20)
-(atom "day-of-week")        ; which trading session
-
-;; ── Per-expert encoding ─────────────────────────────────────────────
+;; ── Manager context ────────────────────────────────────────────────
 ;;
-;; Each proven expert contributes one fact to the manager's thought.
-;; GATED: only proven experts are included. Silence, not noise.
+;; Everything the manager needs to encode one candle's thought.
+;; Passed by the fold — the manager doesn't reach into global state.
+
+(struct manager-context
+  observer-preds               ; (list Prediction) — one per observer
+  observer-atoms               ; (list Vector) — identity atom per observer
+  observer-curve-valid         ; (list bool) — proof gate per observer
+  observer-resolved-lens       ; (list usize) — how many resolved per observer
+  observer-resolved-accs       ; (list f64) — rolling accuracy per observer
+  observer-vecs                ; (list Vector) — thought vectors for coherence
+  generalist-pred              ; Prediction
+  generalist-atom              ; Vector
+  generalist-curve-valid       ; bool
+  candle-atr                   ; f64
+  candle-hour                  ; f64
+  candle-day                   ; f64
+  disc-strength)               ; f64
+
+;; ── Per-observer encoding ──────────────────────────────────────────
 ;;
-;; The encoding is signed: BUY lean binds (atom "buy") with magnitude.
-;; SELL lean binds (atom "sell") with magnitude. Separate action atoms
-;; make BUY@0.25 orthogonal to SELL@0.25 in the hyperspace.
+;; Each observer contributes facts to the manager's thought.
+;; GATED: only observers above the noise floor are included.
+;; Proven observers also get reliability + tenure facts.
 
-;; Guard: below 3σ noise floor (3/sqrt(dims)), the expert has no opinion.
-;; Silence, not forced direction. The noise floor is a property of the
-;; hyperspace geometry, not a tuned parameter.
+(define (noise-floor dims)
+  "3σ — below this, cosine is random noise in the hyperspace."
+  (/ 3.0 (sqrt dims)))
 
-(define (encode-expert expert-atom raw-cos gate-status dims)
-  (let ((noise-floor (/ 3.0 (sqrt dims))))
-    (if (< (abs raw-cos) noise-floor)
-        nothing                                   ; silence — no opinion
+(define (encode-observer-opinion atoms observer-atom pred curve-valid
+                                  resolved-len resolved-acc dims)
+  "Encode one observer's contribution to the manager's thought.
+   Returns a list of facts (may be empty if below noise floor)."
+  (let ((raw-cos (:raw-cosine pred))
+        (min-op  (noise-floor dims)))
+    (if (< (abs raw-cos) min-op)
+        (list)  ;; silence — no opinion
         (let ((magnitude (encode-linear (abs raw-cos) 1.0))
-              (action    (if (>= raw-cos 0.0) (atom "buy") (atom "sell"))))
-          ;; Two facts. Composed, not complected.
-          ;; Fact 1: the opinion (direction + magnitude)
-          ;; Fact 2: the credibility (proven | tentative)
-          ;; The discriminant sees both and learns what each means independently.
-          (list
-            (bind expert-atom (bind action magnitude))   ; opinion
-            (bind expert-atom gate-status))))))           ; credibility
+              (action    (if (>= raw-cos 0.0) (:buy atoms) (:sell atoms)))
+              (status    (if curve-valid (:proven atoms) (:tentative atoms))))
+          (append
+            ;; Fact 1: opinion — direction + magnitude
+            (list (bind observer-atom (bind action magnitude)))
+            ;; Fact 2: credibility — proven or tentative
+            (list (bind observer-atom status))
+            ;; Fact 3: reliability — accuracy above baseline (if enough data)
+            (if (>= resolved-len 20)
+                (list (bind (bind observer-atom (:reliability atoms))
+                            (encode-linear (max 0.0 (- resolved-acc 0.4)) 1.0)))
+                (list))
+            ;; Fact 4: tenure — how long has this observer been resolving?
+            (if (>= resolved-len 50)
+                (list (bind (bind observer-atom (:tenure atoms))
+                            (encode-log resolved-len)))
+                (list)))))))
 
-;; Example: proven momentum says BUY at magnitude 0.25
-;; → (bind momentum (bind buy (encode-linear 0.25 1.0)))   ; opinion
-;; → (bind momentum proven)                                  ; credibility
+;; ── Panel shape ────────────────────────────────────────────────────
 ;;
-;; Example: tentative volume at magnitude 0.08
-;; → (bind volume (bind buy (encode-linear 0.08 1.0)))      ; opinion
-;; → (bind volume tentative)                                  ; credibility
-;;
-;; The opinion's magnitude is NOT affected by credibility.
-;; The discriminant learns: "tentative volume buy at 0.08" may mean
-;; nothing, or it may be a signal about to prove itself. The data decides.
-;;
-;; Additional per-expert facts:
-;; → (bind (bind expert reliability) (encode-linear (- accuracy 0.4) 1.0))
-;; → (bind (bind expert tenure) (encode-log resolved-count))
+;; Emergent properties of the proven observer collective.
+;; These tell the manager about the PATTERN of agreement,
+;; not just who said what. Needs 2+ proven observers.
 
-;; ── Panel shape ─────────────────────────────────────────────────────
-;;
-;; Emergent properties of the expert collective. These tell the
-;; manager about the PATTERN of agreement, not just who said what.
+(define (panel-shape atoms ctx dims)
+  "Panel-level facts from proven observer predictions."
+  (let ((proven-indices (filter (lambda (i) (nth (:observer-curve-valid ctx) i))
+                                (range 0 (len (:observer-preds ctx))))))
+    (if (< (len proven-indices) 2)
+        (list)
+        (let ((proven-preds (map (lambda (i) (nth (:observer-preds ctx) i)) proven-indices))
+              (proven-vecs  (map (lambda (i) (nth (:observer-vecs ctx) i)) proven-indices))
+              (total        (len proven-preds))
+              (buys         (count (lambda (p) (> (:raw-cosine p) 0.0)) proven-preds)))
+          (let ((agreement (/ (max buys (- total buys)) total))
+                (convictions (map :conviction proven-preds))
+                (mean-conv  (mean convictions))
+                (spread     (stddev convictions)))
+            (append
+              (list (bind (:agreement atoms) (encode-linear agreement 1.0))
+                    (bind (:energy atoms)    (encode-linear mean-conv 1.0))
+                    (bind (:divergence atoms) (encode-linear spread 1.0)))
+              ;; Coherence: mean pairwise cosine between proven thought vectors
+              (if (>= (len proven-vecs) 2)
+                  (let ((pair-sims
+                          (fold-left (lambda (acc i)
+                            (append acc
+                              (map (lambda (j) (cosine (nth proven-vecs i) (nth proven-vecs j)))
+                                   (range (+ i 1) (len proven-vecs)))))
+                            (list)
+                            (range 0 (- (len proven-vecs) 1)))))
+                    (list (bind (:coherence atoms)
+                                (encode-linear (abs (/ (fold + 0.0 pair-sims)
+                                                       (len pair-sims)))
+                                               1.0))))
+                  (list))))))))
 
-(define (mean-pairwise-cosine vecs)
-  "Mean cosine similarity across all unique pairs of vectors.
-   Measures how geometrically aligned the expert thoughts are.
-   N*(N-1)/2 pairs. Returns 0 if fewer than 2 vectors."
-  (if (< (len vecs) 2) 0.0
-      (let ((pairs (combinations 2 vecs)))
-        (/ (sum (map (lambda (p) (cosine (first p) (second p))) pairs))
-           (len pairs)))))
+;; ── Context ────────────────────────────────────────────────────────
 
-(define (panel-shape proven-experts)
-  (let* ((buys    (count (lambda (e) (> (cos e) 0)) proven-experts))
-         (total   (length proven-experts))
-         (agree   (/ (max buys (- total buys)) total))   ; 0.5=split, 1.0=unanimous
-         (energy  (mean (map conviction proven-experts)))
-         (spread  (stddev (map conviction proven-experts)))
-         (coherence (mean-pairwise-cosine (map thought-vec proven-experts))))
-    (bundle
-      (bind panel-agreement (encode-linear agree 1.0))       ; [0,1] fraction
-      (bind panel-energy (encode-linear energy 1.0))         ; [0,1] fraction
-      (bind panel-divergence (encode-linear spread 1.0))     ; [0,1] fraction
-      (bind panel-coherence (encode-linear coherence 1.0))))) ; [0,1] fraction
+(define (market-context atoms ctx)
+  "Market-level context facts: volatility, discriminant quality, time."
+  (list
+    (bind (:volatility atoms)    (encode-log (max 1e-10 (:candle-atr ctx))))
+    (bind (:disc-strength atoms) (encode-log (max 1e-10 (:disc-strength ctx))))
+    (bind (:hour atoms)          (encode-circular (:candle-hour ctx) 24.0))
+    (bind (:day atoms)           (encode-circular (:candle-day ctx) 7.0))))
 
-;; ── Context ─────────────────────────────────────────────────────────
-
-(define (market-context candle generalist-journal)
-  (bundle
-    (bind market-volatility (encode-log (atr candle)))            ; orders of magnitude — log correct
-    (bind disc-strength (encode-log (disc-strength generalist)))  ; orders of magnitude — log correct
-    (bind hour-of-day (encode-circular hour 24.0))               ; hour 23 near hour 0
-    (bind day-of-week (encode-circular day-of-week 7.0))))       ; sunday near monday
-
-;; ── Motion ──────────────────────────────────────────────────────────
+;; ── Motion ─────────────────────────────────────────────────────────
 ;;
 ;; The manager sees not just where the panel IS, but where it MOVED.
-;; difference(prev-thought, current-thought) encodes structural change.
+;; difference(prev, current) encodes structural change.
 
-(define (motion current-thought prev-thought)
+(define (motion atoms current-thought prev-thought)
   (if prev-thought
-      (bind panel-delta (difference prev-thought current-thought))
-      nothing))
+      (list (bind (:delta atoms) (difference prev-thought current-thought)))
+      (list)))
 
-;; ── Complete manager thought ────────────────────────────────────────
+;; ── Complete manager thought ───────────────────────────────────────
 
-(define (manager-thought proven-experts candle generalist prev-thought)
-  (let ((expert-facts  (map encode-expert (filter proven? experts)))
-        (shape         (panel-shape proven-experts))
-        (context       (market-context candle generalist))
-        (delta         (motion (bundle expert-facts shape context) prev-thought)))
-    (bundle expert-facts shape context delta)))
+(define (encode-manager-thought atoms ctx dims prev-thought)
+  "Encode the manager's thought from observer opinions.
+   Returns a list of fact vectors ready for bundling."
+  (let ((observer-facts
+          (fold-left (lambda (facts i)
+            (append facts
+              (encode-observer-opinion atoms
+                (nth (:observer-atoms ctx) i)
+                (nth (:observer-preds ctx) i)
+                (nth (:observer-curve-valid ctx) i)
+                (nth (:observer-resolved-lens ctx) i)
+                (nth (:observer-resolved-accs ctx) i)
+                dims)))
+            (list)
+            (range 0 (len (:observer-preds ctx)))))
+        ;; Generalist — same encoding, just from generalist fields
+        (generalist-facts
+          (encode-observer-opinion atoms
+            (:generalist-atom ctx)
+            (:generalist-pred ctx)
+            (:generalist-curve-valid ctx)
+            0 0.0  ;; generalist doesn't track per-observer reliability/tenure
+            dims))
+        (shape   (panel-shape atoms ctx dims))
+        (context (market-context atoms ctx))
+        (current (bundle (append observer-facts generalist-facts shape context))))
+    (append observer-facts generalist-facts shape context
+            (motion atoms current prev-thought))))
 
-;; ── Labels ──────────────────────────────────────────────────────────
+;; ── Journal + labels ───────────────────────────────────────────────
 
 (define manager-journal (journal "manager" dims refit-interval))
-(define buy  (register manager-journal "Buy"))
-(define sell (register manager-journal "Sell"))
+(define buy-label  (register manager-journal "Buy"))
+(define sell-label (register manager-journal "Sell"))
 
-;; ── Learning ────────────────────────────────────────────────────────
+;; ── Learning ───────────────────────────────────────────────────────
 ;;
 ;; Label = raw price direction at horizon.
 ;; Buy = price went up. Sell = price went down.
-;; The manager maps signed expert configurations → actual direction.
+;; The manager maps signed observer configurations → actual direction.
 ;; The flip emerges: the Sell prototype accumulates configurations
-;; where experts said BUY but the price went DOWN.
+;; where observers said BUY but the price went DOWN.
 ;;
-;; (observe manager-journal manager-thought
-;;   (if (> price-at-horizon entry-price) buy sell)
-;;   1.0)
-;;
-;; Guard: manager skips learning when the expert panel is tied
+;; Guard: manager skips learning when the observer panel is tied
 ;; (buys == sells). Nothing to learn from a directionless panel.
-;;
-;; Manager tracks (conviction, correct?) pairs in mgr_resolved.
-;; No coalgebra resolve/curve — proof is via sigma-band scan.
 
-;; ── Gate ─────────────────────────────────────────────────────────────
+;; ── Gate ───────────────────────────────────────────────────────────
 ;;
 ;; The manager's proof: sigma-band scan over resolved predictions.
-;; Outer gate: mgr_resolved.len() >= 500 (enough statistical mass).
-;; Scan conviction bands [k*σ, (k+4)*σ] for k in 3..18, where σ = 1/sqrt(dims).
-;; Find the band with accuracy > 0.51 and at least 200 samples per band.
-;; The treasury deploys only in the proven band.
-;;
-;; (let ((best-band best-acc) (scan-sigma-bands mgr-resolved dims))
-;;   (if (> best-acc 0.51) (gate proven-band) silence))
-;; → The manager acts only when conviction falls inside its proven band.
+;; rune:assay(prose) — the band scan is an imperative search over
+;; conviction ranges. The algorithm: partition resolved predictions
+;; into bands [k*σ, (k+4)*σ] for k in 3..18. Find the band with
+;; accuracy > 0.51 and at least 200 samples. The treasury deploys
+;; only in the proven band.
 
-;; ── What the manager does NOT do ────────────────────────────────────
+;; ── Derived thresholds ─────────────────────────────────────────────
+
+(define (sweet-spot dims)
+  "5σ — conviction level where signal typically emerges."
+  (/ 5.0 (sqrt dims)))
+
+;; ── What the manager does NOT do ───────────────────────────────────
 ;;
 ;; - Does NOT encode candles
 ;; - Does NOT see indicators directly
 ;; - Does NOT flip predictions (the flip emerges from the geometry)
-;; - Does NOT average expert opinions (the shape matters, not the mean)
+;; - Does NOT average observer opinions (the shape matters, not the mean)
 ;; - Does NOT know about costs (that's the treasury's domain)
-
-;; ── Derived thresholds (application-level, not stdlib) ──────────────
-;;
-;; These interpret the geometry for trading. The formula k/sqrt(dims)
-;; is trivial — the application chooses k.
-
-(define (noise-floor dims)
-  (/ 3.0 (sqrt dims)))    ;; 3σ — below this, cosine is random noise
-
-(define (sweet-spot dims)
-  (/ 5.0 (sqrt dims)))    ;; 5σ — conviction level where signal emerges

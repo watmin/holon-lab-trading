@@ -1,4 +1,4 @@
-;; -- market/desk.wat -- a trading pair's expert panel ------------------------
+;; -- market/desk.wat -- a trading pair's observer panel ----------------------
 ;;
 ;; A desk trades one pair (asset_a / asset_b). It consumes two candle
 ;; streams and produces recommendations for the treasury.

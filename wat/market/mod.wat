@@ -5,7 +5,7 @@
 
 ;; ── Submodules ─────────────────────────────────────────────────
 ;;
-;; market/desk.wat      — trading pair's expert panel
+;; market/desk.wat      — trading pair's observer panel
 ;; market/manager.wat   — manager encoding
 ;; market/observer.wat  — Observer struct
 ;; In Rust: `pub mod desk; pub mod manager; pub mod observer;`
