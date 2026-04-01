@@ -49,6 +49,8 @@ For each spec section, verify:
 
 6. **Gate conditions match.** The spec describes proof gates (curve validation, minimum accuracy). The code should gate at the same thresholds using the same mechanism.
 
+7. **Abstractions match.** For each `define` in the wat, does a corresponding function exist in the Rust? The wat names its helpers — `linreg-slope`, `bind-triple`, `panel-shape`, `market-context`. The Rust should have corresponding functions. If the wat extracted a helper, the Rust should extract the same helper. If the Rust inlines what the wat named, the structural intent has diverged. The incantation says HOW the code is organized, not just WHAT it produces. The compiled spell should follow the blueprint's structure.
+
 ## What to report
 
 For each divergence:
