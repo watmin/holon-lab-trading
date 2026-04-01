@@ -1,6 +1,3 @@
-;; rune:assay(prose) — generalist.wat describes the role and vocab union but does not
-;; express the full-profile dispatch. One instantiation line; the rest is description.
-
 ;; ── generalist ─────────────────────────────────────────────────────
 ;;
 ;; The team's composite voice. Sees ALL 150+ facts simultaneously.
@@ -14,12 +11,43 @@
 
 (require core/primitives)
 (require core/structural)
+(require facts)
 (require patterns)
+
+;; ── Profile dispatch ────────────────────────────────────────────────
+
+(define (encode-generalist candles)
+  "Generalist's thought: the union of all specialist dispatches."
+  (append
+    ;; momentum
+    (eval-comparisons candles)
+    (eval-rsi-sma candles)
+    (eval-stochastic candles)
+    (eval-momentum candles)
+    (eval-divergence candles)
+    (eval-oscillators candles)
+    ;; structure
+    (eval-segment-narrative candles)
+    (eval-range-position candles)
+    (eval-ichimoku candles)
+    (eval-fibonacci candles)
+    (eval-keltner candles)
+    (eval-timeframe-structure candles)
+    ;; volume
+    (eval-volume-confirmation candles)
+    (eval-volume-analysis candles)
+    (eval-price-action candles)
+    (eval-flow-module candles)
+    ;; narrative
+    (eval-temporal candles)
+    (eval-calendar candles)
+    (eval-timeframe-narrative candles)
+    ;; regime
+    (eval-regime-module candles)
+    (eval-persistence-module candles)))
 
 ;; ── The expert ──────────────────────────────────────────────────────
 
-;; expert: shorthand for (new-observer profile dims refit-interval seed labels).
-;; See market/observer.wat for the Observer struct.
 (define generalist
   (new-observer "generalist" dims refit-interval :seed-generalist ["Buy" "Sell"]))
 
@@ -27,26 +55,15 @@
 ;; The specialists explore [12, 2016] and discover their own scale.
 ;; The generalist is the anchor. The specialists are the explorers.
 
-;; ── All eval methods ────────────────────────────────────────────────
+;; ── Example thoughts ────────────────────────────────────────────────
 ;;
-;; The "full" profile fires every eval method from every specialist:
-;;   momentum:  comparisons, rsi-sma, stochastic, momentum, divergence, oscillators
-;;   structure: comparisons, segments, range, ichimoku, fibonacci, keltner, timeframe
-;;   volume:    confirmation, analysis, price-action, flow
-;;   narrative: temporal, calendar, timeframe-narrative
-;;   regime:    regime-module, persistence-module
-
-;; ── Role in the manager ─────────────────────────────────────────────
-;;
-;; Reports as one of 6 voices via the opinion → gate pattern:
-;;   (gate (opinion (predict (:journal generalist) thought)
-;;                  (atom "generalist"))
-;;         (atom "generalist")
-;;         (:curve-valid generalist))
-;;
-;; The generalist provides discriminant-strength to the manager's
-;; context encoding — how well the generalist's discriminant separates
-;; the buy and sell prototypes.
+;; Cross-vocabulary patterns only the generalist sees:
+;; (fact/zone "rsi" "overbought")                       ; from momentum
+;; (fact/zone "volume" "volume-drought")                 ; from volume
+;; (fact/zone "dfa-alpha" "random-walk-dfa")             ; from regime
+;; (fact/bare "us")                                      ; from narrative
+;; (fact/zone "close" "above-cloud")                     ; from structure
+;; Together: "overbought + no volume + random walk + US session + above cloud"
 
 ;; ── RESOLVED ────────────────────────────────────────────────────────
 ;;

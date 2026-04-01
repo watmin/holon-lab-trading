@@ -1,6 +1,3 @@
-;; rune:assay(prose) — narrative.wat lists the vocabulary atoms but does not express
-;; eval dispatch or encoding. One instantiation line; the rest is description.
-
 ;; ── narrative expert ────────────────────────────────────────────────
 ;;
 ;; Thinks about: the story of what happened and when.
@@ -8,47 +5,31 @@
 
 (require core/primitives)
 (require core/structural)
-(require common)
+(require facts)
 (require patterns)
 
-;; ── Vocabulary ──────────────────────────────────────────────────────
-;;
-;; Temporal lookback (eval_temporal — PELT segments for cross timing):
-;;   (bind :seg (bundle
-;;     (bind :indicator (atom indicator-name))
-;;     (bind :direction (atom "up"))            ; or "down"
-;;     (bind :magnitude (encode-linear mag 1.0))
-;;     (bind :duration  (encode-log dur))
-;;     (bind :position  (encode-linear seg-idx 1.0))
-;;     (bind :recency   (encode-log candles-ago))))
-;;   (bind :since (bind :crosses-above (bind :close :sma50)))  ; cross timing
-;;   (bind :zone  (bundle
-;;     (bind :indicator (atom "rsi"))
-;;     (bind :zone-name (atom "rsi-overbought"))
-;;     (bind :position  (atom "beginning"))))                   ; zone entry at segment start
-;;
-;; Calendar (eval_calendar — the only expert with session awareness):
-;;   (bind :at-day     (atom day-name))                          ; "monday" .. "sunday"
-;;   (bind :at-session (atom session-name))                      ; "us", "europe", "asia", "off-hours"
-;;   (bind :hour       (encode-circular hour 24.0))              ; circular — 23 is near 0
-;;   (bind :day        (encode-circular day-of-week 7.0))        ; circular — Sunday near Monday
-;;
-;; Multi-timeframe narrative (vocab/timeframe module):
-;;   (bind :at (bind :tf-1h (atom "tf-1h-up-strong")))          ; 1h return direction
-;;   (bind :tf-1h-ret  (encode-linear ret 1.0))                 ; 1h return magnitude
-;;   (bind :at (bind :tf-4h (atom "tf-4h-down-mild")))          ; 4h return direction
-;;   (bind :tf-4h-ret  (encode-linear ret 1.0))                 ; 4h return magnitude
-;;   (atom "tf-all-agree")                                       ; 5m, 1h, 4h same direction
-;;   (atom "tf-all-disagree")                                    ; all timeframes disagree
-;;   (atom "tf-1h-agrees")                                       ; only 1h agrees with 5m
-;;   (atom "tf-4h-agrees")                                       ; only 4h agrees with 5m
+;; ── Profile dispatch ────────────────────────────────────────────────
+
+(define (encode-narrative candles)
+  "Narrative's thought: temporal lookback + calendar + multi-timeframe narrative."
+  (append
+    (eval-temporal candles)             ; PELT segments for cross timing, zone entry
+    (eval-calendar candles)             ; day, session, hour (circular), day-of-week (circular)
+    (eval-timeframe-narrative candles))) ; 1h/4h return direction/magnitude, agreement
 
 ;; ── The expert ──────────────────────────────────────────────────────
 
-;; expert: shorthand for (new-observer profile dims refit-interval seed labels).
-;; See market/observer.wat for the Observer struct.
 (define narrative
   (new-observer "narrative" dims refit-interval :seed-narrative ["Buy" "Sell"]))
+
+;; ── Example thoughts ────────────────────────────────────────────────
+;;
+;; (fact/bare "monday")                                 ; day of week
+;; (fact/bare "us")                                     ; trading session
+;; (fact/scalar "hour" (encode-circular hour 24.0))     ; circular hour
+;; (fact/zone "tf-1h" "tf-1h-up-strong")                ; 1h bullish
+;; (fact/bare "tf-all-agree")                            ; all timeframes aligned
+;; (fact/bare "tf-4h-agrees")                            ; 4h agrees with 5m
 
 ;; ── DISCOVERY ───────────────────────────────────────────────────────
 ;; Narrative is the only expert with calendar awareness. The manager

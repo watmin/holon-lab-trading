@@ -1,6 +1,3 @@
-;; rune:assay(prose) — volume.wat lists the vocabulary atoms but does not express
-;; eval dispatch or encoding. One instantiation line; the rest is description.
-
 ;; ── volume expert ──────────────────────────────────────────────────
 ;;
 ;; Thinks about: participation and conviction behind price moves.
@@ -8,42 +5,32 @@
 
 (require core/primitives)
 (require core/structural)
-(require common)
+(require facts)
 (require patterns)
 
-;; ── Vocabulary ──────────────────────────────────────────────────────
-;;
-;; Flow (vocab/flow module):
-;;   (bind :vwap   (encode-linear (vwap-distance candles) 1.0))  ; price vs volume-weighted average
-;;   (bind :at     (bind :mfi :mfi-overbought))                  ; money flow > 80
-;;   (bind :at     (bind :mfi :mfi-oversold))                    ; money flow < 20
-;;   (bind :buy-pressure  (encode-linear bp 1.0))                ; lower wick / range
-;;   (bind :sell-pressure (encode-linear sp 1.0))                ; upper wick / range
-;;   (bind :body-ratio    (encode-linear br 1.0))                ; body / range
-;;   (bind :at     (bind :volume :volume-spike))                 ; vol_accel > 2.0
-;;   (bind :at     (bind :volume :volume-drought))               ; vol_accel < 0.3
-;;
-;; OBV (special encoding — bind patterns, not Fact interface):
-;;   (bind :obv-direction (atom (if (> obv-slope 0) "up" "down")))
-;;   (bind :obv-diverges  (atom "true"))                         ; OBV vs price disagree
-;;
-;; Participation (vocab/price_action module):
-;;   (bind :at (bind :close :inside-bar))                        ; range compressed
-;;   (bind :at (bind :close :outside-bar))                       ; range engulfs previous
-;;   (bind :at (bind :close :gap-up))                            ; gap from previous close
-;;   (bind :at (bind :close :gap-down))
-;;   (bind :at (bind :close :consecutive-up))                    ; 3+ green candles
-;;   (bind :at (bind :close :consecutive-down))                  ; 3+ red candles
-;;
-;; Volume confirmation (eval_volume_confirmation):
-;;   current volume vs window average, direction match
+;; ── Profile dispatch ────────────────────────────────────────────────
+
+(define (encode-volume candles)
+  "Volume's thought: confirmation + analysis + price action + flow."
+  (append
+    (eval-volume-confirmation candles)  ; current volume vs window average
+    (eval-volume-analysis candles)      ; volume trend, acceleration
+    (eval-price-action candles)         ; inside/outside bars, gaps, consecutive
+    (eval-flow-module candles)))        ; OBV, VWAP, MFI, buying/selling pressure
 
 ;; ── The expert ──────────────────────────────────────────────────────
 
-;; expert: shorthand for (new-observer profile dims refit-interval seed labels).
-;; See market/observer.wat for the Observer struct.
 (define volume
   (new-observer "volume" dims refit-interval :seed-volume ["Buy" "Sell"]))
+
+;; ── Example thoughts ────────────────────────────────────────────────
+;;
+;; (fact/zone "volume" "volume-spike")                  ; vol_accel > 2.0
+;; (fact/zone "volume" "volume-drought")                ; vol_accel < 0.3
+;; (fact/zone "mfi" "mfi-overbought")                   ; money flow > 80
+;; (fact/zone "close" "inside-bar")                      ; range compressed
+;; (fact/zone "close" "gap-up")                          ; gap from previous close
+;; (fact/bare "obv-diverges")                            ; OBV vs price disagree
 
 ;; ── DISCOVERY ───────────────────────────────────────────────────────
 ;; Volume is the THINNEST expert vocabulary. Only 4 eval methods.

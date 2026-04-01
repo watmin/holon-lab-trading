@@ -1,6 +1,3 @@
-;; rune:assay(prose) — momentum.wat lists the vocabulary atoms but does not express
-;; eval dispatch or encoding. One instantiation line; the rest is description.
-
 ;; ── momentum expert ─────────────────────────────────────────────────
 ;;
 ;; Thinks about: speed and direction of price change.
@@ -8,44 +5,38 @@
 
 (require core/primitives)
 (require core/structural)
-(require common)
+(require facts)
 (require patterns)
 
-;; ── Vocabulary ──────────────────────────────────────────────────────
-;;
-;; Comparisons (shared with structure):
-;;   (bind :above (bind :close :sma50))
-;;   (bind :crosses-above (bind :macd-line :macd-signal))
-;;   (bind :above (bind :dmi-plus :dmi-minus))
-;;
-;; Oscillator zones:
-;;   (bind :at (bind :rsi :overbought))
-;;   (bind :at (bind :stoch-k :stoch-overbought))
-;;   (bind :at (bind :cci :cci-overbought))
-;;
-;; Crosses:
-;;   (bind :crosses-above (bind :rsi :rsi-sma))
-;;   (bind :crosses-above (bind :macd-histogram :zero))
-;;
-;; Divergence:
-;;   (bind :diverging (bind :close :up) (bind :rsi :down))
-;;
-;; Oscillators (vocab/oscillators module):
-;;   Williams %R, StochRSI, UltOsc, multi-ROC
+;; ── Profile dispatch ────────────────────────────────────────────────
+
+(define (encode-momentum candles)
+  "Momentum's thought: comparisons + oscillators + crosses + divergence."
+  (append
+    (eval-comparisons candles)          ; shared with structure
+    (eval-rsi-sma candles)              ; (above rsi rsi-sma), crosses
+    (eval-stochastic candles)           ; %K zones, %K/%D crosses
+    (eval-momentum candles)             ; CCI zones, ROC
+    (eval-divergence candles)           ; RSI divergence via PELT peaks
+    (eval-oscillators candles)))        ; Williams %R, StochRSI, UltOsc, multi-ROC
 
 ;; ── The expert ──────────────────────────────────────────────────────
 
-;; expert: shorthand for (new-observer profile dims refit-interval seed labels).
-;; See market/observer.wat for the Observer struct.
 (define momentum
   (new-observer "momentum" dims refit-interval :seed-momentum ["Buy" "Sell"]))
+
+;; ── Example thoughts ────────────────────────────────────────────────
+;;
+;; (fact/comparison "above" "close" "sma50")       ; price above SMA50
+;; (fact/comparison "crosses-above" "macd-line" "macd-signal")
+;; (fact/zone "stoch-k" "stoch-overbought")        ; stochastic overbought
+;; (fact/zone "rsi" "overbought")                   ; RSI overbought
+;; (fact/bare "roc-accelerating")                   ; cascading ROC momentum
 
 ;; ── What momentum does NOT see ──────────────────────────────────────
 ;; - Calendar / time of day (narrative)
 ;; - PELT segment narrative (structure)
-;; - Fibonacci levels (structure)
-;; - Ichimoku cloud (structure)
-;; - Keltner / squeeze (structure)
+;; - Fibonacci / Ichimoku / Keltner (structure)
 ;; - Range position (structure)
 ;; - Volume (volume)
-;; - Regime indicators (regime only — RESOLVED)
+;; - Regime indicators (regime only)
