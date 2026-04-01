@@ -83,10 +83,6 @@
 
   ;; 4-7 only if observer had a directional prediction
   ;; accuracy: fraction of correct predictions in a sequence of (conviction, correct) pairs.
-  (define (accuracy resolved)
-    "Win rate of a resolved-prediction sequence: count(correct) / total."
-    (/ (count (lambda (r) (second r)) resolved)
-       (len resolved)))
 
   (when-let ((pred-dir (:direction prediction)))
     (let ((correct (= pred-dir outcome)))
@@ -112,7 +108,9 @@
                                  (:resolved observer))))
           (when (>= (len high-conv) 20)
             (set! (:curve-valid observer)
-                  (> (accuracy high-conv) 0.52)))))
+                  (> (/ (count (lambda (r) (second r)) high-conv)
+                        (len high-conv))
+                     0.52)))))
 
       ;; 7. Return log data
       (resolve-log :name (:name observer)

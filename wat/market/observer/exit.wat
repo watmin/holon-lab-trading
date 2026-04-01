@@ -63,7 +63,7 @@
 
 ;; ── observer does NOT do ────────────────────────────────
 ;; - Does NOT decide entry (that's the manager)
-;; - Does NOT see market indicators (that's the market experts)
+;; - Does NOT see market indicators (that's the market observers)
 ;; - Does NOT know about other positions (that's risk)
 ;; - Does NOT override the stop loss (the stop is the safety net)
 ;; - Adjusts the TRAIL, not the stop
