@@ -16,7 +16,6 @@
 
 ;; best-price: the most favorable price seen since entry.
 ;; For longs: the highest price. For shorts: the lowest price.
-;; rune:scry(wat-leads) — Rust uses `high_water`; wat renamed to best-price
 
 ;; phase:     :active | :runner | :closed
 ;; direction: :long | :short
@@ -39,7 +38,7 @@
 
 ;; ── Construction ────────────────────────────────────────────────────
 
-;; rune:scry(wat-leads) — Rust ManagedPosition::new takes 10 bare params; no PositionEntry struct yet
+;; rune:scry(aligned) — Rust ManagedPosition::new takes PositionEntry struct
 (struct position-entry
   id candle-idx entry-price entry-atr direction
   base-deployed quote-received entry-fee k-stop k-tp)

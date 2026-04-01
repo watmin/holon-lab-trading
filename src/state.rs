@@ -18,7 +18,7 @@ use crate::market::observer::Observer;
 use crate::market::{parse_candle_hour, parse_candle_day};
 use crate::market::manager::{ManagerAtoms, ManagerContext, encode_manager_thought};
 use crate::portfolio::{Phase, Portfolio};
-use crate::position::{ExitObservation, ExitReason, ManagedPosition, Pending, PositionExit, PositionPhase};
+use crate::position::{ExitObservation, ExitReason, ManagedPosition, Pending, PositionEntry, PositionExit, PositionPhase};
 use crate::risk::RiskBranch;
 use crate::sizing::{kelly_frac, signal_weight};
 use crate::treasury::Treasury;
@@ -866,11 +866,18 @@ impl EnterpriseState {
                         Direction::Long => (spent, received),
                         Direction::Short => (spent * quote_price, 0.0),
                     };
-                    let pos = ManagedPosition::new(
-                        self.next_position_id, i, quote_price, candle.atr_r,
-                        direction, deployed_usd, quote_held, entry_fee,
-                        ctx.k_stop, ctx.k_tp,
-                    );
+                    let pos = ManagedPosition::new(PositionEntry {
+                        id: self.next_position_id,
+                        candle_idx: i,
+                        entry_price: quote_price,
+                        entry_atr: candle.atr_r,
+                        direction,
+                        base_deployed: deployed_usd,
+                        quote_received: quote_held,
+                        entry_fee,
+                        k_stop: ctx.k_stop,
+                        k_tp: ctx.k_tp,
+                    });
                     self.next_position_id += 1;
                     self.hold_swaps += 1;
                     let dir_str = if direction == Direction::Long { "Buy" } else { "Sell" };

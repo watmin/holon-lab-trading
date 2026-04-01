@@ -48,10 +48,12 @@ impl Treasury {
     }
 
     /// Withdraw capital from available balance. Cannot touch deployed.
-    // rune:forge(escape) — silently clamps to 0.0 on overdraw; caller cannot distinguish success from insufficient funds. Should return the actual amount withdrawn.
-    pub fn withdraw(&mut self, asset: &str, amount: f64) {
+    /// Returns the actual amount withdrawn (may be less than requested if insufficient).
+    pub fn withdraw(&mut self, asset: &str, amount: f64) -> f64 {
         let bal = self.balances.entry(asset.to_string()).or_insert(0.0);
-        *bal = (*bal - amount).max(0.0);
+        let actual = amount.min(*bal);
+        *bal -= actual;
+        actual
     }
 
     /// Balance of an asset (available, not deployed).

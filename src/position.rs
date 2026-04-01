@@ -61,6 +61,23 @@ pub enum ExitReason {
     HorizonExpiry,       // safety valve — queue cleanup, not an exit strategy
 }
 
+// ─── Position Entry ─────────────────────────────────────────────────────────
+// All parameters needed to open a position, bundled into a struct so that
+// 10 bare f64/usize params can't be silently swapped at the call site.
+
+pub struct PositionEntry {
+    pub id:              usize,
+    pub candle_idx:      usize,
+    pub entry_price:     f64,
+    pub entry_atr:       f64,
+    pub direction:       Direction,
+    pub base_deployed:   f64,
+    pub quote_received:  f64,
+    pub entry_fee:       f64,
+    pub k_stop:          f64,
+    pub k_tp:            f64,
+}
+
 // ─── Managed Position ────────────────────────────────────────────────────────
 // A real WBTC holding with its own lifecycle. Not binary — fractional.
 // Entered, managed each candle, partially exited, runner, final exit.
@@ -96,47 +113,37 @@ pub struct ManagedPosition {
 }
 
 impl ManagedPosition {
-    // rune:forge(bare-type) — 10 parameters, 7 are bare f64 with different semantics (price, ATR ratio, USD amount, fee amount, multiplier). Swapping entry_price with entry_atr compiles but silently corrupts all stop/TP math.
-    pub fn new(
-        id: usize,
-        candle_idx: usize,
-        entry_price: f64,
-        entry_atr: f64,
-        direction: Direction,
-        base_deployed: f64,
-        quote_received: f64,
-        entry_fee: f64,
-        k_stop: f64,
-        k_tp: f64,
-    ) -> Self {
+    /// Construct a managed position from a PositionEntry struct.
+    /// Named fields prevent silent parameter swaps between bare f64 values.
+    pub fn new(entry: PositionEntry) -> Self {
         // BUY: stop below entry, TP above. SELL: stop above, TP below.
         // rune:forge(bare-type) — wildcard `_` hides Direction::Short; if a third variant arrives, this arm silently catches it
-        let (stop, tp, hw) = match direction {
+        let (stop, tp, hw) = match entry.direction {
             Direction::Long => (
-                entry_price * (1.0 - k_stop * entry_atr),
-                entry_price * (1.0 + k_tp * entry_atr),
-                entry_price,
+                entry.entry_price * (1.0 - entry.k_stop * entry.entry_atr),
+                entry.entry_price * (1.0 + entry.k_tp * entry.entry_atr),
+                entry.entry_price,
             ),
             _ => (
-                entry_price * (1.0 + k_stop * entry_atr), // stop ABOVE for sell
-                entry_price * (1.0 - k_tp * entry_atr),   // TP BELOW for sell
-                entry_price,
+                entry.entry_price * (1.0 + entry.k_stop * entry.entry_atr), // stop ABOVE for sell
+                entry.entry_price * (1.0 - entry.k_tp * entry.entry_atr),   // TP BELOW for sell
+                entry.entry_price,
             ),
         };
         Self {
-            id,
-            entry_candle: candle_idx,
-            entry_price,
-            entry_atr,
-            direction,
-            base_deployed,
-            quote_held: quote_received,
+            id: entry.id,
+            entry_candle: entry.candle_idx,
+            entry_price: entry.entry_price,
+            entry_atr: entry.entry_atr,
+            direction: entry.direction,
+            base_deployed: entry.base_deployed,
+            quote_held: entry.quote_received,
             base_reclaimed: 0.0,
             phase: PositionPhase::Active,
             trailing_stop: stop,
             take_profit: tp,
             best_price: hw,
-            total_fees: entry_fee,
+            total_fees: entry.entry_fee,
             candles_held: 0,
         }
     }

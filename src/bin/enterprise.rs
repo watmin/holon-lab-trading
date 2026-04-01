@@ -343,8 +343,8 @@ fn main() {
     let seed_price = candles[args.window - 1].close;
     {
         let half = args.initial_equity / 2.0;
-        let seed_quote = half / seed_price;
-        state.treasury.withdraw(&args.base_asset, half);
+        let actual = state.treasury.withdraw(&args.base_asset, half);
+        let seed_quote = actual / seed_price;
         state.treasury.deposit(&args.quote_asset, seed_quote);
     }
 

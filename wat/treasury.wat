@@ -65,7 +65,6 @@
     (assoc (:balances treasury) asset
            (+ (balance treasury asset) amount))))
 
-;; rune:scry(wat-leads) — Rust withdraw returns void, silently clamps; wat specifies return value
 (define (withdraw treasury asset amount)
   "Withdraw from available balance. Returns (treasury, actual-withdrawn).
    Cannot withdraw more than available. Cannot touch deployed."
