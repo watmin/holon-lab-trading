@@ -19,8 +19,8 @@
   name                   ; string -- "btc-usdc", "btc-sol"
   asset-a                ; string -- first asset in the pair
   asset-b                ; string -- second asset in the pair
-  staleness-a            ; usize -- max candle age before stale (MAX = never stale)
-  staleness-b)           ; usize
+  staleness-a?           ; usize? -- max candle age before stale (absent = always fresh)
+  staleness-b?)          ; usize? -- absent for stablecoins (always fresh)
 
 ;; -- Side state -------------------------------------------------------------
 
@@ -28,13 +28,15 @@
 (struct side-state
   latest?                ; Candle? -- most recent candle, absent until first update
   age                    ; usize -- candles since last update (0 = just updated)
-  staleness-limit)       ; usize -- MAX means always fresh (stablecoin)
+  staleness-limit?)      ; usize? -- absent means always fresh (stablecoin)
 
 (define (side-fresh? side)
-  "Is this side fresh enough to act on?"
-  (or (= (:staleness-limit side) MAX)    ; stablecoin: always fresh
+  "Is this side fresh enough to act on?
+   Absent staleness-limit means always fresh (stablecoin side)."
+  (if (some? (:staleness-limit? side))
       (and (some? (:latest? side))
-           (<= (:age side) (:staleness-limit side)))))
+           (<= (:age side) (:staleness-limit? side)))
+      true))
 
 (define (side-update side candle)
   (update side :latest? candle :age 0))
@@ -65,8 +67,8 @@
 (define (new-desk config)
   (desk :name (:name config)
         :asset-a (:asset-a config) :asset-b (:asset-b config)
-        :side-a (side-state :age 0 :staleness-limit (:staleness-a config))
-        :side-b (side-state :age 0 :staleness-limit (:staleness-b config))))
+        :side-a (side-state :age 0 :staleness-limit? (:staleness-a? config))
+        :side-b (side-state :age 0 :staleness-limit? (:staleness-b? config))))
 
 ;; -- Observe ----------------------------------------------------------------
 

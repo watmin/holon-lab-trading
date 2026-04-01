@@ -28,9 +28,7 @@
   observe-left           ; candles remaining in observe phase
   trades-taken
   trades-won
-  trades-skipped
   rolling                ; (deque bool) — recent trade outcomes, cap 500
-  rolling-cap            ; 500
   ;; Risk vocabulary infrastructure
   equity-at-trade        ; (deque f64) — equity after each trade, cap 500
   trade-returns          ; (deque f64) — directional return per trade, cap 500
@@ -47,8 +45,8 @@
     :peak-equity initial-equity
     :phase :observe
     :observe-left observe-period
-    :trades-taken 0 :trades-won 0 :trades-skipped 0
-    :rolling (deque) :rolling-cap 500
+    :trades-taken 0 :trades-won 0
+    :rolling (deque)
     :equity-at-trade (deque) :trade-returns (deque)
     :dd-bottom-equity initial-equity
     :trades-since-bottom 0
@@ -159,7 +157,7 @@
     (inc! (:trades-taken portfolio))
     (when won (inc! (:trades-won portfolio)))
     (push-back (:rolling portfolio) won)
-    (when (> (len (:rolling portfolio)) (:rolling-cap portfolio))
+    (when (> (len (:rolling portfolio)) 500)
       (pop-front (:rolling portfolio)))
 
     ;; Phase transition
