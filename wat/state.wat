@@ -74,6 +74,7 @@
 ;; The Rust will split into EncodingConfig × TradingConfig × DisplayConfig
 ;; when the fold is refactored. The wat specifies the target shape.
 
+;; rune:scry(wat-leads) — Rust CandleContext uses bare &str for all three; no enums yet
 (enum conviction-mode :quantile :auto)
 (enum sizing-mode :legacy :kelly)
 (enum asset-mode :round-trip :hold)

@@ -165,4 +165,5 @@
 ;; - Does NOT hold positions (that's managed-position)
 ;; - Does NOT execute trades (that's the treasury)
 ;; - Does NOT encode risk features (that's risk/mod — see risk-branch-features)
+;;   rune:scry(wat-leads) — Rust portfolio.rs still has risk_branch_wat() encoding method
 ;; - It counts. It phases. Risk reads it as data.
