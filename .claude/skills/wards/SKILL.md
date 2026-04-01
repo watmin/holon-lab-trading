@@ -1,14 +1,14 @@
 ---
 name: wards
-description: The datamancer's defense. Five spells that guard against bad thoughts. Structure, metabolism, truth, beauty, craft.
+description: The datamancer's defense. Six spells that guard against bad thoughts. Structure, metabolism, truth, beauty, craft, substance.
 argument-hint: [file-path]
 ---
 
 # Wards
 
-The datamancer's defense. Run all five guard spells in parallel against the target (default: the full enterprise).
+The datamancer's defense. Run all six guard spells in parallel against the target (default: the full enterprise).
 
-Launch FIVE SEPARATE background agents in a SINGLE message. Not one agent doing five things — five independent agents running in parallel. Each agent reads its own skill file and reports independently.
+Launch SIX SEPARATE background agents in a SINGLE message. Not one agent doing six things — six independent agents running in parallel. Each agent reads its own skill file and reports independently.
 
 1. **`/sever`** — read `.claude/skills/sever/SKILL.md`, scan the target file(s). Cuts tangled threads. Finds braided concerns, misplaced logic, duplicated encoding. Recognize `rune:sever()` runes.
 
@@ -30,14 +30,16 @@ When no argument is given, scan the core:
 - `/scry` → `wat/market/manager.wat` vs `src/market/manager.rs` + `src/state.rs`
 - `/gaze` → `src/state.rs` (the densest code, where the spark matters most)
 
-When a file is given, all five scan that file.
+6. **`/assay`** — read `.claude/skills/assay/SKILL.md`, scan the target file(s). Measures substance. Is this a program or a description? Count expressions vs comments. Report the fraction. A specification that doesn't specify is just a letter about a program.
+
+When a file is given, all six scan that file.
 
 ## The expected result
 
-Clean bills from all five, with runes acknowledged. If any ward finds something, fix it before proceeding. The wards must pass before good thoughts can begin.
+Clean bills from all six, with runes acknowledged. If any ward finds something, fix it before proceeding. The wards must pass before good thoughts can begin.
 
 ## The principle
 
-The compiler checks if the code runs. The wards check if the code thinks correctly, lives honestly, speaks truly, and shines beautifully. They are the datamancer's defense against bad thoughts.
+The compiler checks if the code runs. The wards check if the code thinks correctly, lives honestly, speaks truly, shines beautifully, composes cleanly, and expresses fully. They are the datamancer's defense against bad thoughts.
 
-Five wards. Five verbs. Sever. Reap. Scry. Gaze. Forge.
+Six wards. Six verbs. Sever. Reap. Scry. Gaze. Forge. Assay.

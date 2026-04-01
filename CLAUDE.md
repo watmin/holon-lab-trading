@@ -83,13 +83,14 @@ The `wat/` directory contains domain specifications in s-expression format. Thes
 
 ## Wards
 
-Five spells that defend against bad thoughts. Run `/wards` to cast all five.
+Six spells that defend against bad thoughts. Run `/wards` to cast all six.
 
 - `/sever` — cuts tangled threads. Braided concerns, misplaced logic, duplicated encoding.
 - `/reap` — harvests what no longer lives. Dead code, unused structs, write-only fields.
 - `/scry` — divines truth from intention. Spec vs code divergences.
 - `/gaze` — sees the form. Names that mumble, functions that don't fit, comments that lie.
 - `/forge` — tests the craft. Values not places, types that enforce, functions that compose.
+- `/assay` — measures substance. Is the spec a program or a description? Expression density.
 
 ## Standard Test
 
