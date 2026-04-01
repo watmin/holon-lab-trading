@@ -32,11 +32,13 @@ When no argument is given, scan the core:
 
 6. **`/assay`** — read `.claude/skills/assay/SKILL.md`, scan the target file(s). Measures substance. Is this a program or a description? Count expressions vs comments. Report the fraction. A specification that doesn't specify is just a letter about a program.
 
-When a file is given, all six scan that file.
+7. **`/temper`** — read `.claude/skills/temper/SKILL.md`, scan the target file(s). Quiets the fire. Finds redundant pure calls, loop-invariant computation, recalibration-frequency waste, redundant traversals, allocation in the hot path. Correct but wasteful code. Recognize `rune:temper()` runes.
+
+When a file is given, all seven scan that file.
 
 ## The expected result
 
-Clean bills from all six, with runes acknowledged. If any ward finds something, fix it before proceeding. The wards must pass before good thoughts can begin.
+Clean bills from all seven, with runes acknowledged. If any ward finds something, fix it before proceeding. The wards must pass before good thoughts can begin.
 
 ## The principle
 
