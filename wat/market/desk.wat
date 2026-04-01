@@ -71,17 +71,19 @@
 ;; -- Observe ----------------------------------------------------------------
 
 (define (observe-candle desk asset candle)
-  "Feed a candle to the appropriate side. Returns true if desk cares about this asset."
+  "Feed a candle to the appropriate side. Returns (updated-desk, matched?)."
   (cond
     ((= asset (:asset-a desk))
-     (set! (:side-a desk) (side-update (:side-a desk) candle))
-     (set! (:side-b desk) (side-tick-age (:side-b desk)))
-     true)
+     (list (update desk
+             :side-a (side-update (:side-a desk) candle)
+             :side-b (side-tick-age (:side-b desk)))
+           true))
     ((= asset (:asset-b desk))
-     (set! (:side-b desk) (side-update (:side-b desk) candle))
-     (set! (:side-a desk) (side-tick-age (:side-a desk)))
-     true)
-    (else false)))
+     (list (update desk
+             :side-b (side-update (:side-b desk) candle)
+             :side-a (side-tick-age (:side-a desk)))
+           true))
+    (else (list desk false))))
 
 ;; -- Act gate ---------------------------------------------------------------
 

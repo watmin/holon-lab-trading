@@ -92,19 +92,21 @@
 ;; Kelly sizing (sizing.wat) is the replacement. When Kelly is proven,
 ;; these constants become irrelevant. Until then, they gate conservatively.
 (define (position-frac portfolio conviction min-conviction flip-threshold)
-  "Returns position fraction, or absent if conditions not met."
-  (when (!= (:phase portfolio) :observe)
-    (when (>= conviction min-conviction)
-      (when (or (<= flip-threshold 0.0) (>= conviction flip-threshold))
-        (let ((base (match (:phase portfolio)
-                      :tentative 0.005
-                      :confident (let ((conf (max 0.0 (- (rolling-acc portfolio) 0.5))))
-                                   (cond ((< conf 0.05) 0.005)
-                                         ((< conf 0.10) 0.01)
-                                         (else (min 0.02 (* conf 0.10))))))))
-          (if (> flip-threshold 0.0)
-              (min 0.05 (* base (/ conviction flip-threshold)))
-              base))))))
+  "Returns position fraction, or absent if conditions not met.
+   Three gates: not observing, conviction above minimum, conviction in flip zone.
+   flip-threshold <= 0 means no flip zone — use base sizing directly."
+  (when (and (!= (:phase portfolio) :observe)
+             (>= conviction min-conviction)
+             (or (<= flip-threshold 0.0) (>= conviction flip-threshold)))
+    (let ((base (match (:phase portfolio)
+                  :tentative 0.005
+                  :confident (let ((conf (max 0.0 (- (rolling-acc portfolio) 0.5))))
+                               (cond ((< conf 0.05) 0.005)
+                                     ((< conf 0.10) 0.01)
+                                     (else (min 0.02 (* conf 0.10))))))))
+      (if (> flip-threshold 0.0)
+          (min 0.05 (* base (/ conviction flip-threshold)))
+          base))))
 
 ;; -- Trade recording --------------------------------------------------------
 
@@ -112,21 +114,56 @@
 ;; and phase transitions (observe → tentative → confident). The Rust braids them
 ;; in one method. The wat names the concerns; the Rust will extract them when
 ;; the fold is refactored.
-(define (record-trade portfolio outcome-pct frac direction year swap-fee slippage)
+(define (record-trade portfolio outcome-pct frac direction swap-fee slippage)
   "Record a completed trade. Updates equity, drawdown, rolling, phase."
-  (let ((directional-return (match direction :long outcome-pct :short (- outcome-pct)))
-        (per-swap-cost (+ swap-fee slippage))
-        (after-entry (- 1.0 per-swap-cost))
-        (gross-value (* after-entry (+ 1.0 directional-return)))
-        (after-exit (* gross-value (- 1.0 per-swap-cost)))
-        (net-return (- after-exit 1.0))
-        (position-value (* (:equity portfolio) frac))
-        (pnl (* position-value net-return))
-        (won (> net-return 0.0)))
-    ;; Mutates: equity, peak-equity (with 0.999 decay), dd-bottom,
-    ;; trades-since-bottom, completed-drawdowns, equity-at-trade,
-    ;; trade-returns, trades-taken/won, rolling, by-year, phase
-    ))
+  (let* ((directional-return (match direction :long outcome-pct :short (- outcome-pct)))
+         (per-swap-cost (+ swap-fee slippage))
+         (after-entry   (- 1.0 per-swap-cost))
+         (gross-value   (* after-entry (+ 1.0 directional-return)))
+         (after-exit    (* gross-value (- 1.0 per-swap-cost)))
+         (net-return    (- after-exit 1.0))
+         (position-value (* (:equity portfolio) frac))
+         (pnl           (* position-value net-return))
+         (won           (> net-return 0.0))
+         (new-equity    (+ (:equity portfolio) pnl)))
+
+    ;; Drawdown tracking: record completed drawdowns, update bottom
+    (when (> new-equity (:peak-equity portfolio))
+      (when (< (:dd-bottom-equity portfolio) (* (:peak-equity portfolio) 0.999))
+        (push-back (:completed-drawdowns portfolio)
+          (/ (- (:peak-equity portfolio) (:dd-bottom-equity portfolio))
+             (:peak-equity portfolio)))
+        (when (> (len (:completed-drawdowns portfolio)) 20)
+          (pop-front (:completed-drawdowns portfolio))))
+      (set! (:peak-equity portfolio) new-equity)
+      (set! (:dd-bottom-equity portfolio) new-equity)
+      (set! (:trades-since-bottom portfolio) 0))
+
+    ;; Rolling peak decay: peak forgets old highs over ~700 trades
+    (set! (:peak-equity portfolio)
+      (+ (* (:peak-equity portfolio) 0.999) (* new-equity 0.001)))
+
+    (if (< new-equity (:dd-bottom-equity portfolio))
+        (begin (set! (:dd-bottom-equity portfolio) new-equity)
+               (set! (:trades-since-bottom portfolio) 0))
+        (inc! (:trades-since-bottom portfolio)))
+
+    ;; Trade history
+    (set! (:equity portfolio) new-equity)
+    (push-back (:equity-at-trade portfolio) new-equity)
+    (when (> (len (:equity-at-trade portfolio)) 500) (pop-front (:equity-at-trade portfolio)))
+    (push-back (:trade-returns portfolio) net-return)
+    (when (> (len (:trade-returns portfolio)) 500) (pop-front (:trade-returns portfolio)))
+
+    ;; Accounting
+    (inc! (:trades-taken portfolio))
+    (when won (inc! (:trades-won portfolio)))
+    (push-back (:rolling portfolio) won)
+    (when (> (len (:rolling portfolio)) (:rolling-cap portfolio))
+      (pop-front (:rolling portfolio)))
+
+    ;; Phase transition
+    (check-phase portfolio)))
 
 ;; -- Drawdown tracking ------------------------------------------------------
 ;;
