@@ -92,22 +92,19 @@
 ;; Kelly sizing (sizing.wat) is the replacement. When Kelly is proven,
 ;; these constants become irrelevant. Until then, they gate conservatively.
 (define (position-frac portfolio conviction min-conviction flip-threshold)
-  "Returns position fraction or #f."
-  (if (= (:phase portfolio) :observe) #f
-  (if (< conviction min-conviction) #f
-  (let ((base (match (:phase portfolio)
-                :tentative 0.005
-                :confident (let ((conf (max 0.0 (- (rolling-acc portfolio) 0.5))))
-                             (cond ((< conf 0.05) 0.005)
-                                   ((< conf 0.10) 0.01)
-                                   (else (min 0.02 (* conf 0.10))))))))
-    ;; Below flip threshold: no trade (noise zone)
-    (if (and (> flip-threshold 0.0) (< conviction flip-threshold))
-        #f
-        ;; Scale by conviction ratio, cap at 5%
-        (if (> flip-threshold 0.0)
-            (min 0.05 (* base (/ conviction flip-threshold)))
-            base))))))
+  "Returns position fraction, or absent if conditions not met."
+  (when (!= (:phase portfolio) :observe)
+    (when (>= conviction min-conviction)
+      (when (or (<= flip-threshold 0.0) (>= conviction flip-threshold))
+        (let ((base (match (:phase portfolio)
+                      :tentative 0.005
+                      :confident (let ((conf (max 0.0 (- (rolling-acc portfolio) 0.5))))
+                                   (cond ((< conf 0.05) 0.005)
+                                         ((< conf 0.10) 0.01)
+                                         (else (min 0.02 (* conf 0.10))))))))
+          (if (> flip-threshold 0.0)
+              (min 0.05 (* base (/ conviction flip-threshold)))
+              base))))))
 
 ;; -- Trade recording --------------------------------------------------------
 

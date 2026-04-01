@@ -121,7 +121,7 @@
 ;;   Bare        { label }                 -> lookup in cache, or raw atom
 
 (define (cache-get encoder label)
-  "Look up a pre-computed fact vector by label string. Returns vector or #f."
+  "Look up a pre-computed fact vector by label string. Returns vector or absent."
   (get (:fact-cache encoder) label))
 
 (define (encode-facts encoder module-facts facts owned-facts labels)

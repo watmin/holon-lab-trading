@@ -74,25 +74,23 @@
 ;; In Rust, a TrailFactor newtype would prevent passing a price
 ;; where a multiplier is expected. The wat names the intent.
 (define (tick pos current-price k-trail)
-  "Update position with current price. Returns :stop-loss | :take-profit | #f."
-  (if (= (:phase pos) :closed) #f
+  "Update position with current price. Returns :stop-loss | :take-profit | absent."
+  (when (!= (:phase pos) :closed)
     (match (:direction pos)
       :long
         (let ((best-price (max (:best-price pos) current-price))
               (new-stop   (* best-price (- 1.0 (* k-trail (:entry-atr pos))))))
           (let ((trailing-stop (max (:trailing-stop pos) new-stop)))
-            (if (<= current-price trailing-stop) :stop-loss
-              (if (and (= (:phase pos) :active) (>= current-price (:take-profit pos)))
-                  :take-profit
-                  #f))))
+            (cond ((<= current-price trailing-stop) :stop-loss)
+                  ((and (= (:phase pos) :active) (>= current-price (:take-profit pos)))
+                   :take-profit))))
       :short
         (let ((best-price (min (:best-price pos) current-price))
               (new-stop   (* best-price (+ 1.0 (* k-trail (:entry-atr pos))))))
           (let ((trailing-stop (min (:trailing-stop pos) new-stop)))
-            (if (>= current-price trailing-stop) :stop-loss
-              (if (and (= (:phase pos) :active) (<= current-price (:take-profit pos)))
-                  :take-profit
-                  #f)))))))
+            (cond ((>= current-price trailing-stop) :stop-loss)
+                  ((and (= (:phase pos) :active) (<= current-price (:take-profit pos)))
+                   :take-profit)))))))
 
 ;; ── P&L ─────────────────────────────────────────────────────────────
 

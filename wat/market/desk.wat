@@ -26,18 +26,18 @@
 
 ;; The freshness state of one side of the pair.
 (struct side-state
-  latest                 ; (option Candle) -- most recent candle
+  latest?                ; Candle? -- most recent candle, absent until first update
   age                    ; usize -- candles since last update (0 = just updated)
   staleness-limit)       ; usize -- MAX means always fresh (stablecoin)
 
 (define (side-fresh? side)
   "Is this side fresh enough to act on?"
   (or (= (:staleness-limit side) MAX)    ; stablecoin: always fresh
-      (and (some? (:latest side))
+      (and (some? (:latest? side))
            (<= (:age side) (:staleness-limit side)))))
 
 (define (side-update side candle)
-  (update side :latest (some candle) :age 0))
+  (update side :latest? candle :age 0))
 
 (define (side-tick-age side)
   (update side :age (+ (:age side) 1)))
@@ -65,8 +65,8 @@
 (define (new-desk config)
   (desk :name (:name config)
         :asset-a (:asset-a config) :asset-b (:asset-b config)
-        :side-a (side-state :latest nothing :age 0 :staleness-limit (:staleness-a config))
-        :side-b (side-state :latest nothing :age 0 :staleness-limit (:staleness-b config))))
+        :side-a (side-state :age 0 :staleness-limit (:staleness-a config))
+        :side-b (side-state :age 0 :staleness-limit (:staleness-b config))))
 
 ;; -- Observe ----------------------------------------------------------------
 
@@ -93,11 +93,13 @@
 ;; -- Cross rate -------------------------------------------------------------
 
 (define (cross-rate desk)
-  "Price of asset_a in terms of asset_b."
-  (match ((:latest (:side-a desk)) (:latest (:side-b desk)))
-    ((some a) (some b)) (if (> (:close b) 1e-10) (/ (:close a) (:close b)) nothing)
-    ((some a) nothing)  (:close a)  ; base-pair: asset_b = base (price 1.0)
-    _                   nothing))
+  "Price of asset_a in terms of asset_b. Absent if side_a has no candle.
+   Base-pair: when side_b has no candle, asset_b = base (price 1.0)."
+  (when-let ((a (:latest? (:side-a desk))))
+    (if (some? (:latest? (:side-b desk)))
+        (when-let ((b (:latest? (:side-b desk))))
+          (when (> (:close b) 1e-10) (/ (:close a) (:close b))))
+        (:close a))))
 
 ;; -- What desks do NOT do ---------------------------------------------------
 ;; - Do NOT encode candle data (that's ThoughtEncoder)

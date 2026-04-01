@@ -16,7 +16,7 @@
 ;; The enterprise encodes time circularly (hour-of-day, day-of-week).
 ;; These parse the numeric values from the timestamp string.
 
-;; parse-f64: parse a string slice as f64. Returns the number or #f on failure.
+;; parse-f64: parse a string slice as f64. Returns the number or absent on failure.
 ;; In Rust: str::parse::<f64>().ok()
 (define (parse-f64 s) (string->number s))
 
@@ -32,7 +32,7 @@
   ;; Lookup table: [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4]
   ;; Adjust year if month < 3.
   ;; (y + y/4 - y/100 + y/400 + t[m-1] + d) mod 7
-  ;; parse-i32: parse a string slice as i32. Returns the number or #f on failure.
+  ;; parse-i32: parse a string slice as i32. Returns the number or absent on failure.
   ;; In Rust: str::parse::<i32>().ok()
   (define (parse-i32 s) (string->integer s))
 

@@ -19,7 +19,7 @@
 ;;   - At least 3 bins with accuracy > 0.505 (for log-linear fit)
 ;;   - Positive edge (2 * win_rate - 1 > 0)
 ;;
-;; Returns (position-frac, curve-a, curve-b) or nothing.
+;; Returns (position-frac, curve-a, curve-b) or absent.
 
 (define (bin resolved n-bins)
   "Sort resolved predictions by conviction, split into n equal-size bins.
@@ -35,7 +35,7 @@
 
 (define (log-linear-regression points)
   "Fit accuracy = 0.50 + a * exp(b * conviction) via OLS on log-transformed bins.
-   Keeps only bins with accuracy > 0.505. Returns (a, b) or #f.
+   Keeps only bins with accuracy > 0.505. Returns (a, b) or absent.
    The log transform: ln(accuracy - 0.50) = ln(a) + b * conviction."
   (let ((valid (filter (lambda (p) (> (second p) 0.505)) points)))
     (when (>= (len valid) 3)
@@ -51,7 +51,7 @@
 
 (define (kelly-frac conviction resolved n-bins move-threshold)
   "Half-Kelly position fraction from exponential conviction-accuracy curve.
-   Returns (position-frac, a, b) or #f."
+   Returns (position-frac, a, b) or absent."
   (when (>= (len resolved) 500)
     (when-let ((curve (log-linear-regression (bin resolved n-bins))))
       (let* ((a        (first curve))
