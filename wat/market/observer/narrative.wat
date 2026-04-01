@@ -1,3 +1,6 @@
+;; rune:assay(prose) — narrative.wat lists the vocabulary atoms but does not express
+;; eval dispatch or encoding. One instantiation line; the rest is description.
+
 ;; ── narrative expert ────────────────────────────────────────────────
 ;;
 ;; Thinks about: the story of what happened and when.

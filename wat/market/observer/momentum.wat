@@ -1,3 +1,6 @@
+;; rune:assay(prose) — momentum.wat lists the vocabulary atoms but does not express
+;; eval dispatch or encoding. One instantiation line; the rest is description.
+
 ;; ── momentum expert ─────────────────────────────────────────────────
 ;;
 ;; Thinks about: speed and direction of price change.

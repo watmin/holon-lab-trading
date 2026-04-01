@@ -1,3 +1,6 @@
+;; rune:assay(prose) — lib.wat documents the module tree and dependency graph.
+;; No s-expressions. Pure description.
+
 ;; ── lib.wat — module structure ────────────────────────────────────
 ;;
 ;; The directory IS the module system. Each .wat file is a module.

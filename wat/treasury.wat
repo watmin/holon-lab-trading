@@ -75,6 +75,7 @@
             (assoc (:balances treasury) asset (- available actual)))
           actual)))
 
+;; rune:assay(hollow) — swap computes spend/received but mutation is narrated, not expressed
 (define (swap treasury from to amount-from price fee-rate)
   "Sell `from`, buy `to` at `price`, minus fees. Returns (spent, received)."
   (let ((spend     (min amount-from (balance treasury from)))
@@ -91,6 +92,7 @@
     ;; Mutates: balance down, deployed up, n-open incremented
     claimed))
 
+;; rune:assay(hollow) — release body is pure narration
 (define (release treasury asset amount)
   "Move deployed → available. Position done."
   ;; Mutates: deployed down, balance up, n-open decremented
@@ -102,6 +104,7 @@
     ;; Mutates: base balance down, base deployed up, n-open incremented
     reserved))
 
+;; rune:assay(hollow) — close-position computes returned but mutation is narrated
 (define (close-position treasury deployed-amount pnl fees slippage)
   "Close a position. Return capital ± P&L to available balance."
   (let ((returned (max 0.0 (- (+ deployed-amount pnl) fees slippage))))

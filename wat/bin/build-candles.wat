@@ -1,3 +1,8 @@
+;; rune:assay(prose) — build-candles.wat describes the pipeline (read parquet,
+;; compute indicators, write SQLite) but does not express the computation loop,
+;; the Wilder smoothing state machine, or the SQLite write phase. Two struct
+;; declarations; the rest is narration.
+
 ;; ── bin/build-candles.wat — the enterprise builds its own senses ─
 ;;
 ;; One binary. One source. No Python chains.

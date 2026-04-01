@@ -1,3 +1,6 @@
+;; rune:assay(prose) — regime.wat lists the vocabulary atoms but does not express
+;; eval dispatch or encoding. One instantiation line; the rest is description.
+
 ;; ── regime expert ──────────────────────────────────────────────────
 ;;
 ;; Thinks about: what KIND of market this is, not which direction.

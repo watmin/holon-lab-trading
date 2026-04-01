@@ -1,3 +1,6 @@
+;; rune:assay(prose) — generalist.wat describes the role and vocab union but does not
+;; express the full-profile dispatch. One instantiation line; the rest is description.
+
 ;; ── generalist ─────────────────────────────────────────────────────
 ;;
 ;; The team's composite voice. Sees ALL 150+ facts simultaneously.

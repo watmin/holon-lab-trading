@@ -136,6 +136,9 @@
 
 (define (encode-view encoder candles vm expert)
   "Encode a window of candles through the expert's vocabulary lens."
+  ;; rune:assay(hollow) — encode-view dispatch structure is expressed but eval calls
+  ;; use `...` placeholders. The profile→module mapping is correct; the argument
+  ;; threading is not expressed. The forge cannot test these joints.
   (let ((is (lambda (profiles) (or (= expert "full") (member? expert profiles)))))
 
     ;; SHARED: comparisons (momentum + structure only)

@@ -1,3 +1,6 @@
+;; rune:assay(prose) — structure.wat lists the vocabulary atoms but does not express
+;; eval dispatch or encoding. One instantiation line; the rest is description.
+
 ;; ── structure expert ────────────────────────────────────────────────
 ;;
 ;; Thinks about: geometric shape of price action.

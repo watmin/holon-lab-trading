@@ -1,3 +1,7 @@
+;; rune:assay(prose) — vocab/mod describes the Fact interface and expert profiles
+;; but does not express dispatch, rendering, or module registration as s-expressions.
+;; The contract is specified; the Rust implements the wiring.
+
 ;; ── vocab.wat — the contract for thought vocabulary modules ──────
 ;;
 ;; Data in. Data out. The module doesn't know about vectors.

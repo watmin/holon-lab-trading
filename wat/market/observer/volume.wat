@@ -1,3 +1,6 @@
+;; rune:assay(prose) — volume.wat lists the vocabulary atoms but does not express
+;; eval dispatch or encoding. One instantiation line; the rest is description.
+
 ;; ── volume expert ──────────────────────────────────────────────────
 ;;
 ;; Thinks about: participation and conviction behind price moves.
