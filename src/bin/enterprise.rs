@@ -20,7 +20,7 @@ use enterprise::journal::Label;
 use enterprise::thought::{ThoughtEncoder, ThoughtVocab};
 use enterprise::ledger::init_ledger;
 use enterprise::market::manager::ManagerAtoms;
-use enterprise::state::{CandleContext, EnterpriseState, ExitAtoms};
+use enterprise::state::{AssetMode, CandleContext, ConvictionMode, EnterpriseState, ExitAtoms, SizingMode};
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -94,9 +94,8 @@ struct Args {
 
     /// "quantile" = use conviction_quantile percentile. "auto" = find the conviction
     /// level where cumulative win rate from the top first drops below min_edge.
-    // rune:forge(bare-type) — conviction_mode is "quantile"|"auto"; a two-variant enum would make invalid states unrepresentable
-    #[arg(long, default_value = "quantile")]
-    conviction_mode: String,
+    #[arg(long, value_enum, default_value_t = ConvictionMode::Quantile)]
+    conviction_mode: ConvictionMode,
 
     /// Minimum acceptable win rate for trading. This is the ONE economic input.
     /// The system finds the conviction threshold where flipped accuracy >= this value.
@@ -107,9 +106,8 @@ struct Args {
     min_edge: f64,
 
     /// "legacy" = phase-based with 5% cap. "kelly" = half-Kelly from calibration curve.
-    // rune:forge(bare-type) — sizing is "legacy"|"kelly"; an enum would enforce valid variants at parse time
-    #[arg(long, default_value = "legacy")]
-    sizing: String,
+    #[arg(long, value_enum, default_value_t = SizingMode::Legacy)]
+    sizing: SizingMode,
 
     /// Maximum acceptable drawdown (0.20 = 20%). The second economic input.
     /// Combined with the conviction-accuracy curve, this determines position caps.
@@ -140,9 +138,8 @@ struct Args {
     /// "hold" = treasury holds WBTC between BUY signals. BUY = swap USDC→WBTC,
     /// SELL = swap WBTC→USDC. One swap per signal (0.35% cost). WBTC appreciates
     /// between signals. The position persists.
-    // rune:forge(bare-type) — asset_mode is "round-trip"|"hold"; an enum would prevent silent typos
-    #[arg(long, default_value = "hold")]
-    asset_mode: String,
+    #[arg(long, value_enum, default_value_t = AssetMode::Hold)]
+    asset_mode: AssetMode,
 
     /// Base asset — the unit of account. Always priced at 1.0.
     #[arg(long, default_value = "USDC")]
@@ -184,9 +181,9 @@ fn main() {
     } else {
         format!("{:.3}%", args.move_threshold * 100.0)
     };
-    let flip_desc = match args.conviction_mode.as_str() {
-        "auto" => format!("auto(min_edge={:.2})", args.min_edge),
-        _ => format!("q{:.0}", args.conviction_quantile * 100.0),
+    let flip_desc = match args.conviction_mode {
+        ConvictionMode::Auto => format!("auto(min_edge={:.2})", args.min_edge),
+        ConvictionMode::Quantile => format!("q{:.0}", args.conviction_quantile * 100.0),
     };
     eprintln!("  {}D  window={}  horizon={}  threshold={}  decay={}  flip={}",
         args.dims, args.window, args.horizon, thresh_desc, args.decay, flip_desc);
@@ -274,7 +271,7 @@ fn main() {
             ("horizon",         &args.horizon.to_string()),
             ("move_threshold",  &args.move_threshold.to_string()),
             ("atr_multiplier",  &args.atr_multiplier.to_string()),
-            ("conviction_mode",       &args.conviction_mode),
+            ("conviction_mode",       &args.conviction_mode.to_string()),
             ("min_edge",        &args.min_edge.to_string()),
             ("decay",           &args.decay.to_string()),
             ("observe_period",  &args.observe_period.to_string()),
@@ -284,7 +281,7 @@ fn main() {
             ("max_candles",     &args.max_candles.to_string()),
             ("swap_fee",        &args.swap_fee.to_string()),
             ("slippage",        &args.slippage.to_string()),
-            ("sizing",          &args.sizing),
+            ("sizing",          &args.sizing.to_string()),
         ] {
             stmt.execute(params![k, v]).ok();
         }
@@ -367,13 +364,13 @@ fn main() {
         recalib_interval: args.recalib_interval,
         min_conviction: args.min_conviction,
         conviction_quantile: args.conviction_quantile,
-        conviction_mode: &args.conviction_mode,
+        conviction_mode: args.conviction_mode,
         min_edge: args.min_edge,
-        sizing: &args.sizing,
+        sizing: args.sizing,
         max_drawdown: args.max_drawdown,
         swap_fee: args.swap_fee,
         slippage: args.slippage,
-        asset_mode: &args.asset_mode,
+        asset_mode: args.asset_mode,
         base_asset: &args.base_asset,
         quote_asset: &args.quote_asset,
         initial_equity: args.initial_equity,

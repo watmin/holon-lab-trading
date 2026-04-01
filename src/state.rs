@@ -23,6 +23,62 @@ use crate::risk::RiskBranch;
 use crate::sizing::{kelly_frac, signal_weight};
 use crate::treasury::Treasury;
 
+// ─── Mode enums ───────────────────────────────────────────────────────────
+
+/// Conviction threshold strategy: fixed quantile or auto-discovered edge.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum ConvictionMode {
+    /// Use conviction_quantile percentile as the flip threshold.
+    Quantile,
+    /// Find the conviction level where cumulative win rate first drops below min_edge.
+    Auto,
+}
+
+impl std::fmt::Display for ConvictionMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConvictionMode::Quantile => write!(f, "quantile"),
+            ConvictionMode::Auto => write!(f, "auto"),
+        }
+    }
+}
+
+/// Position sizing strategy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum SizingMode {
+    /// Phase-based with 5% cap.
+    Legacy,
+    /// Half-Kelly from calibration curve.
+    Kelly,
+}
+
+impl std::fmt::Display for SizingMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SizingMode::Legacy => write!(f, "legacy"),
+            SizingMode::Kelly => write!(f, "kelly"),
+        }
+    }
+}
+
+/// Asset holding model.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum AssetMode {
+    /// USDC→WBTC→USDC per trade (two swaps per round trip).
+    RoundTrip,
+    /// Treasury holds WBTC between BUY signals (one swap per signal).
+    Hold,
+}
+
+impl std::fmt::Display for AssetMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AssetMode::RoundTrip => write!(f, "round-trip"),
+            AssetMode::Hold => write!(f, "hold"),
+        }
+    }
+}
+
 // ─── TradePnl ─────────────────────────────────────────────────────────────
 
 /// Pure accounting result for a resolved trade. No side effects.
@@ -111,14 +167,13 @@ pub struct CandleContext<'a> {
     pub recalib_interval: usize,
     pub min_conviction: f64,
     pub conviction_quantile: f64,
-    // rune:forge(bare-type) — conviction_mode, sizing, asset_mode are &str; should be enums matching the CLI variants
-    pub conviction_mode: &'a str,
+    pub conviction_mode: ConvictionMode,
     pub min_edge: f64,
-    pub sizing: &'a str,
+    pub sizing: SizingMode,
     pub max_drawdown: f64,
     pub swap_fee: f64,
     pub slippage: f64,
-    pub asset_mode: &'a str,
+    pub asset_mode: AssetMode,
     pub base_asset: &'a str,
     pub quote_asset: &'a str,
     pub initial_equity: f64,
@@ -530,14 +585,14 @@ impl EnterpriseState {
             && self.encode_count % ctx.recalib_interval == 0
         {
             match ctx.conviction_mode {
-                "quantile" if ctx.conviction_quantile > 0.0 => {
+                ConvictionMode::Quantile if ctx.conviction_quantile > 0.0 => {
                     let mut sorted: Vec<f64> = self.conviction_history.iter().copied().collect();
                     sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
                     let idx = ((sorted.len() as f64 * ctx.conviction_quantile) as usize)
                         .min(sorted.len() - 1);
                     self.conviction_threshold = sorted[idx];
                 }
-                "auto" if self.resolved_preds.len() >= ctx.conviction_warmup * 5 => {
+                ConvictionMode::Auto if self.resolved_preds.len() >= ctx.conviction_warmup * 5 => {
                     // Need 5× warmup (~5000 resolved) for stable exponential fit.
                     // Fit the exponential conviction-accuracy curve:
                     //   accuracy = 0.50 + a × exp(b × conviction)
@@ -597,7 +652,7 @@ impl EnterpriseState {
                     }
                 }
                 // Fallback: during auto warmup, use quantile if available.
-                "auto" if ctx.conviction_quantile > 0.0
+                ConvictionMode::Auto if ctx.conviction_quantile > 0.0
                     && self.conviction_history.len() >= ctx.conviction_warmup => {
                     let mut sorted: Vec<f64> = self.conviction_history.iter().copied().collect();
                     sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
@@ -768,7 +823,7 @@ impl EnterpriseState {
         // manager predicts Healthy/Unhealthy and modulates sizing by risk conviction. Code uses a
         // simple threshold (cached_risk_mult > 0.3) — no risk discriminant, no risk conviction.
         let risk_allows = self.cached_risk_mult > 0.3;
-        let should_open = ctx.asset_mode == "hold"
+        let should_open = ctx.asset_mode == AssetMode::Hold
             && self.portfolio.phase != Phase::Observe
             && self.mgr_curve_valid && in_proven_band && market_moved && risk_allows
             && (meta_dir == Some(self.mgr_buy) || meta_dir == Some(self.mgr_sell));
@@ -876,7 +931,7 @@ impl EnterpriseState {
             } else { ctx.move_threshold };
 
             match ctx.sizing {
-                "kelly" => {
+                SizingMode::Kelly => {
                     // Fast path: evaluate cached curve params. No sorting.
                     let kelly_result = if self.kelly_curve_valid && self.cached_curve_b > 0.0 {
                         let win_rate = (0.50 + self.cached_curve_a * (self.cached_curve_b * meta_conviction).exp()).min(0.95);
@@ -1304,7 +1359,7 @@ impl EnterpriseState {
                 else { "STABLE" },
                 exit_info,
             );
-            if ctx.asset_mode == "hold" {
+            if ctx.asset_mode == AssetMode::Hold {
                 let proven: Vec<&str> = self.observers.iter()
                     .filter(|e| e.curve_valid).map(|e| e.name).collect();
                 // generalist is in the observer list, no separate check needed
