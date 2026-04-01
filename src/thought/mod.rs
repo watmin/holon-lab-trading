@@ -495,16 +495,14 @@ impl ThoughtEncoder {
 
 
 
-    /// Expert profiles: which eval methods to run.
-    /// "full" = all methods (generalist). Named profiles select subsets.
-    /// Encode with a windowed view of the streams.
-    /// `expert` selects which thought vocabulary to activate:
-    ///   "full" = all, "momentum"/"structure"/"volume"/"narrative" = subsets.
+    /// Encode a window of candles through a vocabulary lens.
+    /// `lens` selects which eval methods to run:
+    ///   "full" = all (generalist), "momentum"/"structure"/"volume"/"narrative"/"regime" = subsets.
     pub fn encode_thought(
         &self,
         candles: &[Candle],
         vm: &VectorManager,
-        expert: &str,
+        lens: &str,
     ) -> ThoughtResult {
         let mut cached_facts: Vec<&Vector> = Vec::with_capacity(64);
         let mut owned_facts: Vec<Vector> = Vec::with_capacity(96);
@@ -514,12 +512,12 @@ impl ThoughtEncoder {
         let prev = if candles.len() >= 2 { Some(&candles[candles.len() - 2]) } else { None };
 
         let is = |profiles: &[&str]| -> bool {
-            expert == "full" || profiles.contains(&expert)
+            lens == "full" || profiles.contains(&lens)
         };
 
         // ── SHARED: comparisons (momentum + structure only) ────────────
         // Price vs indicator relationships. Volume, narrative, regime do NOT see these
-        // — their specs forbid it. Each expert sees only its own vocabulary.
+        // — their specs forbid it. Each observer sees only its own vocabulary.
         if is(&["momentum", "structure"]) {
             self.eval_comparisons_cached(now, prev, &mut cached_facts, &mut labels);
         }
