@@ -75,41 +75,58 @@
             (assoc (:balances treasury) asset (- available actual)))
           actual)))
 
-;; rune:assay(hollow) — swap computes spend/received but mutation is narrated, not expressed
 (define (swap treasury from to amount-from price fee-rate)
-  "Sell `from`, buy `to` at `price`, minus fees. Returns (spent, received)."
+  "Sell `from`, buy `to` at `price`, minus fees. Returns (treasury, spent, received)."
   (let ((spend     (min amount-from (balance treasury from)))
         (after-fee (* spend (- 1.0 fee-rate)))
         (received  (/ after-fee price))
         (fee       (* spend fee-rate)))
-    ;; Mutates: from balance down, to balance up, fees recorded
-    ;; Returns: (spend received)
-    ))
+    (list
+      (update (update (update treasury
+        :balances (assoc (:balances treasury) from (- (balance treasury from) spend)))
+        :balances (assoc (:balances treasury) to   (+ (balance treasury to) received)))
+        :total-fees-paid (+ (:total-fees-paid treasury) fee))
+      spend received)))
 
 (define (claim treasury asset amount)
-  "Move available → deployed. Position owns it. Returns amount claimed."
+  "Move available → deployed. Returns (treasury, claimed)."
   (let ((claimed (min amount (balance treasury asset))))
-    ;; Mutates: balance down, deployed up, n-open incremented
-    claimed))
+    (list
+      (update (update (update treasury
+        :balances (assoc (:balances treasury) asset (- (balance treasury asset) claimed)))
+        :deployed (assoc (:deployed treasury) asset (+ (get (:deployed treasury) asset 0.0) claimed)))
+        :n-open (+ (:n-open treasury) 1))
+      claimed)))
 
-;; rune:assay(hollow) — release body is pure narration
 (define (release treasury asset amount)
-  "Move deployed → available. Position done."
-  ;; Mutates: deployed down, balance up, n-open decremented
-  )
+  "Move deployed → available. Returns treasury."
+  (let ((released (min amount (get (:deployed treasury) asset 0.0))))
+    (update (update (update treasury
+      :deployed (assoc (:deployed treasury) asset (- (get (:deployed treasury) asset 0.0) released)))
+      :balances (assoc (:balances treasury) asset (+ (balance treasury asset) released)))
+      :n-open (max 0 (- (:n-open treasury) 1)))))
 
 (define (open-position treasury amount)
-  "Reserve base asset for a new trade. Returns amount reserved."
-  (let ((reserved (min amount (allocatable treasury))))
-    ;; Mutates: base balance down, base deployed up, n-open incremented
-    reserved))
+  "Reserve base asset. Returns (treasury, reserved)."
+  (let ((reserved (min amount (allocatable treasury)))
+        (base     (:base-asset treasury)))
+    (list
+      (update (update (update treasury
+        :balances (assoc (:balances treasury) base (- (balance treasury base) reserved)))
+        :deployed (assoc (:deployed treasury) base (+ (get (:deployed treasury) base 0.0) reserved)))
+        :n-open (+ (:n-open treasury) 1))
+      reserved)))
 
-;; rune:assay(hollow) — close-position computes returned but mutation is narrated
 (define (close-position treasury deployed-amount pnl fees slippage)
-  "Close a position. Return capital ± P&L to available balance."
-  (let ((returned (max 0.0 (- (+ deployed-amount pnl) fees slippage))))
-    ;; Mutates: deployed down, balance up by returned, fees/slippage recorded
-    ))
+  "Close position. Return capital ± P&L. Returns treasury."
+  (let ((returned (max 0.0 (- (+ deployed-amount pnl) fees slippage)))
+        (base     (:base-asset treasury)))
+    (update (update (update (update treasury
+      :deployed (assoc (:deployed treasury) base
+                       (max 0.0 (- (get (:deployed treasury) base 0.0) deployed-amount))))
+      :balances (assoc (:balances treasury) base (+ (balance treasury base) returned)))
+      :n-open (max 0 (- (:n-open treasury) 1)))
+      :total-fees-paid (+ (:total-fees-paid treasury) fees))))
 
 ;; ── Execution gate ──────────────────────────────────────────────────
 ;;
