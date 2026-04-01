@@ -1,4 +1,4 @@
-;; ── narrative expert ────────────────────────────────────────────────
+;; ── observer ────────────────────────────────────────────────
 ;;
 ;; Thinks about: the story of what happened and when.
 ;; Window: sampled from [min-window, max-window] per candle.
@@ -8,7 +8,7 @@
 (require facts)
 (require patterns)
 
-;; ── Profile dispatch ────────────────────────────────────────────────
+;; ── Lens ────────────────────────────────────────────────
 
 (define (encode-narrative candles)
   "Narrative's thought: temporal lookback + calendar + multi-timeframe narrative."
@@ -17,7 +17,7 @@
     (eval-calendar candles)             ; day, session, hour (circular), day-of-week (circular)
     (eval-timeframe-narrative candles))) ; 1h/4h return direction/magnitude, agreement
 
-;; ── The expert ──────────────────────────────────────────────────────
+;; ── observer ──────────────────────────────────────────────────────
 
 (define narrative
   (new-observer "narrative" dims refit-interval :seed-narrative ["Buy" "Sell"]))
@@ -32,7 +32,7 @@
 ;; (fact/bare "tf-4h-agrees")                            ; 4h agrees with 5m
 
 ;; ── DISCOVERY ───────────────────────────────────────────────────────
-;; Narrative is the only expert with calendar awareness. The manager
+;; Narrative is the only observer with calendar awareness. The manager
 ;; also encodes hour-of-day and session as context facts. Is the
 ;; duplication harmful? No — the manager's version is bound with
 ;; manager-level atoms (structurally distinct hyperspace). The

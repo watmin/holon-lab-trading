@@ -1,15 +1,15 @@
-;; ── regime expert ──────────────────────────────────────────────────
+;; ── observer ──────────────────────────────────────────────────
 ;;
 ;; Thinks about: what KIND of market this is, not which direction.
 ;; Window: sampled from [min-window, max-window] per candle.
-;; The purest expert — no comparisons, no segments, no calendar, no volume.
+;; The purest lens — no comparisons, no segments, no calendar, no volume.
 
 (require core/primitives)
 (require core/structural)
 (require facts)
 (require patterns)
 
-;; ── Profile dispatch ────────────────────────────────────────────────
+;; ── Lens ────────────────────────────────────────────────
 
 (define (encode-regime candles)
   "Regime's thought: regime characterization + persistence."
@@ -17,7 +17,7 @@
     (eval-regime-module candles)        ; KAMA-ER, choppiness, DFA, VR, DeMark, Aroon, fractal dim, entropy, tails, trend consistency, vol accel, range pos
     (eval-persistence-module candles))) ; Hurst, autocorrelation, ADX zones
 
-;; ── The expert ──────────────────────────────────────────────────────
+;; ── observer ──────────────────────────────────────────────────────
 
 (define regime
   (new-observer "regime" dims refit-interval :seed-regime ["Buy" "Sell"]))
@@ -36,7 +36,7 @@
 ;; ── RESOLVED ────────────────────────────────────────────────────────
 ;; Regime EXCLUSIVELY owns eval_regime and eval_persistence.
 ;; No comparisons, no segments, no calendar, no volume.
-;; This purity is WHY it's the most gate-stable expert:
+;; This purity is WHY it's the most gate-stable observer:
 ;; DFA alpha, entropy, fractal dimension measure SERIES PROPERTIES
 ;; that survive window noise. The other experts' vocabularies depend
 ;; on candle values at specific positions — different sampled windows

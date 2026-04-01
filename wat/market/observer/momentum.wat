@@ -1,4 +1,4 @@
-;; ── momentum expert ─────────────────────────────────────────────────
+;; ── observer ─────────────────────────────────────────────────
 ;;
 ;; Thinks about: speed and direction of price change.
 ;; Window: sampled from [min-window, max-window] per candle.
@@ -8,7 +8,7 @@
 (require facts)
 (require patterns)
 
-;; ── Profile dispatch ────────────────────────────────────────────────
+;; ── Lens ────────────────────────────────────────────────
 
 (define (encode-momentum candles)
   "Momentum's thought: comparisons + oscillators + crosses + divergence."
@@ -20,7 +20,7 @@
     (eval-divergence candles)           ; RSI divergence via PELT peaks
     (eval-oscillators candles)))        ; Williams %R, StochRSI, UltOsc, multi-ROC
 
-;; ── The expert ──────────────────────────────────────────────────────
+;; ── observer ──────────────────────────────────────────────────────
 
 (define momentum
   (new-observer "momentum" dims refit-interval :seed-momentum ["Buy" "Sell"]))

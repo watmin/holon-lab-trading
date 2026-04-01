@@ -1,4 +1,4 @@
-;; ── volume expert ──────────────────────────────────────────────────
+;; ── observer ──────────────────────────────────────────────────
 ;;
 ;; Thinks about: participation and conviction behind price moves.
 ;; Window: sampled from [min-window, max-window] per candle.
@@ -8,7 +8,7 @@
 (require facts)
 (require patterns)
 
-;; ── Profile dispatch ────────────────────────────────────────────────
+;; ── Lens ────────────────────────────────────────────────
 
 (define (encode-volume candles)
   "Volume's thought: confirmation + analysis + price action + flow."
@@ -18,7 +18,7 @@
     (eval-price-action candles)         ; inside/outside bars, gaps, consecutive
     (eval-flow-module candles)))        ; OBV, VWAP, MFI, buying/selling pressure
 
-;; ── The expert ──────────────────────────────────────────────────────
+;; ── observer ──────────────────────────────────────────────────────
 
 (define volume
   (new-observer "volume" dims refit-interval :seed-volume ["Buy" "Sell"]))
@@ -33,7 +33,7 @@
 ;; (fact/bare "obv-diverges")                            ; OBV vs price disagree
 
 ;; ── DISCOVERY ───────────────────────────────────────────────────────
-;; Volume is the THINNEST expert vocabulary. Only 4 eval methods.
+;; Volume is the THINNEST lens. Only 4 eval methods.
 ;; Rarely proves its gate (appeared once in 100k run, at 50k).
 ;; Is the vocabulary too thin, or is volume inherently less predictive?
 ;; Inside bars are geometric (structure) but validated by volume (volume).

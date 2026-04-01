@@ -1,4 +1,4 @@
-;; ── structure expert ────────────────────────────────────────────────
+;; ── observer ────────────────────────────────────────────────
 ;;
 ;; Thinks about: geometric shape of price action.
 ;; Window: sampled from [min-window, max-window] per candle.
@@ -8,7 +8,7 @@
 (require facts)
 (require patterns)
 
-;; ── Profile dispatch ────────────────────────────────────────────────
+;; ── Lens ────────────────────────────────────────────────
 
 (define (encode-structure candles)
   "Structure's thought: comparisons + segments + spatial + multi-timeframe."
@@ -21,7 +21,7 @@
     (eval-keltner candles)              ; squeeze detection, channel position
     (eval-timeframe-structure candles))) ; 1h/4h range position, body ratio
 
-;; ── The expert ──────────────────────────────────────────────────────
+;; ── observer ──────────────────────────────────────────────────────
 
 (define structure
   (new-observer "structure" dims refit-interval :seed-structure ["Buy" "Sell"]))

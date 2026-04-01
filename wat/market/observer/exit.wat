@@ -1,7 +1,7 @@
-;; ── exit expert ────────────────────────────────────────────────────
+;; ── observer ────────────────────────────────────────────────────
 ;;
 ;; Thinks about: open positions. Should this position hold or exit?
-;; Not a market expert. Sees position state, not candles or indicators.
+;; Not a market observer. Sees position state, not candles or indicators.
 ;; Template 1 (PREDICTION): learns which position states precede
 ;; improvement vs deterioration.
 
@@ -56,12 +56,12 @@
 
 ;; ── Application ─────────────────────────────────────────────────────
 ;;
-;; rune:scry(aspirational) — exit expert learns but does not yet predict.
+;; rune:scry(aspirational) — exit observer learns but does not yet predict.
 ;; When wired, prediction modulates trailing stop per position:
 ;;   Exit with conviction → tighten trail
 ;;   Hold with conviction → loosen trail
 
-;; ── What the exit expert does NOT do ────────────────────────────────
+;; ── observer does NOT do ────────────────────────────────
 ;; - Does NOT decide entry (that's the manager)
 ;; - Does NOT see market indicators (that's the market experts)
 ;; - Does NOT know about other positions (that's risk)

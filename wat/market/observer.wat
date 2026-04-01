@@ -12,8 +12,8 @@
 ;; -- State ------------------------------------------------------------------
 
 (struct observer
-  name                   ; &str -- human label (same as profile)
-  profile                ; &str -- "momentum" | "structure" | "volume" | "narrative" | "regime" | "full"
+  name                   ; &str -- human label (same as lens)
+  lens                   ; &str -- "momentum" | "structure" | "volume" | "narrative" | "regime" | "full"
   journal                ; Journal -- the learning primitive
   resolved               ; (deque (conviction, correct)) -- resolved predictions
   good-state-subspace    ; OnlineSubspace -- engram of discriminant states with > 55% accuracy
@@ -24,21 +24,21 @@
   conviction-history     ; (deque f64) -- recent conviction values, cap 2000
   conviction-threshold   ; f64 -- dynamic quantile threshold for flip zone
   primary-label          ; Label -- first registered label (for discriminant access)
-  curve-valid)           ; bool -- proof gate: has this expert proven direction edge?
+  curve-valid)           ; bool -- proof gate: has this observer proven direction edge?
 
 (struct resolve-log
   name conviction direction correct)
 
 ;; -- Construction -----------------------------------------------------------
 
-(define (new-observer profile dims recalib-interval seed labels)
+(define (new-observer lens dims recalib-interval seed labels)
   "Create an observer with its own journal and window sampler."
-  (let ((jrnl (journal profile dims recalib-interval))
+  (let ((jrnl (journal lens dims recalib-interval))
         (primary-label (register jrnl (first labels))))
     ;; Register remaining labels
     (for-each (lambda (l) (register jrnl l)) (rest labels))
     (observer
-      :name profile :profile profile
+      :name lens :lens lens
       :journal jrnl :primary-label primary-label
       :resolved (deque) :good-state-subspace (online-subspace dims 8)
       :recalib-wins 0 :recalib-total 0 :last-recalib-count 0
@@ -65,7 +65,7 @@
     (when (= (:direction prediction) outcome)
       (inc! (:recalib-wins observer))))
 
-  ;; 3. Engram gating: if expert just recalibrated with good accuracy,
+  ;; 3. Engram gating: if observer just recalibrated with good accuracy,
   ;;    snapshot the discriminant as a "good state"
   ;; recalib-count: Journal method. Returns how many times the journal
   ;; has recalibrated (rebuilt prototypes). Integer, monotonically increasing.
@@ -106,7 +106,7 @@
         (set! (:conviction-threshold observer)
               (quantile (:conviction-history observer) conviction-quantile)))
 
-      ;; 6. Proof gate: does this expert have direction edge?
+      ;; 6. Proof gate: does this observer have direction edge?
       (when (>= (len (:resolved observer)) 100)
         (let ((high-conv (filter (lambda (r) (>= (first r) (* (:conviction-threshold observer) 0.8)))
                                  (:resolved observer))))
