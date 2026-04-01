@@ -1,4 +1,4 @@
-;; rune:assay(prose) — vocab/mod describes the Fact interface and expert profiles
+;; rune:assay(prose) — vocab/mod describes the Fact interface and observer profiles
 ;; but does not express dispatch, rendering, or module registration as s-expressions.
 ;; The contract is specified; the Rust implements the wiring.
 
@@ -72,11 +72,11 @@
 ;;   2. Add one line to the profile dispatch
 ;;   3. The encoder never changes
 
-;; ── Expert profiles ─────────────────────────────────────────────
+;; ── Observer profiles ─────────────────────────────────────────────
 ;;
-;; Each expert is a list of modules. The dispatch calls each module
-;; and pipes the facts through the encoder. The expert doesn't know
-;; how encoding works. The encoder doesn't know which expert called.
+;; Each observer is a list of modules. The dispatch calls each module
+;; and pipes the facts through the encoder. The observer doesn't know
+;; how encoding works. The encoder doesn't know which observer called.
 ;;
 ;; (defprofile "momentum"
 ;;   [eval-oscillators eval-momentum eval-divergence])
@@ -87,13 +87,13 @@
 ;; (defprofile "structure"
 ;;   [eval-ichimoku eval-fibonacci eval-keltner])
 ;;
-;; The profile IS the expert's vocabulary.
+;; The profile IS the observer's vocabulary.
 ;; The vocabulary IS the program.
 ;; The curve judges the program.
 
 ;; ── Why this matters ────────────────────────────────────────────
 ;;
-;; When a new thought arrives — "I want a microstructure expert" —
+;; When a new thought arrives — "I want a microstructure observer" —
 ;; the answer is:
 ;;   1. Create vocab/microstructure.rs
 ;;   2. fn eval_microstructure(candles) -> Vec<Fact>

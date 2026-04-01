@@ -2,7 +2,7 @@
 ;;
 ;; Split by domain: structure sees geometry (range position, body ratio).
 ;; Narrative sees the story (direction agreement, return magnitude).
-;; Each expert gets the thoughts that belong to its way of thinking.
+;; Each observer gets the thoughts that belong to its way of seeing.
 ;;
 ;; Expert profiles: structure (eval-timeframe-structure),
 ;;                  narrative (eval-timeframe-narrative)

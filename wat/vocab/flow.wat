@@ -4,7 +4,7 @@
 ;; buying/selling pressure from candle wicks, volume acceleration.
 ;; VWAP and pressure are window-dependent. MFI and OBV pre-computed.
 ;;
-;; Expert profile: volume
+;; Profile: volume
 
 (require facts)
 

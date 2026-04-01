@@ -3,7 +3,7 @@
 ;; Inside bars, outside bars, gaps, consecutive same-direction candles.
 ;; Pure pattern detection from raw OHLC data. No indicators needed.
 ;;
-;; Expert profile: volume
+;; Profile: volume
 
 (require facts)
 

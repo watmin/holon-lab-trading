@@ -1,10 +1,10 @@
 ;; ── vocab/fibonacci.wat — Fibonacci retracement levels ──────────
 ;;
 ;; Computes proximity to fib levels using the viewport swing high/low.
-;; Window-dependent — swing range is the expert's observation window,
+;; Window-dependent — swing range is the observer's window,
 ;; not pre-computed on Candle.
 ;;
-;; Expert profile: structure
+;; Profile: structure
 
 (require facts)
 
@@ -36,7 +36,7 @@
              ("fib-618" 0.618) ("fib-786" 0.786)]))))))
 
 ;; ── What fibonacci does NOT do ─────────────────────────────────
-;; - Does NOT pre-compute levels (they depend on the expert's window)
+;; - Does NOT pre-compute levels (they depend on the observer's window)
 ;; - Does NOT detect swings explicitly (uses window min/max)
 ;; - Does NOT emit scalars (proximity is binary: touches or positional)
 ;; - Pure function. Candles in, facts out.

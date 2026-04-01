@@ -3,7 +3,7 @@
 ;; The simplest vocab module. Reads pre-computed CCI from Candle.
 ;; One indicator, two zones. That's it.
 ;;
-;; Expert profile: momentum
+;; Profile: momentum
 
 (require facts)
 

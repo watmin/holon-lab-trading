@@ -2,7 +2,7 @@
 ;;
 ;; The thought layer transforms raw candle data into hyperdimensional vectors.
 ;; ThoughtVocab holds pre-allocated atoms. ThoughtEncoder weaves facts into
-;; geometry. encode_view dispatches by expert profile.
+;; geometry. encode_view dispatches by profile profile.
 ;;
 ;; Modules return Fact data. The encoder weaves to geometry. No wrappers.
 
@@ -171,12 +171,12 @@
 ;; The main entry point. Selects which eval methods to run based on profile.
 ;; "full" = all methods (generalist). Named profiles select subsets.
 
-(define (encode-thought encoder candles vm expert)
-  "Encode a window of candles through the expert's vocabulary lens.
+(define (encode-thought encoder candles vm profile)
+  "Encode a window of candles through the profile's vocabulary lens.
    Each profile selects which eval functions to run.
    Vocab modules return Fact data → encode-facts weaves to geometry.
    Inline evals push directly to the fact vectors."
-  (let ((is    (lambda (profiles) (or (= expert "full") (member? expert profiles))))
+  (let ((is    (lambda (profiles) (or (= profile "full") (member? profile profiles))))
         (facts (list))
         (owned (list))
         (labels (list))
@@ -316,5 +316,5 @@
 ;; - Does NOT learn (that's the Journal)
 ;; - Does NOT predict (that's the Observer's journal)
 ;; - Does NOT decide trades (that's downstream)
-;; - Does NOT see other experts' thoughts (experts are independent)
+;; - Does NOT see other profiles' thoughts (profiles are independent)
 ;; - It encodes. It weaves. It bundles. That's all.

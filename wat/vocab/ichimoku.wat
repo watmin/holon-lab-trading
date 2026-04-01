@@ -3,7 +3,7 @@
 ;; Tenkan-sen, Kijun-sen, Senkou Spans, cloud zone, TK cross.
 ;; Window-dependent — all levels computed from raw candles, not pre-baked.
 ;;
-;; Expert profile: structure
+;; Profile: structure
 
 (require facts)
 

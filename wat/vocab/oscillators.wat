@@ -4,7 +4,7 @@
 ;; Reads pre-computed values from Candle where available.
 ;; Ultimate Oscillator is window-dependent — computed from raw candles.
 ;;
-;; Expert profile: momentum
+;; Profile: momentum
 
 (require facts)
 

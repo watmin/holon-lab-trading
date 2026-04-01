@@ -4,7 +4,7 @@
 ;; Reads pre-computed stoch_k, stoch_d from the Candle struct.
 ;; Cross detection uses current + previous candle.
 ;;
-;; Expert profile: momentum
+;; Profile: momentum
 
 (require facts)
 
