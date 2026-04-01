@@ -1852,9 +1852,9 @@ Six wards cast on the root. The enterprise awaits judgment.
 
 The language is named after two talks by Gary Bernhardt.
 
-**"Wat"** (CodeMash 2012) — the lightning talk. JavaScript's `[] + {} === "[object Object]"`. The visceral reaction when types lie, when the language does something no one asked for, when the specification and the behavior diverge. The word became shorthand for language-level absurdity. When something is wrong, the reaction should be immediate: *wat*.
+**["Wat"](https://www.destroyallsoftware.com/talks/wat)** (CodeMash 2012) — the lightning talk. JavaScript's `[] + {} === "[object Object]"`. The visceral reaction when types lie, when the language does something no one asked for, when the specification and the behavior diverge. The word became shorthand for language-level absurdity. When something is wrong, the reaction should be immediate: *wat*.
 
-**"Boundaries"** (RubyConf 2012) — the architecture talk. Values not places. Pure functions inside, side effects at the edges. The functional core and the imperative shell. The boundary between the pure world and the impure world is where all the interesting architecture lives.
+**["Boundaries"](https://www.youtube.com/watch?v=yTkzNHF6rMs)** (RubyConf 2012) — the architecture talk. Values not places. Pure functions inside, side effects at the edges. The functional core and the imperative shell. The boundary between the pure world and the impure world is where all the interesting architecture lives.
 
 The language is named *wat* because it catches the lies. The six wards exist to say *wat* when the specification lies — when a name mumbles, when a value doesn't flow, when spec and code diverge, when a form doesn't exist, when dead code festers, when concerns are braided.
 
