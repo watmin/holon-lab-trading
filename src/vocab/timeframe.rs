@@ -9,9 +9,8 @@ use crate::candle::Candle;
 use super::Fact;
 
 /// Classify a return into a direction zone: up-strong / up-mild / down-strong / down-mild.
+/// Exhaustive match on known prefixes returns &'static str.
 fn direction_zone(prefix: &str, ret: f64, threshold: f64) -> &'static str {
-    // Leak the formatted strings into static lifetime — there are only 4 per prefix
-    // and they live for the program's duration. Instead, match on known prefixes.
     match (prefix, ret > threshold, ret > 0.0, ret < -threshold) {
         ("tf-1h", true, _, _) => "tf-1h-up-strong",
         ("tf-1h", _, true, _) => "tf-1h-up-mild",

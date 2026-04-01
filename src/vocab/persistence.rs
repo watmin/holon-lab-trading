@@ -1,8 +1,7 @@
-//! mod/persistence — trend persistence and memory
+//! vocab/persistence — trend persistence and memory
 //!
-//! Implements: Hurst exponent estimate, autocorrelation, ADX zones,
-//!             regime transition detection
-//! Spec: ~/work/holon/wat/mod/persistence.wat
+//! Hurst exponent, lag-1 autocorrelation, ADX zone classification.
+//! Properties of the price series, not direction.
 //!
 //! These measure PROPERTIES of the price series, not direction.
 //! "Is this market trending or mean-reverting? Persistent or random?"
