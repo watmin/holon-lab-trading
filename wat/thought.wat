@@ -2,7 +2,7 @@
 ;;
 ;; The thought layer transforms raw candle data into hyperdimensional vectors.
 ;; ThoughtVocab holds pre-allocated atoms. ThoughtEncoder weaves facts into
-;; geometry. encode_view dispatches by profile profile.
+;; geometry. encode-thought dispatches by profile.
 ;;
 ;; Modules return Fact data. The encoder weaves to geometry. No wrappers.
 
