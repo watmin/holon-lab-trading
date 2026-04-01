@@ -540,7 +540,7 @@ fn main() {
         eprintln!("  Observer panel:");
         for observer in &state.observers {
             eprintln!("    {}: recalibs={} disc_str={:.4} buy={} sell={}",
-                observer.name,
+                observer.lens,
                 observer.journal.recalib_count(),
                 observer.journal.last_disc_strength(),
                 observer.journal.label_count(observer.primary_label),

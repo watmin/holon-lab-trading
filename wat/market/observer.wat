@@ -12,7 +12,6 @@
 ;; -- State ------------------------------------------------------------------
 
 (struct observer
-  name                   ; &str -- human label (same as lens)
   lens                   ; &str -- "momentum" | "structure" | "volume" | "narrative" | "regime" | "full"
   journal                ; Journal -- the learning primitive
   resolved               ; (deque (conviction, correct)) -- resolved predictions
@@ -38,7 +37,7 @@
     ;; Register remaining labels
     (for-each (lambda (l) (register jrnl l)) (rest labels))
     (observer
-      :name lens :lens lens
+      :lens lens
       :journal jrnl :primary-label primary-label
       :resolved (deque) :good-state-subspace (online-subspace dims 8)
       :recalib-wins 0 :recalib-total 0 :last-recalib-count 0

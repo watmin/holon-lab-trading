@@ -1368,7 +1368,7 @@ impl EnterpriseState {
             );
             if ctx.asset_mode == AssetMode::Hold {
                 let proven: Vec<&str> = self.observers.iter()
-                    .filter(|e| e.curve_valid).map(|e| e.name).collect();
+                    .filter(|e| e.curve_valid).map(|e| e.lens).collect();
                 // generalist is in the observer list, no separate check needed
                 let proven_str = if proven.is_empty() { "none".to_string() }
                     else { proven.join(",") };

@@ -22,7 +22,6 @@ pub struct ResolveLog {
 }
 
 pub struct Observer {
-    pub name: &'static str,
     pub lens: &'static str,
     pub journal: Journal,
     pub resolved: VecDeque<(f64, bool)>,  // (conviction, correct)
@@ -48,7 +47,6 @@ impl Observer {
             journal.register(label);
         }
         Self {
-            name: lens,
             lens,
             journal,
             primary_label,
@@ -142,7 +140,7 @@ impl Observer {
 
         // 7. Return log data (heartbeat writes to ledger if diagnostics enabled)
         Some(ResolveLog {
-            name: self.name,
+            name: self.lens,
             conviction: prediction.conviction,
             direction: pred_dir,
             correct,
