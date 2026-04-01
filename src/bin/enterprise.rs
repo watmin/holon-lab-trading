@@ -19,7 +19,7 @@ use enterprise::candle::load_candles;
 use enterprise::journal::Label;
 use enterprise::thought::{ThoughtEncoder, ThoughtVocab};
 use enterprise::ledger::init_ledger;
-use enterprise::market::manager::ManagerAtoms;
+use enterprise::market::manager::{ManagerAtoms, noise_floor};
 use enterprise::state::{AssetMode, CandleContext, ConvictionMode, EnterpriseState, ExitAtoms, SizingMode};
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -242,8 +242,7 @@ fn main() {
         .map(|&name| vm.get_vector(name))
         .collect();
     let generalist_atom = vm.get_vector("generalist");
-    // rune:gaze(naming) — missing WHY: 3/sqrt(D) is the expected noise floor for random cosine similarity in D dimensions
-    let min_opinion_magnitude: f64 = 3.0 / (args.dims as f64).sqrt();
+    let min_opinion_magnitude: f64 = noise_floor(args.dims);
 
     // Risk scalar encoder — separate from thought encoder's scalar encoder
     let risk_scalar = holon::ScalarEncoder::new(args.dims);

@@ -35,7 +35,7 @@ pub struct Observer {
     pub conviction_threshold: f64,
     /// The primary label for discriminant access (first registered label).
     pub primary_label: Label,
-    /// Proof gate: the expert must prove direction accuracy before
+    /// Proof gate: the observer must prove direction accuracy before
     /// its opinion flows upstream. Silence, not noise.
     pub curve_valid: bool,
 }
@@ -86,7 +86,7 @@ impl Observer {
             if pred_dir == outcome { self.recalib_wins += 1; }
         }
 
-        // 3. Engram gating: if expert just recalibrated with good accuracy,
+        // 3. Engram gating: if observer just recalibrated with good accuracy,
         //    snapshot the discriminant as a "good state"
         if self.journal.recalib_count() > self.last_recalib_count {
             self.last_recalib_count = self.journal.recalib_count();
@@ -128,7 +128,7 @@ impl Observer {
             self.conviction_threshold = sorted[idx];
         }
 
-        // 6. Proof gate: does this expert have direction edge?
+        // 6. Proof gate: does this observer have direction edge?
         if self.resolved.len() >= 100 {
             let high_conv: Vec<&(f64, bool)> = self.resolved.iter()
                 .filter(|(c, _)| *c >= self.conviction_threshold * 0.8)

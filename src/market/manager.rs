@@ -3,7 +3,7 @@
 //! Spec: wat/manager.wat
 //!
 //! The manager thinks in observer opinions, not candle data.
-//! Each expert contributes: opinion (direction + magnitude) + credibility (proven/tentative)
+//! Each observer contributes: opinion (direction + magnitude) + credibility (proven/tentative)
 //! Plus: panel shape, market context, time, motion.
 
 use holon::{Primitives, ScalarMode, Similarity, VectorManager, Vector};
@@ -17,7 +17,7 @@ pub struct ManagerContext<'a> {
     pub observer_curve_valid: &'a [bool],
     pub observer_resolved_lens: &'a [usize],
     pub observer_resolved_accs: &'a [f64],  // rolling accuracy per observer
-    pub observer_vecs: &'a [Vector],        // expert thought vectors (for coherence)
+    pub observer_vecs: &'a [Vector],        // observer thought vectors (for coherence)
     pub generalist_pred: &'a Prediction,
     pub generalist_atom: &'a Vector,
     pub generalist_curve_valid: bool,
@@ -68,6 +68,143 @@ impl ManagerAtoms {
     }
 }
 
+/// 3sigma — below this, cosine is random noise in the hyperspace.
+pub fn noise_floor(dims: usize) -> f64 {
+    3.0 / (dims as f64).sqrt()
+}
+
+/// 5sigma — conviction level where signal typically emerges.
+pub fn sweet_spot(dims: usize) -> f64 {
+    5.0 / (dims as f64).sqrt()
+}
+
+/// Encode one observer's contribution to the manager's thought.
+/// Returns facts (may be empty if below noise floor).
+fn encode_observer_opinion(
+    atoms: &ManagerAtoms,
+    scalar: &holon::ScalarEncoder,
+    observer_atom: &Vector,
+    pred: &Prediction,
+    curve_valid: bool,
+    resolved_len: usize,
+    resolved_acc: f64,
+    min_opinion: f64,
+) -> Vec<Vector> {
+    let abs_cos = pred.raw_cos.abs();
+    if abs_cos < min_opinion {
+        return Vec::new();
+    }
+
+    let mut facts = Vec::with_capacity(4);
+
+    // Fact 1: opinion — direction + magnitude
+    let magnitude = scalar.encode(abs_cos, ScalarMode::Linear { scale: 1.0 });
+    let action = if pred.raw_cos >= 0.0 { &atoms.buy } else { &atoms.sell };
+    let opinion = Primitives::bind(action, &magnitude);
+    facts.push(Primitives::bind(observer_atom, &opinion));
+
+    // Fact 2: credibility — proven or tentative
+    let status = if curve_valid { &atoms.proven } else { &atoms.tentative };
+    facts.push(Primitives::bind(observer_atom, status));
+
+    // Fact 3: reliability — accuracy above baseline (if enough data)
+    if resolved_len >= 20 {
+        let rel = scalar.encode((resolved_acc - 0.4).max(0.0), ScalarMode::Linear { scale: 1.0 });
+        facts.push(Primitives::bind(
+            &Primitives::bind(observer_atom, &atoms.reliability), &rel));
+    }
+
+    // Fact 4: tenure — how long has this observer been resolving?
+    let tenure = resolved_len as f64;
+    if tenure >= 50.0 {
+        let ten = scalar.encode_log(tenure);
+        facts.push(Primitives::bind(
+            &Primitives::bind(observer_atom, &atoms.tenure), &ten));
+    }
+
+    facts
+}
+
+/// Panel-level facts from proven observer predictions.
+/// Needs 2+ proven observers.
+fn panel_shape(
+    atoms: &ManagerAtoms,
+    scalar: &holon::ScalarEncoder,
+    ctx: &ManagerContext,
+) -> Vec<Vector> {
+    let proven_indices: Vec<usize> = ctx.observer_curve_valid.iter().enumerate()
+        .filter(|(_, &valid)| valid)
+        .map(|(i, _)| i)
+        .collect();
+
+    if proven_indices.len() < 2 {
+        return Vec::new();
+    }
+
+    let proven_preds: Vec<&Prediction> = proven_indices.iter()
+        .map(|&i| &ctx.observer_preds[i])
+        .collect();
+    let total = proven_preds.len();
+    let buys = proven_preds.iter().filter(|p| p.raw_cos > 0.0).count();
+
+    let mut facts = Vec::with_capacity(4);
+
+    // Agreement
+    let agreement = (buys.max(total - buys) as f64) / total as f64;
+    facts.push(Primitives::bind(&atoms.agreement,
+        &scalar.encode(agreement, ScalarMode::Linear { scale: 1.0 })));
+
+    // Energy — mean conviction
+    let mean_conv = proven_preds.iter().map(|p| p.conviction).sum::<f64>() / total as f64;
+    facts.push(Primitives::bind(&atoms.energy,
+        &scalar.encode(mean_conv, ScalarMode::Linear { scale: 1.0 })));
+
+    // Divergence — spread of convictions
+    let variance = proven_preds.iter()
+        .map(|p| (p.conviction - mean_conv).powi(2))
+        .sum::<f64>() / total as f64;
+    facts.push(Primitives::bind(&atoms.divergence,
+        &scalar.encode(variance.sqrt(), ScalarMode::Linear { scale: 1.0 })));
+
+    // Coherence — mean pairwise cosine between proven thought vectors
+    let proven_vecs: Vec<&Vector> = proven_indices.iter()
+        .map(|&i| &ctx.observer_vecs[i])
+        .collect();
+    if proven_vecs.len() >= 2 {
+        let mut pair_sum = 0.0_f64;
+        let mut pair_count = 0usize;
+        for a in 0..proven_vecs.len() {
+            for b in (a + 1)..proven_vecs.len() {
+                pair_sum += Similarity::cosine(proven_vecs[a], proven_vecs[b]);
+                pair_count += 1;
+            }
+        }
+        let coherence = if pair_count > 0 { pair_sum / pair_count as f64 } else { 0.0 };
+        facts.push(Primitives::bind(&atoms.coherence,
+            &scalar.encode(coherence.abs(), ScalarMode::Linear { scale: 1.0 })));
+    }
+
+    facts
+}
+
+/// Market-level context facts: volatility, discriminant quality, time.
+fn market_context(
+    atoms: &ManagerAtoms,
+    scalar: &holon::ScalarEncoder,
+    ctx: &ManagerContext,
+) -> Vec<Vector> {
+    vec![
+        Primitives::bind(&atoms.volatility,
+            &scalar.encode_log(ctx.candle_atr.max(1e-10))),
+        Primitives::bind(&atoms.disc_strength,
+            &scalar.encode_log(ctx.disc_strength.max(1e-10))),
+        Primitives::bind(&atoms.hour,
+            &scalar.encode(ctx.candle_hour, ScalarMode::Circular { period: 24.0 })),
+        Primitives::bind(&atoms.day,
+            &scalar.encode(ctx.candle_day, ScalarMode::Circular { period: 7.0 })),
+    ]
+}
+
 /// Encode the manager's thought from observer opinions.
 /// This is Layer 2 from enterprise.wat — called once per candle at prediction time,
 /// and reconstructed at resolution time.
@@ -79,102 +216,34 @@ pub fn encode_manager_thought(
 ) -> Vec<Vector> {
     let mut facts: Vec<Vector> = Vec::new();
 
-    // Per-expert: opinion + credibility + reliability + tenure
-    // rune:gaze(naming) — ei/ep want to say expert_idx/expert_pred; loop body spans 30 lines
-    for (ei, ep) in ctx.observer_preds.iter().enumerate() {
-        let abs_cos = ep.raw_cos.abs();
-        if abs_cos < min_opinion { continue; }
-
-        // Opinion: bind(expert, bind(action, magnitude))
-        let magnitude = scalar.encode(abs_cos, ScalarMode::Linear { scale: 1.0 });
-        let action = if ep.raw_cos >= 0.0 { &atoms.buy } else { &atoms.sell };
-        let opinion = Primitives::bind(action, &magnitude);
-        facts.push(Primitives::bind(&ctx.observer_atoms[ei], &opinion));
-
-        // Credibility: bind(expert, proven|tentative)
-        let status = if ctx.observer_curve_valid[ei] { &atoms.proven } else { &atoms.tentative };
-        facts.push(Primitives::bind(&ctx.observer_atoms[ei], status));
-
-        // Reliability: bind(bind(expert, reliability), accuracy)
-        if ctx.observer_resolved_lens[ei] >= 20 {
-            let acc = ctx.observer_resolved_accs[ei];
-            let rel = scalar.encode((acc - 0.4).max(0.0), ScalarMode::Linear { scale: 1.0 });
-            facts.push(Primitives::bind(
-                &Primitives::bind(&ctx.observer_atoms[ei], &atoms.reliability), &rel));
-        }
-
-        // Tenure: bind(bind(expert, tenure), count)
-        let tenure = ctx.observer_resolved_lens[ei] as f64;
-        if tenure >= 50.0 {
-            let ten = scalar.encode_log(tenure);
-            facts.push(Primitives::bind(
-                &Primitives::bind(&ctx.observer_atoms[ei], &atoms.tenure), &ten));
-        }
+    // Per-observer opinions
+    for i in 0..ctx.observer_preds.len() {
+        facts.extend(encode_observer_opinion(
+            atoms, scalar,
+            &ctx.observer_atoms[i],
+            &ctx.observer_preds[i],
+            ctx.observer_curve_valid[i],
+            ctx.observer_resolved_lens[i],
+            ctx.observer_resolved_accs[i],
+            min_opinion,
+        ));
     }
 
-    // Generalist
-    if ctx.generalist_curve_valid && ctx.generalist_pred.raw_cos.abs() >= min_opinion {
-        let gen_mag = scalar.encode(ctx.generalist_pred.raw_cos.abs(), ScalarMode::Linear { scale: 1.0 });
-        let gen_action = if ctx.generalist_pred.raw_cos >= 0.0 { &atoms.buy } else { &atoms.sell };
-        let gen_opinion = Primitives::bind(gen_action, &gen_mag);
-        facts.push(Primitives::bind(ctx.generalist_atom, &gen_opinion));
+    // Generalist — same encoding, just from generalist fields
+    facts.extend(encode_observer_opinion(
+        atoms, scalar,
+        ctx.generalist_atom,
+        ctx.generalist_pred,
+        ctx.generalist_curve_valid,
+        0, 0.0,  // generalist doesn't track per-observer reliability/tenure
+        min_opinion,
+    ));
 
-        let gen_status = if ctx.generalist_curve_valid { &atoms.proven } else { &atoms.tentative };
-        facts.push(Primitives::bind(ctx.generalist_atom, gen_status));
-    }
+    // Panel shape
+    facts.extend(panel_shape(atoms, scalar, ctx));
 
-    // Panel shape (needs 2+ proven experts)
-    let proven_preds: Vec<&Prediction> = ctx.observer_preds.iter().enumerate()
-        .filter(|(ei, _)| ctx.observer_curve_valid[*ei])
-        .map(|(_, ep)| ep)
-        .collect();
-
-    if proven_preds.len() >= 2 {
-        let buys = proven_preds.iter().filter(|p| p.raw_cos > 0.0).count();
-        let total = proven_preds.len();
-        let agreement = (buys.max(total - buys) as f64) / total as f64;
-        facts.push(Primitives::bind(&atoms.agreement,
-            &scalar.encode(agreement, ScalarMode::Linear { scale: 1.0 })));
-
-        let mean_conv = proven_preds.iter().map(|p| p.conviction).sum::<f64>() / total as f64;
-        facts.push(Primitives::bind(&atoms.energy,
-            &scalar.encode(mean_conv, ScalarMode::Linear { scale: 1.0 })));
-
-        let variance = proven_preds.iter()
-            .map(|p| (p.conviction - mean_conv).powi(2))
-            .sum::<f64>() / total as f64;
-        facts.push(Primitives::bind(&atoms.divergence,
-            &scalar.encode(variance.sqrt(), ScalarMode::Linear { scale: 1.0 })));
-
-        // Coherence: pairwise cosine between proven expert thought vectors
-        let proven_vecs: Vec<&Vector> = ctx.observer_vecs.iter().enumerate()
-            .filter(|(ei, _)| ctx.observer_curve_valid[*ei])
-            .map(|(_, v)| v)
-            .collect();
-        if proven_vecs.len() >= 2 {
-            let mut pair_sum = 0.0_f64;
-            let mut pair_count = 0usize;
-            for a in 0..proven_vecs.len() {
-                for b in (a + 1)..proven_vecs.len() {
-                    pair_sum += Similarity::cosine(proven_vecs[a], proven_vecs[b]);
-                    pair_count += 1;
-                }
-            }
-            let coherence = if pair_count > 0 { pair_sum / pair_count as f64 } else { 0.0 };
-            facts.push(Primitives::bind(&atoms.coherence,
-                &scalar.encode(coherence.abs(), ScalarMode::Linear { scale: 1.0 })));
-        }
-    }
-
-    // Context
-    facts.push(Primitives::bind(&atoms.volatility,
-        &scalar.encode_log(ctx.candle_atr.max(1e-10))));
-    facts.push(Primitives::bind(&atoms.disc_strength,
-        &scalar.encode_log(ctx.disc_strength.max(1e-10))));
-    facts.push(Primitives::bind(&atoms.hour,
-        &scalar.encode(ctx.candle_hour, ScalarMode::Circular { period: 24.0 })));
-    facts.push(Primitives::bind(&atoms.day,
-        &scalar.encode(ctx.candle_day, ScalarMode::Circular { period: 7.0 })));
+    // Market context
+    facts.extend(market_context(atoms, scalar, ctx));
 
     facts
 }
