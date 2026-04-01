@@ -6,48 +6,39 @@
 ;;
 ;; Expert profile: momentum
 
-(require vocab/mod)
 (require facts)
 
-;; ── Atoms introduced ───────────────────────────────────────────
-
-;; Indicators:   stoch-k, stoch-d
-;; Predicates:   above, below, crosses-above, crosses-below
-;; Zones:        stoch-overbought, stoch-oversold
-
-;; ── Facts produced ─────────────────────────────────────────────
-
 (define (eval-stochastic candles)
-  "Stochastic oscillator facts. Returns Some(Vec<Fact>) or None if < 2 candles."
+  "Stochastic oscillator facts. None if < 2 candles."
+  (when (>= (len candles) 2)
+    (let ((now     (last candles))
+          (prev    (nth candles (- (len candles) 2)))
+          (sk      (:stoch-k now))
+          (sd      (:stoch-d now))
+          (prev-sk (:stoch-k prev))
+          (prev-sd (:stoch-d prev)))
+      (append
+        ;; K vs D position
+        (list (if (> sk sd)
+                  (fact/comparison "above" "stoch-k" "stoch-d")
+                  (fact/comparison "below" "stoch-k" "stoch-d")))
 
-  ;; K vs D position
-  ;; Comparison: (above stoch-k stoch-d) or (below stoch-k stoch-d)
-  (if (> stoch-k stoch-d)
-      (fact/comparison "above" "stoch-k" "stoch-d")
-      (fact/comparison "below" "stoch-k" "stoch-d"))
+        ;; Crossover: sign change between prev and current
+        (cond
+          ((and (< prev-sk prev-sd) (>= sk sd))
+           (list (fact/comparison "crosses-above" "stoch-k" "stoch-d")))
+          ((and (> prev-sk prev-sd) (<= sk sd))
+           (list (fact/comparison "crosses-below" "stoch-k" "stoch-d")))
+          (else (list)))
 
-  ;; Crossover detection — compares current and previous candle
-  ;; Comparison: (crosses-above stoch-k stoch-d) when prev_k < prev_d AND curr_k >= curr_d
-  ;;              (crosses-below stoch-k stoch-d) when prev_k > prev_d AND curr_k <= curr_d
-  ;; No threshold. Pure sign change detection.
-  (when (and (< prev-k prev-d) (>= stoch-k stoch-d))
-    (fact/comparison "crosses-above" "stoch-k" "stoch-d"))
-  (when (and (> prev-k prev-d) (<= stoch-k stoch-d))
-    (fact/comparison "crosses-below" "stoch-k" "stoch-d"))
-
-  ;; Overbought/oversold zone
-  ;; Zone: (at stoch-k stoch-overbought) when %K > 80
-  ;;        (at stoch-k stoch-oversold)   when %K < 20
-  ;; Thresholds: 80/20. Standard stochastic levels.
-  (when (> stoch-k 80.0) (fact/zone "stoch-k" "stoch-overbought"))
-  (when (< stoch-k 20.0) (fact/zone "stoch-k" "stoch-oversold")))
-
-;; ── Minimum: 2 candles ─────────────────────────────────────────
-;; Need current + previous for cross detection.
+        ;; Overbought/oversold zones (80/20, standard levels)
+        (cond
+          ((> sk 80.0) (list (fact/zone "stoch-k" "stoch-overbought")))
+          ((< sk 20.0) (list (fact/zone "stoch-k" "stoch-oversold")))
+          (else (list)))))))
 
 ;; ── What stochastic does NOT do ────────────────────────────────
 ;; - Does NOT compute %K or %D (pre-computed on Candle)
 ;; - Does NOT use smoothed %D for zones (uses raw %K)
 ;; - Does NOT check StochRSI (that's oscillators.wat)
-;; - Does NOT import holon or create vectors
 ;; - Pure function. Candles in, facts out.
