@@ -9,6 +9,22 @@
 use crate::candle::Candle;
 use super::Fact;
 
+/// Simple linear regression slope. Returns None if degenerate.
+/// Matches wat/vocab/regime.wat linreg-slope.
+fn linreg_slope(xs: &[f64], ys: &[f64]) -> Option<f64> {
+    let n = xs.len() as f64;
+    let sx: f64 = xs.iter().sum();
+    let sy: f64 = ys.iter().sum();
+    let sxx: f64 = xs.iter().map(|x| x * x).sum();
+    let sxy: f64 = xs.iter().zip(ys.iter()).map(|(x, y)| x * y).sum();
+    let denom = n * sxx - sx * sx;
+    if denom.abs() > 1e-10 {
+        Some((n * sxy - sx * sy) / denom)
+    } else {
+        None
+    }
+}
+
 pub fn eval_regime(candles: &[Candle]) -> Vec<Fact<'static>> {
     let n = candles.len();
     let mut facts: Vec<Fact<'static>> = Vec::new();
@@ -86,14 +102,8 @@ pub fn eval_regime(candles: &[Candle]) -> Vec<Fact<'static>> {
                 }
             }
             if log_f.len() >= 3 {
-                let nf = log_f.len() as f64;
-                let sx: f64 = log_s.iter().sum();
-                let sy: f64 = log_f.iter().sum();
-                let sxx: f64 = log_s.iter().map(|x| x * x).sum();
-                let sxy: f64 = log_s.iter().zip(log_f.iter()).map(|(x, y)| x * y).sum();
-                let denom = nf * sxx - sx * sx;
-                if denom.abs() > 1e-10 {
-                    let alpha = ((nf * sxy - sx * sy) / denom).clamp(0.0, 1.5);
+                if let Some(alpha) = linreg_slope(&log_s, &log_f) {
+                    let alpha = alpha.clamp(0.0, 1.5);
                     facts.push(Fact::Zone { indicator: "dfa-alpha", zone: if alpha > 0.6 { "persistent-dfa" }
                         else if alpha < 0.4 { "anti-persistent-dfa" }
                         else { "random-walk-dfa" } });
@@ -210,14 +220,8 @@ pub fn eval_regime(candles: &[Candle]) -> Vec<Fact<'static>> {
             }
         }
         if log_n.len() >= 3 {
-            let nf = log_n.len() as f64;
-            let sx: f64 = log_m.iter().sum();
-            let sy: f64 = log_n.iter().sum();
-            let sxx: f64 = log_m.iter().map(|x| x * x).sum();
-            let sxy: f64 = log_m.iter().zip(log_n.iter()).map(|(x, y)| x * y).sum();
-            let denom = nf * sxx - sx * sx;
-            if denom.abs() > 1e-10 {
-                let b = -(nf * sxy - sx * sy) / denom;
+            if let Some(slope) = linreg_slope(&log_m, &log_n) {
+                let b = -slope;
                 facts.push(Fact::Zone { indicator: "gr-bvalue",
                     zone: if b < 1.0 { "heavy-tails" } else { "light-tails" } });
             }
