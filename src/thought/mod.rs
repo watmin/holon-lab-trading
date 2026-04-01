@@ -8,7 +8,7 @@ use holon::{
 };
 
 use crate::candle::Candle;
-use pelt::{pelt_changepoints, bic_penalty, most_recent_segment_dir};
+use pelt::{pelt_on_values, most_recent_segment_dir};
 
 
 // ─── Atoms ──────────────────────────────────────────────────────────────────
@@ -452,10 +452,10 @@ impl ThoughtEncoder {
     pub fn encode_facts<'a>(
         &'a self,
         module_facts: &[crate::vocab::Fact],
-        facts: &mut Vec<&'a Vector>,
-        owned_facts: &mut Vec<Vector>,
-        labels: &mut Vec<String>,
-    ) {
+    ) -> (Vec<&'a Vector>, Vec<Vector>, Vec<String>) {
+        let mut facts = Vec::new();
+        let mut owned_facts = Vec::new();
+        let mut labels = Vec::new();
         for fact in module_facts {
             match fact {
                 crate::vocab::Fact::Zone { indicator, zone } => {
@@ -491,6 +491,7 @@ impl ThoughtEncoder {
                 }
             }
         }
+        (facts, owned_facts, labels)
     }
 
 
@@ -508,69 +509,79 @@ impl ThoughtEncoder {
         let mut owned_facts: Vec<Vector> = Vec::with_capacity(96);
         let mut labels: Vec<String> = Vec::with_capacity(96);
 
+        // Collect results from an eval method into the accumulators.
+        macro_rules! collect {
+            ($result:expr) => {
+                let (f, o, l) = $result;
+                cached_facts.extend(f);
+                owned_facts.extend(o);
+                labels.extend(l);
+            };
+        }
+
         let now = candles.last().unwrap();
         let prev = if candles.len() >= 2 { Some(&candles[candles.len() - 2]) } else { None };
 
-        let is = |profiles: &[&str]| -> bool {
-            lens == "full" || profiles.contains(&lens)
+        let is = |lenses: &[&str]| -> bool {
+            lens == "full" || lenses.contains(&lens)
         };
 
         // ── SHARED: comparisons (momentum + structure only) ────────────
         // Price vs indicator relationships. Volume, narrative, regime do NOT see these
         // — their specs forbid it. Each observer sees only its own vocabulary.
         if is(&["momentum", "structure"]) {
-            self.eval_comparisons_cached(now, prev, &mut cached_facts, &mut labels);
+            collect!(self.eval_comparisons_cached(now, prev));
         }
 
         // ── EXCLUSIVE: momentum ─────────────────────────────────────
         // Oscillators, crosses, divergence. Speed and direction of change.
         if is(&["momentum"]) {
-            self.eval_rsi_sma_cached(candles, &mut cached_facts, &mut labels);
-            self.eval_stochastic(candles, &mut cached_facts, &mut owned_facts, &mut labels);
-            self.eval_momentum(candles, &mut cached_facts, &mut owned_facts, &mut labels); // CCI, ROC
-            self.eval_divergence(candles, vm, &mut owned_facts, &mut labels);
+            collect!(self.eval_rsi_sma_cached(candles));
+            collect!(self.eval_stochastic(candles));
+            collect!(self.eval_momentum(candles)); // CCI, ROC
+            collect!(self.eval_divergence(candles, vm));
             // vocab/oscillators: Williams %R, Stochastic RSI, Ultimate Oscillator, multi-ROC
-            self.eval_oscillators_module(candles, &mut cached_facts, &mut owned_facts, &mut labels);
+            collect!(self.eval_oscillators_module(candles));
         }
 
         // ── EXCLUSIVE: structure ────────────────────────────────────
         // Geometric shape: segments, levels, channels, cloud, fibs, multi-timeframe.
         if is(&["structure"]) {
-            self.eval_segment_narrative(candles, vm, &mut owned_facts, &mut labels);
-            self.eval_range_position(candles, &mut owned_facts, &mut labels);
-            self.eval_ichimoku(candles, &mut cached_facts, &mut owned_facts, &mut labels);
-            self.eval_fibonacci(candles, &mut cached_facts, &mut owned_facts, &mut labels);
-            self.eval_keltner(candles, &mut cached_facts, &mut owned_facts, &mut labels);
+            collect!(self.eval_segment_narrative(candles, vm));
+            collect!(self.eval_range_position(candles));
+            collect!(self.eval_ichimoku(candles));
+            collect!(self.eval_fibonacci(candles));
+            collect!(self.eval_keltner(candles));
             // vocab/timeframe: multi-timeframe geometry (range position, body ratio)
-            self.encode_facts(&crate::vocab::timeframe::eval_timeframe_structure(candles), &mut cached_facts, &mut owned_facts, &mut labels);
+            collect!(self.encode_facts(&crate::vocab::timeframe::eval_timeframe_structure(candles)));
         }
 
         // ── EXCLUSIVE: volume ───────────────────────────────────────
         // Participation: is the market backing the move?
         if is(&["volume"]) {
-            self.eval_volume_confirmation(candles, &mut owned_facts, &mut labels);
-            self.eval_volume_analysis(candles, &mut cached_facts, &mut labels);
-            self.eval_price_action(candles, &mut cached_facts, &mut owned_facts, &mut labels);
+            collect!(self.eval_volume_confirmation(candles));
+            collect!(self.eval_volume_analysis(candles));
+            collect!(self.eval_price_action(candles));
             // vocab/flow: OBV, VWAP, MFI, buying/selling pressure
-            self.eval_flow_module(candles, &mut cached_facts, &mut owned_facts, &mut labels);
+            collect!(self.eval_flow_module(candles));
         }
 
         // ── EXCLUSIVE: narrative ────────────────────────────────────
         // The story: what happened when. Calendar + temporal lookback + multi-timeframe context.
         if is(&["narrative"]) {
-            self.eval_temporal(candles, vm, &mut owned_facts, &mut labels);
-            self.eval_calendar(now, &mut cached_facts, &mut owned_facts, &mut labels);
+            collect!(self.eval_temporal(candles, vm));
+            collect!(self.eval_calendar(now));
             // vocab/timeframe: multi-timeframe narrative (direction, agreement)
-            self.encode_facts(&crate::vocab::timeframe::eval_timeframe_narrative(candles), &mut cached_facts, &mut owned_facts, &mut labels);
+            collect!(self.encode_facts(&crate::vocab::timeframe::eval_timeframe_narrative(candles)));
         }
 
         // ── EXCLUSIVE: regime ───────────────────────────────────────
         // Market character: trending/chaotic/persistent/mean-reverting.
         // Abstract properties that survive window noise.
         if is(&["regime"]) {
-            self.eval_regime_module(candles, &mut cached_facts, &mut owned_facts, &mut labels);
+            collect!(self.eval_regime_module(candles));
             // vocab/persistence: Hurst, autocorrelation, ADX zones
-            self.eval_persistence_module(candles, &mut cached_facts, &mut owned_facts, &mut labels);
+            collect!(self.eval_persistence_module(candles));
         }
 
         // Unify all facts into a single reference list for bundling.
@@ -593,9 +604,9 @@ impl ThoughtEncoder {
         &'a self,
         now: &Candle,
         prev: Option<&Candle>,
-        facts: &mut Vec<&'a Vector>,
-        labels: &mut Vec<String>,
-    ) {
+    ) -> (Vec<&'a Vector>, Vec<Vector>, Vec<String>) {
+        let mut facts = Vec::new();
+        let mut labels = Vec::new();
         let has_prev_field = |name: &str| name.starts_with("prev-");
 
         for &(a, b) in COMPARISON_PAIRS {
@@ -663,6 +674,7 @@ impl ThoughtEncoder {
                 }
             }
         }
+        (facts, Vec::new(), labels)
     }
 
     // ─── Segment narrative (PELT-based) ────────────────────────────────
@@ -671,11 +683,11 @@ impl ThoughtEncoder {
         &self,
         candles: &[Candle],
         vm: &VectorManager,
-        facts: &mut Vec<Vector>,
-        labels: &mut Vec<String>,
-    ) {
+    ) -> (Vec<&Vector>, Vec<Vector>, Vec<String>) {
+        let mut facts = Vec::new();
+        let mut labels = Vec::new();
         let n_candles = candles.len();
-        if n_candles < 5 { return; }
+        if n_candles < 5 { return (Vec::new(), facts, labels); }
 
         let beginning_atom = self.vocab.get("beginning");
         let ending_atom = self.vocab.get("ending");
@@ -689,12 +701,9 @@ impl ThoughtEncoder {
             let finite_count = values.iter().filter(|v| v.is_finite() && **v != 0.0).count();
             if finite_count < 5 { continue; }
 
-            let penalty = bic_penalty(&values);
-            let changepoints = pelt_changepoints(&values, penalty);
-
-            let mut boundaries = vec![0];
-            boundaries.extend_from_slice(&changepoints);
-            boundaries.push(values.len());
+            let pr = pelt_on_values(values);
+            let values = &pr.values;
+            let boundaries = &pr.boundaries;
 
             let n_segments = boundaries.len() - 1;
             let ind_atom = self.vocab.get(stream_name);
@@ -772,6 +781,7 @@ impl ThoughtEncoder {
                 }
             }
         }
+        (Vec::new(), facts, labels)
     }
 
     // ─── Calendar facts (viewport right-edge) ───────────────────────────
@@ -779,11 +789,12 @@ impl ThoughtEncoder {
     fn eval_calendar<'a>(
         &'a self,
         now: &Candle,
-        facts: &mut Vec<&'a Vector>,
-        owned_facts: &mut Vec<Vector>,
-        labels: &mut Vec<String>,
-    ) {
+    ) -> (Vec<&'a Vector>, Vec<Vector>, Vec<String>) {
         use crate::market::{parse_candle_hour, parse_candle_day};
+
+        let mut facts = Vec::new();
+        let mut owned_facts = Vec::new();
+        let mut labels = Vec::new();
 
         // Hour and day: circular encoding. Hour 23 is near hour 0. Sunday near Monday.
         // The manager and observer agree on time — same functions, same encoding.
@@ -807,6 +818,7 @@ impl ThoughtEncoder {
                 labels.push(key);
             }
         }
+        (facts, owned_facts, labels)
     }
 
     fn session_from_ts(ts: &str) -> Option<&'static str> {
@@ -827,24 +839,19 @@ impl ThoughtEncoder {
         &self,
         candles: &[Candle],
         vm: &VectorManager,
-        facts: &mut Vec<Vector>,
-        labels: &mut Vec<String>,
-    ) {
-        if candles.len() < 3 { return; }
+    ) -> (Vec<&Vector>, Vec<Vector>, Vec<String>) {
+        let mut facts = Vec::new();
+        let mut labels = Vec::new();
+        if candles.len() < 3 { return (Vec::new(), facts, labels); }
 
         // Build close PELT segment map for structural lookback.
         // segment_of[i] = segment index (0 = oldest) for candle i.
-        let close_vals: Vec<f64> = candles.iter().map(|c| c.close.ln()).collect();
-        let penalty = bic_penalty(&close_vals);
-        let cps = pelt_changepoints(&close_vals, penalty);
+        let pr = pelt_on_values(candles.iter().map(|c| c.close.ln()).collect());
         let n = candles.len();
-        let mut boundaries = vec![0usize];
-        boundaries.extend_from_slice(&cps);
-        boundaries.push(n);
-        let n_segs = boundaries.len() - 1;
+        let n_segs = pr.boundaries.len() - 1;
         let mut segment_of = vec![0usize; n];
         for seg in 0..n_segs {
-            for j in boundaries[seg]..boundaries[seg + 1] {
+            for j in pr.boundaries[seg]..pr.boundaries[seg + 1] {
                 segment_of[j] = seg;
             }
         }
@@ -889,6 +896,7 @@ impl ThoughtEncoder {
                 }
             }
         }
+        (Vec::new(), facts, labels)
     }
 
     // ─── RSI divergence (PELT-structural) ──────────────────────────────
@@ -897,9 +905,9 @@ impl ThoughtEncoder {
         &self,
         candles: &[Candle],
         vm: &VectorManager,
-        facts: &mut Vec<Vector>,
-        labels: &mut Vec<String>,
-    ) {
+    ) -> (Vec<&Vector>, Vec<Vector>, Vec<String>) {
+        let mut owned_facts = Vec::new();
+        let mut labels = Vec::new();
         use crate::vocab::divergence::eval_divergence;
         for div in eval_divergence(candles) {
             // bind(diverging, bind(bind(close, price_dir), bind(indicator, indicator_dir)))
@@ -908,10 +916,11 @@ impl ThoughtEncoder {
             let div_fact = Primitives::bind(self.vocab.get("diverging"),
                 &Primitives::bind(&price_fact, &ind_fact));
             let pos = vm.get_position_vector(div.candles_ago as i64);
-            facts.push(Primitives::bind(&div_fact, &pos));
+            owned_facts.push(Primitives::bind(&div_fact, &pos));
             labels.push(format!("(diverging close {} {} {} @{})",
                 div.price_dir, div.indicator, div.indicator_dir, div.candles_ago));
         }
+        (Vec::new(), owned_facts, labels)
     }
 
     // ─── Volume confirmation ─────────────────────────────────────────────
@@ -919,10 +928,10 @@ impl ThoughtEncoder {
     fn eval_volume_confirmation(
         &self,
         candles: &[Candle],
-        facts: &mut Vec<Vector>,
-        labels: &mut Vec<String>,
-    ) {
-        if candles.len() < 5 { return; }
+    ) -> (Vec<&Vector>, Vec<Vector>, Vec<String>) {
+        let mut owned_facts = Vec::new();
+        let mut labels = Vec::new();
+        if candles.len() < 5 { return (Vec::new(), owned_facts, labels); }
 
         let close_vals: Vec<f64> = candles.iter().map(|c| c.close.ln()).collect();
         let vol_vals: Vec<f64> = candles.iter()
@@ -938,9 +947,10 @@ impl ThoughtEncoder {
                 self.vocab.get(predicate),
                 &Primitives::bind(self.vocab.get("volume"), self.vocab.get("close")),
             );
-            facts.push(fact);
+            owned_facts.push(fact);
             labels.push(format!("({} volume close)", predicate));
         }
+        (Vec::new(), owned_facts, labels)
     }
 
     // ─── Range position scalar ───────────────────────────────────────────
@@ -948,15 +958,15 @@ impl ThoughtEncoder {
     fn eval_range_position(
         &self,
         candles: &[Candle],
-        facts: &mut Vec<Vector>,
-        labels: &mut Vec<String>,
-    ) {
-        if candles.is_empty() { return; }
+    ) -> (Vec<&Vector>, Vec<Vector>, Vec<String>) {
+        let mut owned_facts = Vec::new();
+        let mut labels = Vec::new();
+        if candles.is_empty() { return (Vec::new(), owned_facts, labels); }
 
         let range_high = candles.iter().map(|c| c.high).fold(f64::NEG_INFINITY, f64::max);
         let range_low  = candles.iter().map(|c| c.low ).fold(f64::INFINITY,     f64::min);
         let span = range_high - range_low;
-        if span < 1e-10 { return; }
+        if span < 1e-10 { return (Vec::new(), owned_facts, labels); }
 
         let current  = candles.last().unwrap().close;
         let position = (current - range_low) / span; // 0.0 = range low, 1.0 = range high
@@ -965,8 +975,9 @@ impl ThoughtEncoder {
         // position 0.5 is orthogonal to both. Equal absolute differences → equal similarity.
         let pos_vec = self.scalar_enc.encode(position, ScalarMode::Linear { scale: 2.0 });
         let fact = Primitives::bind(self.vocab.get("range-pos"), &pos_vec);
-        facts.push(fact);
+        owned_facts.push(fact);
         labels.push(format!("(range-pos {:.3})", position));
+        (Vec::new(), owned_facts, labels)
     }
 
     // ─── Ichimoku Cloud ─────────────────────────────────────────────────
@@ -974,13 +985,12 @@ impl ThoughtEncoder {
     fn eval_ichimoku<'a>(
         &'a self,
         candles: &[Candle],
-        facts: &mut Vec<&'a Vector>,
-        owned_facts: &mut Vec<Vector>,
-        labels: &mut Vec<String>,
-    ) {
+    ) -> (Vec<&'a Vector>, Vec<Vector>, Vec<String>) {
         use crate::vocab::ichimoku::eval_ichimoku;
         if let Some(ichi_facts) = eval_ichimoku(candles) {
-            self.encode_facts(&ichi_facts, facts, owned_facts, labels);
+            self.encode_facts(&ichi_facts)
+        } else {
+            (Vec::new(), Vec::new(), Vec::new())
         }
     }
 
@@ -989,13 +999,12 @@ impl ThoughtEncoder {
     fn eval_stochastic<'a>(
         &'a self,
         candles: &[Candle],
-        facts: &mut Vec<&'a Vector>,
-        owned_facts: &mut Vec<Vector>,
-        labels: &mut Vec<String>,
-    ) {
+    ) -> (Vec<&'a Vector>, Vec<Vector>, Vec<String>) {
         use crate::vocab::stochastic::eval_stochastic;
         if let Some(stoch_facts) = eval_stochastic(candles) {
-            self.encode_facts(&stoch_facts, facts, owned_facts, labels);
+            self.encode_facts(&stoch_facts)
+        } else {
+            (Vec::new(), Vec::new(), Vec::new())
         }
     }
 
@@ -1004,13 +1013,12 @@ impl ThoughtEncoder {
     fn eval_fibonacci<'a>(
         &'a self,
         candles: &[Candle],
-        facts: &mut Vec<&'a Vector>,
-        owned_facts: &mut Vec<Vector>,
-        labels: &mut Vec<String>,
-    ) {
+    ) -> (Vec<&'a Vector>, Vec<Vector>, Vec<String>) {
         use crate::vocab::fibonacci::eval_fibonacci;
         if let Some(fib_facts) = eval_fibonacci(candles) {
-            self.encode_facts(&fib_facts, facts, owned_facts, labels);
+            self.encode_facts(&fib_facts)
+        } else {
+            (Vec::new(), Vec::new(), Vec::new())
         }
     }
 
@@ -1019,11 +1027,11 @@ impl ThoughtEncoder {
     fn eval_volume_analysis<'a>(
         &'a self,
         candles: &[Candle],
-        facts: &mut Vec<&'a Vector>,
-        labels: &mut Vec<String>,
-    ) {
+    ) -> (Vec<&'a Vector>, Vec<Vector>, Vec<String>) {
+        let mut facts = Vec::new();
+        let mut labels = Vec::new();
         let n = candles.len();
-        if n < 20 { return; }
+        if n < 20 { return (facts, Vec::new(), labels); }
 
         // Volume SMA (20-period)
         let vol_sma: f64 = candles[n.saturating_sub(20)..].iter()
@@ -1042,6 +1050,7 @@ impl ThoughtEncoder {
                 }
             }
         }
+        (facts, Vec::new(), labels)
     }
 
     // ─── Keltner Channels + Squeeze ──────────────────────────────────────
@@ -1049,13 +1058,10 @@ impl ThoughtEncoder {
     fn eval_keltner<'a>(
         &'a self,
         candles: &[Candle],
-        facts: &mut Vec<&'a Vector>,
-        owned_facts: &mut Vec<Vector>,
-        labels: &mut Vec<String>,
-    ) {
+    ) -> (Vec<&'a Vector>, Vec<Vector>, Vec<String>) {
         use crate::vocab::keltner::eval_keltner;
         let kelt_facts = eval_keltner(candles);
-            self.encode_facts(&kelt_facts, facts, owned_facts, labels);
+        self.encode_facts(&kelt_facts)
     }
 
     // ─── Momentum / ROC / CCI ────────────────────────────────────────────
@@ -1063,12 +1069,9 @@ impl ThoughtEncoder {
     fn eval_momentum<'a>(
         &'a self,
         candles: &[Candle],
-        facts: &mut Vec<&'a Vector>,
-        owned_facts: &mut Vec<Vector>,
-        labels: &mut Vec<String>,
-    ) {
+    ) -> (Vec<&'a Vector>, Vec<Vector>, Vec<String>) {
         use crate::vocab::momentum::eval_momentum;
-        self.encode_facts(&eval_momentum(candles), facts, owned_facts, labels);
+        self.encode_facts(&eval_momentum(candles))
     }
 
     // ─── Price Action Patterns ───────────────────────────────────────────
@@ -1076,12 +1079,9 @@ impl ThoughtEncoder {
     fn eval_price_action<'a>(
         &'a self,
         candles: &[Candle],
-        facts: &mut Vec<&'a Vector>,
-        owned_facts: &mut Vec<Vector>,
-        labels: &mut Vec<String>,
-    ) {
+    ) -> (Vec<&'a Vector>, Vec<Vector>, Vec<String>) {
         use crate::vocab::price_action::eval_price_action;
-        self.encode_facts(&eval_price_action(candles), facts, owned_facts, labels);
+        self.encode_facts(&eval_price_action(candles))
     }
 
     // ─── vocab/oscillators module ──────────────────────────────────────
@@ -1089,12 +1089,9 @@ impl ThoughtEncoder {
     fn eval_oscillators_module<'a>(
         &'a self,
         candles: &[Candle],
-        facts: &mut Vec<&'a Vector>,
-        owned_facts: &mut Vec<Vector>,
-        labels: &mut Vec<String>,
-    ) {
+    ) -> (Vec<&'a Vector>, Vec<Vector>, Vec<String>) {
         use crate::vocab::oscillators::eval_oscillators;
-        self.encode_facts(&eval_oscillators(candles), facts, owned_facts, labels);
+        self.encode_facts(&eval_oscillators(candles))
     }
 
     // ─── Advanced indicators (tier-1 underdogs + esoteric) ─────────────
@@ -1104,16 +1101,16 @@ impl ThoughtEncoder {
     fn eval_flow_module<'a>(
         &'a self,
         candles: &[Candle],
-        facts: &mut Vec<&'a Vector>,
-        owned_facts: &mut Vec<Vector>,
-        labels: &mut Vec<String>,
-    ) {
+    ) -> (Vec<&'a Vector>, Vec<Vector>, Vec<String>) {
         use crate::vocab::flow::eval_flow;
         let (obv, flow_facts) = eval_flow(candles);
 
+        let mut owned_facts = Vec::new();
+        let mut labels = Vec::new();
+
         // OBV direction: direct bind patterns that don't fit Fact variants
         if obv.obv_sign > 0.0 {
-            owned_facts.push(self.vocab.get("obv").clone());
+            owned_facts.push(Primitives::bind(self.vocab.get("obv"), self.vocab.get("up")));
             labels.push("(obv rising)".to_string());
         } else if obv.obv_sign < 0.0 {
             owned_facts.push(Primitives::bind(self.vocab.get("obv"), self.vocab.get("down")));
@@ -1124,7 +1121,10 @@ impl ThoughtEncoder {
             labels.push("(obv divergence)".to_string());
         }
 
-        self.encode_facts(&flow_facts, facts, owned_facts, labels);
+        let (f, o, l) = self.encode_facts(&flow_facts);
+        owned_facts.extend(o);
+        labels.extend(l);
+        (f, owned_facts, labels)
     }
 
     // ─── vocab/persistence module ─────────────────────────────────────
@@ -1132,12 +1132,9 @@ impl ThoughtEncoder {
     fn eval_persistence_module<'a>(
         &'a self,
         candles: &[Candle],
-        facts: &mut Vec<&'a Vector>,
-        owned_facts: &mut Vec<Vector>,
-        labels: &mut Vec<String>,
-    ) {
+    ) -> (Vec<&'a Vector>, Vec<Vector>, Vec<String>) {
         use crate::vocab::persistence::eval_persistence;
-        self.encode_facts(&eval_persistence(candles), facts, owned_facts, labels);
+        self.encode_facts(&eval_persistence(candles))
     }
 
     // ─── Advanced indicators (tier-1 underdogs + esoteric) ─────────────
@@ -1145,12 +1142,9 @@ impl ThoughtEncoder {
     fn eval_regime_module<'a>(
         &'a self,
         candles: &[Candle],
-        facts: &mut Vec<&'a Vector>,
-        owned_facts: &mut Vec<Vector>,
-        labels: &mut Vec<String>,
-    ) {
+    ) -> (Vec<&'a Vector>, Vec<Vector>, Vec<String>) {
         use crate::vocab::regime::eval_regime;
-        self.encode_facts(&eval_regime(candles), facts, owned_facts, labels);
+        self.encode_facts(&eval_regime(candles))
     }
 
     // ─── RSI SMA (cached) ───────────────────────────────────────────────
@@ -1158,10 +1152,10 @@ impl ThoughtEncoder {
     fn eval_rsi_sma_cached<'a>(
         &'a self,
         candles: &[Candle],
-        facts: &mut Vec<&'a Vector>,
-        labels: &mut Vec<String>,
-    ) {
-        if candles.len() < 15 { return; }
+    ) -> (Vec<&'a Vector>, Vec<Vector>, Vec<String>) {
+        let mut facts = Vec::new();
+        let mut labels = Vec::new();
+        if candles.len() < 15 { return (facts, Vec::new(), labels); }
 
         let rsi_window = &candles[candles.len().saturating_sub(14)..];
         let rsi_sum: f64 = rsi_window.iter().map(|c| c.rsi).sum();
@@ -1184,5 +1178,6 @@ impl ThoughtEncoder {
                 if let Some(v) = self.fact_cache.get("(crosses-below rsi rsi-sma)") { facts.push(v); labels.push("(crosses-below rsi rsi-sma)".into()); }
             }
         }
+        (facts, Vec::new(), labels)
     }
 }

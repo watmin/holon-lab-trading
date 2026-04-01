@@ -1,7 +1,7 @@
 //! PELT change-point detection on scalar time series.
 //!
 //! Finds structural breaks in indicator streams. The segments between
-//! changepoints become the narrative facts that experts think about.
+//! changepoints become the narrative facts that observers think about.
 
 /// PELT change-point detection on raw scalar values.
 /// Returns changepoint indices (boundaries between segments).
@@ -56,6 +56,26 @@ pub fn pelt_changepoints(values: &[f64], penalty: f64) -> Vec<usize> {
     cps
 }
 
+/// Result of PELT segmentation on a value series.
+pub struct PeltResult {
+    /// The extracted values.
+    pub values: Vec<f64>,
+    /// Changepoint indices (internal boundaries between segments).
+    pub changepoints: Vec<usize>,
+    /// Full boundary list: [0, cp1, cp2, ..., n]. Length = n_segments + 1.
+    pub boundaries: Vec<usize>,
+}
+
+/// Run PELT on a pre-extracted value series.
+pub fn pelt_on_values(values: Vec<f64>) -> PeltResult {
+    let penalty = bic_penalty(&values);
+    let changepoints = pelt_changepoints(&values, penalty);
+    let mut boundaries = vec![0];
+    boundaries.extend_from_slice(&changepoints);
+    boundaries.push(values.len());
+    PeltResult { values, changepoints, boundaries }
+}
+
 /// BIC-derived penalty: 2 * variance * log(n)
 pub fn bic_penalty(values: &[f64]) -> f64 {
     let n = values.len() as f64;
@@ -69,12 +89,11 @@ pub fn bic_penalty(values: &[f64]) -> f64 {
 /// Direction of the most recent PELT segment: "up", "down", or None if degenerate.
 pub fn most_recent_segment_dir(values: &[f64]) -> Option<&'static str> {
     if values.len() < 5 { return None; }
-    let penalty = bic_penalty(values);
-    let cps = pelt_changepoints(values, penalty);
-    let start = cps.last().copied().unwrap_or(0);
-    let end = values.len();
+    let pr = pelt_on_values(values.to_vec());
+    let start = pr.changepoints.last().copied().unwrap_or(0);
+    let end = pr.values.len();
     if end <= start { return None; }
-    let change = values[end - 1] - values[start];
+    let change = pr.values[end - 1] - pr.values[start];
     if change.abs() < 1e-10 { None }
     else if change > 0.0 { Some("up") }
     else { Some("down") }
