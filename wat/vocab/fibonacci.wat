@@ -11,6 +11,9 @@
 (define (eval-fibonacci candles)
   "Fibonacci proximity facts. Returns None if < 10 candles or degenerate range."
   (when (>= (len candles) 10)
+    ;; rune:temper(clarity) — two map+fold chains for swing high/low.
+    ;; Fusible to one pass, but the separated form shows the symmetry:
+    ;; "highest high, lowest low." The Rust compiler fuses iterator chains.
     (let ((swing-high (fold max (first (map :high candles)) (rest (map :high candles))))
           (swing-low  (fold min (first (map :low candles))  (rest (map :low candles))))
           (range      (- swing-high swing-low)))

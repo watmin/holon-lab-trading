@@ -52,6 +52,9 @@
                       (else                   "in-cloud"))))
 
         ;; Tenkan-Kijun cross — needs >= 27 candles for previous period
+        ;; rune:temper(clarity) — prev tenkan/kijun recomputed from window slices.
+        ;; Window semantics require fresh computation; caching prior midpoints
+        ;; would complicate the stateless function contract.
         (if (>= n 27)
             (let ((prev-tenkan (midpoint (take 9  (last-n candles 10))))
                   (prev-kijun  (midpoint (take 26 (last-n candles 27)))))
