@@ -53,7 +53,6 @@ const OBSERVER_SEED_PRIME: u64 = 7919;
 /// Treasury lives on the enterprise (shared across desks).
 /// Portfolio lives on the enterprise (shared across desks).
 pub struct Desk {
-    pub config: DeskConfig,
 
     // ── Observer panel ──────────────────────────────────────────────────
     pub observers: Vec<Observer>,
@@ -79,7 +78,6 @@ pub struct Desk {
     pub next_position_id: usize,
     pub last_exit_price: f64,
     pub last_exit_atr: f64,
-    pub peak_treasury_equity: f64,
 
     // ── Conviction + curve ──────────────────────────────────────────────
     pub conviction_history: VecDeque<f64>,
@@ -155,7 +153,6 @@ impl Desk {
         let panel_engram = OnlineSubspace::with_params(panel_dim, 4, 2.0, 0.01, 3.5, 100);
 
         Self {
-            config,
             observers,
             manager_journal: mgr_journal,
             manager_buy: mgr_buy,
@@ -173,7 +170,6 @@ impl Desk {
             next_position_id: 0,
             last_exit_price: 0.0,
             last_exit_atr: 0.0,
-            peak_treasury_equity: 0.0,
             conviction_history: VecDeque::new(),
             conviction_threshold: 0.0,
             resolved_preds: VecDeque::new(),

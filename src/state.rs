@@ -296,6 +296,9 @@ pub struct EnterpriseState {
     pub risk_branches: Vec<RiskBranch>,
     pub cached_risk_mult: f64,
 
+    // ── Portfolio-level tracking ─────────────────────────────────────────
+    pub peak_treasury_equity: f64,
+
     // ── Shared tracking ─────────────────────────────────────────────────
     pub db_batch: usize,
 
@@ -340,7 +343,6 @@ impl EnterpriseState {
             decay,
         });
         desk.adaptive_decay = decay;
-        desk.peak_treasury_equity = initial_equity;
 
         // ── Risk branches (enterprise-level) ────────────────────────────
         let risk_branches = vec![
@@ -362,6 +364,7 @@ impl EnterpriseState {
             portfolio,
             risk_branches,
             cached_risk_mult: 0.5,
+            peak_treasury_equity: initial_equity,
             db_batch: 0,
             cursor: start_idx,
         }
@@ -411,6 +414,10 @@ impl EnterpriseState {
     ) {
         let i = self.cursor;
         self.cursor += 1;
+
+        // Tempered: cache frequently-accessed desk scalars at function entry.
+        let mgr_buy = self.desk.manager_buy;
+        let mgr_sell = self.desk.manager_sell;
         self.desk.encode_count += 1;
 
         // ── Observer predictions: each observer speaks ────────────────
@@ -524,8 +531,8 @@ impl EnterpriseState {
         // Treasury equity: the source of truth. Token-agnostic.
         let prices = self.treasury.price_map(&[(ctx.quote_asset, quote_price)]);
         let treasury_equity = self.treasury.total_value(&prices);
-        if treasury_equity > self.desk.peak_treasury_equity {
-            self.desk.peak_treasury_equity = treasury_equity;
+        if treasury_equity > self.peak_treasury_equity {
+            self.peak_treasury_equity = treasury_equity;
         }
         // ── Exit expert: encode each position's state, predict, learn ──
         // Resolve pending exit observations (did holding improve the position?)
@@ -665,7 +672,7 @@ impl EnterpriseState {
         let should_open = ctx.asset_mode == AssetMode::Hold
             && self.portfolio.phase != Phase::Observe
             && self.desk.manager_curve_valid && in_proven_band && market_moved && risk_allows
-            && (meta_dir == Some(self.desk.manager_buy) || meta_dir == Some(self.desk.manager_sell));
+            && (meta_dir == Some(mgr_buy) || meta_dir == Some(mgr_sell));
 
         if should_open {
             let expected_move = candle.atr_r * 6.0;
@@ -673,7 +680,7 @@ impl EnterpriseState {
                 let band_edge: f64 = MAX_BASE_POSITION;
                 let frac = ((band_edge / 2.0) * self.cached_risk_mult).min(ctx.max_single_position);
                 let dir_label = meta_dir.unwrap();
-                let is_buy = dir_label == self.desk.manager_buy;
+                let is_buy = dir_label == mgr_buy;
 
                 // Source/target: Buy sells USDC for WBTC, Sell sells WBTC for USDC.
                 // Rate = source_per_target. For Buy: USDC/WBTC = price. For Sell: WBTC/USDC = 1/price.
@@ -763,8 +770,8 @@ impl EnterpriseState {
                     match kelly_result {
                         Some(frac) => {
                             let frac = frac.min(ctx.max_single_position);
-                            let drawdown_pct = if self.desk.peak_treasury_equity > 0.0 {
-                                (self.desk.peak_treasury_equity - treasury_equity) / self.desk.peak_treasury_equity
+                            let drawdown_pct = if self.peak_treasury_equity > 0.0 {
+                                (self.peak_treasury_equity - treasury_equity) / self.peak_treasury_equity
                             } else { 0.0 };
                             let dd_room = (ctx.max_drawdown - drawdown_pct).max(0.0);
                             let cap = (dd_room / (4.0 * mt)).min(1.0);
@@ -996,7 +1003,7 @@ impl EnterpriseState {
 
                 // ── Accounting: pure computation ─────────────────────
                 let pnl = TradePnl::compute(
-                    entry.exit_pct, dir == self.desk.manager_buy,
+                    entry.exit_pct, dir == mgr_buy,
                     ctx.swap_fee, ctx.slippage,
                     is_live, entry.deployed_usd, treasury_equity, frac,
                 );
@@ -1005,7 +1012,7 @@ impl EnterpriseState {
                 // not just ones with capital. Treasury is NOT touched here — capital moves
                 // through ManagedPosition lifecycle only.
                 {
-                    let trade_dir = if dir == self.desk.manager_buy { Direction::Long } else { Direction::Short };
+                    let trade_dir = if dir == mgr_buy { Direction::Long } else { Direction::Short };
                     self.portfolio.record_trade(entry.exit_pct, frac, trade_dir,
                                         ctx.swap_fee, ctx.slippage);
                 }
@@ -1208,8 +1215,8 @@ impl EnterpriseState {
         treasury_equity: f64,
         ctx: &CandleContext,
     ) {
-        let drawdown_pct = if self.desk.peak_treasury_equity > 0.0 {
-            (self.desk.peak_treasury_equity - treasury_equity) / self.desk.peak_treasury_equity * 100.0
+        let drawdown_pct = if self.peak_treasury_equity > 0.0 {
+            (self.peak_treasury_equity - treasury_equity) / self.peak_treasury_equity * 100.0
         } else { 0.0 };
         let streak_val = self.portfolio.streak();
         let streak_len = streak_val.abs() as i32;
