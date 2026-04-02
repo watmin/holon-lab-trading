@@ -4,17 +4,12 @@
 //! Created once at startup, threaded through the heartbeat.
 //! enterprise.rs orchestrates; this module holds what changes.
 
-use std::collections::VecDeque;
-
-use holon::memory::{Journal, OnlineSubspace};
 use holon::{Primitives, ScalarEncoder, ScalarMode, VectorManager, Vector};
 
 use crate::candle::Candle;
 use crate::ledger::LogEntry;
 use crate::event::EnrichedEvent;
-use crate::journal::{Label, Direction, Prediction, register_direction, register_exit};
-use crate::window_sampler::WindowSampler;
-use crate::market::observer::Observer;
+use crate::journal::{Label, Direction, Prediction};
 use crate::market::manager::{ManagerAtoms, ManagerContext, encode_manager_thought, find_proven_band};
 use crate::portfolio::{Phase, Portfolio};
 use crate::position::{CrossingSnapshot, ExitObservation, ExitReason, ManagedPosition, Pending, PositionEntry, PositionExit, PositionPhase, TrailFactor};

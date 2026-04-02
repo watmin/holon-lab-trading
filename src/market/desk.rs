@@ -21,9 +21,8 @@ use std::collections::VecDeque;
 use holon::Vector;
 use holon::memory::{Journal, OnlineSubspace};
 
-use crate::journal::{Label, Prediction};
+use crate::journal::Label;
 use crate::market::observer::Observer;
-use crate::market::Lens;
 use crate::position::{ExitObservation, ManagedPosition, Pending};
 use crate::ledger::LogEntry;
 use crate::window_sampler::WindowSampler;
