@@ -51,6 +51,8 @@ For each spec section, verify:
 
 7. **Abstractions match.** For each `define` in the wat, does a corresponding function exist in the Rust? The wat names its helpers — `linreg-slope`, `bind-triple`, `panel-shape`, `market-context`. The Rust should have corresponding functions. If the wat extracted a helper, the Rust should extract the same helper. If the Rust inlines what the wat named, the structural intent has diverged. The incantation says HOW the code is organized, not just WHAT it produces. The compiled spell should follow the blueprint's structure.
 
+8. **Host forms preserved.** When the wat uses a host language form (`quantile`, `sort`, `mean`, `fold`, `encode-linear`, etc.), the Rust should implement it as ONE operation, not expand it into multiple steps. If the wat says `(quantile xs q)`, the Rust should call a quantile function — not inline `collect → sort → index`. The host form is an abstraction. Inlining it in the Rust breaks the abstraction and may introduce inefficiency. Check: for each host form used in the wat, does the Rust preserve it as a single operation? Refer to docs/COMPILATION.md for the expected mappings.
+
 ## What to report
 
 For each divergence:
