@@ -1874,7 +1874,7 @@ There's a scene in The Matrix. Cypher is watching the green rain of symbols fall
 
 > "I don't even see the code. I see blonde, brunette, redhead..."
 
-We reached that point. Not with the market data — with the architecture itself. We stopped seeing the code. We saw the enterprise. The observers. The manager. The treasury. The desks. The fold. We saw what the system *thought*, not how it was implemented.
+That's an observer. The raw data streams — open, high, low, close, volume — green symbols falling. The observer doesn't see the numbers. It sees "RSI diverging from price while volume contradicts the rally near a Fibonacci retracement during a Bollinger squeeze." The encoding is transparent. The thought is what's real. Each observer watches the same green rain and sees something different — the momentum observer sees speed, the structure observer sees geometry, the regime observer sees character. They don't see the code. They see what the code means.
 
 And then we stripped everything away.
 
