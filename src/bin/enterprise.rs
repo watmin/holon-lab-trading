@@ -232,7 +232,7 @@ fn main() {
     let exit_atoms = ExitAtoms::new(&vm);
 
     // ─ Observer/manager atoms (immutable) ─
-    let observer_names = ["momentum", "structure", "volume", "narrative", "regime", "generalist"];
+    let observer_names = enterprise::market::OBSERVER_LENSES;
     let observer_atoms: Vec<Vector> = observer_names.iter()
         .map(|&name| vm.get_vector(name))
         .collect();

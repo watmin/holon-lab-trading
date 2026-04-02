@@ -15,7 +15,6 @@ use crate::event::EnrichedEvent;
 use crate::journal::{Label, Direction, Prediction, register_direction, register_exit};
 use crate::window_sampler::WindowSampler;
 use crate::market::observer::Observer;
-use crate::market::{parse_candle_hour, parse_candle_day};
 use crate::market::manager::{ManagerAtoms, ManagerContext, encode_manager_thought, find_proven_band};
 use crate::portfolio::{Phase, Portfolio};
 use crate::position::{CrossingSnapshot, ExitObservation, ExitReason, ManagedPosition, Pending, PositionEntry, PositionExit, PositionPhase, TrailFactor};
@@ -397,7 +396,7 @@ impl EnterpriseState {
         let (exit_hold, exit_exit) = register_exit(&mut exit_journal);
 
         // ── Observer panel (5 specialists + 1 generalist) ───────────────
-        let observer_names = ["momentum", "structure", "volume", "narrative", "regime", "generalist"];
+        let observer_names = crate::market::OBSERVER_LENSES;
         let mut observers: Vec<Observer> = observer_names
             .iter()
             .enumerate()
@@ -592,8 +591,8 @@ impl EnterpriseState {
             generalist_atom: ctx.generalist_atom,
             generalist_curve_valid: self.observers[GENERALIST_IDX].curve_valid,
             candle_atr: candle.atr_r,
-            candle_hour: parse_candle_hour(&candle.ts),
-            candle_day: parse_candle_day(&candle.ts),
+            candle_hour: candle.hour,
+            candle_day: candle.day_of_week,
             disc_strength: self.observers[GENERALIST_IDX].journal.last_disc_strength(),
         };
         let mgr_facts = encode_manager_thought(&mgr_ctx, ctx.mgr_atoms, ctx.mgr_scalar, ctx.min_opinion_magnitude);
@@ -865,8 +864,8 @@ impl EnterpriseState {
         // Position sizing: Kelly from the curve × drawdown cap.
         // The curve handles selectivity. The drawdown cap handles survival.
         // Nothing else. No graduated gate, no stability gate, no phase gate.
-        // Risk branch: compute only at recalib intervals (not every candle).
-        // Between recalibs, reuse the last risk_mult.
+        // rune:scry(evolved) — enterprise.wat evaluates risk every candle; Rust caches at recalib
+        // intervals for efficiency. Functionally equivalent given the gate conditions.
         if self.encode_count % ctx.recalib_interval == 0 || self.encode_count < RISK_WARMUP {
             self.cached_risk_mult = risk::evaluate_risk_branches(
                 &mut self.risk_branches, &self.portfolio, ctx.vm, ctx.risk_scalar,
@@ -930,6 +929,8 @@ impl EnterpriseState {
             0.0
         };
 
+        // rune:scry(evolved) — enterprise.wat creates pending entries only when gates pass;
+        // Rust creates for ALL candles (deployed_usd=0 for hypothetical). Paper trail for learning.
         self.pending.push_back(Pending {
             candle_idx:    i,
             tht_vec,

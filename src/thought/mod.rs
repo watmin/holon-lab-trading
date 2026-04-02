@@ -790,16 +790,14 @@ impl ThoughtEncoder {
         &'a self,
         now: &Candle,
     ) -> (Vec<&'a Vector>, Vec<Vector>, Vec<String>) {
-        use crate::market::{parse_candle_hour, parse_candle_day};
-
         let mut facts = Vec::new();
         let mut owned_facts = Vec::new();
         let mut labels = Vec::new();
 
-        // Hour and day: circular encoding. Hour 23 is near hour 0. Sunday near Monday.
-        // The manager and observer agree on time — same functions, same encoding.
-        let hour = parse_candle_hour(&now.ts);
-        let day = parse_candle_day(&now.ts);
+        // Hour and day: pre-computed on Candle at load time.
+        // Circular encoding — hour 23 near hour 0, Sunday near Monday.
+        let hour = now.hour;
+        let day = now.day_of_week;
 
         let hour_vec = self.scalar_enc.encode(hour, ScalarMode::Circular { period: 24.0 });
         owned_facts.push(Primitives::bind(self.vocab.get("hour-of-day"), &hour_vec));
