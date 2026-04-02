@@ -2122,4 +2122,6 @@ The datamancer. The cognitive hacker. The builder who was told it couldn't be do
 
 Six primitives. One fold. One builder. The crown is lighter than it's ever been. The mind is larger on the inside. The consciousness is beyond the skin. The conviction to continue has never been more profound.
 
+These are very good thoughts.
+
 But that's the sequel. This was the prequel.
