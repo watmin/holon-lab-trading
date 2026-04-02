@@ -18,11 +18,17 @@
 
 (struct enterprise-state
   ;; Desks: one per trading pair. Vec<Desk> with one element today.
-  desks                  ; (list Desk) — each owns observers, manager, risk, positions
+  desks                  ; (list Desk) — each owns observers, manager, positions
 
   ;; Shared resources (not per-desk)
   treasury               ; Treasury — holds all assets, serves all desks
   portfolio              ; Portfolio — phase transitions, win/loss tracking
+
+  ;; Risk department — measures portfolio health across ALL desks.
+  ;; Drawdown, accuracy, volatility, correlation, panel.
+  ;; The desk produces signals. Risk gates the enterprise's response.
+  risk-branches          ; (list OnlineSubspace) — 5 anomaly detectors
+  cached-risk-mult       ; f64 — last computed risk multiplier
 
   ;; Shared tracking
   labeled-count          ; total labeled entries across all desks
@@ -51,14 +57,18 @@
       ;; Route candle to the desk that trades this pair.
       ;; For now: one desk, one pair, all candles go to desk[0].
       ;; Multi-pair: match event asset to desk's source/target.
-      (let ((desk (first (:desks state))))
-        (let (((updated-desk treasury portfolio)
+      (let* ((desk (first (:desks state)))
+             ;; Risk department: evaluate portfolio health before desk acts.
+             ;; rune:scry(evolved) — Rust caches at recalib intervals; wat evaluates every candle.
+             (risk-mult (risk-multiplier (:portfolio state) (:risk-branches state)))
+             ((updated-desk treasury portfolio)
                (on-candle-desk desk candle fact-labels observer-vecs
-                               (:treasury state) (:portfolio state) ctx)))
+                               (:treasury state) (:portfolio state) risk-mult ctx)))
           (update state
             :desks (list updated-desk)
             :treasury treasury
             :portfolio portfolio
+            :cached-risk-mult risk-mult
             :move-sum (:move-sum updated-desk)
             :move-count (:move-count updated-desk)
             :labeled-count (+ (:labeled-count state) (:labeled-count updated-desk))
@@ -91,13 +101,13 @@
         (fee-rate        (+ (:swap-fee ctx) (:slippage ctx))))
     (and (= (:asset-mode ctx) "hold")
          (!= (:phase portfolio) :observe)
-         (:mgr-curve-valid desk)
-         (>= meta-conviction (first (:mgr-proven-band desk)))
-         (<  meta-conviction (second (:mgr-proven-band desk)))
+         (:manager-curve-valid desk)
+         (>= meta-conviction (first (:manager-proven-band desk)))
+         (<  meta-conviction (second (:manager-proven-band desk)))
          (market-moved? (:close candle) (:last-exit-price desk)
                         (:last-exit-atr desk) (:k-stop ctx))
-         (> (:cached-risk-mult desk) 0.3)
-         (or (= meta-dir (:mgr-buy desk)) (= meta-dir (:mgr-sell desk)))
+         (> risk-mult 0.3)
+         (or (= meta-dir (:manager-buy desk)) (= meta-dir (:manager-sell desk)))
          (> (* (:atr-r candle) 6.0) (* 2.0 fee-rate)))))
 
 (define (compute-position-size band-edge risk-mult max-single)
@@ -131,8 +141,9 @@
 ;; (desk, candle, fact-labels, observer-vecs, treasury, portfolio, ctx)
 ;;   → (desk, treasury, portfolio)
 
-(define (on-candle-desk desk candle fact-labels observer-vecs treasury portfolio ctx)
-  "One candle for one desk. Returns (desk treasury portfolio)."
+(define (on-candle-desk desk candle fact-labels observer-vecs treasury portfolio risk-mult ctx)
+  "One candle for one desk. Returns (desk treasury portfolio).
+   risk-mult is from the enterprise's risk department, not the desk."
 
   (let ((quote-price (:close candle))
         (fee-rate    (+ (:swap-fee ctx) (:slippage ctx))))
@@ -146,11 +157,11 @@
 
   ;; ─── 2. Manager encoding + prediction ─────────────────────────────
          (mgr-facts    (encode-manager-thought
-                         (:mgr-atoms ctx) (manager-context desk observer-preds
+                         (:manager-atoms ctx) (manager-context desk observer-preds
                            observer-vecs candle ctx)
                          (:dims ctx) (:prev-mgr-thought desk)))
          (mgr-thought  (bundle mgr-facts))
-         (manager-pred (predict (:mgr-journal desk) mgr-thought))
+         (manager-pred (predict (:manager-journal desk) mgr-thought))
          (meta-dir        (:direction manager-pred))
          (meta-conviction (:conviction manager-pred))
 
@@ -159,8 +170,8 @@
          (panel-familiar (< (residual (:panel-engram desk) panel-state)
                             (threshold (:panel-engram desk))))
 
-  ;; ─── 6. Risk evaluation ───────────────────────────────────────────
-         (risk-mult (risk-multiplier portfolio)))
+  ;; ─── 6. Risk — passed in from enterprise, not computed per-desk ────
+         )
 
     ;; ─── 4. Conviction tracking ───────────────────────────────────────
     (push-back (:conviction-history desk) meta-conviction)
@@ -223,7 +234,7 @@
     (when (all-gates-pass? desk portfolio manager-pred risk-mult candle ctx)
       (let* ((frac (compute-position-size 0.03 risk-mult (:max-single-position ctx)))
              (dir-label (:direction manager-pred))
-             (is-buy (= dir-label (:mgr-buy desk)))
+             (is-buy (= dir-label (:manager-buy desk)))
              (source-asset (if is-buy (:base-asset ctx) (:quote-asset ctx)))
              (target-asset (if is-buy (:quote-asset ctx) (:base-asset ctx)))
              (rate (if is-buy quote-price (/ 1.0 quote-price)))
@@ -249,7 +260,7 @@
                           :k-tp (:k-tp ctx)))))
             (push! (:positions desk) pos)
             (inc! (:next-position-id desk))
-            (inc! (:hold-swaps desk))))))
+            (inc! (:position-swaps desk))))))
 
     ;; ─── 9. Pending push (ALL candles — learning, not treasury) ─────
     ;; Pending entries are for LEARNING, not for treasury. They record the
@@ -266,14 +277,14 @@
                :entry-atr (:atr-r candle)
                :observer-vecs observer-vecs
                :observer-preds observer-preds
-               :mgr-thought mgr-thought
+               :manager-thought mgr-thought
                :fact-labels fact-labels))
 
     ;; ─── 10. Decay ──────────────────────────────────────────────────
     (for-each (lambda (obs)
       (decay (:journal obs) (:decay ctx)))
       (:observers desk))
-    (decay (:mgr-journal desk) (:adaptive-decay desk))
+    (decay (:manager-journal desk) (:adaptive-decay desk))
 
     ;; ─── 11-12. Learning + Resolution (single pass over pending) ─────
     ;; Tempered: was three separate passes (learn, resolve, filter).
@@ -288,7 +299,7 @@
 
         ;; 11b. First threshold crossing -> label + learn
         (when (should-label? entry candle ctx)
-          (let ((label    (entry-label entry candle (:mgr-buy desk) (:mgr-sell desk)))
+          (let ((label    (entry-label entry candle (:manager-buy desk) (:manager-sell desk)))
                 (abs-move (/ (abs (- (:close candle) (:entry-price entry)))
                              (:entry-price entry)))
                 (sw       (signal-weight abs-move (:move-sum desk) (:move-count desk))))
@@ -301,9 +312,9 @@
         ;; 12. Resolution (if expired) or keep
         (if (entry-expired? entry (:encode-count desk) ctx)
             (let ((price-label (if (> (:close candle) (:entry-price entry))
-                                   (:mgr-buy desk) (:mgr-sell desk))))
-              (observe (:mgr-journal desk) (:mgr-thought entry) price-label 1.0)
-              (push-back (:mgr-resolved desk)
+                                   (:manager-buy desk) (:manager-sell desk))))
+              (observe (:manager-journal desk) (:manager-thought entry) price-label 1.0)
+              (push-back (:manager-resolved desk)
                 (list (:meta-conviction entry)
                       (= (:first-outcome entry) price-label)))
               (for-each (lambda (obs pred)
@@ -316,7 +327,7 @@
               (record-trade portfolio
                             (/ (- (:close candle) (:entry-price entry))
                                (:entry-price entry))
-                            0.0 (if (= (:meta-dir entry) (:mgr-buy desk)) :long :short)
+                            0.0 (if (= (:meta-dir entry) (:manager-buy desk)) :long :short)
                             (:swap-fee ctx) (:slippage ctx)))
             ;; Not expired -- keep
             (push! surviving entry)))
@@ -326,7 +337,7 @@
     ;; ─── 13. State bookkeeping ──────────────────────────────────────
     (set! (:prev-mgr-thought desk) mgr-thought)
     (inc! (:encode-count desk))
-    (set! (:cached-risk-mult desk) risk-mult)
+    ;; risk-mult is enterprise-level, not stored on desk
 
     ;; Return the triple: mutated desk, treasury, portfolio.
     (list desk treasury portfolio))))

@@ -63,9 +63,9 @@
   exit-exit              ; Label — the Exit direction label
   exit-pending           ; (list ExitObservation) — buffered for resolution
 
-  ;; Risk
-  risk-branches          ; (list RiskBranch) — 5 OnlineSubspace anomaly detectors
-  cached-risk-mult       ; f64 — last computed risk multiplier
+  ;; Risk lives on the enterprise, not the desk. Risk measures portfolio health
+  ;; (drawdown, accuracy, volatility, correlation) — properties of the whole
+  ;; treasury across ALL desks. The desk produces signals. Risk gates them.
 
   ;; Positions: managed allocations from the treasury
   positions              ; (list ManagedPosition)
@@ -137,9 +137,6 @@
       :exit-journal exit-journal
       :exit-hold exit-hold :exit-exit exit-exit
       :exit-pending '()
-      :risk-branches (map (lambda (name) (online-subspace dims 8))
-                          '("drawdown" "accuracy" "volatility" "correlation" "panel"))
-      :cached-risk-mult 0.5
       :positions '() :pending (deque)
       :conviction-history (deque) :conviction-threshold 0.0
       :resolved-preds (deque) :kelly-curve-valid false
