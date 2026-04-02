@@ -165,8 +165,6 @@
   (let* ((observer-preds
            (map (lambda (obs vec) (predict (:journal obs) vec))
                 (:observers desk) observer-vecs))
-         (generalist-pred (nth observer-preds 5))
-         (generalist-vec  (nth observer-vecs 5))
 
   ;; ─── 2. Manager encoding + prediction ─────────────────────────────
          (mgr-ctx      (build-manager-context desk observer-preds observer-vecs candle ctx))
@@ -179,9 +177,9 @@
          (meta-conviction (:conviction manager-pred))
 
   ;; ─── 3. Panel engram state (for engram update at recalibration) ────
-         (panel-state   (map :raw-cosine observer-preds))
-         ;; rune:reap(aspirational) — panel-familiar will gate position entry
+         ;; rune:reap(aspirational) — panel-state will feed panel-familiar gating
          ;; when panel engram matures. Currently computed in Rust for logging only.
+         (panel-state   (map :raw-cosine observer-preds))
 
   ;; ─── 6. Risk — passed in from enterprise, not computed per-desk ────
          )
