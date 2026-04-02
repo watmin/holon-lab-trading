@@ -39,9 +39,14 @@ const MAX_SINGLE_POSITION: f64 = 0.20;
 #[derive(Parser)]
 #[command(name = "enterprise", about = "Self-organizing BTC trading enterprise")]
 struct Args {
-    /// Source candle database (pre-computed indicators).
+    /// Source candle database (pre-computed indicators). Used when --parquet is not set.
     #[arg(long, default_value = "data/candles.db")]
     db_path: PathBuf,
+
+    /// Raw OHLCV parquet file. When set, indicators are computed on the fly
+    /// via streaming fold — no pre-computed SQLite database needed.
+    #[arg(long)]
+    parquet: Option<PathBuf>,
 
     /// Vector dimension. Higher = more expressive, slower.
     #[arg(long, default_value_t = 10000)]
@@ -204,14 +209,21 @@ fn main() {
             2.0 * (args.swap_fee + args.slippage) * 100.0);
     }
 
-    // ─ Load candles and build event stream ─
-    eprintln!("\n  Loading candles from {:?}...", args.db_path);
+    // ─ Load candles ─
     let t0 = Instant::now();
-    let candles = load_candles(&args.db_path, "label_oracle_10");
-    // When fn on_event() is extracted, candles become events via
-    // enterprise::event::stream_from_candles(). For now, heartbeat uses candles[] directly.
-    eprintln!("  Loaded {} candles in {:.1}s",
-        candles.len(), t0.elapsed().as_secs_f64());
+    let candles = if let Some(ref parquet_path) = args.parquet {
+        eprintln!("\n  Streaming indicators from parquet {:?}...", parquet_path);
+        // Indicators computed on the fly — no pre-computed SQLite needed.
+        // Collected into Vec because parallel batch encoding needs random access.
+        // True per-candle streaming requires per-desk window buffers (future).
+        let stream = enterprise::indicators::ParquetCandleStream::open(parquet_path);
+        let candles: Vec<_> = stream.collect();
+        candles
+    } else {
+        eprintln!("\n  Loading pre-computed candles from {:?}...", args.db_path);
+        load_candles(&args.db_path, "label_oracle_10")
+    };
+    eprintln!("  {} candles in {:.1}s", candles.len(), t0.elapsed().as_secs_f64());
 
     let vm = VectorManager::new(args.dims);
 

@@ -35,6 +35,7 @@
   dims                   ; vector dimensionality
   recalib-interval       ; journal update count between recalibrations
   window                 ; candle window size for generalist
+  max-window-size        ; max candle retention (largest observer window, e.g. 2016)
   decay)                 ; accumulator decay rate
 
 ;; ── Desk state ─────────────────────────────────────────────────────
@@ -42,6 +43,13 @@
 
 (struct desk
   config                 ; DeskConfig — immutable pair identity
+
+  ;; Streaming indicator fold — computes indicators from raw OHLCV
+  indicator-bank         ; IndicatorBank — all indicator state machines
+  ;; Candle window — ring buffer of computed candles, max-window-size capacity.
+  ;; Each consumer reads from this window. No global candle array.
+  ;; Observers sample slices at their own scale. Thought encoder reads the window.
+  candle-window          ; (deque Candle) — last N computed candles
 
   ;; Observer panel: 5 specialists + 1 generalist
   observers              ; (list Observer) — each has own Journal + WindowSampler
@@ -135,6 +143,8 @@
          (exit-exit (second exit-labels)))
     (desk
       :config config
+      :indicator-bank (new-indicator-bank)
+      :candle-window (deque)
       :observers observers
       :manager-journal manager-journal
       :manager-buy manager-buy :manager-sell manager-sell

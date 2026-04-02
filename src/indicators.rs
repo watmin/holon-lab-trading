@@ -635,3 +635,106 @@ fn parse_day_of_week(ts: &str) -> f64 {
 fn parse_year(ts: &str) -> i32 {
     ts.get(..4).and_then(|s| s.parse().ok()).unwrap_or(2019)
 }
+
+// ─── Parquet loader ────────────────────────────────────────────────────────
+
+/// Streaming candle iterator: reads raw OHLCV from parquet one batch at a time,
+/// steps the indicator fold per candle, yields computed Candles lazily.
+/// No bulk load. One candle in, one candle out, walking into the future.
+#[cfg(feature = "parquet")]
+pub struct ParquetCandleStream {
+    bank: IndicatorBank,
+    /// Buffered raw candles from the current parquet batch.
+    buffer: Vec<RawCandle>,
+    /// Position within current buffer.
+    buf_idx: usize,
+    /// Parquet batch reader (produces Arrow RecordBatches).
+    reader: parquet::arrow::arrow_reader::ParquetRecordBatchReader,
+}
+
+#[cfg(feature = "parquet")]
+impl ParquetCandleStream {
+    pub fn open(path: &std::path::Path) -> Self {
+        use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+        let file = std::fs::File::open(path).expect("failed to open parquet");
+        let builder = ParquetRecordBatchReaderBuilder::try_new(file).expect("failed to read parquet");
+        let reader = builder.build().expect("failed to build reader");
+        Self {
+            bank: IndicatorBank::new(),
+            buffer: Vec::new(),
+            buf_idx: 0,
+            reader,
+        }
+    }
+
+    /// Fill the buffer from the next parquet batch. Returns false when exhausted.
+    fn fill_buffer(&mut self) -> bool {
+        use arrow::array::{Float64Array, StringArray, Array, TimestampMicrosecondArray};
+
+        loop {
+            match self.reader.next() {
+                Some(Ok(batch)) => {
+                    if batch.num_rows() == 0 { continue; }
+                    let ts_col = batch.column_by_name("ts").expect("missing ts");
+                    let open_col = batch.column_by_name("open").expect("missing open");
+                    let high_col = batch.column_by_name("high").expect("missing high");
+                    let low_col = batch.column_by_name("low").expect("missing low");
+                    let close_col = batch.column_by_name("close").expect("missing close");
+                    let vol_col = batch.column_by_name("volume").expect("missing volume");
+
+                    let ts_strings: Vec<String> = if let Some(arr) = ts_col.as_any().downcast_ref::<StringArray>() {
+                        (0..arr.len()).map(|i| arr.value(i).to_string()).collect()
+                    } else if let Some(arr) = ts_col.as_any().downcast_ref::<TimestampMicrosecondArray>() {
+                        (0..arr.len()).map(|i| {
+                            let micros = arr.value(i);
+                            let secs = micros / 1_000_000;
+                            let nsecs = ((micros % 1_000_000) * 1000) as u32;
+                            chrono::DateTime::from_timestamp(secs, nsecs)
+                                .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
+                                .unwrap_or_default()
+                        }).collect()
+                    } else {
+                        panic!("unsupported timestamp column type");
+                    };
+
+                    let opens = open_col.as_any().downcast_ref::<Float64Array>().expect("open not f64");
+                    let highs = high_col.as_any().downcast_ref::<Float64Array>().expect("high not f64");
+                    let lows = low_col.as_any().downcast_ref::<Float64Array>().expect("low not f64");
+                    let closes = close_col.as_any().downcast_ref::<Float64Array>().expect("close not f64");
+                    let volumes = vol_col.as_any().downcast_ref::<Float64Array>().expect("volume not f64");
+
+                    self.buffer.clear();
+                    self.buf_idx = 0;
+                    for i in 0..batch.num_rows() {
+                        self.buffer.push(RawCandle {
+                            ts: ts_strings[i].clone(),
+                            open: opens.value(i),
+                            high: highs.value(i),
+                            low: lows.value(i),
+                            close: closes.value(i),
+                            volume: volumes.value(i),
+                        });
+                    }
+                    return true;
+                }
+                Some(Err(e)) => panic!("parquet read error: {}", e),
+                None => return false,
+            }
+        }
+    }
+}
+
+#[cfg(feature = "parquet")]
+impl Iterator for ParquetCandleStream {
+    type Item = Candle;
+
+    fn next(&mut self) -> Option<Candle> {
+        // If buffer exhausted, fill from next parquet batch
+        if self.buf_idx >= self.buffer.len() {
+            if !self.fill_buffer() { return None; }
+        }
+        let raw = &self.buffer[self.buf_idx];
+        self.buf_idx += 1;
+        Some(self.bank.tick(raw))
+    }
+}

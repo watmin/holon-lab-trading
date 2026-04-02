@@ -17,7 +17,7 @@ path = "src/bin/build_candles.rs"
 required-features = ["parquet"]
 
 [features]
-default = []
+default = ["parquet"]
 parquet = ["dep:parquet", "dep:arrow"]
 
 [dependencies]
