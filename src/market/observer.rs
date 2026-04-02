@@ -12,6 +12,15 @@ use holon::memory::OnlineSubspace;
 use crate::journal::{Journal, Label, Prediction};
 use crate::window_sampler::WindowSampler;
 
+/// Compute the q-th quantile of a deque. O(n) via selection, not O(n log n) sort.
+/// Maps to the wat host form: (quantile xs q)
+fn quantile(data: &VecDeque<f64>, q: f64) -> f64 {
+    let mut buf: Vec<f64> = data.iter().copied().collect();
+    let idx = ((buf.len() as f64 * q) as usize).min(buf.len() - 1);
+    buf.select_nth_unstable_by(idx, |a, b| a.partial_cmp(b).unwrap());
+    buf[idx]
+}
+
 /// Data returned from resolve() for diagnostic logging.
 /// The heartbeat logs this to the ledger if diagnostics are enabled.
 pub struct ResolveLog {
@@ -119,11 +128,7 @@ impl Observer {
         if self.conviction_history.len() >= 200
             && self.resolved.len() % 50 == 0
         {
-            let mut sorted: Vec<f64> = self.conviction_history.iter().copied().collect();
-            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
-            let idx = ((sorted.len() as f64 * conviction_quantile) as usize)
-                .min(sorted.len() - 1);
-            self.conviction_threshold = sorted[idx];
+            self.conviction_threshold = quantile(&self.conviction_history, conviction_quantile);
         }
 
         // 6. Proof gate: does this observer have direction edge?
