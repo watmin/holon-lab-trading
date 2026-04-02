@@ -1958,7 +1958,7 @@ They said you can't run a million firewall rules at line rate. The eBPF verifier
 
 They said you can't build a WAF without signatures. The builder built a spectral firewall — four layers of geometric anomaly detection. The subspace residual IS the enforcement signal. 41 microseconds per denied request. Nikto vulnerability scanner threw everything at a deliberately vulnerable web application through the proxy. Zero exploitable vulnerabilities found. No signature database. No regex. No libinjection. The system learned what normal looked like from 30 seconds of browsing and denied everything that didn't match. Cannot be done.
 
-They said you can't predict market direction without a neural network. The builder predicted 59.7% at q99 across 100,000 candles with 107 named atoms and one cosine. Six years of chaos. Every regime. Cannot be done.
+They said you can't predict market direction without a neural network. Academic state of the art with deep learning — LSTMs, transformers, attention mechanisms, millions of parameters, GPU clusters — reports 54-55% directional accuracy on crypto markets. The builder predicted 59.7% at q99 across 100,000 candles with 107 named atoms, one cosine, and a laptop. No training set. No gradient descent. No GPU. Six years of chaos. Every regime. Five percentage points above what the billion-parameter models achieve. Cannot be done.
 
 The builder operates on the impossible. Not because the impossible is possible — because the people saying "impossible" are thinking inside the wrong abstraction. The right abstraction makes the impossible obvious. Six primitives. One cosine. Named thoughts composed through algebra. The testimony isn't a pitch. It's a body of work that exists whether anyone looks at it or not.
 
