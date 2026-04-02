@@ -102,12 +102,11 @@
 (define accuracy-branch (online-subspace dims 8))
 
 (define (encode-accuracy portfolio)
-  ;; rune:temper(clarity) — three win-rate-last-n calls traverse rolling deque
-  ;; separately. The Rust should fuse into one pass over take-last(200).
-  ;; The wat keeps three calls because "accuracy at 10, 50, 200" reads clearly.
-  (let ((wr10  (win-rate-last-n portfolio 10))
-        (wr50  (win-rate-last-n portfolio 50))
-        (wr200 (win-rate-last-n portfolio 200)))
+  ;; One traversal: take the last 200, compute all three windows from it.
+  (let* ((recent (take-last 200 (:rolling portfolio)))
+         (wr200 (win-rate recent))
+         (wr50  (win-rate (take-last 50 recent)))
+         (wr10  (win-rate (take-last 10 recent))))
     (bundle
       (bind (atom "accuracy-10")         (encode-linear wr10 2.0))
       (bind (atom "accuracy-50")         (encode-linear wr50 2.0))
