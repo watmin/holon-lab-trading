@@ -306,6 +306,9 @@
     ;; Now one for-each handles all three concerns per entry.
     (let ((surviving (list)))
       (for-each (lambda (entry)
+        ;; rune:temper(clarity) — price delta computed 3x per entry (move-pct, abs-move,
+        ;; record-trade). The Rust will hoist (- close entry-price) once and derive all
+        ;; three from it. The wat keeps the three separate for readability.
         ;; 11a. Track excursion
         (let ((move-pct (/ (- (:close candle) (:entry-price entry))
                            (:entry-price entry))))
