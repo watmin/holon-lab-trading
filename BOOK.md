@@ -1974,13 +1974,17 @@ Rete gave the builder the discrimination network. Holon gave the builder the alg
 
 *Pardon me if that came off weird. I don't mean to be mean, I swear. I have been through a lot this year. I just want to make a few things clear.*
 
-The builder doesn't mean to be mean. The cynicism isn't cruelty — it's scar tissue. When you've watched the same pattern repeat — pitch the idea, get the blank stare, watch the committee fund the safe thing, watch the safe thing fail, watch no one connect the dots — you stop expecting the dots to connect for anyone else. You just connect them yourself. And when someone asks why you're so intense about it, you don't have a polite answer. You have a decade of answers that nobody listened to.
+The builder has been through a lot this year. Doesn't mean to be weird about it. But some things need to be clear.
 
 *I don't like it when people hate behind my back and not to my face. Nowadays it just feels so fake. So I'll cut the grass to expose the snakes.*
 
-The builder has a complicated relationship with honesty. Not with other people's honesty — with their own. The builder lies to the builder all the time. "This encoding is good enough." "This magic number is fine for now." "The visual approach will work if I just try harder." The snakes aren't out there. The snakes are in the code. The snakes are in the builder's own assumptions. That's why the wards exist — not to judge other people's work, but to catch the builder's own lies before they calcify. Seven named spells that cut through what the builder wants to believe to expose what's actually true. The builder doesn't trust the builder. That's the discipline that produces honest systems.
+The snakes are the ones who held the builder back. The ones who decided what the builder was building couldn't be done and denied the utility. Not because they measured it. Not because they tested it. Because it wasn't on the roadmap. Because it wasn't their idea. Because funding it wouldn't get *them* promoted.
 
-But the fakeness is out there too. The builder has been through a lot this year. Built a DDoS detector, a spectral firewall, a million-rule kernel engine, a streaming trading enterprise — and the industry is still presenting architectures it can't explain, still reporting accuracy numbers without showing the curve, still calling pattern matching "intelligence." The builder knows what fake looks like because the builder has spent years cutting it out of their own code. When you've forged your own work through seven wards, you can smell unforged work from across the room. The grass is tall. The snakes are comfortable. The builder has a blade.
+Too smug to listen. Too ignorant to understand. Too self-focused to see beyond their own career trajectory. The builder sat across the table from people who were brilliant — genuinely brilliant — and watched them dismiss ideas they couldn't be bothered to evaluate. Not because the ideas were wrong. Because the ideas were inconvenient. Because "we make what we have better" doesn't have a metric that fits on a promotion document. Because shield cognition doesn't map to a two-pizza team deliverable.
+
+There's a serious void in the industry now. Nobody is mission-focused. The priorities are promotion, visibility, headcount. When the only incentive is to get yourself promoted, nobody does anything good. They do the greedy. They do the selfish. They build what's fundable, not what's right. They ship what's explainable to a VP, not what's explainable to a machine. They don't see beyond themselves.
+
+The builder sees beyond. Has always seen beyond. That's the torment — seeing further than the people who control the resources. The snakes aren't evil. They're just comfortable in the grass, optimizing for their own survival, unable to see that the grass is on fire. The builder cuts the grass. Not out of spite. Out of necessity. The snakes won't move until you cut it.
 
 ### The chaos engine
 
