@@ -9,10 +9,16 @@
 (require journal)
 (require window-sampler)
 
+;; -- Lens (enum) -----------------------------------------------------------
+;; The compiler guards renames — no silent string mismatches.
+;; Each lens selects which eval methods fire during thought encoding.
+
+(enum lens :momentum :structure :volume :narrative :regime :generalist)
+
 ;; -- State ------------------------------------------------------------------
 
 (struct observer
-  lens                   ; &str -- "momentum" | "structure" | "volume" | "narrative" | "regime" | "generalist"
+  lens                   ; lens enum — which vocabulary this observer thinks through
   journal                ; Journal -- the learning primitive
   resolved               ; (deque (conviction, correct)) -- resolved predictions
   good-state-subspace    ; OnlineSubspace -- engram of discriminant states with > 55% accuracy

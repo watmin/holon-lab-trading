@@ -234,7 +234,7 @@ fn main() {
     // ─ Observer/manager atoms (immutable) ─
     let observer_names = enterprise::market::OBSERVER_LENSES;
     let observer_atoms: Vec<Vector> = observer_names.iter()
-        .map(|&name| vm.get_vector(name))
+        .map(|lens| vm.get_vector(lens.as_str()))
         .collect();
     let generalist_atom = vm.get_vector("generalist");
     let min_opinion_magnitude: f64 = noise_floor(args.dims);
@@ -430,20 +430,21 @@ fn main() {
                 // observer (index 5) and provides fact_labels for diagnostics.
                 let w_start = i.saturating_sub(args.window - 1);
                 let window  = &candles[w_start..=i];
-                let full = thought_encoder.encode_thought(window, &vm, "generalist");
+                let full = thought_encoder.encode_thought(window, &vm, enterprise::market::Lens::Generalist);
 
                 // Each observer encodes at their own sampled window.
                 // The generalist (index 5) reuses the full encoding above
                 // to avoid double-encoding the same view.
                 let observer_vecs: Vec<Vector> = (0..n_observers)
                     .map(|ei| {
-                        if observer_names[ei] == "generalist" {
+                        if observer_names[ei] == enterprise::market::Lens::Generalist {
                             full.thought.clone()
                         } else {
                             let ew = observer_windows[ei][bi];
                             let ew_start = i.saturating_sub(ew - 1);
                             let exp_window = &candles[ew_start..=i];
                             thought_encoder.encode_thought(exp_window, &vm, observer_names[ei]).thought
+
                         }
                     })
                     .collect();
@@ -534,7 +535,7 @@ fn main() {
         eprintln!("  Observer panel:");
         for observer in &state.observers {
             eprintln!("    {}: recalibs={} disc_str={:.4} buy={} sell={}",
-                observer.lens,
+                observer.lens.as_str(),
                 observer.journal.recalib_count(),
                 observer.journal.last_disc_strength(),
                 observer.journal.label_count(observer.primary_label),

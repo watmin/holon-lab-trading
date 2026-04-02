@@ -267,7 +267,7 @@ pub struct CandleContext<'a> {
 
     // ── Observer/manager atoms ──────────────────────────────────────────
     pub observer_atoms: &'a [Vector],
-    pub observer_names: &'a [&'a str],
+    pub observer_names: &'a [crate::market::Lens],
     pub generalist_atom: &'a Vector,
     pub min_opinion_magnitude: f64,
 
@@ -1013,7 +1013,7 @@ impl EnterpriseState {
                         ) {
                             if ctx.diagnostics { self.pending_logs.push(LogEntry::ObserverLog {
                                 step: self.log_step,
-                                observer: log.name.to_string(),
+                                observer: log.name.as_str().to_string(),
                                 conviction: log.conviction,
                                 direction: self.observers[ei].journal.label_name(log.direction).unwrap_or("?").to_string(),
                                 correct: log.correct as i32,
@@ -1247,7 +1247,7 @@ impl EnterpriseState {
             );
             if ctx.asset_mode == AssetMode::Hold {
                 let proven: Vec<&str> = self.observers.iter()
-                    .filter(|e| e.curve_valid).map(|e| e.lens).collect();
+                    .filter(|e| e.curve_valid).map(|e| e.lens.as_str()).collect();
                 // generalist is in the observer list, no separate check needed
                 let proven_str = if proven.is_empty() { "none".to_string() }
                     else { proven.join(",") };

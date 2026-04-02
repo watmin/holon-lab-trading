@@ -498,13 +498,15 @@ impl ThoughtEncoder {
 
     /// Encode a window of candles through a vocabulary lens.
     /// `lens` selects which eval methods to run:
-    ///   "generalist" = all vocab, "momentum"/"structure"/"volume"/"narrative"/"regime" = subsets.
+    ///   Generalist = all vocab, specialists = subsets.
     pub fn encode_thought(
         &self,
         candles: &[Candle],
         vm: &VectorManager,
-        lens: &str,
+        lens: crate::market::Lens,
     ) -> ThoughtResult {
+        use crate::market::Lens;
+
         let mut cached_facts: Vec<&Vector> = Vec::with_capacity(64);
         let mut owned_facts: Vec<Vector> = Vec::with_capacity(96);
         let mut labels: Vec<String> = Vec::with_capacity(96);
@@ -522,20 +524,20 @@ impl ThoughtEncoder {
         let now = candles.last().unwrap();
         let prev = if candles.len() >= 2 { Some(&candles[candles.len() - 2]) } else { None };
 
-        let is = |lenses: &[&str]| -> bool {
-            lens == "generalist" || lenses.contains(&lens)
+        let is = |lenses: &[Lens]| -> bool {
+            lens.includes(lenses)
         };
 
         // ── SHARED: comparisons (momentum + structure only) ────────────
         // Price vs indicator relationships. Volume, narrative, regime do NOT see these
         // — their specs forbid it. Each observer sees only its own vocabulary.
-        if is(&["momentum", "structure"]) {
+        if is(&[Lens::Momentum, Lens::Structure]) {
             collect!(self.eval_comparisons_cached(now, prev));
         }
 
         // ── EXCLUSIVE: momentum ─────────────────────────────────────
         // Oscillators, crosses, divergence. Speed and direction of change.
-        if is(&["momentum"]) {
+        if is(&[Lens::Momentum]) {
             collect!(self.eval_rsi_sma_cached(candles));
             collect!(self.eval_stochastic(candles));
             collect!(self.eval_momentum(candles)); // CCI, ROC
@@ -546,7 +548,7 @@ impl ThoughtEncoder {
 
         // ── EXCLUSIVE: structure ────────────────────────────────────
         // Geometric shape: segments, levels, channels, cloud, fibs, multi-timeframe.
-        if is(&["structure"]) {
+        if is(&[Lens::Structure]) {
             collect!(self.eval_segment_narrative(candles, vm));
             collect!(self.eval_range_position(candles));
             collect!(self.eval_ichimoku(candles));
@@ -558,7 +560,7 @@ impl ThoughtEncoder {
 
         // ── EXCLUSIVE: volume ───────────────────────────────────────
         // Participation: is the market backing the move?
-        if is(&["volume"]) {
+        if is(&[Lens::Volume]) {
             collect!(self.eval_volume_confirmation(candles));
             collect!(self.eval_volume_analysis(candles));
             collect!(self.eval_price_action(candles));
@@ -568,7 +570,7 @@ impl ThoughtEncoder {
 
         // ── EXCLUSIVE: narrative ────────────────────────────────────
         // The story: what happened when. Calendar + temporal lookback + multi-timeframe context.
-        if is(&["narrative"]) {
+        if is(&[Lens::Narrative]) {
             collect!(self.eval_temporal(candles, vm));
             collect!(self.eval_calendar(now));
             // vocab/timeframe: multi-timeframe narrative (direction, agreement)
@@ -578,7 +580,7 @@ impl ThoughtEncoder {
         // ── EXCLUSIVE: regime ───────────────────────────────────────
         // Market character: trending/chaotic/persistent/mean-reverting.
         // Abstract properties that survive window noise.
-        if is(&["regime"]) {
+        if is(&[Lens::Regime]) {
             collect!(self.eval_regime_module(candles));
             // vocab/persistence: Hurst, autocorrelation, ADX zones
             collect!(self.eval_persistence_module(candles));

@@ -169,14 +169,15 @@
 ;; -- encode_view dispatch ---------------------------------------------------
 
 ;; The main entry point. Selects which eval methods to run based on lens.
-;; "generalist" = all methods. Named lenses select subsets.
+;; :generalist = all methods. Named lenses select subsets.
+;; lens is an enum (see market/observer.wat) — the compiler guards renames.
 
 (define (encode-thought encoder candles vm lens)
   "Encode a window of candles through a vocabulary lens.
    Each lens selects which eval functions to run.
    Vocab modules return Fact data → encode-facts weaves to geometry.
    Inline evals push directly to the fact vectors."
-  (let ((is    (lambda (lenses) (or (= lens "generalist") (member? lens lenses))))
+  (let ((is    (lambda (lenses) (or (= lens :generalist) (member? lens lenses))))
         (facts (list))
         (owned (list))
         (labels (list))
@@ -186,14 +187,14 @@
                   (encode-facts encoder module-facts facts owned labels))))
 
     ;; SHARED: comparisons (momentum + structure only)
-    (when (is '("momentum" "structure"))
+    (when (is '(:momentum :structure))
       ;; rune:assay(prose) — eval-comparisons iterates 29 indicator pairs × 6
       ;; predicates, checking above/below/crosses/touches/bounces against cached
       ;; facts. Too imperative for wat; the pairs table IS the spec.
       (eval-comparisons encoder now prev facts labels))
 
     ;; EXCLUSIVE: momentum — oscillators, crosses, divergence
-    (when (is '("momentum"))
+    (when (is '(:momentum))
       (eval-rsi-sma encoder candles facts labels)
       (weave (eval-stochastic candles))
       (weave (eval-momentum candles))
@@ -201,7 +202,7 @@
       (weave (eval-oscillators candles)))
 
     ;; EXCLUSIVE: structure — segments, levels, channels, cloud, fibs
-    (when (is '("structure"))
+    (when (is '(:structure))
       ;; rune:assay(prose) — eval-segment-narrative runs PELT on 17 streams,
       ;; classifies segments, emits temporal bindings. The algorithm is
       ;; expressed in thought/pelt.wat; the stream dispatch is imperative.
@@ -213,20 +214,20 @@
       (weave (eval-timeframe-structure candles)))
 
     ;; EXCLUSIVE: volume — participation, flow
-    (when (is '("volume"))
+    (when (is '(:volume))
       (eval-volume-confirmation encoder candles owned labels)
       (eval-volume-analysis encoder candles facts labels)
       (weave (eval-price-action candles))
       (eval-flow-module encoder candles facts owned labels))
 
     ;; EXCLUSIVE: narrative — calendar, temporal lookback
-    (when (is '("narrative"))
+    (when (is '(:narrative))
       (eval-temporal encoder candles vm owned labels)
       (eval-calendar encoder now facts owned labels)
       (weave (eval-timeframe-narrative candles)))
 
     ;; EXCLUSIVE: regime — market character
-    (when (is '("regime"))
+    (when (is '(:regime))
       (weave (eval-regime candles))
       (weave (eval-persistence candles)))
 

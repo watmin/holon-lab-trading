@@ -46,14 +46,14 @@ fn quantile(data: &VecDeque<f64>, q: f64) -> f64 {
 /// Data returned from resolve() for diagnostic logging.
 /// The heartbeat logs this to the ledger if diagnostics are enabled.
 pub struct ResolveLog {
-    pub name: &'static str,
+    pub name: super::Lens,
     pub conviction: f64,
     pub direction: Label,
     pub correct: bool,
 }
 
 pub struct Observer {
-    pub lens: &'static str,
+    pub lens: super::Lens,
     pub journal: Journal,
     pub resolved: VecDeque<(f64, bool)>,  // (conviction, correct)
     pub good_state_subspace: OnlineSubspace,
@@ -73,8 +73,8 @@ pub struct Observer {
 }
 
 impl Observer {
-    pub fn new(lens: &'static str, dims: usize, recalib_interval: usize, seed: u64, labels: &[&str]) -> Self {
-        let mut journal = Journal::new(lens, dims, recalib_interval);
+    pub fn new(lens: super::Lens, dims: usize, recalib_interval: usize, seed: u64, labels: &[&str]) -> Self {
+        let mut journal = Journal::new(lens.as_str(), dims, recalib_interval);
         let primary_label = journal.register(labels[0]);
         for label in &labels[1..] {
             journal.register(label);
