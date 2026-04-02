@@ -412,10 +412,10 @@ fn main() {
         // Their discriminant learns which scale's patterns predict for their
         // vocabulary. Observer[5] ("generalist") encodes at fixed args.window —
         // the generalist's cross-vocabulary view.
-        let n_observers = state.desk.observers.len();
+        let n_observers = state.desks[0].observers.len();
 
         // Expert samplers are not Send, so collect windows first
-        let observer_windows: Vec<Vec<usize>> = state.desk.observers.iter()
+        let observer_windows: Vec<Vec<usize>> = state.desks[0].observers.iter()
             .map(|exp| {
                 (state.cursor..batch_end).map(|i| exp.window_sampler.sample(i).min(i + 1)).collect()
             }).collect();
@@ -463,8 +463,8 @@ fn main() {
         }
 
         // Flush log entries accumulated during this batch.
-        enterprise::ledger::flush_logs(&state.desk.pending_logs, &ledger);
-        state.desk.pending_logs.clear();
+        enterprise::ledger::flush_logs(&state.desks[0].pending_logs, &ledger);
+        state.desks[0].pending_logs.clear();
     }
 
     // Final treasury equity for post-loop reporting
@@ -473,16 +473,20 @@ fn main() {
     let treasury_equity = state.treasury.total_value(&prices);
 
     // ─ Drain remaining pending entries (log, no further learning) ────────────
-    while let Some(entry) = state.desk.pending.pop_front() {
-        let final_out: Option<Label> = entry.crossing.as_ref().map(|c| c.label);
-        if final_out.is_none() { state.desk.noise_count += 1; } else { state.desk.labeled_count += 1; }
+    {
+        let desk = &mut state.desks[0];
+        let treasury = &state.treasury;
+        while let Some(entry) = desk.pending.pop_front() {
+            let final_out: Option<Label> = entry.crossing.as_ref().map(|c| c.label);
+            if final_out.is_none() { desk.noise_count += 1; } else { desk.labeled_count += 1; }
 
-        state.log_candle(&entry, final_out, treasury_equity, &ctx);
+            desk.log_candle(&entry, final_out, treasury_equity, treasury, &ctx);
+        }
     }
 
     // Flush any remaining log entries, then commit.
-    enterprise::ledger::flush_logs(&state.desk.pending_logs, &ledger);
-    state.desk.pending_logs.clear();
+    enterprise::ledger::flush_logs(&state.desks[0].pending_logs, &ledger);
+    state.desks[0].pending_logs.clear();
     ledger.execute_batch("COMMIT").ok();
 
     // ─ Final summary ─────────────────────────────────────────────────────────
@@ -492,7 +496,7 @@ fn main() {
 
     eprintln!("\n═══════════════════════════════════════════════════════════");
     eprintln!("  enterprise complete — {} candles in {:.1}s ({:.0}/s)",
-        state.desk.encode_count, total_time, state.desk.encode_count as f64 / total_time);
+        state.desks[0].encode_count, total_time, state.desks[0].encode_count as f64 / total_time);
     eprintln!("  Orchestration: {}", "enterprise");
     if args.swap_fee > 0.0 || args.slippage > 0.0 {
         let rt = 2.0 * (args.swap_fee + args.slippage) * 100.0;
@@ -501,8 +505,8 @@ fn main() {
     }
     eprintln!("  Exit: ATR-scaled (K_stop={} K_trail={} K_tp={})", k_stop, k_trail, k_tp);
     eprintln!("  Labeled: {}  Noise: {} ({:.1}% noise rate)",
-        state.desk.labeled_count, state.desk.noise_count,
-        state.desk.noise_count as f64 / (state.desk.labeled_count + state.desk.noise_count).max(1) as f64 * 100.0);
+        state.desks[0].labeled_count, state.desks[0].noise_count,
+        state.desks[0].noise_count as f64 / (state.desks[0].labeled_count + state.desks[0].noise_count).max(1) as f64 * 100.0);
     eprintln!();
     eprintln!("  Equity: ${:.2} ({:+.2}%) | B&H: {:+.2}%",
         treasury_equity, ret, bnh_final);
@@ -514,7 +518,7 @@ fn main() {
         state.treasury.total_fees_paid, state.treasury.total_slippage);
     eprintln!();
     {
-        let gen = &state.desk.observers[enterprise::state::GENERALIST_IDX];
+        let gen = &state.desks[0].observers[enterprise::state::GENERALIST_IDX];
         let gen_buy = gen.primary_label;
         let gen_sell = gen.journal.labels()[1];
         eprintln!("  Thought journal — buy_obs={} sell_obs={} cos_raw={:.4} disc_strength={:.4} recalibs={}",
@@ -523,7 +527,7 @@ fn main() {
     }
     eprintln!();
 
-    let gen_resolved = &state.desk.observers[enterprise::state::GENERALIST_IDX].resolved;
+    let gen_resolved = &state.desks[0].observers[enterprise::state::GENERALIST_IDX].resolved;
     let tht_acc = if gen_resolved.is_empty() { 0.0 }
         else { gen_resolved.iter().filter(|(_, c)| *c).count() as f64 / gen_resolved.len() as f64 * 100.0 };
     eprintln!("  Rolling accuracy (last {}): thought={:.1}%",
@@ -531,9 +535,9 @@ fn main() {
     eprintln!();
 
     // Observer panel summary.
-    if !state.desk.observers.is_empty() {
+    if !state.desks[0].observers.is_empty() {
         eprintln!("  Observer panel:");
-        for observer in &state.desk.observers {
+        for observer in &state.desks[0].observers {
             eprintln!("    {}: recalibs={} disc_str={:.4} buy={} sell={}",
                 observer.lens.as_str(),
                 observer.journal.recalib_count(),
@@ -548,6 +552,6 @@ fn main() {
         eprintln!();
     }
 
-    eprintln!("  Run DB: {} ({} rows)", ledger_path, state.desk.log_step);
+    eprintln!("  Run DB: {} ({} rows)", ledger_path, state.desks[0].log_step);
     eprintln!("═══════════════════════════════════════════════════════════");
 }
