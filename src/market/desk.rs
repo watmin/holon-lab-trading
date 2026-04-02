@@ -63,13 +63,19 @@ const OBSERVER_SEED_PRIME: u64 = 7919;
 
 /// A desk — one pair's full enterprise tree.
 ///
-/// Contains observers, manager, exit expert, positions, pending, conviction,
-/// panel engram, adaptive decay, accounting. Everything per-pair.
+/// Contains indicators, candle window, observers, manager, exit expert,
+/// positions, pending, conviction, panel engram, adaptive decay, accounting.
+/// Everything per-pair. No global candle buffer.
 ///
 /// Risk lives on the enterprise (shared across desks).
 /// Treasury lives on the enterprise (shared across desks).
 /// Portfolio lives on the enterprise (shared across desks).
 pub struct Desk {
+
+    // ── Streaming indicators + candle window ────────────────────────────
+    pub indicator_bank: crate::indicators::IndicatorBank,
+    pub candle_window: std::collections::VecDeque<crate::candle::Candle>,
+    pub max_window_size: usize,
 
     // ── Observer panel ──────────────────────────────────────────────────
     pub observers: Vec<Observer>,
@@ -169,7 +175,13 @@ impl Desk {
         let panel_dim = OBSERVER_LENSES.len();
         let panel_engram = OnlineSubspace::with_params(panel_dim, 4, 2.0, 0.01, 3.5, 100);
 
+        // Max window = largest observer window (2016 for specialists, config.window for generalist)
+        let max_window_size = 2016;
+
         Self {
+            indicator_bank: crate::indicators::IndicatorBank::new(),
+            candle_window: VecDeque::with_capacity(max_window_size + 1),
+            max_window_size,
             observers,
             manager_journal: mgr_journal,
             manager_buy: mgr_buy,
