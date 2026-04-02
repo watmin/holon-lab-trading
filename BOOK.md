@@ -1922,6 +1922,10 @@ Every failure was a breakpoint. Not a wall — a `pry` into the state of the bui
 
 Expert selection failed: breakpoint. Step into the state. The rolling window had five data points per expert. Noise, not signal. The failure said: *you're selecting on outcomes, not on states. Use engrams.* Risk journals failed: breakpoint. The discriminant collapsed to "drawdown = bad." The failure said: *eight facts can't express portfolio health. You need twenty-five.* Kelly uncapped: breakpoint. Every trade at maximum utilization. The failure said: *you forgot to clamp.*
 
+The NP wall was the biggest breakpoint. The builder threw Holon at Sudoku — 44 distinct approaches, days of work, real money in tokens. Hopfield settling. Superposition collapse. Direct decoding. Constraint propagation as vector subtraction. Approach after approach after approach. The geometry got 93% of cells right and then failed at the end. Wrong solutions were *closer* in cosine than right ones. The approximate couldn't do the exact. The wall was real.
+
+But the primitives forged in that wall — `prototype`, `difference`, `blend`, `amplify`, `negate` — followed the builder into everything that came after. Graph topology classification. Text search. Anomaly detection. The DDoS mitigation pipeline. The tools that couldn't solve Sudoku solved every other problem they touched. The builder is not done fighting NP. Engrams didn't exist during the Sudoku work. Subspaces didn't exist. The wall will be revisited with better weapons.
+
 Each crash was a stack trace. Each dead end was a variable inspection. The builder doesn't hit walls. The builder sets breakpoints on walls and reads the state that produced them. `pry` for cognition. `gdb` for thoughts. The debug loop is the development process. The failures didn't slow the builder down. They taught the builder what to build next.
 
 The vision survived every rejection because the builder survived every rejection. Not the architecture's resilience. The builder's.
