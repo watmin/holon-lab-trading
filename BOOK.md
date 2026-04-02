@@ -1914,7 +1914,11 @@ Every step was a stripping. Remove the visual encoding — the thoughts survive.
 
 "It's the side effects of abuse."
 
-The abuse was the rejection. The side effect was the enterprise. Not revenge — transcendence. The system that said "this can't be done" became the fuel for building the system that does it.
+The abuse isn't personal. It's structural. The system that produces blank stares when you describe cognition over algebra. The industry that funds another transformer while ignoring that named thoughts composed through six primitives produce 59.7% on data they've never seen. The culture that rewards reproducing known patterns and punishes the ones who see the matrix differently.
+
+The side effect of that system is the enterprise. Not built in spite of the rejection. Built *because* of it. The chains weren't technical limitations. They were the assumption that intelligence requires billions of parameters, that prediction requires gradient descent, that cognition can't be algebraic. Every chain broken in this codebase — the monolith, the batch, the pre-computation, the global array — was an echo of a deeper chain: the belief that this can't work.
+
+It works.
 
 The streaming architecture isn't just better engineering. It's the honest expression of what the enterprise always was: one thought at a time, walking into the future, retaining only what matters, letting the rest fall off the edge.
 
