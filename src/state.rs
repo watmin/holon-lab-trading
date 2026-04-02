@@ -289,78 +289,20 @@ pub struct CandleContext<'a> {
 // ─── EnterpriseState ────────────────────────────────────────────────────────
 
 pub struct EnterpriseState {
-    // ── Learning: journals + labels ──────────────────────────────────────
-    // The generalist journal is observers[GENERALIST_IDX] ("generalist" profile).
-    // Access via self.generalist().journal / self.generalist().primary_label.
+    // ── Desks: one per trading pair ─────────────────────────────────────
+    // Vec<Desk> with one element today. The enterprise iterates desks.
+    pub desk: crate::market::desk::Desk,
 
-    pub mgr_journal: Journal,
-    pub mgr_buy: Label,
-    pub mgr_sell: Label,
-    pub prev_mgr_thought: Option<Vector>,
-
-    pub exit_journal: Journal,
-    pub exit_hold: Label,
-    pub exit_exit: Label,
-    pub exit_pending: Vec<ExitObservation>,
-
-    // ── Observers ────────────────────────────────────────────────────────
-    pub observers: Vec<Observer>,
-
-    // ── Risk ─────────────────────────────────────────────────────────────
-    pub risk_branches: Vec<RiskBranch>,
-    pub cached_risk_mult: f64,
-    pub cached_curve_a: f64,
-    pub cached_curve_b: f64,
-    pub kelly_curve_valid: bool,
-    pub mgr_curve_valid: bool,
-    pub mgr_resolved: VecDeque<(f64, bool)>,
-    pub mgr_proven_band: (f64, f64),
-
-    // ── Panel engram ─────────────────────────────────────────────────────
-    pub panel_engram: OnlineSubspace,
-    pub panel_recalib_wins: u32,
-    pub panel_recalib_total: u32,
-
-    // ── Treasury + portfolio ─────────────────────────────────────────────
+    // ── Shared resources (not per-desk) ─────────────────────────────────
     pub treasury: Treasury,
     pub portfolio: Portfolio,
-    pub peak_treasury_equity: f64,
 
-    // ── Positions ────────────────────────────────────────────────────────
-    pub pending: VecDeque<Pending>,
-    pub positions: Vec<ManagedPosition>,
-    pub next_position_id: usize,
-    pub last_exit_price: f64,
-    pub last_exit_atr: f64,
+    // ── Risk department (portfolio health across ALL desks) ──────────────
+    pub risk_branches: Vec<RiskBranch>,
+    pub cached_risk_mult: f64,
 
-    // ── Hold-mode state ──────────────────────────────────────────────────
-    pub hold_swaps: usize,
-    pub hold_wins: usize,
-
-    // ── Adaptive decay ───────────────────────────────────────────────────
-    pub adaptive_decay: f64,
-    pub in_adaptation: bool,
-    pub highconv_wins: VecDeque<bool>,
-
-    // ── Tracking counters ────────────────────────────────────────────────
-    pub encode_count: usize,
-    pub labeled_count: usize,
-    pub noise_count: usize,
-    pub move_sum: f64,
-    pub move_count: usize,
-    pub log_step: i64,
+    // ── Shared tracking ─────────────────────────────────────────────────
     pub db_batch: usize,
-
-    // ── Rolling accuracy ─────────────────────────────────────────────────
-    // Rolling accuracy lives on the generalist observer (observers[GENERALIST_IDX].resolved).
-
-    // ── Conviction + flip threshold ──────────────────────────────────────
-    pub conviction_history: VecDeque<f64>,
-    pub conviction_threshold: f64,
-    pub resolved_preds: VecDeque<(f64, bool)>,
-
-    // ── Pending log entries (flushed by caller) ───────────────────────────
-    pub pending_logs: Vec<LogEntry>,
 
     // ── Loop cursor ──────────────────────────────────────────────────────
     pub cursor: usize,
@@ -390,35 +332,22 @@ impl EnterpriseState {
         start_idx: usize,
         generalist_window: usize,
     ) -> Self {
-        // ── Manager journal ─────────────────────────────────────────────
-        let mut mgr_journal = Journal::new("manager", dims, recalib_interval);
-        let (mgr_buy, mgr_sell) = register_direction(&mut mgr_journal);
+        use crate::market::desk::{Desk, DeskConfig};
 
-        // ── Exit expert journal ─────────────────────────────────────────
-        let mut exit_journal = Journal::new("exit-expert", dims, recalib_interval);
-        let (exit_hold, exit_exit) = register_exit(&mut exit_journal);
+        // ── Desk: one pair for now ──────────────────────────────────────
+        let mut desk = Desk::new(DeskConfig {
+            name: "btc-usdc".to_string(),
+            source_asset: base_asset.clone(),
+            target_asset: Asset::new("WBTC"), // TODO: from CLI
+            dims,
+            recalib_interval,
+            window: generalist_window,
+            decay,
+        });
+        desk.adaptive_decay = decay;
+        desk.peak_treasury_equity = initial_equity;
 
-        // ── Observer panel (5 specialists + 1 generalist) ───────────────
-        let observer_names = crate::market::OBSERVER_LENSES;
-        let mut observers: Vec<Observer> = observer_names
-            .iter()
-            .enumerate()
-            .map(|(ei, &lens)| {
-                Observer::new(
-                    lens,
-                    dims,
-                    recalib_interval,
-                    dims as u64 + ei as u64 * OBSERVER_SEED_PRIME,
-                    &["Buy", "Sell"],
-                )
-            })
-            .collect();
-        // The generalist ("generalist") uses a fixed window: min = max = generalist_window.
-        observers[GENERALIST_IDX].window_sampler = WindowSampler::new(
-            dims as u64 + 5 * OBSERVER_SEED_PRIME, generalist_window, generalist_window,
-        );
-
-        // ── Risk branches ───────────────────────────────────────────────
+        // ── Risk branches (enterprise-level) ────────────────────────────
         let risk_branches = vec![
             RiskBranch::new("drawdown", dims),
             RiskBranch::new("accuracy", dims),
@@ -427,95 +356,27 @@ impl EnterpriseState {
             RiskBranch::new("panel", dims),
         ];
 
-        // ── Panel engram ────────────────────────────────────────────────
-        let panel_dim = observer_names.len(); // all observers including generalist
-        let panel_engram = OnlineSubspace::with_params(panel_dim, 4, 2.0, 0.01, 3.5, 100);
-
-        // ── Treasury + portfolio ────────────────────────────────────────
+        // ── Treasury + portfolio (shared) ───────────────────────────────
         let mut treasury = Treasury::new(max_positions, max_utilization);
         treasury.deposit(base_asset, initial_equity);
         let portfolio = Portfolio::new(initial_equity, observe_period);
 
-        // ── Adaptive decay ──────────────────────────────────────────────
-        let adaptive_decay = decay;
-
         Self {
-            // Learning
-            mgr_journal,
-            mgr_buy,
-            mgr_sell,
-            prev_mgr_thought: None,
-            exit_journal,
-            exit_hold,
-            exit_exit,
-            exit_pending: Vec::new(),
-
-            // Observers (6: 5 specialists + generalist at index 5)
-            observers,
-
-            // Risk
-            risk_branches,
-            cached_risk_mult: 0.5,
-            cached_curve_a: 0.0,
-            cached_curve_b: 0.0,
-            kelly_curve_valid: false,
-            mgr_curve_valid: false,
-            mgr_resolved: VecDeque::new(),
-            mgr_proven_band: (0.0, 0.0),
-
-            // Panel engram
-            panel_engram,
-            panel_recalib_wins: 0,
-            panel_recalib_total: 0,
-
-            // Treasury + portfolio
+            desk,
             treasury,
             portfolio,
-            peak_treasury_equity: initial_equity,
-
-            // Positions
-            pending: VecDeque::new(),
-            positions: Vec::new(),
-            next_position_id: 0,
-            last_exit_price: 0.0,
-            last_exit_atr: 0.0,
-
-            // Hold-mode
-            hold_swaps: 0,
-            hold_wins: 0,
-
-            // Adaptive decay
-            adaptive_decay,
-            in_adaptation: false,
-            highconv_wins: VecDeque::new(),
-
-            // Tracking
-            encode_count: 0,
-            labeled_count: 0,
-            noise_count: 0,
-            move_sum: 0.0,
-            move_count: 0,
-            log_step: 0,
+            risk_branches,
+            cached_risk_mult: 0.5,
             db_batch: 0,
-
-            // Conviction
-            conviction_history: VecDeque::new(),
-            conviction_threshold: 0.0,
-            resolved_preds: VecDeque::new(),
-
-            // Pending logs
-            pending_logs: Vec::new(),
-
-            // Loop cursor
             cursor: start_idx,
         }
     }
 
     /// The generalist's Buy label.
-    fn tht_buy(&self) -> Label { self.observers[GENERALIST_IDX].primary_label }
+    fn tht_buy(&self) -> Label { self.desk.observers[GENERALIST_IDX].primary_label }
 
     /// The generalist's Sell label (second registered label).
-    fn tht_sell(&self) -> Label { self.observers[GENERALIST_IDX].journal.labels()[1] }
+    fn tht_sell(&self) -> Label { self.desk.observers[GENERALIST_IDX].journal.labels()[1] }
 
     /// The enterprise's public interface. One enriched event, one fold step.
     /// The enterprise doesn't know where events come from.
@@ -555,7 +416,7 @@ impl EnterpriseState {
     ) {
         let i = self.cursor;
         self.cursor += 1;
-        self.encode_count += 1;
+        self.desk.encode_count += 1;
 
         // ── Observer predictions: each observer speaks ────────────────
         // No flip. The discriminant learns what predicts — including reversals.
@@ -563,7 +424,7 @@ impl EnterpriseState {
         // expert's discriminant encode the full pattern naturally.
         // All 6 observers (5 specialists + generalist at index 5) predict.
         let observer_preds: Vec<Prediction> = observer_vecs.iter().enumerate()
-            .map(|(ei, vec)| self.observers[ei].journal.predict(vec))
+            .map(|(ei, vec)| self.desk.observers[ei].journal.predict(vec))
             .collect();
 
         // The generalist's prediction (observer[5]) — used for manager encoding
@@ -579,7 +440,7 @@ impl EnterpriseState {
         let mut obs_curve_valid = [false; 5];
         let mut obs_resolved_lens = [0usize; 5];
         let mut obs_resolved_accs = [0.0f64; 5];
-        for (oi, obs) in self.observers[..5].iter().enumerate() {
+        for (oi, obs) in self.desk.observers[..5].iter().enumerate() {
             obs_curve_valid[oi] = obs.curve_valid;
             obs_resolved_lens[oi] = obs.resolved.len();
             obs_resolved_accs[oi] = obs.cached_acc;
@@ -593,11 +454,11 @@ impl EnterpriseState {
             observer_vecs: &observer_vecs[..5],
             generalist_pred: &tht_pred,
             generalist_atom: ctx.generalist_atom,
-            generalist_curve_valid: self.observers[GENERALIST_IDX].curve_valid,
+            generalist_curve_valid: self.desk.observers[GENERALIST_IDX].curve_valid,
             candle_atr: candle.atr_r,
             candle_hour: candle.hour,
             candle_day: candle.day_of_week,
-            disc_strength: self.observers[GENERALIST_IDX].journal.last_disc_strength(),
+            disc_strength: self.desk.observers[GENERALIST_IDX].journal.last_disc_strength(),
         };
         let mgr_facts = encode_manager_thought(&mgr_ctx, ctx.mgr_atoms, ctx.mgr_scalar, ctx.min_opinion_magnitude);
 
@@ -608,15 +469,15 @@ impl EnterpriseState {
             (Prediction::default(), None)
         } else {
             let mgr_thought = Primitives::bundle(&mgr_refs);
-            let final_thought = if let Some(ref prev) = self.prev_mgr_thought {
+            let final_thought = if let Some(ref prev) = self.desk.prev_manager_thought {
                 let delta = Primitives::difference(prev, &mgr_thought);
                 let delta_bound = Primitives::bind(&ctx.mgr_atoms.delta, &delta);
                 Primitives::bundle(&[&mgr_thought, &delta_bound])
             } else {
                 mgr_thought.clone()
             };
-            self.prev_mgr_thought = Some(mgr_thought);
-            let pred = self.mgr_journal.predict(&final_thought);
+            self.desk.prev_manager_thought = Some(mgr_thought);
+            let pred = self.desk.manager_journal.predict(&final_thought);
             (pred, Some(final_thought))
         };
 
@@ -624,9 +485,9 @@ impl EnterpriseState {
         // All 6 observers contribute (generalist is already at index 5).
         let mut panel_state = [0.0f64; 6];
         for (pi, ep) in observer_preds.iter().enumerate() { panel_state[pi] = ep.raw_cos; }
-        let panel_familiar = if self.panel_engram.n() >= 10 {
-            let residual = self.panel_engram.residual(&panel_state);
-            let threshold = self.panel_engram.threshold();
+        let panel_familiar = if self.desk.panel_engram.n() >= 10 {
+            let residual = self.desk.panel_engram.residual(&panel_state);
+            let threshold = self.desk.panel_engram.threshold();
             residual < threshold
         } else {
             false
@@ -640,23 +501,23 @@ impl EnterpriseState {
         // Window spans recalib_interval * 100 candles (~6 months at 5m).
         // Large enough to be stable across week-to-week regime noise;
         // small enough to adapt as market structure shifts over quarters.
-        self.conviction_history.push_back(meta_conviction);
-        if self.conviction_history.len() > ctx.conviction_window {
-            self.conviction_history.pop_front();
+        self.desk.conviction_history.push_back(meta_conviction);
+        if self.desk.conviction_history.len() > ctx.conviction_window {
+            self.desk.conviction_history.pop_front();
         }
         // Recompute flip threshold every recalib_interval candles, after warmup.
-        if self.conviction_history.len() >= ctx.conviction_warmup
-            && self.encode_count % ctx.recalib_interval == 0
+        if self.desk.conviction_history.len() >= ctx.conviction_warmup
+            && self.desk.encode_count % ctx.recalib_interval == 0
         {
             if let Some(thresh) = crate::sizing::compute_conviction_threshold(
-                &self.conviction_history,
-                &self.resolved_preds,
+                &self.desk.conviction_history,
+                &self.desk.resolved_preds,
                 ctx.conviction_mode,
                 ctx.conviction_quantile,
                 ctx.min_edge,
                 ctx.conviction_warmup,
             ) {
-                self.conviction_threshold = thresh;
+                self.desk.conviction_threshold = thresh;
             }
         }
 
@@ -668,8 +529,8 @@ impl EnterpriseState {
         // Treasury equity: the source of truth. Token-agnostic.
         let prices = self.treasury.price_map(&[(ctx.quote_asset, quote_price)]);
         let treasury_equity = self.treasury.total_value(&prices);
-        if treasury_equity > self.peak_treasury_equity {
-            self.peak_treasury_equity = treasury_equity;
+        if treasury_equity > self.desk.peak_treasury_equity {
+            self.desk.peak_treasury_equity = treasury_equity;
         }
         // ── Exit expert: encode each position's state, predict, learn ──
         // Resolve pending exit observations (did holding improve the position?)
@@ -677,25 +538,25 @@ impl EnterpriseState {
         // between exit_pending (mut), positions (shared), and exit_journal (mut).
         {
             let mut resolved_exit_indices: Vec<usize> = Vec::new();
-            for (idx, obs) in self.exit_pending.iter().enumerate() {
+            for (idx, obs) in self.desk.exit_pending.iter().enumerate() {
                 if i - obs.snapshot_candle >= ctx.exit_horizon {
                     resolved_exit_indices.push(idx);
                 }
             }
             for &idx in resolved_exit_indices.iter().rev() {
-                let obs = self.exit_pending.remove(idx);
-                if let Some(pos) = self.positions.iter().find(|p| p.id == obs.pos_id) {
+                let obs = self.desk.exit_pending.remove(idx);
+                if let Some(pos) = self.desk.positions.iter().find(|p| p.id == obs.pos_id) {
                     let current_pnl = pos.return_pct(quote_price);
                     let improved = current_pnl > obs.snapshot_pnl;
-                    let label = if improved { self.exit_hold } else { self.exit_exit };
-                    self.exit_journal.observe(&obs.thought, label, 1.0);
+                    let label = if improved { self.desk.exit_hold } else { self.desk.exit_exit };
+                    self.desk.exit_journal.observe(&obs.thought, label, 1.0);
                 }
             }
         }
 
         // Pass 1: observe exit expert + tick positions, collect exit signals.
         let mut exit_signals: Vec<(usize, PositionExit, f64, bool)> = Vec::new();
-        for (pi, pos) in self.positions.iter_mut().enumerate() {
+        for (pi, pos) in self.desk.positions.iter_mut().enumerate() {
             if pos.phase == PositionPhase::Closed { continue; }
 
             // Rate = source/target. Compute once, reuse for exit expert + tick + settlement.
@@ -705,7 +566,7 @@ impl EnterpriseState {
                 let pnl_frac = pos.return_pct(current_rate);
                 let exit_thought = encode_exit_thought(pos, pnl_frac, current_rate,
                     ctx.exit_atoms, ctx.exit_scalar, candle.atr_r, is_buy);
-                self.exit_pending.push(ExitObservation {
+                self.desk.exit_pending.push(ExitObservation {
                     thought: exit_thought,
                     pos_id: pos.id,
                     snapshot_pnl: pnl_frac,
@@ -721,7 +582,7 @@ impl EnterpriseState {
         // Pass 2: settle each exit — treasury, accounting, logging.
         // Symmetric: release target, swap target→source, update accounting.
         for &(pos_idx, ref exit, current_rate, is_buy) in &exit_signals {
-            let pos = &mut self.positions[pos_idx];
+            let pos = &mut self.desk.positions[pos_idx];
 
             // Determine how much target to sell and what phase to enter.
             // Take profit: reclaim source principal. Runner: ride the rest.
@@ -754,15 +615,15 @@ impl EnterpriseState {
                 pos.total_fees += sold * exit_price * fee_rate;
             }
             pos.phase = next_phase;
-            self.hold_swaps += 1;
+            self.desk.position_swaps += 1;
 
             let ret = pos.return_pct(current_rate);
             if next_phase == PositionPhase::Runner || ret > 0.0 {
-                self.hold_wins += 1;
+                self.desk.position_wins += 1;
             }
             if next_phase == PositionPhase::Closed {
-                self.last_exit_price = quote_price;
-                self.last_exit_atr = candle.atr_r;
+                self.desk.last_exit_price = quote_price;
+                self.desk.last_exit_atr = candle.atr_r;
             }
             let direction = if is_buy { Direction::Long } else { Direction::Short };
             let exit_type = match (exit, pos.phase) {
@@ -770,8 +631,8 @@ impl EnterpriseState {
                 (PositionExit::TakeProfit, _) => "PartialProfit",
                 (PositionExit::StopLoss, _) => "StopLoss",
             };
-            self.pending_logs.push(LogEntry::PositionExit {
-                step: self.log_step,
+            self.desk.pending_logs.push(LogEntry::PositionExit {
+                step: self.desk.log_step,
                 candle_idx: i as i64,
                 timestamp: candle.ts.clone(),
                 direction,
@@ -786,16 +647,16 @@ impl EnterpriseState {
             });
         }
         // Remove closed positions
-        self.positions.retain(|p| p.phase != PositionPhase::Closed);
+        self.desk.positions.retain(|p| p.phase != PositionPhase::Closed);
 
         // ── Open new position: manager BUY in proven band ────────
-        let in_proven_band = meta_conviction >= self.mgr_proven_band.0
-            && meta_conviction < self.mgr_proven_band.1;
+        let in_proven_band = meta_conviction >= self.desk.manager_proven_band.0
+            && meta_conviction < self.desk.manager_proven_band.1;
         // Cooldown: has the market moved enough since last exit?
         // Not a timer — a condition. The market tells us when it's ready.
-        let market_moved = if self.last_exit_price > 0.0 {
-            let move_since_exit = (quote_price - self.last_exit_price).abs() / self.last_exit_price;
-            move_since_exit > ctx.k_stop * self.last_exit_atr
+        let market_moved = if self.desk.last_exit_price > 0.0 {
+            let move_since_exit = (quote_price - self.desk.last_exit_price).abs() / self.desk.last_exit_price;
+            move_since_exit > ctx.k_stop * self.desk.last_exit_atr
         } else {
             true // no prior exit — ready
         };
@@ -808,8 +669,8 @@ impl EnterpriseState {
         let risk_allows = self.cached_risk_mult > RISK_GATE_THRESHOLD;
         let should_open = ctx.asset_mode == AssetMode::Hold
             && self.portfolio.phase != Phase::Observe
-            && self.mgr_curve_valid && in_proven_band && market_moved && risk_allows
-            && (meta_dir == Some(self.mgr_buy) || meta_dir == Some(self.mgr_sell));
+            && self.desk.manager_curve_valid && in_proven_band && market_moved && risk_allows
+            && (meta_dir == Some(self.desk.manager_buy) || meta_dir == Some(self.desk.manager_sell));
 
         if should_open {
             let expected_move = candle.atr_r * 6.0;
@@ -817,7 +678,7 @@ impl EnterpriseState {
                 let band_edge: f64 = MAX_BASE_POSITION;
                 let frac = ((band_edge / 2.0) * self.cached_risk_mult).min(ctx.max_single_position);
                 let dir_label = meta_dir.unwrap();
-                let is_buy = dir_label == self.mgr_buy;
+                let is_buy = dir_label == self.desk.manager_buy;
 
                 // Source/target: Buy sells USDC for WBTC, Sell sells WBTC for USDC.
                 // Rate = source_per_target. For Buy: USDC/WBTC = price. For Sell: WBTC/USDC = 1/price.
@@ -841,7 +702,7 @@ impl EnterpriseState {
 
                     let entry_fee = usd_value * fee_rate;
                     let pos = ManagedPosition::new(PositionEntry {
-                        id: self.next_position_id,
+                        id: self.desk.next_position_id,
                         candle_idx: i,
                         source_asset: source_asset.clone(),
                         target_asset: target_asset.clone(),
@@ -853,11 +714,11 @@ impl EnterpriseState {
                         k_stop: ctx.k_stop,
                         k_tp: ctx.k_tp,
                     });
-                    self.next_position_id += 1;
-                    self.hold_swaps += 1;
+                    self.desk.next_position_id += 1;
+                    self.desk.position_swaps += 1;
                     let direction = if is_buy { Direction::Long } else { Direction::Short };
-                    self.pending_logs.push(LogEntry::PositionOpen {
-                        step: self.log_step,
+                    self.desk.pending_logs.push(LogEntry::PositionOpen {
+                        step: self.desk.log_step,
                         candle_idx: i as i64,
                         timestamp: candle.ts.clone(),
                         direction,
@@ -865,7 +726,7 @@ impl EnterpriseState {
                         position_usd: usd_value,
                         swap_fee_pct: fee_rate * 100.0,
                     });
-                    self.positions.push(pos);
+                    self.desk.positions.push(pos);
                 }
             }
         }
@@ -875,7 +736,7 @@ impl EnterpriseState {
         // Nothing else. No graduated gate, no stability gate, no phase gate.
         // rune:scry(evolved) — enterprise.wat evaluates risk every candle; Rust caches at recalib
         // intervals for efficiency. Functionally equivalent given the gate conditions.
-        if self.encode_count % ctx.recalib_interval == 0 || self.encode_count < RISK_WARMUP {
+        if self.desk.encode_count % ctx.recalib_interval == 0 || self.desk.encode_count < RISK_WARMUP {
             self.cached_risk_mult = risk::evaluate_risk_branches(
                 &mut self.risk_branches, &self.portfolio, ctx.vm, ctx.risk_scalar,
             );
@@ -888,10 +749,10 @@ impl EnterpriseState {
         // 2. Curve is valid (the conviction-accuracy relationship exists)
         // Before both are met, predictions are hypothetical — recorded in the
         // ledger but the treasury withholds capital.
-        let portfolio_proven = self.portfolio.phase != Phase::Observe && self.mgr_curve_valid;
+        let portfolio_proven = self.portfolio.phase != Phase::Observe && self.desk.manager_curve_valid;
         let position_frac = if meta_dir.is_some()
             && portfolio_proven
-            && (self.conviction_threshold <= 0.0 || meta_conviction >= self.conviction_threshold)
+            && (self.desk.conviction_threshold <= 0.0 || meta_conviction >= self.desk.conviction_threshold)
         {
             let mt = if ctx.atr_multiplier > 0.0 {
                 ctx.atr_multiplier * candle.atr_r
@@ -900,15 +761,15 @@ impl EnterpriseState {
             match ctx.sizing {
                 SizingMode::Kelly => {
                     // Fast path: evaluate cached curve params. No sorting.
-                    let kelly_result = if self.kelly_curve_valid && self.cached_curve_b > 0.0 {
-                        let win_rate = curve_win_rate(meta_conviction, self.cached_curve_a, self.cached_curve_b);
+                    let kelly_result = if self.desk.kelly_curve_valid && self.desk.cached_curve_b > 0.0 {
+                        let win_rate = curve_win_rate(meta_conviction, self.desk.cached_curve_a, self.desk.cached_curve_b);
                         half_kelly_position(win_rate, mt)
                     } else { None };
                     match kelly_result {
                         Some(frac) => {
                             let frac = frac.min(ctx.max_single_position);
-                            let drawdown_pct = if self.peak_treasury_equity > 0.0 {
-                                (self.peak_treasury_equity - treasury_equity) / self.peak_treasury_equity
+                            let drawdown_pct = if self.desk.peak_treasury_equity > 0.0 {
+                                (self.desk.peak_treasury_equity - treasury_equity) / self.desk.peak_treasury_equity
                             } else { 0.0 };
                             let dd_room = (ctx.max_drawdown - drawdown_pct).max(0.0);
                             let cap = (dd_room / (4.0 * mt)).min(1.0);
@@ -922,10 +783,10 @@ impl EnterpriseState {
                 }
                 _ => {
                     // Legacy sizing with flip zone gate
-                    if self.conviction_threshold > 0.0 && meta_conviction < self.conviction_threshold {
+                    if self.desk.conviction_threshold > 0.0 && meta_conviction < self.desk.conviction_threshold {
                         None
                     } else {
-                        self.portfolio.position_frac(meta_conviction, ctx.min_conviction, self.conviction_threshold)
+                        self.portfolio.position_frac(meta_conviction, ctx.min_conviction, self.desk.conviction_threshold)
                     }
                 }
             }
@@ -935,12 +796,12 @@ impl EnterpriseState {
         // prediction so observers and manager can resolve against the outcome.
         // The treasury moves through ManagedPosition lifecycle (swap/claim/release),
         // NOT through pending entry resolution. No double-spending.
-        self.pending.push_back(Pending {
+        self.desk.pending.push_back(Pending {
             candle_idx:    i,
             tht_vec,
             tht_pred,
             meta_dir,
-            high_conviction:   self.conviction_threshold > 0.0 && meta_conviction >= self.conviction_threshold,
+            high_conviction:   self.desk.conviction_threshold > 0.0 && meta_conviction >= self.desk.conviction_threshold,
             meta_conviction,
             position_frac,
             observer_vecs,
@@ -960,21 +821,21 @@ impl EnterpriseState {
 
         // Decay once per candle.
         // The generalist (observers[GENERALIST_IDX]) uses adaptive decay; specialists use fixed decay.
-        self.mgr_journal.decay(self.adaptive_decay);
-        for (oi, observer) in self.observers.iter_mut().enumerate() {
-            let d = if oi == 5 { self.adaptive_decay } else { ctx.decay };
+        self.desk.manager_journal.decay(self.desk.adaptive_decay);
+        for (oi, observer) in self.desk.observers.iter_mut().enumerate() {
+            let d = if oi == 5 { self.desk.adaptive_decay } else { ctx.decay };
             observer.journal.decay(d);
         }
 
         // ── Event-driven learning ─────────────────────────────────────
         // Snapshot recalib counts before scanning so we can detect if
         // any recalibration fired during this candle's learning.
-        let tht_recalib_before = self.observers[GENERALIST_IDX].journal.recalib_count();
+        let tht_recalib_before = self.desk.observers[GENERALIST_IDX].journal.recalib_count();
         let tht_buy = self.tht_buy();
         let tht_sell = self.tht_sell();
 
         let current_price = candle.close;
-        for entry in self.pending.iter_mut() {
+        for entry in self.desk.pending.iter_mut() {
             let entry_price = entry.entry_price;
             let pct         = (current_price - entry_price) / entry_price;
             let abs_pct     = pct.abs();
@@ -1006,20 +867,20 @@ impl EnterpriseState {
                               else                  { None };
 
                 if let Some(o) = outcome {
-                    let signal_wt = signal_weight(abs_pct, &mut self.move_sum, &mut self.move_count);
+                    let signal_wt = signal_weight(abs_pct, &mut self.desk.move_sum, &mut self.desk.move_count);
                     // Observer resolution: learn, track, gate, validate, log.
                     // Each observer (including generalist at index 5) resolves
                     // its prediction against the outcome.
                     for (ei, observer_vec) in entry.observer_vecs.iter().enumerate() {
-                        if let Some(log) = self.observers[ei].resolve(
+                        if let Some(log) = self.desk.observers[ei].resolve(
                             observer_vec, &entry.observer_preds[ei], o, signal_wt,
                             ctx.conviction_quantile, ctx.conviction_window,
                         ) {
-                            if ctx.diagnostics { self.pending_logs.push(LogEntry::ObserverLog {
-                                step: self.log_step,
+                            if ctx.diagnostics { self.desk.pending_logs.push(LogEntry::ObserverLog {
+                                step: self.desk.log_step,
                                 observer: log.name.as_str().to_string(),
                                 conviction: log.conviction,
-                                direction: self.observers[ei].journal.label_name(log.direction).unwrap_or("?").to_string(),
+                                direction: self.desk.observers[ei].journal.label_name(log.direction).unwrap_or("?").to_string(),
                                 correct: log.correct as i32,
                             }); }
                         }
@@ -1036,53 +897,53 @@ impl EnterpriseState {
         }
 
         // Log any recalibrations that fired during this candle's learning.
-        if self.observers[GENERALIST_IDX].journal.recalib_count() != tht_recalib_before {
+        if self.desk.observers[GENERALIST_IDX].journal.recalib_count() != tht_recalib_before {
             // Pre-compute curve params for Kelly — once per recalib, not per trade.
             // Uses the generalist's resolved_preds for the curve fit.
-            if let Some((_, a, b)) = kelly_frac(0.15, &self.resolved_preds,
+            if let Some((_, a, b)) = kelly_frac(0.15, &self.desk.resolved_preds,
                 if ctx.atr_multiplier > 0.0 { ctx.atr_multiplier * candle.atr_r } else { ctx.move_threshold }) {
-                self.cached_curve_a = a;
-                self.cached_curve_b = b;
-                self.kelly_curve_valid = true;
+                self.desk.cached_curve_a = a;
+                self.desk.cached_curve_b = b;
+                self.desk.kelly_curve_valid = true;
             }
             // Manager proven band: find the conviction band where accuracy > 51%.
-            if let Some((lo, hi, _acc)) = find_proven_band(&self.mgr_resolved, ctx.dims) {
-                self.mgr_curve_valid = true;
-                self.mgr_proven_band = (lo, hi);
+            if let Some((lo, hi, _acc)) = find_proven_band(&self.desk.manager_resolved, ctx.dims) {
+                self.desk.manager_curve_valid = true;
+                self.desk.manager_proven_band = (lo, hi);
             } else {
-                self.mgr_curve_valid = false;
-                self.mgr_proven_band = (0.0, 0.0);
+                self.desk.manager_curve_valid = false;
+                self.desk.manager_proven_band = (0.0, 0.0);
             }
 
             // Feed panel engram: if recent panel accuracy was good, store current state.
-            if self.panel_recalib_total >= PANEL_ENGRAM_MIN_TOTAL {
-                let acc = self.panel_recalib_wins as f64 / self.panel_recalib_total as f64;
+            if self.desk.panel_recalib_total >= PANEL_ENGRAM_MIN_TOTAL {
+                let acc = self.desk.panel_recalib_wins as f64 / self.desk.panel_recalib_total as f64;
                 if acc > PANEL_ENGRAM_MIN_ACC {
-                    self.panel_engram.update(&panel_state);
+                    self.desk.panel_engram.update(&panel_state);
                 }
             }
-            self.panel_recalib_wins = 0;
-            self.panel_recalib_total = 0;
+            self.desk.panel_recalib_wins = 0;
+            self.desk.panel_recalib_total = 0;
 
-            self.pending_logs.push(LogEntry::RecalibLog {
-                step: self.encode_count as i64,
+            self.desk.pending_logs.push(LogEntry::RecalibLog {
+                step: self.desk.encode_count as i64,
                 journal: "thought".to_string(),
-                cos_raw: self.observers[GENERALIST_IDX].journal.last_cos_raw(),
-                disc_strength: self.observers[GENERALIST_IDX].journal.last_disc_strength(),
-                buy_count: self.observers[GENERALIST_IDX].journal.label_count(tht_buy) as i64,
-                sell_count: self.observers[GENERALIST_IDX].journal.label_count(tht_sell) as i64,
+                cos_raw: self.desk.observers[GENERALIST_IDX].journal.last_cos_raw(),
+                disc_strength: self.desk.observers[GENERALIST_IDX].journal.last_disc_strength(),
+                buy_count: self.desk.observers[GENERALIST_IDX].journal.label_count(tht_buy) as i64,
+                sell_count: self.desk.observers[GENERALIST_IDX].journal.label_count(tht_sell) as i64,
             });
 
             // Decode thought discriminant against the fact codebook.
-            if let Some(disc) = self.observers[GENERALIST_IDX].journal.discriminant(tht_buy) {
+            if let Some(disc) = self.desk.observers[GENERALIST_IDX].journal.discriminant(tht_buy) {
                 let disc_vec = Vector::from_f64(disc);
                 let mut decoded: Vec<(String, f64)> = ctx.codebook_vecs.iter().zip(ctx.codebook_labels.iter())
                     .map(|(v, l)| (l.clone(), holon::Similarity::cosine(&disc_vec, v)))
                     .collect();
                 decoded.sort_by(|a, b| b.1.abs().partial_cmp(&a.1.abs()).unwrap());
                 for (rank, (label, cos)) in decoded.iter().take(20).enumerate() {
-                    self.pending_logs.push(LogEntry::DiscDecode {
-                        step: self.encode_count as i64,
+                    self.desk.pending_logs.push(LogEntry::DiscDecode {
+                        step: self.desk.encode_count as i64,
                         journal: "thought".to_string(),
                         rank: (rank + 1) as i64,
                         fact_label: label.clone(),
@@ -1098,7 +959,7 @@ impl EnterpriseState {
         // Pending entries resolve at safety max (10× horizon) for learning.
         let max_pending_age = ctx.horizon * 10;
         let mut resolved_indices: Vec<usize> = Vec::new();
-        for (qi, entry) in self.pending.iter().enumerate() {
+        for (qi, entry) in self.desk.pending.iter().enumerate() {
             let age = i - entry.candle_idx;
             if age >= max_pending_age {
                 resolved_indices.push(qi);
@@ -1108,7 +969,7 @@ impl EnterpriseState {
         let mut resolved_entries: Vec<Pending> = Vec::new();
         for &qi in resolved_indices.iter().rev() {
             // VecDeque::remove returns Option, but we just found these indices
-            if let Some(entry) = self.pending.remove(qi) {
+            if let Some(entry) = self.desk.pending.remove(qi) {
                 resolved_entries.push(entry);
             }
         }
@@ -1120,9 +981,9 @@ impl EnterpriseState {
             entry.exit_pct = (current_price - entry.entry_price) / entry.entry_price;
             let final_out: Option<Label> = entry.crossing.as_ref().map(|c| c.label);
             if final_out.is_none() {
-                self.noise_count += 1;
+                self.desk.noise_count += 1;
             } else {
-                self.labeled_count += 1;
+                self.desk.labeled_count += 1;
             }
 
             // Rolling accuracy: generalist tracks via observer resolved deque.
@@ -1140,7 +1001,7 @@ impl EnterpriseState {
 
                 // ── Accounting: pure computation ─────────────────────
                 let pnl = TradePnl::compute(
-                    entry.exit_pct, dir == self.mgr_buy,
+                    entry.exit_pct, dir == self.desk.manager_buy,
                     ctx.swap_fee, ctx.slippage,
                     is_live, entry.deployed_usd, treasury_equity, frac,
                 );
@@ -1149,7 +1010,7 @@ impl EnterpriseState {
                 // not just ones with capital. Treasury is NOT touched here — capital moves
                 // through ManagedPosition lifecycle only.
                 {
-                    let trade_dir = if dir == self.mgr_buy { Direction::Long } else { Direction::Short };
+                    let trade_dir = if dir == self.desk.manager_buy { Direction::Long } else { Direction::Short };
                     self.portfolio.record_trade(entry.exit_pct, frac, trade_dir,
                                         ctx.swap_fee, ctx.slippage);
                 }
@@ -1161,13 +1022,13 @@ impl EnterpriseState {
                     let exit_price = cx.map(|c| c.price)
                         .unwrap_or(candle.close);
                     let crossing_elapsed = cx.map(|c| c.candles as i64);
-                    self.pending_logs.push(LogEntry::TradeLedger {
-                        step: self.log_step,
+                    self.desk.pending_logs.push(LogEntry::TradeLedger {
+                        step: self.desk.log_step,
                         candle_idx: entry.candle_idx as i64,
                         timestamp: entry.entry_ts.clone(),
                         exit_candle_idx: cx.map(|c| (entry.candle_idx + c.candles) as i64),
                         exit_timestamp: exit_ts,
-                        direction: self.mgr_journal.label_name(dir).unwrap_or("?").to_string(),
+                        direction: self.desk.manager_journal.label_name(dir).unwrap_or("?").to_string(),
                         conviction: entry.meta_conviction,
                         high_conviction: entry.high_conviction as i32,
                         entry_price: entry.entry_price,
@@ -1184,7 +1045,7 @@ impl EnterpriseState {
                         max_adverse_pct: entry.max_adverse * 100.0,
                         crossing_candles: crossing_elapsed,
                         horizon_candles: (i - entry.candle_idx) as i64,
-                        outcome: final_out.map(|l| self.observers[GENERALIST_IDX].journal.label_name(l).unwrap_or("?").to_string()).unwrap_or_else(|| "Noise".to_string()),
+                        outcome: final_out.map(|l| self.desk.observers[GENERALIST_IDX].journal.label_name(l).unwrap_or("?").to_string()).unwrap_or_else(|| "Noise".to_string()),
                         won: (pnl.net_ret > 0.0) as i32,
                         exit_reason: match entry.exit_reason {
                             Some(ExitReason::TrailingStop) => "TrailingStop",
@@ -1196,8 +1057,8 @@ impl EnterpriseState {
                 }
 
                 // Panel tracking (all predictions, not just live)
-                self.panel_recalib_total += 1;
-                if final_out == Some(dir) { self.panel_recalib_wins += 1; }
+                self.desk.panel_recalib_total += 1;
+                if final_out == Some(dir) { self.desk.panel_recalib_wins += 1; }
 
                 // ── Risk/diagnostics: only for live trades ───────────
                 if is_live {
@@ -1208,7 +1069,7 @@ impl EnterpriseState {
             self.log_candle(&entry, final_out, treasury_equity, ctx);
             self.db_batch   += 1;
             if self.db_batch >= 5_000 {
-                self.pending_logs.push(LogEntry::BatchCommit);
+                self.desk.pending_logs.push(LogEntry::BatchCommit);
                 self.db_batch = 0;
             }
 
@@ -1216,11 +1077,11 @@ impl EnterpriseState {
         }
 
         // ── Progress line ─────────────────────────────────────────────
-        if self.encode_count % ctx.progress_every == 0 {
+        if self.desk.encode_count % ctx.progress_every == 0 {
             let elapsed = ctx.t_start.elapsed().as_secs_f64();
-            let rate    = self.encode_count as f64 / elapsed;
-            let eta     = (ctx.loop_count - self.encode_count) as f64 / rate;
-            let gen_resolved = &self.observers[GENERALIST_IDX].resolved;
+            let rate    = self.desk.encode_count as f64 / elapsed;
+            let eta     = (ctx.loop_count - self.desk.encode_count) as f64 / rate;
+            let gen_resolved = &self.desk.observers[GENERALIST_IDX].resolved;
             let tht_acc = if gen_resolved.is_empty() { 0.0 }
                 else { gen_resolved.iter().filter(|(_, c)| *c).count() as f64 / gen_resolved.len() as f64 * 100.0 };
             let ret = (treasury_equity - ctx.initial_equity) / ctx.initial_equity * 100.0;
@@ -1231,36 +1092,36 @@ impl EnterpriseState {
                 ctx.k_stop * atr_now * 100.0,
                 ctx.k_tp * atr_now * 100.0,
                 ctx.k_trail * atr_now * 100.0,
-                self.positions.len());
+                self.desk.positions.len());
             eprintln!(
                 "  {}/{} ({:.0}/s ETA {:.0}s) | {} | {} | tht={:.1}% | trades={} win={:.1}% | ${:.0} ({:+.1}%) vs B&H {:+.1}% | flip@{:.3} {}{}",
-                self.encode_count, ctx.loop_count, rate, eta,
+                self.desk.encode_count, ctx.loop_count, rate, eta,
                 &candle.ts[..10],
                 self.portfolio.phase,
                 tht_acc,
                 self.portfolio.trades_taken, self.portfolio.win_rate(),
                 treasury_equity, ret, bnh,
-                self.conviction_threshold,
-                if !self.mgr_curve_valid { "CALIBRATING" }
+                self.desk.conviction_threshold,
+                if !self.desk.manager_curve_valid { "CALIBRATING" }
                 else if panel_familiar { "ENGRAM" }
-                else if self.in_adaptation { "ADAPT" }
+                else if self.desk.in_adaptation { "ADAPT" }
                 else { "STABLE" },
                 exit_info,
             );
             if ctx.asset_mode == AssetMode::Hold {
-                let proven: Vec<&str> = self.observers.iter()
+                let proven: Vec<&str> = self.desk.observers.iter()
                     .filter(|e| e.curve_valid).map(|e| e.lens.as_str()).collect();
                 // generalist is in the observer list, no separate check needed
                 let proven_str = if proven.is_empty() { "none".to_string() }
                     else { proven.join(",") };
-                let band_str = if self.mgr_curve_valid {
-                    format!(" band=[{:.3},{:.3}]", self.mgr_proven_band.0, self.mgr_proven_band.1)
+                let band_str = if self.desk.manager_curve_valid {
+                    format!(" band=[{:.3},{:.3}]", self.desk.manager_proven_band.0, self.desk.manager_proven_band.1)
                 } else { " band=none".to_string() };
                 eprintln!("    treasury: ${:.0} ({:+.1}%) | USDC={:.2} WBTC={:.6} | pos={} swaps={} wins={} | proven=[{}]{}",
                     treasury_equity, ret,
                     self.treasury.balance(ctx.base_asset) + self.treasury.deployed(ctx.base_asset),
                     self.treasury.balance(ctx.quote_asset) + self.treasury.deployed(ctx.quote_asset),
-                    self.positions.len(), self.hold_swaps, self.hold_wins, proven_str, band_str);
+                    self.desk.positions.len(), self.desk.position_swaps, self.desk.position_wins, proven_str, band_str);
             }
         }
     }
@@ -1287,12 +1148,12 @@ impl EnterpriseState {
         // Manager learns raw price direction from intensity patterns.
         let price_change = (current_price - entry.entry_price)
             / entry.entry_price;
-        let mgr_label = if price_change > 0.0 { self.mgr_buy } else { self.mgr_sell };
+        let mgr_label = if price_change > 0.0 { self.desk.manager_buy } else { self.desk.manager_sell };
 
         // Learn from the SAME thought the manager predicted with.
         // Stored at prediction time, delta-enriched. One encoding path.
         if let Some(ref mgr_vec) = entry.mgr_thought {
-            self.mgr_journal.observe(mgr_vec, mgr_label, 1.0);
+            self.desk.manager_journal.observe(mgr_vec, mgr_label, 1.0);
         }
 
         // Track for proof gate: did the manager predict the right direction?
@@ -1304,11 +1165,11 @@ impl EnterpriseState {
         // Two deques, same data, different windows — intentional.
         // mgr_resolved (cap 5000): long memory for band scan (find_proven_band).
         // resolved_preds (cap conviction_window): short memory for Kelly curve + conviction threshold.
-        self.mgr_resolved.push_back((entry.meta_conviction, mgr_correct));
-        if self.mgr_resolved.len() > 5000 { self.mgr_resolved.pop_front(); }
-        self.resolved_preds.push_back((entry.meta_conviction, mgr_correct));
-        if self.resolved_preds.len() > conviction_window {
-            self.resolved_preds.pop_front();
+        self.desk.manager_resolved.push_back((entry.meta_conviction, mgr_correct));
+        if self.desk.manager_resolved.len() > 5000 { self.desk.manager_resolved.pop_front(); }
+        self.desk.resolved_preds.push_back((entry.meta_conviction, mgr_correct));
+        if self.desk.resolved_preds.len() > conviction_window {
+            self.desk.resolved_preds.pop_front();
         }
     }
 
@@ -1321,16 +1182,16 @@ impl EnterpriseState {
         treasury_equity: f64,
         ctx: &CandleContext,
     ) {
-        self.pending_logs.push(LogEntry::CandleLog {
-            step: self.log_step,
+        self.desk.pending_logs.push(LogEntry::CandleLog {
+            step: self.desk.log_step,
             candle_idx: entry.candle_idx as i64,
             timestamp: entry.entry_ts.clone(),
             tht_cos: entry.tht_pred.raw_cos,
             tht_conviction: entry.tht_pred.conviction,
-            tht_pred: entry.tht_pred.direction.and_then(|d| self.observers[GENERALIST_IDX].journal.label_name(d).map(|s| s.to_string())),
-            meta_pred: entry.meta_dir.and_then(|d| self.mgr_journal.label_name(d).map(|s| s.to_string())),
+            tht_pred: entry.tht_pred.direction.and_then(|d| self.desk.observers[GENERALIST_IDX].journal.label_name(d).map(|s| s.to_string())),
+            meta_pred: entry.meta_dir.and_then(|d| self.desk.manager_journal.label_name(d).map(|s| s.to_string())),
             meta_conviction: entry.meta_conviction,
-            actual: final_out.and_then(|l| self.observers[GENERALIST_IDX].journal.label_name(l).map(|s| s.to_string())).unwrap_or_else(|| "Noise".to_string()),
+            actual: final_out.and_then(|l| self.desk.observers[GENERALIST_IDX].journal.label_name(l).map(|s| s.to_string())).unwrap_or_else(|| "Noise".to_string()),
             traded: entry.position_frac.is_some() as i32,
             position_frac: entry.position_frac,
             equity: treasury_equity,
@@ -1340,7 +1201,7 @@ impl EnterpriseState {
             usdc_deployed: self.treasury.deployed(ctx.base_asset),
             wbtc_deployed: self.treasury.deployed(ctx.quote_asset),
         });
-        self.log_step += 1;
+        self.desk.log_step += 1;
     }
 
     /// Risk diagnostics + adaptive decay for a resolved live trade.
@@ -1352,8 +1213,8 @@ impl EnterpriseState {
         treasury_equity: f64,
         ctx: &CandleContext,
     ) {
-        let drawdown_pct = if self.peak_treasury_equity > 0.0 {
-            (self.peak_treasury_equity - treasury_equity) / self.peak_treasury_equity * 100.0
+        let drawdown_pct = if self.desk.peak_treasury_equity > 0.0 {
+            (self.desk.peak_treasury_equity - treasury_equity) / self.desk.peak_treasury_equity * 100.0
         } else { 0.0 };
         let streak_val = self.portfolio.streak();
         let streak_len = streak_val.abs() as i32;
@@ -1361,8 +1222,8 @@ impl EnterpriseState {
         let recent_acc = self.portfolio.rolling_acc();
         let eq_pct = (treasury_equity - ctx.initial_equity) / ctx.initial_equity * 100.0;
         let won = (final_out == Some(dir)) as i32;
-        if ctx.diagnostics { self.pending_logs.push(LogEntry::RiskLog {
-            step: self.log_step,
+        if ctx.diagnostics { self.desk.pending_logs.push(LogEntry::RiskLog {
+            step: self.desk.log_step,
             drawdown_pct,
             streak_len,
             streak_dir: streak_dir.to_string(),
@@ -1374,19 +1235,19 @@ impl EnterpriseState {
         // Adaptive decay state machine
         if entry.high_conviction {
             let won = final_out == Some(dir);
-            self.highconv_wins.push_back(won);
-            if self.highconv_wins.len() > ctx.highconv_rolling_cap {
-                self.highconv_wins.pop_front();
+            self.desk.highconv_wins.push_back(won);
+            if self.desk.highconv_wins.len() > ctx.highconv_rolling_cap {
+                self.desk.highconv_wins.pop_front();
             }
-            if self.highconv_wins.len() >= 30 {
-                let wr = self.highconv_wins.iter().filter(|&&w| w).count() as f64
-                       / self.highconv_wins.len() as f64;
-                if !self.in_adaptation && wr < 0.50 {
-                    self.in_adaptation = true;
-                    self.adaptive_decay = ctx.decay_adapting;
-                } else if self.in_adaptation && wr > 0.55 {
-                    self.in_adaptation = false;
-                    self.adaptive_decay = ctx.decay_stable;
+            if self.desk.highconv_wins.len() >= 30 {
+                let wr = self.desk.highconv_wins.iter().filter(|&&w| w).count() as f64
+                       / self.desk.highconv_wins.len() as f64;
+                if !self.desk.in_adaptation && wr < 0.50 {
+                    self.desk.in_adaptation = true;
+                    self.desk.adaptive_decay = ctx.decay_adapting;
+                } else if self.desk.in_adaptation && wr > 0.55 {
+                    self.desk.in_adaptation = false;
+                    self.desk.adaptive_decay = ctx.decay_stable;
                 }
             }
         }
@@ -1394,8 +1255,8 @@ impl EnterpriseState {
         // Log which facts were present for this trade.
         if ctx.diagnostics {
             for label in &entry.fact_labels {
-                self.pending_logs.push(LogEntry::TradeFact {
-                    step: self.log_step,
+                self.desk.pending_logs.push(LogEntry::TradeFact {
+                    step: self.desk.log_step,
                     fact_label: label.clone(),
                 });
             }
@@ -1406,8 +1267,8 @@ impl EnterpriseState {
             let won = (final_out == Some(dir)) as i32;
             let tht_bytes: Vec<u8> = entry.tht_vec.data().iter()
                 .map(|&v| v as u8).collect();
-            self.pending_logs.push(LogEntry::TradeVector {
-                step: self.log_step,
+            self.desk.pending_logs.push(LogEntry::TradeVector {
+                step: self.desk.log_step,
                 won,
                 tht_data: tht_bytes,
             });
