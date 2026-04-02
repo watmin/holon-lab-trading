@@ -284,6 +284,7 @@ pub struct EnterpriseState {
     pub peak_treasury_equity: f64,
 
     // ── Shared tracking ─────────────────────────────────────────────────
+    pub candle_count: usize,   // total candles processed (enterprise-level, for risk recalib gating)
     pub db_batch: usize,
 
     // ── Loop cursor ──────────────────────────────────────────────────────
@@ -349,6 +350,7 @@ impl EnterpriseState {
             risk_branches,
             cached_risk_mult: 0.5,
             peak_treasury_equity: initial_equity,
+            candle_count: 0,
             db_batch: 0,
             cursor: start_idx,
         }
@@ -395,8 +397,8 @@ impl EnterpriseState {
         // Risk evaluation (enterprise-level)
         // rune:scry(evolved) — enterprise.wat evaluates risk every candle; Rust caches at recalib
         // intervals for efficiency. Functionally equivalent given the gate conditions.
-        let desk_encode_count = self.desks[0].encode_count;
-        if desk_encode_count % ctx.recalib_interval == 0 || desk_encode_count < RISK_WARMUP {
+        self.candle_count += 1;
+        if self.candle_count % ctx.recalib_interval == 0 || self.candle_count < RISK_WARMUP {
             self.cached_risk_mult = risk::evaluate_risk_branches(
                 &mut self.risk_branches, &self.portfolio, ctx.vm, ctx.risk_scalar,
             );

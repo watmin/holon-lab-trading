@@ -404,15 +404,14 @@ fn main() {
 
         let batch_end = (state.cursor + BATCH_SIZE).min(end_idx);
         // ── Parallel: each observer encodes at their own sampled window ────
-        // The manager doesn't encode — it reads expert predictions.
-        // Each expert samples their own window from [12, 2016] per candle.
-        // Their discriminant learns which scale's patterns predict for their
-        // vocabulary. Observer[5] ("generalist") encodes at fixed args.window —
-        // the generalist's cross-vocabulary view.
-        let n_observers = state.desks[0].observers.len();
+        // rune:scry(scaffolding) — desks[0] references throughout the binary are
+        // single-desk backtest scaffolding. With N desks, each desk gets its own
+        // candle stream and encoding batch. Wired when streaming lands.
+        let desk = &state.desks[0];
+        let n_observers = desk.observers.len();
 
         // Expert samplers are not Send, so collect windows first
-        let observer_windows: Vec<Vec<usize>> = state.desks[0].observers.iter()
+        let observer_windows: Vec<Vec<usize>> = desk.observers.iter()
             .map(|exp| {
                 (state.cursor..batch_end).map(|i| exp.window_sampler.sample(i).min(i + 1)).collect()
             }).collect();
