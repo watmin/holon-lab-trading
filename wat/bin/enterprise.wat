@@ -306,49 +306,44 @@
     ;; Now one for-each handles all three concerns per entry.
     (let ((surviving (list)))
       (for-each (lambda (entry)
-        ;; rune:temper(clarity) — price delta computed 3x per entry (move-pct, abs-move,
-        ;; record-trade). The Rust will hoist (- close entry-price) once and derive all
-        ;; three from it. The wat keeps the three separate for readability.
-        ;; 11a. Track excursion
-        (let ((move-pct (/ (- (:close candle) (:entry-price entry))
-                           (:entry-price entry))))
+        ;; Compute base price delta once per entry. All derived values flow from it.
+        (let* ((price-delta (- quote-price (:entry-price entry)))
+               (move-pct   (/ price-delta (:entry-price entry)))
+               (abs-move   (abs move-pct))
+               (price-rose (> price-delta 0.0)))
+
+          ;; 11a. Track excursion
           (set! (:max-favorable entry) (max (:max-favorable entry) move-pct))
-          (set! (:max-adverse entry)   (min (:max-adverse entry) move-pct)))
+          (set! (:max-adverse entry)   (min (:max-adverse entry) move-pct))
 
-        ;; 11b. First threshold crossing -> label + learn
-        (when (should-label? entry candle ctx)
-          (let ((label    (entry-label entry candle (:manager-buy desk) (:manager-sell desk)))
-                (abs-move (/ (abs (- (:close candle) (:entry-price entry)))
-                             (:entry-price entry)))
-                (signal-wt (signal-weight abs-move (:move-sum desk) (:move-count desk))))
-            (set! (:first-outcome entry) label)
-            (for-each (lambda (obs vec)
-              (observe (:journal obs) vec label signal-wt))
-              (:observers desk) (:observer-vecs entry))
-            (inc! (:labeled-count desk))))
+          ;; 11b. First threshold crossing -> label + learn
+          (when (should-label? entry candle ctx)
+            (let ((label     (if price-rose (:manager-buy desk) (:manager-sell desk)))
+                  (signal-wt (signal-weight abs-move (:move-sum desk) (:move-count desk))))
+              (set! (:first-outcome entry) label)
+              (for-each (lambda (obs vec)
+                (observe (:journal obs) vec label signal-wt))
+                (:observers desk) (:observer-vecs entry))
+              (inc! (:labeled-count desk))))
 
-        ;; 12. Resolution (if expired) or keep
-        (if (entry-expired? entry (:encode-count desk) ctx)
-            (let ((price-label (if (> (:close candle) (:entry-price entry))
-                                   (:manager-buy desk) (:manager-sell desk))))
-              (observe (:manager-journal desk) (:manager-thought entry) price-label 1.0)
-              (push-back (:manager-resolved desk)
-                (list (:meta-conviction entry)
-                      (= (:first-outcome entry) price-label)))
-              (for-each (lambda (obs pred)
-                (resolve obs (:tht-vec entry) pred price-label 1.0
-                         (:conviction-quantile ctx) (:conviction-window ctx)))
-                (:observers desk) (:observer-preds entry))
-              ;; Portfolio tracks every resolved prediction for phase transitions.
-              ;; Treasury is NOT touched — capital moves through ManagedPosition only.
-              ;; frac=0.0: this is a paper outcome, not a capital event.
-              (record-trade portfolio
-                            (/ (- (:close candle) (:entry-price entry))
-                               (:entry-price entry))
-                            0.0 (if (= (:meta-dir entry) (:manager-buy desk)) :long :short)
-                            (:swap-fee ctx) (:slippage ctx)))
-            ;; Not expired -- keep
-            (push! surviving entry)))
+          ;; 12. Resolution (if expired) or keep
+          (if (entry-expired? entry (:encode-count desk) ctx)
+              (let ((price-label (if price-rose (:manager-buy desk) (:manager-sell desk))))
+                (observe (:manager-journal desk) (:manager-thought entry) price-label 1.0)
+                (push-back (:manager-resolved desk)
+                  (list (:meta-conviction entry)
+                        (= (:first-outcome entry) price-label)))
+                (for-each (lambda (obs pred)
+                  (resolve obs (:tht-vec entry) pred price-label 1.0
+                           (:conviction-quantile ctx) (:conviction-window ctx)))
+                  (:observers desk) (:observer-preds entry))
+                ;; Portfolio tracks every resolved prediction for phase transitions.
+                ;; Treasury is NOT touched — capital moves through ManagedPosition only.
+                (record-trade portfolio move-pct
+                              0.0 (if (= (:meta-dir entry) (:manager-buy desk)) :long :short)
+                              (:swap-fee ctx) (:slippage ctx)))
+              ;; Not expired -- keep
+              (push! surviving entry))))
         (:pending desk))
       (set! (:pending desk) surviving))
 
