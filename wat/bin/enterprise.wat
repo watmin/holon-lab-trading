@@ -78,6 +78,13 @@
     (nth sorted (min (- (len sorted) 1)
                      (round (* (len sorted) quantile))))))
 
+(define (market-moved? current-price last-exit-price last-exit-atr k-stop)
+  "Has the market moved enough since the last exit to justify re-entry?
+   A condition, not a timer — the market tells us when it's ready."
+  (or (= last-exit-price 0)
+      (> (/ (abs (- current-price last-exit-price)) last-exit-price)
+         (* k-stop last-exit-atr))))
+
 (define (all-gates-pass? state manager-pred risk-mult candle ctx)
   "8 conditions, ALL must hold. Pure predicate — no mutation."
   (let ((meta-dir        (:direction manager-pred))
@@ -176,67 +183,83 @@
     ;; ─── 5. Position tick ─────────────────────────────────────────────
     (for-each (lambda (pos)
       ;; Exit observer encodes + buffers observation
-      (let ((exit-thought (encode-position pos (:close candle) (:atr-r candle))))
+      ;; Rate = source/target. Buy: rate = price. Sell: rate = 1/price.
+      (let* ((is-buy     (= (:source-asset pos) (:base-asset ctx)))
+             (current-rate (if is-buy quote-price (/ 1.0 quote-price)))
+             (pnl-frac    (return-pct pos current-rate))
+             (exit-thought (encode-position pos pnl-frac current-rate (:atr-r candle) is-buy)))
         (when (= (mod (:candles-held pos) (:exit-observe-interval ctx)) 0)
           (push-back (:exit-pending state)
             (exit-observation :thought exit-thought
                               :pos-id (:id pos)
-                              :snapshot-pnl (return-pct pos (:close candle))
+                              :snapshot-pnl pnl-frac
                               :snapshot-candle (:encode-count state)))))
 
       ;; Tick trailing stop + take profit
-      (let ((signal (tick pos (:close candle) (:k-trail ctx))))
+      (let ((signal (tick pos current-rate (:k-trail ctx))))
         (when signal
-          ;; Treasury settles the exit via release + swap (not close-position).
-          ;; ManagedPosition owns WBTC; exit converts WBTC → USDC through the treasury.
-          ;; The Rust two-pass split: pass 1 collects exit signals, pass 2 settles.
-          (release (:treasury state) (:quote-asset ctx) sell-quote)
-          (swap (:treasury state) (:quote-asset ctx) (:base-asset ctx)
-                sell-quote (/ 1.0 (:close candle)) fee-rate)
-          (set! (:last-exit-price state) (:close candle))
+          ;; Treasury settles the exit: release target, swap target→source.
+          ;; Two-pass: pass 1 collects exit signals, pass 2 settles.
+          (let ((sell-target (:target-held pos)))
+            (release (:treasury state) (:target-asset pos) sell-target)
+            (swap (:treasury state) (:target-asset pos) (:source-asset pos)
+                  sell-target (/ 1.0 current-rate) fee-rate))
+          (set! (:last-exit-price state) quote-price)
           (set! (:last-exit-atr state) (:atr-r candle))
           (set! (:phase pos) :closed))))
       (:positions state))
 
     ;; ─── 7-8. Position opening + sizing ───────────────────────────────
+    ;; One path for both directions. Direction determines source/target.
+    ;; Buy: USDC→WBTC (rate = price). Sell: WBTC→USDC (rate = 1/price).
     (when (all-gates-pass? state manager-pred risk-mult candle ctx)
       (let* ((frac (compute-position-size 0.03 risk-mult (:max-single-position ctx)))
-             (direction (trade-direction manager-pred (:mgr-buy state)))
-             (deploy (* (:equity (:portfolio state)) frac)))
-        (when (> deploy 10.0)
-          (let ((pos (new-position
-                       (position-entry
-                         :id (:next-position-id state)
-                         :candle-idx (:encode-count state)
-                         :entry-price (:close candle)
-                         :entry-atr (:atr-r candle)
-                         :direction direction
-                         :base-deployed deploy
-                         :quote-received 0.0
-                         :entry-fee (* deploy (+ (:swap-fee ctx) (:slippage ctx)))
-                         :k-stop (:k-stop ctx)
-                         :k-tp (:k-tp ctx)))))
+             (dir-label (:direction manager-pred))
+             (is-buy (= dir-label (:mgr-buy state)))
+             (source-asset (if is-buy (:base-asset ctx) (:quote-asset ctx)))
+             (target-asset (if is-buy (:quote-asset ctx) (:base-asset ctx)))
+             (rate (if is-buy quote-price (/ 1.0 quote-price)))
+             (deploy-amount (* (balance (:treasury state) source-asset) frac))
+             (usd-value (if is-buy deploy-amount (* deploy-amount quote-price))))
+        (when (> usd-value 10.0)
+          (let* (((spent received) (swap (:treasury state) source-asset target-asset
+                                         deploy-amount rate fee-rate))
+                 ;; Symmetric claim: lock received target in deployed.
+                 (claimed (claim (:treasury state) target-asset received))
+                 (pos (new-position
+                        (position-entry
+                          :id (:next-position-id state)
+                          :candle-idx (:encode-count state)
+                          :source-asset source-asset
+                          :target-asset target-asset
+                          :source-amount spent
+                          :target-received received
+                          :entry-rate rate
+                          :entry-atr (:atr-r candle)
+                          :entry-fee (* usd-value fee-rate)
+                          :k-stop (:k-stop ctx)
+                          :k-tp (:k-tp ctx)))))
             (push! (:positions state) pos)
             (inc! (:next-position-id state))
-            (inc! (:hold-swaps state))
+            (inc! (:hold-swaps state))))))
 
-    ;; ─── 9. Pending push (INSIDE position block — gated candles only) ──
+    ;; ─── 9. Pending push (ALL candles — learning, not treasury) ─────
     ;; Pending entries are for LEARNING, not for treasury. They record the
     ;; prediction so observers and manager can resolve against the outcome.
     ;; The treasury moves through ManagedPosition lifecycle (swap/claim/release),
     ;; NOT through pending entry resolution. No double-spending.
-            (push! (:pending state)
-              (pending :candle-idx (:encode-count state)
-                       :tht-vec mgr-thought
-                       :tht-pred manager-pred
-                       :meta-dir meta-dir
-                       :meta-conviction meta-conviction
-                       :entry-price (:close candle)
-                       :entry-atr (:atr-r candle)
-                       :observer-vecs observer-vecs
-                       :observer-preds observer-preds
-                       :mgr-thought mgr-thought
-                       :fact-labels fact-labels))))))
+    (push! (:pending state)
+      (pending :candle-idx (:encode-count state)
+               :tht-vec mgr-thought
+               :tht-pred manager-pred
+               :meta-dir meta-dir
+               :meta-conviction meta-conviction
+               :entry-price (:close candle)
+               :entry-atr (:atr-r candle)
+               :observer-vecs observer-vecs
+               :observer-preds observer-preds
+               :mgr-thought mgr-thought
+               :fact-labels fact-labels))
 
     ;; ─── 10. Decay ──────────────────────────────────────────────────
     (for-each (lambda (obs)

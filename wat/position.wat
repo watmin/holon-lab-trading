@@ -123,16 +123,10 @@
    One formula: (target-value-in-source + reclaimed - fees) / source-amount - 1.
    No match on direction."
   (if (<= (:source-amount pos) 0.0) 0.0
-    (let ((target-value (* (:target-held pos) (/ 1.0 current-rate))))
-      ;; target-value converts held target back to source units at current rate
-      ;; wait — rate is source/target, so target→source = target * rate? No.
-      ;; rate = source_per_target. 1 target = rate source units.
-      ;; So target-value = target-held * rate (not 1/rate).
-      ;; Example: rate=87000 USDC/WBTC. 0.01 WBTC = 870 USDC.
-      (let ((target-in-source (* (:target-held pos) current-rate)))
-        (- (/ (+ target-in-source (:source-reclaimed pos) (- (:total-fees pos)))
-              (:source-amount pos))
-           1.0)))))
+    (let ((target-in-source (* (:target-held pos) current-rate)))
+      (- (/ (+ target-in-source (:source-reclaimed pos) (- (:total-fees pos)))
+            (:source-amount pos))
+         1.0))))
 
 ;; ── Sizing ──────────────────────────────────────────────────────────
 
@@ -140,14 +134,6 @@
   "Half-Kelly, modulated by risk, capped at max-single-position."
   (min (* (/ band-edge 2.0) risk-mult)
        max-single-position))
-
-;; ── Cooldown ────────────────────────────────────────────────────────
-
-(define (market-moved? current-rate last-exit-rate last-exit-atr k-stop)
-  "Has the rate moved enough since the last exit to justify re-entry?"
-  (or (= last-exit-rate 0)
-      (> (/ (abs (- current-rate last-exit-rate)) last-exit-rate)
-         (* k-stop last-exit-atr))))
 
 ;; ── What positions do NOT do ────────────────────────────────────────
 ;; - Do NOT decide entry (that's the desk manager + treasury)

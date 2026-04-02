@@ -11,12 +11,10 @@
 (struct treasury
   balances            ; (map asset amount) — available to deploy
   deployed            ; (map asset amount) — claimed by open positions
-  n-open              ; active position count
   max-positions
-  max-utilization     ; max fraction of base asset deployed
+  max-utilization     ; max fraction of total portfolio deployed
   total-fees-paid
-  total-slippage
-  base-asset)         ; unit of account (e.g. "USDC")
+  total-slippage)
 
 ;; ── Queries ─────────────────────────────────────────────────────────
 
@@ -29,19 +27,24 @@
 (define (total treasury asset)
   (+ (balance treasury asset) (deployed treasury asset)))
 
-(define (utilization treasury)
-  (let ((total-base (total treasury (:base-asset treasury))))
-    (if (<= total-base 0.0) 0.0
-        (/ (deployed treasury (:base-asset treasury)) total-base))))
+(define (utilization treasury prices)
+  "Portfolio utilization: fraction of total value currently deployed."
+  (let ((total (total-value treasury prices)))
+    (if (<= total 0.0) 0.0
+        (/ (deployed-value treasury prices) total))))
 
-(define (allocatable treasury)
-  (if (>= (:n-open treasury) (:max-positions treasury))
+(define (allocatable treasury asset prices n-open)
+  "How many units of asset can be deployed? Uses portfolio-wide utilization.
+   n-open is passed in — position counting is the enterprise's concern."
+  (if (>= n-open (:max-positions treasury))
       0.0
-      (let ((total-base (total treasury (:base-asset treasury)))
-            (max-deploy (* total-base (:max-utilization treasury)))
-            (deployed-base (deployed treasury (:base-asset treasury))))
-        (min (max 0.0 (- max-deploy deployed-base))
-             (balance treasury (:base-asset treasury))))))
+      (let* ((portfolio-value (total-value treasury prices))
+             (total-deployed  (deployed-value treasury prices))
+             (deploy-room     (max 0.0 (- (* portfolio-value (:max-utilization treasury))
+                                           total-deployed)))
+             (asset-price     (get prices asset 1.0))
+             (max-units       (/ deploy-room asset-price)))
+        (min max-units (balance treasury asset)))))
 
 (define (total-value treasury prices)
   "Sum all assets at current prices. Base asset = 1.0."
@@ -52,11 +55,31 @@
         (keys (:balances treasury))))
 
 (define (price-map treasury asset-prices)
-  "Build prices from (asset, price) pairs. Base asset always 1.0."
-  (fold (lambda (prices pair)
-          (assoc prices (first pair) (second pair)))
-        {(:base-asset treasury) 1.0}
-        asset-prices))
+  "Build prices from (asset, price) pairs. All known assets default to 1.0."
+  (let ((defaults (fold (lambda (m a) (assoc m a 1.0))
+                        {}
+                        (union (keys (:balances treasury))
+                               (keys (:deployed treasury))))))
+    (fold (lambda (prices pair)
+            (assoc prices (first pair) (second pair)))
+          defaults
+          asset-prices)))
+
+(define (deployed-value treasury prices)
+  "Total deployed value in a common denomination."
+  (fold (lambda (sum asset)
+          (+ sum (* (deployed treasury asset)
+                    (get prices asset 1.0))))
+        0.0
+        (keys (:deployed treasury))))
+
+;; ── Construction ────────────────────────────────────────────────────
+
+(define (new-treasury max-positions max-utilization)
+  (treasury :balances {} :deployed {}
+            :max-positions max-positions
+            :max-utilization max-utilization
+            :total-fees-paid 0.0 :total-slippage 0.0))
 
 ;; ── Mutations ───────────────────────────────────────────────────────
 
@@ -89,22 +112,22 @@
       spend received)))
 
 (define (claim treasury asset amount)
-  "Move available → deployed. Returns (treasury, claimed)."
+  "Move available → deployed. Returns (treasury, claimed).
+   Does NOT modify position count — that's the enterprise's concern."
   (let ((claimed (min amount (balance treasury asset))))
     (list
       (update treasury
         :balances (assoc (:balances treasury) asset (- (balance treasury asset) claimed))
-        :deployed (assoc (:deployed treasury) asset (+ (get (:deployed treasury) asset 0.0) claimed))
-        :n-open   (+ (:n-open treasury) 1))
+        :deployed (assoc (:deployed treasury) asset (+ (get (:deployed treasury) asset 0.0) claimed)))
       claimed)))
 
 (define (release treasury asset amount)
-  "Move deployed → available. Returns treasury."
+  "Move deployed → available. Returns treasury.
+   Does NOT modify position count — that's the enterprise's concern."
   (let ((released (min amount (get (:deployed treasury) asset 0.0))))
     (update treasury
       :deployed (assoc (:deployed treasury) asset (- (get (:deployed treasury) asset 0.0) released))
-      :balances (assoc (:balances treasury) asset (+ (balance treasury asset) released))
-      :n-open   (max 0 (- (:n-open treasury) 1)))))
+      :balances (assoc (:balances treasury) asset (+ (balance treasury asset) released)))))
 
 ;; open-position and close-position REMOVED.
 ;; Treasury capital moves exclusively through ManagedPosition lifecycle:
