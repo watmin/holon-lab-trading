@@ -349,12 +349,10 @@ fn main() {
     // ─ Immutable context for on_candle ─
     let ctx = CandleContext {
         dims: args.dims,
-        window: args.window,
         horizon: args.horizon,
         move_threshold: args.move_threshold,
         atr_multiplier: args.atr_multiplier,
         decay: args.decay,
-        observe_period: args.observe_period,
         recalib_interval: args.recalib_interval,
         min_conviction: args.min_conviction,
         conviction_quantile: args.conviction_quantile,
@@ -387,7 +385,6 @@ fn main() {
         exit_atoms: &exit_atoms,
         risk_scalar: &risk_scalar,
         observer_atoms: &observer_atoms,
-        observer_names: &observer_names,
         generalist_atom: &generalist_atom,
         min_opinion_magnitude,
         codebook_labels: &codebook_labels,

@@ -207,12 +207,10 @@ pub fn encode_exit_thought(
 pub struct CandleContext<'a> {
     // ── CLI args ────────────────────────────────────────────────────────
     pub dims: usize,
-    pub window: usize,
     pub horizon: usize,
     pub move_threshold: f64,
     pub atr_multiplier: f64,
     pub decay: f64,
-    pub observe_period: usize,
     pub recalib_interval: usize,
     pub min_conviction: f64,
     pub conviction_quantile: f64,
@@ -253,7 +251,6 @@ pub struct CandleContext<'a> {
 
     // ── Observer/manager atoms ──────────────────────────────────────────
     pub observer_atoms: &'a [Vector],
-    pub observer_names: &'a [crate::market::Lens],
     pub generalist_atom: &'a Vector,
     pub min_opinion_magnitude: f64,
 
