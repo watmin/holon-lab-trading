@@ -477,7 +477,7 @@ fn main() {
         let final_out: Option<Label> = entry.crossing.as_ref().map(|c| c.label);
         if final_out.is_none() { state.noise_count += 1; } else { state.labeled_count += 1; }
 
-        state.log_candle(&entry, final_out, treasury_equity);
+        state.log_candle(&entry, final_out, treasury_equity, &ctx);
     }
 
     // Flush any remaining log entries, then commit.

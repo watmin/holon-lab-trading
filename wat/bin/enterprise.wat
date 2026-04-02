@@ -187,22 +187,15 @@
       ;; Tick trailing stop + take profit
       (let ((signal (tick pos (:close candle) (:k-trail ctx))))
         (when signal
-          ;; Treasury settles the exit
-          (let ((pnl (compute-trade-pnl
-                        (return-pct pos (:close candle))
-                        (= (:direction pos) :long)
-                        (:swap-fee ctx) (:slippage ctx)
-                        (= (:asset-mode ctx) "hold")
-                        (:base-deployed pos)
-                        (:equity (:portfolio state))
-                        0.0)))
-            (close-position (:treasury state) (:base-deployed pos)
-                            (:trade-pnl pnl) (:total-fees pos) 0.0)
-            (record-trade (:portfolio state) (:outcome-pct pnl)
-                          0.0 (:direction pos) (:swap-fee ctx) (:slippage ctx))
-            (set! (:last-exit-price state) (:close candle))
-            (set! (:last-exit-atr state) (:atr-r candle))
-            (set! (:phase pos) :closed)))))
+          ;; Treasury settles the exit via release + swap (not close-position).
+          ;; ManagedPosition owns WBTC; exit converts WBTC → USDC through the treasury.
+          ;; The Rust two-pass split: pass 1 collects exit signals, pass 2 settles.
+          (release (:treasury state) (:quote-asset ctx) sell-quote)
+          (swap (:treasury state) (:quote-asset ctx) (:base-asset ctx)
+                sell-quote (/ 1.0 (:close candle)) fee-rate)
+          (set! (:last-exit-price state) (:close candle))
+          (set! (:last-exit-atr state) (:atr-r candle))
+          (set! (:phase pos) :closed))))
       (:positions state))
 
     ;; ─── 7-8. Position opening + sizing ───────────────────────────────
@@ -227,7 +220,11 @@
             (inc! (:next-position-id state))
             (inc! (:hold-swaps state))
 
-    ;; ─── 9. Pending push ──────────────────────────────────────────────
+    ;; ─── 9. Pending push (INSIDE position block — gated candles only) ──
+    ;; Pending entries are for LEARNING, not for treasury. They record the
+    ;; prediction so observers and manager can resolve against the outcome.
+    ;; The treasury moves through ManagedPosition lifecycle (swap/claim/release),
+    ;; NOT through pending entry resolution. No double-spending.
             (push! (:pending state)
               (pending :candle-idx (:encode-count state)
                        :tht-vec mgr-thought
@@ -282,16 +279,14 @@
                 (resolve obs (:tht-vec entry) pred price-label 1.0
                          (:conviction-quantile ctx) (:conviction-window ctx)))
                 (:observers state) (:observer-preds entry))
-              (let ((pnl (compute-trade-pnl
+              ;; Portfolio tracks every resolved prediction for phase transitions.
+              ;; Treasury is NOT touched — capital moves through ManagedPosition only.
+              ;; frac=0.0: this is a paper outcome, not a capital event.
+              (record-trade (:portfolio state)
                             (/ (- (:close candle) (:entry-price entry))
                                (:entry-price entry))
-                            (= (:meta-dir entry) (:mgr-buy state))
-                            (:swap-fee ctx) (:slippage ctx)
-                            (= (:asset-mode ctx) "hold")
-                            0.0 (:equity (:portfolio state)) 0.0)))
-                (record-trade (:portfolio state) (:net-ret pnl)
-                              0.0 (if (= (:meta-dir entry) (:mgr-buy state)) :long :short)
-                              (:swap-fee ctx) (:slippage ctx))))
+                            0.0 (if (= (:meta-dir entry) (:mgr-buy state)) :long :short)
+                            (:swap-fee ctx) (:slippage ctx)))
             ;; Not expired -- keep
             (push! surviving entry)))
         (:pending state))

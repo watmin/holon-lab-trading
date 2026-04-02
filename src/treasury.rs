@@ -102,28 +102,6 @@ impl Treasury {
         room.min(self.balance(&self.base_asset))
     }
 
-    /// Reserve base asset for a new trade. Returns the amount reserved.
-    pub fn open_position(&mut self, amount: f64) -> f64 {
-        let available = self.allocatable();
-        let reserved = amount.min(available);
-        if reserved <= 0.0 { return 0.0; }
-        *self.balances.get_mut(&self.base_asset).unwrap() -= reserved;
-        *self.deployed.entry(self.base_asset.clone()).or_insert(0.0) += reserved;
-        self.n_open += 1;
-        reserved
-    }
-
-    /// Close a position. Return capital ± P&L to available balance.
-    pub fn close_position(&mut self, deployed_amount: f64, pnl: f64, fees: f64, slippage: f64) {
-        let returned = (deployed_amount + pnl - fees - slippage).max(0.0);
-        let dep = self.deployed.entry(self.base_asset.clone()).or_insert(0.0);
-        *dep = (*dep - deployed_amount).max(0.0);
-        *self.balances.entry(self.base_asset.clone()).or_insert(0.0) += returned;
-        self.n_open = self.n_open.saturating_sub(1);
-        self.total_fees_paid += fees;
-        self.total_slippage += slippage;
-    }
-
     /// Portfolio utilization: fraction of base asset currently deployed.
     pub fn utilization(&self) -> f64 {
         let total = self.total(&self.base_asset);

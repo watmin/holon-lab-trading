@@ -922,15 +922,10 @@ impl EnterpriseState {
             }
         } else { None };
 
-        // Treasury allocation: reserve capital for this position.
-        let deployed_usd = if let Some(frac) = position_frac {
-            self.treasury.open_position(self.treasury.allocatable() * frac)
-        } else {
-            0.0
-        };
-
-        // rune:scry(evolved) — enterprise.wat creates pending entries only when gates pass;
-        // Rust creates for ALL candles (deployed_usd=0 for hypothetical). Paper trail for learning.
+        // Pending entries are for LEARNING, not for treasury. They record the
+        // prediction so observers and manager can resolve against the outcome.
+        // The treasury moves through ManagedPosition lifecycle (swap/claim/release),
+        // NOT through pending entry resolution. No double-spending.
         self.pending.push_back(Pending {
             candle_idx:    i,
             tht_vec,
@@ -951,7 +946,7 @@ impl EnterpriseState {
             max_adverse:       0.0,
             exit_reason:       None,
             exit_pct:          0.0,
-            deployed_usd,
+            deployed_usd: 0.0,
         });
 
         // Decay once per candle.
@@ -1141,15 +1136,13 @@ impl EnterpriseState {
                     is_live, entry.deployed_usd, treasury_equity, frac,
                 );
 
-                // ── Treasury: only moves money for live trades ───────
-                if is_live {
+                // Portfolio tracks win/loss for phase transitions — every resolved prediction,
+                // not just ones with capital. Treasury is NOT touched here — capital moves
+                // through ManagedPosition lifecycle only.
+                {
                     let trade_dir = if dir == self.mgr_buy { Direction::Long } else { Direction::Short };
                     self.portfolio.record_trade(entry.exit_pct, frac, trade_dir,
                                         ctx.swap_fee, ctx.slippage);
-                    self.treasury.close_position(entry.deployed_usd,
-                        pnl.pos_usd * pnl.gross_ret,
-                        pnl.pos_usd * (ctx.swap_fee * 2.0),
-                        pnl.pos_usd * (ctx.slippage * 2.0));
                 }
 
                 // ── Ledger: ALWAYS records. Paper trail for all. ─────
@@ -1203,7 +1196,7 @@ impl EnterpriseState {
                 }
             } // if let Some(dir)
 
-            self.log_candle(&entry, final_out, treasury_equity);
+            self.log_candle(&entry, final_out, treasury_equity, ctx);
             self.db_batch   += 1;
             if self.db_batch >= 5_000 {
                 self.pending_logs.push(LogEntry::BatchCommit);
@@ -1254,8 +1247,11 @@ impl EnterpriseState {
                 let band_str = if self.mgr_curve_valid {
                     format!(" band=[{:.3},{:.3}]", self.mgr_proven_band.0, self.mgr_proven_band.1)
                 } else { " band=none".to_string() };
-                eprintln!("    treasury: ${:.0} ({:+.1}%) | pos={} swaps={} wins={} | proven=[{}]{}",
-                    treasury_equity, ret, self.positions.len(), self.hold_swaps, self.hold_wins, proven_str, band_str);
+                eprintln!("    treasury: ${:.0} ({:+.1}%) | USDC={:.2} WBTC={:.6} | pos={} swaps={} wins={} | proven=[{}]{}",
+                    treasury_equity, ret,
+                    self.treasury.balance(ctx.base_asset) + self.treasury.deployed(ctx.base_asset),
+                    self.treasury.balance(ctx.quote_asset) + self.treasury.deployed(ctx.quote_asset),
+                    self.positions.len(), self.hold_swaps, self.hold_wins, proven_str, band_str);
             }
         }
     }
@@ -1314,6 +1310,7 @@ impl EnterpriseState {
         entry: &Pending,
         final_out: Option<Label>,
         treasury_equity: f64,
+        ctx: &CandleContext,
     ) {
         self.pending_logs.push(LogEntry::CandleLog {
             step: self.log_step,
@@ -1329,6 +1326,10 @@ impl EnterpriseState {
             position_frac: entry.position_frac,
             equity: treasury_equity,
             outcome_pct: entry.crossing.as_ref().map(|c| c.pct).unwrap_or(0.0),
+            usdc_bal: self.treasury.balance(ctx.base_asset),
+            wbtc_bal: self.treasury.balance(ctx.quote_asset),
+            usdc_deployed: self.treasury.deployed(ctx.base_asset),
+            wbtc_deployed: self.treasury.deployed(ctx.quote_asset),
         });
         self.log_step += 1;
     }

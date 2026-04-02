@@ -20,6 +20,10 @@ pub enum LogEntry {
         position_frac: Option<f64>,
         equity: f64,
         outcome_pct: f64,
+        usdc_bal: f64,
+        wbtc_bal: f64,
+        usdc_deployed: f64,
+        wbtc_deployed: f64,
     },
     TradeLedger {
         step: i64,
@@ -123,16 +127,19 @@ pub fn flush_logs(entries: &[LogEntry], conn: &Connection) {
             LogEntry::CandleLog {
                 step, candle_idx, timestamp, tht_cos, tht_conviction, tht_pred,
                 meta_pred, meta_conviction, actual, traded, position_frac, equity, outcome_pct,
+                usdc_bal, wbtc_bal, usdc_deployed, wbtc_deployed,
             } => {
                 conn.execute(
                     "INSERT INTO candle_log
                      (step,candle_idx,timestamp,
                       tht_cos,tht_conviction,tht_pred,
                       meta_pred,meta_conviction,
-                      actual,traded,position_frac,equity,outcome_pct)
-                     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+                      actual,traded,position_frac,equity,outcome_pct,
+                      usdc_bal,wbtc_bal,usdc_deployed,wbtc_deployed)
+                     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)",
                     params![step, candle_idx, timestamp, tht_cos, tht_conviction, tht_pred,
-                            meta_pred, meta_conviction, actual, traded, position_frac, equity, outcome_pct],
+                            meta_pred, meta_conviction, actual, traded, position_frac, equity, outcome_pct,
+                            usdc_bal, wbtc_bal, usdc_deployed, wbtc_deployed],
                 ).ok();
             }
             LogEntry::TradeLedger {
@@ -273,8 +280,13 @@ pub fn init_ledger(path: &str) -> Connection {
             -- paper trading
             traded           INTEGER, -- 1 if a position was taken
             position_frac    REAL,
-            equity           REAL,    -- equity after this trade resolved
-            outcome_pct      REAL     -- price change at first threshold crossing
+            equity           REAL,    -- treasury total value (all assets at market price)
+            outcome_pct      REAL,    -- price change at first threshold crossing
+            -- treasury state (units held, not USD value)
+            usdc_bal         REAL,    -- USDC available balance
+            wbtc_bal         REAL,    -- WBTC available balance
+            usdc_deployed    REAL,    -- USDC locked in positions
+            wbtc_deployed    REAL     -- WBTC locked in positions
         );
 
         -- One row per journal recalibration.
