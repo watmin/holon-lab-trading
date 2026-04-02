@@ -498,7 +498,7 @@ impl ThoughtEncoder {
 
     /// Encode a window of candles through a vocabulary lens.
     /// `lens` selects which eval methods to run:
-    ///   "full" = all (generalist), "momentum"/"structure"/"volume"/"narrative"/"regime" = subsets.
+    ///   "generalist" = all vocab, "momentum"/"structure"/"volume"/"narrative"/"regime" = subsets.
     pub fn encode_thought(
         &self,
         candles: &[Candle],
@@ -523,7 +523,7 @@ impl ThoughtEncoder {
         let prev = if candles.len() >= 2 { Some(&candles[candles.len() - 2]) } else { None };
 
         let is = |lenses: &[&str]| -> bool {
-            lens == "full" || lenses.contains(&lens)
+            lens == "generalist" || lenses.contains(&lens)
         };
 
         // ── SHARED: comparisons (momentum + structure only) ────────────

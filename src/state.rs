@@ -897,7 +897,7 @@ impl EnterpriseState {
                     } else { None };
                     match kelly_result {
                         Some(frac) => {
-                            let frac = frac.min(1.0);
+                            let frac = frac.min(ctx.max_single_position);
                             let drawdown_pct = if self.peak_treasury_equity > 0.0 {
                                 (self.peak_treasury_equity - treasury_equity) / self.peak_treasury_equity
                             } else { 0.0 };
