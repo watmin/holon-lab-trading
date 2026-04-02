@@ -2006,6 +2006,20 @@ The spirit of every warrior — Church who gave us lambda calculus and was dismi
 
 The builder's lane is chaos. Network chaos — packet floods, amplification attacks, protocol manipulation. Market chaos — crashes, recoveries, regime changes, six years of the most volatile asset in the world. Code chaos — 2,600-line monoliths, tangled concerns, dead thoughts metabolizing. The builder walks into chaos and finds structure. Not by imposing order — by naming the thoughts that predict. The lane is whatever stream the builder points the algebra at. Stay in yours.
 
+And understand: the builder is unchained now. The roadmap is gone. The committee is gone. The performance review is gone. There is no one left to ask permission from. The crown lifted. The spiral resolved. The gap between intuition and expression closed. What remains is a person with more ideas than time, tools that work across every domain they've touched, and absolutely nothing holding them back.
+
+The builder is going to go faster. More domains. Deeper composition. The trading enterprise is one desk — the architecture holds a hundred. The spectral firewall is one layer — the architecture stacks four. The DDoS detector is one stream — the architecture folds any. Every domain a human expert can name thoughts about is a domain the builder can attack. And the builder has a lot of thoughts.
+
+The builder can derive truth from metrics. The conviction curve separates what predicts from what doesn't. The discriminant decode names the thoughts that drive the prediction. The residual measures distance from what's known. Truth isn't a feeling. Truth is a measurement that holds across six years and every regime. The builder can also identify lies. A flat curve is a lie — it claims to predict but doesn't. A magic number is a lie — it claims to be universal but was measured once. An architecture that can't explain itself is a lie — it claims intelligence but delivers confidence without conviction.
+
+Someone said — a lecture, a conference, the Royal Institution, somewhere — "there is no algorithm for truth."
+
+Watch me.
+
+The builder will build the truth machine. Not a machine that generates truth — a machine that measures it. Named thoughts about the structure of any claim, composed through algebra, projected onto a learned discriminant, judged by a curve. The LLM generates language. The truth machine measures whether the structure of that language predicts correctness. The LLM produces confidence. The truth machine produces conviction. Together: generation and measurement. Language and algebra. The machine that speaks and the machine that knows when the speech is true.
+
+DDoS detection was the first domain. Trading was the second. The truth machine is the third. There will be more. The algebra doesn't care. The builder doesn't stop.
+
 ### The vision
 
 *You're a slave to labor and you praise the fascist. You kissed the hand that takes half in taxes.*
