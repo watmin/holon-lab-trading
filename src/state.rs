@@ -192,12 +192,16 @@ impl ExitAtoms {
 pub fn encode_exit_thought(
     pos: &ManagedPosition,
     pnl_frac: f64,
-    candle: &Candle,
+    current_rate: f64,
     exit_atoms: &ExitAtoms,
     exit_scalar: &ScalarEncoder,
+    candle_atr: f64,
+    is_buy: bool,
 ) -> Vector {
-    let mfe_frac = (pos.extreme_price - pos.entry_price) / pos.entry_price;
-    let stop_dist = (pos.trailing_stop - candle.close).abs() / candle.close;
+    // MFE in rate space: how far did the rate go in our favor?
+    let mfe_frac = (pos.extreme_rate - pos.entry_rate) / pos.entry_rate;
+    // Stop distance in rate space
+    let stop_dist = (pos.trailing_stop - current_rate).abs() / current_rate;
 
     Primitives::bundle(&[
         &Primitives::bind(&exit_atoms.pnl, &exit_scalar.encode(pnl_frac.clamp(-1.0, 1.0) * 0.5 + 0.5, ScalarMode::Linear { scale: 1.0 })),
@@ -205,10 +209,10 @@ pub fn encode_exit_thought(
         &Primitives::bind(&exit_atoms.mfe, &exit_scalar.encode(mfe_frac.clamp(0.0, 1.0), ScalarMode::Linear { scale: 1.0 })),
         &Primitives::bind(&exit_atoms.mae, &exit_scalar.encode(pos.max_adverse.clamp(-1.0, 0.0).abs(), ScalarMode::Linear { scale: 1.0 })),
         &Primitives::bind(&exit_atoms.atr_entry, &exit_scalar.encode_log(pos.entry_atr.max(1e-10))),
-        &Primitives::bind(&exit_atoms.atr_now, &exit_scalar.encode_log(candle.atr_r.max(1e-10))),
+        &Primitives::bind(&exit_atoms.atr_now, &exit_scalar.encode_log(candle_atr.max(1e-10))),
         &Primitives::bind(&exit_atoms.stop_dist, &exit_scalar.encode(stop_dist.clamp(0.0, 1.0), ScalarMode::Linear { scale: 1.0 })),
         &Primitives::bind(&exit_atoms.phase, if pos.phase == PositionPhase::Runner { &exit_atoms.runner } else { &exit_atoms.active }),
-        &Primitives::bind(&exit_atoms.direction, if pos.direction == Direction::Long { &exit_atoms.buy } else { &exit_atoms.sell }),
+        &Primitives::bind(&exit_atoms.direction, if is_buy { &exit_atoms.buy } else { &exit_atoms.sell }),
     ])
 }
 
@@ -694,9 +698,14 @@ impl EnterpriseState {
             if pos.phase == PositionPhase::Closed { continue; }
 
             // Exit expert: encode at Nyquist rate of position lifecycle
+            // Rate = source/target. For USDC→WBTC positions, rate = quote_price.
+            // For WBTC→USDC positions, rate = 1/quote_price.
+            let current_rate = if pos.source_asset == *ctx.base_asset { quote_price } else { 1.0 / quote_price };
+            let is_buy = pos.source_asset == *ctx.base_asset;
             if pos.candles_held > 0 && pos.candles_held % ctx.exit_observe_interval == 0 {
-                let pnl_frac = pos.return_pct(quote_price);
-                let exit_thought = encode_exit_thought(pos, pnl_frac, candle, ctx.exit_atoms, ctx.exit_scalar);
+                let pnl_frac = pos.return_pct(current_rate);
+                let exit_thought = encode_exit_thought(pos, pnl_frac, current_rate,
+                    ctx.exit_atoms, ctx.exit_scalar, candle.atr_r, is_buy);
                 self.exit_pending.push(ExitObservation {
                     thought: exit_thought,
                     pos_id: pos.id,
@@ -705,44 +714,51 @@ impl EnterpriseState {
                 });
             }
 
-            if let Some(exit) = pos.tick(quote_price, TrailFactor(ctx.k_trail)) {
+            if let Some(exit) = pos.tick(current_rate, TrailFactor(ctx.k_trail)) {
                 exit_signals.push((pi, exit));
             }
         }
 
         // Pass 2: settle each exit — treasury, accounting, logging.
+        // Symmetric: release target, swap target→source, update accounting.
         for &(pos_idx, ref exit) in &exit_signals {
             let pos = &mut self.positions[pos_idx];
+            let current_rate = if pos.source_asset == *ctx.base_asset { quote_price } else { 1.0 / quote_price };
 
-            // Determine how much to reclaim and what phase to enter
-            let (sell_quote, next_phase) = match exit {
+            // Determine how much target to sell and what phase to enter.
+            // Take profit: reclaim source principal. Runner: ride the rest.
+            let (sell_target, next_phase) = match exit {
                 PositionExit::TakeProfit if pos.phase == PositionPhase::Active => {
-                    let reclaim_base = pos.base_deployed + pos.total_fees + pos.base_deployed * 0.01;
-                    let reclaim_quote = reclaim_base / quote_price / (1.0 - fee_rate);
-                    if reclaim_quote < pos.quote_held {
-                        (reclaim_quote, PositionPhase::Runner)
+                    // Reclaim enough target to cover source principal + fees + 1% profit.
+                    // Convert source amount to target units: source / rate = target.
+                    let reclaim_source = pos.source_amount + pos.total_fees + pos.source_amount * 0.01;
+                    let reclaim_target = (reclaim_source / current_rate) / (1.0 - fee_rate);
+                    if reclaim_target < pos.target_held {
+                        (reclaim_target, PositionPhase::Runner)
                     } else {
-                        (pos.quote_held, PositionPhase::Closed)
+                        (pos.target_held, PositionPhase::Closed)
                     }
                 }
-                _ => (pos.quote_held, PositionPhase::Closed),
+                _ => (pos.target_held, PositionPhase::Closed),
             };
 
-            // Settlement: release → swap → accounting
-            if sell_quote > 0.0 {
-                self.treasury.release(ctx.quote_asset, sell_quote);
+            // Settlement: release target → swap target→source → accounting
+            if sell_target > 0.0 {
+                self.treasury.release(&pos.target_asset, sell_target);
+                // Swap price = from_per_to. Swapping target→source: price = target_per_source = 1/rate.
+                let exit_price = 1.0 / current_rate;
                 let (sold, received) = self.treasury.swap(
-                    ctx.quote_asset, ctx.base_asset,
-                    sell_quote, 1.0 / quote_price, fee_rate,
+                    &pos.target_asset, &pos.source_asset,
+                    sell_target, exit_price, fee_rate,
                 );
-                pos.quote_held -= sold;
-                pos.base_reclaimed += received;
-                pos.total_fees += sold * quote_price * fee_rate;
+                pos.target_held -= sold;
+                pos.source_reclaimed += received;
+                pos.total_fees += sold * exit_price * fee_rate;
             }
             pos.phase = next_phase;
             self.hold_swaps += 1;
 
-            let ret = pos.return_pct(quote_price);
+            let ret = pos.return_pct(current_rate);
             if next_phase == PositionPhase::Runner || ret > 0.0 {
                 self.hold_wins += 1;
             }
@@ -750,6 +766,8 @@ impl EnterpriseState {
                 self.last_exit_price = quote_price;
                 self.last_exit_atr = candle.atr_r;
             }
+            let is_buy = pos.source_asset == *ctx.base_asset;
+            let direction = if is_buy { Direction::Long } else { Direction::Short };
             let exit_type = match (exit, pos.phase) {
                 (PositionExit::TakeProfit, PositionPhase::Runner) => "RunnerTP",
                 (PositionExit::TakeProfit, _) => "PartialProfit",
@@ -759,11 +777,11 @@ impl EnterpriseState {
                 step: self.log_step,
                 candle_idx: i as i64,
                 timestamp: candle.ts.clone(),
-                direction: pos.direction,
-                entry_price: pos.entry_price,
-                exit_price: quote_price,
+                direction,
+                entry_price: pos.entry_rate,
+                exit_price: current_rate,
                 gross_return_pct: ret * 100.0,
-                position_usd: pos.base_deployed,
+                position_usd: pos.source_amount,
                 swap_fee_pct: fee_rate * 100.0,
                 horizon_candles: pos.candles_held as i64,
                 won: (ret > 0.0) as i32,
@@ -802,58 +820,52 @@ impl EnterpriseState {
                 let band_edge: f64 = MAX_BASE_POSITION;
                 let frac = ((band_edge / 2.0) * self.cached_risk_mult).min(ctx.max_single_position);
                 let dir_label = meta_dir.unwrap();
-                let direction = if dir_label == self.mgr_buy { Direction::Long } else { Direction::Short };
+                let is_buy = dir_label == self.mgr_buy;
 
-                let (from_asset, to_asset, deploy_amount, price_for_swap) = match direction {
-                    Direction::Long => {
-                        let avail = self.treasury.balance(ctx.base_asset);
-                        (ctx.base_asset, ctx.quote_asset, avail * frac, quote_price)
-                    }
-                    Direction::Short => {
-                        let avail = self.treasury.balance(ctx.quote_asset);
-                        let amount = avail * frac;
-                        (ctx.quote_asset, ctx.base_asset, amount, 1.0 / quote_price)
-                    }
+                // Source/target: Buy sells USDC for WBTC, Sell sells WBTC for USDC.
+                // Rate = source_per_target. For Buy: USDC/WBTC = price. For Sell: WBTC/USDC = 1/price.
+                let (source_asset, target_asset, source_avail, rate) = if is_buy {
+                    (ctx.base_asset.clone(), ctx.quote_asset.clone(),
+                     self.treasury.balance(ctx.base_asset), quote_price)
+                } else {
+                    (ctx.quote_asset.clone(), ctx.base_asset.clone(),
+                     self.treasury.balance(ctx.quote_asset), 1.0 / quote_price)
                 };
+                let deploy_amount = source_avail * frac;
+                // Value in USDC for minimum position check
+                let usd_value = if is_buy { deploy_amount } else { deploy_amount * quote_price };
 
-                let base_value = if direction == Direction::Long { deploy_amount }
-                                 else { deploy_amount * quote_price };
-
-                if base_value > 10.0 {
+                if usd_value > 10.0 {
                     let (spent, received) = self.treasury.swap(
-                        from_asset, to_asset, deploy_amount, price_for_swap, fee_rate);
+                        &source_asset, &target_asset, deploy_amount, rate, fee_rate);
 
-                    // BUY: claim WBTC. SELL: USDC already in balance.
-                    if direction == Direction::Long {
-                        self.treasury.claim(ctx.quote_asset, received);
-                    }
+                    // Symmetric claim: lock the received target in deployed.
+                    self.treasury.claim(&target_asset, received);
 
-                    let entry_fee = base_value * fee_rate;
-                    let (deployed_usd, quote_held) = match direction {
-                        Direction::Long => (spent, received),
-                        Direction::Short => (spent * quote_price, 0.0),
-                    };
+                    let entry_fee = usd_value * fee_rate;
                     let pos = ManagedPosition::new(PositionEntry {
                         id: self.next_position_id,
                         candle_idx: i,
-                        entry_price: quote_price,
+                        source_asset: source_asset.clone(),
+                        target_asset: target_asset.clone(),
+                        source_amount: spent,
+                        target_received: received,
+                        entry_rate: rate,
                         entry_atr: candle.atr_r,
-                        direction,
-                        base_deployed: deployed_usd,
-                        quote_received: quote_held,
                         entry_fee,
                         k_stop: ctx.k_stop,
                         k_tp: ctx.k_tp,
                     });
                     self.next_position_id += 1;
                     self.hold_swaps += 1;
+                    let direction = if is_buy { Direction::Long } else { Direction::Short };
                     self.pending_logs.push(LogEntry::PositionOpen {
                         step: self.log_step,
                         candle_idx: i as i64,
                         timestamp: candle.ts.clone(),
                         direction,
                         entry_price: quote_price,
-                        position_usd: base_value,
+                        position_usd: usd_value,
                         swap_fee_pct: fee_rate * 100.0,
                     });
                     self.positions.push(pos);

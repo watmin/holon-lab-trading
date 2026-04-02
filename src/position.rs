@@ -1,5 +1,6 @@
 use holon::Vector;
-use crate::journal::{Direction, Label, Prediction};
+use crate::journal::{Label, Prediction};
+use crate::treasury::Asset;
 
 /// ATR multiplier for trailing stop distance. Not a price, not a percentage.
 #[derive(Clone, Copy)]
@@ -33,7 +34,7 @@ pub struct Pending {
     pub candle_idx:    usize,
     pub tht_vec:       Vector,
 
-    // ── Prediction (what the experts said) ────────────────────────────
+    // ── Prediction (what the observers said) ────────────────────────
     pub tht_pred:      Prediction,
     pub meta_dir:      Option<Label>,   // manager's direction call
     pub high_conviction:   bool,             // true if conviction >= threshold
@@ -62,36 +63,37 @@ pub struct Pending {
     pub deployed_usd:      f64,    // capital reserved from treasury for this position
 }
 
-#[derive(Clone, Copy, PartialEq)]
+// rune:reap(aspirational) — TrailingStop and TakeProfit are matched in ledger display
+// but only HorizonExpiry is constructed. Wire when pending entries resolve at position
+// exit rather than at horizon — requires linking Pending to ManagedPosition lifecycle.
 pub enum ExitReason {
-    // rune:reap(aspirational) — TrailingStop and TakeProfit are matched in ledger display
-    // but only HorizonExpiry is constructed. Wire when pending entries resolve at position
-    // exit rather than at horizon — requires linking Pending to ManagedPosition lifecycle.
     TrailingStop,        // stop loss hit (including raised stops)
     TakeProfit,          // target reached
     HorizonExpiry,       // safety valve — queue cleanup, not an exit strategy
 }
 
 // ─── Position Entry ─────────────────────────────────────────────────────────
-// All parameters needed to open a position, bundled into a struct so that
-// 10 bare f64/usize params can't be silently swapped at the call site.
+// All parameters needed to open a position, bundled into a struct.
+// Token-to-token: source is what we sell, target is what we receive.
 
 pub struct PositionEntry {
     pub id:              usize,
     pub candle_idx:      usize,
-    pub entry_price:     f64,
-    pub entry_atr:       f64,
-    pub direction:       Direction,
-    pub base_deployed:   f64,
-    pub quote_received:  f64,
-    pub entry_fee:       f64,
+    pub source_asset:    Asset,
+    pub target_asset:    Asset,
+    pub source_amount:   f64,       // units of source spent
+    pub target_received: f64,       // units of target received from swap
+    pub entry_rate:      f64,       // source_per_target at entry
+    pub entry_atr:       f64,       // ATR at entry (scales stop/TP in rate space)
+    pub entry_fee:       f64,       // fee in source units
     pub k_stop:          f64,
     pub k_tp:            f64,
 }
 
 // ─── Managed Position ────────────────────────────────────────────────────────
-// A real WBTC holding with its own lifecycle. Not binary — fractional.
-// Entered, managed each candle, partially exited, runner, final exit.
+// A swap with its own lifecycle. Token-to-token.
+// Rate = source_per_target. Rate going up is ALWAYS good.
+// One formula for stop, TP, trailing, P&L. No match on direction.
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum PositionPhase {
@@ -101,135 +103,96 @@ pub enum PositionPhase {
 }
 
 pub struct ManagedPosition {
-    pub id:             usize,      // unique position identifier
+    pub id:             usize,
     pub entry_candle:   usize,
-    pub entry_price:    f64,
+    pub source_asset:   Asset,
+    pub target_asset:   Asset,
+    pub source_amount:  f64,        // units of source spent to enter
+    pub target_held:    f64,        // units of target currently held
+    pub source_reclaimed: f64,      // units of source recovered from partial exits
+    pub entry_rate:     f64,        // source_per_target at entry
     pub entry_atr:      f64,        // ATR at entry — scales stop/TP
-    pub direction:      Direction,    // Buy (long WBTC) or Sell (back to USDC)
 
-    // Capital
-    pub base_deployed:  f64,        // USDC spent to enter
-    pub quote_held:      f64,        // WBTC currently held in this position
-    pub base_reclaimed: f64,        // USDC recovered from partial exits
-
-    // Management
+    // Management — all in rate space (source_per_target)
     pub phase:          PositionPhase,
-    pub trailing_stop:  f64,        // absolute price level
-    pub take_profit:    f64,        // absolute price level (first target)
-    pub extreme_price:  f64,        // best price in our favor (high for longs, low for shorts)
+    pub trailing_stop:  f64,        // absolute rate level
+    pub take_profit:    f64,        // absolute rate level (first target)
+    pub extreme_rate:   f64,        // best rate in our favor (always highest)
 
     // Accounting
-    pub max_adverse:    f64,        // worst return against us (negative fraction)
-    pub total_fees:     f64,        // cumulative fees paid (entry + partials + exit)
-    pub candles_held:   usize,      // how long this position has been open
+    pub max_adverse:    f64,        // worst return (negative fraction)
+    pub total_fees:     f64,        // cumulative fees (in source units)
+    pub candles_held:   usize,
 }
 
 impl ManagedPosition {
-    /// Construct a managed position from a PositionEntry struct.
-    /// Named fields prevent silent parameter swaps between bare f64 values.
+    /// Construct from a swap. One formula for stop/TP.
+    /// Rate going up = profit. Stop below entry. TP above entry.
     pub fn new(entry: PositionEntry) -> Self {
-        // BUY: stop below entry, TP above. SELL: stop above, TP below.
-        let (stop, tp, hw) = match entry.direction {
-            Direction::Long => (
-                entry.entry_price * (1.0 - entry.k_stop * entry.entry_atr),
-                entry.entry_price * (1.0 + entry.k_tp * entry.entry_atr),
-                entry.entry_price,
-            ),
-            Direction::Short => (
-                entry.entry_price * (1.0 + entry.k_stop * entry.entry_atr), // stop ABOVE for sell
-                entry.entry_price * (1.0 - entry.k_tp * entry.entry_atr),   // TP BELOW for sell
-                entry.entry_price,
-            ),
-        };
+        let rate = entry.entry_rate;
+        let atr = entry.entry_atr;
+        let stop = rate * (1.0 - entry.k_stop * atr);
+        let tp = rate * (1.0 + entry.k_tp * atr);
+
         Self {
             id: entry.id,
             entry_candle: entry.candle_idx,
-            entry_price: entry.entry_price,
-            entry_atr: entry.entry_atr,
-            direction: entry.direction,
-            base_deployed: entry.base_deployed,
-            quote_held: entry.quote_received,
-            base_reclaimed: 0.0,
+            source_asset: entry.source_asset,
+            target_asset: entry.target_asset,
+            source_amount: entry.source_amount,
+            target_held: entry.target_received,
+            source_reclaimed: 0.0,
+            entry_rate: rate,
+            entry_atr: atr,
             phase: PositionPhase::Active,
             trailing_stop: stop,
             take_profit: tp,
-            extreme_price: hw,
+            extreme_rate: rate,
             max_adverse: 0.0,
             total_fees: entry.entry_fee,
             candles_held: 0,
         }
     }
 
-    /// Update position with current price. Returns exit signal if triggered.
-    /// Handles both BUY (long WBTC) and SELL (short WBTC / long USDC) positions.
-    pub fn tick(&mut self, current_price: f64, k_trail: TrailFactor) -> Option<PositionExit> {
+    /// Update position with current rate. Returns exit signal if triggered.
+    /// Rate = source_per_target. Rate going up is always good.
+    /// One formula. No match on direction.
+    pub fn tick(&mut self, current_rate: f64, k_trail: TrailFactor) -> Option<PositionExit> {
         self.candles_held += 1;
-
         if self.phase == PositionPhase::Closed { return None; }
 
-        // Track worst excursion against us
-        let ret = self.return_pct(current_price);
+        // Track worst excursion
+        let ret = self.return_pct(current_rate);
         if ret < self.max_adverse { self.max_adverse = ret; }
 
-        match self.direction {
-            Direction::Long => {
-                // BUY: profit when price goes UP
-                if current_price > self.extreme_price {
-                    self.extreme_price = current_price;
-                }
-                // Trail stop upward
-                let new_stop = self.extreme_price * (1.0 - k_trail.0 * self.entry_atr);
-                if new_stop > self.trailing_stop {
-                    self.trailing_stop = new_stop;
-                }
-                // Stop: price fell below trailing stop
-                if current_price <= self.trailing_stop {
-                    return Some(PositionExit::StopLoss);
-                }
-                // TP: price rose above target
-                if self.phase == PositionPhase::Active && current_price >= self.take_profit {
-                    return Some(PositionExit::TakeProfit);
-                }
-            }
-            Direction::Short => {
-                // SELL: profit when price goes DOWN
-                if current_price < self.extreme_price {
-                    self.extreme_price = current_price;
-                }
-                // Trail stop downward
-                let new_stop = self.extreme_price * (1.0 + k_trail.0 * self.entry_atr);
-                if new_stop < self.trailing_stop {
-                    self.trailing_stop = new_stop;
-                }
-                // Stop: price rose above trailing stop
-                if current_price >= self.trailing_stop {
-                    return Some(PositionExit::StopLoss);
-                }
-                // TP: price fell below target
-                if self.phase == PositionPhase::Active && current_price <= self.take_profit {
-                    return Some(PositionExit::TakeProfit);
-                }
-            }
+        // Rate going up = profit. Track extreme. Trail stop upward.
+        if current_rate > self.extreme_rate {
+            self.extreme_rate = current_rate;
+        }
+        let new_stop = self.extreme_rate * (1.0 - k_trail.0 * self.entry_atr);
+        if new_stop > self.trailing_stop {
+            self.trailing_stop = new_stop;
+        }
+
+        // Stop: rate fell below trailing stop
+        if current_rate <= self.trailing_stop {
+            return Some(PositionExit::StopLoss);
+        }
+        // TP: rate rose above target
+        if self.phase == PositionPhase::Active && current_rate >= self.take_profit {
+            return Some(PositionExit::TakeProfit);
         }
 
         None
     }
 
-    /// Current return as fraction of deployed capital
-    pub fn return_pct(&self, current_price: f64) -> f64 {
-        if self.base_deployed <= 0.0 { return 0.0; }
-        match self.direction {
-            Direction::Long => {
-                let wbtc_value = self.quote_held * current_price;
-                (wbtc_value + self.base_reclaimed - self.total_fees) / self.base_deployed - 1.0
-            }
-            Direction::Short => {
-                // SELL: profit = (entry_price - current_price) / entry_price
-                // Simplified: we deployed USDC equivalent, price moved
-                let price_change = (self.entry_price - current_price) / self.entry_price;
-                price_change - self.total_fees / self.base_deployed
-            }
-        }
+    /// Current return as fraction of source deployed.
+    /// target_held * current_rate = target value in source units.
+    /// One formula. No match on direction.
+    pub fn return_pct(&self, current_rate: f64) -> f64 {
+        if self.source_amount <= 0.0 { return 0.0; }
+        let target_in_source = self.target_held * current_rate;
+        (target_in_source + self.source_reclaimed - self.total_fees) / self.source_amount - 1.0
     }
 }
 
