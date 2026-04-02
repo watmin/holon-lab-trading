@@ -694,15 +694,13 @@ impl EnterpriseState {
         }
 
         // Pass 1: observe exit expert + tick positions, collect exit signals.
-        let mut exit_signals: Vec<(usize, PositionExit)> = Vec::new();
+        let mut exit_signals: Vec<(usize, PositionExit, f64, bool)> = Vec::new();
         for (pi, pos) in self.positions.iter_mut().enumerate() {
             if pos.phase == PositionPhase::Closed { continue; }
 
-            // Exit expert: encode at Nyquist rate of position lifecycle
-            // Rate = source/target. For USDC→WBTC positions, rate = quote_price.
-            // For WBTC→USDC positions, rate = 1/quote_price.
-            let current_rate = if pos.source_asset == *ctx.base_asset { quote_price } else { 1.0 / quote_price };
+            // Rate = source/target. Compute once, reuse for exit expert + tick + settlement.
             let is_buy = pos.source_asset == *ctx.base_asset;
+            let current_rate = if is_buy { quote_price } else { 1.0 / quote_price };
             if pos.candles_held > 0 && pos.candles_held % ctx.exit_observe_interval == 0 {
                 let pnl_frac = pos.return_pct(current_rate);
                 let exit_thought = encode_exit_thought(pos, pnl_frac, current_rate,
@@ -716,15 +714,14 @@ impl EnterpriseState {
             }
 
             if let Some(exit) = pos.tick(current_rate, TrailFactor(ctx.k_trail)) {
-                exit_signals.push((pi, exit));
+                exit_signals.push((pi, exit, current_rate, is_buy));
             }
         }
 
         // Pass 2: settle each exit — treasury, accounting, logging.
         // Symmetric: release target, swap target→source, update accounting.
-        for &(pos_idx, ref exit) in &exit_signals {
+        for &(pos_idx, ref exit, current_rate, is_buy) in &exit_signals {
             let pos = &mut self.positions[pos_idx];
-            let current_rate = if pos.source_asset == *ctx.base_asset { quote_price } else { 1.0 / quote_price };
 
             // Determine how much target to sell and what phase to enter.
             // Take profit: reclaim source principal. Runner: ride the rest.
@@ -767,7 +764,6 @@ impl EnterpriseState {
                 self.last_exit_price = quote_price;
                 self.last_exit_atr = candle.atr_r;
             }
-            let is_buy = pos.source_asset == *ctx.base_asset;
             let direction = if is_buy { Direction::Long } else { Direction::Short };
             let exit_type = match (exit, pos.phase) {
                 (PositionExit::TakeProfit, PositionPhase::Runner) => "RunnerTP",
@@ -1235,7 +1231,7 @@ impl EnterpriseState {
                 ctx.k_stop * atr_now * 100.0,
                 ctx.k_tp * atr_now * 100.0,
                 ctx.k_trail * atr_now * 100.0,
-                self.treasury.n_open);
+                self.positions.len());
             eprintln!(
                 "  {}/{} ({:.0}/s ETA {:.0}s) | {} | {} | tht={:.1}% | trades={} win={:.1}% | ${:.0} ({:+.1}%) vs B&H {:+.1}% | flip@{:.3} {}{}",
                 self.encode_count, ctx.loop_count, rate, eta,

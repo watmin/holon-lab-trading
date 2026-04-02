@@ -32,7 +32,6 @@ impl fmt::Display for Asset {
 pub struct Treasury {
     pub balances:         HashMap<Asset, f64>,  // token → available units
     pub deployed:         HashMap<Asset, f64>,  // token → units locked in active positions
-    pub n_open:           usize,                // number of active positions
     pub max_positions:    usize,
     pub max_utilization:  f64,                  // max fraction of total portfolio deployed
     pub total_fees_paid:  f64,
@@ -44,7 +43,6 @@ impl Treasury {
         Self {
             balances: HashMap::new(),
             deployed: HashMap::new(),
-            n_open: 0,
             max_positions,
             max_utilization,
             total_fees_paid: 0.0,
@@ -82,8 +80,9 @@ impl Treasury {
 
     /// How many units of `asset` can be deployed for a new position?
     /// Considers portfolio-wide utilization limit and position count.
-    pub fn allocatable(&self, asset: &Asset, prices: &HashMap<Asset, f64>) -> f64 {
-        if self.n_open >= self.max_positions { return 0.0; }
+    /// `n_open` is passed in — position counting is the enterprise's concern.
+    pub fn allocatable(&self, asset: &Asset, prices: &HashMap<Asset, f64>, n_open: usize) -> f64 {
+        if n_open >= self.max_positions { return 0.0; }
         let portfolio_value = self.total_value(prices);
         if portfolio_value <= 0.0 { return 0.0; }
         let total_deployed_value = self.deployed_value(prices);
@@ -102,23 +101,23 @@ impl Treasury {
     }
 
     /// Move units from available to deployed. Returns amount actually claimed.
+    /// Does NOT modify n_open — position counting is the enterprise's concern.
     pub fn claim(&mut self, asset: &Asset, amount: f64) -> f64 {
         let available = self.balance(asset);
         let claimed = amount.min(available);
         if claimed <= 0.0 { return 0.0; }
         *self.balances.get_mut(asset).unwrap() -= claimed;
         *self.deployed.entry(asset.clone()).or_insert(0.0) += claimed;
-        self.n_open += 1;
         claimed
     }
 
     /// Move units from deployed back to available.
+    /// Does NOT modify n_open — position counting is the enterprise's concern.
     pub fn release(&mut self, asset: &Asset, amount: f64) {
         let dep = self.deployed.entry(asset.clone()).or_insert(0.0);
         let released = amount.min(*dep);
         *dep -= released;
         *self.balances.entry(asset.clone()).or_insert(0.0) += released;
-        if self.n_open > 0 { self.n_open -= 1; }
     }
 
     /// Swap one token for another at a given price, minus fees.
