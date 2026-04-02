@@ -1,113 +1,147 @@
-;; -- market/desk.wat -- a trading pair's observer panel ----------------------
+;; -- market/desk.wat -- a trading pair's full enterprise tree -----------------
 ;;
-;; A desk trades one pair (asset_a / asset_b). It consumes two candle
-;; streams and produces recommendations for the treasury.
+;; A desk trades one pair (source-asset / target-asset). It owns the complete
+;; prediction + learning stack for that pair:
+;;   - Observer panel (5 specialists + 1 generalist)
+;;   - Manager journal (aggregates observer opinions)
+;;   - Exit expert journal (learns hold/exit from position state)
+;;   - Risk branches (5 OnlineSubspace per desk)
+;;   - Positions (managed allocations from the treasury)
+;;   - Pending entries (learning queue)
 ;;
-;; Two phases per tick:
-;;   observe -- always. Journals learn from partial data.
-;;   act     -- only when both sides are fresh.
+;; The desk is a value. The enterprise iterates Vec<Desk>.
+;; Each desk folds independently over its candle stream.
+;; The treasury is shared — desks don't own capital, they request it.
 ;;
-;; The desk is a value. It has a tick method. The caller decides when
-;; to call it. The desk doesn't know about the fold or the stream.
+;; Two phases per candle:
+;;   observe — always. Encode thoughts. Predict. Buffer pending.
+;;   act     — only when gates pass. Request swap from treasury.
 
+(require core/primitives)
 (require core/structural)
-(require candle)
+(require market/observer)
+(require position)
 
-;; -- Configuration ----------------------------------------------------------
+;; ── Desk configuration ─────────────────────────────────────────────
 
 (struct desk-config
-  name                   ; string -- "btc-usdc", "btc-sol"
-  asset-a                ; string -- first asset in the pair
-  asset-b                ; string -- second asset in the pair
-  staleness-a?           ; usize? -- max candle age before stale (absent = always fresh)
-  staleness-b?)          ; usize? -- absent for stablecoins (always fresh)
+  name                   ; string — "btc-usdc", "eth-usdc"
+  source-asset           ; Asset — what we sell on a Buy (e.g. USDC)
+  target-asset           ; Asset — what we receive on a Buy (e.g. WBTC)
+  dims                   ; vector dimensionality
+  recalib-interval       ; journal update count between recalibrations
+  window                 ; candle window size for generalist
+  decay)                 ; accumulator decay rate
 
-;; -- Side state -------------------------------------------------------------
-
-;; The freshness state of one side of the pair.
-(struct side-state
-  latest?                ; Candle? -- most recent candle, absent until first update
-  age                    ; usize -- candles since last update (0 = just updated)
-  staleness-limit?)      ; usize? -- absent means always fresh (stablecoin)
-
-(define (side-fresh? side)
-  "Is this side fresh enough to act on?
-   Absent staleness-limit means always fresh (stablecoin side)."
-  (if (some? (:staleness-limit? side))
-      (and (some? (:latest? side))
-           (<= (:age side) (:staleness-limit? side)))
-      true))
-
-(define (side-update side candle)
-  (update side :latest? candle :age 0))
-
-(define (side-tick-age side)
-  (update side :age (+ (:age side) 1)))
-
-;; -- Recommendation --------------------------------------------------------
-
-(struct recommendation
-  desk-name
-  asset-a asset-b
-  conviction             ; f64 -- positive = long asset_a, negative = short
-  raw-cos                ; f64 -- the manager's raw cosine
-  proven)                ; bool -- has the desk's manager proven its edge?
-
-;; -- Desk -------------------------------------------------------------------
+;; ── Desk state ─────────────────────────────────────────────────────
+;; Everything the heartbeat needs for ONE pair. The fold step mutates this.
 
 (struct desk
-  name
-  asset-a asset-b
-  side-a                 ; SideState
-  side-b)                ; SideState
-  ;; TODO: observers, generalist, manager, risk will move here
-  ;; from enterprise.rs as the streaming refactor progresses.
-  ;; For now, the desk tracks freshness only.
+  config                 ; DeskConfig — immutable pair identity
+
+  ;; Observer panel: 5 specialists + 1 generalist
+  observers              ; (list Observer) — each has own Journal + WindowSampler
+
+  ;; Manager: reads observer opinions, predicts direction
+  mgr-journal            ; Journal — learns from price direction
+  mgr-buy                ; Label — the Buy direction label
+  mgr-sell               ; Label — the Sell direction label
+  mgr-resolved           ; (deque (conviction, correct)) — for band scan (cap 5000)
+  mgr-curve-valid        ; bool — conviction-accuracy curve exists
+  mgr-proven-band        ; (low, high) — conviction range with proven edge
+  prev-mgr-thought       ; Vector? — previous candle's manager thought (for delta)
+
+  ;; Exit expert
+  exit-journal           ; Journal — learns Hold/Exit from position state
+  exit-pending           ; (list ExitObservation) — buffered for resolution
+
+  ;; Risk
+  risk-branches          ; (list RiskBranch) — 5 OnlineSubspace anomaly detectors
+  cached-risk-mult       ; f64 — last computed risk multiplier
+
+  ;; Positions: managed allocations from the treasury
+  positions              ; (list ManagedPosition)
+
+  ;; Pending: learning queue (ALL candles, not just gated)
+  pending                ; (deque Pending)
+
+  ;; Conviction + curve
+  conviction-history     ; (deque f64)
+  conviction-threshold   ; f64
+  resolved-preds         ; (deque (conviction, correct)) — for Kelly curve
+  kelly-curve-valid      ; bool
+  cached-curve-a         ; f64 — exponential curve parameter
+  cached-curve-b         ; f64
+
+  ;; Panel engram (reaction template)
+  panel-engram           ; OnlineSubspace
+
+  ;; Adaptive decay
+  adaptive-decay         ; f64 — current decay rate
+  in-adaptation          ; bool
+
+  ;; Accounting
+  encode-count           ; usize — candles processed by this desk
+  hold-swaps             ; usize — position opens + exits
+  hold-wins              ; usize — profitable exits
+  last-exit-price        ; f64
+  last-exit-atr          ; f64
+  peak-treasury-equity   ; f64 — for drawdown cap
+  next-position-id       ; usize
+
+  ;; Logging
+  log-step               ; i64
+  pending-logs)          ; (list LogEntry)
+
+;; ── Construction ────────────────────────────────────────────────────
 
 (define (new-desk config)
-  (desk :name (:name config)
-        :asset-a (:asset-a config) :asset-b (:asset-b config)
-        :side-a (side-state :age 0 :staleness-limit? (:staleness-a? config))
-        :side-b (side-state :age 0 :staleness-limit? (:staleness-b? config))))
+  "Create a desk for one trading pair. All state initialized to empty/default."
+  (let* ((dims (:dims config))
+         (recalib (:recalib-interval config))
+         (lenses '(:momentum :structure :volume :narrative :regime :generalist))
+         (observers (map (lambda (lens) (new-observer lens dims recalib)) lenses))
+         (mgr-journal (new-journal "manager" dims recalib))
+         (mgr-buy (register mgr-journal "Buy"))
+         (mgr-sell (register mgr-journal "Sell"))
+         (exit-journal (new-journal "exit-expert" dims recalib)))
+    (desk
+      :config config
+      :observers observers
+      :mgr-journal mgr-journal :mgr-buy mgr-buy :mgr-sell mgr-sell
+      :mgr-resolved (deque) :mgr-curve-valid false
+      :mgr-proven-band '(0.0 0.0) :prev-mgr-thought absent
+      :exit-journal exit-journal :exit-pending '()
+      :risk-branches (map (lambda (name) (new-risk-branch name dims))
+                          '("drawdown" "accuracy" "volatility" "correlation" "panel"))
+      :cached-risk-mult 0.5
+      :positions '() :pending (deque)
+      :conviction-history (deque) :conviction-threshold 0.0
+      :resolved-preds (deque) :kelly-curve-valid false
+      :cached-curve-a 0.0 :cached-curve-b 0.0
+      :panel-engram (online-subspace (len lenses) 4)
+      :adaptive-decay (:decay config) :in-adaptation false
+      :encode-count 0 :hold-swaps 0 :hold-wins 0
+      :last-exit-price 0.0 :last-exit-atr 0.0
+      :peak-treasury-equity 0.0 :next-position-id 0
+      :log-step 0 :pending-logs '())))
 
-;; -- Observe ----------------------------------------------------------------
+;; ── The desk fold step ─────────────────────────────────────────────
+;; This is the heartbeat for ONE pair. The enterprise calls it per desk.
+;; The desk reads the candle and produces signals. The treasury is passed
+;; in for position management but owned by the enterprise.
+;;
+;; (desk, candle, treasury, ctx) → (desk, treasury)
+;;
+;; The desk mutates its own state (observers, journals, positions).
+;; The treasury mutates when positions open/close (swap, claim, release).
 
-(define (observe-candle desk asset candle)
-  "Feed a candle to the appropriate side. Returns (updated-desk, matched?)."
-  (cond
-    ((= asset (:asset-a desk))
-     (list (update desk
-             :side-a (side-update (:side-a desk) candle)
-             :side-b (side-tick-age (:side-b desk)))
-           true))
-    ((= asset (:asset-b desk))
-     (list (update desk
-             :side-b (side-update (:side-b desk) candle)
-             :side-a (side-tick-age (:side-a desk)))
-           true))
-    (else (list desk false))))
+;; The full fold step is enterprise.wat's on-candle, parameterized by desk.
+;; Each step in enterprise.wat (1-13) operates on one desk's state.
 
-;; -- Act gate ---------------------------------------------------------------
-
-(define (can-act? desk)
-  "Both sides must have fresh data."
-  (and (side-fresh? (:side-a desk))
-       (side-fresh? (:side-b desk))))
-
-;; -- Cross rate -------------------------------------------------------------
-
-(define (cross-rate desk)
-  "Price of asset_a in terms of asset_b. Absent if side_a has no candle.
-   Base-pair: when side_b has no candle, asset_b = base (price 1.0)."
-  (when-let ((a (:latest? (:side-a desk))))
-    (if (some? (:latest? (:side-b desk)))
-        (when-let ((b (:latest? (:side-b desk))))
-          (when (> (:close b) 1e-10) (/ (:close a) (:close b))))
-        (:close a))))
-
-;; -- What desks do NOT do ---------------------------------------------------
-;; - Do NOT encode candle data (that's ThoughtEncoder)
-;; - Do NOT learn patterns (that's the observers inside the desk)
-;; - Do NOT manage positions (that's the treasury + position lifecycle)
-;; - Do NOT decide sizing (that's the portfolio + kelly)
-;; - The desk recommends. The treasury decides.
+;; ── What desks do NOT do ────────────────────────────────────────────
+;; - Do NOT own the treasury (shared across desks)
+;; - Do NOT own the portfolio (shared phase/equity tracking)
+;; - Do NOT know about other desks (signal independence)
+;; - Do NOT route capital (treasury decides)
+;; - The desk recommends. The treasury executes.

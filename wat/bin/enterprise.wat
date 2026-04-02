@@ -13,43 +13,26 @@
 (require patterns)
 
 ;; ── The state ───────────────────────────────────────────────────────
+;; The enterprise owns shared resources. Each desk owns per-pair state.
+;; The heartbeat iterates desks. The treasury serves them all.
 
 (struct enterprise-state
-  ;; Learning
-  mgr-journal mgr-buy mgr-sell prev-mgr-thought
-  exit-journal exit-hold exit-exit exit-pending
+  ;; Desks: one per trading pair. Vec<Desk> with one element today.
+  desks                  ; (list Desk) — each owns observers, manager, risk, positions
 
-  ;; Observers (6: momentum, structure, volume, narrative, regime, full)
-  observers
+  ;; Shared resources (not per-desk)
+  treasury               ; Treasury — holds all assets, serves all desks
+  portfolio              ; Portfolio — phase transitions, win/loss tracking
 
-  ;; Risk
-  risk-branches cached-risk-mult
-  cached-curve-a cached-curve-b kelly-curve-valid
-  mgr-curve-valid mgr-resolved mgr-proven-band
+  ;; Shared tracking
+  labeled-count          ; total labeled entries across all desks
+  noise-count            ; total noise entries across all desks
+  move-sum               ; running sum for signal_weight
+  move-count             ; running count for signal_weight
 
-  ;; Panel engram
-  panel-engram panel-recalib-wins panel-recalib-total
-
-  ;; Treasury + portfolio
-  treasury portfolio peak-treasury-equity
-
-  ;; Positions
-  pending positions next-position-id
-  last-exit-price last-exit-atr
-
-  ;; Hold-mode
-  hold-swaps hold-wins
-
-  ;; Adaptive decay
-  adaptive-decay in-adaptation highconv-wins
-
-  ;; Tracking
-  encode-count labeled-count noise-count
-  move-sum move-count log-step db-batch
-
-  ;; Conviction
-  conviction-threshold conviction-history
-  resolved-preds pending-logs cursor)
+  ;; Logging
+  pending-logs           ; (list LogEntry) — accumulated, flushed per batch
+  cursor)                ; current position in the candle stream
 
 ;; ── The event ───────────────────────────────────────────────────────
 
@@ -59,13 +42,21 @@
 ;; rune:reap(scaffolding) — Deposit/Withdraw exist but are never constructed.
 
 ;; ── The fold step ───────────────────────────────────────────────────
+;; The enterprise iterates desks. Each desk processes events for its pair.
+;; The treasury is shared — passed to each desk for position management.
 
 (define (on-event state event ctx)
   (match event
     (enriched-event-candle candle fact-labels observer-vecs)
-      (on-candle state candle fact-labels observer-vecs ctx)
-    :deposit  (deposit (:treasury state) (:asset event) (:amount event))
-    :withdraw (withdraw (:treasury state) (:asset event) (:amount event))))
+      ;; Route candle to the desk that trades this pair.
+      ;; For now: one desk, one pair, all candles go to desk[0].
+      ;; Multi-pair: match event asset to desk's source/target.
+      (let ((desk (first (:desks state))))
+        (let ((updated-desk (on-candle-desk desk candle fact-labels observer-vecs
+                                            (:treasury state) (:portfolio state) ctx)))
+          (update state :desks (list updated-desk))))
+    :deposit  (update state :treasury (deposit (:treasury state) (:asset event) (:amount event)))
+    :withdraw (update state :treasury (withdraw (:treasury state) (:asset event) (:amount event)))))
 
 ;; ── Pure gates and decisions ────────────────────────────────────────
 ;;
