@@ -156,7 +156,7 @@ fn encode_volatility(
             thought(vm, scalar, "trade-sharpe", sharpe, 4.0),
             thought(vm, scalar, "worst-trade", worst, 0.1),
             thought(vm, scalar, "return-skew", skew, 4.0),
-            thought(vm, scalar, "equity-curve", best, 0.1),
+            thought(vm, scalar, "vol-best-trade", best, 0.1),
         ])
     } else {
         vec![0.0; vm.dimensions()]
@@ -214,11 +214,11 @@ fn encode_correlation(
             thought(
                 vm,
                 scalar,
-                "trade-density",
+                "corr-trade-density",
                 portfolio.trades_taken as f64 / 1000.0,
                 2.0,
             ),
-            thought(vm, scalar, "streak", autocorr.signum(), 2.0),
+            thought(vm, scalar, "corr-autocorr-sign", autocorr.signum(), 2.0),
         ])
     } else {
         vec![0.0; vm.dimensions()]
@@ -244,13 +244,13 @@ fn encode_panel(portfolio: &Portfolio, vm: &VectorManager, scalar: &holon::Scala
         0.5
     };
     bundle_f64(vec![
-        thought(vm, scalar, "equity-curve", eq_pct, 2.0),
-        thought(vm, scalar, "streak", streak_val / 10.0, 2.0),
+        thought(vm, scalar, "panel-equity-pct", eq_pct, 2.0),
+        thought(vm, scalar, "panel-streak", streak_val / 10.0, 2.0),
         thought(vm, scalar, "recent-accuracy", win_rate_all, 2.0),
         thought(
             vm,
             scalar,
-            "trade-density",
+            "panel-trade-density",
             portfolio.trades_taken as f64 / 1000.0,
             2.0,
         ),
