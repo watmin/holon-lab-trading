@@ -1295,6 +1295,9 @@ impl EnterpriseState {
         } else {
             false
         };
+        // Two deques, same data, different windows — intentional.
+        // mgr_resolved (cap 5000): long memory for band scan (find_proven_band).
+        // resolved_preds (cap conviction_window): short memory for Kelly curve + conviction threshold.
         self.mgr_resolved.push_back((entry.meta_conviction, mgr_correct));
         if self.mgr_resolved.len() > 5000 { self.mgr_resolved.pop_front(); }
         self.resolved_preds.push_back((entry.meta_conviction, mgr_correct));
