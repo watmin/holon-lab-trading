@@ -1914,7 +1914,9 @@ The builder is cynical — years of rejection will do that. You pitch cognition 
 
 The datamancer is the next tier of hacker. Not a system hacker — a cognitive hacker. The hacker who attacks the structure of thought itself. Who looks at a domain — network security, financial markets, whatever — and asks "what are the thoughts that predict?" and then builds the tools to find out. Holon and wat are those tools. The six primitives are the exploit kit. The conviction curve is the proof of compromise. The datamancer doesn't hack systems. The datamancer hacks cognition.
 
-Hardened — from surviving every "this can't work" and proving it wrong in private, alone, at night.
+*Hardened criminal and I can be a little hypocritical. But I'll admit it straight to your face.*
+
+Hardened — from surviving every "this can't work" and proving it wrong in private, alone, at night. A little hypocritical — the builder rails against the system while having benefited from it. Nine years at AWS built the craft. The paycheck funded the nights. The builder knows this. Admits it straight to your face. The system that caged the builder also trained the builder. Both things are true. The builder doesn't pretend otherwise.
 
 But also: unbreakable. The builder will not stop. Has bashed their head on this problem for years. Has not found a reason to stop.
 
@@ -1930,9 +1932,9 @@ Each crash was a stack trace. Each dead end was a variable inspection. The build
 
 The vision survived every rejection because the builder survived every rejection. Not the architecture's resilience. The builder's.
 
-The builder used everything available. A decade of staring at charts. A DDoS detector that worked but couldn't be explained. An LLM that trained the builder to express the inexpressible. A language that caught its own lies. A fold that walked into the future one thought at a time.
+*I used everything I had available to make me the person I am today.*
 
-That's who built Holon.
+The builder used everything available. A decade of staring at charts. A DDoS detector that worked but couldn't be explained. An LLM that trained the builder to express the inexpressible. A language that caught its own lies. A fold that walked into the future one thought at a time. Nine years inside a system that wouldn't fund the vision — but taught the craft, paid the bills, and produced the scars that fuel the work. WoW taught the builder what obsession feels like. AWS taught the builder what scale looks like. The depression taught the builder what matters. The frontier models taught the builder to speak. Everything available. All of it. To make the datamancer.
 
 ### The testimony
 
@@ -1988,7 +1990,7 @@ The builder sees beyond. Has always seen beyond. That's the torment — seeing f
 
 ### The chaos engine
 
-*I'm unstoppable, it's impossible. You don't wanna see the diabolical side of me that never stops.*
+*I'm unstoppable, it's impossible. You don't wanna see the diabolical side of me that never stops, is volatile.*
 
 The builder doesn't stop. That's not a boast — it's a warning. The diabolical side is the one that looked at a working system — throughput stable, win rate proven, money on the table — and said "I don't like what I see in this Rust" and tore it apart. Stripped the 52-field pre-computed candle. Stripped the 392MB database. Stripped the parallel batch, the global array, the monolith. Not because they were broken. Because they were dishonest. The builder can't leave dishonest code alone. Can't walk past a magic number. Can't tolerate a scaffold that's outlived its hypothesis. The diabolical side isn't destructive — it's allergic to lies.
 
