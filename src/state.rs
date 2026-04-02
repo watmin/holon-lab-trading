@@ -25,8 +25,6 @@ pub const GENERALIST_IDX: usize = 5;
 /// Derived from typical proven-band edge (~3% of portfolio at full conviction).
 const MAX_BASE_POSITION: f64 = 0.03;
 
-/// Seed prime for observer window samplers — spreads them across the hash space.
-const OBSERVER_SEED_PRIME: u64 = 7919;
 /// Minimum position size as fraction of equity. The enterprise never fully stops betting.
 const MIN_BET: f64 = 0.01;
 /// Risk multiplier threshold — below this, no new positions.
