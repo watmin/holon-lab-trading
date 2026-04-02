@@ -76,6 +76,8 @@ pub fn noise_floor(dims: usize) -> f64 {
 }
 
 /// 5sigma — conviction level where signal typically emerges.
+/// rune:reap(scaffolding) — defined for future use (band scan uses inline sigma).
+/// Wire into find_proven_band when the band boundaries are parameterized.
 pub fn sweet_spot(dims: usize) -> f64 {
     5.0 / (dims as f64).sqrt()
 }

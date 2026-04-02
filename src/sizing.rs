@@ -11,7 +11,7 @@ use std::collections::VecDeque;
 pub fn kelly_frac(
     conviction: f64,
     resolved: &VecDeque<(f64, bool)>,
-    _min_sample: usize,
+    _min_sample: usize, // rune:reap(scaffolding) — reserved for configurable minimum; callers pass 50
     move_threshold: f64,
 ) -> Option<(f64, f64, f64)> {
     if resolved.len() < 500 { return None; }
@@ -102,8 +102,9 @@ pub fn compute_conviction_threshold(
             //   accuracy = 0.50 + a × exp(b × conviction)
             // Then solve for threshold: conv = ln((min_edge - 0.50) / a) / b
             //
-            // Bin resolved predictions, compute per-bin accuracy,
-            // log-linear regression on bins where accuracy > 0.50.
+            // rune:scry(duplication) — bin + log-linear regression duplicated with kelly_frac
+            // above. Both implement the same curve-fitting algorithm on resolved predictions.
+            // Extract shared helper when this module grows. Recalib-frequency, not hot path.
             let n_bins = 20usize;
             let mut sorted: Vec<(f64, bool)> = resolved.iter().copied().collect();
             sorted.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
