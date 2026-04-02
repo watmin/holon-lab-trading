@@ -1,6 +1,10 @@
 use rusqlite::Connection;
 use std::path::Path;
 
+/// Default label when the oracle column is absent. Not "Noise" — that was
+/// the old Outcome enum. The journal uses arbitrary Label symbols now.
+const DEFAULT_LABEL: &str = "Unknown";
+
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct Candle {
@@ -198,9 +202,12 @@ pub fn load_candles(db_path: &Path, label_col: &str) -> Vec<Candle> {
                 vol_accel: sf(row, 56),
                 hour: sf(row, 57),
                 day_of_week: sf(row, 58),
+                // Oracle label — prophetic, not causal. "Unknown" when absent.
+                // The journal uses arbitrary Label symbols; this is just
+                // the DB column for supervised evaluation.
                 label: row
                     .get::<_, Option<String>>(59)?
-                    .unwrap_or_else(|| "Noise".to_string()),
+                    .unwrap_or_else(|| DEFAULT_LABEL.to_string()),
             })
         })
         .expect("query failed")
