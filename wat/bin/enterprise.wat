@@ -67,8 +67,6 @@
             :treasury treasury
             :portfolio portfolio
             :cached-risk-mult risk-mult
-            :move-sum (:move-sum updated-desk)
-            :move-count (:move-count updated-desk)
             :labeled-count (+ (:labeled-count state) (:labeled-count updated-desk))
             :noise-count (+ (:noise-count state) (:noise-count updated-desk)))))
     :deposit  (update state :treasury (deposit (:treasury state) (:asset event) (:amount event)))
