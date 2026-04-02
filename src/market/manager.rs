@@ -6,6 +6,8 @@
 //! Each observer contributes: opinion (direction + magnitude) + credibility (proven/tentative)
 //! Plus: panel shape, market context, time, motion.
 
+use std::collections::VecDeque;
+
 use holon::{Primitives, ScalarMode, Similarity, VectorManager, Vector};
 
 use crate::journal::Prediction;
@@ -76,6 +78,41 @@ pub fn noise_floor(dims: usize) -> f64 {
 /// 5sigma — conviction level where signal typically emerges.
 pub fn sweet_spot(dims: usize) -> f64 {
     5.0 / (dims as f64).sqrt()
+}
+
+/// Find the manager's proven conviction band via sigma-band scan.
+///
+/// Iterates bands `[k*σ, (k+4)*σ]` for k in 3..18, requiring 200+ samples
+/// and accuracy > 0.51. Returns the band with best accuracy, or None.
+pub fn find_proven_band(
+    resolved: &VecDeque<(f64, bool)>,
+    dims: usize,
+) -> Option<(f64, f64, f64)> {
+    if resolved.len() < 500 {
+        return None;
+    }
+    let sigma = 1.0 / (dims as f64).sqrt();
+    let mut best_acc = 0.5_f64;
+    let mut best_band = (0.0_f64, 0.0_f64);
+    for k in 3..18 {
+        let lo = k as f64 * sigma;
+        let hi = (k + 4) as f64 * sigma;
+        let (n, correct) = resolved.iter()
+            .filter(|(c, _)| *c >= lo && *c < hi)
+            .fold((0usize, 0usize), |(n, correct), (_, w)| (n + 1, correct + *w as usize));
+        if n >= 200 {
+            let acc = correct as f64 / n as f64;
+            if acc > best_acc {
+                best_acc = acc;
+                best_band = (lo, hi);
+            }
+        }
+    }
+    if best_acc > 0.51 {
+        Some((best_band.0, best_band.1, best_acc))
+    } else {
+        None
+    }
 }
 
 /// Encode one observer's contribution to the manager's thought.

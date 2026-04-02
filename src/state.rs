@@ -7,7 +7,7 @@
 use std::collections::VecDeque;
 
 use holon::memory::{Journal, OnlineSubspace};
-use holon::{Primitives, ScalarMode, VectorManager, Vector};
+use holon::{Primitives, ScalarEncoder, ScalarMode, VectorManager, Vector};
 
 use crate::candle::Candle;
 use crate::ledger::LogEntry;
@@ -16,9 +16,9 @@ use crate::journal::{Label, Direction, Prediction, register_direction, register_
 use crate::window_sampler::WindowSampler;
 use crate::market::observer::Observer;
 use crate::market::{parse_candle_hour, parse_candle_day};
-use crate::market::manager::{ManagerAtoms, ManagerContext, encode_manager_thought};
+use crate::market::manager::{ManagerAtoms, ManagerContext, encode_manager_thought, find_proven_band};
 use crate::portfolio::{Phase, Portfolio};
-use crate::position::{ExitObservation, ExitReason, ManagedPosition, Pending, PositionEntry, PositionExit, PositionPhase};
+use crate::position::{CrossingSnapshot, ExitObservation, ExitReason, ManagedPosition, Pending, PositionEntry, PositionExit, PositionPhase};
 use crate::risk::{self, RiskBranch};
 use crate::sizing::{kelly_frac, signal_weight};
 use crate::treasury::Treasury;
@@ -149,6 +149,33 @@ pub struct ExitAtoms {
     pub sell: Vector,
 }
 
+/// Encode a single exit-expert thought from position state + current market.
+///
+/// Eight facts: pnl, hold duration, MFE, ATR at entry, ATR now, stop distance,
+/// position phase, and direction — bundled into one vector.
+pub fn encode_exit_thought(
+    pos: &ManagedPosition,
+    quote_price: f64,
+    candle: &Candle,
+    exit_atoms: &ExitAtoms,
+    exit_scalar: &ScalarEncoder,
+) -> Vector {
+    let pnl_frac = pos.return_pct(quote_price);
+    let mfe_frac = (pos.best_price - pos.entry_price) / pos.entry_price;
+    let stop_dist = (quote_price - pos.trailing_stop).abs() / quote_price;
+
+    Primitives::bundle(&[
+        &Primitives::bind(&exit_atoms.pnl, &exit_scalar.encode(pnl_frac.clamp(-1.0, 1.0) * 0.5 + 0.5, ScalarMode::Linear { scale: 1.0 })),
+        &Primitives::bind(&exit_atoms.hold, &exit_scalar.encode_log(pos.candles_held as f64)),
+        &Primitives::bind(&exit_atoms.mfe, &exit_scalar.encode(mfe_frac.clamp(0.0, 1.0), ScalarMode::Linear { scale: 1.0 })),
+        &Primitives::bind(&exit_atoms.atr_entry, &exit_scalar.encode_log(pos.entry_atr.max(1e-10))),
+        &Primitives::bind(&exit_atoms.atr_now, &exit_scalar.encode_log(candle.atr_r.max(1e-10))),
+        &Primitives::bind(&exit_atoms.stop_dist, &exit_scalar.encode(stop_dist.clamp(0.0, 1.0), ScalarMode::Linear { scale: 1.0 })),
+        &Primitives::bind(&exit_atoms.phase, if pos.phase == PositionPhase::Runner { &exit_atoms.runner } else { &exit_atoms.active }),
+        &Primitives::bind(&exit_atoms.direction, if pos.direction == Direction::Long { &exit_atoms.buy } else { &exit_atoms.sell }),
+    ])
+}
+
 // ─── CandleContext ─────────────────────────────────────────────────────────
 
 /// Immutable references needed by on_candle but owned by main().
@@ -185,7 +212,6 @@ pub struct CandleContext<'a> {
     pub k_tp: f64,
     pub exit_horizon: usize,
     pub exit_observe_interval: usize,
-    pub rolling_cap: usize,
 
     // ── Config constants ────────────────────────────────────────────────
     pub decay_stable: f64,
@@ -578,89 +604,19 @@ impl EnterpriseState {
         if self.conviction_history.len() > ctx.conviction_window {
             self.conviction_history.pop_front();
         }
-        // rune:sever(inline-computation) — conviction threshold computation (quantile sort, exponential curve fit, log-linear regression) inlined; extract to a conviction module or method
         // Recompute flip threshold every recalib_interval candles, after warmup.
-        // rune:forge(premature) — 60-line curve-fitting block inlined in the fold; extracting to a pure fn(history, resolved, mode, params) -> f64 would make it testable
         if self.conviction_history.len() >= ctx.conviction_warmup
             && self.encode_count % ctx.recalib_interval == 0
         {
-            match ctx.conviction_mode {
-                ConvictionMode::Quantile if ctx.conviction_quantile > 0.0 => {
-                    let mut sorted: Vec<f64> = self.conviction_history.iter().copied().collect();
-                    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
-                    let idx = ((sorted.len() as f64 * ctx.conviction_quantile) as usize)
-                        .min(sorted.len() - 1);
-                    self.conviction_threshold = sorted[idx];
-                }
-                ConvictionMode::Auto if self.resolved_preds.len() >= ctx.conviction_warmup * 5 => {
-                    // Need 5× warmup (~5000 resolved) for stable exponential fit.
-                    // Fit the exponential conviction-accuracy curve:
-                    //   accuracy = 0.50 + a × exp(b × conviction)
-                    // Then solve for threshold: conv = ln((min_edge - 0.50) / a) / b
-                    //
-                    // Bin resolved predictions, compute per-bin accuracy,
-                    // log-linear regression on bins where accuracy > 0.50.
-                    let n_bins = 20usize;
-                    let mut sorted: Vec<(f64, bool)> = self.resolved_preds.iter().copied().collect();
-                    sorted.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-                    let bin_size = sorted.len() / n_bins;
-                    if bin_size >= 20 {
-                        // Compute (mean_conviction, accuracy) per bin.
-                        let mut bins: Vec<(f64, f64)> = Vec::new();
-                        for bi in 0..n_bins {
-                            let start = bi * bin_size;
-                            let end = if bi == n_bins - 1 { sorted.len() } else { (bi + 1) * bin_size };
-                            let slice = &sorted[start..end];
-                            let mean_c: f64 = slice.iter().map(|(c, _)| c).sum::<f64>() / slice.len() as f64;
-                            let acc: f64 = slice.iter().filter(|(_, w)| *w).count() as f64 / slice.len() as f64;
-                            bins.push((mean_c, acc));
-                        }
-
-                        // Log-linear regression on bins where acc > 0.505.
-                        // y = ln(acc - 0.50), x = conviction → y = ln(a) + b*x
-                        let points: Vec<(f64, f64)> = bins.iter()
-                            .filter(|(_, acc)| *acc > 0.505)
-                            .map(|(c, acc)| (*c, (acc - 0.50).ln()))
-                            .filter(|(_, y)| y.is_finite())
-                            .collect();
-
-                        if points.len() >= 3 {
-                            let n = points.len() as f64;
-                            let sx: f64 = points.iter().map(|(x, _)| x).sum();
-                            let sy: f64 = points.iter().map(|(_, y)| y).sum();
-                            let sxx: f64 = points.iter().map(|(x, _)| x * x).sum();
-                            let sxy: f64 = points.iter().map(|(x, y)| x * y).sum();
-                            let denom = n * sxx - sx * sx;
-                            if denom.abs() > 1e-10 {
-                                let b = (n * sxy - sx * sy) / denom;
-                                let ln_a = (sy - b * sx) / n;
-                                let a = ln_a.exp();
-
-                                // Solve: min_edge = 0.50 + a * exp(b * conv)
-                                // conv = ln((min_edge - 0.50) / a) / b
-                                if b > 0.0 && ctx.min_edge > 0.50 {
-                                    let target = (ctx.min_edge - 0.50) / a;
-                                    if target > 0.0 {
-                                        let new_thresh = target.ln() / b;
-                                        if new_thresh > 0.0 && new_thresh < 1.0 {
-                                            self.conviction_threshold = new_thresh;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                // Fallback: during auto warmup, use quantile if available.
-                ConvictionMode::Auto if ctx.conviction_quantile > 0.0
-                    && self.conviction_history.len() >= ctx.conviction_warmup => {
-                    let mut sorted: Vec<f64> = self.conviction_history.iter().copied().collect();
-                    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
-                    let idx = ((sorted.len() as f64 * ctx.conviction_quantile) as usize)
-                        .min(sorted.len() - 1);
-                    self.conviction_threshold = sorted[idx];
-                }
-                _ => {}
+            if let Some(thresh) = crate::sizing::compute_conviction_threshold(
+                &self.conviction_history,
+                &self.resolved_preds,
+                ctx.conviction_mode,
+                ctx.conviction_quantile,
+                ctx.min_edge,
+                ctx.conviction_warmup,
+            ) {
+                self.conviction_threshold = thresh;
             }
         }
 
@@ -701,22 +657,10 @@ impl EnterpriseState {
         for pos in self.positions.iter_mut() {
             if pos.phase == PositionPhase::Closed { continue; }
 
-            // rune:sever(inline-encoding) — exit expert encoding inlined here; belongs in a dedicated encode_exit_thought() in market/ or position module
             // Exit expert: encode at Nyquist rate of position lifecycle
             if pos.candles_held > 0 && pos.candles_held % ctx.exit_observe_interval == 0 {
+                let exit_thought = encode_exit_thought(pos, quote_price, candle, ctx.exit_atoms, ctx.exit_scalar);
                 let pnl_frac = pos.return_pct(quote_price);
-                let mfe_frac = (pos.best_price - pos.entry_price) / pos.entry_price;
-                let stop_dist = (quote_price - pos.trailing_stop).abs() / quote_price;
-                let exit_thought = Primitives::bundle(&[
-                    &Primitives::bind(&ctx.exit_atoms.pnl, &ctx.exit_scalar.encode(pnl_frac.clamp(-1.0, 1.0) * 0.5 + 0.5, ScalarMode::Linear { scale: 1.0 })),
-                    &Primitives::bind(&ctx.exit_atoms.hold, &ctx.exit_scalar.encode_log(pos.candles_held as f64)),
-                    &Primitives::bind(&ctx.exit_atoms.mfe, &ctx.exit_scalar.encode(mfe_frac.clamp(0.0, 1.0), ScalarMode::Linear { scale: 1.0 })),
-                    &Primitives::bind(&ctx.exit_atoms.atr_entry, &ctx.exit_scalar.encode_log(pos.entry_atr.max(1e-10))),
-                    &Primitives::bind(&ctx.exit_atoms.atr_now, &ctx.exit_scalar.encode_log(candle.atr_r.max(1e-10))),
-                    &Primitives::bind(&ctx.exit_atoms.stop_dist, &ctx.exit_scalar.encode(stop_dist.clamp(0.0, 1.0), ScalarMode::Linear { scale: 1.0 })),
-                    &Primitives::bind(&ctx.exit_atoms.phase, if pos.phase == PositionPhase::Runner { &ctx.exit_atoms.runner } else { &ctx.exit_atoms.active }),
-                    &Primitives::bind(&ctx.exit_atoms.direction, if pos.direction == Direction::Long { &ctx.exit_atoms.buy } else { &ctx.exit_atoms.sell }),
-                ]);
 
                 // Buffer observation for resolution
                 self.exit_pending.push(ExitObservation {
@@ -725,58 +669,45 @@ impl EnterpriseState {
                     snapshot_pnl: pnl_frac,
                     snapshot_candle: i,
                 });
-
             }
 
-            // rune:forge(escape) — three exit branches (partial, full-TP, full-stop) each do release+swap+accounting with copy-paste variations; a single close_position() method on ManagedPosition+Treasury would compose
             if let Some(exit) = pos.tick(quote_price, ctx.k_trail) {
-                match exit {
+                // Determine how much to reclaim and what phase to enter
+                let (sell_quote, next_phase) = match exit {
                     PositionExit::TakeProfit if pos.phase == PositionPhase::Active => {
                         // Partial exit: reclaim capital + fees + minimum profit
                         let reclaim_base = pos.base_deployed + pos.total_fees + pos.base_deployed * 0.01;
                         let reclaim_quote = reclaim_base / quote_price / (1.0 - fee_rate);
                         if reclaim_quote < pos.quote_held {
-                            // Partial: release from deployed, then sell
-                            self.treasury.release(ctx.quote_asset, reclaim_quote);
-                            let (sold, received) = self.treasury.swap(ctx.quote_asset, ctx.base_asset,
-                                reclaim_quote, 1.0 / quote_price, fee_rate);
-                            pos.quote_held -= sold;
-                            pos.base_reclaimed += received;
-                            pos.total_fees += sold * quote_price * fee_rate;
-                            pos.phase = PositionPhase::Runner;
-                            self.hold_swaps += 1;
-                            self.hold_wins += 1;
+                            (reclaim_quote, PositionPhase::Runner)
                         } else {
-                            // Full exit — release all, then sell
-                            self.treasury.release(ctx.quote_asset, pos.quote_held);
-                            let (sold, received) = self.treasury.swap(ctx.quote_asset, ctx.base_asset,
-                                pos.quote_held, 1.0 / quote_price, fee_rate);
-                            pos.base_reclaimed += received;
-                            pos.total_fees += sold * quote_price * fee_rate;
-                            pos.quote_held = 0.0;
-                            pos.phase = PositionPhase::Closed;
-                            self.hold_swaps += 1;
-                            if pos.return_pct(quote_price) > 0.0 { self.hold_wins += 1; }
-                            self.last_exit_price = quote_price;
-                            self.last_exit_atr = candle.atr_r;
+                            (pos.quote_held, PositionPhase::Closed)
                         }
                     }
-                    PositionExit::StopLoss | PositionExit::TakeProfit => {
-                        // Full exit — release from deployed, then sell
-                        if pos.quote_held > 0.0 {
-                            self.treasury.release(ctx.quote_asset, pos.quote_held);
-                            let (sold, received) = self.treasury.swap(ctx.quote_asset, ctx.base_asset,
-                                pos.quote_held, 1.0 / quote_price, fee_rate);
-                            pos.base_reclaimed += received;
-                            pos.total_fees += sold * quote_price * fee_rate;
-                        }
-                        pos.quote_held = 0.0;
-                        pos.phase = PositionPhase::Closed;
-                        self.hold_swaps += 1;
-                        if pos.return_pct(quote_price) > 0.0 { self.hold_wins += 1; }
-                        self.last_exit_price = quote_price;
-                        self.last_exit_atr = candle.atr_r;
-                    }
+                    _ => (pos.quote_held, PositionPhase::Closed),
+                };
+
+                // Settlement: release → swap → accounting
+                if sell_quote > 0.0 {
+                    self.treasury.release(ctx.quote_asset, sell_quote);
+                    let (sold, received) = self.treasury.swap(
+                        ctx.quote_asset, ctx.base_asset,
+                        sell_quote, 1.0 / quote_price, fee_rate,
+                    );
+                    pos.quote_held -= sold;
+                    pos.base_reclaimed += received;
+                    pos.total_fees += sold * quote_price * fee_rate;
+                }
+                pos.phase = next_phase;
+                self.hold_swaps += 1;
+                // Partial TP into Runner is always a win (we reclaimed capital + profit).
+                // Full exit: count as win only if net positive.
+                if next_phase == PositionPhase::Runner || pos.return_pct(quote_price) > 0.0 {
+                    self.hold_wins += 1;
+                }
+                if next_phase == PositionPhase::Closed {
+                    self.last_exit_price = quote_price;
+                    self.last_exit_atr = candle.atr_r;
                 }
                 // Log to ledger
                 let ret = pos.return_pct(quote_price);
@@ -994,18 +925,12 @@ impl EnterpriseState {
             observer_preds,
             mgr_thought:   stored_mgr_thought,
             fact_labels:   if ctx.diagnostics { tht_facts } else { Vec::new() },
-            first_outcome: None,
-            outcome_pct:   0.0,
+            crossing:      None,
             entry_price:       candle.close,
             entry_ts:          candle.ts.clone(),
             entry_atr:         candle.atr_r,
             max_favorable:     0.0,
             max_adverse:       0.0,
-            crossing_candles:  None,
-            crossing_ts:       None,
-            crossing_price:    None,
-            path_candles:      0,
-            trailing_stop:     -(ctx.k_stop * candle.atr_r), // stop at K× ATR from this candle
             exit_reason:       None,
             exit_pct:          0.0,
             deployed_usd,
@@ -1032,8 +957,6 @@ impl EnterpriseState {
             let pct         = (current_price - entry_price) / entry_price;
             let abs_pct     = pct.abs();
 
-            entry.path_candles = i - entry.candle_idx;
-
             // Track directional excursion relative to predicted direction.
             let directional_pct = if entry.meta_dir == Some(tht_buy) {
                 pct
@@ -1049,39 +972,8 @@ impl EnterpriseState {
                 entry.max_adverse = directional_pct; // most negative = worst drawdown
             }
 
-            // ── Trade management: trailing stop + take profit ────────
-            // Each trade has its own parameters from ATR at entry time.
-            // No averaging. No calcification. The market at entry tells
-            // each trade how much room it needs.
-            //
-            // Managed exits: the market closes the trade, not the clock.
-            if entry.exit_reason.is_none()
-                && entry.position_frac.is_some()
-                && self.portfolio.phase != Phase::Observe
-            {
-                // This trade's ATR at entry — how volatile was the market when we entered?
-                let entry_atr = entry.entry_atr;
-
-                // Raise the floor: trail follows favorable movement.
-                let trail = ctx.k_trail * entry_atr;
-                let new_stop = entry.max_favorable - trail;
-                if new_stop > entry.trailing_stop {
-                    entry.trailing_stop = new_stop;
-                }
-
-                // Check exits (priority: take profit > stop loss)
-                let tp = ctx.k_tp * entry_atr;
-                if directional_pct >= tp {
-                    entry.exit_reason = Some(ExitReason::TakeProfit);
-                    entry.exit_pct = pct;
-                } else if directional_pct <= entry.trailing_stop {
-                    entry.exit_reason = Some(ExitReason::TrailingStop);
-                    entry.exit_pct = pct;
-                }
-            }
-
             // Learn only on the first threshold crossing per pending entry.
-            if entry.first_outcome.is_none() {
+            if entry.crossing.is_none() {
                 let thresh = if ctx.atr_multiplier > 0.0 {
                     ctx.atr_multiplier * entry.entry_atr
                 } else {
@@ -1092,9 +984,6 @@ impl EnterpriseState {
                               else                  { None };
 
                 if let Some(o) = outcome {
-                    entry.crossing_candles = Some(entry.path_candles);
-                    entry.crossing_ts = Some(candle.ts.clone());
-                    entry.crossing_price = Some(candle.close);
                     // rune:gaze(naming) — sw wants to say signal_weight; function name is right there but the binding mumbles
                     let sw = signal_weight(abs_pct, &mut self.move_sum, &mut self.move_count);
                     // Observer resolution: learn, track, gate, validate, log.
@@ -1114,8 +1003,13 @@ impl EnterpriseState {
                             }); }
                         }
                     }
-                    entry.first_outcome = Some(o);
-                    entry.outcome_pct   = pct;
+                    entry.crossing = Some(CrossingSnapshot {
+                        label:   o,
+                        pct,
+                        candles: i - entry.candle_idx,
+                        ts:      candle.ts.clone(),
+                        price:   candle.close,
+                    });
                 }
             }
         }
@@ -1130,37 +1024,13 @@ impl EnterpriseState {
                 self.cached_curve_b = b;
                 self.kelly_curve_valid = true;
             }
-            // rune:sever(inline-computation) — manager proven band scan (sigma-band iteration + accuracy computation) inlined; extract to manager module or sizing
-            // Manager's own proof: band-based, not exponential.
-            // Find the conviction band where accuracy > 51% with 500+ samples.
-            // The sweet spot is at 5-10σ (geometric property of dims).
-            // The manager acts only in its proven band.
-            if self.mgr_resolved.len() >= 500 {
-                let sigma = 1.0 / (ctx.dims as f64).sqrt();
-                // Scan bands: [k*sigma, (k+2)*sigma] for k in 3..20
-                let mut best_acc = 0.5_f64;
-                let mut best_band = (0.0_f64, 0.0_f64);
-                for k in (3..18).step_by(1) {
-                    let lo = k as f64 * sigma;
-                    let hi = (k + 4) as f64 * sigma; // 4σ wide bands
-                    let in_band: Vec<&(f64, bool)> = self.mgr_resolved.iter()
-                        .filter(|(c, _)| *c >= lo && *c < hi).collect();
-                    let n = in_band.len();
-                    if n >= 200 {
-                        let acc = in_band.iter().filter(|(_, c)| *c).count() as f64 / n as f64;
-                        if acc > best_acc {
-                            best_acc = acc;
-                            best_band = (lo, hi);
-                        }
-                    }
-                }
-                if best_acc > 0.51 {
-                    self.mgr_curve_valid = true;
-                    self.mgr_proven_band = best_band;
-                } else {
-                    self.mgr_curve_valid = false;
-                    self.mgr_proven_band = (0.0, 0.0);
-                }
+            // Manager proven band: find the conviction band where accuracy > 51%.
+            if let Some((lo, hi, _acc)) = find_proven_band(&self.mgr_resolved, ctx.dims) {
+                self.mgr_curve_valid = true;
+                self.mgr_proven_band = (lo, hi);
+            } else {
+                self.mgr_curve_valid = false;
+                self.mgr_proven_band = (0.0, 0.0);
             }
 
             // Feed panel engram: if recent panel accuracy was good, store current state.
@@ -1202,17 +1072,14 @@ impl EnterpriseState {
 
         }
 
-        // ── Resolve entries: managed exit OR horizon expiry ──────────
-        // Horizon is the safety valve, not the exit strategy.
-        // The market closes the trade (stop/TP). The horizon only controls
-        // learning labels. Safety max (10× horizon) prevents unbounded queue growth.
+        // ── Resolve entries: horizon expiry ──────────────────────────
+        // ManagedPosition owns trade lifecycle (stop/TP).
+        // Pending entries resolve at safety max (10× horizon) for learning.
         let max_pending_age = ctx.horizon * 10;
         let mut resolved_indices: Vec<usize> = Vec::new();
         for (qi, entry) in self.pending.iter().enumerate() {
             let age = i - entry.candle_idx;
-            let safety_expired = age >= max_pending_age;
-            let market_exited = entry.exit_reason.is_some();
-            if safety_expired || market_exited {
+            if age >= max_pending_age {
                 resolved_indices.push(qi);
             }
         }
@@ -1227,13 +1094,10 @@ impl EnterpriseState {
         resolved_entries.reverse(); // restore chronological order
 
         for mut entry in resolved_entries {
-            // Set exit reason for horizon expiry if not already managed-exited.
-            if entry.exit_reason.is_none() {
-                entry.exit_reason = Some(ExitReason::HorizonExpiry);
-                // Exit at current price for horizon expiry
-                entry.exit_pct = (current_price - entry.entry_price) / entry.entry_price;
-            }
-            let final_out: Option<Label> = entry.first_outcome;
+            // Pending entries always resolve at horizon — ManagedPosition owns trade lifecycle.
+            entry.exit_reason = Some(ExitReason::HorizonExpiry);
+            entry.exit_pct = (current_price - entry.entry_price) / entry.entry_price;
+            let final_out: Option<Label> = entry.crossing.as_ref().map(|c| c.label);
             if final_out.is_none() {
                 self.noise_count += 1;
             } else {
@@ -1273,16 +1137,16 @@ impl EnterpriseState {
 
                 // ── Ledger: ALWAYS records. Paper trail for all. ─────
                 {
-                    let exit_ts = entry.crossing_ts.clone();
-                    let exit_price = entry.crossing_price
+                    let cx = entry.crossing.as_ref();
+                    let exit_ts = cx.map(|c| c.ts.clone());
+                    let exit_price = cx.map(|c| c.price)
                         .unwrap_or(candle.close);
-                    let crossing_elapsed = entry.crossing_candles
-                        .map(|c| c as i64);
+                    let crossing_elapsed = cx.map(|c| c.candles as i64);
                     self.pending_logs.push(LogEntry::TradeLedger {
                         step: self.log_step,
                         candle_idx: entry.candle_idx as i64,
                         timestamp: entry.entry_ts.clone(),
-                        exit_candle_idx: entry.crossing_candles.map(|c| (entry.candle_idx + c) as i64),
+                        exit_candle_idx: cx.map(|c| (entry.candle_idx + c.candles) as i64),
                         exit_timestamp: exit_ts,
                         direction: self.mgr_journal.label_name(dir).unwrap_or("?").to_string(),
                         conviction: entry.meta_conviction,
@@ -1300,7 +1164,7 @@ impl EnterpriseState {
                         max_favorable_pct: entry.max_favorable * 100.0,
                         max_adverse_pct: entry.max_adverse * 100.0,
                         crossing_candles: crossing_elapsed,
-                        horizon_candles: entry.path_candles as i64,
+                        horizon_candles: (i - entry.candle_idx) as i64,
                         outcome: final_out.map(|l| self.observers[5].journal.label_name(l).unwrap_or("?").to_string()).unwrap_or_else(|| "Noise".to_string()),
                         won: (pnl.net_ret > 0.0) as i32,
                         exit_reason: match entry.exit_reason {
@@ -1442,7 +1306,7 @@ impl EnterpriseState {
             traded: entry.position_frac.is_some() as i32,
             position_frac: entry.position_frac,
             equity: treasury_equity,
-            outcome_pct: entry.outcome_pct,
+            outcome_pct: entry.crossing.as_ref().map(|c| c.pct).unwrap_or(0.0),
         });
         self.log_step += 1;
     }

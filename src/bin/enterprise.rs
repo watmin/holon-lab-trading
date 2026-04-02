@@ -379,7 +379,6 @@ fn main() {
         k_tp,
         exit_horizon,
         exit_observe_interval,
-        rolling_cap,
         decay_stable,
         decay_adapting,
         highconv_rolling_cap,
@@ -479,7 +478,7 @@ fn main() {
 
     // ─ Drain remaining pending entries (log, no further learning) ────────────
     while let Some(entry) = state.pending.pop_front() {
-        let final_out: Option<Label> = entry.first_outcome;
+        let final_out: Option<Label> = entry.crossing.as_ref().map(|c| c.label);
         if final_out.is_none() { state.noise_count += 1; } else { state.labeled_count += 1; }
 
         state.log_candle(&entry, final_out, treasury_equity);

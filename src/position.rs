@@ -12,6 +12,17 @@ pub struct ExitObservation {
     pub snapshot_candle: usize,
 }
 
+// ─── Crossing snapshot ──────────────────────────────────────────────────────
+/// Data captured at the moment of first threshold crossing.
+/// Bundled with the outcome label so crossing data lives with the event.
+pub struct CrossingSnapshot {
+    pub label:    Label,   // the outcome (Buy/Sell)
+    pub pct:      f64,     // price change at crossing
+    pub candles:  usize,   // candles elapsed since entry at crossing
+    pub ts:       String,  // timestamp at crossing
+    pub price:    f64,     // candle close at crossing
+}
+
 // ─── Pending entry ───────────────────────────────────────────────────────────
 
 pub struct Pending {
@@ -30,8 +41,7 @@ pub struct Pending {
     pub fact_labels:   Vec<String>,      // thought facts present at this candle
 
     // ── Learning (event-driven, first crossing only) ─────────────────
-    pub first_outcome: Option<Label>, // set on first threshold crossing; drives learning
-    pub outcome_pct:   f64,             // price change at first crossing (for DB)
+    pub crossing: Option<CrossingSnapshot>, // set on first threshold crossing; drives learning
 
     // ── Accounting (pure measurement, no hallucination) ──────────────
     pub entry_price:       f64,
@@ -39,13 +49,8 @@ pub struct Pending {
     pub entry_atr:         f64,    // ATR at entry (for threshold scaling)
     pub max_favorable:     f64,    // best price move in our direction
     pub max_adverse:       f64,    // worst price move against us (negative)
-    pub crossing_candles:  Option<usize>,  // candles elapsed at first crossing
-    pub crossing_ts:       Option<String>, // timestamp at first crossing
-    pub crossing_price:    Option<f64>,    // price at first crossing
-    pub path_candles:      usize,  // candles elapsed since entry
 
     // ── Trade management (the enterprise) ────────────────────────────
-    pub trailing_stop:     f64,    // current stop level (pct from entry, starts negative)
     pub exit_reason:       Option<ExitReason>, // why the trade closed
     pub exit_pct:          f64,    // actual exit price change (for P&L)
 
