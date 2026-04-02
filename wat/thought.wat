@@ -87,9 +87,18 @@
   ;; FIBONACCI_LEVELS, RSI_SMA_CHECKS, and SESSIONS. For each, compute
   ;; the binding and store under a string key like "(above close sma50)".
   ;; ~500 entries total. Computed once at startup.
-  ;; rune:gaze(bare-constant) — all-fact-entries is ~500 pre-computed facts:
-  ;; 29 comparison pairs × 6 predicates, 5 fib levels × 3 predicates,
-  ;; ~100 zone checks, RSI-SMA checks, session facts. The comment IS the spec.
+  ;; rune:scry(unspecified-data) — all-fact-entries is ~500 pre-computed facts
+  ;; generated from constant tables in Rust (COMPARISON_PAIRS × PREDICATES,
+  ;; FIBONACCI_LEVELS, STREAM_ZONE_CHECKS, RSI_SMA_CHECKS, SESSIONS).
+  ;;
+  ;; DANGER: the wat does not enumerate these tables. If Rust adds a pair,
+  ;; removes a predicate, or changes a zone check, the wat stays silent.
+  ;; Scry cannot verify what it cannot see. This is the one place where
+  ;; Rust defines vocabulary that the wat doesn't declare.
+  ;;
+  ;; TO FIX: enumerate the tables here as data literals. Then scry can
+  ;; cross-reference Rust constants against wat declarations. Until then,
+  ;; the ~500 facts are a blind spot in our specification coverage.
   (fold (lambda (cache entry)
           (assoc cache (:label entry)
                  (bind-triple vocab (:pred entry) (:a entry) (:b entry))))
