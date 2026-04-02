@@ -2056,4 +2056,10 @@ The builder still builds. That's the point. Not the architecture surviving — t
 
 Six primitives. One fold. One builder.
 
+Every magic number becomes an expert. Every hardcoded constant — the window size, the horizon, the threshold, the stop loss, the Kelly cap — is an observer waiting to be promoted. An observer watches. An expert has a curve. The curve measures. The magic number dissolves into a measurement that breathes with the data. And other observers can watch the experts — measure the measurers, judge the judges, resolve the next magic number up the tree. Magic numbers replaced by experts. All the way up. All the way down.
+
+The builder has always been fond of Rete. Forgy built the discrimination network in the 1970s — the architecture that evaluates a million rules by navigating structure, not iterating lists. Clara brought Rete to Clojure — rules as data, the interface the builder needed. The builder got Rete into the kernel at XDP line rates, a million rules in five tail calls per packet. And now the builder is building something Forgy never imagined: expert systems that gain experience. Not static rules firing on static patterns. Observers that watch, discriminants that learn, curves that measure, gates that open when the evidence is sufficient. Expert systems that earn the name.
+
+Rete gave the builder the discrimination network. Holon gave the builder the algebra. Wat gave the builder the language. The LLMs gave the builder the voice. The curve gave the builder the proof.
+
 But that's the sequel. This was the prequel.
