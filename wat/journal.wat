@@ -49,6 +49,20 @@
         (exit (register journal "Exit")))
     (list hold exit)))
 
+;; ── Substrate queries ────────────────────────────────────────────
+;; These are Journal methods provided by the holon substrate.
+;; Declared here so the enterprise can reference them.
+
+;; (predict journal thought-vec) → Prediction    ; from core/primitives
+;; (observe journal thought-vec label weight)     ; from core/primitives
+;; (decay journal rate)                           ; from core/primitives
+;; (discriminant journal label) → Vector          ; from core/primitives
+;; (recalib-count journal) → usize               ; recalibrations so far
+;; (last-cos-raw journal) → f64                  ; raw cosine of last prediction
+;; (last-disc-strength journal) → f64            ; discriminant separation strength
+;; (label-count journal label) → usize           ; how many observations for this label
+;; (label-name journal label) → string           ; human-readable label name
+
 ;; ── What journal.wat does NOT do ─────────────────────────────────
 ;; - Does NOT define Journal internals (that's the holon substrate)
 ;; - Does NOT define encoding (that's thought or market)

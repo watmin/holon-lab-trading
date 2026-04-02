@@ -131,16 +131,13 @@
 
 
 
-(define (should-label? entry candle ctx)
-  "Has the price crossed the move threshold since entry?"
-  (let ((move (/ (abs (- (:close candle) (:entry-price entry)))
-                 (:entry-price entry))))
-    (and (not (:first-outcome entry))
-         (> move (:move-threshold ctx)))))
+(define (should-label? entry abs-move ctx)
+  "Has the price crossed the move threshold since entry?
+   abs-move is pre-computed by the caller (tempered: no recomputation)."
+  (and (not (:first-outcome entry))
+       (> abs-move (:move-threshold ctx))))
 
-(define (entry-label entry candle mgr-buy mgr-sell)
-  "Buy if price went up, Sell if price went down."
-  (if (> (:close candle) (:entry-price entry)) mgr-buy mgr-sell))
+;; entry-label was inlined into the let* block (price-rose already bound).
 
 (define (entry-expired? entry candle-idx ctx)
   "Safety valve: pending entries expire at 10× horizon."
@@ -313,7 +310,7 @@
           (set! (:max-adverse entry)   (min (:max-adverse entry) move-pct))
 
           ;; 11b. First threshold crossing -> label + learn
-          (when (should-label? entry candle ctx)
+          (when (should-label? entry abs-move ctx)
             (let ((label     (if price-rose (:manager-buy desk) (:manager-sell desk)))
                   (signal-wt (signal-weight abs-move (:move-sum desk) (:move-count desk))))
               (set! (:first-outcome entry) label)

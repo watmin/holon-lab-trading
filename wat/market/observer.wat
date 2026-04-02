@@ -29,7 +29,8 @@
   conviction-history     ; (deque f64) -- recent conviction values, cap 2000
   conviction-threshold   ; f64 -- dynamic quantile threshold for flip zone
   primary-label          ; Label -- first registered label (for discriminant access)
-  curve-valid)           ; bool -- proof gate: has this observer proven direction edge?
+  curve-valid            ; bool -- proof gate: has this observer proven direction edge?
+  cached-acc)            ; f64 -- rolling accuracy of resolved predictions, updated on resolve
 
 (struct resolve-log
   name conviction direction correct)
