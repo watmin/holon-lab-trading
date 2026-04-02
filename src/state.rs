@@ -191,14 +191,13 @@ impl ExitAtoms {
 /// position phase, and direction — bundled into one vector.
 pub fn encode_exit_thought(
     pos: &ManagedPosition,
-    quote_price: f64,
+    pnl_frac: f64,
     candle: &Candle,
     exit_atoms: &ExitAtoms,
     exit_scalar: &ScalarEncoder,
 ) -> Vector {
-    let pnl_frac = pos.return_pct(quote_price);
     let mfe_frac = (pos.extreme_price - pos.entry_price) / pos.entry_price;
-    let stop_dist = (quote_price - pos.trailing_stop).abs() / quote_price;
+    let stop_dist = (pos.trailing_stop - candle.close).abs() / candle.close;
 
     Primitives::bundle(&[
         &Primitives::bind(&exit_atoms.pnl, &exit_scalar.encode(pnl_frac.clamp(-1.0, 1.0) * 0.5 + 0.5, ScalarMode::Linear { scale: 1.0 })),
@@ -696,11 +695,12 @@ impl EnterpriseState {
 
             // Exit expert: encode at Nyquist rate of position lifecycle
             if pos.candles_held > 0 && pos.candles_held % ctx.exit_observe_interval == 0 {
-                let exit_thought = encode_exit_thought(pos, quote_price, candle, ctx.exit_atoms, ctx.exit_scalar);
+                let pnl_frac = pos.return_pct(quote_price);
+                let exit_thought = encode_exit_thought(pos, pnl_frac, candle, ctx.exit_atoms, ctx.exit_scalar);
                 self.exit_pending.push(ExitObservation {
                     thought: exit_thought,
                     pos_id: pos.id,
-                    snapshot_pnl: pos.return_pct(quote_price),
+                    snapshot_pnl: pnl_frac,
                     snapshot_candle: i,
                 });
             }
