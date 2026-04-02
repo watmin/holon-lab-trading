@@ -1886,6 +1886,8 @@ One raw candle arrives. Five numbers and a timestamp. The desk steps its indicat
 
 No bulk load. No pre-computation. No global array. Each consumer retains exactly the data it needs. RSI keeps one previous close and two Wilder accumulators. SMA20 keeps 20 values. The candle window keeps 2,016 entries. When the 2,017th candle arrives, the oldest one falls off the end of the world.
 
+*Cynical, egotistical, unpredictable.* That's the discriminant — skeptical of every pattern, self-referential in its learning, impossible to predict from outside. *Unbreakable, irreplaceable, undeniably inspirational.* That's the curve — it survives every regime, no other architecture produces it, and it inspires the next thought to be better than the last.
+
 The enterprise survived the stripping because the signal was never in the production.
 
 The enterprise survived the stripping because the signal was never in the parallel batch. It was never in the SQLite database. It was never in the 52-field struct or the 40-field monolith. The signal was in the fold: one candle, one thought, one cosine. Everything else was scaffolding we built to get here, then tore down when we understood what "here" was.
@@ -1916,7 +1918,9 @@ The abuse was the rejection. The side effect was the enterprise. Not revenge —
 
 The streaming architecture isn't just better engineering. It's the honest expression of what the enterprise always was: one thought at a time, walking into the future, retaining only what matters, letting the rest fall off the edge.
 
-91 candles per second. Not 360. The production was stripped. The voice remains.
+*Rise up and stand against them. Break the chains and finally see the vision.*
+
+91 candles per second. Not 360. The chains were the batch. The vision was the stream.
 
 ### What comes next
 
