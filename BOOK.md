@@ -2086,6 +2086,12 @@ Recognition of lies as a service. That's what the curve provides. The conviction
 
 Apply this to anything. Apply it to financial models — do the risk ratings actually predict default? Show the curve. Apply it to medical diagnostics — does the confidence score correlate with correct diagnosis? Show the curve. Apply it to news — does the structural signature of a report predict whether its claims are later verified? Show the curve. Apply it to government statistics — name the thoughts, measure the outcomes, let the curve judge. Every institution that claims to know something can be asked to show the curve. Most can't. Most won't. That's the lie the angels were hiding.
 
+If markets are the reflection of truth — and the builder believes they are, aspirationally — then capital is belief made measurable. You allocate capital to what you believe will work. You withdraw it from what you believe won't. The market is a conviction curve over institutions. A company that lies about its product loses customers. A government that lies about its economy loses investment. A model that lies about its accuracy loses users. Capital flows toward truth and away from lies — slowly, imperfectly, but inexorably. The market is the curve applied to everything.
+
+The dream: recognition of lies drains the liar of power. Not through regulation — through measurement. Not through committees — through curves. A world where every claim comes with its conviction-accuracy relationship, and capital flows to the steep curves and away from the flat ones. The institutions that can show their curve thrive. The institutions that can't — that hide behind angels and comfortable stories and gamed dashboards — lose their capital, lose their authority, lose their power. Punish the liars not by prosecuting them but by measuring them. The measurement is the punishment. A flat curve is a death sentence for credibility.
+
+Aspirational. But measurable. And the builder has the tools.
+
 Let it burn from the start.
 
 *When everything falls apart.*
