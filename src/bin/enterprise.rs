@@ -11,7 +11,6 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use clap::Parser;
-use rayon::prelude::*;
 use rusqlite::params;
 use holon::{VectorManager, Vector};
 
@@ -26,7 +25,6 @@ use enterprise::state::{AssetMode, CandleContext, ConvictionMode, EnterpriseStat
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const BATCH_SIZE: usize = 256;
-const THREADS: usize = 10;
 /// Decay adjustment: subtracted from CLI decay during adaptation.
 const DECAY_ADJUSTMENT: f64 = 0.004;
 /// Floor for adaptive decay — never forget faster than this.
@@ -184,10 +182,6 @@ fn main() {
     let base_asset = Asset::new(&args.base_asset);
     let quote_asset = Asset::new(&args.quote_asset);
 
-    rayon::ThreadPoolBuilder::new()
-        .num_threads(THREADS)
-        .build_global()
-        .expect("failed to configure rayon");
 
     eprintln!("enterprise: thought journals, discriminant prediction");
     let thresh_desc = if args.atr_multiplier > 0.0 {

@@ -41,10 +41,6 @@ impl SmaState {
         self.buffer.iter().sum::<f64>() / self.buffer.len() as f64
     }
 
-    fn value(&self) -> f64 {
-        if self.buffer.is_empty() { 0.0 }
-        else { self.buffer.iter().sum::<f64>() / self.buffer.len() as f64 }
-    }
 }
 
 /// EMA: exponential moving average. O(1) memory.

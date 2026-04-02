@@ -240,7 +240,7 @@ impl Desk {
         i: usize,
         candle: &Candle,
         tht_facts: Vec<String>,
-        observer_vecs: Vec<Vector>,
+        _observer_vecs: Vec<Vector>,  // rune:reap(scaffolding) — desk encodes from window
         treasury: &mut Treasury,
         portfolio: &mut Portfolio,
         risk_mult: f64,
@@ -265,7 +265,6 @@ impl Desk {
         // The generalist uses the full window. Specialists sample shorter windows.
         // No parallel batch — sequential, per-desk, websocket-ready.
         let n_observers = self.observers.len();
-        let window_slice: Vec<&Candle> = self.candle_window.iter().collect();
         let observer_vecs: Vec<Vector> = (0..n_observers).map(|ei| {
             let w = self.observers[ei].window_sampler.sample(self.encode_count).min(self.candle_window.len());
             let start = self.candle_window.len().saturating_sub(w);

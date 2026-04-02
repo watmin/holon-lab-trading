@@ -374,8 +374,8 @@ impl EnterpriseState {
                 self.treasury.withdraw(&asset, amount);
                 return;
             }
-            EnrichedEvent::Candle { candle, fact_labels: tht_facts, observer_vecs } => {
-                self.on_candle_inner(&candle, tht_facts, observer_vecs, ctx);
+            EnrichedEvent::Candle { candle, fact_labels: tht_facts, observer_vecs: _ } => {
+                self.on_candle_inner(&candle, tht_facts, Vec::new(), ctx);
             }
         }
     }
@@ -383,13 +383,13 @@ impl EnterpriseState {
     /// Process one candle's pre-computed results. The fold's step function.
     ///
     /// Called from on_event for EnrichedEvent::Candle.
-    /// The backtest runner pre-encodes in parallel (rayon), then wraps
-    /// results in EnrichedEvent::Candle. The cursor is managed here.
+    /// The desk encodes thoughts from its candle window. The enterprise
+    /// routes candles to desks sequentially. The cursor is managed here.
     fn on_candle_inner(
         &mut self,
         candle: &Candle,
         tht_facts: Vec<String>,
-        observer_vecs: Vec<Vector>,
+        _observer_vecs: Vec<Vector>,  // rune:reap(scaffolding) — desk encodes from its window now
         ctx: &CandleContext,
     ) {
         let i = self.cursor;
@@ -408,7 +408,7 @@ impl EnterpriseState {
         // Desk fold step
         for desk in &mut self.desks {
             desk.on_candle(
-                i, candle, tht_facts.clone(), observer_vecs.clone(),
+                i, candle, tht_facts.clone(), Vec::new(),
                 &mut self.treasury, &mut self.portfolio,
                 self.cached_risk_mult, &mut self.peak_treasury_equity,
                 &mut self.db_batch, ctx,
