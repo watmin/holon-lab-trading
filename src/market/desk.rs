@@ -248,16 +248,37 @@ impl Desk {
         db_batch: &mut usize,
         ctx: &CandleContext,
     ) {
+        // Push computed candle to window (ring buffer, max capacity).
+        // Each consumer reads from this window. No global candle array.
+        self.candle_window.push_back(candle.clone());
+        if self.candle_window.len() > self.max_window_size {
+            self.candle_window.pop_front();
+        }
+
         // Tempered: cache frequently-accessed desk scalars at function entry.
         let mgr_buy = self.manager_buy;
         let mgr_sell = self.manager_sell;
         self.encode_count += 1;
 
-        // ── Observer predictions: each observer speaks ────────────────
-        // No flip. The discriminant learns what predicts — including reversals.
-        // The flip was a hack for a single journal. The enterprise lets each
-        // expert's discriminant encode the full pattern naturally.
-        // All 6 observers (5 specialists + generalist at index 5) predict.
+        // ── Observer thought encoding from candle window ────────────────
+        // Each observer encodes at their own sampled window scale.
+        // The generalist uses the full window. Specialists sample shorter windows.
+        // No parallel batch — sequential, per-desk, websocket-ready.
+        let n_observers = self.observers.len();
+        let window_slice: Vec<&Candle> = self.candle_window.iter().collect();
+        let observer_vecs: Vec<Vector> = (0..n_observers).map(|ei| {
+            let w = self.observers[ei].window_sampler.sample(self.encode_count).min(self.candle_window.len());
+            let start = self.candle_window.len().saturating_sub(w);
+            let slice: Vec<Candle> = self.candle_window.iter().skip(start).cloned().collect();
+            if slice.is_empty() {
+                // Not enough candles yet — return zero vector
+                holon::Vector::zeros(ctx.dims)
+            } else {
+                ctx.thought_encoder.encode_thought(&slice, ctx.vm, crate::market::OBSERVER_LENSES[ei]).thought
+            }
+        }).collect();
+
+        // ── Observer predictions ────────────────────────────────────────
         let observer_preds: Vec<Prediction> = observer_vecs.iter().enumerate()
             .map(|(ei, vec)| self.observers[ei].journal.predict(vec))
             .collect();

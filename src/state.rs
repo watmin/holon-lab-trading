@@ -243,6 +243,7 @@ pub struct CandleContext<'a> {
 
     // ── Immutable encoding infrastructure ───────────────────────────────
     pub vm: &'a VectorManager,
+    pub thought_encoder: &'a crate::thought::ThoughtEncoder,
     pub mgr_atoms: &'a ManagerAtoms,
     pub mgr_scalar: &'a holon::ScalarEncoder,
     pub exit_scalar: &'a holon::ScalarEncoder,

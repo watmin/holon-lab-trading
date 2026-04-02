@@ -391,6 +391,7 @@ fn main() {
         conviction_warmup,
         conviction_window,
         vm: &vm,
+        thought_encoder: &thought_encoder,
         mgr_atoms: &mgr_atoms,
         mgr_scalar: &mgr_scalar,
         exit_scalar: &exit_scalar,
@@ -415,57 +416,15 @@ fn main() {
         }
 
         let batch_end = (state.cursor + BATCH_SIZE).min(end_idx);
-        // ── Parallel: each observer encodes at their own sampled window ────
-        // rune:scry(scaffolding) — desks[0] references throughout the binary are
-        // single-desk backtest scaffolding. With N desks, each desk gets its own
-        // candle stream and encoding batch. Wired when streaming lands.
-        let desk = &state.desks[0];
-        let n_observers = desk.observers.len();
 
-        // Expert samplers are not Send, so collect windows first
-        let observer_windows: Vec<Vec<usize>> = desk.observers.iter()
-            .map(|exp| {
-                (state.cursor..batch_end).map(|i| exp.window_sampler.sample(i).min(i + 1)).collect()
-            }).collect();
-
-        let batch_start = state.cursor;
-        let tht_vecs: Vec<(usize, Vec<String>, Vec<Vector>)> = (batch_start..batch_end)
-            .into_par_iter()
-            .map(|i| {
-                let bi = i - batch_start; // batch index
-
-                // Primary "generalist" encoding at fixed window
-                // observer (index 5) and provides fact_labels for diagnostics.
-                let w_start = i.saturating_sub(args.window - 1);
-                let window  = &candles[w_start..=i];
-                let full = thought_encoder.encode_thought(window, &vm, enterprise::market::Lens::Generalist);
-
-                // Each observer encodes at their own sampled window.
-                // The generalist (index 5) reuses the full encoding above
-                // to avoid double-encoding the same view.
-                let observer_vecs: Vec<Vector> = (0..n_observers)
-                    .map(|ei| {
-                        if observer_names[ei] == enterprise::market::Lens::Generalist {
-                            full.thought.clone()
-                        } else {
-                            let ew = observer_windows[ei][bi];
-                            let ew_start = i.saturating_sub(ew - 1);
-                            let exp_window = &candles[ew_start..=i];
-                            thought_encoder.encode_thought(exp_window, &vm, observer_names[ei]).thought
-
-                        }
-                    })
-                    .collect();
-                (i, full.fact_labels, observer_vecs)
-            })
-            .collect();
-
-        // ── Sequential: predict + buffer + learn + expire ────────────────────
-        for (i, fact_labels, observer_vecs) in tht_vecs {
+        // ── Sequential: one candle at a time ────────────────────────────────
+        // The desk encodes thoughts from its own candle window.
+        // No parallel batch. No pre-encoding. Websocket-ready.
+        for i in state.cursor..batch_end {
             let event = enterprise::event::EnrichedEvent::Candle {
                 candle: candles[i].clone(),
-                fact_labels,
-                observer_vecs,
+                fact_labels: Vec::new(),    // desk computes its own
+                observer_vecs: Vec::new(),  // desk encodes from its window
             };
             state.on_event(event, &ctx);
         }
