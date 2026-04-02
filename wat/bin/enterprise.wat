@@ -41,10 +41,9 @@
   cursor)                ; current position in the candle stream
 
 ;; ── The event ───────────────────────────────────────────────────────
-;; Raw candle. No pre-computed indicators, no pre-encoded thoughts.
+;; Raw candle — defined in candle.wat (required by desk).
+;; No pre-computed indicators, no pre-encoded thoughts.
 ;; The desk computes everything from the raw OHLCV.
-
-(struct raw-candle ts open high low close volume)
 
 ;; rune:reap(scaffolding) — Deposit/Withdraw exist but are never constructed.
 
@@ -131,28 +130,168 @@
            (map (lambda (obs vec) (predict (:journal obs) vec))
                 (:observers desk) observer-vecs))
 
-  ;; 4-13. The rest of the fold (same as before)
-  ;; ... manager encoding, panel engram, conviction tracking,
-  ;; ... position tick, position opening, pending push, decay,
-  ;; ... learning + resolution, state bookkeeping
-  ;;
-  ;; (The full steps 4-13 from the existing on-candle-desk body apply here.
-  ;;  They operate on desk-owned state with treasury/portfolio as params.)
+  ;; 4. Manager encoding + prediction
+         (mgr-facts    (encode-manager-thought
+                         (:manager-atoms ctx)
+                         (build-manager-context desk observer-preds observer-vecs
+                                                computed-candle ctx)
+                         (:dims (:config desk))
+                         (:prev-manager-thought? desk)))
+         (mgr-thought  (bundle mgr-facts))
+         (manager-pred (predict (:manager-journal desk) mgr-thought))
+         (meta-dir        (:direction manager-pred))
+         (meta-conviction (:conviction manager-pred))
+
+  ;; 5. Panel engram
+         (panel-state   (map :raw-cosine observer-preds))
+         (panel-familiar (< (residual (:panel-engram desk) panel-state)
+                            (threshold (:panel-engram desk))))
 
          (quote-price (:close computed-candle))
          (fee-rate    (+ (:swap-fee ctx) (:slippage ctx))))
 
-    ;; Steps 4-13 continue with computed-candle, observer-vecs, observer-preds...
-    ;; (The existing on-candle-desk body from steps 4-13 goes here,
-    ;;  replacing the old `candle` parameter with `computed-candle`
-    ;;  and using `window` for any lookback the thought encoder needs.)
+    ;; 6. Conviction tracking
+    (push-back (:conviction-history desk) meta-conviction)
+    (when (> (len (:conviction-history desk)) (:conviction-window ctx))
+      (pop-front (:conviction-history desk)))
 
-    ;; Return: desk with updated indicator-bank and candle-window
+    (when (and (>= (len (:conviction-history desk)) (:conviction-warmup ctx))
+               (= (mod (:encode-count desk) (:recalib-interval (:config desk))) 0))
+      (match (:conviction-mode ctx)
+        :quantile
+          (set! (:conviction-threshold desk)
+                (conviction-threshold-quantile (:conviction-history desk)
+                                               (:conviction-quantile ctx)))
+        :auto
+          (when-let ((curve (log-linear-regression
+                      (bin (:resolved-preds desk) 20))))
+            (let* ((a (first curve)) (b (second curve)))
+              (when (and (> b 0.0) (> (:min-edge ctx) 0.50))
+                (let ((target (/ (- (:min-edge ctx) 0.50) a)))
+                  (when (> target 0.0)
+                    (let ((thresh (/ (ln target) b)))
+                      (when (and (> thresh 0.0) (< thresh 1.0))
+                        (set! (:conviction-threshold desk) thresh))))))))))
+
+    ;; 7. Position tick (exit expert encode, tick positions, settle exits)
+    (for-each (lambda (pos)
+      (let ((exit-thought (encode-position pos quote-price (:atr computed-candle))))
+        (when (= (mod (:candles-held pos) (:exit-observe-interval ctx)) 0)
+          (push-back (:exit-pending desk)
+            (exit-observation :thought exit-thought
+                              :pos-id (:id pos)
+                              :snapshot-pnl (return-pct pos quote-price)
+                              :snapshot-candle (:encode-count desk)))))
+
+      (let ((signal (tick pos quote-price (:k-trail ctx))))
+        (when signal
+          (let ((pnl (compute-trade-pnl
+                        (return-pct pos quote-price)
+                        (= (:direction pos) :long)
+                        (:swap-fee ctx) (:slippage ctx)
+                        (= (:asset-mode ctx) "hold")
+                        (:base-deployed pos)
+                        (:equity portfolio)
+                        0.0)))
+            (close-position treasury (:base-deployed pos)
+                            (:trade-pnl pnl) (:total-fees pos) 0.0)
+            (record-trade portfolio (:outcome-pct pnl)
+                          0.0 (:direction pos) (:swap-fee ctx) (:slippage ctx))
+            (set! (:last-exit-price desk) quote-price)
+            (set! (:last-exit-atr desk) (:atr computed-candle))
+            (set! (:phase pos) :closed)))))
+      (:positions desk))
+
+    ;; 8-9. Position opening + sizing
+    (when (all-gates-pass? desk portfolio manager-pred risk-mult computed-candle fee-rate ctx)
+      (let* ((frac (compute-position-size 0.03 risk-mult (:max-single-position ctx)))
+             (direction (trade-direction manager-pred (:manager-buy desk)))
+             (deploy (* (:equity portfolio) frac)))
+        (when (> deploy 10.0)
+          (let ((pos (new-position
+                       (position-entry
+                         :id (:next-position-id desk)
+                         :candle-idx (:encode-count desk)
+                         :entry-price quote-price
+                         :entry-atr (:atr computed-candle)
+                         :direction direction
+                         :base-deployed deploy
+                         :quote-received 0.0
+                         :entry-fee (* deploy fee-rate)
+                         :k-stop (:k-stop ctx)
+                         :k-tp (:k-tp ctx)))))
+            (push! (:positions desk) pos)
+            (inc! (:next-position-id desk))
+            (inc! (:position-swaps desk))
+
+    ;; 10. Pending push (all candles, for learning)
+            (push! (:pending desk)
+              (pending :candle-idx (:encode-count desk)
+                       :tht-vec mgr-thought
+                       :tht-pred manager-pred
+                       :meta-dir meta-dir
+                       :meta-conviction meta-conviction
+                       :entry-price quote-price
+                       :entry-atr (:atr computed-candle)
+                       :observer-vecs observer-vecs
+                       :observer-preds observer-preds
+                       :mgr-thought mgr-thought))))))
+
+    ;; 11. Decay (journals)
+    (for-each (lambda (obs)
+      (decay (:journal obs) (:decay (:config desk))))
+      (:observers desk))
+    (decay (:manager-journal desk) (:adaptive-decay desk))
+
+    ;; 12. Learning + resolution
+    (for-each (lambda (entry)
+      (let* ((price-delta (- quote-price (:entry-price entry)))
+             (abs-move (/ (abs price-delta) (:entry-price entry))))
+
+        ;; Track excursion
+        (let ((move-pct (/ price-delta (:entry-price entry))))
+          (set! (:max-favorable entry) (max (:max-favorable entry) move-pct))
+          (set! (:max-adverse entry)   (min (:max-adverse entry) move-pct)))
+
+        ;; First threshold crossing → label + learn
+        (when (should-label? entry abs-move ctx)
+          (let ((price-rose (> quote-price (:entry-price entry)))
+                (label (if price-rose (:manager-buy desk) (:manager-sell desk)))
+                (sw (signal-weight abs-move (:move-sum desk) (:move-count desk))))
+            (set! (:first-outcome entry) label)
+            ;; All 6 observers learn
+            (for-each (lambda (obs vec)
+              (observe (:journal obs) vec label sw))
+              (:observers desk) (:observer-vecs entry))
+            (inc! (:labeled-count desk))))
+
+        ;; Resolution: expired entries teach the manager
+        (when (entry-expired? entry (:encode-count desk) ctx)
+          (let ((price-label (if (> quote-price (:entry-price entry))
+                                 (:manager-buy desk) (:manager-sell desk))))
+            (observe (:manager-journal desk) (:mgr-thought entry) price-label 1.0)
+            (push-back (:manager-resolved desk)
+              (list (:meta-conviction entry)
+                    (= (:first-outcome entry) price-label)))
+            (for-each (lambda (obs pred)
+              (resolve obs (:tht-vec entry) pred price-label 1.0
+                       (:conviction-quantile ctx) (:conviction-window ctx)))
+              (:observers desk) (:observer-preds entry))))))
+      (:pending desk))
+
+    ;; Remove resolved entries
+    (set! (:pending desk)
+      (filter (lambda (e) (not (entry-expired? e (:encode-count desk) ctx)))
+              (:pending desk)))
+
+    ;; 13. State bookkeeping
+    (set! (:prev-manager-thought? desk) mgr-thought)
+    (inc! (:encode-count desk))
+
+    ;; Return: desk with updated indicator-bank and candle-window, plus treasury/portfolio
     (list (update desk
             :indicator-bank indicator-bank
-            :candle-window window
-            ;; ... plus all the mutations from steps 4-13
-            )
+            :candle-window window)
           treasury portfolio)))
 
 ;; ── Candle window management ────────────────────────────────────────

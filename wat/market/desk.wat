@@ -5,7 +5,6 @@
 ;;   - Observer panel (5 specialists + 1 generalist)
 ;;   - Manager journal (aggregates observer opinions)
 ;;   - Exit expert journal (learns hold/exit from position state)
-;;   - Risk branches (5 OnlineSubspace per desk)
 ;;   - Positions (managed allocations from the treasury)
 ;;   - Pending entries (learning queue)
 ;;
@@ -50,6 +49,8 @@
   ;; Each consumer reads from this window. No global candle array.
   ;; Observers sample slices at their own scale. Thought encoder reads the window.
   candle-window          ; (deque Candle) — last N computed candles
+  ;; Thought encoder — encodes thoughts from the candle window using the vocabulary.
+  thought-encoder        ; ThoughtEncoder — initialized by enterprise at setup with vocab
 
   ;; Observer panel: 5 specialists + 1 generalist
   observers              ; (list Observer) — each has own Journal + WindowSampler
@@ -145,6 +146,8 @@
       :config config
       :indicator-bank (new-indicator-bank)
       :candle-window (deque)
+      ;; thought-encoder initialized by enterprise at setup with vocabulary context
+      :thought-encoder false
       :observers observers
       :manager-journal manager-journal
       :manager-buy manager-buy :manager-sell manager-sell

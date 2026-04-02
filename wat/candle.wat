@@ -132,12 +132,13 @@
 (define (linreg-slope buf)
   "Compute OLS slope of values in buf indexed by position."
   (let* ((n   (len buf))
-         (nf  (exact->inexact n))
+         (nf  (* 1.0 n))
          (sx  (/ (* nf (- nf 1.0)) 2.0))             ; sum of 0..n-1
          (sxx (/ (* nf (- nf 1.0) (- (* 2.0 nf) 1.0)) 6.0)) ; sum of i^2
          (sy  (fold + 0.0 buf))
+         (indices (range n))
          (sxy (fold + 0.0
-                (map-indexed (lambda (j v) (* (exact->inexact j) v)) buf)))
+                (map (lambda (j v) (* (* 1.0 j) v)) indices buf)))
          (denom (- (* nf sxx) (* sx sx))))
     (if (< (abs denom) 1e-10) 0.0
         (/ (- (* nf sxy) (* sx sy)) denom))))
@@ -423,7 +424,7 @@
              (ups  (fold + 0.0 buf))
              (n    (len buf)))
         (list (update state :ring ring :prev-close close)
-              (/ ups (exact->inexact n))))))
+              (/ ups (* 1.0 n))))))
 
 ;; ATR ROC: ROC applied to ATR values (not closes).
 ;; Reuses roc-state. Just feed ATR values instead of closes.
@@ -595,13 +596,113 @@
   ;; Pre-computed from raw (no fold state needed)
   close prev-close?)
 
+;; ── Constructor ────────────────────────────────────────────────────
+
+(define (new-indicator-bank)
+  "Create an indicator bank with all state machines initialized.
+   All output value fields start absent/false."
+  (indicator-bank
+    ;; Scalar stream processor states
+    :sma20 (new-sma 20) :sma50 (new-sma 50) :sma200 (new-sma 200)
+    :bb-stddev (new-stddev 20)
+    :ema20 (new-ema 20)
+    :rsi (new-rsi 14)
+    :macd (new-macd)
+    :dmi (new-dmi 14)
+    :atr (new-atr 14)
+    :stoch (new-stoch 14)
+    :stoch-d-sma (new-sma 3)
+    :williams-buf (new-stoch 14)
+    :volume-sma20 (new-sma 20)
+
+    ;; ROC states
+    :roc-1 (new-roc 1) :roc-3 (new-roc 3)
+    :roc-6 (new-roc 6) :roc-12 (new-roc 12)
+
+    ;; CCI, MFI, OBV
+    :cci-state (new-cci 20)
+    :mfi-state (new-mfi 14)
+    :obv-slope-state (new-obv-slope 12)
+
+    ;; Multi-timeframe
+    :mtf-1h (new-mtf 12) :mtf-4h (new-mtf 48)
+
+    ;; Range position
+    :rangepos-12 (new-rangepos 12) :rangepos-24 (new-rangepos 24)
+    :rangepos-48 (new-rangepos 48)
+
+    ;; Trend consistency
+    :trendcons-6 (new-trendcons 6) :trendcons-12 (new-trendcons 12)
+    :trendcons-24 (new-trendcons 24)
+
+    ;; ATR ROC
+    :atr-roc-6 (new-roc 6) :atr-roc-12 (new-roc 12)
+
+    ;; All output values absent/false during warmup
+    :sma20-val? false :sma50-val? false :sma200-val? false
+    :bb-upper? false :bb-lower? false :bb-width? false
+    :rsi-val? false
+    :macd-line? false :macd-signal? false :macd-hist? false
+    :dmi-plus? false :dmi-minus? false :adx? false
+    :atr-val? false :atr-r? false
+    :stoch-k? false :stoch-d? false
+    :williams-r? false
+    :cci? false :mfi? false
+    :volume-sma20-val? false
+    :roc-1? false :roc-3? false :roc-6? false :roc-12? false
+    :obv-slope-12? false
+    :tf-1h-close? false :tf-1h-high? false :tf-1h-low? false
+    :tf-1h-ret? false :tf-1h-body? false
+    :tf-4h-close? false :tf-4h-high? false :tf-4h-low? false
+    :tf-4h-ret? false :tf-4h-body? false
+    :range-pos-12? false :range-pos-24? false :range-pos-48? false
+    :trend-consistency-6? false :trend-consistency-12? false
+    :trend-consistency-24? false
+    :atr-roc-6? false :atr-roc-12? false
+    :vol-accel? false
+    :bb-pos? false
+    :kelt-upper? false :kelt-lower? false :kelt-pos? false
+    :squeeze? false
+    :rsi-prev? false :stoch-k-prev? false :stoch-d-prev? false
+    :macd-line-prev? false :macd-signal-prev? false
+    :sma50-prev? false :sma200-prev? false
+    :close false :prev-close? false))
+
+;; ── Computed candle ─────────────────────────────────────────────────
+;;
+;; The output of tick-indicators: all indicator values the Candle struct needs.
+;; Enterprise.wat expects (list updated-bank computed-candle) from tick-indicators.
+
+(struct computed-candle
+  ts open high low close volume
+  sma20 sma50 sma200
+  bb-upper bb-lower bb-width
+  rsi
+  macd-line macd-signal macd-hist
+  dmi-plus dmi-minus adx
+  atr atr-r
+  stoch-k stoch-d
+  williams-r
+  cci mfi
+  volume-sma20
+  roc-1 roc-3 roc-6 roc-12
+  obv-slope-12
+  tf-1h-close tf-1h-high tf-1h-low tf-1h-ret tf-1h-body
+  tf-4h-close tf-4h-high tf-4h-low tf-4h-ret tf-4h-body
+  range-pos-12 range-pos-24 range-pos-48
+  trend-consistency-6 trend-consistency-12 trend-consistency-24
+  atr-roc-6 atr-roc-12
+  vol-accel bb-pos
+  kelt-upper kelt-lower kelt-pos
+  squeeze)
+
 ;; ── tick-indicators ────────────────────────────────────────────────
 ;;
 ;; The fold step. Advances all indicators with one candle.
-;; Pure: bank in, bank out. No mutation. No side effects.
+;; Pure: bank in, (bank, computed-candle) out. No mutation. No side effects.
 
 (define (tick-indicators bank candle)
-  "Step all indicators with one candle. Returns new bank."
+  "Step all indicators with one candle. Returns (list updated-bank computed-candle)."
   (let* ((close  (:close candle))
          (high   (:high candle))
          (low    (:low candle))
@@ -697,89 +798,129 @@
          (mtf1h    (second mtf1h-r))
          (mtf4h    (second mtf4h-r)))
 
-    (update bank
-      ;; ── Updated states ────────────────────────────────────────
-      :sma20 (first sma20-r) :sma50 (first sma50-r) :sma200 (first sma200-r)
-      :bb-stddev (first bb-r) :ema20 (first ema20-r)
-      :rsi (first rsi-r) :macd (first macd-r)
-      :dmi (first dmi-r) :atr (first atr-r)
-      :stoch (first stoch-r) :stoch-d-sma (first stoch-d-r)
-      :williams-buf (first will-r)
-      :volume-sma20 (first vol-r)
-      :roc-1 (first roc1-r) :roc-3 (first roc3-r)
-      :roc-6 (first roc6-r) :roc-12 (first roc12-r)
-      :cci-state (first cci-r)
-      :mfi-state (first mfi-r)
-      :obv-slope-state (first obv-r)
-      :mtf-1h (first mtf1h-r) :mtf-4h (first mtf4h-r)
-      :rangepos-12 (first rp12-r) :rangepos-24 (first rp24-r) :rangepos-48 (first rp48-r)
-      :trendcons-6 (first tc6-r) :trendcons-12 (first tc12-r) :trendcons-24 (first tc24-r)
-      :atr-roc-6 (first atr-roc6-r) :atr-roc-12 (first atr-roc12-r)
+    (let ((atr-r-v (if (> close 1e-10) (/ atr-v close) 0.0))
 
-      ;; ── Shift current → prev ──────────────────────────────────
-      :rsi-prev? (:rsi-val? bank)
-      :stoch-k-prev? (:stoch-k? bank)
-      :stoch-d-prev? (:stoch-d? bank)
-      :macd-line-prev? (:macd-line? bank)
-      :macd-signal-prev? (:macd-signal? bank)
-      :sma50-prev? (:sma50-val? bank)
-      :sma200-prev? (:sma200-val? bank)
-      :prev-close? (:close bank)
+           (updated-bank
+             (update bank
+               ;; ── Updated states ────────────────────────────────────────
+               :sma20 (first sma20-r) :sma50 (first sma50-r) :sma200 (first sma200-r)
+               :bb-stddev (first bb-r) :ema20 (first ema20-r)
+               :rsi (first rsi-r) :macd (first macd-r)
+               :dmi (first dmi-r) :atr (first atr-r)
+               :stoch (first stoch-r) :stoch-d-sma (first stoch-d-r)
+               :williams-buf (first will-r)
+               :volume-sma20 (first vol-r)
+               :roc-1 (first roc1-r) :roc-3 (first roc3-r)
+               :roc-6 (first roc6-r) :roc-12 (first roc12-r)
+               :cci-state (first cci-r)
+               :mfi-state (first mfi-r)
+               :obv-slope-state (first obv-r)
+               :mtf-1h (first mtf1h-r) :mtf-4h (first mtf4h-r)
+               :rangepos-12 (first rp12-r) :rangepos-24 (first rp24-r) :rangepos-48 (first rp48-r)
+               :trendcons-6 (first tc6-r) :trendcons-12 (first tc12-r) :trendcons-24 (first tc24-r)
+               :atr-roc-6 (first atr-roc6-r) :atr-roc-12 (first atr-roc12-r)
 
-      ;; ── New current values ────────────────────────────────────
-      :close close
-      :sma20-val? sma20-v
-      :sma50-val? (second sma50-r)
-      :sma200-val? (second sma200-r)
-      :bb-upper? bb-up :bb-lower? bb-lo
-      :bb-width? bb-w
-      :rsi-val? (second rsi-r)
-      :macd-line? (first (second macd-r))
-      :macd-signal? (second (second macd-r))
-      :macd-hist? (nth (second macd-r) 2)
-      :dmi-plus? (first (second dmi-r))
-      :dmi-minus? (second (second dmi-r))
-      :adx? (nth (second dmi-r) 2)
-      :atr-val? atr-v
-      :atr-r? (if (> close 1e-10) (/ atr-v close) 0.0)
-      :stoch-k? (second stoch-r)
-      :stoch-d? (second stoch-d-r)
-      :williams-r? (second will-r)
-      :cci? (second cci-r)
-      :mfi? (second mfi-r)
-      :volume-sma20-val? vol-sma
-      :roc-1? (second roc1-r)
-      :roc-3? (second roc3-r)
-      :roc-6? (second roc6-r)
-      :roc-12? (second roc12-r)
-      :obv-slope-12? (second obv-r)
+               ;; ── Shift current → prev ──────────────────────────────────
+               :rsi-prev? (:rsi-val? bank)
+               :stoch-k-prev? (:stoch-k? bank)
+               :stoch-d-prev? (:stoch-d? bank)
+               :macd-line-prev? (:macd-line? bank)
+               :macd-signal-prev? (:macd-signal? bank)
+               :sma50-prev? (:sma50-val? bank)
+               :sma200-prev? (:sma200-val? bank)
+               :prev-close? (:close bank)
 
-      ;; Multi-timeframe
-      :tf-1h-close? (first mtf1h) :tf-1h-high? (second mtf1h)
-      :tf-1h-low? (nth mtf1h 2) :tf-1h-ret? (nth mtf1h 3) :tf-1h-body? (nth mtf1h 4)
-      :tf-4h-close? (first mtf4h) :tf-4h-high? (second mtf4h)
-      :tf-4h-low? (nth mtf4h 2) :tf-4h-ret? (nth mtf4h 3) :tf-4h-body? (nth mtf4h 4)
+               ;; ── New current values ────────────────────────────────────
+               :close close
+               :sma20-val? sma20-v
+               :sma50-val? (second sma50-r)
+               :sma200-val? (second sma200-r)
+               :bb-upper? bb-up :bb-lower? bb-lo
+               :bb-width? bb-w
+               :rsi-val? (second rsi-r)
+               :macd-line? (first (second macd-r))
+               :macd-signal? (second (second macd-r))
+               :macd-hist? (nth (second macd-r) 2)
+               :dmi-plus? (first (second dmi-r))
+               :dmi-minus? (second (second dmi-r))
+               :adx? (nth (second dmi-r) 2)
+               :atr-val? atr-v
+               :atr-r? atr-r-v
+               :stoch-k? (second stoch-r)
+               :stoch-d? (second stoch-d-r)
+               :williams-r? (second will-r)
+               :cci? (second cci-r)
+               :mfi? (second mfi-r)
+               :volume-sma20-val? vol-sma
+               :roc-1? (second roc1-r)
+               :roc-3? (second roc3-r)
+               :roc-6? (second roc6-r)
+               :roc-12? (second roc12-r)
+               :obv-slope-12? (second obv-r)
 
-      ;; Range position
-      :range-pos-12? (second rp12-r)
-      :range-pos-24? (second rp24-r)
-      :range-pos-48? (second rp48-r)
+               ;; Multi-timeframe
+               :tf-1h-close? (first mtf1h) :tf-1h-high? (second mtf1h)
+               :tf-1h-low? (nth mtf1h 2) :tf-1h-ret? (nth mtf1h 3) :tf-1h-body? (nth mtf1h 4)
+               :tf-4h-close? (first mtf4h) :tf-4h-high? (second mtf4h)
+               :tf-4h-low? (nth mtf4h 2) :tf-4h-ret? (nth mtf4h 3) :tf-4h-body? (nth mtf4h 4)
 
-      ;; Trend consistency
-      :trend-consistency-6? (second tc6-r)
-      :trend-consistency-12? (second tc12-r)
-      :trend-consistency-24? (second tc24-r)
+               ;; Range position
+               :range-pos-12? (second rp12-r)
+               :range-pos-24? (second rp24-r)
+               :range-pos-48? (second rp48-r)
 
-      ;; ATR ROC
-      :atr-roc-6? (second atr-roc6-r)
-      :atr-roc-12? (second atr-roc12-r)
+               ;; Trend consistency
+               :trend-consistency-6? (second tc6-r)
+               :trend-consistency-12? (second tc12-r)
+               :trend-consistency-24? (second tc24-r)
 
-      ;; Derived
-      :vol-accel? vol-accel
-      :bb-pos? bb-pos
-      :kelt-upper? kelt-up :kelt-lower? kelt-lo
-      :kelt-pos? kelt-pos
-      :squeeze? squeeze)))
+               ;; ATR ROC
+               :atr-roc-6? (second atr-roc6-r)
+               :atr-roc-12? (second atr-roc12-r)
+
+               ;; Derived
+               :vol-accel? vol-accel
+               :bb-pos? bb-pos
+               :kelt-upper? kelt-up :kelt-lower? kelt-lo
+               :kelt-pos? kelt-pos
+               :squeeze? squeeze)))
+
+      (list updated-bank
+            (computed-candle
+              :ts (:ts candle) :open (:open candle)
+              :high high :low low :close close :volume volume
+              :sma20 sma20-v :sma50 (second sma50-r) :sma200 (second sma200-r)
+              :bb-upper bb-up :bb-lower bb-lo :bb-width bb-w
+              :rsi (second rsi-r)
+              :macd-line (first (second macd-r))
+              :macd-signal (second (second macd-r))
+              :macd-hist (nth (second macd-r) 2)
+              :dmi-plus (first (second dmi-r))
+              :dmi-minus (second (second dmi-r))
+              :adx (nth (second dmi-r) 2)
+              :atr atr-v :atr-r atr-r-v
+              :stoch-k (second stoch-r) :stoch-d (second stoch-d-r)
+              :williams-r (second will-r)
+              :cci (second cci-r) :mfi (second mfi-r)
+              :volume-sma20 vol-sma
+              :roc-1 (second roc1-r) :roc-3 (second roc3-r)
+              :roc-6 (second roc6-r) :roc-12 (second roc12-r)
+              :obv-slope-12 (second obv-r)
+              :tf-1h-close (first mtf1h) :tf-1h-high (second mtf1h)
+              :tf-1h-low (nth mtf1h 2) :tf-1h-ret (nth mtf1h 3) :tf-1h-body (nth mtf1h 4)
+              :tf-4h-close (first mtf4h) :tf-4h-high (second mtf4h)
+              :tf-4h-low (nth mtf4h 2) :tf-4h-ret (nth mtf4h 3) :tf-4h-body (nth mtf4h 4)
+              :range-pos-12 (second rp12-r)
+              :range-pos-24 (second rp24-r)
+              :range-pos-48 (second rp48-r)
+              :trend-consistency-6 (second tc6-r)
+              :trend-consistency-12 (second tc12-r)
+              :trend-consistency-24 (second tc24-r)
+              :atr-roc-6 (second atr-roc6-r)
+              :atr-roc-12 (second atr-roc12-r)
+              :vol-accel vol-accel :bb-pos bb-pos
+              :kelt-upper kelt-up :kelt-lower kelt-lo :kelt-pos kelt-pos
+              :squeeze squeeze)))))
 
 ;; ── Spatial indicators (no fold state — computed from candle window) ──
 ;;
