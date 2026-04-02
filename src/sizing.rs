@@ -1,5 +1,50 @@
 use std::collections::VecDeque;
 
+/// Fit the exponential conviction-accuracy curve from resolved predictions.
+/// accuracy = 0.50 + a × exp(b × conviction)
+/// Returns (a, b) or None if insufficient data or ill-conditioned.
+///
+/// Shared by kelly_frac (sizes positions) and compute_conviction_threshold
+/// (finds the conviction level where signal emerges).
+fn fit_conviction_curve(resolved: &VecDeque<(f64, bool)>, min_bin_size: usize) -> Option<(f64, f64)> {
+    let n_bins = 20usize;
+    let mut sorted: Vec<(f64, bool)> = resolved.iter().copied().collect();
+    sorted.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+    let bin_size = sorted.len() / n_bins;
+    if bin_size < min_bin_size { return None; }
+
+    // Bin: compute (mean_conviction, log(accuracy - 0.50)) per bin
+    let mut points: Vec<(f64, f64)> = Vec::new();
+    for bi in 0..n_bins {
+        let start = bi * bin_size;
+        let end = if bi == n_bins - 1 { sorted.len() } else { (bi + 1) * bin_size };
+        let slice = &sorted[start..end];
+        let mean_c = slice.iter().map(|(c, _)| c).sum::<f64>() / slice.len() as f64;
+        let acc = slice.iter().filter(|(_, w)| *w).count() as f64 / slice.len() as f64;
+        if acc > 0.505 {
+            let ln_excess = (acc - 0.50).ln();
+            if ln_excess.is_finite() {
+                points.push((mean_c, ln_excess));
+            }
+        }
+    }
+
+    if points.len() < 3 { return None; }
+
+    // Log-linear regression: ln(acc - 0.50) = ln(a) + b × conviction
+    let n = points.len() as f64;
+    let (sx, sy, sxx, sxy) = points.iter().fold(
+        (0.0, 0.0, 0.0, 0.0),
+        |(sx, sy, sxx, sxy), (x, y)| (sx + x, sy + y, sxx + x * x, sxy + x * y),
+    );
+    let denom = n * sxx - sx * sx;
+    if denom.abs() <= 1e-10 { return None; }
+
+    let b = (n * sxy - sx * sy) / denom;
+    let a = ((sy - b * sx) / n).exp();
+    Some((a, b))
+}
+
 /// Kelly position sizing from the exponential conviction-accuracy curve.
 ///
 /// Uses the fitted curve `accuracy = 0.50 + a × exp(b × conviction)` to
@@ -16,45 +61,8 @@ pub fn kelly_frac(
 ) -> Option<(f64, f64, f64)> {
     if resolved.len() < 500 { return None; }
 
-    // Fit the exponential curve from resolved predictions (binned).
-    let n_bins = 20usize;
-    let mut sorted: Vec<(f64, bool)> = resolved.iter().copied().collect();
-    sorted.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-    let bin_size = sorted.len() / n_bins;
-    if bin_size < 10 { return None; }
-
-    let mut points: Vec<(f64, f64)> = Vec::new();
-    for bi in 0..n_bins {
-        let start = bi * bin_size;
-        let end = if bi == n_bins - 1 { sorted.len() } else { (bi + 1) * bin_size };
-        let slice = &sorted[start..end];
-        let mean_c = slice.iter().map(|(c, _)| c).sum::<f64>() / slice.len() as f64;
-        let acc = slice.iter().filter(|(_, w)| *w).count() as f64 / slice.len() as f64;
-        if acc > 0.505 {
-            if let Some(ln_excess) = Some((acc - 0.50).ln()) {
-                if ln_excess.is_finite() {
-                    points.push((mean_c, ln_excess));
-                }
-            }
-        }
-    }
-
-    // Log-linear regression: ln(acc - 0.50) = ln(a) + b * conviction
-    let (win_rate, curve_a, curve_b) = if points.len() >= 3 {
-        let n = points.len() as f64;
-        let sx: f64 = points.iter().map(|(x, _)| x).sum();
-        let sy: f64 = points.iter().map(|(_, y)| y).sum();
-        let sxx: f64 = points.iter().map(|(x, _)| x * x).sum();
-        let sxy: f64 = points.iter().map(|(x, y)| x * y).sum();
-        let denom = n * sxx - sx * sx;
-        if denom.abs() > 1e-10 {
-            let b = (n * sxy - sx * sy) / denom;
-            let ln_a = (sy - b * sx) / n;
-            let a = ln_a.exp();
-            let wr = (0.50 + a * (b * conviction).exp()).min(0.95);
-            (wr, a, b)
-        } else { return None; }
-    } else { return None; };
+    let (curve_a, curve_b) = fit_conviction_curve(resolved, 10)?;
+    let win_rate = (0.50 + curve_a * (curve_b * conviction).exp()).min(0.95);
 
     let edge = 2.0 * win_rate - 1.0;
     if edge <= 0.0 { return None; }
@@ -102,57 +110,16 @@ pub fn compute_conviction_threshold(
             //   accuracy = 0.50 + a × exp(b × conviction)
             // Then solve for threshold: conv = ln((min_edge - 0.50) / a) / b
             //
-            // rune:scry(duplication) — bin + log-linear regression duplicated with kelly_frac
-            // above. Both implement the same curve-fitting algorithm on resolved predictions.
-            // Extract shared helper when this module grows. Recalib-frequency, not hot path.
-            let n_bins = 20usize;
-            let mut sorted: Vec<(f64, bool)> = resolved.iter().copied().collect();
-            sorted.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-            let bin_size = sorted.len() / n_bins;
-            if bin_size >= 20 {
-                // Compute (mean_conviction, accuracy) per bin.
-                let mut bins: Vec<(f64, f64)> = Vec::new();
-                for bi in 0..n_bins {
-                    let start = bi * bin_size;
-                    let end = if bi == n_bins - 1 { sorted.len() } else { (bi + 1) * bin_size };
-                    let slice = &sorted[start..end];
-                    let mean_c: f64 = slice.iter().map(|(c, _)| c).sum::<f64>() / slice.len() as f64;
-                    let acc: f64 = slice.iter().filter(|(_, w)| *w).count() as f64 / slice.len() as f64;
-                    bins.push((mean_c, acc));
-                }
-
-                // Log-linear regression on bins where acc > 0.505.
-                // y = ln(acc - 0.50), x = conviction → y = ln(a) + b*x
-                let points: Vec<(f64, f64)> = bins.iter()
-                    .filter(|(_, acc)| *acc > 0.505)
-                    .map(|(c, acc)| (*c, (acc - 0.50).ln()))
-                    .filter(|(_, y)| y.is_finite())
-                    .collect();
-
-                if points.len() >= 3 {
-                    let n = points.len() as f64;
-                    let (sx, sy, sxx, sxy) = points.iter().fold(
-                        (0.0, 0.0, 0.0, 0.0),
-                        |(sx, sy, sxx, sxy), (x, y)| {
-                            (sx + x, sy + y, sxx + x * x, sxy + x * y)
-                        },
-                    );
-                    let denom = n * sxx - sx * sx;
-                    if denom.abs() > 1e-10 {
-                        let b = (n * sxy - sx * sy) / denom;
-                        let ln_a = (sy - b * sx) / n;
-                        let a = ln_a.exp();
-
-                        // Solve: min_edge = 0.50 + a * exp(b * conv)
-                        // conv = ln((min_edge - 0.50) / a) / b
-                        if b > 0.0 && min_edge > 0.50 {
-                            let target = (min_edge - 0.50) / a;
-                            if target > 0.0 {
-                                let new_thresh = target.ln() / b;
-                                if new_thresh > 0.0 && new_thresh < 1.0 {
-                                    return Some(new_thresh);
-                                }
-                            }
+            // Fit curve, then solve for threshold where accuracy meets min_edge.
+            if let Some((a, b)) = fit_conviction_curve(resolved, 20) {
+                // Solve: min_edge = 0.50 + a × exp(b × conv)
+                // → conv = ln((min_edge - 0.50) / a) / b
+                if b > 0.0 && min_edge > 0.50 {
+                    let target = (min_edge - 0.50) / a;
+                    if target > 0.0 {
+                        let new_thresh = target.ln() / b;
+                        if new_thresh > 0.0 && new_thresh < 1.0 {
+                            return Some(new_thresh);
                         }
                     }
                 }
