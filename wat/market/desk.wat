@@ -133,7 +133,7 @@
       :manager-journal manager-journal
       :manager-buy manager-buy :manager-sell manager-sell
       :manager-resolved (deque) :manager-curve-valid false
-      :manager-proven-band '(0.0 0.0) :prev-manager-thought? #none
+      :manager-proven-band '(0.0 0.0) :prev-manager-thought? false
       :exit-journal exit-journal
       :exit-hold exit-hold :exit-exit exit-exit
       :exit-pending '()

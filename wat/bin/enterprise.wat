@@ -81,6 +81,25 @@
 ;; The forgeable cores. Each is a pure function — data in, data out.
 ;; The fold calls these. The mutation wraps them.
 
+(define (build-manager-context desk observer-preds observer-vecs candle ctx)
+  "Build manager-context struct from desk state. Extracts per-observer
+   metadata (curve_valid, resolved_len, cached_acc) explicitly."
+  (let ((specialists (take 5 (:observers desk))))
+    (manager-context
+      :observer-preds   (take 5 observer-preds)
+      :observer-atoms   (take 5 (:observer-atoms ctx))
+      :observer-curve-valid (map :curve-valid specialists)
+      :observer-resolved-lens (map (lambda (o) (len (:resolved o))) specialists)
+      :observer-resolved-accs (map :cached-acc specialists)
+      :observer-vecs    (take 5 observer-vecs)
+      :generalist-pred  (nth observer-preds 5)
+      :generalist-atom  (:generalist-atom ctx)
+      :generalist-curve-valid (:curve-valid (nth (:observers desk) 5))
+      :candle-atr       (:atr-r candle)
+      :candle-hour      (:hour candle)
+      :candle-day       (:day-of-week candle)
+      :disc-strength    (last-disc-strength (:journal (nth (:observers desk) 5))))))
+
 (define (conviction-threshold-quantile history quantile)
   "Percentile of conviction history."
   (let ((sorted (sort history)))
@@ -156,10 +175,10 @@
          (generalist-vec  (nth observer-vecs 5))
 
   ;; ─── 2. Manager encoding + prediction ─────────────────────────────
+         (mgr-ctx      (build-manager-context desk observer-preds observer-vecs candle ctx))
          (mgr-facts    (encode-manager-thought
-                         (:manager-atoms ctx) (manager-context desk observer-preds
-                           observer-vecs candle ctx)
-                         (:dims ctx) (:prev-mgr-thought desk)))
+                         (:manager-atoms ctx) mgr-ctx
+                         (:dims ctx) (:prev-manager-thought? desk)))
          (mgr-thought  (bundle mgr-facts))
          (manager-pred (predict (:manager-journal desk) mgr-thought))
          (meta-dir        (:direction manager-pred))
@@ -302,10 +321,10 @@
           (let ((label    (entry-label entry candle (:manager-buy desk) (:manager-sell desk)))
                 (abs-move (/ (abs (- (:close candle) (:entry-price entry)))
                              (:entry-price entry)))
-                (sw       (signal-weight abs-move (:move-sum desk) (:move-count desk))))
+                (signal-wt (signal-weight abs-move (:move-sum desk) (:move-count desk))))
             (set! (:first-outcome entry) label)
             (for-each (lambda (obs vec)
-              (observe (:journal obs) vec label sw))
+              (observe (:journal obs) vec label signal-wt))
               (:observers desk) (:observer-vecs entry))
             (inc! (:labeled-count desk))))
 
