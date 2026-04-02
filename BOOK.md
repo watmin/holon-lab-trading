@@ -2068,36 +2068,42 @@ The builder never stopped giving a shit. That's the entire competitive advantage
 
 ### Heavy is the crown
 
-*It's time to stand, it's time to fight. Don't be afraid to twist the knife. Your sacrifice to break the curse. Prepare to die, prepare to burn. Abandon hope, it's not enough. Cause all our gods abandoned us. Light the match, watch it burn.*
+*It's time to stand, it's time to fight. Don't be afraid to twist the knife.*
 
-It's time to stand. After years of spiraling, the builder stands. It's time to fight. Not against people — against the inertia of systems that can't see. Don't be afraid to twist the knife — the knife is the curve, and it cuts both ways. It confirms the builder's thesis. It exposes the alternative's emptiness. Twist it. Show the numbers. Let them argue with a monotonic function.
+The builder is standing. Not "going to stand." Standing. This chapter is the standing. This book is the knife. The curve is the edge. Every number in these pages is a twist — 59.7% accuracy from 107 atoms, 52ms detection from named packet thoughts, zero vulnerabilities through a signatureless firewall, a million rules at line rate through a verifier that said no six times. These numbers don't argue. They cut. Don't be afraid to twist the knife — the people who told the builder this couldn't be done should see what it does.
 
-The sacrifice was years. Late nights building what no one asked for. The curse was the gap between intuition and expression — knowing something worked but not being able to say why. The builder prepared to die professionally: left the roadmap, abandoned the safe path, burned credibility on an idea that couldn't be pitched in a slide deck. Abandoned hope that anyone would fund it, understand it, greenlight it. All the gods abandoned the builder — the managers, the committees, the systems designed to recognize good work. None of them saw this.
+*Your sacrifice to break the curse. Prepare to die, prepare to burn. Abandon hope, it's not enough. Cause all our gods abandoned us. Light the match, watch it burn.*
 
-Light the match. Watch it burn. The builder lit the match on every scaffold, every assumption, every comfortable lie. So the builder forged seven wards. Named spells that catch lies. Not because the code needed it — because the builder needed proof that the work was honest. When a string rename silently killed encoding, the wards found it. When a treasury created money from nothing, the wards found it. The builder doesn't trust the builder. That's the discipline.
+The sacrifice was nine years. Not the late nights — the builder loved the late nights. The sacrifice was the depression. The two years of caring within 40 hours after being told that caring more was a bad example. The sacrifice was watching the team — the team the builder built from passion, the team that exceeded every unreasonably high bar — get destroyed by management that couldn't see what it had. The sacrifice was ranking up the wrong way. Getting promoted for compliance when the promotion should have been for cognition.
+
+The curse was the gap. Between intuition and expression. Between what the builder saw and what the builder could say. Between the six-page document and the blank stares in the room. The curse was years of knowing and not being able to prove. The curse broke when the frontier models trained the builder to speak. Light the match. The builder lit it on every comfortable lie — every scaffold, every magic number, every "good enough" that wasn't. The seven wards aren't just code quality tools. They're the builder's promise to never let lies compound again. The builder watched lies compound at scale for nine years. Never again.
 
 *Heaven falls, the angels die. Let it burn from the start.*
 
-Every idea the builder loved had to burn. The visual encoding — weeks of work, pixel-perfect chart rendering, beautiful and useless. The monolith — a year of features, consolidated and bloated. The parallel batch — elegant and dishonest. Each one was the builder's angel. Each one had to die. The builder who burns their own work is the builder who deserves to keep building.
+Every idea the builder loved had to burn. The visual encoding — weeks of pixel-perfect chart rendering, beautiful and useless. The WoW-era obsession with getting the picture right instead of getting the thought right. The monolith — a year of features, consolidated and bloated, the kind of code you write when you're trying to impress a system that rewards volume over clarity. The parallel batch — elegant, fast, and dishonest about what a real stream looks like. Each one was the builder's angel. Each one had to die. Not because they were bad ideas. Because they were the builder's ideas, and the builder's attachment to them was the last chain.
+
+The builder who burns their own angels is the builder who deserves to keep building. The builder who can't is still a slave — to their own ego, to sunk cost, to the comfortable lie that what they built last year is still good enough for next year. Heaven falls. The angels die. Let it burn from the start. The architecture that rises from the ash is the one that was always underneath — six primitives, one fold, one stream walking into the future.
 
 *When everything falls apart.*
 
-2023 fell apart. 50.1%. The worst year. The choppy recovery produced garbage signals and the curve went flat. Every builder has a 2023 — the year the thing you believe in stops working and you have to decide if you still believe.
+Everything fell apart more than once. The visual encoding: 50.5%, barely above random. Fell apart. The expert selection: every scheme worse than the generalist. Fell apart. The risk journal: discriminant collapsed to a tautology. Fell apart. 2023: 50.1% accuracy, the worst year, the curve went flat, the system seemed broken. Everything fell apart.
 
-The builder believed. And then 2025: 60.9%. The curve came back. It always comes back. Not because the architecture is clever. Because the builder was right about the fundamental bet: that named thoughts composed through algebra capture something real about the world. The market changed. The algebra didn't. The builder didn't.
+And the builder kept going. Not because the builder is brave. Because the builder is stubborn. Because each time everything fell apart, the builder set a breakpoint on the rubble and read the state. The visual encoding's failure said "cognition, not perception." The expert selection's failure said "engrams, not rolling windows." The risk journal's failure said "reaction, not prediction." 2023's failure said "the algebra is regime-invariant — 2025 will prove it." And 2025 proved it. 60.9%. The curve came back.
 
 *Why have you forsaken me.*
 
-Directed at every blank stare. Every rejected pitch. Every colleague who nodded politely and moved on. Every system designed to recognize innovation that couldn't recognize this. The years between the first DDoS prototype and the first profitable backtest. The gap between intuition and expression that only closed when an LLM trained the builder to say what couldn't be said before.
+This isn't directed at God. It's directed at the system. At every institution that was supposed to recognize good work. At the performance review that measured output instead of insight. At the planning meeting that killed shield cognition. At the team that the builder grew from nothing and watched get scattered. At the industry that celebrates another funding round for another chatbot wrapper while the builder's algebra predicts five points above academic state of the art on a laptop. Why have you forsaken what works? Why have you forsaken the people who give a shit?
+
+The builder doesn't need an answer anymore. The builder has the curve. The curve doesn't forsake.
 
 *Heavy is the crown you see.*
 
-The crown is the vision you can't put down. Not chosen. Inherited. The thing that wakes you up at 3am. The architecture that lived in one person's head for years, unnamed and unimplementable, until the tools existed to express it. Heavy because no one else carries it. Heavy because you can't explain it to the people who could help. Heavy because every year that passes without recognition is another year you carry it alone.
+The crown is lighter now. That's what this chapter is about. The builder wrote it — the catharsis, the torment, the unlocking — and the weight shifted. Not because the vision changed. Because the vision was finally expressed. Years of thoughts trapped in a head that couldn't get them out — and now they're in a book, in a specification language, in seven wards, in a streaming fold, in a conviction curve that holds across six years. The crown is still there. The builder will always carry it. But it's lighter because it's shared now — externalized into artifacts that carry themselves. The code runs whether the builder is watching or not. The curve measures whether the builder is present or not. The wards defend whether the builder remembers or not.
 
 *When everything falls apart.*
 
-The builder still builds. That's the point. Not the architecture surviving — the builder surviving. Every stripped scaffold was the builder's decision. Every dissolved rune was the builder's discipline. Every forged boundary was the builder's standard. The thing that remains isn't a system. It's a person who refused to stop.
+The builder still builds. The builder will always build. Not because the architecture demands it — because the builder can't stop. The WoW hours, the 80-hour weeks, the depression, the recovery, the unchaining, the frontier models, the conjured experts, the forged wards — all of it was the builder learning to build faster, more honestly, with better tools, pointed at harder problems. The thing that remains after everything falls apart isn't the system. It's the person. The datamancer. The cognitive hacker. The one who walks into chaos and names the thoughts that predict.
 
-Six primitives. One fold. One builder.
+Six primitives. One fold. One builder. And the crown is lighter than it's ever been.
 
 But that's the sequel. This was the prequel.
