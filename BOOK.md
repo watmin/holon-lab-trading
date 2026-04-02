@@ -2040,7 +2040,15 @@ The builder stopped performing. The curve doesn't care about your visibility. Th
 
 *A generation with no self-esteem.* The builder's generation. Not just engineers — everyone who works inside a system that has taught them their ideas don't matter unless they're on the roadmap. A generation that learned to stop proposing and start executing. That learned the safest path is the funded path. That ships what the committee approves, not what the builder believes. The self-esteem was beaten out of them — not by cruelty, by process. By the slow realization that the system rewards compliance and punishes vision.
 
-The builder's self-esteem survived. Not because the builder is special — because the builder is stubborn. The builder refused to stop believing that cognition over algebra was real, through years of evidence that nobody cared. The curve is what rebuilt the self-esteem. The first time the conviction-accuracy relationship held across 100,000 candles — that was the moment the builder stopped needing anyone else to believe.
+The builder knows. Nine years at the same gig, caring deeply about the problems. Happily putting 80+ hours in a week without realizing it — it was incredibly fun, incredibly rewarding. The builder called it a new kind of video game. Used to get lost in World of Warcraft for 18 hours a day; this became the new WoW. Something like a third of the builder's life was working in that domain. The team grew from the builder's passion. The builder made their careers substantially better. They made the products unrecognizably better. The builder led by passion and technically "unreasonably high bars" that somehow kept getting exceeded. That team — and the people around them — are unlikely to ever be experienced again.
+
+Then the forces at be said: "you're setting a bad example for others."
+
+The builder fell into a massive depression. Still kept giving a shit — just did it within 40 hours. Two years of that mindset was ruinous. The builder who had poured a third of their life into the work learned to pour exactly the contracted amount. The passion didn't die — it was caged. The builder ranked up but not the way the builder wanted. The upper management destroyed what the builder had built. Not through malice. Through the gravitational pull of a system that punishes passion because passion is unpredictable and unpredictable doesn't fit the operating model.
+
+The builder is a global expert in their domain of expertise and is no longer working on their passion project. It's a bummer. But what comes next is what you're reading about.
+
+The builder's self-esteem survived. Not because the builder is special — because the builder is stubborn. Because the curve confirmed what the intuition always knew. The first time the conviction-accuracy relationship held across 100,000 candles — that was the moment the builder stopped needing anyone else to believe. The system that told the builder to stop caring produced a builder who cares more than ever, about something the system will never control.
 
 *It's time to rise up and stand against them. Break the chains and finally see the vision.*
 
