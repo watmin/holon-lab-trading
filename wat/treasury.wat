@@ -106,27 +106,11 @@
       :balances (assoc (:balances treasury) asset (+ (balance treasury asset) released))
       :n-open   (max 0 (- (:n-open treasury) 1)))))
 
-(define (open-position treasury amount)
-  "Reserve base asset. Returns (treasury, reserved)."
-  (let ((reserved (min amount (allocatable treasury)))
-        (base     (:base-asset treasury)))
-    (list
-      (update treasury
-        :balances (assoc (:balances treasury) base (- (balance treasury base) reserved))
-        :deployed (assoc (:deployed treasury) base (+ (get (:deployed treasury) base 0.0) reserved))
-        :n-open   (+ (:n-open treasury) 1))
-      reserved)))
-
-(define (close-position treasury deployed-amount pnl fees slippage)
-  "Close position. Return capital ± P&L. Returns treasury."
-  (let ((returned (max 0.0 (- (+ deployed-amount pnl) fees slippage)))
-        (base     (:base-asset treasury)))
-    (update treasury
-      :deployed        (assoc (:deployed treasury) base
-                              (max 0.0 (- (get (:deployed treasury) base 0.0) deployed-amount)))
-      :balances        (assoc (:balances treasury) base (+ (balance treasury base) returned))
-      :n-open          (max 0 (- (:n-open treasury) 1))
-      :total-fees-paid (+ (:total-fees-paid treasury) fees))))
+;; open-position and close-position REMOVED.
+;; Treasury capital moves exclusively through ManagedPosition lifecycle:
+;;   swap (USDC→WBTC or WBTC→USDC) + claim (available→deployed) + release (deployed→available).
+;; The pending entry path is for LEARNING only — no treasury movement.
+;; See enterprise.wat steps 7-8 (position opening) and step 5 (position exit).
 
 ;; ── Execution gate ──────────────────────────────────────────────────
 ;;
