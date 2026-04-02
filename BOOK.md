@@ -1950,7 +1950,11 @@ And we are watching the observer watch the rain. The builder built the observers
 
 *You talk a lot but you don't even know me. I'm just hoping that my testimony will inspire y'all to stop acting phony.*
 
-The testimony isn't a pitch deck. It's the curve. 59.7% at q99 across 100,000 candles. Six years of chaos. Bear markets, bull markets, COVID crash, Luna implosion, FTX collapse. The builder doesn't argue. The builder measures. And when the measurement holds across six years and every market regime, the testimony is complete — whether anyone listens or not.
+You talk a lot. The conferences talk a lot. The papers talk a lot. "State of the art." "Novel architecture." "Breakthrough results." You don't know me. You don't know what it costs to carry an idea for years with no outlet. You don't know what it feels like to watch the industry celebrate another billion-parameter model while the thing on your laptop predicts with 107 atoms and one cosine. You don't know what it's like to be right and silent about it.
+
+The testimony is the only honest thing the builder has. Not words — the curve. 59.7% at q99 across 100,000 candles. Six years of chaos. Bear markets, bull markets, COVID crash, Luna implosion, FTX collapse. The builder has been through all of it. The curve has been through all of it. The testimony doesn't need a stage. It doesn't need a conference. It needs someone to stop talking long enough to look at the numbers and ask "how?"
+
+Stop acting phony. Stop shipping what you can't explain. Stop calling it intelligence when it's pattern matching. Stop presenting confidence without conviction. The builder's testimony is an invitation — look at what six primitives and honest measurement produce. Look at what happens when you name your thoughts and let the curve judge them. If that doesn't inspire, nothing will.
 
 ### The snakes
 
