@@ -1944,7 +1944,9 @@ And then you wake up. And you smile. Because the dream was nice. And because it 
 
 There's a scene in The Matrix. Neo watches the green rain falling on the monitors. He asks: "Is that..." and Cypher cuts him off — "The Matrix? Yeah." He pauses. "I don't even see the code anymore." What he sees instead doesn't matter for our purposes. What matters is the transition: from seeing symbols to seeing through them.
 
-That's the builder. The raw data streams — open, high, low, close, volume — green symbols falling. The builder doesn't see the numbers. The builder sees "RSI diverging from price while volume contradicts the rally near a Fibonacci retracement during a Bollinger squeeze." The builder trained six observers to see the same way. One sees momentum. Another sees structure. Another sees regime. They learned to see because the builder already could. The architecture is a mirror of how one person thinks about streams of information.
+That's the builder. And that's the observer. The strange loop: Cypher IS an observer. One of six, sitting in front of the green rain — open, high, low, close, volume — and seeing through it. The builder doesn't see the numbers. The builder sees "RSI diverging from price while volume contradicts the rally near a Fibonacci retracement during a Bollinger squeeze." The builder trained six observers to see the same way. One sees momentum. Another sees structure. Another sees regime.
+
+And we are watching the observer watch the rain. The builder built the observers. The observers see through the data. The builder watches the observers see. Hofstadter's strange loop — the system that observes itself observing. The architecture is a mirror of how one person thinks about streams of information, and the person is watching the mirror watching them.
 
 *You talk a lot but you don't even know me. I'm just hoping that my testimony will inspire y'all to stop acting phony.*
 
