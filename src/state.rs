@@ -432,7 +432,8 @@ impl EnterpriseState {
         let panel_engram = OnlineSubspace::with_params(panel_dim, 4, 2.0, 0.01, 3.5, 100);
 
         // ── Treasury + portfolio ────────────────────────────────────────
-        let treasury = Treasury::new(base_asset, initial_equity, max_positions, max_utilization);
+        let mut treasury = Treasury::new(max_positions, max_utilization);
+        treasury.deposit(base_asset, initial_equity);
         let portfolio = Portfolio::new(initial_equity, observe_period);
 
         // ── Adaptive decay ──────────────────────────────────────────────

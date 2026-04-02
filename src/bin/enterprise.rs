@@ -510,7 +510,7 @@ fn main() {
         state.portfolio.trades_taken, state.portfolio.trades_won, state.portfolio.win_rate());
     eprintln!("  Treasury: ${:.2} available  ${:.2} deployed  {:.1}% utilization  fees=${:.2}  slip=${:.2}",
         state.treasury.balance(&base_asset), state.treasury.deployed(&base_asset),
-        state.treasury.utilization() * 100.0,
+        state.treasury.utilization(&prices) * 100.0,
         state.treasury.total_fees_paid, state.treasury.total_slippage);
     eprintln!();
     {
