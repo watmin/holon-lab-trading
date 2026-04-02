@@ -780,7 +780,7 @@ impl EnterpriseState {
                 }
                 // Log to ledger
                 let ret = pos.return_pct(quote_price);
-                let exit_dir = match pos.direction { Direction::Long => "Buy", Direction::Short => "Sell" };
+                let exit_dir = pos.direction;
                 let exit_type = match (exit, pos.phase) {
                     (PositionExit::TakeProfit, PositionPhase::Runner) => "RunnerTP",
                     (PositionExit::TakeProfit, _) => "PartialProfit",
@@ -790,7 +790,7 @@ impl EnterpriseState {
                     step: self.log_step,
                     candle_idx: i as i64,
                     timestamp: candle.ts.clone(),
-                    direction: exit_dir.to_string(),
+                    direction: exit_dir,
                     entry_price: pos.entry_price,
                     exit_price: quote_price,
                     gross_return_pct: ret * 100.0,
@@ -880,12 +880,11 @@ impl EnterpriseState {
                     });
                     self.next_position_id += 1;
                     self.hold_swaps += 1;
-                    let dir_str = if direction == Direction::Long { "Buy" } else { "Sell" };
                     self.pending_logs.push(LogEntry::PositionOpen {
                         step: self.log_step,
                         candle_idx: i as i64,
                         timestamp: candle.ts.clone(),
-                        direction: dir_str.to_string(),
+                        direction,
                         entry_price: quote_price,
                         position_usd: base_value,
                         swap_fee_pct: fee_rate * 100.0,

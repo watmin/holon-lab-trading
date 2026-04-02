@@ -98,6 +98,9 @@ pub struct Candle {
     pub vol_accel: f64,
 
     // Time
+    // rune:forge(bare-type) — hour and day_of_week are f64 because they feed
+    // encode_circular as continuous scalars. Newtypes would add .0 at every
+    // use site for no safety gain — the circular encoder takes f64 with a period.
     pub hour: f64,
     pub day_of_week: f64,
 

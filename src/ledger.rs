@@ -1,4 +1,5 @@
 use rusqlite::{params, Connection};
+use crate::journal::Direction;
 
 // ─── LogEntry ───────────────────────────────────────────────────────────────
 // The fold says WHAT happened. The caller decides WHEN to write.
@@ -51,7 +52,7 @@ pub enum LogEntry {
         step: i64,
         candle_idx: i64,
         timestamp: String,
-        direction: String,
+        direction: Direction,
         entry_price: f64,
         position_usd: f64,
         swap_fee_pct: f64,
@@ -60,7 +61,7 @@ pub enum LogEntry {
         step: i64,
         candle_idx: i64,
         timestamp: String,
-        direction: String,
+        direction: Direction,
         entry_price: f64,
         exit_price: f64,
         gross_return_pct: f64,
@@ -168,7 +169,7 @@ pub fn flush_logs(entries: &[LogEntry], conn: &Connection) {
                 conn.execute(
                     "INSERT INTO trade_ledger (step,candle_idx,timestamp,direction,entry_price,position_usd,swap_fee_pct,exit_reason)
                      VALUES (?1,?2,?3,?4,?5,?6,?7,'Open')",
-                    params![step, candle_idx, timestamp, direction, entry_price, position_usd, swap_fee_pct],
+                    params![step, candle_idx, timestamp, direction.to_string(), entry_price, position_usd, swap_fee_pct],
                 ).ok();
             }
             LogEntry::PositionExit {
@@ -178,7 +179,7 @@ pub fn flush_logs(entries: &[LogEntry], conn: &Connection) {
                 conn.execute(
                     "INSERT INTO trade_ledger (step,candle_idx,timestamp,direction,entry_price,exit_price,gross_return_pct,position_usd,swap_fee_pct,horizon_candles,won,exit_reason)
                      VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
-                    params![step, candle_idx, timestamp, direction, entry_price, exit_price,
+                    params![step, candle_idx, timestamp, direction.to_string(), entry_price, exit_price,
                             gross_return_pct, position_usd, swap_fee_pct, horizon_candles, won, exit_reason],
                 ).ok();
             }
