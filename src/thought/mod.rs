@@ -125,7 +125,7 @@ const ZONE_ATOMS: &[&str] = &[
     "hurst-trending", "hurst-reverting",
     "autocorr-positive", "autocorr-negative",
     "moderate-trend",
-    // Risk / portfolio state — role atoms used by portfolio.rs risk_branch_wat()
+    // Risk / portfolio state — role atoms used by risk::encode_risk_branches()
     // Scalar values are encoded continuously via bind(atom, encode_linear(value)).
     // No categorical zone qualifiers — the discriminant finds the zones.
     "drawdown", "drawdown-velocity", "recovery-progress", "drawdown-duration", "dd-historical",

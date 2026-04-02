@@ -553,10 +553,6 @@ fn main() {
         eprintln!();
     }
 
-    // By-year breakdown removed — portfolio.by_year tracks trade P&L which
-    // diverges from treasury value in hold mode. Treasury is the source of truth.
-    // TODO: compute by-year from the treasury's value snapshots or the ledger DB.
-
     eprintln!("  Run DB: {} ({} rows)", ledger_path, state.log_step);
     eprintln!("═══════════════════════════════════════════════════════════");
 }

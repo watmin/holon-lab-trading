@@ -19,7 +19,7 @@ use crate::market::{parse_candle_hour, parse_candle_day};
 use crate::market::manager::{ManagerAtoms, ManagerContext, encode_manager_thought};
 use crate::portfolio::{Phase, Portfolio};
 use crate::position::{ExitObservation, ExitReason, ManagedPosition, Pending, PositionEntry, PositionExit, PositionPhase};
-use crate::risk::RiskBranch;
+use crate::risk::{self, RiskBranch};
 use crate::sizing::{kelly_frac, signal_weight};
 use crate::treasury::Treasury;
 
@@ -901,7 +901,7 @@ impl EnterpriseState {
         // Risk branch: compute only at recalib intervals (not every candle).
         // Between recalibs, reuse the last risk_mult.
         if self.encode_count % ctx.recalib_interval == 0 || self.encode_count < 100 {
-            let branch_features = self.portfolio.risk_branch_wat(ctx.vm, ctx.risk_scalar);
+            let branch_features = risk::encode_risk_branches(&self.portfolio, ctx.vm, ctx.risk_scalar);
             let mut worst_ratio = 1.0_f64;
             let healthy = self.portfolio.is_healthy() && self.portfolio.trades_taken >= 20;
             for (bi, branch) in self.risk_branches.iter_mut().enumerate() {
@@ -984,7 +984,6 @@ impl EnterpriseState {
 
         self.pending.push_back(Pending {
             candle_idx:    i,
-            year:          candle.year,
             tht_vec,
             tht_pred:      tht_pred.clone(),
             meta_dir,
@@ -1264,7 +1263,7 @@ impl EnterpriseState {
                 // ── Treasury: only moves money for live trades ───────
                 if is_live {
                     let trade_dir = if dir == self.mgr_buy { Direction::Long } else { Direction::Short };
-                    self.portfolio.record_trade(entry.exit_pct, frac, trade_dir, entry.year,
+                    self.portfolio.record_trade(entry.exit_pct, frac, trade_dir,
                                         ctx.swap_fee, ctx.slippage);
                     self.treasury.close_position(entry.deployed_usd,
                         pnl.pos_usd * pnl.gross_ret,

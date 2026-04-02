@@ -16,7 +16,6 @@ pub struct ExitObservation {
 
 pub struct Pending {
     pub candle_idx:    usize,
-    pub year:          i32,
     pub tht_vec:       Vector,
 
     // ── Prediction (what the experts said) ────────────────────────────
