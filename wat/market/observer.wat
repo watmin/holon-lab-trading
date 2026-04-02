@@ -12,7 +12,7 @@
 ;; -- State ------------------------------------------------------------------
 
 (struct observer
-  lens                   ; &str -- "momentum" | "structure" | "volume" | "narrative" | "regime" | "full"
+  lens                   ; &str -- "momentum" | "structure" | "volume" | "narrative" | "regime" | "generalist"
   journal                ; Journal -- the learning primitive
   resolved               ; (deque (conviction, correct)) -- resolved predictions
   good-state-subspace    ; OnlineSubspace -- engram of discriminant states with > 55% accuracy

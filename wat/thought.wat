@@ -169,14 +169,14 @@
 ;; -- encode_view dispatch ---------------------------------------------------
 
 ;; The main entry point. Selects which eval methods to run based on lens.
-;; "full" = all methods (generalist). Named lenses select subsets.
+;; "generalist" = all methods. Named lenses select subsets.
 
 (define (encode-thought encoder candles vm lens)
   "Encode a window of candles through a vocabulary lens.
    Each lens selects which eval functions to run.
    Vocab modules return Fact data → encode-facts weaves to geometry.
    Inline evals push directly to the fact vectors."
-  (let ((is    (lambda (lenses) (or (= lens "full") (member? lens lenses))))
+  (let ((is    (lambda (lenses) (or (= lens "generalist") (member? lens lenses))))
         (facts (list))
         (owned (list))
         (labels (list))

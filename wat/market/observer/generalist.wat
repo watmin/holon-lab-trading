@@ -3,7 +3,7 @@
 ;; The team's composite voice. Sees ALL 150+ facts simultaneously.
 ;; Fixed window (args.window, default 48). Own journal, own proof gate.
 ;;
-;; The generalist is Observer[5] with lens "full". It thinks every
+;; The generalist is Observer[5] with lens "generalist". It thinks every
 ;; thought the specialists think, bundled into one vector. It finds
 ;; cross-vocabulary patterns no specialist can see — "RSI divergence
 ;; + volume exhaustion + regime shift" is a thought only the generalist
