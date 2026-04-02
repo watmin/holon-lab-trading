@@ -90,6 +90,9 @@
 (define accuracy-branch (online-subspace dims 8))
 
 (define (encode-accuracy portfolio)
+  ;; rune:temper(clarity) — three win-rate-last-n calls traverse rolling deque
+  ;; separately. The Rust should fuse into one pass over take-last(200).
+  ;; The wat keeps three calls because "accuracy at 10, 50, 200" reads clearly.
   (let ((wr10  (win-rate-last-n portfolio 10))
         (wr50  (win-rate-last-n portfolio 50))
         (wr200 (win-rate-last-n portfolio 200)))
@@ -207,22 +210,23 @@
                       correlation-branch panel-branch))
 
 (define (risk-multiplier portfolio)
-  "Update branches when healthy, then take the MIN per-branch ratio."
+  "Update branches when healthy, compute MIN ratio. Single pass over branches."
   (let* ((states (list (encode-drawdown portfolio) (encode-accuracy portfolio)
                        (encode-volatility portfolio) (encode-correlation portfolio)
                        (encode-panel portfolio)))
-         (_      (when (healthy? portfolio)
-                   (for-each update branches states)))
-         ;; n: number of observations the subspace has seen (its training count).
-         ;; Branches with < 10 observations are untrained — skip them.
+         (is-healthy (healthy? portfolio))
+         ;; Single pass: update (if healthy) then score each branch
          (worst-ratio
            (fold-left
              (lambda (acc branch features)
+               ;; Update branch when healthy
+               (when is-healthy (update branch features))
+               ;; Score: branches with < 10 observations are untrained — skip
                (if (< (n branch) 10) acc
-                 (let* ((residual  (residual branch features))
-                        (threshold (threshold branch))
-                        (ratio     (if (< residual threshold) 1.0
-                                       (max 0.1 (/ threshold residual)))))
+                 (let* ((res (residual branch features))
+                        (thr (threshold branch))
+                        (ratio (if (< res thr) 1.0
+                                   (max 0.1 (/ thr res)))))
                    (min acc ratio))))
              1.0
              branches states)))

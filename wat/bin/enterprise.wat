@@ -247,64 +247,55 @@
       (:observers state))
     (decay (:mgr-journal state) (:adaptive-decay state))
 
-    ;; ─── 11. Event-driven learning ──────────────────────────────────
-    (for-each (lambda (entry)
-      ;; Track excursion
-      (let ((move-pct (/ (- (:close candle) (:entry-price entry))
-                         (:entry-price entry))))
-        (set! (:max-favorable entry) (max (:max-favorable entry) move-pct))
-        (set! (:max-adverse entry)   (min (:max-adverse entry) move-pct)))
+    ;; ─── 11-12. Learning + Resolution (single pass over pending) ─────
+    ;; Tempered: was three separate passes (learn, resolve, filter).
+    ;; Now one for-each handles all three concerns per entry.
+    (let ((surviving (list)))
+      (for-each (lambda (entry)
+        ;; 11a. Track excursion
+        (let ((move-pct (/ (- (:close candle) (:entry-price entry))
+                           (:entry-price entry))))
+          (set! (:max-favorable entry) (max (:max-favorable entry) move-pct))
+          (set! (:max-adverse entry)   (min (:max-adverse entry) move-pct)))
 
-      ;; First threshold crossing → label + learn
-      (when (should-label? entry candle ctx)
-        (let ((label    (entry-label entry candle (:mgr-buy state) (:mgr-sell state)))
-              (abs-move (/ (abs (- (:close candle) (:entry-price entry)))
-                           (:entry-price entry)))
-              (sw       (signal-weight abs-move (:move-sum state) (:move-count state))))
-          (set! (:first-outcome entry) label)
-          ;; All 6 observers learn
-          (for-each (lambda (obs vec)
-            (observe (:journal obs) vec label sw))
-            (:observers state) (:observer-vecs entry))
-          (inc! (:labeled-count state)))))
-      (:pending state))
+        ;; 11b. First threshold crossing -> label + learn
+        (when (should-label? entry candle ctx)
+          (let ((label    (entry-label entry candle (:mgr-buy state) (:mgr-sell state)))
+                (abs-move (/ (abs (- (:close candle) (:entry-price entry)))
+                             (:entry-price entry)))
+                (sw       (signal-weight abs-move (:move-sum state) (:move-count state))))
+            (set! (:first-outcome entry) label)
+            (for-each (lambda (obs vec)
+              (observe (:journal obs) vec label sw))
+              (:observers state) (:observer-vecs entry))
+            (inc! (:labeled-count state))))
 
-    ;; ─── 12. Resolution ─────────────────────────────────────────────
-    (for-each (lambda (entry)
-      (when (entry-expired? entry (:encode-count state) ctx)
-        ;; Manager learns from stored thought
-        (let ((price-label (if (> (:close candle) (:entry-price entry))
-                               (:mgr-buy state) (:mgr-sell state))))
-          (observe (:mgr-journal state) (:mgr-thought entry) price-label 1.0))
-
-        ;; Track manager accuracy
-        (push-back (:mgr-resolved state)
-          (list (:meta-conviction entry)
-                (= (:first-outcome entry) price-label)))
-
-        ;; Resolve each observer
-        (for-each (lambda (obs pred)
-          (resolve obs (:tht-vec entry) pred price-label 1.0
-                   (:conviction-quantile ctx) (:conviction-window ctx)))
-          (:observers state) (:observer-preds entry))
-
-        ;; Accounting
-        (let ((pnl (compute-trade-pnl
-                      (/ (- (:close candle) (:entry-price entry))
-                         (:entry-price entry))
-                      (= (:meta-dir entry) (:mgr-buy state))
-                      (:swap-fee ctx) (:slippage ctx)
-                      (= (:asset-mode ctx) "hold")
-                      0.0 (:equity (:portfolio state)) 0.0)))
-          (record-trade (:portfolio state) (:net-ret pnl)
-                        0.0 (if (= (:meta-dir entry) (:mgr-buy state)) :long :short)
-                        (:swap-fee ctx) (:slippage ctx)))))
-      (:pending state))
-
-    ;; Remove resolved entries
-    (set! (:pending state)
-      (filter (lambda (e) (not (entry-expired? e (:encode-count state) ctx)))
-              (:pending state)))
+        ;; 12. Resolution (if expired) or keep
+        (if (entry-expired? entry (:encode-count state) ctx)
+            (let ((price-label (if (> (:close candle) (:entry-price entry))
+                                   (:mgr-buy state) (:mgr-sell state))))
+              (observe (:mgr-journal state) (:mgr-thought entry) price-label 1.0)
+              (push-back (:mgr-resolved state)
+                (list (:meta-conviction entry)
+                      (= (:first-outcome entry) price-label)))
+              (for-each (lambda (obs pred)
+                (resolve obs (:tht-vec entry) pred price-label 1.0
+                         (:conviction-quantile ctx) (:conviction-window ctx)))
+                (:observers state) (:observer-preds entry))
+              (let ((pnl (compute-trade-pnl
+                            (/ (- (:close candle) (:entry-price entry))
+                               (:entry-price entry))
+                            (= (:meta-dir entry) (:mgr-buy state))
+                            (:swap-fee ctx) (:slippage ctx)
+                            (= (:asset-mode ctx) "hold")
+                            0.0 (:equity (:portfolio state)) 0.0)))
+                (record-trade (:portfolio state) (:net-ret pnl)
+                              0.0 (if (= (:meta-dir entry) (:mgr-buy state)) :long :short)
+                              (:swap-fee ctx) (:slippage ctx))))
+            ;; Not expired -- keep
+            (push! surviving entry)))
+        (:pending state))
+      (set! (:pending state) surviving))
 
     ;; ─── 13. State bookkeeping ──────────────────────────────────────
     (set! (:prev-mgr-thought state) mgr-thought)

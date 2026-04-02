@@ -7,19 +7,14 @@
 
 (require facts)
 
-(define (consecutive-up candles)
-  "Count consecutive bullish candles from most recent backward."
-  (fold (lambda (count c)
-          (if (> (:close c) (:open c)) (+ count 1) count))
-        0
-        (reverse candles)))
-
-(define (consecutive-down candles)
-  "Count consecutive bearish candles from most recent backward."
-  (fold (lambda (count c)
-          (if (< (:close c) (:open c)) (+ count 1) count))
-        0
-        (reverse candles)))
+(define (consecutive-runs candles)
+  "Count consecutive bullish and bearish candles from most recent backward.
+   Returns (up-count, down-count). One reversal, one pass."
+  (let ((rev (reverse candles)))
+    (fold (lambda (acc c)
+            (list (if (> (:close c) (:open c)) (+ (first acc) 1) (first acc))
+                  (if (< (:close c) (:open c)) (+ (second acc) 1) (second acc))))
+          (list 0 0) rev)))
 
 (define (eval-price-action candles)
   "Price action pattern facts. Minimum 3 candles."
@@ -32,8 +27,9 @@
             (prev-high  (:high prev))
             (prev-low   (:low prev))
             (prev-close (:close prev))
-            (up-count   (consecutive-up candles))
-            (down-count (consecutive-down candles)))
+            (runs       (consecutive-runs candles))
+            (up-count   (first runs))
+            (down-count (second runs)))
         (append
           ;; Inside bar — current range within previous range
           (if (and (<= now-high prev-high) (>= now-low prev-low))

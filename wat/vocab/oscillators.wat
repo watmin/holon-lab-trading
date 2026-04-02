@@ -51,12 +51,11 @@
             (else (list))))
 
         ;; Multi-timeframe ROC — cascading momentum test
-        (if (and (> roc-1 roc-3) (> roc-3 roc-6) (> roc-6 roc-12))
-            (list (fact/bare "roc-accelerating"))
-            (list))
-        (if (and (< roc-1 roc-3) (< roc-3 roc-6) (< roc-6 roc-12))
-            (list (fact/bare "roc-decelerating"))
-            (list))))))
+        (let ((accel (and (> roc-1 roc-3) (> roc-3 roc-6) (> roc-6 roc-12)))
+              (decel (and (< roc-1 roc-3) (< roc-3 roc-6) (< roc-6 roc-12))))
+          (cond (accel (list (fact/bare "roc-accelerating")))
+                (decel (list (fact/bare "roc-decelerating")))
+                (else (list))))))))
 
 ;; ── What oscillators does NOT do ───────────────────────────────
 ;; - Does NOT compute RSI (that's the segment narrative in thought/mod.rs)

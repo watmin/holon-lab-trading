@@ -118,12 +118,12 @@
   "Aroon up/down as (up, down) pair. Returns None if insufficient data."
   (when (> (len candles) period)
     (let ((slice (last-n candles (+ period 1))))
-      (let ((hi-idx (fold-left (lambda (best i)
-                                 (if (>= (:high (nth slice i)) (:high (nth slice best))) i best))
-                               0 (range 0 (+ period 1))))
-            (lo-idx (fold-left (lambda (best i)
-                                 (if (<= (:low (nth slice i)) (:low (nth slice best))) i best))
-                               0 (range 0 (+ period 1)))))
+      (let ((indices (fold-left (lambda (acc i)
+                                  (list (if (>= (:high (nth slice i)) (:high (nth slice (first acc)))) i (first acc))
+                                        (if (<= (:low (nth slice i)) (:low (nth slice (second acc)))) i (second acc))))
+                                (list 0 0) (range 0 (+ period 1))))
+            (hi-idx (first indices))
+            (lo-idx (second indices)))
         (list (* 100.0 (/ hi-idx period))
               (* 100.0 (/ lo-idx period)))))))
 
@@ -131,14 +131,18 @@
 
 (define (fractal-dimension closes)
   "FD = ln(N) / (ln(N) + ln(max_dist/path_len)). Returns None if degenerate."
-  (let ((n (len closes))
-        (path-len (fold + 0.0
-                    (map (lambda (i) (sqrt (+ (* (- (nth closes i) (nth closes (- i 1)))
-                                                 (- (nth closes i) (nth closes (- i 1))))
-                                              1.0)))
-                         (range 1 n))))
-        (max-dist (fold max 0.0
-                    (map (lambda (c) (abs (- c (first closes)))) closes))))
+  (let* ((n (len closes))
+         (c0 (first closes))
+         (accum (fold-left (lambda (acc i)
+                   (let ((step (sqrt (+ (* (- (nth closes i) (nth closes (- i 1)))
+                                           (- (nth closes i) (nth closes (- i 1))))
+                                        1.0)))
+                         (dist (abs (- (nth closes i) c0))))
+                     (list (+ (first acc) step)
+                           (max (second acc) dist))))
+                 (list 0.0 0.0) (range 1 n)))
+         (path-len (first accum))
+         (max-dist (second accum)))
     (when (and (> path-len 1e-10) (> max-dist 1e-10))
       (clamp (/ (ln n) (+ (ln n) (ln (/ max-dist path-len)))) 1.0 2.0))))
 
