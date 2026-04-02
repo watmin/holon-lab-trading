@@ -125,9 +125,6 @@
 (define (ring-oldest state)
   (first (:buffer state)))
 
-(define (ring-newest state)
-  (last (:buffer state)))
-
 ;; Linear regression slope over a ring buffer's contents.
 (define (linreg-slope buf)
   "Compute OLS slope of values in buf indexed by position."
@@ -675,6 +672,7 @@
 
 (struct computed-candle
   ts open high low close volume
+  hour day-of-week
   sma20 sma50 sma200
   bb-upper bb-lower bb-width
   rsi
@@ -707,6 +705,8 @@
          (high   (:high candle))
          (low    (:low candle))
          (volume (:volume candle))
+         (hour       (timestamp-hour (:ts candle)))
+         (day-of-week (timestamp-day-of-week (:ts candle)))
 
          ;; ── Scalar indicators — fed individual values ──────────
          (sma20-r  (sma-step (:sma20 bank) close))
@@ -889,6 +889,7 @@
             (computed-candle
               :ts (:ts candle) :open (:open candle)
               :high high :low low :close close :volume volume
+              :hour hour :day-of-week day-of-week
               :sma20 sma20-v :sma50 (second sma50-r) :sma200 (second sma200-r)
               :bb-upper bb-up :bb-lower bb-lo :bb-width bb-w
               :rsi (second rsi-r)

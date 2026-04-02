@@ -166,12 +166,18 @@
           (when-let ((curve (log-linear-regression
                       (bin (:resolved-preds desk) 20))))
             (let* ((a (first curve)) (b (second curve)))
+              (set! (:kelly-curve-valid desk) true)
+              (set! (:cached-curve-a desk) a)
+              (set! (:cached-curve-b desk) b)
               (when (and (> b 0.0) (> (:min-edge ctx) 0.50))
                 (let ((target (/ (- (:min-edge ctx) 0.50) a)))
                   (when (> target 0.0)
                     (let ((thresh (/ (ln target) b)))
                       (when (and (> thresh 0.0) (< thresh 1.0))
-                        (set! (:conviction-threshold desk) thresh))))))))))
+                        (set! (:conviction-threshold desk) thresh)
+                        (set! (:manager-curve-valid desk) true)
+                        (set! (:manager-proven-band desk)
+                              (list thresh 1.0)))))))))))
 
     ;; 7. Position tick (exit expert encode, tick positions, settle exits)
     (for-each (lambda (pos)
@@ -193,8 +199,9 @@
                         (:base-deployed pos)
                         (:equity portfolio)
                         0.0)))
-            (close-position treasury (:base-deployed pos)
-                            (:trade-pnl pnl) (:total-fees pos) 0.0)
+            (release treasury (:target-asset (:config desk)) (:base-deployed pos))
+            (swap treasury (:target-asset (:config desk)) (:source-asset (:config desk))
+                  (:base-deployed pos) quote-price fee-rate)
             (record-trade portfolio (:outcome-pct pnl)
                           0.0 (:direction pos) (:swap-fee ctx) (:slippage ctx))
             (set! (:last-exit-price desk) quote-price)
@@ -205,7 +212,7 @@
     ;; 8-9. Position opening + sizing
     (when (all-gates-pass? desk portfolio manager-pred risk-mult computed-candle fee-rate ctx)
       (let* ((frac (compute-position-size 0.03 risk-mult (:max-single-position ctx)))
-             (direction (trade-direction manager-pred (:manager-buy desk)))
+             (direction (if (= (:direction manager-pred) (:manager-buy desk)) :long :short))
              (deploy (* (:equity portfolio) frac)))
         (when (> deploy 10.0)
           (let ((pos (new-position
@@ -246,12 +253,12 @@
     ;; 12. Learning + resolution
     (for-each (lambda (entry)
       (let* ((price-delta (- quote-price (:entry-price entry)))
-             (abs-move (/ (abs price-delta) (:entry-price entry))))
+             (move-pct (/ price-delta (:entry-price entry)))
+             (abs-move (abs move-pct)))
 
         ;; Track excursion
-        (let ((move-pct (/ price-delta (:entry-price entry))))
-          (set! (:max-favorable entry) (max (:max-favorable entry) move-pct))
-          (set! (:max-adverse entry)   (min (:max-adverse entry) move-pct)))
+        (set! (:max-favorable entry) (max (:max-favorable entry) move-pct))
+        (set! (:max-adverse entry)   (min (:max-adverse entry) move-pct))
 
         ;; First threshold crossing → label + learn
         (when (should-label? entry abs-move ctx)
@@ -273,6 +280,9 @@
             (push-back (:manager-resolved desk)
               (list (:meta-conviction entry)
                     (= (:first-outcome entry) price-label)))
+            (push-back (:resolved-preds desk)
+              (list (:meta-conviction entry)
+                    (= (:first-outcome entry) price-label)))
             (for-each (lambda (obs pred)
               (resolve obs (:tht-vec entry) pred price-label 1.0
                        (:conviction-quantile ctx) (:conviction-window ctx)))
@@ -284,15 +294,14 @@
       (filter (lambda (e) (not (entry-expired? e (:encode-count desk) ctx)))
               (:pending desk)))
 
-    ;; 13. State bookkeeping
+    ;; 13. State bookkeeping — all mutations explicit via set!
+    (set! (:indicator-bank desk) indicator-bank)
+    (set! (:candle-window desk) window)
     (set! (:prev-manager-thought? desk) mgr-thought)
     (inc! (:encode-count desk))
 
-    ;; Return: desk with updated indicator-bank and candle-window, plus treasury/portfolio
-    (list (update desk
-            :indicator-bank indicator-bank
-            :candle-window window)
-          treasury portfolio)))
+    ;; Return: desk already mutated, plus treasury/portfolio
+    (list desk treasury portfolio)))
 
 ;; ── Candle window management ────────────────────────────────────────
 
