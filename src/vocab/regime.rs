@@ -158,8 +158,13 @@ fn aroon(candles: &[Candle], period: usize) -> Option<(f64, f64)> {
 /// Matches wat/vocab/regime.wat fractal-dimension.
 fn fractal_dimension(closes: &[f64]) -> Option<f64> {
     let n = closes.len();
-    let path_len: f64 = (1..n).map(|i| ((closes[i] - closes[i-1]).powi(2) + 1.0).sqrt()).sum();
-    let max_dist = closes.iter().map(|&c| (c - closes[0]).abs()).fold(0.0_f64, f64::max);
+    let mut path_len = 0.0_f64;
+    let mut max_dist = 0.0_f64;
+    for i in 1..n {
+        path_len += ((closes[i] - closes[i - 1]).powi(2) + 1.0).sqrt();
+        let dist = (closes[i] - closes[0]).abs();
+        if dist > max_dist { max_dist = dist; }
+    }
     if path_len > 1e-10 && max_dist > 1e-10 {
         let nf = n as f64;
         Some((nf.ln() / (nf.ln() + (max_dist / path_len).ln())).clamp(1.0, 2.0))

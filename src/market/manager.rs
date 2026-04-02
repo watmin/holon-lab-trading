@@ -141,11 +141,22 @@ fn panel_shape(
         return Vec::new();
     }
 
-    let proven_preds: Vec<&Prediction> = proven_indices.iter()
-        .map(|&i| &ctx.observer_preds[i])
-        .collect();
-    let total = proven_preds.len();
-    let buys = proven_preds.iter().filter(|p| p.raw_cos > 0.0).count();
+    let total = proven_indices.len();
+
+    // Single fold: buys, total conviction, sum of squared convictions
+    let (buys, sum_conv, sum_sq_conv) = proven_indices.iter().fold(
+        (0usize, 0.0_f64, 0.0_f64),
+        |(b, sc, ssq), &i| {
+            let p = &ctx.observer_preds[i];
+            (
+                b + (p.raw_cos > 0.0) as usize,
+                sc + p.conviction,
+                ssq + p.conviction * p.conviction,
+            )
+        },
+    );
+    let mean_conv = sum_conv / total as f64;
+    let spread = (sum_sq_conv / total as f64 - mean_conv * mean_conv).max(0.0).sqrt();
 
     let mut facts = Vec::with_capacity(4);
 
@@ -155,16 +166,12 @@ fn panel_shape(
         &scalar.encode(agreement, ScalarMode::Linear { scale: 1.0 })));
 
     // Energy — mean conviction
-    let mean_conv = proven_preds.iter().map(|p| p.conviction).sum::<f64>() / total as f64;
     facts.push(Primitives::bind(&atoms.energy,
         &scalar.encode(mean_conv, ScalarMode::Linear { scale: 1.0 })));
 
     // Divergence — spread of convictions
-    let variance = proven_preds.iter()
-        .map(|p| (p.conviction - mean_conv).powi(2))
-        .sum::<f64>() / total as f64;
     facts.push(Primitives::bind(&atoms.divergence,
-        &scalar.encode(variance.sqrt(), ScalarMode::Linear { scale: 1.0 })));
+        &scalar.encode(spread, ScalarMode::Linear { scale: 1.0 })));
 
     // Coherence — mean pairwise cosine between proven thought vectors
     let proven_vecs: Vec<&Vector> = proven_indices.iter()
