@@ -52,9 +52,17 @@
       ;; For now: one desk, one pair, all candles go to desk[0].
       ;; Multi-pair: match event asset to desk's source/target.
       (let ((desk (first (:desks state))))
-        (let ((updated-desk (on-candle-desk desk candle fact-labels observer-vecs
-                                            (:treasury state) (:portfolio state) ctx)))
-          (update state :desks (list updated-desk))))
+        (let (((updated-desk treasury portfolio)
+               (on-candle-desk desk candle fact-labels observer-vecs
+                               (:treasury state) (:portfolio state) ctx)))
+          (update state
+            :desks (list updated-desk)
+            :treasury treasury
+            :portfolio portfolio
+            :move-sum (:move-sum updated-desk)
+            :move-count (:move-count updated-desk)
+            :labeled-count (+ (:labeled-count state) (:labeled-count updated-desk))
+            :noise-count (+ (:noise-count state) (:noise-count updated-desk)))))
     :deposit  (update state :treasury (deposit (:treasury state) (:asset event) (:amount event)))
     :withdraw (update state :treasury (withdraw (:treasury state) (:asset event) (:amount event)))))
 
@@ -76,20 +84,20 @@
       (> (/ (abs (- current-price last-exit-price)) last-exit-price)
          (* k-stop last-exit-atr))))
 
-(define (all-gates-pass? state manager-pred risk-mult candle ctx)
+(define (all-gates-pass? desk portfolio manager-pred risk-mult candle ctx)
   "8 conditions, ALL must hold. Pure predicate — no mutation."
   (let ((meta-dir        (:direction manager-pred))
         (meta-conviction (:conviction manager-pred))
         (fee-rate        (+ (:swap-fee ctx) (:slippage ctx))))
     (and (= (:asset-mode ctx) "hold")
-         (!= (:phase (:portfolio state)) :observe)
-         (:mgr-curve-valid state)
-         (>= meta-conviction (first (:mgr-proven-band state)))
-         (<  meta-conviction (second (:mgr-proven-band state)))
-         (market-moved? (:close candle) (:last-exit-price state)
-                        (:last-exit-atr state) (:k-stop ctx))
-         (> (:cached-risk-mult state) 0.3)
-         (or (= meta-dir (:mgr-buy state)) (= meta-dir (:mgr-sell state)))
+         (!= (:phase portfolio) :observe)
+         (:mgr-curve-valid desk)
+         (>= meta-conviction (first (:mgr-proven-band desk)))
+         (<  meta-conviction (second (:mgr-proven-band desk)))
+         (market-moved? (:close candle) (:last-exit-price desk)
+                        (:last-exit-atr desk) (:k-stop ctx))
+         (> (:cached-risk-mult desk) 0.3)
+         (or (= meta-dir (:mgr-buy desk)) (= meta-dir (:mgr-sell desk)))
          (> (* (:atr-r candle) 6.0) (* 2.0 fee-rate)))))
 
 (define (compute-position-size band-edge risk-mult max-single)
@@ -116,60 +124,69 @@
   (> (- candle-idx (:candle-idx entry)) (* 10 (:horizon ctx))))
 
 ;; ── The candle step ────────────────────────────────────────────────
+;; Pure-ish function: desk owns prediction/learning state.
+;; Treasury and portfolio are passed in (shared across desks) and returned
+;; because position management mutates them.
+;;
+;; (desk, candle, fact-labels, observer-vecs, treasury, portfolio, ctx)
+;;   → (desk, treasury, portfolio)
 
-(define (on-candle state candle fact-labels observer-vecs ctx)
-  "One candle. The fold's inner step."
+(define (on-candle-desk desk candle fact-labels observer-vecs treasury portfolio ctx)
+  "One candle for one desk. Returns (desk treasury portfolio)."
+
+  (let ((quote-price (:close candle))
+        (fee-rate    (+ (:swap-fee ctx) (:slippage ctx))))
 
   ;; ─── 1. Observer predictions ──────────────────────────────────────
   (let* ((observer-preds
            (map (lambda (obs vec) (predict (:journal obs) vec))
-                (:observers state) observer-vecs))
+                (:observers desk) observer-vecs))
          (generalist-pred (nth observer-preds 5))
          (generalist-vec  (nth observer-vecs 5))
 
   ;; ─── 2. Manager encoding + prediction ─────────────────────────────
          (mgr-facts    (encode-manager-thought
-                         (:mgr-atoms ctx) (manager-context state observer-preds
+                         (:mgr-atoms ctx) (manager-context desk observer-preds
                            observer-vecs candle ctx)
-                         (:dims ctx) (:prev-mgr-thought state)))
+                         (:dims ctx) (:prev-mgr-thought desk)))
          (mgr-thought  (bundle mgr-facts))
-         (manager-pred (predict (:mgr-journal state) mgr-thought))
+         (manager-pred (predict (:mgr-journal desk) mgr-thought))
          (meta-dir        (:direction manager-pred))
          (meta-conviction (:conviction manager-pred))
 
   ;; ─── 3. Panel engram ──────────────────────────────────────────────
          (panel-state   (map :raw-cosine observer-preds))
-         (panel-familiar (< (residual (:panel-engram state) panel-state)
-                            (threshold (:panel-engram state))))
+         (panel-familiar (< (residual (:panel-engram desk) panel-state)
+                            (threshold (:panel-engram desk))))
 
   ;; ─── 6. Risk evaluation ───────────────────────────────────────────
-         (risk-mult (risk-multiplier (:portfolio state))))
+         (risk-mult (risk-multiplier portfolio)))
 
     ;; ─── 4. Conviction tracking ───────────────────────────────────────
-    (push-back (:conviction-history state) meta-conviction)
-    (when (> (len (:conviction-history state)) (:conviction-window ctx))
-      (pop-front (:conviction-history state)))
+    (push-back (:conviction-history desk) meta-conviction)
+    (when (> (len (:conviction-history desk)) (:conviction-window ctx))
+      (pop-front (:conviction-history desk)))
 
-    (when (and (>= (len (:conviction-history state)) (:conviction-warmup ctx))
-               (= (mod (:encode-count state) (:recalib-interval ctx)) 0))
+    (when (and (>= (len (:conviction-history desk)) (:conviction-warmup ctx))
+               (= (mod (:encode-count desk) (:recalib-interval ctx)) 0))
       (match (:conviction-mode ctx)
         :quantile
-          (set! (:conviction-threshold state)
-                (conviction-threshold-quantile (:conviction-history state)
+          (set! (:conviction-threshold desk)
+                (conviction-threshold-quantile (:conviction-history desk)
                                                (:conviction-quantile ctx)))
         :auto
           ;; rune:assay(prose) — auto mode fits exponential curve via log-linear
           ;; regression on 20 binned resolved predictions. See sizing.wat
           ;; kelly-frac for the shared curve-fitting algorithm.
           (when-let ((curve (log-linear-regression
-                      (bin (:resolved-preds state) 20))))
+                      (bin (:resolved-preds desk) 20))))
             (let* ((a (first curve)) (b (second curve)))
               (when (and (> b 0.0) (> (:min-edge ctx) 0.50))
                 (let ((target (/ (- (:min-edge ctx) 0.50) a)))
                   (when (> target 0.0)
                     (let ((thresh (/ (ln target) b)))
                       (when (and (> thresh 0.0) (< thresh 1.0))
-                        (set! (:conviction-threshold state) thresh))))))))))
+                        (set! (:conviction-threshold desk) thresh))))))))))
 
     ;; ─── 5. Position tick ─────────────────────────────────────────────
     (for-each (lambda (pos)
@@ -180,11 +197,11 @@
              (pnl-frac    (return-pct pos current-rate))
              (exit-thought (encode-position pos pnl-frac current-rate (:atr-r candle) is-buy)))
         (when (= (mod (:candles-held pos) (:exit-observe-interval ctx)) 0)
-          (push-back (:exit-pending state)
+          (push-back (:exit-pending desk)
             (exit-observation :thought exit-thought
                               :pos-id (:id pos)
                               :snapshot-pnl pnl-frac
-                              :snapshot-candle (:encode-count state)))))
+                              :snapshot-candle (:encode-count desk)))))
 
       ;; Tick trailing stop + take profit
       (let ((signal (tick pos current-rate (:k-trail ctx))))
@@ -192,35 +209,35 @@
           ;; Treasury settles the exit: release target, swap target→source.
           ;; Two-pass: pass 1 collects exit signals, pass 2 settles.
           (let ((sell-target (:target-held pos)))
-            (release (:treasury state) (:target-asset pos) sell-target)
-            (swap (:treasury state) (:target-asset pos) (:source-asset pos)
+            (release treasury (:target-asset pos) sell-target)
+            (swap treasury (:target-asset pos) (:source-asset pos)
                   sell-target (/ 1.0 current-rate) fee-rate))
-          (set! (:last-exit-price state) quote-price)
-          (set! (:last-exit-atr state) (:atr-r candle))
+          (set! (:last-exit-price desk) quote-price)
+          (set! (:last-exit-atr desk) (:atr-r candle))
           (set! (:phase pos) :closed))))
-      (:positions state))
+      (:positions desk))
 
     ;; ─── 7-8. Position opening + sizing ───────────────────────────────
     ;; One path for both directions. Direction determines source/target.
     ;; Buy: USDC→WBTC (rate = price). Sell: WBTC→USDC (rate = 1/price).
-    (when (all-gates-pass? state manager-pred risk-mult candle ctx)
+    (when (all-gates-pass? desk portfolio manager-pred risk-mult candle ctx)
       (let* ((frac (compute-position-size 0.03 risk-mult (:max-single-position ctx)))
              (dir-label (:direction manager-pred))
-             (is-buy (= dir-label (:mgr-buy state)))
+             (is-buy (= dir-label (:mgr-buy desk)))
              (source-asset (if is-buy (:base-asset ctx) (:quote-asset ctx)))
              (target-asset (if is-buy (:quote-asset ctx) (:base-asset ctx)))
              (rate (if is-buy quote-price (/ 1.0 quote-price)))
-             (deploy-amount (* (balance (:treasury state) source-asset) frac))
+             (deploy-amount (* (balance treasury source-asset) frac))
              (usd-value (if is-buy deploy-amount (* deploy-amount quote-price))))
         (when (> usd-value 10.0)
-          (let* (((spent received) (swap (:treasury state) source-asset target-asset
+          (let* (((spent received) (swap treasury source-asset target-asset
                                          deploy-amount rate fee-rate))
                  ;; Symmetric claim: lock received target in deployed.
-                 (claimed (claim (:treasury state) target-asset received))
+                 (claimed (claim treasury target-asset received))
                  (pos (new-position
                         (position-entry
-                          :id (:next-position-id state)
-                          :candle-idx (:encode-count state)
+                          :id (:next-position-id desk)
+                          :candle-idx (:encode-count desk)
                           :source-asset source-asset
                           :target-asset target-asset
                           :source-amount spent
@@ -230,22 +247,22 @@
                           :entry-fee (* usd-value fee-rate)
                           :k-stop (:k-stop ctx)
                           :k-tp (:k-tp ctx)))))
-            (push! (:positions state) pos)
-            (inc! (:next-position-id state))
-            (inc! (:hold-swaps state))))))
+            (push! (:positions desk) pos)
+            (inc! (:next-position-id desk))
+            (inc! (:hold-swaps desk))))))
 
     ;; ─── 9. Pending push (ALL candles — learning, not treasury) ─────
     ;; Pending entries are for LEARNING, not for treasury. They record the
     ;; prediction so observers and manager can resolve against the outcome.
     ;; The treasury moves through ManagedPosition lifecycle (swap/claim/release),
     ;; NOT through pending entry resolution. No double-spending.
-    (push! (:pending state)
-      (pending :candle-idx (:encode-count state)
+    (push! (:pending desk)
+      (pending :candle-idx (:encode-count desk)
                :tht-vec mgr-thought
                :tht-pred manager-pred
                :meta-dir meta-dir
                :meta-conviction meta-conviction
-               :entry-price (:close candle)
+               :entry-price quote-price
                :entry-atr (:atr-r candle)
                :observer-vecs observer-vecs
                :observer-preds observer-preds
@@ -255,8 +272,8 @@
     ;; ─── 10. Decay ──────────────────────────────────────────────────
     (for-each (lambda (obs)
       (decay (:journal obs) (:decay ctx)))
-      (:observers state))
-    (decay (:mgr-journal state) (:adaptive-decay state))
+      (:observers desk))
+    (decay (:mgr-journal desk) (:adaptive-decay desk))
 
     ;; ─── 11-12. Learning + Resolution (single pass over pending) ─────
     ;; Tempered: was three separate passes (learn, resolve, filter).
@@ -271,47 +288,48 @@
 
         ;; 11b. First threshold crossing -> label + learn
         (when (should-label? entry candle ctx)
-          (let ((label    (entry-label entry candle (:mgr-buy state) (:mgr-sell state)))
+          (let ((label    (entry-label entry candle (:mgr-buy desk) (:mgr-sell desk)))
                 (abs-move (/ (abs (- (:close candle) (:entry-price entry)))
                              (:entry-price entry)))
-                (sw       (signal-weight abs-move (:move-sum state) (:move-count state))))
+                (sw       (signal-weight abs-move (:move-sum desk) (:move-count desk))))
             (set! (:first-outcome entry) label)
             (for-each (lambda (obs vec)
               (observe (:journal obs) vec label sw))
-              (:observers state) (:observer-vecs entry))
-            (inc! (:labeled-count state))))
+              (:observers desk) (:observer-vecs entry))
+            (inc! (:labeled-count desk))))
 
         ;; 12. Resolution (if expired) or keep
-        (if (entry-expired? entry (:encode-count state) ctx)
+        (if (entry-expired? entry (:encode-count desk) ctx)
             (let ((price-label (if (> (:close candle) (:entry-price entry))
-                                   (:mgr-buy state) (:mgr-sell state))))
-              (observe (:mgr-journal state) (:mgr-thought entry) price-label 1.0)
-              (push-back (:mgr-resolved state)
+                                   (:mgr-buy desk) (:mgr-sell desk))))
+              (observe (:mgr-journal desk) (:mgr-thought entry) price-label 1.0)
+              (push-back (:mgr-resolved desk)
                 (list (:meta-conviction entry)
                       (= (:first-outcome entry) price-label)))
               (for-each (lambda (obs pred)
                 (resolve obs (:tht-vec entry) pred price-label 1.0
                          (:conviction-quantile ctx) (:conviction-window ctx)))
-                (:observers state) (:observer-preds entry))
+                (:observers desk) (:observer-preds entry))
               ;; Portfolio tracks every resolved prediction for phase transitions.
               ;; Treasury is NOT touched — capital moves through ManagedPosition only.
               ;; frac=0.0: this is a paper outcome, not a capital event.
-              (record-trade (:portfolio state)
+              (record-trade portfolio
                             (/ (- (:close candle) (:entry-price entry))
                                (:entry-price entry))
-                            0.0 (if (= (:meta-dir entry) (:mgr-buy state)) :long :short)
+                            0.0 (if (= (:meta-dir entry) (:mgr-buy desk)) :long :short)
                             (:swap-fee ctx) (:slippage ctx)))
             ;; Not expired -- keep
             (push! surviving entry)))
-        (:pending state))
-      (set! (:pending state) surviving))
+        (:pending desk))
+      (set! (:pending desk) surviving))
 
     ;; ─── 13. State bookkeeping ──────────────────────────────────────
-    (set! (:prev-mgr-thought state) mgr-thought)
-    (inc! (:encode-count state))
-    (set! (:cached-risk-mult state) risk-mult)
+    (set! (:prev-mgr-thought desk) mgr-thought)
+    (inc! (:encode-count desk))
+    (set! (:cached-risk-mult desk) risk-mult)
 
-    state))
+    ;; Return the triple: mutated desk, treasury, portfolio.
+    (list desk treasury portfolio))))
 
 ;; ── The organization ────────────────────────────────────────────────
 ;;
