@@ -93,6 +93,12 @@
   in-adaptation          ; bool
   highconv-wins          ; (deque bool) — recent high-conviction outcomes for adaptive decay
 
+  ;; Tracking (per-desk, merged to enterprise in on-event)
+  move-sum               ; f64 — running sum for signal_weight
+  move-count             ; usize — running count for signal_weight
+  labeled-count          ; usize — labeled entries this desk produced
+  noise-count            ; usize — noise entries this desk produced
+
   ;; Accounting
   encode-count           ; usize — candles processed by this desk
   position-swaps         ; usize — position opens + exits
@@ -145,6 +151,8 @@
       :panel-recalib-wins 0 :panel-recalib-total 0
       :adaptive-decay (:decay config) :in-adaptation false
       :highconv-wins (deque)
+      :move-sum 0.0 :move-count 0
+      :labeled-count 0 :noise-count 0
       :encode-count 0 :position-swaps 0 :position-wins 0
       :last-exit-price 0.0 :last-exit-atr 0.0
       :peak-treasury-equity 0.0 :next-position-id 0

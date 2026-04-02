@@ -30,11 +30,9 @@
   risk-branches          ; (list OnlineSubspace) — 5 anomaly detectors
   cached-risk-mult       ; f64 — last computed risk multiplier
 
-  ;; Shared tracking
+  ;; Shared tracking (aggregated from desks in on-event)
   labeled-count          ; total labeled entries across all desks
   noise-count            ; total noise entries across all desks
-  move-sum               ; running sum for signal_weight
-  move-count             ; running count for signal_weight
 
   ;; Logging
   pending-logs           ; (list LogEntry) — accumulated, flushed per batch
@@ -83,7 +81,7 @@
 
 (define (build-manager-context desk observer-preds observer-vecs candle ctx)
   "Build manager-context struct from desk state. Extracts per-observer
-   metadata (curve_valid, resolved_len, cached_acc) explicitly."
+   metadata (observer-curve-valid, observer-resolved-lens, observer-resolved-accs) explicitly."
   (let ((specialists (take 5 (:observers desk))))
     (manager-context
       :observer-preds   (take 5 observer-preds)
@@ -113,11 +111,11 @@
       (> (/ (abs (- current-price last-exit-price)) last-exit-price)
          (* k-stop last-exit-atr))))
 
-(define (all-gates-pass? desk portfolio manager-pred risk-mult candle ctx)
-  "8 conditions, ALL must hold. Pure predicate — no mutation."
+(define (all-gates-pass? desk portfolio manager-pred risk-mult candle fee-rate ctx)
+  "8 conditions, ALL must hold. Pure predicate — no mutation.
+   fee-rate is pre-computed by caller (tempered: computed once, not per-gate)."
   (let ((meta-dir        (:direction manager-pred))
-        (meta-conviction (:conviction manager-pred))
-        (fee-rate        (+ (:swap-fee ctx) (:slippage ctx))))
+        (meta-conviction (:conviction manager-pred)))
     (and (= (:asset-mode ctx) "hold")
          (!= (:phase portfolio) :observe)
          (:manager-curve-valid desk)
@@ -133,9 +131,7 @@
   "Half-Kelly modulated by risk, capped."
   (min (* (/ band-edge 2.0) risk-mult) max-single))
 
-(define (trade-direction manager-pred mgr-buy)
-  "Manager direction → position direction."
-  (if (= (:direction manager-pred) mgr-buy) :long :short))
+
 
 (define (should-label? entry candle ctx)
   "Has the price crossed the move threshold since entry?"
@@ -184,10 +180,10 @@
          (meta-dir        (:direction manager-pred))
          (meta-conviction (:conviction manager-pred))
 
-  ;; ─── 3. Panel engram ──────────────────────────────────────────────
+  ;; ─── 3. Panel engram state (for engram update at recalibration) ────
          (panel-state   (map :raw-cosine observer-preds))
-         (panel-familiar (< (residual (:panel-engram desk) panel-state)
-                            (threshold (:panel-engram desk))))
+         ;; rune:reap(aspirational) — panel-familiar will gate position entry
+         ;; when panel engram matures. Currently computed in Rust for logging only.
 
   ;; ─── 6. Risk — passed in from enterprise, not computed per-desk ────
          )
@@ -250,7 +246,7 @@
     ;; ─── 7-8. Position opening + sizing ───────────────────────────────
     ;; One path for both directions. Direction determines source/target.
     ;; Buy: USDC→WBTC (rate = price). Sell: WBTC→USDC (rate = 1/price).
-    (when (all-gates-pass? desk portfolio manager-pred risk-mult candle ctx)
+    (when (all-gates-pass? desk portfolio manager-pred risk-mult candle fee-rate ctx)
       (let* ((frac (compute-position-size 0.03 risk-mult (:max-single-position ctx)))
              (dir-label (:direction manager-pred))
              (is-buy (= dir-label (:manager-buy desk)))
@@ -354,7 +350,7 @@
       (set! (:pending desk) surviving))
 
     ;; ─── 13. State bookkeeping ──────────────────────────────────────
-    (set! (:prev-mgr-thought desk) mgr-thought)
+    (set! (:prev-manager-thought? desk) mgr-thought)
     (inc! (:encode-count desk))
     ;; risk-mult is enterprise-level, not stored on desk
 
