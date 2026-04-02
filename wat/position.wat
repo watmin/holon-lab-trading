@@ -11,11 +11,12 @@
 (struct managed-position
   id entry-candle entry-price entry-atr direction
   base-deployed quote-held base-reclaimed
-  phase trailing-stop take-profit best-price
-  total-fees candles-held)
+  phase trailing-stop take-profit extreme-price
+  max-adverse total-fees candles-held)
 
-;; best-price: the most favorable price seen since entry.
+;; extreme-price: the most favorable price seen since entry.
 ;; For longs: the highest price. For shorts: the lowest price.
+;; max-adverse: worst return against us (negative fraction). Tracked per tick.
 
 ;; phase:     :active | :runner | :closed
 ;; direction: :long | :short
@@ -64,28 +65,33 @@
       :base-reclaimed 0.0
       :phase :active
       :trailing-stop stop :take-profit tp
-      :best-price price
+      :extreme-price price
+      :max-adverse 0.0
       :total-fees (:entry-fee entry) :candles-held 0)))
 
 ;; ── Tick ────────────────────────────────────────────────────────────
 
 ;; k-trail: ATR multiplier for trailing stop distance.
-;; In Rust, a TrailFactor newtype would prevent passing a price
-;; where a multiplier is expected. The wat names the intent.
+;; In Rust, TrailFactor newtype prevents passing a price where a multiplier belongs.
 (define (tick pos current-price k-trail)
-  "Update position with current price. Returns :stop-loss | :take-profit | absent."
+  "Update position with current price. Returns :stop-loss | :take-profit | absent.
+   Tracks max adverse excursion (worst return against us) per tick."
   (when (!= (:phase pos) :closed)
+    ;; Track worst excursion
+    (let ((ret (return-pct pos current-price)))
+      (when (< ret (:max-adverse pos))
+        (set! (:max-adverse pos) ret)))
     (match (:direction pos)
       :long
-        (let ((best-price (max (:best-price pos) current-price))
-              (new-stop   (* best-price (- 1.0 (* k-trail (:entry-atr pos))))))
+        (let ((extreme-price (max (:extreme-price pos) current-price))
+              (new-stop   (* extreme-price (- 1.0 (* k-trail (:entry-atr pos))))))
           (let ((trailing-stop (max (:trailing-stop pos) new-stop)))
             (cond ((<= current-price trailing-stop) :stop-loss)
                   ((and (= (:phase pos) :active) (>= current-price (:take-profit pos)))
                    :take-profit))))
       :short
-        (let ((best-price (min (:best-price pos) current-price))
-              (new-stop   (* best-price (+ 1.0 (* k-trail (:entry-atr pos))))))
+        (let ((extreme-price (min (:extreme-price pos) current-price))
+              (new-stop   (* extreme-price (+ 1.0 (* k-trail (:entry-atr pos))))))
           (let ((trailing-stop (min (:trailing-stop pos) new-stop)))
             (cond ((>= current-price trailing-stop) :stop-loss)
                   ((and (= (:phase pos) :active) (<= current-price (:take-profit pos)))

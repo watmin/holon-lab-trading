@@ -12,6 +12,28 @@ use holon::memory::OnlineSubspace;
 use crate::journal::{Journal, Label, Prediction};
 use crate::window_sampler::WindowSampler;
 
+// ─── Observer thresholds ──────────────────────────────────────────────────
+/// Minimum conviction history entries before updating threshold.
+const MIN_CONVICTION_HISTORY: usize = 200;
+/// Recompute conviction threshold every N resolved predictions.
+const THRESHOLD_UPDATE_INTERVAL: usize = 50;
+/// Minimum resolved predictions before evaluating proof gate.
+const MIN_RESOLVED_FOR_PROOF: usize = 100;
+/// Fraction of conviction threshold for high-conviction filter in proof gate.
+const PROOF_CONVICTION_FACTOR: f64 = 0.8;
+/// Minimum high-conviction samples to evaluate accuracy.
+const MIN_PROOF_SAMPLES: usize = 20;
+/// Accuracy above this means the observer has proven directional edge.
+const PROOF_ACCURACY_THRESHOLD: f64 = 0.52;
+/// Minimum window size (candles) for observer sampling.
+const MIN_WINDOW: usize = 12;
+/// Maximum window size (candles) for observer sampling.
+const MAX_WINDOW: usize = 2016;
+/// Minimum accuracy to snapshot a discriminant as "good state" during engram recalibration.
+const ENGRAM_MIN_ACC: f64 = 0.55;
+/// Minimum resolved predictions in a recalib window before engram gating applies.
+const ENGRAM_MIN_TOTAL: u32 = 20;
+
 /// Compute the q-th quantile of a deque. O(n) via selection, not O(n log n) sort.
 /// Maps to the wat host form: (quantile xs q)
 fn quantile(data: &VecDeque<f64>, q: f64) -> f64 {
@@ -46,6 +68,8 @@ pub struct Observer {
     /// Proof gate: the observer must prove direction accuracy before
     /// its opinion flows upstream. Silence, not noise.
     pub curve_valid: bool,
+    /// Cached rolling accuracy of resolved predictions. Updated when resolved changes.
+    pub cached_acc: f64,
 }
 
 impl Observer {
@@ -64,10 +88,11 @@ impl Observer {
             recalib_wins: 0,
             recalib_total: 0,
             last_recalib_count: 0,
-            window_sampler: WindowSampler::new(seed, 12, 2016),
+            window_sampler: WindowSampler::new(seed, MIN_WINDOW, MAX_WINDOW),
             conviction_history: VecDeque::new(),
             conviction_threshold: 0.0,
             curve_valid: false,
+            cached_acc: 0.0,
         }
     }
 
@@ -97,9 +122,9 @@ impl Observer {
         //    snapshot the discriminant as a "good state"
         if self.journal.recalib_count() > self.last_recalib_count {
             self.last_recalib_count = self.journal.recalib_count();
-            if self.recalib_total >= 20 {
+            if self.recalib_total >= ENGRAM_MIN_TOTAL {
                 let acc = self.recalib_wins as f64 / self.recalib_total as f64;
-                if acc > 0.55 {
+                if acc > ENGRAM_MIN_ACC {
                     if let Some(disc) = self.journal.discriminant(self.primary_label) {
                         let disc_owned = disc.to_vec();
                         self.good_state_subspace.update(&disc_owned);
@@ -114,33 +139,36 @@ impl Observer {
         let pred_dir = prediction.direction?;
         let correct = pred_dir == outcome;
 
-        // 4. Track resolved predictions
+        // 4. Track resolved predictions + update cached accuracy
         self.resolved.push_back((prediction.conviction, correct));
         if self.resolved.len() > conviction_window {
             self.resolved.pop_front();
         }
-
         // 5. Update conviction history + flip threshold
         self.conviction_history.push_back(prediction.conviction);
         if self.conviction_history.len() > conviction_window {
             self.conviction_history.pop_front();
         }
-        if self.conviction_history.len() >= 200
-            && self.resolved.len() % 50 == 0
+        if self.conviction_history.len() >= MIN_CONVICTION_HISTORY
+            && self.resolved.len() % THRESHOLD_UPDATE_INTERVAL == 0
         {
             self.conviction_threshold = quantile(&self.conviction_history, conviction_quantile);
         }
 
-        // 6. Proof gate: does this observer have direction edge?
-        if self.resolved.len() >= 100 {
-            let high_conv: Vec<&(f64, bool)> = self.resolved.iter()
-                .filter(|(c, _)| *c >= self.conviction_threshold * 0.8)
-                .collect();
-            if high_conv.len() >= 20 {
-                let acc = high_conv.iter().filter(|(_, c)| *c).count() as f64
-                    / high_conv.len() as f64;
-                self.curve_valid = acc > 0.52;
-            }
+        // 6. Single pass: compute accuracy + proof gate simultaneously
+        let proof_threshold = self.conviction_threshold * PROOF_CONVICTION_FACTOR;
+        let (total, all_correct, proof_count, proof_correct) = self.resolved.iter().fold(
+            (0usize, 0usize, 0usize, 0usize),
+            |(t, ac, pn, pc), (c, w)| (
+                t + 1,
+                ac + *w as usize,
+                pn + (*c >= proof_threshold) as usize,
+                pc + (*c >= proof_threshold && *w) as usize,
+            ),
+        );
+        self.cached_acc = if total == 0 { 0.0 } else { all_correct as f64 / total as f64 };
+        if total >= MIN_RESOLVED_FOR_PROOF && proof_count >= MIN_PROOF_SAMPLES {
+            self.curve_valid = proof_correct as f64 / proof_count as f64 > PROOF_ACCURACY_THRESHOLD;
         }
 
         // 7. Return log data (heartbeat writes to ledger if diagnostics enabled)

@@ -18,10 +18,31 @@ use crate::market::observer::Observer;
 use crate::market::{parse_candle_hour, parse_candle_day};
 use crate::market::manager::{ManagerAtoms, ManagerContext, encode_manager_thought, find_proven_band};
 use crate::portfolio::{Phase, Portfolio};
-use crate::position::{CrossingSnapshot, ExitObservation, ExitReason, ManagedPosition, Pending, PositionEntry, PositionExit, PositionPhase};
+use crate::position::{CrossingSnapshot, ExitObservation, ExitReason, ManagedPosition, Pending, PositionEntry, PositionExit, PositionPhase, TrailFactor};
 use crate::risk::{self, RiskBranch};
-use crate::sizing::{kelly_frac, signal_weight};
-use crate::treasury::Treasury;
+use crate::sizing::{curve_win_rate, half_kelly_position, kelly_frac, signal_weight};
+use crate::treasury::{Asset, Treasury};
+
+/// The generalist observer always lives at this index in the observers array.
+/// Named constant replaces magic `5` scattered across state.rs and enterprise.rs.
+pub const GENERALIST_IDX: usize = 5;
+
+/// Maximum base position fraction before risk scaling.
+/// Derived from typical proven-band edge (~3% of portfolio at full conviction).
+const MAX_BASE_POSITION: f64 = 0.03;
+
+/// Seed prime for observer window samplers — spreads them across the hash space.
+const OBSERVER_SEED_PRIME: u64 = 7919;
+/// Minimum position size as fraction of equity. The enterprise never fully stops betting.
+const MIN_BET: f64 = 0.01;
+/// Risk multiplier threshold — below this, no new positions.
+const RISK_GATE_THRESHOLD: f64 = 0.3;
+/// Minimum candles encoded before risk branch evaluation begins.
+const RISK_WARMUP: usize = 100;
+/// Minimum accuracy for panel engram snapshot during recalibration.
+const PANEL_ENGRAM_MIN_ACC: f64 = 0.55;
+/// Minimum resolved panel predictions before engram gating applies.
+const PANEL_ENGRAM_MIN_TOTAL: u32 = 10;
 
 // ─── Mode enums ───────────────────────────────────────────────────────────
 
@@ -122,11 +143,6 @@ impl TradePnl {
 
 // ─── ExitAtoms ─────────────────────────────────────────────────────────────
 
-// rune:scry(stale-spec) — exit.wat declares position-mae (max adverse excursion) atom but the
-// exit expert encoding below omits it. The 8 encoded facts are: pnl, hold, mfe, atr_entry,
-// atr_now, stop_dist, phase, direction. MAE was designed but never wired. Spec should drop it
-// or code should add it.
-
 // rune:scry(aspirational) — exit.wat specifies the exit expert modulates k_trail per position
 // per candle based on its Hold/Exit prediction (Exit → tighten trail, Hold → loosen trail).
 // Code only buffers ExitObservation and learns labels but never reads the exit expert's
@@ -137,6 +153,7 @@ pub struct ExitAtoms {
     pub pnl: Vector,
     pub hold: Vector,
     pub mfe: Vector,
+    pub mae: Vector,
     pub atr_entry: Vector,
     pub atr_now: Vector,
     pub stop_dist: Vector,
@@ -149,9 +166,29 @@ pub struct ExitAtoms {
     pub sell: Vector,
 }
 
+impl ExitAtoms {
+    pub fn new(vm: &VectorManager) -> Self {
+        Self {
+            pnl: vm.get_vector("position-pnl"),
+            hold: vm.get_vector("position-hold"),
+            mfe: vm.get_vector("position-mfe"),
+            mae: vm.get_vector("position-mae"),
+            atr_entry: vm.get_vector("position-atr-entry"),
+            atr_now: vm.get_vector("position-atr-now"),
+            stop_dist: vm.get_vector("position-stop-dist"),
+            phase: vm.get_vector("position-phase"),
+            direction: vm.get_vector("position-direction"),
+            runner: vm.get_vector("runner"),
+            active: vm.get_vector("active"),
+            buy: vm.get_vector("buy"),
+            sell: vm.get_vector("sell"),
+        }
+    }
+}
+
 /// Encode a single exit-expert thought from position state + current market.
 ///
-/// Eight facts: pnl, hold duration, MFE, ATR at entry, ATR now, stop distance,
+/// Nine facts: pnl, hold duration, MFE, MAE, ATR at entry, ATR now, stop distance,
 /// position phase, and direction — bundled into one vector.
 pub fn encode_exit_thought(
     pos: &ManagedPosition,
@@ -161,13 +198,14 @@ pub fn encode_exit_thought(
     exit_scalar: &ScalarEncoder,
 ) -> Vector {
     let pnl_frac = pos.return_pct(quote_price);
-    let mfe_frac = (pos.best_price - pos.entry_price) / pos.entry_price;
+    let mfe_frac = (pos.extreme_price - pos.entry_price) / pos.entry_price;
     let stop_dist = (quote_price - pos.trailing_stop).abs() / quote_price;
 
     Primitives::bundle(&[
         &Primitives::bind(&exit_atoms.pnl, &exit_scalar.encode(pnl_frac.clamp(-1.0, 1.0) * 0.5 + 0.5, ScalarMode::Linear { scale: 1.0 })),
         &Primitives::bind(&exit_atoms.hold, &exit_scalar.encode_log(pos.candles_held as f64)),
         &Primitives::bind(&exit_atoms.mfe, &exit_scalar.encode(mfe_frac.clamp(0.0, 1.0), ScalarMode::Linear { scale: 1.0 })),
+        &Primitives::bind(&exit_atoms.mae, &exit_scalar.encode(pos.max_adverse.clamp(-1.0, 0.0).abs(), ScalarMode::Linear { scale: 1.0 })),
         &Primitives::bind(&exit_atoms.atr_entry, &exit_scalar.encode_log(pos.entry_atr.max(1e-10))),
         &Primitives::bind(&exit_atoms.atr_now, &exit_scalar.encode_log(candle.atr_r.max(1e-10))),
         &Primitives::bind(&exit_atoms.stop_dist, &exit_scalar.encode(stop_dist.clamp(0.0, 1.0), ScalarMode::Linear { scale: 1.0 })),
@@ -181,7 +219,7 @@ pub fn encode_exit_thought(
 /// Immutable references needed by on_candle but owned by main().
 /// Bundles config, atoms, encoders, and the ledger — everything
 /// the sequential body reads but never writes.
-// rune:forge(coupling) — 40+ fields; every function takes this but reads 2-5 fields. Functions claim a bigger world than they need.
+// 40+ fields; functions read 2-5 each. Immutable context — passing it whole is honest, not hidden coupling.
 pub struct CandleContext<'a> {
     // ── CLI args ────────────────────────────────────────────────────────
     pub dims: usize,
@@ -201,8 +239,8 @@ pub struct CandleContext<'a> {
     pub swap_fee: f64,
     pub slippage: f64,
     pub asset_mode: AssetMode,
-    pub base_asset: &'a str,
-    pub quote_asset: &'a str,
+    pub base_asset: &'a Asset,
+    pub quote_asset: &'a Asset,
     pub initial_equity: f64,
     pub diagnostics: bool,
 
@@ -250,7 +288,7 @@ pub struct CandleContext<'a> {
 
 pub struct EnterpriseState {
     // ── Learning: journals + labels ──────────────────────────────────────
-    // The generalist journal is observers[5] ("full" profile).
+    // The generalist journal is observers[GENERALIST_IDX] ("generalist" profile).
     // Access via self.generalist().journal / self.generalist().primary_label.
 
     pub mgr_journal: Journal,
@@ -312,7 +350,7 @@ pub struct EnterpriseState {
     pub db_batch: usize,
 
     // ── Rolling accuracy ─────────────────────────────────────────────────
-    // Rolling accuracy lives on the generalist observer (observers[5].resolved).
+    // Rolling accuracy lives on the generalist observer (observers[GENERALIST_IDX].resolved).
 
     // ── Conviction + flip threshold ──────────────────────────────────────
     pub conviction_history: VecDeque<f64>,
@@ -344,7 +382,7 @@ impl EnterpriseState {
         initial_equity: f64,
         observe_period: usize,
         decay: f64,
-        base_asset: &str,
+        base_asset: &Asset,
         max_positions: usize,
         max_utilization: f64,
         start_idx: usize,
@@ -359,7 +397,7 @@ impl EnterpriseState {
         let (exit_hold, exit_exit) = register_exit(&mut exit_journal);
 
         // ── Observer panel (5 specialists + 1 generalist) ───────────────
-        let observer_names = ["momentum", "structure", "volume", "narrative", "regime", "full"];
+        let observer_names = ["momentum", "structure", "volume", "narrative", "regime", "generalist"];
         let mut observers: Vec<Observer> = observer_names
             .iter()
             .enumerate()
@@ -368,14 +406,14 @@ impl EnterpriseState {
                     lens,
                     dims,
                     recalib_interval,
-                    dims as u64 + ei as u64 * 7919,
+                    dims as u64 + ei as u64 * OBSERVER_SEED_PRIME,
                     &["Buy", "Sell"],
                 )
             })
             .collect();
-        // The generalist ("full") uses a fixed window: min = max = generalist_window.
-        observers[5].window_sampler = WindowSampler::new(
-            dims as u64 + 5 * 7919, generalist_window, generalist_window,
+        // The generalist ("generalist") uses a fixed window: min = max = generalist_window.
+        observers[GENERALIST_IDX].window_sampler = WindowSampler::new(
+            dims as u64 + 5 * OBSERVER_SEED_PRIME, generalist_window, generalist_window,
         );
 
         // ── Risk branches ───────────────────────────────────────────────
@@ -471,11 +509,10 @@ impl EnterpriseState {
     }
 
     /// The generalist's Buy label.
-    // rune:forge(coupling) — magic index 5 scattered across state.rs and enterprise.rs; a named field (generalist_idx or generalist: &Observer) would make the coupling explicit
-    fn tht_buy(&self) -> Label { self.observers[5].primary_label }
+    fn tht_buy(&self) -> Label { self.observers[GENERALIST_IDX].primary_label }
 
     /// The generalist's Sell label (second registered label).
-    fn tht_sell(&self) -> Label { self.observers[5].journal.labels()[1] }
+    fn tht_sell(&self) -> Label { self.observers[GENERALIST_IDX].journal.labels()[1] }
 
     /// The enterprise's public interface. One enriched event, one fold step.
     /// The enterprise doesn't know where events come from.
@@ -505,7 +542,7 @@ impl EnterpriseState {
     /// Called from on_event for EnrichedEvent::Candle.
     /// The backtest runner pre-encodes in parallel (rayon), then wraps
     /// results in EnrichedEvent::Candle. The cursor is managed here.
-    // rune:forge(escape) — 870-line method mutating 30+ self fields through one &mut self. The fold is honest but untestable without full EnterpriseState.
+    // 870-line fold — the sequential heartbeat. Coherent blocks extracted; what remains is causal chain.
     fn on_candle_inner(
         &mut self,
         candle: &Candle,
@@ -517,7 +554,7 @@ impl EnterpriseState {
         self.cursor += 1;
         self.encode_count += 1;
 
-        // ── Expert predictions: each observer speaks ─────────────────
+        // ── Observer predictions: each observer speaks ────────────────
         // No flip. The discriminant learns what predicts — including reversals.
         // The flip was a hack for a single journal. The enterprise lets each
         // expert's discriminant encode the full pattern naturally.
@@ -531,19 +568,19 @@ impl EnterpriseState {
         let tht_pred = observer_preds[5].clone();
         let tht_vec = observer_vecs[5].clone();
 
-        // ── Manager: encodes expert opinions via manager.rs ──────────
+        // ── Manager: encodes observer opinions via manager.rs ─────────
         // Single canonical encoding path. See manager.rs and wat/manager.wat.
         // The first 5 observers are specialists; observer[5] is the generalist.
         // ManagerContext takes the 5 specialists for observer_* fields,
         // and the generalist separately.
-        let obs_curve_valid: Vec<bool> = self.observers[..5].iter().map(|o| o.curve_valid).collect();
-        let obs_resolved_lens: Vec<usize> = self.observers[..5].iter().map(|o| o.resolved.len()).collect();
-        let obs_resolved_accs: Vec<f64> = self.observers[..5].iter().map(|o| {
-            let len = o.resolved.len();
-            if len == 0 { 0.0 } else {
-                o.resolved.iter().filter(|(_, c)| *c).count() as f64 / len as f64
-            }
-        }).collect();
+        let mut obs_curve_valid = [false; 5];
+        let mut obs_resolved_lens = [0usize; 5];
+        let mut obs_resolved_accs = [0.0f64; 5];
+        for (oi, obs) in self.observers[..5].iter().enumerate() {
+            obs_curve_valid[oi] = obs.curve_valid;
+            obs_resolved_lens[oi] = obs.resolved.len();
+            obs_resolved_accs[oi] = obs.cached_acc;
+        }
         let mgr_ctx = ManagerContext {
             observer_preds: &observer_preds[..5],
             observer_atoms: &ctx.observer_atoms[..5],
@@ -553,11 +590,11 @@ impl EnterpriseState {
             observer_vecs: &observer_vecs[..5],
             generalist_pred: &tht_pred,
             generalist_atom: ctx.generalist_atom,
-            generalist_curve_valid: self.observers[5].curve_valid,
+            generalist_curve_valid: self.observers[GENERALIST_IDX].curve_valid,
             candle_atr: candle.atr_r,
             candle_hour: parse_candle_hour(&candle.ts),
             candle_day: parse_candle_day(&candle.ts),
-            disc_strength: self.observers[5].journal.last_disc_strength(),
+            disc_strength: self.observers[GENERALIST_IDX].journal.last_disc_strength(),
         };
         let mgr_facts = encode_manager_thought(&mgr_ctx, ctx.mgr_atoms, ctx.mgr_scalar, ctx.min_opinion_magnitude);
 
@@ -582,8 +619,8 @@ impl EnterpriseState {
 
         // Panel state for engram (Template 2 — reaction layer)
         // All 6 observers contribute (generalist is already at index 5).
-        let panel_state: Vec<f64> = observer_preds.iter()
-            .map(|ep| ep.raw_cos).collect();
+        let mut panel_state = [0.0f64; 6];
+        for (pi, ep) in observer_preds.iter().enumerate() { panel_state[pi] = ep.raw_cos; }
         let panel_familiar = if self.panel_engram.n() >= 10 {
             let residual = self.panel_engram.residual(&panel_state);
             let threshold = self.panel_engram.threshold();
@@ -653,85 +690,86 @@ impl EnterpriseState {
             }
         }
 
-        // rune:sever(braided-concerns) — position tick loop braids exit expert encoding, position lifecycle (tick), treasury settlement (swap/release), and ledger logging in one block
-        for pos in self.positions.iter_mut() {
+        // Pass 1: observe exit expert + tick positions, collect exit signals.
+        let mut exit_signals: Vec<(usize, PositionExit)> = Vec::new();
+        for (pi, pos) in self.positions.iter_mut().enumerate() {
             if pos.phase == PositionPhase::Closed { continue; }
 
             // Exit expert: encode at Nyquist rate of position lifecycle
             if pos.candles_held > 0 && pos.candles_held % ctx.exit_observe_interval == 0 {
                 let exit_thought = encode_exit_thought(pos, quote_price, candle, ctx.exit_atoms, ctx.exit_scalar);
-                let pnl_frac = pos.return_pct(quote_price);
-
-                // Buffer observation for resolution
                 self.exit_pending.push(ExitObservation {
-                    thought: exit_thought.clone(),
+                    thought: exit_thought,
                     pos_id: pos.id,
-                    snapshot_pnl: pnl_frac,
+                    snapshot_pnl: pos.return_pct(quote_price),
                     snapshot_candle: i,
                 });
             }
 
-            if let Some(exit) = pos.tick(quote_price, ctx.k_trail) {
-                // Determine how much to reclaim and what phase to enter
-                let (sell_quote, next_phase) = match exit {
-                    PositionExit::TakeProfit if pos.phase == PositionPhase::Active => {
-                        // Partial exit: reclaim capital + fees + minimum profit
-                        let reclaim_base = pos.base_deployed + pos.total_fees + pos.base_deployed * 0.01;
-                        let reclaim_quote = reclaim_base / quote_price / (1.0 - fee_rate);
-                        if reclaim_quote < pos.quote_held {
-                            (reclaim_quote, PositionPhase::Runner)
-                        } else {
-                            (pos.quote_held, PositionPhase::Closed)
-                        }
-                    }
-                    _ => (pos.quote_held, PositionPhase::Closed),
-                };
-
-                // Settlement: release → swap → accounting
-                if sell_quote > 0.0 {
-                    self.treasury.release(ctx.quote_asset, sell_quote);
-                    let (sold, received) = self.treasury.swap(
-                        ctx.quote_asset, ctx.base_asset,
-                        sell_quote, 1.0 / quote_price, fee_rate,
-                    );
-                    pos.quote_held -= sold;
-                    pos.base_reclaimed += received;
-                    pos.total_fees += sold * quote_price * fee_rate;
-                }
-                pos.phase = next_phase;
-                self.hold_swaps += 1;
-                // Partial TP into Runner is always a win (we reclaimed capital + profit).
-                // Full exit: count as win only if net positive.
-                if next_phase == PositionPhase::Runner || pos.return_pct(quote_price) > 0.0 {
-                    self.hold_wins += 1;
-                }
-                if next_phase == PositionPhase::Closed {
-                    self.last_exit_price = quote_price;
-                    self.last_exit_atr = candle.atr_r;
-                }
-                // Log to ledger
-                let ret = pos.return_pct(quote_price);
-                let exit_dir = pos.direction;
-                let exit_type = match (exit, pos.phase) {
-                    (PositionExit::TakeProfit, PositionPhase::Runner) => "RunnerTP",
-                    (PositionExit::TakeProfit, _) => "PartialProfit",
-                    (PositionExit::StopLoss, _) => "StopLoss",
-                };
-                self.pending_logs.push(LogEntry::PositionExit {
-                    step: self.log_step,
-                    candle_idx: i as i64,
-                    timestamp: candle.ts.clone(),
-                    direction: exit_dir,
-                    entry_price: pos.entry_price,
-                    exit_price: quote_price,
-                    gross_return_pct: ret * 100.0,
-                    position_usd: pos.base_deployed,
-                    swap_fee_pct: fee_rate * 100.0,
-                    horizon_candles: pos.candles_held as i64,
-                    won: (ret > 0.0) as i32,
-                    exit_reason: exit_type.to_string(),
-                });
+            if let Some(exit) = pos.tick(quote_price, TrailFactor(ctx.k_trail)) {
+                exit_signals.push((pi, exit));
             }
+        }
+
+        // Pass 2: settle each exit — treasury, accounting, logging.
+        for &(pos_idx, ref exit) in &exit_signals {
+            let pos = &mut self.positions[pos_idx];
+
+            // Determine how much to reclaim and what phase to enter
+            let (sell_quote, next_phase) = match exit {
+                PositionExit::TakeProfit if pos.phase == PositionPhase::Active => {
+                    let reclaim_base = pos.base_deployed + pos.total_fees + pos.base_deployed * 0.01;
+                    let reclaim_quote = reclaim_base / quote_price / (1.0 - fee_rate);
+                    if reclaim_quote < pos.quote_held {
+                        (reclaim_quote, PositionPhase::Runner)
+                    } else {
+                        (pos.quote_held, PositionPhase::Closed)
+                    }
+                }
+                _ => (pos.quote_held, PositionPhase::Closed),
+            };
+
+            // Settlement: release → swap → accounting
+            if sell_quote > 0.0 {
+                self.treasury.release(ctx.quote_asset, sell_quote);
+                let (sold, received) = self.treasury.swap(
+                    ctx.quote_asset, ctx.base_asset,
+                    sell_quote, 1.0 / quote_price, fee_rate,
+                );
+                pos.quote_held -= sold;
+                pos.base_reclaimed += received;
+                pos.total_fees += sold * quote_price * fee_rate;
+            }
+            pos.phase = next_phase;
+            self.hold_swaps += 1;
+
+            let ret = pos.return_pct(quote_price);
+            if next_phase == PositionPhase::Runner || ret > 0.0 {
+                self.hold_wins += 1;
+            }
+            if next_phase == PositionPhase::Closed {
+                self.last_exit_price = quote_price;
+                self.last_exit_atr = candle.atr_r;
+            }
+            let exit_type = match (exit, pos.phase) {
+                (PositionExit::TakeProfit, PositionPhase::Runner) => "RunnerTP",
+                (PositionExit::TakeProfit, _) => "PartialProfit",
+                (PositionExit::StopLoss, _) => "StopLoss",
+            };
+            self.pending_logs.push(LogEntry::PositionExit {
+                step: self.log_step,
+                candle_idx: i as i64,
+                timestamp: candle.ts.clone(),
+                direction: pos.direction,
+                entry_price: pos.entry_price,
+                exit_price: quote_price,
+                gross_return_pct: ret * 100.0,
+                position_usd: pos.base_deployed,
+                swap_fee_pct: fee_rate * 100.0,
+                horizon_candles: pos.candles_held as i64,
+                won: (ret > 0.0) as i32,
+                exit_reason: exit_type.to_string(),
+            });
         }
         // Remove closed positions
         self.positions.retain(|p| p.phase != PositionPhase::Closed);
@@ -753,7 +791,7 @@ impl EnterpriseState {
         // rune:scry(aspirational) — risk.wat specifies conviction-based risk rejection: the risk
         // manager predicts Healthy/Unhealthy and modulates sizing by risk conviction. Code uses a
         // simple threshold (cached_risk_mult > 0.3) — no risk discriminant, no risk conviction.
-        let risk_allows = self.cached_risk_mult > 0.3;
+        let risk_allows = self.cached_risk_mult > RISK_GATE_THRESHOLD;
         let should_open = ctx.asset_mode == AssetMode::Hold
             && self.portfolio.phase != Phase::Observe
             && self.mgr_curve_valid && in_proven_band && market_moved && risk_allows
@@ -762,8 +800,7 @@ impl EnterpriseState {
         if should_open {
             let expected_move = candle.atr_r * 6.0;
             if expected_move > 2.0 * fee_rate {
-                // rune:gaze(naming) — magic 0.03 with no WHY; band_edge controls max base position size but the derivation is unexplained
-                let band_edge: f64 = 0.03;
+                let band_edge: f64 = MAX_BASE_POSITION;
                 let frac = ((band_edge / 2.0) * self.cached_risk_mult).min(ctx.max_single_position);
                 let dir_label = meta_dir.unwrap();
                 let direction = if dir_label == self.mgr_buy { Direction::Long } else { Direction::Short };
@@ -828,27 +865,12 @@ impl EnterpriseState {
         // Position sizing: Kelly from the curve × drawdown cap.
         // The curve handles selectivity. The drawdown cap handles survival.
         // Nothing else. No graduated gate, no stability gate, no phase gate.
-        // rune:sever(braided-concerns) — risk branch feature encoding + subspace anomaly scoring + healthy gating + update all braided in one block; extract risk evaluation to risk/ module
         // Risk branch: compute only at recalib intervals (not every candle).
         // Between recalibs, reuse the last risk_mult.
-        if self.encode_count % ctx.recalib_interval == 0 || self.encode_count < 100 {
-            let branch_features = risk::encode_risk_branches(&self.portfolio, ctx.vm, ctx.risk_scalar);
-            let mut worst_ratio = 1.0_f64;
-            let healthy = self.portfolio.is_healthy() && self.portfolio.trades_taken >= 20;
-            for (bi, branch) in self.risk_branches.iter_mut().enumerate() {
-                let features = &branch_features[bi];
-                if branch.subspace.n() >= 10 {
-                    let residual = branch.subspace.residual(features);
-                    let threshold = branch.subspace.threshold();
-                    let ratio = if residual < threshold { 1.0 }
-                        else { (threshold / residual).max(0.1) };
-                    worst_ratio = worst_ratio.min(ratio);
-                }
-                if healthy { branch.subspace.update(features); }
-            }
-            self.cached_risk_mult = if self.risk_branches[0].subspace.n() >= 10 {
-                worst_ratio
-            } else { 0.5 };
+        if self.encode_count % ctx.recalib_interval == 0 || self.encode_count < RISK_WARMUP {
+            self.cached_risk_mult = risk::evaluate_risk_branches(
+                &mut self.risk_branches, &self.portfolio, ctx.vm, ctx.risk_scalar,
+            );
         }
         let risk_mult = self.cached_risk_mult;
 
@@ -871,26 +893,21 @@ impl EnterpriseState {
                 SizingMode::Kelly => {
                     // Fast path: evaluate cached curve params. No sorting.
                     let kelly_result = if self.kelly_curve_valid && self.cached_curve_b > 0.0 {
-                        let win_rate = (0.50 + self.cached_curve_a * (self.cached_curve_b * meta_conviction).exp()).min(0.95);
-                        let edge = 2.0 * win_rate - 1.0;
-                        if edge > 0.0 {
-                            let half_kelly_risk = edge / 2.0;
-                            Some(half_kelly_risk / mt)
-                        } else { None }
+                        let win_rate = curve_win_rate(meta_conviction, self.cached_curve_a, self.cached_curve_b);
+                        half_kelly_position(win_rate, mt)
                     } else { None };
                     match kelly_result {
                         Some(frac) => {
                             let frac = frac.min(1.0);
-                            let dd = if self.peak_treasury_equity > 0.0 {
+                            let drawdown_pct = if self.peak_treasury_equity > 0.0 {
                                 (self.peak_treasury_equity - treasury_equity) / self.peak_treasury_equity
                             } else { 0.0 };
-                            let dd_room = (ctx.max_drawdown - dd).max(0.0);
+                            let dd_room = (ctx.max_drawdown - drawdown_pct).max(0.0);
                             let cap = (dd_room / (4.0 * mt)).min(1.0);
                             let sized = frac.min(cap) * risk_mult;
                             // NEVER zero. Always learn. Minimum 1% position.
                             // The wat machine never quits — it gets quiet.
-                            let min_bet = 0.01;
-                            Some(sized.max(min_bet))
+                            Some(sized.max(MIN_BET))
                         }
                         None => None
                     }
@@ -916,7 +933,7 @@ impl EnterpriseState {
         self.pending.push_back(Pending {
             candle_idx:    i,
             tht_vec,
-            tht_pred:      tht_pred.clone(),
+            tht_pred,
             meta_dir,
             high_conviction:   self.conviction_threshold > 0.0 && meta_conviction >= self.conviction_threshold,
             meta_conviction,
@@ -937,7 +954,7 @@ impl EnterpriseState {
         });
 
         // Decay once per candle.
-        // The generalist (observers[5]) uses adaptive decay; specialists use fixed decay.
+        // The generalist (observers[GENERALIST_IDX]) uses adaptive decay; specialists use fixed decay.
         self.mgr_journal.decay(self.adaptive_decay);
         for (oi, observer) in self.observers.iter_mut().enumerate() {
             let d = if oi == 5 { self.adaptive_decay } else { ctx.decay };
@@ -947,7 +964,7 @@ impl EnterpriseState {
         // ── Event-driven learning ─────────────────────────────────────
         // Snapshot recalib counts before scanning so we can detect if
         // any recalibration fired during this candle's learning.
-        let tht_recalib_before = self.observers[5].journal.recalib_count();
+        let tht_recalib_before = self.observers[GENERALIST_IDX].journal.recalib_count();
         let tht_buy = self.tht_buy();
         let tht_sell = self.tht_sell();
 
@@ -984,14 +1001,13 @@ impl EnterpriseState {
                               else                  { None };
 
                 if let Some(o) = outcome {
-                    // rune:gaze(naming) — sw wants to say signal_weight; function name is right there but the binding mumbles
-                    let sw = signal_weight(abs_pct, &mut self.move_sum, &mut self.move_count);
+                    let signal_wt = signal_weight(abs_pct, &mut self.move_sum, &mut self.move_count);
                     // Observer resolution: learn, track, gate, validate, log.
                     // Each observer (including generalist at index 5) resolves
                     // its prediction against the outcome.
-                    for (ei, expert_vec) in entry.observer_vecs.iter().enumerate() {
+                    for (ei, observer_vec) in entry.observer_vecs.iter().enumerate() {
                         if let Some(log) = self.observers[ei].resolve(
-                            expert_vec, &entry.observer_preds[ei], o, sw,
+                            observer_vec, &entry.observer_preds[ei], o, signal_wt,
                             ctx.conviction_quantile, ctx.conviction_window,
                         ) {
                             if ctx.diagnostics { self.pending_logs.push(LogEntry::ObserverLog {
@@ -1015,10 +1031,10 @@ impl EnterpriseState {
         }
 
         // Log any recalibrations that fired during this candle's learning.
-        if self.observers[5].journal.recalib_count() != tht_recalib_before {
+        if self.observers[GENERALIST_IDX].journal.recalib_count() != tht_recalib_before {
             // Pre-compute curve params for Kelly — once per recalib, not per trade.
             // Uses the generalist's resolved_preds for the curve fit.
-            if let Some((_, a, b)) = kelly_frac(0.15, &self.resolved_preds, 50,
+            if let Some((_, a, b)) = kelly_frac(0.15, &self.resolved_preds,
                 if ctx.atr_multiplier > 0.0 { ctx.atr_multiplier * candle.atr_r } else { ctx.move_threshold }) {
                 self.cached_curve_a = a;
                 self.cached_curve_b = b;
@@ -1034,9 +1050,9 @@ impl EnterpriseState {
             }
 
             // Feed panel engram: if recent panel accuracy was good, store current state.
-            if self.panel_recalib_total >= 10 {
+            if self.panel_recalib_total >= PANEL_ENGRAM_MIN_TOTAL {
                 let acc = self.panel_recalib_wins as f64 / self.panel_recalib_total as f64;
-                if acc > 0.55 {
+                if acc > PANEL_ENGRAM_MIN_ACC {
                     self.panel_engram.update(&panel_state);
                 }
             }
@@ -1046,14 +1062,14 @@ impl EnterpriseState {
             self.pending_logs.push(LogEntry::RecalibLog {
                 step: self.encode_count as i64,
                 journal: "thought".to_string(),
-                cos_raw: self.observers[5].journal.last_cos_raw(),
-                disc_strength: self.observers[5].journal.last_disc_strength(),
-                buy_count: self.observers[5].journal.label_count(tht_buy) as i64,
-                sell_count: self.observers[5].journal.label_count(tht_sell) as i64,
+                cos_raw: self.observers[GENERALIST_IDX].journal.last_cos_raw(),
+                disc_strength: self.observers[GENERALIST_IDX].journal.last_disc_strength(),
+                buy_count: self.observers[GENERALIST_IDX].journal.label_count(tht_buy) as i64,
+                sell_count: self.observers[GENERALIST_IDX].journal.label_count(tht_sell) as i64,
             });
 
             // Decode thought discriminant against the fact codebook.
-            if let Some(disc) = self.observers[5].journal.discriminant(tht_buy) {
+            if let Some(disc) = self.observers[GENERALIST_IDX].journal.discriminant(tht_buy) {
                 let disc_vec = Vector::from_f64(disc);
                 let mut decoded: Vec<(String, f64)> = ctx.codebook_vecs.iter().zip(ctx.codebook_labels.iter())
                     .map(|(v, l)| (l.clone(), holon::Similarity::cosine(&disc_vec, v)))
@@ -1165,7 +1181,7 @@ impl EnterpriseState {
                         max_adverse_pct: entry.max_adverse * 100.0,
                         crossing_candles: crossing_elapsed,
                         horizon_candles: (i - entry.candle_idx) as i64,
-                        outcome: final_out.map(|l| self.observers[5].journal.label_name(l).unwrap_or("?").to_string()).unwrap_or_else(|| "Noise".to_string()),
+                        outcome: final_out.map(|l| self.observers[GENERALIST_IDX].journal.label_name(l).unwrap_or("?").to_string()).unwrap_or_else(|| "Noise".to_string()),
                         won: (pnl.net_ret > 0.0) as i32,
                         exit_reason: match entry.exit_reason {
                             Some(ExitReason::TrailingStop) => "TrailingStop",
@@ -1201,7 +1217,7 @@ impl EnterpriseState {
             let elapsed = ctx.t_start.elapsed().as_secs_f64();
             let rate    = self.encode_count as f64 / elapsed;
             let eta     = (ctx.loop_count - self.encode_count) as f64 / rate;
-            let gen_resolved = &self.observers[5].resolved;
+            let gen_resolved = &self.observers[GENERALIST_IDX].resolved;
             let tht_acc = if gen_resolved.is_empty() { 0.0 }
                 else { gen_resolved.iter().filter(|(_, c)| *c).count() as f64 / gen_resolved.len() as f64 * 100.0 };
             let ret = (treasury_equity - ctx.initial_equity) / ctx.initial_equity * 100.0;
@@ -1253,11 +1269,13 @@ impl EnterpriseState {
         current_price: f64,
         conviction_window: usize,
     ) {
-        // Skip if experts have no majority — nothing to learn from a tie.
-        let buys = entry.observer_preds.iter()
-            .filter(|ep| ep.direction == Some(self.tht_buy())).count();
-        let sells = entry.observer_preds.iter()
-            .filter(|ep| ep.direction == Some(self.tht_sell())).count();
+        // Skip if observers have no majority — nothing to learn from a tie.
+        let buy_label = self.tht_buy();
+        let (buys, sells) = entry.observer_preds.iter().fold((0, 0), |(b, s), ep| {
+            if ep.direction == Some(buy_label) { (b + 1, s) }
+            else if ep.direction.is_some() { (b, s + 1) }
+            else { (b, s) }
+        });
         if buys == sells { return; }
 
         // Manager learns raw price direction from intensity patterns.
@@ -1299,10 +1317,10 @@ impl EnterpriseState {
             timestamp: entry.entry_ts.clone(),
             tht_cos: entry.tht_pred.raw_cos,
             tht_conviction: entry.tht_pred.conviction,
-            tht_pred: entry.tht_pred.direction.and_then(|d| self.observers[5].journal.label_name(d).map(|s| s.to_string())),
+            tht_pred: entry.tht_pred.direction.and_then(|d| self.observers[GENERALIST_IDX].journal.label_name(d).map(|s| s.to_string())),
             meta_pred: entry.meta_dir.and_then(|d| self.mgr_journal.label_name(d).map(|s| s.to_string())),
             meta_conviction: entry.meta_conviction,
-            actual: final_out.and_then(|l| self.observers[5].journal.label_name(l).map(|s| s.to_string())).unwrap_or_else(|| "Noise".to_string()),
+            actual: final_out.and_then(|l| self.observers[GENERALIST_IDX].journal.label_name(l).map(|s| s.to_string())).unwrap_or_else(|| "Noise".to_string()),
             traded: entry.position_frac.is_some() as i32,
             position_frac: entry.position_frac,
             equity: treasury_equity,
@@ -1320,29 +1338,18 @@ impl EnterpriseState {
         treasury_equity: f64,
         ctx: &CandleContext,
     ) {
-        // rune:gaze(naming) — dd wants to say drawdown_pct
-        let dd = if self.peak_treasury_equity > 0.0 {
+        let drawdown_pct = if self.peak_treasury_equity > 0.0 {
             (self.peak_treasury_equity - treasury_equity) / self.peak_treasury_equity * 100.0
         } else { 0.0 };
-        let (streak_len, streak_dir) = {
-            let mut len = 0i32;
-            if let Some(&last) = self.portfolio.rolling.back() {
-                for &o in self.portfolio.rolling.iter().rev() {
-                    if o == last { len += 1; } else { break; }
-                }
-            }
-            let dir = if self.portfolio.rolling.back() == Some(&true) { "winning" } else { "losing" };
-            (len, dir)
-        };
-        let recent_acc = if self.portfolio.rolling.len() >= 5 {
-            self.portfolio.rolling.iter().filter(|&&x| x).count() as f64
-                / self.portfolio.rolling.len() as f64
-        } else { 0.5 };
+        let streak_val = self.portfolio.streak();
+        let streak_len = streak_val.abs() as i32;
+        let streak_dir = if streak_val >= 0.0 { "winning" } else { "losing" };
+        let recent_acc = self.portfolio.rolling_acc();
         let eq_pct = (treasury_equity - ctx.initial_equity) / ctx.initial_equity * 100.0;
         let won = (final_out == Some(dir)) as i32;
         if ctx.diagnostics { self.pending_logs.push(LogEntry::RiskLog {
             step: self.log_step,
-            drawdown_pct: dd,
+            drawdown_pct,
             streak_len,
             streak_dir: streak_dir.to_string(),
             recent_acc,

@@ -5,6 +5,7 @@
 //! Backtest, websocket, test harness — same Event, same fold.
 
 use crate::candle::{Candle, load_candles};
+use crate::treasury::Asset;
 use holon::Vector;
 use std::path::Path;
 
@@ -15,27 +16,27 @@ use std::path::Path;
 pub enum Event {
     /// A new candle arrived for an asset.
     Candle {
-        asset: String,
+        asset: Asset,
         candle: Candle,
     },
 
     /// Capital deposited into the treasury.
     /// The system evolves with new capital arriving over time.
     Deposit {
-        asset: String,
+        asset: Asset,
         amount: f64,
     },
 
     /// Capital withdrawn from the treasury.
     Withdraw {
-        asset: String,
+        asset: Asset,
         amount: f64,
     },
 }
 
 impl Event {
     /// Which asset does this event concern?
-    pub fn asset(&self) -> &str {
+    pub fn asset(&self) -> &Asset {
         match self {
             Event::Candle { asset, .. } => asset,
             Event::Deposit { asset, .. } => asset,
@@ -69,20 +70,20 @@ pub enum EnrichedEvent {
 
     // rune:reap(scaffolding) — Deposit and Withdraw variants are matched in on_event but never constructed anywhere. Wired when streaming interface supports capital events.
     /// Capital deposited into the treasury.
-    Deposit { asset: String, amount: f64 },
+    Deposit { asset: Asset, amount: f64 },
 
     /// Capital withdrawn from the treasury.
-    Withdraw { asset: String, amount: f64 },
+    Withdraw { asset: Asset, amount: f64 },
 }
 
 // ─── Stream constructors ────────────────────────────────────────────────────
 
 /// Convert already-loaded candles into an event stream.
 /// Zero-copy of the candle data — wraps each candle with an asset tag.
-pub fn stream_from_candles(candles: &[Candle], asset: &str) -> Vec<Event> {
+pub fn stream_from_candles(candles: &[Candle], asset: &Asset) -> Vec<Event> {
     candles.iter()
         .map(|candle| Event::Candle {
-            asset: asset.to_string(),
+            asset: asset.clone(),
             candle: candle.clone(),
         })
         .collect()
@@ -90,7 +91,7 @@ pub fn stream_from_candles(candles: &[Candle], asset: &str) -> Vec<Event> {
 
 /// Load a single asset's candles from a DB and produce an event stream.
 /// Convenience: loads + wraps in one call.
-pub fn stream_from_db(db_path: &Path, asset: &str, label_col: &str) -> Vec<Event> {
+pub fn stream_from_db(db_path: &Path, asset: &Asset, label_col: &str) -> Vec<Event> {
     let candles = load_candles(db_path, label_col);
     stream_from_candles(&candles, asset)
 }
@@ -109,7 +110,7 @@ pub fn merge_streams(streams: Vec<Vec<Event>>) -> Vec<Event> {
 /// The system evolves with new capital arriving over time.
 pub fn with_recurring_deposits(
     mut events: Vec<Event>,
-    asset: &str,
+    asset: &Asset,
     amount: f64,
     interval: usize,
 ) -> Vec<Event> {
@@ -122,7 +123,7 @@ pub fn with_recurring_deposits(
             candle_idx += 1;
             if candle_idx % interval == 0 {
                 deposits.push(Event::Deposit {
-                    asset: asset.to_string(),
+                    asset: asset.clone(),
                     amount,
                 });
                 // We'll insert after this candle's timestamp

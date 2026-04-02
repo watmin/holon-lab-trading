@@ -14,6 +14,14 @@
 (require core/structural)
 (require std/statistics)
 
+;; ── Constants ─────────────────────────────────────────────────────
+
+(define BAND_MIN_RESOLVED      500)   ; minimum resolved predictions before band scan
+(define BAND_MIN_PER_BAND      200)   ; minimum samples per band
+(define BAND_MIN_ACCURACY      0.51)  ; minimum accuracy for a proven band
+(define MIN_RESOLVED_FOR_RELIABILITY 20)  ; enough data to encode reliability
+(define MIN_RESOLVED_FOR_TENURE     50)  ; enough data to encode tenure
+
 ;; ── Manager atoms ──────────────────────────────────────────────────
 
 (struct manager-atoms
@@ -29,7 +37,7 @@
   (manager-atoms
     :buy (atom "buy") :sell (atom "sell")
     :proven (atom "proven") :tentative (atom "tentative")
-    :reliability (atom "expert-reliability") :tenure (atom "expert-tenure")
+    :reliability (atom "observer-reliability") :tenure (atom "observer-tenure")
     :agreement (atom "panel-agreement") :energy (atom "panel-energy")
     :divergence (atom "panel-divergence") :coherence (atom "panel-coherence")
     :volatility (atom "market-volatility") :disc-strength (atom "disc-strength")
@@ -82,12 +90,12 @@
             ;; Fact 2: credibility — proven or tentative
             (list (bind observer-atom status))
             ;; Fact 3: reliability — accuracy above baseline (if enough data)
-            (if (>= resolved-len 20)
+            (if (>= resolved-len MIN_RESOLVED_FOR_RELIABILITY)
                 (list (bind (bind observer-atom (:reliability atoms))
                             (encode-linear (max 0.0 (- resolved-acc 0.4)) 1.0)))
                 (list))
             ;; Fact 4: tenure — how long has this observer been resolving?
-            (if (>= resolved-len 50)
+            (if (>= resolved-len MIN_RESOLVED_FOR_TENURE)
                 (list (bind (bind observer-atom (:tenure atoms))
                             (encode-log resolved-len)))
                 (list)))))))
@@ -207,7 +215,7 @@
 ;; rune:assay(prose) — the band scan is an imperative search over
 ;; conviction ranges. The algorithm: partition resolved predictions
 ;; into bands [k*σ, (k+4)*σ] for k in 3..18. Find the band with
-;; accuracy > 0.51 and at least 200 samples. The treasury deploys
+;; accuracy > BAND_MIN_ACCURACY and at least BAND_MIN_PER_BAND samples. The treasury deploys
 ;; only in the proven band.
 
 ;; ── Derived thresholds ─────────────────────────────────────────────

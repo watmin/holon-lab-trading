@@ -9,13 +9,24 @@
 (require risk)
 (require std/statistics)
 
+;; -- Constants --------------------------------------------------------------
+
+(define history-window         500)   ; rolling history cap (rolling, equity-at-trade, trade-returns)
+(define phase-up-min-trades    500)   ; tentative→confident: minimum trades in window
+(define phase-up-min-acc       0.52)  ; tentative→confident: minimum rolling accuracy
+(define phase-down-min-trades  200)   ; confident→tentative: minimum trades in window
+(define phase-down-max-acc     0.50)  ; confident→tentative: maximum rolling accuracy
+(define healthy-max-drawdown   0.02)  ; is-healthy? gate: max drawdown fraction
+(define healthy-min-win-rate   0.55)  ; is-healthy? gate: min win rate (last 50)
+(define peak-decay             0.999) ; peak equity decay factor per trade
+
 ;; -- Phase lifecycle --------------------------------------------------------
 
 ;; phase: :observe | :tentative | :confident
 ;;
 ;; :observe    -> :tentative   when observe_left reaches 0
-;; :tentative  -> :confident   when rolling.len >= 500 AND rolling_acc > 0.52
-;; :confident  -> :tentative   when rolling.len >= 200 AND rolling_acc < 0.50
+;; :tentative  -> :confident   when rolling.len >= phase-up-min-trades AND rolling_acc > phase-up-min-acc
+;; :confident  -> :tentative   when rolling.len >= phase-down-min-trades AND rolling_acc < phase-down-max-acc
 ;; :observe    -> never re-entered
 
 ;; -- State ------------------------------------------------------------------
@@ -28,10 +39,10 @@
   observe-left           ; candles remaining in observe phase
   trades-taken
   trades-won
-  rolling                ; (deque bool) — recent trade outcomes, cap 500
+  rolling                ; (deque bool) — recent trade outcomes, cap history-window
   ;; Risk vocabulary infrastructure
-  equity-at-trade        ; (deque f64) — equity after each trade, cap 500
-  trade-returns          ; (deque f64) — directional return per trade, cap 500
+  equity-at-trade        ; (deque f64) — equity after each trade, cap history-window
+  trade-returns          ; (deque f64) — directional return per trade, cap history-window
   dd-bottom-equity       ; deepest point of current drawdown
   trades-since-bottom    ; trades since drawdown bottom
   completed-drawdowns)   ; (deque f64) — max depth of each completed dd, cap 20
@@ -80,8 +91,8 @@
 
 (define (is-healthy? portfolio)
   "Gates subspace updates. All three must hold."
-  (and (< (drawdown portfolio) 0.02)
-       (> (win-rate-last-n portfolio 50) 0.55)
+  (and (< (drawdown portfolio) healthy-max-drawdown)
+       (> (win-rate-last-n portfolio 50) healthy-min-win-rate)
        (> (mean (take-last 50 (:trade-returns portfolio))) 0.0)))
 
 ;; -- Position sizing --------------------------------------------------------
@@ -89,6 +100,12 @@
 ;; Graduated position sizes. These are the legacy sizing path —
 ;; Kelly sizing (sizing.wat) is the replacement. When Kelly is proven,
 ;; these constants become irrelevant. Until then, they gate conservatively.
+(define frac-tentative     0.005)  ; minimum position (tentative or low edge)
+(define frac-modest        0.01)   ; position when edge is modest (5-10% above baseline)
+(define frac-max-base      0.02)   ; max base position before conviction scaling
+(define frac-cap           0.05)   ; hard cap on any single position fraction
+(define edge-modest        0.05)   ; rolling accuracy edge to reach modest sizing
+(define edge-proportional  0.10)   ; rolling accuracy edge for proportional sizing
 (define (position-frac portfolio conviction min-conviction flip-threshold)
   "Returns position fraction, or absent if conditions not met.
    Three gates: not observing, conviction above minimum, conviction in flip zone.
@@ -97,13 +114,13 @@
              (>= conviction min-conviction)
              (or (<= flip-threshold 0.0) (>= conviction flip-threshold)))
     (let ((base (match (:phase portfolio)
-                  :tentative 0.005
-                  :confident (let ((conf (max 0.0 (- (rolling-acc portfolio) 0.5))))
-                               (cond ((< conf 0.05) 0.005)
-                                     ((< conf 0.10) 0.01)
-                                     (else (min 0.02 (* conf 0.10))))))))
+                  :tentative frac-tentative
+                  :confident (let ((edge (max 0.0 (- (rolling-acc portfolio) 0.5))))
+                               (cond ((< edge edge-modest)        frac-tentative)
+                                     ((< edge edge-proportional)  frac-modest)
+                                     (else (min frac-max-base (* edge 0.10))))))))
       (if (> flip-threshold 0.0)
-          (min 0.05 (* base (/ conviction flip-threshold)))
+          (min frac-cap (* base (/ conviction flip-threshold)))
           base))))
 
 ;; -- Trade recording --------------------------------------------------------
@@ -127,7 +144,7 @@
 
     ;; Drawdown tracking: record completed drawdowns, update bottom
     (when (> new-equity (:peak-equity portfolio))
-      (when (< (:dd-bottom-equity portfolio) (* (:peak-equity portfolio) 0.999))
+      (when (< (:dd-bottom-equity portfolio) (* (:peak-equity portfolio) peak-decay))
         (push-back (:completed-drawdowns portfolio)
           (/ (- (:peak-equity portfolio) (:dd-bottom-equity portfolio))
              (:peak-equity portfolio)))
@@ -139,7 +156,7 @@
 
     ;; Rolling peak decay: peak forgets old highs over ~700 trades
     (set! (:peak-equity portfolio)
-      (+ (* (:peak-equity portfolio) 0.999) (* new-equity 0.001)))
+      (+ (* (:peak-equity portfolio) peak-decay) (* new-equity (- 1.0 peak-decay))))
 
     (if (< new-equity (:dd-bottom-equity portfolio))
         (begin (set! (:dd-bottom-equity portfolio) new-equity)
@@ -149,15 +166,15 @@
     ;; Trade history
     (set! (:equity portfolio) new-equity)
     (push-back (:equity-at-trade portfolio) new-equity)
-    (when (> (len (:equity-at-trade portfolio)) 500) (pop-front (:equity-at-trade portfolio)))
+    (when (> (len (:equity-at-trade portfolio)) history-window) (pop-front (:equity-at-trade portfolio)))
     (push-back (:trade-returns portfolio) net-return)
-    (when (> (len (:trade-returns portfolio)) 500) (pop-front (:trade-returns portfolio)))
+    (when (> (len (:trade-returns portfolio)) history-window) (pop-front (:trade-returns portfolio)))
 
     ;; Accounting
     (inc! (:trades-taken portfolio))
     (when won (inc! (:trades-won portfolio)))
     (push-back (:rolling portfolio) won)
-    (when (> (len (:rolling portfolio)) 500)
+    (when (> (len (:rolling portfolio)) history-window)
       (pop-front (:rolling portfolio)))
 
     ;; Phase transition
@@ -165,7 +182,7 @@
 
 ;; -- Drawdown tracking ------------------------------------------------------
 ;;
-;; Peak equity decays: peak = peak * 0.999 + equity * 0.001
+;; Peak equity decays: peak = peak * peak-decay + equity * (1 - peak-decay)
 ;; After ~700 trades below peak, the cap has halved the gap.
 ;; When equity exceeds peak, the previous drawdown (if > 0.1%) is recorded
 ;; in completed-drawdowns (cap 20).
@@ -183,11 +200,11 @@
 (define (check-phase portfolio)
   "Promote or demote based on rolling accuracy."
   (match (:phase portfolio)
-    :tentative (if (and (>= (len (:rolling portfolio)) 500)
-                        (> (rolling-acc portfolio) 0.52))
+    :tentative (if (and (>= (len (:rolling portfolio)) phase-up-min-trades)
+                        (> (rolling-acc portfolio) phase-up-min-acc))
                    (update portfolio :phase :confident))
-    :confident (if (and (>= (len (:rolling portfolio)) 200)
-                        (< (rolling-acc portfolio) 0.50))
+    :confident (if (and (>= (len (:rolling portfolio)) phase-down-min-trades)
+                        (< (rolling-acc portfolio) phase-down-max-acc))
                    (update portfolio :phase :tentative))
     :observe portfolio))
 
@@ -196,5 +213,4 @@
 ;; - Does NOT hold positions (that's managed-position)
 ;; - Does NOT execute trades (that's the treasury)
 ;; - Does NOT encode risk features (that's risk/mod — see risk-branch-features)
-;;   rune:scry(wat-leads) — Rust portfolio.rs still has risk_branch_wat() encoding method
 ;; - It counts. It phases. Risk reads it as data.

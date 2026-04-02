@@ -9,6 +9,18 @@
 (require std/memory)
 (require std/statistics)
 
+;; ── Named constants ────────────────────────────────────────────────
+(define VOLATILITY_WINDOW       50)     ; rolling window for volatility/correlation outcomes
+(define CORRELATION_MIN_LEN     20)     ; minimum trades before correlation branch activates
+(define LOSS_DENSITY_WINDOW     20)     ; window for recent loss fraction
+(define DD_VELOCITY_LOOKBACK     5)     ; trades back for drawdown velocity
+(define RECOVERY_THRESHOLD   0.005)     ; drawdown below this counts as recovered
+(define HIST_WORST_THRESHOLD 0.001)     ; ignore historical worst below this
+(define TRADES_SCALE         100.0)     ; normalise trades-since-bottom
+(define STREAK_SCALE          10.0)     ; normalise consecutive-loss / streak length
+(define DENSITY_SCALE       1000.0)     ; normalise lifetime trade count
+(define FREQUENCY_SCALE       30.0)     ; normalise sqrt(trades) frequency term
+
 ;; ── Five specialists ────────────────────────────────────────────────
 ;;
 ;; Each is an OnlineSubspace. They measure ANOMALY not DIRECTION.
@@ -36,8 +48,8 @@
 (define (healthy? portfolio)
   "Gates subspace updates. All four conditions must hold."
   (and (< (drawdown portfolio) 0.02)
-       (> (win-rate-last-n portfolio 50) 0.55)
-       (> (recent-return-mean portfolio 50) 0.0)
+       (> (win-rate-last-n portfolio VOLATILITY_WINDOW) 0.55)
+       (> (recent-return-mean portfolio VOLATILITY_WINDOW) 0.0)
        (>= (:trades-taken portfolio) 20)))
 
 ;; ── Drawdown ────────────────────────────────────────────────────────
@@ -47,9 +59,9 @@
 (define (drawdown-velocity portfolio)
   "Rate of drawdown change: current dd minus dd 5 trades ago."
   (let ((dd (drawdown portfolio))
-        (eq5 (if (>= (len (:equity-at-trade portfolio)) 5)
+        (eq5 (if (>= (len (:equity-at-trade portfolio)) DD_VELOCITY_LOOKBACK)
                  (nth (:equity-at-trade portfolio)
-                       (- (len (:equity-at-trade portfolio)) 5))
+                       (- (len (:equity-at-trade portfolio)) DD_VELOCITY_LOOKBACK))
                  (:equity portfolio))))
     (- dd (if (> (:peak-equity portfolio) 0.0)
               (/ (- (:peak-equity portfolio) eq5) (:peak-equity portfolio))
@@ -60,7 +72,7 @@
    1.0 when at peak or drawdown < 0.5%."
   (let ((dd (drawdown portfolio)))
     (if (or (<= (:peak-equity portfolio) (:dd-bottom-equity portfolio))
-            (< dd 0.005))
+            (< dd RECOVERY_THRESHOLD))
         1.0
         (clamp (/ (- (:equity portfolio) (:dd-bottom-equity portfolio))
                   (- (:peak-equity portfolio) (:dd-bottom-equity portfolio)))
@@ -74,8 +86,8 @@
   (let ((dd      (drawdown portfolio))
         (dd-vel  (drawdown-velocity portfolio))
         (recover (recovery-progress portfolio))
-        (dur     (/ (:trades-since-bottom portfolio) 100.0))
-        (hist    (if (> (historical-worst-drawdown portfolio) 0.001)
+        (dur     (/ (:trades-since-bottom portfolio) TRADES_SCALE))
+        (hist    (if (> (historical-worst-drawdown portfolio) HIST_WORST_THRESHOLD)
                      (/ dd (historical-worst-drawdown portfolio))
                      0.0)))
     (bundle
@@ -112,7 +124,7 @@
   (take-last n (:trade-returns portfolio)))
 
 (define (encode-volatility portfolio)
-  (let ((returns (last-n-returns portfolio 50)))
+  (let ((returns (last-n-returns portfolio VOLATILITY_WINDOW)))
     (if (< (length returns) 5)
         (zeros dims)
         (let ((vol    (stddev returns))
@@ -125,7 +137,7 @@
             (bind (atom "trade-sharpe") (encode-linear sharpe 4.0))
             (bind (atom "worst-trade")  (encode-linear worst 0.1))
             (bind (atom "return-skew")  (encode-linear skew 4.0))
-            (bind (atom "equity-curve") (encode-linear (max returns) 0.1)))))))
+            (bind (atom "vol-best-trade") (encode-linear (max returns) 0.1)))))))
 
 ;; ── Correlation ─────────────────────────────────────────────────────
 
@@ -159,19 +171,19 @@
         (loop (rest seq) (+ n 1)))))
 
 (define (encode-correlation portfolio)
-  (let ((seq (last-n-outcomes portfolio 50)))
-    (if (< (length seq) 20)
+  (let ((seq (last-n-outcomes portfolio VOLATILITY_WINDOW)))
+    (if (< (length seq) CORRELATION_MIN_LEN)
         (zeros dims)
         (let ((autocorr       (autocorrelation seq))
-              (loss-frac      (/ (count-losses (last-n-outcomes portfolio 20)) 20.0))
+              (loss-frac      (/ (count-losses (last-n-outcomes portfolio LOSS_DENSITY_WINDOW)) (exact->inexact LOSS_DENSITY_WINDOW)))
               (consec         (consecutive-losses portfolio))
-              (trade-density  (/ (:trades-taken portfolio) 1000.0)))
+              (trade-density  (/ (:trades-taken portfolio) DENSITY_SCALE)))
           (bundle
             (bind (atom "loss-pattern")  (encode-linear autocorr 2.0))
             (bind (atom "loss-density")  (encode-linear loss-frac 2.0))
-            (bind (atom "consec-loss")   (encode-linear (/ consec 10.0) 2.0))
-            (bind (atom "trade-density") (encode-linear trade-density 2.0))
-            (bind (atom "streak")        (encode-linear (signum autocorr) 2.0)))))))
+            (bind (atom "consec-loss")   (encode-linear (/ consec STREAK_SCALE) 2.0))
+            (bind (atom "corr-trade-density") (encode-linear trade-density 2.0))
+            (bind (atom "corr-autocorr-sign") (encode-linear (signum autocorr) 2.0)))))))
 
 ;; ── Panel ───────────────────────────────────────────────────────────
 
@@ -195,13 +207,13 @@
                        (:initial-equity portfolio)))
         (streak-val (streak-value portfolio))
         (wr-all     (win-rate portfolio))
-        (density    (/ (:trades-taken portfolio) 1000.0))
-        (frequency  (/ (sqrt (:trades-taken portfolio)) 30.0)))
+        (density    (/ (:trades-taken portfolio) DENSITY_SCALE))
+        (frequency  (/ (sqrt (:trades-taken portfolio)) FREQUENCY_SCALE)))
     (bundle
-      (bind (atom "equity-curve")    (encode-linear equity-pct 2.0))
-      (bind (atom "streak")          (encode-linear (/ streak-val 10.0) 2.0))
-      (bind (atom "recent-accuracy") (encode-linear wr-all 2.0))
-      (bind (atom "trade-density")   (encode-linear density 2.0))
+      (bind (atom "panel-equity-pct")    (encode-linear equity-pct 2.0))
+      (bind (atom "panel-streak")        (encode-linear (/ streak-val STREAK_SCALE) 2.0))
+      (bind (atom "recent-accuracy")     (encode-linear wr-all 2.0))
+      (bind (atom "panel-trade-density") (encode-linear density 2.0))
       (bind (atom "trade-frequency") (encode-linear frequency 2.0)))))
 
 ;; ── Risk multiplier ─────────────────────────────────────────────────

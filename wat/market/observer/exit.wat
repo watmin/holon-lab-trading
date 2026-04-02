@@ -12,26 +12,28 @@
 
 ;; ── Encoding ────────────────────────────────────────────────────────
 
-;; rune:scry(aspirational) — position-mae declared below but not yet
-;; encoded in the Rust. The data exists on Pending.max_adverse.
 (define (return-pct pos current-price)
   "Signed return of a position: (current - entry) / entry.
    Positive when price moved in the position's favor."
   (/ (- current-price (:entry-price pos)) (:entry-price pos)))
 
+;; All linear-encoded facts are clamped to [0,1] before encoding.
+;; PNL is shifted: clamp(-1,1) * 0.5 + 0.5 → [0,1].
+;; MAE is clamped to [-1,0] then abs → [0,1].
 (define (encode-position pos current-price current-atr)
-  (bundle
-    (bind (atom "position-pnl")       (encode-linear (return-pct pos current-price) 1.0))
-    (bind (atom "position-hold")      (encode-log (:candles-held pos)))
-    (bind (atom "position-mfe")       (encode-linear
-      (/ (- (:high-water pos) (:entry-price pos)) (:entry-price pos)) 1.0))
-    (bind (atom "position-mae")       (encode-linear (:max-adverse pos) 1.0))
-    (bind (atom "position-atr-entry") (encode-log (:entry-atr pos)))
-    (bind (atom "position-atr-now")   (encode-log current-atr))
-    (bind (atom "position-stop-dist") (encode-linear
-      (/ (abs (- current-price (:trailing-stop pos))) current-price) 1.0))
-    (bind (atom "position-phase")     (if (= (:phase pos) :runner) (atom "runner") (atom "active")))
-    (bind (atom "position-direction") (if (= (:direction pos) :long) (atom "buy") (atom "sell")))))
+  (let ((pnl-raw    (return-pct pos current-price))
+        (mfe-frac   (/ (- (:extreme-price pos) (:entry-price pos)) (:entry-price pos)))
+        (stop-dist  (/ (abs (- current-price (:trailing-stop pos))) current-price)))
+    (bundle
+      (bind (atom "position-pnl")       (encode-linear (+ (* (clamp pnl-raw -1.0 1.0) 0.5) 0.5) 1.0))
+      (bind (atom "position-hold")      (encode-log (:candles-held pos)))
+      (bind (atom "position-mfe")       (encode-linear (clamp mfe-frac 0.0 1.0) 1.0))
+      (bind (atom "position-mae")       (encode-linear (abs (clamp (:max-adverse pos) -1.0 0.0)) 1.0))
+      (bind (atom "position-atr-entry") (encode-log (:entry-atr pos)))
+      (bind (atom "position-atr-now")   (encode-log current-atr))
+      (bind (atom "position-stop-dist") (encode-linear (clamp stop-dist 0.0 1.0) 1.0))
+      (bind (atom "position-phase")     (if (= (:phase pos) :runner) (atom "runner") (atom "active")))
+      (bind (atom "position-direction") (if (= (:direction pos) :long) (atom "buy") (atom "sell"))))))
 
 ;; ── Journal ─────────────────────────────────────────────────────────
 

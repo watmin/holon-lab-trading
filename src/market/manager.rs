@@ -12,6 +12,13 @@ use holon::{Primitives, ScalarMode, Similarity, VectorManager, Vector};
 
 use crate::journal::Prediction;
 
+// ── Constants ──────────────────────────────────────────────────────
+const BAND_MIN_RESOLVED: usize = 500;
+const BAND_MIN_PER_BAND: usize = 200;
+const BAND_MIN_ACCURACY: f64 = 0.51;
+const MIN_RESOLVED_FOR_RELIABILITY: usize = 20;
+const MIN_RESOLVED_FOR_TENURE: f64 = 50.0;
+
 /// Everything the manager needs to encode one candle's thought.
 pub struct ManagerContext<'a> {
     pub observer_preds: &'a [Prediction],
@@ -55,8 +62,8 @@ impl ManagerAtoms {
             sell: vm.get_vector("sell"),
             proven: vm.get_vector("proven"),
             tentative: vm.get_vector("tentative"),
-            reliability: vm.get_vector("expert-reliability"),
-            tenure: vm.get_vector("expert-tenure"),
+            reliability: vm.get_vector("observer-reliability"),
+            tenure: vm.get_vector("observer-tenure"),
             agreement: vm.get_vector("panel-agreement"),
             energy: vm.get_vector("panel-energy"),
             divergence: vm.get_vector("panel-divergence"),
@@ -75,13 +82,6 @@ pub fn noise_floor(dims: usize) -> f64 {
     3.0 / (dims as f64).sqrt()
 }
 
-/// 5sigma — conviction level where signal typically emerges.
-/// rune:reap(scaffolding) — defined for future use (band scan uses inline sigma).
-/// Wire into find_proven_band when the band boundaries are parameterized.
-pub fn sweet_spot(dims: usize) -> f64 {
-    5.0 / (dims as f64).sqrt()
-}
-
 /// Find the manager's proven conviction band via sigma-band scan.
 ///
 /// Iterates bands `[k*σ, (k+4)*σ]` for k in 3..18, requiring 200+ samples
@@ -90,7 +90,7 @@ pub fn find_proven_band(
     resolved: &VecDeque<(f64, bool)>,
     dims: usize,
 ) -> Option<(f64, f64, f64)> {
-    if resolved.len() < 500 {
+    if resolved.len() < BAND_MIN_RESOLVED {
         return None;
     }
     let sigma = 1.0 / (dims as f64).sqrt();
@@ -102,7 +102,7 @@ pub fn find_proven_band(
         let (n, correct) = resolved.iter()
             .filter(|(c, _)| *c >= lo && *c < hi)
             .fold((0usize, 0usize), |(n, correct), (_, w)| (n + 1, correct + *w as usize));
-        if n >= 200 {
+        if n >= BAND_MIN_PER_BAND {
             let acc = correct as f64 / n as f64;
             if acc > best_acc {
                 best_acc = acc;
@@ -110,7 +110,7 @@ pub fn find_proven_band(
             }
         }
     }
-    if best_acc > 0.51 {
+    if best_acc > BAND_MIN_ACCURACY {
         Some((best_band.0, best_band.1, best_acc))
     } else {
         None
@@ -147,7 +147,7 @@ fn encode_observer_opinion(
     facts.push(Primitives::bind(observer_atom, status));
 
     // Fact 3: reliability — accuracy above baseline (if enough data)
-    if resolved_len >= 20 {
+    if resolved_len >= MIN_RESOLVED_FOR_RELIABILITY {
         let rel = scalar.encode((resolved_acc - 0.4).max(0.0), ScalarMode::Linear { scale: 1.0 });
         facts.push(Primitives::bind(
             &Primitives::bind(observer_atom, &atoms.reliability), &rel));
@@ -155,7 +155,7 @@ fn encode_observer_opinion(
 
     // Fact 4: tenure — how long has this observer been resolving?
     let tenure = resolved_len as f64;
-    if tenure >= 50.0 {
+    if tenure >= MIN_RESOLVED_FOR_TENURE {
         let ten = scalar.encode_log(tenure);
         facts.push(Primitives::bind(
             &Primitives::bind(observer_atom, &atoms.tenure), &ten));
@@ -260,7 +260,7 @@ pub fn encode_manager_thought(
     scalar: &holon::ScalarEncoder,
     min_opinion: f64,
 ) -> Vec<Vector> {
-    let mut facts: Vec<Vector> = Vec::new();
+    let mut facts: Vec<Vector> = Vec::with_capacity(30);
 
     // Per-observer opinions
     for i in 0..ctx.observer_preds.len() {

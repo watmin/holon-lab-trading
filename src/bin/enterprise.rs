@@ -16,6 +16,7 @@ use rusqlite::params;
 use holon::{VectorManager, Vector};
 
 use enterprise::candle::load_candles;
+use enterprise::treasury::Asset;
 use enterprise::journal::Label;
 use enterprise::thought::{ThoughtEncoder, ThoughtVocab};
 use enterprise::ledger::init_ledger;
@@ -26,6 +27,12 @@ use enterprise::state::{AssetMode, CandleContext, ConvictionMode, EnterpriseStat
 
 const BATCH_SIZE: usize = 256;
 const THREADS: usize = 10;
+/// Decay adjustment: subtracted from CLI decay during adaptation.
+const DECAY_ADJUSTMENT: f64 = 0.004;
+/// Floor for adaptive decay — never forget faster than this.
+const DECAY_MINIMUM: f64 = 0.990;
+/// Maximum fraction of equity in a single position.
+const MAX_SINGLE_POSITION: f64 = 0.20;
 
 // ─── CLI ─────────────────────────────────────────────────────────────────────
 
@@ -169,6 +176,8 @@ struct Args {
 
 fn main() {
     let args = Args::parse();
+    let base_asset = Asset::new(&args.base_asset);
+    let quote_asset = Asset::new(&args.quote_asset);
 
     rayon::ThreadPoolBuilder::new()
         .num_threads(THREADS)
@@ -218,26 +227,12 @@ fn main() {
     let mgr_scalar = holon::ScalarEncoder::new(args.dims);
     let mgr_atoms = ManagerAtoms::new(&vm);
 
-    // rune:sever(inline-encoding) — ExitAtoms constructed inline with vm.get_vector() calls; should have ExitAtoms::new(&vm) like ManagerAtoms
     // ─ Exit expert atoms (immutable) ─
     let exit_scalar = holon::ScalarEncoder::new(args.dims);
-    let exit_atoms = ExitAtoms {
-        pnl: vm.get_vector("position-pnl"),
-        hold: vm.get_vector("position-hold"),
-        mfe: vm.get_vector("position-mfe"),
-        atr_entry: vm.get_vector("position-atr-entry"),
-        atr_now: vm.get_vector("position-atr-now"),
-        stop_dist: vm.get_vector("position-stop-dist"),
-        phase: vm.get_vector("position-phase"),
-        direction: vm.get_vector("position-direction"),
-        runner: vm.get_vector("runner"),
-        active: vm.get_vector("active"),
-        buy: vm.get_vector("buy"),
-        sell: vm.get_vector("sell"),
-    };
+    let exit_atoms = ExitAtoms::new(&vm);
 
     // ─ Observer/manager atoms (immutable) ─
-    let observer_names = ["momentum", "structure", "volume", "narrative", "regime", "full"];
+    let observer_names = ["momentum", "structure", "volume", "narrative", "regime", "generalist"];
     let observer_atoms: Vec<Vector> = observer_names.iter()
         .map(|&name| vm.get_vector(name))
         .collect();
@@ -290,9 +285,9 @@ fn main() {
     // ─ Config constants (immutable after setup) ─
     // Adaptive decay: fast forgetting during regime transitions, slow during stable periods.
     let decay_stable   = args.decay;          // CLI value (default 0.999)
-    let decay_adapting = (args.decay - 0.004).max(0.990); // 0.995 for default
+    let decay_adapting = (args.decay - DECAY_ADJUSTMENT).max(DECAY_MINIMUM);
     let highconv_rolling_cap = 200usize;
-    let max_single_position: f64 = 0.20; // max 20% of equity in one position
+    let max_single_position: f64 = MAX_SINGLE_POSITION;
 
     // ─ Exit parameters (managed mode) ──────────────────────────────────
     let k_stop:  f64 = 3.0;
@@ -330,7 +325,7 @@ fn main() {
         args.initial_equity,
         args.observe_period,
         args.decay,
-        &args.base_asset,
+        &base_asset,
         args.max_positions,
         args.max_utilization,
         start_idx,
@@ -342,9 +337,9 @@ fn main() {
     let seed_price = candles[args.window - 1].close;
     {
         let half = args.initial_equity / 2.0;
-        let actual = state.treasury.withdraw(&args.base_asset, half);
+        let actual = state.treasury.withdraw(&base_asset, half);
         let seed_quote = actual / seed_price;
-        state.treasury.deposit(&args.quote_asset, seed_quote);
+        state.treasury.deposit(&quote_asset, seed_quote);
     }
 
     ledger.execute_batch("BEGIN").ok();
@@ -370,8 +365,8 @@ fn main() {
         swap_fee: args.swap_fee,
         slippage: args.slippage,
         asset_mode: args.asset_mode,
-        base_asset: &args.base_asset,
-        quote_asset: &args.quote_asset,
+        base_asset: &base_asset,
+        quote_asset: &quote_asset,
         initial_equity: args.initial_equity,
         diagnostics: args.diagnostics,
         k_stop,
@@ -415,7 +410,7 @@ fn main() {
         // The manager doesn't encode — it reads expert predictions.
         // Each expert samples their own window from [12, 2016] per candle.
         // Their discriminant learns which scale's patterns predict for their
-        // vocabulary. Observer[5] ("full") encodes at fixed args.window —
+        // vocabulary. Observer[5] ("generalist") encodes at fixed args.window —
         // the generalist's cross-vocabulary view.
         let n_observers = state.observers.len();
 
@@ -431,18 +426,18 @@ fn main() {
             .map(|i| {
                 let bi = i - batch_start; // batch index
 
-                // Primary "full" encoding at fixed window — drives the generalist
+                // Primary "generalist" encoding at fixed window
                 // observer (index 5) and provides fact_labels for diagnostics.
                 let w_start = i.saturating_sub(args.window - 1);
                 let window  = &candles[w_start..=i];
-                let full = thought_encoder.encode_thought(window, &vm, "full");
+                let full = thought_encoder.encode_thought(window, &vm, "generalist");
 
                 // Each observer encodes at their own sampled window.
                 // The generalist (index 5) reuses the full encoding above
                 // to avoid double-encoding the same view.
                 let observer_vecs: Vec<Vector> = (0..n_observers)
                     .map(|ei| {
-                        if observer_names[ei] == "full" {
+                        if observer_names[ei] == "generalist" {
                             full.thought.clone()
                         } else {
                             let ew = observer_windows[ei][bi];
@@ -473,7 +468,7 @@ fn main() {
 
     // Final treasury equity for post-loop reporting
     let final_price = candles[end_idx - 1].close;
-    let prices = state.treasury.price_map(&[(&args.quote_asset, final_price)]);
+    let prices = state.treasury.price_map(&[(&quote_asset, final_price)]);
     let treasury_equity = state.treasury.total_value(&prices);
 
     // ─ Drain remaining pending entries (log, no further learning) ────────────
@@ -510,15 +505,15 @@ fn main() {
     eprintln!();
     eprintln!("  Equity: ${:.2} ({:+.2}%) | B&H: {:+.2}%",
         treasury_equity, ret, bnh_final);
-    eprintln!("  Trades taken: {}  Won: {}  Win rate: {:.1}%  Skipped: {}",
-        state.portfolio.trades_taken, state.portfolio.trades_won, state.portfolio.win_rate(), state.portfolio.trades_skipped);
+    eprintln!("  Trades taken: {}  Won: {}  Win rate: {:.1}%",
+        state.portfolio.trades_taken, state.portfolio.trades_won, state.portfolio.win_rate());
     eprintln!("  Treasury: ${:.2} available  ${:.2} deployed  {:.1}% utilization  fees=${:.2}  slip=${:.2}",
-        state.treasury.balance(&args.base_asset), state.treasury.deployed(&args.base_asset),
+        state.treasury.balance(&base_asset), state.treasury.deployed(&base_asset),
         state.treasury.utilization() * 100.0,
         state.treasury.total_fees_paid, state.treasury.total_slippage);
     eprintln!();
     {
-        let gen = &state.observers[5];
+        let gen = &state.observers[enterprise::state::GENERALIST_IDX];
         let gen_buy = gen.primary_label;
         let gen_sell = gen.journal.labels()[1];
         eprintln!("  Thought journal — buy_obs={} sell_obs={} cos_raw={:.4} disc_strength={:.4} recalibs={}",
@@ -527,7 +522,7 @@ fn main() {
     }
     eprintln!();
 
-    let gen_resolved = &state.observers[5].resolved;
+    let gen_resolved = &state.observers[enterprise::state::GENERALIST_IDX].resolved;
     let tht_acc = if gen_resolved.is_empty() { 0.0 }
         else { gen_resolved.iter().filter(|(_, c)| *c).count() as f64 / gen_resolved.len() as f64 * 100.0 };
     eprintln!("  Rolling accuracy (last {}): thought={:.1}%",

@@ -45,6 +45,21 @@ fn fit_conviction_curve(resolved: &VecDeque<(f64, bool)>, min_bin_size: usize) -
     Some((a, b))
 }
 
+/// Evaluate the conviction-accuracy curve at a given conviction level.
+/// Returns the estimated win rate, capped at 0.95.
+/// Used by both kelly_frac (full fit) and the cached fast path in state.rs.
+pub fn curve_win_rate(conviction: f64, curve_a: f64, curve_b: f64) -> f64 {
+    (0.50 + curve_a * (curve_b * conviction).exp()).min(0.95)
+}
+
+/// Half-Kelly position fraction from win rate and move threshold.
+/// Returns None if no edge.
+pub fn half_kelly_position(win_rate: f64, move_threshold: f64) -> Option<f64> {
+    let edge = 2.0 * win_rate - 1.0;
+    if edge <= 0.0 { return None; }
+    Some(edge / 2.0 / move_threshold)
+}
+
 /// Kelly position sizing from the exponential conviction-accuracy curve.
 ///
 /// Uses the fitted curve `accuracy = 0.50 + a × exp(b × conviction)` to
@@ -56,18 +71,12 @@ fn fit_conviction_curve(resolved: &VecDeque<(f64, bool)>, min_bin_size: usize) -
 pub fn kelly_frac(
     conviction: f64,
     resolved: &VecDeque<(f64, bool)>,
-    _min_sample: usize, // rune:reap(scaffolding) — reserved for configurable minimum; callers pass 50
     move_threshold: f64,
 ) -> Option<(f64, f64, f64)> {
     if resolved.len() < 500 { return None; }
 
     let (curve_a, curve_b) = fit_conviction_curve(resolved, 10)?;
-    let win_rate = (0.50 + curve_a * (curve_b * conviction).exp()).min(0.95);
-
-    let edge = 2.0 * win_rate - 1.0;
-    if edge <= 0.0 { return None; }
-    let half_kelly_risk = edge / 2.0;
-    let position = half_kelly_risk / move_threshold;
+    let position = half_kelly_position(curve_win_rate(conviction, curve_a, curve_b), move_threshold)?;
     Some((position, curve_a, curve_b))
 }
 

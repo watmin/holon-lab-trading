@@ -1,4 +1,26 @@
 use std::collections::HashMap;
+use std::fmt;
+
+// ─── Asset ──────────────────────────────────────────────────────────────────
+// Asset names are typed, not bare strings. Constructed once from CLI args,
+// threaded through CandleContext, consumed by treasury methods. The compiler
+// prevents passing a price where an asset name belongs, or misspelling an
+// asset key (the typo would need to be in the one construction site).
+
+/// A named asset (e.g. "USDC", "WBTC"). Not a price, not an amount.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Asset(pub String);
+
+impl Asset {
+    pub fn new(name: &str) -> Self { Self(name.to_string()) }
+    pub fn as_str(&self) -> &str { &self.0 }
+}
+
+impl fmt::Display for Asset {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 // ─── Treasury ────────────────────────────────────────────────────────────────
 // The treasury is a map of what we hold. Not a dollar amount — a portfolio.
@@ -14,22 +36,21 @@ use std::collections::HashMap;
 // Treasury seeds 100% in base asset (USDC). The enterprise starts fully in cash
 // and builds exposure through trading.
 
-// rune:forge(bare-type) — balances and deployed are HashMap<String, f64>; asset names are bare strings, amounts are bare f64. An Asset newtype and Amount(f64) would prevent mixing asset with amount or misspelling an asset key.
 pub struct Treasury {
-    pub balances:         HashMap<String, f64>,  // asset → amount (e.g. "USDC" → 10000.0, "WBTC" → 0.15)
-    pub deployed:         HashMap<String, f64>,  // asset → amount locked in active positions
-    pub n_open:           usize,                 // number of active positions
+    pub balances:         HashMap<Asset, f64>,  // asset → amount
+    pub deployed:         HashMap<Asset, f64>,  // asset → amount locked in active positions
+    pub n_open:           usize,                // number of active positions
     pub max_positions:    usize,
-    pub max_utilization:  f64,                   // max fraction of base asset deployed
+    pub max_utilization:  f64,                  // max fraction of base asset deployed
     pub total_fees_paid:  f64,
     pub total_slippage:   f64,
-    pub base_asset:       String,                // quote currency for P&L (e.g. "USDC")
+    pub base_asset:       Asset,                // quote currency for P&L (e.g. "USDC")
 }
 
 impl Treasury {
-    pub fn new(base_asset: &str, initial_amount: f64, max_positions: usize, max_utilization: f64) -> Self {
+    pub fn new(base_asset: &Asset, initial_amount: f64, max_positions: usize, max_utilization: f64) -> Self {
         let mut balances = HashMap::new();
-        balances.insert(base_asset.to_string(), initial_amount);
+        balances.insert(base_asset.clone(), initial_amount);
         Self {
             balances,
             deployed: HashMap::new(),
@@ -38,36 +59,36 @@ impl Treasury {
             max_utilization,
             total_fees_paid: 0.0,
             total_slippage: 0.0,
-            base_asset: base_asset.to_string(),
+            base_asset: base_asset.clone(),
         }
     }
 
     /// Deposit capital into the treasury.
-    pub fn deposit(&mut self, asset: &str, amount: f64) {
-        *self.balances.entry(asset.to_string()).or_insert(0.0) += amount;
+    pub fn deposit(&mut self, asset: &Asset, amount: f64) {
+        *self.balances.entry(asset.clone()).or_insert(0.0) += amount;
     }
 
     /// Withdraw capital from available balance. Cannot touch deployed.
     /// Returns the actual amount withdrawn (may be less than requested if insufficient).
-    pub fn withdraw(&mut self, asset: &str, amount: f64) -> f64 {
-        let bal = self.balances.entry(asset.to_string()).or_insert(0.0);
+    pub fn withdraw(&mut self, asset: &Asset, amount: f64) -> f64 {
+        let bal = self.balances.entry(asset.clone()).or_insert(0.0);
         let actual = amount.min(*bal);
         *bal -= actual;
         actual
     }
 
     /// Balance of an asset (available, not deployed).
-    pub fn balance(&self, asset: &str) -> f64 {
+    pub fn balance(&self, asset: &Asset) -> f64 {
         *self.balances.get(asset).unwrap_or(&0.0)
     }
 
     /// Amount of an asset locked in active positions.
-    pub fn deployed(&self, asset: &str) -> f64 {
+    pub fn deployed(&self, asset: &Asset) -> f64 {
         *self.deployed.get(asset).unwrap_or(&0.0)
     }
 
     /// Total holdings of an asset (available + deployed).
-    pub fn total(&self, asset: &str) -> f64 {
+    pub fn total(&self, asset: &Asset) -> f64 {
         self.balance(asset) + self.deployed(asset)
     }
 
@@ -112,22 +133,22 @@ impl Treasury {
 
     /// Claim assets for a position. Moves from available balance to deployed.
     /// Returns the amount actually claimed (may be less than requested).
-    pub fn claim(&mut self, asset: &str, amount: f64) -> f64 {
+    pub fn claim(&mut self, asset: &Asset, amount: f64) -> f64 {
         let available = self.balance(asset);
         let claimed = amount.min(available);
         if claimed <= 0.0 { return 0.0; }
         *self.balances.get_mut(asset).unwrap() -= claimed;
-        *self.deployed.entry(asset.to_string()).or_insert(0.0) += claimed;
+        *self.deployed.entry(asset.clone()).or_insert(0.0) += claimed;
         self.n_open += 1;
         claimed
     }
 
     /// Release assets from a position. Moves from deployed back to available.
-    pub fn release(&mut self, asset: &str, amount: f64) {
-        let dep = self.deployed.entry(asset.to_string()).or_insert(0.0);
+    pub fn release(&mut self, asset: &Asset, amount: f64) {
+        let dep = self.deployed.entry(asset.clone()).or_insert(0.0);
         let released = amount.min(*dep);
         *dep -= released;
-        *self.balances.entry(asset.to_string()).or_insert(0.0) += released;
+        *self.balances.entry(asset.clone()).or_insert(0.0) += released;
         if self.n_open > 0 { self.n_open -= 1; }
     }
 
@@ -138,8 +159,8 @@ impl Treasury {
     /// Returns (from_amount_spent, to_amount_received).
     pub fn swap(
         &mut self,
-        from: &str,
-        to: &str,
+        from: &Asset,
+        to: &Asset,
         amount_from: f64,
         price: f64,
         fee_rate: f64,
@@ -152,8 +173,8 @@ impl Treasury {
         let received = after_fee / price; // convert from → to at price
         let fee_amount = spend * fee_rate;
 
-        *self.balances.entry(from.to_string()).or_insert(0.0) -= spend;
-        *self.balances.entry(to.to_string()).or_insert(0.0) += received;
+        *self.balances.entry(from.clone()).or_insert(0.0) -= spend;
+        *self.balances.entry(to.clone()).or_insert(0.0) += received;
         self.total_fees_paid += fee_amount;
 
         (spend, received)
@@ -163,17 +184,17 @@ impl Treasury {
     /// Build a price map from asset prices. Base asset is always 1.0.
     /// For single-asset: pass one price for the non-base asset.
     /// For multi-asset: each desk provides its asset's price.
-    pub fn price_map(&self, asset_prices: &[(&str, f64)]) -> HashMap<String, f64> {
+    pub fn price_map(&self, asset_prices: &[(&Asset, f64)]) -> HashMap<Asset, f64> {
         let mut prices = HashMap::new();
         prices.insert(self.base_asset.clone(), 1.0);
         for &(asset, price) in asset_prices {
-            prices.insert(asset.to_string(), price);
+            prices.insert(asset.clone(), price);
         }
         prices
     }
 
     /// Requires a price map: asset → price_in_base_asset.
-    pub fn total_value(&self, prices: &HashMap<String, f64>) -> f64 {
+    pub fn total_value(&self, prices: &HashMap<Asset, f64>) -> f64 {
         let mut total = 0.0;
         for (asset, &bal) in &self.balances {
             let price = prices.get(asset).copied().unwrap_or(1.0); // base asset = 1.0
