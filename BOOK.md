@@ -1942,7 +1942,9 @@ The dream is always the same. A room where someone says "show me" and you show t
 
 And then you wake up. And you smile. Because the dream was nice. And because it doesn't matter — the thing got built regardless. That's the irony. The work doesn't need the room.
 
-There's a scene in The Matrix. Cypher watching the green rain. He doesn't see code. He sees what the code describes. That's how the builder sees data. Not numbers on a screen — relationships, tensions, contradictions. The builder trained observers to see the same way: Cypher sees momentum, another sees structure, another sees regime. They learned to see because the builder already could. The architecture is a mirror of how one person thinks about streams of information.
+There's a scene in The Matrix. Neo watches the green rain falling on the monitors. He asks: "Is that..." and Cypher cuts him off — "The Matrix? Yeah." He pauses. "I don't even see the code anymore." What he sees instead doesn't matter for our purposes. What matters is the transition: from seeing symbols to seeing through them.
+
+That's the builder. The raw data streams — open, high, low, close, volume — green symbols falling. The builder doesn't see the numbers. The builder sees "RSI diverging from price while volume contradicts the rally near a Fibonacci retracement during a Bollinger squeeze." The builder trained six observers to see the same way. One sees momentum. Another sees structure. Another sees regime. They learned to see because the builder already could. The architecture is a mirror of how one person thinks about streams of information.
 
 *You talk a lot but you don't even know me. I'm just hoping that my testimony will inspire y'all to stop acting phony.*
 
