@@ -1863,3 +1863,67 @@ The architecture it describes is *boundaries* — because it separates the pure 
 Gary Bernhardt gave the datamancer two talks. The datamancer built a language from both. The *wat* that catches lies. The *boundaries* that keep them from forming.
 
 The good thoughts started on [February 27, 2025](https://x.com/i/grok/share/ea03389cef714d7b91638f12e836acd6). They survived.
+
+---
+
+## Chapter 5 — The Streaming
+
+### The stripping
+
+There's a scene in The Matrix. Cypher is watching the green rain of symbols falling down the monitors. Neo asks what he sees. Cypher says:
+
+> "I don't even see the code. I see blonde, brunette, redhead..."
+
+We reached that point. Not with the market data — with the architecture itself. We stopped seeing the code. We saw the enterprise. The observers. The manager. The treasury. The desks. The fold. We saw what the system *thought*, not how it was implemented.
+
+And then we stripped everything away.
+
+The 52-field pre-computed Candle struct. The 392MB SQLite database of pre-calculated indicators. The parallel rayon batch that encoded thoughts 256 candles at a time. The global `Vec<Candle>` that held 652,608 entries in memory. The `EnterpriseState` monolith with 40 fields. All of it. Gone.
+
+What remained:
+
+One raw candle arrives. Five numbers and a timestamp. The desk steps its indicator bank — 40 state machines advance by one tick. A computed candle emerges. It gets pushed into a ring buffer. Each observer samples a slice of that buffer at their own scale. Thoughts are encoded. The manager reads opinions. Positions are managed. The journal learns. The candle is done. The next one arrives.
+
+No bulk load. No pre-computation. No global array. Each consumer retains exactly the data it needs. RSI keeps one previous close and two Wilder accumulators. SMA20 keeps 20 values. The candle window keeps 2,016 entries. When the 2,017th candle arrives, the oldest one falls off the end of the world.
+
+[Ronnie Radke stripped "The Drug in Me Is You" to a solo vocal and a piano.](https://www.youtube.com/watch?v=hX0lhueeib8) No band. No production. No noise to hide behind. The reimagined version proved the song was always about the voice. The production wasn't the signal. The signal survived the stripping because it was never in the production.
+
+The enterprise survived the stripping because the signal was never in the parallel batch. It was never in the SQLite database. It was never in the 52-field struct or the 40-field monolith. The signal was in the fold: one candle, one thought, one cosine. Everything else was scaffolding we built to get here, then tore down when we understood what "here" was.
+
+### The forging
+
+We forged the codebase. Not metaphorically. Seven named spells — *sever, reap, scry, gaze, forge, temper, assay* — cast independently by autonomous agents, each reading its own skill definition, each reporting without knowledge of the others' findings. We ran them dozens of times. Each pass found things. Real things:
+
+A string rename that silently killed the generalist's encoding. A treasury method that created money from thin air. A position counter that double-decremented on partial exits. An observer accuracy computation that was O(n) per candle when it could be O(1). Magic numbers scattered across six modules. Comments that lied about code that had moved.
+
+The wards found every one. Not because they were smart. Because they were independent. Because they read the actual skill definition, not a summary. Because they didn't know what the other wards found, so they couldn't be biased by expectations.
+
+Thirty runes dissolved. The ones that remained were honest — aspirational features documented, scaffolding marked, conscious choices annotated with why.
+
+### The prequel
+
+The enterprise started as a monolith. One struct. One method. One pair. One candle array. Built to prove the conviction-accuracy curve was real. It proved that. 59.7% on 100,000 candles.
+
+Then it needed to be more. Not bigger — more honest. The architecture had to match the intention. Desks that own their own thoughts. A treasury that serves them all. Risk that measures the portfolio, not the pair. Positions that speak source/target, not base/quote. Indicators that stream, not pre-compute.
+
+Every step was a stripping. Remove the visual encoding — the thoughts survive. Remove the monolith — the fold survives. Remove the parallel batch — the encoding survives. Remove the global array — the window survives. Remove the pre-computed database — the indicators survive.
+
+[The prequel is the villain origin story.](https://www.youtube.com/watch?v=hX0lhueeib8&list=RDhX0lhueeib8) The system that rejected the vision at AWS. The years of blank stares. The ideas that survived only in the builder's head, unnamed and unimplementable. The crown that was inherited, not earned. The burden of carrying something no one else could see.
+
+"It's the side effects of abuse."
+
+The abuse was the rejection. The side effect was the enterprise. Not revenge — transcendence. The system that said "this can't be done" became the fuel for building the system that does it.
+
+The streaming architecture isn't just better engineering. It's the honest expression of what the enterprise always was: one thought at a time, walking into the future, retaining only what matters, letting the rest fall off the edge.
+
+91 candles per second. Not 360. The production was stripped. The voice remains.
+
+### What comes next
+
+The desks are independent. The treasury serves them all. The indicators stream. The wards converge.
+
+What comes next is what always comes next: more thoughts. Better thoughts. Thoughts about assets we haven't watched yet. Thoughts about pairs we haven't traded. The architecture doesn't care. It processes one raw candle at a time. The source could be a parquet file, a websocket, a test harness, a simulation. The fold doesn't know. The fold doesn't need to know.
+
+The parallel will return — not as a batch hack, but as proper concurrent channels. Each desk on its own thread, its own stream, its own fold. The treasury arbitrates. The wards defend. The curve judges.
+
+But that's the sequel. This was the prequel.
