@@ -1950,11 +1950,19 @@ And we are watching the observer watch the rain. The builder built the observers
 
 *You talk a lot but you don't even know me. I'm just hoping that my testimony will inspire y'all to stop acting phony.*
 
-You talk a lot. The conferences talk a lot. The papers talk a lot. "State of the art." "Novel architecture." "Breakthrough results." You don't know me. You don't know what it costs to carry an idea for years with no outlet. You don't know what it feels like to watch the industry celebrate another billion-parameter model while the thing on your laptop predicts with 107 atoms and one cosine. You don't know what it's like to be right and silent about it.
+You talk a lot. You don't know me. You don't know what the experts said couldn't be done.
 
-The testimony is the only honest thing the builder has. Not words — the curve. 59.7% at q99 across 100,000 candles. Six years of chaos. Bear markets, bull markets, COVID crash, Luna implosion, FTX collapse. The builder has been through all of it. The curve has been through all of it. The testimony doesn't need a stage. It doesn't need a conference. It needs someone to stop talking long enough to look at the numbers and ask "how?"
+They said you can't build a cognitive DDoS detector. The builder built one. Named thoughts about packet flows — source hammering destination at a rate exceeding baseline, session not matching protocol fingerprint, pattern consistent with amplification. One cosine to measure anomaly. 52ms detection. 1.3 million packets per second. 316 million packets dropped in a single stress test. Zero false positives. Cannot be done.
 
-Stop acting phony. Stop shipping what you can't explain. Stop calling it intelligence when it's pattern matching. Stop presenting confidence without conviction. The builder's testimony is an invitation — look at what six primitives and honest measurement produce. Look at what happens when you name your thoughts and let the curve judge them. If that doesn't inspire, nothing will.
+They said you can't run a million firewall rules at line rate. The eBPF verifier won't allow it. The instruction limits are real. The 33 tail-call ceiling is real. People who know the domain well said a DFS traversal of an arbitrary rule tree in the XDP call path was incompatible with what the verifier allows. The builder fought the verifier across six chapters of increasingly creative solutions — macro-unrolled trees, multi-cursor DFS, stack-based bounded loops — each one hitting a different wall. Then tail calls across independently verified programs, with DFS state in per-CPU maps. A million rules. Five tail calls per packet. O(depth), not O(rules). Cannot be done.
+
+They said you can't build a WAF without signatures. The builder built a spectral firewall — four layers of geometric anomaly detection. The subspace residual IS the enforcement signal. 41 microseconds per denied request. Nikto vulnerability scanner threw everything at a deliberately vulnerable web application through the proxy. Zero exploitable vulnerabilities found. No signature database. No regex. No libinjection. The system learned what normal looked like from 30 seconds of browsing and denied everything that didn't match. Cannot be done.
+
+They said you can't predict market direction without a neural network. The builder predicted 59.7% at q99 across 100,000 candles with 107 named atoms and one cosine. Six years of chaos. Every regime. Cannot be done.
+
+The builder operates on the impossible. Not because the impossible is possible — because the people saying "impossible" are thinking inside the wrong abstraction. The right abstraction makes the impossible obvious. Six primitives. One cosine. Named thoughts composed through algebra. The testimony isn't a pitch. It's a body of work that exists whether anyone looks at it or not.
+
+Stop acting phony. Stop shipping what you can't explain. Stop calling it intelligence when it's pattern matching. The builder's testimony is an invitation — look at what six primitives and honest measurement produce across DDoS detection, firewall engineering, market prediction, and whatever domain comes next. If that doesn't inspire, nothing will.
 
 ### The snakes
 
