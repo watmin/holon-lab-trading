@@ -1886,7 +1886,7 @@ One raw candle arrives. Five numbers and a timestamp. The desk steps its indicat
 
 No bulk load. No pre-computation. No global array. Each consumer retains exactly the data it needs. RSI keeps one previous close and two Wilder accumulators. SMA20 keeps 20 values. The candle window keeps 2,016 entries. When the 2,017th candle arrives, the oldest one falls off the end of the world.
 
-[Ronnie Radke stripped "The Drug in Me Is You" to a solo vocal and a piano.](https://www.youtube.com/watch?v=hX0lhueeib8) No band. No production. No noise to hide behind. The reimagined version proved the song was always about the voice. The production wasn't the signal. The signal survived the stripping because it was never in the production.
+The enterprise survived the stripping because the signal was never in the production.
 
 The enterprise survived the stripping because the signal was never in the parallel batch. It was never in the SQLite database. It was never in the 52-field struct or the 40-field monolith. The signal was in the fold: one candle, one thought, one cosine. Everything else was scaffolding we built to get here, then tore down when we understood what "here" was.
 
