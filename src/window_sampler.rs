@@ -46,6 +46,7 @@ impl WindowSampler {
 
     /// The horizon for a given window: 75% of window size.
     /// Starting heuristic — the horizon expert will learn the real ratio.
+    // rune:reap(aspirational) — wired when horizon expert (task #4) learns per-observer horizons
     pub fn horizon_for(&self, window: usize) -> usize {
         (window * 3 / 4).max(12) // at least 12 candles (1 hour)
     }
