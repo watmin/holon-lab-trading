@@ -19,6 +19,7 @@
 
 use holon::memory::OnlineSubspace;
 use holon::{Primitives, ScalarMode, VectorManager, Vector};
+// VectorManager used only by RiskAtoms::new
 
 use crate::portfolio::Portfolio;
 
@@ -54,10 +55,72 @@ impl RiskBranch {
 // correlation, panel. Each encodes named thoughts (bind atom with scalar) and
 // bundles them into one f64 vector for the corresponding OnlineSubspace.
 
-/// Encode a named risk thought: bind(atom, encode_linear(value, scale)).
-fn thought(vm: &VectorManager, scalar: &holon::ScalarEncoder, name: &str, value: f64, scale: f64) -> Vector {
+/// Pre-warmed atom vectors for all 25 risk encoding dimensions.
+/// Created once at startup, passed through CandleContext.
+pub struct RiskAtoms {
+    pub drawdown: Vector,
+    pub drawdown_velocity: Vector,
+    pub recovery_progress: Vector,
+    pub drawdown_duration: Vector,
+    pub dd_historical: Vector,
+    pub accuracy_10: Vector,
+    pub accuracy_50: Vector,
+    pub accuracy_200: Vector,
+    pub accuracy_trajectory: Vector,
+    pub acc_divergence: Vector,
+    pub pnl_vol: Vector,
+    pub trade_sharpe: Vector,
+    pub worst_trade: Vector,
+    pub return_skew: Vector,
+    pub vol_best_trade: Vector,
+    pub loss_pattern: Vector,
+    pub loss_density: Vector,
+    pub consec_loss: Vector,
+    pub corr_trade_density: Vector,
+    pub corr_autocorr_sign: Vector,
+    pub panel_equity_pct: Vector,
+    pub panel_streak: Vector,
+    pub recent_accuracy: Vector,
+    pub panel_trade_density: Vector,
+    pub trade_frequency: Vector,
+}
+
+impl RiskAtoms {
+    pub fn new(vm: &VectorManager) -> Self {
+        Self {
+            drawdown: vm.get_vector("drawdown"),
+            drawdown_velocity: vm.get_vector("drawdown-velocity"),
+            recovery_progress: vm.get_vector("recovery-progress"),
+            drawdown_duration: vm.get_vector("drawdown-duration"),
+            dd_historical: vm.get_vector("dd-historical"),
+            accuracy_10: vm.get_vector("accuracy-10"),
+            accuracy_50: vm.get_vector("accuracy-50"),
+            accuracy_200: vm.get_vector("accuracy-200"),
+            accuracy_trajectory: vm.get_vector("accuracy-trajectory"),
+            acc_divergence: vm.get_vector("acc-divergence"),
+            pnl_vol: vm.get_vector("pnl-vol"),
+            trade_sharpe: vm.get_vector("trade-sharpe"),
+            worst_trade: vm.get_vector("worst-trade"),
+            return_skew: vm.get_vector("return-skew"),
+            vol_best_trade: vm.get_vector("vol-best-trade"),
+            loss_pattern: vm.get_vector("loss-pattern"),
+            loss_density: vm.get_vector("loss-density"),
+            consec_loss: vm.get_vector("consec-loss"),
+            corr_trade_density: vm.get_vector("corr-trade-density"),
+            corr_autocorr_sign: vm.get_vector("corr-autocorr-sign"),
+            panel_equity_pct: vm.get_vector("panel-equity-pct"),
+            panel_streak: vm.get_vector("panel-streak"),
+            recent_accuracy: vm.get_vector("recent-accuracy"),
+            panel_trade_density: vm.get_vector("panel-trade-density"),
+            trade_frequency: vm.get_vector("trade-frequency"),
+        }
+    }
+}
+
+/// Encode a risk thought: bind(pre-warmed atom, encode_linear(value, scale)).
+fn thought(atom: &Vector, scalar: &holon::ScalarEncoder, value: f64, scale: f64) -> Vector {
     let sv = scalar.encode(value, ScalarMode::Linear { scale });
-    Primitives::bind(&vm.get_vector(name), &sv)
+    Primitives::bind(atom, &sv)
 }
 
 /// Bundle thought vectors into one f64 vector for a subspace.
@@ -67,7 +130,7 @@ fn bundle_f64(thoughts: Vec<Vector>) -> Vec<f64> {
     bundled.data().iter().map(|&v| v as f64).collect()
 }
 
-fn encode_drawdown(portfolio: &Portfolio, vm: &VectorManager, scalar: &holon::ScalarEncoder) -> Vec<f64> {
+fn encode_drawdown(portfolio: &Portfolio, atoms: &RiskAtoms, scalar: &holon::ScalarEncoder) -> Vec<f64> {
     let drawdown = if portfolio.peak_equity > 0.0 {
         (portfolio.peak_equity - portfolio.equity) / portfolio.peak_equity
     } else {
@@ -98,32 +161,32 @@ fn encode_drawdown(portfolio: &Portfolio, vm: &VectorManager, scalar: &holon::Sc
         .copied()
         .fold(0.0_f64, f64::max);
     bundle_f64(vec![
-        thought(vm, scalar, "drawdown", drawdown, 1.0),
-        thought(vm, scalar, "drawdown-velocity", drawdown_velocity, 0.2),
-        thought(vm, scalar, "recovery-progress", recovery, 2.0),
-        thought(vm, scalar, "drawdown-duration",
+        thought(&atoms.drawdown, scalar, drawdown, 1.0),
+        thought(&atoms.drawdown_velocity, scalar, drawdown_velocity, 0.2),
+        thought(&atoms.recovery_progress, scalar, recovery, 2.0),
+        thought(&atoms.drawdown_duration, scalar,
             portfolio.trades_since_bottom as f64 / TRADES_SCALE, 2.0),
-        thought(vm, scalar, "dd-historical",
+        thought(&atoms.dd_historical, scalar,
             if hist_worst > HIST_WORST_THRESHOLD { drawdown / hist_worst } else { 0.0 }, 2.0),
     ])
 }
 
-fn encode_accuracy(portfolio: &Portfolio, vm: &VectorManager, scalar: &holon::ScalarEncoder) -> Vec<f64> {
+fn encode_accuracy(portfolio: &Portfolio, atoms: &RiskAtoms, scalar: &holon::ScalarEncoder) -> Vec<f64> {
     let win_rate_10 = portfolio.win_rate_last_n(10);
     let win_rate_50 = portfolio.win_rate_last_n(50);
     let win_rate_200 = portfolio.win_rate_last_n(200);
     bundle_f64(vec![
-        thought(vm, scalar, "accuracy-10", win_rate_10, 2.0),
-        thought(vm, scalar, "accuracy-50", win_rate_50, 2.0),
-        thought(vm, scalar, "accuracy-200", win_rate_200, 2.0),
-        thought(vm, scalar, "accuracy-trajectory", win_rate_10 - win_rate_50, 0.5),
-        thought(vm, scalar, "acc-divergence", win_rate_10 - win_rate_200, 0.5),
+        thought(&atoms.accuracy_10, scalar, win_rate_10, 2.0),
+        thought(&atoms.accuracy_50, scalar, win_rate_50, 2.0),
+        thought(&atoms.accuracy_200, scalar, win_rate_200, 2.0),
+        thought(&atoms.accuracy_trajectory, scalar, win_rate_10 - win_rate_50, 0.5),
+        thought(&atoms.acc_divergence, scalar, win_rate_10 - win_rate_200, 0.5),
     ])
 }
 
 fn encode_volatility(
     portfolio: &Portfolio,
-    vm: &VectorManager,
+    atoms: &RiskAtoms,
     scalar: &holon::ScalarEncoder,
 ) -> Vec<f64> {
     let returns: Vec<f64> = portfolio
@@ -151,20 +214,20 @@ fn encode_volatility(
             0.0
         };
         bundle_f64(vec![
-            thought(vm, scalar, "pnl-vol", vol, 0.1),
-            thought(vm, scalar, "trade-sharpe", sharpe, 4.0),
-            thought(vm, scalar, "worst-trade", worst, 0.1),
-            thought(vm, scalar, "return-skew", skew, 4.0),
-            thought(vm, scalar, "vol-best-trade", best, 0.1),
+            thought(&atoms.pnl_vol, scalar, vol, 0.1),
+            thought(&atoms.trade_sharpe, scalar, sharpe, 4.0),
+            thought(&atoms.worst_trade, scalar, worst, 0.1),
+            thought(&atoms.return_skew, scalar, skew, 4.0),
+            thought(&atoms.vol_best_trade, scalar, best, 0.1),
         ])
     } else {
-        vec![0.0; vm.dimensions()]
+        vec![0.0; atoms.drawdown.data().len()]
     }
 }
 
 fn encode_correlation(
     portfolio: &Portfolio,
-    vm: &VectorManager,
+    atoms: &RiskAtoms,
     scalar: &holon::ScalarEncoder,
 ) -> Vec<f64> {
     if portfolio.rolling.len() >= CORRELATION_MIN_LEN {
@@ -190,31 +253,24 @@ fn encode_correlation(
         } else {
             0.0
         };
-        // Loss density (last 20) and consecutive losses from seq (already reversed)
         let loss_density = seq.iter().take(LOSS_DENSITY_WINDOW).filter(|&&v| v < 0.0).count() as f64 / LOSS_DENSITY_WINDOW as f64;
         let mut consec_losses = 0.0_f64;
         for &v in &seq {
             if v < 0.0 { consec_losses += 1.0; } else { break; }
         }
         bundle_f64(vec![
-            thought(vm, scalar, "loss-pattern", autocorr, 2.0),
-            thought(vm, scalar, "loss-density", loss_density, 2.0),
-            thought(vm, scalar, "consec-loss", consec_losses / STREAK_SCALE, 2.0),
-            thought(
-                vm,
-                scalar,
-                "corr-trade-density",
-                portfolio.trades_taken as f64 / DENSITY_SCALE,
-                2.0,
-            ),
-            thought(vm, scalar, "corr-autocorr-sign", autocorr.signum(), 2.0),
+            thought(&atoms.loss_pattern, scalar, autocorr, 2.0),
+            thought(&atoms.loss_density, scalar, loss_density, 2.0),
+            thought(&atoms.consec_loss, scalar, consec_losses / STREAK_SCALE, 2.0),
+            thought(&atoms.corr_trade_density, scalar, portfolio.trades_taken as f64 / DENSITY_SCALE, 2.0),
+            thought(&atoms.corr_autocorr_sign, scalar, autocorr.signum(), 2.0),
         ])
     } else {
-        vec![0.0; vm.dimensions()]
+        vec![0.0; atoms.drawdown.data().len()]
     }
 }
 
-fn encode_panel(portfolio: &Portfolio, vm: &VectorManager, scalar: &holon::ScalarEncoder) -> Vec<f64> {
+fn encode_panel(portfolio: &Portfolio, atoms: &RiskAtoms, scalar: &holon::ScalarEncoder) -> Vec<f64> {
     let eq_pct =
         (portfolio.equity - portfolio.initial_equity) / portfolio.initial_equity;
     let streak_val = portfolio.streak();
@@ -224,23 +280,11 @@ fn encode_panel(portfolio: &Portfolio, vm: &VectorManager, scalar: &holon::Scala
         0.5
     };
     bundle_f64(vec![
-        thought(vm, scalar, "panel-equity-pct", eq_pct, 2.0),
-        thought(vm, scalar, "panel-streak", streak_val / STREAK_SCALE, 2.0),
-        thought(vm, scalar, "recent-accuracy", win_rate_all, 2.0),
-        thought(
-            vm,
-            scalar,
-            "panel-trade-density",
-            portfolio.trades_taken as f64 / DENSITY_SCALE,
-            2.0,
-        ),
-        thought(
-            vm,
-            scalar,
-            "trade-frequency",
-            (portfolio.trades_taken as f64).sqrt() / FREQUENCY_SCALE,
-            2.0,
-        ),
+        thought(&atoms.panel_equity_pct, scalar, eq_pct, 2.0),
+        thought(&atoms.panel_streak, scalar, streak_val / STREAK_SCALE, 2.0),
+        thought(&atoms.recent_accuracy, scalar, win_rate_all, 2.0),
+        thought(&atoms.panel_trade_density, scalar, portfolio.trades_taken as f64 / DENSITY_SCALE, 2.0),
+        thought(&atoms.trade_frequency, scalar, (portfolio.trades_taken as f64).sqrt() / FREQUENCY_SCALE, 2.0),
     ])
 }
 
@@ -251,10 +295,10 @@ fn encode_panel(portfolio: &Portfolio, vm: &VectorManager, scalar: &holon::Scala
 pub fn evaluate_risk_branches(
     branches: &mut [RiskBranch],
     portfolio: &Portfolio,
-    vm: &VectorManager,
+    atoms: &RiskAtoms,
     scalar: &holon::ScalarEncoder,
 ) -> f64 {
-    let branch_features = encode_risk_branches(portfolio, vm, scalar);
+    let branch_features = encode_risk_branches(portfolio, atoms, scalar);
     let mut worst_ratio = 1.0_f64;
     let healthy = portfolio.is_healthy() && portfolio.trades_taken >= 20;
     for (branch_idx, branch) in branches.iter_mut().enumerate() {
@@ -275,14 +319,14 @@ pub fn evaluate_risk_branches(
 /// Each is a bundled thought vector at full dimensionality, ready for its OnlineSubspace.
 pub fn encode_risk_branches(
     portfolio: &Portfolio,
-    vm: &VectorManager,
+    atoms: &RiskAtoms,
     scalar: &holon::ScalarEncoder,
 ) -> [Vec<f64>; 5] {
     [
-        encode_drawdown(portfolio, vm, scalar),
-        encode_accuracy(portfolio, vm, scalar),
-        encode_volatility(portfolio, vm, scalar),
-        encode_correlation(portfolio, vm, scalar),
-        encode_panel(portfolio, vm, scalar),
+        encode_drawdown(portfolio, atoms, scalar),
+        encode_accuracy(portfolio, atoms, scalar),
+        encode_volatility(portfolio, atoms, scalar),
+        encode_correlation(portfolio, atoms, scalar),
+        encode_panel(portfolio, atoms, scalar),
     ]
 }

@@ -173,6 +173,7 @@ pub struct CandleContext<'a> {
     pub exit_scalar: &'a holon::ScalarEncoder,
     pub exit_atoms: &'a ExitAtoms,
     pub risk_scalar: &'a holon::ScalarEncoder,
+    pub risk_atoms: &'a risk::RiskAtoms,
 
     // ── Observer/manager atoms ──────────────────────────────────────────
     pub observer_atoms: &'a [Vector],
@@ -319,7 +320,7 @@ impl EnterpriseState {
         self.candle_count += 1;
         if self.candle_count % ctx.recalib_interval == 0 || self.candle_count < RISK_WARMUP {
             self.cached_risk_mult = risk::evaluate_risk_branches(
-                &mut self.risk_branches, &self.portfolio, ctx.vm, ctx.risk_scalar,
+                &mut self.risk_branches, &self.portfolio, ctx.risk_atoms, ctx.risk_scalar,
             );
         }
 

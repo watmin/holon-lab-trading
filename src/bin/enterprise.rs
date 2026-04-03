@@ -221,6 +221,7 @@ fn main() {
     // ─ Exit expert atoms (immutable) ─
     let exit_scalar = holon::ScalarEncoder::new(args.dims);
     let exit_atoms = ExitAtoms::new(&vm);
+    let risk_atoms = enterprise::risk::RiskAtoms::new(&vm);
 
     // ─ Observer/manager atoms (immutable) ─
     let observer_names = enterprise::market::OBSERVER_LENSES;
@@ -369,6 +370,7 @@ fn main() {
         exit_scalar: &exit_scalar,
         exit_atoms: &exit_atoms,
         risk_scalar: &risk_scalar,
+        risk_atoms: &risk_atoms,
         observer_atoms: &observer_atoms,
         generalist_atom: &generalist_atom,
         min_opinion_magnitude,
