@@ -17,7 +17,7 @@ pub enum Event {
     /// bank to produce computed indicators. No pre-computation.
     Candle(RawCandle),
 
-    // rune:reap(scaffolding) — Deposit and Withdraw are handled in on_event but
+    // rune:reap(aspirational) — Deposit and Withdraw are handled in on_event but
     // never constructed. Wired when streaming interface supports capital events.
     /// Capital deposited into the treasury.
     Deposit { asset: Asset, amount: f64 },

@@ -45,7 +45,7 @@
 ;; No pre-computed indicators, no pre-encoded thoughts.
 ;; The desk computes everything from the raw OHLCV.
 
-;; rune:reap(scaffolding) — Deposit/Withdraw exist but are never constructed.
+;; rune:reap(aspirational) — Deposit/Withdraw exist but are never constructed.
 
 ;; ── The fold step ───────────────────────────────────────────────────
 ;; One raw candle arrives. The enterprise:
