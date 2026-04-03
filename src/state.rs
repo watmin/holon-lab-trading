@@ -11,7 +11,7 @@ use crate::indicators::RawCandle;
 use crate::market::exit::ExitAtoms;
 use crate::market::manager::ManagerAtoms;
 use crate::portfolio::Portfolio;
-// ManagedPosition and PositionPhase moved to market/exit.rs with encode_exit_thought
+// ExitAtoms and encode_exit_thought live in market/exit.rs
 use crate::risk::{self, RiskBranch};
 use crate::treasury::{Asset, Treasury};
 
@@ -103,7 +103,6 @@ impl TradePnl {
         swap_fee: f64,
         slippage: f64,
         is_live: bool,
-        deployed_usd: f64,
         treasury_equity: f64,
         frac: f64,
     ) -> Self {
@@ -115,9 +114,7 @@ impl TradePnl {
         let net_ret = after_exit - 1.0;
         let entry_cost_frac = per_swap;
         let exit_cost_frac = gross_value * per_swap;
-        let pos_usd = if is_live {
-            if deployed_usd > 0.0 { deployed_usd } else { treasury_equity * frac }
-        } else { 0.0 };
+        let pos_usd = if is_live { treasury_equity * frac } else { 0.0 };
         let trade_pnl = pos_usd * net_ret;
         Self { gross_ret, net_ret, entry_cost_frac, exit_cost_frac, pos_usd, trade_pnl }
     }

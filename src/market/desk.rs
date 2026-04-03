@@ -295,10 +295,10 @@ impl Desk {
         let mut obs_curve_valid = [false; 5];
         let mut obs_resolved_lens = [0usize; 5];
         let mut obs_resolved_accs = [0.0f64; 5];
-        for (oi, obs) in self.observers[..5].iter().enumerate() {
-            obs_curve_valid[oi] = obs.curve_valid;
-            obs_resolved_lens[oi] = obs.resolved.len();
-            obs_resolved_accs[oi] = obs.cached_acc;
+        for (obs_idx, obs) in self.observers[..5].iter().enumerate() {
+            obs_curve_valid[obs_idx] = obs.curve_valid;
+            obs_resolved_lens[obs_idx] = obs.resolved.len();
+            obs_resolved_accs[obs_idx] = obs.cached_acc;
         }
         let mgr_ctx = ManagerContext {
             observer_preds: &observer_preds[..5],
@@ -656,7 +656,6 @@ impl Desk {
             observer_vecs,
             observer_preds,
             mgr_thought:   stored_mgr_thought,
-            fact_labels:   Vec::new(),  // desk computes its own thoughts; no external fact labels
             crossing:      None,
             entry_price:       candle.close,
             entry_ts:          candle.ts.clone(),
@@ -665,14 +664,13 @@ impl Desk {
             max_adverse:       0.0,
             exit_reason:       None,
             exit_pct:          0.0,
-            deployed_usd: 0.0,
         });
 
         // Decay once per candle.
         // The generalist (observers[GENERALIST_IDX]) uses adaptive decay; specialists use fixed decay.
         self.manager_journal.decay(self.adaptive_decay);
-        for (oi, observer) in self.observers.iter_mut().enumerate() {
-            let d = if oi == 5 { self.adaptive_decay } else { ctx.decay };
+        for (obs_idx, observer) in self.observers.iter_mut().enumerate() {
+            let d = if obs_idx == 5 { self.adaptive_decay } else { ctx.decay };
             observer.journal.decay(d);
         }
 
@@ -799,7 +797,7 @@ impl Desk {
                 let pnl = TradePnl::compute(
                     entry.exit_pct, dir == mgr_buy,
                     ctx.swap_fee, ctx.slippage,
-                    is_live, entry.deployed_usd, treasury_equity, frac,
+                    is_live, treasury_equity, frac,
                 );
 
                 // Portfolio tracks win/loss for phase transitions — every resolved prediction,
@@ -1120,16 +1118,6 @@ impl Desk {
                     self.in_adaptation = false;
                     self.adaptive_decay = ctx.decay_stable;
                 }
-            }
-        }
-
-        // Log which facts were present for this trade.
-        if ctx.diagnostics {
-            for label in &entry.fact_labels {
-                self.pending_logs.push(LogEntry::TradeFact {
-                    step: self.log_step,
-                    fact_label: label.clone(),
-                });
             }
         }
 

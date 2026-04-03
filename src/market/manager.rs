@@ -148,17 +148,17 @@ fn encode_observer_opinion(
 
     // Fact 3: reliability — accuracy above baseline (if enough data)
     if resolved_len >= MIN_RESOLVED_FOR_RELIABILITY {
-        let rel = scalar.encode((resolved_acc - 0.4).max(0.0), ScalarMode::Linear { scale: 1.0 });
+        let reliability_vec = scalar.encode((resolved_acc - 0.4).max(0.0), ScalarMode::Linear { scale: 1.0 });
         facts.push(Primitives::bind(
-            &Primitives::bind(observer_atom, &atoms.reliability), &rel));
+            &Primitives::bind(observer_atom, &atoms.reliability), &reliability_vec));
     }
 
     // Fact 4: tenure — how long has this observer been resolving?
     let tenure = resolved_len as f64;
     if tenure >= MIN_RESOLVED_FOR_TENURE {
-        let ten = scalar.encode_log(tenure);
+        let tenure_vec = scalar.encode_log(tenure);
         facts.push(Primitives::bind(
-            &Primitives::bind(observer_atom, &atoms.tenure), &ten));
+            &Primitives::bind(observer_atom, &atoms.tenure), &tenure_vec));
     }
 
     facts

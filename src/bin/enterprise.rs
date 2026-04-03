@@ -1,7 +1,7 @@
 /// enterprise — self-organizing BTC trading enterprise.
 ///
-/// Six primitives. Seven layers. One heartbeat per candle.
-/// See wat/examples/enterprise.wat for the specification.
+/// Six primitives. Two templates. One heartbeat per candle.
+/// See wat/bin/enterprise.wat for the specification.
 ///
 /// Experts predict direction from candle data at sampled time scales.
 /// The manager reads expert opinions and decides.

@@ -43,7 +43,6 @@ pub struct Pending {
     pub observer_vecs:   Vec<Vector>,       // per-observer thought vectors
     pub observer_preds:  Vec<Prediction>,   // per-observer predictions at entry time
     pub mgr_thought:     Option<Vector>,    // complete manager thought (delta-enriched) for learning
-    pub fact_labels:   Vec<String>,      // thought facts present at this candle
 
     // ── Learning (event-driven, first crossing only) ─────────────────
     pub crossing: Option<CrossingSnapshot>, // set on first threshold crossing; drives learning
@@ -59,8 +58,6 @@ pub struct Pending {
     pub exit_reason:       Option<ExitReason>, // why the trade closed
     pub exit_pct:          f64,    // actual exit price change (for P&L)
 
-    // ── Treasury allocation ──────────────────────────────────────────
-    pub deployed_usd:      f64,    // capital reserved from treasury for this position
 }
 
 // rune:reap(aspirational) — TrailingStop and TakeProfit are matched in ledger display

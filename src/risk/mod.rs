@@ -257,8 +257,8 @@ pub fn evaluate_risk_branches(
     let branch_features = encode_risk_branches(portfolio, vm, scalar);
     let mut worst_ratio = 1.0_f64;
     let healthy = portfolio.is_healthy() && portfolio.trades_taken >= 20;
-    for (bi, branch) in branches.iter_mut().enumerate() {
-        let features = &branch_features[bi];
+    for (branch_idx, branch) in branches.iter_mut().enumerate() {
+        let features = &branch_features[branch_idx];
         if branch.subspace.n() >= 10 {
             let residual = branch.subspace.residual(features);
             let threshold = branch.subspace.threshold();

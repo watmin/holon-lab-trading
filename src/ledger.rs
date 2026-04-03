@@ -292,7 +292,7 @@ pub fn init_ledger(path: &str) -> Connection {
         -- One row per journal recalibration.
         CREATE TABLE IF NOT EXISTS recalib_log (
             step          INTEGER,  -- candle index when recalib fired
-            journal       TEXT,     -- 'visual' | 'thought'
+            journal       TEXT,     -- 'thought'
             cos_raw       REAL,     -- cos(buy_proto, sell_proto) before discrimination
             disc_strength REAL,     -- separating signal available (0=none, 1=fully separated)
             buy_count     INTEGER,

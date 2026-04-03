@@ -32,6 +32,8 @@ fn fit_conviction_curve(resolved: &VecDeque<(f64, bool)>, min_bin_size: usize) -
     if points.len() < 3 { return None; }
 
     // Log-linear regression: ln(acc - 0.50) = ln(a) + b × conviction
+    // OLS normal equations. sx/sy/sxx/sxy are the standard sums for
+    // computing slope (b) and intercept (ln(a)) of the linearized curve.
     let n = points.len() as f64;
     let (sx, sy, sxx, sxy) = points.iter().fold(
         (0.0, 0.0, 0.0, 0.0),

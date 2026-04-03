@@ -1,6 +1,5 @@
 // Candle struct — the computed indicator values for one candle.
-// Built by IndicatorBank::tick() from raw OHLCV. The label field
-// is vestigial (set to empty string in the streaming path).
+// Built by IndicatorBank::tick() from raw OHLCV.
 
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
