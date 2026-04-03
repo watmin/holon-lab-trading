@@ -393,8 +393,8 @@ fn main() {
         // Stop at end_idx
         if candle_idx >= end_idx { break; }
 
-        // Kill switch
-        if kill_file.exists() {
+        // Kill switch — check every 1000 candles, not every candle
+        if candle_idx % 1000 == 0 && kill_file.exists() {
             eprintln!("\n  Kill file — aborting.");
             std::fs::remove_file(kill_file).ok();
             break;

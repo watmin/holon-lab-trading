@@ -249,15 +249,12 @@ impl Desk {
         // Step indicator bank → computed candle (wat: tick-indicators)
         let candle = self.indicator_bank.tick(raw);
 
-        // Push computed candle to window (ring buffer, max capacity).
-        // Each consumer reads from this window. No global candle array.
+        // Push clone to window, keep owned candle for this fold step.
+        // One clone instead of two — the window needs its copy, we need ours.
         self.candle_window.push_back(candle.clone());
         if self.candle_window.len() > self.max_window_size {
             self.candle_window.pop_front();
         }
-        // Clone: the borrow checker needs `self` mutable later (position management,
-        // learning, logging). Holding a reference into candle_window prevents that.
-        let candle = self.candle_window.back().unwrap().clone();
 
         // Tempered: cache frequently-accessed desk scalars at function entry.
         let mgr_buy = self.manager_buy;
@@ -266,18 +263,17 @@ impl Desk {
 
         // ── Observer thought encoding from candle window ────────────────
         // Each observer encodes at their own sampled window scale.
-        // The generalist uses the full window. Specialists sample shorter windows.
-        // No parallel batch — sequential, per-desk, websocket-ready.
+        // Tempered: collect window once, observers take sub-slices.
         let n_observers = self.observers.len();
+        let window_vec: Vec<Candle> = self.candle_window.iter().cloned().collect();
         let observer_vecs: Vec<Vector> = (0..n_observers).map(|ei| {
-            let w = self.observers[ei].window_sampler.sample(self.encode_count).min(self.candle_window.len());
-            let start = self.candle_window.len().saturating_sub(w);
-            let slice: Vec<Candle> = self.candle_window.iter().skip(start).cloned().collect();
+            let w = self.observers[ei].window_sampler.sample(self.encode_count).min(window_vec.len());
+            let start = window_vec.len().saturating_sub(w);
+            let slice = &window_vec[start..];
             if slice.is_empty() {
-                // Not enough candles yet — return zero vector
                 holon::Vector::zeros(ctx.dims)
             } else {
-                ctx.thought_encoder.encode_thought(&slice, ctx.vm, crate::market::OBSERVER_LENSES[ei]).thought
+                ctx.thought_encoder.encode_thought(slice, ctx.vm, crate::market::OBSERVER_LENSES[ei]).thought
             }
         }).collect();
 

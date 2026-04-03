@@ -26,24 +26,27 @@ pub struct RawCandle {
 
 // ─── Primitive state machines ──────────────────────────────────────────────
 
-/// SMA: sliding window average. O(period) memory.
+/// SMA: sliding window average. O(1) per step via running sum.
 struct SmaState {
     buffer: VecDeque<f64>,
     period: usize,
+    sum: f64,
 }
 
 impl SmaState {
     fn new(period: usize) -> Self {
-        Self { buffer: VecDeque::with_capacity(period + 1), period }
+        Self { buffer: VecDeque::with_capacity(period + 1), period, sum: 0.0 }
     }
 
     fn step(&mut self, value: f64) -> f64 {
+        self.sum += value;
         self.buffer.push_back(value);
-        if self.buffer.len() > self.period { self.buffer.pop_front(); }
+        if self.buffer.len() > self.period {
+            self.sum -= self.buffer.pop_front().unwrap();
+        }
         if self.buffer.len() < self.period { return 0.0; }
-        self.buffer.iter().sum::<f64>() / self.period as f64
+        self.sum / self.period as f64
     }
-
 }
 
 /// EMA: exponential moving average. O(1) memory.
@@ -98,27 +101,35 @@ impl WilderState {
     }
 }
 
-/// Rolling standard deviation — exact population stddev over a window.
-/// Keeps the full window of values. Matches build_candles::stddev() exactly.
+/// Rolling standard deviation — O(1) per step via running sum + sum of squares.
+/// Numerically equivalent to exact population stddev over the window.
 struct RollingStddev {
     buffer: VecDeque<f64>,
     period: usize,
+    sum: f64,
+    sum_sq: f64,
 }
 
 impl RollingStddev {
     fn new(period: usize) -> Self {
-        Self { buffer: VecDeque::with_capacity(period + 1), period }
+        Self { buffer: VecDeque::with_capacity(period + 1), period, sum: 0.0, sum_sq: 0.0 }
     }
 
     fn step(&mut self, value: f64) -> f64 {
+        self.sum += value;
+        self.sum_sq += value * value;
         self.buffer.push_back(value);
-        if self.buffer.len() > self.period { self.buffer.pop_front(); }
+        if self.buffer.len() > self.period {
+            let old = self.buffer.pop_front().unwrap();
+            self.sum -= old;
+            self.sum_sq -= old * old;
+        }
         if self.buffer.len() < self.period { return 0.0; }
-        let mean = self.buffer.iter().sum::<f64>() / self.buffer.len() as f64;
-        let var = self.buffer.iter()
-            .map(|v| (v - mean).powi(2))
-            .sum::<f64>() / self.buffer.len() as f64;
-        var.sqrt()
+        let n = self.period as f64;
+        let mean = self.sum / n;
+        let var = (self.sum_sq / n) - mean * mean;
+        // Guard against floating-point rounding producing tiny negatives
+        var.max(0.0).sqrt()
     }
 }
 
