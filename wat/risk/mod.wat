@@ -243,10 +243,58 @@
              branches states)))
     worst-ratio))
 
-;; ── Aspirational ────────────────────────────────────────────────────
+;; ── Risk Manager (Template 1 — prediction) ─────────────────────────
 ;;
-;; rune:scry(aspirational) — risk MANAGER with Journal discriminant,
-;; Healthy/Unhealthy labels, conviction-based rejection.
+;; The risk manager reads branch residual ratios as a thought.
+;; Same pattern as market/manager: encode specialist outputs → Journal
+;; → conviction about portfolio health → gate.
+;;
+;; The five branch residual ratios ARE the risk manager's opinion vector.
+;; Each ratio is a scalar [0.1, 1.0] — distance from healthy.
+;; The manager encodes them as bind(branch-atom, encode-linear(ratio, 1.0)).
+;; Bundled into one thought. The Journal learns Healthy/Unhealthy.
+
+(struct risk-manager-atoms
+  drawdown-branch accuracy-branch volatility-branch
+  correlation-branch panel-branch
+  healthy unhealthy)
+
+(define (new-risk-manager-atoms vm)
+  (risk-manager-atoms
+    :drawdown-branch    (atom "risk-drawdown-branch")
+    :accuracy-branch    (atom "risk-accuracy-branch")
+    :volatility-branch  (atom "risk-volatility-branch")
+    :correlation-branch (atom "risk-correlation-branch")
+    :panel-branch       (atom "risk-panel-branch")
+    :healthy            (atom "risk-healthy")
+    :unhealthy          (atom "risk-unhealthy")))
+
+(define (encode-risk-manager-thought atoms ratios)
+  "Encode the 5 branch residual ratios as one risk manager thought.
+   ratios is a list of 5 f64 values in [0.1, 1.0]."
+  (bundle
+    (bind (:drawdown-branch atoms)    (encode-linear (nth ratios 0) 1.0))
+    (bind (:accuracy-branch atoms)    (encode-linear (nth ratios 1) 1.0))
+    (bind (:volatility-branch atoms)  (encode-linear (nth ratios 2) 1.0))
+    (bind (:correlation-branch atoms) (encode-linear (nth ratios 3) 1.0))
+    (bind (:panel-branch atoms)       (encode-linear (nth ratios 4) 1.0))))
+
+;; The risk manager Journal learns:
+;;   observe(journal, thought, Healthy, 1.0) — when portfolio is healthy after N candles
+;;   observe(journal, thought, Unhealthy, 1.0) — when portfolio enters drawdown
+;;
+;; predict(journal, thought) → { direction: Healthy|Unhealthy, conviction: f64 }
+;;
+;; The conviction gates trades:
+;;   high conviction toward Healthy → full sizing (risk_mult = 1.0)
+;;   high conviction toward Unhealthy → reduce sizing (risk_mult from conviction curve)
+;;   low conviction → default (risk_mult = 0.5)
+;;
+;; This replaces the bare residual threshold with a learned discriminant.
+;; The Journal discovers WHICH configurations of branch ratios predict
+;; healthy vs unhealthy outcomes — not just "is this anomalous?"
+
+;; ── Aspirational (remaining) ───────────────────────────────────────
 ;;
 ;; rune:scry(aspirational) — risk GENERALIST seeing all dimensions.
 ;;

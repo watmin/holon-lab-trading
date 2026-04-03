@@ -1,9 +1,12 @@
 //! Risk domain — portfolio health measurement and gating.
 //!
-//! Each branch measures health in its own domain. The worst residual drives
-//! the risk multiplier. Gated updates: only learn from healthy states.
+//! Two templates:
+//!   Template 2 (reaction): OnlineSubspace branches learn healthy manifold, residuals gate.
+//!   Template 1 (prediction): risk manager Journal learns Healthy/Unhealthy from branch ratios.
 //!
-//! Future: risk/manager.rs (risk manager encoding from branch signals).
+//! The branches measure. The manager predicts. Together they gate sizing.
+
+pub mod manager;
 
 // rune:scry(aspirational) — risk.wat specifies a risk MANAGER with Journal-based discriminant,
 // Healthy/Unhealthy labels, and conviction-based trade rejection. Current implementation has
@@ -292,16 +295,17 @@ fn encode_panel(portfolio: &Portfolio, atoms: &RiskAtoms, scalar: &holon::Scalar
 /// Returns the risk multiplier (1.0 = fully healthy, 0.1 = worst allowed).
 /// Gated updates: only learn from healthy states so the subspaces model
 /// what "good" looks like, not what "crisis" looks like.
+/// Returns (worst_ratio, per_branch_ratios). The ratios feed the risk manager.
 pub fn evaluate_risk_branches(
     branches: &mut [RiskBranch],
     portfolio: &Portfolio,
     atoms: &RiskAtoms,
     scalar: &holon::ScalarEncoder,
-) -> f64 {
+) -> (f64, [f64; 5]) {
     let branch_features = encode_risk_branches(portfolio, atoms, scalar);
     let mut worst_ratio = 1.0_f64;
+    let mut ratios = [1.0_f64; 5];
     let healthy = portfolio.is_healthy() && portfolio.trades_taken >= 20;
-    // Sequential: 5 branches at recalib frequency. Rayon overhead > computation cost.
     for (branch_idx, branch) in branches.iter_mut().enumerate() {
         let features = &branch_features[branch_idx];
         if branch.subspace.n() >= 10 {
@@ -309,11 +313,13 @@ pub fn evaluate_risk_branches(
             let threshold = branch.subspace.threshold();
             let ratio = if residual < threshold { 1.0 }
                 else { (threshold / residual).max(0.1) };
+            ratios[branch_idx] = ratio;
             worst_ratio = worst_ratio.min(ratio);
         }
         if healthy { branch.subspace.update(features); }
     }
-    if branches[0].subspace.n() >= 10 { worst_ratio } else { 0.5 }
+    let mult = if branches[0].subspace.n() >= 10 { worst_ratio } else { 0.5 };
+    (mult, ratios)
 }
 
 /// Five risk branch feature vectors — [drawdown, accuracy, volatility, correlation, panel].

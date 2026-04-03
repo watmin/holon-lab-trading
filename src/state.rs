@@ -173,6 +173,7 @@ pub struct CandleContext<'a> {
     pub exit_atoms: &'a ExitAtoms,
     pub risk_scalar: &'a holon::ScalarEncoder,
     pub risk_atoms: &'a risk::RiskAtoms,
+    pub risk_mgr_atoms: &'a risk::manager::RiskManagerAtoms,
 
     // ── Observer/manager atoms ──────────────────────────────────────────
     pub observer_atoms: &'a [Vector],
@@ -202,6 +203,7 @@ pub struct EnterpriseState {
 
     // ── Risk department (portfolio health across ALL desks) ──────────────
     pub risk_branches: Vec<RiskBranch>,
+    pub risk_manager: risk::manager::RiskManager,
     pub cached_risk_mult: f64,
 
     // ── Portfolio-level tracking ─────────────────────────────────────────
@@ -273,6 +275,7 @@ impl EnterpriseState {
             treasury,
             portfolio,
             risk_branches,
+            risk_manager: risk::manager::RiskManager::new(dims, recalib_interval),
             cached_risk_mult: 0.5,
             peak_treasury_equity: initial_equity,
             candle_count: 0,
@@ -319,9 +322,24 @@ impl EnterpriseState {
         // intervals for efficiency. Functionally equivalent given the gate conditions.
         self.candle_count += 1;
         if self.candle_count % ctx.recalib_interval == 0 || self.candle_count < RISK_WARMUP {
-            self.cached_risk_mult = risk::evaluate_risk_branches(
+            let (branch_mult, ratios) = risk::evaluate_risk_branches(
                 &mut self.risk_branches, &self.portfolio, ctx.risk_atoms, ctx.risk_scalar,
             );
+
+            // Risk manager: encode branch ratios, predict, learn
+            let risk_thought = risk::manager::encode_risk_manager_thought(
+                &ratios, ctx.risk_mgr_atoms, ctx.risk_scalar,
+            );
+            let risk_pred = self.risk_manager.predict(&risk_thought);
+            let mgr_mult = self.risk_manager.risk_mult_from_prediction(&risk_pred);
+
+            // Label: was the portfolio healthy at this moment?
+            let was_healthy = self.portfolio.is_healthy() && self.portfolio.trades_taken >= 20;
+            self.risk_manager.observe(&risk_thought, was_healthy, 1.0);
+            self.risk_manager.decay(ctx.decay);
+
+            // Combine: branch residuals AND manager prediction
+            self.cached_risk_mult = branch_mult.min(mgr_mult);
         }
 
         // Desk fold step — each desk computes its own indicators from raw OHLCV
