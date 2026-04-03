@@ -326,12 +326,14 @@ impl EnterpriseState {
 
         // Desk fold step — each desk computes its own indicators from raw OHLCV
         for desk in &mut self.desks {
-            desk.on_candle(
-                i, &raw,
-                &mut self.treasury, &mut self.portfolio,
-                self.cached_risk_mult, &mut self.peak_treasury_equity,
-                &mut self.db_batch, ctx,
-            );
+            let mut shared = crate::market::desk::SharedState {
+                treasury: &mut self.treasury,
+                portfolio: &mut self.portfolio,
+                risk_mult: self.cached_risk_mult,
+                peak_equity: &mut self.peak_treasury_equity,
+                db_batch: &mut self.db_batch,
+            };
+            desk.on_candle(i, &raw, &mut shared, ctx);
         }
     }
 }

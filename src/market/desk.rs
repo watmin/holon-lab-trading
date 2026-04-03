@@ -48,6 +48,17 @@ const MIN_BET: f64 = 0.01;
 /// Risk multiplier threshold — below this, no new positions.
 const RISK_GATE_THRESHOLD: f64 = 0.3;
 
+/// The enterprise's shared mutable state, passed to each desk's fold step.
+/// Groups what the desk needs to mutate that it doesn't own.
+/// 5 fields instead of 5 separate &mut parameters.
+pub struct SharedState<'a> {
+    pub treasury: &'a mut Treasury,
+    pub portfolio: &'a mut Portfolio,
+    pub risk_mult: f64,
+    pub peak_equity: &'a mut f64,
+    pub db_batch: &'a mut usize,
+}
+
 /// Configuration for creating a desk.
 pub struct DeskConfig {
     pub name: String,
@@ -234,22 +245,21 @@ impl Desk {
     ///
     /// Called from EnterpriseState::on_candle_raw. The enterprise passes
     /// the raw OHLCV and shared resources. The desk computes its own indicators.
-    // rune:forge(coupling) — 8 &mut params claims the enterprise as its world.
-    // Extracting position settlement, pending resolution, position opening into
-    // separate methods with narrow mutable slices would improve testability.
-    // Deferred: the causal chain between phases is real, and splitting risks
-    // introducing bugs in the 870-line fold without behavior change.
+    /// The desk's fold step. One raw candle → indicators → thoughts → positions → learn.
+    /// SharedState groups the enterprise's mutable state (3 params instead of 5).
     pub fn on_candle(
         &mut self,
         i: usize,
         raw: &crate::indicators::RawCandle,
-        treasury: &mut Treasury,
-        portfolio: &mut Portfolio,
-        risk_mult: f64,
-        peak_equity: &mut f64,
-        db_batch: &mut usize,
+        shared: &mut SharedState,
         ctx: &CandleContext,
     ) {
+        // Destructure for body compatibility — the fold uses these names throughout.
+        let treasury = &mut *shared.treasury;
+        let portfolio = &mut *shared.portfolio;
+        let risk_mult = shared.risk_mult;
+        let peak_equity = &mut *shared.peak_equity;
+        let db_batch = &mut *shared.db_batch;
         // Step indicator bank → computed candle (wat: tick-indicators)
         let candle = self.indicator_bank.tick(raw);
 
