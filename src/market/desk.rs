@@ -266,24 +266,13 @@ impl Desk {
         self.encode_count += 1;
 
         // ── Observer thought encoding from candle window ────────────────
-        // Each observer encodes at their own sampled window scale.
-        // Tempered: make_contiguous gives &[Candle] with zero clones.
-        let n_observers = self.observers.len();
         let window_slice = self.candle_window.make_contiguous();
-        let observer_vecs: Vec<Vector> = (0..n_observers).map(|ei| {
-            let w = self.observers[ei].window_sampler.sample(self.encode_count).min(window_slice.len());
-            let start = window_slice.len().saturating_sub(w);
-            let slice = &window_slice[start..];
-            if slice.is_empty() {
-                holon::Vector::zeros(ctx.dims)
-            } else {
-                ctx.thought_encoder.encode_thought(slice, ctx.vm, crate::market::OBSERVER_LENSES[ei]).thought
-            }
-        }).collect();
+        let observer_vecs = Self::encode_observers(
+            &self.observers, window_slice, self.encode_count, ctx);
 
-        // ── Observer predictions ────────────────────────────────────────
-        let observer_preds: Vec<Prediction> = observer_vecs.iter().enumerate()
-            .map(|(ei, vec)| self.observers[ei].journal.predict(vec))
+        // ── Observer predictions (pmap-ready: each journal.predict is independent) ──
+        let observer_preds: Vec<Prediction> = self.observers.iter().zip(observer_vecs.iter())
+            .map(|(obs, vec)| obs.journal.predict(vec))
             .collect();
 
         // The generalist's prediction (observer[5]) — used for manager encoding
@@ -655,8 +644,7 @@ impl Desk {
             exit_pct:          0.0,
         });
 
-        // Decay once per candle.
-        // The generalist (observers[GENERALIST_IDX]) uses adaptive decay; specialists use fixed decay.
+        // Decay once per candle (pfor-each-ready: each observer's journal is independent).
         self.manager_journal.decay(self.adaptive_decay);
         for (obs_idx, observer) in self.observers.iter_mut().enumerate() {
             let d = if obs_idx == 5 { self.adaptive_decay } else { ctx.decay };
@@ -910,6 +898,28 @@ impl Desk {
                     self.positions.len(), self.position_swaps, self.position_wins, proven_str, band_str);
             }
         }
+    }
+
+    // ─── Pure phases (extractable, pmap-ready) ──────────────────────────
+
+    /// Encode all observers from the candle window. Pure: reads window + samplers,
+    /// produces vectors. Each observer is independent — future pmap candidate.
+    fn encode_observers(
+        observers: &[Observer],
+        window: &[Candle],
+        encode_count: usize,
+        ctx: &CandleContext,
+    ) -> Vec<Vector> {
+        observers.iter().enumerate().map(|(ei, obs)| {
+            let w = obs.window_sampler.sample(encode_count).min(window.len());
+            let start = window.len().saturating_sub(w);
+            let slice = &window[start..];
+            if slice.is_empty() {
+                holon::Vector::zeros(ctx.dims)
+            } else {
+                ctx.thought_encoder.encode_thought(slice, ctx.vm, crate::market::OBSERVER_LENSES[ei]).thought
+            }
+        }).collect()
     }
 
     // ─── Recalibration ──────────────────────────────────────────────────
