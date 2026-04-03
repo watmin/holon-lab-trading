@@ -301,6 +301,7 @@ pub fn evaluate_risk_branches(
     let branch_features = encode_risk_branches(portfolio, atoms, scalar);
     let mut worst_ratio = 1.0_f64;
     let healthy = portfolio.is_healthy() && portfolio.trades_taken >= 20;
+    // Sequential: 5 branches at recalib frequency. Rayon overhead > computation cost.
     for (branch_idx, branch) in branches.iter_mut().enumerate() {
         let features = &branch_features[branch_idx];
         if branch.subspace.n() >= 10 {
