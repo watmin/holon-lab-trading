@@ -336,7 +336,8 @@ impl Desk {
         };
 
         // Panel state for engram (Template 2 — reaction layer)
-        // All 6 observers contribute (generalist is already at index 5).
+        // Panel state: observer raw cosines, fed to panel_engram.update() at recalibration
+        // and used in progress display for engram familiarity check.
         let mut panel_state = [0.0f64; 6];
         for (pi, ep) in observer_preds.iter().enumerate() { panel_state[pi] = ep.raw_cos; }
         // Manager's prediction drives direction + conviction.

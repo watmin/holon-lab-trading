@@ -8,10 +8,6 @@ use std::fmt;
 #[derive(Clone, Copy, Debug)]
 pub struct Rate(pub f64);
 
-impl Rate {
-    /// Invert: from_per_to ↔ to_per_from
-    pub fn invert(self) -> Self { Rate(1.0 / self.0) }
-}
 
 // ─── Asset ──────────────────────────────────────────────────────────────────
 

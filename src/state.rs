@@ -104,7 +104,7 @@ impl TradePnl {
         per_swap_fee: f64,
         is_live: bool,
         treasury_equity: f64,
-        frac: f64,
+        position_frac: f64,
     ) -> Self {
         let gross_ret = if is_buy { trade_pct } else { -trade_pct };
         let per_swap = per_swap_fee;
@@ -114,7 +114,7 @@ impl TradePnl {
         let net_ret = after_exit - 1.0;
         let entry_cost_frac = per_swap;
         let exit_cost_frac = gross_value * per_swap;
-        let pos_usd = if is_live { treasury_equity * frac } else { 0.0 };
+        let pos_usd = if is_live { treasury_equity * position_frac } else { 0.0 };
         let trade_pnl = pos_usd * net_ret;
         Self { gross_ret, net_ret, entry_cost_frac, exit_cost_frac, pos_usd, trade_pnl }
     }

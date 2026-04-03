@@ -45,18 +45,4 @@ impl std::fmt::Display for Direction {
 //   let allocate = journal.register("Allocate");
 //   let withhold = journal.register("Withhold");
 
-/// Convenience: register the standard market direction labels on a journal.
-/// Returns (buy, sell) Label handles.
-pub fn register_direction(journal: &mut Journal) -> (Label, Label) {
-    let buy = journal.register("Buy");
-    let sell = journal.register("Sell");
-    (buy, sell)
-}
-
-/// Convenience: register exit expert labels.
-/// Returns (hold, exit) Label handles.
-pub fn register_exit(journal: &mut Journal) -> (Label, Label) {
-    let hold = journal.register("Hold");
-    let exit = journal.register("Exit");
-    (hold, exit)
-}
+// register_direction and register_exit removed — callers register labels inline.

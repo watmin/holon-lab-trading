@@ -296,7 +296,6 @@ fn is_derived_field(name: &str) -> bool {
 
 pub struct ThoughtResult {
     pub thought: Vector,
-    pub fact_labels: Vec<String>,
 }
 
 /// Indicator pairs to check for comparison predicates (above/below/crosses/touches/bounces).
@@ -532,15 +531,14 @@ impl ThoughtEncoder {
 
         let mut cached_facts: Vec<&Vector> = Vec::with_capacity(64);
         let mut owned_facts: Vec<Vector> = Vec::with_capacity(96);
-        let mut labels: Vec<String> = Vec::with_capacity(96);
-
         // Collect results from an eval method into the accumulators.
+        // Labels are computed by eval methods but not accumulated — they're
+        // diagnostic only, available if needed via individual eval calls.
         macro_rules! collect {
             ($result:expr) => {
-                let (f, o, l) = $result;
+                let (f, o, _labels) = $result;
                 cached_facts.extend(f);
                 owned_facts.extend(o);
-                labels.extend(l);
             };
         }
 
@@ -620,7 +618,7 @@ impl ThoughtEncoder {
             Primitives::bundle(&all_refs)
         };
 
-        ThoughtResult { thought, fact_labels: labels }
+        ThoughtResult { thought }
     }
 
     // ─── Comparison predicates (cached) ──────────────────────────────────
