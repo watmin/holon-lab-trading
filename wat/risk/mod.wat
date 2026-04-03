@@ -220,28 +220,38 @@
 (define branches (list drawdown-branch accuracy-branch volatility-branch
                       correlation-branch panel-branch))
 
-(define (risk-multiplier portfolio)
-  "Update branches when healthy, compute MIN ratio. Single pass over branches."
-  (let* ((states (list (encode-drawdown portfolio) (encode-accuracy portfolio)
-                       (encode-volatility portfolio) (encode-correlation portfolio)
-                       (encode-panel portfolio)))
+(define (risk-multiplier portfolio branches generalist)
+  "Encode branches (pmap — independent), score, update, compute MIN ratio."
+  (let* (;; pmap: each encode function is pure, reads only portfolio
+         (states (pmap (lambda (encode-fn) (encode-fn portfolio))
+                       (list encode-drawdown encode-accuracy
+                             encode-volatility encode-correlation encode-panel)))
          (is-healthy (healthy? portfolio))
-         ;; Single pass: update (if healthy) then score each branch
-         (worst-ratio
-           (fold-left
-             (lambda (acc branch features)
-               ;; Update branch when healthy
-               (when is-healthy (update branch features))
-               ;; Score: branches with < 10 observations are untrained — skip
-               (if (< (n branch) 10) acc
-                 (let* ((res (residual branch features))
-                        (thr (threshold branch))
-                        (ratio (if (< res thr) 1.0
-                                   (max 0.1 (/ thr res)))))
-                   (min acc ratio))))
-             1.0
-             branches states)))
-    worst-ratio))
+
+         ;; pmap: score each branch independently
+         (ratios (pmap (lambda (branch features)
+                   (if (< (n branch) 10) 1.0
+                     (let* ((res (residual branch features))
+                            (thr (threshold branch)))
+                       (if (< res thr) 1.0 (max 0.1 (/ thr res))))))
+                  branches states))
+
+         ;; pfor-each: update when healthy (disjoint branches)
+         (_ (when is-healthy
+              (pfor-each (lambda (branch features) (update branch features))
+                         branches states)))
+
+         ;; Generalist: bundle-of-bundles, score holistically
+         (gen-thought (bundle (nth states 0) (nth states 1) (nth states 2)
+                              (nth states 3) (nth states 4)))
+         (gen-ratio (if (< (n generalist) 10) 1.0
+                       (let ((res (residual generalist gen-thought))
+                             (thr (threshold generalist)))
+                         (if (< res thr) 1.0 (max 0.1 (/ thr res))))))
+         (_ (when is-healthy (update generalist gen-thought))))
+
+    ;; Worst of all specialist ratios + generalist
+    (fold min gen-ratio ratios)))
 
 ;; ── Risk Manager (Template 1 — prediction) ─────────────────────────
 ;;

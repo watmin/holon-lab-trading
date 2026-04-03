@@ -304,6 +304,9 @@ fn encode_panel(portfolio: &Portfolio, atoms: &RiskAtoms, scalar: &holon::Scalar
 /// Evaluate risk branches: encode features, score anomalies, update if healthy.
 /// Returns (worst_ratio, per_branch_ratios). The ratios feed the risk manager.
 /// Also evaluates the generalist (holistic cross-branch pattern).
+/// rune:scry(evolved) — wat says pmap for encode/score/update (5 branches are independent).
+/// Rust stays sequential: measured 122/s→111/s with rayon on 5 items at recalib frequency.
+/// The overhead exceeds the gain. Correct to parallelize when branch count grows.
 pub fn evaluate_risk_branches(
     branches: &mut [RiskBranch],
     generalist: &mut OnlineSubspace,

@@ -1,8 +1,10 @@
 # Holon Lab: Trading
 
-A self-organizing BTC trading enterprise built from six primitives. Proves that named thoughts composed through vector algebra predict market direction — 59.7% at q99 on 100,000 candles, five points above academic SOTA with deep learning.
+A self-organizing trading enterprise built from six primitives. Proves that named thoughts composed through vector algebra predict market direction — 59.7% at q99, five points above academic SOTA with deep learning. On a laptop. With 107 atoms and one cosine.
 
-**This is a proving ground for [Holon](https://github.com/watmin/holon) and [wat](https://github.com/watmin/wat).** Zero modifications to holon core. The enterprise consumes the holon-rs library and the wat specification language.
+Currently trading BTC. The architecture is asset-agnostic — each desk trades a pair, the treasury holds any tokens, and adding an asset is pushing a desk. The algebra doesn't care what it's pointed at.
+
+**This is the proving ground for [Holon](https://github.com/watmin/holon) and [wat](https://github.com/watmin/wat).** The enterprise is specified in wat (s-expression specifications that ARE programs), implemented in Rust, and defended by seven wards. The wat leads. The Rust follows. The wards catch lies.
 
 ## Architecture
 
@@ -108,6 +110,32 @@ Everything else is userland. The enterprise is a program written in these six pr
 **Template 1 — Prediction (Journal):** "What will happen next?" Observers predict direction. The manager predicts profitability. The risk manager predicts portfolio health.
 
 **Template 2 — Reaction (OnlineSubspace):** "Does this look normal?" Risk branches measure distance from healthy. The panel engram measures expert agreement familiarity.
+
+## The Wat Specification
+
+The `wat/` directory is the source of truth. Every Rust module has a corresponding wat file. The wat is an s-expression language for algebraic cognition — Lisp shaped for the six primitives. It specifies what the enterprise thinks, how it learns, and where the boundaries are.
+
+```
+wat/
+  bin/enterprise.wat    — the fold: one raw candle, one state transition
+  candle.wat            — 40 streaming indicator state machines + fact tables
+  market/
+    desk.wat            — desk struct, fold step, all 13 phases
+    manager.wat         — manager encoding (15 atoms, motion delta)
+    observer.wat        — observer struct, resolve, proof gates
+    observer/*.wat      — 7 lens profiles (momentum, structure, ...)
+  risk/
+    mod.wat             — 5 branches + generalist + risk manager Journal
+  thought.wat           — ThoughtEncoder, 17 eval methods, fact generation tables
+  vocab/*.wat           — 12 vocabulary modules
+  treasury.wat          — generic asset map, swap, claim, release
+  position.wat          — symmetric positions (source/target)
+  event.wat             — Event enum (raw candle, deposit, withdraw)
+```
+
+The wat language provides `pmap` and `pfor-each` for declaring independent computations. The enterprise uses both — observer encoding and prediction are `pmap`, observer decay and resolution are `pfor-each`. The Rust compiles these to rayon `par_iter`. The compiler verifies Send+Sync.
+
+See the [wat language repository](https://github.com/watmin/wat) for the full language specification, including proposals reviewed by conjured designers (Hickey and Beckman).
 
 ## Module Layout
 
