@@ -270,10 +270,13 @@ impl Desk {
         let observer_vecs = Self::encode_observers(
             &self.observers, window_slice, self.encode_count, ctx);
 
-        // ── Observer predictions (pmap-ready: each journal.predict is independent) ──
-        let observer_preds: Vec<Prediction> = self.observers.iter().zip(observer_vecs.iter())
-            .map(|(obs, vec)| obs.journal.predict(vec))
-            .collect();
+        // ── Observer predictions (pmap: each journal.predict is independent) ──
+        let observer_preds: Vec<Prediction> = {
+            use rayon::prelude::*;
+            self.observers.par_iter().zip(observer_vecs.par_iter())
+                .map(|(obs, vec)| obs.journal.predict(vec))
+                .collect()
+        };
 
         // The generalist's prediction (observer[5]) — used for manager encoding
         // and backward-compatible logging.
@@ -644,11 +647,16 @@ impl Desk {
             exit_pct:          0.0,
         });
 
-        // Decay once per candle (pfor-each-ready: each observer's journal is independent).
+        // pfor-each: each observer's journal is independent. Manager decays separately.
         self.manager_journal.decay(self.adaptive_decay);
-        for (obs_idx, observer) in self.observers.iter_mut().enumerate() {
-            let d = if obs_idx == 5 { self.adaptive_decay } else { ctx.decay };
-            observer.journal.decay(d);
+        {
+            use rayon::prelude::*;
+            let adaptive = self.adaptive_decay;
+            let fixed = ctx.decay;
+            self.observers.par_iter_mut().enumerate().for_each(|(obs_idx, observer)| {
+                let d = if obs_idx == GENERALIST_IDX { adaptive } else { fixed };
+                observer.journal.decay(d);
+            });
         }
 
         // ── Event-driven learning ─────────────────────────────────────
@@ -904,13 +912,16 @@ impl Desk {
 
     /// Encode all observers from the candle window. Pure: reads window + samplers,
     /// produces vectors. Each observer is independent — future pmap candidate.
+    /// pmap: encode all observers in parallel. Each observer is independent —
+    /// reads its own window slice, encodes through its own lens. Pure function.
     fn encode_observers(
         observers: &[Observer],
         window: &[Candle],
         encode_count: usize,
         ctx: &CandleContext,
     ) -> Vec<Vector> {
-        observers.iter().enumerate().map(|(ei, obs)| {
+        use rayon::prelude::*;
+        observers.par_iter().enumerate().map(|(ei, obs)| {
             let w = obs.window_sampler.sample(encode_count).min(window.len());
             let start = window.len().saturating_sub(w);
             let slice = &window[start..];
