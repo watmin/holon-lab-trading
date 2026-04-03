@@ -248,67 +248,68 @@
 (define (encode-thought encoder candles vm lens)
   "Encode a window of candles through a vocabulary lens.
    Each lens selects which eval functions to run.
-   Vocab modules return Fact data → encode-facts weaves to geometry.
-   Inline evals push directly to the fact vectors."
+   Eval methods are independent — pmap within each lens group.
+   Vocab modules return Fact data → encode-facts weaves to geometry."
   (let ((is    (lambda (lenses) (or (= lens :generalist) (member? lens lenses))))
-        (facts (list))
-        (owned (list))
-        (labels (list))
         (now   (last candles))
-        (prev  (when (>= (len candles) 2) (nth candles (- (len candles) 2))))
-        (weave (lambda (module-facts)
-                  (encode-facts encoder module-facts facts owned labels))))
+        (prev  (when (>= (len candles) 2) (nth candles (- (len candles) 2)))))
 
-    ;; SHARED: comparisons (momentum + structure only)
-    (when (is '(:momentum :structure))
-      ;; rune:assay(prose) — eval-comparisons iterates 29 indicator pairs × 6
-      ;; predicates, checking above/below/crosses/touches/bounces against cached
-      ;; facts. Too imperative for wat; the pairs table IS the spec.
-      (eval-comparisons encoder now prev facts labels))
+    ;; Each eval method returns (cached-facts, owned-facts) independently.
+    ;; pmap within each lens group — eval methods read the same immutable
+    ;; candle slice and produce disjoint fact vectors. No shared mutation.
+    (let ((results
+      (flatten (filter some? (list
+        ;; SHARED: comparisons (momentum + structure)
+        (when (is '(:momentum :structure))
+          (pmap (lambda (eval-fn) (eval-fn))
+            (list (lambda () (eval-comparisons encoder now prev))
+                  (lambda () (eval-rsi-sma encoder candles)))))
 
-    ;; EXCLUSIVE: momentum — oscillators, crosses, divergence
-    (when (is '(:momentum))
-      (eval-rsi-sma encoder candles facts labels)
-      (weave (eval-stochastic candles))
-      (weave (eval-momentum candles))
-      (eval-divergence encoder candles vm owned labels)
-      (weave (eval-oscillators candles)))
+        ;; EXCLUSIVE: momentum
+        (when (is '(:momentum))
+          (pmap (lambda (eval-fn) (eval-fn))
+            (list (lambda () (encode-facts encoder (eval-stochastic candles)))
+                  (lambda () (encode-facts encoder (eval-momentum candles)))
+                  (lambda () (eval-divergence encoder candles vm))
+                  (lambda () (encode-facts encoder (eval-oscillators candles))))))
 
-    ;; EXCLUSIVE: structure — segments, levels, channels, cloud, fibs
-    (when (is '(:structure))
-      ;; rune:assay(prose) — eval-segment-narrative runs PELT on 17 streams,
-      ;; classifies segments, emits temporal bindings. The algorithm is
-      ;; expressed in thought/pelt.wat; the stream dispatch is imperative.
-      (eval-segment-narrative encoder candles vm owned labels)
-      (eval-range-position encoder candles owned labels)
-      (weave (eval-ichimoku candles))
-      (weave (eval-fibonacci candles))
-      (weave (eval-keltner candles))
-      (weave (eval-timeframe-structure candles)))
+        ;; EXCLUSIVE: structure — PELT is the heavy computation
+        (when (is '(:structure))
+          (pmap (lambda (eval-fn) (eval-fn))
+            (list (lambda () (eval-segment-narrative encoder candles vm))
+                  (lambda () (eval-range-position encoder candles))
+                  (lambda () (encode-facts encoder (eval-ichimoku candles)))
+                  (lambda () (encode-facts encoder (eval-fibonacci candles)))
+                  (lambda () (encode-facts encoder (eval-keltner candles)))
+                  (lambda () (encode-facts encoder (eval-timeframe-structure candles))))))
 
-    ;; EXCLUSIVE: volume — participation, flow
-    (when (is '(:volume))
-      (eval-volume-confirmation encoder candles owned labels)
-      (eval-volume-analysis encoder candles facts labels)
-      (weave (eval-price-action candles))
-      (eval-flow-module encoder candles facts owned labels))
+        ;; EXCLUSIVE: volume
+        (when (is '(:volume))
+          (pmap (lambda (eval-fn) (eval-fn))
+            (list (lambda () (eval-volume-confirmation encoder candles))
+                  (lambda () (eval-volume-analysis encoder candles))
+                  (lambda () (encode-facts encoder (eval-price-action candles)))
+                  (lambda () (eval-flow-module encoder candles)))))
 
-    ;; EXCLUSIVE: narrative — calendar, temporal lookback
-    (when (is '(:narrative))
-      (eval-temporal encoder candles vm owned labels)
-      (eval-calendar encoder now facts owned labels)
-      (weave (eval-timeframe-narrative candles)))
+        ;; EXCLUSIVE: narrative
+        (when (is '(:narrative))
+          (pmap (lambda (eval-fn) (eval-fn))
+            (list (lambda () (eval-temporal encoder candles vm))
+                  (lambda () (eval-calendar encoder now))
+                  (lambda () (encode-facts encoder (eval-timeframe-narrative candles))))))
 
-    ;; EXCLUSIVE: regime — market character
-    (when (is '(:regime))
-      (weave (eval-regime candles))
-      (weave (eval-persistence candles)))
+        ;; EXCLUSIVE: regime
+        (when (is '(:regime))
+          (pmap (lambda (eval-fn) (eval-fn))
+            (list (lambda () (encode-facts encoder (eval-regime candles)))
+                  (lambda () (encode-facts encoder (eval-persistence candles)))))))))))
 
-    ;; Bundle all facts into one thought vector
-    (let ((all-facts (append facts owned)))
-      (thought-result
-        :thought (if (empty? all-facts) (zeros (dimensions encoder)) (bundle all-facts))
-        :fact-labels labels))))
+      ;; Merge all results and bundle into one thought vector
+      (let ((all-facts (fold append '() (map first results))
+             (all-owned (fold append '() (map second results)))))
+        (let ((refs (append all-facts all-owned)))
+          (thought-result
+            :thought (if (empty? refs) (zeros (dimensions encoder)) (bundle refs))))))))
 
 ;; -- Inline evals (defined here, called from encode-thought) ---------------
 
