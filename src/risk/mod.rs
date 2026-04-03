@@ -292,12 +292,11 @@ fn encode_panel(portfolio: &Portfolio, atoms: &RiskAtoms, scalar: &holon::Scalar
 }
 
 /// Evaluate risk branches: encode features, score anomalies, update if healthy.
-/// Returns the risk multiplier (1.0 = fully healthy, 0.1 = worst allowed).
-/// Gated updates: only learn from healthy states so the subspaces model
-/// what "good" looks like, not what "crisis" looks like.
 /// Returns (worst_ratio, per_branch_ratios). The ratios feed the risk manager.
+/// Also evaluates the generalist (holistic cross-branch pattern).
 pub fn evaluate_risk_branches(
     branches: &mut [RiskBranch],
+    generalist: &mut OnlineSubspace,
     portfolio: &Portfolio,
     atoms: &RiskAtoms,
     scalar: &holon::ScalarEncoder,
@@ -306,6 +305,8 @@ pub fn evaluate_risk_branches(
     let mut worst_ratio = 1.0_f64;
     let mut ratios = [1.0_f64; 5];
     let healthy = portfolio.is_healthy() && portfolio.trades_taken >= 20;
+
+    // Specialist branches
     for (branch_idx, branch) in branches.iter_mut().enumerate() {
         let features = &branch_features[branch_idx];
         if branch.subspace.n() >= 10 {
@@ -318,6 +319,24 @@ pub fn evaluate_risk_branches(
         }
         if healthy { branch.subspace.update(features); }
     }
+
+    // Generalist: bundle ALL branch feature vectors into one holistic thought.
+    // Each branch is a full-dims bundle. Bundle-of-bundles keeps dims constant.
+    let branch_vecs: Vec<Vector> = branch_features.iter()
+        .map(|f| Vector::from_f64(f))
+        .collect();
+    let branch_refs: Vec<&Vector> = branch_vecs.iter().collect();
+    let generalist_thought = Primitives::bundle(&branch_refs);
+    let generalist_features: Vec<f64> = generalist_thought.data().iter().map(|&v| v as f64).collect();
+    if generalist.n() >= 10 {
+        let residual = generalist.residual(&generalist_features);
+        let threshold = generalist.threshold();
+        let ratio = if residual < threshold { 1.0 }
+            else { (threshold / residual).max(0.1) };
+        worst_ratio = worst_ratio.min(ratio);
+    }
+    if healthy { generalist.update(&generalist_features); }
+
     let mult = if branches[0].subspace.n() >= 10 { worst_ratio } else { 0.5 };
     (mult, ratios)
 }

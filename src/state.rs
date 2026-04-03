@@ -203,6 +203,7 @@ pub struct EnterpriseState {
 
     // ── Risk department (portfolio health across ALL desks) ──────────────
     pub risk_branches: Vec<RiskBranch>,
+    pub risk_generalist: holon::memory::OnlineSubspace,
     pub risk_manager: risk::manager::RiskManager,
     pub cached_risk_mult: f64,
 
@@ -275,6 +276,7 @@ impl EnterpriseState {
             treasury,
             portfolio,
             risk_branches,
+            risk_generalist: holon::memory::OnlineSubspace::new(dims, 8),
             risk_manager: risk::manager::RiskManager::new(dims, recalib_interval),
             cached_risk_mult: 0.5,
             peak_treasury_equity: initial_equity,
@@ -323,7 +325,8 @@ impl EnterpriseState {
         self.candle_count += 1;
         if self.candle_count % ctx.recalib_interval == 0 || self.candle_count < RISK_WARMUP {
             let (branch_mult, ratios) = risk::evaluate_risk_branches(
-                &mut self.risk_branches, &self.portfolio, ctx.risk_atoms, ctx.risk_scalar,
+                &mut self.risk_branches, &mut self.risk_generalist,
+                &self.portfolio, ctx.risk_atoms, ctx.risk_scalar,
             );
 
             // Risk manager: encode branch ratios, predict, learn

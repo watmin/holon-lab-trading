@@ -294,9 +294,40 @@
 ;; The Journal discovers WHICH configurations of branch ratios predict
 ;; healthy vs unhealthy outcomes — not just "is this anomalous?"
 
-;; ── Aspirational (remaining) ───────────────────────────────────────
+;; ── Risk Generalist (Template 2 — reaction, holistic) ──────────────
 ;;
-;; rune:scry(aspirational) — risk GENERALIST seeing all dimensions.
+;; The generalist sees ALL 25 risk dimensions simultaneously.
+;; Where specialists see one domain each (drawdown OR accuracy OR ...),
+;; the generalist sees the cross-domain pattern. "Drawdown accelerating
+;; AND accuracy declining AND volatility spiking" is one thought to the
+;; generalist, three independent anomalies to the specialists.
+;;
+;; Implementation: bundle all 5 branch feature vectors into one
+;; 25-dimensional thought. Feed to a single OnlineSubspace. The residual
+;; measures holistic portfolio health — distance from the COMBINED
+;; healthy manifold, not the per-branch manifolds.
+
+(define risk-generalist (online-subspace dims 8))
+
+(define (encode-risk-generalist portfolio atoms scalar)
+  "Bundle ALL risk branch features into one holistic thought."
+  (let ((features (encode-risk-branches portfolio atoms scalar)))
+    ;; Concatenate all 5 branch bundles into one vector.
+    ;; Each branch is a full-dimensional bundle. The generalist
+    ;; bundles the bundles — cross-branch patterns emerge.
+    (bundle (nth features 0) (nth features 1) (nth features 2)
+            (nth features 3) (nth features 4))))
+
+(define (evaluate-risk-generalist generalist portfolio atoms scalar is-healthy)
+  "Score holistic portfolio health. Update when healthy."
+  (let ((thought (encode-risk-generalist portfolio atoms scalar)))
+    (when is-healthy (update generalist thought))
+    (if (< (n generalist) 10) 1.0
+        (let ((res (residual generalist thought))
+              (thr (threshold generalist)))
+          (if (< res thr) 1.0 (max 0.1 (/ thr res)))))))
+
+;; ── Aspirational (remaining) ───────────────────────────────────────
 ;;
 ;; rune:scry(aspirational) — risk-alpha-journal with Profitable/Unprofitable
 ;; labels. Requires treasury alpha tracking.
