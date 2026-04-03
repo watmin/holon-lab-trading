@@ -80,3 +80,107 @@ pub fn encode_exit_thought(
         &Primitives::bind(&exit_atoms.direction, if is_buy { &exit_atoms.buy } else { &exit_atoms.sell }),
     ])
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::position::PositionEntry;
+    use crate::treasury::Asset;
+
+    const TEST_DIMS: usize = 64;
+
+    fn make_vm() -> VectorManager {
+        VectorManager::new(TEST_DIMS)
+    }
+
+    fn make_position() -> ManagedPosition {
+        let entry = PositionEntry {
+            id: 1,
+            candle_idx: 0,
+            source_asset: Asset::new("USDC"),
+            target_asset: Asset::new("WBTC"),
+            source_amount: 1000.0,
+            target_received: 0.02,
+            entry_rate: 50000.0,
+            entry_atr: 0.01,
+            entry_fee: 1.0,
+            k_stop: 2.0,
+            k_tp: 3.0,
+        };
+        ManagedPosition::new(entry)
+    }
+
+    #[test]
+    fn exit_atoms_new_does_not_panic() {
+        let vm = make_vm();
+        let _atoms = ExitAtoms::new(&vm);
+    }
+
+    #[test]
+    fn exit_atoms_fields_are_nonzero() {
+        let vm = make_vm();
+        let atoms = ExitAtoms::new(&vm);
+        assert!(atoms.pnl.data().iter().any(|&x| x != 0));
+        assert!(atoms.hold.data().iter().any(|&x| x != 0));
+        assert!(atoms.buy.data().iter().any(|&x| x != 0));
+        assert!(atoms.sell.data().iter().any(|&x| x != 0));
+    }
+
+    #[test]
+    fn encode_exit_thought_returns_nonzero_vector() {
+        let vm = make_vm();
+        let atoms = ExitAtoms::new(&vm);
+        let scalar = ScalarEncoder::new(TEST_DIMS);
+        let pos = make_position();
+
+        let thought = encode_exit_thought(
+            &pos,
+            0.05,    // pnl_frac (5% profit)
+            51000.0, // current_rate
+            &atoms,
+            &scalar,
+            0.015,   // candle_atr
+            true,    // is_buy
+        );
+
+        assert!(thought.data().iter().any(|&x| x != 0), "exit thought should be non-zero");
+    }
+
+    #[test]
+    fn encode_exit_thought_buy_vs_sell_differ() {
+        let vm = make_vm();
+        let atoms = ExitAtoms::new(&vm);
+        let scalar = ScalarEncoder::new(TEST_DIMS);
+        let pos = make_position();
+
+        let thought_buy = encode_exit_thought(&pos, 0.05, 51000.0, &atoms, &scalar, 0.015, true);
+        let thought_sell = encode_exit_thought(&pos, 0.05, 51000.0, &atoms, &scalar, 0.015, false);
+
+        assert_ne!(thought_buy.data(), thought_sell.data(),
+            "buy and sell exit thoughts should differ");
+    }
+
+    #[test]
+    fn encode_exit_thought_different_pnl_differ() {
+        // Use higher dims so scalar encoding has room to differentiate
+        let dims = 256;
+        let vm = VectorManager::new(dims);
+        let atoms = ExitAtoms::new(&vm);
+        let scalar = ScalarEncoder::new(dims);
+        let pos_entry = PositionEntry {
+            id: 1, candle_idx: 0,
+            source_asset: Asset::new("USDC"), target_asset: Asset::new("WBTC"),
+            source_amount: 1000.0, target_received: 0.02,
+            entry_rate: 50000.0, entry_atr: 0.01, entry_fee: 1.0,
+            k_stop: 2.0, k_tp: 3.0,
+        };
+        let pos = ManagedPosition::new(pos_entry);
+
+        let thought_profit = encode_exit_thought(&pos, 0.50, 51000.0, &atoms, &scalar, 0.015, true);
+        let thought_loss = encode_exit_thought(&pos, -0.50, 51000.0, &atoms, &scalar, 0.015, true);
+
+        // At 256 dims with extreme P&L difference, cosine should be < 1.0
+        let sim = holon::Similarity::cosine(&thought_profit, &thought_loss);
+        assert!(sim < 0.99, "profit and loss exit thoughts should differ, cosine={sim}");
+    }
+}

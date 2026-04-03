@@ -180,3 +180,107 @@ impl Observer {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const TEST_DIMS: usize = 64;
+
+    #[test]
+    fn observer_new_creates_with_correct_fields() {
+        let obs = Observer::new(
+            super::super::Lens::Momentum,
+            TEST_DIMS,
+            500,  // recalib_interval
+            42,   // seed
+            &["Buy", "Sell"],
+        );
+
+        assert_eq!(obs.lens, super::super::Lens::Momentum);
+        assert!(obs.resolved.is_empty());
+        assert!(obs.conviction_history.is_empty());
+        assert_eq!(obs.conviction_threshold, 0.0);
+        assert!(!obs.curve_valid);
+        assert_eq!(obs.cached_acc, 0.0);
+        assert_eq!(obs.recalib_wins, 0);
+        assert_eq!(obs.recalib_total, 0);
+        assert_eq!(obs.last_recalib_count, 0);
+    }
+
+    #[test]
+    fn observer_new_registers_primary_label() {
+        let obs = Observer::new(
+            super::super::Lens::Structure,
+            TEST_DIMS,
+            500,
+            7,
+            &["Buy", "Sell"],
+        );
+        // primary_label should be the first registered label (index 0)
+        assert_eq!(obs.primary_label.index(), 0);
+    }
+
+    #[test]
+    fn observer_new_with_different_lenses() {
+        for lens in &[
+            super::super::Lens::Momentum,
+            super::super::Lens::Volume,
+            super::super::Lens::Regime,
+            super::super::Lens::Generalist,
+        ] {
+            let obs = Observer::new(*lens, TEST_DIMS, 500, 1, &["Buy", "Sell"]);
+            assert_eq!(obs.lens, *lens);
+        }
+    }
+
+    #[test]
+    fn observer_resolve_without_direction_returns_none() {
+        let mut obs = Observer::new(
+            super::super::Lens::Momentum,
+            TEST_DIMS,
+            500,
+            42,
+            &["Buy", "Sell"],
+        );
+
+        let thought = holon::Vector::zeros(TEST_DIMS);
+        // Prediction with no direction
+        let pred = Prediction {
+            scores: Vec::new(),
+            direction: None,
+            conviction: 0.0,
+            raw_cos: 0.0,
+        };
+
+        let result = obs.resolve(&thought, &pred, obs.primary_label, 1.0, 0.5, 1000);
+        assert!(result.is_none(), "no direction means no resolve log");
+    }
+
+    #[test]
+    fn observer_resolve_with_direction_returns_some() {
+        let mut obs = Observer::new(
+            super::super::Lens::Momentum,
+            TEST_DIMS,
+            500,
+            42,
+            &["Buy", "Sell"],
+        );
+
+        let thought = holon::Vector::zeros(TEST_DIMS);
+        let buy_label = obs.primary_label;
+        let pred = Prediction {
+            scores: Vec::new(),
+            direction: Some(buy_label),
+            conviction: 0.5,
+            raw_cos: 0.5,
+        };
+
+        let result = obs.resolve(&thought, &pred, buy_label, 1.0, 0.5, 1000);
+        assert!(result.is_some(), "with direction should return resolve log");
+        let log = result.unwrap();
+        assert_eq!(log.name, super::super::Lens::Momentum);
+        assert!((log.conviction - 0.5).abs() < 1e-10);
+        assert!(log.correct); // predicted buy, outcome is buy
+    }
+}

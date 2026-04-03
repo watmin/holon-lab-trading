@@ -154,3 +154,161 @@ pub fn signal_weight(abs_pct: f64, move_sum: &mut f64, move_count: &mut usize) -
     *move_count += 1;
     abs_pct / (*move_sum / *move_count as f64)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── signal_weight ────────────────────────────────────────────────────────
+
+    #[test]
+    fn signal_weight_first_observation_returns_one() {
+        let mut sum = 0.0;
+        let mut count = 0usize;
+        let w = signal_weight(0.5, &mut sum, &mut count);
+        // First observation: abs_pct / (abs_pct / 1) = 1.0
+        assert!((w - 1.0).abs() < 1e-10);
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn signal_weight_large_move_scores_above_one() {
+        let mut sum = 0.0;
+        let mut count = 0usize;
+        // Seed with small moves
+        signal_weight(0.1, &mut sum, &mut count);
+        signal_weight(0.1, &mut sum, &mut count);
+        signal_weight(0.1, &mut sum, &mut count);
+        // Now a large move — should be above average
+        let w = signal_weight(0.5, &mut sum, &mut count);
+        assert!(w > 1.0, "large move should score above 1.0, got {w}");
+    }
+
+    #[test]
+    fn signal_weight_small_move_scores_below_one() {
+        let mut sum = 0.0;
+        let mut count = 0usize;
+        signal_weight(0.5, &mut sum, &mut count);
+        signal_weight(0.5, &mut sum, &mut count);
+        signal_weight(0.5, &mut sum, &mut count);
+        let w = signal_weight(0.1, &mut sum, &mut count);
+        assert!(w < 1.0, "small move should score below 1.0, got {w}");
+    }
+
+    // ── curve_win_rate ───────────────────────────────────────────────────────
+
+    #[test]
+    fn curve_win_rate_at_zero_conviction() {
+        // accuracy = 0.50 + a * exp(b * 0) = 0.50 + a
+        let a = 0.05;
+        let b = 2.0;
+        let wr = curve_win_rate(0.0, a, b);
+        assert!((wr - 0.55).abs() < 1e-10);
+    }
+
+    #[test]
+    fn curve_win_rate_caps_at_095() {
+        // With large conviction, result should cap at 0.95
+        let wr = curve_win_rate(100.0, 0.1, 1.0);
+        assert!((wr - 0.95).abs() < 1e-10, "should cap at 0.95, got {wr}");
+    }
+
+    #[test]
+    fn curve_win_rate_increases_with_conviction() {
+        let a = 0.02;
+        let b = 3.0;
+        let wr_low = curve_win_rate(0.1, a, b);
+        let wr_high = curve_win_rate(0.5, a, b);
+        assert!(wr_high > wr_low, "higher conviction should yield higher win rate");
+    }
+
+    #[test]
+    fn curve_win_rate_never_below_half() {
+        // With negative conviction, exp shrinks but a>0 so still >= 0.50
+        let wr = curve_win_rate(-10.0, 0.05, 2.0);
+        assert!(wr >= 0.50, "win rate should never drop below 0.50, got {wr}");
+    }
+
+    // ── half_kelly_position ──────────────────────────────────────────────────
+
+    #[test]
+    fn half_kelly_no_edge_returns_none() {
+        // win_rate = 0.50 → edge = 0 → None
+        assert!(half_kelly_position(0.50, 0.01).is_none());
+    }
+
+    #[test]
+    fn half_kelly_negative_edge_returns_none() {
+        assert!(half_kelly_position(0.40, 0.01).is_none());
+    }
+
+    #[test]
+    fn half_kelly_with_edge() {
+        // win_rate = 0.60 → edge = 0.20 → frac = 0.20 / 2.0 / 0.01 = 10.0
+        let frac = half_kelly_position(0.60, 0.01).unwrap();
+        assert!((frac - 10.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn half_kelly_scales_with_move_threshold() {
+        // Larger move_threshold → smaller position
+        let frac_small = half_kelly_position(0.60, 0.01).unwrap();
+        let frac_large = half_kelly_position(0.60, 0.05).unwrap();
+        assert!(frac_small > frac_large);
+    }
+
+    // ── kelly_frac ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn kelly_frac_insufficient_data_returns_none() {
+        let resolved: VecDeque<(f64, bool)> = (0..499)
+            .map(|i| (i as f64 / 500.0, i % 2 == 0))
+            .collect();
+        assert!(kelly_frac(0.5, &resolved, 0.01).is_none());
+    }
+
+    #[test]
+    fn kelly_frac_with_strong_signal() {
+        // Build resolved predictions where higher conviction → higher accuracy.
+        // Use 1000 samples: conviction in [0, 1], win if conviction > threshold
+        // adjusted with some randomness via deterministic pattern.
+        let mut resolved: VecDeque<(f64, bool)> = VecDeque::new();
+        for i in 0..2000 {
+            let conviction = (i as f64) / 2000.0;
+            // Higher conviction → more likely to win.
+            // Win if conviction > 0.3, plus some noise via modular pattern.
+            let win = conviction > 0.3 + 0.15 * ((i % 7) as f64 / 7.0);
+            resolved.push_back((conviction, win));
+        }
+        let result = kelly_frac(0.8, &resolved, 0.01);
+        // May or may not produce a fit depending on the data shape.
+        // If it does, the fraction should be positive.
+        if let Some((frac, a, b)) = result {
+            assert!(frac > 0.0, "position fraction should be positive");
+            assert!(a > 0.0, "curve_a should be positive");
+            assert!(b.is_finite(), "curve_b should be finite");
+        }
+    }
+
+    // ── fit_conviction_curve (tested indirectly through kelly_frac) ──────────
+
+    #[test]
+    fn kelly_frac_random_data_likely_none() {
+        // Pure coin-flip data — no signal, curve fit should fail or show no edge.
+        let mut resolved: VecDeque<(f64, bool)> = VecDeque::new();
+        for i in 0..1000 {
+            let conviction = (i as f64) / 1000.0;
+            // Alternating win/loss regardless of conviction — no signal
+            let win = i % 2 == 0;
+            resolved.push_back((conviction, win));
+        }
+        // With no relationship between conviction and accuracy, curve fit
+        // should either fail or produce no edge (half_kelly returns None).
+        let result = kelly_frac(0.5, &resolved, 0.01);
+        // Either None (no fit) or Some with very small/zero fraction is acceptable.
+        if let Some((frac, _, _)) = result {
+            // If the fit somehow succeeds, fraction should be tiny
+            assert!(frac < 1.0, "random data should not produce large position");
+        }
+    }
+}

@@ -117,6 +117,7 @@ pub fn find_proven_band(
     }
 }
 
+
 /// Encode one observer's contribution to the manager's thought.
 /// Returns facts (may be empty if below noise floor).
 fn encode_observer_opinion(
@@ -313,4 +314,218 @@ pub fn bundle_manager_thought(
         raw.clone()
     };
     Some((final_thought, raw))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use holon::{ScalarEncoder, VectorManager};
+
+    const TEST_DIMS: usize = 64;
+
+    fn make_vm() -> VectorManager {
+        VectorManager::new(TEST_DIMS)
+    }
+
+    fn make_prediction(raw_cos: f64, conviction: f64) -> Prediction {
+        Prediction {
+            scores: Vec::new(),
+            direction: None,
+            conviction,
+            raw_cos,
+        }
+    }
+
+    fn make_ctx<'a>(
+        observer_preds: &'a [Prediction],
+        observer_atoms: &'a [Vector],
+        observer_curve_valid: &'a [bool],
+        observer_resolved_lens: &'a [usize],
+        observer_resolved_accs: &'a [f64],
+        observer_vecs: &'a [Vector],
+        generalist_pred: &'a Prediction,
+        generalist_atom: &'a Vector,
+    ) -> ManagerContext<'a> {
+        ManagerContext {
+            observer_preds,
+            observer_atoms,
+            observer_curve_valid,
+            observer_resolved_lens,
+            observer_resolved_accs,
+            observer_vecs,
+            generalist_pred,
+            generalist_atom,
+            generalist_curve_valid: false,
+            candle_atr: 0.02,
+            candle_hour: 14.0,
+            candle_day: 3.0,
+            disc_strength: 0.5,
+        }
+    }
+
+    #[test]
+    fn manager_atoms_new_does_not_panic() {
+        let vm = make_vm();
+        let _atoms = ManagerAtoms::new(&vm);
+    }
+
+    #[test]
+    fn encode_observer_opinion_returns_nonzero_vector() {
+        let vm = make_vm();
+        let atoms = ManagerAtoms::new(&vm);
+        let scalar = ScalarEncoder::new(TEST_DIMS);
+        let observer_atom = vm.get_vector("test-observer");
+        let pred = make_prediction(0.3, 0.3);
+
+        let facts = encode_observer_opinion(
+            &atoms, &scalar, &observer_atom, &pred,
+            true,  // curve_valid
+            100,   // resolved_len (>= MIN_RESOLVED_FOR_RELIABILITY=20)
+            0.55,  // resolved_acc
+            0.01,  // min_opinion (below 0.3)
+        );
+
+        assert!(!facts.is_empty(), "should produce at least one fact");
+        for fact in &facts {
+            assert!(fact.data().iter().any(|&x| x != 0), "fact should be non-zero");
+        }
+    }
+
+    #[test]
+    fn encode_observer_opinion_below_noise_floor_returns_empty() {
+        let vm = make_vm();
+        let atoms = ManagerAtoms::new(&vm);
+        let scalar = ScalarEncoder::new(TEST_DIMS);
+        let observer_atom = vm.get_vector("test-observer");
+        let pred = make_prediction(0.01, 0.01);
+
+        let facts = encode_observer_opinion(
+            &atoms, &scalar, &observer_atom, &pred,
+            false, 0, 0.0,
+            0.5,  // min_opinion higher than pred.raw_cos.abs()
+        );
+
+        assert!(facts.is_empty(), "should return empty below min_opinion");
+    }
+
+    #[test]
+    fn encode_observer_opinion_includes_reliability_and_tenure() {
+        let vm = make_vm();
+        let atoms = ManagerAtoms::new(&vm);
+        let scalar = ScalarEncoder::new(TEST_DIMS);
+        let observer_atom = vm.get_vector("test-observer");
+        let pred = make_prediction(0.5, 0.5);
+
+        // With enough resolved (>= 20 for reliability, >= 50 for tenure)
+        let facts = encode_observer_opinion(
+            &atoms, &scalar, &observer_atom, &pred,
+            true, 100, 0.6, 0.01,
+        );
+        // Should have: opinion, credibility, reliability, tenure = 4 facts
+        assert_eq!(facts.len(), 4, "should have opinion + credibility + reliability + tenure");
+    }
+
+    #[test]
+    fn encode_manager_thought_nonempty_with_observers() {
+        let vm = make_vm();
+        let atoms = ManagerAtoms::new(&vm);
+        let scalar = ScalarEncoder::new(TEST_DIMS);
+
+        let preds = vec![make_prediction(0.4, 0.4)];
+        let obs_atoms = vec![vm.get_vector("obs-0")];
+        let curve_valid = vec![true];
+        let resolved_lens = vec![100_usize];
+        let resolved_accs = vec![0.55_f64];
+        let obs_vecs = vec![vm.get_vector("obs-vec-0")];
+        let gen_pred = make_prediction(0.3, 0.3);
+        let gen_atom = vm.get_vector("generalist");
+
+        let ctx = make_ctx(
+            &preds, &obs_atoms, &curve_valid,
+            &resolved_lens, &resolved_accs, &obs_vecs,
+            &gen_pred, &gen_atom,
+        );
+
+        let facts = encode_manager_thought(&ctx, &atoms, &scalar, 0.01);
+        assert!(!facts.is_empty(), "should produce facts with active observers");
+    }
+
+    #[test]
+    fn bundle_manager_thought_no_prev_returns_thought_eq_raw() {
+        let vm = make_vm();
+        let atoms = ManagerAtoms::new(&vm);
+        let v1 = vm.get_vector("fact-1");
+        let v2 = vm.get_vector("fact-2");
+
+        let facts = vec![v1, v2];
+        let result = bundle_manager_thought(facts, None, &atoms);
+        assert!(result.is_some());
+        let (thought, raw) = result.unwrap();
+        // With no prev, thought == raw
+        assert_eq!(thought.data(), raw.data());
+    }
+
+    #[test]
+    fn bundle_manager_thought_with_prev_includes_delta() {
+        let vm = make_vm();
+        let atoms = ManagerAtoms::new(&vm);
+        let v1 = vm.get_vector("fact-1");
+        let v2 = vm.get_vector("fact-2");
+        let prev = vm.get_vector("prev-thought");
+
+        let facts = vec![v1, v2];
+        let result = bundle_manager_thought(facts, Some(&prev), &atoms);
+        assert!(result.is_some());
+        let (thought, raw) = result.unwrap();
+        // With prev, thought != raw (delta is folded in)
+        assert_ne!(thought.data(), raw.data());
+    }
+
+    #[test]
+    fn bundle_manager_thought_empty_returns_none() {
+        let vm = make_vm();
+        let atoms = ManagerAtoms::new(&vm);
+        let result = bundle_manager_thought(Vec::new(), None, &atoms);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn find_proven_band_empty_returns_none() {
+        let data = VecDeque::new();
+        assert!(find_proven_band(&data, TEST_DIMS).is_none());
+    }
+
+    #[test]
+    fn find_proven_band_insufficient_data_returns_none() {
+        let mut data = VecDeque::new();
+        // Only 100 entries, need 500
+        for _ in 0..100 {
+            data.push_back((0.5, true));
+        }
+        assert!(find_proven_band(&data, TEST_DIMS).is_none());
+    }
+
+    #[test]
+    fn find_proven_band_with_sufficient_accurate_data() {
+        let sigma = 1.0 / (TEST_DIMS as f64).sqrt();
+        let mut data = VecDeque::new();
+        // Fill with 600 entries, conviction in band k=5: [5*sigma, 9*sigma]
+        let target_conv = 6.0 * sigma;
+        for _ in 0..300 {
+            data.push_back((target_conv, true));   // 70% correct in this band
+        }
+        for _ in 0..100 {
+            data.push_back((target_conv, false));
+        }
+        // Add some outside the band to reach 500+ total
+        for _ in 0..200 {
+            data.push_back((0.01 * sigma, true));  // outside all bands
+        }
+        let result = find_proven_band(&data, TEST_DIMS);
+        assert!(result.is_some(), "should find a band with 75% accuracy and 400 samples");
+        let (lo, hi, acc) = result.unwrap();
+        assert!(lo > 0.0);
+        assert!(hi > lo);
+        assert!(acc > BAND_MIN_ACCURACY);
+    }
 }

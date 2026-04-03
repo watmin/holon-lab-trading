@@ -375,3 +375,231 @@ fn encode_risk_branches(
         encode_panel(portfolio, atoms, scalar),
     ]
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::portfolio::Portfolio;
+
+    const TEST_DIMS: usize = 64;
+
+    fn make_vm() -> VectorManager {
+        VectorManager::new(TEST_DIMS)
+    }
+
+    fn make_atoms(vm: &VectorManager) -> RiskAtoms {
+        RiskAtoms::new(vm)
+    }
+
+    fn make_scalar() -> holon::ScalarEncoder {
+        holon::ScalarEncoder::new(TEST_DIMS)
+    }
+
+    fn make_branches() -> [RiskBranch; 5] {
+        [
+            RiskBranch::new("drawdown", TEST_DIMS),
+            RiskBranch::new("accuracy", TEST_DIMS),
+            RiskBranch::new("volatility", TEST_DIMS),
+            RiskBranch::new("correlation", TEST_DIMS),
+            RiskBranch::new("panel", TEST_DIMS),
+        ]
+    }
+
+    // ── BranchRatios ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn branch_ratios_has_named_fields() {
+        let br = BranchRatios {
+            drawdown: 0.9,
+            accuracy: 0.8,
+            volatility: 0.7,
+            correlation: 0.6,
+            panel: 0.5,
+            generalist: 1.0,
+        };
+        assert!((br.drawdown - 0.9).abs() < 1e-10);
+        assert!((br.accuracy - 0.8).abs() < 1e-10);
+        assert!((br.volatility - 0.7).abs() < 1e-10);
+        assert!((br.correlation - 0.6).abs() < 1e-10);
+        assert!((br.panel - 0.5).abs() < 1e-10);
+        assert!((br.generalist - 1.0).abs() < 1e-10);
+    }
+
+    // ── RiskBranch construction ──────────────────────────────────────────────
+
+    #[test]
+    fn risk_branch_new_has_zero_observations() {
+        let branch = RiskBranch::new("test", TEST_DIMS);
+        assert_eq!(branch.name, "test");
+        assert_eq!(branch.subspace.n(), 0);
+    }
+
+    // ── RiskAtoms construction ───────────────────────────────────────────────
+
+    #[test]
+    fn risk_atoms_creates_distinct_vectors() {
+        let vm = make_vm();
+        let atoms = make_atoms(&vm);
+        // Two different atoms should produce different vectors
+        let sim = holon::similarity::Similarity::cosine(&atoms.drawdown, &atoms.accuracy_10);
+        assert!(sim.abs() < 0.5, "distinct atoms should have low similarity, got {sim}");
+    }
+
+    // ── evaluate_risk_branches ───────────────────────────────────────────────
+
+    #[test]
+    fn evaluate_returns_default_when_no_observations() {
+        let vm = make_vm();
+        let atoms = make_atoms(&vm);
+        let scalar = make_scalar();
+        let mut branches = make_branches();
+        let mut generalist = OnlineSubspace::with_params(TEST_DIMS, 8, 2.0, 0.01, 3.5, 100);
+        let portfolio = Portfolio::new(10000.0, 0);
+
+        let (mult, ratios) = evaluate_risk_branches(
+            &mut branches, &mut generalist, &portfolio, &atoms, &scalar,
+        );
+
+        // With n < 10, all branches return 1.0, but the final mult uses 0.5 default
+        assert!((mult - 0.5).abs() < 1e-10, "default mult should be 0.5, got {mult}");
+        assert!((ratios.drawdown - 1.0).abs() < 1e-10);
+        assert!((ratios.accuracy - 1.0).abs() < 1e-10);
+        assert!((ratios.volatility - 1.0).abs() < 1e-10);
+        assert!((ratios.correlation - 1.0).abs() < 1e-10);
+        assert!((ratios.panel - 1.0).abs() < 1e-10);
+        assert!((ratios.generalist - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn evaluate_returns_f64_and_branch_ratios() {
+        let vm = make_vm();
+        let atoms = make_atoms(&vm);
+        let scalar = make_scalar();
+        let mut branches = make_branches();
+        let mut generalist = OnlineSubspace::with_params(TEST_DIMS, 8, 2.0, 0.01, 3.5, 100);
+        let portfolio = Portfolio::new(10000.0, 0);
+
+        let (mult, _ratios) = evaluate_risk_branches(
+            &mut branches, &mut generalist, &portfolio, &atoms, &scalar,
+        );
+
+        // mult should be a valid f64 in [0.1, 1.0] or the 0.5 default
+        assert!(mult >= 0.1 && mult <= 1.0, "mult out of range: {mult}");
+    }
+
+    #[test]
+    fn evaluate_with_trained_branches() {
+        let vm = make_vm();
+        let atoms = make_atoms(&vm);
+        let scalar = make_scalar();
+        let mut branches = make_branches();
+        let mut generalist = OnlineSubspace::with_params(TEST_DIMS, 8, 2.0, 0.01, 3.5, 100);
+
+        // Build a portfolio with enough healthy trades to pass the is_healthy gate.
+        // We need: low drawdown, >55% win rate last 50, positive mean return.
+        let mut portfolio = Portfolio::new(10000.0, 0);
+        portfolio.phase = crate::portfolio::Phase::Tentative;
+
+        // Record trades that make the portfolio healthy: 70% wins
+        for i in 0..100 {
+            if i % 10 < 7 {
+                // Win: +2% move, long
+                portfolio.record_trade(0.02, 0.01, crate::journal::Direction::Long, 0.0, 0.0);
+            } else {
+                // Loss: -1% move, long (smaller losses than wins)
+                portfolio.record_trade(-0.01, 0.01, crate::journal::Direction::Long, 0.0, 0.0);
+            }
+
+            // Feed each observation to the branches
+            let branch_features = [
+                encode_drawdown(&portfolio, &atoms, &scalar),
+                encode_accuracy(&portfolio, &atoms, &scalar),
+                encode_volatility(&portfolio, &atoms, &scalar),
+                encode_correlation(&portfolio, &atoms, &scalar),
+                encode_panel(&portfolio, &atoms, &scalar),
+            ];
+            for (idx, branch) in branches.iter_mut().enumerate() {
+                branch.subspace.update(&branch_features[idx]);
+            }
+            // Also feed the generalist
+            let bvecs: Vec<Vector> = branch_features.iter().map(|f| Vector::from_f64(f)).collect();
+            let brefs: Vec<&Vector> = bvecs.iter().collect();
+            let gen_thought = Primitives::bundle(&brefs);
+            let gen_f: Vec<f64> = gen_thought.data().iter().map(|&v| v as f64).collect();
+            generalist.update(&gen_f);
+        }
+
+        // Now all branches should have n >= 10
+        assert!(branches[0].subspace.n() >= 10);
+
+        // Evaluate — with trained branches and a healthy portfolio, should get real ratios
+        let (mult, ratios) = evaluate_risk_branches(
+            &mut branches, &mut generalist, &portfolio, &atoms, &scalar,
+        );
+
+        // mult should come from actual residual scoring now, not the 0.5 default
+        assert!(mult >= 0.1 && mult <= 1.0, "mult out of range: {mult}");
+        // Each ratio should be in [0.1, 1.0]
+        assert!(ratios.drawdown >= 0.1 && ratios.drawdown <= 1.0);
+        assert!(ratios.accuracy >= 0.1 && ratios.accuracy <= 1.0);
+        assert!(ratios.volatility >= 0.1 && ratios.volatility <= 1.0);
+        assert!(ratios.correlation >= 0.1 && ratios.correlation <= 1.0);
+        assert!(ratios.panel >= 0.1 && ratios.panel <= 1.0);
+        assert!(ratios.generalist >= 0.1 && ratios.generalist <= 1.0);
+    }
+
+    // ── encode helpers (private, tested via evaluate) ────────────────────────
+
+    #[test]
+    fn encode_drawdown_produces_correct_length() {
+        let vm = make_vm();
+        let atoms = make_atoms(&vm);
+        let scalar = make_scalar();
+        let portfolio = Portfolio::new(10000.0, 0);
+        let vec = encode_drawdown(&portfolio, &atoms, &scalar);
+        assert_eq!(vec.len(), TEST_DIMS, "drawdown vector should match dims");
+    }
+
+    #[test]
+    fn encode_accuracy_produces_correct_length() {
+        let vm = make_vm();
+        let atoms = make_atoms(&vm);
+        let scalar = make_scalar();
+        let portfolio = Portfolio::new(10000.0, 0);
+        let vec = encode_accuracy(&portfolio, &atoms, &scalar);
+        assert_eq!(vec.len(), TEST_DIMS);
+    }
+
+    #[test]
+    fn encode_volatility_empty_returns_zeros() {
+        let vm = make_vm();
+        let atoms = make_atoms(&vm);
+        let scalar = make_scalar();
+        let portfolio = Portfolio::new(10000.0, 0);
+        let vec = encode_volatility(&portfolio, &atoms, &scalar);
+        assert_eq!(vec.len(), TEST_DIMS);
+        // With no trade returns, should be all zeros
+        assert!(vec.iter().all(|&v| v == 0.0));
+    }
+
+    #[test]
+    fn encode_correlation_empty_returns_zeros() {
+        let vm = make_vm();
+        let atoms = make_atoms(&vm);
+        let scalar = make_scalar();
+        let portfolio = Portfolio::new(10000.0, 0);
+        let vec = encode_correlation(&portfolio, &atoms, &scalar);
+        assert_eq!(vec.len(), TEST_DIMS);
+        assert!(vec.iter().all(|&v| v == 0.0));
+    }
+
+    #[test]
+    fn encode_panel_produces_correct_length() {
+        let vm = make_vm();
+        let atoms = make_atoms(&vm);
+        let scalar = make_scalar();
+        let portfolio = Portfolio::new(10000.0, 0);
+        let vec = encode_panel(&portfolio, &atoms, &scalar);
+        assert_eq!(vec.len(), TEST_DIMS);
+    }
+}
