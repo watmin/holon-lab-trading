@@ -19,6 +19,7 @@ pub struct RiskManagerAtoms {
     pub volatility_branch: Vector,
     pub correlation_branch: Vector,
     pub panel_branch: Vector,
+    pub generalist_branch: Vector,
 }
 
 impl RiskManagerAtoms {
@@ -29,6 +30,7 @@ impl RiskManagerAtoms {
             volatility_branch: vm.get_vector("risk-volatility-branch"),
             correlation_branch: vm.get_vector("risk-correlation-branch"),
             panel_branch: vm.get_vector("risk-panel-branch"),
+            generalist_branch: vm.get_vector("risk-generalist-branch"),
         }
     }
 }
@@ -46,6 +48,7 @@ pub fn encode_risk_manager_thought(
         &Primitives::bind(&atoms.volatility_branch, &scalar.encode(ratios.volatility, ScalarMode::Linear { scale: 1.0 })),
         &Primitives::bind(&atoms.correlation_branch, &scalar.encode(ratios.correlation, ScalarMode::Linear { scale: 1.0 })),
         &Primitives::bind(&atoms.panel_branch, &scalar.encode(ratios.panel, ScalarMode::Linear { scale: 1.0 })),
+        &Primitives::bind(&atoms.generalist_branch, &scalar.encode(ratios.generalist, ScalarMode::Linear { scale: 1.0 })),
     ])
 }
 

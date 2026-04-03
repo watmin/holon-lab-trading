@@ -39,16 +39,16 @@ graph TD
         end
 
         subgraph "Risk Department (enterprise-level)"
-            subgraph "Branches (pmap — 5 parallel)"
+            subgraph "Risk Branches (pmap — 6 parallel)"
                 DD[Drawdown]
                 ACC[Accuracy]
                 VOLR[Volatility]
                 CORR[Correlation]
                 PAN[Panel]
+                RGEN[Generalist<br/>holistic]
             end
-            DD & ACC & VOLR & CORR & PAN --> RGEN[Risk Generalist<br/>holistic OnlineSubspace]
-            DD & ACC & VOLR & CORR & PAN --> RMGR[Risk Manager Journal<br/>Healthy / Unhealthy]
-            RMGR & RGEN --> RMULT[risk_mult]
+            DD & ACC & VOLR & CORR & PAN & RGEN --> RMGR[Risk Manager Journal<br/>Healthy / Unhealthy]
+            RMGR --> RMULT[risk_mult]
         end
 
         RMULT --> CONV

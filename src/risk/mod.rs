@@ -34,18 +34,14 @@ const DENSITY_SCALE: f64 = 1000.0;          // normalise lifetime trade count
 const FREQUENCY_SCALE: f64 = 30.0;          // normalise sqrt(trades) frequency term
 
 /// Per-branch residual ratios [0.1, 1.0]. Named fields prevent index confusion.
+/// 6 branches: 5 specialists + 1 generalist (same shape as market observers).
 pub struct BranchRatios {
     pub drawdown: f64,
     pub accuracy: f64,
     pub volatility: f64,
     pub correlation: f64,
     pub panel: f64,
-}
-
-impl BranchRatios {
-    pub fn as_array(&self) -> [f64; 5] {
-        [self.drawdown, self.accuracy, self.volatility, self.correlation, self.panel]
-    }
+    pub generalist: f64,
 }
 
 pub struct RiskBranch {
@@ -344,19 +340,22 @@ pub fn evaluate_risk_branches(
     let branch_refs: Vec<&Vector> = branch_vecs.iter().collect();
     let generalist_thought = Primitives::bundle(&branch_refs);
     let generalist_features: Vec<f64> = generalist_thought.data().iter().map(|&v| v as f64).collect();
-    if generalist.n() >= 10 {
+    let gen_ratio = if generalist.n() >= 10 {
         let residual = generalist.residual(&generalist_features);
         let threshold = generalist.threshold();
         let ratio = if residual < threshold { 1.0 }
             else { (threshold / residual).max(0.1) };
         worst_ratio = worst_ratio.min(ratio);
-    }
+        ratio
+    } else {
+        1.0
+    };
     if healthy { generalist.update(&generalist_features); }
 
     let mult = if branches[0].subspace.n() >= 10 { worst_ratio } else { 0.5 };
     let branch_ratios = BranchRatios {
         drawdown: ratios[0], accuracy: ratios[1], volatility: ratios[2],
-        correlation: ratios[3], panel: ratios[4],
+        correlation: ratios[3], panel: ratios[4], generalist: gen_ratio,
     };
     (mult, branch_ratios)
 }

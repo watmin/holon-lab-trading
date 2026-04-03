@@ -266,7 +266,7 @@
 
 (struct risk-manager-atoms
   drawdown-branch accuracy-branch volatility-branch
-  correlation-branch panel-branch
+  correlation-branch panel-branch generalist-branch
   healthy unhealthy)
 
 (define (new-risk-manager-atoms vm)
