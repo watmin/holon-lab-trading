@@ -254,6 +254,7 @@ fn candle_field(candle: &Candle, name: &str) -> f64 {
         "bb-upper" => candle.bb_upper,
         "bb-lower" => candle.bb_lower,
         "bb-width" => candle.bb_upper - candle.bb_lower,
+        "bb-pos" => candle.bb_pos,
         "rsi" => candle.rsi,
         "macd-line" => candle.macd_line,
         "macd-signal" => candle.macd_signal,
@@ -261,12 +262,23 @@ fn candle_field(candle: &Candle, name: &str) -> f64 {
         "dmi-plus" => candle.dmi_plus,
         "dmi-minus" => candle.dmi_minus,
         "adx" => candle.adx,
-        "atr" => candle.atr_r,
+        "atr" => candle.atr,
+        "stoch-k" => candle.stoch_k,
+        "stoch-d" => candle.stoch_d,
+        "williams-r" => candle.williams_r,
+        "cci" => candle.cci,
+        "mfi" => candle.mfi,
+        "keltner-upper" => candle.kelt_upper,
+        "keltner-lower" => candle.kelt_lower,
         "candle-range" => candle.high - candle.low,
         "candle-body" => (candle.close - candle.open).abs(),
         "upper-wick" => candle.high - candle.close.max(candle.open),
         "lower-wick" => candle.close.min(candle.open) - candle.low,
-        _ => 0.0,
+        // Ichimoku fields — computed from candle window by eval_ichimoku, not per-candle.
+        // Comparisons involving these are handled by eval_ichimoku, not eval_comparisons.
+        "tenkan-sen" | "kijun-sen" | "cloud-top" | "cloud-bottom"
+        | "senkou-span-a" | "senkou-span-b" => 0.0,
+        _ => panic!("unknown candle field: '{}' — add it to candle_field()", name),
     }
 }
 
