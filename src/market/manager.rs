@@ -293,3 +293,24 @@ pub fn encode_manager_thought(
 
     facts
 }
+
+/// Bundle manager facts into a single thought, enriched with motion (delta from previous).
+/// Returns (final_thought, raw_thought_for_next_delta).
+/// The raw thought is stored by the caller for next candle's delta computation.
+pub fn bundle_manager_thought(
+    facts: Vec<Vector>,
+    prev_thought: Option<&Vector>,
+    atoms: &ManagerAtoms,
+) -> Option<(Vector, Vector)> {
+    if facts.is_empty() { return None; }
+    let refs: Vec<&Vector> = facts.iter().collect();
+    let raw = Primitives::bundle(&refs);
+    let final_thought = if let Some(prev) = prev_thought {
+        let delta = Primitives::difference(prev, &raw);
+        let delta_bound = Primitives::bind(&atoms.delta, &delta);
+        Primitives::bundle(&[&raw, &delta_bound])
+    } else {
+        raw.clone()
+    };
+    Some((final_thought, raw))
+}

@@ -250,6 +250,7 @@ impl EnterpriseState {
             dims,
             recalib_interval,
             window: generalist_window,
+            max_window_size: 2016,
             decay,
         });
         desk.adaptive_decay = decay;

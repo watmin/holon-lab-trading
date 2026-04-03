@@ -18,7 +18,7 @@
 
 use std::collections::VecDeque;
 
-use holon::{Primitives, Vector};
+use holon::Vector;
 use holon::memory::{Journal, OnlineSubspace};
 
 use crate::candle::Candle;
@@ -56,6 +56,7 @@ pub struct DeskConfig {
     pub dims: usize,
     pub recalib_interval: usize,
     pub window: usize,
+    pub max_window_size: usize,
     pub decay: f64,
 }
 
@@ -176,8 +177,7 @@ impl Desk {
         let panel_dim = OBSERVER_LENSES.len();
         let panel_engram = OnlineSubspace::with_params(panel_dim, 4, 2.0, 0.01, 3.5, 100);
 
-        // Max window = largest observer window (2016 for specialists, config.window for generalist)
-        let max_window_size = 2016;
+        let max_window_size = config.max_window_size;
 
         Self {
             indicator_bank: crate::indicators::IndicatorBank::new(),
@@ -317,23 +317,16 @@ impl Desk {
         };
         let mgr_facts = encode_manager_thought(&mgr_ctx, ctx.mgr_atoms, ctx.mgr_scalar, ctx.min_opinion_magnitude);
 
-        // Difference: what changed since last candle?
-        // The manager sees motion, not just position.
-        let mgr_refs: Vec<&Vector> = mgr_facts.iter().collect();
-        let (mgr_pred, stored_mgr_thought) = if mgr_refs.is_empty() {
-            (Prediction::default(), None)
-        } else {
-            let mgr_thought = Primitives::bundle(&mgr_refs);
-            let final_thought = if let Some(ref prev) = self.prev_manager_thought {
-                let delta = Primitives::difference(prev, &mgr_thought);
-                let delta_bound = Primitives::bind(&ctx.mgr_atoms.delta, &delta);
-                Primitives::bundle(&[&mgr_thought, &delta_bound])
-            } else {
-                mgr_thought.clone()
-            };
-            self.prev_manager_thought = Some(mgr_thought);
+        // Bundle facts + delta into one thought. Manager owns its motion encoding.
+        let (mgr_pred, stored_mgr_thought) = if let Some((final_thought, raw)) =
+            crate::market::manager::bundle_manager_thought(
+                mgr_facts, self.prev_manager_thought.as_ref(), ctx.mgr_atoms)
+        {
+            self.prev_manager_thought = Some(raw);
             let pred = self.manager_journal.predict(&final_thought);
             (pred, Some(final_thought))
+        } else {
+            (Prediction::default(), None)
         };
 
         // Panel state for engram (Template 2 — reaction layer)
