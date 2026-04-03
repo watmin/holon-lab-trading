@@ -334,4 +334,473 @@ mod tests {
         ));
         assert!(has_gap, "expected gap-up, got: {:?}", facts);
     }
+
+    // ── Oscillator tests ────────────────────────────────────────────────
+
+    #[test]
+    fn oscillators_williams_r_overbought() {
+        let mut c = make_candle();
+        c.williams_r = -10.0; // > -20 → overbought
+        let facts = oscillators::eval_oscillators(&[c]);
+        let has_ob = facts.iter().any(|f| matches!(f,
+            Fact::Zone { indicator: "williams-r", zone: "williams-overbought" }
+        ));
+        assert!(has_ob, "expected williams-overbought, got: {:?}", facts);
+    }
+
+    #[test]
+    fn oscillators_williams_r_oversold() {
+        let mut c = make_candle();
+        c.williams_r = -90.0; // < -80 → oversold
+        let facts = oscillators::eval_oscillators(&[c]);
+        let has_os = facts.iter().any(|f| matches!(f,
+            Fact::Zone { indicator: "williams-r", zone: "williams-oversold" }
+        ));
+        assert!(has_os, "expected williams-oversold, got: {:?}", facts);
+    }
+
+    #[test]
+    fn oscillators_williams_r_neutral_no_zone() {
+        let mut c = make_candle();
+        c.williams_r = -50.0; // between -80 and -20 → no zone fact
+        let facts = oscillators::eval_oscillators(&[c]);
+        let has_zone = facts.iter().any(|f| matches!(f,
+            Fact::Zone { indicator: "williams-r", .. }
+        ));
+        assert!(!has_zone, "expected no williams-r zone for neutral value, got: {:?}", facts);
+    }
+
+    #[test]
+    fn oscillators_williams_r_scalar_always_present() {
+        let c = make_candle(); // williams_r = -50
+        let facts = oscillators::eval_oscillators(&[c]);
+        let has_scalar = facts.iter().any(|f| matches!(f,
+            Fact::Scalar { indicator: "williams-r", .. }
+        ));
+        assert!(has_scalar, "expected williams-r scalar, got: {:?}", facts);
+    }
+
+    #[test]
+    fn oscillators_stoch_rsi_overbought() {
+        let mut c = make_candle();
+        c.stoch_k = 85.0; // > 80 → overbought
+        let facts = oscillators::eval_oscillators(&[c]);
+        let has_ob = facts.iter().any(|f| matches!(f,
+            Fact::Zone { indicator: "stoch-rsi", zone: "stoch-rsi-overbought" }
+        ));
+        assert!(has_ob, "expected stoch-rsi-overbought, got: {:?}", facts);
+    }
+
+    #[test]
+    fn oscillators_stoch_rsi_oversold() {
+        let mut c = make_candle();
+        c.stoch_k = 15.0; // < 20 → oversold
+        let facts = oscillators::eval_oscillators(&[c]);
+        let has_os = facts.iter().any(|f| matches!(f,
+            Fact::Zone { indicator: "stoch-rsi", zone: "stoch-rsi-oversold" }
+        ));
+        assert!(has_os, "expected stoch-rsi-oversold, got: {:?}", facts);
+    }
+
+    #[test]
+    fn oscillators_roc_accelerating() {
+        let mut c = make_candle();
+        c.roc_1 = 4.0;
+        c.roc_3 = 3.0;
+        c.roc_6 = 2.0;
+        c.roc_12 = 1.0; // roc_1 > roc_3 > roc_6 > roc_12
+        let facts = oscillators::eval_oscillators(&[c]);
+        let has_accel = facts.iter().any(|f| matches!(f,
+            Fact::Bare { label: "roc-accelerating" }
+        ));
+        assert!(has_accel, "expected roc-accelerating, got: {:?}", facts);
+    }
+
+    #[test]
+    fn oscillators_roc_decelerating() {
+        let mut c = make_candle();
+        c.roc_1 = 1.0;
+        c.roc_3 = 2.0;
+        c.roc_6 = 3.0;
+        c.roc_12 = 4.0; // roc_1 < roc_3 < roc_6 < roc_12
+        let facts = oscillators::eval_oscillators(&[c]);
+        let has_decel = facts.iter().any(|f| matches!(f,
+            Fact::Bare { label: "roc-decelerating" }
+        ));
+        assert!(has_decel, "expected roc-decelerating, got: {:?}", facts);
+    }
+
+    // ── Momentum tests ──────────────────────────────────────────────────
+
+    #[test]
+    fn momentum_cci_overbought() {
+        let mut c = make_candle();
+        c.cci = 150.0; // > 100 → overbought
+        let facts = momentum::eval_momentum(&[c]);
+        let has_ob = facts.iter().any(|f| matches!(f,
+            Fact::Zone { indicator: "cci", zone: "cci-overbought" }
+        ));
+        assert!(has_ob, "expected cci-overbought, got: {:?}", facts);
+    }
+
+    #[test]
+    fn momentum_cci_oversold() {
+        let mut c = make_candle();
+        c.cci = -150.0; // < -100 → oversold
+        let facts = momentum::eval_momentum(&[c]);
+        let has_os = facts.iter().any(|f| matches!(f,
+            Fact::Zone { indicator: "cci", zone: "cci-oversold" }
+        ));
+        assert!(has_os, "expected cci-oversold, got: {:?}", facts);
+    }
+
+    #[test]
+    fn momentum_cci_neutral_no_zone() {
+        let mut c = make_candle();
+        c.cci = 50.0; // between -100 and 100 → no zone
+        let facts = momentum::eval_momentum(&[c]);
+        assert!(facts.is_empty(), "expected no facts for neutral CCI, got: {:?}", facts);
+    }
+
+    // ── Regime tests ────────────────────────────────────────────────────
+
+    #[test]
+    fn regime_returns_empty_for_short_window() {
+        let candles: Vec<Candle> = (0..10).map(|_| make_candle()).collect();
+        let facts = regime::eval_regime(&candles);
+        assert!(facts.is_empty(), "expected empty for n < 20, got: {:?}", facts);
+    }
+
+    #[test]
+    fn regime_trend_strong() {
+        let mut candles: Vec<Candle> = (0..25).map(|i| {
+            let mut c = make_candle();
+            c.close = 100.0 + i as f64; // steady uptrend for closes
+            c.high = c.close + 2.0;
+            c.low = c.close - 2.0;
+            c
+        }).collect();
+        // Set trend consistency on the last candle
+        let last = candles.last_mut().unwrap();
+        last.trend_consistency_6 = 0.9;
+        last.trend_consistency_12 = 0.8;
+        last.trend_consistency_24 = 0.7;
+        let facts = regime::eval_regime(&candles);
+        let has_strong = facts.iter().any(|f| matches!(f,
+            Fact::Zone { indicator: "trend", zone: "trend-strong" }
+        ));
+        assert!(has_strong, "expected trend-strong, got: {:?}", facts);
+    }
+
+    #[test]
+    fn regime_trend_choppy() {
+        let mut candles: Vec<Candle> = (0..25).map(|i| {
+            let mut c = make_candle();
+            // Alternate up/down for choppy behavior
+            c.close = 100.0 + if i % 2 == 0 { 1.0 } else { -1.0 };
+            c.high = c.close + 2.0;
+            c.low = c.close - 2.0;
+            c
+        }).collect();
+        let last = candles.last_mut().unwrap();
+        last.trend_consistency_6 = 0.3;
+        last.trend_consistency_12 = 0.35;
+        let facts = regime::eval_regime(&candles);
+        let has_choppy = facts.iter().any(|f| matches!(f,
+            Fact::Zone { indicator: "trend", zone: "trend-choppy" }
+        ));
+        assert!(has_choppy, "expected trend-choppy, got: {:?}", facts);
+    }
+
+    #[test]
+    fn regime_vol_expanding() {
+        let mut candles: Vec<Candle> = (0..25).map(|i| {
+            let mut c = make_candle();
+            c.close = 100.0 + i as f64;
+            c.high = c.close + 2.0;
+            c.low = c.close - 2.0;
+            c
+        }).collect();
+        let last = candles.last_mut().unwrap();
+        last.atr_roc_6 = 0.3; // > 0.2 → vol-expanding
+        let facts = regime::eval_regime(&candles);
+        let has_vol = facts.iter().any(|f| matches!(f,
+            Fact::Zone { indicator: "volatility", zone: "vol-expanding" }
+        ));
+        assert!(has_vol, "expected vol-expanding, got: {:?}", facts);
+    }
+
+    #[test]
+    fn regime_vol_contracting() {
+        let mut candles: Vec<Candle> = (0..25).map(|i| {
+            let mut c = make_candle();
+            c.close = 100.0 + i as f64;
+            c.high = c.close + 2.0;
+            c.low = c.close - 2.0;
+            c
+        }).collect();
+        let last = candles.last_mut().unwrap();
+        last.atr_roc_6 = -0.2; // < -0.15 → vol-contracting
+        let facts = regime::eval_regime(&candles);
+        let has_vol = facts.iter().any(|f| matches!(f,
+            Fact::Zone { indicator: "volatility", zone: "vol-contracting" }
+        ));
+        assert!(has_vol, "expected vol-contracting, got: {:?}", facts);
+    }
+
+    #[test]
+    fn regime_kama_er_zone_present() {
+        let candles: Vec<Candle> = (0..25).map(|i| {
+            let mut c = make_candle();
+            c.close = 100.0 + i as f64;
+            c.high = c.close + 2.0;
+            c.low = c.close - 2.0;
+            c
+        }).collect();
+        let facts = regime::eval_regime(&candles);
+        let has_kama = facts.iter().any(|f| matches!(f,
+            Fact::Zone { indicator: "kama-er", .. }
+        ));
+        assert!(has_kama, "expected kama-er zone, got: {:?}", facts);
+    }
+
+    #[test]
+    fn regime_chop_zone_present() {
+        let candles: Vec<Candle> = (0..25).map(|i| {
+            let mut c = make_candle();
+            c.close = 100.0 + i as f64;
+            c.high = c.close + 2.0;
+            c.low = c.close - 2.0;
+            c
+        }).collect();
+        let facts = regime::eval_regime(&candles);
+        let has_chop = facts.iter().any(|f| matches!(f,
+            Fact::Zone { indicator: "chop", .. }
+        ));
+        assert!(has_chop, "expected chop zone, got: {:?}", facts);
+    }
+
+    #[test]
+    fn regime_scalars_present() {
+        let candles: Vec<Candle> = (0..25).map(|i| {
+            let mut c = make_candle();
+            c.close = 100.0 + i as f64;
+            c.high = c.close + 2.0;
+            c.low = c.close - 2.0;
+            c
+        }).collect();
+        let facts = regime::eval_regime(&candles);
+        let has_tc6 = facts.iter().any(|f| matches!(f,
+            Fact::Scalar { indicator: "trend-consistency-6", .. }
+        ));
+        let has_rp12 = facts.iter().any(|f| matches!(f,
+            Fact::Scalar { indicator: "range-pos-12", .. }
+        ));
+        let has_atr_roc = facts.iter().any(|f| matches!(f,
+            Fact::Scalar { indicator: "atr-roc-6", .. }
+        ));
+        assert!(has_tc6, "expected trend-consistency-6 scalar");
+        assert!(has_rp12, "expected range-pos-12 scalar");
+        assert!(has_atr_roc, "expected atr-roc-6 scalar");
+    }
+
+    // ── Divergence tests ────────────────────────────────────────────────
+
+    #[test]
+    fn divergence_no_panic_on_short_window() {
+        let candles: Vec<Candle> = (0..5).map(|_| make_candle()).collect();
+        let divs = divergence::eval_divergence(&candles);
+        assert!(divs.is_empty(), "short window should return no divergences");
+    }
+
+    #[test]
+    fn divergence_no_panic_on_flat_series() {
+        let candles: Vec<Candle> = (0..20).map(|_| make_candle()).collect();
+        let divs = divergence::eval_divergence(&candles);
+        let _ = divs; // just verify no panic
+    }
+
+    #[test]
+    fn divergence_bearish_higher_high_lower_rsi() {
+        let n = 30;
+        let mut candles: Vec<Candle> = (0..n).map(|_| make_candle()).collect();
+        for (i, c) in candles.iter_mut().enumerate() {
+            let t = i as f64;
+            c.close = if i <= 8 {
+                100.0 + t * 1.25
+            } else if i <= 15 {
+                110.0 - (t - 8.0) * 2.14
+            } else if i <= 22 {
+                95.0 + (t - 15.0) * 2.86
+            } else {
+                115.0 - (t - 22.0) * 1.0
+            };
+            c.high = c.close + 1.0;
+            c.low = c.close - 1.0;
+            c.open = c.close - 0.5;
+            c.rsi = if i <= 8 {
+                50.0 + t * 2.5
+            } else if i <= 15 {
+                70.0 - (t - 8.0) * 2.86
+            } else if i <= 22 {
+                50.0 + (t - 15.0) * 1.43
+            } else {
+                60.0 - (t - 22.0) * 1.0
+            };
+        }
+        let divs = divergence::eval_divergence(&candles);
+        for d in &divs {
+            assert!(d.kind == "bearish" || d.kind == "bullish");
+            assert_eq!(d.indicator, "rsi");
+        }
+    }
+
+    #[test]
+    fn divergence_varying_price_produces_valid_output() {
+        let n = 40;
+        let mut candles: Vec<Candle> = (0..n).map(|_| make_candle()).collect();
+        for (i, c) in candles.iter_mut().enumerate() {
+            let t = i as f64 / n as f64 * std::f64::consts::PI * 3.0;
+            c.close = 100.0 + 10.0 * t.sin();
+            c.high = c.close + 2.0;
+            c.low = c.close - 2.0;
+            c.open = c.close - 0.5;
+            c.rsi = 50.0 + 20.0 * (t * 0.9).sin();
+        }
+        let divs = divergence::eval_divergence(&candles);
+        for d in &divs {
+            assert!(d.kind == "bearish" || d.kind == "bullish");
+            assert!(d.candles_ago < n);
+        }
+    }
+
+    // ── Timeframe structure tests ───────────────────────────────────────
+
+    #[test]
+    fn timeframe_structure_no_panic_empty() {
+        let facts = timeframe::eval_timeframe_structure(&[]);
+        assert!(facts.is_empty());
+    }
+
+    #[test]
+    fn timeframe_structure_produces_body_scalars() {
+        let mut c = make_candle();
+        c.tf_1h_body = 0.7;
+        c.tf_4h_body = 0.3;
+        c.tf_1h_high = 105.0;
+        c.tf_1h_low = 95.0;
+        c.tf_4h_high = 108.0;
+        c.tf_4h_low = 92.0;
+        let facts = timeframe::eval_timeframe_structure(&[c]);
+        let has_1h_body = facts.iter().any(|f| matches!(f,
+            Fact::Scalar { indicator: "tf-1h-body", .. }
+        ));
+        let has_4h_body = facts.iter().any(|f| matches!(f,
+            Fact::Scalar { indicator: "tf-4h-body", .. }
+        ));
+        assert!(has_1h_body, "expected tf-1h-body scalar, got: {:?}", facts);
+        assert!(has_4h_body, "expected tf-4h-body scalar, got: {:?}", facts);
+    }
+
+    #[test]
+    fn timeframe_structure_range_position() {
+        let mut c = make_candle();
+        c.close = 100.0;
+        c.tf_1h_high = 110.0;
+        c.tf_1h_low = 90.0;
+        c.tf_4h_high = 120.0;
+        c.tf_4h_low = 80.0;
+        let facts = timeframe::eval_timeframe_structure(&[c]);
+        let has_1h_range = facts.iter().any(|f| matches!(f,
+            Fact::Scalar { indicator: "tf-1h-range-pos", .. }
+        ));
+        let has_4h_range = facts.iter().any(|f| matches!(f,
+            Fact::Scalar { indicator: "tf-4h-range-pos", .. }
+        ));
+        assert!(has_1h_range, "expected tf-1h-range-pos, got: {:?}", facts);
+        assert!(has_4h_range, "expected tf-4h-range-pos, got: {:?}", facts);
+    }
+
+    #[test]
+    fn timeframe_structure_zero_range_skips_pos() {
+        let mut c = make_candle();
+        c.tf_1h_high = 100.0;
+        c.tf_1h_low = 100.0;
+        let facts = timeframe::eval_timeframe_structure(&[c]);
+        let has_1h_range = facts.iter().any(|f| matches!(f,
+            Fact::Scalar { indicator: "tf-1h-range-pos", .. }
+        ));
+        assert!(!has_1h_range, "zero range should skip range-pos, got: {:?}", facts);
+    }
+
+    // ── Timeframe narrative tests ───────────────────────────────────────
+
+    #[test]
+    fn timeframe_narrative_no_panic_empty() {
+        let facts = timeframe::eval_timeframe_narrative(&[]);
+        assert!(facts.is_empty());
+    }
+
+    #[test]
+    fn timeframe_narrative_1h_up_strong() {
+        let mut c = make_candle();
+        c.tf_1h_ret = 0.01;
+        let facts = timeframe::eval_timeframe_narrative(&[c]);
+        let has_zone = facts.iter().any(|f| matches!(f,
+            Fact::Zone { indicator: "tf-1h", zone: "tf-1h-up-strong" }
+        ));
+        assert!(has_zone, "expected tf-1h-up-strong zone, got: {:?}", facts);
+    }
+
+    #[test]
+    fn timeframe_narrative_4h_down_strong() {
+        let mut c = make_candle();
+        c.tf_4h_ret = -0.02;
+        let facts = timeframe::eval_timeframe_narrative(&[c]);
+        let has_zone = facts.iter().any(|f| matches!(f,
+            Fact::Zone { indicator: "tf-4h", zone: "tf-4h-down-strong" }
+        ));
+        assert!(has_zone, "expected tf-4h-down-strong zone, got: {:?}", facts);
+    }
+
+    #[test]
+    fn timeframe_narrative_all_agree() {
+        let mut prev = make_candle();
+        prev.close = 99.0;
+        let mut now = make_candle();
+        now.close = 101.0;
+        now.tf_1h_ret = 0.01;
+        now.tf_4h_ret = 0.02;
+        let facts = timeframe::eval_timeframe_narrative(&[prev, now]);
+        let has_agree = facts.iter().any(|f| matches!(f,
+            Fact::Bare { label: "tf-all-agree" }
+        ));
+        assert!(has_agree, "expected tf-all-agree, got: {:?}", facts);
+    }
+
+    #[test]
+    fn timeframe_narrative_all_disagree() {
+        let mut prev = make_candle();
+        prev.close = 101.0;
+        let mut now = make_candle();
+        now.close = 99.0;
+        now.tf_1h_ret = 0.01;
+        now.tf_4h_ret = 0.02;
+        let facts = timeframe::eval_timeframe_narrative(&[prev, now]);
+        let has_disagree = facts.iter().any(|f| matches!(f,
+            Fact::Bare { label: "tf-all-disagree" }
+        ));
+        assert!(has_disagree, "expected tf-all-disagree, got: {:?}", facts);
+    }
+
+    #[test]
+    fn timeframe_narrative_ret_scalar() {
+        let mut c = make_candle();
+        c.tf_1h_ret = 0.003;
+        let facts = timeframe::eval_timeframe_narrative(&[c]);
+        let has_ret = facts.iter().any(|f| matches!(f,
+            Fact::Scalar { indicator: "tf-1h-ret", .. }
+        ));
+        assert!(has_ret, "expected tf-1h-ret scalar, got: {:?}", facts);
+    }
 }

@@ -96,7 +96,7 @@ pub struct PositionEntry {
 // Rate = source_per_target. Rate going up is ALWAYS good.
 // One formula for stop, TP, trailing, P&L. No match on direction.
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum PositionPhase {
     Active,         // initial position, stop + TP active
     Runner,         // capital reclaimed, riding house money
@@ -197,8 +197,118 @@ impl ManagedPosition {
     }
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum PositionExit {
     StopLoss,
     TakeProfit,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_entry(rate: f64, atr: f64, k_stop: f64, k_tp: f64) -> PositionEntry {
+        PositionEntry {
+            id: 1,
+            candle_idx: 0,
+            source_asset: Asset::new("USDC"),
+            target_asset: Asset::new("WBTC"),
+            source_amount: 1000.0,
+            target_received: 1000.0 / rate,
+            entry_rate: rate,
+            entry_atr: atr,
+            entry_fee: 1.0,
+            k_stop,
+            k_tp,
+        }
+    }
+
+    #[test]
+    fn new_creates_with_correct_stop_trail_tp() {
+        let rate = 50000.0;
+        let atr = 0.01;  // 1% normalized ATR
+        let k_stop = 2.0;
+        let k_tp = 3.0;
+        let pos = ManagedPosition::new(make_entry(rate, atr, k_stop, k_tp));
+
+        let expected_stop = rate * (1.0 - k_stop * atr);
+        let expected_tp = rate * (1.0 + k_tp * atr);
+
+        assert_eq!(pos.entry_rate, rate);
+        assert!((pos.trailing_stop - expected_stop).abs() < 1e-6);
+        assert!((pos.take_profit - expected_tp).abs() < 1e-6);
+        assert_eq!(pos.phase, PositionPhase::Active);
+        assert_eq!(pos.extreme_rate, rate);
+        assert_eq!(pos.candles_held, 0);
+    }
+
+    #[test]
+    fn tick_returns_none_when_no_trigger() {
+        let mut pos = ManagedPosition::new(make_entry(50000.0, 0.01, 2.0, 3.0));
+        // Price moves slightly up but not to TP
+        let result = pos.tick(50500.0, TrailFactor(1.5));
+        assert_eq!(result, None);
+        assert_eq!(pos.candles_held, 1);
+    }
+
+    #[test]
+    fn tick_returns_stop_loss_when_stop_triggered() {
+        let mut pos = ManagedPosition::new(make_entry(50000.0, 0.01, 2.0, 3.0));
+        // Stop is at 50000 * (1 - 2*0.01) = 49000
+        let result = pos.tick(48000.0, TrailFactor(1.5));
+        assert_eq!(result, Some(PositionExit::StopLoss));
+    }
+
+    #[test]
+    fn tick_returns_take_profit_when_tp_triggered() {
+        let mut pos = ManagedPosition::new(make_entry(50000.0, 0.01, 2.0, 3.0));
+        // TP is at 50000 * (1 + 3*0.01) = 51500
+        let result = pos.tick(52000.0, TrailFactor(1.5));
+        assert_eq!(result, Some(PositionExit::TakeProfit));
+    }
+
+    #[test]
+    fn trailing_stop_ratchets_upward() {
+        let mut pos = ManagedPosition::new(make_entry(50000.0, 0.01, 2.0, 3.0));
+        let initial_stop = pos.trailing_stop;
+
+        // Price rises but not to TP
+        pos.tick(50800.0, TrailFactor(1.5));
+        // New extreme is 50800, new stop = 50800 * (1 - 1.5*0.01) = 50038
+        assert!(pos.trailing_stop > initial_stop);
+        assert!((pos.extreme_rate - 50800.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn return_pct_positive_when_rate_rises() {
+        let entry = make_entry(50000.0, 0.01, 2.0, 3.0);
+        let source_amount = entry.source_amount;
+        let target_held = entry.target_received;
+        let fee = entry.entry_fee;
+        let pos = ManagedPosition::new(entry);
+
+        // Rate goes up 10%: 55000
+        let ret = pos.return_pct(55000.0);
+        // target_held * 55000 / source_amount - 1 (minus fees)
+        let expected = (target_held * 55000.0 + 0.0 - fee) / source_amount - 1.0;
+        assert!((ret - expected).abs() < 1e-10);
+        assert!(ret > 0.0);
+    }
+
+    #[test]
+    fn return_pct_negative_when_rate_falls() {
+        let pos = ManagedPosition::new(make_entry(50000.0, 0.01, 2.0, 3.0));
+        let ret = pos.return_pct(45000.0);
+        assert!(ret < 0.0);
+    }
+
+    #[test]
+    fn return_pct_symmetric_with_entry() {
+        let pos = ManagedPosition::new(make_entry(50000.0, 0.01, 2.0, 3.0));
+        // At entry rate, return should be slightly negative (due to entry fee)
+        let ret = pos.return_pct(50000.0);
+        // fee is 1.0 on 1000.0 source, so ~ -0.001
+        assert!(ret < 0.0);
+        assert!(ret > -0.01); // small
+    }
 }

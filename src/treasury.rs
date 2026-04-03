@@ -186,3 +186,139 @@ impl Treasury {
             .sum()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn usdc() -> Asset { Asset::new("USDC") }
+    fn wbtc() -> Asset { Asset::new("WBTC") }
+
+    fn price_map(btc_price: f64) -> HashMap<Asset, f64> {
+        let mut m = HashMap::new();
+        m.insert(usdc(), 1.0);
+        m.insert(wbtc(), btc_price);
+        m
+    }
+
+    #[test]
+    fn deposit_adds_to_balance() {
+        let mut t = Treasury::new(5, 0.5);
+        t.deposit(&usdc(), 1000.0);
+        assert_eq!(t.balance(&usdc()), 1000.0);
+        t.deposit(&usdc(), 500.0);
+        assert_eq!(t.balance(&usdc()), 1500.0);
+    }
+
+    #[test]
+    fn withdraw_removes_capped_at_available() {
+        let mut t = Treasury::new(5, 0.5);
+        t.deposit(&usdc(), 100.0);
+        let got = t.withdraw(&usdc(), 60.0);
+        assert_eq!(got, 60.0);
+        assert_eq!(t.balance(&usdc()), 40.0);
+
+        // withdraw more than available
+        let got = t.withdraw(&usdc(), 999.0);
+        assert_eq!(got, 40.0);
+        assert_eq!(t.balance(&usdc()), 0.0);
+    }
+
+    #[test]
+    fn swap_converts_at_rate_minus_fees() {
+        let mut t = Treasury::new(5, 0.5);
+        t.deposit(&usdc(), 1000.0);
+        // rate = 50000 USDC per BTC, fee = 1%
+        let (spent, received) = t.swap(&usdc(), &wbtc(), 1000.0, Rate(50000.0), 0.01);
+        assert_eq!(spent, 1000.0);
+        // after fee: 990 USDC / 50000 = 0.0198 BTC
+        assert!((received - 0.0198).abs() < 1e-10);
+        assert_eq!(t.balance(&usdc()), 0.0);
+        assert!((t.balance(&wbtc()) - 0.0198).abs() < 1e-10);
+        assert!((t.total_fees_paid - 10.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn swap_capped_at_available() {
+        let mut t = Treasury::new(5, 0.5);
+        t.deposit(&usdc(), 100.0);
+        let (spent, received) = t.swap(&usdc(), &wbtc(), 500.0, Rate(50000.0), 0.0);
+        assert_eq!(spent, 100.0);
+        assert!((received - 100.0 / 50000.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn swap_zero_rate_returns_nothing() {
+        let mut t = Treasury::new(5, 0.5);
+        t.deposit(&usdc(), 100.0);
+        let (spent, received) = t.swap(&usdc(), &wbtc(), 50.0, Rate(0.0), 0.0);
+        assert_eq!(spent, 0.0);
+        assert_eq!(received, 0.0);
+        assert_eq!(t.balance(&usdc()), 100.0);
+    }
+
+    #[test]
+    fn claim_moves_balance_to_deployed() {
+        let mut t = Treasury::new(5, 0.5);
+        t.deposit(&usdc(), 1000.0);
+        let claimed = t.claim(&usdc(), 400.0);
+        assert_eq!(claimed, 400.0);
+        assert_eq!(t.balance(&usdc()), 600.0);
+        assert_eq!(t.deployed(&usdc()), 400.0);
+        assert_eq!(t.total(&usdc()), 1000.0);
+    }
+
+    #[test]
+    fn claim_capped_at_balance() {
+        let mut t = Treasury::new(5, 0.5);
+        t.deposit(&usdc(), 100.0);
+        let claimed = t.claim(&usdc(), 999.0);
+        assert_eq!(claimed, 100.0);
+        assert_eq!(t.balance(&usdc()), 0.0);
+        assert_eq!(t.deployed(&usdc()), 100.0);
+    }
+
+    #[test]
+    fn release_moves_deployed_to_balance() {
+        let mut t = Treasury::new(5, 0.5);
+        t.deposit(&usdc(), 1000.0);
+        t.claim(&usdc(), 600.0);
+        t.release(&usdc(), 200.0);
+        assert_eq!(t.balance(&usdc()), 600.0);   // 400 + 200
+        assert_eq!(t.deployed(&usdc()), 400.0);   // 600 - 200
+    }
+
+    #[test]
+    fn release_capped_at_deployed() {
+        let mut t = Treasury::new(5, 0.5);
+        t.deposit(&usdc(), 100.0);
+        t.claim(&usdc(), 50.0);
+        t.release(&usdc(), 999.0);
+        assert_eq!(t.balance(&usdc()), 100.0);
+        assert_eq!(t.deployed(&usdc()), 0.0);
+    }
+
+    #[test]
+    fn rate_newtype_used_in_swap() {
+        let mut t = Treasury::new(5, 0.5);
+        t.deposit(&usdc(), 50000.0);
+        // Rate(50000) means 50000 USDC per BTC
+        let (_, received) = t.swap(&usdc(), &wbtc(), 50000.0, Rate(50000.0), 0.0);
+        assert!((received - 1.0).abs() < 1e-10); // exactly 1 BTC
+    }
+
+    #[test]
+    fn total_value_sums_across_assets_at_given_prices() {
+        let mut t = Treasury::new(5, 0.5);
+        t.deposit(&usdc(), 5000.0);
+        t.deposit(&wbtc(), 0.1);
+        t.claim(&wbtc(), 0.05); // 0.05 in balance, 0.05 deployed
+
+        let prices = price_map(60000.0);
+        // USDC: 5000 * 1.0 = 5000
+        // WBTC balance: 0.05 * 60000 = 3000
+        // WBTC deployed: 0.05 * 60000 = 3000
+        let expected = 5000.0 + 3000.0 + 3000.0;
+        assert!((t.total_value(&prices) - expected).abs() < 1e-10);
+    }
+}

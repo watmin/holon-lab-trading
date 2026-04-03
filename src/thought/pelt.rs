@@ -96,3 +96,69 @@ pub fn most_recent_segment_dir(values: &[f64]) -> Option<&'static str> {
     else if change > 0.0 { Some("up") }
     else { Some("down") }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn constant_series_no_changepoints() {
+        let values = vec![1.0; 20];
+        let cps = pelt_changepoints(&values, bic_penalty(&values));
+        assert!(cps.is_empty(), "constant series should have no changepoints, got: {:?}", cps);
+    }
+
+    #[test]
+    fn step_function_one_changepoint() {
+        let mut values = vec![1.0; 10];
+        values.extend(vec![5.0; 10]);
+        let cps = pelt_changepoints(&values, bic_penalty(&values));
+        assert!(!cps.is_empty(), "step function should have at least one changepoint");
+        // The changepoint should be near index 10 (the boundary)
+        let cp = cps[0];
+        assert!((8..=12).contains(&cp), "changepoint {} should be near index 10", cp);
+    }
+
+    #[test]
+    fn pelt_on_values_returns_boundaries() {
+        let mut values = vec![1.0; 10];
+        values.extend(vec![5.0; 10]);
+        let result = pelt_on_values(&values);
+        // boundaries always starts with 0 and ends with n
+        assert_eq!(*result.boundaries.first().unwrap(), 0);
+        assert_eq!(*result.boundaries.last().unwrap(), values.len());
+        // boundaries length = changepoints + 2 (start + end)
+        assert_eq!(result.boundaries.len(), result.changepoints.len() + 2);
+    }
+
+    #[test]
+    fn most_recent_segment_dir_rising() {
+        // A clearly rising series: 1, 2, 3, ..., 20
+        let values: Vec<f64> = (1..=20).map(|i| i as f64).collect();
+        let dir = most_recent_segment_dir(&values);
+        assert_eq!(dir, Some("up"), "rising series should yield 'up', got: {:?}", dir);
+    }
+
+    #[test]
+    fn most_recent_segment_dir_falling() {
+        // A clearly falling series: 20, 19, 18, ..., 1
+        let values: Vec<f64> = (1..=20).rev().map(|i| i as f64).collect();
+        let dir = most_recent_segment_dir(&values);
+        assert_eq!(dir, Some("down"), "falling series should yield 'down', got: {:?}", dir);
+    }
+
+    #[test]
+    fn short_series_returns_none() {
+        // fewer than 5 elements → None
+        let values = vec![1.0, 2.0, 3.0];
+        assert_eq!(most_recent_segment_dir(&values), None);
+    }
+
+    #[test]
+    fn bic_penalty_constant_is_huge() {
+        // Zero-variance series gets a huge penalty (no splits)
+        let values = vec![5.0; 100];
+        let p = bic_penalty(&values);
+        assert!(p > 1e9, "constant series penalty should be huge, got: {}", p);
+    }
+}
