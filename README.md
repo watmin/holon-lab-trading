@@ -1,57 +1,168 @@
 # Holon Lab: Trading
 
-A self-tuning BTC paper trader powered by [Holon](https://github.com/watmin/holon)'s
-algebraic intelligence stack. Encodes OHLCV market data + technical indicators into
-hypervectors, learns market-regime manifolds, and autonomously refines its pattern
-memory through a two-phase feedback loop.
+A self-organizing BTC trading enterprise built from six primitives. Proves that named thoughts composed through vector algebra predict market direction — 59.7% at q99 on 100,000 candles, five points above academic SOTA with deep learning.
 
-**This is a proving ground — zero modifications to holon core.**
+**This is a proving ground for [Holon](https://github.com/watmin/holon) and [wat](https://github.com/watmin/wat).** Zero modifications to holon core. The enterprise consumes the holon-rs library and the wat specification language.
 
-> If anything about how Holon works is unclear, read [`HOLON_CONTEXT.md`](./HOLON_CONTEXT.md)
-> before the code. The standard VSA/HDC literature has gaps that matter. That file captures
-> what Holon has discovered that isn't in the papers.
+## Architecture
+
+```mermaid
+graph TD
+    subgraph "Data Source"
+        PQ[Parquet: raw OHLCV]
+    end
+
+    subgraph "Enterprise Fold"
+        STREAM[ParquetRawStream] --> EVENT[Event::Candle]
+        EVENT --> DESK
+
+        subgraph DESK["Desk (per trading pair)"]
+            IND[IndicatorBank<br/>40 streaming state machines] --> WINDOW[Candle Window<br/>ring buffer, max 2016]
+
+            subgraph "Observers (pmap — 6 parallel)"
+                MOM[Momentum]
+                STR[Structure]
+                VOL[Volume]
+                NAR[Narrative]
+                REG[Regime]
+                GEN[Generalist]
+            end
+
+            WINDOW --> MOM & STR & VOL & NAR & REG & GEN
+
+            MOM & STR & VOL & NAR & REG & GEN --> MGR[Manager Journal<br/>reads observer opinions]
+            MGR --> CONV{Conviction in<br/>proven band?}
+            CONV -->|yes| POS[Position Management<br/>open / tick / exit]
+            CONV -->|no| SKIP[Skip]
+        end
+
+        subgraph "Risk Department (enterprise-level)"
+            RB[5 Specialist Branches<br/>OnlineSubspace each] --> RMGR[Risk Manager Journal<br/>Healthy / Unhealthy]
+            RB --> RGEN[Risk Generalist<br/>holistic OnlineSubspace]
+            RMGR & RGEN --> RMULT[risk_mult]
+        end
+
+        RMULT --> CONV
+        POS --> TREASURY[Treasury<br/>generic asset map]
+    end
+
+    subgraph "Output"
+        TREASURY --> LEDGER[SQLite Ledger<br/>every trade, every candle]
+    end
+```
+
+## The Fold
+
+The enterprise is a fold over a stream of raw candles: `(state, raw_candle) → state`. One event at a time. Walking into the future.
+
+1. **Raw candle arrives** — 5 numbers and a timestamp
+2. **Desk steps indicator bank** — 40 streaming state machines produce computed indicators
+3. **Candle pushed to window** — ring buffer, observers sample slices at their own scale
+4. **6 observers encode in parallel** (rayon pmap) — each through its own vocabulary lens
+5. **6 observers predict in parallel** — each journal produces direction + conviction
+6. **Manager encodes observer opinions** — learns which configurations are profitable
+7. **Gates check** — conviction in proven band, risk_mult above threshold, market moved
+8. **Position management** — open, tick (stop/trail/TP), exit, settle
+9. **Learning** — observers learn from price outcomes, manager learns from profitability
+10. **Risk evaluates** — 5 branches + generalist + manager, all from portfolio state
+
+## Parallelism
+
+Five rayon `par_iter` / `par_iter_mut` sites verified by the compiler (Send+Sync):
+
+| Site | Form | Items | Per |
+|------|------|-------|-----|
+| Observer encoding | pmap | 6 | every candle |
+| Observer prediction | pmap | 6 | every candle |
+| Observer decay | pfor-each | 6 | every candle |
+| Observer resolve | pfor-each | 6 | per resolved entry |
+
+The wat language declares `pmap` and `pfor-each` as structural forms. The Rust implements via rayon. The compiler verifies independence.
 
 ## Quick Start
 
 ```bash
-# 1. Set up environment (auto-creates venv, installs holon + deps)
-./scripts/run_with_venv.sh python -c "print('ready')"
-
-# 2. Download historical data (~2 years of 5m BTC candles)
-./scripts/run_with_venv.sh python -c "from trading.feed import HistoricalFeed; HistoricalFeed().ensure_data()"
-
-# 3. Discover seed engrams (offline, ~10 min)
-./scripts/discover.sh
-
-# 4. Run live self-tuning system
-./scripts/run_live.sh
+./enterprise.sh build                                    # compile (release)
+./enterprise.sh run --max-candles 5000 --asset-mode hold  # quick run
+./enterprise.sh test 100000 --asset-mode hold --name run  # benchmark → runs/
+./enterprise.sh kill                                      # kill switch
 ```
 
-## Architecture
+Kill switch: `touch trader-stop`
 
-See [PLAN.md](PLAN.md) for the full battle plan.
-
-```
-Phase 1 (main thread)          Phase 2 (daemon thread)
-─────────────────────          ────────────────────────
-Live 5m BTC feed               Every 30 min:
-  → encode window                → read recent decisions
-  → probe engram library         → score engrams by outcome
-  → match? deploy action         → reward/punish features
-  → surprise? mint engram        → prune bottom 35%
-  → log to SQLite                → ship updated engrams
-  → hot-reload if new version    → consumer reloads
-```
-
-## Project Structure
+## Six Primitives
 
 ```
-trading/
-  features.py    Technical indicators (SMA, BB, MACD, ADX, RSI, ATR)
-  encoder.py     OHLCV → hypervector via encode_walkable
-  feed.py        Live + historical BTC data feed
-  tracker.py     Paper trading + metrics + SQLite audit trail
-  harness.py     Brute-force engram discovery
-  darwinism.py   Algebraic feature selection (reward/punishment)
-  system.py      Two-phase orchestrator
+atom    — name a thought
+bind    — compose thoughts
+bundle  — superpose thoughts
+cosine  — measure a thought
+journal — learn from a stream of thoughts
+curve   — evaluate the quality of learned thoughts
 ```
+
+Everything else is userland. The enterprise is a program written in these six primitives.
+
+## Two Templates
+
+**Template 1 — Prediction (Journal):** "What will happen next?" Observers predict direction. The manager predicts profitability. The risk manager predicts portfolio health.
+
+**Template 2 — Reaction (OnlineSubspace):** "Does this look normal?" Risk branches measure distance from healthy. The panel engram measures expert agreement familiarity.
+
+## Module Layout
+
+```
+src/bin/enterprise.rs     — the heartbeat (orchestrates, doesn't define)
+src/market/
+  desk.rs                 — trading pair's full enterprise tree
+  exit.rs                 — exit expert encoding
+  manager.rs              — manager encoding (observer opinions → thought)
+  observer.rs             — Observer struct + proof gates
+  mod.rs                  — Lens enum, observer panel
+src/risk/
+  mod.rs                  — 5 specialist branches + generalist
+  manager.rs              — risk manager Journal (Healthy/Unhealthy)
+src/thought/
+  mod.rs                  — ThoughtEncoder + 17 eval methods
+  pelt.rs                 — PELT changepoint detection
+src/vocab/                — 12 vocabulary modules (oscillators, flow, regime, ...)
+src/indicators.rs         — streaming indicator fold (40 state machines)
+src/event.rs              — Event::Candle(RawCandle)
+src/state.rs              — EnterpriseState + CandleContext + SharedState
+src/treasury.rs           — generic asset map with Rate newtype
+src/position.rs           — symmetric positions (source/target)
+src/portfolio.rs          — phase transitions, win/loss tracking
+src/sizing.rs             — Kelly criterion
+src/journal.rs            — holon-rs Journal bridge
+src/ledger.rs             — SQLite schema
+src/candle.rs             — Candle struct (52 indicator fields)
+```
+
+## Specifications
+
+The `wat/` directory mirrors `src/`. Every Rust module has a wat specification. The wat leads, the Rust follows. Seven wards defend the code:
+
+| Ward | Question |
+|------|----------|
+| `/sever` | Is it tangled? |
+| `/reap` | Is it alive? |
+| `/scry` | Does spec match code? |
+| `/gaze` | Does it communicate? |
+| `/forge` | Does it compose? |
+| `/temper` | Is it efficient? |
+| `/assay` | Is it expressed? |
+
+## The Book
+
+[BOOK.md](BOOK.md) documents the full journey — from visual encoding failure to streaming enterprise. Five chapters. The architecture, the philosophy, the results, the catharsis.
+
+## Data
+
+- `data/btc_5m_raw.parquet` — 652,608 5-minute BTC candles (Jan 2019–Mar 2025)
+- `runs/` — run ledgers and logs (append-only, never delete)
+
+## What This Proves
+
+The trading system is a proxy for intelligence. We are proving that named thoughts composed through vector algebra — six primitives, one cosine, one fold — can predict. The same architecture that detects DDoS attacks, that builds spectral firewalls, that evaluates a million rules at kernel line rate. Different vocabulary. Same algebra. Same curve.
+
+The ideas are free. The code is public. The curve confirms.
