@@ -6,8 +6,8 @@
 
 use holon::{Primitives, ScalarEncoder, ScalarMode, VectorManager, Vector};
 
-use crate::candle::Candle;
-use crate::event::EnrichedEvent;
+use crate::event::Event;
+use crate::indicators::RawCandle;
 use crate::market::manager::ManagerAtoms;
 use crate::portfolio::Portfolio;
 use crate::position::{ManagedPosition, PositionPhase};
@@ -357,39 +357,34 @@ impl EnterpriseState {
         }
     }
 
-    /// The enterprise's public interface. One enriched event, one fold step.
+    /// The enterprise's public interface. One event, one fold step.
     /// The enterprise doesn't know where events come from.
-    /// Backtest, websocket, test harness — same EnrichedEvent, same fold.
+    /// Backtest, websocket, test harness — same Event, same fold.
     pub fn on_event(
         &mut self,
-        event: EnrichedEvent,
+        event: Event,
         ctx: &CandleContext,
     ) {
         match event {
-            EnrichedEvent::Deposit { asset, amount } => {
+            Event::Deposit { asset, amount } => {
                 self.treasury.deposit(&asset, amount);
-                return;
             }
-            EnrichedEvent::Withdraw { asset, amount } => {
+            Event::Withdraw { asset, amount } => {
                 self.treasury.withdraw(&asset, amount);
-                return;
             }
-            EnrichedEvent::Candle { candle, fact_labels: tht_facts, observer_vecs: _ } => {
-                self.on_candle_inner(&candle, tht_facts, Vec::new(), ctx);
+            Event::Candle(raw) => {
+                self.on_candle_raw(raw, ctx);
             }
         }
     }
 
-    /// Process one candle's pre-computed results. The fold's step function.
+    /// Process one raw candle. The fold's step function.
     ///
-    /// Called from on_event for EnrichedEvent::Candle.
-    /// The desk encodes thoughts from its candle window. The enterprise
-    /// routes candles to desks sequentially. The cursor is managed here.
-    fn on_candle_inner(
+    /// Each desk steps its own indicator bank from the raw OHLCV.
+    /// No pre-computed indicators. No pre-encoded thoughts.
+    fn on_candle_raw(
         &mut self,
-        candle: &Candle,
-        tht_facts: Vec<String>,
-        _observer_vecs: Vec<Vector>,  // rune:reap(scaffolding) — desk encodes from its window now
+        raw: RawCandle,
         ctx: &CandleContext,
     ) {
         let i = self.cursor;
@@ -405,10 +400,10 @@ impl EnterpriseState {
             );
         }
 
-        // Desk fold step
+        // Desk fold step — each desk computes its own indicators from raw OHLCV
         for desk in &mut self.desks {
             desk.on_candle(
-                i, candle, tht_facts.clone(), Vec::new(),
+                i, &raw,
                 &mut self.treasury, &mut self.portfolio,
                 self.cached_risk_mult, &mut self.peak_treasury_equity,
                 &mut self.db_batch, ctx,

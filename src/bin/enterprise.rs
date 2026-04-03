@@ -14,7 +14,6 @@ use clap::Parser;
 use rusqlite::params;
 use holon::{VectorManager, Vector};
 
-use enterprise::candle::load_candles;
 use enterprise::treasury::Asset;
 use enterprise::journal::Label;
 use enterprise::thought::{ThoughtEncoder, ThoughtVocab};
@@ -37,12 +36,7 @@ const MAX_SINGLE_POSITION: f64 = 0.20;
 #[derive(Parser)]
 #[command(name = "enterprise", about = "Self-organizing BTC trading enterprise")]
 struct Args {
-    /// Source candle database (pre-computed indicators). Used when --parquet is not set.
-    #[arg(long, default_value = "data/candles.db")]
-    db_path: PathBuf,
-
-    /// Raw OHLCV parquet file. When set, indicators are computed on the fly
-    /// via streaming fold — no pre-computed SQLite database needed.
+    /// Raw OHLCV parquet file. Indicators computed on the fly per-desk.
     #[arg(long)]
     parquet: Option<PathBuf>,
 
@@ -203,21 +197,11 @@ fn main() {
             2.0 * (args.swap_fee + args.slippage) * 100.0);
     }
 
-    // ─ Load candles ─
-    let t0 = Instant::now();
-    let candles = if let Some(ref parquet_path) = args.parquet {
-        eprintln!("\n  Streaming indicators from parquet {:?}...", parquet_path);
-        // Indicators computed on the fly — no pre-computed SQLite needed.
-        // Collected into Vec because parallel batch encoding needs random access.
-        // True per-candle streaming requires per-desk window buffers (future).
-        let stream = enterprise::indicators::ParquetCandleStream::open(parquet_path);
-        let candles: Vec<_> = stream.collect();
-        candles
-    } else {
-        eprintln!("\n  Loading pre-computed candles from {:?}...", args.db_path);
-        load_candles(&args.db_path, "label_oracle_10")
-    };
-    eprintln!("  {} candles in {:.1}s", candles.len(), t0.elapsed().as_secs_f64());
+    // ─ Raw candle stream (OHLCV only — indicators computed per-desk) ─
+    let parquet_path = args.parquet.as_ref().expect("--parquet is required (candles.db removed)");
+    let total_candles = enterprise::indicators::ParquetRawStream::total_candles(parquet_path);
+    eprintln!("\n  Parquet: {:?} ({} candles)", parquet_path, total_candles);
+    let raw_stream = enterprise::indicators::ParquetRawStream::open(parquet_path);
 
     let vm = VectorManager::new(args.dims);
 
@@ -304,7 +288,6 @@ fn main() {
     let rolling_cap = 1000usize;
 
     // ─ Loop config ─
-    let total_candles = candles.len();
     let start_idx     = args.window - 1;
     let end_idx       = if args.max_candles > 0 {
         (start_idx + args.max_candles).min(total_candles)
@@ -315,7 +298,9 @@ fn main() {
     let progress_every = if loop_count <= 5_000 { 500 }
                         else if loop_count <= 50_000 { 2_000 }
                         else { 10_000 };
-    let bnh_entry     = candles[start_idx].close;
+    // bnh_entry and seed_price discovered as the stream flows
+    let mut bnh_entry: f64 = 0.0;
+    let mut last_close: f64 = 0.0;
     let t_start = Instant::now();
 
     // Dynamic flip threshold config.
@@ -338,15 +323,8 @@ fn main() {
         args.window,
     );
 
-    // Seed treasury 50/50: half USDC, half WBTC at starting price.
-    // "I don't know which way the market will go — hold both."
-    let seed_price = candles[args.window - 1].close;
-    {
-        let half = args.initial_equity / 2.0;
-        let actual = state.treasury.withdraw(&base_asset, half);
-        let seed_quote = actual / seed_price;
-        state.treasury.deposit(&quote_asset, seed_quote);
-    }
+    // Treasury seeding deferred until we see the first candle at start_idx.
+    let mut treasury_seeded = false;
 
     ledger.execute_batch("BEGIN").ok();
 
@@ -402,34 +380,57 @@ fn main() {
         t_start,
     };
 
-    while state.cursor < end_idx {
+    let mut candle_idx: usize = 0;
+    let mut batch_count: usize = 0;
+    for raw in raw_stream {
+        // Skip candles before start_idx (indicator warmup)
+        if candle_idx < start_idx {
+            // Track close for seed price
+            last_close = raw.close;
+            candle_idx += 1;
+            continue;
+        }
+
+        // Stop at end_idx
+        if candle_idx >= end_idx { break; }
+
+        // Kill switch
         if kill_file.exists() {
             eprintln!("\n  Kill file — aborting.");
             std::fs::remove_file(kill_file).ok();
             break;
         }
 
-        let batch_end = (state.cursor + BATCH_SIZE).min(end_idx);
-
-        // ── Sequential: one candle at a time ────────────────────────────────
-        // The desk encodes thoughts from its own candle window.
-        // No parallel batch. No pre-encoding. Websocket-ready.
-        for i in state.cursor..batch_end {
-            let event = enterprise::event::EnrichedEvent::Candle {
-                candle: candles[i].clone(),
-                fact_labels: Vec::new(),    // desk computes its own
-                observer_vecs: Vec::new(),  // desk encodes from its window
-            };
-            state.on_event(event, &ctx);
+        // First candle at start_idx: seed treasury and record bnh entry
+        if !treasury_seeded {
+            let seed_price = raw.close;
+            bnh_entry = seed_price;
+            let half = args.initial_equity / 2.0;
+            let actual = state.treasury.withdraw(&base_asset, half);
+            let seed_quote = actual / seed_price;
+            state.treasury.deposit(&quote_asset, seed_quote);
+            treasury_seeded = true;
         }
 
-        // Flush log entries accumulated during this batch.
-        enterprise::ledger::flush_logs(&state.desks[0].pending_logs, &ledger);
-        state.desks[0].pending_logs.clear();
+        last_close = raw.close;
+        state.on_event(enterprise::event::Event::Candle(raw), &ctx);
+
+        // Flush log entries in batches
+        batch_count += 1;
+        if batch_count >= BATCH_SIZE {
+            enterprise::ledger::flush_logs(&state.desks[0].pending_logs, &ledger);
+            state.desks[0].pending_logs.clear();
+            batch_count = 0;
+        }
+
+        candle_idx += 1;
     }
+    // Flush remaining
+    enterprise::ledger::flush_logs(&state.desks[0].pending_logs, &ledger);
+    state.desks[0].pending_logs.clear();
 
     // Final treasury equity for post-loop reporting
-    let final_price = candles[end_idx - 1].close;
+    let final_price = last_close;
     let prices = state.treasury.price_map(&[(&quote_asset, final_price)]);
     let treasury_equity = state.treasury.total_value(&prices);
 
@@ -453,7 +454,7 @@ fn main() {
     // ─ Final summary ─────────────────────────────────────────────────────────
     let total_time = t_start.elapsed().as_secs_f64();
     let ret        = (treasury_equity - args.initial_equity) / args.initial_equity * 100.0;
-    let bnh_final  = (candles[end_idx - 1].close - bnh_entry) / bnh_entry * 100.0;
+    let bnh_final  = (final_price - bnh_entry) / bnh_entry * 100.0;
 
     eprintln!("\n═══════════════════════════════════════════════════════════");
     eprintln!("  enterprise complete — {} candles in {:.1}s ({:.0}/s)",

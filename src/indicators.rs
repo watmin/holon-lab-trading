@@ -13,6 +13,8 @@ use crate::candle::Candle;
 // ─── Raw input ─────────────────────────────────────────────────────────────
 
 /// Minimal candle from parquet: just OHLCV + timestamp.
+/// The enterprise's true input — everything else is derived.
+#[derive(Clone)]
 pub struct RawCandle {
     pub ts: String,
     pub open: f64,
@@ -38,7 +40,8 @@ impl SmaState {
     fn step(&mut self, value: f64) -> f64 {
         self.buffer.push_back(value);
         if self.buffer.len() > self.period { self.buffer.pop_front(); }
-        self.buffer.iter().sum::<f64>() / self.buffer.len() as f64
+        if self.buffer.len() < self.period { return 0.0; }
+        self.buffer.iter().sum::<f64>() / self.period as f64
     }
 
 }
@@ -81,17 +84,41 @@ impl WilderState {
 
     fn step(&mut self, value: f64) -> f64 {
         self.count += 1;
-        let p = self.period as f64;
+        let period_f = self.period as f64;
         if self.count <= self.period {
             self.accum += value;
             if self.count == self.period {
-                self.prev = self.accum / p;
+                self.prev = self.accum / period_f;
             }
             self.accum / self.count as f64
         } else {
-            self.prev = (self.prev * (p - 1.0) + value) / p;
+            self.prev = (self.prev * (period_f - 1.0) + value) / period_f;
             self.prev
         }
+    }
+}
+
+/// Rolling standard deviation — exact population stddev over a window.
+/// Keeps the full window of values. Matches build_candles::stddev() exactly.
+struct RollingStddev {
+    buffer: VecDeque<f64>,
+    period: usize,
+}
+
+impl RollingStddev {
+    fn new(period: usize) -> Self {
+        Self { buffer: VecDeque::with_capacity(period + 1), period }
+    }
+
+    fn step(&mut self, value: f64) -> f64 {
+        self.buffer.push_back(value);
+        if self.buffer.len() > self.period { self.buffer.pop_front(); }
+        if self.buffer.len() < self.period { return 0.0; }
+        let mean = self.buffer.iter().sum::<f64>() / self.buffer.len() as f64;
+        let var = self.buffer.iter()
+            .map(|v| (v - mean).powi(2))
+            .sum::<f64>() / self.buffer.len() as f64;
+        var.sqrt()
     }
 }
 
@@ -201,6 +228,8 @@ impl MacdState {
     }
 }
 
+/// DMI/ADX with two-phase ADX accumulation matching build_candles.
+/// ADX Wilder only receives DX values after DM/ATR Wilders complete warmup.
 struct DmiState {
     plus: WilderState,
     minus: WilderState,
@@ -210,6 +239,8 @@ struct DmiState {
     prev_low: f64,
     prev_close: f64,
     started: bool,
+    count: usize,
+    period: usize,
 }
 
 impl DmiState {
@@ -217,7 +248,8 @@ impl DmiState {
         Self {
             plus: WilderState::new(period), minus: WilderState::new(period),
             atr: WilderState::new(period), adx: WilderState::new(period),
-            prev_high: 0.0, prev_low: 0.0, prev_close: 0.0, started: false,
+            prev_high: 0.0, prev_low: 0.0, prev_close: 0.0,
+            started: false, count: 0, period,
         }
     }
 
@@ -227,8 +259,10 @@ impl DmiState {
             self.prev_high = high;
             self.prev_low = low;
             self.prev_close = close;
+            self.count = 1;
             return (0.0, 0.0, 0.0);
         }
+        self.count += 1;
         let up_move = high - self.prev_high;
         let down_move = self.prev_low - low;
         let plus_dm = if up_move > down_move && up_move > 0.0 { up_move } else { 0.0 };
@@ -242,7 +276,13 @@ impl DmiState {
         let dmi_plus = sm_plus * 100.0 / atr_val;
         let dmi_minus = sm_minus * 100.0 / atr_val;
         let dx = (dmi_plus - dmi_minus).abs() * 100.0 / (dmi_plus + dmi_minus).max(1e-10);
-        let adx = self.adx.step(dx);
+
+        // Two-phase ADX: only feed DX after DM/ATR warmup (matches build_candles)
+        let adx = if self.count >= self.period {
+            self.adx.step(dx)
+        } else {
+            0.0
+        };
 
         self.prev_high = high;
         self.prev_low = low;
@@ -294,16 +334,17 @@ impl CciState {
     }
 }
 
+/// MFI — windowed sum of positive/negative money flow (matches build_candles exactly).
 struct MfiState {
-    pos_flow: WilderState,
-    neg_flow: WilderState,
+    pos_buf: RingBuffer,
+    neg_buf: RingBuffer,
     prev_tp: f64,
     started: bool,
 }
 
 impl MfiState {
     fn new(period: usize) -> Self {
-        Self { pos_flow: WilderState::new(period), neg_flow: WilderState::new(period), prev_tp: 0.0, started: false }
+        Self { pos_buf: RingBuffer::new(period), neg_buf: RingBuffer::new(period), prev_tp: 0.0, started: false }
     }
 
     fn step(&mut self, high: f64, low: f64, close: f64, volume: f64) -> f64 {
@@ -315,11 +356,14 @@ impl MfiState {
         }
         let money_flow = tp * volume;
         let pos = if tp > self.prev_tp { money_flow } else { 0.0 };
-        let neg = if tp < self.prev_tp { money_flow } else { 0.0 };
-        let avg_pos = self.pos_flow.step(pos);
-        let avg_neg = self.neg_flow.step(neg);
+        let neg = if tp <= self.prev_tp { money_flow } else { 0.0 };
+        self.pos_buf.push(pos);
+        self.neg_buf.push(neg);
         self.prev_tp = tp;
-        100.0 - 100.0 / (1.0 + avg_pos / avg_neg.max(1e-10))
+        if !self.pos_buf.full() { return 50.0; }
+        let pos_sum: f64 = self.pos_buf.iter().sum();
+        let neg_sum: f64 = self.neg_buf.iter().sum();
+        if neg_sum > 1e-10 { 100.0 - 100.0 / (1.0 + pos_sum / neg_sum) } else { 100.0 }
     }
 }
 
@@ -366,8 +410,7 @@ pub struct IndicatorBank {
     sma20: SmaState,
     sma50: SmaState,
     sma200: SmaState,
-    bb_stddev: SmaState,    // SMA of squared deviations (for Bollinger)
-    bb_mean: SmaState,      // duplicate SMA20 for stddev calc
+    bb_stddev: RollingStddev, // exact population stddev over 20-period window
     ema20: EmaState,
     rsi: RsiState,
     macd: MacdState,
@@ -380,7 +423,7 @@ pub struct IndicatorBank {
     volume_sma20: SmaState,
 
     // ROC ring buffers
-    roc_buf: RingBuffer,    // 12-period buffer for all ROC windows
+    roc_buf: RingBuffer,    // 12-period close buffer — ROC 1/3/6/12 index into this
 
     // Range position
     range_high_12: RingBuffer,
@@ -417,8 +460,7 @@ impl IndicatorBank {
             sma20: SmaState::new(20),
             sma50: SmaState::new(50),
             sma200: SmaState::new(200),
-            bb_stddev: SmaState::new(20),
-            bb_mean: SmaState::new(20),
+            bb_stddev: RollingStddev::new(20),
             ema20: EmaState::new(20),
             rsi: RsiState::new(14),
             macd: MacdState::new(),
@@ -461,11 +503,8 @@ impl IndicatorBank {
         let sma50 = self.sma50.step(close);
         let sma200 = self.sma200.step(close);
 
-        // Bollinger: stddev from SMA20
-        let bb_mean = self.bb_mean.step(close);
-        let sq_dev = (close - bb_mean).powi(2);
-        let bb_var = self.bb_stddev.step(sq_dev);
-        let bb_std = bb_var.sqrt();
+        // Bollinger: exact population stddev over 20-period window (matches build_candles)
+        let bb_std = self.bb_stddev.step(close);
         let bb_upper = sma20 + 2.0 * bb_std;
         let bb_lower = sma20 - 2.0 * bb_std;
         let bb_width = if sma20.abs() > 1e-10 { (bb_upper - bb_lower) / sma20 } else { 0.0 };
@@ -634,12 +673,10 @@ fn parse_year(ts: &str) -> i32 {
 
 // ─── Parquet loader ────────────────────────────────────────────────────────
 
-/// Streaming candle iterator: reads raw OHLCV from parquet one batch at a time,
-/// steps the indicator fold per candle, yields computed Candles lazily.
-/// No bulk load. One candle in, one candle out, walking into the future.
 #[cfg(feature = "parquet")]
-pub struct ParquetCandleStream {
-    bank: IndicatorBank,
+/// Streams raw OHLCV candles from a parquet file.
+/// No indicator computation — that's the desk's job.
+pub struct ParquetRawStream {
     /// Buffered raw candles from the current parquet batch.
     buffer: Vec<RawCandle>,
     /// Position within current buffer.
@@ -649,18 +686,25 @@ pub struct ParquetCandleStream {
 }
 
 #[cfg(feature = "parquet")]
-impl ParquetCandleStream {
+impl ParquetRawStream {
     pub fn open(path: &std::path::Path) -> Self {
         use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
         let file = std::fs::File::open(path).expect("failed to open parquet");
         let builder = ParquetRecordBatchReaderBuilder::try_new(file).expect("failed to read parquet");
         let reader = builder.build().expect("failed to build reader");
         Self {
-            bank: IndicatorBank::new(),
             buffer: Vec::new(),
             buf_idx: 0,
             reader,
         }
+    }
+
+    /// Total raw candles in the parquet file. Reads metadata only (no data scan).
+    pub fn total_candles(path: &std::path::Path) -> usize {
+        use parquet::file::reader::{FileReader, SerializedFileReader};
+        let file = std::fs::File::open(path).expect("failed to open parquet for metadata");
+        let reader = SerializedFileReader::new(file).expect("failed to read parquet metadata");
+        reader.metadata().file_metadata().num_rows() as usize
     }
 
     /// Fill the buffer from the next parquet batch. Returns false when exhausted.
@@ -721,16 +765,46 @@ impl ParquetCandleStream {
 }
 
 #[cfg(feature = "parquet")]
-impl Iterator for ParquetCandleStream {
-    type Item = Candle;
+impl Iterator for ParquetRawStream {
+    type Item = RawCandle;
 
-    fn next(&mut self) -> Option<Candle> {
+    fn next(&mut self) -> Option<RawCandle> {
         // If buffer exhausted, fill from next parquet batch
         if self.buf_idx >= self.buffer.len() {
             if !self.fill_buffer() { return None; }
         }
-        let raw = &self.buffer[self.buf_idx];
+        let raw = self.buffer[self.buf_idx].clone();
         self.buf_idx += 1;
-        Some(self.bank.tick(raw))
+        Some(raw)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn compare_with_candles_db() {
+        let path = std::path::Path::new("data/btc_5m_raw.parquet");
+        if !path.exists() { eprintln!("skipping — no parquet"); return; }
+        let stream = ParquetRawStream::open(path);
+        let mut bank = IndicatorBank::new();
+        
+        for (i, raw) in stream.enumerate() {
+            let c = bank.tick(&raw);
+            if i == 250 {
+                eprintln!("=== Streaming IndicatorBank at index 250 ===");
+                eprintln!("ts={} close={:.1}", c.ts, c.close);
+                eprintln!("sma20={:.5} sma50={:.5}", c.sma20, c.sma50);
+                eprintln!("bb_upper={:.5} bb_lower={:.5}", c.bb_upper, c.bb_lower);
+                eprintln!("rsi={:.5}", c.rsi);
+                eprintln!("macd_line={:.5} macd_signal={:.5}", c.macd_line, c.macd_signal);
+                eprintln!("atr={:.6} atr_r={:.8}", c.atr, c.atr_r);
+                eprintln!("dmi+={:.5} dmi-={:.5} adx={:.5}", c.dmi_plus, c.dmi_minus, c.adx);
+                eprintln!("stoch_k={:.5} cci={:.5} mfi={:.5}", c.stoch_k, c.cci, c.mfi);
+                eprintln!("vol_sma20={:.5}", c.volume_sma_20);
+                break;
+            }
+        }
     }
 }

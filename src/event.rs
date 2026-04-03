@@ -3,140 +3,23 @@
 //! The enterprise is a fold over Stream<Event>.
 //! Every input is an Event. The enterprise doesn't know where events come from.
 //! Backtest, websocket, test harness — same Event, same fold.
+//!
+//! The enterprise receives raw OHLCV. Each desk computes its own indicators.
 
-use crate::candle::{Candle, load_candles};
+use crate::indicators::RawCandle;
 use crate::treasury::Asset;
-use holon::Vector;
-use std::path::Path;
 
-// rune:reap(scaffolding) — Event enum and all stream constructors (stream_from_candles, stream_from_db, merge_streams, with_recurring_deposits) are never used outside this file. The enterprise folds over EnrichedEvent, not Event. Wired when streaming interface replaces backtest loop.
-/// Raw event before encoding. Used by stream constructors (merge_streams, with_recurring_deposits).
-/// The fold consumes EnrichedEvent, not Event. Event is the source vocabulary; EnrichedEvent is the fold's input.
-#[derive(Clone, Debug)]
+/// The enterprise's fold input. One raw candle at a time.
+/// No pre-computed indicators. No pre-encoded thoughts.
+/// The desk computes everything from the raw OHLCV.
 pub enum Event {
-    /// A new candle arrived for an asset.
-    Candle {
-        asset: Asset,
-        candle: Candle,
-    },
+    /// A raw candle — just OHLCV + timestamp. The desk steps its indicator
+    /// bank to produce computed indicators. No pre-computation.
+    Candle(RawCandle),
 
-    /// Capital deposited into the treasury.
-    /// The system evolves with new capital arriving over time.
-    Deposit {
-        asset: Asset,
-        amount: f64,
-    },
-
-    /// Capital withdrawn from the treasury.
-    Withdraw {
-        asset: Asset,
-        amount: f64,
-    },
-}
-
-impl Event {
-    /// Which asset does this event concern?
-    pub fn asset(&self) -> &Asset {
-        match self {
-            Event::Candle { asset, .. } => asset,
-            Event::Deposit { asset, .. } => asset,
-            Event::Withdraw { asset, .. } => asset,
-        }
-    }
-
-    /// The timestamp of this event (for ordering merged streams).
-    pub fn timestamp(&self) -> &str {
-        match self {
-            Event::Candle { candle, .. } => &candle.ts,
-            // Deposits and withdrawals carry no candle timestamp.
-            // In a merged stream, they're ordered by insertion time.
-            _ => "",
-        }
-    }
-}
-
-/// Enriched event — carries pre-computed encoding products.
-///
-/// The backtest runner pre-encodes in parallel, then wraps the results
-/// in EnrichedEvent::Candle. A live runner would encode per-candle.
-/// The enterprise folds over EnrichedEvent, not raw Event.
-pub enum EnrichedEvent {
-    /// A candle with pre-computed thought encodings.
-    Candle {
-        candle: Candle,
-        fact_labels: Vec<String>,
-        observer_vecs: Vec<Vector>,
-    },
-
-    // rune:reap(scaffolding) — Deposit and Withdraw variants are matched in on_event but never constructed anywhere. Wired when streaming interface supports capital events.
     /// Capital deposited into the treasury.
     Deposit { asset: Asset, amount: f64 },
 
     /// Capital withdrawn from the treasury.
     Withdraw { asset: Asset, amount: f64 },
-}
-
-// ─── Stream constructors ────────────────────────────────────────────────────
-
-/// Convert already-loaded candles into an event stream.
-/// Zero-copy of the candle data — wraps each candle with an asset tag.
-pub fn stream_from_candles(candles: &[Candle], asset: &Asset) -> Vec<Event> {
-    candles.iter()
-        .map(|candle| Event::Candle {
-            asset: asset.clone(),
-            candle: candle.clone(),
-        })
-        .collect()
-}
-
-/// Load a single asset's candles from a DB and produce an event stream.
-/// Convenience: loads + wraps in one call.
-pub fn stream_from_db(db_path: &Path, asset: &Asset, label_col: &str) -> Vec<Event> {
-    let candles = load_candles(db_path, label_col);
-    stream_from_candles(&candles, asset)
-}
-
-/// Merge multiple event streams by timestamp.
-/// The merged stream is sorted — the enterprise processes events in time order.
-/// This is the bridge to multi-asset: each asset's stream is merged into one.
-pub fn merge_streams(streams: Vec<Vec<Event>>) -> Vec<Event> {
-    let mut merged: Vec<Event> = streams.into_iter().flatten().collect();
-    merged.sort_by(|a, b| a.timestamp().cmp(b.timestamp()));
-    merged
-}
-
-/// Inject recurring deposits into a stream.
-/// Every `interval` candles, deposit `amount` of `asset`.
-/// The system evolves with new capital arriving over time.
-pub fn with_recurring_deposits(
-    mut events: Vec<Event>,
-    asset: &Asset,
-    amount: f64,
-    interval: usize,
-) -> Vec<Event> {
-    let mut deposits = Vec::new();
-
-    // Find candle timestamps at deposit intervals
-    let mut candle_idx = 0;
-    for event in &events {
-        if let Event::Candle { candle: _, .. } = event {
-            candle_idx += 1;
-            if candle_idx % interval == 0 {
-                deposits.push(Event::Deposit {
-                    asset: asset.clone(),
-                    amount,
-                });
-                // We'll insert after this candle's timestamp
-            }
-        }
-    }
-
-    // For now, append deposits at end and re-sort
-    // (proper interleaving would insert at the right timestamp)
-    if !deposits.is_empty() {
-        events.extend(deposits);
-        events.sort_by(|a, b| a.timestamp().cmp(b.timestamp()));
-    }
-
-    events
 }

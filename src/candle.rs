@@ -1,9 +1,6 @@
-use rusqlite::Connection;
-use std::path::Path;
-
-/// Default label when the oracle column is absent. Not "Noise" — that was
-/// the old Outcome enum. The journal uses arbitrary Label symbols now.
-const DEFAULT_LABEL: &str = "Unknown";
+// Candle struct — the computed indicator values for one candle.
+// Built by IndicatorBank::tick() from raw OHLCV. The label field
+// is vestigial (set to empty string in the streaming path).
 
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
@@ -105,114 +102,5 @@ pub struct Candle {
     pub label: String,
 }
 
-fn sf(row: &rusqlite::Row, idx: usize) -> f64 {
-    row.get::<_, Option<f64>>(idx).unwrap_or(None).unwrap_or(0.0)
-}
-
-pub fn load_candles(db_path: &Path, label_col: &str) -> Vec<Candle> {
-    let conn = Connection::open(db_path).expect("failed to open database");
-
-    let sql = format!(
-        "SELECT ts, year, open, high, low, close, volume, \
-         sma20, sma50, sma200, \
-         bb_upper, bb_lower, bb_width, \
-         rsi, \
-         macd_line, macd_signal, macd_hist, \
-         dmi_plus, dmi_minus, adx, \
-         atr, atr_r, \
-         stoch_k, stoch_d, \
-         williams_r, \
-         cci, \
-         mfi, \
-         roc_1, roc_3, roc_6, roc_12, \
-         obv_slope_12, \
-         volume_sma_20, \
-         tf_1h_close, tf_1h_high, tf_1h_low, tf_1h_ret, tf_1h_body, \
-         tf_4h_close, tf_4h_high, tf_4h_low, tf_4h_ret, tf_4h_body, \
-         bb_pos, kelt_upper, kelt_lower, kelt_pos, squeeze, \
-         range_pos_12, range_pos_24, range_pos_48, \
-         trend_consistency_6, trend_consistency_12, trend_consistency_24, \
-         atr_roc_6, atr_roc_12, \
-         vol_accel, \
-         hour, day_of_week, \
-         {label_col} \
-         FROM candles ORDER BY ts"
-    );
-
-    let mut stmt = conn.prepare(&sql).expect("failed to prepare query");
-    let candles = stmt
-        .query_map([], |row| {
-            Ok(Candle {
-                ts: row.get::<_, String>(0)?,
-                year: row.get::<_, i32>(1)?,
-                open: sf(row, 2),
-                high: sf(row, 3),
-                low: sf(row, 4),
-                close: sf(row, 5),
-                volume: sf(row, 6),
-                sma20: sf(row, 7),
-                sma50: sf(row, 8),
-                sma200: sf(row, 9),
-                bb_upper: sf(row, 10),
-                bb_lower: sf(row, 11),
-                bb_width: sf(row, 12),
-                rsi: sf(row, 13),
-                macd_line: sf(row, 14),
-                macd_signal: sf(row, 15),
-                macd_hist: sf(row, 16),
-                dmi_plus: sf(row, 17),
-                dmi_minus: sf(row, 18),
-                adx: sf(row, 19),
-                atr: sf(row, 20),
-                atr_r: sf(row, 21),
-                stoch_k: sf(row, 22),
-                stoch_d: sf(row, 23),
-                williams_r: sf(row, 24),
-                cci: sf(row, 25),
-                mfi: sf(row, 26),
-                roc_1: sf(row, 27),
-                roc_3: sf(row, 28),
-                roc_6: sf(row, 29),
-                roc_12: sf(row, 30),
-                obv_slope_12: sf(row, 31),
-                volume_sma_20: sf(row, 32),
-                tf_1h_close: sf(row, 33),
-                tf_1h_high: sf(row, 34),
-                tf_1h_low: sf(row, 35),
-                tf_1h_ret: sf(row, 36),
-                tf_1h_body: sf(row, 37),
-                tf_4h_close: sf(row, 38),
-                tf_4h_high: sf(row, 39),
-                tf_4h_low: sf(row, 40),
-                tf_4h_ret: sf(row, 41),
-                tf_4h_body: sf(row, 42),
-                bb_pos: sf(row, 43),
-                kelt_upper: sf(row, 44),
-                kelt_lower: sf(row, 45),
-                kelt_pos: sf(row, 46),
-                squeeze: row.get::<_, Option<i32>>(47)?.unwrap_or(0) != 0,
-                range_pos_12: sf(row, 48),
-                range_pos_24: sf(row, 49),
-                range_pos_48: sf(row, 50),
-                trend_consistency_6: sf(row, 51),
-                trend_consistency_12: sf(row, 52),
-                trend_consistency_24: sf(row, 53),
-                atr_roc_6: sf(row, 54),
-                atr_roc_12: sf(row, 55),
-                vol_accel: sf(row, 56),
-                hour: sf(row, 57),
-                day_of_week: sf(row, 58),
-                // Oracle label — prophetic, not causal. "Unknown" when absent.
-                // The journal uses arbitrary Label symbols; this is just
-                // the DB column for supervised evaluation.
-                label: row
-                    .get::<_, Option<String>>(59)?
-                    .unwrap_or_else(|| DEFAULT_LABEL.to_string()),
-            })
-        })
-        .expect("query failed")
-        .filter_map(|r| r.ok())
-        .collect();
-
-    candles
-}
+// load_candles and sf() removed — the enterprise streams from parquet now.
+// The IndicatorBank computes indicators per-desk. No pre-computed SQLite.

@@ -5,7 +5,7 @@ set -euo pipefail
 unset CARGO_TARGET_DIR 2>/dev/null || true
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DB_PATH="$SCRIPT_DIR/data/candles.db"
+PARQUET_PATH="$SCRIPT_DIR/data/btc_5m_raw.parquet"
 BINARY="$SCRIPT_DIR/target/release/enterprise"
 
 usage() {
@@ -53,8 +53,8 @@ case "${1:-}" in
         shift
         do_kill 2>/dev/null || true
         do_build
-        echo "Running: $BINARY --db-path $DB_PATH $*"
-        "$BINARY" --db-path "$DB_PATH" "$@"
+        echo "Running: $BINARY --parquet $PARQUET_PATH $*"
+        "$BINARY" --parquet "$PARQUET_PATH" "$@"
         ;;
     test)
         shift
@@ -89,7 +89,7 @@ case "${1:-}" in
         echo "Flags: ${extra_args[*]:-}"
         echo "──────────────────────────────────────"
 
-        "$BINARY" --db-path "$DB_PATH" --max-candles "$candles" --ledger "$rundb" "${extra_args[@]}" 2> "$logfile"
+        "$BINARY" --parquet "$PARQUET_PATH" --max-candles "$candles" --ledger "$rundb" "${extra_args[@]}" 2> "$logfile"
 
         echo ""
         echo "Done. Key results:"

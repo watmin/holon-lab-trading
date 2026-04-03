@@ -231,16 +231,13 @@ impl Desk {
 
     /// The desk's fold step. One candle, one step.
     ///
-    /// Called from EnterpriseState::on_candle_inner. The enterprise passes
-    /// shared resources (treasury, portfolio, risk_mult, peak_equity) and
-    /// the candle index. Everything per-desk is `self`.
+    /// Called from EnterpriseState::on_candle_raw. The enterprise passes
+    /// the raw OHLCV and shared resources. The desk computes its own indicators.
     // 870-line fold — the sequential heartbeat. Coherent blocks extracted; what remains is causal chain.
     pub fn on_candle(
         &mut self,
         i: usize,
-        candle: &Candle,
-        tht_facts: Vec<String>,
-        _observer_vecs: Vec<Vector>,  // rune:reap(scaffolding) — desk encodes from window
+        raw: &crate::indicators::RawCandle,
         treasury: &mut Treasury,
         portfolio: &mut Portfolio,
         risk_mult: f64,
@@ -248,12 +245,18 @@ impl Desk {
         db_batch: &mut usize,
         ctx: &CandleContext,
     ) {
+        // Step indicator bank → computed candle (wat: tick-indicators)
+        let candle = self.indicator_bank.tick(raw);
+
         // Push computed candle to window (ring buffer, max capacity).
         // Each consumer reads from this window. No global candle array.
         self.candle_window.push_back(candle.clone());
         if self.candle_window.len() > self.max_window_size {
             self.candle_window.pop_front();
         }
+        // Clone: the borrow checker needs `self` mutable later (position management,
+        // learning, logging). Holding a reference into candle_window prevents that.
+        let candle = self.candle_window.back().unwrap().clone();
 
         // Tempered: cache frequently-accessed desk scalars at function entry.
         let mgr_buy = self.manager_buy;
@@ -656,7 +659,7 @@ impl Desk {
             observer_vecs,
             observer_preds,
             mgr_thought:   stored_mgr_thought,
-            fact_labels:   if ctx.diagnostics { tht_facts } else { Vec::new() },
+            fact_labels:   Vec::new(),  // desk computes its own thoughts; no external fact labels
             crossing:      None,
             entry_price:       candle.close,
             entry_ts:          candle.ts.clone(),
@@ -935,7 +938,7 @@ impl Desk {
             let tht_acc = if gen_resolved.is_empty() { 0.0 }
                 else { gen_resolved.iter().filter(|(_, c)| *c).count() as f64 / gen_resolved.len() as f64 * 100.0 };
             let ret = (treasury_equity - ctx.initial_equity) / ctx.initial_equity * 100.0;
-            let bnh = (candle.close - ctx.bnh_entry) / ctx.bnh_entry * 100.0;
+            let bnh = if ctx.bnh_entry > 0.0 { (candle.close - ctx.bnh_entry) / ctx.bnh_entry * 100.0 } else { 0.0 };
             let atr_now = candle.atr_r;
             let exit_info = format!(" | ATR={:.2}% sl={:.2}% tp={:.2}% tr={:.2}% open={}",
                 atr_now * 100.0,

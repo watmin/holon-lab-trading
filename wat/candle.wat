@@ -10,9 +10,8 @@
 ;;
 ;; See proposal 005 (streaming indicator folds) for the design.
 ;;
-;; rune:reap(scaffolding) — this file specifies the streaming fold architecture.
-;; The Rust still uses a 52-field pre-computed Candle struct from SQLite.
-;; This becomes live when the streaming interface replaces the batch loader.
+;; Live. The Rust IndicatorBank::tick() implements this fold exactly.
+;; Each desk steps its own indicator bank from raw OHLCV per candle.
 
 (require core/structural)
 
@@ -45,11 +44,15 @@
   (sma-state :buffer (deque) :period period))
 
 (define (sma-step state value)
-  "Feed one value. Returns (new-state, sma-value)."
+  "Feed one value. Returns (new-state, sma-value).
+   Returns 0.0 when fewer than period values have been seen.
+   Matches build_candles::sma() exactly."
   (let ((buf (push-back (:buffer state) value)))
     (let ((buf (if (> (len buf) (:period state)) (pop-front buf) buf)))
       (list (update state :buffer buf)
-            (/ (fold + 0.0 buf) (len buf))))))
+            (if (< (len buf) (:period state))
+                0.0
+                (/ (fold + 0.0 buf) (:period state)))))))
 
 ;; EMA: exponential moving average. O(1) memory.
 (struct ema-state alpha prev started)
@@ -201,40 +204,53 @@
           (list line (second sig) (- line (second sig))))))
 
 ;; DMI/ADX: Wilder-smoothed directional movement. O(1).
-(struct dmi-state plus-wilder minus-wilder atr-wilder adx-wilder prev-high prev-low prev-close started)
+;; ADX uses two-phase accumulation matching build_candles:
+;;   Phase 1 (count <= period): DM/ATR Wilders accumulate. ADX not fed.
+;;   Phase 2 (count > period):  DI values valid. DX fed to ADX Wilder.
+;; This ensures ADX only sees DX from converged DI values.
+(struct dmi-state plus-wilder minus-wilder atr-wilder adx-wilder
+        prev-high prev-low prev-close started count period)
 
 (define (new-dmi period)
   (dmi-state :plus-wilder (new-wilder period) :minus-wilder (new-wilder period)
              :atr-wilder (new-wilder period) :adx-wilder (new-wilder period)
-             :prev-high 0.0 :prev-low 0.0 :prev-close 0.0 :started false))
+             :prev-high 0.0 :prev-low 0.0 :prev-close 0.0
+             :started false :count 0 :period period))
 
 (define (dmi-step state candle)
-  "Feed a candle. Returns (new-state, (dmi-plus, dmi-minus, adx))."
+  "Feed a candle. Returns (new-state, (dmi-plus, dmi-minus, adx)).
+   ADX only begins accumulating after DM/ATR Wilders have completed warmup."
   (let ((high (:high candle)) (low (:low candle)) (close (:close candle)))
     (if (not (:started state))
-        (list (update state :started true :prev-high high :prev-low low :prev-close close)
+        (list (update state :started true :prev-high high :prev-low low :prev-close close
+                      :count 1)
               (list 0.0 0.0 0.0))
-        (let* ((up-move   (- high (:prev-high state)))
+        (let* ((count     (+ (:count state) 1))
+               (up-move   (- high (:prev-high state)))
                (down-move (- (:prev-low state) low))
-             (plus-dm   (if (and (> up-move down-move) (> up-move 0.0)) up-move 0.0))
-             (minus-dm  (if (and (> down-move up-move) (> down-move 0.0)) down-move 0.0))
-             (tr        (max (- high low)
-                             (abs (- high (:prev-close state)))
-                             (abs (- low (:prev-close state)))))
-             (p-result  (wilder-step (:plus-wilder state) plus-dm))
-             (m-result  (wilder-step (:minus-wilder state) minus-dm))
-             (a-result  (wilder-step (:atr-wilder state) tr))
-             (atr-val   (max (second a-result) 1e-10))
-             (dmi-plus  (/ (* (second p-result) 100.0) atr-val))
-             (dmi-minus (/ (* (second m-result) 100.0) atr-val))
-             (dx        (/ (* (abs (- dmi-plus dmi-minus)) 100.0)
-                           (max (+ dmi-plus dmi-minus) 1e-10)))
-             (adx-result (wilder-step (:adx-wilder state) dx)))
-        (list (update state
-                :plus-wilder (first p-result) :minus-wilder (first m-result)
-                :atr-wilder (first a-result) :adx-wilder (first adx-result)
-                :prev-high high :prev-low low :prev-close close)
-              (list dmi-plus dmi-minus (second adx-result)))))))
+               (plus-dm   (if (and (> up-move down-move) (> up-move 0.0)) up-move 0.0))
+               (minus-dm  (if (and (> down-move up-move) (> down-move 0.0)) down-move 0.0))
+               (tr        (max (- high low)
+                               (abs (- high (:prev-close state)))
+                               (abs (- low (:prev-close state)))))
+               (p-result  (wilder-step (:plus-wilder state) plus-dm))
+               (m-result  (wilder-step (:minus-wilder state) minus-dm))
+               (a-result  (wilder-step (:atr-wilder state) tr))
+               (atr-val   (max (second a-result) 1e-10))
+               (dmi-plus  (/ (* (second p-result) 100.0) atr-val))
+               (dmi-minus (/ (* (second m-result) 100.0) atr-val))
+               (dx        (/ (* (abs (- dmi-plus dmi-minus)) 100.0)
+                             (max (+ dmi-plus dmi-minus) 1e-10)))
+               ;; Only feed DX to ADX after DM/ATR warmup (count > period)
+               (adx-result (if (>= count (:period state))
+                               (wilder-step (:adx-wilder state) dx)
+                               (list (:adx-wilder state) 0.0))))
+          (list (update state
+                  :plus-wilder (first p-result) :minus-wilder (first m-result)
+                  :atr-wilder (first a-result) :adx-wilder (first adx-result)
+                  :prev-high high :prev-low low :prev-close close
+                  :count count)
+                (list dmi-plus dmi-minus (second adx-result)))))))
 
 ;; Stochastic %K: sliding window min/max. O(period).
 (struct stoch-state high-buf low-buf period)
