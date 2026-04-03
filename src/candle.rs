@@ -1,12 +1,10 @@
 // Candle struct — the computed indicator values for one candle.
 // Built by IndicatorBank::tick() from raw OHLCV.
 
-#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct Candle {
     // Raw OHLCV
     pub ts: String,
-    pub year: i32,
     pub open: f64,
     pub high: f64,
     pub low: f64,

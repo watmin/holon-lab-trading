@@ -298,6 +298,8 @@ pub struct ThoughtResult {
     pub thought: Vector,
 }
 
+
+
 /// Indicator pairs to check for comparison predicates (above/below/crosses/touches/bounces).
 const COMPARISON_PAIRS: &[(&str, &str)] = &[
     // Original 9 pairs
@@ -349,8 +351,6 @@ pub struct ThoughtEncoder {
     /// Indexed lookup: comparison_vecs[pair_idx][pred_idx] = Vector.
     /// Eliminates format! + HashMap lookup in the hot path.
     comparison_vecs: Vec<[Vector; 6]>,
-    /// Pre-computed labels: comparison_labels[pair_idx][pred_idx] = "(pred a b)".
-    comparison_labels: Vec<[String; 6]>,
 }
 
 impl ThoughtEncoder {
@@ -361,19 +361,15 @@ impl ThoughtEncoder {
         // Pre-compute comparison facts — both HashMap (for zone/fib/rsi/session)
         // and indexed arrays (for the hot comparison loop)
         let mut comparison_vecs: Vec<[Vector; 6]> = Vec::with_capacity(COMPARISON_PAIRS.len());
-        let mut comparison_labels: Vec<[String; 6]> = Vec::with_capacity(COMPARISON_PAIRS.len());
         for &(a, b) in COMPARISON_PAIRS {
             let mut vecs: [Vector; 6] = std::array::from_fn(|_| Vector::zeros(dims));
-            let mut labels: [String; 6] = std::array::from_fn(|_| String::new());
             for (pi, &pred) in PRED_NAMES.iter().enumerate() {
                 let key = format!("({} {} {})", pred, a, b);
                 let vec = fact_binary(&vocab, pred, a, b);
-                fact_cache.insert(key.clone(), vec.clone());
+                fact_cache.insert(key, vec.clone());
                 vecs[pi] = vec;
-                labels[pi] = key;
             }
             comparison_vecs.push(vecs);
-            comparison_labels.push(labels);
         }
 
         // Pre-compute fibonacci comparison facts (touches/above/below close vs fib levels)
@@ -453,7 +449,7 @@ impl ThoughtEncoder {
             }
         }
 
-        Self { vocab, scalar_enc: ScalarEncoder::new(dims), fact_cache, comparison_vecs, comparison_labels }
+        Self { vocab, scalar_enc: ScalarEncoder::new(dims), fact_cache, comparison_vecs }
     }
 
     /// Return the pre-computed fact codebook: (label, vector) pairs for all
@@ -474,46 +470,40 @@ impl ThoughtEncoder {
     pub fn encode_facts<'a>(
         &'a self,
         module_facts: &[crate::vocab::Fact],
-    ) -> (Vec<&'a Vector>, Vec<Vector>, Vec<String>) {
+    ) -> (Vec<&'a Vector>, Vec<Vector>) {
         let mut facts = Vec::new();
         let mut owned_facts = Vec::new();
-        let mut labels = Vec::new();
         for fact in module_facts {
             match fact {
                 crate::vocab::Fact::Zone { indicator, zone } => {
                     let key = format!("(at {} {})", indicator, zone);
                     if let Some(v) = self.fact_cache.get(&key) {
                         facts.push(v);
-                        labels.push(key);
                     }
                 }
                 crate::vocab::Fact::Comparison { predicate, a, b } => {
                     let key = format!("({} {} {})", predicate, a, b);
                     if let Some(v) = self.fact_cache.get(&key) {
                         facts.push(v);
-                        labels.push(key);
                     }
                 }
                 crate::vocab::Fact::Scalar { indicator, value, scale } => {
                     let v = self.scalar_enc.encode(*value, ScalarMode::Linear { scale: *scale });
                     let bound = Primitives::bind(self.vocab.get(indicator), &v);
-                    labels.push(format!("({} {:.3})", indicator, value));
                     owned_facts.push(bound);
                 }
                 crate::vocab::Fact::Bare { label } => {
                     if let Some(v) = self.fact_cache.get(*label) {
                         facts.push(v);
-                        labels.push(label.to_string());
                     } else {
                         // Try as a raw atom
                         let atom = self.vocab.get(label);
                         owned_facts.push(atom.clone());
-                        labels.push(label.to_string());
                     }
                 }
             }
         }
-        (facts, owned_facts, labels)
+        (facts, owned_facts)
     }
 
 
@@ -536,7 +526,7 @@ impl ThoughtEncoder {
         // diagnostic only, available if needed via individual eval calls.
         macro_rules! collect {
             ($result:expr) => {
-                let (f, o, _labels) = $result;
+                let (f, o) = $result;
                 cached_facts.extend(f);
                 owned_facts.extend(o);
             };
@@ -629,9 +619,8 @@ impl ThoughtEncoder {
         &'a self,
         now: &Candle,
         prev: Option<&Candle>,
-    ) -> (Vec<&'a Vector>, Vec<Vector>, Vec<String>) {
+    ) -> (Vec<&'a Vector>, Vec<Vector>) {
         let mut facts: Vec<&Vector> = Vec::new();
-        let mut labels: Vec<String> = Vec::new();
         let has_prev_field = |name: &str| name.starts_with("prev-");
 
         for (pair_idx, &(a, b)) in COMPARISON_PAIRS.iter().enumerate() {
@@ -641,7 +630,6 @@ impl ThoughtEncoder {
             // above/below — always fires
             let pred_idx = if a_val > b_val { PRED_ABOVE } else { PRED_BELOW };
             facts.push(&self.comparison_vecs[pair_idx][pred_idx]);
-            labels.push(self.comparison_labels[pair_idx][pred_idx].clone());
 
             // crosses need prev values; skip for prev-* fields
             if has_prev_field(a) || has_prev_field(b) { continue; }
@@ -652,10 +640,8 @@ impl ThoughtEncoder {
 
                 if pa < pb && a_val >= b_val {
                     facts.push(&self.comparison_vecs[pair_idx][PRED_CROSSES_ABOVE]);
-                    labels.push(self.comparison_labels[pair_idx][PRED_CROSSES_ABOVE].clone());
                 } else if pa > pb && a_val <= b_val {
                     facts.push(&self.comparison_vecs[pair_idx][PRED_CROSSES_BELOW]);
-                    labels.push(self.comparison_labels[pair_idx][PRED_CROSSES_BELOW].clone());
                 }
             }
 
@@ -663,7 +649,6 @@ impl ThoughtEncoder {
             let epsilon = atr * 0.1;
             if (a_val - b_val).abs() < epsilon {
                 facts.push(&self.comparison_vecs[pair_idx][PRED_TOUCHES]);
-                labels.push(self.comparison_labels[pair_idx][PRED_TOUCHES].clone());
 
                 if let Some(p) = prev {
                     let pa = match field_value(p, None, a) { Some(v) => v, None => continue };
@@ -672,12 +657,11 @@ impl ThoughtEncoder {
                     let now_dist = (a_val - b_val).abs();
                     if prev_dist < epsilon && now_dist > prev_dist {
                         facts.push(&self.comparison_vecs[pair_idx][PRED_BOUNCES_OFF]);
-                        labels.push(self.comparison_labels[pair_idx][PRED_BOUNCES_OFF].clone());
                     }
                 }
             }
         }
-        (facts, Vec::new(), labels)
+        (facts, Vec::new())
     }
 
     // ─── Segment narrative (PELT-based) ────────────────────────────────
@@ -686,11 +670,10 @@ impl ThoughtEncoder {
         &self,
         candles: &[Candle],
         vm: &VectorManager,
-    ) -> (Vec<&Vector>, Vec<Vector>, Vec<String>) {
+    ) -> (Vec<&Vector>, Vec<Vector>) {
         let mut facts = Vec::new();
-        let mut labels = Vec::new();
         let n_candles = candles.len();
-        if n_candles < 5 { return (Vec::new(), facts, labels); }
+        if n_candles < 5 { return (Vec::new(), facts); }
 
         let beginning_atom = self.vocab.get("beginning");
         let ending_atom = self.vocab.get("ending");
@@ -708,8 +691,8 @@ impl ThoughtEncoder {
             let finite_count = values_buf.iter().filter(|v| v.is_finite() && **v != 0.0).count();
             if finite_count < 5 { continue; }
 
-            let pr = pelt_on_values(values_buf.clone());
-            let values = &pr.values;
+            let pr = pelt_on_values(&values_buf);
+            let values = &values_buf;
             let boundaries = &pr.boundaries;
 
             let n_segments = boundaries.len() - 1;
@@ -758,8 +741,6 @@ impl ThoughtEncoder {
 
                 let segment_fact = Primitives::bind(&desc, &temporal);
                 facts.push(segment_fact);
-                labels.push(format!("(seg {} {} {:.4} dur={} @{} ago={})",
-                                   stream_name, dir, change, duration, pos, candles_ago_end));
 
                 // Zone states at segment boundaries (only for streams with zone checks)
                 if !zone_checks.is_empty() {
@@ -774,21 +755,19 @@ impl ThoughtEncoder {
                                     &Primitives::bind(zone_vec, beginning_atom),
                                     &pos_vec);
                                 facts.push(bound);
-                                labels.push(format!("(zone {} {} beginning @{})", ind, zone, pos));
                             }
                             if check(end_candle) {
                                 let bound = Primitives::bind(
                                     &Primitives::bind(zone_vec, ending_atom),
                                     &pos_vec);
                                 facts.push(bound);
-                                labels.push(format!("(zone {} {} ending @{})", ind, zone, pos));
                             }
                         }
                     }
                 }
             }
         }
-        (Vec::new(), facts, labels)
+        (Vec::new(), facts)
     }
 
     // ─── Calendar facts (viewport right-edge) ───────────────────────────
@@ -796,10 +775,9 @@ impl ThoughtEncoder {
     fn eval_calendar<'a>(
         &'a self,
         now: &Candle,
-    ) -> (Vec<&'a Vector>, Vec<Vector>, Vec<String>) {
+    ) -> (Vec<&'a Vector>, Vec<Vector>) {
         let mut facts = Vec::new();
         let mut owned_facts = Vec::new();
-        let mut labels = Vec::new();
 
         // Hour and day: pre-computed on Candle at load time.
         // Circular encoding — hour 23 near hour 0, Sunday near Monday.
@@ -808,11 +786,9 @@ impl ThoughtEncoder {
 
         let hour_vec = self.scalar_enc.encode(hour, ScalarMode::Circular { period: 24.0 });
         owned_facts.push(Primitives::bind(self.vocab.get("hour-of-day"), &hour_vec));
-        labels.push(format!("(hour-of-day {:.0})", hour));
 
         let day_vec = self.scalar_enc.encode(day, ScalarMode::Circular { period: 7.0 });
         owned_facts.push(Primitives::bind(self.vocab.get("day-of-week"), &day_vec));
-        labels.push(format!("(day-of-week {:.0})", day));
 
         // Trading session: categorical. Sessions have discrete character, not circular position.
         let session = Self::session_from_ts(&now.ts);
@@ -820,10 +796,9 @@ impl ThoughtEncoder {
             let key = format!("(at-session {})", session);
             if let Some(v) = self.fact_cache.get(&key) {
                 facts.push(v);
-                labels.push(key);
             }
         }
-        (facts, owned_facts, labels)
+        (facts, owned_facts)
     }
 
     fn session_from_ts(ts: &str) -> Option<&'static str> {
@@ -844,14 +819,14 @@ impl ThoughtEncoder {
         &self,
         candles: &[Candle],
         vm: &VectorManager,
-    ) -> (Vec<&Vector>, Vec<Vector>, Vec<String>) {
+    ) -> (Vec<&Vector>, Vec<Vector>) {
         let mut facts = Vec::new();
-        let mut labels = Vec::new();
-        if candles.len() < 3 { return (Vec::new(), facts, labels); }
+        if candles.len() < 3 { return (Vec::new(), facts); }
 
         // Build close PELT segment map for structural lookback.
         // segment_of[i] = segment index (0 = oldest) for candle i.
-        let pr = pelt_on_values(candles.iter().map(|c| c.close.ln()).collect());
+        let close_ln: Vec<f64> = candles.iter().map(|c| c.close.ln()).collect();
+        let pr = pelt_on_values(&close_ln);
         let n = candles.len();
         let n_segs = pr.boundaries.len() - 1;
         let mut segment_of = vec![0usize; n];
@@ -878,12 +853,10 @@ impl ThoughtEncoder {
                 if p.sma50 < p.sma200 && c.sma50 >= c.sma200 {
                     let base = fact_binary(&self.vocab, "crosses-above", "sma50", "sma200");
                     facts.push(fact_since(vm, &base, seg_dist));
-                    labels.push(format!("(since (crosses-above sma50 sma200) {}seg)", seg_dist));
                 }
                 if p.sma50 > p.sma200 && c.sma50 <= c.sma200 {
                     let base = fact_binary(&self.vocab, "crosses-below", "sma50", "sma200");
                     facts.push(fact_since(vm, &base, seg_dist));
-                    labels.push(format!("(since (crosses-below sma50 sma200) {}seg)", seg_dist));
                 }
             }
 
@@ -892,16 +865,14 @@ impl ThoughtEncoder {
                 if p.macd_line < p.macd_signal && c.macd_line >= c.macd_signal {
                     let base = fact_binary(&self.vocab, "crosses-above", "macd-line", "macd-signal");
                     facts.push(fact_since(vm, &base, seg_dist));
-                    labels.push(format!("(since (crosses-above macd-line macd-signal) {}seg)", seg_dist));
                 }
                 if p.macd_line > p.macd_signal && c.macd_line <= c.macd_signal {
                     let base = fact_binary(&self.vocab, "crosses-below", "macd-line", "macd-signal");
                     facts.push(fact_since(vm, &base, seg_dist));
-                    labels.push(format!("(since (crosses-below macd-line macd-signal) {}seg)", seg_dist));
                 }
             }
         }
-        (Vec::new(), facts, labels)
+        (Vec::new(), facts)
     }
 
     // ─── RSI divergence (PELT-structural) ──────────────────────────────
@@ -910,22 +881,18 @@ impl ThoughtEncoder {
         &self,
         candles: &[Candle],
         vm: &VectorManager,
-    ) -> (Vec<&Vector>, Vec<Vector>, Vec<String>) {
+    ) -> (Vec<&Vector>, Vec<Vector>) {
         let mut owned_facts = Vec::new();
-        let mut labels = Vec::new();
         use crate::vocab::divergence::eval_divergence;
         for div in eval_divergence(candles) {
-            // bind(diverging, bind(bind(close, price_dir), bind(indicator, indicator_dir)))
             let price_fact = Primitives::bind(self.vocab.get("close"), self.vocab.get(div.price_dir));
             let ind_fact = Primitives::bind(self.vocab.get(div.indicator), self.vocab.get(div.indicator_dir));
             let div_fact = Primitives::bind(self.vocab.get("diverging"),
                 &Primitives::bind(&price_fact, &ind_fact));
             let pos = vm.get_position_vector(div.candles_ago as i64);
             owned_facts.push(Primitives::bind(&div_fact, &pos));
-            labels.push(format!("(diverging close {} {} {} @{})",
-                div.price_dir, div.indicator, div.indicator_dir, div.candles_ago));
         }
-        (Vec::new(), owned_facts, labels)
+        (Vec::new(), owned_facts)
     }
 
     // ─── Volume confirmation ─────────────────────────────────────────────
@@ -933,10 +900,9 @@ impl ThoughtEncoder {
     fn eval_volume_confirmation(
         &self,
         candles: &[Candle],
-    ) -> (Vec<&Vector>, Vec<Vector>, Vec<String>) {
+    ) -> (Vec<&Vector>, Vec<Vector>) {
         let mut owned_facts = Vec::new();
-        let mut labels = Vec::new();
-        if candles.len() < 5 { return (Vec::new(), owned_facts, labels); }
+        if candles.len() < 5 { return (Vec::new(), owned_facts); }
 
         let close_vals: Vec<f64> = candles.iter().map(|c| c.close.ln()).collect();
         let vol_vals: Vec<f64> = candles.iter()
@@ -953,9 +919,8 @@ impl ThoughtEncoder {
                 &Primitives::bind(self.vocab.get("volume"), self.vocab.get("close")),
             );
             owned_facts.push(fact);
-            labels.push(format!("({} volume close)", predicate));
         }
-        (Vec::new(), owned_facts, labels)
+        (Vec::new(), owned_facts)
     }
 
     // ─── Range position scalar ───────────────────────────────────────────
@@ -963,26 +928,22 @@ impl ThoughtEncoder {
     fn eval_range_position(
         &self,
         candles: &[Candle],
-    ) -> (Vec<&Vector>, Vec<Vector>, Vec<String>) {
+    ) -> (Vec<&Vector>, Vec<Vector>) {
         let mut owned_facts = Vec::new();
-        let mut labels = Vec::new();
-        if candles.is_empty() { return (Vec::new(), owned_facts, labels); }
+        if candles.is_empty() { return (Vec::new(), owned_facts); }
 
         let range_high = candles.iter().map(|c| c.high).fold(f64::NEG_INFINITY, f64::max);
         let range_low  = candles.iter().map(|c| c.low ).fold(f64::INFINITY,     f64::min);
         let span = range_high - range_low;
-        if span < 1e-10 { return (Vec::new(), owned_facts, labels); }
+        if span < 1e-10 { return (Vec::new(), owned_facts); }
 
         let current  = candles.last().unwrap().close;
-        let position = (current - range_low) / span; // 0.0 = range low, 1.0 = range high
+        let position = (current - range_low) / span;
 
-        // Linear encoding with scale=2.0: position 0.0 and 1.0 are anti-correlated,
-        // position 0.5 is orthogonal to both. Equal absolute differences → equal similarity.
         let pos_vec = self.scalar_enc.encode(position, ScalarMode::Linear { scale: 2.0 });
         let fact = Primitives::bind(self.vocab.get("range-pos"), &pos_vec);
         owned_facts.push(fact);
-        labels.push(format!("(range-pos {:.3})", position));
-        (Vec::new(), owned_facts, labels)
+        (Vec::new(), owned_facts)
     }
 
     // ─── Ichimoku Cloud ─────────────────────────────────────────────────
@@ -990,12 +951,12 @@ impl ThoughtEncoder {
     fn eval_ichimoku<'a>(
         &'a self,
         candles: &[Candle],
-    ) -> (Vec<&'a Vector>, Vec<Vector>, Vec<String>) {
+    ) -> (Vec<&'a Vector>, Vec<Vector>) {
         use crate::vocab::ichimoku::eval_ichimoku;
         if let Some(ichi_facts) = eval_ichimoku(candles) {
             self.encode_facts(&ichi_facts)
         } else {
-            (Vec::new(), Vec::new(), Vec::new())
+            (Vec::new(), Vec::new())
         }
     }
 
@@ -1004,12 +965,12 @@ impl ThoughtEncoder {
     fn eval_stochastic<'a>(
         &'a self,
         candles: &[Candle],
-    ) -> (Vec<&'a Vector>, Vec<Vector>, Vec<String>) {
+    ) -> (Vec<&'a Vector>, Vec<Vector>) {
         use crate::vocab::stochastic::eval_stochastic;
         if let Some(stoch_facts) = eval_stochastic(candles) {
             self.encode_facts(&stoch_facts)
         } else {
-            (Vec::new(), Vec::new(), Vec::new())
+            (Vec::new(), Vec::new())
         }
     }
 
@@ -1018,12 +979,12 @@ impl ThoughtEncoder {
     fn eval_fibonacci<'a>(
         &'a self,
         candles: &[Candle],
-    ) -> (Vec<&'a Vector>, Vec<Vector>, Vec<String>) {
+    ) -> (Vec<&'a Vector>, Vec<Vector>) {
         use crate::vocab::fibonacci::eval_fibonacci;
         if let Some(fib_facts) = eval_fibonacci(candles) {
             self.encode_facts(&fib_facts)
         } else {
-            (Vec::new(), Vec::new(), Vec::new())
+            (Vec::new(), Vec::new())
         }
     }
 
@@ -1032,11 +993,10 @@ impl ThoughtEncoder {
     fn eval_volume_analysis<'a>(
         &'a self,
         candles: &[Candle],
-    ) -> (Vec<&'a Vector>, Vec<Vector>, Vec<String>) {
+    ) -> (Vec<&'a Vector>, Vec<Vector>) {
         let mut facts = Vec::new();
-        let mut labels = Vec::new();
         let n = candles.len();
-        if n < 20 { return (facts, Vec::new(), labels); }
+        if n < 20 { return (facts, Vec::new()); }
 
         // Volume SMA (20-period)
         let vol_sma: f64 = candles[n.saturating_sub(20)..].iter()
@@ -1047,15 +1007,15 @@ impl ThoughtEncoder {
             let ratio = vol / vol_sma;
             if ratio > 2.0 {
                 if let Some(v) = self.fact_cache.get("(at volume volume-spike)") {
-                    facts.push(v); labels.push("(at volume volume-spike)".into());
+                    facts.push(v);
                 }
             } else if ratio < 0.5 {
                 if let Some(v) = self.fact_cache.get("(at volume volume-drought)") {
-                    facts.push(v); labels.push("(at volume volume-drought)".into());
+                    facts.push(v);
                 }
             }
         }
-        (facts, Vec::new(), labels)
+        (facts, Vec::new())
     }
 
     // ─── Keltner Channels + Squeeze ──────────────────────────────────────
@@ -1063,7 +1023,7 @@ impl ThoughtEncoder {
     fn eval_keltner<'a>(
         &'a self,
         candles: &[Candle],
-    ) -> (Vec<&'a Vector>, Vec<Vector>, Vec<String>) {
+    ) -> (Vec<&'a Vector>, Vec<Vector>) {
         use crate::vocab::keltner::eval_keltner;
         let kelt_facts = eval_keltner(candles);
         self.encode_facts(&kelt_facts)
@@ -1074,7 +1034,7 @@ impl ThoughtEncoder {
     fn eval_momentum<'a>(
         &'a self,
         candles: &[Candle],
-    ) -> (Vec<&'a Vector>, Vec<Vector>, Vec<String>) {
+    ) -> (Vec<&'a Vector>, Vec<Vector>) {
         use crate::vocab::momentum::eval_momentum;
         self.encode_facts(&eval_momentum(candles))
     }
@@ -1084,7 +1044,7 @@ impl ThoughtEncoder {
     fn eval_price_action<'a>(
         &'a self,
         candles: &[Candle],
-    ) -> (Vec<&'a Vector>, Vec<Vector>, Vec<String>) {
+    ) -> (Vec<&'a Vector>, Vec<Vector>) {
         use crate::vocab::price_action::eval_price_action;
         self.encode_facts(&eval_price_action(candles))
     }
@@ -1094,7 +1054,7 @@ impl ThoughtEncoder {
     fn eval_oscillators_module<'a>(
         &'a self,
         candles: &[Candle],
-    ) -> (Vec<&'a Vector>, Vec<Vector>, Vec<String>) {
+    ) -> (Vec<&'a Vector>, Vec<Vector>) {
         use crate::vocab::oscillators::eval_oscillators;
         self.encode_facts(&eval_oscillators(candles))
     }
@@ -1106,30 +1066,25 @@ impl ThoughtEncoder {
     fn eval_flow_module<'a>(
         &'a self,
         candles: &[Candle],
-    ) -> (Vec<&'a Vector>, Vec<Vector>, Vec<String>) {
+    ) -> (Vec<&'a Vector>, Vec<Vector>) {
         use crate::vocab::flow::eval_flow;
         let (obv, flow_facts) = eval_flow(candles);
 
         let mut owned_facts = Vec::new();
-        let mut labels = Vec::new();
 
         // OBV direction: direct bind patterns that don't fit Fact variants
         if obv.obv_sign > 0.0 {
             owned_facts.push(Primitives::bind(self.vocab.get("obv"), self.vocab.get("up")));
-            labels.push("(obv rising)".to_string());
         } else if obv.obv_sign < 0.0 {
             owned_facts.push(Primitives::bind(self.vocab.get("obv"), self.vocab.get("down")));
-            labels.push("(obv falling)".to_string());
         }
         if obv.obv_diverges {
             owned_facts.push(Primitives::bind(self.vocab.get("obv"), self.vocab.get("divergence")));
-            labels.push("(obv divergence)".to_string());
         }
 
-        let (f, o, l) = self.encode_facts(&flow_facts);
+        let (f, o) = self.encode_facts(&flow_facts);
         owned_facts.extend(o);
-        labels.extend(l);
-        (f, owned_facts, labels)
+        (f, owned_facts)
     }
 
     // ─── vocab/persistence module ─────────────────────────────────────
@@ -1137,7 +1092,7 @@ impl ThoughtEncoder {
     fn eval_persistence_module<'a>(
         &'a self,
         candles: &[Candle],
-    ) -> (Vec<&'a Vector>, Vec<Vector>, Vec<String>) {
+    ) -> (Vec<&'a Vector>, Vec<Vector>) {
         use crate::vocab::persistence::eval_persistence;
         self.encode_facts(&eval_persistence(candles))
     }
@@ -1147,7 +1102,7 @@ impl ThoughtEncoder {
     fn eval_regime_module<'a>(
         &'a self,
         candles: &[Candle],
-    ) -> (Vec<&'a Vector>, Vec<Vector>, Vec<String>) {
+    ) -> (Vec<&'a Vector>, Vec<Vector>) {
         use crate::vocab::regime::eval_regime;
         self.encode_facts(&eval_regime(candles))
     }
@@ -1157,10 +1112,9 @@ impl ThoughtEncoder {
     fn eval_rsi_sma_cached<'a>(
         &'a self,
         candles: &[Candle],
-    ) -> (Vec<&'a Vector>, Vec<Vector>, Vec<String>) {
+    ) -> (Vec<&'a Vector>, Vec<Vector>) {
         let mut facts = Vec::new();
-        let mut labels = Vec::new();
-        if candles.len() < 15 { return (facts, Vec::new(), labels); }
+        if candles.len() < 15 { return (facts, Vec::new()); }
 
         let rsi_window = &candles[candles.len().saturating_sub(14)..];
         let rsi_sum: f64 = rsi_window.iter().map(|c| c.rsi).sum();
@@ -1169,7 +1123,7 @@ impl ThoughtEncoder {
         let now = candles.last().unwrap();
 
         let key = if now.rsi > rsi_sma { "(above rsi rsi-sma)" } else { "(below rsi rsi-sma)" };
-        if let Some(v) = self.fact_cache.get(key) { facts.push(v); labels.push(key.into()); }
+        if let Some(v) = self.fact_cache.get(key) { facts.push(v); }
 
         if candles.len() >= 16 {
             let prev_window = &candles[candles.len().saturating_sub(15)..candles.len() - 1];
@@ -1178,11 +1132,11 @@ impl ThoughtEncoder {
             let prev = &candles[candles.len() - 2];
 
             if prev.rsi < prev_rsi_sma && now.rsi >= rsi_sma {
-                if let Some(v) = self.fact_cache.get("(crosses-above rsi rsi-sma)") { facts.push(v); labels.push("(crosses-above rsi rsi-sma)".into()); }
+                if let Some(v) = self.fact_cache.get("(crosses-above rsi rsi-sma)") { facts.push(v); }
             } else if prev.rsi > prev_rsi_sma && now.rsi <= rsi_sma {
-                if let Some(v) = self.fact_cache.get("(crosses-below rsi rsi-sma)") { facts.push(v); labels.push("(crosses-below rsi rsi-sma)".into()); }
+                if let Some(v) = self.fact_cache.get("(crosses-below rsi rsi-sma)") { facts.push(v); }
             }
         }
-        (facts, Vec::new(), labels)
+        (facts, Vec::new())
     }
 }

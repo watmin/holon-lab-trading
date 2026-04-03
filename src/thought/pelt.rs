@@ -56,24 +56,22 @@ pub fn pelt_changepoints(values: &[f64], penalty: f64) -> Vec<usize> {
     cps
 }
 
-/// Result of PELT segmentation on a value series.
+/// Result of PELT segmentation. Borrows the value series.
 pub struct PeltResult {
-    /// The extracted values.
-    pub values: Vec<f64>,
     /// Changepoint indices (internal boundaries between segments).
     pub changepoints: Vec<usize>,
     /// Full boundary list: [0, cp1, cp2, ..., n]. Length = n_segments + 1.
     pub boundaries: Vec<usize>,
 }
 
-/// Run PELT on a pre-extracted value series.
-pub fn pelt_on_values(values: Vec<f64>) -> PeltResult {
-    let penalty = bic_penalty(&values);
-    let changepoints = pelt_changepoints(&values, penalty);
+/// Run PELT on a borrowed value series. Zero-copy — no ownership taken.
+pub fn pelt_on_values(values: &[f64]) -> PeltResult {
+    let penalty = bic_penalty(values);
+    let changepoints = pelt_changepoints(values, penalty);
     let mut boundaries = vec![0];
     boundaries.extend_from_slice(&changepoints);
     boundaries.push(values.len());
-    PeltResult { values, changepoints, boundaries }
+    PeltResult { changepoints, boundaries }
 }
 
 /// BIC-derived penalty: 2 * variance * log(n)
@@ -89,11 +87,11 @@ pub fn bic_penalty(values: &[f64]) -> f64 {
 /// Direction of the most recent PELT segment: "up", "down", or None if degenerate.
 pub fn most_recent_segment_dir(values: &[f64]) -> Option<&'static str> {
     if values.len() < 5 { return None; }
-    let pr = pelt_on_values(values.to_vec());
+    let pr = pelt_on_values(values);
     let start = pr.changepoints.last().copied().unwrap_or(0);
-    let end = pr.values.len();
+    let end = values.len();
     if end <= start { return None; }
-    let change = pr.values[end - 1] - pr.values[start];
+    let change = values[end - 1] - values[start];
     if change.abs() < 1e-10 { None }
     else if change > 0.0 { Some("up") }
     else { Some("down") }

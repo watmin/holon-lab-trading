@@ -619,14 +619,12 @@ impl IndicatorBank {
         // Time
         let hour = parse_hour(&raw.ts);
         let day_of_week = parse_day_of_week(&raw.ts);
-        let year = parse_year(&raw.ts);
 
         self.prev_close = close;
         self.count += 1;
 
         Candle {
             ts: raw.ts.clone(),
-            year,
             open: raw.open,
             high, low, close, volume,
             sma20, sma50, sma200,
@@ -675,10 +673,6 @@ fn parse_day_of_week(ts: &str) -> f64 {
     let t = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4];
     let y2 = if m < 3 { y - 1 } else { y };
     ((y2 + y2 / 4 - y2 / 100 + y2 / 400 + t[(m - 1) as usize] + d) % 7) as f64
-}
-
-fn parse_year(ts: &str) -> i32 {
-    ts.get(..4).and_then(|s| s.parse().ok()).unwrap_or(2019)
 }
 
 // ─── Parquet loader ────────────────────────────────────────────────────────
