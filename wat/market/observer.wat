@@ -99,7 +99,7 @@
         (pop-front (:resolved observer)))
 
       ;; 5. Update conviction history + threshold
-      ;; rune:scry(wat-leads) — Rust hardcodes 2000 cap; wat uses conviction-window parameter
+      ;; Rust passes conviction_window through CandleContext; observer.resolve() uses it.
       (push-back (:conviction-history observer) (:conviction prediction))
       (when (> (len (:conviction-history observer)) conviction-window)
         (pop-front (:conviction-history observer)))
