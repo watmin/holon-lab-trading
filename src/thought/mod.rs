@@ -334,10 +334,24 @@ const COMPARISON_PAIRS: &[(&str, &str)] = &[
     ("bb-upper", "keltner-upper"),  // squeeze detection
 ];
 
+/// Predicate indices for the comparison_vecs array.
+const PRED_ABOVE: usize = 0;
+const PRED_BELOW: usize = 1;
+const PRED_CROSSES_ABOVE: usize = 2;
+const PRED_CROSSES_BELOW: usize = 3;
+const PRED_TOUCHES: usize = 4;
+const PRED_BOUNCES_OFF: usize = 5;
+const PRED_NAMES: [&str; 6] = ["above", "below", "crosses-above", "crosses-below", "touches", "bounces-off"];
+
 pub struct ThoughtEncoder {
     vocab: ThoughtVocab,
     scalar_enc: ScalarEncoder,
     fact_cache: HashMap<String, Vector>,
+    /// Indexed lookup: comparison_vecs[pair_idx][pred_idx] = Vector.
+    /// Eliminates format! + HashMap lookup in the hot path.
+    comparison_vecs: Vec<[Vector; 6]>,
+    /// Pre-computed labels: comparison_labels[pair_idx][pred_idx] = "(pred a b)".
+    comparison_labels: Vec<[String; 6]>,
 }
 
 impl ThoughtEncoder {
@@ -345,13 +359,22 @@ impl ThoughtEncoder {
         let dims = vocab.dims();
         let mut fact_cache = HashMap::new();
 
-        // Pre-compute comparison facts
+        // Pre-compute comparison facts — both HashMap (for zone/fib/rsi/session)
+        // and indexed arrays (for the hot comparison loop)
+        let mut comparison_vecs: Vec<[Vector; 6]> = Vec::with_capacity(COMPARISON_PAIRS.len());
+        let mut comparison_labels: Vec<[String; 6]> = Vec::with_capacity(COMPARISON_PAIRS.len());
         for &(a, b) in COMPARISON_PAIRS {
-            for &pred in &["above", "below", "crosses-above", "crosses-below", "touches", "bounces-off"] {
+            let mut vecs: [Vector; 6] = std::array::from_fn(|_| Vector::zeros(dims));
+            let mut labels: [String; 6] = std::array::from_fn(|_| String::new());
+            for (pi, &pred) in PRED_NAMES.iter().enumerate() {
                 let key = format!("({} {} {})", pred, a, b);
                 let vec = fact_binary(&vocab, pred, a, b);
-                fact_cache.insert(key, vec);
+                fact_cache.insert(key.clone(), vec.clone());
+                vecs[pi] = vec;
+                labels[pi] = key;
             }
+            comparison_vecs.push(vecs);
+            comparison_labels.push(labels);
         }
 
         // Pre-compute fibonacci comparison facts (touches/above/below close vs fib levels)
@@ -431,7 +454,7 @@ impl ThoughtEncoder {
             }
         }
 
-        Self { vocab, scalar_enc: ScalarEncoder::new(dims), fact_cache }
+        Self { vocab, scalar_enc: ScalarEncoder::new(dims), fact_cache, comparison_vecs, comparison_labels }
     }
 
     /// Return the pre-computed fact codebook: (label, vector) pairs for all
@@ -602,39 +625,27 @@ impl ThoughtEncoder {
 
     // ─── Comparison predicates (cached) ──────────────────────────────────
 
-    // rune:temper(intentional) — format! keys for fact_cache lookup create ~70 String
-    // allocs per candle. Pre-computing a (pair_idx, predicate) → &Vector index would
-    // eliminate these. Deferred: encoding-path change requires accuracy validation.
-    // Also: eval_temporal bypasses fact_cache for crosses-above/below (fact_binary).
+    /// Tempered: indexed lookup instead of format! + HashMap per pair per candle.
+    /// Zero String allocation in the hot path.
     fn eval_comparisons_cached<'a>(
         &'a self,
         now: &Candle,
         prev: Option<&Candle>,
     ) -> (Vec<&'a Vector>, Vec<Vector>, Vec<String>) {
-        let mut facts = Vec::new();
-        let mut labels = Vec::new();
+        let mut facts: Vec<&Vector> = Vec::new();
+        let mut labels: Vec<String> = Vec::new();
         let has_prev_field = |name: &str| name.starts_with("prev-");
 
-        for &(a, b) in COMPARISON_PAIRS {
+        for (pair_idx, &(a, b)) in COMPARISON_PAIRS.iter().enumerate() {
             let a_val = match field_value(now, prev, a) { Some(v) => v, None => continue };
             let b_val = match field_value(now, prev, b) { Some(v) => v, None => continue };
 
-            if a_val > b_val {
-                let key = format!("(above {} {})", a, b);
-                if let Some(v) = self.fact_cache.get(&key) {
-                    facts.push(v);
-                    labels.push(key);
-                }
-            } else {
-                let key = format!("(below {} {})", a, b);
-                if let Some(v) = self.fact_cache.get(&key) {
-                    facts.push(v);
-                    labels.push(key);
-                }
-            }
+            // above/below — always fires
+            let pred_idx = if a_val > b_val { PRED_ABOVE } else { PRED_BELOW };
+            facts.push(&self.comparison_vecs[pair_idx][pred_idx]);
+            labels.push(self.comparison_labels[pair_idx][pred_idx].clone());
 
-            // crosses/touches/bounces need prev values of both fields;
-            // skip for pairs involving prev-* fields (would need prev-prev candle)
+            // crosses need prev values; skip for prev-* fields
             if has_prev_field(a) || has_prev_field(b) { continue; }
 
             if let Some(p) = prev {
@@ -642,28 +653,19 @@ impl ThoughtEncoder {
                 let pb = match field_value(p, None, b) { Some(v) => v, None => continue };
 
                 if pa < pb && a_val >= b_val {
-                    let key = format!("(crosses-above {} {})", a, b);
-                    if let Some(v) = self.fact_cache.get(&key) {
-                        facts.push(v);
-                        labels.push(key);
-                    }
+                    facts.push(&self.comparison_vecs[pair_idx][PRED_CROSSES_ABOVE]);
+                    labels.push(self.comparison_labels[pair_idx][PRED_CROSSES_ABOVE].clone());
                 } else if pa > pb && a_val <= b_val {
-                    let key = format!("(crosses-below {} {})", a, b);
-                    if let Some(v) = self.fact_cache.get(&key) {
-                        facts.push(v);
-                        labels.push(key);
-                    }
+                    facts.push(&self.comparison_vecs[pair_idx][PRED_CROSSES_BELOW]);
+                    labels.push(self.comparison_labels[pair_idx][PRED_CROSSES_BELOW].clone());
                 }
             }
 
             let atr = now.atr_r.max(0.001);
             let epsilon = atr * 0.1;
             if (a_val - b_val).abs() < epsilon {
-                let key = format!("(touches {} {})", a, b);
-                if let Some(v) = self.fact_cache.get(&key) {
-                    facts.push(v);
-                    labels.push(key);
-                }
+                facts.push(&self.comparison_vecs[pair_idx][PRED_TOUCHES]);
+                labels.push(self.comparison_labels[pair_idx][PRED_TOUCHES].clone());
 
                 if let Some(p) = prev {
                     let pa = match field_value(p, None, a) { Some(v) => v, None => continue };
@@ -671,11 +673,8 @@ impl ThoughtEncoder {
                     let prev_dist = (pa - pb).abs();
                     let now_dist = (a_val - b_val).abs();
                     if prev_dist < epsilon && now_dist > prev_dist {
-                        let key = format!("(bounces-off {} {})", a, b);
-                        if let Some(v) = self.fact_cache.get(&key) {
-                            facts.push(v);
-                            labels.push(key);
-                        }
+                        facts.push(&self.comparison_vecs[pair_idx][PRED_BOUNCES_OFF]);
+                        labels.push(self.comparison_labels[pair_idx][PRED_BOUNCES_OFF].clone());
                     }
                 }
             }
@@ -685,9 +684,6 @@ impl ThoughtEncoder {
 
     // ─── Segment narrative (PELT-based) ────────────────────────────────
 
-    // rune:temper(intentional) — allocates a values Vec per stream per candle (17 streams).
-    // Pre-allocating a reusable buffer on the encoder would eliminate per-candle alloc.
-    // Deferred: encoding-path change requires accuracy validation.
     fn eval_segment_narrative(
         &self,
         candles: &[Candle],
@@ -701,16 +697,20 @@ impl ThoughtEncoder {
         let beginning_atom = self.vocab.get("beginning");
         let ending_atom = self.vocab.get("ending");
 
+        // Tempered: pre-allocate buffer once, reuse across 17 streams.
+        // PELT takes ownership so we clone into it; saves 16 of 17 allocations.
+        let mut values_buf: Vec<f64> = Vec::with_capacity(candles.len());
         for &(stream_name, extractor) in SEGMENT_STREAMS {
-            let values: Vec<f64> = candles.iter().map(extractor).collect();
+            values_buf.clear();
+            values_buf.extend(candles.iter().map(extractor));
 
-            if values.len() < 5 { continue; }
+            if values_buf.len() < 5 { continue; }
 
             // Skip streams with degenerate data (all zeros or NaN)
-            let finite_count = values.iter().filter(|v| v.is_finite() && **v != 0.0).count();
+            let finite_count = values_buf.iter().filter(|v| v.is_finite() && **v != 0.0).count();
             if finite_count < 5 { continue; }
 
-            let pr = pelt_on_values(values);
+            let pr = pelt_on_values(values_buf.clone());
             let values = &pr.values;
             let boundaries = &pr.boundaries;
 
