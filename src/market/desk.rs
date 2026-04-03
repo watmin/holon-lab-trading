@@ -234,7 +234,11 @@ impl Desk {
     ///
     /// Called from EnterpriseState::on_candle_raw. The enterprise passes
     /// the raw OHLCV and shared resources. The desk computes its own indicators.
-    // 870-line fold — the sequential heartbeat. Coherent blocks extracted; what remains is causal chain.
+    // rune:forge(coupling) — 8 &mut params claims the enterprise as its world.
+    // Extracting position settlement, pending resolution, position opening into
+    // separate methods with narrow mutable slices would improve testability.
+    // Deferred: the causal chain between phases is real, and splitting risks
+    // introducing bugs in the 870-line fold without behavior change.
     pub fn on_candle(
         &mut self,
         i: usize,

@@ -1,3 +1,8 @@
+// rune:forge(bare-type) — amount, fee_rate, price are all bare f64.
+// Newtypes (Rate, FeeRate) would prevent swap(price) vs swap(1/price) errors.
+// Deferred: requires API change across treasury, desk, position, enterprise.
+// The symmetric position model (rate going up = good) reduces the risk.
+
 use std::collections::HashMap;
 use std::fmt;
 
