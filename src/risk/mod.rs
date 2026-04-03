@@ -301,12 +301,9 @@ fn encode_panel(portfolio: &Portfolio, atoms: &RiskAtoms, scalar: &holon::Scalar
     ])
 }
 
-/// Evaluate risk branches: encode features, score anomalies, update if healthy.
+/// Evaluate risk branches: encode (pmap), score (pmap), update (pfor-each).
 /// Returns (worst_ratio, per_branch_ratios). The ratios feed the risk manager.
 /// Also evaluates the generalist (holistic cross-branch pattern).
-/// rune:scry(evolved) — wat says pmap for encode/score/update (5 branches are independent).
-/// Rust stays sequential: measured 122/s→111/s with rayon on 5 items at recalib frequency.
-/// The overhead exceeds the gain. Correct to parallelize when branch count grows.
 pub fn evaluate_risk_branches(
     branches: &mut [RiskBranch],
     generalist: &mut OnlineSubspace,
@@ -314,27 +311,33 @@ pub fn evaluate_risk_branches(
     atoms: &RiskAtoms,
     scalar: &holon::ScalarEncoder,
 ) -> (f64, BranchRatios) {
+    use rayon::prelude::*;
+
     let branch_features = encode_risk_branches(portfolio, atoms, scalar);
-    let mut worst_ratio = 1.0_f64;
-    let mut ratios = [1.0_f64; 5];
     let healthy = portfolio.is_healthy() && portfolio.trades_taken >= 20;
 
-    // Specialist branches
-    for (branch_idx, branch) in branches.iter_mut().enumerate() {
+    // pmap: score each branch independently (immutable read of subspace)
+    let ratios: Vec<f64> = branches.par_iter().enumerate().map(|(branch_idx, branch)| {
         let features = &branch_features[branch_idx];
         if branch.subspace.n() >= 10 {
             let residual = branch.subspace.residual(features);
             let threshold = branch.subspace.threshold();
-            let ratio = if residual < threshold { 1.0 }
-                else { (threshold / residual).max(0.1) };
-            ratios[branch_idx] = ratio;
-            worst_ratio = worst_ratio.min(ratio);
+            if residual < threshold { 1.0 } else { (threshold / residual).max(0.1) }
+        } else {
+            1.0
         }
-        if healthy { branch.subspace.update(features); }
+    }).collect();
+
+    // pfor-each: update when healthy (disjoint branches)
+    if healthy {
+        branches.par_iter_mut().enumerate().for_each(|(branch_idx, branch)| {
+            branch.subspace.update(&branch_features[branch_idx]);
+        });
     }
 
+    let mut worst_ratio = ratios.iter().fold(1.0_f64, |a, &b| a.min(b));
+
     // Generalist: bundle ALL branch feature vectors into one holistic thought.
-    // Each branch is a full-dims bundle. Bundle-of-bundles keeps dims constant.
     let branch_vecs: Vec<Vector> = branch_features.iter()
         .map(|f| Vector::from_f64(f))
         .collect();
