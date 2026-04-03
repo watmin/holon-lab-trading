@@ -363,3 +363,237 @@ impl EnterpriseState {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::indicators::RawCandle;
+    use crate::market::manager::{ManagerAtoms, noise_floor};
+    use crate::market::exit::ExitAtoms;
+    use crate::market::OBSERVER_LENSES;
+    use crate::thought::{ThoughtVocab, ThoughtEncoder};
+    use crate::treasury::Asset;
+    use holon::{ScalarEncoder, VectorManager, Vector};
+
+    const TEST_DIMS: usize = 64;
+
+    fn make_raw_candle(i: usize) -> RawCandle {
+        let base = 50000.0 + (i as f64) * 10.0;
+        RawCandle {
+            ts: format!("2024-01-01T{:02}:00:00Z", i % 24),
+            open: base,
+            high: base + 50.0,
+            low: base - 50.0,
+            close: base + 20.0,
+            volume: 100.0 + (i as f64),
+        }
+    }
+
+    fn make_ctx<'a>(
+        vm: &'a VectorManager,
+        thought_encoder: &'a ThoughtEncoder,
+        mgr_atoms: &'a ManagerAtoms,
+        mgr_scalar: &'a ScalarEncoder,
+        exit_scalar: &'a ScalarEncoder,
+        exit_atoms: &'a ExitAtoms,
+        risk_scalar: &'a ScalarEncoder,
+        risk_atoms: &'a crate::risk::RiskAtoms,
+        risk_mgr_atoms: &'a crate::risk::manager::RiskManagerAtoms,
+        observer_atoms: &'a [Vector],
+        generalist_atom: &'a Vector,
+        codebook_labels: &'a [String],
+        codebook_vecs: &'a [Vector],
+    ) -> CandleContext<'a> {
+        let base_asset = Asset::new("USDC");
+        let quote_asset = Asset::new("WBTC");
+        CandleContext {
+            dims: TEST_DIMS,
+            horizon: 36,
+            move_threshold: 0.005,
+            atr_multiplier: 1.0,
+            decay: 0.999,
+            recalib_interval: 200,
+            min_conviction: 0.0,
+            conviction_quantile: 0.5,
+            conviction_mode: ConvictionMode::Quantile,
+            min_edge: 0.01,
+            sizing: SizingMode::Kelly,
+            max_drawdown: 0.15,
+            swap_fee: 0.001,
+            slippage: 0.0025,
+            asset_mode: AssetMode::Hold,
+            base_asset: Box::leak(Box::new(base_asset)),
+            quote_asset: Box::leak(Box::new(quote_asset)),
+            initial_equity: 10000.0,
+            diagnostics: false,
+            k_stop: 2.0,
+            k_trail: 1.5,
+            k_tp: 3.0,
+            exit_horizon: 36,
+            exit_observe_interval: 5,
+            decay_stable: 0.999,
+            decay_adapting: 0.995,
+            highconv_rolling_cap: 100,
+            max_single_position: 0.03,
+            conviction_warmup: 100,
+            conviction_window: 500,
+            vm,
+            thought_encoder,
+            mgr_atoms,
+            mgr_scalar,
+            exit_scalar,
+            exit_atoms,
+            risk_scalar,
+            risk_atoms,
+            risk_mgr_atoms,
+            observer_atoms,
+            generalist_atom,
+            min_opinion_magnitude: noise_floor(TEST_DIMS),
+            codebook_labels,
+            codebook_vecs,
+            loop_count: 1000,
+            progress_every: 500,
+            t_start: std::time::Instant::now(),
+        }
+    }
+
+    /// Build all the encoding infrastructure needed for CandleContext at small dims.
+    struct TestInfra {
+        vm: VectorManager,
+        thought_encoder: ThoughtEncoder,
+        mgr_atoms: ManagerAtoms,
+        mgr_scalar: ScalarEncoder,
+        exit_scalar: ScalarEncoder,
+        exit_atoms: ExitAtoms,
+        risk_scalar: ScalarEncoder,
+        risk_atoms: crate::risk::RiskAtoms,
+        risk_mgr_atoms: crate::risk::manager::RiskManagerAtoms,
+        observer_atoms: Vec<Vector>,
+        generalist_atom: Vector,
+        codebook_labels: Vec<String>,
+        codebook_vecs: Vec<Vector>,
+    }
+
+    impl TestInfra {
+        fn new() -> Self {
+            let vm = VectorManager::new(TEST_DIMS);
+            let vocab = ThoughtVocab::new(&vm);
+            let thought_encoder = ThoughtEncoder::new(vocab);
+            let mgr_atoms = ManagerAtoms::new(&vm);
+            let mgr_scalar = ScalarEncoder::new(TEST_DIMS);
+            let exit_scalar = ScalarEncoder::new(TEST_DIMS);
+            let exit_atoms = ExitAtoms::new(&vm);
+            let risk_scalar = ScalarEncoder::new(TEST_DIMS);
+            let risk_atoms = crate::risk::RiskAtoms::new(&vm);
+            let risk_mgr_atoms = crate::risk::manager::RiskManagerAtoms::new(&vm);
+            let observer_atoms: Vec<Vector> = OBSERVER_LENSES.iter()
+                .map(|lens| vm.get_vector(lens.as_str()))
+                .collect();
+            let generalist_atom = vm.get_vector("generalist");
+            let (codebook_labels, codebook_vecs) = thought_encoder.fact_codebook();
+            Self {
+                vm,
+                thought_encoder,
+                mgr_atoms,
+                mgr_scalar,
+                exit_scalar,
+                exit_atoms,
+                risk_scalar,
+                risk_atoms,
+                risk_mgr_atoms,
+                observer_atoms,
+                generalist_atom,
+                codebook_labels,
+                codebook_vecs,
+            }
+        }
+
+        fn ctx(&self) -> CandleContext<'_> {
+            make_ctx(
+                &self.vm,
+                &self.thought_encoder,
+                &self.mgr_atoms,
+                &self.mgr_scalar,
+                &self.exit_scalar,
+                &self.exit_atoms,
+                &self.risk_scalar,
+                &self.risk_atoms,
+                &self.risk_mgr_atoms,
+                &self.observer_atoms,
+                &self.generalist_atom,
+                &self.codebook_labels,
+                &self.codebook_vecs,
+            )
+        }
+    }
+
+    fn make_enterprise() -> EnterpriseState {
+        let base_asset = Asset::new("USDC");
+        EnterpriseState::new(
+            TEST_DIMS,
+            200,      // recalib_interval
+            10000.0,  // initial_equity
+            100,      // observe_period
+            0.999,    // decay
+            &base_asset,
+            3,        // max_positions
+            0.5,      // max_utilization
+            0,        // start_idx
+            100,      // generalist_window
+        )
+    }
+
+    #[test]
+    fn enterprise_state_new_creates() {
+        let state = make_enterprise();
+        assert_eq!(state.desks.len(), 1, "should have exactly one desk");
+        let usdc = Asset::new("USDC");
+        assert_eq!(
+            state.treasury.balance(&usdc), 10000.0,
+            "treasury should have initial equity"
+        );
+        assert_eq!(state.cursor, 0);
+        assert_eq!(state.candle_count, 0);
+    }
+
+    #[test]
+    fn enterprise_state_on_event_candle() {
+        let infra = TestInfra::new();
+        let ctx = infra.ctx();
+        let mut state = make_enterprise();
+
+        let raw = make_raw_candle(0);
+        state.on_event(Event::Candle(raw), &ctx);
+
+        assert_eq!(state.cursor, 1, "cursor should advance by one after a candle");
+    }
+
+    #[test]
+    fn enterprise_state_processes_100_candles() {
+        let infra = TestInfra::new();
+        let ctx = infra.ctx();
+        let mut state = make_enterprise();
+
+        for i in 0..100 {
+            let raw = make_raw_candle(i);
+            state.on_event(Event::Candle(raw), &ctx);
+        }
+
+        assert_eq!(state.cursor, 100, "cursor should be 100 after 100 candles");
+        assert_eq!(state.candle_count, 100);
+    }
+
+    #[test]
+    fn enterprise_state_deposit_event() {
+        let infra = TestInfra::new();
+        let ctx = infra.ctx();
+        let mut state = make_enterprise();
+
+        let usdc = Asset::new("USDC");
+        let before = state.treasury.balance(&usdc);
+        state.on_event(Event::Deposit { asset: usdc.clone(), amount: 5000.0 }, &ctx);
+        let after = state.treasury.balance(&usdc);
+
+        assert_eq!(after - before, 5000.0, "deposit should increase balance by deposited amount");
+    }
+}

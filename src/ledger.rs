@@ -373,3 +373,130 @@ pub fn init_ledger(path: &str) -> Connection {
     ").expect("failed to init run DB");
     db
 }
+
+pub fn write_meta(conn: &Connection, key: &str, value: &str) {
+    conn.execute(
+        "INSERT OR REPLACE INTO meta (key, value) VALUES (?1, ?2)",
+        params![key, value],
+    )
+    .expect("failed to write meta");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static TEST_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+    fn test_db_path() -> String {
+        let id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let pid = std::process::id();
+        format!("/tmp/test_ledger_{}_{}.db", pid, id)
+    }
+
+    #[test]
+    fn init_ledger_creates_tables() {
+        let path = test_db_path();
+        let _ = std::fs::remove_file(&path);
+        let conn = init_ledger(&path);
+
+        let mut stmt = conn
+            .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+            .unwrap();
+        let tables: Vec<String> = stmt
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
+
+        let expected = [
+            "candle_log",
+            "disc_decode",
+            "meta",
+            "observer_log",
+            "recalib_log",
+            "risk_log",
+            "trade_facts",
+            "trade_ledger",
+            "trade_vectors",
+        ];
+        for name in &expected {
+            assert!(
+                tables.contains(&name.to_string()),
+                "missing table: {}",
+                name
+            );
+        }
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn write_meta_stores_key_value() {
+        let path = test_db_path();
+        let _ = std::fs::remove_file(&path);
+        let conn = init_ledger(&path);
+
+        write_meta(&conn, "run_name", "test-run-42");
+
+        let val: String = conn
+            .query_row("SELECT value FROM meta WHERE key = ?1", params!["run_name"], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(val, "test-run-42");
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn flush_logs_empty_no_panic() {
+        let path = test_db_path();
+        let _ = std::fs::remove_file(&path);
+        let conn = init_ledger(&path);
+
+        flush_logs(&[], &conn);
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn flush_logs_candle_log() {
+        let path = test_db_path();
+        let _ = std::fs::remove_file(&path);
+        let conn = init_ledger(&path);
+
+        let entries = vec![LogEntry::CandleLog {
+            step: 1,
+            candle_idx: 100,
+            timestamp: "2025-01-01T00:00:00".to_string(),
+            tht_cos: 0.85,
+            tht_conviction: 0.72,
+            tht_pred: Some("Buy".to_string()),
+            meta_pred: Some("Buy".to_string()),
+            meta_conviction: 0.65,
+            actual: "Buy".to_string(),
+            traded: 1,
+            position_frac: Some(0.1),
+            equity: 10000.0,
+            outcome_pct: 1.5,
+            usdc_bal: 9000.0,
+            wbtc_bal: 0.01,
+            usdc_deployed: 1000.0,
+            wbtc_deployed: 0.0,
+        }];
+
+        flush_logs(&entries, &conn);
+
+        let (step, equity): (i64, f64) = conn
+            .query_row("SELECT step, equity FROM candle_log WHERE step = 1", [], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })
+            .unwrap();
+        assert_eq!(step, 1);
+        assert!((equity - 10000.0).abs() < f64::EPSILON);
+
+        let _ = std::fs::remove_file(&path);
+    }
+}

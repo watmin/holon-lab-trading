@@ -1172,3 +1172,238 @@ impl Desk {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::indicators::RawCandle;
+    use crate::market::manager::{ManagerAtoms, noise_floor};
+    use crate::market::exit::ExitAtoms;
+    use crate::market::OBSERVER_LENSES;
+    use crate::thought::{ThoughtVocab, ThoughtEncoder};
+    use crate::state::{AssetMode, CandleContext, ConvictionMode, SizingMode};
+    use holon::{ScalarEncoder, VectorManager, Vector};
+
+    const TEST_DIMS: usize = 64;
+
+    fn make_raw_candle(i: usize) -> RawCandle {
+        let base = 50000.0 + (i as f64) * 10.0;
+        RawCandle {
+            ts: format!("2024-01-01T{:02}:00:00Z", i % 24),
+            open: base,
+            high: base + 50.0,
+            low: base - 50.0,
+            close: base + 20.0,
+            volume: 100.0 + (i as f64),
+        }
+    }
+
+    fn make_desk() -> Desk {
+        let base = Asset::new("USDC");
+        let target = Asset::new("WBTC");
+        Desk::new(DeskConfig {
+            name: "test-desk".to_string(),
+            source_asset: base,
+            target_asset: target,
+            dims: TEST_DIMS,
+            recalib_interval: 200,
+            window: 100,
+            max_window_size: 2016,
+            decay: 0.999,
+        })
+    }
+
+    struct TestInfra {
+        vm: VectorManager,
+        thought_encoder: ThoughtEncoder,
+        mgr_atoms: ManagerAtoms,
+        mgr_scalar: ScalarEncoder,
+        exit_scalar: ScalarEncoder,
+        exit_atoms: ExitAtoms,
+        risk_scalar: ScalarEncoder,
+        risk_atoms: crate::risk::RiskAtoms,
+        risk_mgr_atoms: crate::risk::manager::RiskManagerAtoms,
+        observer_atoms: Vec<Vector>,
+        generalist_atom: Vector,
+        codebook_labels: Vec<String>,
+        codebook_vecs: Vec<Vector>,
+    }
+
+    impl TestInfra {
+        fn new() -> Self {
+            let vm = VectorManager::new(TEST_DIMS);
+            let vocab = ThoughtVocab::new(&vm);
+            let thought_encoder = ThoughtEncoder::new(vocab);
+            let mgr_atoms = ManagerAtoms::new(&vm);
+            let mgr_scalar = ScalarEncoder::new(TEST_DIMS);
+            let exit_scalar = ScalarEncoder::new(TEST_DIMS);
+            let exit_atoms = ExitAtoms::new(&vm);
+            let risk_scalar = ScalarEncoder::new(TEST_DIMS);
+            let risk_atoms = crate::risk::RiskAtoms::new(&vm);
+            let risk_mgr_atoms = crate::risk::manager::RiskManagerAtoms::new(&vm);
+            let observer_atoms: Vec<Vector> = OBSERVER_LENSES.iter()
+                .map(|lens| vm.get_vector(lens.as_str()))
+                .collect();
+            let generalist_atom = vm.get_vector("generalist");
+            let (codebook_labels, codebook_vecs) = thought_encoder.fact_codebook();
+            Self {
+                vm,
+                thought_encoder,
+                mgr_atoms,
+                mgr_scalar,
+                exit_scalar,
+                exit_atoms,
+                risk_scalar,
+                risk_atoms,
+                risk_mgr_atoms,
+                observer_atoms,
+                generalist_atom,
+                codebook_labels,
+                codebook_vecs,
+            }
+        }
+
+        fn ctx(&self) -> CandleContext<'_> {
+            let base_asset = Asset::new("USDC");
+            let quote_asset = Asset::new("WBTC");
+            CandleContext {
+                dims: TEST_DIMS,
+                horizon: 36,
+                move_threshold: 0.005,
+                atr_multiplier: 1.0,
+                decay: 0.999,
+                recalib_interval: 200,
+                min_conviction: 0.0,
+                conviction_quantile: 0.5,
+                conviction_mode: ConvictionMode::Quantile,
+                min_edge: 0.01,
+                sizing: SizingMode::Kelly,
+                max_drawdown: 0.15,
+                swap_fee: 0.001,
+                slippage: 0.0025,
+                asset_mode: AssetMode::Hold,
+                base_asset: Box::leak(Box::new(base_asset)),
+                quote_asset: Box::leak(Box::new(quote_asset)),
+                initial_equity: 10000.0,
+                diagnostics: false,
+                k_stop: 2.0,
+                k_trail: 1.5,
+                k_tp: 3.0,
+                exit_horizon: 36,
+                exit_observe_interval: 5,
+                decay_stable: 0.999,
+                decay_adapting: 0.995,
+                highconv_rolling_cap: 100,
+                max_single_position: 0.03,
+                conviction_warmup: 100,
+                conviction_window: 500,
+                vm: &self.vm,
+                thought_encoder: &self.thought_encoder,
+                mgr_atoms: &self.mgr_atoms,
+                mgr_scalar: &self.mgr_scalar,
+                exit_scalar: &self.exit_scalar,
+                exit_atoms: &self.exit_atoms,
+                risk_scalar: &self.risk_scalar,
+                risk_atoms: &self.risk_atoms,
+                risk_mgr_atoms: &self.risk_mgr_atoms,
+                observer_atoms: &self.observer_atoms,
+                generalist_atom: &self.generalist_atom,
+                min_opinion_magnitude: noise_floor(TEST_DIMS),
+                codebook_labels: &self.codebook_labels,
+                codebook_vecs: &self.codebook_vecs,
+                loop_count: 1000,
+                progress_every: 500,
+                t_start: std::time::Instant::now(),
+            }
+        }
+    }
+
+    #[test]
+    fn desk_new_creates() {
+        let desk = make_desk();
+        assert_eq!(desk.observers.len(), 6, "should have 6 observers (5 specialists + 1 generalist)");
+        assert_eq!(desk.encode_count, 0);
+        assert_eq!(desk.candle_window.len(), 0);
+    }
+
+    #[test]
+    fn desk_on_candle_no_panic() {
+        let infra = TestInfra::new();
+        let ctx = infra.ctx();
+        let mut desk = make_desk();
+        desk.adaptive_decay = 0.999;
+
+        let mut treasury = Treasury::new(3, 0.5);
+        treasury.deposit(&Asset::new("USDC"), 10000.0);
+        let mut portfolio = crate::portfolio::Portfolio::new(10000.0, 100);
+        let mut peak = 10000.0;
+        let mut db_batch = 0usize;
+
+        let raw = make_raw_candle(0);
+        let mut shared = SharedState {
+            treasury: &mut treasury,
+            portfolio: &mut portfolio,
+            risk_mult: 0.5,
+            peak_equity: &mut peak,
+            db_batch: &mut db_batch,
+        };
+        desk.on_candle(0, &raw, &mut shared, &ctx);
+        // No panic means success
+    }
+
+    #[test]
+    fn desk_on_candle_increments_encode_count() {
+        let infra = TestInfra::new();
+        let ctx = infra.ctx();
+        let mut desk = make_desk();
+        desk.adaptive_decay = 0.999;
+
+        let mut treasury = Treasury::new(3, 0.5);
+        treasury.deposit(&Asset::new("USDC"), 10000.0);
+        let mut portfolio = crate::portfolio::Portfolio::new(10000.0, 100);
+        let mut peak = 10000.0;
+        let mut db_batch = 0usize;
+
+        for i in 0..5 {
+            let raw = make_raw_candle(i);
+            let mut shared = SharedState {
+                treasury: &mut treasury,
+                portfolio: &mut portfolio,
+                risk_mult: 0.5,
+                peak_equity: &mut peak,
+                db_batch: &mut db_batch,
+            };
+            desk.on_candle(i, &raw, &mut shared, &ctx);
+        }
+
+        assert_eq!(desk.encode_count, 5, "encode_count should be 5 after 5 candles");
+    }
+
+    #[test]
+    fn desk_candle_window_fills() {
+        let infra = TestInfra::new();
+        let ctx = infra.ctx();
+        let mut desk = make_desk();
+        desk.adaptive_decay = 0.999;
+
+        let mut treasury = Treasury::new(3, 0.5);
+        treasury.deposit(&Asset::new("USDC"), 10000.0);
+        let mut portfolio = crate::portfolio::Portfolio::new(10000.0, 100);
+        let mut peak = 10000.0;
+        let mut db_batch = 0usize;
+
+        for i in 0..50 {
+            let raw = make_raw_candle(i);
+            let mut shared = SharedState {
+                treasury: &mut treasury,
+                portfolio: &mut portfolio,
+                risk_mult: 0.5,
+                peak_equity: &mut peak,
+                db_batch: &mut db_batch,
+            };
+            desk.on_candle(i, &raw, &mut shared, &ctx);
+        }
+
+        assert_eq!(desk.candle_window.len(), 50, "candle_window should have 50 entries after 50 candles");
+    }
+}
