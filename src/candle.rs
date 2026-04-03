@@ -36,7 +36,7 @@ pub struct Candle {
 
     // ATR (14-period)
     pub atr: f64,
-    pub atr_r: f64,
+    pub atr_r: f64, // ATR as ratio to close price (atr / close)
 
     // Stochastic (14-period)
     pub stoch_k: f64,
@@ -74,6 +74,14 @@ pub struct Candle {
     pub tf_4h_low: f64,
     pub tf_4h_ret: f64,
     pub tf_4h_body: f64,
+
+    // Ichimoku Cloud (9/26/52-period midpoint system)
+    pub tenkan_sen: f64,    // (highest-high + lowest-low) / 2 over 9 periods
+    pub kijun_sen: f64,     // (highest-high + lowest-low) / 2 over 26 periods
+    pub senkou_span_a: f64, // (tenkan + kijun) / 2
+    pub senkou_span_b: f64, // (highest-high + lowest-low) / 2 over 52 periods
+    pub cloud_top: f64,     // max(span_a, span_b)
+    pub cloud_bottom: f64,  // min(span_a, span_b)
 
     // Derived
     pub bb_pos: f64,

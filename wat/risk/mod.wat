@@ -71,11 +71,11 @@
   "How far equity has recovered from drawdown bottom toward peak. [0, 1].
    1.0 when at peak or drawdown < 0.5%."
   (let ((dd (drawdown portfolio)))
-    (if (or (<= (:peak-equity portfolio) (:dd-bottom-equity portfolio))
+    (if (or (<= (:peak-equity portfolio) (:drawdown-bottom-equity portfolio))
             (< dd RECOVERY_THRESHOLD))
         1.0
-        (clamp (/ (- (:equity portfolio) (:dd-bottom-equity portfolio))
-                  (- (:peak-equity portfolio) (:dd-bottom-equity portfolio)))
+        (clamp (/ (- (:equity portfolio) (:drawdown-bottom-equity portfolio))
+                  (- (:peak-equity portfolio) (:drawdown-bottom-equity portfolio)))
                0.0 1.0))))
 
 (define (historical-worst-drawdown portfolio)

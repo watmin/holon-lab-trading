@@ -43,7 +43,7 @@
   ;; Risk vocabulary infrastructure
   equity-at-trade        ; (deque f64) — equity after each trade, cap history-window
   trade-returns          ; (deque f64) — directional return per trade, cap history-window
-  dd-bottom-equity       ; deepest point of current drawdown
+  drawdown-bottom-equity       ; deepest point of current drawdown
   trades-since-bottom    ; trades since drawdown bottom
   completed-drawdowns)   ; (deque f64) — max depth of each completed dd, cap 20
 
@@ -59,7 +59,7 @@
     :trades-taken 0 :trades-won 0
     :rolling (deque)
     :equity-at-trade (deque) :trade-returns (deque)
-    :dd-bottom-equity initial-equity
+    :drawdown-bottom-equity initial-equity
     :trades-since-bottom 0
     :completed-drawdowns (deque)))
 
@@ -144,22 +144,22 @@
 
     ;; Drawdown tracking: record completed drawdowns, update bottom
     (when (> new-equity (:peak-equity portfolio))
-      (when (< (:dd-bottom-equity portfolio) (* (:peak-equity portfolio) peak-decay))
+      (when (< (:drawdown-bottom-equity portfolio) (* (:peak-equity portfolio) peak-decay))
         (push-back (:completed-drawdowns portfolio)
-          (/ (- (:peak-equity portfolio) (:dd-bottom-equity portfolio))
+          (/ (- (:peak-equity portfolio) (:drawdown-bottom-equity portfolio))
              (:peak-equity portfolio)))
         (when (> (len (:completed-drawdowns portfolio)) 20)
           (pop-front (:completed-drawdowns portfolio))))
       (set! (:peak-equity portfolio) new-equity)
-      (set! (:dd-bottom-equity portfolio) new-equity)
+      (set! (:drawdown-bottom-equity portfolio) new-equity)
       (set! (:trades-since-bottom portfolio) 0))
 
     ;; Rolling peak decay: peak forgets old highs over ~700 trades
     (set! (:peak-equity portfolio)
       (+ (* (:peak-equity portfolio) peak-decay) (* new-equity (- 1.0 peak-decay))))
 
-    (if (< new-equity (:dd-bottom-equity portfolio))
-        (begin (set! (:dd-bottom-equity portfolio) new-equity)
+    (if (< new-equity (:drawdown-bottom-equity portfolio))
+        (begin (set! (:drawdown-bottom-equity portfolio) new-equity)
                (set! (:trades-since-bottom portfolio) 0))
         (inc! (:trades-since-bottom portfolio)))
 

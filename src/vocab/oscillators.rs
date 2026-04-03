@@ -78,14 +78,22 @@ pub fn eval_oscillators(candles: &[Candle]) -> Vec<Fact<'static>> {
         }
     }
 
-    // Multi-timeframe ROC — pre-computed on Candle
-    let accel = now.roc_1 > now.roc_3 && now.roc_3 > now.roc_6 && now.roc_6 > now.roc_12;
-    let decel = now.roc_1 < now.roc_3 && now.roc_3 < now.roc_6 && now.roc_6 < now.roc_12;
+    // Multi-timeframe ROC — normalized per-candle rate.
+    // roc_N / N = average per-candle rate over N periods.
+    // Acceleration: short-term rate exceeds long-term rate (move getting faster).
+    // Deceleration: short-term rate below long-term rate (move exhausting).
+    // Majority vote across 3 comparisons — tolerates noise in one pair.
+    let r1 = now.roc_1;           // already per-candle
+    let r3 = now.roc_3 / 3.0;
+    let r6 = now.roc_6 / 6.0;
+    let r12 = now.roc_12 / 12.0;
+    let accel_votes = (r1 > r3) as u8 + (r3 > r6) as u8 + (r6 > r12) as u8;
+    let decel_votes = (r1 < r3) as u8 + (r3 < r6) as u8 + (r6 < r12) as u8;
 
-    if accel {
+    if accel_votes >= 2 {
         facts.push(Fact::Bare { label: "roc-accelerating" });
     }
-    if decel {
+    if decel_votes >= 2 {
         facts.push(Fact::Bare { label: "roc-decelerating" });
     }
 

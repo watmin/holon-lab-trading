@@ -1,69 +1,51 @@
 ;; ── vocab/ichimoku.wat — Ichimoku Cloud system ──────────────────
 ;;
 ;; Tenkan-sen, Kijun-sen, Senkou Spans, cloud zone, TK cross.
-;; Window-dependent — all levels computed from raw candles, not pre-baked.
+;; Ichimoku levels are streaming per-candle fields on the Candle struct
+;; (computed by IndicatorBank from rolling 9/26/52-period high/low buffers).
+;;
+;; The 7 comparison pairs (close vs tenkan, kijun, cloud, spans) are handled
+;; by COMPARISON_PAIRS in eval-comparisons — not duplicated here.
+;;
+;; This module adds: cloud zone (above/below/in) and TK cross detection.
+;; These require window context (previous candle's tenkan/kijun for cross).
 ;;
 ;; Lens: structure
 
 (require facts)
 
-(define (midpoint candles)
-  "Midpoint of a candle window: (highest-high + lowest-low) / 2."
-  (let ((hi (fold max (first (map :high candles)) (rest (map :high candles))))
-        (lo (fold min (first (map :low candles))  (rest (map :low candles)))))
-    (/ (+ hi lo) 2.0)))
-
 (define (eval-ichimoku candles)
-  "Ichimoku cloud facts. Returns None if < 26 candles."
-  (when (>= (len candles) 26)
-    (let ((n      (len candles))
-          (now    (last candles))
-          (close  (:close now))
-          (tenkan (midpoint (last-n candles 9)))
-          (kijun  (midpoint (last-n candles 26)))
-          (span-a (/ (+ tenkan kijun) 2.0))
-          (span-b (midpoint candles))
-          (cloud-top    (max span-a span-b))
-          (cloud-bottom (min span-a span-b)))
-      (append
-        ;; 7 comparison pairs — close vs ichimoku levels
-        (fold-left
-          (lambda (facts quad)
-            (let ((a-name (first quad))
-                  (b-name (second quad))
-                  (a-val  (nth quad 2))
-                  (b-val  (nth quad 3)))
-              (append facts
-                (list (fact/comparison (if (> a-val b-val) "above" "below")
-                                      a-name b-name)))))
-          (list)
-          [("close"      "tenkan-sen"   close  tenkan)
-           ("close"      "kijun-sen"    close  kijun)
-           ("close"      "cloud-top"    close  cloud-top)
-           ("close"      "cloud-bottom" close  cloud-bottom)
-           ("tenkan-sen" "kijun-sen"    tenkan kijun)
-           ("close"      "senkou-span-a" close span-a)
-           ("close"      "senkou-span-b" close span-b)])
+  "Ichimoku cloud zone + TK cross. Returns None if levels not yet computed."
+  (let ((n   (len candles))
+        (now (last candles)))
+    ;; Ichimoku fields are 0.0 during warmup (< 52 candles in IndicatorBank).
+    ;; field_value filters 0.0 as None for non-derived fields.
+    (when (> (:cloud-top now) 0.0)
+      (let ((close        (:close now))
+            (cloud-top    (:cloud-top now))
+            (cloud-bottom (:cloud-bottom now))
+            (tenkan       (:tenkan-sen now))
+            (kijun        (:kijun-sen now)))
+        (append
+          ;; Cloud zone — above, below, or inside the cloud
+          (list (fact/zone "close"
+                  (cond ((> close cloud-top)    "above-cloud")
+                        ((< close cloud-bottom) "below-cloud")
+                        (else                   "in-cloud"))))
 
-        ;; Cloud zone
-        (list (fact/zone "close"
-                (cond ((> close cloud-top)    "above-cloud")
-                      ((< close cloud-bottom) "below-cloud")
-                      (else                   "in-cloud"))))
-
-        ;; Tenkan-Kijun cross — needs >= 27 candles for previous period
-        ;; Two different window slices (9-back and 26-back) — not redundant traversal.
-        ;; Each midpoint requires its own window. Stateless: no caching needed.
-        (if (>= n 27)
-            (let ((prev-tenkan (midpoint (take 9  (last-n candles 10))))
-                  (prev-kijun  (midpoint (take 26 (last-n candles 27)))))
-              (cond
-                ((and (< prev-tenkan prev-kijun) (>= tenkan kijun))
-                 (list (fact/comparison "crosses-above" "tenkan-sen" "kijun-sen")))
-                ((and (> prev-tenkan prev-kijun) (<= tenkan kijun))
-                 (list (fact/comparison "crosses-below" "tenkan-sen" "kijun-sen")))
-                (else (list))))
-            (list))))))
+          ;; Tenkan-Kijun cross — needs previous candle
+          (if (>= n 2)
+              (let ((prev (nth candles (- n 2))))
+                (when (> (:tenkan-sen prev) 0.0)
+                  (let ((prev-tenkan (:tenkan-sen prev))
+                        (prev-kijun  (:kijun-sen prev)))
+                    (cond
+                      ((and (< prev-tenkan prev-kijun) (>= tenkan kijun))
+                       (list (fact/comparison "crosses-above" "tenkan-sen" "kijun-sen")))
+                      ((and (> prev-tenkan prev-kijun) (<= tenkan kijun))
+                       (list (fact/comparison "crosses-below" "tenkan-sen" "kijun-sen")))
+                      (else (list))))))
+              (list)))))))
 
 ;; ── What ichimoku does NOT do ──────────────────────────────────
 ;; - Does NOT project spans forward (standard Ichimoku shifts by 26 — we don't)

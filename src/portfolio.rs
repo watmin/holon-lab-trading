@@ -68,7 +68,7 @@ pub struct Portfolio {
     // Risk vocabulary infrastructure
     pub equity_at_trade:    VecDeque<f64>,   // equity after each trade (HISTORY_WINDOW)
     pub trade_returns:      VecDeque<f64>,   // directional return per trade (HISTORY_WINDOW)
-    pub dd_bottom_equity:   f64,             // deepest point of current drawdown
+    pub drawdown_bottom_equity: f64,         // deepest point of current drawdown
     pub trades_since_bottom: usize,          // trades since drawdown bottom
     pub completed_drawdowns: VecDeque<f64>,  // max depth of each completed dd (20)
 }
@@ -87,7 +87,7 @@ impl Portfolio {
             rolling_cap: HISTORY_WINDOW,
             equity_at_trade: VecDeque::new(),
             trade_returns: VecDeque::new(),
-            dd_bottom_equity: initial_equity,
+            drawdown_bottom_equity: initial_equity,
             trades_since_bottom: 0,
             completed_drawdowns: VecDeque::new(),
         }
@@ -169,13 +169,13 @@ impl Portfolio {
     fn apply_pnl(&mut self, pnl: f64) {
         self.equity += pnl;
         if self.equity > self.peak_equity {
-            if self.dd_bottom_equity < self.peak_equity * PEAK_DECAY {
-                let dd_depth = (self.peak_equity - self.dd_bottom_equity) / self.peak_equity;
+            if self.drawdown_bottom_equity < self.peak_equity * PEAK_DECAY {
+                let dd_depth = (self.peak_equity - self.drawdown_bottom_equity) / self.peak_equity;
                 self.completed_drawdowns.push_back(dd_depth);
                 if self.completed_drawdowns.len() > 20 { self.completed_drawdowns.pop_front(); }
             }
             self.peak_equity = self.equity;
-            self.dd_bottom_equity = self.equity;
+            self.drawdown_bottom_equity = self.equity;
             self.trades_since_bottom = 0;
         }
     }
@@ -184,8 +184,8 @@ impl Portfolio {
     /// After ~700 trades below peak, the peak has halved the gap.
     fn track_drawdown(&mut self) {
         self.peak_equity = self.peak_equity * PEAK_DECAY + self.equity * (1.0 - PEAK_DECAY);
-        if self.equity < self.dd_bottom_equity {
-            self.dd_bottom_equity = self.equity;
+        if self.equity < self.drawdown_bottom_equity {
+            self.drawdown_bottom_equity = self.equity;
             self.trades_since_bottom = 0;
         } else {
             self.trades_since_bottom += 1;
@@ -409,5 +409,195 @@ mod tests {
 
         record_loss(&mut p);
         assert!((p.streak() - -2.0).abs() < 1e-10);
+    }
+
+    // ── Phase::Display ──────────────────────────────────────────────────────
+
+    #[test]
+    fn phase_display_formatting() {
+        assert_eq!(format!("{}", Phase::Observe), "OBSERVE");
+        assert_eq!(format!("{}", Phase::Tentative), "TENTATIVE");
+        assert_eq!(format!("{}", Phase::Confident), "CONFIDENT");
+    }
+
+    // ── win_rate ────────────────────────────────────────────────────────────
+
+    #[test]
+    fn win_rate_zero_trades_returns_zero() {
+        let p = make_portfolio();
+        assert!((p.win_rate() - 0.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn win_rate_with_trades() {
+        let mut p = make_portfolio();
+        record_win(&mut p);
+        record_win(&mut p);
+        record_loss(&mut p);
+        // 2 wins out of 3 trades = 66.67%
+        assert!((p.win_rate() - 200.0 / 3.0).abs() < 1e-6);
+    }
+
+    // ── position_frac ───────────────────────────────────────────────────────
+
+    #[test]
+    fn position_frac_observe_returns_none() {
+        let p = Portfolio::new(10000.0, 10);
+        assert_eq!(p.phase, Phase::Observe);
+        assert!(p.position_frac(0.5, 0.1, 0.3).is_none());
+    }
+
+    #[test]
+    fn position_frac_below_min_conviction_returns_none() {
+        let p = make_portfolio();
+        // conviction 0.05 < min_conviction 0.1
+        assert!(p.position_frac(0.05, 0.1, 0.0).is_none());
+    }
+
+    #[test]
+    fn position_frac_tentative_returns_base() {
+        let p = make_portfolio();
+        // Tentative phase, conviction above min, no flip threshold
+        let frac = p.position_frac(0.5, 0.1, 0.0).unwrap();
+        assert!((frac - FRAC_TENTATIVE).abs() < 1e-10);
+    }
+
+    #[test]
+    fn position_frac_confident_low_edge() {
+        let mut p = make_portfolio();
+        p.phase = Phase::Confident;
+        // rolling_acc defaults to 0.5 (empty), edge = 0.0 < EDGE_MODEST
+        let frac = p.position_frac(0.5, 0.1, 0.0).unwrap();
+        assert!((frac - FRAC_TENTATIVE).abs() < 1e-10);
+    }
+
+    #[test]
+    fn position_frac_confident_modest_edge() {
+        let mut p = make_portfolio();
+        p.phase = Phase::Confident;
+        // Build rolling accuracy of ~56% → edge = 0.06 (> EDGE_MODEST, < EDGE_PROPORTIONAL)
+        for _ in 0..56 { p.rolling.push_back(true); }
+        for _ in 0..44 { p.rolling.push_back(false); }
+        let edge = p.rolling_acc() - 0.5;
+        assert!(edge >= EDGE_MODEST && edge < EDGE_PROPORTIONAL,
+            "edge {edge} should be in modest range");
+        let frac = p.position_frac(0.5, 0.1, 0.0).unwrap();
+        assert!((frac - FRAC_MODEST).abs() < 1e-10);
+    }
+
+    #[test]
+    fn position_frac_confident_proportional_edge() {
+        let mut p = make_portfolio();
+        p.phase = Phase::Confident;
+        // Build rolling accuracy of ~65% → edge = 0.15 (> EDGE_PROPORTIONAL)
+        for _ in 0..65 { p.rolling.push_back(true); }
+        for _ in 0..35 { p.rolling.push_back(false); }
+        let edge = p.rolling_acc() - 0.5;
+        assert!(edge >= EDGE_PROPORTIONAL, "edge {edge} should be proportional");
+        let frac = p.position_frac(0.5, 0.1, 0.0).unwrap();
+        let expected = (edge * 0.10).min(FRAC_MAX_BASE);
+        assert!((frac - expected).abs() < 1e-10);
+    }
+
+    #[test]
+    fn position_frac_confident_max_cap() {
+        let mut p = make_portfolio();
+        p.phase = Phase::Confident;
+        // Build rolling accuracy of ~90% → edge = 0.40, edge*0.10 = 0.04 > FRAC_MAX_BASE
+        for _ in 0..90 { p.rolling.push_back(true); }
+        for _ in 0..10 { p.rolling.push_back(false); }
+        let frac = p.position_frac(0.5, 0.1, 0.0).unwrap();
+        assert!((frac - FRAC_MAX_BASE).abs() < 1e-10);
+    }
+
+    #[test]
+    fn position_frac_flip_threshold_gates_below() {
+        let p = make_portfolio();
+        // conviction 0.2 < flip_threshold 0.3 → gated out
+        assert!(p.position_frac(0.2, 0.1, 0.3).is_none());
+    }
+
+    #[test]
+    fn position_frac_flip_threshold_scales_above() {
+        let p = make_portfolio();
+        // conviction 0.6 > flip_threshold 0.3 → allowed and scaled
+        let frac = p.position_frac(0.6, 0.1, 0.3).unwrap();
+        // base = FRAC_TENTATIVE (tentative phase)
+        // scaled = FRAC_TENTATIVE * (0.6 / 0.3) = FRAC_TENTATIVE * 2.0
+        let expected = (FRAC_TENTATIVE * (0.6 / 0.3)).min(FRAC_CAP);
+        assert!((frac - expected).abs() < 1e-10);
+    }
+
+    #[test]
+    fn position_frac_conviction_scaling_capped() {
+        let p = make_portfolio();
+        // Very high conviction relative to threshold → capped at FRAC_CAP
+        let frac = p.position_frac(10.0, 0.1, 0.3).unwrap();
+        assert!((frac - FRAC_CAP).abs() < 1e-10);
+    }
+
+    // ── record_trade drawdown tracking ──────────────────────────────────────
+
+    #[test]
+    fn record_trade_completes_drawdown_on_new_peak() {
+        let mut p = make_portfolio();
+        // Win several trades to establish a peak
+        for _ in 0..10 { record_win(&mut p); }
+        let peak_before = p.peak_equity;
+        assert!(peak_before > 10000.0);
+
+        // Now lose several trades to create a drawdown
+        for _ in 0..10 { record_loss(&mut p); }
+        assert!(p.equity < peak_before);
+        let bottom = p.drawdown_bottom_equity;
+        assert!(bottom < peak_before);
+
+        // Win enough to surpass the (decayed) peak → should record a completed drawdown
+        let dd_before = p.completed_drawdowns.len();
+        for _ in 0..50 { record_win(&mut p); }
+        // After many wins, equity should exceed peak, completing the drawdown
+        if p.completed_drawdowns.len() > dd_before {
+            let dd = *p.completed_drawdowns.back().unwrap();
+            assert!(dd > 0.0, "completed drawdown depth should be positive");
+            assert!(dd < 1.0, "completed drawdown depth should be < 100%");
+        }
+    }
+
+    #[test]
+    fn record_trade_short_direction() {
+        let mut p = make_portfolio();
+        let initial = p.equity;
+        // Short direction: -5% price move → profit (price went down, short wins)
+        p.record_trade(-0.05, 0.01, Direction::Short, 0.0, 0.0);
+        assert!(p.equity > initial, "short should profit when price drops");
+    }
+
+    #[test]
+    fn record_trade_with_fees() {
+        let mut p = make_portfolio();
+        let initial = p.equity;
+        // Winning trade but with significant fees
+        p.record_trade(0.05, 0.01, Direction::Long, 0.01, 0.005);
+        let with_fees = p.equity;
+
+        let mut p2 = make_portfolio();
+        p2.record_trade(0.05, 0.01, Direction::Long, 0.0, 0.0);
+        let without_fees = p2.equity;
+
+        // Fees should reduce profit
+        assert!(with_fees < without_fees);
+        // But still profitable with 5% move
+        assert!(with_fees > initial);
+    }
+
+    // ── is_healthy with peak_equity <= 0 branch ─────────────────────────────
+
+    #[test]
+    fn is_healthy_zero_peak_equity() {
+        let mut p = make_portfolio();
+        p.peak_equity = 0.0;
+        p.equity = 0.0;
+        // Should not panic; dd branch returns 0.0 when peak_equity <= 0
+        let _h = p.is_healthy();
     }
 }

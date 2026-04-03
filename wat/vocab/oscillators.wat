@@ -50,12 +50,20 @@
             ((< uo 30.0) (list (fact/zone "ult-osc" "ult-osc-oversold")))
             (else (list))))
 
-        ;; Multi-timeframe ROC — cascading momentum test
-        (let ((accel (and (> roc-1 roc-3) (> roc-3 roc-6) (> roc-6 roc-12)))
-              (decel (and (< roc-1 roc-3) (< roc-3 roc-6) (< roc-6 roc-12))))
-          (cond (accel (list (fact/bare "roc-accelerating")))
-                (decel (list (fact/bare "roc-decelerating")))
-                (else (list))))))))
+        ;; Multi-timeframe ROC — per-candle rate, majority vote.
+        ;; Normalize by period to get per-candle rate of change.
+        ;; Acceleration: short-term rate exceeds long-term rate (move getting faster).
+        ;; Deceleration: short-term rate below long-term rate (move exhausting).
+        ;; Majority vote across 3 comparisons — tolerates noise in one pair.
+        (let ((r1 roc-1)             ;; already per-candle
+              (r3 (/ roc-3 3.0))
+              (r6 (/ roc-6 6.0))
+              (r12 (/ roc-12 12.0)))
+          (let ((accel-votes (+ (if (> r1 r3) 1 0) (if (> r3 r6) 1 0) (if (> r6 r12) 1 0)))
+                (decel-votes (+ (if (< r1 r3) 1 0) (if (< r3 r6) 1 0) (if (< r6 r12) 1 0))))
+            (append
+              (if (>= accel-votes 2) (list (fact/bare "roc-accelerating")) (list))
+              (if (>= decel-votes 2) (list (fact/bare "roc-decelerating")) (list)))))))))
 
 ;; ── What oscillators does NOT do ───────────────────────────────
 ;; - Does NOT compute RSI (that's the segment narrative in thought/mod.rs)

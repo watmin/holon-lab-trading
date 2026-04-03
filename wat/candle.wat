@@ -19,6 +19,103 @@
 
 (struct raw-candle ts open high low close volume)
 
+;; ── Computed candle ───────────────────────────────────────────────
+;;
+;; The output of tick-indicators: raw OHLCV + all derived indicators.
+;; Built by IndicatorBank::tick() from a single raw-candle.
+;; Vocab modules read fields from this struct.
+
+(struct candle
+  ;; Raw OHLCV
+  ts open high low close volume
+  ;; Moving averages
+  sma20 sma50 sma200
+  ;; Bollinger Bands (20-period, 2σ)
+  bb-upper bb-lower bb-width
+  ;; RSI (14-period Wilder)
+  rsi
+  ;; MACD (12, 26, 9)
+  macd-line macd-signal macd-hist
+  ;; DMI / ADX (14-period)
+  dmi-plus dmi-minus adx
+  ;; ATR (14-period)
+  atr
+  atr-r                          ; ATR as ratio to close (atr / close)
+  ;; Stochastic (14-period)
+  stoch-k stoch-d
+  ;; Williams %R (14-period)
+  williams-r
+  ;; CCI (20-period)
+  cci
+  ;; MFI (14-period)
+  mfi
+  ;; Rate of change (1, 3, 6, 12 period)
+  roc-1 roc-3 roc-6 roc-12
+  ;; OBV slope (12-period)
+  obv-slope-12
+  ;; Volume SMA (20-period)
+  volume-sma-20
+  ;; Multi-timeframe (1h=12 candles, 4h=48 candles)
+  tf-1h-close tf-1h-high tf-1h-low tf-1h-ret tf-1h-body
+  tf-4h-close tf-4h-high tf-4h-low tf-4h-ret tf-4h-body
+  ;; Ichimoku Cloud (9/26/52-period midpoint system)
+  tenkan-sen                     ; (highest-high + lowest-low) / 2 over 9 periods
+  kijun-sen                      ; (highest-high + lowest-low) / 2 over 26 periods
+  senkou-span-a                  ; (tenkan + kijun) / 2
+  senkou-span-b                  ; (highest-high + lowest-low) / 2 over 52 periods
+  cloud-top                      ; max(span-a, span-b)
+  cloud-bottom                   ; min(span-a, span-b)
+  ;; Derived
+  bb-pos                         ; position within Bollinger Bands [0, 1]
+  kelt-upper kelt-lower kelt-pos ; Keltner channel (20-period, 1.5× ATR)
+  squeeze                        ; bool — BB inside Keltner
+  range-pos-12 range-pos-24 range-pos-48  ; position within N-candle range
+  trend-consistency-6 trend-consistency-12 trend-consistency-24
+  atr-roc-6 atr-roc-12          ; ATR rate of change
+  vol-accel                      ; volume acceleration
+  ;; Time (f64 — feeds encode-circular)
+  hour day-of-week)
+
+;; ── Indicator implementations ─────────────────────────────────────
+;;
+;; Concrete indicators that satisfy the protocols above.
+;;
+;; scalar-indicator implementations:
+;;   SMA      (periods: 20, 50, 200)
+;;   EMA      (periods: 12, 20, 26 for MACD)
+;;   Wilder   (RSI gains/losses, ATR, DMI+/-, ADX)
+;;   Stddev   (20-period rolling, for Bollinger Bands)
+;;
+;; candle-indicator implementations:
+;;   RSI      (14-period Wilder smoothing)
+;;   MACD     (12, 26, 9 — two EMAs + signal line)
+;;   DMI/ADX  (14-period Wilder, two-phase warmup)
+;;   ATR      (14-period Wilder)
+;;   Stochastic (14-period %K, 3-period SMA %D)
+;;   CCI      (20-period — mean deviation)
+;;   MFI      (14-period — windowed ring buffers)
+;;   OBV      (cumulative, 12-period slope via linreg)
+;;   ROC      (1, 3, 6, 12 period — ring buffers)
+;;
+;; Derived (computed from other indicators, no own state):
+;;   Bollinger position, Keltner channel, squeeze detection,
+;;   range position, trend consistency, ATR ROC, volume acceleration,
+;;   multi-timeframe aggregation (1h=12, 4h=48)
+;;
+;; Ichimoku Cloud (streaming, per-candle):
+;;   Tenkan-sen   (9-period rolling high/low midpoint)
+;;   Kijun-sen    (26-period rolling high/low midpoint)
+;;   Senkou Span A (average of tenkan + kijun)
+;;   Senkou Span B (52-period rolling high/low midpoint)
+;;   Cloud top/bottom (max/min of span A, span B)
+;;   Note: no future displacement — values are at present position.
+;;   Chikou span not computed (requires backward projection).
+;;
+;; Rolling computed (from candle window, not per-candle):
+;;   rsi-sma  — 14-period SMA of RSI values, computed by ThoughtEncoder
+;;   Fibonacci — swing detection from window
+;;   Hurst/DFA/entropy — statistical properties of window returns
+
 ;; ── The indicator protocol ─────────────────────────────────────────
 ;;
 ;; Every indicator satisfies this contract:

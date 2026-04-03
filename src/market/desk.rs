@@ -168,9 +168,15 @@ impl Desk {
             })
             .collect();
 
-        // The generalist uses a fixed window.
+        // Both generalists use fixed windows.
         observers[GENERALIST_IDX].window_sampler = WindowSampler::new(
             dims as u64 + 5 * OBSERVER_SEED_PRIME,
+            config.window, config.window,
+        );
+        // gen-classic: fixed 48, same as old trader3
+        let gen_classic_idx = OBSERVER_LENSES.len() - 1;
+        observers[gen_classic_idx].window_sampler = WindowSampler::new(
+            dims as u64 + 6 * OBSERVER_SEED_PRIME,
             config.window, config.window,
         );
 
@@ -338,7 +344,7 @@ impl Desk {
         // Panel state for engram (Template 2 — reaction layer)
         // Panel state: observer raw cosines, fed to panel_engram.update() at recalibration
         // and used in progress display for engram familiarity check.
-        let mut panel_state = [0.0f64; 6];
+        let mut panel_state = vec![0.0f64; self.observers.len()];
         for (pi, ep) in observer_preds.iter().enumerate() { panel_state[pi] = ep.raw_cos; }
         // Manager's prediction drives direction + conviction.
         let meta_dir = mgr_pred.direction;
@@ -406,7 +412,8 @@ impl Desk {
         for (pi, pos) in self.positions.iter_mut().enumerate() {
             if pos.phase == PositionPhase::Closed { continue; }
 
-            // Rate = source/target. Compute once, reuse for exit expert + tick + settlement.
+            // rune:forge(bare-type) — is_buy is local, derived from asset comparison,
+            // consumed within the same block. Direction enum adds ceremony without safety here.
             let is_buy = pos.source_asset == *ctx.base_asset;
             let current_rate = if is_buy { quote_price } else { 1.0 / quote_price };
             if pos.candles_held > 0 && pos.candles_held % ctx.exit_observe_interval == 0 {
@@ -525,9 +532,11 @@ impl Desk {
                 let band_edge: f64 = MAX_BASE_POSITION;
                 let frac = ((band_edge / 2.0) * risk_mult).min(ctx.max_single_position);
                 let dir_label = meta_dir.unwrap();
+                // rune:forge(bare-type) — same pattern as position loop; local, derived, consumed here.
                 let is_buy = dir_label == mgr_buy;
 
                 // Source/target: Buy sells USDC for WBTC, Sell sells WBTC for USDC.
+                // rune:forge(bare-type) — Rate wraps at treasury boundary; intermediate arithmetic clearer as f64.
                 // Rate = source_per_target. For Buy: USDC/WBTC = price. For Sell: WBTC/USDC = 1/price.
                 let (source_asset, target_asset, source_avail, rate) = if is_buy {
                     (ctx.base_asset.clone(), ctx.quote_asset.clone(),
@@ -657,6 +666,48 @@ impl Desk {
             max_adverse:       0.0,
             exit_reason:       None,
             exit_pct:          0.0,
+        });
+
+        // Candle snapshot: every indicator value at entry time.
+        // Keyed by candle_idx. Join with trade_ledger.candle_idx → trade_facts.step
+        // to verify facts match the indicator state that produced them.
+        self.pending_logs.push(LogEntry::CandleSnapshot {
+            candle_idx: i as i64,
+            ts: candle_ts.clone(),
+            open: candle.open, high: candle.high, low: candle.low,
+            close: candle.close, volume: candle.volume,
+            sma20: candle.sma20, sma50: candle.sma50, sma200: candle.sma200,
+            bb_upper: candle.bb_upper, bb_lower: candle.bb_lower,
+            bb_width: candle.bb_width, bb_pos: candle.bb_pos,
+            rsi: candle.rsi,
+            macd_line: candle.macd_line, macd_signal: candle.macd_signal,
+            macd_hist: candle.macd_hist,
+            dmi_plus: candle.dmi_plus, dmi_minus: candle.dmi_minus, adx: candle.adx,
+            atr: candle.atr, atr_r: candle.atr_r,
+            stoch_k: candle.stoch_k, stoch_d: candle.stoch_d,
+            williams_r: candle.williams_r, cci: candle.cci, mfi: candle.mfi,
+            roc_1: candle.roc_1, roc_3: candle.roc_3,
+            roc_6: candle.roc_6, roc_12: candle.roc_12,
+            obv_slope_12: candle.obv_slope_12,
+            volume_sma_20: candle.volume_sma_20, vol_accel: candle.vol_accel,
+            tf_1h_close: candle.tf_1h_close, tf_1h_high: candle.tf_1h_high,
+            tf_1h_low: candle.tf_1h_low, tf_1h_ret: candle.tf_1h_ret,
+            tf_1h_body: candle.tf_1h_body,
+            tf_4h_close: candle.tf_4h_close, tf_4h_high: candle.tf_4h_high,
+            tf_4h_low: candle.tf_4h_low, tf_4h_ret: candle.tf_4h_ret,
+            tf_4h_body: candle.tf_4h_body,
+            tenkan_sen: candle.tenkan_sen, kijun_sen: candle.kijun_sen,
+            senkou_span_a: candle.senkou_span_a, senkou_span_b: candle.senkou_span_b,
+            cloud_top: candle.cloud_top, cloud_bottom: candle.cloud_bottom,
+            kelt_upper: candle.kelt_upper, kelt_lower: candle.kelt_lower,
+            kelt_pos: candle.kelt_pos, squeeze: candle.squeeze as i32,
+            range_pos_12: candle.range_pos_12, range_pos_24: candle.range_pos_24,
+            range_pos_48: candle.range_pos_48,
+            trend_consistency_6: candle.trend_consistency_6,
+            trend_consistency_12: candle.trend_consistency_12,
+            trend_consistency_24: candle.trend_consistency_24,
+            atr_roc_6: candle.atr_roc_6, atr_roc_12: candle.atr_roc_12,
+            hour: candle.hour, day_of_week: candle.day_of_week,
         });
 
         // pfor-each: each observer's journal is independent. Manager decays separately.
@@ -862,6 +913,18 @@ impl Desk {
                     });
                 }
 
+                // Log which facts were active in this thought vector.
+                // Decode: cosine each codebook entry against the thought, log positives.
+                for (label, vec) in ctx.codebook_labels.iter().zip(ctx.codebook_vecs.iter()) {
+                    let cos = holon::Similarity::cosine(&entry.tht_vec, vec);
+                    if cos.abs() > 0.05 {
+                        self.pending_logs.push(LogEntry::TradeFact {
+                            step: self.log_step,
+                            fact_label: label.clone(),
+                        });
+                    }
+                }
+
                 // Panel tracking (all predictions, not just live)
                 self.panel_recalib_total += 1;
                 if final_out == Some(dir) { self.panel_recalib_wins += 1; }
@@ -892,8 +955,6 @@ impl Desk {
             let tht_acc = if gen_resolved.is_empty() { 0.0 }
                 else { gen_resolved.iter().filter(|(_, c)| *c).count() as f64 / gen_resolved.len() as f64 * 100.0 };
             let ret = (treasury_equity - ctx.initial_equity) / ctx.initial_equity * 100.0;
-            let first_close = self.candle_window.front().map(|c| c.close).unwrap_or(candle.close);
-            let bnh = (candle.close - first_close) / first_close * 100.0;
             let atr_now = candle.atr_r;
             let exit_info = format!(" | ATR={:.2}% sl={:.2}% tp={:.2}% tr={:.2}% open={}",
                 atr_now * 100.0,
@@ -902,13 +963,13 @@ impl Desk {
                 ctx.k_trail * atr_now * 100.0,
                 self.positions.len());
             eprintln!(
-                "  {}/{} ({:.0}/s ETA {:.0}s) | {} | {} | tht={:.1}% | trades={} win={:.1}% | ${:.0} ({:+.1}%) vs B&H {:+.1}% | flip@{:.3} {}{}",
+                "  {}/{} ({:.0}/s ETA {:.0}s) | {} | {} | tht={:.1}% | trades={} win={:.1}% | ${:.0} ({:+.1}%) | thresh={:.3} {}{}",
                 self.encode_count, ctx.loop_count, rate, eta,
                 &candle.ts[..10],
                 portfolio.phase,
                 tht_acc,
                 portfolio.trades_taken, portfolio.win_rate(),
-                treasury_equity, ret, bnh,
+                treasury_equity, ret,
                 self.conviction_threshold,
                 if !self.manager_curve_valid { "CALIBRATING" }
                 else if self.panel_engram.n() >= 10
@@ -926,10 +987,14 @@ impl Desk {
                 let band_str = if self.manager_curve_valid {
                     format!(" band=[{:.3},{:.3}]", self.manager_proven_band.0, self.manager_proven_band.1)
                 } else { " band=none".to_string() };
-                eprintln!("    treasury: ${:.0} ({:+.1}%) | USDC={:.2} WBTC={:.6} | pos={} swaps={} wins={} | proven=[{}]{}",
-                    treasury_equity, ret,
-                    treasury.balance(ctx.base_asset) + treasury.deployed(ctx.base_asset),
-                    treasury.balance(ctx.quote_asset) + treasury.deployed(ctx.quote_asset),
+                // rune:temper(rare-path) — diagnostics display, not hot path
+                let base_units = treasury.balance(ctx.base_asset) + treasury.deployed(ctx.base_asset);
+                let quote_units = treasury.balance(ctx.quote_asset) + treasury.deployed(ctx.quote_asset);
+                let base_usd = base_units * prices.get(ctx.base_asset).copied().unwrap_or(1.0);
+                let quote_usd = quote_units * prices.get(ctx.quote_asset).copied().unwrap_or(1.0);
+                eprintln!("    {} {:.2} (${:.0}) | {} {:.6} (${:.0}) | pos={} swaps={} wins={} | proven=[{}]{}",
+                    ctx.base_asset, base_units, base_usd,
+                    ctx.quote_asset, quote_units, quote_usd,
                     self.positions.len(), self.position_swaps, self.position_wins, proven_str, band_str);
             }
         }
@@ -1002,17 +1067,24 @@ impl Desk {
         self.panel_recalib_wins = 0;
         self.panel_recalib_total = 0;
 
-        // 4. Recalib log
-        self.pending_logs.push(LogEntry::RecalibLog {
-            step: self.encode_count as i64,
-            journal: "thought".to_string(),
-            cos_raw: self.observers[GENERALIST_IDX].journal.last_cos_raw(),
-            disc_strength: self.observers[GENERALIST_IDX].journal.last_disc_strength(),
-            buy_count: self.observers[GENERALIST_IDX].journal.label_count(tht_buy) as i64,
-            sell_count: self.observers[GENERALIST_IDX].journal.label_count(tht_sell) as i64,
-        });
+        // 4. Recalib log — ALL observers, not just generalist
+        for obs in &self.observers {
+            let health = obs.journal.prototype_health().unwrap_or((0.0, 0.0, 0.0));
+            self.pending_logs.push(LogEntry::RecalibLog {
+                step: self.encode_count as i64,
+                journal: obs.lens.as_str().to_string(),
+                cos_raw: obs.journal.last_cos_raw(),
+                disc_strength: obs.journal.last_disc_strength(),
+                buy_count: obs.journal.label_count(tht_buy) as i64,
+                sell_count: obs.journal.label_count(tht_sell) as i64,
+                buy_norm: health.0,
+                sell_norm: health.1,
+                proto_cosine: health.2,
+            });
+        }
 
         // Discriminant decode against fact codebook
+        // rune:temper(rare-path) — recalibration frequency, ~200 candle intervals
         if let Some(disc) = self.observers[GENERALIST_IDX].journal.discriminant(tht_buy) {
             let disc_vec = Vector::from_f64(disc);
             let mut decoded: Vec<(String, f64)> = ctx.codebook_vecs.iter().zip(ctx.codebook_labels.iter())
@@ -1405,5 +1477,642 @@ mod tests {
         }
 
         assert_eq!(desk.candle_window.len(), 50, "candle_window should have 50 entries after 50 candles");
+    }
+
+    // ─── Deep integration tests ─────────────────────────────────────────────
+
+    /// Helper: run N candles through a desk, returning the shared state scalars.
+    /// Reduces boilerplate across integration tests.
+    fn run_candles(desk: &mut Desk, n: usize, ctx: &CandleContext) -> (Treasury, crate::portfolio::Portfolio, f64) {
+        let mut treasury = Treasury::new(3, 0.5);
+        treasury.deposit(&Asset::new("USDC"), 10000.0);
+        let mut portfolio = crate::portfolio::Portfolio::new(10000.0, 100);
+        let mut peak = 10000.0;
+        let mut db_batch = 0usize;
+
+        for i in 0..n {
+            let raw = make_raw_candle(i);
+            let mut shared = SharedState {
+                treasury: &mut treasury,
+                portfolio: &mut portfolio,
+                risk_mult: 0.8,
+                peak_equity: &mut peak,
+                db_batch: &mut db_batch,
+            };
+            desk.on_candle(i, &raw, &mut shared, ctx);
+        }
+        (treasury, portfolio, peak)
+    }
+
+    /// Helper: make a raw candle with an explicit price.
+    fn make_priced_candle(i: usize, price: f64) -> RawCandle {
+        RawCandle {
+            ts: format!("2024-01-01T{:02}:00:00Z", i % 24),
+            open: price - 10.0,
+            high: price + 50.0,
+            low: price - 50.0,
+            close: price,
+            volume: 100.0 + (i as f64),
+        }
+    }
+
+    #[test]
+    fn desk_processes_many_candles_builds_pending() {
+        let infra = TestInfra::new();
+        let ctx = infra.ctx();
+        let mut desk = make_desk();
+        desk.adaptive_decay = 0.999;
+
+        let (_treasury, _portfolio, _peak) = run_candles(&mut desk, 250, &ctx);
+
+        // After 250 candles, pending should have accumulated entries.
+        // Each candle pushes one Pending. Resolution happens at horizon*10 = 360 candles.
+        // So with 250 candles, none should have expired yet — all 250 should be pending.
+        assert_eq!(desk.pending.len(), 250,
+            "all 250 entries should still be pending (horizon*10 = 360)");
+        assert_eq!(desk.encode_count, 250);
+        // Pending entries should have threshold crossings from ascending prices.
+        let crossed = desk.pending.iter().filter(|p| p.crossing.is_some()).count();
+        assert!(crossed > 0,
+            "ascending prices should cause threshold crossings on earlier entries");
+    }
+
+    #[test]
+    fn desk_position_opening_when_conditions_met() {
+        let infra = TestInfra::new();
+        let ctx = infra.ctx();
+        let mut desk = make_desk();
+        desk.adaptive_decay = 0.999;
+
+        let mut treasury = Treasury::new(3, 0.5);
+        treasury.deposit(&Asset::new("USDC"), 10000.0);
+        let mut portfolio = crate::portfolio::Portfolio::new(10000.0, 0);
+        portfolio.phase = Phase::Tentative;
+        let mut peak = 10000.0;
+        let mut db_batch = 0usize;
+
+        // Seed the manager journal with observations so it can predict a direction.
+        // We need enough for recalibration to fire (builds discriminants).
+        // Manager has recalib_interval=200, so we feed 201 observations.
+        let buy_vec = infra.vm.get_vector("seed_buy_pattern");
+        let sell_vec = infra.vm.get_vector("seed_sell_pattern");
+        let mgr_buy = desk.manager_buy;
+        let mgr_sell = desk.manager_sell;
+        for _ in 0..120 {
+            desk.manager_journal.observe(&buy_vec, mgr_buy, 1.0);
+        }
+        for _ in 0..81 {
+            desk.manager_journal.observe(&sell_vec, mgr_sell, 1.0);
+        }
+        // After 201 observe calls (120+81), recalib should have fired,
+        // building discriminants so predict() returns a direction.
+
+        // Force conditions for position opening
+        desk.manager_curve_valid = true;
+        desk.manager_proven_band = (0.0, 1.0);
+        desk.last_exit_price = 0.0;
+
+        // Run candles with ascending prices
+        let mut opened = false;
+        for i in 0..200 {
+            let raw = make_raw_candle(i);
+            let mut shared = SharedState {
+                treasury: &mut treasury,
+                portfolio: &mut portfolio,
+                risk_mult: 0.8,
+                peak_equity: &mut peak,
+                db_batch: &mut db_batch,
+            };
+            desk.on_candle(i, &raw, &mut shared, &ctx);
+            // Re-force conditions each candle since recalibration may reset them
+            desk.manager_curve_valid = true;
+            desk.manager_proven_band = (0.0, 1.0);
+            desk.last_exit_price = 0.0;
+            if !desk.positions.is_empty() {
+                opened = true;
+                break;
+            }
+        }
+
+        assert!(opened, "a position should have opened when all conditions are met");
+        assert!(desk.position_swaps > 0, "swap count should have incremented");
+        assert!(desk.pending_logs.iter().any(|l| matches!(l, LogEntry::PositionOpen { .. })),
+            "position open log should have been emitted");
+    }
+
+    #[test]
+    fn desk_pending_resolves_at_horizon() {
+        let infra = TestInfra::new();
+        let ctx = infra.ctx();
+        let mut desk = make_desk();
+        desk.adaptive_decay = 0.999;
+
+        // First, run a few candles so the desk has valid indicator state.
+        let mut treasury = Treasury::new(3, 0.5);
+        treasury.deposit(&Asset::new("USDC"), 10000.0);
+        let mut portfolio = crate::portfolio::Portfolio::new(10000.0, 100);
+        let mut peak = 10000.0;
+        let mut db_batch = 0usize;
+
+        // Warm up with 10 candles
+        for i in 0..10 {
+            let raw = make_raw_candle(i);
+            let mut shared = SharedState {
+                treasury: &mut treasury,
+                portfolio: &mut portfolio,
+                risk_mult: 0.5,
+                peak_equity: &mut peak,
+                db_batch: &mut db_batch,
+            };
+            desk.on_candle(i, &raw, &mut shared, &ctx);
+        }
+
+        // Now we have 10 pending entries with candle_idx 0..9.
+        assert_eq!(desk.pending.len(), 10);
+
+        // max_pending_age = horizon * 10 = 36 * 10 = 360.
+        // To resolve entry at candle_idx=0, we need i >= 360.
+        // Run candle at i=370, which should resolve entries 0..9 (all age >= 360).
+        // But we also need indicator state, so run candles 10..370.
+        for i in 10..371 {
+            let raw = make_raw_candle(i);
+            let mut shared = SharedState {
+                treasury: &mut treasury,
+                portfolio: &mut portfolio,
+                risk_mult: 0.5,
+                peak_equity: &mut peak,
+                db_batch: &mut db_batch,
+            };
+            desk.on_candle(i, &raw, &mut shared, &ctx);
+        }
+
+        // Entries from candle 0..9 should have been resolved (age = 370 - idx >= 361).
+        // New entries 10..370 (361 entries) added, minus those resolved too.
+        // Entries with candle_idx <= 10 have age >= 360, so at least the first 11 are resolved.
+        // Total added: 371. Resolved: those with age >= 360 at time of processing.
+        // The resolution check runs after push, so candle i=370 resolves idx 0..10 (11 entries).
+        // Let's just verify pending shrank vs total candles run.
+        assert!(desk.pending.len() < 371,
+            "some entries should have been resolved at horizon");
+        // Verify CandleLog entries were emitted (resolution produces log entries)
+        let candle_log_count = desk.pending_logs.iter()
+            .filter(|l| matches!(l, LogEntry::CandleLog { .. }))
+            .count();
+        assert!(candle_log_count > 0, "resolved entries should produce CandleLog entries");
+    }
+
+    #[test]
+    fn desk_recalibration_fires() {
+        // Journal recalibrates after recalib_interval observe() calls, not candles.
+        // Each threshold crossing triggers one observe() per observer.
+        // We use a desk with a small recalib_interval (20) and volatile prices
+        // so crossings accumulate quickly enough to trigger recalibration.
+        let infra = TestInfra::new();
+        let mut desk = Desk::new(DeskConfig {
+            name: "test-desk".to_string(),
+            source_asset: Asset::new("USDC"),
+            target_asset: Asset::new("WBTC"),
+            dims: TEST_DIMS,
+            recalib_interval: 20,  // small interval for faster recalibration
+            window: 100,
+            max_window_size: 2016,
+            decay: 0.999,
+        });
+        desk.adaptive_decay = 0.999;
+
+        // Build ctx with matching recalib_interval
+        let base_asset = Asset::new("USDC");
+        let quote_asset = Asset::new("WBTC");
+        let ctx = CandleContext {
+            dims: TEST_DIMS,
+            horizon: 36,
+            move_threshold: 0.005,
+            atr_multiplier: 1.0,
+            decay: 0.999,
+            recalib_interval: 20,
+            min_conviction: 0.0,
+            conviction_quantile: 0.5,
+            conviction_mode: ConvictionMode::Quantile,
+            min_edge: 0.01,
+            sizing: SizingMode::Kelly,
+            max_drawdown: 0.15,
+            swap_fee: 0.001,
+            slippage: 0.0025,
+            asset_mode: AssetMode::Hold,
+            base_asset: Box::leak(Box::new(base_asset)),
+            quote_asset: Box::leak(Box::new(quote_asset)),
+            initial_equity: 10000.0,
+            diagnostics: false,
+            k_stop: 2.0,
+            k_trail: 1.5,
+            k_tp: 3.0,
+            exit_horizon: 36,
+            exit_observe_interval: 5,
+            decay_stable: 0.999,
+            decay_adapting: 0.995,
+            highconv_rolling_cap: 100,
+            max_single_position: 0.03,
+            conviction_warmup: 100,
+            conviction_window: 500,
+            vm: &infra.vm,
+            thought_encoder: &infra.thought_encoder,
+            mgr_atoms: &infra.mgr_atoms,
+            mgr_scalar: &infra.mgr_scalar,
+            exit_scalar: &infra.exit_scalar,
+            exit_atoms: &infra.exit_atoms,
+            risk_scalar: &infra.risk_scalar,
+            risk_atoms: &infra.risk_atoms,
+            risk_mgr_atoms: &infra.risk_mgr_atoms,
+            observer_atoms: &infra.observer_atoms,
+            generalist_atom: &infra.generalist_atom,
+            min_opinion_magnitude: noise_floor(TEST_DIMS),
+            codebook_labels: &infra.codebook_labels,
+            codebook_vecs: &infra.codebook_vecs,
+            loop_count: 1000,
+            progress_every: 10000,  // suppress progress output
+            t_start: std::time::Instant::now(),
+        };
+
+        let mut treasury = Treasury::new(3, 0.5);
+        treasury.deposit(&Asset::new("USDC"), 10000.0);
+        let mut portfolio = crate::portfolio::Portfolio::new(10000.0, 100);
+        let mut peak = 10000.0;
+        let mut db_batch = 0usize;
+
+        let recalib_before = desk.observers[GENERALIST_IDX].journal.recalib_count();
+
+        // Use volatile prices to generate many threshold crossings.
+        // Alternate high and low prices so entries cross threshold quickly.
+        for i in 0..300 {
+            let price = if i % 2 == 0 { 50000.0 + (i as f64) * 50.0 }
+                        else { 50000.0 - (i as f64) * 50.0 };
+            let raw = make_priced_candle(i, price.max(10000.0));
+            let mut shared = SharedState {
+                treasury: &mut treasury,
+                portfolio: &mut portfolio,
+                risk_mult: 0.5,
+                peak_equity: &mut peak,
+                db_batch: &mut db_batch,
+            };
+            desk.on_candle(i, &raw, &mut shared, &ctx);
+        }
+
+        let recalib_after = desk.observers[GENERALIST_IDX].journal.recalib_count();
+        assert!(recalib_after > recalib_before,
+            "journal should have recalibrated (before={}, after={})", recalib_before, recalib_after);
+
+        // Check that RecalibLog was emitted
+        let recalib_logs: Vec<_> = desk.pending_logs.iter()
+            .filter(|l| matches!(l, LogEntry::RecalibLog { .. }))
+            .collect();
+        assert!(!recalib_logs.is_empty(),
+            "RecalibLog entries should have been emitted during recalibration");
+    }
+
+    #[test]
+    fn desk_position_exit_on_stop_loss() {
+        let infra = TestInfra::new();
+        let ctx = infra.ctx();
+        let mut desk = make_desk();
+        desk.adaptive_decay = 0.999;
+
+        // Warm up desk with some candles at a stable price
+        let entry_price = 50000.0;
+        let mut treasury = Treasury::new(3, 0.5);
+        treasury.deposit(&Asset::new("USDC"), 10000.0);
+        treasury.deposit(&Asset::new("WBTC"), 0.1);
+        let mut portfolio = crate::portfolio::Portfolio::new(10000.0, 0);
+        portfolio.phase = Phase::Tentative;
+        let mut peak = 10000.0;
+        let mut db_batch = 0usize;
+
+        // Run a few candles to build indicator state
+        for i in 0..20 {
+            let raw = make_priced_candle(i, entry_price);
+            let mut shared = SharedState {
+                treasury: &mut treasury,
+                portfolio: &mut portfolio,
+                risk_mult: 0.8,
+                peak_equity: &mut peak,
+                db_batch: &mut db_batch,
+            };
+            desk.on_candle(i, &raw, &mut shared, &ctx);
+        }
+
+        // Manually create a position and push it into desk.positions.
+        // Buy position: source=USDC, target=WBTC, rate = USDC per WBTC = price
+        let base = Asset::new("USDC");
+        let quote = Asset::new("WBTC");
+        let atr = 0.01; // 1% normalized ATR
+        let pos = ManagedPosition::new(PositionEntry {
+            id: desk.next_position_id,
+            candle_idx: 15,
+            source_asset: base.clone(),
+            target_asset: quote.clone(),
+            source_amount: 500.0,
+            target_received: 500.0 / entry_price,
+            entry_rate: entry_price,
+            entry_atr: atr,
+            entry_fee: 1.0,
+            k_stop: ctx.k_stop,
+            k_tp: ctx.k_tp,
+        });
+        // Stop is at entry_price * (1 - k_stop * atr) = 50000 * (1 - 2*0.01) = 49000
+        desk.next_position_id += 1;
+        // Claim the target in treasury so release works
+        treasury.deposit(&quote, pos.target_held);
+        treasury.claim(&quote, pos.target_held);
+        desk.positions.push(pos);
+
+        assert_eq!(desk.positions.len(), 1, "should have one position before crash");
+
+        // Now feed a candle with a price crash that triggers the stop loss
+        // Stop is at 49000, so feed 48000
+        let crash_price = 48000.0;
+        let raw = make_priced_candle(20, crash_price);
+        let mut shared = SharedState {
+            treasury: &mut treasury,
+            portfolio: &mut portfolio,
+            risk_mult: 0.8,
+            peak_equity: &mut peak,
+            db_batch: &mut db_batch,
+        };
+        desk.on_candle(20, &raw, &mut shared, &ctx);
+
+        // Position should have been closed and removed
+        assert_eq!(desk.positions.len(), 0,
+            "position should be closed after stop loss trigger");
+        assert!(desk.position_swaps > 0, "swap count should reflect the exit");
+        // Should have a PositionExit log
+        assert!(desk.pending_logs.iter().any(|l| matches!(l, LogEntry::PositionExit { .. })),
+            "PositionExit log should have been emitted");
+    }
+
+    #[test]
+    fn desk_position_exit_on_take_profit() {
+        let infra = TestInfra::new();
+        let ctx = infra.ctx();
+        let mut desk = make_desk();
+        desk.adaptive_decay = 0.999;
+
+        let entry_price = 50000.0;
+        let mut treasury = Treasury::new(3, 0.5);
+        treasury.deposit(&Asset::new("USDC"), 10000.0);
+        let mut portfolio = crate::portfolio::Portfolio::new(10000.0, 0);
+        portfolio.phase = Phase::Tentative;
+        let mut peak = 10000.0;
+        let mut db_batch = 0usize;
+
+        // Warm up
+        for i in 0..20 {
+            let raw = make_priced_candle(i, entry_price);
+            let mut shared = SharedState {
+                treasury: &mut treasury,
+                portfolio: &mut portfolio,
+                risk_mult: 0.8,
+                peak_equity: &mut peak,
+                db_batch: &mut db_batch,
+            };
+            desk.on_candle(i, &raw, &mut shared, &ctx);
+        }
+
+        // Create a buy position. TP at entry_price * (1 + k_tp * atr) = 50000*(1+3*0.01) = 51500
+        let base = Asset::new("USDC");
+        let quote = Asset::new("WBTC");
+        let atr = 0.01;
+        let pos = ManagedPosition::new(PositionEntry {
+            id: desk.next_position_id,
+            candle_idx: 15,
+            source_asset: base.clone(),
+            target_asset: quote.clone(),
+            source_amount: 500.0,
+            target_received: 500.0 / entry_price,
+            entry_rate: entry_price,
+            entry_atr: atr,
+            entry_fee: 1.0,
+            k_stop: ctx.k_stop,
+            k_tp: ctx.k_tp,
+        });
+        desk.next_position_id += 1;
+        treasury.deposit(&quote, pos.target_held);
+        treasury.claim(&quote, pos.target_held);
+        desk.positions.push(pos);
+
+        // Feed a candle above TP (51500) → should trigger take profit → Runner phase
+        let tp_price = 52000.0;
+        let raw = make_priced_candle(20, tp_price);
+        let mut shared = SharedState {
+            treasury: &mut treasury,
+            portfolio: &mut portfolio,
+            risk_mult: 0.8,
+            peak_equity: &mut peak,
+            db_batch: &mut db_batch,
+        };
+        desk.on_candle(20, &raw, &mut shared, &ctx);
+
+        // Position should transition to Runner (partial profit), not closed
+        // OR if reclaim_target >= target_held, it closes entirely.
+        // Either way, a PositionExit log should exist.
+        assert!(desk.pending_logs.iter().any(|l| matches!(l, LogEntry::PositionExit { .. })),
+            "PositionExit log should have been emitted on take profit");
+        assert!(desk.position_swaps > 0);
+        assert!(desk.position_wins > 0, "take profit should count as a win");
+    }
+
+    #[test]
+    fn desk_500_candle_smoke_test() {
+        let infra = TestInfra::new();
+        let ctx = infra.ctx();
+        let mut desk = make_desk();
+        desk.adaptive_decay = 0.999;
+
+        let mut treasury = Treasury::new(3, 0.5);
+        treasury.deposit(&Asset::new("USDC"), 10000.0);
+        let mut portfolio = crate::portfolio::Portfolio::new(10000.0, 100);
+        let mut peak = 10000.0;
+        let mut db_batch = 0usize;
+
+        // Ascending then descending prices: trend then reversal
+        for i in 0..500 {
+            let price = if i < 250 {
+                50000.0 + (i as f64) * 20.0  // ascending
+            } else {
+                50000.0 + (500.0 - i as f64) * 20.0  // descending back
+            };
+            let raw = make_priced_candle(i, price);
+            let mut shared = SharedState {
+                treasury: &mut treasury,
+                portfolio: &mut portfolio,
+                risk_mult: 0.8,
+                peak_equity: &mut peak,
+                db_batch: &mut db_batch,
+            };
+            desk.on_candle(i, &raw, &mut shared, &ctx);
+        }
+
+        // Basic sanity: no panic, all candles processed
+        assert_eq!(desk.encode_count, 500);
+        assert!(desk.candle_window.len() <= desk.max_window_size,
+            "window should not exceed max_window_size");
+        // Pending entries: 500 pushed, some resolved (max_pending_age=360, oldest at i=0, last i=499)
+        // entries 0..139 have age >= 360 at some point → resolved
+        assert!(desk.pending.len() < 500,
+            "some entries should have resolved at horizon");
+        // Log entries should have been produced
+        assert!(!desk.pending_logs.is_empty(), "logs should have been produced");
+        // Verify entries were resolved and categorized
+        assert!(desk.labeled_count + desk.noise_count > 0,
+            "some entries should have been labeled or marked as noise after 500 candles with resolution at horizon*10=360");
+    }
+
+    #[test]
+    fn desk_learning_loop_threshold_crossing() {
+        // Verify that the learning loop detects threshold crossings and records them.
+        let infra = TestInfra::new();
+        let ctx = infra.ctx();
+        let mut desk = make_desk();
+        desk.adaptive_decay = 0.999;
+
+        let mut treasury = Treasury::new(3, 0.5);
+        treasury.deposit(&Asset::new("USDC"), 10000.0);
+        let mut portfolio = crate::portfolio::Portfolio::new(10000.0, 100);
+        let mut peak = 10000.0;
+        let mut db_batch = 0usize;
+
+        // Start at 50000, then jump to trigger threshold crossing.
+        // atr_multiplier=1.0, so threshold = 1.0 * entry.entry_atr.
+        // After indicator warmup, ATR should stabilize. A large price jump
+        // should cross the threshold for early entries.
+        for i in 0..50 {
+            let raw = make_priced_candle(i, 50000.0);
+            let mut shared = SharedState {
+                treasury: &mut treasury,
+                portfolio: &mut portfolio,
+                risk_mult: 0.5,
+                peak_equity: &mut peak,
+                db_batch: &mut db_batch,
+            };
+            desk.on_candle(i, &raw, &mut shared, &ctx);
+        }
+
+        // Count entries without crossings
+        let uncrossed_before = desk.pending.iter()
+            .filter(|p| p.crossing.is_none()).count();
+
+        // Big price jump: 50000 → 55000 (10% move) — should cross any reasonable threshold
+        for i in 50..60 {
+            let raw = make_priced_candle(i, 55000.0);
+            let mut shared = SharedState {
+                treasury: &mut treasury,
+                portfolio: &mut portfolio,
+                risk_mult: 0.5,
+                peak_equity: &mut peak,
+                db_batch: &mut db_batch,
+            };
+            desk.on_candle(i, &raw, &mut shared, &ctx);
+        }
+
+        // Some earlier pending entries should now have crossings
+        let crossed_count = desk.pending.iter()
+            .filter(|p| p.crossing.is_some()).count();
+        assert!(crossed_count > 0,
+            "price jump should have triggered threshold crossings on pending entries");
+        // Entries at the new price shouldn't cross yet (no movement from 55000)
+        let uncrossed_after = desk.pending.iter()
+            .filter(|p| p.crossing.is_none()).count();
+        assert!(uncrossed_after > 0,
+            "entries at the new stable price should not have crossed yet");
+        assert!(uncrossed_after < uncrossed_before + 10,
+            "some of the old entries should have gained crossings");
+    }
+
+    #[test]
+    fn desk_manager_learning_on_resolution() {
+        // Verify that manager_resolved accumulates when entries resolve with non-Noise outcomes.
+        // For manager learning to fire, resolved entries need:
+        // 1. A threshold crossing (non-Noise)
+        // 2. Observer predictions with a majority direction (buys != sells)
+        // We seed observer journals so they produce directional predictions.
+        let infra = TestInfra::new();
+        let ctx = infra.ctx();
+        let mut desk = make_desk();
+        desk.adaptive_decay = 0.999;
+
+        // Seed all observer journals with enough observations to build discriminants.
+        // Recalib_interval=200 for observers, so 201 observations triggers recalib.
+        let buy_seed = infra.vm.get_vector("obs_buy_seed");
+        let sell_seed = infra.vm.get_vector("obs_sell_seed");
+        for obs in desk.observers.iter_mut() {
+            let buy_label = obs.primary_label;
+            let sell_label = obs.journal.labels()[1];
+            for _ in 0..120 {
+                obs.journal.observe(&buy_seed, buy_label, 1.0);
+            }
+            for _ in 0..81 {
+                obs.journal.observe(&sell_seed, sell_label, 1.0);
+            }
+        }
+        // Also seed manager journal
+        let mgr_buy_seed = infra.vm.get_vector("mgr_buy_seed");
+        let mgr_sell_seed = infra.vm.get_vector("mgr_sell_seed");
+        for _ in 0..120 {
+            desk.manager_journal.observe(&mgr_buy_seed, desk.manager_buy, 1.0);
+        }
+        for _ in 0..81 {
+            desk.manager_journal.observe(&mgr_sell_seed, desk.manager_sell, 1.0);
+        }
+
+        let mut treasury = Treasury::new(3, 0.5);
+        treasury.deposit(&Asset::new("USDC"), 10000.0);
+        let mut portfolio = crate::portfolio::Portfolio::new(10000.0, 100);
+        let mut peak = 10000.0;
+        let mut db_batch = 0usize;
+
+        // Phase 1: flat for 20 candles (entries at stable price)
+        for i in 0..20 {
+            let raw = make_priced_candle(i, 50000.0);
+            let mut shared = SharedState {
+                treasury: &mut treasury,
+                portfolio: &mut portfolio,
+                risk_mult: 0.5,
+                peak_equity: &mut peak,
+                db_batch: &mut db_batch,
+            };
+            desk.on_candle(i, &raw, &mut shared, &ctx);
+        }
+
+        // Phase 2: big jump to trigger crossings on early entries
+        for i in 20..30 {
+            let raw = make_priced_candle(i, 55000.0);
+            let mut shared = SharedState {
+                treasury: &mut treasury,
+                portfolio: &mut portfolio,
+                risk_mult: 0.5,
+                peak_equity: &mut peak,
+                db_batch: &mut db_batch,
+            };
+            desk.on_candle(i, &raw, &mut shared, &ctx);
+        }
+
+        let resolved_before = desk.manager_resolved.len();
+
+        // Phase 3: run to resolution (candle 370+ resolves entries from candle 0..10+)
+        for i in 30..400 {
+            let raw = make_priced_candle(i, 55000.0 + (i as f64) * 5.0);
+            let mut shared = SharedState {
+                treasury: &mut treasury,
+                portfolio: &mut portfolio,
+                risk_mult: 0.5,
+                peak_equity: &mut peak,
+                db_batch: &mut db_batch,
+            };
+            desk.on_candle(i, &raw, &mut shared, &ctx);
+        }
+
+        assert!(desk.manager_resolved.len() > resolved_before,
+            "manager_resolved should grow as entries with crossings resolve (before={}, after={})",
+            resolved_before, desk.manager_resolved.len());
+        assert!(desk.labeled_count > 0,
+            "some entries should have been labeled (non-Noise)");
     }
 }

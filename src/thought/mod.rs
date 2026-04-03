@@ -274,10 +274,13 @@ fn candle_field(candle: &Candle, name: &str) -> f64 {
         "candle-body" => (candle.close - candle.open).abs(),
         "upper-wick" => candle.high - candle.close.max(candle.open),
         "lower-wick" => candle.close.min(candle.open) - candle.low,
-        // Ichimoku fields — computed from candle window by eval_ichimoku, not per-candle.
-        // Comparisons involving these are handled by eval_ichimoku, not eval_comparisons.
-        "tenkan-sen" | "kijun-sen" | "cloud-top" | "cloud-bottom"
-        | "senkou-span-a" | "senkou-span-b" => 0.0,
+        // Ichimoku Cloud — streaming per-candle from IndicatorBank
+        "tenkan-sen" => candle.tenkan_sen,
+        "kijun-sen" => candle.kijun_sen,
+        "cloud-top" => candle.cloud_top,
+        "cloud-bottom" => candle.cloud_bottom,
+        "senkou-span-a" => candle.senkou_span_a,
+        "senkou-span-b" => candle.senkou_span_b,
         _ => panic!("unknown candle field: '{}' — add it to candle_field()", name),
     }
 }
@@ -547,66 +550,66 @@ impl ThoughtEncoder {
         let now = candles.last().unwrap();
         let prev = if candles.len() >= 2 { Some(&candles[candles.len() - 2]) } else { None };
 
-        let is = |lenses: &[Lens]| -> bool {
-            lens.includes(lenses)
-        };
-
-        // ── SHARED: comparisons (momentum + structure only) ────────────
-        // Price vs indicator relationships. Volume, narrative, regime do NOT see these
-        // — their specs forbid it. Each observer sees only its own vocabulary.
-        if is(&[Lens::Momentum, Lens::Structure]) {
+        // ── GeneralistClassic: original 8 eval methods only ────────
+        // Diagnostic lens — pre-refactor vocabulary. No specialist modules.
+        if lens == Lens::GeneralistClassic {
             collect!(self.eval_comparisons_cached(now, prev));
-        }
-
-        // ── EXCLUSIVE: momentum ─────────────────────────────────────
-        // Oscillators, crosses, divergence. Speed and direction of change.
-        if is(&[Lens::Momentum]) {
-            collect!(self.eval_rsi_sma_cached(candles));
-            collect!(self.eval_stochastic(candles));
-            collect!(self.eval_momentum(candles)); // CCI, ROC
-            collect!(self.eval_divergence(candles, vm));
-            // vocab/oscillators: Williams %R, Stochastic RSI, Ultimate Oscillator, multi-ROC
-            collect!(self.eval_oscillators_module(candles));
-        }
-
-        // ── EXCLUSIVE: structure ────────────────────────────────────
-        // Geometric shape: segments, levels, channels, cloud, fibs, multi-timeframe.
-        if is(&[Lens::Structure]) {
             collect!(self.eval_segment_narrative(candles, vm));
-            collect!(self.eval_range_position(candles));
-            collect!(self.eval_ichimoku(candles));
-            collect!(self.eval_fibonacci(candles));
-            collect!(self.eval_keltner(candles));
-            // vocab/timeframe: multi-timeframe geometry (range position, body ratio)
-            collect!(self.encode_facts(&crate::vocab::timeframe::eval_timeframe_structure(candles)));
-        }
-
-        // ── EXCLUSIVE: volume ───────────────────────────────────────
-        // Participation: is the market backing the move?
-        if is(&[Lens::Volume]) {
-            collect!(self.eval_volume_confirmation(candles));
-            collect!(self.eval_volume_analysis(candles));
-            collect!(self.eval_price_action(candles));
-            // vocab/flow: OBV, VWAP, MFI, buying/selling pressure
-            collect!(self.eval_flow_module(candles));
-        }
-
-        // ── EXCLUSIVE: narrative ────────────────────────────────────
-        // The story: what happened when. Calendar + temporal lookback + multi-timeframe context.
-        if is(&[Lens::Narrative]) {
             collect!(self.eval_temporal(candles, vm));
+            collect!(self.eval_rsi_sma_cached(candles));
             collect!(self.eval_calendar(now));
-            // vocab/timeframe: multi-timeframe narrative (direction, agreement)
-            collect!(self.encode_facts(&crate::vocab::timeframe::eval_timeframe_narrative(candles)));
-        }
+            collect!(self.eval_divergence(candles, vm));
+            collect!(self.eval_volume_confirmation(candles));
+            collect!(self.eval_range_position(candles));
+        } else {
+            let is = |lenses: &[Lens]| -> bool {
+                lens.includes(lenses)
+            };
 
-        // ── EXCLUSIVE: regime ───────────────────────────────────────
-        // Market character: trending/chaotic/persistent/mean-reverting.
-        // Abstract properties that survive window noise.
-        if is(&[Lens::Regime]) {
-            collect!(self.eval_regime_module(candles));
-            // vocab/persistence: Hurst, autocorrelation, ADX zones
-            collect!(self.eval_persistence_module(candles));
+            // ── SHARED: comparisons (momentum + structure only) ────────────
+            if is(&[Lens::Momentum, Lens::Structure]) {
+                collect!(self.eval_comparisons_cached(now, prev));
+            }
+
+            // ── EXCLUSIVE: momentum ─────────────────────────────────────
+            if is(&[Lens::Momentum]) {
+                collect!(self.eval_rsi_sma_cached(candles));
+                collect!(self.eval_stochastic(candles));
+                collect!(self.eval_momentum(candles));
+                collect!(self.eval_divergence(candles, vm));
+                collect!(self.eval_oscillators_module(candles));
+            }
+
+            // ── EXCLUSIVE: structure ────────────────────────────────────
+            if is(&[Lens::Structure]) {
+                collect!(self.eval_segment_narrative(candles, vm));
+                collect!(self.eval_range_position(candles));
+                collect!(self.eval_ichimoku(candles));
+                collect!(self.eval_fibonacci(candles));
+                collect!(self.eval_keltner(candles));
+                collect!(self.encode_facts(&crate::vocab::timeframe::eval_timeframe_structure(candles)));
+            }
+
+            // ── EXCLUSIVE: volume ───────────────────────────────────────
+            if is(&[Lens::Volume]) {
+                collect!(self.eval_volume_confirmation(candles));
+                collect!(self.eval_volume_analysis(candles));
+                collect!(self.eval_price_action(candles));
+                collect!(self.eval_flow_module(candles));
+            }
+
+            // ── EXCLUSIVE: narrative ────────────────────────────────────
+            if is(&[Lens::Narrative]) {
+                collect!(self.eval_temporal(candles, vm));
+                collect!(self.eval_calendar(now));
+                collect!(self.encode_facts(&crate::vocab::timeframe::eval_timeframe_narrative(candles)));
+            }
+
+            // ── EXCLUSIVE: regime ───────────────────────────────────────
+            if is(&[Lens::Regime]) {
+                collect!(self.eval_regime_module(candles));
+                collect!(self.eval_persistence_module(candles));
+            }
         }
 
         // Unify all facts into a single reference list for bundling.
@@ -1206,6 +1209,12 @@ mod tests {
             tf_4h_low: 97.0,
             tf_4h_ret: 0.02,
             tf_4h_body: 0.6,
+            tenkan_sen: 0.0,
+            kijun_sen: 0.0,
+            senkou_span_a: 0.0,
+            senkou_span_b: 0.0,
+            cloud_top: 0.0,
+            cloud_bottom: 0.0,
             bb_pos: 0.5,
             kelt_upper: 104.0,
             kelt_lower: 96.0,
@@ -1336,5 +1345,52 @@ mod tests {
         c.atr_r = 0.031;
         // candle_field("atr") should return the absolute ATR, not atr_r
         assert!((candle_field(&c, "atr") - 3.14).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn thought_vectors_change_between_candles() {
+        let vm = VectorManager::new(TEST_DIMS);
+        let vocab = ThoughtVocab::new(&vm);
+        let enc = ThoughtEncoder::new(vocab);
+
+        // Two windows that share candles but differ at the end
+        let candles = make_candles(20);
+        let t1 = enc.encode_thought(&candles[..10], &vm, Lens::Generalist);
+        let t2 = enc.encode_thought(&candles[..11], &vm, Lens::Generalist);
+
+        let sim = holon::Similarity::cosine(&t1.thought, &t2.thought);
+        assert!(sim < 0.999,
+            "thoughts from different candle windows should differ, cosine={sim}");
+        assert!(sim > -1.0, "thoughts should both be non-zero");
+    }
+
+    #[test]
+    fn thought_vectors_vary_with_market_state() {
+        let vm = VectorManager::new(TEST_DIMS);
+        let vocab = ThoughtVocab::new(&vm);
+        let enc = ThoughtEncoder::new(vocab);
+
+        // Uptrend: close rising above SMAs
+        let mut up_candles = make_candles(30);
+        for (i, c) in up_candles.iter_mut().enumerate() {
+            c.close = 100.0 + i as f64 * 2.0;
+            c.sma20 = 100.0 + i as f64 * 1.0; // close above sma20
+            c.rsi = 65.0 + (i as f64 * 0.5).min(15.0); // rising RSI
+        }
+
+        // Downtrend: close falling below SMAs
+        let mut dn_candles = make_candles(30);
+        for (i, c) in dn_candles.iter_mut().enumerate() {
+            c.close = 100.0 - i as f64 * 2.0;
+            c.sma20 = 100.0 - i as f64 * 1.0; // close below sma20
+            c.rsi = 35.0 - (i as f64 * 0.5).min(15.0); // falling RSI
+        }
+
+        let up_thought = enc.encode_thought(&up_candles, &vm, Lens::Momentum);
+        let dn_thought = enc.encode_thought(&dn_candles, &vm, Lens::Momentum);
+
+        let sim = holon::Similarity::cosine(&up_thought.thought, &dn_thought.thought);
+        assert!(sim < 0.9,
+            "uptrend and downtrend should produce meaningfully different thoughts, cosine={sim}");
     }
 }

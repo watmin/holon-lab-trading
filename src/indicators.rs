@@ -340,6 +340,45 @@ impl StochState {
     }
 }
 
+struct IchimokuState {
+    high_9: RingBuffer, low_9: RingBuffer,
+    high_26: RingBuffer, low_26: RingBuffer,
+    high_52: RingBuffer, low_52: RingBuffer,
+}
+
+impl IchimokuState {
+    fn new() -> Self {
+        Self {
+            high_9: RingBuffer::new(9), low_9: RingBuffer::new(9),
+            high_26: RingBuffer::new(26), low_26: RingBuffer::new(26),
+            high_52: RingBuffer::new(52), low_52: RingBuffer::new(52),
+        }
+    }
+
+    fn step(&mut self, high: f64, low: f64) -> (f64, f64, f64, f64, f64, f64) {
+        self.high_9.push(high); self.low_9.push(low);
+        self.high_26.push(high); self.low_26.push(low);
+        self.high_52.push(high); self.low_52.push(low);
+
+        let tenkan = if self.high_9.full() {
+            (self.high_9.max() + self.low_9.min()) / 2.0
+        } else { 0.0 };
+        let kijun = if self.high_26.full() {
+            (self.high_26.max() + self.low_26.min()) / 2.0
+        } else { 0.0 };
+        let span_b = if self.high_52.full() {
+            (self.high_52.max() + self.low_52.min()) / 2.0
+        } else { 0.0 };
+        let span_a = if tenkan > 0.0 && kijun > 0.0 {
+            (tenkan + kijun) / 2.0
+        } else { 0.0 };
+        let cloud_top = if span_a > 0.0 && span_b > 0.0 { span_a.max(span_b) } else { 0.0 };
+        let cloud_bottom = if span_a > 0.0 && span_b > 0.0 { span_a.min(span_b) } else { 0.0 };
+
+        (tenkan, kijun, span_a, span_b, cloud_top, cloud_bottom)
+    }
+}
+
 struct CciState {
     tp_sma: SmaState,
     tp_buf: RingBuffer,
@@ -472,6 +511,9 @@ pub struct IndicatorBank {
     tf_4h_high: RingBuffer,
     tf_4h_low: RingBuffer,
 
+    // Ichimoku Cloud (9/26/52-period midpoint system)
+    ichimoku: IchimokuState,
+
     // Previous values for derived computations
     prev_close: f64,
 
@@ -511,6 +553,7 @@ impl IndicatorBank {
             tf_4h_buf: RingBuffer::new(48),
             tf_4h_high: RingBuffer::new(48),
             tf_4h_low: RingBuffer::new(48),
+            ichimoku: IchimokuState::new(),
             prev_close: 0.0,
             count: 0,
         }
@@ -630,6 +673,10 @@ impl IndicatorBank {
             if first.abs() < 1e-10 { 0.0 } else { (close - first).abs() / first }
         };
 
+        // Ichimoku Cloud
+        let (tenkan_sen, kijun_sen, senkou_span_a, senkou_span_b, cloud_top, cloud_bottom)
+            = self.ichimoku.step(high, low);
+
         // Time
         let hour = parse_hour(&raw.ts);
         let day_of_week = parse_day_of_week(&raw.ts);
@@ -663,6 +710,8 @@ impl IndicatorBank {
             tf_4h_low: tf_low(&self.tf_4h_low),
             tf_4h_ret: tf_ret(&self.tf_4h_buf),
             tf_4h_body: tf_body(&self.tf_4h_buf),
+            tenkan_sen, kijun_sen, senkou_span_a, senkou_span_b,
+            cloud_top, cloud_bottom,
             bb_pos, kelt_upper, kelt_lower, kelt_pos,
             squeeze,
             range_pos_12, range_pos_24, range_pos_48,

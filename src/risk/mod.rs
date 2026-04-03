@@ -156,9 +156,9 @@ fn encode_drawdown(portfolio: &Portfolio, atoms: &RiskAtoms, scalar: &holon::Sca
     } else {
         0.0
     };
-    let recovery = if portfolio.peak_equity > portfolio.dd_bottom_equity && drawdown > RECOVERY_THRESHOLD {
-        ((portfolio.equity - portfolio.dd_bottom_equity)
-            / (portfolio.peak_equity - portfolio.dd_bottom_equity))
+    let recovery = if portfolio.peak_equity > portfolio.drawdown_bottom_equity && drawdown > RECOVERY_THRESHOLD {
+        ((portfolio.equity - portfolio.drawdown_bottom_equity)
+            / (portfolio.peak_equity - portfolio.drawdown_bottom_equity))
             .max(0.0)
             .min(1.0)
     } else {

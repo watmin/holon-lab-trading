@@ -283,4 +283,164 @@ mod tests {
         assert!((log.conviction - 0.5).abs() < 1e-10);
         assert!(log.correct); // predicted buy, outcome is buy
     }
+
+    #[test]
+    fn quantile_computes_median() {
+        let data: VecDeque<f64> = (0..100).map(|i| i as f64).collect();
+        let med = quantile(&data, 0.5);
+        assert!((med - 50.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn quantile_computes_extremes() {
+        let data: VecDeque<f64> = (0..100).map(|i| i as f64).collect();
+        let low = quantile(&data, 0.0);
+        assert_eq!(low, 0.0);
+        let high = quantile(&data, 0.99);
+        assert!(high >= 98.0);
+    }
+
+    #[test]
+    fn observer_resolve_tracks_conviction_history() {
+        let mut obs = Observer::new(
+            super::super::Lens::Momentum,
+            TEST_DIMS,
+            500,
+            42,
+            &["Buy", "Sell"],
+        );
+        let thought = holon::Vector::zeros(TEST_DIMS);
+        let buy = obs.primary_label;
+
+        for i in 0..10 {
+            let pred = Prediction {
+                scores: Vec::new(),
+                direction: Some(buy),
+                conviction: 0.1 * i as f64,
+                raw_cos: 0.5,
+            };
+            obs.resolve(&thought, &pred, buy, 1.0, 0.5, 1000);
+        }
+
+        assert_eq!(obs.conviction_history.len(), 10);
+        assert_eq!(obs.resolved.len(), 10);
+    }
+
+    #[test]
+    fn observer_resolve_caps_conviction_window() {
+        let mut obs = Observer::new(
+            super::super::Lens::Structure,
+            TEST_DIMS,
+            500,
+            7,
+            &["Buy", "Sell"],
+        );
+        let thought = holon::Vector::zeros(TEST_DIMS);
+        let buy = obs.primary_label;
+        let window = 20;
+
+        for _ in 0..50 {
+            let pred = Prediction {
+                scores: Vec::new(),
+                direction: Some(buy),
+                conviction: 0.5,
+                raw_cos: 0.5,
+            };
+            obs.resolve(&thought, &pred, buy, 1.0, 0.5, window);
+        }
+
+        assert_eq!(obs.conviction_history.len(), window);
+        assert_eq!(obs.resolved.len(), window);
+    }
+
+    #[test]
+    fn observer_resolve_updates_cached_acc() {
+        let mut obs = Observer::new(
+            super::super::Lens::Volume,
+            TEST_DIMS,
+            500,
+            99,
+            &["Buy", "Sell"],
+        );
+        let thought = holon::Vector::zeros(TEST_DIMS);
+        let buy = obs.primary_label;
+        let sell = obs.journal.register("Sell_extra");  // need a second label for wrong predictions
+
+        // 10 correct predictions
+        for _ in 0..10 {
+            let pred = Prediction {
+                scores: Vec::new(),
+                direction: Some(buy),
+                conviction: 0.5,
+                raw_cos: 0.5,
+            };
+            obs.resolve(&thought, &pred, buy, 1.0, 0.5, 1000);
+        }
+        assert!((obs.cached_acc - 1.0).abs() < 1e-10, "all correct → acc=1.0");
+
+        // Now add 10 wrong predictions (predict buy, outcome sell)
+        let sell_label = obs.journal.register("Sell2");
+        for _ in 0..10 {
+            let pred = Prediction {
+                scores: Vec::new(),
+                direction: Some(buy),
+                conviction: 0.5,
+                raw_cos: 0.5,
+            };
+            obs.resolve(&thought, &pred, sell_label, 1.0, 0.5, 1000);
+        }
+        assert!((obs.cached_acc - 0.5).abs() < 1e-10, "half correct → acc=0.5");
+    }
+
+    #[test]
+    fn observer_resolve_updates_conviction_threshold_after_min_history() {
+        let mut obs = Observer::new(
+            super::super::Lens::Regime,
+            TEST_DIMS,
+            500,
+            42,
+            &["Buy", "Sell"],
+        );
+        let thought = holon::Vector::zeros(TEST_DIMS);
+        let buy = obs.primary_label;
+
+        // Need MIN_CONVICTION_HISTORY (200) entries and hit THRESHOLD_UPDATE_INTERVAL (50)
+        for i in 0..250 {
+            let pred = Prediction {
+                scores: Vec::new(),
+                direction: Some(buy),
+                conviction: (i as f64) / 250.0,
+                raw_cos: 0.5,
+            };
+            obs.resolve(&thought, &pred, buy, 1.0, 0.5, 1000);
+        }
+        // After 250 resolved with min_conviction_history=200, threshold should be updated
+        assert!(obs.conviction_threshold > 0.0, "threshold should be updated after enough history");
+    }
+
+    #[test]
+    fn observer_resolve_incorrect_prediction_tracked() {
+        let mut obs = Observer::new(
+            super::super::Lens::Momentum,
+            TEST_DIMS,
+            500,
+            42,
+            &["Buy", "Sell"],
+        );
+        let thought = holon::Vector::zeros(TEST_DIMS);
+        let buy = obs.primary_label;
+        let sell = obs.journal.register("SellLabel");
+
+        // Predict buy, but outcome is sell → incorrect
+        let pred = Prediction {
+            scores: Vec::new(),
+            direction: Some(buy),
+            conviction: 0.8,
+            raw_cos: 0.8,
+        };
+        let result = obs.resolve(&thought, &pred, sell, 1.0, 0.5, 1000);
+        assert!(result.is_some());
+        let log = result.unwrap();
+        assert!(!log.correct);
+    }
 }

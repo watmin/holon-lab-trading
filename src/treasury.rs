@@ -321,4 +321,129 @@ mod tests {
         let expected = 5000.0 + 3000.0 + 3000.0;
         assert!((t.total_value(&prices) - expected).abs() < 1e-10);
     }
+
+    #[test]
+    fn asset_as_str_returns_name() {
+        let a = Asset::new("WBTC");
+        assert_eq!(a.as_str(), "WBTC");
+    }
+
+    #[test]
+    fn asset_display_formats_name() {
+        let a = Asset::new("USDC");
+        assert_eq!(format!("{}", a), "USDC");
+    }
+
+    #[test]
+    fn deployed_returns_zero_for_unknown_asset() {
+        let t = Treasury::new(5, 0.5);
+        assert_eq!(t.deployed(&wbtc()), 0.0);
+    }
+
+    #[test]
+    fn allocatable_respects_max_positions() {
+        let mut t = Treasury::new(2, 0.8);
+        t.deposit(&usdc(), 10000.0);
+        let prices = price_map(50000.0);
+        // n_open == max_positions → no room
+        assert_eq!(t.allocatable(&usdc(), &prices, 2), 0.0);
+        // n_open < max_positions → some room
+        assert!(t.allocatable(&usdc(), &prices, 0) > 0.0);
+    }
+
+    #[test]
+    fn allocatable_respects_utilization_limit() {
+        let mut t = Treasury::new(5, 0.5);
+        t.deposit(&usdc(), 10000.0);
+        let prices = price_map(50000.0);
+        // With 0 deployed, room = 10000 * 0.5 = 5000, but balance is 10000 → capped at 5000
+        let alloc = t.allocatable(&usdc(), &prices, 0);
+        assert!((alloc - 5000.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn allocatable_accounts_for_deployed() {
+        let mut t = Treasury::new(5, 0.5);
+        t.deposit(&usdc(), 10000.0);
+        t.claim(&usdc(), 4000.0); // 4000 deployed, 6000 available
+        let prices = price_map(50000.0);
+        // total value = 10000, max deployed = 5000, already deployed 4000 → room = 1000
+        let alloc = t.allocatable(&usdc(), &prices, 1);
+        assert!((alloc - 1000.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn allocatable_converts_to_asset_units() {
+        let mut t = Treasury::new(5, 0.8);
+        t.deposit(&usdc(), 10000.0);
+        t.deposit(&wbtc(), 0.1);
+        let prices = price_map(50000.0);
+        // total value = 10000 + 0.1*50000 = 15000
+        // max deploy = 15000 * 0.8 = 12000
+        // deploy_room in USD = 12000 - 0 = 12000
+        // in WBTC units = 12000 / 50000 = 0.24, but only 0.1 available → 0.1
+        let alloc = t.allocatable(&wbtc(), &prices, 0);
+        assert!((alloc - 0.1).abs() < 1e-10);
+    }
+
+    #[test]
+    fn allocatable_zero_portfolio_value() {
+        let t = Treasury::new(5, 0.5);
+        let prices = price_map(50000.0);
+        assert_eq!(t.allocatable(&usdc(), &prices, 0), 0.0);
+    }
+
+    #[test]
+    fn utilization_with_no_deployed() {
+        let mut t = Treasury::new(5, 0.5);
+        t.deposit(&usdc(), 10000.0);
+        let prices = price_map(50000.0);
+        assert_eq!(t.utilization(&prices), 0.0);
+    }
+
+    #[test]
+    fn utilization_fraction_of_deployed() {
+        let mut t = Treasury::new(5, 0.5);
+        t.deposit(&usdc(), 10000.0);
+        t.claim(&usdc(), 2500.0);
+        let prices = price_map(50000.0);
+        // deployed = 2500, total = 10000 → 0.25
+        assert!((t.utilization(&prices) - 0.25).abs() < 1e-10);
+    }
+
+    #[test]
+    fn utilization_zero_total_value() {
+        let t = Treasury::new(5, 0.5);
+        let prices = price_map(50000.0);
+        assert_eq!(t.utilization(&prices), 0.0);
+    }
+
+    #[test]
+    fn swap_from_empty_asset_returns_zero() {
+        let mut t = Treasury::new(5, 0.5);
+        // no deposits at all
+        let (spent, received) = t.swap(&usdc(), &wbtc(), 100.0, Rate(50000.0), 0.01);
+        assert_eq!(spent, 0.0);
+        assert_eq!(received, 0.0);
+    }
+
+    #[test]
+    fn claim_zero_returns_zero() {
+        let mut t = Treasury::new(5, 0.5);
+        t.deposit(&usdc(), 100.0);
+        let claimed = t.claim(&usdc(), 0.0);
+        assert_eq!(claimed, 0.0);
+        assert_eq!(t.balance(&usdc()), 100.0);
+        assert_eq!(t.deployed(&usdc()), 0.0);
+    }
+
+    #[test]
+    fn release_on_undeployed_asset_is_noop() {
+        let mut t = Treasury::new(5, 0.5);
+        t.deposit(&usdc(), 100.0);
+        // release without claiming first
+        t.release(&usdc(), 50.0);
+        assert_eq!(t.balance(&usdc()), 100.0);
+        assert_eq!(t.deployed(&usdc()), 0.0);
+    }
 }

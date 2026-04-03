@@ -16,6 +16,9 @@ use crate::journal::Prediction;
 const BAND_MIN_RESOLVED: usize = 500;
 const BAND_MIN_PER_BAND: usize = 200;
 const BAND_MIN_ACCURACY: f64 = 0.51;
+const BAND_K_START: usize = 3;       // lowest sigma multiple for band scan
+const BAND_K_END: usize = 18;        // highest sigma multiple (exclusive)
+const BAND_WIDTH: usize = 4;         // sigma width of each band
 const MIN_RESOLVED_FOR_RELIABILITY: usize = 20;
 const MIN_RESOLVED_FOR_TENURE: f64 = 50.0;
 
@@ -96,9 +99,9 @@ pub fn find_proven_band(
     let sigma = 1.0 / (dims as f64).sqrt();
     let mut best_acc = 0.5_f64;
     let mut best_band = (0.0_f64, 0.0_f64);
-    for k in 3..18 {
+    for k in BAND_K_START..BAND_K_END {
         let lo = k as f64 * sigma;
-        let hi = (k + 4) as f64 * sigma;
+        let hi = (k + BAND_WIDTH) as f64 * sigma;
         let (n, correct) = resolved.iter()
             .filter(|(c, _)| *c >= lo && *c < hi)
             .fold((0usize, 0usize), |(n, correct), (_, w)| (n + 1, correct + *w as usize));
@@ -527,5 +530,133 @@ mod tests {
         assert!(lo > 0.0);
         assert!(hi > lo);
         assert!(acc > BAND_MIN_ACCURACY);
+    }
+
+    #[test]
+    fn encode_manager_thought_with_proven_observers_fires_panel_shape() {
+        let vm = make_vm();
+        let atoms = ManagerAtoms::new(&vm);
+        let scalar = ScalarEncoder::new(TEST_DIMS);
+
+        // Two observers, both curve_valid (proven) — triggers panel_shape
+        let preds = vec![
+            make_prediction(0.4, 0.4),
+            make_prediction(-0.3, 0.3),
+        ];
+        let obs_atoms = vec![vm.get_vector("obs-0"), vm.get_vector("obs-1")];
+        let curve_valid = vec![true, true];
+        let resolved_lens = vec![100_usize, 80_usize];
+        let resolved_accs = vec![0.58_f64, 0.55_f64];
+        let obs_vecs = vec![vm.get_vector("obs-vec-0"), vm.get_vector("obs-vec-1")];
+        let gen_pred = make_prediction(0.2, 0.2);
+        let gen_atom = vm.get_vector("generalist");
+
+        let ctx = make_ctx(
+            &preds, &obs_atoms, &curve_valid,
+            &resolved_lens, &resolved_accs, &obs_vecs,
+            &gen_pred, &gen_atom,
+        );
+
+        let facts = encode_manager_thought(&ctx, &atoms, &scalar, 0.01);
+
+        // With 2 proven observers: per-observer facts + generalist facts + panel_shape (4) + market_context (4)
+        // Each observer with resolved >= 50 and >= 20 yields 4 facts. Generalist yields 2 (no reliability/tenure).
+        // panel_shape yields 4 (agreement, energy, divergence, coherence).
+        // market_context yields 4.
+        // Total = 4 + 4 + 2 + 4 + 4 = 18
+        assert!(facts.len() >= 14, "should include panel_shape and market_context facts, got {}", facts.len());
+
+        // Verify panel_shape produces non-trivial vectors by checking total count exceeds
+        // what we'd get without panel_shape (which needs < 2 proven).
+        // With only 1 proven observer, panel_shape returns empty.
+        let curve_valid_one = vec![true, false];
+        let ctx_one_proven = make_ctx(
+            &preds, &obs_atoms, &curve_valid_one,
+            &resolved_lens, &resolved_accs, &obs_vecs,
+            &gen_pred, &gen_atom,
+        );
+        let facts_one = encode_manager_thought(&ctx_one_proven, &atoms, &scalar, 0.01);
+        assert!(facts.len() > facts_one.len(),
+            "two proven observers should produce more facts than one (panel_shape): {} vs {}",
+            facts.len(), facts_one.len());
+    }
+
+    #[test]
+    fn encode_manager_thought_three_proven_observers_panel_coherence() {
+        let vm = make_vm();
+        let atoms = ManagerAtoms::new(&vm);
+        let scalar = ScalarEncoder::new(TEST_DIMS);
+
+        // Three proven observers — panel_shape fires with coherence from 3 pairs
+        let preds = vec![
+            make_prediction(0.5, 0.5),
+            make_prediction(0.4, 0.4),
+            make_prediction(-0.3, 0.3),
+        ];
+        let obs_atoms = vec![
+            vm.get_vector("obs-0"),
+            vm.get_vector("obs-1"),
+            vm.get_vector("obs-2"),
+        ];
+        let curve_valid = vec![true, true, true];
+        let resolved_lens = vec![60_usize, 70_usize, 55_usize];
+        let resolved_accs = vec![0.6, 0.55, 0.52];
+        let obs_vecs = vec![
+            vm.get_vector("obs-vec-0"),
+            vm.get_vector("obs-vec-1"),
+            vm.get_vector("obs-vec-2"),
+        ];
+        let gen_pred = make_prediction(0.15, 0.15);
+        let gen_atom = vm.get_vector("generalist");
+
+        let ctx = make_ctx(
+            &preds, &obs_atoms, &curve_valid,
+            &resolved_lens, &resolved_accs, &obs_vecs,
+            &gen_pred, &gen_atom,
+        );
+
+        let facts = encode_manager_thought(&ctx, &atoms, &scalar, 0.01);
+        // 3 observers * 4 facts + generalist 2 + panel_shape 4 + market_context 4 = 22
+        assert!(facts.len() >= 18, "three proven observers should yield rich encoding, got {}", facts.len());
+    }
+
+    #[test]
+    fn bundle_with_prev_thought_produces_different_from_without() {
+        // Tests the motion/delta path through bundle_manager_thought more thoroughly
+        let vm = make_vm();
+        let atoms = ManagerAtoms::new(&vm);
+        let scalar = ScalarEncoder::new(TEST_DIMS);
+
+        let preds = vec![make_prediction(0.4, 0.4), make_prediction(0.3, 0.3)];
+        let obs_atoms = vec![vm.get_vector("obs-0"), vm.get_vector("obs-1")];
+        let curve_valid = vec![true, true];
+        let resolved_lens = vec![100_usize, 80_usize];
+        let resolved_accs = vec![0.55, 0.52];
+        let obs_vecs = vec![vm.get_vector("v0"), vm.get_vector("v1")];
+        let gen_pred = make_prediction(0.2, 0.2);
+        let gen_atom = vm.get_vector("gen");
+
+        let ctx = make_ctx(
+            &preds, &obs_atoms, &curve_valid,
+            &resolved_lens, &resolved_accs, &obs_vecs,
+            &gen_pred, &gen_atom,
+        );
+
+        let facts = encode_manager_thought(&ctx, &atoms, &scalar, 0.01);
+
+        // First bundle without prev
+        let (thought_no_prev, raw) = bundle_manager_thought(facts.clone(), None, &atoms).unwrap();
+
+        // Second bundle with a *different* prev_thought (simulating a previous candle's thought)
+        let different_prev = vm.get_vector("completely-different-prev");
+        let (thought_with_prev, _) = bundle_manager_thought(facts, Some(&different_prev), &atoms).unwrap();
+
+        // The two thoughts should differ because delta is folded in
+        assert_ne!(thought_no_prev.data(), thought_with_prev.data(),
+            "motion delta should change the bundled thought");
+
+        // Both should be non-zero
+        assert!(thought_no_prev.data().iter().any(|&x| x != 0));
+        assert!(thought_with_prev.data().iter().any(|&x| x != 0));
     }
 }

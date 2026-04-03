@@ -82,6 +82,9 @@ pub enum LogEntry {
         disc_strength: f64,
         buy_count: i64,
         sell_count: i64,
+        buy_norm: f64,      // L2 norm of Buy prototype
+        sell_norm: f64,     // L2 norm of Sell prototype
+        proto_cosine: f64,  // cosine between Buy and Sell prototypes
     },
     DiscDecode {
         step: i64,
@@ -114,6 +117,35 @@ pub enum LogEntry {
         step: i64,
         won: i32,
         tht_data: Vec<u8>,
+    },
+    CandleSnapshot {
+        candle_idx: i64,
+        // Raw OHLCV
+        ts: String, open: f64, high: f64, low: f64, close: f64, volume: f64,
+        // Indicators
+        sma20: f64, sma50: f64, sma200: f64,
+        bb_upper: f64, bb_lower: f64, bb_width: f64, bb_pos: f64,
+        rsi: f64,
+        macd_line: f64, macd_signal: f64, macd_hist: f64,
+        dmi_plus: f64, dmi_minus: f64, adx: f64,
+        atr: f64, atr_r: f64,
+        stoch_k: f64, stoch_d: f64,
+        williams_r: f64, cci: f64, mfi: f64,
+        roc_1: f64, roc_3: f64, roc_6: f64, roc_12: f64,
+        obv_slope_12: f64, volume_sma_20: f64, vol_accel: f64,
+        // Multi-timeframe
+        tf_1h_close: f64, tf_1h_high: f64, tf_1h_low: f64, tf_1h_ret: f64, tf_1h_body: f64,
+        tf_4h_close: f64, tf_4h_high: f64, tf_4h_low: f64, tf_4h_ret: f64, tf_4h_body: f64,
+        // Ichimoku
+        tenkan_sen: f64, kijun_sen: f64, senkou_span_a: f64, senkou_span_b: f64,
+        cloud_top: f64, cloud_bottom: f64,
+        // Keltner + derived
+        kelt_upper: f64, kelt_lower: f64, kelt_pos: f64, squeeze: i32,
+        range_pos_12: f64, range_pos_24: f64, range_pos_48: f64,
+        trend_consistency_6: f64, trend_consistency_12: f64, trend_consistency_24: f64,
+        atr_roc_6: f64, atr_roc_12: f64,
+        // Time
+        hour: f64, day_of_week: f64,
     },
     BatchCommit,
 }
@@ -192,11 +224,13 @@ pub fn flush_logs(entries: &[LogEntry], conn: &Connection) {
             }
             LogEntry::RecalibLog {
                 step, journal, cos_raw, disc_strength, buy_count, sell_count,
+                buy_norm, sell_norm, proto_cosine,
             } => {
                 conn.execute(
-                    "INSERT INTO recalib_log (step,journal,cos_raw,disc_strength,buy_count,sell_count)
-                     VALUES (?1,?2,?3,?4,?5,?6)",
-                    params![step, journal, cos_raw, disc_strength, buy_count, sell_count],
+                    "INSERT INTO recalib_log (step,journal,cos_raw,disc_strength,buy_count,sell_count,buy_norm,sell_norm,proto_cosine)
+                     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+                    params![step, journal, cos_raw, disc_strength, buy_count, sell_count,
+                            buy_norm, sell_norm, proto_cosine],
                 ).ok();
             }
             LogEntry::DiscDecode {
@@ -241,6 +275,77 @@ pub fn flush_logs(entries: &[LogEntry], conn: &Connection) {
                     "INSERT INTO trade_vectors (step, won, tht_data) VALUES (?1, ?2, ?3)",
                     params![step, won, tht_data],
                 ).ok();
+            }
+            LogEntry::CandleSnapshot {
+                candle_idx, ts,
+                open, high, low, close, volume,
+                sma20, sma50, sma200,
+                bb_upper, bb_lower, bb_width, bb_pos,
+                rsi, macd_line, macd_signal, macd_hist,
+                dmi_plus, dmi_minus, adx, atr, atr_r,
+                stoch_k, stoch_d, williams_r, cci, mfi,
+                roc_1, roc_3, roc_6, roc_12,
+                obv_slope_12, volume_sma_20, vol_accel,
+                tf_1h_close, tf_1h_high, tf_1h_low, tf_1h_ret, tf_1h_body,
+                tf_4h_close, tf_4h_high, tf_4h_low, tf_4h_ret, tf_4h_body,
+                tenkan_sen, kijun_sen, senkou_span_a, senkou_span_b,
+                cloud_top, cloud_bottom,
+                kelt_upper, kelt_lower, kelt_pos, squeeze,
+                range_pos_12, range_pos_24, range_pos_48,
+                trend_consistency_6, trend_consistency_12, trend_consistency_24,
+                atr_roc_6, atr_roc_12,
+                hour, day_of_week,
+            } => {
+                conn.execute(
+                    "INSERT INTO candle_snapshot (
+                        candle_idx, ts,
+                        open, high, low, close, volume,
+                        sma20, sma50, sma200,
+                        bb_upper, bb_lower, bb_width, bb_pos,
+                        rsi, macd_line, macd_signal, macd_hist,
+                        dmi_plus, dmi_minus, adx, atr, atr_r,
+                        stoch_k, stoch_d, williams_r, cci, mfi,
+                        roc_1, roc_3, roc_6, roc_12,
+                        obv_slope_12, volume_sma_20, vol_accel,
+                        tf_1h_close, tf_1h_high, tf_1h_low, tf_1h_ret, tf_1h_body,
+                        tf_4h_close, tf_4h_high, tf_4h_low, tf_4h_ret, tf_4h_body,
+                        tenkan_sen, kijun_sen, senkou_span_a, senkou_span_b,
+                        cloud_top, cloud_bottom,
+                        kelt_upper, kelt_lower, kelt_pos, squeeze,
+                        range_pos_12, range_pos_24, range_pos_48,
+                        trend_consistency_6, trend_consistency_12, trend_consistency_24,
+                        atr_roc_6, atr_roc_12,
+                        hour, day_of_week
+                    ) VALUES (
+                        ?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,
+                        ?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,
+                        ?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,
+                        ?31,?32,?33,?34,?35,?36,?37,?38,?39,?40,
+                        ?41,?42,?43,?44,?45,?46,?47,?48,?49,?50,
+                        ?51,?52,?53,?54,?55,?56,?57,?58,?59,?60,
+                        ?61,?62,?63,?64,?65
+                    )",
+                    params![
+                        candle_idx, ts,
+                        open, high, low, close, volume,
+                        sma20, sma50, sma200,
+                        bb_upper, bb_lower, bb_width, bb_pos,
+                        rsi, macd_line, macd_signal, macd_hist,
+                        dmi_plus, dmi_minus, adx, atr, atr_r,
+                        stoch_k, stoch_d, williams_r, cci, mfi,
+                        roc_1, roc_3, roc_6, roc_12,
+                        obv_slope_12, volume_sma_20, vol_accel,
+                        tf_1h_close, tf_1h_high, tf_1h_low, tf_1h_ret, tf_1h_body,
+                        tf_4h_close, tf_4h_high, tf_4h_low, tf_4h_ret, tf_4h_body,
+                        tenkan_sen, kijun_sen, senkou_span_a, senkou_span_b,
+                        cloud_top, cloud_bottom,
+                        kelt_upper, kelt_lower, kelt_pos, squeeze,
+                        range_pos_12, range_pos_24, range_pos_48,
+                        trend_consistency_6, trend_consistency_12, trend_consistency_24,
+                        atr_roc_6, atr_roc_12,
+                        hour, day_of_week,
+                    ],
+                ).map_err(|e| eprintln!("candle_snapshot insert error: {}", e)).ok();
             }
             LogEntry::BatchCommit => {
                 conn.execute_batch("COMMIT; BEGIN").ok();
@@ -292,11 +397,14 @@ pub fn init_ledger(path: &str) -> Connection {
         -- One row per journal recalibration.
         CREATE TABLE IF NOT EXISTS recalib_log (
             step          INTEGER,  -- candle index when recalib fired
-            journal       TEXT,     -- 'thought'
+            journal       TEXT,     -- observer name or 'thought'
             cos_raw       REAL,     -- cos(buy_proto, sell_proto) before discrimination
             disc_strength REAL,     -- separating signal available (0=none, 1=fully separated)
             buy_count     INTEGER,
-            sell_count    INTEGER
+            sell_count    INTEGER,
+            buy_norm      REAL,     -- L2 norm of Buy prototype
+            sell_norm     REAL,     -- L2 norm of Sell prototype
+            proto_cosine  REAL      -- cosine between Buy and Sell prototypes
         );
 
         -- Top fact contributions to discriminant at each recalibration.
@@ -362,6 +470,33 @@ pub fn init_ledger(path: &str) -> Connection {
             outcome           TEXT,     -- 'Buy' | 'Sell' | 'Noise'
             won               INTEGER,  -- 1 if net_return > 0 (after costs)
             exit_reason       TEXT      -- 'ThresholdCrossing' | 'TrailingStop' | 'TakeProfit' | 'HorizonExpiry'
+        );
+
+        -- Full candle snapshot at trade resolution time. Every indicator value.
+        -- Join with trade_facts to verify: does the indicator justify the fact?
+        CREATE TABLE IF NOT EXISTS candle_snapshot (
+            candle_idx        INTEGER PRIMARY KEY,
+            ts                TEXT,
+            open REAL, high REAL, low REAL, close REAL, volume REAL,
+            sma20 REAL, sma50 REAL, sma200 REAL,
+            bb_upper REAL, bb_lower REAL, bb_width REAL, bb_pos REAL,
+            rsi REAL,
+            macd_line REAL, macd_signal REAL, macd_hist REAL,
+            dmi_plus REAL, dmi_minus REAL, adx REAL,
+            atr REAL, atr_r REAL,
+            stoch_k REAL, stoch_d REAL,
+            williams_r REAL, cci REAL, mfi REAL,
+            roc_1 REAL, roc_3 REAL, roc_6 REAL, roc_12 REAL,
+            obv_slope_12 REAL, volume_sma_20 REAL, vol_accel REAL,
+            tf_1h_close REAL, tf_1h_high REAL, tf_1h_low REAL, tf_1h_ret REAL, tf_1h_body REAL,
+            tf_4h_close REAL, tf_4h_high REAL, tf_4h_low REAL, tf_4h_ret REAL, tf_4h_body REAL,
+            tenkan_sen REAL, kijun_sen REAL, senkou_span_a REAL, senkou_span_b REAL,
+            cloud_top REAL, cloud_bottom REAL,
+            kelt_upper REAL, kelt_lower REAL, kelt_pos REAL, squeeze INTEGER,
+            range_pos_12 REAL, range_pos_24 REAL, range_pos_48 REAL,
+            trend_consistency_6 REAL, trend_consistency_12 REAL, trend_consistency_24 REAL,
+            atr_roc_6 REAL, atr_roc_12 REAL,
+            hour REAL, day_of_week REAL
         );
 
         -- Thought vectors for flip-zone trades (for engram analysis).
@@ -496,6 +631,322 @@ mod tests {
             .unwrap();
         assert_eq!(step, 1);
         assert!((equity - 10000.0).abs() < f64::EPSILON);
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn flush_logs_position_open() {
+        let path = test_db_path();
+        let _ = std::fs::remove_file(&path);
+        let conn = init_ledger(&path);
+
+        let entries = vec![LogEntry::PositionOpen {
+            step: 10,
+            candle_idx: 200,
+            timestamp: "2025-02-01T00:00:00".to_string(),
+            direction: Direction::Long,
+            entry_price: 42000.0,
+            position_usd: 5000.0,
+            swap_fee_pct: 0.001,
+        }];
+
+        flush_logs(&entries, &conn);
+
+        let (step, dir, reason): (i64, String, String) = conn
+            .query_row(
+                "SELECT step, direction, exit_reason FROM trade_ledger WHERE step = 10",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(step, 10);
+        assert_eq!(dir, "Buy");
+        assert_eq!(reason, "Open");
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn flush_logs_position_exit() {
+        let path = test_db_path();
+        let _ = std::fs::remove_file(&path);
+        let conn = init_ledger(&path);
+
+        let entries = vec![LogEntry::PositionExit {
+            step: 20,
+            candle_idx: 300,
+            timestamp: "2025-03-01T00:00:00".to_string(),
+            direction: Direction::Short,
+            entry_price: 50000.0,
+            exit_price: 48000.0,
+            gross_return_pct: 4.0,
+            position_usd: 3000.0,
+            swap_fee_pct: 0.001,
+            horizon_candles: 12,
+            won: 1,
+            exit_reason: "ThresholdCrossing".to_string(),
+        }];
+
+        flush_logs(&entries, &conn);
+
+        let (step, dir, won, reason): (i64, String, i32, String) = conn
+            .query_row(
+                "SELECT step, direction, won, exit_reason FROM trade_ledger WHERE step = 20",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(step, 20);
+        assert_eq!(dir, "Sell");
+        assert_eq!(won, 1);
+        assert_eq!(reason, "ThresholdCrossing");
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn flush_logs_disc_decode() {
+        let path = test_db_path();
+        let _ = std::fs::remove_file(&path);
+        let conn = init_ledger(&path);
+
+        let entries = vec![LogEntry::DiscDecode {
+            step: 30,
+            journal: "thought".to_string(),
+            rank: 1,
+            fact_label: "rsi_oversold".to_string(),
+            cosine: 0.87,
+        }];
+
+        flush_logs(&entries, &conn);
+
+        let (step, rank, label, cos): (i64, i64, String, f64) = conn
+            .query_row(
+                "SELECT step, rank, fact_label, cosine FROM disc_decode WHERE step = 30",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(step, 30);
+        assert_eq!(rank, 1);
+        assert_eq!(label, "rsi_oversold");
+        assert!((cos - 0.87).abs() < 1e-10);
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn flush_logs_recalib_log() {
+        let path = test_db_path();
+        let _ = std::fs::remove_file(&path);
+        let conn = init_ledger(&path);
+
+        let entries = vec![LogEntry::RecalibLog {
+            step: 40,
+            journal: "momentum".to_string(),
+            cos_raw: 0.12,
+            disc_strength: 0.88,
+            buy_count: 150,
+            sell_count: 130,
+        }];
+
+        flush_logs(&entries, &conn);
+
+        let (step, journal, cos_raw, buy_count): (i64, String, f64, i64) = conn
+            .query_row(
+                "SELECT step, journal, cos_raw, buy_count FROM recalib_log WHERE step = 40",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(step, 40);
+        assert_eq!(journal, "momentum");
+        assert!((cos_raw - 0.12).abs() < 1e-10);
+        assert_eq!(buy_count, 150);
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn flush_logs_trade_ledger() {
+        let path = test_db_path();
+        let _ = std::fs::remove_file(&path);
+        let conn = init_ledger(&path);
+
+        let entries = vec![LogEntry::TradeLedger {
+            step: 50,
+            candle_idx: 400,
+            timestamp: "2025-04-01T00:00:00".to_string(),
+            exit_candle_idx: Some(410),
+            exit_timestamp: Some("2025-04-01T00:50:00".to_string()),
+            direction: "Buy".to_string(),
+            conviction: 0.75,
+            high_conviction: 1,
+            entry_price: 60000.0,
+            exit_price: 61000.0,
+            position_frac: 0.1,
+            position_usd: 6000.0,
+            gross_return_pct: 1.67,
+            swap_fee_pct: 0.001,
+            slippage_pct: 0.0025,
+            net_return_pct: 1.33,
+            pnl_usd: 80.0,
+            equity_after: 10080.0,
+            max_favorable_pct: 2.0,
+            max_adverse_pct: 0.5,
+            crossing_candles: Some(8),
+            horizon_candles: 12,
+            outcome: "Buy".to_string(),
+            won: 1,
+            exit_reason: "ThresholdCrossing".to_string(),
+        }];
+
+        flush_logs(&entries, &conn);
+
+        let (step, dir, won, pnl): (i64, String, i32, f64) = conn
+            .query_row(
+                "SELECT step, direction, won, pnl_usd FROM trade_ledger WHERE step = 50",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(step, 50);
+        assert_eq!(dir, "Buy");
+        assert_eq!(won, 1);
+        assert!((pnl - 80.0).abs() < 1e-10);
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn flush_logs_observer_log() {
+        let path = test_db_path();
+        let _ = std::fs::remove_file(&path);
+        let conn = init_ledger(&path);
+
+        let entries = vec![LogEntry::ObserverLog {
+            step: 60,
+            observer: "momentum".to_string(),
+            conviction: 0.65,
+            direction: "Buy".to_string(),
+            correct: 1,
+        }];
+
+        flush_logs(&entries, &conn);
+
+        let (step, obs, correct): (i64, String, i32) = conn
+            .query_row(
+                "SELECT step, observer, correct FROM observer_log WHERE step = 60",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(step, 60);
+        assert_eq!(obs, "momentum");
+        assert_eq!(correct, 1);
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn flush_logs_risk_log() {
+        let path = test_db_path();
+        let _ = std::fs::remove_file(&path);
+        let conn = init_ledger(&path);
+
+        let entries = vec![LogEntry::RiskLog {
+            step: 70,
+            drawdown_pct: 3.5,
+            streak_len: 4,
+            streak_dir: "losing".to_string(),
+            recent_acc: 0.48,
+            equity_pct: -2.0,
+            won: 0,
+        }];
+
+        flush_logs(&entries, &conn);
+
+        let (step, drawdown, streak): (i64, f64, i32) = conn
+            .query_row(
+                "SELECT step, drawdown_pct, streak_len FROM risk_log WHERE step = 70",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(step, 70);
+        assert!((drawdown - 3.5).abs() < 1e-10);
+        assert_eq!(streak, 4);
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn flush_logs_trade_fact() {
+        let path = test_db_path();
+        let _ = std::fs::remove_file(&path);
+        let conn = init_ledger(&path);
+
+        let entries = vec![LogEntry::TradeFact {
+            step: 80,
+            fact_label: "rsi_bullish".to_string(),
+        }];
+
+        flush_logs(&entries, &conn);
+
+        let (step, label): (i64, String) = conn
+            .query_row(
+                "SELECT step, fact_label FROM trade_facts WHERE step = 80",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(step, 80);
+        assert_eq!(label, "rsi_bullish");
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn flush_logs_trade_vector() {
+        let path = test_db_path();
+        let _ = std::fs::remove_file(&path);
+        let conn = init_ledger(&path);
+
+        let data = vec![1u8, 2, 3, 4, 5];
+        let entries = vec![LogEntry::TradeVector {
+            step: 90,
+            won: 1,
+            tht_data: data.clone(),
+        }];
+
+        flush_logs(&entries, &conn);
+
+        let (step, won, blob): (i64, i32, Vec<u8>) = conn
+            .query_row(
+                "SELECT step, won, tht_data FROM trade_vectors WHERE step = 90",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(step, 90);
+        assert_eq!(won, 1);
+        assert_eq!(blob, data);
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn flush_logs_batch_commit() {
+        let path = test_db_path();
+        let _ = std::fs::remove_file(&path);
+        let conn = init_ledger(&path);
+
+        // Start a transaction so BatchCommit's "COMMIT; BEGIN" has something to commit
+        conn.execute_batch("BEGIN").ok();
+        let entries = vec![LogEntry::BatchCommit];
+        flush_logs(&entries, &conn);
+        // Should not panic — the batch commit succeeded
 
         let _ = std::fs::remove_file(&path);
     }

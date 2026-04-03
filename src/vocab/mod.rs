@@ -102,6 +102,12 @@ mod tests {
             tf_4h_low: 0.0,
             tf_4h_ret: 0.0,
             tf_4h_body: 0.0,
+            tenkan_sen: 0.0,
+            kijun_sen: 0.0,
+            senkou_span_a: 0.0,
+            senkou_span_b: 0.0,
+            cloud_top: 0.0,
+            cloud_bottom: 0.0,
             bb_pos: 0.0,
             kelt_upper: 0.0,
             kelt_lower: 0.0,
@@ -405,10 +411,12 @@ mod tests {
     #[test]
     fn oscillators_roc_accelerating() {
         let mut c = make_candle();
-        c.roc_1 = 4.0;
-        c.roc_3 = 3.0;
-        c.roc_6 = 2.0;
-        c.roc_12 = 1.0; // roc_1 > roc_3 > roc_6 > roc_12
+        // Per-candle rates: r1=0.05, r3=0.03, r6=0.02, r12=0.01
+        // r1 > r3 > r6 > r12 → 3 accel votes → accelerating
+        c.roc_1 = 0.05;
+        c.roc_3 = 0.09;   // /3 = 0.03
+        c.roc_6 = 0.12;   // /6 = 0.02
+        c.roc_12 = 0.12;  // /12 = 0.01
         let facts = oscillators::eval_oscillators(&[c]);
         let has_accel = facts.iter().any(|f| matches!(f,
             Fact::Bare { label: "roc-accelerating" }
@@ -419,10 +427,12 @@ mod tests {
     #[test]
     fn oscillators_roc_decelerating() {
         let mut c = make_candle();
-        c.roc_1 = 1.0;
-        c.roc_3 = 2.0;
-        c.roc_6 = 3.0;
-        c.roc_12 = 4.0; // roc_1 < roc_3 < roc_6 < roc_12
+        // Per-candle rates: r1=0.001, r3=0.01, r6=0.02, r12=0.03
+        // r1 < r3 < r6 < r12 → 3 decel votes → decelerating
+        c.roc_1 = 0.001;
+        c.roc_3 = 0.03;   // /3 = 0.01
+        c.roc_6 = 0.12;   // /6 = 0.02
+        c.roc_12 = 0.36;  // /12 = 0.03
         let facts = oscillators::eval_oscillators(&[c]);
         let has_decel = facts.iter().any(|f| matches!(f,
             Fact::Bare { label: "roc-decelerating" }
@@ -802,5 +812,182 @@ mod tests {
             Fact::Scalar { indicator: "tf-1h-ret", .. }
         ));
         assert!(has_ret, "expected tf-1h-ret scalar, got: {:?}", facts);
+    }
+
+    // ── ROC acceleration/deceleration firing rate diagnostic ────────────
+
+    #[test]
+    fn roc_accel_decel_firing_rate() {
+        use crate::indicators::{IndicatorBank, RawCandle};
+
+        // --- Generate synthetic price series via IndicatorBank ---
+        // Three regimes: uptrend (200 candles), downtrend (200), chop (200)
+        let mut bank = IndicatorBank::new();
+        let mut candles = Vec::new();
+        let mut price = 50_000.0_f64;
+        let base_vol = 100.0;
+
+        // Simple deterministic noise from a seed — no rand crate needed.
+        let mut seed: u64 = 42;
+        let mut noise = || -> f64 {
+            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            // Map to [-1, 1]
+            ((seed >> 33) as f64 / (u32::MAX as f64 / 2.0)) - 1.0
+        };
+
+        // Phase 1: Strong uptrend (accelerating then steady)
+        for i in 0..200 {
+            // Accelerating drift: starts small, grows
+            let drift = if i < 80 {
+                0.001 + 0.0001 * (i as f64) // accelerating
+            } else if i < 140 {
+                0.005 // steady strong
+            } else {
+                0.005 - 0.00003 * ((i - 140) as f64) // decelerating
+            };
+            price *= 1.0 + drift + noise() * 0.002;
+            let high = price * (1.0 + noise().abs() * 0.003);
+            let low = price * (1.0 - noise().abs() * 0.003);
+            let open = price * (1.0 + noise() * 0.001);
+            let raw = RawCandle {
+                ts: format!("2024-01-01T{:04}:00", i),
+                open, high, low, close: price,
+                volume: base_vol * (1.0 + noise().abs() * 0.5),
+            };
+            candles.push(bank.tick(&raw));
+        }
+
+        // Phase 2: Strong downtrend
+        for i in 0..200 {
+            let drift = if i < 80 {
+                -0.001 - 0.0001 * (i as f64) // accelerating down
+            } else if i < 140 {
+                -0.005
+            } else {
+                -0.005 + 0.00003 * ((i - 140) as f64) // decelerating down
+            };
+            price *= 1.0 + drift + noise() * 0.002;
+            let high = price * (1.0 + noise().abs() * 0.003);
+            let low = price * (1.0 - noise().abs() * 0.003);
+            let open = price * (1.0 + noise() * 0.001);
+            let raw = RawCandle {
+                ts: format!("2024-02-01T{:04}:00", i),
+                open, high, low, close: price,
+                volume: base_vol * (1.0 + noise().abs() * 0.5),
+            };
+            candles.push(bank.tick(&raw));
+        }
+
+        // Phase 3: Choppy sideways
+        let anchor = price;
+        for i in 0..200 {
+            // Mean-reverting chop
+            let revert = (anchor - price) / anchor * 0.1;
+            price *= 1.0 + revert + noise() * 0.004;
+            let high = price * (1.0 + noise().abs() * 0.003);
+            let low = price * (1.0 - noise().abs() * 0.003);
+            let open = price * (1.0 + noise() * 0.001);
+            let raw = RawCandle {
+                ts: format!("2024-03-01T{:04}:00", i),
+                open, high, low, close: price,
+                volume: base_vol * (1.0 + noise().abs() * 0.5),
+            };
+            candles.push(bank.tick(&raw));
+        }
+
+        assert_eq!(candles.len(), 600);
+
+        // --- Evaluate oscillators on each candle and count firings ---
+        // Skip first 20 candles (warmup for indicators)
+        let warmup = 20;
+        let mut accel_count = 0_usize;
+        let mut decel_count = 0_usize;
+        let mut total = 0_usize;
+
+        // Collect ROC value samples for reporting
+        let mut roc_samples: Vec<(f64, f64, f64, f64)> = Vec::new();
+
+        for i in warmup..candles.len() {
+            // eval_oscillators only reads candles.last(), but needs a slice
+            let slice = &candles[..=i];
+            let facts = oscillators::eval_oscillators(slice);
+            total += 1;
+
+            let has_accel = facts.iter().any(|f| matches!(f, Fact::Bare { label: "roc-accelerating" }));
+            let has_decel = facts.iter().any(|f| matches!(f, Fact::Bare { label: "roc-decelerating" }));
+
+            if has_accel { accel_count += 1; }
+            if has_decel { decel_count += 1; }
+
+            // Sample ROC values at phase boundaries and interesting points
+            let c = &candles[i];
+            if i == warmup || i == 100 || i == 200 || i == 300 || i == 400 || i == 500 || i == candles.len() - 1 {
+                roc_samples.push((c.roc_1, c.roc_3, c.roc_6, c.roc_12));
+            }
+        }
+
+        let accel_pct = 100.0 * accel_count as f64 / total as f64;
+        let decel_pct = 100.0 * decel_count as f64 / total as f64;
+        let neither_pct = 100.0 * (total - accel_count - decel_count) as f64 / total as f64;
+
+        eprintln!("\n=== ROC Acceleration/Deceleration Firing Rate ===");
+        eprintln!("Total candles evaluated: {}", total);
+        eprintln!("  roc-accelerating:  {:>4} / {} ({:.1}%)", accel_count, total, accel_pct);
+        eprintln!("  roc-decelerating:  {:>4} / {} ({:.1}%)", decel_count, total, decel_pct);
+        eprintln!("  neither:           {:>4} / {} ({:.1}%)", total - accel_count - decel_count, total, neither_pct);
+        eprintln!();
+
+        // Per-phase breakdown
+        let phases = [
+            ("uptrend", warmup, 200),
+            ("downtrend", 200, 400),
+            ("choppy", 400, 600),
+        ];
+        for (name, start, end) in &phases {
+            let mut pa = 0_usize;
+            let mut pd = 0_usize;
+            let mut pt = 0_usize;
+            for i in *start..*end {
+                let slice = &candles[..=i];
+                let facts = oscillators::eval_oscillators(slice);
+                pt += 1;
+                if facts.iter().any(|f| matches!(f, Fact::Bare { label: "roc-accelerating" })) { pa += 1; }
+                if facts.iter().any(|f| matches!(f, Fact::Bare { label: "roc-decelerating" })) { pd += 1; }
+            }
+            eprintln!("  {:<12}  accel: {:>3}/{} ({:.1}%)  decel: {:>3}/{} ({:.1}%)",
+                name, pa, pt, 100.0 * pa as f64 / pt as f64,
+                pd, pt, 100.0 * pd as f64 / pt as f64);
+        }
+
+        // ROC value samples — reveal the scale issue
+        eprintln!();
+        eprintln!("  ROC value samples (roc_1, roc_3, roc_6, roc_12):");
+        let labels = ["warmup", "i=100", "i=200", "i=300", "i=400", "i=500", "last"];
+        for (j, (r1, r3, r6, r12)) in roc_samples.iter().enumerate() {
+            let label = if j < labels.len() { labels[j] } else { "?" };
+            eprintln!("    {:<8}  roc1={:+.6}  roc3={:+.6}  roc6={:+.6}  roc12={:+.6}",
+                label, r1, r3, r6, r12);
+            // Show whether chain ordering holds
+            let chain_accel = r1 > r3 && r3 > r6 && r6 > r12;
+            let chain_decel = r1 < r3 && r3 < r6 && r6 < r12;
+            if chain_accel {
+                eprintln!("             ^ ACCEL: roc1 > roc3 > roc6 > roc12");
+            } else if chain_decel {
+                eprintln!("             ^ DECEL: roc1 < roc3 < roc6 < roc12");
+            } else {
+                eprintln!("             ^ neither (chain broken)");
+            }
+        }
+
+        eprintln!();
+        eprintln!("  Key insight: ROC_N = (close - close[N]) / close[N]");
+        eprintln!("  In a *steady* uptrend, roc_12 > roc_6 > roc_3 > roc_1 (more candles = more return)");
+        eprintln!("  Accel requires roc_1 > roc_3 > ... meaning short-term outpaces long-term");
+        eprintln!("  This only happens at the START of a new move or during genuine acceleration");
+
+        // The test passes regardless — it's a diagnostic.
+        // But assert non-zero to verify the condition CAN fire with our synthetic data.
+        assert!(accel_count + decel_count > 0,
+            "Neither accel nor decel ever fired — synthetic data may be too tame");
     }
 }
