@@ -116,19 +116,19 @@
          (window (push-candle (:candle-window desk) computed-candle
                               (:max-window-size (:config desk))))
 
-  ;; 3. Observer predictions — each at their own sampled window scale
+  ;; 3. Observer encoding + prediction — each observer is independent (pmap)
          (observer-vecs
-           (map (lambda (obs)
-                  (let ((w (sample (:window-sampler obs) (:encode-count desk))))
-                    (encode-thought (:thought-encoder desk)
-                                   (take-last w window)
-                                   (:vm ctx)
-                                   (:lens obs))))
-                (:observers desk)))
+           (pmap (lambda (obs)
+                   (let ((w (sample (:window-sampler obs) (:encode-count desk))))
+                     (encode-thought (:thought-encoder desk)
+                                    (take-last w window)
+                                    (:vm ctx)
+                                    (:lens obs))))
+                 (:observers desk)))
 
          (observer-preds
-           (map (lambda (obs vec) (predict (:journal obs) vec))
-                (:observers desk) observer-vecs))
+           (pmap (lambda (obs vec) (predict (:journal obs) vec))
+                 (:observers desk) observer-vecs))
 
   ;; 4. Manager encoding + prediction
          (mgr-facts    (encode-manager-thought
@@ -244,8 +244,8 @@
                        :observer-preds observer-preds
                        :mgr-thought mgr-thought))))))
 
-    ;; 11. Decay (journals)
-    (for-each (lambda (obs)
+    ;; 11. Decay (journals — pfor-each: each observer's journal is disjoint)
+    (pfor-each (lambda (obs)
       (decay (:journal obs) (:decay (:config desk))))
       (:observers desk))
     (decay (:manager-journal desk) (:adaptive-decay desk))
@@ -266,8 +266,8 @@
                 (label (if price-rose (:manager-buy desk) (:manager-sell desk)))
                 (sw (signal-weight abs-move (:move-sum desk) (:move-count desk))))
             (set! (:first-outcome entry) label)
-            ;; All 6 observers learn
-            (for-each (lambda (obs vec)
+            ;; All 6 observers learn (pfor-each: disjoint journals)
+            (pfor-each (lambda (obs vec)
               (observe (:journal obs) vec label sw))
               (:observers desk) (:observer-vecs entry))
             (inc! (:labeled-count desk))))
@@ -283,7 +283,7 @@
             (push-back (:resolved-preds desk)
               (list (:meta-conviction entry)
                     (= (:first-outcome entry) price-label)))
-            (for-each (lambda (obs pred)
+            (pfor-each (lambda (obs pred)
               (resolve obs (:tht-vec entry) pred price-label 1.0
                        (:conviction-quantile ctx) (:conviction-window ctx)))
               (:observers desk) (:observer-preds entry))))))

@@ -700,21 +700,36 @@ impl Desk {
 
                 if let Some(o) = outcome {
                     let signal_wt = signal_weight(abs_pct, &mut self.move_sum, &mut self.move_count);
-                    // Observer resolution: learn, track, gate, validate, log.
-                    // Each observer (including generalist at index 5) resolves
-                    // its prediction against the outcome.
-                    for (ei, observer_vec) in entry.observer_vecs.iter().enumerate() {
-                        if let Some(log) = self.observers[ei].resolve(
-                            observer_vec, &entry.observer_preds[ei], o, signal_wt,
-                            ctx.conviction_quantile, ctx.conviction_window,
-                        ) {
-                            if ctx.diagnostics { self.pending_logs.push(LogEntry::ObserverLog {
+                    // pfor-each: each observer resolves independently (disjoint journals).
+                    // Logs collected in parallel, merged after.
+                    let obs_logs: Vec<Option<(String, f64, String, i32)>> = {
+                        use rayon::prelude::*;
+                        self.observers.par_iter_mut().enumerate().map(|(ei, obs)| {
+                            if ei < entry.observer_vecs.len() {
+                                if let Some(log) = obs.resolve(
+                                    &entry.observer_vecs[ei], &entry.observer_preds[ei], o, signal_wt,
+                                    ctx.conviction_quantile, ctx.conviction_window,
+                                ) {
+                                    return Some((
+                                        log.name.as_str().to_string(),
+                                        log.conviction,
+                                        obs.journal.label_name(log.direction).unwrap_or("?").to_string(),
+                                        log.correct as i32,
+                                    ));
+                                }
+                            }
+                            None
+                        }).collect()
+                    };
+                    if ctx.diagnostics {
+                        for log in obs_logs.into_iter().flatten() {
+                            self.pending_logs.push(LogEntry::ObserverLog {
                                 step: self.log_step,
-                                observer: log.name.as_str().to_string(),
-                                conviction: log.conviction,
-                                direction: self.observers[ei].journal.label_name(log.direction).unwrap_or("?").to_string(),
-                                correct: log.correct as i32,
-                            }); }
+                                observer: log.0,
+                                conviction: log.1,
+                                direction: log.2,
+                                correct: log.3,
+                            });
                         }
                     }
                     entry.crossing = Some(CrossingSnapshot {
