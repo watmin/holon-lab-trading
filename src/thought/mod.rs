@@ -602,6 +602,10 @@ impl ThoughtEncoder {
 
     // ─── Comparison predicates (cached) ──────────────────────────────────
 
+    // rune:temper(intentional) — format! keys for fact_cache lookup create ~70 String
+    // allocs per candle. Pre-computing a (pair_idx, predicate) → &Vector index would
+    // eliminate these. Deferred: encoding-path change requires accuracy validation.
+    // Also: eval_temporal bypasses fact_cache for crosses-above/below (fact_binary).
     fn eval_comparisons_cached<'a>(
         &'a self,
         now: &Candle,
@@ -681,6 +685,9 @@ impl ThoughtEncoder {
 
     // ─── Segment narrative (PELT-based) ────────────────────────────────
 
+    // rune:temper(intentional) — allocates a values Vec per stream per candle (17 streams).
+    // Pre-allocating a reusable buffer on the encoder would eliminate per-candle alloc.
+    // Deferred: encoding-path change requires accuracy validation.
     fn eval_segment_narrative(
         &self,
         candles: &[Candle],
