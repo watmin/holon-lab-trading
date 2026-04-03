@@ -39,8 +39,15 @@ graph TD
         end
 
         subgraph "Risk Department (enterprise-level)"
-            RB[5 Specialist Branches<br/>OnlineSubspace each] --> RMGR[Risk Manager Journal<br/>Healthy / Unhealthy]
-            RB --> RGEN[Risk Generalist<br/>holistic OnlineSubspace]
+            subgraph "Branches (pmap — 5 parallel)"
+                DD[Drawdown]
+                ACC[Accuracy]
+                VOLR[Volatility]
+                CORR[Correlation]
+                PAN[Panel]
+            end
+            DD & ACC & VOLR & CORR & PAN --> RGEN[Risk Generalist<br/>holistic OnlineSubspace]
+            DD & ACC & VOLR & CORR & PAN --> RMGR[Risk Manager Journal<br/>Healthy / Unhealthy]
             RMGR & RGEN --> RMULT[risk_mult]
         end
 
@@ -70,7 +77,7 @@ The enterprise is a fold over a stream of raw candles: `(state, raw_candle) → 
 
 ## Parallelism
 
-Five rayon `par_iter` / `par_iter_mut` sites verified by the compiler (Send+Sync):
+Seven rayon `par_iter` / `par_iter_mut` sites verified by the compiler (Send+Sync):
 
 | Site | Form | Items | Per |
 |------|------|-------|-----|
@@ -78,6 +85,9 @@ Five rayon `par_iter` / `par_iter_mut` sites verified by the compiler (Send+Sync
 | Observer prediction | pmap | 6 | every candle |
 | Observer decay | pfor-each | 6 | every candle |
 | Observer resolve | pfor-each | 6 | per resolved entry |
+| Risk branch scoring | pmap | 5 | recalib interval |
+| Risk branch update | pfor-each | 5 | recalib interval |
+| Desk iteration | pmap | N | every candle (1 desk today, N when multi-asset) |
 
 The wat language declares `pmap` and `pfor-each` as structural forms. The Rust implements via rayon. The compiler verifies independence.
 
