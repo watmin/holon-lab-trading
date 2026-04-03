@@ -99,7 +99,9 @@ src/window_sampler.rs     — deterministic log-uniform window sampling
 
 ## Specifications
 
-The `wat/` directory contains domain specifications in s-expression format. These are the source of truth for what the enterprise SHOULD do. The Rust implements them. When code and spec diverge, update the one that's wrong.
+The `wat/` directory is the source of truth. The Rust in `src/` implements it.
+
+When adding or changing behavior: update the wat first, then implement in Rust. When code and spec diverge, the wat is right unless the code discovered something the spec missed — then update the wat to match the discovery. Never let them drift silently.
 
 ## Wards
 
