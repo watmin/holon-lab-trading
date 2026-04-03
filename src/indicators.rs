@@ -976,5 +976,145 @@ mod tests {
         // %K = (9 - 5) / (12 - 5) * 100 = 4/7*100 = 57.14
         assert!(approx(k, 57.14, 0.1), "Stoch K was {}", k);
     }
+
+    // ── IndicatorBank composed pipeline ──────────────────────────────
+
+    fn make_raw(i: usize, price: f64) -> RawCandle {
+        RawCandle {
+            ts: format!("2019-01-01 {:02}:00:00", i % 24),
+            open: price - 0.5,
+            high: price + 1.0,
+            low: price - 1.0,
+            close: price,
+            volume: 50.0,
+        }
+    }
+
+    #[test]
+    fn indicator_bank_new_creates() {
+        let _bank = IndicatorBank::new();
+        // No panic — construction succeeds.
+    }
+
+    #[test]
+    fn indicator_bank_tick_returns_candle_with_raw_fields() {
+        let mut bank = IndicatorBank::new();
+        let raw = make_raw(0, 100.0);
+        let candle = bank.tick(&raw);
+        assert!(approx(candle.close, 100.0, 1e-10));
+        assert!(approx(candle.open, 99.5, 1e-10));
+        assert!(approx(candle.high, 101.0, 1e-10));
+        assert!(approx(candle.low, 99.0, 1e-10));
+        assert!(approx(candle.volume, 50.0, 1e-10));
+        assert_eq!(candle.ts, "2019-01-01 00:00:00");
+    }
+
+    #[test]
+    fn indicator_bank_warmup_zeros() {
+        let mut bank = IndicatorBank::new();
+        let mut candle = bank.tick(&make_raw(0, 100.0));
+        for i in 1..5 {
+            candle = bank.tick(&make_raw(i, 100.0 + i as f64));
+        }
+        // After 5 candles: SMA20 needs 20, RSI Wilder needs 14+1, ATR Wilder needs 14+1
+        assert!(approx(candle.sma20, 0.0, 1e-10), "sma20 should be 0 during warmup, got {}", candle.sma20);
+        assert!(approx(candle.rsi, 50.0, 0.001), "rsi should be 50 during warmup, got {}", candle.rsi);
+        assert!(approx(candle.atr, 0.0, 1e-10), "atr should be 0 during warmup, got {}", candle.atr);
+    }
+
+    #[test]
+    fn indicator_bank_after_warmup_nonzero() {
+        let mut bank = IndicatorBank::new();
+        let mut candle = bank.tick(&make_raw(0, 100.0));
+        for i in 1..50 {
+            // Varying prices to avoid degenerate flat series
+            let price = 100.0 + (i as f64 * 0.7).sin() * 10.0;
+            candle = bank.tick(&make_raw(i, price));
+        }
+        assert!(candle.sma20 != 0.0, "sma20 should be nonzero after 50 candles");
+        assert!(candle.rsi > 0.0 && candle.rsi < 100.0, "rsi should be 0-100, got {}", candle.rsi);
+        assert!(candle.rsi != 50.0, "rsi should not be exactly 50 after 50 varied candles, got {}", candle.rsi);
+        assert!(candle.atr > 0.0, "atr should be nonzero after 50 candles, got {}", candle.atr);
+    }
+
+    #[test]
+    fn indicator_bank_sma20_correct_after_20() {
+        let mut bank = IndicatorBank::new();
+        let closes: Vec<f64> = (0..20).map(|i| 100.0 + i as f64).collect();
+        let mut candle = bank.tick(&make_raw(0, closes[0]));
+        for i in 1..20 {
+            candle = bank.tick(&make_raw(i, closes[i]));
+        }
+        let expected: f64 = closes.iter().sum::<f64>() / 20.0; // (100+101+...+119)/20 = 109.5
+        assert!(approx(candle.sma20, expected, 0.001),
+            "sma20 should be {}, got {}", expected, candle.sma20);
+    }
+
+    #[test]
+    fn indicator_bank_rsi_responds_to_trend() {
+        // Rising prices → high RSI
+        let mut bank_up = IndicatorBank::new();
+        let mut candle_up = bank_up.tick(&make_raw(0, 100.0));
+        for i in 1..20 {
+            candle_up = bank_up.tick(&make_raw(i, 100.0 + i as f64 * 2.0));
+        }
+        assert!(candle_up.rsi > 60.0, "RSI after rising trend should be > 60, got {}", candle_up.rsi);
+
+        // Falling prices → low RSI
+        let mut bank_down = IndicatorBank::new();
+        let mut candle_down = bank_down.tick(&make_raw(0, 200.0));
+        for i in 1..20 {
+            candle_down = bank_down.tick(&make_raw(i, 200.0 - i as f64 * 2.0));
+        }
+        assert!(candle_down.rsi < 40.0, "RSI after falling trend should be < 40, got {}", candle_down.rsi);
+    }
+
+    #[test]
+    fn indicator_bank_macd_zero_during_warmup() {
+        let mut bank = IndicatorBank::new();
+        let mut candle = bank.tick(&make_raw(0, 100.0));
+        for i in 1..10 {
+            candle = bank.tick(&make_raw(i, 100.0 + i as f64));
+        }
+        // EMA26 needs 26 candles to seed; before that ema26 returns 0, so macd_line = ema12 - 0
+        // But ema12 also returns 0 before 12 candles. At 10 candles, both are 0.
+        assert!(approx(candle.macd_line, 0.0, 1e-10),
+            "macd_line should be 0 during warmup (10 candles), got {}", candle.macd_line);
+    }
+
+    #[test]
+    fn indicator_bank_sequential_deterministic() {
+        let prices: Vec<f64> = (0..30).map(|i| 100.0 + (i as f64 * 1.3).sin() * 15.0).collect();
+
+        let mut bank1 = IndicatorBank::new();
+        let mut bank2 = IndicatorBank::new();
+
+        for i in 0..30 {
+            let c1 = bank1.tick(&make_raw(i, prices[i]));
+            let c2 = bank2.tick(&make_raw(i, prices[i]));
+
+            assert_eq!(c1.close, c2.close, "close mismatch at candle {}", i);
+            assert_eq!(c1.sma20, c2.sma20, "sma20 mismatch at candle {}", i);
+            assert_eq!(c1.sma50, c2.sma50, "sma50 mismatch at candle {}", i);
+            assert_eq!(c1.rsi, c2.rsi, "rsi mismatch at candle {}", i);
+            assert_eq!(c1.macd_line, c2.macd_line, "macd_line mismatch at candle {}", i);
+            assert_eq!(c1.macd_signal, c2.macd_signal, "macd_signal mismatch at candle {}", i);
+            assert_eq!(c1.atr, c2.atr, "atr mismatch at candle {}", i);
+            assert_eq!(c1.bb_width, c2.bb_width, "bb_width mismatch at candle {}", i);
+            assert_eq!(c1.bb_upper, c2.bb_upper, "bb_upper mismatch at candle {}", i);
+            assert_eq!(c1.bb_lower, c2.bb_lower, "bb_lower mismatch at candle {}", i);
+            assert_eq!(c1.stoch_k, c2.stoch_k, "stoch_k mismatch at candle {}", i);
+            assert_eq!(c1.mfi, c2.mfi, "mfi mismatch at candle {}", i);
+            assert_eq!(c1.adx, c2.adx, "adx mismatch at candle {}", i);
+            assert_eq!(c1.cci, c2.cci, "cci mismatch at candle {}", i);
+            assert_eq!(c1.obv_slope_12, c2.obv_slope_12, "obv_slope_12 mismatch at candle {}", i);
+            assert_eq!(c1.volume_sma_20, c2.volume_sma_20, "volume_sma_20 mismatch at candle {}", i);
+            assert_eq!(c1.roc_1, c2.roc_1, "roc_1 mismatch at candle {}", i);
+            assert_eq!(c1.roc_12, c2.roc_12, "roc_12 mismatch at candle {}", i);
+            assert_eq!(c1.range_pos_12, c2.range_pos_12, "range_pos_12 mismatch at candle {}", i);
+            assert_eq!(c1.trend_consistency_6, c2.trend_consistency_6, "trend_consistency_6 mismatch at candle {}", i);
+            assert_eq!(c1.vol_accel, c2.vol_accel, "vol_accel mismatch at candle {}", i);
+        }
+    }
 }
 

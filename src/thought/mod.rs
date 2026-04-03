@@ -1152,3 +1152,189 @@ impl ThoughtEncoder {
         (facts, Vec::new())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::candle::Candle;
+    use crate::market::Lens;
+    use holon::VectorManager;
+
+    const TEST_DIMS: usize = 64;
+
+    fn make_candle() -> Candle {
+        Candle {
+            ts: String::new(),
+            open: 99.0,
+            high: 102.0,
+            low: 98.0,
+            close: 100.0,
+            volume: 50.0,
+            sma20: 100.0,
+            sma50: 100.0,
+            sma200: 100.0,
+            bb_upper: 105.0,
+            bb_lower: 95.0,
+            bb_width: 10.0,
+            rsi: 50.0,
+            macd_line: 0.5,
+            macd_signal: 0.3,
+            macd_hist: 0.2,
+            dmi_plus: 20.0,
+            dmi_minus: 15.0,
+            adx: 25.0,
+            atr: 2.0,
+            atr_r: 0.02,
+            stoch_k: 50.0,
+            stoch_d: 45.0,
+            williams_r: -50.0,
+            cci: 0.0,
+            mfi: 50.0,
+            roc_1: 0.01,
+            roc_3: 0.02,
+            roc_6: 0.03,
+            roc_12: 0.04,
+            obv_slope_12: 0.0,
+            volume_sma_20: 40.0,
+            tf_1h_close: 100.0,
+            tf_1h_high: 102.0,
+            tf_1h_low: 98.0,
+            tf_1h_ret: 0.01,
+            tf_1h_body: 0.5,
+            tf_4h_close: 100.0,
+            tf_4h_high: 103.0,
+            tf_4h_low: 97.0,
+            tf_4h_ret: 0.02,
+            tf_4h_body: 0.6,
+            bb_pos: 0.5,
+            kelt_upper: 104.0,
+            kelt_lower: 96.0,
+            kelt_pos: 0.5,
+            squeeze: false,
+            range_pos_12: 0.5,
+            range_pos_24: 0.5,
+            range_pos_48: 0.5,
+            trend_consistency_6: 0.5,
+            trend_consistency_12: 0.5,
+            trend_consistency_24: 0.5,
+            atr_roc_6: 0.0,
+            atr_roc_12: 0.0,
+            vol_accel: 0.0,
+            hour: 12.0,
+            day_of_week: 3.0,
+        }
+    }
+
+    fn make_candles(n: usize) -> Vec<Candle> {
+        (0..n)
+            .map(|i| {
+                let mut c = make_candle();
+                // Vary price slightly so PELT and comparisons see movement
+                c.close = 100.0 + i as f64 * 0.5;
+                c.open = 99.0 + i as f64 * 0.5;
+                c.high = 102.0 + i as f64 * 0.5;
+                c.low = 98.0 + i as f64 * 0.5;
+                c.hour = (i % 24) as f64;
+                c.day_of_week = (i % 7) as f64;
+                c
+            })
+            .collect()
+    }
+
+    #[test]
+    fn thought_vocab_new_creates() {
+        let vm = VectorManager::new(TEST_DIMS);
+        let _vocab = ThoughtVocab::new(&vm);
+    }
+
+    #[test]
+    fn thought_encoder_new_creates() {
+        let vm = VectorManager::new(TEST_DIMS);
+        let vocab = ThoughtVocab::new(&vm);
+        let enc = ThoughtEncoder::new(vocab);
+        assert!(!enc.fact_cache.is_empty(), "fact_cache should be populated");
+    }
+
+    #[test]
+    fn encode_thought_returns_nonzero_vector() {
+        let vm = VectorManager::new(TEST_DIMS);
+        let vocab = ThoughtVocab::new(&vm);
+        let enc = ThoughtEncoder::new(vocab);
+
+        let candles = make_candles(10);
+        let result = enc.encode_thought(&candles, &vm, Lens::Generalist);
+        assert!(result.thought.norm() > 0.0, "thought vector should be non-zero");
+    }
+
+    #[test]
+    fn encode_thought_different_lenses_differ() {
+        let vm = VectorManager::new(TEST_DIMS);
+        let vocab = ThoughtVocab::new(&vm);
+        let enc = ThoughtEncoder::new(vocab);
+
+        let candles = make_candles(10);
+        let momentum = enc.encode_thought(&candles, &vm, Lens::Momentum);
+        let structure = enc.encode_thought(&candles, &vm, Lens::Structure);
+
+        let sim = holon::Similarity::cosine(&momentum.thought, &structure.thought);
+        assert!(
+            sim < 0.99,
+            "Momentum and Structure should produce different vectors, cosine={sim}"
+        );
+    }
+
+    #[test]
+    fn encode_thought_momentum_lens_only_fires_momentum_facts() {
+        let vm = VectorManager::new(TEST_DIMS);
+        let vocab = ThoughtVocab::new(&vm);
+        let enc = ThoughtEncoder::new(vocab);
+
+        let candles = make_candles(10);
+        let momentum = enc.encode_thought(&candles, &vm, Lens::Momentum);
+        let volume = enc.encode_thought(&candles, &vm, Lens::Volume);
+
+        // Momentum and Volume are exclusive lens categories — they should differ
+        let sim = holon::Similarity::cosine(&momentum.thought, &volume.thought);
+        assert!(
+            sim < 0.99,
+            "Momentum lens should not contain Volume facts, cosine={sim}"
+        );
+    }
+
+    #[test]
+    fn comparison_vecs_populated() {
+        let vm = VectorManager::new(TEST_DIMS);
+        let vocab = ThoughtVocab::new(&vm);
+        let enc = ThoughtEncoder::new(vocab);
+        assert_eq!(
+            enc.comparison_vecs.len(),
+            COMPARISON_PAIRS.len(),
+            "comparison_vecs should have one entry per COMPARISON_PAIRS element"
+        );
+    }
+
+    #[test]
+    fn candle_field_panics_on_unknown() {
+        let c = make_candle();
+        let result = std::panic::catch_unwind(|| {
+            candle_field(&c, "nonexistent-field");
+        });
+        assert!(result.is_err(), "candle_field should panic on unknown field name");
+    }
+
+    #[test]
+    fn candle_field_maps_stoch_k() {
+        let mut c = make_candle();
+        c.stoch_k = 73.5;
+        assert!((candle_field(&c, "stoch-k") - 73.5).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn candle_field_maps_atr_to_absolute() {
+        let mut c = make_candle();
+        c.atr = 3.14;
+        c.atr_r = 0.031;
+        // candle_field("atr") should return the absolute ATR, not atr_r
+        assert!((candle_field(&c, "atr") - 3.14).abs() < f64::EPSILON);
+    }
+}
