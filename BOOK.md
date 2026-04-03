@@ -2209,7 +2209,9 @@ The database caught it. Not the tests. Not the wards. Not the coverage. The data
 
 The debugging process: leaves to root. Prove each layer before moving up. Don't trust the log lines — query the database. Don't theorize about what should work — measure what does. The builder yelled at the machine for trusting outputs instead of verifying them. The machine learned. The database became the debugger.
 
-One `abs()`. Months of refactoring. 59% → 46%. The sign was always there.
+One `abs()`. A week of refactoring. 59% → 46%. The sign was always there.
+
+The seven wards. The proposals. The designers. The forging sessions. All of it on the trading lab. None of it on holon-rs. The substrate was trusted. Unquestioned. Un-warded. The bug lived in the one crate nobody thought to check — because it was the foundation, and foundations don't break. Except when they do, and then everything above them is beautiful and wrong.
 
 ### What Chapter 4 would have said
 
