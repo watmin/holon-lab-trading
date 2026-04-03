@@ -263,13 +263,13 @@ impl Desk {
 
         // ── Observer thought encoding from candle window ────────────────
         // Each observer encodes at their own sampled window scale.
-        // Tempered: collect window once, observers take sub-slices.
+        // Tempered: make_contiguous gives &[Candle] with zero clones.
         let n_observers = self.observers.len();
-        let window_vec: Vec<Candle> = self.candle_window.iter().cloned().collect();
+        let window_slice = self.candle_window.make_contiguous();
         let observer_vecs: Vec<Vector> = (0..n_observers).map(|ei| {
-            let w = self.observers[ei].window_sampler.sample(self.encode_count).min(window_vec.len());
-            let start = window_vec.len().saturating_sub(w);
-            let slice = &window_vec[start..];
+            let w = self.observers[ei].window_sampler.sample(self.encode_count).min(window_slice.len());
+            let start = window_slice.len().saturating_sub(w);
+            let slice = &window_slice[start..];
             if slice.is_empty() {
                 holon::Vector::zeros(ctx.dims)
             } else {
