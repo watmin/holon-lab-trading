@@ -749,62 +749,9 @@ impl Desk {
             }
         }
 
-        // Log any recalibrations that fired during this candle's learning.
+        // Recalibration: four independent concerns, one trigger.
         if self.observers[GENERALIST_IDX].journal.recalib_count() != tht_recalib_before {
-            // Pre-compute curve params for Kelly — once per recalib, not per trade.
-            // Uses the generalist's resolved_preds for the curve fit.
-            if let Some((_, a, b)) = kelly_frac(0.15, &self.resolved_preds,
-                if ctx.atr_multiplier > 0.0 { ctx.atr_multiplier * candle.atr_r } else { ctx.move_threshold }) {
-                self.cached_curve_a = a;
-                self.cached_curve_b = b;
-                self.kelly_curve_valid = true;
-            }
-            // Manager proven band: find the conviction band where accuracy > 51%.
-            if let Some((lo, hi, _acc)) = find_proven_band(&self.manager_resolved, ctx.dims) {
-                self.manager_curve_valid = true;
-                self.manager_proven_band = (lo, hi);
-            } else {
-                self.manager_curve_valid = false;
-                self.manager_proven_band = (0.0, 0.0);
-            }
-
-            // Feed panel engram: if recent panel accuracy was good, store current state.
-            if self.panel_recalib_total >= crate::state::PANEL_ENGRAM_MIN_TOTAL {
-                let acc = self.panel_recalib_wins as f64 / self.panel_recalib_total as f64;
-                if acc > crate::state::PANEL_ENGRAM_MIN_ACC {
-                    self.panel_engram.update(&panel_state);
-                }
-            }
-            self.panel_recalib_wins = 0;
-            self.panel_recalib_total = 0;
-
-            self.pending_logs.push(LogEntry::RecalibLog {
-                step: self.encode_count as i64,
-                journal: "thought".to_string(),
-                cos_raw: self.observers[GENERALIST_IDX].journal.last_cos_raw(),
-                disc_strength: self.observers[GENERALIST_IDX].journal.last_disc_strength(),
-                buy_count: self.observers[GENERALIST_IDX].journal.label_count(tht_buy) as i64,
-                sell_count: self.observers[GENERALIST_IDX].journal.label_count(tht_sell) as i64,
-            });
-
-            // Decode thought discriminant against the fact codebook.
-            if let Some(disc) = self.observers[GENERALIST_IDX].journal.discriminant(tht_buy) {
-                let disc_vec = Vector::from_f64(disc);
-                let mut decoded: Vec<(String, f64)> = ctx.codebook_vecs.iter().zip(ctx.codebook_labels.iter())
-                    .map(|(v, l)| (l.clone(), holon::Similarity::cosine(&disc_vec, v)))
-                    .collect();
-                decoded.sort_by(|a, b| b.1.abs().partial_cmp(&a.1.abs()).unwrap());
-                for (rank, (label, cos)) in decoded.iter().take(20).enumerate() {
-                    self.pending_logs.push(LogEntry::DiscDecode {
-                        step: self.encode_count as i64,
-                        journal: "thought".to_string(),
-                        rank: (rank + 1) as i64,
-                        fact_label: label.clone(),
-                        cosine: *cos,
-                    });
-                }
-            }
-
+            self.on_recalibration(&candle, &panel_state, tht_buy, tht_sell, ctx);
         }
 
         // ── Resolve entries: horizon expiry ──────────────────────────
@@ -976,6 +923,77 @@ impl Desk {
                     treasury.balance(ctx.base_asset) + treasury.deployed(ctx.base_asset),
                     treasury.balance(ctx.quote_asset) + treasury.deployed(ctx.quote_asset),
                     self.positions.len(), self.position_swaps, self.position_wins, proven_str, band_str);
+            }
+        }
+    }
+
+    // ─── Recalibration ──────────────────────────────────────────────────
+
+    /// Four independent concerns triggered by a journal recalibration:
+    /// 1. Kelly curve fit from resolved predictions
+    /// 2. Manager proven band discovery
+    /// 3. Panel engram feed (if recent accuracy was good)
+    /// 4. Recalib log + discriminant decode
+    fn on_recalibration(
+        &mut self,
+        candle: &Candle,
+        panel_state: &[f64],
+        tht_buy: Label,
+        tht_sell: Label,
+        ctx: &CandleContext,
+    ) {
+        // 1. Kelly curve fit
+        if let Some((_, a, b)) = kelly_frac(0.15, &self.resolved_preds,
+            if ctx.atr_multiplier > 0.0 { ctx.atr_multiplier * candle.atr_r } else { ctx.move_threshold }) {
+            self.cached_curve_a = a;
+            self.cached_curve_b = b;
+            self.kelly_curve_valid = true;
+        }
+
+        // 2. Manager proven band
+        if let Some((lo, hi, _acc)) = find_proven_band(&self.manager_resolved, ctx.dims) {
+            self.manager_curve_valid = true;
+            self.manager_proven_band = (lo, hi);
+        } else {
+            self.manager_curve_valid = false;
+            self.manager_proven_band = (0.0, 0.0);
+        }
+
+        // 3. Panel engram feed
+        if self.panel_recalib_total >= crate::state::PANEL_ENGRAM_MIN_TOTAL {
+            let acc = self.panel_recalib_wins as f64 / self.panel_recalib_total as f64;
+            if acc > crate::state::PANEL_ENGRAM_MIN_ACC {
+                self.panel_engram.update(&panel_state);
+            }
+        }
+        self.panel_recalib_wins = 0;
+        self.panel_recalib_total = 0;
+
+        // 4. Recalib log
+        self.pending_logs.push(LogEntry::RecalibLog {
+            step: self.encode_count as i64,
+            journal: "thought".to_string(),
+            cos_raw: self.observers[GENERALIST_IDX].journal.last_cos_raw(),
+            disc_strength: self.observers[GENERALIST_IDX].journal.last_disc_strength(),
+            buy_count: self.observers[GENERALIST_IDX].journal.label_count(tht_buy) as i64,
+            sell_count: self.observers[GENERALIST_IDX].journal.label_count(tht_sell) as i64,
+        });
+
+        // Discriminant decode against fact codebook
+        if let Some(disc) = self.observers[GENERALIST_IDX].journal.discriminant(tht_buy) {
+            let disc_vec = Vector::from_f64(disc);
+            let mut decoded: Vec<(String, f64)> = ctx.codebook_vecs.iter().zip(ctx.codebook_labels.iter())
+                .map(|(v, l)| (l.clone(), holon::Similarity::cosine(&disc_vec, v)))
+                .collect();
+            decoded.sort_by(|a, b| b.1.abs().partial_cmp(&a.1.abs()).unwrap());
+            for (rank, (label, cos)) in decoded.iter().take(20).enumerate() {
+                self.pending_logs.push(LogEntry::DiscDecode {
+                    step: self.encode_count as i64,
+                    journal: "thought".to_string(),
+                    rank: (rank + 1) as i64,
+                    fact_label: label.clone(),
+                    cosine: *cos,
+                });
             }
         }
     }
