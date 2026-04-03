@@ -54,19 +54,30 @@
                 0.0
                 (/ (fold + 0.0 buf) (:period state)))))))
 
-;; EMA: exponential moving average. O(1) memory.
-(struct ema-state alpha prev started)
+;; EMA: exponential moving average with SMA seed (ta-lib canonical).
+;; First `period` values averaged as SMA seed, then EMA recursive.
+(struct ema-state alpha prev period count accum)
 
 (define (new-ema period)
-  (ema-state :alpha (/ 2.0 (+ period 1)) :prev 0.0 :started false))
+  (ema-state :alpha (/ 2.0 (+ period 1)) :prev 0.0
+             :period period :count 0 :accum 0.0))
 
 (define (ema-step state value)
-  "Feed one value. Returns (new-state, ema-value)."
-  (if (not (:started state))
-      (list (update state :started true :prev value) value)
-      (let ((new (+ (* (:alpha state) value)
-                     (* (- 1.0 (:alpha state)) (:prev state)))))
-        (list (update state :prev new) new))))
+  "Feed one value. Returns (new-state, ema-value).
+   Warmup: accumulate period values, seed with SMA. Then EMA recursive."
+  (let ((count (+ (:count state) 1)))
+    (if (<= count (:period state))
+        (let ((accum (+ (:accum state) value)))
+          (if (= count (:period state))
+              ;; Warmup complete: SMA seed
+              (let ((avg (/ accum (:period state))))
+                (list (update state :count count :accum accum :prev avg) avg))
+              ;; Still warming up
+              (list (update state :count count :accum accum) 0.0)))
+        ;; After warmup: EMA recursive
+        (let ((new (+ (* (:alpha state) value)
+                       (* (- 1.0 (:alpha state)) (:prev state)))))
+          (list (update state :count count :prev new) new)))))
 
 ;; Wilder: smoothed average. O(1) after warmup.
 ;; First `period` values averaged, then smooth_t = (prev*(p-1) + value) / p.

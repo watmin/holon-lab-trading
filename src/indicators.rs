@@ -49,22 +49,30 @@ impl SmaState {
     }
 }
 
-/// EMA: exponential moving average. O(1) memory.
+/// EMA: exponential moving average with SMA seed (ta-lib canonical).
+/// First `period` values averaged as SMA seed, then EMA recursive.
 struct EmaState {
     alpha: f64,
     prev: f64,
-    started: bool,
+    period: usize,
+    count: usize,
+    accum: f64,
 }
 
 impl EmaState {
     fn new(period: usize) -> Self {
-        Self { alpha: 2.0 / (period as f64 + 1.0), prev: 0.0, started: false }
+        Self { alpha: 2.0 / (period as f64 + 1.0), prev: 0.0, period, count: 0, accum: 0.0 }
     }
 
     fn step(&mut self, value: f64) -> f64 {
-        if !self.started {
-            self.started = true;
-            self.prev = value;
+        self.count += 1;
+        if self.count <= self.period {
+            self.accum += value;
+            if self.count == self.period {
+                self.prev = self.accum / self.period as f64;
+                return self.prev;
+            }
+            return 0.0; // no signal during warmup
         } else {
             self.prev = value * self.alpha + self.prev * (1.0 - self.alpha);
         }
