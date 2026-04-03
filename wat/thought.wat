@@ -31,6 +31,55 @@
 ;; The Rust pre-allocates these into a VectorManager for O(1) lookup.
 ;; The leaves ARE the specification. The groups are derived, not declared.
 
+;; -- Candle field mapping ---------------------------------------------------
+;;
+;; Maps string field names to Candle struct fields. Used by eval-comparisons
+;; to resolve comparison pairs like ("close" "sma20") to candle values.
+;; PANICS on unknown field names — every name must be mapped.
+
+(define (candle-field candle name)
+  "Resolve a candle field by name. Panics on unknown."
+  (match name
+    "close"          (:close candle)
+    "open"           (:open candle)
+    "high"           (:high candle)
+    "low"            (:low candle)
+    "volume"         (:volume candle)
+    "sma20"          (:sma20 candle)
+    "sma50"          (:sma50 candle)
+    "sma200"         (:sma200 candle)
+    "bb-upper"       (:bb-upper candle)
+    "bb-lower"       (:bb-lower candle)
+    "bb-width"       (- (:bb-upper candle) (:bb-lower candle))
+    "bb-pos"         (:bb-pos candle)
+    "rsi"            (:rsi candle)
+    "macd-line"      (:macd-line candle)
+    "macd-signal"    (:macd-signal candle)
+    "macd-hist"      (:macd-hist candle)
+    "dmi-plus"       (:dmi-plus candle)
+    "dmi-minus"      (:dmi-minus candle)
+    "adx"            (:adx candle)
+    "atr"            (:atr candle)       ; absolute ATR, NOT atr_r ratio
+    "stoch-k"        (:stoch-k candle)
+    "stoch-d"        (:stoch-d candle)
+    "williams-r"     (:williams-r candle)
+    "cci"            (:cci candle)
+    "mfi"            (:mfi candle)
+    "keltner-upper"  (:kelt-upper candle)
+    "keltner-lower"  (:kelt-lower candle)
+    "candle-range"   (- (:high candle) (:low candle))
+    "candle-body"    (abs (- (:close candle) (:open candle)))
+    "upper-wick"     (- (:high candle) (max (:close candle) (:open candle)))
+    "lower-wick"     (- (min (:close candle) (:open candle)) (:low candle))
+    ;; Ichimoku: spatial — computed from window, not per-candle
+    "tenkan-sen"     0.0
+    "kijun-sen"      0.0
+    "cloud-top"      0.0
+    "cloud-bottom"   0.0
+    "senkou-span-a"  0.0
+    "senkou-span-b"  0.0
+    _                (error (format "unknown candle field: '{}'" name))))
+
 ;; -- ThoughtVocab -----------------------------------------------------------
 
 (struct thought-vocab
