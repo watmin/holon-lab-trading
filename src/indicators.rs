@@ -801,28 +801,180 @@ impl Iterator for ParquetRawStream {
 mod tests {
     use super::*;
 
+    fn approx(a: f64, b: f64, tol: f64) -> bool {
+        (a - b).abs() < tol
+    }
+
+    // ── SMA: sliding window, 0 during warmup ──────────────────────────
+
     #[test]
-    fn compare_with_candles_db() {
-        let path = std::path::Path::new("data/btc_5m_raw.parquet");
-        if !path.exists() { eprintln!("skipping — no parquet"); return; }
-        let stream = ParquetRawStream::open(path);
-        let mut bank = IndicatorBank::new();
-        
-        for (i, raw) in stream.enumerate() {
-            let c = bank.tick(&raw);
-            if i == 250 {
-                eprintln!("=== Streaming IndicatorBank at index 250 ===");
-                eprintln!("ts={} close={:.1}", c.ts, c.close);
-                eprintln!("sma20={:.5} sma50={:.5}", c.sma20, c.sma50);
-                eprintln!("bb_upper={:.5} bb_lower={:.5}", c.bb_upper, c.bb_lower);
-                eprintln!("rsi={:.5}", c.rsi);
-                eprintln!("macd_line={:.5} macd_signal={:.5}", c.macd_line, c.macd_signal);
-                eprintln!("atr={:.6} atr_r={:.8}", c.atr, c.atr_r);
-                eprintln!("dmi+={:.5} dmi-={:.5} adx={:.5}", c.dmi_plus, c.dmi_minus, c.adx);
-                eprintln!("stoch_k={:.5} cci={:.5} mfi={:.5}", c.stoch_k, c.cci, c.mfi);
-                eprintln!("vol_sma20={:.5}", c.volume_sma_20);
-                break;
-            }
+    fn sma_warmup_returns_zero() {
+        let mut sma = SmaState::new(3);
+        assert_eq!(sma.step(10.0), 0.0); // count=1 < period=3
+        assert_eq!(sma.step(20.0), 0.0); // count=2 < period=3
+    }
+
+    #[test]
+    fn sma_at_period_returns_average() {
+        let mut sma = SmaState::new(3);
+        sma.step(10.0);
+        sma.step(20.0);
+        let v = sma.step(30.0); // count=3 = period
+        assert!(approx(v, 20.0, 0.001)); // (10+20+30)/3 = 20
+    }
+
+    #[test]
+    fn sma_slides_window() {
+        let mut sma = SmaState::new(3);
+        sma.step(10.0); sma.step(20.0); sma.step(30.0);
+        let v = sma.step(40.0); // window: [20, 30, 40]
+        assert!(approx(v, 30.0, 0.001)); // (20+30+40)/3 = 30
+    }
+
+    // ── EMA: SMA seed, then recursive ─────────────────────────────────
+
+    #[test]
+    fn ema_warmup_returns_zero() {
+        let mut ema = EmaState::new(3);
+        assert_eq!(ema.step(10.0), 0.0); // count=1 < period=3
+        assert_eq!(ema.step(20.0), 0.0); // count=2 < period=3
+    }
+
+    #[test]
+    fn ema_at_period_returns_sma_seed() {
+        let mut ema = EmaState::new(3);
+        ema.step(10.0);
+        ema.step(20.0);
+        let v = ema.step(30.0); // SMA seed: (10+20+30)/3 = 20
+        assert!(approx(v, 20.0, 0.001));
+    }
+
+    #[test]
+    fn ema_after_seed_uses_alpha() {
+        let mut ema = EmaState::new(3); // alpha = 2/(3+1) = 0.5
+        ema.step(10.0); ema.step(20.0); ema.step(30.0); // seed = 20.0
+        let v = ema.step(40.0); // EMA = 40*0.5 + 20*0.5 = 30.0
+        assert!(approx(v, 30.0, 0.001));
+    }
+
+    // ── Wilder: SMA seed, then (prev*(n-1) + value) / n ──────────────
+
+    #[test]
+    fn wilder_warmup_returns_zero() {
+        let mut w = WilderState::new(3);
+        assert_eq!(w.step(10.0), 0.0);
+        assert_eq!(w.step(20.0), 0.0);
+    }
+
+    #[test]
+    fn wilder_at_period_returns_sma() {
+        let mut w = WilderState::new(3);
+        w.step(10.0); w.step(20.0);
+        let v = w.step(30.0); // (10+20+30)/3 = 20
+        assert!(approx(v, 20.0, 0.001));
+    }
+
+    #[test]
+    fn wilder_after_seed_smooths() {
+        let mut w = WilderState::new(3);
+        w.step(10.0); w.step(20.0); w.step(30.0); // seed = 20
+        let v = w.step(40.0); // (20*2 + 40) / 3 = 80/3 = 26.667
+        assert!(approx(v, 26.667, 0.001));
+    }
+
+    // ── RSI: 50 during warmup, then Wilder gain/loss ─────────────────
+
+    #[test]
+    fn rsi_returns_50_during_warmup() {
+        let mut rsi = RsiState::new(14);
+        // Step 0: first close, no change yet → 50
+        assert!(approx(rsi.step(100.0), 50.0, 0.001));
+        // Steps 1-13: Wilder accumulating, returns 0 → RSI guard returns 50
+        for i in 1..14 {
+            let v = rsi.step(100.0 + i as f64);
+            assert!(approx(v, 50.0, 0.001), "RSI at step {} was {}", i, v);
         }
+        // Step 14: Wilder completes warmup. All gains, no losses → RSI ≈ 100
+        let v = rsi.step(114.0);
+        assert!(v > 95.0, "RSI at step 14 (all gains) was {} (expected > 95)", v);
+    }
+
+    #[test]
+    fn rsi_after_warmup_responds_to_gains() {
+        let mut rsi = RsiState::new(14);
+        // 15 candles going up: should produce RSI > 50
+        for i in 0..16 {
+            rsi.step(100.0 + i as f64);
+        }
+        // All gains, no losses → RSI should be high
+        let v = rsi.step(116.0);
+        assert!(v > 70.0, "RSI after all gains was {} (expected > 70)", v);
+    }
+
+    #[test]
+    fn rsi_after_warmup_responds_to_losses() {
+        let mut rsi = RsiState::new(14);
+        // 15 candles going down: should produce RSI < 50
+        for i in 0..16 {
+            rsi.step(200.0 - i as f64);
+        }
+        let v = rsi.step(184.0);
+        assert!(v < 30.0, "RSI after all losses was {} (expected < 30)", v);
+    }
+
+    // ── ATR: 0 during warmup, then Wilder-smoothed TR ────────────────
+
+    #[test]
+    fn atr_warmup_returns_zero() {
+        let mut atr = AtrState::new(3);
+        // First candle: sets prev_close, returns first TR via Wilder (warmup)
+        let v = atr.step(105.0, 95.0, 100.0);
+        assert!(approx(v, 0.0, 0.001)); // Wilder warmup → 0
+    }
+
+    #[test]
+    fn atr_at_period_returns_average_tr() {
+        let mut atr = AtrState::new(3);
+        atr.step(105.0, 95.0, 100.0);  // first: TR = H-L = 10, Wilder count=1 → 0
+        atr.step(108.0, 98.0, 103.0);  // TR = max(10, 8, 2) = 10, Wilder count=2 → 0
+        let v = atr.step(106.0, 96.0, 101.0); // TR = 10, Wilder count=3 → (10+10+10)/3 = 10
+        assert!(approx(v, 10.0, 0.5), "ATR at period was {}", v);
+    }
+
+    // ── Bollinger: population stddev ──────────────────────────────────
+
+    #[test]
+    fn bollinger_stddev_population() {
+        let mut sd = RollingStddev::new(4);
+        sd.step(2.0); sd.step(4.0); sd.step(4.0);
+        let v = sd.step(4.0); // mean=3.5, var=((-.5)^2+.5^2+.5^2+.5^2)/4 = 0.75/4...
+        // values: [2,4,4,4], mean=3.5, deviations: [-1.5, 0.5, 0.5, 0.5]
+        // var = (2.25 + 0.25 + 0.25 + 0.25)/4 = 3.0/4 = 0.75
+        // stddev = sqrt(0.75) = 0.866
+        assert!(approx(v, 0.866, 0.01), "Stddev was {}", v);
+    }
+
+    // ── MFI: rolling sum, not Wilder ─────────────────────────────────
+
+    #[test]
+    fn mfi_returns_50_during_warmup() {
+        let mut mfi = MfiState::new(3);
+        let v1 = mfi.step(10.0, 8.0, 9.0, 100.0); // first: 50 (no prev TP)
+        assert!(approx(v1, 50.0, 0.001));
+        let v2 = mfi.step(11.0, 9.0, 10.0, 100.0); // count=1 < period=3
+        assert!(approx(v2, 50.0, 0.001));
+    }
+
+    // ── Stochastic: (close - low) / (high - low) * 100 ──────────────
+
+    #[test]
+    fn stochastic_basic() {
+        let mut stoch = StochState::new(3);
+        stoch.step(10.0, 5.0, 8.0);   // H=10 L=5 C=8
+        stoch.step(12.0, 6.0, 10.0);  // H=12 L=6 C=10
+        let (k, _, _) = stoch.step(11.0, 7.0, 9.0);  // H=12 L=5 C=9
+        // %K = (9 - 5) / (12 - 5) * 100 = 4/7*100 = 57.14
+        assert!(approx(k, 57.14, 0.1), "Stoch K was {}", k);
     }
 }
+
