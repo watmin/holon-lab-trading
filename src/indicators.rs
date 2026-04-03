@@ -85,6 +85,9 @@ impl WilderState {
         Self { count: 0, accum: 0.0, prev: 0.0, period }
     }
 
+    /// During warmup (count < period): accumulate, return 0.0.
+    /// At count == period: initial average.
+    /// After: Wilder smooth. Matches Python ta-lib.
     fn step(&mut self, value: f64) -> f64 {
         self.count += 1;
         let period_f = self.period as f64;
@@ -92,8 +95,9 @@ impl WilderState {
             self.accum += value;
             if self.count == self.period {
                 self.prev = self.accum / period_f;
+                return self.prev;
             }
-            self.accum / self.count as f64
+            0.0  // no signal during warmup
         } else {
             self.prev = (self.prev * (period_f - 1.0) + value) / period_f;
             self.prev
@@ -188,6 +192,8 @@ impl RsiState {
         let avg_gain = self.gain.step(change.max(0.0));
         let avg_loss = self.loss.step((-change).max(0.0));
         self.prev_close = close;
+        // During Wilder warmup, both return 0.0 — RSI is undefined
+        if avg_gain == 0.0 && avg_loss == 0.0 { return 50.0; }
         100.0 - 100.0 / (1.0 + avg_gain / avg_loss.max(1e-10))
     }
 }

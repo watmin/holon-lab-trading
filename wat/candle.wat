@@ -76,15 +76,20 @@
   (wilder-state :count 0 :accum 0.0 :prev 0.0 :period period))
 
 (define (wilder-step state value)
-  "Feed one value. Returns (new-state, smoothed-value)."
+  "Feed one value. Returns (new-state, smoothed-value).
+   During warmup (count < period): accumulate, return 0.0 (no signal).
+   At count == period: compute initial average, return it.
+   After: Wilder smooth. Matches Python ta-lib behavior."
   (let ((count (+ (:count state) 1))
         (period (:period state)))
     (if (<= count period)
-        (let ((accum (+ (:accum state) value))
-              (avg   (/ accum count)))
-          (list (update state :count count :accum accum
-                  :prev (if (= count period) avg (:prev state)))
-                avg))
+        (let ((accum (+ (:accum state) value)))
+          (if (= count period)
+              ;; Warmup complete: initial average
+              (let ((avg (/ accum period)))
+                (list (update state :count count :accum accum :prev avg) avg))
+              ;; Still warming up: accumulate, no output
+              (list (update state :count count :accum accum) 0.0)))
         (let ((new (/ (+ (* (:prev state) (- period 1)) value) period)))
           (list (update state :count count :prev new) new)))))
 
