@@ -78,31 +78,95 @@
 ;;   - rsi-sma facts: (pred rsi rsi-sma) for 4 predicates
 ;;   - session facts: (at-session session) for 4 sessions
 
+;; ── Fact generation tables ─────────────────────────────────────────
+;; These tables are the source of truth. Scry verifies Rust matches.
+;; The cross-product of tables × predicates produces ~235 cached facts.
+
+(define COMPARISON_PAIRS
+  '(;; Original 9
+    ("close" "sma20") ("close" "sma50") ("close" "sma200")
+    ("close" "bb-upper") ("close" "bb-lower")
+    ("sma20" "sma50") ("sma50" "sma200")
+    ("macd-line" "macd-signal") ("dmi-plus" "dmi-minus")
+    ;; Cross-candle (5)
+    ("high" "prev-high") ("low" "prev-low")
+    ("open" "prev-close") ("close" "prev-close") ("close" "prev-open")
+    ;; OHLC vs structure (7)
+    ("open" "sma20") ("open" "sma50") ("open" "sma200")
+    ("open" "bb-upper") ("open" "bb-lower")
+    ("high" "bb-upper") ("low" "bb-lower")
+    ;; Intra-candle (5)
+    ("close" "open")
+    ("upper-wick" "candle-body") ("lower-wick" "candle-body")
+    ("upper-wick" "lower-wick") ("candle-range" "atr")
+    ;; Additional structure (3)
+    ("candle-body" "candle-range") ("high" "sma200") ("low" "sma200")
+    ;; Ichimoku (7)
+    ("close" "tenkan-sen") ("close" "kijun-sen")
+    ("close" "cloud-top") ("close" "cloud-bottom")
+    ("tenkan-sen" "kijun-sen")
+    ("close" "senkou-span-a") ("close" "senkou-span-b")
+    ;; Stochastic (1)
+    ("stoch-k" "stoch-d")
+    ;; Keltner (3)
+    ("close" "keltner-upper") ("close" "keltner-lower")
+    ("bb-upper" "keltner-upper")))
+
+(define COMPARISON_PREDICATES
+  '("above" "below" "crosses-above" "crosses-below" "touches" "bounces-off"))
+
+(define ZONE_CHECKS
+  '(("rsi" "overbought") ("rsi" "oversold")
+    ("rsi" "above-midline") ("rsi" "below-midline")
+    ("adx" "strong-trend") ("adx" "weak-trend")
+    ("dmi-plus" "strong-trend") ("dmi-plus" "weak-trend")
+    ("dmi-minus" "strong-trend") ("dmi-minus" "weak-trend")
+    ("macd-line" "positive") ("macd-line" "negative")
+    ("macd-hist" "positive") ("macd-hist" "negative")))
+
+(define FIBONACCI_LEVELS '("fib-236" "fib-382" "fib-500" "fib-618" "fib-786"))
+(define FIBONACCI_PREDICATES '("above" "below" "touches"))
+
+(define RSI_SMA_PREDICATES '("above" "below" "crosses-above" "crosses-below"))
+
+(define SESSIONS '("asian-session" "european-session" "us-session" "off-hours"))
+
+;; ── Fact cache construction ───────────────────────────────────────
+
 (define (build-fact-cache vocab)
-  "Pre-compute all static facts as vectors. Returns a map of label -> Vector.
-   Caches: comparison facts (pred, a, b) for 29 pairs x 6 predicates,
-   fibonacci proximity facts, zone facts, RSI-SMA facts, session facts.
-   Each cached fact is bind(pred, bind(a, b)) — a pre-computed triple binding."
-  ;; Implementation: iterate COMPARISON_PAIRS x PREDICATES, STREAM_ZONE_CHECKS,
-  ;; FIBONACCI_LEVELS, RSI_SMA_CHECKS, and SESSIONS. For each, compute
-  ;; the binding and store under a string key like "(above close sma50)".
-  ;; ~500 entries total. Computed once at startup.
-  ;; rune:scry(unspecified-data) — all-fact-entries is ~500 pre-computed facts
-  ;; generated from constant tables in Rust (COMPARISON_PAIRS × PREDICATES,
-  ;; FIBONACCI_LEVELS, STREAM_ZONE_CHECKS, RSI_SMA_CHECKS, SESSIONS).
-  ;;
-  ;; DANGER: the wat does not enumerate these tables. If Rust adds a pair,
-  ;; removes a predicate, or changes a zone check, the wat stays silent.
-  ;; Scry cannot verify what it cannot see. This is the one place where
-  ;; Rust defines vocabulary that the wat doesn't declare.
-  ;;
-  ;; TO FIX: enumerate the tables here as data literals. Then scry can
-  ;; cross-reference Rust constants against wat declarations. Until then,
-  ;; the ~500 facts are a blind spot in our specification coverage.
-  (fold (lambda (cache entry)
-          (assoc cache (:label entry)
-                 (bind-triple vocab (:pred entry) (:a entry) (:b entry))))
-        {} all-fact-entries))
+  "Pre-compute all static facts as vectors. Returns a map of label → Vector.
+   Derived from the tables above — cross-products, not enumeration."
+  (let ((cache {}))
+    ;; 1. COMPARISON_PAIRS × PREDICATES → ~198 facts
+    (for-each (lambda ((a b))
+      (for-each (lambda (pred)
+        (set! cache (assoc cache (format "({} {} {})" pred a b)
+                          (bind-triple vocab pred a b))))
+        COMPARISON_PREDICATES))
+      COMPARISON_PAIRS)
+    ;; 2. ZONE_CHECKS → 14 facts (at ind zone)
+    (for-each (lambda ((ind zone))
+      (set! cache (assoc cache (format "(at {} {})" ind zone)
+                        (bind-triple vocab "at" ind zone))))
+      ZONE_CHECKS)
+    ;; 3. FIBONACCI_LEVELS × FIBONACCI_PREDICATES → 15 facts
+    (for-each (lambda (fib)
+      (for-each (lambda (pred)
+        (set! cache (assoc cache (format "({} close {})" pred fib)
+                          (bind-triple vocab pred "close" fib))))
+        FIBONACCI_PREDICATES))
+      FIBONACCI_LEVELS)
+    ;; 4. RSI vs SMA → 4 facts
+    (for-each (lambda (pred)
+      (set! cache (assoc cache (format "({} rsi rsi-sma)" pred)
+                        (bind-triple vocab pred "rsi" "rsi-sma"))))
+      RSI_SMA_PREDICATES)
+    ;; 5. SESSIONS → 4 facts
+    (for-each (lambda (session)
+      (set! cache (assoc cache (format "(at-session {})" session)
+                        (bind-triple vocab "at-session" session session))))
+      SESSIONS)
+    cache))
 
 (define (new-thought-encoder vocab)
   "Pre-compute the fact cache."
