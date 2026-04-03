@@ -33,6 +33,21 @@ const STREAK_SCALE: f64 = 10.0;             // normalise consecutive-loss / stre
 const DENSITY_SCALE: f64 = 1000.0;          // normalise lifetime trade count
 const FREQUENCY_SCALE: f64 = 30.0;          // normalise sqrt(trades) frequency term
 
+/// Per-branch residual ratios [0.1, 1.0]. Named fields prevent index confusion.
+pub struct BranchRatios {
+    pub drawdown: f64,
+    pub accuracy: f64,
+    pub volatility: f64,
+    pub correlation: f64,
+    pub panel: f64,
+}
+
+impl BranchRatios {
+    pub fn as_array(&self) -> [f64; 5] {
+        [self.drawdown, self.accuracy, self.volatility, self.correlation, self.panel]
+    }
+}
+
 pub struct RiskBranch {
     pub name: &'static str,
     pub subspace: OnlineSubspace,
@@ -60,12 +75,12 @@ pub struct RiskAtoms {
     pub drawdown_velocity: Vector,
     pub recovery_progress: Vector,
     pub drawdown_duration: Vector,
-    pub dd_historical: Vector,
+    pub drawdown_historical: Vector,
     pub accuracy_10: Vector,
     pub accuracy_50: Vector,
     pub accuracy_200: Vector,
     pub accuracy_trajectory: Vector,
-    pub acc_divergence: Vector,
+    pub accuracy_divergence: Vector,
     pub pnl_vol: Vector,
     pub trade_sharpe: Vector,
     pub worst_trade: Vector,
@@ -90,12 +105,12 @@ impl RiskAtoms {
             drawdown_velocity: vm.get_vector("drawdown-velocity"),
             recovery_progress: vm.get_vector("recovery-progress"),
             drawdown_duration: vm.get_vector("drawdown-duration"),
-            dd_historical: vm.get_vector("dd-historical"),
+            drawdown_historical: vm.get_vector("drawdown-historical"),
             accuracy_10: vm.get_vector("accuracy-10"),
             accuracy_50: vm.get_vector("accuracy-50"),
             accuracy_200: vm.get_vector("accuracy-200"),
             accuracy_trajectory: vm.get_vector("accuracy-trajectory"),
-            acc_divergence: vm.get_vector("acc-divergence"),
+            accuracy_divergence: vm.get_vector("accuracy-divergence"),
             pnl_vol: vm.get_vector("pnl-vol"),
             trade_sharpe: vm.get_vector("trade-sharpe"),
             worst_trade: vm.get_vector("worst-trade"),
@@ -164,7 +179,7 @@ fn encode_drawdown(portfolio: &Portfolio, atoms: &RiskAtoms, scalar: &holon::Sca
         thought(&atoms.recovery_progress, scalar, recovery, 2.0),
         thought(&atoms.drawdown_duration, scalar,
             portfolio.trades_since_bottom as f64 / TRADES_SCALE, 2.0),
-        thought(&atoms.dd_historical, scalar,
+        thought(&atoms.drawdown_historical, scalar,
             if hist_worst > HIST_WORST_THRESHOLD { drawdown / hist_worst } else { 0.0 }, 2.0),
     ])
 }
@@ -178,7 +193,7 @@ fn encode_accuracy(portfolio: &Portfolio, atoms: &RiskAtoms, scalar: &holon::Sca
         thought(&atoms.accuracy_50, scalar, win_rate_50, 2.0),
         thought(&atoms.accuracy_200, scalar, win_rate_200, 2.0),
         thought(&atoms.accuracy_trajectory, scalar, win_rate_10 - win_rate_50, 0.5),
-        thought(&atoms.acc_divergence, scalar, win_rate_10 - win_rate_200, 0.5),
+        thought(&atoms.accuracy_divergence, scalar, win_rate_10 - win_rate_200, 0.5),
     ])
 }
 
@@ -295,7 +310,7 @@ pub fn evaluate_risk_branches(
     portfolio: &Portfolio,
     atoms: &RiskAtoms,
     scalar: &holon::ScalarEncoder,
-) -> (f64, [f64; 5]) {
+) -> (f64, BranchRatios) {
     let branch_features = encode_risk_branches(portfolio, atoms, scalar);
     let mut worst_ratio = 1.0_f64;
     let mut ratios = [1.0_f64; 5];
@@ -333,7 +348,11 @@ pub fn evaluate_risk_branches(
     if healthy { generalist.update(&generalist_features); }
 
     let mult = if branches[0].subspace.n() >= 10 { worst_ratio } else { 0.5 };
-    (mult, ratios)
+    let branch_ratios = BranchRatios {
+        drawdown: ratios[0], accuracy: ratios[1], volatility: ratios[2],
+        correlation: ratios[3], panel: ratios[4],
+    };
+    (mult, branch_ratios)
 }
 
 /// Five risk branch feature vectors — [drawdown, accuracy, volatility, correlation, panel].

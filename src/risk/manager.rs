@@ -33,19 +33,19 @@ impl RiskManagerAtoms {
     }
 }
 
-/// Encode 5 branch residual ratios as one risk manager thought.
+/// Encode branch residual ratios as one risk manager thought.
 /// Each ratio is [0.1, 1.0] — 1.0 = healthy, 0.1 = worst allowed.
 pub fn encode_risk_manager_thought(
-    ratios: &[f64; 5],
+    ratios: &super::BranchRatios,
     atoms: &RiskManagerAtoms,
     scalar: &ScalarEncoder,
 ) -> Vector {
     Primitives::bundle(&[
-        &Primitives::bind(&atoms.drawdown_branch, &scalar.encode(ratios[0], ScalarMode::Linear { scale: 1.0 })),
-        &Primitives::bind(&atoms.accuracy_branch, &scalar.encode(ratios[1], ScalarMode::Linear { scale: 1.0 })),
-        &Primitives::bind(&atoms.volatility_branch, &scalar.encode(ratios[2], ScalarMode::Linear { scale: 1.0 })),
-        &Primitives::bind(&atoms.correlation_branch, &scalar.encode(ratios[3], ScalarMode::Linear { scale: 1.0 })),
-        &Primitives::bind(&atoms.panel_branch, &scalar.encode(ratios[4], ScalarMode::Linear { scale: 1.0 })),
+        &Primitives::bind(&atoms.drawdown_branch, &scalar.encode(ratios.drawdown, ScalarMode::Linear { scale: 1.0 })),
+        &Primitives::bind(&atoms.accuracy_branch, &scalar.encode(ratios.accuracy, ScalarMode::Linear { scale: 1.0 })),
+        &Primitives::bind(&atoms.volatility_branch, &scalar.encode(ratios.volatility, ScalarMode::Linear { scale: 1.0 })),
+        &Primitives::bind(&atoms.correlation_branch, &scalar.encode(ratios.correlation, ScalarMode::Linear { scale: 1.0 })),
+        &Primitives::bind(&atoms.panel_branch, &scalar.encode(ratios.panel, ScalarMode::Linear { scale: 1.0 })),
     ])
 }
 
@@ -88,23 +88,32 @@ impl RiskManager {
     }
 
     /// Convert the prediction into a risk multiplier [0.1, 1.0].
-    /// High conviction toward Healthy → 1.0 (full sizing).
-    /// High conviction toward Unhealthy → scaled down.
-    /// Low conviction → 0.5 (cautious default).
+    /// Pure: takes its dependencies as arguments, doesn't reach into self beyond labels.
     pub fn risk_mult_from_prediction(&self, pred: &crate::journal::Prediction) -> f64 {
-        if !self.curve_valid {
-            return 0.5; // no curve yet — cautious
+        risk_mult(pred, self.curve_valid, self.healthy, self.unhealthy)
+    }
+}
+
+/// Pure risk multiplier computation. No self needed.
+/// High conviction toward Healthy → 1.0 (full sizing).
+/// High conviction toward Unhealthy → scaled down.
+/// Low conviction → 0.5 (cautious default).
+pub fn risk_mult(
+    pred: &crate::journal::Prediction,
+    curve_valid: bool,
+    healthy: Label,
+    unhealthy: Label,
+) -> f64 {
+    if !curve_valid {
+        return 0.5;
+    }
+    match pred.direction {
+        Some(dir) if dir == healthy => {
+            (0.5 + pred.conviction * 0.5).min(1.0)
         }
-        match pred.direction {
-            Some(dir) if dir == self.healthy => {
-                // Confident it's healthy — scale toward 1.0 with conviction
-                (0.5 + pred.conviction * 0.5).min(1.0)
-            }
-            Some(dir) if dir == self.unhealthy => {
-                // Confident it's unhealthy — scale toward 0.1
-                (0.5 - pred.conviction * 0.4).max(0.1)
-            }
-            _ => 0.5,
+        Some(dir) if dir == unhealthy => {
+            (0.5 - pred.conviction * 0.4).max(0.1)
         }
+        _ => 0.5,
     }
 }

@@ -95,7 +95,7 @@
       (bind (atom "drawdown-velocity") (encode-linear dd-vel 0.2))
       (bind (atom "recovery-progress") (encode-linear recover 2.0))
       (bind (atom "drawdown-duration") (encode-linear dur 2.0))
-      (bind (atom "dd-historical") (encode-linear hist 2.0)))))
+      (bind (atom "drawdown-historical") (encode-linear hist 2.0)))))
 
 ;; ── Accuracy ────────────────────────────────────────────────────────
 
@@ -112,7 +112,7 @@
       (bind (atom "accuracy-50")         (encode-linear wr50 2.0))
       (bind (atom "accuracy-200")        (encode-linear wr200 2.0))
       (bind (atom "accuracy-trajectory") (encode-linear (- wr10 wr50) 0.5))
-      (bind (atom "acc-divergence") (encode-linear (- wr10 wr200) 0.5)))))
+      (bind (atom "accuracy-divergence") (encode-linear (- wr10 wr200) 0.5)))))
 
 ;; ── Volatility ──────────────────────────────────────────────────────
 
@@ -279,20 +279,34 @@
     (bind (:correlation-branch atoms) (encode-linear (nth ratios 3) 1.0))
     (bind (:panel-branch atoms)       (encode-linear (nth ratios 4) 1.0))))
 
-;; The risk manager Journal learns:
-;;   observe(journal, thought, Healthy, 1.0) — when portfolio is healthy after N candles
-;;   observe(journal, thought, Unhealthy, 1.0) — when portfolio enters drawdown
-;;
-;; predict(journal, thought) → { direction: Healthy|Unhealthy, conviction: f64 }
-;;
-;; The conviction gates trades:
-;;   high conviction toward Healthy → full sizing (risk_mult = 1.0)
-;;   high conviction toward Unhealthy → reduce sizing (risk_mult from conviction curve)
-;;   low conviction → default (risk_mult = 0.5)
-;;
-;; This replaces the bare residual threshold with a learned discriminant.
-;; The Journal discovers WHICH configurations of branch ratios predict
-;; healthy vs unhealthy outcomes — not just "is this anomalous?"
+;; The risk manager Journal lifecycle — expressed, not described.
+
+(define (new-risk-manager dims recalib-interval)
+  "Create a risk manager with Healthy/Unhealthy labels."
+  (let* ((jrnl (journal "risk-manager" dims recalib-interval))
+         (healthy   (register jrnl "Healthy"))
+         (unhealthy (register jrnl "Unhealthy")))
+    (risk-manager-state
+      :journal jrnl :healthy healthy :unhealthy unhealthy
+      :curve-valid false)))
+
+(define (risk-manager-predict manager thought)
+  "Predict portfolio health from branch ratios."
+  (predict (:journal manager) thought))
+
+(define (risk-manager-observe manager thought was-healthy)
+  "Learn: was the portfolio healthy at this configuration?"
+  (let ((label (if was-healthy (:healthy manager) (:unhealthy manager))))
+    (observe (:journal manager) thought label 1.0)))
+
+(define (risk-mult-from-prediction pred curve-valid healthy unhealthy)
+  "Pure: conviction → risk multiplier [0.1, 1.0].
+   High conviction Healthy → 1.0. High conviction Unhealthy → scale down."
+  (if (not curve-valid) 0.5
+      (match (:direction pred)
+        healthy   (min 1.0 (+ 0.5 (* (:conviction pred) 0.5)))
+        unhealthy (max 0.1 (- 0.5 (* (:conviction pred) 0.4)))
+        _         0.5)))
 
 ;; ── Risk Generalist (Template 2 — reaction, holistic) ──────────────
 ;;
