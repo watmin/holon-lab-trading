@@ -317,7 +317,7 @@ pub fn evaluate_risk_branches(
 
 /// Five risk branch feature vectors — [drawdown, accuracy, volatility, correlation, panel].
 /// Each is a bundled thought vector at full dimensionality, ready for its OnlineSubspace.
-pub fn encode_risk_branches(
+fn encode_risk_branches(
     portfolio: &Portfolio,
     atoms: &RiskAtoms,
     scalar: &holon::ScalarEncoder,

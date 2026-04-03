@@ -260,9 +260,10 @@ impl Desk {
             self.candle_window.pop_front();
         }
 
-        // Tempered: cache frequently-accessed desk scalars at function entry.
+        // Tempered: cache frequently-accessed scalars at function entry.
         let mgr_buy = self.manager_buy;
         let mgr_sell = self.manager_sell;
+        let candle_ts = candle.ts.clone(); // one clone, used 4 times below
         self.encode_count += 1;
 
         // ── Observer thought encoding from candle window ────────────────
@@ -278,10 +279,9 @@ impl Desk {
                 .collect()
         };
 
-        // The generalist's prediction (observer[5]) — used for manager encoding
-        // and backward-compatible logging.
-        let tht_pred = observer_preds[5].clone();
-        let tht_vec = observer_vecs[5].clone();
+        // The generalist's prediction — used for manager encoding and logging.
+        let tht_pred = observer_preds[GENERALIST_IDX].clone();
+        let tht_vec = observer_vecs[GENERALIST_IDX].clone();
 
         // ── Manager: encodes observer opinions via manager.rs ─────────
         // Single canonical encoding path. See manager.rs and wat/manager.wat.
@@ -470,7 +470,7 @@ impl Desk {
             self.pending_logs.push(LogEntry::PositionExit {
                 step: self.log_step,
                 candle_idx: i as i64,
-                timestamp: candle.ts.clone(),
+                timestamp: candle_ts.clone(),
                 direction,
                 entry_price: pos.entry_rate,
                 exit_price: current_rate,
@@ -556,7 +556,7 @@ impl Desk {
                     self.pending_logs.push(LogEntry::PositionOpen {
                         step: self.log_step,
                         candle_idx: i as i64,
-                        timestamp: candle.ts.clone(),
+                        timestamp: candle_ts.clone(),
                         direction,
                         entry_price: quote_price,
                         position_usd: usd_value,
@@ -639,7 +639,7 @@ impl Desk {
             mgr_thought:   stored_mgr_thought,
             crossing:      None,
             entry_price:       candle.close,
-            entry_ts:          candle.ts.clone(),
+            entry_ts:          candle_ts.clone(),
             entry_atr:         candle.atr_r,
             max_favorable:     0.0,
             max_adverse:       0.0,
@@ -736,7 +736,7 @@ impl Desk {
                         label:   o,
                         pct,
                         candles: i - entry.candle_idx,
-                        ts:      candle.ts.clone(),
+                        ts:      candle_ts.clone(),
                         price:   candle.close,
                     });
                 }
@@ -796,7 +796,7 @@ impl Desk {
                 // ── Accounting: pure computation ─────────────────────
                 let pnl = TradePnl::compute(
                     entry.exit_pct, dir == mgr_buy,
-                    ctx.swap_fee, ctx.slippage,
+                    ctx.swap_fee + ctx.slippage,
                     is_live, treasury_equity, frac,
                 );
 

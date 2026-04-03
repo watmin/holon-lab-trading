@@ -11,7 +11,6 @@ use crate::indicators::RawCandle;
 use crate::market::exit::ExitAtoms;
 use crate::market::manager::ManagerAtoms;
 use crate::portfolio::Portfolio;
-// ExitAtoms and encode_exit_thought live in market/exit.rs
 use crate::risk::{self, RiskBranch};
 use crate::treasury::{Asset, Treasury};
 
@@ -97,17 +96,18 @@ pub struct TradePnl {
 
 impl TradePnl {
     /// Compute P&L for a resolved entry. Pure arithmetic.
+    /// `per_swap_fee` = swap_fee + slippage, pre-computed by caller.
+    /// One param instead of two swappable bare f64s.
     pub fn compute(
         trade_pct: f64,
         is_buy: bool,
-        swap_fee: f64,
-        slippage: f64,
+        per_swap_fee: f64,
         is_live: bool,
         treasury_equity: f64,
         frac: f64,
     ) -> Self {
         let gross_ret = if is_buy { trade_pct } else { -trade_pct };
-        let per_swap = swap_fee + slippage;
+        let per_swap = per_swap_fee;
         let after_entry = 1.0 - per_swap;
         let gross_value = after_entry * (1.0 + gross_ret);
         let after_exit = gross_value * (1.0 - per_swap);
@@ -120,7 +120,6 @@ impl TradePnl {
     }
 }
 
-// ExitAtoms and encode_exit_thought moved to market/exit.rs
 
 // ─── CandleContext ─────────────────────────────────────────────────────────
 
