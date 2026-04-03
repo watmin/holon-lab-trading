@@ -30,11 +30,10 @@ pub struct CrossingSnapshot {
 
 // ─── Pending entry ───────────────────────────────────────────────────────────
 
-// rune:forge(coupling) — Pending has 19 fields, many mutated post-construction
+// rune:forge(aspirational) — Pending has 17 fields; 5 mutated post-construction
 // (crossing, max_favorable, max_adverse, exit_reason, exit_pct).
-// Split into PendingEntry (immutable at creation) + PendingOutcome (built
-// as events arrive) would make the place/value distinction honest.
-// Deferred: touches desk.rs learning loop, enterprise.rs drain, log_candle.
+// Split into PendingEntry + PendingOutcome would improve value/place distinction.
+// Low risk: mutations are in the learning loop (infrequent, per-entry).
 pub struct Pending {
     pub candle_idx:    usize,
     pub tht_vec:       Vector,

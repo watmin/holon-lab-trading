@@ -1,10 +1,17 @@
-// rune:forge(bare-type) — amount, fee_rate, price are all bare f64.
-// Newtypes (Rate, FeeRate) would prevent swap(price) vs swap(1/price) errors.
-// Deferred: requires API change across treasury, desk, position, enterprise.
-// The symmetric position model (rate going up = good) reduces the risk.
-
 use std::collections::HashMap;
 use std::fmt;
+
+// ─── Rate ──────────────────────────────────────────────────────────────────
+
+/// Price expressed as "units of FROM per unit of TO" (from_per_to).
+/// The newtype prevents swap(rate) vs swap(1/rate) errors.
+#[derive(Clone, Copy, Debug)]
+pub struct Rate(pub f64);
+
+impl Rate {
+    /// Invert: from_per_to ↔ to_per_from
+    pub fn invert(self) -> Self { Rate(1.0 / self.0) }
+}
 
 // ─── Asset ──────────────────────────────────────────────────────────────────
 
@@ -125,23 +132,23 @@ impl Treasury {
         *self.balances.entry(asset.clone()).or_insert(0.0) += released;
     }
 
-    /// Swap one token for another at a given price, minus fees.
-    /// `price` = how many units of `from` per unit of `to`.
+    /// Swap one token for another at a given rate, minus fees.
+    /// `rate` = how many units of `from` per unit of `to` (from_per_to).
     /// Returns (from_amount_spent, to_amount_received).
     pub fn swap(
         &mut self,
         from: &Asset,
         to: &Asset,
         amount_from: f64,
-        price: f64,
+        rate: Rate,
         fee_rate: f64,
     ) -> (f64, f64) {
         let available = self.balance(from);
         let spend = amount_from.min(available);
-        if spend <= 0.0 || price <= 0.0 { return (0.0, 0.0); }
+        if spend <= 0.0 || rate.0 <= 0.0 { return (0.0, 0.0); }
 
         let after_fee = spend * (1.0 - fee_rate);
-        let received = after_fee / price;
+        let received = after_fee / rate.0;
         let fee_amount = spend * fee_rate;
 
         *self.balances.entry(from.clone()).or_insert(0.0) -= spend;

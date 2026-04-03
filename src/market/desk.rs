@@ -440,15 +440,15 @@ impl Desk {
             // Settlement: release target → swap target→source → accounting
             if sell_target > 0.0 {
                 treasury.release(&pos.target_asset, sell_target);
-                // Swap price = from_per_to. Swapping target→source: price = target_per_source = 1/rate.
-                let exit_price = 1.0 / current_rate;
+                // Swap rate = from_per_to. Swapping target→source: rate = target_per_source = 1/rate.
+                let exit_rate = crate::treasury::Rate(1.0 / current_rate);
                 let (sold, received) = treasury.swap(
                     &pos.target_asset, &pos.source_asset,
-                    sell_target, exit_price, fee_rate,
+                    sell_target, exit_rate, fee_rate,
                 );
                 pos.target_held -= sold;
                 pos.source_reclaimed += received;
-                pos.total_fees += sold * exit_price * fee_rate;
+                pos.total_fees += sold * exit_rate.0 * fee_rate;
             }
             pos.phase = next_phase;
             self.position_swaps += 1;
@@ -531,7 +531,8 @@ impl Desk {
 
                 if usd_value > 10.0 {
                     let (spent, received) = treasury.swap(
-                        &source_asset, &target_asset, deploy_amount, rate, fee_rate);
+                        &source_asset, &target_asset, deploy_amount,
+                        crate::treasury::Rate(rate), fee_rate);
 
                     // Symmetric claim: lock the received target in deployed.
                     treasury.claim(&target_asset, received);
