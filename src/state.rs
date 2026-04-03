@@ -341,6 +341,11 @@ impl EnterpriseState {
             self.risk_manager.observe(&risk_thought, was_healthy, 1.0);
             self.risk_manager.decay(ctx.decay);
 
+            // Gate: risk manager's prediction matters once the journal has recalibrated
+            if self.risk_manager.journal.recalib_count() > 0 {
+                self.risk_manager.curve_valid = true;
+            }
+
             // Combine: branch residuals AND manager prediction
             self.cached_risk_mult = branch_mult.min(mgr_mult);
         }
