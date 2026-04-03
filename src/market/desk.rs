@@ -340,14 +340,6 @@ impl Desk {
         // All 6 observers contribute (generalist is already at index 5).
         let mut panel_state = [0.0f64; 6];
         for (pi, ep) in observer_preds.iter().enumerate() { panel_state[pi] = ep.raw_cos; }
-        let panel_familiar = if self.panel_engram.n() >= 10 {
-            let residual = self.panel_engram.residual(&panel_state);
-            let threshold = self.panel_engram.threshold();
-            residual < threshold
-        } else {
-            false
-        };
-
         // Manager's prediction drives direction + conviction.
         let meta_dir = mgr_pred.direction;
         let meta_conviction = mgr_pred.conviction;
@@ -899,7 +891,8 @@ impl Desk {
                 treasury_equity, ret, bnh,
                 self.conviction_threshold,
                 if !self.manager_curve_valid { "CALIBRATING" }
-                else if panel_familiar { "ENGRAM" }
+                else if self.panel_engram.n() >= 10
+                    && self.panel_engram.residual(&panel_state) < self.panel_engram.threshold() { "ENGRAM" }
                 else if self.in_adaptation { "ADAPT" }
                 else { "STABLE" },
                 exit_info,
