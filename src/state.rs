@@ -187,7 +187,6 @@ pub struct CandleContext<'a> {
     pub codebook_vecs: &'a [Vector],
 
     // ── Progress display ────────────────────────────────────────────────
-    pub bnh_entry: f64,
     pub loop_count: usize,
     pub progress_every: usize,
     pub t_start: std::time::Instant,

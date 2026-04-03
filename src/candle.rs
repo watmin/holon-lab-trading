@@ -99,7 +99,6 @@ pub struct Candle {
     pub day_of_week: f64,
 
     // Label (oracle — prophetic, not causal)
-    pub label: String,
 }
 
 // load_candles and sf() removed — the enterprise streams from parquet now.

@@ -286,7 +286,6 @@ fn main() {
     let k_tp:    f64 = 6.0;
     let exit_horizon: usize = (k_stop * k_stop) as usize;
     let exit_observe_interval: usize = (exit_horizon / 2).max(1);
-    let rolling_cap = 1000usize;
 
     // ─ Loop config ─
     let start_idx     = args.window - 1;
@@ -375,7 +374,6 @@ fn main() {
         min_opinion_magnitude,
         codebook_labels: &codebook_labels,
         codebook_vecs: &codebook_vecs,
-        bnh_entry,
         loop_count,
         progress_every,
         t_start,
@@ -494,7 +492,7 @@ fn main() {
     let tht_acc = if gen_resolved.is_empty() { 0.0 }
         else { gen_resolved.iter().filter(|(_, c)| *c).count() as f64 / gen_resolved.len() as f64 * 100.0 };
     eprintln!("  Rolling accuracy (last {}): thought={:.1}%",
-        rolling_cap, tht_acc);
+        gen_resolved.len(), tht_acc);
     eprintln!();
 
     // Observer panel summary.

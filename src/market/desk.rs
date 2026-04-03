@@ -886,7 +886,8 @@ impl Desk {
             let tht_acc = if gen_resolved.is_empty() { 0.0 }
                 else { gen_resolved.iter().filter(|(_, c)| *c).count() as f64 / gen_resolved.len() as f64 * 100.0 };
             let ret = (treasury_equity - ctx.initial_equity) / ctx.initial_equity * 100.0;
-            let bnh = if ctx.bnh_entry > 0.0 { (candle.close - ctx.bnh_entry) / ctx.bnh_entry * 100.0 } else { 0.0 };
+            let first_close = self.candle_window.front().map(|c| c.close).unwrap_or(candle.close);
+            let bnh = (candle.close - first_close) / first_close * 100.0;
             let atr_now = candle.atr_r;
             let exit_info = format!(" | ATR={:.2}% sl={:.2}% tp={:.2}% tr={:.2}% open={}",
                 atr_now * 100.0,

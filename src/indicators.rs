@@ -647,7 +647,6 @@ impl IndicatorBank {
             atr_roc_6, atr_roc_12,
             vol_accel,
             hour, day_of_week,
-            label: String::new(), // streaming has no oracle label
         }
     }
 }
