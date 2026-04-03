@@ -1,6 +1,6 @@
 # CLAUDE.md — holon-lab-trading
 
-The enterprise. A self-organizing BTC trading system built from six primitives.
+The enterprise. A self-organizing trading system built from six primitives.
 
 ## Build & Run
 
@@ -21,11 +21,11 @@ Six primitives: atom, bind, bundle, cosine, journal, curve.
 Two templates: prediction (Journal) and reaction (OnlineSubspace).
 One tree: observers → manager → treasury.
 
-**Observers** (leaves) predict direction from candle data at sampled time scales. Five profiles: momentum, structure, volume, narrative, regime. Each has its own Journal, own discriminant, own window discovered through experience.
+**Observers** (leaves) predict direction from candle data at sampled time scales. Seven observers: five specialists (momentum, structure, volume, narrative, regime), one full generalist, one classic generalist (original 8-method vocabulary, for A/B testing). Each has its own Journal, own discriminant, own window.
 
 **Manager** (branch) reads observer opinions encoded as Holon vectors. Learns which configurations of expert agreement predict profitability. Does not see candles. Does not encode market data. Thinks in expert opinions.
 
-**Risk branches** measure portfolio health via OnlineSubspace anomaly detection. Five domains: drawdown, accuracy, volatility, correlation, panel.
+**Risk branches** measure portfolio health via OnlineSubspace anomaly detection. Five domains: drawdown, accuracy, volatility, correlation, panel. Risk manager (Template 1) learns Healthy/Unhealthy from branch ratios.
 
 **Treasury** (root) holds assets. Deploys capital only to proven experts. The ledger records everything.
 
@@ -33,26 +33,44 @@ One tree: observers → manager → treasury.
 
 ```
 src/bin/enterprise.rs     — the heartbeat (orchestrates, doesn't define)
+src/bin/build_candles.rs  — parquet → SQLite candle builder (legacy pipeline)
+src/lib.rs                — crate root, re-exports
+src/state.rs              — EnterpriseState, CandleContext, TradePnl, SharedState
+src/event.rs              — Event enum (Candle, Deposit, Withdraw)
+src/indicators.rs         — streaming IndicatorBank (all TA from raw OHLCV)
 src/thought/
   mod.rs                  — ThoughtEncoder + eval methods (Layer 0: candle → thoughts)
   pelt.rs                 — PELT changepoint detection
 src/market/
-  mod.rs                  — shared market primitives (time encoding)
+  mod.rs                  — Lens enum, OBSERVER_LENSES
+  desk.rs                 — Desk struct (the fold — on_candle, positions, learning)
   manager.rs              — manager encoding (ManagerAtoms, ManagerContext, encode_manager_thought)
-  observer.rs             — Observer struct
+  observer.rs             — Observer struct (resolve, proof gate, engram)
+  exit.rs                 — ExitAtoms + encode_exit_thought
 src/risk/
-  mod.rs                  — RiskBranch struct
+  mod.rs                  — RiskBranch, RiskAtoms, 5 specialist encoders + generalist
+  manager.rs              — RiskManager (Template 1 Journal: Healthy/Unhealthy)
 src/vocab/
+  mod.rs                  — Fact enum, module registry
   oscillators.rs          — Williams %R, StochRSI, UltOsc, multi-ROC
   flow.rs                 — OBV, VWAP, MFI, buying/selling pressure
   persistence.rs          — Hurst, autocorrelation, ADX zones
-src/journal.rs            — the learning primitive (generic, no domain)
-src/candle.rs             — Candle struct + SQLite loader
-src/ledger.rs             — run DB schema (the ledger that counts)
-src/portfolio.rs          — Portfolio struct (equity, phase, risk_branch_wat)
-src/position.rs           — Pending, ExitObservation, ManagedPosition
-src/treasury.rs           — asset map (claim/release/swap)
-src/sizing.rs             — Kelly criterion
+  regime.rs               — KAMA-ER, choppiness, DFA, variance ratio, TD count, Aroon, fractal dim, entropy
+  divergence.rs           — RSI divergence via PELT structural peaks
+  ichimoku.rs             — cloud zone, TK cross (streaming values on Candle)
+  stochastic.rs           — %K/%D zones and crosses
+  fibonacci.rs            — retracement level detection
+  keltner.rs              — channel position, BB position, squeeze
+  momentum.rs             — CCI zones
+  price_action.rs         — inside/outside bars, gaps, consecutive runs
+  timeframe.rs            — 1h/4h structure + narrative + inter-timeframe agreement
+src/journal.rs            — re-export of holon::Journal
+src/candle.rs             — Candle struct (computed indicators per candle)
+src/ledger.rs             — run DB schema + candle_snapshot + trade_facts
+src/portfolio.rs          — Portfolio struct (equity, phase, drawdown tracking)
+src/position.rs           — Pending, ManagedPosition, PositionEntry
+src/treasury.rs           — asset map (claim/release/swap), Rate newtype
+src/sizing.rs             — Kelly criterion, conviction threshold, signal weight
 src/window_sampler.rs     — deterministic log-uniform window sampling
 ```
 
@@ -66,7 +84,8 @@ src/window_sampler.rs     — deterministic log-uniform window sampling
 - Observer (not expert, not trader) — they perceive, they don't decide
 - Portfolio (not Trader) — portfolio state, not a person
 - Ledger (not run_db) — the ledger records, it doesn't decide
-- Candle (not db) — it loads candles
+- Candle (not db) — it holds computed indicators
+- Desk (not trader) — one desk per asset pair, owns the fold
 
 **Flat until siblings arrive.** Don't create `foo/mod.rs` until `foo/bar.rs` needs to exist. Grow the tree when the leaves arrive.
 
@@ -74,8 +93,9 @@ src/window_sampler.rs     — deterministic log-uniform window sampling
 
 ## Data
 
-- `data/analysis.db` — 652,608 5-minute BTC candles (Jan 2019–Mar 2025) with pre-computed indicators
+- `data/btc_5m_raw.parquet` — 652,608 5-minute BTC candles (Jan 2019–Mar 2025), raw OHLCV
 - `runs/` — run ledgers and logs (append-only, never delete)
+- `docs/verification-sequence.md` — leaves-to-root diagnostic checklist
 
 ## Specifications
 
