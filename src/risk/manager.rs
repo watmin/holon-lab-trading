@@ -55,7 +55,6 @@ pub struct RiskManager {
     pub healthy: Label,
     pub unhealthy: Label,
     pub curve_valid: bool,
-    pub cached_conviction: f64,
 }
 
 impl RiskManager {
@@ -68,7 +67,6 @@ impl RiskManager {
             healthy,
             unhealthy,
             curve_valid: false,
-            cached_conviction: 0.0,
         }
     }
 
