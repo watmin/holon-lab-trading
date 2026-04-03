@@ -3,6 +3,7 @@
 //! Lens enum, observer panel, and re-exports for market::manager, etc.
 
 pub mod desk;
+pub mod exit;
 pub mod manager;
 pub mod observer;
 

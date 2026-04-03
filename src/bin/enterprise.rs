@@ -19,7 +19,8 @@ use enterprise::journal::Label;
 use enterprise::thought::{ThoughtEncoder, ThoughtVocab};
 use enterprise::ledger::init_ledger;
 use enterprise::market::manager::{ManagerAtoms, noise_floor};
-use enterprise::state::{AssetMode, CandleContext, ConvictionMode, EnterpriseState, ExitAtoms, SizingMode};
+use enterprise::market::exit::ExitAtoms;
+use enterprise::state::{AssetMode, CandleContext, ConvictionMode, EnterpriseState, SizingMode};
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 

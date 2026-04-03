@@ -31,9 +31,10 @@ use crate::position::{CrossingSnapshot, ExitObservation, ExitReason, ManagedPosi
 use crate::sizing::{curve_win_rate, half_kelly_position, kelly_frac, signal_weight};
 use crate::treasury::{Asset, Treasury};
 use crate::window_sampler::WindowSampler;
+use crate::market::exit::encode_exit_thought;
 use crate::state::{
     AssetMode, CandleContext, SizingMode, TradePnl,
-    GENERALIST_IDX, encode_exit_thought,
+    GENERALIST_IDX,
 };
 
 use super::OBSERVER_LENSES;
