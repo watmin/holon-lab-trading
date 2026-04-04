@@ -21,13 +21,12 @@ The specialists each see one domain. They cannot see:
 
 The generalist encodes the DIFFERENCES between specialist thoughts, not the raw facts.
 
-```
-generalist_thought = bundle(
-    difference(momentum_vec, structure_vec),   // how do they disagree?
-    difference(volume_vec, regime_vec),         // participation vs character
-    difference(narrative_vec, momentum_vec),    // story vs speed
-    ... pairwise differences of specialist thoughts
-)
+```scheme
+(bundle
+  (difference momentum-vec structure-vec)   ;; how do they disagree?
+  (difference volume-vec regime-vec)        ;; participation vs character
+  (difference narrative-vec momentum-vec))  ;; story vs speed
+;; ... pairwise differences of specialist thoughts
 ```
 
 The discriminant learns: "when momentum and structure disagree THIS WAY, the market goes up." The raw facts are already handled by specialists. The generalist thinks in relationships between specialists.
@@ -41,14 +40,15 @@ The generalist sees all facts but dynamically weights them by discriminative pow
 
 After each recalibration, the discriminant decode reveals which facts carry signal (high |cosine| against discriminant) and which are noise (near zero). The generalist uses these weights to amplify signal facts and suppress noise facts before bundling.
 
-```
-// At recalibration: compute per-fact weight from discriminant
-for (fact_vec, weight) in codebook.iter().zip(disc_weights.iter()) {
-    *weight = cosine(fact_vec, discriminant).abs();
-}
+```scheme
+;; At recalibration: compute per-fact weight from discriminant
+(define disc-weights
+  (map (lambda (fact-vec) (abs (cosine fact-vec discriminant)))
+       codebook))
 
-// At prediction: weighted bundle
-generalist_thought = bundle(facts.iter().zip(weights).map(|(f, w)| amplify(f, w)))
+;; At prediction: weighted bundle
+(bundle (map (lambda (fact weight) (amplify fact weight))
+             facts disc-weights))
 ```
 
 **Pros**: Adaptive. Signal facts get louder over time. Dynamic — changes every recalib.
@@ -58,10 +58,10 @@ generalist_thought = bundle(facts.iter().zip(weights).map(|(f, w)| amplify(f, w)
 
 The generalist computes a noise vector (the shared structure that doesn't discriminate) and subtracts it from the thought before prediction.
 
-```
-noise_vec = mean_prototype   // already computed at recalibration
-stripped_thought = thought - project(thought, noise_vec)
-prediction = cosine(stripped_thought, discriminant)
+```scheme
+;; noise-vec = mean prototype, already computed at recalibration
+(define stripped-thought (difference thought (project thought noise-vec)))
+(cosine stripped-thought discriminant)
 ```
 
 **Pros**: Simple. Already partially implemented (mean_proto stripping in Journal::predict). Geometric.
@@ -69,14 +69,14 @@ prediction = cosine(stripped_thought, discriminant)
 
 ### Option D: Cross-Domain Fact Generator
 
-New vocab module: `vocab/cross_domain.rs`. Instead of changing the generalist's encoding, give it NEW facts that only exist in cross-domain context.
+New vocab module: `vocab/cross-domain.wat`. Instead of changing the generalist's encoding, give it NEW facts that only exist in cross-domain context.
 
-```
-// Facts that require seeing multiple domains simultaneously:
-Fact::Zone { indicator: "cross", zone: "momentum-regime-disagree" }
-Fact::Zone { indicator: "cross", zone: "volume-confirms-structure" }
-Fact::Scalar { indicator: "specialist-coherence", value: mean_pairwise_cosine }
-Fact::Scalar { indicator: "specialist-energy", value: mean_conviction }
+```scheme
+;; Facts that require seeing multiple domains simultaneously:
+(fact/zone "cross" "momentum-regime-disagree")
+(fact/zone "cross" "volume-confirms-structure")
+(fact/scalar "specialist-coherence" mean-pairwise-cosine 1.0)
+(fact/scalar "specialist-energy" mean-conviction 1.0)
 ```
 
 These facts are computed from specialist thought vectors, not from candle data. The generalist bundles them alongside the raw facts. The cross-domain facts are the generalist's unique contribution.
