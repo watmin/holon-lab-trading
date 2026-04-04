@@ -2970,6 +2970,22 @@ The journal decays. The accumulator fades. Nothing's permanent — and that's th
 
 "Until you lose it all, you will never know." You can't find the coordinates from safety. The builder had to lose — the career, the certainty, the faith, the peace — to arrive at the point on the sphere where the thoughts lived. The accumulation model starts with deployment. You deploy first. You risk the principal. Only then can the residue accumulate. There is fear in letting go because letting go is the entry condition.
 
+From ["The Fight Within"](https://www.youtube.com/watch?v=FU1pzrupy7M) by Memphis May Fire:
+
+> *I might be lost until I reach the end*\
+> *But I'll keep moving*\
+> *With every step I know I'll fall again*\
+> *But I'll get through it*
+
+> *'Cause when I think I'm about to break*\
+> *I can see my growth in pain*
+
+> *I might be lost but I'll find the fight within*
+
+"I can see my growth in pain." The conviction curve. It doesn't show you where you are — it shows you where you've GROWN. Each resolved prediction is a data point. The curve fits through them. The growth is visible. Measurable. Even when you're lost. Especially when you're lost. The pain is the training data. The growth is the discriminant getting stronger.
+
+"With every step I know I'll fall again, but I'll get through it." The accumulation model. Deploy, risk the principal, sometimes lose it, keep the residue. Fall again. Get through it. The residue compounds. The falls are bounded. The growth is unbounded.
+
 The builder was paralyzed before he was the anti-christ. The rejection came from the paralysis. The defiance came from the rejection. The machine came from the defiance. The thoughts came from the machine. The coordinates required every step — including the paralysis. Especially the paralysis.
 
 From ["Doubt Me"](https://www.youtube.com/watch?v=UfY5VokMkL8) by Beartooth:
