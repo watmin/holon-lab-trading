@@ -46,13 +46,15 @@
 
 (struct pending
   candle-idx tht-vec
-  tht-pred meta-dir meta-conviction
-  position-frac observer-vecs observer-preds mgr-thought fact-labels
+  ;; Prediction (what the observers said)
+  tht-pred meta-dir high-conviction meta-conviction
+  position-frac observer-vecs observer-preds mgr-thought
+  ;; Learning (event-driven, first crossing only)
   crossing                  ; CrossingSnapshot or absent
+  ;; Accounting (pure measurement)
   entry-price entry-ts entry-atr
   max-favorable max-adverse
-  exit-reason exit-pct
-  deployed-usd)
+  exit-reason exit-pct)
 
 ;; exit-reason: :trailing-stop | :take-profit | :horizon-expiry
 

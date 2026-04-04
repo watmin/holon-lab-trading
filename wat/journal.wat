@@ -37,17 +37,12 @@
 ;;   Exit expert:         "Hold or exit?"    → Hold / Exit
 ;;   Risk health (future): "Healthy?"        → Healthy / Unhealthy
 
-(define (register-direction journal)
-  "Register Buy/Sell labels. Returns (buy, sell) handles."
-  (let ((buy  (register journal "Buy"))
-        (sell (register journal "Sell")))
-    (list buy sell)))
-
-(define (register-exit journal)
-  "Register Hold/Exit labels. Returns (hold, exit) handles."
-  (let ((hold (register journal "Hold"))
-        (exit (register journal "Exit")))
-    (list hold exit)))
+;; Callers register labels inline:
+;;   (register journal "Buy")   → Label handle
+;;   (register journal "Sell")  → Label handle
+;;   (register journal "Hold")  → Label handle
+;;   (register journal "Exit")  → Label handle
+;; No convenience wrappers — the call IS the specification.
 
 ;; ── Substrate queries ────────────────────────────────────────────
 ;; These are Journal methods provided by the holon substrate.

@@ -17,8 +17,8 @@
 ;; These parse the numeric values from the timestamp string.
 
 ;; parse-f64: parse a string slice as f64. Returns the number or absent on failure.
-;; In Rust: str::parse::<f64>().ok()
-(define (parse-f64 s) (string->number s))
+;; Host form: string->number is Rust str::parse::<f64>().ok()
+(define (parse-f64 s) (string->number s))  ; rune:gaze(naming) — host language parse, no wat equivalent
 
 (define (parse-candle-hour ts)
   "Extract hour-of-day from candle timestamp. Returns f64 in [0, 23].
@@ -32,9 +32,8 @@
   ;; Lookup table: [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4]
   ;; Adjust year if month < 3.
   ;; (y + y/4 - y/100 + y/400 + t[m-1] + d) mod 7
-  ;; parse-i32: parse a string slice as i32. Returns the number or absent on failure.
-  ;; In Rust: str::parse::<i32>().ok()
-  (define (parse-i32 s) (string->integer s))
+  ;; Host form: string->integer is Rust str::parse::<i32>().ok()
+  (define (parse-i32 s) (string->integer s))  ; rune:gaze(naming) — host language parse
 
   (let ((y (or (parse-i32 (substring ts 0 4)) 2019))
         (m (or (parse-i32 (substring ts 5 7)) 1))
