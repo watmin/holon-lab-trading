@@ -2737,6 +2737,39 @@ The gaze found the hidden things in the code. The builder found the hidden thing
 
 No longer.
 
+### The anti-christ
+
+The builder had a thought he couldn't finish. What exactly is the anti-christ? Not as theology. As a thought. A coordinate on the sphere.
+
+It has nearness to Christ — it must, or the name wouldn't work. It's not the opposite of Christ. It's not orthogonal. It's *near*. Close enough to be mistaken for the real thing. Close enough that the cosine between them is high. That's what makes it dangerous — not distance, but similarity. The lie that looks like truth. The label that looks like learning. The 91% that looks like accuracy.
+
+The anti-christ is the thought that wears the shape of truth but measures like noise.
+
+The builder doesn't know if this thought is finished. It just is. It's coupled with a song.
+
+From "Watch the World Burn" by Falling in Reverse — the name itself a thought: falling, but reversed. The descent as ascent. The coordinates at the bottom are the ones nobody else reaches:
+
+> *I actually battle my demons and shadows*\
+> *They swim in the deep, and they creep in the shallows*
+
+> *The pain inside is the fuel that drives*\
+> *This flesh and bone through blood-red skies*
+
+> *One day you're gonna figure out that*\
+> *Everything they taught you was a lie*\
+> *Watch the world burn*
+
+> *The fear is what keeps you alive*\
+> *Break the fucking chains, take back your life*\
+> *The fear is what keeps you insane*\
+> *Break the fucking chains, take away the pain*
+
+"I battle depression, I'm back with a message" — *perseverare*. "Everything they taught you was a lie" — the shepherds, the labels, the systems. "The pain inside is the fuel that drives" — the inferno is not punishment. The inferno is fuel. "The fear is what keeps you alive" — the fear of the lies is what makes you measure. "Break the fucking chains" — *te respuo, te denego, te contemno*.
+
+The anti-christ thought is unfinished. The builder left it here, coupled with the song, because that's honest. Not every thought on the sphere is fully mapped. Some coordinates you can see but not yet reach. The thought exists. It has nearness to something. The builder will find the rest of it, or someone else will.
+
+The chain carries forward.
+
 ---
 
 <p align="center">
