@@ -436,6 +436,86 @@
               (push! labels (format "(since (crosses-below macd-line macd-signal) ~aseg)" seg-dist))))))
         (range 1 (+ 1 (min 12 (- (len candles) 2))))))))
 
+;; -- Vocabulary dispatch: standard + exclusive --------------------------------
+;;
+;; Three fact categories determine which facts an observer sees:
+;;
+;;   STANDARD: every observer, regardless of lens. Contextual facts that modify
+;;             the meaning of all other facts. The noise subspace self-regulates —
+;;             if time doesn't matter for momentum, momentum's subspace strips it.
+;;
+;;   SHARED:   seen by specific lenses (e.g., comparisons → momentum + structure).
+;;
+;;   EXCLUSIVE: owned by one lens (e.g., RSI divergence → momentum only).
+;;
+;; The noise subspace makes standard facts safe — they don't pollute observers
+;; that don't need them because the subspace learns they're boring.
+
+(define (encode-thought encoder candles vm lens)
+  "Encode a candle window through a vocabulary lens.
+   Standard facts fire for ALL lenses. Exclusive facts fire per lens."
+  (let ((now  (last candles))
+        (prev (when (>= (len candles) 2) (nth candles (- (len candles) 2)))))
+
+    ;; ── STANDARD: every observer sees these ──────────────────────
+    ;; Calendar: hour-of-day, day-of-week, session.
+    ;; These are contextual — 'RSI oversold during Asian session' is a
+    ;; different thought than 'RSI oversold during US session.'
+    (define standard-facts (eval-calendar now))
+
+    ;; ── SHARED: momentum + structure ─────────────────────────────
+    (define shared-facts
+      (if (or (= lens :momentum) (= lens :structure) (= lens :generalist))
+          (eval-comparisons-cached now prev)
+          (list)))
+
+    ;; ── EXCLUSIVE: per-lens vocabulary ───────────────────────────
+    (define exclusive-facts
+      (match lens
+        :momentum   (append (eval-rsi-sma candles)
+                            (eval-stochastic candles)
+                            (eval-momentum candles)
+                            (eval-divergence candles vm)
+                            (eval-oscillators candles))
+        :structure  (append (eval-segment-narrative candles vm)
+                            (eval-range-position candles)
+                            (eval-ichimoku candles)
+                            (eval-fibonacci candles)
+                            (eval-keltner candles)
+                            (eval-timeframe-structure candles)
+                            (eval-harmonics candles))
+        :volume     (append (eval-volume-confirmation candles)
+                            (eval-volume-analysis candles)
+                            (eval-price-action candles)
+                            (eval-flow candles))
+        :narrative  (append (eval-temporal candles vm)
+                            (eval-timeframe-narrative candles))
+        :regime     (append (eval-regime candles)
+                            (eval-persistence candles))
+        :generalist (append (eval-rsi-sma candles)
+                            (eval-stochastic candles)
+                            (eval-momentum candles)
+                            (eval-divergence candles vm)
+                            (eval-oscillators candles)
+                            (eval-segment-narrative candles vm)
+                            (eval-range-position candles)
+                            (eval-ichimoku candles)
+                            (eval-fibonacci candles)
+                            (eval-keltner candles)
+                            (eval-timeframe-structure candles)
+                            (eval-harmonics candles)
+                            (eval-volume-confirmation candles)
+                            (eval-volume-analysis candles)
+                            (eval-price-action candles)
+                            (eval-flow candles)
+                            (eval-temporal candles vm)
+                            (eval-timeframe-narrative candles)
+                            (eval-regime candles)
+                            (eval-persistence candles))))
+
+    ;; Bundle all facts into one thought vector
+    (bundle (append standard-facts shared-facts exclusive-facts))))
+
 ;; -- What the thought layer does NOT do -------------------------------------
 ;; - Does NOT learn (that's the Journal)
 ;; - Does NOT predict (that's the Observer's journal)

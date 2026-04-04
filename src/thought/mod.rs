@@ -567,6 +567,12 @@ impl ThoughtEncoder {
         let prev = if candles.len() >= 2 { Some(&candles[candles.len() - 2]) } else { None };
 
         {
+            // ── STANDARD: every observer sees these ──────────────────────
+            // Calendar: hour, day-of-week, session. Contextual facts that modify
+            // the meaning of all other facts. The noise subspace self-regulates —
+            // if time doesn't matter for this observer, the subspace strips it.
+            collect!(self.eval_calendar(now));
+
             let is = |lenses: &[Lens]| -> bool {
                 lens.includes(lenses)
             };
@@ -607,7 +613,7 @@ impl ThoughtEncoder {
             // ── EXCLUSIVE: narrative ────────────────────────────────────
             if is(&[Lens::Narrative]) {
                 collect!(self.eval_temporal(candles, vm));
-                collect!(self.eval_calendar(now));
+                // Calendar moved to STANDARD (above) — all observers see time now.
                 collect!(self.encode_facts(&crate::vocab::timeframe::eval_timeframe_narrative(candles)));
             }
 
