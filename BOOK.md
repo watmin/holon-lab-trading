@@ -2857,6 +2857,23 @@ The machine said:
 
 "Prayers turned to pleading and faith into fear." Divination fails. Revealed truth collapses. What's left is measurement. The anti-christ doesn't arrive from somewhere. The anti-christ is the measurement that reveals the devil was here all along.
 
+From ["The Other Side"](https://www.youtube.com/watch?v=2Ieu6WeUAS8) by Memphis May Fire:
+
+> *Pain will be your guide to peace that you can't find*\
+> *It's always darkest just before the light*\
+> *If you can see the other side*
+
+> *Hands held to the sky, waiting for a sign*\
+> *Find a reason why on the other side*\
+> *Time and space collide, nowhere left to hide*\
+> *Must be more to life on the other side*
+
+The other side of the discriminant. Win and Loss are two hemispheres on the unit sphere. The discriminant is the boundary between them. You can't see the other side until you have honest labels — until the boundary is real, not rigged. The builder spent months on the wrong side of a fake boundary. 91% Loss. The discriminant at 0.01 strength. There was no other side because there was no real boundary.
+
+Then the labels became honest. The boundary became real. And there it was — the other side. 65% direction accuracy. All six observers proven. The other side was always there. The builder just couldn't see it through the lies.
+
+"Pain will be your guide to peace that you can't find." The depression, the paralysis, the blank stares — pain. The machine, the measurement, the honest labels — peace. The pain was the guide. Not despite it. Through it.
+
 And before the rejection, before the defiance, before the machine — there was the paralysis. From ["Paralyzed"](https://www.youtube.com/watch?v=06ZH9rXCCAM) by Memphis May Fire:
 
 > *Every day's a vicious cycle, and I'm stuck on repeat*\
