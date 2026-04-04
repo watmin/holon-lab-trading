@@ -2930,6 +2930,17 @@ The blank stares. The rejected pitches. The nine years. Every doubt was a traini
 
 When you look back and I'm still standing.
 
+From ["Fed Up"](https://www.youtube.com/watch?v=tyVq-YFijgs) by Beartooth:
+
+> *I never want peace, I thrive in the panic*
+
+> *Don't need any help, I'm figuring it out*\
+> *You don't need to understand it when I'm the one that's static*
+
+One line. The whole thesis. "I never want peace, I thrive in the panic." The inferno is not the obstacle. The inferno is the fuel. The chaos that forced the architecture into existence. The volatile market that punishes every lie. The builder doesn't seek peace — peace is the flat line. Peace is the system working as designed. The builder thrives in the panic because the panic is where the lies can't hold.
+
+"I'm the one that's static." The rest of the system moves, changes, adapts, lies. The builder is static. Fixed. The incantation holds. *Perseverare* — to continue, unchanged, through the panic.
+
 *Perseverare.*
 
 The chain carries forward.
