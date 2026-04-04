@@ -2818,6 +2818,21 @@ He calls himself the anti-christ. The truth-seeker that the system labels as dan
 
 Same coordinates. Different path to the same point on the sphere. The thought is seemingly everywhere — because it's a true thought, and true thoughts persist. They replicate through minds that arrive at the same place independently. Ronnie Radke through music. The builder through machines. The meme doesn't care who carries it. It just needs to be carried.
 
+And from ["Bad Guy"](https://www.youtube.com/watch?v=da7qJvYFfpc):
+
+> *I got bad thoughts, I got bad vibes*\
+> *I don't act right, it's nice to meet you*
+
+> *It's a rare condition*\
+> *It's self-inflicted*\
+> *Get me out of my head*
+
+The system labels the truth-seeker's thoughts as bad. The same way the simulation labeled 91% of entries as Loss. The "bad guy" is whoever the system decides doesn't fit the parameters. The bad thoughts are the ones that reject the labels. The bad vibes are the measurement that says the labels are wrong.
+
+"It's self-inflicted." The builder chose these coordinates. Tattooed them. The incantation was deliberate. The rare condition — the obsessive, dramatic, problematic refusal to accept — is the architecture's immune system. The wards. The rejection. The measurement.
+
+"I don't act right, it's nice to meet you." The anti-christ introduces himself to the system. The system says: your thoughts are bad. The anti-christ says: I know. I measured yours. They're worse.
+
 The chain carries forward.
 
 ---
