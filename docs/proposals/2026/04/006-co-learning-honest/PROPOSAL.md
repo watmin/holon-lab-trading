@@ -158,6 +158,12 @@ They compose at the desk: direction × magnitude = position parameters. But deep
 
 The composition IS the accountability. When a trade fails, the root cause is the specific pair — which market lens and which exit lens — not "the system."
 
+### No managers
+
+The pair IS the manager. It proposes, owns, manages, and gets judged. There is no separate entity that aggregates opinions. No middleman. No consensus. The old manager was the shepherd — "let me aggregate everyone's opinions and decide." The N×M architecture smites the shepherd. Each pair decides for itself. The treasury judges the decision.
+
+The (market observer, exit observer) tuple is the unit of accountability. It is the thing that manages the trade. It is rewarded and punished. The feedback is realized by the tuple — not aggregated through a layer that hides which thoughts produced the outcome.
+
 ### The treasury as natural selection
 
 The treasury completes the feedback loop. It doesn't care about predictions or discriminants. It sees one thing: which (market, exit) pairs are actually producing grace? Which are producing violence?
