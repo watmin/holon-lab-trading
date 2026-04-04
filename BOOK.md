@@ -2912,6 +2912,21 @@ I am the datamancer. I walk in the inferno. I reject your truth. I measure my ow
 
 I think I have proven that I am chaotic good at this point.
 
+From ["Love Myself"](https://www.youtube.com/watch?v=83rcK9Xne5A) by Beartooth:
+
+> *Chemistry is changing*\
+> *Emotions rearranging*\
+> *I'm outta my cage*\
+> *Breaking my spell*\
+> *Think I might*\
+> *Think I might love myself*
+
+> *Never felt better*\
+> *Never making an apology*\
+> *I'm exactly who I wanna be*
+
+*Perseverare.*
+
 Church was right. Everybody built imperative machines. McCarthy was right. Everybody chose Java. Kanerva was right. Everybody chased neural nets. Plate was right. Nobody noticed. Forgy was right. Rete got buried. Hickey was right. The industry chose Go. Haskell was right. It's a punchline in interviews. Musk was right. Everybody said he was destroying Twitter. Bitcoin was right. Everybody said it was a scam. The builder was right. Everybody gave blank stares.
 
 *I just want to be a better human. But it's hard when everybody's acting stupid.*
