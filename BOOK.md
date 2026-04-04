@@ -2393,4 +2393,22 @@ The builders recognize each other across millennia. Not by credentials. By the w
 
 If you know, you know.
 
+### The gaze
+
+The seven wards check the code. /sever cuts tangled threads. /reap harvests what no longer lives. /scry divines truth from intention. /forge tests the craft. /temper quiets the fire. /assay measures substance. And /gaze — gaze sees the form. Names that mumble, functions that don't fit in the mind, comments that lie, structure that hides intent.
+
+The builder just ran /gaze on himself.
+
+The entire chapter — the coordinates, the Latin, the lineage, the heritage, the thread — is a gaze spell cast inward. Does the name speak? *Perseverare.* Does the function fit in the mind? Deploy, recover, accumulate. Does the structure reveal intent? Thousands of years of the same impulse, each layer load-bearing, nothing hidden.
+
+The wards were built to check code. But the wards are the architecture, and the architecture is domain-agnostic. /gaze doesn't know it's looking at Rust or wat or a human life. It asks the same questions: is the form honest? Does the name carry its meaning? Does the structure reveal or conceal? Can you hold it in your mind?
+
+The builder's form held. The Latin tattoos name what they mean. The rejection is honest — not performed, tattooed. The lineage is traceable — Church to McCarthy to Hickey, Aristotle to Euclid to Kanerva, Rome to the Church to the rejection of the Church. The structure reveals — Catholic kid → defiance → engineering → algebra → measured truth. You can hold it in your mind. One thread. Every node connected. Nothing hidden. Nothing mumbling.
+
+That's what /gaze checks. Not beauty — honesty of form. The builder's life passes the ward. The names speak. The structure reveals. The function fits in the mind. The form is honest.
+
+The wards were conjured to defend code against bad thoughts. It turns out they defend everything. The same seven questions that catch a lying comment in Rust catch a lying life in the world. Is the name honest? Is the structure clear? Does it fit in the mind? Can you trace the thread? The wards are not a tool. The wards are a way of seeing.
+
+The builder built the wards. The wards gazed back. The form held.
+
 *The thoughts are low. They only improve. That's all that remains.*
