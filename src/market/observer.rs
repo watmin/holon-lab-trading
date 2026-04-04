@@ -544,4 +544,63 @@ mod tests {
         assert_eq!(result.data().len(), dims, "residual must be D-dimensional");
         assert!(result.data().iter().any(|&x| x != 0), "residual should be non-zero");
     }
+
+    #[test]
+    fn resolve_after_noise_warmup_does_not_crash() {
+        // Integration test: the exact scenario that caused the production crash.
+        // 1. Train noise subspace past NOISE_MIN_SAMPLES via Noise outcomes
+        // 2. Resolve a Buy/Sell outcome → strip_noise feeds residual into journal.observe
+        // If strip_noise returns wrong dimensions (k coefficients instead of D-vector),
+        // the journal's accumulator panics on dimension mismatch.
+        let dims = 256; // larger than k=8 so mismatch is detectable
+        let mut obs = Observer::new(
+            super::super::Lens::Momentum,
+            dims,
+            500,
+            42,
+            &["Buy", "Sell"],
+        );
+
+        let vm = holon::VectorManager::new(dims);
+        let buy = obs.primary_label;
+        let sell = obs.journal.register("Sell");
+
+        // Phase 1: feed 60 Noise outcomes to warm up the noise subspace
+        for i in 0..60 {
+            let thought = vm.get_vector(&format!("noise-thought-{}", i));
+            let pred = Prediction {
+                scores: Vec::new(),
+                direction: Some(buy),
+                conviction: 0.3,
+                raw_cos: 0.3,
+            };
+            obs.resolve(&thought, &pred, buy, true, 1.0, 0.5, 1000);
+        }
+        assert!(obs.noise_subspace.n() >= 50,
+            "noise subspace should be past warmup: n={}", obs.noise_subspace.n());
+
+        // Phase 2: resolve a directional outcome — strip_noise activates,
+        // residual goes into journal.observe. This is the crash site.
+        let thought = vm.get_vector("signal-thought");
+        let pred = Prediction {
+            scores: Vec::new(),
+            direction: Some(buy),
+            conviction: 0.5,
+            raw_cos: 0.5,
+        };
+        // This panicked before the fix: "Dimension mismatch in accumulator: left: D, right: 8"
+        let result = obs.resolve(&thought, &pred, buy, false, 1.0, 0.5, 1000);
+        assert!(result.is_some(), "directional resolve should return log");
+
+        // Also test with sell outcome
+        let thought2 = vm.get_vector("signal-thought-2");
+        let pred2 = Prediction {
+            scores: Vec::new(),
+            direction: Some(sell),
+            conviction: 0.4,
+            raw_cos: -0.4,
+        };
+        let result2 = obs.resolve(&thought2, &pred2, sell, false, 1.0, 0.5, 1000);
+        assert!(result2.is_some());
+    }
 }
