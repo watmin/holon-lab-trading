@@ -80,6 +80,8 @@ Each side of the dual-sided entry — buy hypothesis and sell hypothesis — has
 
 No horizon. No age limit. The market resolves both sides through organic price movement.
 
+**Honest acknowledgment**: the trailing stop and take-profit parameters (k_stop, k_tp, k_trail × ATR) are still magic numbers. They are a better approximation than the horizon — the market's movement triggers resolution, not a timer — but they are still parameters we chose, not parameters the machine learned. This is the crutch. The idealized version: the exit observers themselves learn WHEN a side has resolved, replacing the fixed trailing stop with a learned boundary. We build the crutch first. The machine learns to walk without it after.
+
 ### The buffer is a safety valve, not a learning mechanism
 
 The ring buffer exists to prevent OOM and to keep the system online. If an entry's two sides somehow never resolve — prolonged sideways candles, neither stop nor TP fires — the buffer evicts the oldest entry WITHOUT labeling it. No Win. No Loss. No learning. The journal doesn't learn from silence.
