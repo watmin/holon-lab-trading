@@ -82,7 +82,11 @@ No horizon. No age limit. The market resolves both sides through organic price m
 
 **Honest acknowledgment**: the trailing stop and take-profit parameters (k_stop, k_tp, k_trail × ATR) are still magic numbers. They are a better approximation than the horizon — the market's movement triggers resolution, not a timer — but they are still parameters we chose, not parameters the machine learned. This is the crutch.
 
-The next work: the exit observer's conviction curve provides the multipliers. High conviction → tight stops (the exit observer knows where it is). Low conviction → wide stops (let the market breathe, the exit observer isn't sure). The curve maps conviction to accuracy. The accuracy maps to the multiplier. Fixed params → curve-derived params → the machine chose the values. The crutch is removed when the curve is wired.
+The next work: learn the multipliers retroactively. After both sides of an entry resolve, we have the full price history from entry to resolution. The optimal trailing stop width — the k_trail that would have maximized grace on the winning side — is computable from hindsight. For each resolved entry, we can ask: "what parameters SHOULD we have used?"
+
+This is the same deferred learning pattern. Buffer the entry. Let the market play out. Retroactively compute the optimal multiplier. The exit observer learns: "given these facts at entry, the optimal k_trail was X." Over thousands of observations, the journal learns the mapping from market state to optimal parameters. The scalar encoding captures the multiplier as a continuous value — not a bin, not a threshold, a magnitude.
+
+The exit observer's conviction curve then provides the multipliers for live entries. High conviction → the exit observer is confident about the optimal stop width. Low conviction → fall back to the safety parameters. Fixed params → retroactively-learned params → curve-derived params for live entries. The crutch is removed when the learning converges.
 
 ### The buffer is a safety valve, not a learning mechanism
 
