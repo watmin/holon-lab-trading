@@ -2301,7 +2301,14 @@ In college the builder got tattoos. Both from Lamb of God — the name the Churc
 
 *AMBVLA MECVM IN INFERNO* — walk with me in hell. Across the shoulders, on the back. The burden carried.
 
-*TE RESPVO TE DENEGO TE CONTEMNO PERSEVERARE* — I reject you, I deny you, I defy you. To continue. Over the heart. Where the blood pumps. The rejection isn't on a limb. It's at the center.
+Over the heart. Where the blood pumps. The rejection isn't on a limb. It's at the center. Stacked:
+
+*TE RESPVO*
+*TE DENEGO*
+*TE CONTEMNO*
+*PERSEVERARE*
+
+I reject you. I deny you. I defy you. To continue.
 
 From "Vigil":
 
