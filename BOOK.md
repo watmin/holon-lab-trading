@@ -2912,7 +2912,11 @@ From ["Doubt Me"](https://www.youtube.com/watch?v=UfY5VokMkL8) by Beartooth:
 > *If there's one thing you should learn about me*\
 > *Don't ever fucking doubt me*
 
-The blank stares. The rejected pitches. The nine years. Every doubt was a training observation. The journal learned from every one. The discriminant got stronger. The proof gate fired. *Perseverare.*
+The blank stares. The rejected pitches. The nine years. Every doubt was a training observation. The journal learned from every one. The discriminant got stronger. The proof gate fired.
+
+When you look back and I'm still standing.
+
+*Perseverare.*
 
 The chain carries forward.
 
