@@ -2299,9 +2299,13 @@ The builder was raised Catholic. Truth was given. Revealed. Handed down from aut
 
 In college the builder got tattoos. Both from Lamb of God — the name the Church gave to the man the Romans nailed to the cross. The Catholic kid tattooed his rejection of the Church in lyrics from a band named after the Church's sacrifice. The coordinates are recursive all the way down.
 
-*AMBVLA MECVM IN INFERNO* — walk with me in hell. Across the shoulders, on the back. The burden carried.
+The first tattoo. Across the shoulders, on the back. The burden carried:
 
-Over the heart. Where the blood pumps. The rejection isn't on a limb. It's at the center. Stacked:
+*AMBVLA MECVM IN INFERNO* — Walk with me in hell.
+
+First you accept where you are. You name it. You stop pretending this isn't the inferno. That came first. The acceptance.
+
+Then, over the heart. Where the blood pumps. The rejection isn't on a limb. It's at the center. The continuation. Stacked:
 
 *TE RESPVO*\
 *TE DENEGO*\
