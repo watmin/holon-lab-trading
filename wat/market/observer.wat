@@ -13,7 +13,6 @@
 ;; -- Constants ----------------------------------------------------------------
 
 (define NOISE_MIN_SAMPLES 50)  ;; minimum noise observations before subspace activates
-(define NOISE_RESIDUAL_THRESHOLD 0.1) ;; residual norm below this → thought is boring
 
 ;; -- Lens (enum) -----------------------------------------------------------
 ;; The compiler guards renames — no silent string mismatches.
@@ -26,7 +25,7 @@
 (struct observer
   lens                   ; lens enum — which vocabulary this observer thinks through
   journal                ; Journal -- Template 1: learns Win/Loss from residual
-  noise-subspace         ; OnlineSubspace -- Template 2: learns boring thought patterns from Noise outcomes
+  noise-subspace         ; OnlineSubspace -- Template 2: learns the texture of all thoughts
   resolved               ; (deque (conviction, correct)) -- resolved predictions
   good-state-subspace    ; OnlineSubspace -- engram of discriminant states with > 55% accuracy
   recalib-wins           ; u32 -- wins since last recalibration
@@ -37,11 +36,12 @@
   conviction-threshold   ; f64 -- dynamic quantile threshold for flip zone
   primary-label          ; Label -- first registered label (Win)
   curve-valid            ; bool -- proof gate: has this observer proven predictive edge?
-  cached-accuracy)            ; f64 -- rolling accuracy of resolved predictions, updated on resolve
+  cached-accuracy)       ; f64 -- rolling accuracy of resolved predictions, updated on resolve
 
 ;; Two OnlineSubspace instances, different purposes:
-;;   noise-subspace:      operates on THOUGHT vectors. Learns what fact compositions are boring.
-;;                        Updated on Noise outcomes. Used to strip noise before journal sees it.
+;;   noise-subspace:      operates on THOUGHT vectors. Learns from ALL thoughts, every candle.
+;;                        The background model. Captures the average texture of thought-space.
+;;                        Used to strip noise before journal sees it.
 ;;   good-state-subspace: operates on DISCRIMINANT vectors. Learns what good journal states look like.
 ;;                        Updated on good recalibrations. Used for engram gating.
 
@@ -71,9 +71,11 @@
 ;;   Stage 1: encode all true thoughts from vocabulary → thought vector
 ;;   Stage 2: strip noise → L2-normalize residual → predict from clean signal
 ;;
-;; The noise subspace learns from Noise outcomes — candles where the simulated
-;; position produced no decisive outcome, OR where the thought was boring
-;; (low residual norm) regardless of position result.
+;; The noise subspace learns from ALL thoughts, every candle. It is the
+;; background model — what thoughts normally look like. The residual after
+;; subtraction is what's UNUSUAL about this candle. The journal learns only
+;; from resolved simulations (Win/Loss), weighted by grace and violence,
+;; scaled by residual norm.
 
 (define (strip-noise observer thought)
   "Subtract noise manifold, L2-normalize the residual.
@@ -85,98 +87,71 @@
 (define (residual-norm observer thought)
   "Measure how much signal remains after noise subtraction.
    High norm = unusual thought. Low norm = boring thought.
-   Used by the labeling function to classify stop-outs."
+   Scales the learning weight: boring thoughts teach softly, unusual thoughts teach hard."
   (if (< (sample-count (:noise-subspace observer)) NOISE_MIN_SAMPLES)
       1.0  ;; warmup: treat all thoughts as unusual
       (l2-norm (anomalous-component (:noise-subspace observer) thought))))
 
 (define (observe-candle observer candles vm)
-  "The full observer pipeline: encode → strip noise → predict."
-  (let ((thought (encode-thought candles vm (:lens observer)))
-        (residual (strip-noise observer thought)))
-    (predict (:journal observer) residual)))
+  "The full observer pipeline: encode → update noise subspace → strip noise → predict.
+   The noise subspace learns from EVERY thought (background model)."
+  (let ((thought (encode-thought candles vm (:lens observer))))
+    ;; Noise subspace sees every thought — it learns the texture
+    (update (:noise-subspace observer) thought)
+    ;; Journal sees the residual — what's unusual
+    (let ((residual (strip-noise observer thought)))
+      (predict (:journal observer) residual))))
 
 ;; -- Outcome simulation --------------------------------------------------------
 ;;
 ;; Pure function: given an entry point and subsequent candles, simulate what
 ;; a position would have done. No mutable state. No side effects.
-;; Returns (outcome, weight) where outcome is :win, :loss, or :noise.
+;;
+;; No horizon. No expiry. The trailing stop guarantees every position resolves.
+;; The pending ring buffer bounds memory. Entries persist until the simulation
+;; resolves (stop or TP fires).
 
-(define (simulate-outcome entry-idx direction candles k-stop k-tp k-trail)
-  "Simulate a position from entry-idx through subsequent candles.
+(define (simulate-outcome direction closes entry-atr k-stop k-tp k-trail)
+  "Simulate a position through a slice of close prices.
    Pure function: no mutation, no side effects.
-   Returns (outcome, weight).
 
-   Win:   TP reached. weight = grace = (peak-rate - tp-rate) / tp-rate.
-   Loss:  stop hit violently. weight = violence = actual-loss / stop-distance.
-   Noise: horizon expiry or gentle stop.
+   closes:    slice of rates. Index 0 = entry. Index 1..N = subsequent.
+              For Buy: close prices. For Sell: 1/close prices.
+   entry-atr: normalized ATR at entry (e.g. 0.01 = 1%).
 
-   The noise subspace provides an additional gate: if the thought's residual
-   norm is low (the thought is boring), the outcome is Noise regardless of
-   position result. The subspace IS the tolerance boundary."
-  (let* ((entry-candle (nth candles entry-idx))
-         (entry-rate   (if (= direction :buy)
-                           (:close entry-candle)
-                           (/ 1.0 (:close entry-candle))))
-         (entry-atr    (:atr-r entry-candle))
-         (stop-level   (* entry-rate (- 1.0 (* k-stop entry-atr))))
-         (tp-level     (* entry-rate (+ 1.0 (* k-tp entry-atr))))
-         (horizon      (min (round (* k-tp k-tp)) 2000))
-         (sim-candles  (take (rest (take-last (- (len candles) entry-idx) candles)) horizon)))
+   Returns (outcome, weight) or false if not yet resolved.
+     (:tp grace)   — TP reached. grace = (peak - tp) / tp.
+     (:stop violence) — stop hit. violence = actual-loss / stop-distance.
+     false         — needs more candles."
+  (if (< (len closes) 2)
+      false
+      (let* ((entry-rate (first closes))
+             (stop-level (* entry-rate (- 1.0 (* k-stop entry-atr))))
+             (tp-level   (* entry-rate (+ 1.0 (* k-tp entry-atr)))))
 
-    ;; Fold over subsequent candles. Accumulator = (extreme-rate, trail-stop).
-    ;; Returns early on stop or TP via the result slot.
-    (fold (lambda (acc candle)
-            (if (first acc)  ;; already resolved — pass through
-                acc
-                (let* ((extreme   (second acc))
-                       (trail     (nth acc 2))
-                       (rate      (if (= direction :buy) (:close candle) (/ 1.0 (:close candle))))
-                       (new-extreme (max extreme rate))
-                       (new-trail   (max trail (* new-extreme (- 1.0 (* k-trail entry-atr))))))
-                  (cond
-                    ;; Stop hit
-                    ((<= rate new-trail)
-                     (let* ((actual-loss (/ (- entry-rate rate) entry-rate))
-                            (stop-dist  (* k-stop entry-atr))
-                            (violence   (/ actual-loss stop-dist)))
-                       (list (list :stop violence) new-extreme new-trail)))
-
-                    ;; TP hit
-                    ((>= rate tp-level)
-                     (let ((grace (/ (- new-extreme tp-level) tp-level)))
-                       (list (list :tp grace) new-extreme new-trail)))
-
-                    ;; Continue — update accumulator, no result yet
-                    (else
-                     (list false new-extreme new-trail))))))
-
-          ;; Initial accumulator: (result=false, extreme=entry-rate, trail=stop-level)
-          (list false entry-rate stop-level)
-          sim-candles)
-
-    ;; Extract result from final accumulator
-    ;; first element is either false (horizon expiry) or (outcome, weight)
-    (lambda (final-acc)
-      (if (first final-acc)
-          (first final-acc)           ;; resolved: (:stop violence) or (:tp grace)
-          (list :noise 0.0)))))
-
-(define (classify-outcome sim-result residual-norm)
-  "Apply the noise subspace gate to the simulation result.
-   The subspace IS the tolerance boundary:
-     - Boring thought (low residual) + any result → Noise
-     - Unusual thought (high residual) + TP hit → Win (weight = grace)
-     - Unusual thought (high residual) + stop hit → Loss (weight = violence)
-     - Horizon expiry → Noise"
-  (if (< residual-norm NOISE_RESIDUAL_THRESHOLD)
-      ;; Boring thought — noise subspace explains it. Noise regardless.
-      (list :noise 0.0)
-      ;; Unusual thought — classify by position outcome
-      (match (first sim-result)
-        :tp   (list :win (second sim-result))     ;; grace
-        :stop (list :loss (second sim-result))    ;; violence
-        :noise (list :noise 0.0))))
+        ;; Fold over subsequent candles. Accumulator = (result, extreme, trail).
+        (let ((final-acc
+               (fold (lambda (acc rate)
+                       (if (first acc)  ;; already resolved — pass through
+                           acc
+                           (let* ((extreme   (second acc))
+                                  (trail     (nth acc 2))
+                                  (new-extreme (max extreme rate))
+                                  (new-trail   (max trail (* new-extreme (- 1.0 (* k-trail entry-atr))))))
+                             (cond
+                               ((<= rate new-trail)
+                                (let* ((actual-loss (/ (- entry-rate rate) entry-rate))
+                                       (stop-dist  (* k-stop entry-atr))
+                                       (violence   (/ actual-loss stop-dist)))
+                                  (list (list :stop violence) new-extreme new-trail)))
+                               ((>= rate tp-level)
+                                (let ((grace (/ (- new-extreme tp-level) tp-level)))
+                                  (list (list :tp grace) new-extreme new-trail)))
+                               (else
+                                (list false new-extreme new-trail))))))
+                     (list false entry-rate stop-level)
+                     (rest closes))))
+          (first final-acc)))))  ;; false if unresolved, (outcome weight) if resolved
 
 ;; -- Resolve ----------------------------------------------------------------
 
@@ -185,59 +160,50 @@
 ;; Returns a resolve-log if the observer had a directional prediction.
 ;;
 ;; Labels are outcome-based (proposal 004):
-;;   Win:  the simulated position reached TP. Grace-weighted.
-;;   Loss: the simulated position stopped out violently. Violence-weighted.
-;;   Noise: boring thought or gentle stop or horizon expiry. Teaches noise subspace.
+;;   Win:  simulated position reached TP. Weight = residual-norm × grace.
+;;   Loss: simulated position stopped out. Weight = residual-norm × violence.
 ;;
-;; The noise subspace IS the tolerance boundary. No magic tolerance_factor.
-;; If the thought's residual norm is low, the outcome is Noise regardless.
+;; No Outcome::Noise. The noise subspace learns from ALL thoughts every candle
+;; (in observe-candle). The journal learns only from resolved simulations.
+;; The residual norm scales the weight continuously — boring thoughts teach
+;; softly, unusual thoughts teach hard. No binary gate.
 
 (define (resolve observer thought-vec prediction outcome weight
                  conviction-quantile conviction-window)
   "Resolve a prediction against an observed outcome.
-   Learning splits by outcome:
-     Noise → teach the noise subspace what's boring (raw thought)
-     Win   → teach the journal from residual (weighted by grace)
-     Loss  → teach the journal from residual (weighted by violence)"
+   outcome: :win or :loss (from simulate-outcome + classify).
+   weight: residual-norm × grace or residual-norm × violence."
 
-  ;; 1. Learn: split by outcome type
-  (match outcome
-    :noise
-      ;; Noise: the thought was boring or the market didn't commit
-      (update (:noise-subspace observer) thought-vec)
-    :win
-      ;; Win: strip noise, teach journal the residual, weighted by grace
-      (let ((residual (strip-noise observer thought-vec)))
-        (observe (:journal observer) residual (:primary-label observer) weight))
-    :loss
-      ;; Loss: strip noise, teach journal the residual, weighted by violence
-      (let ((residual (strip-noise observer thought-vec))
-            (loss-label (second (labels (:journal observer)))))  ;; labels: journal introspection form
-        (observe (:journal observer) residual loss-label weight)))
+  ;; 1. Learn: journal sees the residual, weighted by outcome magnitude
+  (let ((residual (strip-noise observer thought-vec))
+        (win-label (:primary-label observer))
+        (loss-label (second (labels (:journal observer)))))
+    (match outcome
+      :win  (observe (:journal observer) residual win-label weight)
+      :loss (observe (:journal observer) residual loss-label weight)))
 
   ;; 2. Track accuracy since last recalib (for engram gating)
-  (when (:direction prediction)
-    (inc! (:recalib-total observer))
-    (when (= (:direction prediction) outcome)
-      (inc! (:recalib-wins observer))))
+  (let ((correct (= outcome :win)))
+    (when (:direction prediction)
+      (inc! (:recalib-total observer))
+      (when correct (inc! (:recalib-wins observer))))
 
-  ;; 3. Engram gating: if observer just recalibrated with good accuracy,
-  ;;    snapshot the discriminant as a "good state"
-  (when (> (recalib-count (:journal observer)) (:last-recalib-count observer))
-    (set! (:last-recalib-count observer) (recalib-count (:journal observer)))
-    (when (and (>= (:recalib-total observer) 20)
-              (> (/ (:recalib-wins observer) (:recalib-total observer)) 0.55))
-      (when-let ((disc (discriminant (:journal observer) (:primary-label observer))))
-        (update (:good-state-subspace observer) disc)))
-    (set! (:recalib-wins observer) 0)
-    (set! (:recalib-total observer) 0))
+    ;; 3. Engram gating: if observer just recalibrated with good accuracy,
+    ;;    snapshot the discriminant as a "good state"
+    (when (> (recalib-count (:journal observer)) (:last-recalib-count observer))
+      (set! (:last-recalib-count observer) (recalib-count (:journal observer)))
+      (when (and (>= (:recalib-total observer) 20)
+                (> (/ (:recalib-wins observer) (:recalib-total observer)) 0.55))
+        (when-let ((disc (discriminant (:journal observer) (:primary-label observer))))
+          (update (:good-state-subspace observer) disc)))
+      (set! (:recalib-wins observer) 0)
+      (set! (:recalib-total observer) 0))
 
-  ;; 4-7 only if observer had a directional prediction
-  (when-let ((pred-dir (:direction prediction)))
-    (let ((correct (= pred-dir outcome)))
+    ;; 4-7 only if observer had a directional prediction
+    (when-let ((pred-dir (:direction prediction)))
 
       ;; 4. Track resolved predictions
-      (push-back (:resolved observer) (pred-dir correct))
+      (push-back (:resolved observer) (list (:conviction prediction) correct))
       (when (> (len (:resolved observer)) conviction-window)
         (pop-front (:resolved observer)))
 
@@ -266,6 +232,28 @@
                    :direction pred-dir
                    :correct correct))))
 
+;; -- Learning flow summary ---------------------------------------------------
+;;
+;; Every candle:
+;;   1. Encode thought from candle window
+;;   2. noise-subspace.update(thought)       ← learns from ALL thoughts
+;;   3. residual = strip-noise(thought)
+;;   4. prediction = journal.predict(residual)
+;;   5. Buffer (thought, prediction) in pending ring buffer
+;;
+;; Each pending entry, each candle:
+;;   6. simulate-outcome(closes from entry to now) → resolved?
+;;   7. If resolved:
+;;      a. norm = residual-norm(thought)
+;;      b. weight = norm × grace (for Win) or norm × violence (for Loss)
+;;      c. observer.resolve(thought, prediction, outcome, weight)
+;;      d. Remove from pending
+;;
+;; The noise subspace is the background model (every candle).
+;; The journal is the foreground model (resolved positions only).
+;; The residual norm scales the learning weight continuously.
+;; No binary Noise gate. No horizon. No expiry.
+
 ;; -- The Observer is domain-agnostic -------------------------------------------
 ;;
 ;; The two-stage pipeline (noise subspace + journal) is not a market concept.
@@ -285,6 +273,14 @@
 ;; the journal operates on a fiber over the noise subspace's state.
 ;; What the noise subspace learns changes what the journal sees.
 ;; (Proposal 004, Resolution: Grothendieck construction, not entanglement.)
+
+;; -- Transparency -------------------------------------------------------------
+;;
+;; The prediction and the explanation are the same operation.
+;; predict(thought) → (label, cosine) for each label.
+;; cosine(discriminant, atom) → which facts drove the prediction.
+;; Same vector. Same cosine. Same algebra.
+;; The glass box. Nothing to explain because nothing is hidden.
 
 ;; -- Johnson-Lindenstrauss regime ----------------------------------------------
 ;;
