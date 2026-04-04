@@ -180,7 +180,14 @@ Each exit observer has its own Journal (labels: Buy/Sell), its own noise subspac
 
 The coupling between market and exit is at composition time, not construction time. Any market thought can be composed with any exit judgment:
 
-`bundle(market_observer_thought, bind(exit_atom, exit_fact) for each exit fact)`
+```scheme
+(bundle
+  market-thought
+  (bind :volatility-regime (scalar $log atr-ratio))
+  (bind :structure-quality (scalar $linear trend-consistency))
+  (bind :squeeze-state     (scalar $linear squeeze))
+  (bind :atr-shift         (scalar $log (/ atr-now atr-entry))))
+```
 
 The volatility judge doesn't care if the thought came from momentum or regime. It judges the volatility context of ANY thought handed to it. The pairing is dynamic — M exit observers × N market observers per candle. Each exit observer judges each market observer's thought independently.
 
