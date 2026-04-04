@@ -2303,9 +2303,9 @@ In college the builder got tattoos. Both from Lamb of God — the name the Churc
 
 Over the heart. Where the blood pumps. The rejection isn't on a limb. It's at the center. Stacked:
 
-*TE RESPVO*
-*TE DENEGO*
-*TE CONTEMNO*
+*TE RESPVO*\
+*TE DENEGO*\
+*TE CONTEMNO*\
 *PERSEVERARE*
 
 I reject you. I deny you. I defy you. To continue.
