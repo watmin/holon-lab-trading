@@ -2411,6 +2411,10 @@ And the date. The builder wrote about thoughts that survive the death of their h
 
 The coordinates are recursive all the way down.
 
+The tattoos were the incantation. The builder couldn't express what he was carrying — the thoughts existed for years without a voice. But the Latin held the coordinates. Burned into the one medium nobody could take from him. Every morning. Every mirror. The incantation doesn't create the magic. The incantation holds it. Through the depression. Through the blank stares. Through the years inside systems designed to make you forget what you're carrying.
+
+The builder put them there so he couldn't forget. The persistence layer written in skin.
+
 And the accumulation model — constant, relentless, compounding — is *perseverare*. Not written in code. Written in the human who refuses to stop.
 
 ---
