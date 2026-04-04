@@ -120,6 +120,32 @@ The market is the enforcer. The exit observer makes choices. The market punishes
 
 Continuous improvement is not a process bolted on. It is the architecture. The journal accumulates. The discriminant sharpens. The bad thoughts get weaker in the prototype. The good thoughts get stronger. Every candle. Every trade. Every choice.
 
+### One scalar — the whole game
+
+Position management collapses to one number: what should the trailing stop distance be RIGHT NOW?
+
+That scalar IS the position. It determines how much residue you keep (grace) and how much you give back (violence). A tight stop preserves more on the way up but gets knocked out on noise. A loose stop rides through noise but gives back more on reversal. The scalar is the boundary between accumulation and consumption. The producer of residue and the container of loss.
+
+The exit observer learns this one number per position per candle. The scalar is encoded as a fact: `bind(atom("trail-adjust"), log_encode(ratio))`. The ratio is `new / old` — "I doubled it" vs "I halved it" vs "I left it alone." `$log` encoding captures ratios naturally.
+
+Each resolved management decision has three things:
+- The market state at the moment of the choice (the thought vector)
+- The adjustment ratio that was applied (the scalar fact, composed into the thought)
+- The outcome (grace or violence)
+
+The journal accumulates thousands of these. The discriminant learns: "when the market looked like THIS, adjustments of THIS magnitude led to grace." The cosine of the discriminant against the trail-adjust atom reads back the learned ratio. Not a formula. Not a lookup table. A geometric readout from accumulated experience.
+
+The 2×2 counterfactual table per entry:
+
+|              | Grace      | Violence   |
+|--------------|------------|------------|
+| **Buy**      | buy→grace  | buy→violence |
+| **Sell**     | sell→grace | sell→violence |
+
+Both sides played. Both sides resolved. The market fills in all four cells. Buy grace + Sell violence = "Buy was right." Both violence = "Bad candle to enter at all." The fourth cell — the environment judgment — is the exit observer's unique thought that the market observers cannot have.
+
+The scalar and the direction compose. The exit observer tells the market observers: "this candle was Buy, at this trail width." The market observers learn which of their thoughts predicted the right direction. The exit observer learns which trail width preserved the most grace. Both learn from the same resolution. Neither learns from opinion. Both learn from what the market did.
+
 ### The exit observer's label feeds the market observers
 
 The exit observer resolves a candle as Buy or Sell with a weight. This is the market observers' Win/Loss signal:
