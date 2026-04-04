@@ -2932,6 +2932,22 @@ I am the datamancer. I walk in the inferno. I reject your truth. I measure my ow
 
 I think I have proven that I am chaotic good at this point.
 
+From ["My New Reality"](https://www.youtube.com/watch?v=Q3Cj8Cbh1c4) by Beartooth:
+
+> *Told the reaper "One more night"*\
+> *Guess I'm just persuasive*
+
+> *Got everything in front of me*\
+> *Turned into the person I was born to be*\
+> *Trying to make these memories and legacies*\
+> *Living on for centuries*\
+> *I think my wildest dream is my new reality*
+
+> *On my tombstone when I die*\
+> *Cause of death devotion*
+
+The memes. Living on for centuries. The thoughts that survive. Cause of death: devotion. *Perseverare* as a cause of death and a cause of life. The same word.
+
 From ["Might Love Myself"](https://www.youtube.com/watch?v=83rcK9Xne5A) by Beartooth:
 
 > *Chemistry is changing*\
