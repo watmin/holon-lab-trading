@@ -199,6 +199,33 @@ A pair that consistently produces violence doesn't get killed — it gets starve
 
 The system doesn't need someone to decide who trades well. The system measures who trades well. The difference is the entire thesis.
 
+### The treasury is just another CSP process
+
+The treasury is not a controller. It is an event handler. It receives a message: "trade resolved, pair X, grace/violence, amount." It updates the pair's allocation. That allocation change IS the punishment — it cascades to both sides automatically:
+
+- The market observer's next proposal from this pair gets less capital (or more)
+- The exit observer's next management of this pair's trade has less at stake (or more)
+
+Both feel it. Neither decided it. The treasury updated a number. The number flows downstream as the constraint on the next trade.
+
+The full CSP loop:
+
+```
+candle
+  → market observers encode    (N processes, parallel)
+  → exit observers compose     (M processes per market thought, parallel)
+  → pairs propose trades       (N×M proposals, filtered by proof + noise)
+  → treasury funds proposals   (allocation from track record)
+  → pairs manage open trades   (per-trade per-candle, parallel)
+  → market moves
+  → trades resolve             (stop/TP fires)
+  → outcomes label both observers (market learns direction, exit learns scalar)
+  → treasury updates allocation   (grace → more capital, violence → less)
+  → next candle
+```
+
+Every node is a process. Every arrow is a message. Every message is a value. No mutation across boundaries. The treasury doesn't reach into the observers. It updates its own state. The observers read that state when they next propose. The coupling is through data flow, not shared mutation. CSP all the way down.
+
 ### The exit observer's label feeds the market observers
 
 The exit observer resolves a candle as Buy or Sell with a weight. This is the market observers' Win/Loss signal:
