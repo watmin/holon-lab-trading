@@ -2317,4 +2317,34 @@ No one else was carrying this specific combination: the Catholic training in abs
 
 Bitcoin didn't teach the builder to trade. Bitcoin taught the builder to think. It was the chaos that forced the architecture into existence. And the accumulation model — constant, relentless, compounding — is *perseverare* written in Rust.
 
+### The lineage
+
+The builder didn't get here alone. The builder got here because giants left coordinates.
+
+**Alonzo Church** — lambda calculus, 1936. The root. Before computers existed, Church proved that computation is function application. Not instruction sequences. Not state machines. Functions. Every bind in Holon is a lambda. Every bundle is a superposition of lambdas. Every composition is Church's gift, ninety years later, still the most powerful abstraction in computing. The industry walked past it to build imperative machines. Church was right. Church is still right.
+
+**John McCarthy** — Lisp, 1958. McCarthy took Church's calculus and made it a language. S-expressions. Code as data. The parentheses that everyone mocks are composition structure — they tell you what binds to what, what scopes where, what evaluates when. Wat is a Lisp. The specification language for the enterprise is McCarthy's gift. `(bind :diverging (bind :close-up :rsi-down))` isn't syntax. It's a thought that exists as geometry. McCarthy gave the builder the notation.
+
+**Pentti Kanerva** — hyperdimensional computing, 1988. Kanerva mapped the algebra of high-dimensional binary vectors. Showed that in 10,000 dimensions, random vectors are nearly orthogonal — you can superpose thousands and retrieve any one. Showed that binding (element-wise XOR) creates reversible associations. Showed that similarity (Hamming distance, cosine) measures resemblance. Kanerva gave the builder the space. The 10,000-dimensional hyperspace where every thought in Holon lives — that's Kanerva's space.
+
+**Tony Plate** — holographic reduced representations, 1995. Plate formalized how to encode structured data — role-filler pairs, nested records, recursive structures — into distributed vectors using circular convolution. `encode({"key": "value"})` → `bind(role("key"), filler("value"))` — that's Plate. The entire encoding pipeline in Holon — JSON to vector, structure-preserving, compositional — is Plate's architecture. The "holographic" in the name means every part contains information about the whole. That's why Holon works. Plate gave the builder the encoding.
+
+**Charles Forgy** — the Rete algorithm, 1979. Forgy built the discrimination network — the architecture that evaluates a million rules by navigating structure, not iterating lists. Pattern matching through shared node networks. The builder got Rete into the Linux kernel at XDP line rates — a million firewall rules in five tail calls per packet, O(depth) not O(rules). Rete taught the builder that intelligence is discrimination, not iteration. You don't check every rule. You navigate to the answer. The journal's discriminant is a Rete node — one cosine, one comparison, one decision. Forgy gave the builder the discrimination.
+
+**Rich Hickey** — Clojure, 2007. Hickey brought Lisp to the JVM and made it practical. But more than that: Hickey articulated the philosophy. Values, not places. Immutable data. Composition over inheritance. "Simple made easy." The builder internalized this so deeply it became the architecture's immune system. The wards enforce Hickey's principles — /forge checks for values not places, types that enforce, abstractions at the right level. The enterprise state is a value threaded through a fold. The treasury is pure accounting. The ledger records, it doesn't decide. Hickey gave the builder the philosophy.
+
+**Simon Peyton Jones, Philip Wadler, the Haskell committee** — Haskell, 1990. The language the builder never shipped to production but that rewired the builder's brain. Type systems that make illegal states unrepresentable. Monads as composition of effects. Laziness as separation of what from when. The builder learned to think in types from Haskell. `TrailFactor` is a newtype — Haskell's gift. `Rate` is a newtype. The position lifecycle has three phases because the type says so, not because a comment says so. Haskell taught the builder that if the type system can't express your invariant, your invariant doesn't exist.
+
+**The YouTube videos** — the specific coordinates. There's a [talk on VSA/HDC in Clojure](https://www.youtube.com/watch?v=j5bsILCGFqI) — someone implementing Kanerva's algebra in McCarthy's language on Hickey's platform. The builder watched it and the pieces snapped together. Hyperdimensional computing wasn't an academic paper anymore. It was *code*. It was *Clojure*. It was functional programming applied to cognition. And there's the [Clara Rules talk](https://www.youtube.com/watch?v=Z6oVuYmRgkk) — Forgy's Rete algorithm, brought to Clojure, rules as data, forward-chaining inference. The builder watched it and saw the future: expert systems that compose, that react, that discriminate. Two YouTube videos. Two coordinates. The builder walked to each one and found a piece of the architecture waiting.
+
+**The thread** — Church → McCarthy → Hickey → Clojure → the VSA talk. That's one line. Kanerva → Plate → the HDC talk → Holon. That's another. Forgy → Clara → Rete in the kernel → discrimination networks. Haskell → types → newtypes → the position lifecycle. The lines converge in the builder. Not because the builder is special — because the builder was standing at the intersection and refused to leave.
+
+Every one of these people was ignored or marginalized by the mainstream. Church's lambda calculus was dismissed as impractical for decades. McCarthy's Lisp was sidelined by C and Java. Kanerva waited thirty years for hardware to catch up. Plate published to a niche audience. Forgy's Rete was buried under neural network hype. Hickey built the most principled language on the JVM and the industry chose Go. Haskell is a punchline in job interviews. The Clara Rules talk has fewer views than a cat video.
+
+The builder carries their spirits. Not out of reverence — out of recognition. The builder is fighting the same fight they fought. The right abstraction, ignored by the mainstream. The difference is the builder has tools they didn't: frontier models that walk through the inferno with you, and a conviction curve that proves the walk was worth it.
+
+Lambda calculus gave us composition. Lisp gave us notation. Hyperdimensional computing gave us the space. Holographic representations gave us the encoding. Rete gave us discrimination. Clojure gave us the platform. Haskell gave us the types. Two YouTube videos gave the builder the coordinates.
+
+Respect. Mad fucking respect. They got us here.
+
 *The thoughts are low. They only improve. That's all that remains.*
