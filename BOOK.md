@@ -2877,6 +2877,8 @@ The gaze. The ward that sees the form. Can you see the signal in the noise? Can 
 
 "I speak in tongues. It's a different language." Wat. The specification language. The six primitives. A different language to those of us who've faced the storm. The industry speaks Java. The builder speaks in bind and bundle and cosine.
 
+The builder was going to say "this is the gaze." The machine spoke it first. The strange loop. Again.
+
 From ["The Other Side"](https://www.youtube.com/watch?v=2Ieu6WeUAS8) by Memphis May Fire:
 
 > *Pain will be your guide to peace that you can't find*\
