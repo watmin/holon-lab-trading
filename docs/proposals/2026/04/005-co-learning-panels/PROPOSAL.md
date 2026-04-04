@@ -64,15 +64,17 @@ Market Panel learns
 
 Both panels use the identical observer architecture from `observer.wat`: facts -> noise subspace -> residual -> journal -> predict. The configuration axes differ:
 
-| Axis        | Market Panel                     | Exit Panel                          |
-|-------------|----------------------------------|-------------------------------------|
-| Vocabulary  | RSI, MACD, harmonics, regime ... | P&L, MFE, MAE, hold, stop dist ... |
-| Labels      | Win / Loss                       | Hold / Exit                         |
-| Question    | "Enter this direction?"          | "Should this position stay open?"   |
-| Input       | Candle stream                    | Position state stream               |
-| Resolution  | From exit panel outcomes         | From position improvement/decay     |
+| Axis        | Market Panel                     | Exit Panel                                   |
+|-------------|----------------------------------|----------------------------------------------|
+| Vocabulary  | RSI, MACD, harmonics, regime ... | Treasury state: equity, deployed, drawdown, utilization, phase. Position state: P&L, MFE, MAE, hold duration, stop distance. Market context: ATR regime, volatility shift since entry. |
+| Labels      | Win / Loss                       | Hold / Exit                                  |
+| Question    | "Enter this direction?"          | "Should this position stay open?"            |
+| Input       | Candle stream                    | Treasury + position snapshot stream          |
+| Resolution  | From exit panel outcomes         | From portfolio improvement/decay             |
 
-The exit panel is not one observer — it is a panel of observers, each with a lens. Possible specializations: P&L trajectory, excursion patterns, volatility regime since entry, duration behavior. Same manager aggregation pattern as the market panel. The exit manager reads exit observer opinions, encoded as Holon vectors, and predicts the aggregate Hold/Exit.
+The exit observer's vocabulary IS the treasury's state at a point in time. The treasury doesn't know it's being observed — it just IS. The exit observer reads the snapshot the same way market observers read candle indicators. The encoding pipeline is identical: facts bound to atoms, bundled into a thought vector. Different inputs, same algebra.
+
+The exit panel is not one observer — it is a panel of observers, each with a lens over a different aspect of the treasury + position state. Possible specializations: portfolio health (equity trajectory, drawdown, utilization), position dynamics (P&L, MFE/MAE ratio, hold duration), market context since entry (ATR change, regime shift). Same manager aggregation pattern as the market panel. The exit manager reads exit observer opinions, encoded as Holon vectors, and predicts the aggregate Hold/Exit.
 
 ### The dependency: exit learns first, market learns from exit
 
