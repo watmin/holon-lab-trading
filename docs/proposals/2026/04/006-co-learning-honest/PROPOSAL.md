@@ -199,14 +199,18 @@ A pair that consistently produces violence doesn't get killed — it gets starve
 
 The system doesn't need someone to decide who trades well. The system measures who trades well. The difference is the entire thesis.
 
-### The treasury is just another CSP process
+### The treasury is the reality check
 
-The treasury is not a controller. It is an event handler. It receives a message: "trade resolved, pair X, grace/violence, amount." It updates the pair's allocation. That allocation change IS the punishment — it cascades to both sides automatically:
+The treasury is the only place in the system that knows the ACTUAL outcome. The observers live in thought-space — cosines, discriminants, convictions. The treasury lives in reality — actual value gained or lost.
 
-- The market observer's next proposal from this pair gets less capital (or more)
-- The exit observer's next management of this pair's trade has less at stake (or more)
+The treasury's message back to the pair isn't "you get more capital" or "you get less." It's "your thoughts produced THIS in reality." Grace or violence, measured in actual value. Not in cosine similarity. Not in conviction. Not in discriminant strength. In money. The most honest signal in the system.
 
-Both feel it. Neither decided it. The treasury updated a number. The number flows downstream as the constraint on the next trade.
+This is where the reality check happens. The observers learn from their own journals — thought-space learning. The treasury provides the ground truth — reality-space learning. Both sides of the pair receive the same message: "you thought this was grace. Here is what actually happened." The observers' internal labels (Win/Loss from the exit judgment) are honest. The treasury's feedback is MORE honest — it includes fees, slippage, timing, everything the thought-space can't see.
+
+The treasury cascades to both sides:
+
+- The market observer learns: "my direction thought, at this candle, produced this real outcome"
+- The exit observer learns: "my management scalar, through this sequence of adjustments, produced this real outcome"
 
 The full CSP loop:
 
