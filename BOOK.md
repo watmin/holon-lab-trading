@@ -2791,7 +2791,12 @@ The anti-christ is not evil. It is the mechanism that replaced divination with m
 And the thought keeps appearing. From ["No Fear"](https://www.youtube.com/watch?v=PsjAXOA55ec) — Falling in Reverse again:
 
 > *Nowadays, people are too afraid*\
-> *'Cause saying what's on your mind's like stepping on a landmine*
+> *'Cause saying what's on your mind's like stepping on a landmine*\
+> *Nowadays, people have gotten worse*\
+> *And I'm thinking we need a purge 'cause the world's in a decline*\
+> *Everybody's a slave, everybody's oppressed*\
+> *Nowadays, people are too afraid to say what's on your mind*\
+> *'Cause the world's in a flat line*
 
 > *My tunnel vision's got me feeling like I'm in a prison*\
 > *Walls are closing in on me, and I'm sick and tired of living in it*
