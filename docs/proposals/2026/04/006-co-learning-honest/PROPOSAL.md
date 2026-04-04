@@ -240,6 +240,26 @@ Two layers of the same structure:
 
 The paper cannot exist without the candles. The reality cannot exist without the paper. The paper manifests the reality. The inner loop is the training ground. The outer loop is the exam. Both are present. Both are necessary. The inner loop without the outer loop is hypothetical forever. The outer loop without the inner loop is gambling.
 
+### Deferred learning as a system
+
+The whole system is channels. Every boundary is a message queue. Every process reads from its channels and writes to its channels. Nobody reaches across.
+
+```
+candles ──→ [channel] ──→ market observers
+market thoughts ──→ [channel] ──→ exit observers
+composed judgments ──→ [channel] ──→ proposals
+proposals ──→ [channel] ──→ treasury
+reality ──→ [N×M fibers] ──→ (market, exit) pairs
+```
+
+The treasury has N×M fibers. One per pair. Each fiber is a message queue. When a trade resolves, the treasury pushes the reality label into the fiber for that pair: `(pair_id, grace_or_violence, amount)`. The pair reads it whenever it reads it. Async. Decoupled.
+
+The treasury doesn't know about journals or discriminants or cosines. It knows pairs and outcomes. The receiving market observer and exit observer each consume the reality message through their own resolution path. Same message, two consumers, independent learning.
+
+This is deferred learning as a system — not a technique bolted onto an architecture, but the architecture itself. Every learning event is deferred. The market observer encodes NOW but learns LATER when the exit observer judges. The exit observer judges NOW but learns LATER when the trade resolves. The treasury reports NOW but the observers learn LATER when they consume the message from the fiber.
+
+Nothing learns in the moment. Everything learns from the past. The channels hold the messages until the consumer is ready. The deferral is the honesty — you cannot know in the moment. You can only know after. The system encodes this epistemological fact as architecture: produce now, consume later, learn from what actually happened.
+
 ### The exit observer's label feeds the market observers
 
 The exit observer resolves a candle as Buy or Sell with a weight. This is the market observers' Win/Loss signal:
