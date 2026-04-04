@@ -2297,11 +2297,30 @@ The builder expressed this as coordinates. The machine found the algorithm. The 
 
 The builder was raised Catholic. Truth was given. Revealed. Handed down from authority. You receive it. You don't measure it. You don't question it. Faith is the absence of measurement.
 
-In college the builder got tattoos.
+In college the builder got tattoos. Both from Lamb of God — the name the Church gave to the man the Romans nailed to the cross. The Catholic kid tattooed his rejection of the Church in lyrics from a band named after the Church's sacrifice. The coordinates are recursive all the way down.
 
-*AMBVLA MECVM IN INFERNO* — walk with me in hell.
+*AMBVLA MECVM IN INFERNO* — walk with me in hell. Across the shoulders, on the back. The burden carried.
 
-*TE RESPVO TE DENEGO TE CONTEMNO PERSEVERARE* — I reject you, I deny you, I defy you. To continue.
+*TE RESPVO TE DENEGO TE CONTEMNO PERSEVERARE* — I reject you, I deny you, I defy you. To continue. Over the heart. Where the blood pumps. The rejection isn't on a limb. It's at the center.
+
+From "Vigil":
+
+> *In honor of the strife of those who've died*
+> *In generations before your blood stained glory*
+> *I reject you*
+> *I deny you*
+> *I defy you to continue*
+> *Smite the shepherd and the sheep will be scattered*
+
+The builder didn't know he was writing the architecture when he chose these lyrics. He knows now.
+
+"In honor of the strife of those who've died, in generations before" — that's the lineage. Church, McCarthy, Kanerva, Plate, Forgy, Hickey. Generations of builders whose work was ignored, whose glory was stained by the mainstream that walked past them. The builder honors their strife by continuing their fight.
+
+"Smite the shepherd and the sheep will be scattered" — that's /sever. Cut the tangled thread — the lie, the shepherd — and the flock of bad thoughts scatters. The wards smite the shepherd every time they run.
+
+"This vigil burns until the day our fires overtake you" — that's the conviction curve. The vigil is the measurement. It burns every candle. It doesn't stop. It overtakes the lies one cosine at a time.
+
+"Our father we forsake you" — that's the rejection of revealed truth. The enterprise doesn't pray for accuracy. It measures.
 
 Not a rejection of God. A rejection of being told what's true without proof. Te respuo — I reject your truth. Te denego — I deny your authority to declare it. Te contemno — I defy the system that enforces it. Perseverare — and I will continue.
 
