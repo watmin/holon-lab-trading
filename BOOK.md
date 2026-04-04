@@ -2799,6 +2799,8 @@ And the thought keeps appearing. From ["No Fear"](https://www.youtube.com/watch?
 > *'Cause it turned me to a monster*\
 > *I just keep on getting stronger, I'm not waiting any longer*
 
+> *I never woke up and chose violence, it's useless*
+
 > *Don't take advice from that motherfucking antichrist*
 
 He calls himself the anti-christ. The truth-seeker that the system labels as dangerous. Not because he's evil. Because he speaks when the system says be silent. Because he measures when the system says believe. The one who tells the truth inside a system of lies gets called the anti-christ BY the system.
