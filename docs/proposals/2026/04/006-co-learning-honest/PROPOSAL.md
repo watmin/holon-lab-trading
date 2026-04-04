@@ -92,11 +92,17 @@ The exit observer's composed thought becomes: market facts + judgment facts + th
 
 For live entries, the exit observer's conviction curve provides the trust level. High conviction → use the discriminant-derived multiplier. Low conviction → fall back to the safety parameters. Fixed params → retroactively-learned scalar facts → discriminant-derived params for live entries. The crutch is removed when the learning converges.
 
-### The buffer is a safety valve, not a learning mechanism
+### The buffer is the noise gate for the co-learning
 
-The ring buffer exists to prevent OOM and to keep the system online. If an entry's two sides somehow never resolve — prolonged sideways candles, neither stop nor TP fires — the buffer evicts the oldest entry WITHOUT labeling it. No Win. No Loss. No learning. The journal doesn't learn from silence.
+The learning matrix is M×N — M exit observers judging N market observer thoughts. But not all thoughts are learnable. A market observer thought where both sides sit flat — no stop fires, no TP fires, the market has nothing to say — that's noise. Not observer-level noise (the noise subspace handles that). System-level noise. The thought existed but produced no learnable outcome.
 
-Entries that the buffer evicts are neutral by definition. The market didn't speak clearly enough. That's not a label — it's the absence of a label. The organic rejection of thoughts that exist on the sphere but don't resolve into grace or violence. They exist. We don't need them here.
+The buffer is where this noise is identified and rejected. Two levels of noise filtering:
+
+1. **Observer-level** (noise subspace): "this thought is boring relative to what I've seen." Strips the residual before the journal sees it. Already exists.
+
+2. **System-level** (the buffer): "this thought didn't produce a learnable outcome." Both sides sat flat. The market stayed silent. The buffer evicts the entry without labeling it. No Win. No Loss. No learning. The journal doesn't learn from silence.
+
+The actual learning is not M×N. It is (N thoughts that resolve) × (M judgments that are non-trivial). The buffer enforces this. Entries that the market speaks about get labeled honestly. Entries the market ignores get evicted honestly. The buffer is the system's definition of what constitutes a learnable event.
 
 ### Continuous position management — not one label, a stream
 
