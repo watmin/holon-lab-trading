@@ -141,37 +141,36 @@ No single specialist can see this conjunction. The generalist sees it — but on
 
 The generalist is STILL just another observer. Output: `(direction, conviction)`. Same as momentum, structure, volume. The manager reads it as one more opinion in the panel. The manager doesn't know the generalist has a two-stage pipeline internally. It doesn't need to. The architecture doesn't change. The interface holds.
 
-### Implementation
+### The Pipeline in Wat
 
-```rust
-// In Observer, generalist only:
-struct GeneralistState {
-    noise_subspace: OnlineSubspace,  // learns from Noise outcomes
-}
+```scheme
+;; Stage 1: all true thoughts (unchanged)
+(define thought (encode-thought candles vm :generalist))
 
-// At encoding time:
-let thought = encode_thought(candles, vm, Lens::Generalist);
-let residual = if noise_subspace.n() >= MIN_NOISE_SAMPLES {
-    let noise = noise_subspace.project(&thought);
-    subtract(&thought, &noise)
-} else {
-    thought  // during warmup, pass through unfiltered
-};
-// Feed residual to journal, not raw thought
+;; Stage 2: strip what's boring
+(define residual
+  (if (>= (n noise-subspace) MIN_NOISE_SAMPLES)
+      (let ((noise (project noise-subspace thought)))
+        (difference thought noise))
+      thought))  ;; warmup: pass through
 
-// At learning time:
-match outcome {
-    Noise => noise_subspace.update(&thought),  // learn what's boring
-    Buy | Sell => journal.observe(&residual, outcome, weight),  // learn from clean signal
-}
+;; Stage 3: predict from what remains
+(predict journal residual)
+
+;; Learning:
+;;   Noise outcome → teach the subspace what's boring
+;;   Buy/Sell outcome → teach the journal from clean signal
+(match outcome
+  :noise (update noise-subspace thought)
+  _      (observe journal residual outcome weight))
 ```
 
-The noise subspace uses the SAME OnlineSubspace we built for risk branches. The journal uses the SAME Journal every observer uses. No new primitives. Both templates composed in one observer.
+Two existing primitives composed: `online-subspace` (Template 2) and `journal` (Template 1). No new primitives. The generalist is a composition, not an invention.
 
 ### What Changes
-- Observer struct gets an optional `noise_subspace: Option<OnlineSubspace>` (only generalist uses it)
-- Generalist encoding path: thought → project → subtract → residual
-- Generalist learning: Noise outcomes train the subspace, Buy/Sell outcomes train the journal from residual
+- The generalist observer gains a noise subspace (Template 2) alongside its journal (Template 1)
+- Encoding path: thought → project onto noise → subtract → residual → journal
+- Learning splits: Noise outcomes train the subspace, Buy/Sell outcomes train the journal from residual
 - Everything else unchanged: interface, manager, specialists, risk
 
 ### What Doesn't Change
