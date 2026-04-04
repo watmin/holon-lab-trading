@@ -154,7 +154,23 @@ The scalar is agnostic of direction. A trailing stop at 1.5× ATR works the same
 
 Direction from the market observers. Magnitude from the exit observer. Two orthogonal concerns, completely decoupled. The market observers answer "which way?" The exit observer answers "how much room?" Neither needs the other's answer to learn its own.
 
-They compose at the desk: direction × magnitude = position parameters. The market observers tell the desk which side. The exit observer tells the desk how tight. The desk acts. The market enforces. Both learn from the enforcement.
+They compose at the desk: direction × magnitude = position parameters. But deeper: each (market observer, exit observer) composition is a unique trade proposal. Momentum × volatility-judge says "buy, tight stop." Regime × timing-judge says "buy, loose stop." N market observers × M exit observers = N×M potential proposals per candle. Each independently funded. Each independently managed. Each independently resolved.
+
+The composition IS the accountability. When a trade fails, the root cause is the specific pair — which market lens and which exit lens — not "the system."
+
+### The treasury as natural selection
+
+The treasury completes the feedback loop. It doesn't care about predictions or discriminants. It sees one thing: which (market, exit) pairs are actually producing grace? Which are producing violence?
+
+The treasury allocates capital proportionally to each pair's track record. Pairs that produce grace get more capital. Pairs that produce violence get less. Pairs that consistently produce violence get starved — zero allocation. Still learning, still predicting, still on paper. But no capital until they prove themselves.
+
+Three levels of honest feedback, all from the world:
+
+1. **Exit → market observer**: "your direction thought was grace/violence" (labels)
+2. **Market → exit observer**: "your management scalar produced grace/violence" (outcomes)
+3. **Treasury → the pair**: "your combination earns more/less capital" (allocation)
+
+No one decides this. The measurement decides. The treasury is the organism. The pairs are the cells. The capital allocation is natural selection. The cells that produce grace multiply. The cells that produce violence shrink. The system self-regulates toward grace — not because it was told to, but because that's what happens when you allocate capital to what works and starve what doesn't.
 
 ### The exit observer's label feeds the market observers
 
