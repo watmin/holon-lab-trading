@@ -18,40 +18,34 @@ pub enum Lens {
     Narrative,
     Regime,
     Generalist,
-    /// Limited generalist: only the original 8 eval methods (pre-refactor vocabulary).
-    /// Diagnostic lens — measures whether the expanded vocabulary dilutes signal.
-    GeneralistClassic,
 }
 
 impl Lens {
     /// The string name used for atom lookup and journal naming.
     pub fn as_str(&self) -> &'static str {
         match self {
-            Lens::Momentum          => "momentum",
-            Lens::Structure         => "structure",
-            Lens::Volume            => "volume",
-            Lens::Narrative         => "narrative",
-            Lens::Regime            => "regime",
-            Lens::Generalist        => "generalist",
-            Lens::GeneralistClassic => "gen-classic",
+            Lens::Momentum   => "momentum",
+            Lens::Structure  => "structure",
+            Lens::Volume     => "volume",
+            Lens::Narrative  => "narrative",
+            Lens::Regime     => "regime",
+            Lens::Generalist => "generalist",
         }
     }
 
     /// Does this lens include the given specialist vocabulary?
     pub fn includes(&self, specialists: &[Lens]) -> bool {
-        matches!(self, Lens::Generalist | Lens::GeneralistClassic)
-            || specialists.contains(self)
+        *self == Lens::Generalist || specialists.contains(self)
     }
 }
 
-/// The enterprise's observer panel: 5 specialists + 2 generalists.
+/// The enterprise's observer panel: 5 specialists + 1 generalist.
 /// Single source of truth — used by enterprise.rs (atom lookup) and state.rs (observer creation).
-pub const OBSERVER_LENSES: [Lens; 7] = [
+pub const OBSERVER_LENSES: [Lens; 6] = [
     Lens::Momentum,
     Lens::Structure,
     Lens::Volume,
     Lens::Narrative,
     Lens::Regime,
     Lens::Generalist,
-    Lens::GeneralistClassic,
 ];

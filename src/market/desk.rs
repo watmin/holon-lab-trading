@@ -168,15 +168,9 @@ impl Desk {
             })
             .collect();
 
-        // Both generalists use fixed windows.
+        // The generalist uses a fixed window.
         observers[GENERALIST_IDX].window_sampler = WindowSampler::new(
             dims as u64 + 5 * OBSERVER_SEED_PRIME,
-            config.window, config.window,
-        );
-        // gen-classic: fixed 48, same as old trader3
-        let gen_classic_idx = OBSERVER_LENSES.len() - 1;
-        observers[gen_classic_idx].window_sampler = WindowSampler::new(
-            dims as u64 + 6 * OBSERVER_SEED_PRIME,
             config.window, config.window,
         );
 

@@ -749,6 +749,9 @@ mod tests {
             disc_strength: 0.88,
             buy_count: 150,
             sell_count: 130,
+            buy_norm: 1.0,
+            sell_norm: 1.0,
+            proto_cosine: 0.95,
         }];
 
         flush_logs(&entries, &conn);

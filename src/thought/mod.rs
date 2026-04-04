@@ -82,6 +82,8 @@ const INDICATOR_ATOMS: &[&str] = &[
     "tf-1h-body", "tf-4h-body",
     "tf-1h-range-pos", "tf-4h-range-pos",
     "tf-all-agree", "tf-all-disagree", "tf-1h-agrees", "tf-4h-agrees",
+    // vocab/harmonics
+    "harmonic", "harmonic-quality",
 ];
 
 const DIRECTION_ATOMS: &[&str] = &["up", "down", "flat"];
@@ -125,6 +127,13 @@ const ZONE_ATOMS: &[&str] = &[
     "hurst-trending", "hurst-reverting",
     "autocorr-positive", "autocorr-negative",
     "moderate-trend",
+    // vocab/harmonics zones
+    "gartley-bullish", "gartley-bearish",
+    "bat-bullish", "bat-bearish",
+    "butterfly-bullish", "butterfly-bearish",
+    "crab-bullish", "crab-bearish",
+    "deep-crab-bullish", "deep-crab-bearish",
+    "cypher-bullish", "cypher-bearish",
     // Risk / portfolio state — role atoms used by risk::encode_risk_branches()
     // Scalar values are encoded continuously via bind(atom, encode_linear(value)).
     // No categorical zone qualifiers — the discriminant finds the zones.
@@ -457,6 +466,13 @@ impl ThoughtEncoder {
             ("tf-1h", "tf-1h-down-strong"), ("tf-1h", "tf-1h-down-mild"),
             ("tf-4h", "tf-4h-up-strong"), ("tf-4h", "tf-4h-up-mild"),
             ("tf-4h", "tf-4h-down-strong"), ("tf-4h", "tf-4h-down-mild"),
+            // vocab/harmonics zones
+            ("harmonic", "gartley-bullish"), ("harmonic", "gartley-bearish"),
+            ("harmonic", "bat-bullish"), ("harmonic", "bat-bearish"),
+            ("harmonic", "butterfly-bullish"), ("harmonic", "butterfly-bearish"),
+            ("harmonic", "crab-bullish"), ("harmonic", "crab-bearish"),
+            ("harmonic", "deep-crab-bullish"), ("harmonic", "deep-crab-bearish"),
+            ("harmonic", "cypher-bullish"), ("harmonic", "cypher-bearish"),
         ] {
             let key = format!("(at {} {})", ind, zone);
             if !fact_cache.contains_key(&key) {
@@ -550,18 +566,7 @@ impl ThoughtEncoder {
         let now = candles.last().unwrap();
         let prev = if candles.len() >= 2 { Some(&candles[candles.len() - 2]) } else { None };
 
-        // ── GeneralistClassic: original 8 eval methods only ────────
-        // Diagnostic lens — pre-refactor vocabulary. No specialist modules.
-        if lens == Lens::GeneralistClassic {
-            collect!(self.eval_comparisons_cached(now, prev));
-            collect!(self.eval_segment_narrative(candles, vm));
-            collect!(self.eval_temporal(candles, vm));
-            collect!(self.eval_rsi_sma_cached(candles));
-            collect!(self.eval_calendar(now));
-            collect!(self.eval_divergence(candles, vm));
-            collect!(self.eval_volume_confirmation(candles));
-            collect!(self.eval_range_position(candles));
-        } else {
+        {
             let is = |lenses: &[Lens]| -> bool {
                 lens.includes(lenses)
             };
@@ -588,6 +593,7 @@ impl ThoughtEncoder {
                 collect!(self.eval_fibonacci(candles));
                 collect!(self.eval_keltner(candles));
                 collect!(self.encode_facts(&crate::vocab::timeframe::eval_timeframe_structure(candles)));
+                collect!(self.encode_facts(&crate::vocab::harmonics::eval_harmonics(candles)));
             }
 
             // ── EXCLUSIVE: volume ───────────────────────────────────────
