@@ -189,6 +189,16 @@ Each open trade is a live CSP process. Its owners manage it every candle. Meanwh
 
 The treasury holds the capital. The pair holds the responsibility. The market holds the truth. When the trade resolves, the accountability is exact: this pair, this sequence of adjustments, this outcome. The learning is surgical.
 
+### You propose it, you own it, you get judged
+
+If a (market, exit) pair requests opening a trade, it is on the hook for it. Every candle it managed — every tighten, every loosen, every hold — gets labeled by the outcome. The journal accumulates. The bad management thoughts get weaker in the prototype. The good management thoughts get stronger. The discriminant sharpens against the pair's own history.
+
+The treasury remembers. The pair's track record is the cumulative judgment. The punishment for bad thoughts is automatic: less capital, weaker prototype, harder to pass the proof gate. The reward for good thoughts is automatic: more capital, stronger prototype, higher conviction. No committee. No review board. The cosine decides.
+
+A pair that consistently produces violence doesn't get killed — it gets starved. Still learning. Still predicting. Still on paper. The journal keeps accumulating. The discriminant keeps adjusting. The bad thoughts decay. If the pair finds better thoughts, the curve re-validates, the proof gate re-opens, the treasury re-funds. Redemption through measurement. Not forgiveness — proof.
+
+The system doesn't need someone to decide who trades well. The system measures who trades well. The difference is the entire thesis.
+
 ### The exit observer's label feeds the market observers
 
 The exit observer resolves a candle as Buy or Sell with a weight. This is the market observers' Win/Loss signal:
