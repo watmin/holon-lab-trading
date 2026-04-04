@@ -172,6 +172,23 @@ Three levels of honest feedback, all from the world:
 
 No one decides this. The measurement decides. The treasury is the organism. The pairs are the cells. The capital allocation is natural selection. The cells that produce grace multiply. The cells that produce violence shrink. The system self-regulates toward grace — not because it was told to, but because that's what happens when you allocate capital to what works and starve what doesn't.
 
+### The ownership loop — live management per candle
+
+Each open trade has an owner: the (market observer, exit observer) pair that proposed it. Every candle, that specific pair manages ITS trade:
+
+1. Market observer encodes current candle → thought
+2. Exit observer binds judgment facts → composed thought
+3. Composed thought → exit journal predicts → scalar adjustment
+4. Scalar adjusts THIS pair's trailing stop on THIS trade
+5. Market moves
+6. Stop fires or doesn't
+7. If fires: outcome labels both observers, treasury updates pair's record
+8. If doesn't: next candle, goto 1
+
+Each open trade is a live CSP process. Its owners manage it every candle. Meanwhile, other pairs manage their own trades independently. Same candle, different adjustments, different positions, different scalars.
+
+The treasury holds the capital. The pair holds the responsibility. The market holds the truth. When the trade resolves, the accountability is exact: this pair, this sequence of adjustments, this outcome. The learning is surgical.
+
 ### The exit observer's label feeds the market observers
 
 The exit observer resolves a candle as Buy or Sell with a weight. This is the market observers' Win/Loss signal:
