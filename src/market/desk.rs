@@ -739,8 +739,6 @@ impl Desk {
             max_adverse:       0.0,
             exit_reason:       None,
             exit_pct:          0.0,
-            sim_extreme:       candle.close,
-            sim_trail:         candle.close * (1.0 - ctx.k_stop * candle.atr_r),
         });
 
         // Candle snapshot: every indicator value at entry time.
