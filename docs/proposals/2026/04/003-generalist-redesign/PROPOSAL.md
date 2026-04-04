@@ -1,4 +1,4 @@
-# Proposal 003: Generalist Redesign
+# Proposal 003: Observer Redesign — Two-Stage Pipeline + Standard Vocabulary
 
 ## Problem
 
