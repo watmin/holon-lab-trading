@@ -161,7 +161,7 @@ The only new code is: (a) exit manager aggregation (same pattern as market manag
 
 3. **Label feedback timing**: Positions may be open for hundreds of candles. The market panel only learns when a position resolves. Is this too slow? Should there be intermediate feedback (e.g., partial resolution at principal recovery, final resolution at close)?
 
-4. **Paper positions for exit learning**: The market panel creates paper entries for learning even without capital. The exit panel needs open positions to observe. Do we create paper positions (unfunded, simulated lifecycle) so the exit panel can learn during flat periods? Or does the exit panel only learn from live trades?
+4. **Exit learning without positions**: The exit panel does not need open positions to learn. It needs a snapshot of the portfolio state at the moment a thought was encoded — equity, deployment, drawdown, ATR, phase. That snapshot IS the exit thought. Resolution: did the portfolio state improve or deteriorate N candles later? Same pattern as market observers: encode state, predict, resolve against what actually happened. No paper positions. No simulated lifecycle. Just snapshots and outcomes.
 
 5. **Trail modulation bounds**: When the exit panel says "tighten" or "loosen," how much? Should conviction magnitude map linearly to trail adjustment? Should there be a maximum tightening/loosening factor? Or should the exit panel learn the modulation magnitude as part of its own curve?
 
