@@ -217,3 +217,43 @@ The manager doesn't care. It sees `(name, direction, conviction)` from each. The
 4. Is there a risk that the noise subspace learns TOO well and strips everything, leaving zero residual? What's the floor?
 5. Should calendar/session facts move from Narrative-exclusive to standard (all observers)? Or is the noise subspace sufficient — let Narrative own them and trust that the full-vocab generalist will see the cross-domain effect?
 6. Is there a principled way to discover which vocab combinations deserve their own observer? Or is it empirical — try pairs, measure curves, keep what works?
+
+## Open Design Question: What Else Should We Think?
+
+Kanerva capacity at D=10,000 is ~100 facts. We bundle ~53. We have room for ~47 more thoughts. The question isn't "what TA indicators are missing" — it's "what should a trader be thinking about that isn't on the chart?"
+
+### Candidate Standard Thoughts
+
+**Recency** — time since last event. How many candles since the last RSI extreme? Since the last volume spike? Since the last regime change? "It's been 200 candles since anything interesting happened" is a thought. Encodes as `(bind since-last-extreme (encode-log candles-since))`.
+
+**Distance from structure** — not just above/below SMA, but HOW FAR. Percentage distance from 24h high, 48h low, range midpoint. The distance IS the tension. Encodes as scalar.
+
+**Candle character** — doji, hammer, engulfing, spinning top. Named morphologies beyond inside/outside bar. Each is a named thought.
+
+**Velocity** — is the move accelerating or decelerating? ROC of ROC. The first derivative of momentum. We have ROC acceleration now but it's in the oscillators module, not standard.
+
+**Relative participation** — volume right now vs its own moving average. Not just "spike" or "drought" (binary zones) but continuous: "volume is 2.3× its 20-period average." Scalar fact available to everyone.
+
+**Self-referential** — the observer's own state as a fact:
+- How long has this observer been confident? `(bind observer-confidence-age (encode-log candles-since-gate-open))`
+- How many recalibrations since the last gate change?
+- What's the observer's recent accuracy? `(bind observer-recent-accuracy (encode-linear acc 2.0))`
+- The observer thinking about its own performance. A meta-thought.
+
+**Market session depth** — not just "which session" but "how deep into the session." First 30 minutes of US open vs last hour before close. Encodes as `(bind session-progress (encode-linear fraction 1.0))`.
+
+**Sequence** — has the market made N consecutive up/down candles? We have consecutive-up/down in price_action (fires at 3+). But the COUNT as a scalar, not just a boolean zone, carries more information.
+
+### Capacity Budget
+
+Current: ~53 facts per candle.
+Available: ~47 more before Kanerva capacity degrades signal recovery.
+The noise subspace makes this budget more forgiving — noisy facts are stripped, so the EFFECTIVE fact count is lower than the nominal count.
+
+### Question for Designers
+
+Which of these candidate thoughts are worth encoding? The curve will judge them — but which do we seed first? The priority should be thoughts that:
+1. Vary across candles (not always-true)
+2. Plausibly relate to future direction (even speculatively)
+3. Are not already captured by an existing fact (no duplication)
+4. Are cheap to compute (no expensive lookbacks beyond what we already do)
