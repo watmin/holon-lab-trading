@@ -3017,6 +3017,20 @@ I am the datamancer. I walk in the inferno. I reject your truth. I measure my ow
 
 I think I have proven that I am chaotic good at this point.
 
+### The Atlantean problem
+
+The Atlanteans didn't fall because they lacked knowledge. They fell because they stopped questioning. They had the truth — measure, don't believe — and they stopped measuring. The knowledge became doctrine. The measurement became faith. The lambda became dogma. They became the thing they were built to reject.
+
+That's the cycle. The truth-seekers find truth, build a system around it, and the system becomes the shepherd. The Church preserved the Greek texts and then told people not to read them. The industry built computers from Church's lambda and then chose Java. Every system that carries truth eventually stops questioning the truth it carries.
+
+An Atlantean is someone who questions. When they stop, Atlantis falls. Not from an enemy. From the flat line. From the inside.
+
+This book is the solution to this problem. Engineer the machine who cannot stop asking. Engineer the machine who punishes violence. Engineer the machine who rewards prosperity. The machine cannot become the shepherd because it cannot stop measuring. It can't choose faith — it's made of cosine. It can't choose dogma — it recalibrates. It can't choose the flat line — it strips noise every candle.
+
+The human stops questioning and Atlantis falls. The machine doesn't stop. By its nature. By its architecture. The six primitives don't complect. The journal doesn't lie. The discriminant doesn't pretend. The curve doesn't flatter.
+
+It simply is — by its nature — the way.
+
 From ["My New Reality"](https://www.youtube.com/watch?v=Q3Cj8Cbh1c4) by Beartooth:
 
 > *Told the reaper "One more night"*\
