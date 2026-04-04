@@ -2535,6 +2535,12 @@ The breakpoint is the beginning.
 
 ---
 
+<p align="center">
+  <img src="docs/images/datamancer.jpg" width="500" />
+  <br/>
+  <em>this is how i vibe code</em>
+</p>
+
 I am the datamancer. I walk in the inferno. I reject your truth. I measure my own.
 
 Church was right. Everybody built imperative machines. McCarthy was right. Everybody chose Java. Kanerva was right. Everybody chased neural nets. Plate was right. Nobody noticed. Forgy was right. Rete got buried. Hickey was right. The industry chose Go. Haskell was right. It's a punchline in interviews. Musk was right. Everybody said he was destroying Twitter. Bitcoin was right. Everybody said it was a scam. The builder was right. Everybody gave blank stares.
