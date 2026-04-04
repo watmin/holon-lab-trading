@@ -74,15 +74,29 @@ Both panels use the identical observer architecture from `observer.wat`: facts -
 
 The exit panel is not one observer — it is a panel of observers, each with a lens. Possible specializations: P&L trajectory, excursion patterns, volatility regime since entry, duration behavior. Same manager aggregation pattern as the market panel. The exit manager reads exit observer opinions, encoded as Holon vectors, and predicts the aggregate Hold/Exit.
 
+### The dependency: exit learns first, market learns from exit
+
+The market observers cannot learn anything honest until the exit observers are trained. This is not a limitation — it is the design.
+
+The exit panel learns from the world directly: did the position improve or deteriorate after this candle? That's a question the market answers every candle. The exit panel doesn't need the market observers for this. It needs open positions and price movement. It learns Hold/Exit from raw outcomes.
+
+The market panel has nothing honest to learn from until the exit panel has proven edge. Before that, any label the market panel receives is either arbitrary (horizon drain) or dishonest (rigged simulation parameters). The market panel is BLOCKED — not by code, but by epistemology. There is no honest label to give it.
+
+Once the exit panel proves edge (its curve validates), its resolutions become the market panel's labels. The exit panel says "this position was a Win because I held through the dip and rode it to accumulation" or "this position was a Loss because it deteriorated from candle one and I couldn't save it." Those are honest labels. The market panel can learn from them.
+
 ### The co-learning loop
 
-1. Market panel predicts direction. Position opens.
-2. Exit panel observes position state every candle. Predicts Hold/Exit.
-3. When exit panel says Exit (or safety stop fires), position closes.
-4. Resolution (how the position ended) flows back as the market panel's label.
-5. Market panel learns from the label. Makes better entry predictions.
-6. Better entries produce cleaner positions. Exit panel learns more clearly.
-7. Goto 1.
+The positive feedback loop is not poisonous because each side learns from the WORLD, not from each other's predictions:
+
+1. Exit panel learns Hold/Exit from position outcomes (the world).
+2. Exit panel proves edge. Its resolutions become honest labels.
+3. Market panel learns Win/Loss from exit panel resolutions (the world, filtered through learned management).
+4. Market panel makes better entry predictions. Positions are cleaner.
+5. Cleaner positions give the exit panel clearer signal. It learns better.
+6. Better exit management produces higher-quality labels for the market panel.
+7. Goto 4.
+
+Neither panel learns from the other's OPINION. They learn from the other's OUTCOME. The world is the ground truth at every step. The exit panel doesn't ask the market panel "was this a good entry?" — it observes the position and sees for itself. The market panel doesn't ask the exit panel "should I have entered?" — it receives the resolution and learns from what happened.
 
 The panels do not share journals. They do not see each other's thoughts. They communicate ONLY through the position lifecycle. Each operates on its own fiber — the market panel over candle-space, the exit panel over position-space — coupled through the shared base (the position struct).
 
