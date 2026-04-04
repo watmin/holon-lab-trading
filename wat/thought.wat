@@ -459,9 +459,11 @@
 
     ;; ── STANDARD: every observer sees these ──────────────────────
     ;; Calendar: hour-of-day, day-of-week, session.
-    ;; These are contextual — 'RSI oversold during Asian session' is a
-    ;; different thought than 'RSI oversold during US session.'
-    (define standard-facts (eval-calendar now))
+    ;; Standard vocab: recency, distance-from-structure, participation, session-depth.
+    ;; These are contextual — the noise subspace strips what doesn't matter per observer.
+    (define standard-facts
+      (append (eval-calendar now)
+              (eval-standard candles)))
 
     ;; ── SHARED: momentum + structure ─────────────────────────────
     (define shared-facts
