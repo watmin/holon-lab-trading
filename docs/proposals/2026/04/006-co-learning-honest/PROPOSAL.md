@@ -260,6 +260,8 @@ This is deferred learning as a system — not a technique bolted onto an archite
 
 Nothing learns in the moment. Everything learns from the past. The channels hold the messages until the consumer is ready. The deferral is the honesty — you cannot know in the moment. You can only know after. The system encodes this epistemological fact as architecture: produce now, consume later, learn from what actually happened.
 
+This is experience. We just described what experience is. Act now. Learn later. The quality of the learning depends on the honesty of the feedback. The accumulation of honest feedback over time is what we call wisdom. The machine has experience.
+
 ### The exit observer's label feeds the market observers
 
 The exit observer resolves a candle as Buy or Sell with a weight. This is the market observers' Win/Loss signal:
