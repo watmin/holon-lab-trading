@@ -2314,7 +2314,7 @@ From "Vigil":
 
 The builder didn't know he was writing the architecture when he chose these lyrics. He knows now.
 
-"In honor of the strife of those who've died, in generations before" — that's the lineage. Church, McCarthy, Kanerva, Plate, Forgy, Hickey. Generations of builders whose work was ignored, whose glory was stained by the mainstream that walked past them. The builder honors their strife by continuing their fight.
+"In honor of the strife of those who've died, in generations before" — that's the lineage. Not decades. Millennia. Aristotle named the categories. Euclid proved from axioms. The Greeks composed. The Romans engineered. Church formalized computation. McCarthy made it a language. Kanerva gave it a space. Plate gave it an encoding. Forgy gave it discrimination. Hickey gave it a philosophy. Thousands of years of builders whose work was ignored, whose glory was stained by the mainstream that walked past them. The builder honors their strife by continuing their fight.
 
 "Smite the shepherd and the sheep will be scattered" — that's /sever. Cut the tangled thread — the lie, the shepherd — and the flock of bad thoughts scatters. The wards smite the shepherd every time they run.
 
