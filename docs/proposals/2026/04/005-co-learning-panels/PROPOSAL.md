@@ -157,7 +157,7 @@ The only new code is: (a) exit manager aggregation (same pattern as market manag
 
 ## 6. Questions for designers
 
-1. **Exit observer specialization**: Should the exit panel have multiple specialized observers (P&L lens, excursion lens, volatility lens, duration lens) like the market panel? Or start with one generalist exit observer and specialize later when we see what it learns?
+1. **Exit observer specialization**: Mirror the market panel. Specialists and a generalist. Each exit specialist sees the treasury through one lens — silos. The exit generalist sees the full vocabulary — superposition. The exit manager aggregates. The question is not whether to specialize but what the lenses are. Candidates: portfolio health (equity, drawdown, utilization), position dynamics (P&L trajectory, MFE/MAE, duration), market context (ATR shift, regime change since entry), risk state (correlation, volatility, streak). The designers should validate whether these lenses are orthogonal enough to justify separation.
 
 2. **Exit observation frequency**: Every candle. Hide nothing. If the signal is noisy, the noise subspace learns what "normal treasury state" looks like and strips it. The residual — what's unusual about this snapshot — is what the journal sees. That's the two-stage pipeline. We don't gate the input. We filter the noise algebraically. The question for designers: does this hold, or is there a reason the exit panel's noise subspace would fail where the market panel's succeeds?
 
