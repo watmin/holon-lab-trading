@@ -80,7 +80,9 @@ Each side of the dual-sided entry — buy hypothesis and sell hypothesis — has
 
 No horizon. No age limit. The market resolves both sides through organic price movement.
 
-**Honest acknowledgment**: the trailing stop and take-profit parameters (k_stop, k_tp, k_trail × ATR) are still magic numbers. They are a better approximation than the horizon — the market's movement triggers resolution, not a timer — but they are still parameters we chose, not parameters the machine learned. This is the crutch. The idealized version: the exit observers themselves learn WHEN a side has resolved, replacing the fixed trailing stop with a learned boundary. We build the crutch first. The machine learns to walk without it after.
+**Honest acknowledgment**: the trailing stop and take-profit parameters (k_stop, k_tp, k_trail × ATR) are still magic numbers. They are a better approximation than the horizon — the market's movement triggers resolution, not a timer — but they are still parameters we chose, not parameters the machine learned. This is the crutch.
+
+The next work: the exit observer's conviction curve provides the multipliers. High conviction → tight stops (the exit observer knows where it is). Low conviction → wide stops (let the market breathe, the exit observer isn't sure). The curve maps conviction to accuracy. The accuracy maps to the multiplier. Fixed params → curve-derived params → the machine chose the values. The crutch is removed when the curve is wired.
 
 ### The buffer is a safety valve, not a learning mechanism
 
