@@ -285,6 +285,7 @@ fn main() {
     // ─ Exit parameters (managed mode) ──────────────────────────────────
     let k_stop:  f64 = 3.0;
     let k_trail: f64 = 1.5;
+    let k_trail_runner: f64 = 3.0;  // wider trail for house money
     let k_tp:    f64 = 6.0;
     let exit_horizon: usize = (k_stop * k_stop) as usize;
     let exit_observe_interval: usize = (exit_horizon / 2).max(1);
@@ -355,6 +356,7 @@ fn main() {
         diagnostics: args.diagnostics,
         k_stop,
         k_trail,
+        k_trail_runner,
         k_tp,
         exit_horizon,
         exit_observe_interval,
@@ -449,9 +451,10 @@ fn main() {
         }
     }
 
-    // Flush any remaining log entries, then commit.
+    // Flush any remaining log entries, write accumulation summary, then commit.
     enterprise::ledger::flush_logs(&state.desks[0].pending_logs, &ledger);
     state.desks[0].pending_logs.clear();
+    enterprise::ledger::write_accumulation_summary(&ledger, &state.accumulation);
     ledger.execute_batch("COMMIT").ok();
 
     // ─ Final summary ─────────────────────────────────────────────────────────
@@ -468,7 +471,7 @@ fn main() {
         eprintln!("  Venue costs: {:.1}bps fee + {:.1}bps slippage = {:.2}% round trip",
             args.swap_fee * 10000.0, args.slippage * 10000.0, rt);
     }
-    eprintln!("  Exit: ATR-scaled (K_stop={} K_trail={} K_tp={})", k_stop, k_trail, k_tp);
+    eprintln!("  Exit: ATR-scaled (K_stop={} K_trail={}/{} K_tp={})", k_stop, k_trail, k_trail_runner, k_tp);
     eprintln!("  Labeled: {}  Noise: {} ({:.1}% noise rate)",
         state.desks[0].labeled_count, state.desks[0].noise_count,
         state.desks[0].noise_count as f64 / (state.desks[0].labeled_count + state.desks[0].noise_count).max(1) as f64 * 100.0);
@@ -481,6 +484,17 @@ fn main() {
         state.treasury.balance(&base_asset), state.treasury.deployed(&base_asset),
         state.treasury.utilization(&prices) * 100.0,
         state.treasury.total_fees_paid, state.treasury.total_slippage);
+    {
+        let acc = &state.accumulation;
+        let wbtc_acc = acc.accumulated(&quote_asset);
+        let usdc_acc = acc.accumulated(&base_asset);
+        let wbtc_lost = acc.lost(&quote_asset);
+        let usdc_lost = acc.lost(&base_asset);
+        eprintln!("  Accumulation: {} {:.6} ({} recoveries) | {} {:.2} ({} recoveries)",
+            quote_asset, wbtc_acc, acc.recovery_count, base_asset, usdc_acc, acc.recovery_count);
+        eprintln!("  Losses: {} (${:.2} {} lost, {:.6} {} lost) | Fees: ${:.2}",
+            acc.loss_count, usdc_lost, base_asset, wbtc_lost, quote_asset, acc.total_fees);
+    }
     eprintln!();
     {
         let gen = &state.desks[0].observers[enterprise::state::GENERALIST_IDX];

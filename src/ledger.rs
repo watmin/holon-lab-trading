@@ -505,8 +505,43 @@ pub fn init_ledger(path: &str) -> Connection {
             won           INTEGER,  -- 1 if trade was correct
             tht_data      BLOB      -- bipolar thought vector (i8 array)
         );
+
+        -- Accumulation model summary. Written at end of run.
+        -- See wat/accumulation.wat for the full spec.
+        CREATE TABLE IF NOT EXISTS accumulation_summary (
+            asset             TEXT,     -- e.g. 'WBTC', 'USDC'
+            total_accumulated REAL,     -- lifetime residue harvested
+            total_lost        REAL,     -- lifetime loss from stop-outs
+            trade_count       INTEGER,
+            recovery_count    INTEGER,  -- principal recovered (wins)
+            loss_count        INTEGER,  -- stopped out (losses)
+            total_fees        REAL
+        );
     ").expect("failed to init run DB");
     db
+}
+
+pub fn write_accumulation_summary(conn: &Connection, ledger: &crate::treasury::AccumulationLedger) {
+    // Collect all assets from both maps
+    let mut assets = std::collections::HashSet::new();
+    for k in ledger.total_accumulated.keys() { assets.insert(k.clone()); }
+    for k in ledger.total_lost.keys() { assets.insert(k.clone()); }
+    for asset in &assets {
+        conn.execute(
+            "INSERT INTO accumulation_summary
+             (asset, total_accumulated, total_lost, trade_count, recovery_count, loss_count, total_fees)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                asset.as_str(),
+                ledger.accumulated(asset),
+                ledger.lost(asset),
+                ledger.trade_count as i64,
+                ledger.recovery_count as i64,
+                ledger.loss_count as i64,
+                ledger.total_fees,
+            ],
+        ).ok();
+    }
 }
 
 pub fn write_meta(conn: &Connection, key: &str, value: &str) {

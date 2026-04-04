@@ -29,7 +29,7 @@ use crate::market::observer::Observer;
 use crate::portfolio::{Phase, Portfolio};
 use crate::position::{CrossingSnapshot, ExitObservation, ExitReason, ManagedPosition, Pending, PositionEntry, PositionExit, PositionPhase, TrailFactor};
 use crate::sizing::{curve_win_rate, half_kelly_position, kelly_frac, signal_weight};
-use crate::treasury::{Asset, Treasury};
+use crate::treasury::{AccumulationLedger, Asset, Treasury};
 use crate::window_sampler::WindowSampler;
 use crate::market::exit::encode_exit_thought;
 use crate::state::{
@@ -54,6 +54,7 @@ const RISK_GATE_THRESHOLD: f64 = 0.3;
 pub struct SharedState<'a> {
     pub treasury: &'a mut Treasury,
     pub portfolio: &'a mut Portfolio,
+    pub accumulation: &'a mut AccumulationLedger,
     pub risk_mult: f64,
     pub peak_equity: &'a mut f64,
     pub db_batch: &'a mut usize,
@@ -257,6 +258,7 @@ impl Desk {
         // Destructure for body compatibility — the fold uses these names throughout.
         let treasury = &mut *shared.treasury;
         let portfolio = &mut *shared.portfolio;
+        let accumulation = &mut *shared.accumulation;
         let risk_mult = shared.risk_mult;
         let peak_equity = &mut *shared.peak_equity;
         let db_batch = &mut *shared.db_batch;
@@ -425,7 +427,11 @@ impl Desk {
                 });
             }
 
-            if let Some(exit) = pos.tick(current_rate, TrailFactor(ctx.k_trail)) {
+            let trail = match pos.phase {
+                PositionPhase::Runner => TrailFactor(ctx.k_trail_runner),
+                _ => TrailFactor(ctx.k_trail),
+            };
+            if let Some(exit) = pos.tick(current_rate, trail) {
                 exit_signals.push((pi, exit, current_rate, is_buy));
             }
         }
@@ -435,27 +441,40 @@ impl Desk {
         for &(pos_idx, ref exit, current_rate, is_buy) in &exit_signals {
             let pos = &mut self.positions[pos_idx];
 
-            // Determine how much target to sell and what phase to enter.
-            // Take profit: reclaim source principal. Runner: ride the rest.
-            let (sell_target, next_phase) = match exit {
-                PositionExit::TakeProfit if pos.phase == PositionPhase::Active => {
-                    // Reclaim enough target to cover source principal + fees + 1% profit.
-                    // Convert source amount to target units: source / rate = target.
-                    let reclaim_source = pos.source_amount + pos.total_fees + pos.source_amount * 0.01;
-                    let reclaim_target = (reclaim_source / current_rate) / (1.0 - fee_rate);
-                    if reclaim_target < pos.target_held {
-                        (reclaim_target, PositionPhase::Runner)
+            // Determine how much target to sell, how much to keep, and what phase to enter.
+            // Accumulation model (wat/accumulation.wat):
+            //   Active TakeProfit → recover exactly source-amount, keep residue (→ Runner)
+            //   Active StopLoss  → swap everything back, eat the bounded loss
+            //   Runner StopLoss  → no swap, residue stays as accumulated target
+            let prev_phase = pos.phase;
+            let (sell_target, keep_target, next_phase) = match (exit, prev_phase) {
+                (PositionExit::TakeProfit, PositionPhase::Active) => {
+                    // Principal recovery: swap just enough target to recover source-amount.
+                    // gross_need = source_amount in target units at current rate.
+                    // with_fee = extra target to cover the swap fee.
+                    let gross_need = pos.source_amount / current_rate;
+                    let reclaim_target = (gross_need / (1.0 - fee_rate)).min(pos.target_held);
+                    let residue = pos.target_held - reclaim_target;
+                    if residue > 0.0 {
+                        (reclaim_target, residue, PositionPhase::Runner)
                     } else {
-                        (pos.target_held, PositionPhase::Closed)
+                        (pos.target_held, 0.0, PositionPhase::Closed)
                     }
                 }
-                _ => (pos.target_held, PositionPhase::Closed),
+                (PositionExit::StopLoss, PositionPhase::Runner) => {
+                    // Runner stop: no swap. Residue stays as accumulated target.
+                    // Release from deployed to available — it's harvested.
+                    (0.0, pos.target_held, PositionPhase::Closed)
+                }
+                _ => {
+                    // Active stop loss: swap everything back. Loss is bounded.
+                    (pos.target_held, 0.0, PositionPhase::Closed)
+                }
             };
 
-            // Settlement: release target → swap target→source → accounting
+            // Settlement: swap what needs swapping, release what stays
             if sell_target > 0.0 {
                 treasury.release(&pos.target_asset, sell_target);
-                // Swap rate = from_per_to. Swapping target→source: rate = target_per_source = 1/rate.
                 let exit_rate = crate::treasury::Rate(1.0 / current_rate);
                 let (sold, received) = treasury.swap(
                     &pos.target_asset, &pos.source_asset,
@@ -463,13 +482,36 @@ impl Desk {
                 );
                 pos.target_held -= sold;
                 pos.source_reclaimed += received;
-                pos.total_fees += sold * exit_rate.0 * fee_rate;
+                let swap_fee = sold * exit_rate.0 * fee_rate;
+                pos.total_fees += swap_fee;
+                accumulation.record_fees(swap_fee);
             }
+            if keep_target > 0.0 {
+                // Release residue from deployed → available (no swap, stays as target)
+                treasury.release(&pos.target_asset, keep_target);
+                pos.target_held -= keep_target;
+            }
+
+            // Accumulation accounting
+            match (exit, prev_phase) {
+                (PositionExit::TakeProfit, PositionPhase::Active) if next_phase == PositionPhase::Runner => {
+                    // Principal recovered, residue accumulated
+                    accumulation.record_recovery(&pos.target_asset, keep_target);
+                }
+                (PositionExit::StopLoss, PositionPhase::Active) => {
+                    // Active stop-loss: record the loss
+                    let loss = (pos.source_amount - pos.source_reclaimed).max(0.0);
+                    accumulation.record_loss(&pos.source_asset, loss);
+                }
+                _ => {} // Runner stop: already counted at recovery time
+            }
+
             pos.phase = next_phase;
             self.position_swaps += 1;
 
             let ret = pos.return_pct(current_rate);
-            if next_phase == PositionPhase::Runner || ret > 0.0 {
+            // Win = principal recovered (transition to Runner)
+            if next_phase == PositionPhase::Runner {
                 self.position_wins += 1;
             }
             if next_phase == PositionPhase::Closed {
@@ -477,10 +519,11 @@ impl Desk {
                 self.last_exit_atr = candle.atr_r;
             }
             let direction = if is_buy { Direction::Long } else { Direction::Short };
-            let exit_type = match (exit, pos.phase) {
-                (PositionExit::TakeProfit, PositionPhase::Runner) => "RunnerTP",
-                (PositionExit::TakeProfit, _) => "PartialProfit",
+            let exit_type = match (exit, prev_phase) {
+                (PositionExit::TakeProfit, PositionPhase::Active) if next_phase == PositionPhase::Runner => "PrincipalRecovery",
+                (PositionExit::StopLoss, PositionPhase::Runner) => "RunnerHarvest",
                 (PositionExit::StopLoss, _) => "StopLoss",
+                (PositionExit::TakeProfit, _) => "FullExit",
             };
             self.pending_logs.push(LogEntry::PositionExit {
                 step: self.log_step,
@@ -570,6 +613,8 @@ impl Desk {
                     });
                     self.next_position_id += 1;
                     self.position_swaps += 1;
+                    accumulation.record_trade();
+                    accumulation.record_fees(entry_fee);
                     let direction = if is_buy { Direction::Long } else { Direction::Short };
                     self.pending_logs.push(LogEntry::PositionOpen {
                         step: self.log_step,
@@ -1370,6 +1415,7 @@ mod tests {
                 diagnostics: false,
                 k_stop: 2.0,
                 k_trail: 1.5,
+                k_trail_runner: 3.0,
                 k_tp: 3.0,
                 exit_horizon: 36,
                 exit_observe_interval: 5,
@@ -1422,9 +1468,11 @@ mod tests {
         let mut db_batch = 0usize;
 
         let raw = make_raw_candle(0);
+        let mut accum = AccumulationLedger::new();
         let mut shared = SharedState {
             treasury: &mut treasury,
             portfolio: &mut portfolio,
+            accumulation: &mut accum,
             risk_mult: 0.5,
             peak_equity: &mut peak,
             db_batch: &mut db_batch,
@@ -1443,6 +1491,7 @@ mod tests {
         let mut treasury = Treasury::new(3, 0.5);
         treasury.deposit(&Asset::new("USDC"), 10000.0);
         let mut portfolio = crate::portfolio::Portfolio::new(10000.0, 100);
+        let mut accum = AccumulationLedger::new();
         let mut peak = 10000.0;
         let mut db_batch = 0usize;
 
@@ -1451,6 +1500,7 @@ mod tests {
             let mut shared = SharedState {
                 treasury: &mut treasury,
                 portfolio: &mut portfolio,
+                accumulation: &mut accum,
                 risk_mult: 0.5,
                 peak_equity: &mut peak,
                 db_batch: &mut db_batch,
@@ -1471,6 +1521,7 @@ mod tests {
         let mut treasury = Treasury::new(3, 0.5);
         treasury.deposit(&Asset::new("USDC"), 10000.0);
         let mut portfolio = crate::portfolio::Portfolio::new(10000.0, 100);
+        let mut accum = AccumulationLedger::new();
         let mut peak = 10000.0;
         let mut db_batch = 0usize;
 
@@ -1479,6 +1530,7 @@ mod tests {
             let mut shared = SharedState {
                 treasury: &mut treasury,
                 portfolio: &mut portfolio,
+                accumulation: &mut accum,
                 risk_mult: 0.5,
                 peak_equity: &mut peak,
                 db_batch: &mut db_batch,
@@ -1497,6 +1549,7 @@ mod tests {
         let mut treasury = Treasury::new(3, 0.5);
         treasury.deposit(&Asset::new("USDC"), 10000.0);
         let mut portfolio = crate::portfolio::Portfolio::new(10000.0, 100);
+        let mut accum = AccumulationLedger::new();
         let mut peak = 10000.0;
         let mut db_batch = 0usize;
 
@@ -1505,6 +1558,7 @@ mod tests {
             let mut shared = SharedState {
                 treasury: &mut treasury,
                 portfolio: &mut portfolio,
+                accumulation: &mut accum,
                 risk_mult: 0.8,
                 peak_equity: &mut peak,
                 db_batch: &mut db_batch,
@@ -1558,6 +1612,7 @@ mod tests {
         treasury.deposit(&Asset::new("USDC"), 10000.0);
         let mut portfolio = crate::portfolio::Portfolio::new(10000.0, 0);
         portfolio.phase = Phase::Tentative;
+        let mut accum = AccumulationLedger::new();
         let mut peak = 10000.0;
         let mut db_batch = 0usize;
 
@@ -1589,6 +1644,7 @@ mod tests {
             let mut shared = SharedState {
                 treasury: &mut treasury,
                 portfolio: &mut portfolio,
+                accumulation: &mut accum,
                 risk_mult: 0.8,
                 peak_equity: &mut peak,
                 db_batch: &mut db_batch,
@@ -1621,6 +1677,7 @@ mod tests {
         let mut treasury = Treasury::new(3, 0.5);
         treasury.deposit(&Asset::new("USDC"), 10000.0);
         let mut portfolio = crate::portfolio::Portfolio::new(10000.0, 100);
+        let mut accum = AccumulationLedger::new();
         let mut peak = 10000.0;
         let mut db_batch = 0usize;
 
@@ -1630,6 +1687,7 @@ mod tests {
             let mut shared = SharedState {
                 treasury: &mut treasury,
                 portfolio: &mut portfolio,
+                accumulation: &mut accum,
                 risk_mult: 0.5,
                 peak_equity: &mut peak,
                 db_batch: &mut db_batch,
@@ -1649,6 +1707,7 @@ mod tests {
             let mut shared = SharedState {
                 treasury: &mut treasury,
                 portfolio: &mut portfolio,
+                accumulation: &mut accum,
                 risk_mult: 0.5,
                 peak_equity: &mut peak,
                 db_batch: &mut db_batch,
@@ -1715,6 +1774,7 @@ mod tests {
             diagnostics: false,
             k_stop: 2.0,
             k_trail: 1.5,
+            k_trail_runner: 3.0,
             k_tp: 3.0,
             exit_horizon: 36,
             exit_observe_interval: 5,
@@ -1746,6 +1806,7 @@ mod tests {
         let mut treasury = Treasury::new(3, 0.5);
         treasury.deposit(&Asset::new("USDC"), 10000.0);
         let mut portfolio = crate::portfolio::Portfolio::new(10000.0, 100);
+        let mut accum = AccumulationLedger::new();
         let mut peak = 10000.0;
         let mut db_batch = 0usize;
 
@@ -1760,6 +1821,7 @@ mod tests {
             let mut shared = SharedState {
                 treasury: &mut treasury,
                 portfolio: &mut portfolio,
+                accumulation: &mut accum,
                 risk_mult: 0.5,
                 peak_equity: &mut peak,
                 db_batch: &mut db_batch,
@@ -1793,6 +1855,7 @@ mod tests {
         treasury.deposit(&Asset::new("WBTC"), 0.1);
         let mut portfolio = crate::portfolio::Portfolio::new(10000.0, 0);
         portfolio.phase = Phase::Tentative;
+        let mut accum = AccumulationLedger::new();
         let mut peak = 10000.0;
         let mut db_batch = 0usize;
 
@@ -1802,6 +1865,7 @@ mod tests {
             let mut shared = SharedState {
                 treasury: &mut treasury,
                 portfolio: &mut portfolio,
+                accumulation: &mut accum,
                 risk_mult: 0.8,
                 peak_equity: &mut peak,
                 db_batch: &mut db_batch,
@@ -1843,6 +1907,7 @@ mod tests {
         let mut shared = SharedState {
             treasury: &mut treasury,
             portfolio: &mut portfolio,
+            accumulation: &mut accum,
             risk_mult: 0.8,
             peak_equity: &mut peak,
             db_batch: &mut db_batch,
@@ -1870,6 +1935,7 @@ mod tests {
         treasury.deposit(&Asset::new("USDC"), 10000.0);
         let mut portfolio = crate::portfolio::Portfolio::new(10000.0, 0);
         portfolio.phase = Phase::Tentative;
+        let mut accum = AccumulationLedger::new();
         let mut peak = 10000.0;
         let mut db_batch = 0usize;
 
@@ -1879,6 +1945,7 @@ mod tests {
             let mut shared = SharedState {
                 treasury: &mut treasury,
                 portfolio: &mut portfolio,
+                accumulation: &mut accum,
                 risk_mult: 0.8,
                 peak_equity: &mut peak,
                 db_batch: &mut db_batch,
@@ -1914,6 +1981,7 @@ mod tests {
         let mut shared = SharedState {
             treasury: &mut treasury,
             portfolio: &mut portfolio,
+            accumulation: &mut accum,
             risk_mult: 0.8,
             peak_equity: &mut peak,
             db_batch: &mut db_batch,
@@ -1939,6 +2007,7 @@ mod tests {
         let mut treasury = Treasury::new(3, 0.5);
         treasury.deposit(&Asset::new("USDC"), 10000.0);
         let mut portfolio = crate::portfolio::Portfolio::new(10000.0, 100);
+        let mut accum = AccumulationLedger::new();
         let mut peak = 10000.0;
         let mut db_batch = 0usize;
 
@@ -1953,6 +2022,7 @@ mod tests {
             let mut shared = SharedState {
                 treasury: &mut treasury,
                 portfolio: &mut portfolio,
+                accumulation: &mut accum,
                 risk_mult: 0.8,
                 peak_equity: &mut peak,
                 db_batch: &mut db_batch,
@@ -1986,6 +2056,7 @@ mod tests {
         let mut treasury = Treasury::new(3, 0.5);
         treasury.deposit(&Asset::new("USDC"), 10000.0);
         let mut portfolio = crate::portfolio::Portfolio::new(10000.0, 100);
+        let mut accum = AccumulationLedger::new();
         let mut peak = 10000.0;
         let mut db_batch = 0usize;
 
@@ -1998,6 +2069,7 @@ mod tests {
             let mut shared = SharedState {
                 treasury: &mut treasury,
                 portfolio: &mut portfolio,
+                accumulation: &mut accum,
                 risk_mult: 0.5,
                 peak_equity: &mut peak,
                 db_batch: &mut db_batch,
@@ -2015,6 +2087,7 @@ mod tests {
             let mut shared = SharedState {
                 treasury: &mut treasury,
                 portfolio: &mut portfolio,
+                accumulation: &mut accum,
                 risk_mult: 0.5,
                 peak_equity: &mut peak,
                 db_batch: &mut db_batch,
@@ -2075,6 +2148,7 @@ mod tests {
         let mut treasury = Treasury::new(3, 0.5);
         treasury.deposit(&Asset::new("USDC"), 10000.0);
         let mut portfolio = crate::portfolio::Portfolio::new(10000.0, 100);
+        let mut accum = AccumulationLedger::new();
         let mut peak = 10000.0;
         let mut db_batch = 0usize;
 
@@ -2084,6 +2158,7 @@ mod tests {
             let mut shared = SharedState {
                 treasury: &mut treasury,
                 portfolio: &mut portfolio,
+                accumulation: &mut accum,
                 risk_mult: 0.5,
                 peak_equity: &mut peak,
                 db_batch: &mut db_batch,
@@ -2097,6 +2172,7 @@ mod tests {
             let mut shared = SharedState {
                 treasury: &mut treasury,
                 portfolio: &mut portfolio,
+                accumulation: &mut accum,
                 risk_mult: 0.5,
                 peak_equity: &mut peak,
                 db_batch: &mut db_batch,
@@ -2112,6 +2188,7 @@ mod tests {
             let mut shared = SharedState {
                 treasury: &mut treasury,
                 portfolio: &mut portfolio,
+                accumulation: &mut accum,
                 risk_mult: 0.5,
                 peak_equity: &mut peak,
                 db_batch: &mut db_batch,

@@ -8,6 +8,70 @@ use std::fmt;
 #[derive(Clone, Copy, Debug)]
 pub struct Rate(pub f64);
 
+// ─── Accumulation Ledger ───────────────────────────────────────────────────
+// Tracks lifetime harvest per asset. The accumulation model's accounting.
+// See wat/accumulation.wat for the full spec.
+
+pub struct AccumulationLedger {
+    /// Lifetime residue accumulated per asset (from principal recovery).
+    pub total_accumulated: HashMap<Asset, f64>,
+    /// Total trades opened (both directions).
+    pub trade_count: usize,
+    /// Trades where principal was recovered (take-profit → runner).
+    pub recovery_count: usize,
+    /// Trades stopped out at a loss (active stop-loss).
+    pub loss_count: usize,
+    /// Lifetime source lost to stop-losses, per asset.
+    pub total_lost: HashMap<Asset, f64>,
+    /// Lifetime fees paid across all trades.
+    pub total_fees: f64,
+}
+
+impl AccumulationLedger {
+    pub fn new() -> Self {
+        Self {
+            total_accumulated: HashMap::new(),
+            trade_count: 0,
+            recovery_count: 0,
+            loss_count: 0,
+            total_lost: HashMap::new(),
+            total_fees: 0.0,
+        }
+    }
+
+    /// Record a principal recovery: residue deposited as accumulated target.
+    pub fn record_recovery(&mut self, asset: &Asset, residue: f64) {
+        self.recovery_count += 1;
+        *self.total_accumulated.entry(asset.clone()).or_insert(0.0) += residue;
+    }
+
+    /// Record a stop-loss: source lost.
+    pub fn record_loss(&mut self, asset: &Asset, loss: f64) {
+        self.loss_count += 1;
+        *self.total_lost.entry(asset.clone()).or_insert(0.0) += loss;
+    }
+
+    /// Record a trade opened.
+    pub fn record_trade(&mut self) {
+        self.trade_count += 1;
+    }
+
+    /// Record fees paid.
+    pub fn record_fees(&mut self, fees: f64) {
+        self.total_fees += fees;
+    }
+
+    /// Lifetime residue accumulated for an asset.
+    pub fn accumulated(&self, asset: &Asset) -> f64 {
+        *self.total_accumulated.get(asset).unwrap_or(&0.0)
+    }
+
+    /// Lifetime loss for an asset.
+    pub fn lost(&self, asset: &Asset) -> f64 {
+        *self.total_lost.get(asset).unwrap_or(&0.0)
+    }
+}
+
 
 // ─── Asset ──────────────────────────────────────────────────────────────────
 

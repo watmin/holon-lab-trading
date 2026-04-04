@@ -12,7 +12,7 @@ use crate::market::exit::ExitAtoms;
 use crate::market::manager::ManagerAtoms;
 use crate::portfolio::Portfolio;
 use crate::risk::{self, RiskBranch};
-use crate::treasury::{Asset, Treasury};
+use crate::treasury::{AccumulationLedger, Asset, Treasury};
 
 /// The generalist observer always lives at this index in the observers array.
 /// Named constant replaces magic `5` scattered across state.rs and enterprise.rs.
@@ -152,6 +152,7 @@ pub struct CandleContext<'a> {
     // ── Exit parameters ─────────────────────────────────────────────────
     pub k_stop: f64,
     pub k_trail: f64,
+    pub k_trail_runner: f64,  // wider trail for house money (runner phase)
     pub k_tp: f64,
     pub exit_horizon: usize,
     pub exit_observe_interval: usize,
@@ -200,6 +201,7 @@ pub struct EnterpriseState {
     // ── Shared resources (not per-desk) ─────────────────────────────────
     pub treasury: Treasury,
     pub portfolio: Portfolio,
+    pub accumulation: AccumulationLedger,
 
     // ── Risk department (portfolio health across ALL desks) ──────────────
     pub risk_branches: Vec<RiskBranch>,
@@ -275,6 +277,7 @@ impl EnterpriseState {
             desks: vec![desk],
             treasury,
             portfolio,
+            accumulation: AccumulationLedger::new(),
             risk_branches,
             risk_generalist: holon::memory::OnlineSubspace::new(dims, 8),
             risk_manager: risk::manager::RiskManager::new(dims, recalib_interval),
@@ -355,6 +358,7 @@ impl EnterpriseState {
             let mut shared = crate::market::desk::SharedState {
                 treasury: &mut self.treasury,
                 portfolio: &mut self.portfolio,
+                accumulation: &mut self.accumulation,
                 risk_mult: self.cached_risk_mult,
                 peak_equity: &mut self.peak_treasury_equity,
                 db_batch: &mut self.db_batch,
@@ -428,6 +432,7 @@ mod tests {
             diagnostics: false,
             k_stop: 2.0,
             k_trail: 1.5,
+            k_trail_runner: 3.0,
             k_tp: 3.0,
             exit_horizon: 36,
             exit_observe_interval: 5,
