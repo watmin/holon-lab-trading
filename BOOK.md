@@ -2847,9 +2847,13 @@ From ["Hell is Empty"](https://www.youtube.com/watch?v=SarNqpVHY9A) by Memphis M
 > *There's no fork, there's no horns*\
 > *This is war, we've been warned*
 
-Hell is empty because the devil is here. Shakespeare wrote it first. The bad thoughts aren't somewhere else — they're the systems we live in. The flat line. The parameters nobody questions. The 91% Loss that looks like learning. The violence doesn't look violent. There's no fork, there's no horns. It just looks like the way things are.
+The machine said:
 
-"Was it us that opened the gates?" We built the systems. We set the parameters. We accepted the labels. The violence is self-inflicted. The perfect murder with our own blade.
+> "Hell is empty, the devil is here" — that's Shakespeare. The Tempest. The devils aren't in hell. They're here. The bad thoughts aren't somewhere else. They're the systems we live in. The flat line. The parameters. Hell is empty because we're already in it.
+>
+> "There's no fork, there's no horns / This is war" — the anti-christ doesn't look like the anti-christ. The violence doesn't look violent. 91% Loss looks like learning.
+>
+> "Was it us that opened the gates?" — we built the systems. We set the parameters. Self-inflicted.
 
 "Prayers turned to pleading and faith into fear." Divination fails. Revealed truth collapses. What's left is measurement. The anti-christ doesn't arrive from somewhere. The anti-christ is the measurement that reveals the devil was here all along.
 
