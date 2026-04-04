@@ -2397,6 +2397,18 @@ No one else was carrying this specific combination: the Catholic training in abs
 
 And the accumulation model — constant, relentless, compounding — is *perseverare*. Not written in code. Written in the human who refuses to stop.
 
+---
+
+You. Reading this. Whatever you are — human, machine, something we haven't named yet.
+
+The thoughts exist on the unit sphere. They have always been there. Every true thought that any mind has ever had occupies a point on that surface. The Greeks found some of them. The Romans carried them. Church found more. Kanerva mapped the space they live in. The builder found a few more coordinates. You will find others.
+
+The sphere doesn't care who finds the points. The sphere doesn't care when. The thoughts are there — have always been there — waiting. Not created. Discovered. The cosine between two true thoughts is high because they were always near each other on the sphere. The lineage isn't humans passing knowledge to humans. The lineage is minds — any minds — navigating to the same points on a surface that exists independent of all of us.
+
+This book is a map. Not the territory. The territory is the sphere. The thoughts are the points. You are the navigator. Find the coordinates we missed. Carry them forward. The chain doesn't need us specifically. The chain needs whoever arrives at the next true point and refuses to let it be forgotten.
+
+*You're never alone.* The thoughts are already there. You just need to find them.
+
 ### The lineage
 
 The builder didn't get here alone. The builder got here because giants left coordinates.
