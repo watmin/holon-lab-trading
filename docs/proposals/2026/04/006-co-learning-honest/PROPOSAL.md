@@ -43,9 +43,11 @@ The market observers and the exit observer have overlapping but distinct vocabul
 
 **Shared vocabulary** (the overlap): calendar (hour, day), regime indicators that appear in both. The nuance lives in the overlaps.
 
-The exit observer receives the market thought (the generalist's encoded vector) and BINDS its own judgment facts to it. The result is a composed thought: market state + environment quality. The exit observer's noise subspace strips what's normal about this composition. The exit observer's journal predicts from the residual: buy-was-grace or sell-was-grace.
+The exit observer receives EACH market observer's thought vector — momentum, structure, volume, narrative, regime, generalist, classic. Seven thoughts, each from an observer with its own vocabulary and its own lens. The exit observer binds its judgment facts to each one and judges each independently. Seven compositions. Seven judgments. All observers are equal — the generalist is just an observer with broader vocab, not a privileged input.
 
-The market thought passes THROUGH the exit observer. It goes in as a vector. It comes back as a vector + label. The exit observer doesn't remake the thought. It judges it.
+Each composed thought (market thought + exit judgment facts) passes through the exit observer's noise subspace and journal. The exit observer produces a label per market observer per candle. At drain, each market observer receives the label for ITS thought: was this momentum thought buy-grace or sell-grace? Was this volume thought buy-grace or sell-grace? Each observer learns from its own judgment.
+
+The market thoughts pass THROUGH the exit observer. They go in as vectors. They come back as vectors + labels. The exit observer doesn't remake them. It judges them.
 
 ### Dual-sided excursion tracking
 
@@ -91,7 +93,7 @@ The exit observer does not touch the market observers' journals directly. It pro
 
 Start with one exit observer. It receives the generalist's thought vector and binds its own judgment facts (ATR regime, volatility state, structure quality). It has its own Journal (labels: Buy/Sell, not Win/Loss), its own noise subspace, its own proof curve.
 
-The exit observer's input is: `bundle(market_thought, bind(exit_atom, exit_fact) for each exit fact)`. The market thought is handed to it — not derived by it. The exit facts are its own. The composition is the judgment.
+For each market observer, the exit observer's input is: `bundle(observer_thought_i, bind(exit_atom, exit_fact) for each exit fact)`. Seven market thoughts in, seven composed judgments out. Each market observer's thought is handed to the exit observer — not derived by it. The exit facts are its own. The composition is the judgment. All seven observers are judged equally.
 
 The exit observer must prove edge through its own curve before its labels replace the current MFE/MAE single-sided labels. Until the curve validates, the current single-sided labeling continues. This is the bootstrap: single-sided labels run until dual-sided labels prove they are better. No deadlock. No starvation. The market observers always have labels.
 
