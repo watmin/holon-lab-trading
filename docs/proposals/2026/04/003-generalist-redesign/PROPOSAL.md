@@ -244,6 +244,12 @@ The pipeline is the same: facts → noise subspace → residual → journal → 
 ## Questions For Designers
 
 1. Should the noise subspace learn from ALL candles or only Noise-labeled candles? Learning from all captures the "average thought." Learning from Noise only captures the "uninformative thought." Different manifolds.
+
+7. **Memory vs forgetting**: The OnlineSubspace (CCIPCA) maintains k eigenvectors — fixed size, never grows. But should it decay?
+   - **No decay**: The noise manifold accumulates across all regimes. If markets are cyclical, bull market noise and bear market noise both live in the eigenvectors. When the cycle returns, the noise is already known. Simplest hypothesis. Testable: do eigenvalues stabilize or drift over 652k candles?
+   - **Exponential decay**: Recent noise dominates. Adapts to current regime but forgets past regimes. When the cycle returns, it relearns from scratch.
+   - **Engrams**: Snapshot the noise manifold at regime boundaries. Recall when conditions match. Recognition-based memory. Most complex, most capable, most risky to get wrong.
+   - The question: is market noise structure consistent enough across years that a lifetime subspace captures it? Or does noise shift so fundamentally between regimes that decay or snapshots are required? This is an empirical question the 652k run can answer.
 2. What's the right k (subspace rank) for the noise subspace? Too low = misses noise dimensions. Too high = strips signal.
 3. Should the residual be L2-normalized before feeding to the journal? The subtraction changes the vector's norm.
 4. Is there a risk that the noise subspace learns TOO well and strips everything, leaving zero residual? What's the floor?
