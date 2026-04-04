@@ -28,10 +28,24 @@ The exit observer thinks about positions, not candles. It needs an open ManagedP
 
 ### Same candles, different question
 
-The exit observer sees the same candle window as the market observers. It encodes the same thought vocabulary (the full generalist set). It uses the same two-stage pipeline: encode thoughts, strip noise, predict. The only difference is the question it answers and the label it receives.
+The exit observer does not encode its own thoughts from candles. It RECEIVES the market observers' already-encoded thought vectors and judges them. "Given that the generalist thought THIS at candle N, was that a buy-grace or sell-grace thought?"
 
 - Market observer asks: "which direction?"
-- Exit observer asks: "if I entered at this candle, which side was better?"
+- Exit observer asks: "given these market thoughts, which side was better?"
+
+### Two vocabularies, composed
+
+The market observers and the exit observer have overlapping but distinct vocabularies — a Venn diagram:
+
+**Market vocabulary** (the market observers' circles): RSI, MACD, harmonics, regime, divergence, persistence, flow. Each specialist sees a subset. The generalist sees all. These facts describe what the market IS doing.
+
+**Exit vocabulary** (the exit observer's circle): ATR regime, volatility state, market structure quality, spread conditions. These facts describe whether the environment is favorable for ANY entry, regardless of direction. Not "which way?" but "is now a good time?"
+
+**Shared vocabulary** (the overlap): calendar (hour, day), regime indicators that appear in both. The nuance lives in the overlaps.
+
+The exit observer receives the market thought (the generalist's encoded vector) and BINDS its own judgment facts to it. The result is a composed thought: market state + environment quality. The exit observer's noise subspace strips what's normal about this composition. The exit observer's journal predicts from the residual: buy-was-grace or sell-was-grace.
+
+The market thought passes THROUGH the exit observer. It goes in as a vector. It comes back as a vector + label. The exit observer doesn't remake the thought. It judges it.
 
 ### Dual-sided excursion tracking
 
@@ -73,9 +87,11 @@ The exit observer resolves a candle as Buy or Sell with a weight. This is the ma
 
 The exit observer does not touch the market observers' journals directly. It produces a label (Buy or Sell) and a weight. The existing resolution code in `desk.rs` translates this into Win/Loss per observer based on what each observer predicted at that candle. The plumbing already exists -- `classify_excursion` returns an outcome and a weight, and `resolve` consumes it. The change is what produces the outcome: dual-sided excursion instead of single-sided.
 
-### One exit observer, generalist vocabulary
+### One exit observer, judgment vocabulary
 
-Start with one exit observer. It sees the full vocabulary -- every fact the generalist market observer sees. It has its own Journal (labels: Buy/Sell, not Win/Loss), its own noise subspace, its own proof curve.
+Start with one exit observer. It receives the generalist's thought vector and binds its own judgment facts (ATR regime, volatility state, structure quality). It has its own Journal (labels: Buy/Sell, not Win/Loss), its own noise subspace, its own proof curve.
+
+The exit observer's input is: `bundle(market_thought, bind(exit_atom, exit_fact) for each exit fact)`. The market thought is handed to it — not derived by it. The exit facts are its own. The composition is the judgment.
 
 The exit observer must prove edge through its own curve before its labels replace the current MFE/MAE single-sided labels. Until the curve validates, the current single-sided labeling continues. This is the bootstrap: single-sided labels run until dual-sided labels prove they are better. No deadlock. No starvation. The market observers always have labels.
 
@@ -83,7 +99,7 @@ The exit observer must prove edge through its own curve before its labels replac
 
 1. **New struct**: `DualExcursion` -- tracks buy-side and sell-side MFE/MAE for a candle. Four floats, updated every candle in the pending entry loop.
 
-2. **Exit observer in Desk**: One Observer instance with Buy/Sell labels instead of Win/Loss. Encodes the same thought vector as the generalist (same `encode_thought` call, same vocabulary). Predicts every candle. Resolves at drain.
+2. **Exit observer in Desk**: One Observer instance with Buy/Sell labels instead of Win/Loss. Receives the generalist's thought vector, binds its own judgment facts (exit vocabulary), composes the two via bundle. Predicts every candle. Resolves at drain.
 
 3. **Resolution path**: When a pending entry drains, compute `buy_grace` and `sell_grace` from `DualExcursion`. If the exit observer's curve is valid, use the dual-sided label. If not, fall back to the current single-sided `classify_excursion`.
 
@@ -93,7 +109,7 @@ The exit observer must prove edge through its own curve before its labels replac
 
 The single-sided MFE/MAE labeling in `classify_excursion`. The exit observer in `market/exit.rs` that encodes position state. The aspirational trail modulation.
 
-The exit observer's role shrinks and sharpens: it does not manage positions, it does not modulate trails, it does not need treasury state. It looks at candles. It plays both sides. It tells the market observers which side was right. That is all it does.
+The exit observer's role shrinks and sharpens: it does not manage positions, it does not modulate trails, it does not need treasury state. It receives market thoughts. It binds its own judgment. It plays both sides. It tells the market observers which side was right. That is all it does.
 
 ## 4. The algebraic question
 
