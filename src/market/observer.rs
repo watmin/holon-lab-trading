@@ -10,6 +10,7 @@ use holon::Vector;
 use holon::memory::OnlineSubspace;
 
 use crate::journal::{Journal, Label, Prediction};
+use crate::position::Outcome;
 use crate::window_sampler::WindowSampler;
 
 // ─── Observer thresholds ──────────────────────────────────────────────────
@@ -80,12 +81,10 @@ pub struct Observer {
 }
 
 impl Observer {
-    pub fn new(lens: super::Lens, dims: usize, recalib_interval: usize, seed: u64, labels: &[&str]) -> Self {
+    pub fn new(lens: super::Lens, dims: usize, recalib_interval: usize, seed: u64) -> Self {
         let mut journal = Journal::new(lens.as_str(), dims, recalib_interval);
-        let primary_label = journal.register(labels[0]);
-        for label in &labels[1..] {
-            journal.register(label);
-        }
+        let primary_label = journal.register("Win");
+        journal.register("Loss");
         Self {
             lens,
             journal,
@@ -126,10 +125,28 @@ impl Observer {
         Vector::from_data(normalized)
     }
 
-    /// Resolve a prediction against an observed outcome.
-    /// Learning splits by outcome:
-    ///   Noise → teach the noise subspace what's boring (raw thought)
-    ///   Buy/Sell → teach the journal from clean signal (L2-normalized residual)
+    /// Measure how much signal remains after noise subtraction.
+    /// High norm = unusual thought. Low norm = boring thought.
+    /// Used by classify_outcome to gate Win/Loss vs Noise.
+    pub fn residual_norm(&self, thought: &Vector) -> f64 {
+        if self.noise_subspace.n() < NOISE_MIN_SAMPLES {
+            return 1.0; // warmup: treat all thoughts as unusual
+        }
+        let thought_f64: Vec<f64> = thought.data().iter().map(|&v| v as f64).collect();
+        let residual = self.noise_subspace.anomalous_component(&thought_f64);
+        residual.iter().map(|x| x * x).sum::<f64>().sqrt()
+    }
+
+    /// Update the noise subspace with a raw thought. Called every candle.
+    /// The noise subspace is the background model — it sees everything.
+    pub fn learn_noise(&mut self, thought_vec: &Vector) {
+        let thought_f64: Vec<f64> = thought_vec.data().iter().map(|&v| v as f64).collect();
+        self.noise_subspace.update(&thought_f64);
+    }
+
+    /// Resolve a prediction against an observed outcome (Win or Loss).
+    /// Called when a simulated position resolves — not every candle.
+    /// Weight = residual_norm × grace/violence (already computed by caller).
     /// Also handles: accuracy tracking, engram gating, curve validation,
     /// conviction threshold update, and resolved prediction tracking.
     /// Returns a log record if the observer had a directional prediction.
@@ -137,27 +154,30 @@ impl Observer {
         &mut self,
         thought_vec: &Vector,
         prediction: &Prediction,
-        outcome: Label,
-        is_noise: bool,
-        signal_weight: f64,
+        outcome: Outcome,
         conviction_quantile: f64,
         conviction_window: usize,
     ) -> Option<ResolveLog> {
-        // 1. Learn: split by outcome type
-        if is_noise {
-            // Noise: thought was uninformative — teach the noise subspace
-            let thought_f64: Vec<f64> = thought_vec.data().iter().map(|&v| v as f64).collect();
-            self.noise_subspace.update(&thought_f64);
-        } else {
-            // Buy/Sell: strip noise, normalize, teach the journal from residual
-            let residual = self.strip_noise(thought_vec);
-            self.journal.observe(&residual, outcome, signal_weight);
-        }
+        // 1. Learn: journal sees the residual, weighted by outcome magnitude
+        let win_label = self.primary_label;
+        let loss_label = self.journal.labels()[1];
+        let correct = match outcome {
+            Outcome::Win { weight } => {
+                let residual = self.strip_noise(thought_vec);
+                self.journal.observe(&residual, win_label, weight);
+                true
+            }
+            Outcome::Loss { weight } => {
+                let residual = self.strip_noise(thought_vec);
+                self.journal.observe(&residual, loss_label, weight);
+                false
+            }
+        };
 
         // 2. Track accuracy since last recalib (for engram gating)
-        if let Some(pred_dir) = prediction.direction {
+        if let Some(_pred_dir) = prediction.direction {
             self.recalib_total += 1;
-            if pred_dir == outcome { self.recalib_wins += 1; }
+            if correct { self.recalib_wins += 1; }
         }
 
         // 3. Engram gating: if observer just recalibrated with good accuracy,
@@ -179,7 +199,6 @@ impl Observer {
 
         // 4-7: Only if the observer had a directional prediction
         let pred_dir = prediction.direction?;
-        let correct = pred_dir == outcome;
 
         // 4. Track resolved predictions + update cached accuracy
         self.resolved.push_back((prediction.conviction, correct));
@@ -236,7 +255,6 @@ mod tests {
             TEST_DIMS,
             500,  // recalib_interval
             42,   // seed
-            &["Buy", "Sell"],
         );
 
         assert_eq!(obs.lens, super::super::Lens::Momentum);
@@ -257,7 +275,6 @@ mod tests {
             TEST_DIMS,
             500,
             7,
-            &["Buy", "Sell"],
         );
         // primary_label should be the first registered label (index 0)
         assert_eq!(obs.primary_label.index(), 0);
@@ -271,7 +288,7 @@ mod tests {
             super::super::Lens::Regime,
             super::super::Lens::Generalist,
         ] {
-            let obs = Observer::new(*lens, TEST_DIMS, 500, 1, &["Buy", "Sell"]);
+            let obs = Observer::new(*lens, TEST_DIMS, 500, 1);
             assert_eq!(obs.lens, *lens);
         }
     }
@@ -283,7 +300,6 @@ mod tests {
             TEST_DIMS,
             500,
             42,
-            &["Buy", "Sell"],
         );
 
         let thought = holon::Vector::zeros(TEST_DIMS);
@@ -295,7 +311,7 @@ mod tests {
             raw_cos: 0.0,
         };
 
-        let result = obs.resolve(&thought, &pred, obs.primary_label, false, 1.0, 0.5, 1000);
+        let result = obs.resolve(&thought, &pred, Outcome::Win { weight: 1.0 }, 0.5, 1000);
         assert!(result.is_none(), "no direction means no resolve log");
     }
 
@@ -306,7 +322,6 @@ mod tests {
             TEST_DIMS,
             500,
             42,
-            &["Buy", "Sell"],
         );
 
         let thought = holon::Vector::zeros(TEST_DIMS);
@@ -318,12 +333,12 @@ mod tests {
             raw_cos: 0.5,
         };
 
-        let result = obs.resolve(&thought, &pred, buy_label, false, 1.0, 0.5, 1000);
+        let result = obs.resolve(&thought, &pred, Outcome::Win { weight: 1.0 }, 0.5, 1000);
         assert!(result.is_some(), "with direction should return resolve log");
         let log = result.unwrap();
         assert_eq!(log.name, super::super::Lens::Momentum);
         assert!((log.conviction - 0.5).abs() < 1e-10);
-        assert!(log.correct); // predicted buy, outcome is buy
+        assert!(log.correct); // predicted buy, outcome is Win
     }
 
     #[test]
@@ -349,7 +364,6 @@ mod tests {
             TEST_DIMS,
             500,
             42,
-            &["Buy", "Sell"],
         );
         let thought = holon::Vector::zeros(TEST_DIMS);
         let buy = obs.primary_label;
@@ -361,7 +375,7 @@ mod tests {
                 conviction: 0.1 * i as f64,
                 raw_cos: 0.5,
             };
-            obs.resolve(&thought, &pred, buy, false, 1.0, 0.5, 1000);
+            obs.resolve(&thought, &pred, Outcome::Win { weight: 1.0 }, 0.5, 1000);
         }
 
         assert_eq!(obs.conviction_history.len(), 10);
@@ -375,7 +389,6 @@ mod tests {
             TEST_DIMS,
             500,
             7,
-            &["Buy", "Sell"],
         );
         let thought = holon::Vector::zeros(TEST_DIMS);
         let buy = obs.primary_label;
@@ -388,7 +401,7 @@ mod tests {
                 conviction: 0.5,
                 raw_cos: 0.5,
             };
-            obs.resolve(&thought, &pred, buy, false, 1.0, 0.5, window);
+            obs.resolve(&thought, &pred, Outcome::Win { weight: 1.0 }, 0.5, window);
         }
 
         assert_eq!(obs.conviction_history.len(), window);
@@ -402,13 +415,11 @@ mod tests {
             TEST_DIMS,
             500,
             99,
-            &["Buy", "Sell"],
         );
         let thought = holon::Vector::zeros(TEST_DIMS);
         let buy = obs.primary_label;
-        let sell = obs.journal.register("Sell_extra");  // need a second label for wrong predictions
 
-        // 10 correct predictions
+        // 10 correct predictions (Win outcome)
         for _ in 0..10 {
             let pred = Prediction {
                 scores: Vec::new(),
@@ -416,12 +427,11 @@ mod tests {
                 conviction: 0.5,
                 raw_cos: 0.5,
             };
-            obs.resolve(&thought, &pred, buy, false, 1.0, 0.5, 1000);
+            obs.resolve(&thought, &pred, Outcome::Win { weight: 1.0 }, 0.5, 1000);
         }
         assert!((obs.cached_acc - 1.0).abs() < 1e-10, "all correct → acc=1.0");
 
-        // Now add 10 wrong predictions (predict buy, outcome sell)
-        let sell_label = obs.journal.register("Sell2");
+        // Now add 10 wrong predictions (Loss outcome)
         for _ in 0..10 {
             let pred = Prediction {
                 scores: Vec::new(),
@@ -429,7 +439,7 @@ mod tests {
                 conviction: 0.5,
                 raw_cos: 0.5,
             };
-            obs.resolve(&thought, &pred, sell_label, false, 1.0, 0.5, 1000);
+            obs.resolve(&thought, &pred, Outcome::Loss { weight: 1.0 }, 0.5, 1000);
         }
         assert!((obs.cached_acc - 0.5).abs() < 1e-10, "half correct → acc=0.5");
     }
@@ -441,7 +451,6 @@ mod tests {
             TEST_DIMS,
             500,
             42,
-            &["Buy", "Sell"],
         );
         let thought = holon::Vector::zeros(TEST_DIMS);
         let buy = obs.primary_label;
@@ -454,7 +463,7 @@ mod tests {
                 conviction: (i as f64) / 250.0,
                 raw_cos: 0.5,
             };
-            obs.resolve(&thought, &pred, buy, false, 1.0, 0.5, 1000);
+            obs.resolve(&thought, &pred, Outcome::Win { weight: 1.0 }, 0.5, 1000);
         }
         // After 250 resolved with min_conviction_history=200, threshold should be updated
         assert!(obs.conviction_threshold > 0.0, "threshold should be updated after enough history");
@@ -467,20 +476,18 @@ mod tests {
             TEST_DIMS,
             500,
             42,
-            &["Buy", "Sell"],
         );
         let thought = holon::Vector::zeros(TEST_DIMS);
         let buy = obs.primary_label;
-        let sell = obs.journal.register("SellLabel");
 
-        // Predict buy, but outcome is sell → incorrect
+        // Predict buy, but outcome is Loss → incorrect
         let pred = Prediction {
             scores: Vec::new(),
             direction: Some(buy),
             conviction: 0.8,
             raw_cos: 0.8,
         };
-        let result = obs.resolve(&thought, &pred, sell, false, 1.0, 0.5, 1000);
+        let result = obs.resolve(&thought, &pred, Outcome::Loss { weight: 1.0 }, 0.5, 1000);
         assert!(result.is_some());
         let log = result.unwrap();
         assert!(!log.correct);
@@ -493,7 +500,6 @@ mod tests {
             TEST_DIMS,
             500,
             42,
-            &["Buy", "Sell"],
         );
 
         let thought = holon::VectorManager::new(TEST_DIMS).get_vector("test-thought");
@@ -526,7 +532,6 @@ mod tests {
             dims,
             500,
             42,
-            &["Buy", "Sell"],
         );
 
         let vm = holon::VectorManager::new(dims);
@@ -548,8 +553,8 @@ mod tests {
     #[test]
     fn resolve_after_noise_warmup_does_not_crash() {
         // Integration test: the exact scenario that caused the production crash.
-        // 1. Train noise subspace past NOISE_MIN_SAMPLES via Noise outcomes
-        // 2. Resolve a Buy/Sell outcome → strip_noise feeds residual into journal.observe
+        // 1. Train noise subspace past NOISE_MIN_SAMPLES via learn_noise
+        // 2. Resolve a Win/Loss outcome → strip_noise feeds residual into journal.observe
         // If strip_noise returns wrong dimensions (k coefficients instead of D-vector),
         // the journal's accumulator panics on dimension mismatch.
         let dims = 256; // larger than k=8 so mismatch is detectable
@@ -558,23 +563,16 @@ mod tests {
             dims,
             500,
             42,
-            &["Buy", "Sell"],
         );
 
         let vm = holon::VectorManager::new(dims);
         let buy = obs.primary_label;
-        let sell = obs.journal.register("Sell");
+        let loss_label = obs.journal.labels()[1];
 
-        // Phase 1: feed 60 Noise outcomes to warm up the noise subspace
+        // Phase 1: feed 60 thoughts to learn_noise to warm up the noise subspace
         for i in 0..60 {
             let thought = vm.get_vector(&format!("noise-thought-{}", i));
-            let pred = Prediction {
-                scores: Vec::new(),
-                direction: Some(buy),
-                conviction: 0.3,
-                raw_cos: 0.3,
-            };
-            obs.resolve(&thought, &pred, buy, true, 1.0, 0.5, 1000);
+            obs.learn_noise(&thought);
         }
         assert!(obs.noise_subspace.n() >= 50,
             "noise subspace should be past warmup: n={}", obs.noise_subspace.n());
@@ -589,18 +587,18 @@ mod tests {
             raw_cos: 0.5,
         };
         // This panicked before the fix: "Dimension mismatch in accumulator: left: D, right: 8"
-        let result = obs.resolve(&thought, &pred, buy, false, 1.0, 0.5, 1000);
+        let result = obs.resolve(&thought, &pred, Outcome::Win { weight: 1.0 }, 0.5, 1000);
         assert!(result.is_some(), "directional resolve should return log");
 
-        // Also test with sell outcome
+        // Also test with Loss outcome
         let thought2 = vm.get_vector("signal-thought-2");
         let pred2 = Prediction {
             scores: Vec::new(),
-            direction: Some(sell),
+            direction: Some(loss_label),
             conviction: 0.4,
             raw_cos: -0.4,
         };
-        let result2 = obs.resolve(&thought2, &pred2, sell, false, 1.0, 0.5, 1000);
+        let result2 = obs.resolve(&thought2, &pred2, Outcome::Loss { weight: 1.0 }, 0.5, 1000);
         assert!(result2.is_some());
     }
 }

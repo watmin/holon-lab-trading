@@ -27,8 +27,8 @@ use crate::ledger::LogEntry;
 use crate::market::manager::{ManagerContext, encode_manager_thought, find_proven_band};
 use crate::market::observer::Observer;
 use crate::portfolio::{Phase, Portfolio};
-use crate::position::{CrossingSnapshot, ExitObservation, ExitReason, ManagedPosition, Pending, PositionEntry, PositionExit, PositionPhase, TrailFactor};
-use crate::sizing::{curve_win_rate, half_kelly_position, kelly_frac, signal_weight};
+use crate::position::{CrossingSnapshot, ExitObservation, ExitReason, ManagedPosition, Pending, PositionEntry, PositionExit, PositionPhase, TrailFactor, simulate_outcome, to_outcome};
+use crate::sizing::{curve_win_rate, half_kelly_position, kelly_frac};
 use crate::treasury::{AccumulationLedger, Asset, Treasury};
 use crate::window_sampler::WindowSampler;
 use crate::market::exit::encode_exit_thought;
@@ -164,7 +164,6 @@ impl Desk {
                     dims,
                     recalib,
                     dims as u64 + ei as u64 * OBSERVER_SEED_PRIME,
-                    &["Buy", "Sell"],
                 )
             })
             .collect();
@@ -775,7 +774,7 @@ impl Desk {
         for entry in self.pending.iter_mut() {
             let entry_price = entry.entry_price;
             let pct         = (current_price - entry_price) / entry_price;
-            let abs_pct     = pct.abs();
+            let _abs_pct    = pct.abs();
 
             // Track directional excursion relative to predicted direction.
             let directional_pct = if entry.meta_dir == Some(tht_buy) {
@@ -792,59 +791,88 @@ impl Desk {
                 entry.max_adverse = directional_pct; // most negative = worst drawdown
             }
 
-            // Learn only on the first threshold crossing per pending entry.
-            if entry.crossing.is_none() {
-                let thresh = if ctx.atr_multiplier > 0.0 {
-                    ctx.atr_multiplier * entry.entry_atr
-                } else {
-                    ctx.move_threshold
-                };
-                let outcome = if pct > thresh       { Some(tht_buy)  }
-                              else if pct < -thresh { Some(tht_sell) }
-                              else                  { None };
-
-                if let Some(o) = outcome {
-                    let signal_wt = signal_weight(abs_pct, &mut self.move_sum, &mut self.move_count);
-                    // pfor-each: each observer resolves independently (disjoint journals).
-                    // Logs collected in parallel, merged after.
-                    let obs_logs: Vec<Option<(String, f64, String, i32)>> = {
-                        use rayon::prelude::*;
-                        self.observers.par_iter_mut().enumerate().map(|(ei, obs)| {
-                            if ei < entry.observer_vecs.len() {
-                                if let Some(log) = obs.resolve(
-                                    &entry.observer_vecs[ei], &entry.observer_preds[ei], o,
-                                    false, // not noise — threshold crossed
-                                    signal_wt, ctx.conviction_quantile, ctx.conviction_window,
-                                ) {
-                                    return Some((
-                                        log.name.as_str().to_string(),
-                                        log.conviction,
-                                        obs.journal.label_name(log.direction).unwrap_or("?").to_string(),
-                                        log.correct as i32,
-                                    ));
-                                }
-                            }
-                            None
-                        }).collect()
-                    };
-                    if ctx.diagnostics {
-                        for log in obs_logs.into_iter().flatten() {
-                            self.pending_logs.push(LogEntry::ObserverLog {
-                                step: self.log_step,
-                                observer: log.0,
-                                conviction: log.1,
-                                direction: log.2,
-                                correct: log.3,
-                            });
-                        }
+            // Noise learning: every candle, every observer sees the thought.
+            // The noise subspace is the background model — it sees everything.
+            {
+                use rayon::prelude::*;
+                self.observers.par_iter_mut().enumerate().for_each(|(ei, obs)| {
+                    if ei < entry.observer_vecs.len() {
+                        obs.learn_noise(&entry.observer_vecs[ei]);
                     }
-                    entry.crossing = Some(CrossingSnapshot {
-                        label:   o,
-                        pct,
-                        candles: i - entry.candle_idx,
-                        ts:      candle_ts.clone(),
-                        price:   candle.close,
-                    });
+                });
+            }
+
+            // Simulation-based resolution: simulate a hypothetical position from entry forward.
+            // If it resolves (TP or stop), learn from the outcome.
+            if entry.crossing.is_none() {
+                // Extract closes from entry candle to current candle.
+                let entry_offset = if entry.candle_idx < i {
+                    // candle_window is a sliding window; compute offset within it.
+                    let window_start_idx = if i + 1 >= self.candle_window.len() {
+                        i + 1 - self.candle_window.len()
+                    } else {
+                        0
+                    };
+                    if entry.candle_idx >= window_start_idx {
+                        Some(entry.candle_idx - window_start_idx)
+                    } else {
+                        None // entry fell out of the candle window
+                    }
+                } else {
+                    None
+                };
+
+                if let Some(offset) = entry_offset {
+                    let window_slice = self.candle_window.make_contiguous();
+                    let closes: Vec<f64> = window_slice[offset..].iter().map(|c| c.close).collect();
+
+                    if let Some(sim) = simulate_outcome(&closes, entry.entry_atr, ctx.k_stop, ctx.k_tp, ctx.k_trail) {
+                        // Compute residual norm + classify outcome
+                        let obs_logs: Vec<Option<(String, f64, String, i32)>> = {
+                            use rayon::prelude::*;
+                            self.observers.par_iter_mut().enumerate().map(|(ei, obs)| {
+                                if ei < entry.observer_vecs.len() {
+                                    let residual_norm = obs.residual_norm(&entry.observer_vecs[ei]);
+                                    let outcome = to_outcome(sim, residual_norm);
+                                    if let Some(log) = obs.resolve(
+                                        &entry.observer_vecs[ei], &entry.observer_preds[ei], outcome,
+                                        ctx.conviction_quantile, ctx.conviction_window,
+                                    ) {
+                                        return Some((
+                                            log.name.as_str().to_string(),
+                                            log.conviction,
+                                            obs.journal.label_name(log.direction).unwrap_or("?").to_string(),
+                                            log.correct as i32,
+                                        ));
+                                    }
+                                }
+                                None
+                            }).collect()
+                        };
+                        if ctx.diagnostics {
+                            for log in obs_logs.into_iter().flatten() {
+                                self.pending_logs.push(LogEntry::ObserverLog {
+                                    step: self.log_step,
+                                    observer: log.0,
+                                    conviction: log.1,
+                                    direction: log.2,
+                                    correct: log.3,
+                                });
+                            }
+                        }
+                        // Record crossing snapshot for downstream (manager learning, ledger)
+                        let crossing_label = match sim {
+                            crate::position::SimResult::TakeProfit { .. } => tht_buy,
+                            crate::position::SimResult::StopLoss { .. } => tht_sell,
+                        };
+                        entry.crossing = Some(CrossingSnapshot {
+                            label:   crossing_label,
+                            pct,
+                            candles: i - entry.candle_idx,
+                            ts:      candle_ts.clone(),
+                            price:   candle.close,
+                        });
+                    }
                 }
             }
         }
@@ -882,18 +910,8 @@ impl Desk {
             let final_out: Option<Label> = entry.crossing.as_ref().map(|c| c.label);
             if final_out.is_none() {
                 self.noise_count += 1;
-                // Noise: price didn't cross threshold — teach noise subspaces.
-                // pfor-each: each observer learns independently.
-                {
-                    use rayon::prelude::*;
-                    self.observers.par_iter_mut().enumerate().for_each(|(ei, obs)| {
-                        if ei < entry.observer_vecs.len() {
-                            let thought_f64: Vec<f64> = entry.observer_vecs[ei].data().iter()
-                                .map(|&v| v as f64).collect();
-                            obs.noise_subspace.update(&thought_f64);
-                        }
-                    });
-                }
+                // Noise: simulation didn't resolve before horizon expiry.
+                // Noise subspace already learned from learn_noise every candle.
             } else {
                 self.labeled_count += 1;
             }
@@ -1812,11 +1830,11 @@ mod tests {
 
         let recalib_before = desk.observers[GENERALIST_IDX].journal.recalib_count();
 
-        // Use volatile prices to generate many threshold crossings.
-        // Alternate high and low prices so entries cross threshold quickly.
-        for i in 0..300 {
-            let price = if i % 2 == 0 { 50000.0 + (i as f64) * 50.0 }
-                        else { 50000.0 - (i as f64) * 50.0 };
+        // Use volatile prices so simulated positions resolve quickly.
+        // Large alternating swings ensure stops/TPs trigger within a few candles.
+        for i in 0..600 {
+            let price = if i % 2 == 0 { 50000.0 + (i as f64) * 200.0 }
+                        else { 50000.0 - (i as f64) * 200.0 };
             let raw = make_priced_candle(i, price.max(10000.0));
             let mut shared = SharedState {
                 treasury: &mut treasury,

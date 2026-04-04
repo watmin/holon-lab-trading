@@ -203,6 +203,96 @@ pub enum PositionExit {
     TakeProfit,
 }
 
+// ─── Outcome-based labeling ─────────────────────────────────────────────────
+// Pure simulation of a hypothetical position for learning labels.
+// See wat/market/observer.wat: simulate-outcome, classify-outcome.
+// See docs/proposals/2026/04/004-learning-pipeline/RESOLUTION.md.
+
+/// The raw result of simulating a position forward through candle history.
+/// Every position eventually resolves — the trailing stop guarantees it.
+/// No horizon. No expiry. The ring buffer bounds memory.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum SimResult {
+    /// Take-profit reached. weight = grace (how far past TP).
+    TakeProfit { grace: f64 },
+    /// Stop-loss hit. weight = violence (actual_loss / stop_distance).
+    StopLoss { violence: f64 },
+}
+
+/// The classified outcome: Win or Loss. No third state.
+/// The noise subspace learns from ALL thoughts every candle (background model).
+/// The journal learns only from resolved positions (Win/Loss).
+/// Weight = residual_norm × grace/violence (continuous, not gated).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Outcome {
+    /// TP reached. Weight = residual_norm × grace.
+    Win { weight: f64 },
+    /// Stop hit. Weight = residual_norm × violence.
+    Loss { weight: f64 },
+}
+
+/// Simulate a hypothetical position from `entry_idx` forward through `closes`.
+/// Pure function: no mutation, no side effects.
+///
+/// `closes`: slice of close prices (or 1/close for Sell direction).
+///           Index 0 = the entry candle. Index 1..N = subsequent candles.
+/// `entry_atr`: ATR at entry (normalized, e.g. 0.01 = 1%).
+///
+/// Returns Some(SimResult) if the position resolved, None if more candles needed.
+/// Every position eventually resolves — the trailing stop guarantees it.
+/// No horizon. No expiry. The pending ring buffer bounds memory.
+pub fn simulate_outcome(
+    closes: &[f64],
+    entry_atr: f64,
+    k_stop: f64,
+    k_tp: f64,
+    k_trail: f64,
+) -> Option<SimResult> {
+    if closes.len() < 2 { return None; }
+
+    let entry_rate = closes[0];
+    let stop_level = entry_rate * (1.0 - k_stop * entry_atr);
+    let tp_level = entry_rate * (1.0 + k_tp * entry_atr);
+
+    let mut extreme = entry_rate;
+    let mut trail = stop_level;
+
+    for &rate in &closes[1..] {
+        if rate > extreme { extreme = rate; }
+        let new_trail = extreme * (1.0 - k_trail * entry_atr);
+        if new_trail > trail { trail = new_trail; }
+
+        if rate <= trail {
+            let actual_loss = (entry_rate - rate) / entry_rate;
+            let stop_dist = k_stop * entry_atr;
+            let violence = actual_loss / stop_dist;
+            return Some(SimResult::StopLoss { violence });
+        }
+
+        if rate >= tp_level {
+            let grace = (extreme - tp_level) / tp_level;
+            return Some(SimResult::TakeProfit { grace });
+        }
+    }
+
+    None // not yet resolved
+}
+
+/// Classify a simulation result using the noise subspace as the tolerance boundary.
+/// `residual_norm`: L2 norm of the thought after noise subtraction.
+///                  High = unusual thought. Low = boring thought.
+/// `threshold`: below this norm, the thought is boring → Noise regardless of sim result.
+/// Convert a simulation result into a learning outcome.
+/// Weight = residual_norm × grace/violence.
+/// Boring thoughts (low residual) teach softly. Unusual thoughts teach hard.
+/// No binary gate. Continuous weighting.
+pub fn to_outcome(sim: SimResult, residual_norm: f64) -> Outcome {
+    match sim {
+        SimResult::TakeProfit { grace } => Outcome::Win { weight: residual_norm * grace.max(0.01) },
+        SimResult::StopLoss { violence } => Outcome::Loss { weight: residual_norm * violence.max(0.01) },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -310,5 +400,115 @@ mod tests {
         // fee is 1.0 on 1000.0 source, so ~ -0.001
         assert!(ret < 0.0);
         assert!(ret > -0.01); // small
+    }
+
+    // ── simulate_outcome tests ──────────────────────────────────────────
+
+    #[test]
+    fn sim_tp_reached() {
+        let closes = vec![50000.0, 50500.0, 51000.0, 51500.0, 52000.0];
+        let result = simulate_outcome(&closes, 0.01, 2.0, 3.0, 1.5);
+        match result {
+            Some(SimResult::TakeProfit { grace }) => {
+                assert!(grace >= 0.0, "grace should be non-negative");
+            }
+            other => panic!("expected TakeProfit, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn sim_stop_hit() {
+        let closes = vec![50000.0, 49500.0, 48500.0];
+        let result = simulate_outcome(&closes, 0.01, 2.0, 3.0, 1.5);
+        match result {
+            Some(SimResult::StopLoss { violence }) => {
+                assert!(violence > 0.0, "violence should be positive");
+            }
+            other => panic!("expected StopLoss, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn sim_not_yet_resolved() {
+        // Price stays flat — neither stop nor TP. Needs more candles.
+        let closes = vec![50000.0, 50010.0, 49990.0, 50005.0];
+        assert_eq!(simulate_outcome(&closes, 0.01, 2.0, 3.0, 1.5), None);
+    }
+
+    #[test]
+    fn sim_single_candle_returns_none() {
+        assert_eq!(simulate_outcome(&[50000.0], 0.01, 2.0, 3.0, 1.5), None);
+    }
+
+    #[test]
+    fn sim_empty_returns_none() {
+        assert_eq!(simulate_outcome(&[], 0.01, 2.0, 3.0, 1.5), None);
+    }
+
+    #[test]
+    fn sim_trailing_stop_ratchets() {
+        let closes = vec![50000.0, 50500.0, 51000.0, 50100.0, 50000.0];
+        let result = simulate_outcome(&closes, 0.01, 2.0, 3.0, 1.5);
+        match result {
+            Some(SimResult::StopLoss { .. }) => {}
+            other => panic!("expected StopLoss from trailing stop, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn sim_violence_proportional_to_gap() {
+        let gentle = vec![50000.0, 49000.0];
+        let violent = vec![50000.0, 47000.0];
+
+        let g_violence = match simulate_outcome(&gentle, 0.01, 2.0, 3.0, 1.5) {
+            Some(SimResult::StopLoss { violence }) => violence,
+            other => panic!("expected StopLoss, got {:?}", other),
+        };
+        let v_violence = match simulate_outcome(&violent, 0.01, 2.0, 3.0, 1.5) {
+            Some(SimResult::StopLoss { violence }) => violence,
+            other => panic!("expected StopLoss, got {:?}", other),
+        };
+
+        assert!(v_violence > g_violence,
+            "violent gap should have higher violence: {} vs {}", v_violence, g_violence);
+    }
+
+    // ── to_outcome tests ──────────────────────────────────────────
+
+    #[test]
+    fn outcome_win_weight_scales_by_residual_norm() {
+        let outcome = to_outcome(SimResult::TakeProfit { grace: 0.2 }, 0.5);
+        match outcome {
+            Outcome::Win { weight } => assert!((weight - 0.1).abs() < 1e-10, "0.5 * 0.2 = 0.1"),
+            _ => panic!("expected Win"),
+        }
+    }
+
+    #[test]
+    fn outcome_loss_weight_scales_by_residual_norm() {
+        let outcome = to_outcome(SimResult::StopLoss { violence: 2.0 }, 0.3);
+        match outcome {
+            Outcome::Loss { weight } => assert!((weight - 0.6).abs() < 1e-10, "0.3 * 2.0 = 0.6"),
+            _ => panic!("expected Loss"),
+        }
+    }
+
+    #[test]
+    fn outcome_boring_thought_teaches_softly() {
+        let boring = to_outcome(SimResult::TakeProfit { grace: 0.2 }, 0.01);
+        let unusual = to_outcome(SimResult::TakeProfit { grace: 0.2 }, 1.0);
+        let w_boring = match boring { Outcome::Win { weight } => weight, _ => panic!() };
+        let w_unusual = match unusual { Outcome::Win { weight } => weight, _ => panic!() };
+        assert!(w_unusual > w_boring * 10.0, "unusual should teach much harder than boring");
+    }
+
+    #[test]
+    fn outcome_min_weight_floor() {
+        // Grace of 0.0 (barely tapped TP) should still have min weight
+        let outcome = to_outcome(SimResult::TakeProfit { grace: 0.0 }, 0.5);
+        match outcome {
+            Outcome::Win { weight } => assert!(weight > 0.0, "min floor should prevent zero weight"),
+            _ => panic!("expected Win"),
+        }
     }
 }
