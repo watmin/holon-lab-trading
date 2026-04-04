@@ -281,11 +281,14 @@ impl Desk {
         let observer_vecs = Self::encode_observers(
             &self.observers, window_slice, self.encode_count, ctx);
 
-        // ── Observer predictions (pmap: each journal.predict is independent) ──
+        // ── Observer predictions (pmap: strip noise, then predict from residual) ──
         let observer_preds: Vec<Prediction> = {
             use rayon::prelude::*;
             self.observers.par_iter().zip(observer_vecs.par_iter())
-                .map(|(obs, vec)| obs.journal.predict(vec))
+                .map(|(obs, vec)| {
+                    let residual = obs.strip_noise(vec);
+                    obs.journal.predict(&residual)
+                })
                 .collect()
         };
 
@@ -764,8 +767,9 @@ impl Desk {
                         self.observers.par_iter_mut().enumerate().map(|(ei, obs)| {
                             if ei < entry.observer_vecs.len() {
                                 if let Some(log) = obs.resolve(
-                                    &entry.observer_vecs[ei], &entry.observer_preds[ei], o, signal_wt,
-                                    ctx.conviction_quantile, ctx.conviction_window,
+                                    &entry.observer_vecs[ei], &entry.observer_preds[ei], o,
+                                    false, // not noise — threshold crossed
+                                    signal_wt, ctx.conviction_quantile, ctx.conviction_window,
                                 ) {
                                     return Some((
                                         log.name.as_str().to_string(),
@@ -833,6 +837,18 @@ impl Desk {
             let final_out: Option<Label> = entry.crossing.as_ref().map(|c| c.label);
             if final_out.is_none() {
                 self.noise_count += 1;
+                // Noise: price didn't cross threshold — teach noise subspaces.
+                // pfor-each: each observer learns independently.
+                {
+                    use rayon::prelude::*;
+                    self.observers.par_iter_mut().enumerate().for_each(|(ei, obs)| {
+                        if ei < entry.observer_vecs.len() {
+                            let thought_f64: Vec<f64> = entry.observer_vecs[ei].data().iter()
+                                .map(|&v| v as f64).collect();
+                            obs.noise_subspace.update(&thought_f64);
+                        }
+                    });
+                }
             } else {
                 self.labeled_count += 1;
             }

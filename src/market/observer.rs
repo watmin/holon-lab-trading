@@ -33,6 +33,9 @@ const MAX_WINDOW: usize = 2016;
 const ENGRAM_MIN_ACC: f64 = 0.55;
 /// Minimum resolved predictions in a recalib window before engram gating applies.
 const ENGRAM_MIN_TOTAL: u32 = 20;
+/// Minimum noise observations before the noise subspace activates.
+/// Below this, thoughts pass through unfiltered (monotonic warmup).
+const NOISE_MIN_SAMPLES: usize = 50;
 
 /// Compute the q-th quantile of a deque. O(n) via selection, not O(n log n) sort.
 /// Maps to the wat host form: (quantile xs q)
@@ -55,6 +58,10 @@ pub struct ResolveLog {
 pub struct Observer {
     pub lens: super::Lens,
     pub journal: Journal,
+    /// Template 2: learns boring thought patterns from Noise outcomes.
+    /// Operates on thought vectors. Different from good_state_subspace
+    /// which operates on discriminant vectors.
+    pub noise_subspace: OnlineSubspace,
     pub resolved: VecDeque<(f64, bool)>,  // (conviction, correct)
     pub good_state_subspace: OnlineSubspace,
     pub recalib_wins: u32,
@@ -83,6 +90,7 @@ impl Observer {
             lens,
             journal,
             primary_label,
+            noise_subspace: OnlineSubspace::new(dims, 8),
             resolved: VecDeque::new(),
             good_state_subspace: OnlineSubspace::new(dims, 8),
             recalib_wins: 0,
@@ -96,8 +104,34 @@ impl Observer {
         }
     }
 
+    /// Strip noise from a thought vector via the noise subspace.
+    /// Monotonic warmup: passes through unfiltered until NOISE_MIN_SAMPLES.
+    /// Returns the L2-normalized residual after noise projection is subtracted.
+    pub fn strip_noise(&self, thought: &Vector) -> Vector {
+        if self.noise_subspace.n() < NOISE_MIN_SAMPLES {
+            return thought.clone(); // warmup: unfiltered
+        }
+        let thought_f64: Vec<f64> = thought.data().iter().map(|&v| v as f64).collect();
+        let noise = self.noise_subspace.project(&thought_f64);
+        let residual: Vec<f64> = thought_f64.iter().zip(noise.iter())
+            .map(|(t, n)| t - n)
+            .collect();
+        // L2-normalize: the subtraction changes the norm. Normalize before journal sees it.
+        let norm = residual.iter().map(|x| x * x).sum::<f64>().sqrt();
+        if norm < 1e-10 {
+            return thought.clone(); // degenerate: noise ate everything, pass through
+        }
+        let normalized: Vec<i8> = residual.iter()
+            .map(|&x| (x / norm * 127.0).round().clamp(-127.0, 127.0) as i8)
+            .collect();
+        Vector::from_data(normalized)
+    }
+
     /// Resolve a prediction against an observed outcome.
-    /// Handles: learning, accuracy tracking, engram gating, curve validation,
+    /// Learning splits by outcome:
+    ///   Noise → teach the noise subspace what's boring (raw thought)
+    ///   Buy/Sell → teach the journal from clean signal (L2-normalized residual)
+    /// Also handles: accuracy tracking, engram gating, curve validation,
     /// conviction threshold update, and resolved prediction tracking.
     /// Returns a log record if the observer had a directional prediction.
     pub fn resolve(
@@ -105,12 +139,21 @@ impl Observer {
         thought_vec: &Vector,
         prediction: &Prediction,
         outcome: Label,
+        is_noise: bool,
         signal_weight: f64,
         conviction_quantile: f64,
         conviction_window: usize,
     ) -> Option<ResolveLog> {
-        // 1. Learn: accumulate this observation
-        self.journal.observe(thought_vec, outcome, signal_weight);
+        // 1. Learn: split by outcome type
+        if is_noise {
+            // Noise: thought was uninformative — teach the noise subspace
+            let thought_f64: Vec<f64> = thought_vec.data().iter().map(|&v| v as f64).collect();
+            self.noise_subspace.update(&thought_f64);
+        } else {
+            // Buy/Sell: strip noise, normalize, teach the journal from residual
+            let residual = self.strip_noise(thought_vec);
+            self.journal.observe(&residual, outcome, signal_weight);
+        }
 
         // 2. Track accuracy since last recalib (for engram gating)
         if let Some(pred_dir) = prediction.direction {
@@ -253,7 +296,7 @@ mod tests {
             raw_cos: 0.0,
         };
 
-        let result = obs.resolve(&thought, &pred, obs.primary_label, 1.0, 0.5, 1000);
+        let result = obs.resolve(&thought, &pred, obs.primary_label, false, 1.0, 0.5, 1000);
         assert!(result.is_none(), "no direction means no resolve log");
     }
 
@@ -276,7 +319,7 @@ mod tests {
             raw_cos: 0.5,
         };
 
-        let result = obs.resolve(&thought, &pred, buy_label, 1.0, 0.5, 1000);
+        let result = obs.resolve(&thought, &pred, buy_label, false, 1.0, 0.5, 1000);
         assert!(result.is_some(), "with direction should return resolve log");
         let log = result.unwrap();
         assert_eq!(log.name, super::super::Lens::Momentum);
@@ -319,7 +362,7 @@ mod tests {
                 conviction: 0.1 * i as f64,
                 raw_cos: 0.5,
             };
-            obs.resolve(&thought, &pred, buy, 1.0, 0.5, 1000);
+            obs.resolve(&thought, &pred, buy, false, 1.0, 0.5, 1000);
         }
 
         assert_eq!(obs.conviction_history.len(), 10);
@@ -346,7 +389,7 @@ mod tests {
                 conviction: 0.5,
                 raw_cos: 0.5,
             };
-            obs.resolve(&thought, &pred, buy, 1.0, 0.5, window);
+            obs.resolve(&thought, &pred, buy, false, 1.0, 0.5, window);
         }
 
         assert_eq!(obs.conviction_history.len(), window);
@@ -374,7 +417,7 @@ mod tests {
                 conviction: 0.5,
                 raw_cos: 0.5,
             };
-            obs.resolve(&thought, &pred, buy, 1.0, 0.5, 1000);
+            obs.resolve(&thought, &pred, buy, false, 1.0, 0.5, 1000);
         }
         assert!((obs.cached_acc - 1.0).abs() < 1e-10, "all correct → acc=1.0");
 
@@ -387,7 +430,7 @@ mod tests {
                 conviction: 0.5,
                 raw_cos: 0.5,
             };
-            obs.resolve(&thought, &pred, sell_label, 1.0, 0.5, 1000);
+            obs.resolve(&thought, &pred, sell_label, false, 1.0, 0.5, 1000);
         }
         assert!((obs.cached_acc - 0.5).abs() < 1e-10, "half correct → acc=0.5");
     }
@@ -412,7 +455,7 @@ mod tests {
                 conviction: (i as f64) / 250.0,
                 raw_cos: 0.5,
             };
-            obs.resolve(&thought, &pred, buy, 1.0, 0.5, 1000);
+            obs.resolve(&thought, &pred, buy, false, 1.0, 0.5, 1000);
         }
         // After 250 resolved with min_conviction_history=200, threshold should be updated
         assert!(obs.conviction_threshold > 0.0, "threshold should be updated after enough history");
@@ -438,7 +481,7 @@ mod tests {
             conviction: 0.8,
             raw_cos: 0.8,
         };
-        let result = obs.resolve(&thought, &pred, sell, 1.0, 0.5, 1000);
+        let result = obs.resolve(&thought, &pred, sell, false, 1.0, 0.5, 1000);
         assert!(result.is_some());
         let log = result.unwrap();
         assert!(!log.correct);
