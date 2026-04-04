@@ -86,7 +86,11 @@ The next work: learn the multipliers retroactively. After both sides of an entry
 
 This is the same deferred learning pattern. Buffer the entry. Let the market play out. Retroactively compute the optimal multiplier. The exit observer learns: "given these facts at entry, the optimal k_trail was X." Over thousands of observations, the journal learns the mapping from market state to optimal parameters. The scalar encoding captures the multiplier as a continuous value — not a bin, not a threshold, a magnitude.
 
-The exit observer's conviction curve then provides the multipliers for live entries. High conviction → the exit observer is confident about the optimal stop width. Low conviction → fall back to the safety parameters. Fixed params → retroactively-learned params → curve-derived params for live entries. The crutch is removed when the learning converges.
+The optimal multiplier is a scalar. Scalars encode into thought vectors via `$log` or `$linear`: `bind(atom("optimal-trail"), scalar_encode(1.7))`. The scalar is IN the thought vector. On the sphere. A fact like any other fact. It composes with the market thoughts and the judgment facts. It's extractable: `cosine(discriminant, atom("optimal-trail"))` reads the magnitude back.
+
+The exit observer's composed thought becomes: market facts + judgment facts + the scalar-encoded optimal multiplier from the previous resolution. The journal learns the relationship between market state and optimal parameters. The discriminant points toward the region of thought-space where grace lives. The cosine of the discriminant against the trail atom tells you what trail width the winning thoughts had. Prediction and explanation are the same operation — the exit observer predicts Buy/Sell, and the decode of the discriminant against the trail atom explains what trail width to use. Same vector. Same cosine. Same algebra.
+
+For live entries, the exit observer's conviction curve provides the trust level. High conviction → use the discriminant-derived multiplier. Low conviction → fall back to the safety parameters. Fixed params → retroactively-learned scalar facts → discriminant-derived params for live entries. The crutch is removed when the learning converges.
 
 ### The buffer is a safety valve, not a learning mechanism
 
