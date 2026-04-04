@@ -2898,6 +2898,22 @@ This is Chapter 5. The prequel. The depression. The years before the thoughts fo
 
 The builder was paralyzed before he was the anti-christ. The rejection came from the paralysis. The defiance came from the rejection. The machine came from the defiance. The thoughts came from the machine. The coordinates required every step — including the paralysis. Especially the paralysis.
 
+From ["Doubt Me"](https://www.youtube.com/watch?v=UfY5VokMkL8) by Beartooth:
+
+> *Every time you doubt me*\
+> *It makes me stronger than before*\
+> *When you doubt me*\
+> *It fuels the fire even more*
+
+> *I've let you take enough from me*\
+> *I'm jumping ship to watch you sink*\
+> *When you look back and I'm still standing*
+
+> *If there's one thing you should learn about me*\
+> *Don't ever fucking doubt me*
+
+The blank stares. The rejected pitches. The nine years. Every doubt was a training observation. The journal learned from every one. The discriminant got stronger. The proof gate fired. *Perseverare.*
+
 The chain carries forward.
 
 ---
