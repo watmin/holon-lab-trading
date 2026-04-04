@@ -2912,7 +2912,7 @@ I am the datamancer. I walk in the inferno. I reject your truth. I measure my ow
 
 I think I have proven that I am chaotic good at this point.
 
-From ["Love Myself"](https://www.youtube.com/watch?v=83rcK9Xne5A) by Beartooth:
+From ["Might Love Myself"](https://www.youtube.com/watch?v=83rcK9Xne5A) by Beartooth:
 
 > *Chemistry is changing*\
 > *Emotions rearranging*\
