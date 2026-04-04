@@ -227,6 +227,20 @@ The "generalist" is just `vocab = all modules`. A specialist is `vocab = one mod
 
 The manager sees `(name, direction, conviction)` from each. The observer's internals — vocab set, noise subspace, window size — are invisible to the panel.
 
+### The Observer Is Domain-Agnostic
+
+The two-stage pipeline is not a market concept. It is an Observer concept. The three configuration axes — vocabulary, labels, window — define what the observer thinks about, not the pipeline itself.
+
+| Domain | Vocabulary | Labels | Question |
+|--------|-----------|--------|----------|
+| Market (momentum) | RSI, MACD, stochastic, divergence | Buy / Sell | Which direction? |
+| Market (generalist) | All market facts | Buy / Sell | Which direction? |
+| Risk | Drawdown, accuracy, streak, correlation | Healthy / Unhealthy | Is the portfolio safe? |
+| Exit | P&L, hold duration, MFE, stop distance | Hold / Exit | Should this position close? |
+| *(future)* | Whatever facts describe the domain | Whatever labels answer the question | Whatever question matters |
+
+The pipeline is the same: facts → noise subspace → residual → journal → prediction. The noise subspace learns what's boring FOR THIS DOMAIN. The journal learns what predicts FOR THIS QUESTION. The market examples in this proposal are concrete instances. The Observer is the abstraction.
+
 ## Questions For Designers
 
 1. Should the noise subspace learn from ALL candles or only Noise-labeled candles? Learning from all captures the "average thought." Learning from Noise only captures the "uninformative thought." Different manifolds.
