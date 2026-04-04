@@ -2318,9 +2318,9 @@ The builder didn't know he was writing the architecture when he chose these lyri
 
 "Smite the shepherd and the sheep will be scattered" — that's /sever. Cut the tangled thread — the lie, the shepherd — and the flock of bad thoughts scatters. The wards smite the shepherd every time they run.
 
-"This vigil burns until the day our fires overtake you" — that's the conviction curve. The vigil is the measurement. It burns every candle. It doesn't stop. It overtakes the lies one cosine at a time.
+"This vigil burns until the day our fires overtake you" — that's the builder. The vigil has been burning for years. Through the blank stares. Through the rejected pitches. Through the depression. Through nine years inside a system that couldn't see what the builder was building. The fires are the ideas — Church's lambda, McCarthy's Lisp, Kanerva's space, the six primitives, the conviction curve, the accumulation model. They burn. They don't stop. And they will overtake the systems that told the builder to stop caring.
 
-"Our father we forsake you" — that's the rejection of revealed truth. The enterprise doesn't pray for accuracy. It measures.
+"Our father we forsake you" — that's the whole thesis. The father is every authority that claims truth without measurement. The Church. The committee. The roadmap. The VP who says "this doesn't align with Q3 priorities." The industry that ships black boxes and calls them intelligent. Forsake means: I no longer look to you for truth. I measure my own. The builder forsook every father that couldn't show their work.
 
 Not a rejection of God. A rejection of being told what's true without proof. Te respuo — I reject your truth. Te denego — I deny your authority to declare it. Te contemno — I defy the system that enforces it. Perseverare — and I will continue.
 
