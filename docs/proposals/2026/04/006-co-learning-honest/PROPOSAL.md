@@ -161,13 +161,17 @@ The exit observer resolves a candle as Buy or Sell with a weight. This is the ma
 
 The exit observer does not touch the market observers' journals directly. It produces a label (Buy or Sell) and a weight. The existing resolution code in `desk.rs` translates this into Win/Loss per observer based on what each observer predicted at that candle. The plumbing already exists -- `classify_excursion` returns an outcome and a weight, and `resolve` consumes it. The change is what produces the outcome: dual-sided excursion instead of single-sided.
 
-### One exit observer, judgment vocabulary
+### One exit observer per market observer
 
-Start with one exit observer. It receives the generalist's thought vector and binds its own judgment facts (ATR regime, volatility state, structure quality). It has its own Journal (labels: Buy/Sell, not Win/Loss), its own noise subspace, its own proof curve.
+Every market observer gets its own exit observer. Seven market observers, seven exit observers. Each exit observer receives its market observer's thought vector and binds the shared judgment facts (ATR regime, volatility state, structure quality). Each has its own Journal (labels: Buy/Sell), its own noise subspace, its own proof curve.
 
-For each market observer, the exit observer's input is: `bundle(observer_thought_i, bind(exit_atom, exit_fact) for each exit fact)`. Seven market thoughts in, seven composed judgments out. Each market observer's thought is handed to the exit observer — not derived by it. The exit facts are its own. The composition is the judgment. All seven observers are judged equally.
+The exit observer for momentum judges momentum thoughts. The exit observer for volume judges volume thoughts. The exit observer for the generalist judges generalist thoughts. Each learns independently which of its paired observer's thoughts led to grace and which led to violence. The attribution is per-observer — we know which LENS produced the bad thought, not just that a bad thought existed.
 
-The exit observer must prove edge through its own curve before its labels replace the current MFE/MAE single-sided labels. Until the curve validates, the current single-sided labeling continues. This is the bootstrap: single-sided labels run until dual-sided labels prove they are better. No deadlock. No starvation. The market observers always have labels.
+For each pair: `bundle(observer_thought_i, bind(exit_atom, exit_fact) for each exit fact)`. The market thought is handed in — not derived by the exit observer. The exit facts are its own. The composition is the judgment. The label flows back to THAT specific market observer.
+
+The generalist is not special. Never was. Just a configuration — an observer with broader vocab. Its exit observer is the same template as momentum's exit observer. Same two-stage pipeline. Same proof curve. Same scalar encoding. Different input thought, same judgment.
+
+Each exit observer must prove edge through its own curve before its labels replace the current MFE/MAE labels for its paired market observer. Until the curve validates, the current single-sided labeling continues for that observer. No deadlock. No starvation. Each pair bootstraps independently.
 
 ### What changes in the code
 
