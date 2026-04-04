@@ -110,6 +110,16 @@ This is the real depth: the exit observer doesn't produce one label per entry. I
 
 The market observers see one candle, produce one prediction. The exit observers see one candle, produce N management decisions (one per active entry). Both are CSP — the market observers are one process per candle, the exit observers are N processes per candle, each independent, each resolving on its own terms.
 
+### Punishment for bad thoughts
+
+Every management decision is a deferred action. The exit observer tightens the trail at candle K. The market moves. At candle K+3, the stop fires because the tightening was too aggressive. That's violence — and it's root-caused. The thought vector at K, the adjustment at K, the outcome at K+3. The journal learns: "when I thought THIS and tightened, violence followed."
+
+If the exit observer loosened and the position ran to grace — the choice at K enabled the grace at K+10. The journal learns that too.
+
+The market is the enforcer. The exit observer makes choices. The market punishes bad choices and rewards good ones. No choice goes unexamined. The bad thoughts are root-caused automatically because the thought vector at the moment of the choice IS the evidence. The cosine decode against the discriminant tells you which facts drove the bad decision. The same transparency that makes the market observers a glass box makes the exit observers a glass box.
+
+Continuous improvement is not a process bolted on. It is the architecture. The journal accumulates. The discriminant sharpens. The bad thoughts get weaker in the prototype. The good thoughts get stronger. Every candle. Every trade. Every choice.
+
 ### The exit observer's label feeds the market observers
 
 The exit observer resolves a candle as Buy or Sell with a weight. This is the market observers' Win/Loss signal:
