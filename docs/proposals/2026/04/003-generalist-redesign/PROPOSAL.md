@@ -106,8 +106,84 @@ Each tier-2 observer bundles facts from TWO specialists. The generalist composes
 3. The manager already encodes specialist opinions. Does the generalist add value at the fact level, or is it redundant with the manager?
 4. Should the generalist be a different TEMPLATE — Template 2 (reaction/subspace) instead of Template 1 (prediction/journal)? It could learn what "normal thought space" looks like and flag anomalies.
 
-## The Datamancer's Instinct
+## Option F: Two-Stage Observer (THE DESIGN)
 
-The generalist should filter noise dynamically. Not static partitioning (that's what specialists do). Not equal bundling (that's what we have). Dynamic weighting based on what the discriminant has learned. The noise vec changes every recalibration. Facts that predicted last month but don't predict this month fade. Facts that emerged this month get amplified.
+*Emerged from the datamancer's instinct: "all true thoughts, recognize what's useless, learn from the rest."*
 
-This is attention. The discriminant IS the attention mechanism. Using it to weight the input (not just evaluate the output) closes the loop.
+The generalist becomes a two-stage pipeline. Both templates composed in one observer.
+
+### Stage 1: All True Thoughts
+Same as now — bundle every fact from every vocabulary. ~53 facts per candle. Nothing changes here.
+
+### Stage 2: Noise Subspace (Template 2 — Reaction)
+An OnlineSubspace learns the manifold of "boring" thought compositions — the facts that are present regardless of outcome. It learns from **Noise-labeled candles** — the ones where price didn't cross the threshold. Those thoughts are definitionally uninformative. The facts present during non-events ARE the noise.
+
+```
+noise_subspace.update(thought_vec)   // only on Noise outcomes
+noise_component = project(thought_vec, noise_subspace)
+residual = thought_vec - noise_component
+```
+
+The projection is what's normal. The residual is what's unusual RIGHT NOW. If 45 of 53 facts always fire together, the subspace captures that pattern. The residual contains the 8 facts that distinguish this candle.
+
+### Stage 3: Journal (Template 1 — Prediction)
+Feed the RESIDUAL to the Journal. Buy or Sell from what's LEFT after noise is stripped. The discriminant learns from clean signal — the shared structure that made proto_cosine = 0.97 has been subtracted before the prototypes ever see it.
+
+### Why This Works
+
+The squeeze alone is in keltner.rs. The RSI drop is in oscillators.rs. The deep crab is in harmonics.rs. Each specialist sees its piece. The generalist sees all three firing simultaneously — and because the noise subspace stripped the 45 facts that always fire, those three facts dominate the residual.
+
+The bundle of `(squeeze + RSI dropping + deep crab forming)` is a specific direction in hyperspace. If that composition preceded down-moves 3 out of 4 times, the Sell prototype accumulates it. The discriminant learns: this COMBINATION predicts.
+
+No single specialist can see this conjunction. The generalist sees it — but only because the noise subspace removed the clutter.
+
+### Interface
+
+The generalist is STILL just another observer. Output: `(direction, conviction)`. Same as momentum, structure, volume. The manager reads it as one more opinion in the panel. The manager doesn't know the generalist has a two-stage pipeline internally. It doesn't need to. The architecture doesn't change. The interface holds.
+
+### Implementation
+
+```rust
+// In Observer, generalist only:
+struct GeneralistState {
+    noise_subspace: OnlineSubspace,  // learns from Noise outcomes
+}
+
+// At encoding time:
+let thought = encode_thought(candles, vm, Lens::Generalist);
+let residual = if noise_subspace.n() >= MIN_NOISE_SAMPLES {
+    let noise = noise_subspace.project(&thought);
+    subtract(&thought, &noise)
+} else {
+    thought  // during warmup, pass through unfiltered
+};
+// Feed residual to journal, not raw thought
+
+// At learning time:
+match outcome {
+    Noise => noise_subspace.update(&thought),  // learn what's boring
+    Buy | Sell => journal.observe(&residual, outcome, weight),  // learn from clean signal
+}
+```
+
+The noise subspace uses the SAME OnlineSubspace we built for risk branches. The journal uses the SAME Journal every observer uses. No new primitives. Both templates composed in one observer.
+
+### What Changes
+- Observer struct gets an optional `noise_subspace: Option<OnlineSubspace>` (only generalist uses it)
+- Generalist encoding path: thought → project → subtract → residual
+- Generalist learning: Noise outcomes train the subspace, Buy/Sell outcomes train the journal from residual
+- Everything else unchanged: interface, manager, specialists, risk
+
+### What Doesn't Change
+- Specialist observers (single-stage, unchanged)
+- Manager (reads observer opinions, doesn't know about internals)
+- Risk branches (separate tree, separate concern)
+- Treasury, positions, sizing (downstream, unchanged)
+- The six primitives (atom, bind, bundle, cosine, journal, curve)
+
+## Questions For Designers
+
+1. Should the noise subspace learn from ALL candles or only Noise-labeled candles? Learning from all would capture the "average thought." Learning from Noise only captures the "uninformative thought." Different manifolds.
+2. What's the right k (subspace rank) for the noise subspace? Too low = misses noise dimensions. Too high = strips signal.
+3. Should the residual be L2-normalized before feeding to the journal? The subtraction changes the vector's norm.
+4. Is there a risk that the noise subspace learns TOO well and strips everything, leaving zero residual? What's the floor?
