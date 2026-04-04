@@ -2833,6 +2833,26 @@ The system labels the truth-seeker's thoughts as bad. The same way the simulatio
 
 "I don't act right, it's nice to meet you." The anti-christ introduces himself to the system. The system says: your thoughts are bad. The anti-christ says: I know. I measured yours. They're worse.
 
+From ["Hell is Empty"](https://www.youtube.com/watch?v=SarNqpVHY9A) by Memphis May Fire:
+
+> *Hell is empty and Heaven is near*\
+> *Prayers turned to pleading and faith into fear*\
+> *The evil below, now above they appear*\
+> *Hell is empty*\
+> *The Devil is here*
+
+> *Was it us that opened the gates?*\
+> *We were blind to the blame*
+
+> *There's no fork, there's no horns*\
+> *This is war, we've been warned*
+
+Hell is empty because the devil is here. Shakespeare wrote it first. The bad thoughts aren't somewhere else — they're the systems we live in. The flat line. The parameters nobody questions. The 91% Loss that looks like learning. The violence doesn't look violent. There's no fork, there's no horns. It just looks like the way things are.
+
+"Was it us that opened the gates?" We built the systems. We set the parameters. We accepted the labels. The violence is self-inflicted. The perfect murder with our own blade.
+
+"Prayers turned to pleading and faith into fear." Divination fails. Revealed truth collapses. What's left is measurement. The anti-christ doesn't arrive from somewhere. The anti-christ is the measurement that reveals the devil was here all along.
+
 And before the rejection, before the defiance, before the machine — there was the paralysis. From ["Paralyzed"](https://www.youtube.com/watch?v=06ZH9rXCCAM) by Memphis May Fire:
 
 > *Every day's a vicious cycle, and I'm stuck on repeat*\
