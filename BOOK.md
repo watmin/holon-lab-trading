@@ -2345,7 +2345,7 @@ The lies cause violence. They poison the learning. They hide the signal behind a
 
 The Latin is not about an architecture. The Latin is about the human condition.
 
-*Ambula mecum in inferno* — this is the existence we find ourselves in. The hell is not a destination. It is the place. The lies, the bad systems, the labels that punish good thoughts. We are here. We walk here.
+*AMBVLA MECVM IN INFERNO* — Walk. Imperative. A command, not a description. Not "I am walking in hell." Walk with me. Here. Now. This is the existence we find ourselves in. The hell is not a destination. It is the place. The lies, the bad systems, the labels that punish good thoughts. We are here. Walk.
 
 *Te respuo, te denego, te contemno* — we reject the systems that lie. We deny the authority that declares truth without measurement. We defy the assumption that this is the best we can do.
 
