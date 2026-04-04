@@ -196,18 +196,36 @@ Seen by ALL observers. Calendar (hour-of-day, day-of-week, session). These are c
 
 Currently calendar is exclusive to Narrative. It should be standard — every observer sees time. If time doesn't matter for momentum, the momentum observer's noise subspace strips it. If time matters for volume (Asian = thin), it survives. Self-regulating.
 
-## Refinement: The Observer Is Configuration, Not Architecture
+## Refinement: The Observer IS the Two-Stage Pipeline
 
-An observer is defined by:
+The two-stage pipeline is not a generalist feature. It is the Observer. Every observer — specialist and generalist — uses both templates:
+
 1. **Vocabulary set** — which fact modules it calls (configuration)
-2. **Noise subspace** — what it has learned is boring (Template 2, per-observer)
-3. **Journal** — what it has learned predicts (Template 1, per-observer)
+2. **Noise subspace** (Template 2) — learns which of THIS observer's facts are boring right now. Per-observer, per-regime, self-regulating.
+3. **Journal** (Template 1) — learns Buy/Sell from the residual after noise is stripped. Clean signal in, clean prototypes out.
 
-The "generalist" is just `vocab = all modules, noise = on, journal = on`. A specialist is `vocab = momentum modules, noise = on, journal = on`. A cross-domain observer would be `vocab = momentum + structure, noise = on, journal = on`.
+The momentum observer's noise subspace learns that "RSI above midline" is always true during a trend — boring for momentum right now. Strips it. The structure observer's noise subspace learns that "close below sma200" has been true for 2000 candles — boring for structure right now. Strips it.
 
-The architecture supports N observers with arbitrary vocab sets. Which combinations are worth having is an empirical question — the curve judges. Start with the existing 5 specialists + 1 full generalist. Add cross-domain observers when we have evidence for which pairings carry signal.
+Each observer filters its OWN noise. The generalist filters generalist noise. The specialists filter specialist noise. Same mechanism, different manifolds.
 
-The manager doesn't care. It sees `(name, direction, conviction)` from each. The observer's internals — vocab set, noise filtering, window size — are invisible to the panel.
+```scheme
+;; The Observer pipeline — same for ALL observers:
+(define (observe-candle observer candles)
+  (let ((thought (encode-thought candles (:vocab observer)))
+        (residual (if (>= (n (:noise-subspace observer)) min-samples)
+                      (difference thought (project (:noise-subspace observer) thought))
+                      thought)))
+    (predict (:journal observer) residual)))
+
+;; Learning — same for ALL observers:
+(match outcome
+  :noise (update (:noise-subspace observer) thought)
+  _      (observe (:journal observer) residual outcome weight))
+```
+
+The "generalist" is just `vocab = all modules`. A specialist is `vocab = one module`. A cross-domain observer is `vocab = two modules`. The pipeline is the same. The vocabulary is configuration.
+
+The manager sees `(name, direction, conviction)` from each. The observer's internals — vocab set, noise subspace, window size — are invisible to the panel.
 
 ## Questions For Designers
 
