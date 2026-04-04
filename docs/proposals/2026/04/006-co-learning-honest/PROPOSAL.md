@@ -98,6 +98,18 @@ The ring buffer exists to prevent OOM and to keep the system online. If an entry
 
 Entries that the buffer evicts are neutral by definition. The market didn't speak clearly enough. That's not a label — it's the absence of a label. The organic rejection of thoughts that exist on the sphere but don't resolve into grace or violence. They exist. We don't need them here.
 
+### Continuous position management — not one label, a stream
+
+The market observers always operate on the now. A reversal is or isn't happening. Could be happening for 7 candles in a row — all exploitable. The market observers fire once per candle: "this is what I see."
+
+The exit observers are doing N managements per candle — one per active hypothetical entry. Each is independent. Each has its own trailing stop state, its own excursion history, its own current market context. Every candle, every active entry, the exit observer asks: "right now, for THIS entry, should I tighten? Loosen? By how much?"
+
+The scalar encoding captures the magnitude of adjustment. After the entry resolves, every one of those per-candle management decisions gets labeled honestly: did tightening at candle K lead to grace or violence? Did loosening at candle K lead to grace or violence? The exit observer learns from the FULL HISTORY of management decisions, not just the final outcome.
+
+This is the real depth: the exit observer doesn't produce one label per entry. It produces a management decision per entry per candle. It learns from all of them. The position lifecycle is a stream of decisions, each independently labeled by what happened next.
+
+The market observers see one candle, produce one prediction. The exit observers see one candle, produce N management decisions (one per active entry). Both are CSP — the market observers are one process per candle, the exit observers are N processes per candle, each independent, each resolving on its own terms.
+
 ### The exit observer's label feeds the market observers
 
 The exit observer resolves a candle as Buy or Sell with a weight. This is the market observers' Win/Loss signal:
