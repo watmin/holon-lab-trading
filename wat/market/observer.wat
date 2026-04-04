@@ -37,7 +37,7 @@
   conviction-threshold   ; f64 -- dynamic quantile threshold for flip zone
   primary-label          ; Label -- first registered label (Win)
   curve-valid            ; bool -- proof gate: has this observer proven predictive edge?
-  cached-acc)            ; f64 -- rolling accuracy of resolved predictions, updated on resolve
+  cached-accuracy)            ; f64 -- rolling accuracy of resolved predictions, updated on resolve
 
 ;; Two OnlineSubspace instances, different purposes:
 ;;   noise-subspace:      operates on THOUGHT vectors. Learns what fact compositions are boring.
@@ -76,21 +76,19 @@
 ;; (low residual norm) regardless of position result.
 
 (define (strip-noise observer thought)
-  "Project thought onto noise manifold, subtract, L2-normalize the residual.
+  "Subtract noise manifold, L2-normalize the residual.
    Monotonic warmup: pass through unfiltered until min-samples reached."
-  (if (< (n (:noise-subspace observer)) NOISE_MIN_SAMPLES)
+  (if (< (sample-count (:noise-subspace observer)) NOISE_MIN_SAMPLES)
       thought  ;; warmup: unfiltered passthrough
-      (let ((noise (project (:noise-subspace observer) thought)))
-        (l2-normalize (difference thought noise)))))
+      (l2-normalize (anomalous-component (:noise-subspace observer) thought))))
 
 (define (residual-norm observer thought)
   "Measure how much signal remains after noise subtraction.
    High norm = unusual thought. Low norm = boring thought.
    Used by the labeling function to classify stop-outs."
-  (if (< (n (:noise-subspace observer)) NOISE_MIN_SAMPLES)
+  (if (< (sample-count (:noise-subspace observer)) NOISE_MIN_SAMPLES)
       1.0  ;; warmup: treat all thoughts as unusual
-      (let ((noise (project (:noise-subspace observer) thought)))
-        (l2-norm (difference thought noise)))))
+      (l2-norm (anomalous-component (:noise-subspace observer) thought))))
 
 (define (observe-candle observer candles vm)
   "The full observer pipeline: encode → strip noise → predict."
@@ -106,6 +104,7 @@
 
 (define (simulate-outcome entry-idx direction candles k-stop k-tp k-trail)
   "Simulate a position from entry-idx through subsequent candles.
+   Pure function: no mutation, no side effects.
    Returns (outcome, weight).
 
    Win:   TP reached. weight = grace = (peak-rate - tp-rate) / tp-rate.
@@ -122,41 +121,46 @@
          (entry-atr    (:atr-r entry-candle))
          (stop-level   (* entry-rate (- 1.0 (* k-stop entry-atr))))
          (tp-level     (* entry-rate (+ 1.0 (* k-tp entry-atr))))
-         (trail-stop   stop-level)
-         (extreme-rate entry-rate)
-         (horizon      (min (* k-tp k-tp) 2000))  ;; diffusion bound with hard cap
-         (end-idx      (min (+ entry-idx horizon) (len candles))))
+         (horizon      (min (round (* k-tp k-tp)) 2000))
+         (sim-candles  (take (rest (take-last (- (len candles) entry-idx) candles)) horizon)))
 
-    ;; Fold over subsequent candles: pure, no mutation
-    (fold-candles entry-idx end-idx candles
-      (lambda (candle-idx)
-        (let* ((c (nth candles candle-idx))
-               (rate (if (= direction :buy) (:close c) (/ 1.0 (:close c))))
-               ;; Trail stop upward
-               (new-extreme (max extreme-rate rate))
-               (new-trail   (max trail-stop (* new-extreme (- 1.0 (* k-trail entry-atr))))))
+    ;; Fold over subsequent candles. Accumulator = (extreme-rate, trail-stop).
+    ;; Returns early on stop or TP via the result slot.
+    (fold (lambda (acc candle)
+            (if (first acc)  ;; already resolved — pass through
+                acc
+                (let* ((extreme   (second acc))
+                       (trail     (nth acc 2))
+                       (rate      (if (= direction :buy) (:close candle) (/ 1.0 (:close candle))))
+                       (new-extreme (max extreme rate))
+                       (new-trail   (max trail (* new-extreme (- 1.0 (* k-trail entry-atr))))))
+                  (cond
+                    ;; Stop hit
+                    ((<= rate new-trail)
+                     (let* ((actual-loss (/ (- entry-rate rate) entry-rate))
+                            (stop-dist  (* k-stop entry-atr))
+                            (violence   (/ actual-loss stop-dist)))
+                       (list (list :stop violence) new-extreme new-trail)))
 
-          (cond
-            ;; Stop hit
-            ((<= rate new-trail)
-             (let ((actual-loss (/ (- entry-rate rate) entry-rate))
-                   (stop-dist  (* k-stop entry-atr)))
-               (let ((violence (/ actual-loss stop-dist)))
-                 (list :stop violence))))
+                    ;; TP hit
+                    ((>= rate tp-level)
+                     (let ((grace (/ (- new-extreme tp-level) tp-level)))
+                       (list (list :tp grace) new-extreme new-trail)))
 
-            ;; TP hit
-            ((>= rate tp-level)
-             (let ((grace (/ (- new-extreme tp-level) tp-level)))
-               (list :tp grace)))
+                    ;; Continue — update accumulator, no result yet
+                    (else
+                     (list false new-extreme new-trail))))))
 
-            ;; Continue
-            (else
-             (set! extreme-rate new-extreme)
-             (set! trail-stop new-trail)
-             false))))
+          ;; Initial accumulator: (result=false, extreme=entry-rate, trail=stop-level)
+          (list false entry-rate stop-level)
+          sim-candles)
 
-    ;; If fold completes without stop or TP → Noise (horizon expiry)
-    (list :noise 0.0)))
+    ;; Extract result from final accumulator
+    ;; first element is either false (horizon expiry) or (outcome, weight)
+    (lambda (final-acc)
+      (if (first final-acc)
+          (first final-acc)           ;; resolved: (:stop violence) or (:tp grace)
+          (list :noise 0.0)))))
 
 (define (classify-outcome sim-result residual-norm)
   "Apply the noise subspace gate to the simulation result.
@@ -208,7 +212,7 @@
     :loss
       ;; Loss: strip noise, teach journal the residual, weighted by violence
       (let ((residual (strip-noise observer thought-vec))
-            (loss-label (second (labels (:journal observer)))))
+            (loss-label (second (labels (:journal observer)))))  ;; labels: journal introspection form
         (observe (:journal observer) residual loss-label weight)))
 
   ;; 2. Track accuracy since last recalib (for engram gating)
