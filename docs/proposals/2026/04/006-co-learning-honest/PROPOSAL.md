@@ -167,17 +167,26 @@ The exit observer resolves a candle as Buy or Sell with a weight. This is the ma
 
 The exit observer does not touch the market observers' journals directly. It produces a label (Buy or Sell) and a weight. The existing resolution code in `desk.rs` translates this into Win/Loss per observer based on what each observer predicted at that candle. The plumbing already exists -- `classify_excursion` returns an outcome and a weight, and `resolve` consumes it. The change is what produces the outcome: dual-sided excursion instead of single-sided.
 
-### One exit observer per market observer
+### The exit org — its own observers, its own lenses
 
-Every market observer gets its own exit observer. Seven market observers, seven exit observers. Each exit observer receives its market observer's thought vector and binds the shared judgment facts (ATR regime, volatility state, structure quality). Each has its own Journal (labels: Buy/Sell), its own noise subspace, its own proof curve.
+The exit observers are their own org. Not paired to market observers. Not owned by them. They have their own vocabulary domains — their own lenses on the judgment question:
 
-The exit observer for momentum judges momentum thoughts. The exit observer for volume judges volume thoughts. The exit observer for the generalist judges generalist thoughts. Each learns independently which of its paired observer's thoughts led to grace and which led to violence. The attribution is per-observer — we know which LENS produced the bad thought, not just that a bad thought existed.
+- **Volatility judge**: ATR regime, volatility shift, squeeze state. "Is this environment stable enough to trade?"
+- **Structure judge**: trend consistency, support/resistance, market structure quality. "Is the structure clear enough to exploit?"
+- **Timing judge**: momentum state, reversal signals, duration patterns. "Is the timing right for this entry?"
+- **Exit generalist**: full exit vocabulary. Sees all judgment facts.
 
-For each pair: `bundle(observer_thought_i, bind(exit_atom, exit_fact) for each exit fact)`. The market thought is handed in — not derived by the exit observer. The exit facts are its own. The composition is the judgment. The label flows back to THAT specific market observer.
+Each exit observer has its own Journal (labels: Buy/Sell), its own noise subspace, its own proof curve. Same template as the market observers. Same two-stage pipeline. Different vocabulary domain.
 
-The generalist is not special. Never was. Just a configuration — an observer with broader vocab. Its exit observer is the same template as momentum's exit observer. Same two-stage pipeline. Same proof curve. Same scalar encoding. Different input thought, same judgment.
+The coupling between market and exit is at composition time, not construction time. Any market thought can be composed with any exit judgment:
 
-Each exit observer must prove edge through its own curve before its labels replace the current MFE/MAE labels for its paired market observer. Until the curve validates, the current single-sided labeling continues for that observer. No deadlock. No starvation. Each pair bootstraps independently.
+`bundle(market_observer_thought, bind(exit_atom, exit_fact) for each exit fact)`
+
+The volatility judge doesn't care if the thought came from momentum or regime. It judges the volatility context of ANY thought handed to it. The pairing is dynamic — M exit observers × N market observers per candle. Each exit observer judges each market observer's thought independently.
+
+The attribution is two-dimensional: "the momentum observer's thought was labeled violence by the volatility judge but grace by the timing judge." We know which market LENS and which exit LENS intersected to produce grace or violence.
+
+Each exit observer proves edge through its own curve. Each market observer receives labels from all M exit observers — aggregated by the exit manager into one label, or weighted by exit conviction. The market observer doesn't know or care which exit observer judged it. It receives: Buy or Sell, with a weight. That's all it needs.
 
 ### What changes in the code
 
