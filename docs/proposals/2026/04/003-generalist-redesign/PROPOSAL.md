@@ -118,10 +118,10 @@ Same as now — bundle every fact from every vocabulary. ~53 facts per candle. N
 ### Stage 2: Noise Subspace (Template 2 — Reaction)
 An OnlineSubspace learns the manifold of "boring" thought compositions — the facts that are present regardless of outcome. It learns from **Noise-labeled candles** — the ones where price didn't cross the threshold. Those thoughts are definitionally uninformative. The facts present during non-events ARE the noise.
 
-```
-noise_subspace.update(thought_vec)   // only on Noise outcomes
-noise_component = project(thought_vec, noise_subspace)
-residual = thought_vec - noise_component
+```scheme
+(update noise-subspace thought)              ;; only on Noise outcomes
+(define noise (project noise-subspace thought))
+(define residual (difference thought noise))
 ```
 
 The projection is what's normal. The residual is what's unusual RIGHT NOW. If 45 of 53 facts always fire together, the subspace captures that pattern. The residual contains the 8 facts that distinguish this candle.
