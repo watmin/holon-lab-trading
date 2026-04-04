@@ -74,9 +74,17 @@ else:
 
 The label is honest because BOTH sides were played. No prediction decided which direction to measure. The market decided. The weight is honest because it measures how decisively one side won over the other -- not how far it went, but how much better one side was than the other.
 
-### What drains the buffer
+### Resolution: the market speaks, not a timer
 
-The ring buffer has a fixed capacity (same as the current pending buffer). Entries drain when they reach the buffer's age limit. No horizon parameter -- the buffer size IS the horizon. The oldest entry is always the one that drains. This is the same mechanism as today, just named honestly: it is a ring buffer with a capacity, not a "horizon."
+Each side of the dual-sided entry — buy hypothesis and sell hypothesis — has its own trailing stop and take-profit, computed from ATR at entry. The same mechanism that resolves real ManagedPositions resolves hypothetical entries. The buy-side trailing stop fires when price drops enough. The sell-side trailing stop fires when price rises enough. When BOTH sides have resolved (stop or TP on each), the entry is done. The comparison is honest because both sides lived and died on their own terms.
+
+No horizon. No age limit. The market resolves both sides through organic price movement.
+
+### The buffer is a safety valve, not a learning mechanism
+
+The ring buffer exists to prevent OOM and to keep the system online. If an entry's two sides somehow never resolve — prolonged sideways candles, neither stop nor TP fires — the buffer evicts the oldest entry WITHOUT labeling it. No Win. No Loss. No learning. The journal doesn't learn from silence.
+
+Entries that the buffer evicts are neutral by definition. The market didn't speak clearly enough. That's not a label — it's the absence of a label. The organic rejection of thoughts that exist on the sphere but don't resolve into grace or violence. They exist. We don't need them here.
 
 ### The exit observer's label feeds the market observers
 
