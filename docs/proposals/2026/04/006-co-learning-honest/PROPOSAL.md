@@ -144,7 +144,11 @@ The 2×2 counterfactual table per entry:
 
 Both sides played. Both sides resolved. The market fills in all four cells. Buy grace + Sell violence = "Buy was right." Both violence = "Bad candle to enter at all." The fourth cell — the environment judgment — is the exit observer's unique thought that the market observers cannot have.
 
-The scalar and the direction compose. The exit observer tells the market observers: "this candle was Buy, at this trail width." The market observers learn which of their thoughts predicted the right direction. The exit observer learns which trail width preserved the most grace. Both learn from the same resolution. Neither learns from opinion. Both learn from what the market did.
+The scalar is agnostic of direction. A trailing stop at 1.5× ATR works the same whether you're long or short. The scalar is distance from the extreme — it doesn't know or care which side. The exit observer learns one thing: given this market state, what distance maximizes residue? Buy or sell, the magnitude question is the same.
+
+Direction from the market observers. Magnitude from the exit observer. Two orthogonal concerns, completely decoupled. The market observers answer "which way?" The exit observer answers "how much room?" Neither needs the other's answer to learn its own.
+
+They compose at the desk: direction × magnitude = position parameters. The market observers tell the desk which side. The exit observer tells the desk how tight. The desk acts. The market enforces. Both learn from the enforcement.
 
 ### The exit observer's label feeds the market observers
 
