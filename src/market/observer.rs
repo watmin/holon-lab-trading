@@ -112,10 +112,9 @@ impl Observer {
             return thought.clone(); // warmup: unfiltered
         }
         let thought_f64: Vec<f64> = thought.data().iter().map(|&v| v as f64).collect();
-        let noise = self.noise_subspace.project(&thought_f64);
-        let residual: Vec<f64> = thought_f64.iter().zip(noise.iter())
-            .map(|(t, n)| t - n)
-            .collect();
+        // anomalous_component = x - reconstruct(x): the part the noise subspace CAN'T explain.
+        // Returns D-dimensional vector (same as input), not k coefficients.
+        let residual = self.noise_subspace.anomalous_component(&thought_f64);
         // L2-normalize: the subtraction changes the norm. Normalize before journal sees it.
         let norm = residual.iter().map(|x| x * x).sum::<f64>().sqrt();
         if norm < 1e-10 {
@@ -485,5 +484,64 @@ mod tests {
         assert!(result.is_some());
         let log = result.unwrap();
         assert!(!log.correct);
+    }
+
+    #[test]
+    fn strip_noise_returns_same_dimension() {
+        let mut obs = Observer::new(
+            super::super::Lens::Momentum,
+            TEST_DIMS,
+            500,
+            42,
+            &["Buy", "Sell"],
+        );
+
+        let thought = holon::VectorManager::new(TEST_DIMS).get_vector("test-thought");
+
+        // Before warmup: passthrough, same dims
+        let result = obs.strip_noise(&thought);
+        assert_eq!(result.data().len(), TEST_DIMS, "passthrough should preserve dims");
+
+        // Train noise subspace past warmup
+        for i in 0..60 {
+            let v: Vec<f64> = (0..TEST_DIMS).map(|d| ((i * d) as f64).sin()).collect();
+            obs.noise_subspace.update(&v);
+        }
+
+        // After warmup: residual should still be same dims
+        let result = obs.strip_noise(&thought);
+        assert_eq!(result.data().len(), TEST_DIMS,
+            "noise-stripped residual must be same dimension as input");
+        assert!(result.data().iter().any(|&x| x != 0),
+            "residual should be non-zero");
+    }
+
+    #[test]
+    fn strip_noise_produces_valid_residual_after_training() {
+        // Train noise subspace on varied vectors, then strip noise from a new thought.
+        // The residual should be D-dimensional and non-zero.
+        let dims = 256;
+        let mut obs = Observer::new(
+            super::super::Lens::Generalist,
+            dims,
+            500,
+            42,
+            &["Buy", "Sell"],
+        );
+
+        let vm = holon::VectorManager::new(dims);
+
+        // Train on varied vectors (different atoms = different random directions)
+        for i in 0..100 {
+            let v: Vec<f64> = vm.get_vector(&format!("train-{}", i))
+                .data().iter().map(|&x| x as f64).collect();
+            obs.noise_subspace.update(&v);
+        }
+
+        // Strip noise from a new thought
+        let thought = vm.get_vector("unseen-thought");
+        let result = obs.strip_noise(&thought);
+        assert_eq!(result.data().len(), dims, "residual must be D-dimensional");
+        assert!(result.data().iter().any(|&x| x != 0), "residual should be non-zero");
     }
 }
