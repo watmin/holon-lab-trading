@@ -100,6 +100,14 @@ Neither panel learns from the other's OPINION. They learn from the other's OUTCO
 
 The panels do not share journals. They do not see each other's thoughts. They communicate ONLY through the position lifecycle. Each operates on its own fiber — the market panel over candle-space, the exit panel over position-space — coupled through the shared base (the position struct).
 
+### The MFE/MAE approximation — and why it must be replaced
+
+The current MFE/MAE labels (proposal 004, revised) are better than the simulation labels they replaced — 50/50 instead of 91/9. But they are still magic numbers. The horizon (360 candles) is arbitrary. The binary split (MFE > |MAE|?) is crude. The weight (|MFE - |MAE||) is a heuristic. These are approximations of what a trained exit panel would provide honestly.
+
+The MFE/MAE calculation IS the exit expert — just a dumb version of it. A fixed window, a fixed comparison, no learning. The exit panel replaces the approximation with a learned resolution. It doesn't ask "after 360 candles, was MFE > MAE?" It asks "right now, should this position stay open?" — and it learns the answer from every position it has ever watched.
+
+The MFE/MAE labels are the bootstrap. They prove the architecture works with honest labels. The exit panel is the convergence — when the approximation is replaced by the thing it was approximating.
+
 ### What the exit panel replaces
 
 Today the trailing stop is `k_trail x ATR` from the extreme rate. The exit panel's prediction modulates this:
