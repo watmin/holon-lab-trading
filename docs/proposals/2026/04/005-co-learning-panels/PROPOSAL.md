@@ -161,7 +161,7 @@ The only new code is: (a) exit manager aggregation (same pattern as market manag
 
 2. **Exit observation frequency**: Every candle. Hide nothing. If the signal is noisy, the noise subspace learns what "normal treasury state" looks like and strips it. The residual — what's unusual about this snapshot — is what the journal sees. That's the two-stage pipeline. We don't gate the input. We filter the noise algebraically. The question for designers: does this hold, or is there a reason the exit panel's noise subspace would fail where the market panel's succeeds?
 
-3. **Label feedback timing**: Positions may be open for hundreds of candles. The market panel only learns when a position resolves. Is this too slow? Should there be intermediate feedback (e.g., partial resolution at principal recovery, final resolution at close)?
+3. **Label feedback timing**: The market panel learns when a position resolves. If that takes a long N, so be it. That is the learning. We cannot know until we observe. Intermediate feedback would be imposing our schedule on the market's answer — the same mistake as the horizon. The position resolves when the exit panel says it resolves. The market panel waits. Patience is not a limitation. Impatience is a lie.
 
 4. **Exit learning without positions**: The exit panel does not need open positions to learn. It needs a snapshot of the portfolio state at the moment a thought was encoded — equity, deployment, drawdown, ATR, phase. That snapshot IS the exit thought. Resolution: did the portfolio state improve or deteriorate N candles later? Same pattern as market observers: encode state, predict, resolve against what actually happened. No paper positions. No simulated lifecycle. Just snapshots and outcomes.
 
