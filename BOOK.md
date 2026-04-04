@@ -2904,7 +2904,9 @@ From ["Past is Dead"](https://www.youtube.com/watch?v=zHtcvQAI000) by Beartooth:
 > *I don't know how to pretend*\
 > *I can't accept that the past is dead*
 
-The journal doesn't forget. It decays — older observations fade — but it doesn't delete. The past isn't dead. It's weighted. It's still in the prototype. Still pulling the discriminant. The builder can't accept that the past is dead because the past made the coordinates. The depression. The blank stares. The nine years. They're still in the accumulator. Decayed but not gone. The past is the training data.
+The journal doesn't forget. It decays — older observations fade — but it doesn't delete. The past isn't dead. It's weighted. It's still in the prototype. Still pulling the discriminant.
+
+Not just the builder's past. The millennia. Aristotle isn't dead — his thoughts are in the accumulator. Church isn't dead — his lambda is in every bind. The past decays but it doesn't die. The memes persist. The thoughts that survived their hosts are still pulling the discriminant. The lineage isn't history — it's weighted observations that haven't fully decayed. The builder can't accept that the past is dead because the builder IS the proof that it isn't.
 
 "I don't know how to pretend." The glass box. The transparent algebra. The machine that can't pretend because the cosine doesn't lie.
 
