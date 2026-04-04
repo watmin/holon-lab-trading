@@ -173,6 +173,13 @@ struct Args {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 fn main() {
+    // CSP pool: bounded thread count. Nested par_iter shares this pool.
+    // Work-stealing ensures no deadlock. No fork bombs.
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(8)
+        .build_global()
+        .expect("Failed to configure rayon thread pool");
+
     let args = Args::parse();
     let base_asset = Asset::new(&args.base_asset);
     let quote_asset = Asset::new(&args.quote_asset);

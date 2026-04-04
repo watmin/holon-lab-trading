@@ -71,8 +71,10 @@ pub struct Observer {
     pub window_sampler: WindowSampler,
     pub conviction_history: VecDeque<f64>,
     pub conviction_threshold: f64,
-    /// The primary label for discriminant access (first registered label).
+    /// The primary label for discriminant access (first registered label = Win).
     pub primary_label: Label,
+    /// The loss label (second registered label = Loss). Stored, not fetched by index.
+    pub loss_label: Label,
     /// Proof gate: the observer must prove direction accuracy before
     /// its opinion flows upstream. Silence, not noise.
     pub curve_valid: bool,
@@ -84,11 +86,12 @@ impl Observer {
     pub fn new(lens: super::Lens, dims: usize, recalib_interval: usize, seed: u64) -> Self {
         let mut journal = Journal::new(lens.as_str(), dims, recalib_interval);
         let primary_label = journal.register("Win");
-        journal.register("Loss");
+        let loss_label = journal.register("Loss");
         Self {
             lens,
             journal,
             primary_label,
+            loss_label,
             noise_subspace: OnlineSubspace::new(dims, 8),
             resolved: VecDeque::new(),
             good_state_subspace: OnlineSubspace::new(dims, 8),
@@ -160,7 +163,7 @@ impl Observer {
     ) -> Option<ResolveLog> {
         // 1. Learn: journal sees the residual, weighted by outcome magnitude
         let win_label = self.primary_label;
-        let loss_label = self.journal.labels()[1];
+        let loss_label = self.loss_label;
         let correct = match outcome {
             Outcome::Win { weight } => {
                 let residual = self.strip_noise(thought_vec);

@@ -102,56 +102,38 @@
     (let ((residual (strip-noise observer thought)))
       (predict (:journal observer) residual))))
 
-;; -- Outcome simulation --------------------------------------------------------
+;; -- Outcome: MFE vs MAE -------------------------------------------------------
 ;;
-;; Pure function: given an entry point and subsequent candles, simulate what
-;; a position would have done. No mutable state. No side effects.
+;; The market tells us the label. Not the simulation.
+;; Every pending entry tracks two values as it ages:
+;;   max-favorable-excursion (MFE): biggest move in our direction
+;;   max-adverse-excursion   (MAE): biggest move against us
 ;;
-;; No horizon. No expiry. The trailing stop guarantees every position resolves.
-;; The pending ring buffer bounds memory. Entries persist until the simulation
-;; resolves (stop or TP fires).
+;; At horizon drain, the question is binary:
+;;   MFE > |MAE|  →  Win  (the trade went right before it went wrong)
+;;   MFE ≤ |MAE|  →  Loss (the trade went wrong before it went right)
+;;
+;; Weight = |MFE - |MAE|| — how decisively the market answered.
+;; Strong favorable-first = high weight Win. The journal learns hard.
+;; Near the boundary = ambiguous. The journal learns softly.
+;;
+;; This produces ~50/50 labels in a random walk.
+;; Deviations from 50/50 are real signal — that's what the journal learns.
+;;
+;; No k-stop, k-tp, k-trail in the label. Those exist for position management
+;; (ManagedPosition lifecycle), not for observer learning.
+;; The observers learn what the market DOES, not what we parameterized.
 
-(define (simulate-outcome direction closes entry-atr k-stop k-tp k-trail)
-  "Simulate a position through a slice of close prices.
-   Pure function: no mutation, no side effects.
-
-   closes:    slice of rates. Index 0 = entry. Index 1..N = subsequent.
-              For Buy: close prices. For Sell: 1/close prices.
-   entry-atr: normalized ATR at entry (e.g. 0.01 = 1%).
-
-   Returns (outcome, weight) or false if not yet resolved.
-     (:tp grace)   — TP reached. grace = (peak - tp) / tp.
-     (:stop violence) — stop hit. violence = actual-loss / stop-distance.
-     false         — needs more candles."
-  (if (< (len closes) 2)
-      false
-      (let* ((entry-rate (first closes))
-             (stop-level (* entry-rate (- 1.0 (* k-stop entry-atr))))
-             (tp-level   (* entry-rate (+ 1.0 (* k-tp entry-atr)))))
-
-        ;; Fold over subsequent candles. Accumulator = (result, extreme, trail).
-        (let ((final-acc
-               (fold (lambda (acc rate)
-                       (if (first acc)  ;; already resolved — pass through
-                           acc
-                           (let* ((extreme   (second acc))
-                                  (trail     (nth acc 2))
-                                  (new-extreme (max extreme rate))
-                                  (new-trail   (max trail (* new-extreme (- 1.0 (* k-trail entry-atr))))))
-                             (cond
-                               ((<= rate new-trail)
-                                (let* ((actual-loss (/ (- entry-rate rate) entry-rate))
-                                       (stop-dist  (* k-stop entry-atr))
-                                       (violence   (/ actual-loss stop-dist)))
-                                  (list (list :stop violence) new-extreme new-trail)))
-                               ((>= rate tp-level)
-                                (let ((grace (/ (- new-extreme tp-level) tp-level)))
-                                  (list (list :tp grace) new-extreme new-trail)))
-                               (else
-                                (list false new-extreme new-trail))))))
-                     (list false entry-rate stop-level)
-                     (rest closes))))
-          (first final-acc)))))  ;; false if unresolved, (outcome weight) if resolved
+(define (classify-excursion mfe mae)
+  "Classify a pending entry's excursion into Win or Loss.
+   mfe: max favorable excursion (positive).
+   mae: max adverse excursion (negative).
+   Returns (:win weight) or (:loss weight)."
+  (let ((favorable-first (> mfe (abs mae)))
+        (weight (max (abs (- mfe (abs mae))) 0.01)))
+    (if favorable-first
+        (list :win weight)
+        (list :loss weight))))
 
 ;; -- Resolve ----------------------------------------------------------------
 
@@ -159,20 +141,19 @@
 ;; curve validation, conviction threshold update, resolved prediction tracking.
 ;; Returns a resolve-log if the observer had a directional prediction.
 ;;
-;; Labels are outcome-based (proposal 004):
-;;   Win:  simulated position reached TP. Weight = residual-norm × grace.
-;;   Loss: simulated position stopped out. Weight = residual-norm × violence.
+;; Labels are excursion-based (discovered from data analysis):
+;;   Win:  MFE > |MAE| — the trade went right before it went wrong (84% profitable)
+;;   Loss: MFE ≤ |MAE| — the trade went wrong before it went right (16% profitable)
 ;;
 ;; No Outcome::Noise. The noise subspace learns from ALL thoughts every candle
-;; (in observe-candle). The journal learns only from resolved simulations.
-;; The residual norm scales the weight continuously — boring thoughts teach
-;; softly, unusual thoughts teach hard. No binary gate.
+;; (in observe-candle). The journal learns only at horizon drain.
+;; Weight = |MFE - |MAE|| — how decisively the market spoke.
 
 (define (resolve observer thought-vec prediction outcome weight
                  conviction-quantile conviction-window)
   "Resolve a prediction against an observed outcome.
-   outcome: :win or :loss (from simulate-outcome + classify).
-   weight: residual-norm × grace or residual-norm × violence."
+   outcome: :win or :loss (from classify-excursion at horizon drain).
+   weight: |MFE - |MAE|| — decisiveness of the market's answer."
 
   ;; 1. Learn: journal sees the residual, weighted by outcome magnitude
   (let ((residual (strip-noise observer thought-vec))
@@ -239,20 +220,21 @@
 ;;   2. noise-subspace.update(thought)       ← learns from ALL thoughts
 ;;   3. residual = strip-noise(thought)
 ;;   4. prediction = journal.predict(residual)
-;;   5. Buffer (thought, prediction) in pending ring buffer
+;;   5. Buffer (thought, prediction, MFE=0, MAE=0) in pending ring buffer
 ;;
 ;; Each pending entry, each candle:
-;;   6. simulate-outcome(closes from entry to now) → resolved?
-;;   7. If resolved:
-;;      a. norm = residual-norm(thought)
-;;      b. weight = norm × grace (for Win) or norm × violence (for Loss)
-;;      c. observer.resolve(thought, prediction, outcome, weight)
-;;      d. Remove from pending
+;;   6. Track MFE (max favorable excursion) and MAE (max adverse excursion)
+;;
+;; At horizon drain (max-pending-age reached):
+;;   7. classify-excursion(MFE, MAE) → Win or Loss
+;;   8. weight = |MFE - |MAE|| — how decisive the market was
+;;   9. observer.resolve(thought, prediction, outcome, weight)
+;;   10. Remove from pending
 ;;
 ;; The noise subspace is the background model (every candle).
-;; The journal is the foreground model (resolved positions only).
-;; The residual norm scales the learning weight continuously.
-;; No binary Noise gate. No horizon. No expiry.
+;; The journal is the foreground model (horizon drain only).
+;; Weight scales by decisiveness — ambiguous trades teach softly.
+;; ~50/50 Win/Loss in a random walk. Deviations are signal.
 
 ;; -- The Observer is domain-agnostic -------------------------------------------
 ;;

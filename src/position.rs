@@ -62,6 +62,11 @@ pub struct Pending {
     pub exit_reason:       Option<ExitReason>, // why the trade closed
     pub exit_pct:          f64,    // actual exit price change (for P&L)
 
+    // ── Incremental simulation state ─────────────────────────────────
+    // Avoids replaying full close history each candle.
+    // Initialized at entry: extreme = entry_price, trail = initial stop.
+    pub sim_extreme:       f64,    // best rate seen since entry
+    pub sim_trail:         f64,    // current trailing stop level
 }
 
 // rune:reap(aspirational) — TrailingStop and TakeProfit are matched in ledger display
@@ -276,6 +281,53 @@ pub fn simulate_outcome(
     }
 
     None // not yet resolved
+}
+
+/// Incremental simulation: check ONE new close against stored (extreme, trail).
+/// Returns Some(SimResult) if resolved, None if still pending.
+/// Updates extreme/trail in place via the returned SimState.
+/// O(1) per candle instead of O(age).
+pub struct SimState {
+    pub extreme: f64,
+    pub trail: f64,
+}
+
+pub fn tick_sim(
+    current_rate: f64,
+    entry_rate: f64,
+    entry_atr: f64,
+    k_stop: f64,
+    k_tp: f64,
+    k_trail: f64,
+    state: &mut SimState,
+) -> Option<SimResult> {
+    if current_rate > state.extreme { state.extreme = current_rate; }
+    let new_trail = state.extreme * (1.0 - k_trail * entry_atr);
+    if new_trail > state.trail { state.trail = new_trail; }
+
+    let tp_level = entry_rate * (1.0 + k_tp * entry_atr);
+
+    if current_rate <= state.trail {
+        let actual_loss = (entry_rate - current_rate) / entry_rate;
+        let stop_dist = k_stop * entry_atr;
+        let violence = actual_loss / stop_dist;
+        return Some(SimResult::StopLoss { violence });
+    }
+
+    if current_rate >= tp_level {
+        let grace = (state.extreme - tp_level) / tp_level;
+        return Some(SimResult::TakeProfit { grace });
+    }
+
+    None
+}
+
+/// Initialize a SimState for a new pending entry.
+pub fn init_sim_state(entry_rate: f64, entry_atr: f64, k_stop: f64) -> SimState {
+    SimState {
+        extreme: entry_rate,
+        trail: entry_rate * (1.0 - k_stop * entry_atr),
+    }
 }
 
 /// Classify a simulation result using the noise subspace as the tolerance boundary.

@@ -27,7 +27,7 @@ use crate::ledger::LogEntry;
 use crate::market::manager::{ManagerContext, encode_manager_thought, find_proven_band};
 use crate::market::observer::Observer;
 use crate::portfolio::{Phase, Portfolio};
-use crate::position::{CrossingSnapshot, ExitObservation, ExitReason, ManagedPosition, Pending, PositionEntry, PositionExit, PositionPhase, TrailFactor, simulate_outcome, to_outcome};
+use crate::position::{CrossingSnapshot, ExitObservation, ExitReason, ManagedPosition, Pending, PositionEntry, PositionExit, PositionPhase, TrailFactor};
 use crate::sizing::{curve_win_rate, half_kelly_position, kelly_frac};
 use crate::treasury::{AccumulationLedger, Asset, Treasury};
 use crate::window_sampler::WindowSampler;
@@ -282,6 +282,17 @@ impl Desk {
         let observer_vecs = Self::encode_observers(
             &self.observers, window_slice, self.encode_count, ctx);
 
+        // ── Noise learning: once per observer per candle with CURRENT thought ──
+        // The noise subspace is the background model — it sees every thought, every candle.
+        // Must happen before strip_noise (which reads the subspace) and outside the pending loop.
+        {
+            use rayon::prelude::*;
+            self.observers.par_iter_mut().zip(observer_vecs.par_iter())
+                .for_each(|(obs, vec)| {
+                    obs.learn_noise(vec);
+                });
+        }
+
         // ── Observer predictions (pmap: strip noise, then predict from residual) ──
         let observer_preds: Vec<Prediction> = {
             use rayon::prelude::*;
@@ -302,14 +313,19 @@ impl Desk {
         // The first 5 observers are specialists; observer[5] is the generalist.
         // ManagerContext takes the 5 specialists for observer_* fields,
         // and the generalist separately.
-        let mut obs_curve_valid = [false; 5];
-        let mut obs_resolved_lens = [0usize; 5];
-        let mut obs_resolved_accs = [0.0f64; 5];
-        for (obs_idx, obs) in self.observers[..5].iter().enumerate() {
-            obs_curve_valid[obs_idx] = obs.curve_valid;
-            obs_resolved_lens[obs_idx] = obs.resolved.len();
-            obs_resolved_accs[obs_idx] = obs.cached_acc;
-        }
+        let (obs_curve_valid, obs_resolved_lens, obs_resolved_accs) = {
+            use rayon::prelude::*;
+            let vals: Vec<(bool, usize, f64)> = self.observers[..5].par_iter()
+                .map(|obs| (obs.curve_valid, obs.resolved.len(), obs.cached_acc))
+                .collect();
+            let mut cv = [false; 5];
+            let mut rl = [0usize; 5];
+            let mut ra = [0.0f64; 5];
+            for (idx, (c, r, a)) in vals.into_iter().enumerate() {
+                cv[idx] = c; rl[idx] = r; ra[idx] = a;
+            }
+            (cv, rl, ra)
+        };
         let mgr_ctx = ManagerContext {
             observer_preds: &observer_preds[..5],
             observer_atoms: &ctx.observer_atoms[..5],
@@ -342,8 +358,10 @@ impl Desk {
         // Panel state for engram (Template 2 — reaction layer)
         // Panel state: observer raw cosines, fed to panel_engram.update() at recalibration
         // and used in progress display for engram familiarity check.
-        let mut panel_state = vec![0.0f64; self.observers.len()];
-        for (pi, ep) in observer_preds.iter().enumerate() { panel_state[pi] = ep.raw_cos; }
+        let panel_state: Vec<f64> = {
+            use rayon::prelude::*;
+            observer_preds.par_iter().map(|ep| ep.raw_cos).collect()
+        };
         // Manager's prediction drives direction + conviction.
         let meta_dir = mgr_pred.direction;
         let meta_conviction = mgr_pred.conviction;
@@ -388,12 +406,13 @@ impl Desk {
         // Two-phase: collect resolved, then learn + drain. Avoids borrow conflict
         // between exit_pending (mut), positions (shared), and exit_journal (mut).
         {
-            let mut resolved_exit_indices: Vec<usize> = Vec::new();
-            for (idx, obs) in self.exit_pending.iter().enumerate() {
-                if i - obs.snapshot_candle >= ctx.exit_horizon {
-                    resolved_exit_indices.push(idx);
-                }
-            }
+            // Phase 1: parallel scan for resolved indices
+            use rayon::prelude::*;
+            let resolved_exit_indices: Vec<usize> = self.exit_pending.par_iter().enumerate()
+                .filter_map(|(idx, obs)| {
+                    if i - obs.snapshot_candle >= ctx.exit_horizon { Some(idx) } else { None }
+                }).collect();
+            // Phase 2: sequential drain (index mutation) + learn
             for &idx in resolved_exit_indices.iter().rev() {
                 let obs = self.exit_pending.remove(idx);
                 if let Some(pos) = self.positions.iter().find(|p| p.id == obs.pos_id) {
@@ -405,34 +424,47 @@ impl Desk {
             }
         }
 
-        // Pass 1: observe exit expert + tick positions, collect exit signals.
+        // Pass 1: parallel tick — each position is independent.
+        // Produces exit signals + exit observations as messages.
+        struct TickResult {
+            pos_idx: usize,
+            exit: Option<PositionExit>,
+            current_rate: f64,
+            is_buy: bool,
+            exit_obs: Option<ExitObservation>,
+        }
+        let tick_results: Vec<TickResult> = {
+            use rayon::prelude::*;
+            self.positions.par_iter_mut().enumerate().filter_map(|(pi, pos)| {
+                if pos.phase == PositionPhase::Closed { return None; }
+                let is_buy = pos.source_asset == *ctx.base_asset;
+                let current_rate = if is_buy { quote_price } else { 1.0 / quote_price };
+
+                let exit_obs = if pos.candles_held > 0 && pos.candles_held % ctx.exit_observe_interval == 0 {
+                    let pnl_frac = pos.return_pct(current_rate);
+                    let exit_thought = encode_exit_thought(pos, pnl_frac, current_rate,
+                        ctx.exit_atoms, ctx.exit_scalar, candle.atr_r, is_buy);
+                    Some(ExitObservation {
+                        thought: exit_thought,
+                        pos_id: pos.id,
+                        snapshot_pnl: pnl_frac,
+                        snapshot_candle: i,
+                    })
+                } else { None };
+
+                let trail = match pos.phase {
+                    PositionPhase::Runner => TrailFactor(ctx.k_trail_runner),
+                    _ => TrailFactor(ctx.k_trail),
+                };
+                let exit = pos.tick(current_rate, trail);
+                Some(TickResult { pos_idx: pi, exit, current_rate, is_buy, exit_obs })
+            }).collect()
+        };
+        // Handoff: collect messages into sequential structures
         let mut exit_signals: Vec<(usize, PositionExit, f64, bool)> = Vec::new();
-        for (pi, pos) in self.positions.iter_mut().enumerate() {
-            if pos.phase == PositionPhase::Closed { continue; }
-
-            // rune:forge(bare-type) — is_buy is local, derived from asset comparison,
-            // consumed within the same block. Direction enum adds ceremony without safety here.
-            let is_buy = pos.source_asset == *ctx.base_asset;
-            let current_rate = if is_buy { quote_price } else { 1.0 / quote_price };
-            if pos.candles_held > 0 && pos.candles_held % ctx.exit_observe_interval == 0 {
-                let pnl_frac = pos.return_pct(current_rate);
-                let exit_thought = encode_exit_thought(pos, pnl_frac, current_rate,
-                    ctx.exit_atoms, ctx.exit_scalar, candle.atr_r, is_buy);
-                self.exit_pending.push(ExitObservation {
-                    thought: exit_thought,
-                    pos_id: pos.id,
-                    snapshot_pnl: pnl_frac,
-                    snapshot_candle: i,
-                });
-            }
-
-            let trail = match pos.phase {
-                PositionPhase::Runner => TrailFactor(ctx.k_trail_runner),
-                _ => TrailFactor(ctx.k_trail),
-            };
-            if let Some(exit) = pos.tick(current_rate, trail) {
-                exit_signals.push((pi, exit, current_rate, is_buy));
-            }
+        for tr in tick_results {
+            if let Some(obs) = tr.exit_obs { self.exit_pending.push(obs); }
+            if let Some(exit) = tr.exit { exit_signals.push((tr.pos_idx, exit, tr.current_rate, tr.is_buy)); }
         }
 
         // Pass 2: settle each exit — treasury, accounting, logging.
@@ -707,6 +739,8 @@ impl Desk {
             max_adverse:       0.0,
             exit_reason:       None,
             exit_pct:          0.0,
+            sim_extreme:       candle.close,
+            sim_trail:         candle.close * (1.0 - ctx.k_stop * candle.atr_r),
         });
 
         // Candle snapshot: every indicator value at entry time.
@@ -770,111 +804,35 @@ impl Desk {
         let tht_buy = self.tht_buy();
         let tht_sell = self.tht_sell();
 
+        // ── CSP: tick all pending entries (parallel, no observer mutation) ──
+        // Each entry tracks MFE/MAE — the market's actual excursion.
+        // No simulation labels here. Observer learning happens at horizon resolution
+        // where we know the full picture: did it go right before it went wrong?
         let current_price = candle.close;
-        for entry in self.pending.iter_mut() {
-            let entry_price = entry.entry_price;
-            let pct         = (current_price - entry_price) / entry_price;
-            let _abs_pct    = pct.abs();
+        {
+            use rayon::prelude::*;
+            let pending_slice = self.pending.make_contiguous();
+            pending_slice.par_iter_mut().for_each(|entry| {
+                let entry_price = entry.entry_price;
+                let pct = (current_price - entry_price) / entry_price;
 
-            // Track directional excursion relative to predicted direction.
-            let directional_pct = if entry.meta_dir == Some(tht_buy) {
-                pct
-            } else if entry.meta_dir == Some(tht_sell) {
-                -pct
-            } else {
-                pct.abs() // no direction → track absolute
-            };
-            if directional_pct > entry.max_favorable {
-                entry.max_favorable = directional_pct;
-            }
-            if directional_pct < entry.max_adverse {
-                entry.max_adverse = directional_pct; // most negative = worst drawdown
-            }
-
-            // Noise learning: every candle, every observer sees the thought.
-            // The noise subspace is the background model — it sees everything.
-            {
-                use rayon::prelude::*;
-                self.observers.par_iter_mut().enumerate().for_each(|(ei, obs)| {
-                    if ei < entry.observer_vecs.len() {
-                        obs.learn_noise(&entry.observer_vecs[ei]);
-                    }
-                });
-            }
-
-            // Simulation-based resolution: simulate a hypothetical position from entry forward.
-            // If it resolves (TP or stop), learn from the outcome.
-            if entry.crossing.is_none() {
-                // Extract closes from entry candle to current candle.
-                let entry_offset = if entry.candle_idx < i {
-                    // candle_window is a sliding window; compute offset within it.
-                    let window_start_idx = if i + 1 >= self.candle_window.len() {
-                        i + 1 - self.candle_window.len()
-                    } else {
-                        0
-                    };
-                    if entry.candle_idx >= window_start_idx {
-                        Some(entry.candle_idx - window_start_idx)
-                    } else {
-                        None // entry fell out of the candle window
-                    }
+                // Track directional excursion
+                // Buy: price up = favorable. Sell: price down = favorable.
+                // No direction: raw price change (up = favorable).
+                let directional_pct = if entry.meta_dir == Some(tht_buy) {
+                    pct
+                } else if entry.meta_dir == Some(tht_sell) {
+                    -pct
                 } else {
-                    None
+                    pct
                 };
-
-                if let Some(offset) = entry_offset {
-                    let window_slice = self.candle_window.make_contiguous();
-                    let closes: Vec<f64> = window_slice[offset..].iter().map(|c| c.close).collect();
-
-                    if let Some(sim) = simulate_outcome(&closes, entry.entry_atr, ctx.k_stop, ctx.k_tp, ctx.k_trail) {
-                        // Compute residual norm + classify outcome
-                        let obs_logs: Vec<Option<(String, f64, String, i32)>> = {
-                            use rayon::prelude::*;
-                            self.observers.par_iter_mut().enumerate().map(|(ei, obs)| {
-                                if ei < entry.observer_vecs.len() {
-                                    let residual_norm = obs.residual_norm(&entry.observer_vecs[ei]);
-                                    let outcome = to_outcome(sim, residual_norm);
-                                    if let Some(log) = obs.resolve(
-                                        &entry.observer_vecs[ei], &entry.observer_preds[ei], outcome,
-                                        ctx.conviction_quantile, ctx.conviction_window,
-                                    ) {
-                                        return Some((
-                                            log.name.as_str().to_string(),
-                                            log.conviction,
-                                            obs.journal.label_name(log.direction).unwrap_or("?").to_string(),
-                                            log.correct as i32,
-                                        ));
-                                    }
-                                }
-                                None
-                            }).collect()
-                        };
-                        if ctx.diagnostics {
-                            for log in obs_logs.into_iter().flatten() {
-                                self.pending_logs.push(LogEntry::ObserverLog {
-                                    step: self.log_step,
-                                    observer: log.0,
-                                    conviction: log.1,
-                                    direction: log.2,
-                                    correct: log.3,
-                                });
-                            }
-                        }
-                        // Record crossing snapshot for downstream (manager learning, ledger)
-                        let crossing_label = match sim {
-                            crate::position::SimResult::TakeProfit { .. } => tht_buy,
-                            crate::position::SimResult::StopLoss { .. } => tht_sell,
-                        };
-                        entry.crossing = Some(CrossingSnapshot {
-                            label:   crossing_label,
-                            pct,
-                            candles: i - entry.candle_idx,
-                            ts:      candle_ts.clone(),
-                            price:   candle.close,
-                        });
-                    }
+                if directional_pct > entry.max_favorable {
+                    entry.max_favorable = directional_pct;
                 }
-            }
+                if directional_pct < entry.max_adverse {
+                    entry.max_adverse = directional_pct;
+                }
+            });
         }
 
         // Recalibration: four independent concerns, one trigger.
@@ -886,13 +844,14 @@ impl Desk {
         // ManagedPosition owns trade lifecycle (stop/TP).
         // Pending entries resolve at safety max (10× horizon) for learning.
         let max_pending_age = ctx.horizon * 10;
-        let mut resolved_indices: Vec<usize> = Vec::new();
-        for (qi, entry) in self.pending.iter().enumerate() {
-            let age = i - entry.candle_idx;
-            if age >= max_pending_age {
-                resolved_indices.push(qi);
-            }
-        }
+        let resolved_indices: Vec<usize> = {
+            use rayon::prelude::*;
+            let pending_slice = self.pending.make_contiguous();
+            pending_slice.par_iter().enumerate()
+                .filter_map(|(qi, entry)| {
+                    if i - entry.candle_idx >= max_pending_age { Some(qi) } else { None }
+                }).collect()
+        };
         // Drain in reverse order to preserve indices.
         let mut resolved_entries: Vec<Pending> = Vec::new();
         for &qi in resolved_indices.iter().rev() {
@@ -904,17 +863,72 @@ impl Desk {
         resolved_entries.reverse(); // restore chronological order
 
         for mut entry in resolved_entries {
-            // Pending entries always resolve at horizon — ManagedPosition owns trade lifecycle.
+            // Pending entries resolve at horizon. The market has spoken.
             entry.exit_reason = Some(ExitReason::HorizonExpiry);
             entry.exit_pct = (current_price - entry.entry_price) / entry.entry_price;
-            let final_out: Option<Label> = entry.crossing.as_ref().map(|c| c.label);
-            if final_out.is_none() {
-                self.noise_count += 1;
-                // Noise: simulation didn't resolve before horizon expiry.
-                // Noise subspace already learned from learn_noise every candle.
+
+            // ── Observer learning: MFE vs MAE ────────────────────────────
+            // Did the trade go right before it went wrong?
+            // favorable_first → Win (84% actual profitability from the data).
+            // adverse_first   → Loss (16% actual profitability from the data).
+            // Weight = |MFE - |MAE|| — how decisively the market answered.
+            // Near the boundary: soft lesson. Far from it: hard lesson.
+            // MFE vs MAE: did it go right before it went wrong?
+            // Observers ALWAYS learn — they don't need the manager's opinion.
+            // The market tells us the label. The observers learn from it.
+            let favorable_first = entry.max_favorable > entry.max_adverse.abs();
+            let weight_magnitude = (entry.max_favorable - entry.max_adverse.abs()).abs();
+
+            let outcome = if favorable_first {
+                crate::position::Outcome::Win { weight: weight_magnitude.max(0.01) }
             } else {
-                self.labeled_count += 1;
+                crate::position::Outcome::Loss { weight: weight_magnitude.max(0.01) }
+            };
+
+            // Parallel observer resolution — each observer learns from its own thought
+            let obs_logs: Vec<Option<(String, f64, String, i32)>> = {
+                use rayon::prelude::*;
+                self.observers.par_iter_mut().enumerate().map(|(ei, obs)| {
+                    if ei < entry.observer_vecs.len() {
+                        if let Some(log) = obs.resolve(
+                            &entry.observer_vecs[ei], &entry.observer_preds[ei], outcome,
+                            ctx.conviction_quantile, ctx.conviction_window,
+                        ) {
+                            return Some((
+                                log.name.as_str().to_string(),
+                                log.conviction,
+                                obs.journal.label_name(log.direction).unwrap_or("?").to_string(),
+                                log.correct as i32,
+                            ));
+                        }
+                    }
+                    None
+                }).collect()
+            };
+            if ctx.diagnostics {
+                for log in obs_logs.into_iter().flatten() {
+                    self.pending_logs.push(LogEntry::ObserverLog {
+                        step: self.log_step,
+                        observer: log.0,
+                        conviction: log.1,
+                        direction: log.2,
+                        correct: log.3,
+                    });
+                }
             }
+            self.labeled_count += 1;
+
+            // Set crossing for downstream (ledger, manager)
+            let crossing_label = if favorable_first { tht_buy } else { tht_sell };
+            entry.crossing = Some(CrossingSnapshot {
+                label: crossing_label,
+                pct: entry.exit_pct,
+                candles: i - entry.candle_idx,
+                ts: candle_ts.clone(),
+                price: candle.close,
+            });
+
+            let final_out: Option<Label> = entry.crossing.as_ref().map(|c| c.label);
 
             // Rolling accuracy: generalist tracks via observer resolved deque.
             if let Some(_outcome) = final_out {
@@ -987,13 +1001,20 @@ impl Desk {
                 }
 
                 // Log which facts were active in this thought vector.
-                // Decode: cosine each codebook entry against the thought, log positives.
-                for (label, vec) in ctx.codebook_labels.iter().zip(ctx.codebook_vecs.iter()) {
-                    let cos = holon::Similarity::cosine(&entry.tht_vec, vec);
-                    if cos.abs() > 0.05 {
+                // Parallel cosine decode: each codebook entry is independent.
+                {
+                    use rayon::prelude::*;
+                    let active_facts: Vec<String> = ctx.codebook_labels.par_iter()
+                        .zip(ctx.codebook_vecs.par_iter())
+                        .filter_map(|(label, vec)| {
+                            let cos = holon::Similarity::cosine(&entry.tht_vec, vec);
+                            if cos.abs() > 0.05 { Some(label.clone()) } else { None }
+                        }).collect();
+                    // Handoff: sequential append to log
+                    for label in active_facts {
                         self.pending_logs.push(LogEntry::TradeFact {
                             step: self.log_step,
-                            fact_label: label.clone(),
+                            fact_label: label,
                         });
                     }
                 }
@@ -1017,6 +1038,12 @@ impl Desk {
             }
 
             portfolio.tick_observe();
+        }
+
+        // Recalibration check after drain — observers learn during drain,
+        // so recalib may fire here that the pre-drain check didn't catch.
+        if self.observers[GENERALIST_IDX].journal.recalib_count() != tht_recalib_before {
+            self.on_recalibration(&candle, &panel_state, tht_buy, tht_sell, ctx);
         }
 
         // ── Progress line ─────────────────────────────────────────────
@@ -1140,29 +1167,39 @@ impl Desk {
         self.panel_recalib_wins = 0;
         self.panel_recalib_total = 0;
 
-        // 4. Recalib log — ALL observers, not just generalist
-        for obs in &self.observers {
-            let health = obs.journal.prototype_health().unwrap_or((0.0, 0.0, 0.0));
-            self.pending_logs.push(LogEntry::RecalibLog {
-                step: self.encode_count as i64,
-                journal: obs.lens.as_str().to_string(),
-                cos_raw: obs.journal.last_cos_raw(),
-                disc_strength: obs.journal.last_disc_strength(),
-                buy_count: obs.journal.label_count(tht_buy) as i64,
-                sell_count: obs.journal.label_count(tht_sell) as i64,
-                buy_norm: health.0,
-                sell_norm: health.1,
-                proto_cosine: health.2,
-            });
+        // 4. Recalib log — ALL observers, parallel collect then sequential append
+        {
+            use rayon::prelude::*;
+            let encode_count = self.encode_count as i64;
+            let logs: Vec<LogEntry> = self.observers.par_iter().map(|obs| {
+                let health = obs.journal.prototype_health().unwrap_or((0.0, 0.0, 0.0));
+                LogEntry::RecalibLog {
+                    step: encode_count,
+                    journal: obs.lens.as_str().to_string(),
+                    cos_raw: obs.journal.last_cos_raw(),
+                    disc_strength: obs.journal.last_disc_strength(),
+                    buy_count: obs.journal.label_count(tht_buy) as i64,
+                    sell_count: obs.journal.label_count(tht_sell) as i64,
+                    buy_norm: health.0,
+                    sell_norm: health.1,
+                    proto_cosine: health.2,
+                }
+            }).collect();
+            self.pending_logs.extend(logs);
         }
 
         // Discriminant decode against fact codebook
         // rune:temper(rare-path) — recalibration frequency, ~200 candle intervals
         if let Some(disc) = self.observers[GENERALIST_IDX].journal.discriminant(tht_buy) {
             let disc_vec = Vector::from_f64(disc);
-            let mut decoded: Vec<(String, f64)> = ctx.codebook_vecs.iter().zip(ctx.codebook_labels.iter())
-                .map(|(v, l)| (l.clone(), holon::Similarity::cosine(&disc_vec, v)))
-                .collect();
+            // Parallel cosine decode
+            let mut decoded: Vec<(String, f64)> = {
+                use rayon::prelude::*;
+                ctx.codebook_vecs.par_iter().zip(ctx.codebook_labels.par_iter())
+                    .map(|(v, l)| (l.clone(), holon::Similarity::cosine(&disc_vec, v)))
+                    .collect()
+            };
+            // Sequential: sort + log (ordering matters)
             decoded.sort_by(|a, b| b.1.abs().partial_cmp(&a.1.abs()).unwrap());
             for (rank, (label, cos)) in decoded.iter().take(20).enumerate() {
                 self.pending_logs.push(LogEntry::DiscDecode {
@@ -1613,10 +1650,11 @@ mod tests {
         assert_eq!(desk.pending.len(), 250,
             "all 250 entries should still be pending (horizon*10 = 360)");
         assert_eq!(desk.encode_count, 250);
-        // Pending entries should have threshold crossings from ascending prices.
+        // Crossings now happen at horizon drain (MFE vs MAE), not during the pending loop.
+        // At 250 candles, no entries have drained yet, so no crossings.
         let crossed = desk.pending.iter().filter(|p| p.crossing.is_some()).count();
-        assert!(crossed > 0,
-            "ascending prices should cause threshold crossings on earlier entries");
+        assert_eq!(crossed, 0,
+            "crossings happen at horizon drain, not mid-life");
     }
 
     #[test]
@@ -1830,11 +1868,13 @@ mod tests {
 
         let recalib_before = desk.observers[GENERALIST_IDX].journal.recalib_count();
 
-        // Use volatile prices so simulated positions resolve quickly.
-        // Large alternating swings ensure stops/TPs trigger within a few candles.
-        for i in 0..600 {
-            let price = if i % 2 == 0 { 50000.0 + (i as f64) * 200.0 }
-                        else { 50000.0 - (i as f64) * 200.0 };
+        // Use volatile prices so entries get both Win (MFE > |MAE|) and Loss labels.
+        // The journal needs BOTH labels observed before it can recalibrate.
+        // Alternating up/down creates a mix of favorable-first and adverse-first entries.
+        // Run 800 candles → 440 drain → mix of Win/Loss → recalib fires.
+        for i in 0..800 {
+            let price = if i % 3 == 0 { 50000.0 + (i as f64) * 30.0 }
+                        else { 50000.0 - (i as f64) * 10.0 };
             let raw = make_priced_candle(i, price.max(10000.0));
             let mut shared = SharedState {
                 treasury: &mut treasury,
@@ -2064,8 +2104,10 @@ mod tests {
     }
 
     #[test]
-    fn desk_learning_loop_threshold_crossing() {
-        // Verify that the learning loop detects threshold crossings and records them.
+    fn desk_learning_loop_mfe_mae_labeling() {
+        // Verify that MFE/MAE labeling works at horizon drain.
+        // Price goes up → entries entered at lower prices have favorable MFE.
+        // These should get Win labels when they drain.
         let infra = TestInfra::new();
         let ctx = infra.ctx();
         let mut desk = make_desk();
@@ -2078,12 +2120,11 @@ mod tests {
         let mut peak = 10000.0;
         let mut db_batch = 0usize;
 
-        // Start at 50000, then jump to trigger threshold crossing.
-        // atr_multiplier=1.0, so threshold = 1.0 * entry.entry_atr.
-        // After indicator warmup, ATR should stabilize. A large price jump
-        // should cross the threshold for early entries.
-        for i in 0..50 {
-            let raw = make_priced_candle(i, 50000.0);
+        // Run ascending prices past horizon drain (max_pending_age = horizon*10 = 360)
+        // Entries at low prices should accumulate favorable MFE.
+        for i in 0..400 {
+            let price = 50000.0 + (i as f64) * 20.0; // ascending
+            let raw = make_priced_candle(i, price);
             let mut shared = SharedState {
                 treasury: &mut treasury,
                 portfolio: &mut portfolio,
@@ -2095,36 +2136,13 @@ mod tests {
             desk.on_candle(i, &raw, &mut shared, &ctx);
         }
 
-        // Count entries without crossings
-        let uncrossed_before = desk.pending.iter()
-            .filter(|p| p.crossing.is_none()).count();
-
-        // Big price jump: 50000 → 55000 (10% move) — should cross any reasonable threshold
-        for i in 50..60 {
-            let raw = make_priced_candle(i, 55000.0);
-            let mut shared = SharedState {
-                treasury: &mut treasury,
-                portfolio: &mut portfolio,
-                accumulation: &mut accum,
-                risk_mult: 0.5,
-                peak_equity: &mut peak,
-                db_batch: &mut db_batch,
-            };
-            desk.on_candle(i, &raw, &mut shared, &ctx);
-        }
-
-        // Some earlier pending entries should now have crossings
-        let crossed_count = desk.pending.iter()
-            .filter(|p| p.crossing.is_some()).count();
-        assert!(crossed_count > 0,
-            "price jump should have triggered threshold crossings on pending entries");
-        // Entries at the new price shouldn't cross yet (no movement from 55000)
-        let uncrossed_after = desk.pending.iter()
-            .filter(|p| p.crossing.is_none()).count();
-        assert!(uncrossed_after > 0,
-            "entries at the new stable price should not have crossed yet");
-        assert!(uncrossed_after < uncrossed_before + 10,
-            "some of the old entries should have gained crossings");
+        // After 400 candles, entries from candles 0-39 should have drained (age >= 360).
+        // Ascending prices → MFE > |MAE| → labeled as Win.
+        assert!(desk.labeled_count > 0,
+            "entries should have drained and been labeled");
+        // Pending should have fewer than 400 entries (some drained)
+        assert!(desk.pending.len() < 400,
+            "some entries should have been drained at horizon");
     }
 
     #[test]
