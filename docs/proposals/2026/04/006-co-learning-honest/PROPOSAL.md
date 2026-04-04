@@ -303,51 +303,57 @@ Each exit observer proves edge through its own curve. Each market observer recei
 
 ### What changes in the code
 
-1. **New struct**: `DualExcursion` -- tracks buy-side and sell-side MFE/MAE for a candle. Four floats, updated every candle in the pending entry loop.
+1. **Exit org**: M exit observers, each with its own judgment lens and vocabulary. Same Observer template. Buy/Sell labels. Own noise subspace, own journal, own proof curve, own WindowSampler.
 
-2. **Exit observer in Desk**: One Observer instance with Buy/Sell labels instead of Win/Loss. Receives the generalist's thought vector, binds its own judgment facts (exit vocabulary), composes the two via bundle. Predicts every candle. Resolves at drain.
+2. **DualExcursion per pending entry**: Four floats (buy MFE, buy MAE, sell MFE, sell MAE) plus trailing stop state for both sides. Updated every candle.
 
-3. **Resolution path**: When a pending entry drains, compute `buy_grace` and `sell_grace` from `DualExcursion`. If the exit observer's curve is valid, use the dual-sided label. If not, fall back to the current single-sided `classify_excursion`.
+3. **N×M composition per candle**: Each exit observer receives each market observer's thought, binds its judgment facts, produces a composed thought. Parallel — M×N independent compositions.
 
-4. **No changes to**: Observer template, Journal, OnlineSubspace, manager encoding, position management, treasury, risk branches, accumulation model.
+4. **Continuous management**: Each open trade owned by a (market, exit) pair. Every candle, the pair produces a scalar adjustment via its composed thought. The desk applies it.
+
+5. **Treasury fibers**: N×M channels. One per pair. Trade resolution pushes reality labels to both the market observer and exit observer in the pair.
+
+6. **Resolution path**: Entries resolve when both sides' trailing stops fire (organic). Buffer eviction for unresolved entries — no label, no learning. Fallback to single-sided MFE/MAE until exit org proves edge.
+
+7. **No changes to**: Observer template, Journal, OnlineSubspace, six primitives, accumulation model.
 
 ### What this replaces
 
 The single-sided MFE/MAE labeling in `classify_excursion`. The exit observer in `market/exit.rs` that encodes position state. The aspirational trail modulation.
 
-The exit observer's role shrinks and sharpens: it does not manage positions, it does not modulate trails, it does not need treasury state. It receives market thoughts. It binds its own judgment. It plays both sides. It tells the market observers which side was right. That is all it does.
+The exit org replaces: single-sided MFE/MAE labeling, the old exit observer in `market/exit.rs`, the horizon drain as a learning mechanism, and fixed k_stop/k_tp/k_trail as the only resolution trigger.
+
+The exit org introduces: dual-sided excursion, judgment vocabulary, N×M co-learning, continuous position management, scalar learning for trailing stop, treasury as CSP reality check, deferred learning as the system architecture.
 
 ## 4. The algebraic question
 
-No new algebraic structures. The exit observer uses the existing observer template:
+No new algebraic structures. Both orgs — market and exit — use the same six primitives:
 
-- **Bundle**: superposition of facts into thought vector (same `encode_thought`).
-- **Bind**: role-filler binding (same atoms, same vocabulary).
-- **Journal**: prediction + resolution. Labels are Buy/Sell instead of Win/Loss. The journal does not care -- labels are atoms.
-- **OnlineSubspace**: noise stripping (same two-stage pipeline).
-- **Cosine**: similarity scoring for predictions.
-- **Curve**: proof gate for the exit observer. Must prove edge before its labels feed the market observers.
+- **Bundle**: market thoughts bundled from candle facts. Exit judgments bundled from market thought + exit facts. Composition IS bundle — the same operation at both levels.
+- **Bind**: role-filler binding. Market atoms bind to indicator values. Exit atoms bind to judgment values. The scalar-encoded trail adjustment is a binding: `bind(atom("trail-adjust"), log_encode(ratio))`.
+- **Journal**: prediction + resolution. Market journals learn Win/Loss. Exit journals learn Buy/Sell. The journal doesn't care — labels are atoms.
+- **OnlineSubspace**: noise stripping at every level. Market observer noise. Exit observer noise. System-level noise (the buffer). Three levels, same primitive.
+- **Cosine**: similarity scoring for predictions in both orgs. Discriminant decode to extract the learned scalar.
+- **Curve**: proof gate for every observer. Market observers prove direction edge. Exit observers prove judgment edge. The treasury uses curves to gate capital allocation.
 
-The dual-sided excursion tracking is arithmetic, not algebra. Four floats tracked per pending entry, updated with `max()` every candle. The label derivation is a comparison and a subtraction. No vector operations. No new primitives.
+The N×M composition is bundle applied across orgs — not a new operation. The channel fibers between treasury and pairs are data flow — not vector operations. The ownership loop is architecture, not algebra. The scalar learning (trail adjustment as a fact on the sphere, extracted via cosine) is bind + cosine — existing primitives, new wiring.
 
-The label routing from exit observer to market observers is a function call that maps (exit label, observer prediction) to (Win/Loss, weight). This is the same kind of translation that `classify_excursion` already performs -- it maps excursion data to an outcome. The function signature changes but the pattern does not.
-
-The coupling between exit observer and market observers is through the pending entry buffer, which already exists. The exit observer writes a label at drain time. The market observers read it at drain time. Same buffer, same drain event, same resolution code path. No new communication channel.
+The coupling between orgs is through channels: market thoughts flow to exit observers, labels flow back, reality flows from treasury. No shared mutation. No new primitives. The architecture is wiring. The algebra is unchanged.
 
 ## 5. The simplicity question
 
-**Is this simple or easy?** Simple. One new observer instance (same template). Four new floats per pending entry (buy MFE, buy MAE, sell MFE, sell MAE). One new comparison at drain time. One fallback path (curve not yet valid, use single-sided).
+**Is this simple or easy?** Simple. Two orgs of observers (market and exit), each using the same template. Channels between them. The treasury as a third CSP process. The composition is bundle. The feedback is channels. The learning is deferred. Each piece is simple. The depth comes from the wiring, not the complexity of any single piece.
 
-**What's being complected?** The risk is complecting the exit observer's learning with the market observers' learning -- making them depend on each other. This is avoided by the fallback: the market observers always have labels (single-sided until dual-sided proves itself). The exit observer learns independently. When it proves edge, its labels replace the approximation. The dependency is one-directional and gated by proof.
+**What's being complected?** The risk is complecting the two orgs — making them depend on each other's internal state. This is avoided by the channel architecture: market observers don't know exit observers exist. They receive labels. Exit observers don't know market observers exist. They receive thought vectors. The treasury doesn't know about journals. It receives outcomes. Each process reads from its channels and writes to its channels. Nobody reaches across.
 
-**Could existing forms solve it?** The dual-sided excursion tracking could be done without an observer -- just compute both sides and pick the winner. That would improve labels without any learning. The exit observer adds the ability to PREDICT which side will win before the excursion plays out. But the immediate value is in the honest labeling, not the prediction. The exit observer earns its prediction role over time, through the same proof curve every other observer uses.
+**Could existing forms solve it?** They DO solve it. The observer template is unchanged. The journal is unchanged. The noise subspace is unchanged. The dual-sided excursion is arithmetic. The scalar learning is bind + cosine. The channels are data flow. The N×M composition is bundle applied across orgs. No new forms. New wiring.
 
 **What 005 got wrong that this avoids:**
-- 005 confused per-position and per-portfolio observation. This proposal observes candles, not positions.
-- 005 used the CSP/position-as-channel metaphor. This drops it. The channel is the pending buffer, which already exists.
-- 005 proposed trail modulation. This proposes labels only. The exit observer produces data (a label and weight), not a side effect.
-- 005 proposed a full exit panel (six specialists). This starts with one observer.
-- 005 had a bootstrap deadlock (market panel starved until exit panel proves edge). This has no deadlock -- single-sided labels run continuously, dual-sided labels phase in when proven.
+- 005 confused per-position and per-portfolio observation. This proposal: exit observers judge candle thoughts, not positions.
+- 005 coupled exit observers to specific market observers. This proposal: exit org is independent, composition is dynamic at runtime.
+- 005 proposed trail modulation as a side effect. This proposal: the scalar is a value, extracted via cosine, applied by the desk.
+- 005 had a bootstrap deadlock. This proposal: single-sided labels run continuously, dual-sided labels phase in when proven. No starvation.
+- 005 didn't describe the treasury feedback loop. This proposal: the treasury is a CSP process with N×M fibers, the reality check that cascades to both orgs.
 
 ## 6. Questions for designers
 
