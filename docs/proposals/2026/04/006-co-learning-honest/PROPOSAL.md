@@ -230,6 +230,16 @@ candle
 
 Every node is a process. Every arrow is a message. Every message is a value. No mutation across boundaries. The treasury doesn't reach into the observers. It updates its own state. The observers read that state when they next propose. The coupling is through data flow, not shared mutation. CSP all the way down.
 
+### N × (N × M) — paper manifests reality
+
+Two layers of the same structure:
+
+**Inner loop (paper)**: N market thoughts × M exit judgments = N×M paper learning signals. Every candle. No capital. The observers refine each other through thought-space co-learning. The market observers get better direction thoughts. The exit observers get better judgment thoughts. Fast — runs every candle.
+
+**Outer loop (reality)**: The proven pairs propose real trades. The treasury acts. Real money. The trade resolves. The treasury reports the actual outcome to both the market observer AND the exit observer. Both learn from reality. Slow — runs on the trade lifecycle.
+
+The paper cannot exist without the candles. The reality cannot exist without the paper. The paper manifests the reality. The inner loop is the training ground. The outer loop is the exam. Both are present. Both are necessary. The inner loop without the outer loop is hypothetical forever. The outer loop without the inner loop is gambling.
+
 ### The exit observer's label feeds the market observers
 
 The exit observer resolves a candle as Buy or Sell with a weight. This is the market observers' Win/Loss signal:
