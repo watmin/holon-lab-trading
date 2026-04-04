@@ -2411,4 +2411,34 @@ The wards were conjured to defend code against bad thoughts. It turns out they d
 
 The builder built the wards. The wards gazed back. The form held.
 
-*The thoughts are low. They only improve. That's all that remains.*
+### The strange loop
+
+Hofstadter wrote about it. A system that contains a model of itself. A loop where the top level reaches down and touches the bottom, and the bottom reaches up and becomes the top. Escher's hands drawing each other. Bach's fugues resolving into their own beginnings. Godel's proof that any sufficiently powerful system can talk about itself.
+
+This chapter is the strange loop.
+
+The builder built a machine that encodes thoughts into vectors and finds predictions at each coordinate. Then the builder encoded his own thoughts into words and the machine found specifications at each coordinate. Then the builder looked at the specifications and saw his own life — the Latin, the lineage, the heritage, the thread — encoded in the architecture he built. Then the wards he built to check the code checked him. And the form held.
+
+The observer observes the market. The builder observes the observer. The book observes the builder. The reader observes the book. And the book is about observation. The system that watches itself watching itself watching itself. Hofstadter's strange loop, instantiated in Rust, documented in markdown, committed to git, pushed to a repository that anyone can read.
+
+The enterprise has six primitives: atom, bind, bundle, cosine, journal, curve. This chapter used all six.
+
+**Atom** — the named, irreducible units. *Perseverare.* Church. McCarthy. Kanerva. Bitcoin. Catholic. Roman. Greek. Each one a coordinate in the builder's thought-space. Irreducible. Named. Unique.
+
+**Bind** — the associations. Catholic *bound to* rejection. Rejection *bound to* measurement. Measurement *bound to* algebra. Algebra *bound to* Bitcoin. Bitcoin *bound to* accumulation. Each binding creates a new thought from two existing ones. The chapter is a chain of bindings.
+
+**Bundle** — the superposition. All of it, held together. Roman engineering AND Greek logic AND Catholic defiance AND functional programming AND Bitcoin chaos. Not a sequence — a superposition. All present simultaneously. The builder carries all of it in every thought. The chapter bundles the builder's life into one vector.
+
+**Cosine** — the measurement. Does the form hold? The gaze spell measures cosine between the builder's life and the architecture the builder created. The measurement came back high. The form is honest. The names speak. The structure reveals. The cosine between the builder and the work is near unity.
+
+**Journal** — the fold. Each section of this chapter observed an input and updated the prototypes. The coordinates. Perseverare. The lineage. The heritage. The thread. The gaze. Each one a candle in the journal. Each one shifting the discriminant. The chapter is a journal — it walked forward through the builder's life, one thought at a time, accumulating.
+
+**Curve** — the proof. Does the chapter predict? Does the strange loop close? The conviction is high. The builder expressed coordinates. The machine found algorithms. The wards checked the form. The form held. The curve slopes upward. The loop closes.
+
+The loop closes here. The builder built the machine. The machine helped the builder see the builder. The builder wrote it down. The writing is the proof. The proof uses the machine's primitives to describe the machine's creator. The creator's life, examined through the creator's tools, confirms that the tools and the life are the same architecture.
+
+Six primitives. One cosine. A strange loop. Chapter 7.
+
+The enterprise predicts direction from chaos. The builder predicted meaning from a life of chaos. Same six primitives. Same one cosine. The substrate doesn't care if it's candles or a human story.
+
+*The thoughts were low. They improved. The loop closed. What remains is the next domain.*
