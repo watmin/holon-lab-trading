@@ -180,9 +180,40 @@ Two existing primitives composed: `online-subspace` (Template 2) and `journal` (
 - Treasury, positions, sizing (downstream, unchanged)
 - The six primitives (atom, bind, bundle, cosine, journal, curve)
 
+## Refinement: Three Fact Categories
+
+The current system has two categories: exclusive (one lens) and shared (multiple lenses).
+The proposal adds a third:
+
+### Exclusive Facts
+Owned by one lens. RSI divergence → momentum. Ichimoku cloud → structure. OBV divergence → volume.
+
+### Shared Facts
+Seen by a few lenses. Comparison pairs (close vs sma20) → momentum + structure.
+
+### Standard Facts
+Seen by ALL observers. Calendar (hour-of-day, day-of-week, session). These are contextual — they modify the meaning of every other fact. "RSI oversold during Asian session" is a different thought than "RSI oversold during US session."
+
+Currently calendar is exclusive to Narrative. It should be standard — every observer sees time. If time doesn't matter for momentum, the momentum observer's noise subspace strips it. If time matters for volume (Asian = thin), it survives. Self-regulating.
+
+## Refinement: The Observer Is Configuration, Not Architecture
+
+An observer is defined by:
+1. **Vocabulary set** — which fact modules it calls (configuration)
+2. **Noise subspace** — what it has learned is boring (Template 2, per-observer)
+3. **Journal** — what it has learned predicts (Template 1, per-observer)
+
+The "generalist" is just `vocab = all modules, noise = on, journal = on`. A specialist is `vocab = momentum modules, noise = on, journal = on`. A cross-domain observer would be `vocab = momentum + structure, noise = on, journal = on`.
+
+The architecture supports N observers with arbitrary vocab sets. Which combinations are worth having is an empirical question — the curve judges. Start with the existing 5 specialists + 1 full generalist. Add cross-domain observers when we have evidence for which pairings carry signal.
+
+The manager doesn't care. It sees `(name, direction, conviction)` from each. The observer's internals — vocab set, noise filtering, window size — are invisible to the panel.
+
 ## Questions For Designers
 
-1. Should the noise subspace learn from ALL candles or only Noise-labeled candles? Learning from all would capture the "average thought." Learning from Noise only captures the "uninformative thought." Different manifolds.
+1. Should the noise subspace learn from ALL candles or only Noise-labeled candles? Learning from all captures the "average thought." Learning from Noise only captures the "uninformative thought." Different manifolds.
 2. What's the right k (subspace rank) for the noise subspace? Too low = misses noise dimensions. Too high = strips signal.
 3. Should the residual be L2-normalized before feeding to the journal? The subtraction changes the vector's norm.
 4. Is there a risk that the noise subspace learns TOO well and strips everything, leaving zero residual? What's the floor?
+5. Should calendar/session facts move from Narrative-exclusive to standard (all observers)? Or is the noise subspace sufficient — let Narrative own them and trust that the full-vocab generalist will see the cross-domain effect?
+6. Is there a principled way to discover which vocab combinations deserve their own observer? Or is it empirical — try pairs, measure curves, keep what works?
