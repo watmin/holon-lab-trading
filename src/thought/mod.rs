@@ -84,6 +84,10 @@ const INDICATOR_ATOMS: &[&str] = &[
     "tf-all-agree", "tf-all-disagree", "tf-1h-agrees", "tf-4h-agrees",
     // vocab/harmonics
     "harmonic", "harmonic-quality",
+    // vocab/standard
+    "since-rsi-extreme", "since-vol-spike", "since-large-move",
+    "dist-from-high", "dist-from-low", "dist-from-midpoint", "dist-from-sma200",
+    "volume-ratio", "session-depth",
 ];
 
 const DIRECTION_ATOMS: &[&str] = &["up", "down", "flat"];
@@ -568,10 +572,11 @@ impl ThoughtEncoder {
 
         {
             // ── STANDARD: every observer sees these ──────────────────────
-            // Calendar: hour, day-of-week, session. Contextual facts that modify
-            // the meaning of all other facts. The noise subspace self-regulates —
-            // if time doesn't matter for this observer, the subspace strips it.
+            // Calendar + standard vocab. Contextual facts that modify the meaning
+            // of all other facts. The noise subspace self-regulates — if a fact
+            // doesn't matter for this observer, the subspace strips it.
             collect!(self.eval_calendar(now));
+            collect!(self.encode_facts(&crate::vocab::standard::eval_standard(candles)));
 
             let is = |lenses: &[Lens]| -> bool {
                 lens.includes(lenses)
@@ -1402,7 +1407,9 @@ mod tests {
         let dn_thought = enc.encode_thought(&dn_candles, &vm, Lens::Momentum);
 
         let sim = holon::Similarity::cosine(&up_thought.thought, &dn_thought.thought);
-        assert!(sim < 0.9,
+        // Standard facts (calendar, session depth) are shared across both, raising the floor.
+        // The exclusive momentum facts still differ — the cosine should be well below 1.0.
+        assert!(sim < 0.95,
             "uptrend and downtrend should produce meaningfully different thoughts, cosine={sim}");
     }
 }
