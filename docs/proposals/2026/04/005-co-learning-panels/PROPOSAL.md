@@ -1,151 +1,146 @@
 # Proposal 005: Co-Learning Panels — Positions as Message Queues
 
-## Problem
+**Scope: userland** — uses existing forms (journal, observer, predict, resolve, online-subspace). No new language forms.
 
-The market observers predict direction. But they cannot validate their own predictions. The label that says "you were right" or "you were wrong" comes from somewhere else — the position lifecycle. Today that "somewhere else" is an arbitrary horizon timeout with MFE/MAE comparison. The observers learn, but the quality of their learning depends entirely on the resolution mechanism, which is uncoupled from any learning of its own.
+---
 
-Meanwhile, the exit expert learns Hold/Exit but is never queried. It accumulates knowledge about position management that nobody uses. The stop loss and take profit are fixed ATR multipliers — parameters, not predictions.
+## 1. The current state
 
-Two halves of a conversation, neither listening to the other.
+The enterprise has two observer pipelines, both using the same two templates (prediction journal + noise subspace):
 
-## Insight
+**Market panel** (six observers: momentum, structure, volume, narrative, regime, generalist). Each observer encodes candle-derived thoughts through its lens, strips noise via OnlineSubspace, predicts direction via Journal. Labels are Win/Loss, determined by MFE vs MAE at horizon drain. The manager aggregates opinions and the desk opens positions when conviction is sufficient.
 
-The position IS the message queue.
+**Exit observer** (one, in `market/exit.rs`). Encodes position state every N candles (P&L, MFE, MAE, hold duration, stop distance, ATR shift, phase, direction). Learns Hold/Exit from whether the position improved or deteriorated over the next interval. Currently aspirational — it learns but does not yet modulate the trailing stop. The safety stop (k_stop x ATR) and take-profit (k_tp x ATR) are fixed parameters.
 
-Market observers produce a message: "enter here, this direction, this conviction." That message becomes a ManagedPosition. The position lives, accumulates state — P&L, MFE, MAE, hold duration, distance to stop, distance to TP. The exit observers read that state every candle. When the exit panel says "exit" (or the safety stop fires), it produces a message back: "this is how it ended." That message becomes the learning label for the market observers.
+**Position lifecycle** follows the accumulation model: deploy source, swap to target, manage via trailing stop and take-profit, recover principal on TP (keeping residue as accumulation), close on stop or runner trail. Phases: Active, Runner, Closed.
 
-Two independent processes. One shared queue. The position struct is the message format. The treasury is the backpressure. The ring buffer is the bounded channel.
+The two halves exist. The templates are proven. The plumbing works.
 
-CSP all the way down.
+## 2. The problem
 
-## Architecture
+The market observers cannot validate their own predictions. The label that says "you were right" comes from the position lifecycle — specifically from horizon drain, where MFE vs MAE is compared after a fixed number of candles. The quality of market observer learning depends entirely on the resolution mechanism, and the resolution mechanism learns nothing.
 
-### Two Panels
+The exit observer accumulates knowledge about position management but nobody consults it. It can distinguish "this position is deteriorating" from "this position is improving" but the trailing stop ignores it. The stop/TP levels are fixed ATR multiples — parameters, not predictions.
+
+Two learning systems, neither coupled to the other. The market panel produces entries that the exit observer could evaluate, but the exit observer's judgment never flows back as market panel labels. The exit observer sees positions that the market panel created, but has no channel to say "this entry was easy to manage" or "this entry was a disaster from candle one."
+
+## 3. The proposed change
+
+### Positions as the message queue
+
+The position IS the communication channel between two independent panels. This is CSP: two processes, one bounded channel, messages passed through the position lifecycle.
 
 ```
-                    ┌─────────────────┐
-                    │   Market Panel   │
-                    │                  │
-                    │  momentum        │
-                    │  structure       │
-                    │  volume          │
-                    │  narrative       │
-                    │  regime          │
-                    │  generalist      │
-                    │       ↓          │
-                    │  market manager  │
-                    └────────┬─────────┘
-                             │
-                     "enter here"
-                             │
-                             ▼
-                    ┌─────────────────┐
-                    │    Position      │
-                    │   (the message)  │
-                    │                  │
-                    │  lives, breathes │
-                    │  accumulates     │
-                    └────────┬─────────┘
-                             │
-                     "this is how it ended"
-                             │
-                             ▼
-                    ┌─────────────────┐
-                    │   Exit Panel     │
-                    │                  │
-                    │  pnl observer    │
-                    │  duration obs    │
-                    │  excursion obs   │
-                    │  volatility obs  │
-                    │       ↓          │
-                    │  exit manager    │
-                    └────────┬─────────┘
-                             │
-                     resolution label
-                             │
-                             ▼
-                     market panel learns
+Market Panel                    Exit Panel
+(predict direction)             (predict hold/exit)
+      │                               │
+      │   "enter here, this           │
+      │    direction, this             │
+      │    conviction"                 │
+      ▼                               │
+┌──────────────┐                      │
+│   Position   │◄─────────────────────┘
+│  (the message)   reads state each candle
+│              │
+│  lives, accumulates state:
+│  P&L, MFE, MAE, duration,
+│  stop distance, ATR shift
+└──────┬───────┘
+       │
+       │  "this is how it ended"
+       │  (resolution label)
+       ▼
+Market Panel learns
 ```
 
-### Market Panel (exists today)
+**Producer**: market panel creates positions (via manager + treasury).
+**Consumer**: exit panel reads position state each candle the position is open.
+**Message format**: ManagedPosition struct — already defined in `position.wat`.
+**Acknowledgment**: position resolution flows back as the market panel's Win/Loss label.
+**Backpressure**: treasury (won't fund more positions than available capital).
+**Bounded channel**: ring buffer on pending entries (safety valve).
 
-- **Vocabulary**: RSI, MACD, regime, harmonics, divergence, etc.
-- **Labels**: Win / Loss (from exit panel resolution)
-- **Question**: "Is this a good time to enter, and which direction?"
-- **Grace**: the exit panel's confidence in the Win — how decisively favorable
-- **Violence**: the exit panel's confidence in the Loss — how decisively adverse
+### Two independent panels, same template
 
-### Exit Panel (new)
+Both panels use the identical observer architecture from `observer.wat`: facts -> noise subspace -> residual -> journal -> predict. The configuration axes differ:
 
-- **Vocabulary**: TBD — the open question
-  - P&L trajectory (current return, rate of change)
-  - Excursion state (MFE, MAE, MFE/MAE ratio)
-  - Hold duration (candles since entry)
-  - Volatility since entry (ATR change, regime shift)
-  - Distance to stop / TP (in ATR units)
-  - Market context at current candle (not at entry — the world changed)
-- **Labels**: Hold / Exit
-  - Hold: the position improved after this observation
-  - Exit: the position deteriorated after this observation
-- **Question**: "Should this position stay open or close now?"
-- **Grace**: how much the position improved because we held (reward for patience)
-- **Violence**: how much the position lost because we held when we should have exited
+| Axis        | Market Panel                     | Exit Panel                          |
+|-------------|----------------------------------|-------------------------------------|
+| Vocabulary  | RSI, MACD, harmonics, regime ... | P&L, MFE, MAE, hold, stop dist ... |
+| Labels      | Win / Loss                       | Hold / Exit                         |
+| Question    | "Enter this direction?"          | "Should this position stay open?"   |
+| Input       | Candle stream                    | Position state stream               |
+| Resolution  | From exit panel outcomes         | From position improvement/decay     |
 
-### The Co-Learning Loop
+The exit panel is not one observer — it is a panel of observers, each with a lens. Possible specializations: P&L trajectory, excursion patterns, volatility regime since entry, duration behavior. Same manager aggregation pattern as the market panel. The exit manager reads exit observer opinions, encoded as Holon vectors, and predicts the aggregate Hold/Exit.
 
-1. Market panel predicts direction → position opens
-2. Exit panel observes position every candle → predicts Hold/Exit
-3. When exit panel says Exit (or safety stop fires) → position closes
-4. The resolution (how the position ended) flows back as the market panel's label
-5. The market panel learns from the label → makes better entry predictions
-6. Better entries → cleaner positions → better exit learning
-7. Goto 1
+### The co-learning loop
 
-The panels don't share journals. They don't see each other's thoughts. They communicate ONLY through the position lifecycle. This is the Grothendieck construction — they operate on fibers over a shared base (the position), coupled through the projection, independent in their own spaces.
+1. Market panel predicts direction. Position opens.
+2. Exit panel observes position state every candle. Predicts Hold/Exit.
+3. When exit panel says Exit (or safety stop fires), position closes.
+4. Resolution (how the position ended) flows back as the market panel's label.
+5. Market panel learns from the label. Makes better entry predictions.
+6. Better entries produce cleaner positions. Exit panel learns more clearly.
+7. Goto 1.
 
-### Positions as the Message Queue
+The panels do not share journals. They do not see each other's thoughts. They communicate ONLY through the position lifecycle. Each operates on its own fiber — the market panel over candle-space, the exit panel over position-space — coupled through the shared base (the position struct).
 
-- **Producer**: market panel (creates position)
-- **Consumer**: exit panel (reads position state each candle)
-- **Message format**: ManagedPosition struct
-- **Acknowledgment**: position resolution (Win/Loss label sent back to market panel)
-- **Backpressure**: treasury (won't fund more positions than available capital)
-- **Bounded channel**: ring buffer on pending entries (safety valve, not a learning mechanism)
-- **Protocol**: the position lifecycle (Active → Runner → Closed)
+### What the exit panel replaces
 
-No horizon. No timeout. The exit panel decides when the position is done. The safety stop (k_stop × ATR) is the last resort — the exit panel should learn to exit before the stop fires.
+Today the trailing stop is `k_trail x ATR` from the extreme rate. The exit panel's prediction modulates this:
 
-## Open Questions
+- Exit with high conviction: tighten the trail (the position is deteriorating).
+- Hold with high conviction: loosen the trail (the position is improving).
+- Low conviction: trail unchanged (safety parameters hold).
 
-1. **Exit vocabulary**: What does an exit observer think in? The list above is a starting point, not a spec. Which facts are predictive of "should I hold or exit"?
+The safety stop (`k_stop x ATR`) remains as an invariant floor. The exit panel operates above it — it can only tighten or loosen the trail, never remove the stop. The stop is the guardrail, not the strategy. The exit panel learns the strategy.
 
-2. **Exit observer specialization**: Should exit observers have lenses like market observers? One that thinks in P&L trajectory, another in volatility regime, another in excursion patterns? Or one generalist?
+### What the exit panel changes about market labels
 
-3. **Grace and violence for exit**: When the exit panel says "hold" and it was right, grace = position improvement. When it says "hold" and it was wrong, violence = position deterioration. But over what window? One candle? Until the next exit prediction? Until resolution?
+Today, market observers learn from horizon drain: MFE vs MAE after N candles. In the co-learning model, market observers learn from position resolution — how the exit panel managed the trade. A position that the exit panel held through a dip and rode to accumulation is a Win with high weight. A position that the exit panel exited early because it detected immediate deterioration is a Loss with high weight. The exit panel's management quality becomes the market panel's label quality.
 
-4. **Label feedback timing**: The market panel learns when a position resolves. But positions may be open for hundreds of candles. The market panel doesn't learn in real time — it learns in position time. Is this too slow? Should there be intermediate feedback?
+Grace and violence carry across the channel:
+- **Grace** (market panel): how much residue was accumulated — the exit panel held well.
+- **Violence** (market panel): how much was lost — the exit panel couldn't save it.
+- **Grace** (exit panel): how much the position improved after a Hold prediction.
+- **Violence** (exit panel): how much the position lost after a Hold prediction (should have exited).
 
-5. **Safety stop vs learned exit**: The safety stop (k_stop × ATR) exists today as a hard floor. When the exit panel learns, does it replace the safety stop? Tighten it? Or does the safety stop remain as an invariant that the exit panel operates above?
+## 4. The algebraic question
 
-6. **Paper positions**: Today, every candle creates a pending entry for learning even without real capital. In the co-learning model, the exit panel needs real positions to observe. Do we create paper positions for exit learning? Or does the exit panel only learn from live trades?
+No new algebraic structures. Both panels use the existing monoid:
 
-## What Doesn't Change
+- **Bundle**: superposition of observer opinions (market manager, exit manager).
+- **Bind**: role-filler binding (exit facts bound to position atoms, same as market facts bound to indicator atoms).
+- **Journal**: prediction + resolution for both panels. Win/Loss journal for market. Hold/Exit journal for exit.
+- **OnlineSubspace**: noise stripping for both panels. Position-space noise model for exit, candle-space noise model for market.
+- **Cosine**: similarity scoring for predictions in both panels.
+- **Curve**: proof gate for both panels. An exit observer must prove predictive edge before its opinion modulates the trail.
 
-- Six primitives (atom, bind, bundle, cosine, journal, curve)
-- Two templates (prediction journal + reaction subspace)
-- The noise subspace / residual pipeline per observer
-- The enterprise tree structure
-- The accumulation model
-- Treasury, portfolio, ledger
-- The thought encoding vocabulary for market observers
+The coupling between panels is not algebraic — it is architectural. The position struct is data, not a vector operation. The label flow is a function call, not a new primitive. The co-learning emerges from how we wire the existing forms, not from extending them.
 
-## What This Enables
+The accumulation model (`accumulation.wat`) is unchanged. Principal recovery, residue, runner phase — all the same. The exit panel decides WHEN to trigger these transitions, but the transitions themselves are the same operations.
 
-If the exit panel learns to manage positions well:
-- Stops tighten when the exit panel detects deterioration (not fixed ATR)
-- TPs extend when the exit panel detects continued strength (not fixed ATR)
-- The market panel receives high-quality labels (from learned exits, not parameters)
-- Both panels improve each other through the lifecycle
-- The system discovers its own stop/TP strategy rather than us hardcoding one
+## 5. The simplicity question
 
-The fixed k_stop/k_tp/k_trail become safety floors, not the strategy. The exit panel learns the strategy. The parameters become guardrails.
+**Is this simple or easy?** Simple. Two instances of the same template (observer panel), connected by a data structure that already exists (ManagedPosition). No new types. No new primitives. No new encoding tricks.
+
+**What's being complected?** The risk is complecting position management with prediction. The exit panel predicts Hold/Exit but the ACTION is trail modulation. These must stay separate: the prediction is a vector operation, the trail modulation is arithmetic on the position struct. The exit panel offers an opinion. The desk acts on it (or doesn't). Same boundary as market observers: they perceive, they don't decide.
+
+**Could existing forms solve it?** They DO solve it. That is the point. The observer template (`observer.wat`) already supports arbitrary vocabulary and labels. The exit observer encoding (`exit.wat`) already exists. The manager aggregation pattern already works. The proposal is: wire the second instance of what we already have, and connect the two through the position lifecycle.
+
+The only new code is: (a) exit manager aggregation (same pattern as market manager), (b) trail modulation from exit conviction (arithmetic), (c) label routing from position resolution back to market panel (a function call).
+
+## 6. Questions for designers
+
+1. **Exit observer specialization**: Should the exit panel have multiple specialized observers (P&L lens, excursion lens, volatility lens, duration lens) like the market panel? Or start with one generalist exit observer and specialize later when we see what it learns?
+
+2. **Exit observation frequency**: The market panel observes every candle. Should the exit panel also observe every candle, or at a different cadence? Position state changes slowly (one candle of P&L movement) — is every-candle observation too noisy for the exit journal?
+
+3. **Label feedback timing**: Positions may be open for hundreds of candles. The market panel only learns when a position resolves. Is this too slow? Should there be intermediate feedback (e.g., partial resolution at principal recovery, final resolution at close)?
+
+4. **Paper positions for exit learning**: The market panel creates paper entries for learning even without capital. The exit panel needs open positions to observe. Do we create paper positions (unfunded, simulated lifecycle) so the exit panel can learn during flat periods? Or does the exit panel only learn from live trades?
+
+5. **Trail modulation bounds**: When the exit panel says "tighten" or "loosen," how much? Should conviction magnitude map linearly to trail adjustment? Should there be a maximum tightening/loosening factor? Or should the exit panel learn the modulation magnitude as part of its own curve?
+
+6. **Transition from horizon drain**: Today the market panel learns from horizon drain (fixed N candle lookback). In the co-learning model, it learns from position resolution. During warmup (before the exit panel has proven edge), should the market panel continue using horizon drain? When does the switchover happen — when the exit panel's curve validates?
