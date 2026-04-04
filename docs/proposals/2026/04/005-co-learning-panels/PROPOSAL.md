@@ -159,7 +159,7 @@ The only new code is: (a) exit manager aggregation (same pattern as market manag
 
 1. **Exit observer specialization**: Should the exit panel have multiple specialized observers (P&L lens, excursion lens, volatility lens, duration lens) like the market panel? Or start with one generalist exit observer and specialize later when we see what it learns?
 
-2. **Exit observation frequency**: The market panel observes every candle. Should the exit panel also observe every candle, or at a different cadence? Position state changes slowly (one candle of P&L movement) — is every-candle observation too noisy for the exit journal?
+2. **Exit observation frequency**: Every candle. Hide nothing. If the signal is noisy, the noise subspace learns what "normal treasury state" looks like and strips it. The residual — what's unusual about this snapshot — is what the journal sees. That's the two-stage pipeline. We don't gate the input. We filter the noise algebraically. The question for designers: does this hold, or is there a reason the exit panel's noise subspace would fail where the market panel's succeeds?
 
 3. **Label feedback timing**: Positions may be open for hundreds of candles. The market panel only learns when a position resolves. Is this too slow? Should there be intermediate feedback (e.g., partial resolution at principal recovery, final resolution at close)?
 
