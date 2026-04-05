@@ -155,6 +155,20 @@ pub enum LogEntry {
         pair_count: i64,                // how many (thought, distance) pairs accumulated
         atr: f64,                       // current ATR for context
     },
+    EnterpriseLog {
+        candle_idx: i64,
+        slot_idx: i64,
+        market_lens: String,
+        exit_lens: String,
+        learned_pairs: i64,
+        recommended_dist: f64,
+        paper_count: i64,
+        journal_grace: f64,
+        journal_violence: f64,
+        journal_trades: i64,
+        curve_valid: i32,
+        cached_acc: f64,
+    },
     BatchCommit,
 }
 
@@ -364,6 +378,25 @@ pub fn flush_logs(entries: &[LogEntry], conn: &Connection) {
                     params![step, candle_idx, recommended_distance_pct, learned_k_trail, pair_count, atr],
                 ).ok();
             }
+            LogEntry::EnterpriseLog {
+                candle_idx, slot_idx, market_lens, exit_lens,
+                learned_pairs, recommended_dist, paper_count,
+                journal_grace, journal_violence, journal_trades,
+                curve_valid, cached_acc,
+            } => {
+                conn.execute(
+                    "INSERT INTO enterprise_log
+                     (candle_idx,slot_idx,market_lens,exit_lens,
+                      learned_pairs,recommended_dist,paper_count,
+                      journal_grace,journal_violence,journal_trades,
+                      curve_valid,cached_acc)
+                     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
+                    params![candle_idx, slot_idx, market_lens, exit_lens,
+                            learned_pairs, recommended_dist, paper_count,
+                            journal_grace, journal_violence, journal_trades,
+                            curve_valid, cached_acc],
+                ).ok();
+            }
             LogEntry::BatchCommit => {
                 conn.execute_batch("COMMIT; BEGIN").ok();
             }
@@ -530,6 +563,22 @@ pub fn init_ledger(path: &str) -> Connection {
             step          INTEGER PRIMARY KEY,
             won           INTEGER,  -- 1 if trade was correct
             tht_data      BLOB      -- bipolar thought vector (i8 array)
+        );
+
+        -- Enterprise diagnostic log. One row per (market, exit) tuple, sampled every 1000 candles.
+        CREATE TABLE IF NOT EXISTS enterprise_log (
+            candle_idx        INTEGER,
+            slot_idx          INTEGER,
+            market_lens       TEXT,
+            exit_lens         TEXT,
+            learned_pairs     INTEGER,
+            recommended_dist  REAL,
+            paper_count       INTEGER,
+            journal_grace     REAL,
+            journal_violence  REAL,
+            journal_trades    INTEGER,
+            curve_valid       INTEGER,
+            cached_acc        REAL
         );
 
         -- Accumulation model summary. Written at end of run.

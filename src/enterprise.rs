@@ -508,6 +508,52 @@ impl Enterprise {
             // Proposal slot already cleared by .take() above.
         }
     }
+
+    /// Emit diagnostic log entries for all N×M slots.
+    ///
+    /// Called every 1000 candles to avoid excessive row counts.
+    /// Produces one EnterpriseLog per slot — visibility into what
+    /// each tuple journal has learned, its proof state, and paper activity.
+    pub fn emit_diagnostics(&self, candle_idx: usize) -> Vec<crate::ledger::LogEntry> {
+        let mut logs = Vec::with_capacity(self.n_market * self.m_exit);
+        let market_lenses = crate::market::OBSERVER_LENSES;
+        let exit_lenses = EXIT_LENSES;
+
+        for mi in 0..self.n_market {
+            for ei in 0..self.m_exit {
+                let i = self.idx(mi, ei);
+                let journal = &self.registry[i];
+                let learned_stop = &self.learned_stops[i];
+
+                // Query recommended distance with a zero vector — gives the
+                // global average when no specific thought context is available.
+                let dims = journal.noise_subspace.dim();
+                let recommended_dist = learned_stop.recommended_distance(
+                    &holon::Vector::zeros(dims),
+                );
+
+                logs.push(crate::ledger::LogEntry::EnterpriseLog {
+                    candle_idx: candle_idx as i64,
+                    slot_idx: i as i64,
+                    market_lens: market_lenses.get(mi)
+                        .map(|l| l.as_str().to_string())
+                        .unwrap_or_else(|| format!("market-{}", mi)),
+                    exit_lens: exit_lenses.get(ei)
+                        .map(|l| l.as_str().to_string())
+                        .unwrap_or_else(|| format!("exit-{}", ei)),
+                    learned_pairs: learned_stop.pair_count() as i64,
+                    recommended_dist,
+                    paper_count: journal.paper_count() as i64,
+                    journal_grace: journal.cumulative_grace,
+                    journal_violence: journal.cumulative_violence,
+                    journal_trades: journal.trade_count as i64,
+                    curve_valid: journal.curve_valid as i32,
+                    cached_acc: journal.cached_acc,
+                });
+            }
+        }
+        logs
+    }
 }
 
 /// Compose a market thought with exit judgment facts for a given lens.

@@ -469,6 +469,12 @@ fn main() {
                     &ctx,
                 );
             }
+
+            // Enterprise diagnostics — sample every 1000 candles to keep row count sane.
+            if candle_idx % 1000 == 0 {
+                let diag_logs = ent.emit_diagnostics(candle_idx);
+                enterprise::ledger::flush_logs(&diag_logs, &ledger);
+            }
         }
 
         // Flush log entries in batches
