@@ -55,54 +55,54 @@ constructor calls ARE the dependency graph.
 
 (struct raw-candle source-asset target-asset ts open high low close volume)
 
-(new-indicator-bank)                          ; streaming state machine
-
-(new-window-sampler seed min-window max-window) ; deterministic window selection
-
-(new-scalar-accumulator name)                 ; per-magic-number f64 learning
+(new-indicator-bank)                                → IndicatorBank
+(new-window-sampler seed min-window max-window)     → WindowSampler
+(new-scalar-accumulator name)                       → ScalarAccumulator
 
 ;; ── Candle — produced by indicator bank ─────────────────────────────
 
-(tick indicator-bank raw-candle)              ; → Candle (100+ computed indicators)
+(tick IndicatorBank RawCandle)                      → Candle
 
 ;; ── Vocabulary — pure functions, context in, fact-vectors out ───────
 ;; Three domains: shared (time), market (direction), exit (conditions)
 ;; The vocabulary speaks a DSL of ThoughtASTs — data, not execution
 
+(vocab-fn context)                                  → Vec<ThoughtAST>
+
 ;; ── ThoughtEncoder — evaluates the vocabulary's ASTs ────────────────
 
-(new-thought-encoder vector-manager)          ; dictionary (atoms) + cache (compositions)
+(new-thought-encoder VectorManager)                 → ThoughtEncoder
+(encode ThoughtEncoder ThoughtAST)                  → Vector
 
 ;; ── Observers — both are learned ────────────────────────────────────
 
-(new-market-observer lens dims recalib-interval  ; predicts direction (Win/Loss)
-  (new-window-sampler seed min max))             ; takes a window sampler
+(new-market-observer Lens dims interval
+  WindowSampler)                                    → MarketObserver
 
-(new-exit-observer lens                       ; predicts exit distance
-  default-trail default-stop default-tp)      ; three regressions, start ignorant
+(new-exit-observer Lens
+  default-trail default-stop default-tp)            → ExitObserver
 
 ;; ── TupleJournal — the closure, takes both observers ────────────────
 
-(new-tuple-journal                            ; accountability primitive
-  market-name exit-name dims recalib-interval  ; identity of the pair
-  (new-scalar-accumulator "trail-distance")   ; takes scalar accumulators
-  (new-scalar-accumulator "stop-distance")
-  (new-scalar-accumulator "tp-distance"))
+(new-tuple-journal market-name exit-name
+  dims interval
+  ScalarAccumulator ScalarAccumulator
+  ScalarAccumulator)                                → TupleJournal
 
 ;; ── Post — one per asset pair, takes observers + journals ───────────
 
-(new-post source-asset target-asset           ; the thinking unit
-  dims recalib-interval max-window-size       ; takes config
-  market-observers exit-observers registry)   ; takes what's above
+(new-post Asset Asset dims interval max-window-size
+  Vec<MarketObserver> Vec<ExitObserver>
+  Vec<TupleJournal>)                                → Post
 
 ;; ── Treasury — pure accounting ──────────────────────────────────────
 
-(new-treasury initial-assets)                 ; holds capital, settles trades
+(new-treasury initial-assets)                       → Treasury
 
 ;; ── Enterprise — the coordination plane, takes everything ───────────
 
-(new-enterprise                               ; the CSP sync point
-  posts treasury thought-encoder)             ; takes all of the above
+(new-enterprise
+  Vec<Post> Treasury ThoughtEncoder)                → Enterprise
 ```
 
 ---
