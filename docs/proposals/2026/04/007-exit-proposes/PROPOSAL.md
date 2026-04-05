@@ -137,15 +137,28 @@ Each exit observer queries `recommended_distance(thought)` for new market though
 
 For each proposal: TupleJournal proven? Capital available? Risk allows? If yes → insert into the live trade map. If no → stays paper.
 
-### The exit observer is a LearnedStop wrapper
+### The exit observer has its own vocabulary
 
-The exit observer does not encode its own thoughts from candles. It receives the market observer's thought and uses it as the query key into its LearnedStop. The LearnedStop IS the exit observer's brain.
+Each exit observer has a judgment lens — its own vocabulary for evaluating market conditions. From proposal 006:
 
-`recommended_distance(thought)` is the exit observer's prediction. The prediction is a distance, not a direction. The exit observer answers "how much room does this kind of thought need?" not "which way?"
+- **Volatility judge**: ATR regime, volatility shift, squeeze state.
+- **Structure judge**: trend consistency, support/resistance quality.
+- **Timing judge**: momentum state, reversal signals, duration patterns.
+- **Exit generalist**: full judgment vocabulary.
 
-`observe(thought, optimal_distance, weight)` is the exit observer's learning. After a trade resolves, `compute_optimal_distance` provides the training signal. The LearnedStop accumulates. The next query for a similar thought returns a better distance.
+The exit observer receives a market thought and COMPOSES it with its own judgment facts:
 
-The exit observer does not need its own vocabulary. It does not need its own noise subspace for encoding. It does not encode candle data. It receives a thought vector and manages it. The thought vector IS the context. A trending-regime thought naturally clusters near other trending-regime thoughts in the LearnedStop. A choppy-regime thought clusters near other choppy thoughts. The market observer's encoding already captures the regime. The exit observer reads the regime through the thought vector's position on the sphere.
+```scheme
+(bundle
+  market-thought
+  (bind :volatility-regime (scalar $log atr-ratio))
+  (bind :structure-quality (scalar $linear trend-consistency))
+  (bind :squeeze-state     (scalar $linear squeeze)))
+```
+
+The composed thought — market context + exit judgment — is what the LearnedStop sees. This is why there are N exit observers: each composes differently. The volatility judge adds volatility facts. The timing judge adds timing facts. The same market thought produces different compositions, different LearnedStop queries, different distances.
+
+The LearnedStop IS the exit observer's brain. `recommended_distance(composed_thought)` is its prediction. `observe(composed_thought, optimal_distance, weight)` is its learning. The composition makes each exit observer unique. Without it, they'd all return the same distance for the same market thought.
 
 ### Each magic number gets its own LearnedStop
 
@@ -241,13 +254,13 @@ The coupling between passes is data flow: Pass 1 produces thoughts, Pass 2 consu
 The proposal is wiring. The pieces are proven. The question is the topology of the wiring, not the pieces themselves.
 
 **What 005 and 006 attempted that this simplifies:**
-- 005 proposed an exit PANEL (multiple exit observers with their own vocabulary lenses). This proposal: one exit observer wrapper per market observer, no exit encoding, no exit vocabulary. The exit observer's intelligence is the LearnedStop, not a journal over exit-specific facts.
+- 005 proposed an exit panel with its own vocabulary lenses. This proposal keeps the vocabulary (volatility, structure, timing) but replaces the exit journal with a LearnedStop. The exit observer's intelligence is nearest neighbor regression on composed thoughts, not a journal with Win/Loss labels.
 - 006 proposed N x M composition (N market observers x M exit observers) with dual-sided labeling and continuous management scalars. This proposal: the exit observer is simpler -- it is a regression, not a journal. It does not predict Buy/Sell. It predicts a distance. The composition is not bundle -- it is a function call.
 - Both 005 and 006 described the exit observer as a full observer with its own encoding pipeline. This proposal: the exit observer has no encoding. It is a LearnedStop with a proposal gate. The intelligence is in the (thought, distance) pairs, not in a separate thought about the thought.
 
 ## 6. Questions for designers
 
-1. **One exit observer or one per market observer?** The LearnedStop stores (thought, distance) pairs. Thoughts from different market observers live in different regions of the sphere (different vocabulary, different lens). A single shared LearnedStop would cluster them naturally -- trending-momentum thoughts near other trending-momentum thoughts, choppy-regime thoughts near other choppy-regime thoughts. Alternatively, one LearnedStop per market observer keeps the accountability clean: each market observer's exit performance is measured independently. The question: is one shared regression sufficient, or does per-observer separation produce better learning? The TupleJournal already exists for per-pair accountability. Does the LearnedStop need the same separation?
+1. **How many exit observers?** Each exit observer has its own judgment vocabulary (volatility, structure, timing, generalist). Each composes the market thought with its own facts, producing a different query into its LearnedStop. The question is not "one or many" — it's many, because they have different lenses. The question is: do we start with all four exit lenses, or start with one (exit generalist) and earn the specialization? The data from the 100k run should inform this — does the optimal distance vary more by volatility regime or by timing context?
 
 2. **Paper entry memory.** Every market thought registers as a paper entry. Seven observers, one thought each per candle, each living until both sides of the DualExcursion resolve. At 99.9% organic resolution, entries die. But the buffer is implicit memory pressure. How many concurrent paper entries is reasonable? The DualExcursion is 8 floats per entry. At 7 observers x ~100 candle average lifetime, that is ~700 concurrent entries. Is this the right order? The buffer cap is the last implicit parameter.
 
