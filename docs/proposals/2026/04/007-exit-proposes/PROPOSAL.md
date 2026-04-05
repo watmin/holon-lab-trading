@@ -104,16 +104,26 @@ No signal crosses without going through the tuple journal. The tuple journal is 
 
 ### The treasury as registry
 
-The treasury holds two maps:
+The treasury holds three maps:
 
 ```rust
-registry:      HashMap<(MarketId, ExitId), TupleJournal>  // all known pairs, never shrinks
-active_trades: HashMap<TupleJournalId, Trade>             // live trades, insert/remove
+registry:        HashMap<(MarketId, ExitId), TupleJournal>  // permanent memory, never shrinks
+proposed_trades: HashMap<TupleJournalId, Proposal>          // waiting for funding
+active_trades:   HashMap<TupleJournalId, Trade>             // live, being managed
 ```
 
 The **registry** is the institutional memory. Every (market, exit) pair that has ever proposed a trade has a tuple journal here. The journal accumulates Grace/Violence across ALL trades this pair has done. It persists across trades. When a trade closes, the journal stays — only the trade is removed. The registry grows. It never shrinks. The track record is permanent.
 
-The **active_trades** map is the current state. Insert on fund. Remove on close. The tuple journal ID is the key — it points back to the registry.
+The **proposed_trades** map is the queue. Phase 4 (PROPOSE) inserts proposals. Phase 5 (FUND) iterates them — sorted by pair track record, conviction, or whatever metric the treasury uses to prioritize — funds the best, rejects the rest. Funded proposals move to `active_trades`. Rejected proposals are removed. The queue is empty after Phase 5.
+
+The **active_trades** map is the current state. Phase 1 (SETTLE) iterates it — closes what triggered, propagates, removes closed trades. Phase 3 (MANAGE) iterates it — updates triggers from fresh thoughts.
+
+Three maps. Three phases own them. The lifecycle:
+- PROPOSE → insert into `proposed_trades`
+- FUND → move from `proposed_trades` to `active_trades` (or discard)
+- MANAGE → update triggers on `active_trades`
+- SETTLE → close and remove from `active_trades`
+- Registry: always there, always accumulating, never forgetting.
 
 When an exit observer wants to propose a trade with a market observer's thought:
 1. Look up `(market_id, exit_id)` in the registry.
