@@ -160,6 +160,29 @@ const CALENDAR_ATOMS: &[&str] = &[
     "at-session",
 ];
 
+/// Exit vocabulary atoms — indicator names used by exit::vocab encoders.
+/// These are bound with scalar-encoded values to produce exit judgment facts.
+const EXIT_VOCAB_ATOMS: &[&str] = &[
+    // Volatility lens
+    "atr-regime", "atr-ratio", "atr-accel-6", "atr-accel-12",
+    // Structure lens
+    "exit-trend-consistency-6", "exit-trend-consistency-12", "exit-trend-consistency-24",
+    "exit-adx-strength", "exit-structure-quality",
+    // Timing lens
+    "exit-momentum-rsi", "exit-momentum-macd", "exit-stoch-k", "exit-cci-magnitude",
+    // Zone indicator atoms (used as role in fact_binary for zone facts)
+    "vol-regime", "exit-structure", "exit-timing",
+];
+
+/// Exit vocabulary zone atoms — bare labels and zone qualifiers.
+const EXIT_ZONE_ATOMS: &[&str] = &[
+    "squeeze-active", "squeeze-off",
+    "vol-expanding-fast", "vol-expanding", "vol-contracting-fast", "vol-contracting", "vol-stable",
+    "structure-strong", "structure-moderate", "structure-absent", "structure-weak",
+    "timing-overbought", "timing-oversold", "timing-neutral",
+    "timing-cci-hot", "timing-cci-cold", "timing-active",
+];
+
 const ALL_ATOM_GROUPS: &[&[&str]] = &[
     INDICATOR_ATOMS,
     DIRECTION_ATOMS,
@@ -167,6 +190,8 @@ const ALL_ATOM_GROUPS: &[&[&str]] = &[
     PREDICATE_ATOMS,
     SEGMENT_ATOMS,
     CALENDAR_ATOMS,
+    EXIT_VOCAB_ATOMS,
+    EXIT_ZONE_ATOMS,
 ];
 
 /// Raw value extractors for PELT segmentation — 17 streams
@@ -477,6 +502,16 @@ impl ThoughtEncoder {
             ("harmonic", "crab-bullish"), ("harmonic", "crab-bearish"),
             ("harmonic", "deep-crab-bullish"), ("harmonic", "deep-crab-bearish"),
             ("harmonic", "cypher-bullish"), ("harmonic", "cypher-bearish"),
+            // Exit vocabulary zones
+            ("vol-regime", "vol-expanding-fast"), ("vol-regime", "vol-expanding"),
+            ("vol-regime", "vol-contracting-fast"), ("vol-regime", "vol-contracting"),
+            ("vol-regime", "vol-stable"),
+            ("exit-structure", "structure-strong"), ("exit-structure", "structure-moderate"),
+            ("exit-structure", "structure-absent"), ("exit-structure", "structure-weak"),
+            ("exit-timing", "timing-overbought"), ("exit-timing", "timing-oversold"),
+            ("exit-timing", "timing-neutral"),
+            ("exit-timing", "timing-cci-hot"), ("exit-timing", "timing-cci-cold"),
+            ("exit-timing", "timing-active"),
         ] {
             let key = format!("(at {} {})", ind, zone);
             if !fact_cache.contains_key(&key) {

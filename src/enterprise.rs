@@ -9,12 +9,18 @@
 //! The desk is gone. The treasury IS the desk.
 //! The manager is gone. The tuple journal IS the manager.
 
-use holon::Vector;
+use holon::{Primitives, Vector};
 
+use crate::candle::Candle;
 use crate::exit::learned_stop::LearnedStop;
 use crate::exit::optimal::compute_optimal_distance;
 use crate::exit::tuple::{RealityOutcome, TupleJournal};
+use crate::exit::vocab::{
+    ExitLens, EXIT_LENSES,
+    encode_volatility_facts, encode_structure_facts, encode_timing_facts,
+};
 use crate::position::{ManagedPosition, PositionEntry, PositionExit, TrailFactor};
+use crate::state::CandleContext;
 use crate::treasury::Asset;
 
 /// A trade proposal from an exit observer.
@@ -223,9 +229,9 @@ impl Enterprise {
     /// from the candle window at its own sampled time scale.
     ///
     /// Phase B: sequential dispatch — for each (market_idx, exit_idx) pair,
-    /// look up the tuple journal, compose the thought (market thought directly
-    /// for now — exit vocabulary comes later), propose on the journal,
-    /// and insert a proposal if conditions are met.
+    /// encode exit judgment facts for this lens, compose with the market thought,
+    /// propose the composed thought on the tuple journal, and insert a proposal
+    /// if conditions are met.
     ///
     /// Returns the market thought vectors for Step 3 to use.
     pub fn step_compute_dispatch(
@@ -252,8 +258,9 @@ impl Enterprise {
             }).collect()
         };
 
-        // ── Phase B: sequential dispatch ───────────────────────────────
-        self.dispatch_thoughts(&thoughts);
+        // ── Phase B: sequential dispatch with exit composition ─────────
+        let candle = candle_window.last();
+        self.dispatch_thoughts(&thoughts, candle, Some(ctx));
 
         thoughts
     }
@@ -319,23 +326,42 @@ impl Enterprise {
 
     /// Phase B of Step 2: sequential dispatch of pre-computed thoughts into the registry.
     ///
-    /// For each (market_idx, exit_idx) pair: compose the thought (market thought
-    /// directly for now), propose on the tuple journal, query the learned stop,
-    /// and insert a proposal if all conditions are met.
+    /// For each (market_idx, exit_idx) pair: determine the ExitLens for this
+    /// exit_idx, encode exit judgment facts from the candle, compose the market
+    /// thought with the exit fact vector via bundle, propose the COMPOSED thought
+    /// on the tuple journal, query the learned stop, and insert a proposal if all
+    /// conditions are met.
     ///
-    /// Separated from step_compute_dispatch so it can be tested without the full
-    /// CandleContext encoding infrastructure.
-    pub fn dispatch_thoughts(&mut self, thoughts: &[Vector]) {
+    /// The composition follows wat/exit/observer.wat:
+    ///   (apply bundle (cons market-thought judgment-facts))
+    ///
+    /// When `candle` is None (e.g. in tests), falls back to passing the raw
+    /// market thought without exit composition.
+    pub fn dispatch_thoughts(
+        &mut self,
+        thoughts: &[Vector],
+        candle: Option<&Candle>,
+        ctx: Option<&CandleContext>,
+    ) {
         for market_idx in 0..self.n_market.min(thoughts.len()) {
-            let thought = &thoughts[market_idx];
+            let market_thought = &thoughts[market_idx];
 
             for exit_idx in 0..self.m_exit {
                 let i = self.idx(market_idx, exit_idx);
+
+                // Compose: bundle market thought with exit judgment facts.
+                let composed = if let (Some(candle), Some(ctx)) = (candle, ctx) {
+                    let exit_lens = EXIT_LENSES.get(exit_idx).copied()
+                        .unwrap_or(ExitLens::ExitGeneralist);
+                    compose_with_exit_facts(market_thought, candle, exit_lens, ctx)
+                } else {
+                    market_thought.clone()
+                };
+
                 let journal = &mut self.registry[i];
 
                 // Propose: updates noise subspace, predicts grace/violence.
-                // Pass by reference — no need to clone.
-                let prediction = journal.propose(thought);
+                let prediction = journal.propose(&composed);
 
                 // Check proposal conditions:
                 //   - journal must have proven its curve (funded)
@@ -346,11 +372,11 @@ impl Enterprise {
                     && prediction.conviction > 0.2
                     && self.learned_stops[i].pair_count() > 0
                 {
-                    // Query the learned stop only when we need the distance.
-                    let distance = self.learned_stops[i].recommended_distance(thought);
+                    // Query the learned stop with the composed thought.
+                    let distance = self.learned_stops[i].recommended_distance(&composed);
 
                     self.proposals[i] = Some(Proposal {
-                        composed_thought: thought.clone(),
+                        composed_thought: composed,
                         direction: prediction.direction,
                         distance,
                         conviction: prediction.conviction,
@@ -460,6 +486,51 @@ impl Enterprise {
     }
 }
 
+/// Compose a market thought with exit judgment facts for a given lens.
+///
+/// Encodes the exit vocabulary facts into vectors using the ThoughtEncoder,
+/// then bundles them with the market thought. This is the Rust implementation
+/// of `(apply bundle (cons market-thought judgment-facts))` from
+/// wat/exit/observer.wat.
+fn compose_with_exit_facts(
+    market_thought: &Vector,
+    candle: &Candle,
+    exit_lens: ExitLens,
+    ctx: &CandleContext,
+) -> Vector {
+    use crate::vocab::Fact;
+
+    // Gather exit facts based on the lens.
+    let exit_facts: Vec<Fact<'static>> = match exit_lens {
+        ExitLens::Volatility => encode_volatility_facts(candle),
+        ExitLens::Structure => encode_structure_facts(candle),
+        ExitLens::Timing => encode_timing_facts(candle),
+        ExitLens::ExitGeneralist => {
+            let mut all = encode_volatility_facts(candle);
+            all.extend(encode_structure_facts(candle));
+            all.extend(encode_timing_facts(candle));
+            all
+        }
+    };
+
+    if exit_facts.is_empty() {
+        return market_thought.clone();
+    }
+
+    // Encode facts into vectors using the ThoughtEncoder.
+    let (cached_refs, owned_vecs) = ctx.thought_encoder.encode_facts(&exit_facts);
+
+    // Collect all vectors to bundle: market thought + exit fact vectors.
+    let mut bundle_inputs: Vec<&Vector> = Vec::with_capacity(1 + cached_refs.len() + owned_vecs.len());
+    bundle_inputs.push(market_thought);
+    bundle_inputs.extend(cached_refs);
+    for v in &owned_vecs {
+        bundle_inputs.push(v);
+    }
+
+    Primitives::bundle(&bundle_inputs)
+}
+
 /// Extract close prices from the candle window starting at the entry point.
 ///
 /// `candles_held`: how many candles the trade has been open. The entry is
@@ -524,7 +595,7 @@ mod tests {
             vm.get_vector("thought-m1"),
         ];
 
-        e.dispatch_thoughts(&thoughts);
+        e.dispatch_thoughts(&thoughts, None, None);
 
         // No proposals: journals are cold (not funded, no learned stop pairs).
         assert_eq!(e.proposal_count(), 0, "cold journals should not propose");
@@ -540,13 +611,12 @@ mod tests {
     #[test]
     fn dispatch_thoughts_same_market_thought_goes_to_all_exit_slots() {
         // Market 0's thought should be dispatched to exit slots 0, 1, 2.
-        // Verify by checking that all exit slots for market 0 received the same
-        // noise update (since composed = market thought directly for now).
+        // Without candle/ctx, composed = market thought directly (no exit facts).
         let mut e = Enterprise::new(1, 3, 64, 500, &["m0"], &["e0", "e1", "e2"]);
         let vm = holon::VectorManager::new(64);
         let thoughts = vec![vm.get_vector("market-thought")];
 
-        e.dispatch_thoughts(&thoughts);
+        e.dispatch_thoughts(&thoughts, None, None);
 
         // All 3 exit slots should have been updated.
         assert_eq!(e.registry[0].noise_subspace.n(), 1);
@@ -570,7 +640,7 @@ mod tests {
         });
 
         let thoughts = vec![holon::Vector::zeros(64)];
-        e.dispatch_thoughts(&thoughts);
+        e.dispatch_thoughts(&thoughts, None, None);
 
         // Cold journal can't propose, so the stale proposal should be left as-is
         // (dispatch writes None only via the condition gate — it doesn't clear first).
@@ -585,7 +655,7 @@ mod tests {
         let mut e = Enterprise::new(3, 2, 64, 500, &["m0", "m1", "m2"], &["e0", "e1"]);
         let thoughts = vec![holon::Vector::zeros(64)]; // only 1 thought for 3 markets
 
-        e.dispatch_thoughts(&thoughts);
+        e.dispatch_thoughts(&thoughts, None, None);
 
         // Only market 0's exit slots should have been touched.
         assert_eq!(e.registry[0].noise_subspace.n(), 1); // market 0, exit 0
@@ -622,7 +692,7 @@ mod tests {
         }
 
         let thoughts = vec![thought];
-        e.dispatch_thoughts(&thoughts);
+        e.dispatch_thoughts(&thoughts, None, None);
 
         // Check: if a proposal was created, its distance should come from learned stop.
         if let Some(ref prop) = e.proposals[0] {
@@ -641,8 +711,146 @@ mod tests {
         // Empty thoughts should not panic.
         let mut e = Enterprise::new(2, 2, 64, 500, &["m0", "m1"], &["e0", "e1"]);
         let thoughts: Vec<holon::Vector> = vec![];
-        e.dispatch_thoughts(&thoughts);
+        e.dispatch_thoughts(&thoughts, None, None);
         assert_eq!(e.proposal_count(), 0);
+    }
+
+    // ── compose_with_exit_facts tests ──────────────────────────────
+
+    #[test]
+    fn compose_produces_different_vectors_per_exit_lens() {
+        // Each exit lens encodes different facts, so the composed thought
+        // should differ across lenses even for the same market thought + candle.
+        use crate::thought::{ThoughtEncoder, ThoughtVocab};
+
+        let vm = holon::VectorManager::new(128);
+        let vocab = ThoughtVocab::new(&vm);
+        let encoder = ThoughtEncoder::new(vocab);
+        let scalar = holon::ScalarEncoder::new(128);
+        let mgr_atoms = crate::market::manager::ManagerAtoms::new(&vm);
+        let exit_scalar = holon::ScalarEncoder::new(128);
+        let exit_atoms = crate::market::exit::ExitAtoms::new(&vm);
+        let risk_scalar = holon::ScalarEncoder::new(128);
+        let risk_atoms = crate::risk::RiskAtoms::new(&vm);
+        let risk_mgr_atoms = crate::risk::manager::RiskManagerAtoms::new(&vm);
+        let observer_atoms: Vec<holon::Vector> = crate::market::OBSERVER_LENSES
+            .iter().map(|l| vm.get_vector(l.as_str())).collect();
+        let generalist_atom = vm.get_vector("generalist");
+        let (cb_labels, cb_vecs) = encoder.fact_codebook();
+
+        let ctx = CandleContext {
+            dims: 128, horizon: 36, move_threshold: 0.005, atr_multiplier: 0.0,
+            decay: 0.999, recalib_interval: 500, min_conviction: 0.0,
+            conviction_quantile: 0.85, conviction_mode: crate::state::ConvictionMode::Quantile,
+            min_edge: 0.55, sizing: crate::state::SizingMode::Legacy,
+            max_drawdown: 0.20, swap_fee: 0.0, slippage: 0.0,
+            asset_mode: crate::state::AssetMode::Hold,
+            base_asset: &crate::treasury::Asset::new("USDC"),
+            quote_asset: &crate::treasury::Asset::new("WBTC"),
+            initial_equity: 10000.0, diagnostics: false,
+            k_stop: 3.0, k_trail: 1.5, k_trail_runner: 3.0, k_tp: 6.0,
+            exit_horizon: 9, exit_observe_interval: 4,
+            decay_stable: 0.999, decay_adapting: 0.995,
+            highconv_rolling_cap: 200, max_single_position: 0.2,
+            conviction_warmup: 1000, conviction_window: 2000,
+            vm: &vm, thought_encoder: &encoder,
+            mgr_atoms: &mgr_atoms, mgr_scalar: &scalar,
+            exit_scalar: &exit_scalar, exit_atoms: &exit_atoms,
+            risk_scalar: &risk_scalar, risk_atoms: &risk_atoms,
+            risk_mgr_atoms: &risk_mgr_atoms,
+            observer_atoms: &observer_atoms, generalist_atom: &generalist_atom,
+            min_opinion_magnitude: 0.01,
+            codebook_labels: &cb_labels, codebook_vecs: &cb_vecs,
+            loop_count: 100, progress_every: 100,
+            t_start: std::time::Instant::now(),
+        };
+
+        let candle = make_test_candle(50000.0);
+        let market_thought = vm.get_vector("test-market-thought");
+
+        let vol  = compose_with_exit_facts(&market_thought, &candle, ExitLens::Volatility, &ctx);
+        let struc = compose_with_exit_facts(&market_thought, &candle, ExitLens::Structure, &ctx);
+        let time = compose_with_exit_facts(&market_thought, &candle, ExitLens::Timing, &ctx);
+        let gen  = compose_with_exit_facts(&market_thought, &candle, ExitLens::ExitGeneralist, &ctx);
+
+        // Each composed vector should be different from the raw market thought.
+        let sim_raw_vol = holon::Similarity::cosine(&market_thought, &vol);
+        assert!(sim_raw_vol < 0.99, "volatility composed should differ from raw market thought: {}", sim_raw_vol);
+
+        // Different lenses should produce different compositions.
+        let sim_vol_struc = holon::Similarity::cosine(&vol, &struc);
+        let sim_vol_time = holon::Similarity::cosine(&vol, &time);
+        assert!(sim_vol_struc < 0.99, "volatility vs structure should differ: {}", sim_vol_struc);
+        assert!(sim_vol_time < 0.99, "volatility vs timing should differ: {}", sim_vol_time);
+
+        // Generalist should be different from each specialist (it has all facts).
+        let sim_gen_vol = holon::Similarity::cosine(&gen, &vol);
+        assert!(sim_gen_vol < 0.99, "generalist vs volatility should differ: {}", sim_gen_vol);
+    }
+
+    #[test]
+    fn dispatch_with_candle_composes_exit_facts() {
+        // When a candle and ctx are provided, dispatch should compose exit facts
+        // into the thought before proposing. Verify by checking the noise subspace
+        // receives a composed vector, not the raw market thought.
+        use crate::thought::{ThoughtEncoder, ThoughtVocab};
+
+        let vm = holon::VectorManager::new(128);
+        let vocab = ThoughtVocab::new(&vm);
+        let encoder = ThoughtEncoder::new(vocab);
+        let scalar = holon::ScalarEncoder::new(128);
+        let mgr_atoms = crate::market::manager::ManagerAtoms::new(&vm);
+        let exit_scalar = holon::ScalarEncoder::new(128);
+        let exit_atoms = crate::market::exit::ExitAtoms::new(&vm);
+        let risk_scalar = holon::ScalarEncoder::new(128);
+        let risk_atoms = crate::risk::RiskAtoms::new(&vm);
+        let risk_mgr_atoms = crate::risk::manager::RiskManagerAtoms::new(&vm);
+        let observer_atoms: Vec<holon::Vector> = crate::market::OBSERVER_LENSES
+            .iter().map(|l| vm.get_vector(l.as_str())).collect();
+        let generalist_atom = vm.get_vector("generalist");
+        let (cb_labels, cb_vecs) = encoder.fact_codebook();
+
+        let ctx = CandleContext {
+            dims: 128, horizon: 36, move_threshold: 0.005, atr_multiplier: 0.0,
+            decay: 0.999, recalib_interval: 500, min_conviction: 0.0,
+            conviction_quantile: 0.85, conviction_mode: crate::state::ConvictionMode::Quantile,
+            min_edge: 0.55, sizing: crate::state::SizingMode::Legacy,
+            max_drawdown: 0.20, swap_fee: 0.0, slippage: 0.0,
+            asset_mode: crate::state::AssetMode::Hold,
+            base_asset: &crate::treasury::Asset::new("USDC"),
+            quote_asset: &crate::treasury::Asset::new("WBTC"),
+            initial_equity: 10000.0, diagnostics: false,
+            k_stop: 3.0, k_trail: 1.5, k_trail_runner: 3.0, k_tp: 6.0,
+            exit_horizon: 9, exit_observe_interval: 4,
+            decay_stable: 0.999, decay_adapting: 0.995,
+            highconv_rolling_cap: 200, max_single_position: 0.2,
+            conviction_warmup: 1000, conviction_window: 2000,
+            vm: &vm, thought_encoder: &encoder,
+            mgr_atoms: &mgr_atoms, mgr_scalar: &scalar,
+            exit_scalar: &exit_scalar, exit_atoms: &exit_atoms,
+            risk_scalar: &risk_scalar, risk_atoms: &risk_atoms,
+            risk_mgr_atoms: &risk_mgr_atoms,
+            observer_atoms: &observer_atoms, generalist_atom: &generalist_atom,
+            min_opinion_magnitude: 0.01,
+            codebook_labels: &cb_labels, codebook_vecs: &cb_vecs,
+            loop_count: 100, progress_every: 100,
+            t_start: std::time::Instant::now(),
+        };
+
+        // 1 market × 4 exit (matching EXIT_LENSES)
+        let mut e = Enterprise::new(1, 4, 128, 500, &["m0"],
+            &["volatility", "structure", "timing", "exit-generalist"]);
+        let thought = vm.get_vector("market-thought-for-compose");
+        let thoughts = vec![thought];
+        let candle = make_test_candle(50000.0);
+
+        e.dispatch_thoughts(&thoughts, Some(&candle), Some(&ctx));
+
+        // All 4 exit slots should have been updated.
+        for i in 0..4 {
+            assert_eq!(e.registry[i].noise_subspace.n(), 1,
+                "exit slot {} should have 1 noise observation", i);
+        }
     }
 
     // ── step_resolve tests ─────────────────────────────────────────

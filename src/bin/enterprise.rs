@@ -343,7 +343,8 @@ fn main() {
         let market_names: Vec<&str> = enterprise::market::OBSERVER_LENSES.iter()
             .map(|l| l.as_str())
             .collect();
-        let exit_names: Vec<&str> = vec!["exit"];
+        let exit_names: Vec<&str> = enterprise::exit::vocab::EXIT_LENSES
+            .iter().map(|l| l.as_str()).collect();
         let n_market = market_names.len();
         let m_exit = exit_names.len();
         eprintln!("  Enterprise (four-step): {}×{} = {} tuple journals",
