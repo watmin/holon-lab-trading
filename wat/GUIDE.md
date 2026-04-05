@@ -1,5 +1,7 @@
 # wat/ — The 007 Blueprint
 
+*The coordinates to where the machine is.*
+
 Built leaves to root from Proposal 007: Exit Proposes.
 This document defines every struct and its interface. No implementation.
 The wat files implement what this document declares.
