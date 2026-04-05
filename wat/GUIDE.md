@@ -31,10 +31,14 @@ These are NOT specified in this tree. They are provided by holon-rs.
   - `(encode-linear value scale) → Vector`
   - `(encode-circular value period) → Vector`
 - **Primitives** — atom, bind, bundle, cosine, journal, curve
-  - `(atom name) → Vector`
-  - `(bind a b) → Vector`
-  - `(bundle &vecs) → Vector`
-  - `(cosine a b) → f64`
+  - `(atom name) → Vector` — name a thought
+  - `(bind a b) → Vector` — compose two thoughts
+  - `(bundle &vecs) → Vector` — superpose many thoughts
+  - `(cosine a b) → f64` — measure similarity
+  - `journal` — accumulate observations, predict. Two readouts:
+    - label readout: Win/Loss, Grace/Violence (market observer, tuple journal)
+    - scalar readout: distance (exit observer)
+  - `curve` — evaluate the journal's quality. The proof gate.
 - **VectorManager** — deterministic atom → vector allocation
   - `(get-vector vm name) → Vector`
 
