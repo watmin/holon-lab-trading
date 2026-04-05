@@ -132,12 +132,12 @@ think about.
 ;; ── Lenses — which vocabulary subset an observer thinks through ─────
 ;; A lens selects which vocab modules fire. The observer's identity.
 
-(enum Lens :momentum :structure :volume :narrative :regime :generalist)
-(enum ExitLens :volatility :structure :timing :exit-generalist)
+(enum MarketLens :momentum :structure :volume :narrative :regime :generalist)
+(enum ExitLens :volatility :structure :timing :generalist)
 
 ;; ── MarketObserver — predicts direction, learned ────────────────────
 
-(make-market-observer Lens usize usize WindowSampler)
+(make-market-observer MarketLens usize usize WindowSampler)
                                                     → MarketObserver
 ;; lens, dims, recalib-interval, window-sampler
 
@@ -594,7 +594,7 @@ The generalist is just another lens. No special treatment.
 
 ```
 (struct market-observer
-  lens                 ; Lens enum
+  lens                 ; MarketLens enum
   journal              ; Journal — Win/Loss
   noise-subspace       ; OnlineSubspace — background model
   window-sampler       ; WindowSampler — own time scale
