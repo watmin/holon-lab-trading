@@ -37,11 +37,12 @@ These are NOT specified in this tree. They are provided by holon-rs.
   - **NOTE: Gauge does not yet exist in holon-rs. It must be added.
     The interface is defined here. The implementation follows the
     journal's cosine-weighted accumulation with scalar readout.**
-- **curve** — evaluates a journal's quality over time. How much edge?
-  Input: history of (conviction, correct?) pairs. Output: a continuous
-  measure of edge — not a boolean. 52.1% is barely there. 70% is
-  screaming. The treasury uses the amplitude to fund proportionally.
-  The proof gate is not "proven or not" — it is "how proven."
+- **curve** — a gauge applied to journal quality. The "thought" is the
+  conviction level. The "scalar" is correctness (1.0 or 0.0). Query
+  with a conviction → get the accuracy at that conviction. A continuous
+  surface. Not a boolean. How much edge, not whether edge.
+  No circular dependency: journal produces predictions, curve (gauge)
+  consumes their outcomes. One direction.
 - **OnlineSubspace** — learns a manifold, measures anomaly via residual
   - `(update subspace vector)`
   - `(anomalous-component subspace vector) → Vector`
