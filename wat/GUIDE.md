@@ -255,21 +255,23 @@ has no intermediate form. Atoms compose. Vectors result. Thoughts bundle.
 
 ### ThoughtEncoder (depends on: Vocabulary, VectorManager)
 
-Renders facts to geometry. Owned by the enterprise. Immutable after
+Calls the vocabulary for a given lens, bundles the resulting fact-vectors
+into one thought vector. Owned by the enterprise. Immutable after
 construction. The enterprise passes it down to posts — the posts
 borrow it, they don't own it. Not a singleton. Owned.
 
-Pre-computes common compositions — comparison facts, zone facts,
-fibonacci facts. A cache of the vocabulary rendered as vectors.
+Pre-computes common atom vectors for performance. A cache, not a concept.
 
 ```
 (struct thought-encoder
-  vocab fact-cache comparison-vecs)
+  vocab atom-cache)
 ```
 
 **Interface:**
-- `(encode-thought encoder candles vm lens) → Vector`
-- `(encode-facts encoder facts) → Vec<Vector>`
+- `(encode-thought encoder context lens) → Vector`
+  calls vocab modules for this lens with context, bundles fact-vectors into one thought
+- `(encode-facts encoder context lens) → Vec<Vector>`
+  returns the individual fact-vectors before bundling (for composition)
 
 ---
 
