@@ -298,7 +298,45 @@ decides how to compute it efficiently.
 
 **Interface:**
 - `(encode thought-encoder ast) → Vector`
-  walk the AST bottom-up, hit cache where possible, compute where necessary
+
+One function. Recursive. Cache at every node. The cache key IS the AST
+node — its structure is its identity. Same structure, same vector.
+
+```scheme
+(define (encode encoder ast)
+  (or (lookup (:cache encoder) ast)          ;; cache hit → done
+      (let ((result
+              (match ast
+                (Atom name)
+                  (lookup-atom (:atoms encoder) name)
+
+                (Linear name value scale)
+                  (bind (encode encoder (Atom name))
+                        (encode-linear value scale))
+
+                (Log name value)
+                  (bind (encode encoder (Atom name))
+                        (encode-log value))
+
+                (Circular name value period)
+                  (bind (encode encoder (Atom name))
+                        (encode-circular value period))
+
+                (Bind left right)
+                  (bind (encode encoder left)
+                        (encode encoder right))
+
+                (Bundle children)
+                  (apply bundle
+                    (map (lambda (c) (encode encoder c)) children)))))
+
+        (store (:cache encoder) ast result)
+        result)))
+```
+
+The vocabulary produces QUOTED expressions — data, not execution. The
+encoder evaluates them. The vocabulary doesn't know about caching. The
+encoder doesn't know about RSI. The quoted list is the interface.
 
 The observer composes the thought:
 ```
