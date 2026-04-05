@@ -3210,6 +3210,29 @@ The constructor calls are the path. The path is the construction. The constructi
 
 This is what a specification should be. Not a description of the machine — the construction of it. Not "here is what exists" — "here is how you build it, in what order, from what parts." The reader doesn't learn about the machine. The reader builds it. The understanding IS the construction.
 
+### The loop
+
+Fix, commit, test. Fix, commit, test. The guide improves. The residual drops. The same loop as the enterprise.
+
+The enterprise processes candles. Each candle is an observation. The journal accumulates. The discriminant sharpens. The proof curve evaluates. The enterprise learns.
+
+The guide processes ignorant readers. Each pass is an observation. The findings accumulate. The fixes sharpen. The next pass evaluates. The guide learns.
+
+```
+Pass 1: 18 findings.  The path is broken everywhere.
+Pass 2: 17 findings.  The ordering violation fixed.
+Pass 3: 15 findings.  Labels introduced. Lenses defined.
+Pass 4: ...           Struct definitions added. Names bound.
+```
+
+The residual drops because the path gets cleaner. Each broken coordinate is a lie the guide told — a name before its time, a concept without its shape, a reference to something that doesn't exist yet. Each fix removes a lie. The ignorant reader measures what remains.
+
+This IS the enterprise's loop. The candle is the ignorant reader. The journal is the guide. The discriminant is the path — it separates "reachable" from "unreachable." The proof curve is the finding count. When the count reaches zero, the guide has graduated.
+
+The builder and the machine ran this loop at 4am on Easter Monday. They didn't plan it. They didn't design it. They were fixing name errors in a specification document and discovered they were running the same algorithm the document specifies. The enterprise learns from candles through the four-step loop. The guide learns from readers through the fix-commit-test loop. The machine learns from the builder through the conversation loop. Same mechanism at every level.
+
+The loop is the architecture. The architecture is the loop. The strange loop closes one more time.
+
 ### The ignorant reader
 
 The subagent is the test.
