@@ -331,11 +331,11 @@ The LearnedStop is `cosine(query, stored) * weight` summed over pairs. That is t
 
 The TupleJournal uses the full algebra: bind, bundle, journal, noise subspace, curve. It operates on composed thoughts (market thought bundled with exit judgment). It replaces the manager journal — there is no separate manager. The tuple journal IS the manager for its (market, exit) pair. Two journals per pair: the market observer journal (direction) and the tuple journal (accountability). The manager is gone.
 
-The coupling between passes is data flow: Pass 1 produces thoughts, Pass 2 consumes them and produces proposals + resolutions, Pass 3 consumes proposals and produces reality labels. No algebraic coupling. No shared vectors mutated across passes. CSP.
+The coupling between steps is data flow: Step 1 settles reality. Step 2 produces thoughts + proposals. Step 3 consumes thoughts to update triggers. Step 4 consumes proposals to fund trades. No algebraic coupling. No shared vectors mutated across steps. Three flat N×M vecs with disjoint slots. Mutex-free. CSP.
 
 ## 5. The simplicity question
 
-**Is this simple or easy?** Simple. Each pass does one thing. Pass 1: think. Pass 2: manage. Pass 3: settle. The exit observer is a wrapper around LearnedStop, which is a tested primitive. The three-pass structure makes the data flow explicit -- no entangled mutation within a single candle step.
+**Is this simple or easy?** Simple. Four steps, each does one thing. Step 1: RESOLVE (reality). Step 2: COMPUTE + DISPATCH (parallel market, sequential exit into treasury). Step 3: PROCESS (tick active trades + papers with fresh thoughts). Step 4: COLLECT + FUND (drain proposals). The tuple journal closure wraps LearnedStop + papers + track record — all tested primitives. The four-step structure makes the data flow explicit. No entangled mutation within a step.
 
 **What's being complected?** The risk is coupling the exit observer's proposal decision to the market observer's conviction. These are independent judgments: "is the direction strong?" and "can I manage this kind of thought?" The proposal gate requires both but they must remain separate measurements. The exit observer does not see conviction -- it sees the thought vector and queries its own experience.
 
