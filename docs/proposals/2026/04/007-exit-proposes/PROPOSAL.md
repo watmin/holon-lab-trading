@@ -258,17 +258,24 @@ k_trail, k_stop, and k_tp are all distances. Each gets its own LearnedStop:
 
 Each learns independently. Each returns the default until enough resolved entries have trained it. The defaults are the current ATR multipliers -- the crutch. As the LearnedStops accumulate experience, the crutch is replaced by learned values. No hard switch. The LearnedStop returns `default_distance` when empty and blends toward the learned value as pairs accumulate.
 
-### Paper trades are the training ground
+### Paper trades live inside the tuple journal
 
-Every market thought registers as a paper entry. Every paper entry gets a DualExcursion. Every candle, every paper entry ticks. When a paper entry resolves (both sides of the DualExcursion fire), the optimal distance is computed and the LearnedStop learns.
+The tuple journal — the closure over (market_observer, exit_observer) — holds the paper entries for its pair. Not a separate data structure. Not a global pending queue. Each closure manages its own papers. The papers are internal state of the closure.
 
-Paper entries produce learning without risking capital. The exit observer trains on thousands of entries before proposing a single live trade. The proof gate on the TupleJournal ensures the exit observer has demonstrated edge before the treasury funds it.
+When Step 2 dispatches a market thought to an exit observer, the exit observer looks up the tuple journal on the treasury: `registry[market_idx * M + exit_idx]`. That closure:
+1. Receives the composed thought (market + exit judgment)
+2. Creates a paper entry with a DualExcursion
+3. Ticks all its existing paper entries with the fresh price
+4. Resolves any that triggered → compute_optimal_distance → feed LearnedStop → learning
+5. If conditions met → propose trade via `treasury.proposals[i] = Some(proposal)`
+
+The papers never leave the closure. The closure IS the paper manager. When papers resolve, the learning happens inside the closure. When a paper is promoted to a live trade, it moves to `treasury.trades[i]` — but the closure still owns the accountability.
 
 Live entries are a subset of paper entries that were:
 1. Proposed by the exit observer (high market conviction + proven distance for this thought).
 2. Funded by the treasury (TupleJournal proven, capital available, risk allows).
 
-Both paper and live entries produce learning. Paper is the training ground. Live is the exam.
+Both paper and live entries produce learning. Paper is the training ground. Live is the exam. Both live in the same closure — the tuple journal for that (market, exit) pair.
 
 ### Three learning streams — all simultaneous
 
