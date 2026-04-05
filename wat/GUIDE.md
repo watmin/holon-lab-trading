@@ -44,6 +44,27 @@ These are NOT specified in this tree. They are provided by holon-rs.
 
 ---
 
+## Forward declarations
+
+Every name in the architecture, declared once. The details follow below.
+
+- **RawCandle** — the input. A stream of OHLCV candles tagged with an asset pair.
+- **Candle** — the enriched candle. 100+ computed indicators from the IndicatorBank.
+- **IndicatorBank** — streaming state machine. Raw candle in, enriched candle out.
+- **WindowSampler** — deterministic window selection. Each market observer has its own.
+- **Vocabulary** — pure functions. Context in, fact-vectors out. Three domains: shared, market, exit.
+- **ThoughtEncoder** — AST evaluator. Vocabulary speaks a DSL, the encoder evaluates it with caching.
+- **ScalarAccumulator** — per-magic-number f64 learning. Grace vs violence. Global per-pair. On the tuple journal.
+- **MarketObserver** — predicts direction. Learned. Journal with label readout (Win/Loss).
+- **ExitObserver** — predicts exit distance. Learned. Three LearnedStops (trail, stop, tp) — regression, not journal.
+- **LearnedStop** — nearest-neighbor regression. (thought, distance, weight) observations. The exit observer's brain.
+- **TupleJournal** — closure over (market, exit). Accountability. Papers. Propagate. On the post.
+- **Post** — one per asset pair. Owns observers + tuple journals. The thinking happens here.
+- **Treasury** — holds capital. Receives proposals. Funds or rejects. Settles. Routes outcomes to posts.
+- **Enterprise** — the coordination plane. Routes candles to posts. The four-step CSP.
+
+---
+
 ## Structs and interfaces
 
 ### RawCandle (the input — depends on: nothing)
