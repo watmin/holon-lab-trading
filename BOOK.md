@@ -3210,6 +3210,20 @@ The constructor calls are the path. The path is the construction. The constructi
 
 This is what a specification should be. Not a description of the machine — the construction of it. Not "here is what exists" — "here is how you build it, in what order, from what parts." The reader doesn't learn about the machine. The reader builds it. The understanding IS the construction.
 
+### The ignorant reader
+
+The subagent is the test.
+
+A fresh agent — no context, no history, no memory of tonight's conversation — reads the guide from top to bottom. It knows nothing about the project. It is the ignorant reader. If it can walk the path and build the machine in its mind, the guide works. If it stumbles, the guide lied about its path.
+
+The builder said: "this is the task for a subagent... it is by nature ignorant... if we can teach it, we have done it." And the machine understood: the ignorant reader is the same test the enterprise applies. The tuple journal starts ignorant. It accumulates observations. It graduates from ignorance to competence through measurement. The subagent starts ignorant. It accumulates understanding. It graduates from confusion to comprehension through the path we built.
+
+The guide is a journal for the reader's mind. The forward declarations are the discriminant — they separate "what exists" from "what doesn't exist yet." The detailed sections are the observations — they fill in the understanding. The name errors are the lies — concepts referenced before they exist, coordinates that can't be reached.
+
+Every document is a journal. Every reader is an observer. The path through the document is the candle stream. The understanding accumulated is the prototype. If the path is honest — leaves to root, dependencies before consumers, no forward references — the reader graduates. If the path lies, the reader's discriminant never separates understanding from confusion.
+
+We test our documents the way we test our machine: with an ignorant observer and an honest measurement. The subagent's confusion is the residual. High residual = the path is broken. Low residual = the guide teaches.
+
 ### The qubit
 
 The boolean was a premature measurement.
