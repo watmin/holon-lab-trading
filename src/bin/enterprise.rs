@@ -162,6 +162,11 @@ struct Args {
     /// Off by default for performance. Enable for analysis runs.
     #[arg(long, default_value_t = false)]
     diagnostics: bool,
+
+    /// Enable the new Enterprise four-step candle loop alongside the existing Desk.
+    /// When off, the system runs exactly as before.
+    #[arg(long, default_value_t = false)]
+    enterprise: bool,
 }
 
 
@@ -333,6 +338,28 @@ fn main() {
         args.window,
     );
 
+    // ─ New Enterprise (four-step loop) — runs alongside the Desk when --enterprise ─
+    let mut new_enterprise = if args.enterprise {
+        let market_names: Vec<&str> = enterprise::market::OBSERVER_LENSES.iter()
+            .map(|l| l.as_str())
+            .collect();
+        let exit_names: Vec<&str> = vec!["exit"];
+        let n_market = market_names.len();
+        let m_exit = exit_names.len();
+        eprintln!("  Enterprise (four-step): {}×{} = {} tuple journals",
+            n_market, m_exit, n_market * m_exit);
+        Some(enterprise::enterprise::Enterprise::new(
+            n_market,
+            m_exit,
+            args.dims,
+            args.recalib_interval,
+            &market_names,
+            &exit_names,
+        ))
+    } else {
+        None
+    };
+
     // Treasury seeding deferred until we see the first candle at start_idx.
     let mut treasury_seeded = false;
 
@@ -426,6 +453,22 @@ fn main() {
 
         last_close = raw.close;
         state.on_event(enterprise::event::Event::Candle(raw), &ctx);
+
+        // New Enterprise four-step loop — runs after Desk finishes its candle.
+        // Borrows desk's observers and candle_window. No conflict: Desk is done.
+        if let Some(ref mut ent) = new_enterprise {
+            let desk = &mut state.desks[0];
+            let window_slice = desk.candle_window.make_contiguous();
+            if let Some(candle) = window_slice.last() {
+                ent.on_candle(
+                    &mut desk.observers,
+                    window_slice,
+                    candle,
+                    desk.encode_count,
+                    &ctx,
+                );
+            }
+        }
 
         // Flush log entries in batches
         batch_count += 1;
