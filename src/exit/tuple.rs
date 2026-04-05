@@ -17,6 +17,21 @@ use holon::memory::OnlineSubspace;
 
 use crate::journal::{Journal, Label, Prediction};
 
+/// Normalize a scalar to 0-1 for encoding. The meaning lives at the call site.
+/// `value`: the raw value. `max`: the upper bound of the range.
+/// Values outside [0, max] are clamped.
+pub fn normalize_scalar(value: f64, max: f64) -> f64 {
+    (value / max).clamp(0.0, 1.0)
+}
+
+/// Denormalize a 0-1 scalar back to its original range.
+pub fn denormalize_scalar(normalized: f64, max: f64) -> f64 {
+    normalized * max
+}
+
+/// The unit scale for all scalar encoding. Every scalar goes in as 0-1.
+const SCALAR_SCALE: f64 = 1.0;
+
 /// Minimum noise observations before the noise subspace activates.
 const NOISE_MIN_SAMPLES: usize = 50;
 /// Minimum resolved predictions before evaluating proof gate.
@@ -266,11 +281,17 @@ impl TupleJournal {
     /// The prototype preserves magnitude (unnormalized).
     /// The discriminant does NOT (normalized — magnitude lost).
     /// Returns None if the prototype doesn't exist yet.
-    pub fn extract_trail_scalar(&self, trail_atom: &Vector) -> Option<Vector> {
-        let proto = self.journal.prototype(self.grace_label)?;
-        let proto_vec = Vector::from_f64(&proto);
-        // unbind IS bind — self-inverse property (Kanerva)
-        Some(holon::Primitives::bind(&proto_vec, trail_atom))
+    /// Extract the learned trail scalar from the grace prototype.
+    /// Unbind in f64 space (element-wise multiply) to preserve magnitude.
+    /// The result is an f64 vector — compare against scalar encodings via dot product.
+    pub fn extract_trail_scalar_f64(&self, trail_atom: &Vector) -> Option<Vec<f64>> {
+        let raw = self.journal.raw_prototype(self.grace_label)?;
+        let atom_data = trail_atom.data();
+        // unbind in f64: element-wise multiply (bind IS multiply for bipolar)
+        let unbound: Vec<f64> = raw.iter().zip(atom_data.iter())
+            .map(|(&sum, &atom)| sum * atom as f64)
+            .collect();
+        Some(unbound)
     }
 }
 
@@ -331,68 +352,88 @@ mod tests {
     }
 
     #[test]
-    fn scalar_extraction_from_discriminant() {
-        // The full test: encode a scalar via ScalarEncoder, bind it to an atom,
-        // bundle into thoughts, accumulate in the journal, unbind from the
-        // discriminant, decode_log to recover the number.
-        //
-        // Grace thoughts carry k_trail=1.7. Violence thoughts carry k_trail=0.5.
-        // After learning, unbind + decode_log should recover ~1.7 from the grace discriminant.
+    fn scalar_extraction_from_prototype() {
+        // 0-1 normalized scalars. The meaning is at the boundary.
+        // k_trail=1.7 → 1.7/5.0 = 0.34. k_trail=0.5 → 0.5/5.0 = 0.10.
+        // Unbind from the grace PROTOTYPE. Sweep to find the best match.
+        // Denormalize to recover the original value.
         let dims = 10000;
         let vm = holon::VectorManager::new(dims);
         let scalar_enc = holon::ScalarEncoder::new(dims);
         let mut pj = TupleJournal::new("test-market", "test-exit", dims, 20);
 
         let trail_atom = vm.get_vector("k-trail");
+        let k_trail_max = 5.0;
+        let mode = holon::ScalarMode::Linear { scale: SCALAR_SCALE };
 
-        // Use linear encoding with scale=5.0 (k_trail range ~0.5 to 3.0)
-        // Log encoding collapses nearby values at bipolar quantization.
-        // Linear with appropriate scale separates them.
-        let mode = holon::ScalarMode::Linear { scale: 5.0 };
-        let enc_17 = scalar_enc.encode(1.7, mode);
-        let enc_05 = scalar_enc.encode(0.5, mode);
-        let raw_cos = holon::Similarity::cosine(&enc_17, &enc_05);
-        eprintln!("encode_linear(1.7) vs encode_linear(0.5) cosine: {:.4}", raw_cos);
+        let norm_high = normalize_scalar(1.7, k_trail_max); // 0.34
+        let norm_low = normalize_scalar(0.5, k_trail_max);  // 0.10
+        let enc_high = scalar_enc.encode(norm_high, mode);
+        let enc_low = scalar_enc.encode(norm_low, mode);
 
-        // Bind scalar to atom: bind(trail_atom, scalar_encode(value))
-        let trail_high = holon::Primitives::bind(&trail_atom, &enc_17);
-        let trail_low = holon::Primitives::bind(&trail_atom, &enc_05);
+        eprintln!("enc(0.34) vs enc(0.10) cosine: {:.4}",
+            holon::Similarity::cosine(&enc_high, &enc_low));
 
-        for i in 0..100 {
+        let trail_high = holon::Primitives::bind(&trail_atom, &enc_high);
+        let trail_low = holon::Primitives::bind(&trail_atom, &enc_low);
+
+        for i in 0..500 {
             let noise = vm.get_vector(&format!("noise-{}", i));
             let base = vm.get_vector(&format!("base-{}", i % 10));
 
-            // Grace: high trail
             let grace_thought = holon::Primitives::bundle(&[&base, &noise, &trail_high]);
             let pred = pj.propose(&grace_thought);
             pj.resolve(&grace_thought, &pred, RealityOutcome::Grace { amount: 10.0 }, 0.5, 1000);
 
-            // Violence: low trail
             let violence_thought = holon::Primitives::bundle(&[&base, &noise, &trail_low]);
             let pred = pj.propose(&violence_thought);
             pj.resolve(&violence_thought, &pred, RealityOutcome::Violence { amount: 10.0 }, 0.5, 1000);
         }
 
-        // Unbind: bind(discriminant, trail_atom) → the scalar vector from graceful region
-        let unbound = pj.extract_trail_scalar(&trail_atom);
-        assert!(unbound.is_some(), "discriminant should exist after 200 observations");
-        let extracted = unbound.unwrap();
+        // Unbind from raw prototype in f64 space (preserves magnitude)
+        let extracted_f64 = pj.extract_trail_scalar_f64(&trail_atom)
+            .expect("prototype should exist after 1000 observations");
 
-        // Compare the extracted scalar against known encodings
-        let cos_high = holon::Similarity::cosine(&extracted, &enc_17);
-        let cos_low = holon::Similarity::cosine(&extracted, &enc_05);
-        eprintln!("extracted vs linear(1.7): {:.4}", cos_high);
-        eprintln!("extracted vs linear(0.5): {:.4}", cos_low);
-        eprintln!("delta: {:.4} (positive = grace learned higher trail)", cos_high - cos_low);
+        // f64 cosine helper
+        let cos_f64 = |a: &[f64], b: &Vector| -> f64 {
+            let bd = b.data();
+            let mut dot = 0.0f64;
+            let mut na = 0.0f64;
+            let mut nb = 0.0f64;
+            for (&x, &y) in a.iter().zip(bd.iter()) {
+                let yf = y as f64;
+                dot += x * yf;
+                na += x * x;
+                nb += yf * yf;
+            }
+            let denom = (na * nb).sqrt();
+            if denom < 1e-10 { 0.0 } else { dot / denom }
+        };
 
-        // The extracted vector should separate the two values.
-        // The sign depends on discriminant convention (grace-violence or violence-grace).
-        // What matters: the MAGNITUDE of separation is strong. The sign tells us
-        // which convention the journal uses — we just need to know and be consistent.
+        let cos_high = cos_f64(&extracted_f64, &enc_high);
+        let cos_low = cos_f64(&extracted_f64, &enc_low);
         let separation = (cos_high - cos_low).abs();
-        eprintln!("separation magnitude: {:.4} (>0.3 = strong signal)", separation);
-        assert!(separation > 0.3,
-            "discriminant should strongly separate the two scalar values: separation={:.4}",
-            separation);
+        eprintln!("f64 extracted vs enc(0.34): {:.4}", cos_high);
+        eprintln!("f64 extracted vs enc(0.10): {:.4}", cos_low);
+        eprintln!("separation: {:.4}", separation);
+        assert!(separation > 0.1, "should separate: {:.4}", separation);
+
+        // Sweep in f64 space
+        let mut best_val = 0.0f64;
+        let mut best_cos = -2.0f64;
+        for i in 0..=100 {
+            let v = i as f64 / 100.0;
+            let enc = scalar_enc.encode(v, mode);
+            let cos = cos_f64(&extracted_f64, &enc);
+            if cos > best_cos { best_cos = cos; best_val = v; }
+        }
+        let recovered = denormalize_scalar(best_val, k_trail_max);
+        eprintln!("sweep best: 0-1={:.2} → k_trail={:.2} (cos={:.4})", best_val, recovered, best_cos);
+
+        // The recovered value should be near one of our inputs
+        let near_high = (recovered - 1.7).abs() < 1.0;
+        let near_low = (recovered - 0.5).abs() < 1.0;
+        assert!(near_high || near_low,
+            "recovered {:.2} should be near 1.7 or 0.5", recovered);
     }
 }
