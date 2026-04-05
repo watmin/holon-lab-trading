@@ -129,12 +129,12 @@ The closure captures the pair. The closure routes the signal. The closure accumu
 The treasury holds three maps:
 
 ```rust
-registry:        Vec<TupleJournal>                          // closures, permanent, never shrinks
+registry:        HashMap<(MarketId, ExitId), TupleJournal>  // O(1) lookup, closures, never shrinks
 proposed_trades: HashMap<TupleJournalId, Proposal>          // waiting for funding
 active_trades:   HashMap<TupleJournalId, Trade>             // live, being managed
 ```
 
-The **registry** is a collection of closures. Each closure knows its (market, exit) pair. Each accumulates Grace/Violence across ALL trades this pair has done. The closures persist across trades — when a trade closes, the closure stays with its track record. The registry grows as new pairs are discovered. It never shrinks. The track record is permanent.
+The **registry** is a hashmap of closures. O(1) lookup by (market, exit) pair — the exit observer needs to find its journal fast. Each closure knows its pair, routes signals, accumulates track record. The closures persist across trades — when a trade closes, the closure stays. The registry grows as new pairs are discovered. It never shrinks. The track record is permanent.
 
 The **proposed_trades** map is the queue. Step 2 (COMPUTE + DISPATCH) inserts proposals via `treasury.propose_trade()`. Step 4 (COLLECT + FUND) iterates them — sorted by pair track record, conviction, or whatever metric the treasury uses to prioritize — funds the best, rejects the rest. Funded proposals move to `active_trades`. Rejected proposals are removed. The queue is empty after Step 4.
 
