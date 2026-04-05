@@ -187,11 +187,17 @@ A **fact** is a composition of atoms. The composition IS a vector.
 The vector IS the fact. It doesn't need a separate name. It simply is.
 
 ```
-"RSI is overbought"    → (bind (atom "rsi") (atom "overbought"))         → Vector
-"close is above SMA20" → (bind (atom "above") (bind (atom "close") (atom "sma20"))) → Vector
-"RSI is at 73.2"       → (bind (atom "rsi") (encode-linear 73.2 100.0)) → Vector
-"divergence detected"  → (atom "divergence")                             → Vector
+"RSI is overbought"        → (bind (atom "rsi") (atom "overbought"))            → Vector
+"RSI is at 73.2"           → (bind (atom "rsi") (encode-linear 73.2 100.0))     → Vector
+"close is 2.3% above SMA20"→ (bind (atom "close-sma20") (encode-linear 0.023 0.1)) → Vector
+"divergence detected"      → (atom "divergence")                                → Vector
 ```
+
+Every relationship carries its magnitude. Not "close is above SMA20" —
+"close is 2.3% above SMA20." The boolean throws away the signal. The
+scalar preserves it. The discriminant learns that 0.1% above is noise
+and 5% above is signal. The sign carries direction. The magnitude
+carries conviction. The vector holds both.
 
 The vocabulary observes. It composes atoms. The result is a vector.
 Many fact-vectors get bundled into one thought-vector. That's the
