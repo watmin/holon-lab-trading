@@ -27,6 +27,7 @@ use crate::ledger::LogEntry;
 use crate::market::manager::{ManagerContext, encode_manager_thought, find_proven_band};
 use crate::market::observer::Observer;
 use crate::portfolio::{Phase, Portfolio};
+use crate::exit::tuple::{TupleJournal, RealityOutcome};
 use crate::position::{CrossingSnapshot, DualExcursion, ExitObservation, ExitReason, ManagedPosition, Pending, PositionEntry, PositionExit, PositionPhase, TrailFactor};
 use crate::sizing::{curve_win_rate, half_kelly_position, kelly_frac};
 use crate::treasury::{AccumulationLedger, Asset, Treasury};
@@ -140,6 +141,14 @@ pub struct Desk {
     pub labeled_count: usize,
     pub noise_count: usize,
 
+    // ── Tuple journals (accountability) ──────────────────────────────────
+    /// One per market observer. The tuple owns the trade and propagates
+    /// Grace/Violence from reality back to the contributor.
+    pub tuple_journals: Vec<TupleJournal>,
+    /// Observer thought vectors at position entry, keyed by position ID.
+    /// Bridges Pending (learning) and ManagedPosition (trading) lifecycles.
+    pub position_thoughts: std::collections::HashMap<usize, Vec<Vector>>,
+
     // ── Accounting ──────────────────────────────────────────────────────
     pub encode_count: usize,
     pub position_swaps: usize,
@@ -227,6 +236,10 @@ impl Desk {
             move_count: 0,
             labeled_count: 0,
             noise_count: 0,
+            tuple_journals: OBSERVER_LENSES.iter()
+                .map(|lens| TupleJournal::new(lens.as_str(), "mfe-mae", dims, recalib))
+                .collect(),
+            position_thoughts: std::collections::HashMap::new(),
             encode_count: 0,
             position_swaps: 0,
             position_wins: 0,
@@ -541,6 +554,25 @@ impl Desk {
             self.position_swaps += 1;
 
             let ret = pos.return_pct(current_rate);
+
+            // ── Tuple journals: reality feedback ─────────────────���────
+            // The treasury knows the actual outcome. Propagate to each
+            // observer's tuple journal. The most honest signal.
+            if let Some(thoughts) = self.position_thoughts.remove(&pos.id) {
+                let reality = if ret > 0.0 {
+                    RealityOutcome::Grace { amount: (ret * pos.source_amount).abs() }
+                } else {
+                    RealityOutcome::Violence { amount: (ret * pos.source_amount).abs() }
+                };
+                for (ei, tj) in self.tuple_journals.iter_mut().enumerate() {
+                    if ei < thoughts.len() {
+                        let pred = tj.propose(&thoughts[ei]);
+                        tj.resolve(&thoughts[ei], &pred, reality,
+                            ctx.conviction_quantile, ctx.conviction_window);
+                    }
+                }
+            }
+
             // Win = principal recovered (transition to Runner)
             if next_phase == PositionPhase::Runner {
                 self.position_wins += 1;
@@ -656,6 +688,8 @@ impl Desk {
                         position_usd: usd_value,
                         swap_fee_pct: fee_rate * 100.0,
                     });
+                    // Stash observer thoughts for tuple journal resolution at exit
+                    self.position_thoughts.insert(pos.id, observer_vecs.clone());
                     self.positions.push(pos);
                 }
             }
