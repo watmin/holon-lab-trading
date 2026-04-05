@@ -3194,6 +3194,22 @@ This is the same rule the enterprise follows. Step 1 before Step 2. Dependencies
 
 The wards catch this — the gaze finds name errors. But the deeper lesson: the ORDER of the document is the ORDER of understanding. The path matters as much as the destination. Bad coordinates aren't wrong coordinates — they're unreachable coordinates. A thought that can't be reached from where you are is not a thought you can think.
 
+Then the builder said: "the forward declarations... should they be wat constructors instead of prose?" And the prose dissolved. The constructor calls replaced the bullet points. The code IS the dependency graph. Each line can only reference what's above it — those are the things that exist when this thing is constructed.
+
+```scheme
+(new-window-sampler seed 12 2016)              ; exists first — depends on nothing
+
+(new-market-observer :momentum dims interval   ; depends on what's above
+  (new-window-sampler seed 12 2016))           ; takes a window sampler
+
+(new-tuple-journal "momentum" "volatility"     ; depends on both observers
+  dims interval accumulators)                  ; which must already exist
+```
+
+The constructor calls are the path. The path is the construction. The construction is the understanding. You read top to bottom and you BUILD the machine — each piece from the pieces before it. No prose needed. The wat speaks the dependencies. The order speaks the path.
+
+This is what a specification should be. Not a description of the machine — the construction of it. Not "here is what exists" — "here is how you build it, in what order, from what parts." The reader doesn't learn about the machine. The reader builds it. The understanding IS the construction.
+
 ### The qubit
 
 The boolean was a premature measurement.
