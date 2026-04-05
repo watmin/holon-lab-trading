@@ -253,35 +253,35 @@ has no intermediate form. Atoms compose. Vectors result. Thoughts bundle.
 
 ---
 
-### ThoughtCache (depends on: VectorManager)
+### ThoughtEncoder (depends on: VectorManager)
 
-The enterprise's memory. Two kinds of knowledge.
+The vocabulary produces ASTs — the specification of WHAT to think. The
+ThoughtEncoder evaluates them — HOW to think efficiently. It walks the
+AST bottom-up, checking its memory at every node. The minimum computation
+happens. Parts of the thought are already ready for reuse.
+
+Two kinds of memory:
 
 **Atoms: a dictionary.** Finite. Known at startup. Pre-computed. Never
-evicted because never growing. "rsi", "close-sma20", "atr-ratio", "hour" —
-the set is closed. The thought IS its own identity function. Always there.
+evicted because never growing. The set is closed. Always there.
 
-**Scalar compositions: a cache.** Infinite. Optimistic. Use it if we have it.
-Compute if we don't. Evict when memory says so. `bind(atom("rsi"),
-encode-linear(0.73, 1.0))` — might be there, might not. The set is open.
+**Compositions: a cache.** Infinite. Optimistic. Use it if we have it.
+Compute if we don't. Evict when memory says so. The set is open.
 
-One is a dictionary. The other is a cache. Different things.
+The ThoughtEncoder reclaims its name. It IS an encoder — it takes a
+thought AST and produces a vector, doing the minimum work.
 
 Owned by the enterprise. Passed to posts.
 
 ```
-(struct thought-cache
+(struct thought-encoder
   atoms                 ; map of name → Vector (finite, pre-computed, permanent)
   compositions)         ; LRU cache: key → Vector (optimistic, self-evicting)
 ```
 
 **Interface:**
-- `(lookup-atom cache name) → Vector`
-  always succeeds — atoms are pre-computed
-- `(lookup cache key) → Option<Vector>`
-  optimistic — returns the composition if we have it
-- `(store cache key vector)`
-  memoize for reuse — evicts oldest when full
+- `(encode thought-encoder ast) → Vector`
+  walk the AST bottom-up, hit cache where possible, compute where necessary
 
 The observer composes the thought:
 ```
@@ -292,17 +292,21 @@ observer calls bundle(facts)         → Vector        ; the thought
 The lens is not a parameter. The lens is on the observer. The observer
 knows which vocab modules are its domain.
 
-**Thought composition is recursive lookup.** Atoms always hit (dictionary).
-Scalar compositions are optimistic (cache). The recursion:
+**Thought composition is AST evaluation with caching.** The vocabulary
+produces the AST — the structure of the thought. The ThoughtEncoder
+walks it:
 
 ```
-compose(thing)
-  → atom? → dictionary lookup (always succeeds)
-  → scalar composition? → cache lookup
-    → hit: use it
-    → miss: compute from sub-components (recurse), store, done
-  → bundle? → always fresh (per-observer, per-candle)
+evaluate(node)
+  → atom?        → dictionary (always succeeds)
+  → scalar?      → compute fresh (the value changed)
+  → bind/encode? → cache check → hit: reuse / miss: compute, store
+  → bundle?      → always fresh (per-observer, per-candle)
 ```
+
+The AST IS a function. `bind(atom("rsi"), encode-linear(x, 1.0))` — the
+structure is fixed. Only x varies. The encoder recognizes the structure
+and reuses everything except the fresh scalar.
 
 ---
 
