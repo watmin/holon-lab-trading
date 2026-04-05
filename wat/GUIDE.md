@@ -255,23 +255,33 @@ has no intermediate form. Atoms compose. Vectors result. Thoughts bundle.
 
 ### ThoughtEncoder (depends on: Vocabulary, VectorManager)
 
-Calls the vocabulary for a given lens, bundles the resulting fact-vectors
-into one thought vector. Owned by the enterprise. Immutable after
-construction. The enterprise passes it down to posts — the posts
-borrow it, they don't own it. Not a singleton. Owned.
+A cache. Not the API surface — the observer is. The observer knows what
+it thinks about (its lens). The observer calls its vocab modules. The
+observer gets fact-vectors. The observer bundles them into a thought.
 
-Pre-computes common atom vectors for performance. A cache, not a concept.
+The ThoughtEncoder pre-computes common atom vectors so the observers
+don't re-derive them every candle. Owned by the enterprise. Immutable
+after construction. Passed to posts. Not a singleton — owned.
 
 ```
 (struct thought-encoder
-  vocab atom-cache)
+  atom-cache)           ; pre-computed atom → vector mappings
 ```
 
 **Interface:**
-- `(encode-thought encoder context lens) → Vector`
-  calls vocab modules for this lens with context, bundles fact-vectors into one thought
-- `(encode-facts encoder context lens) → Vec<Vector>`
-  returns the individual fact-vectors before bundling (for composition)
+- `(cached-atom encoder name) → Vector`
+  fast lookup of a named atom vector
+- `(cached-scalar encoder name value scale) → Vector`
+  fast bind(atom, encode(value)) with cached atom
+
+The observer composes the thought:
+```
+observer calls vocab(context) → Vec<Vector>    ; fact-vectors
+observer calls bundle(facts)  → Vector         ; the thought
+```
+
+The lens is not a parameter. The lens is on the observer. The observer
+knows which vocab modules are its domain.
 
 ---
 
