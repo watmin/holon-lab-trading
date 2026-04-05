@@ -255,27 +255,33 @@ has no intermediate form. Atoms compose. Vectors result. Thoughts bundle.
 
 ### ThoughtCache (depends on: VectorManager)
 
-The enterprise's memory. One cache. One mechanism.
+The enterprise's memory. Two kinds of knowledge.
 
-The thought IS its own identity function — same composition, same vector.
-Try the cache. Hit → use it. Miss → compute from sub-components (recurse),
-store, done. If memory pressure → evict least recently used.
+**Atoms: a dictionary.** Finite. Known at startup. Pre-computed. Never
+evicted because never growing. "rsi", "close-sma20", "atr-ratio", "hour" —
+the set is closed. The thought IS its own identity function. Always there.
 
-Atoms never evict because they're used every candle — always recent.
-Scalars stick if the same values recur. Compositions stick if multiple
-observers need them this candle. The cache manages itself. No tiers.
-No policies. Just an LRU.
+**Scalar compositions: a cache.** Infinite. Optimistic. Use it if we have it.
+Compute if we don't. Evict when memory says so. `bind(atom("rsi"),
+encode-linear(0.73, 1.0))` — might be there, might not. The set is open.
+
+One is a dictionary. The other is a cache. Different things.
 
 Owned by the enterprise. Passed to posts.
 
 ```
 (struct thought-cache
-  lru)                  ; LRU cache: composition-key → Vector
+  atoms                 ; map of name → Vector (finite, pre-computed, permanent)
+  compositions)         ; LRU cache: key → Vector (optimistic, self-evicting)
 ```
 
 **Interface:**
+- `(lookup-atom cache name) → Vector`
+  always succeeds — atoms are pre-computed
 - `(lookup cache key) → Option<Vector>`
+  optimistic — returns the composition if we have it
 - `(store cache key vector)`
+  memoize for reuse — evicts oldest when full
 
 The observer composes the thought:
 ```
@@ -286,21 +292,17 @@ observer calls bundle(facts)         → Vector        ; the thought
 The lens is not a parameter. The lens is on the observer. The observer
 knows which vocab modules are its domain.
 
-**Thought composition is recursive cache lookup.** One mechanism at
-every level of the recursion:
+**Thought composition is recursive lookup.** Atoms always hit (dictionary).
+Scalar compositions are optimistic (cache). The recursion:
 
 ```
 compose(thing)
-  → cache lookup
-    → hit: done
+  → atom? → dictionary lookup (always succeeds)
+  → scalar composition? → cache lookup
+    → hit: use it
     → miss: compute from sub-components (recurse), store, done
+  → bundle? → always fresh (per-observer, per-candle)
 ```
-
-Atoms always hit — they're used every candle, never evicted.
-Scalars hit if the same value recurs. Compositions hit if another
-observer needs the same fact this candle. The cache is the optimization
-AND the guard — prevents infinite growth (LRU cap) and wasted work
-(reuse) with the same structure.
 
 ---
 
