@@ -27,6 +27,7 @@ use crate::ledger::LogEntry;
 use crate::market::manager::{ManagerContext, encode_manager_thought, find_proven_band};
 use crate::market::observer::Observer;
 use crate::portfolio::{Phase, Portfolio};
+use crate::exit::learned_stop::LearnedStop;
 use crate::exit::optimal::compute_optimal_distance;
 use crate::exit::tuple::{TupleJournal, RealityOutcome};
 use crate::position::{CrossingSnapshot, DualExcursion, ExitObservation, ExitReason, ManagedPosition, Pending, PositionEntry, PositionExit, PositionPhase, TrailFactor};
@@ -146,6 +147,9 @@ pub struct Desk {
     /// One per market observer. The tuple owns the trade and propagates
     /// Grace/Violence from reality back to the contributor.
     pub tuple_journals: Vec<TupleJournal>,
+    /// Learned trailing stop — nearest neighbor regression on (thought, distance) pairs.
+    /// Replaces k_trail. "Given this thought, what distance?"
+    pub learned_stop: LearnedStop,
     /// Observer thought vectors at position entry, keyed by position ID.
     /// Bridges Pending (learning) and ManagedPosition (trading) lifecycles.
     pub position_thoughts: std::collections::HashMap<usize, Vec<Vector>>,
@@ -249,6 +253,7 @@ impl Desk {
                 }
                 tjs
             },
+            learned_stop: LearnedStop::new(5000, 0.015), // default 1.5% — ignorance state
             position_thoughts: std::collections::HashMap::new(),
             encode_count: 0,
             position_swaps: 0,
@@ -447,6 +452,17 @@ impl Desk {
             }
         }
 
+        // Query the learned stop distance for this candle's thought.
+        // One query per candle, used for all positions. The thought is the generalist's.
+        let learned_trail_distance = self.learned_stop.recommended_distance(&tht_vec);
+        // Convert distance (fraction of price) to TrailFactor (ATR multiplier)
+        // for compatibility with position.tick(). distance = k_trail * ATR → k_trail = distance / ATR.
+        let learned_k_trail = if candle.atr_r > 1e-10 {
+            learned_trail_distance / candle.atr_r
+        } else {
+            ctx.k_trail // fallback if ATR is zero
+        };
+
         // Pass 1: parallel tick — each position is independent.
         // Produces exit signals + exit observations as messages.
         struct TickResult {
@@ -477,7 +493,7 @@ impl Desk {
 
                 let trail = match pos.phase {
                     PositionPhase::Runner => TrailFactor(ctx.k_trail_runner),
-                    _ => TrailFactor(ctx.k_trail),
+                    _ => TrailFactor(learned_k_trail),
                 };
                 let exit = pos.tick(current_rate, trail);
                 Some(TickResult { pos_idx: pi, exit, current_rate, is_buy, exit_obs })
@@ -569,6 +585,30 @@ impl Desk {
             // The treasury knows the actual outcome. Propagate to each
             // observer's tuple journal. The most honest signal.
             if let Some(thoughts) = self.position_thoughts.remove(&pos.id) {
+                // Compute optimal distance from price history — for learning
+                let optimal_dist = {
+                    let window_slice = self.candle_window.make_contiguous();
+                    let entry_offset = if pos.entry_candle < i {
+                        let ws = if i + 1 >= window_slice.len() { i + 1 - window_slice.len() } else { 0 };
+                        if pos.entry_candle >= ws { Some(pos.entry_candle - ws) } else { None }
+                    } else { None };
+                    entry_offset.and_then(|offset| {
+                        let closes: Vec<f64> = window_slice[offset..].iter().map(|c| c.close).collect();
+                        compute_optimal_distance(&closes, pos.entry_rate, 100, 0.05)
+                    })
+                };
+
+                // Feed the LearnedStop: thought + optimal distance from hindsight
+                if let Some(opt) = &optimal_dist {
+                    // Use the generalist thought as the identity
+                    if let Some(gen_thought) = thoughts.get(crate::state::GENERALIST_IDX) {
+                        self.learned_stop.observe(
+                            gen_thought.clone(),
+                            opt.distance_pct,
+                            opt.residue.abs().max(0.01),
+                        );
+                    }
+                }
                 let reality = if ret > 0.0 {
                     RealityOutcome::Grace { amount: (ret * pos.source_amount).abs() }
                 } else {
@@ -581,19 +621,9 @@ impl Desk {
                         let pred = tj.propose(&thoughts[ei]);
                         tj.resolve(&thoughts[ei], &pred, reality,
                             ctx.conviction_quantile, ctx.conviction_window);
-                        // Compute optimal distance from the position's price history.
-                        // The market's answer — not a magic number.
-                        let window_slice = self.candle_window.make_contiguous();
-                        let entry_offset = if pos.entry_candle < i {
-                            let ws = if i + 1 >= window_slice.len() { i + 1 - window_slice.len() } else { 0 };
-                            if pos.entry_candle >= ws { Some(pos.entry_candle - ws) } else { None }
-                        } else { None };
-                        if let Some(offset) = entry_offset {
-                            let closes: Vec<f64> = window_slice[offset..].iter().map(|c| c.close).collect();
-                            if let Some(opt) = compute_optimal_distance(&closes, pos.entry_rate, 100, 0.05) {
-                                // Feed the OPTIMAL distance, not the magic number
-                                tj.observe_scalar("trail-distance", opt.distance_pct, grace, opt.residue.abs().max(0.01));
-                            }
+                        // Feed the optimal distance to the scalar accumulator too
+                        if let Some(opt) = &optimal_dist {
+                            tj.observe_scalar("trail-distance", opt.distance_pct, grace, opt.residue.abs().max(0.01));
                         }
                     }
                 }
