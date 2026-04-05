@@ -13,43 +13,52 @@ pub struct OptimalDistance {
     pub residue: f64,
 }
 
-/// Compute the optimal trailing stop distance for a trade's price history.
+/// Both sides' optimal distances from one price history.
+#[derive(Clone, Copy, Debug)]
+pub struct DualOptimalDistance {
+    pub buy: OptimalDistance,
+    pub sell: OptimalDistance,
+}
+
+/// Compute the optimal trailing stop distance for BOTH sides.
+/// The market answers both questions from the same price history.
 ///
-/// `closes`: slice of close prices. Index 0 = entry. Index 1..N = subsequent.
-/// `entry_price`: the price at entry (closes[0]).
-/// `steps`: number of candidate distances to sweep (resolution).
-/// `max_distance_pct`: maximum distance to consider (e.g., 0.05 = 5%).
-///
-/// Returns the distance that produced the most residue, or None if < 2 candles.
+/// Returns the buy-side and sell-side optimal distances, or None if < 2 candles.
 pub fn compute_optimal_distance(
     closes: &[f64],
     entry_price: f64,
     steps: usize,
     max_distance_pct: f64,
-) -> Option<OptimalDistance> {
+) -> Option<DualOptimalDistance> {
     if closes.len() < 2 || entry_price <= 0.0 { return None; }
 
-    let mut best = OptimalDistance { distance_pct: 0.0, residue: f64::NEG_INFINITY };
+    let mut best_buy = OptimalDistance { distance_pct: 0.0, residue: f64::NEG_INFINITY };
+    let mut best_sell = OptimalDistance { distance_pct: 0.0, residue: f64::NEG_INFINITY };
 
     for i in 1..=steps {
         let distance_pct = max_distance_pct * i as f64 / steps as f64;
-        let residue = simulate_trail(closes, entry_price, distance_pct);
-        if residue > best.residue {
-            best = OptimalDistance { distance_pct, residue };
+
+        let buy_residue = simulate_trail_buy(closes, entry_price, distance_pct);
+        if buy_residue > best_buy.residue {
+            best_buy = OptimalDistance { distance_pct, residue: buy_residue };
+        }
+
+        let sell_residue = simulate_trail_sell(closes, entry_price, distance_pct);
+        if sell_residue > best_sell.residue {
+            best_sell = OptimalDistance { distance_pct, residue: sell_residue };
         }
     }
 
-    if best.residue > f64::NEG_INFINITY { Some(best) } else { None }
+    if best_buy.residue > f64::NEG_INFINITY || best_sell.residue > f64::NEG_INFINITY {
+        Some(DualOptimalDistance { buy: best_buy, sell: best_sell })
+    } else {
+        None
+    }
 }
 
-/// Simulate a trailing stop at a given distance and return the residue.
-///
-/// The trailing stop ratchets upward from entry. When price drops below
-/// `extreme * (1 - distance_pct)`, the position closes. The residue is
-/// the return at close: `(close_price - entry_price) / entry_price`.
-///
-/// If the stop never fires, the residue is the final price's return.
-fn simulate_trail(closes: &[f64], entry_price: f64, distance_pct: f64) -> f64 {
+/// Simulate a BUY-side trailing stop. Ratchets upward. Fires when price drops.
+/// Residue = (close_price - entry_price) / entry_price.
+fn simulate_trail_buy(closes: &[f64], entry_price: f64, distance_pct: f64) -> f64 {
     let mut extreme = entry_price;
     let mut trail = entry_price * (1.0 - distance_pct);
 
@@ -60,14 +69,33 @@ fn simulate_trail(closes: &[f64], entry_price: f64, distance_pct: f64) -> f64 {
             if new_trail > trail { trail = new_trail; }
         }
         if price <= trail {
-            // Stop fired. Residue = return at this price.
             return (price - entry_price) / entry_price;
         }
     }
 
-    // Never fired. Residue = return at final price.
     let last = closes[closes.len() - 1];
     (last - entry_price) / entry_price
+}
+
+/// Simulate a SELL-side trailing stop. Ratchets downward. Fires when price rises.
+/// Residue = (entry_price - close_price) / entry_price.
+fn simulate_trail_sell(closes: &[f64], entry_price: f64, distance_pct: f64) -> f64 {
+    let mut extreme = entry_price;
+    let mut trail = entry_price * (1.0 + distance_pct);
+
+    for &price in &closes[1..] {
+        if price < extreme {
+            extreme = price;
+            let new_trail = extreme * (1.0 + distance_pct);
+            if new_trail < trail { trail = new_trail; }
+        }
+        if price >= trail {
+            return (entry_price - price) / entry_price;
+        }
+    }
+
+    let last = closes[closes.len() - 1];
+    (entry_price - last) / entry_price
 }
 
 #[cfg(test)]
@@ -80,8 +108,8 @@ mod tests {
         let closes: Vec<f64> = (0..100).map(|i| 50000.0 + i as f64 * 100.0).collect();
         let opt = compute_optimal_distance(&closes, 50000.0, 100, 0.05).unwrap();
         eprintln!("ascending: optimal distance={:.4}% residue={:.4}%",
-            opt.distance_pct * 100.0, opt.residue * 100.0);
-        assert!(opt.residue > 0.0, "ascending should produce positive residue");
+            opt.buy.distance_pct * 100.0, opt.buy.residue * 100.0);
+        assert!(opt.buy.residue > 0.0, "ascending should produce positive residue");
     }
 
     #[test]
@@ -92,9 +120,9 @@ mod tests {
         for i in 0..50 { closes.push(60000.0 - i as f64 * 300.0); } // down hard
         let opt = compute_optimal_distance(&closes, 50000.0, 100, 0.05).unwrap();
         eprintln!("reversal: optimal distance={:.4}% residue={:.4}%",
-            opt.distance_pct * 100.0, opt.residue * 100.0);
+            opt.buy.distance_pct * 100.0, opt.buy.residue * 100.0);
         // The optimal should be tight enough to capture the peak
-        assert!(opt.distance_pct < 0.03, "reversal should want a tight stop");
+        assert!(opt.buy.distance_pct < 0.03, "reversal should want a tight stop");
     }
 
     #[test]
@@ -108,9 +136,9 @@ mod tests {
         }
         let opt = compute_optimal_distance(&closes, 50000.0, 200, 0.05).unwrap();
         eprintln!("choppy: optimal distance={:.4}% residue={:.4}%",
-            opt.distance_pct * 100.0, opt.residue * 100.0);
+            opt.buy.distance_pct * 100.0, opt.buy.residue * 100.0);
         // Should find a middle ground
-        assert!(opt.distance_pct > 0.005, "choppy needs some breathing room");
+        assert!(opt.buy.distance_pct > 0.005, "choppy needs some breathing room");
     }
 
     #[test]
@@ -149,9 +177,9 @@ mod tests {
             // Compute the optimal distance for this trade
             let opt = compute_optimal_distance(&closes, entry, 100, 0.05);
             if let Some(opt) = opt {
-                let grace = opt.residue > 0.0;
-                let amount = opt.residue.abs() * entry;
-                acc.observe(opt.distance_pct, grace, amount.max(1.0));
+                let grace = opt.buy.residue > 0.0;
+                let amount = opt.buy.residue.abs() * entry;
+                acc.observe(opt.buy.distance_pct, grace, amount.max(1.0));
             }
         }
 
@@ -177,8 +205,8 @@ mod tests {
         ];
         let opt = compute_optimal_distance(&closes, entry, 200, 0.05).unwrap();
         eprintln!("realistic: optimal distance={:.4}% residue={:.4}%",
-            opt.distance_pct * 100.0, opt.residue * 100.0);
+            opt.buy.distance_pct * 100.0, opt.buy.residue * 100.0);
         eprintln!("  (a {:.2}% stop would have captured the best exit)",
-            opt.distance_pct * 100.0);
+            opt.buy.distance_pct * 100.0);
     }
 }

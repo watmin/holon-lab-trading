@@ -609,13 +609,14 @@ impl Desk {
                 };
 
                 // Feed the LearnedStop: thought + optimal distance from hindsight
+                // Use the side matching the trade's direction
                 if let Some(opt) = &optimal_dist {
-                    // Use the generalist thought as the identity
+                    let side = if is_buy { &opt.buy } else { &opt.sell };
                     if let Some(gen_thought) = thoughts.get(crate::state::GENERALIST_IDX) {
                         self.learned_stop.observe(
                             gen_thought.clone(),
-                            opt.distance_pct,
-                            opt.residue.abs().max(0.01),
+                            side.distance_pct,
+                            side.residue.abs().max(0.01),
                         );
                     }
                 }
@@ -633,7 +634,8 @@ impl Desk {
                             ctx.conviction_quantile, ctx.conviction_window);
                         // Feed the optimal distance to the scalar accumulator too
                         if let Some(opt) = &optimal_dist {
-                            tj.observe_scalar("trail-distance", opt.distance_pct, grace, opt.residue.abs().max(0.01));
+                            let side = if is_buy { &opt.buy } else { &opt.sell };
+                            tj.observe_scalar("trail-distance", side.distance_pct, grace, side.residue.abs().max(0.01));
                         }
                     }
                 }

@@ -179,7 +179,7 @@ mod tests {
             let entry = 50000.0;
             let closes: Vec<f64> = (0..50).map(|j| entry + j as f64 * 100.0).collect();
             if let Some(opt) = compute_optimal_distance(&closes, entry, 100, 0.05) {
-                ls.observe(trending_thought.clone(), opt.distance_pct, opt.residue.abs().max(0.01));
+                ls.observe(trending_thought.clone(), opt.buy.distance_pct, opt.buy.residue.abs().max(0.01));
             }
         }
 
@@ -192,7 +192,7 @@ mod tests {
                 entry + j as f64 * 20.0 + noise
             }).collect();
             if let Some(opt) = compute_optimal_distance(&closes, entry, 100, 0.05) {
-                ls.observe(choppy_thought.clone(), opt.distance_pct, opt.residue.abs().max(0.01));
+                ls.observe(choppy_thought.clone(), opt.buy.distance_pct, opt.buy.residue.abs().max(0.01));
             }
         }
 
