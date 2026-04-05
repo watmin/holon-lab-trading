@@ -297,6 +297,18 @@ observer calls bundle(facts)         → Vector        ; the thought
 The lens is not a parameter. The lens is on the observer. The observer
 knows which vocab modules are its domain.
 
+**Thought composition is recursive cache lookup.** The recursion bottoms
+out at atoms (always cached) and scalars (always fresh). Everything in
+between is a memo.
+
+```
+atom("rsi")                    → cache hit (permanent)
+encode-linear(0.73, 1.0)      → compute (fresh scalar)
+bind(atom, scalar)             → compute, store (per-candle cache)
+next observer wants rsi fact   → cache hit (per-candle)
+bundle(all facts)              → compute (the thought — never cached)
+```
+
 ---
 
 ### LearnedStop (depends on: nothing)
