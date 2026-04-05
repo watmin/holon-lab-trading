@@ -32,68 +32,98 @@ The exit module has the primitives to fill this gap -- LearnedStop predicts dist
 
 ## 3. The proposed change
 
-### Three passes per candle
+### Five CSP phases per candle
 
-The single-pass candle loop becomes three independent passes. Each is a CSP stage. No shared mutation between stages. Data flows forward. Reality first.
+The single-pass candle loop becomes five phases. Each completes before the next starts. Collect is the handoff. No shared mutation between phases. Reality first.
 
-**Pass 1: Treasury settles.** (Reality first — money before thoughts.)
+```
+candle arrives
+  │
+  ├─ Phase 1: SETTLE    treasury closes triggered positions, accounting, propagate
+  │                      collect() ──────────────────────────────────────────────────┐
+  │                                                                                  │
+  ├─ Phase 2: THINK     market observers encode candle → (label, thoughts)           │
+  │                      collect() ──────────────────────────────────────────────────┐│
+  │                                                                                  ││
+  ├─ Phase 3: MANAGE    (market, exit) pairs update triggers on active entries       ││
+  │                      using CURRENT thoughts from Phase 2                         ││
+  │                      paper entries that resolve → learning                       ││
+  │                      collect() ──────────────────────────────────────────────────┐││
+  │                                                                                  │││
+  ├─ Phase 4: PROPOSE   exit observers with experience + high conviction propose     │││
+  │                      collect() ──────────────────────────────────────────────────┐│││
+  │                                                                                  ││││
+  ├─ Phase 5: FUND      treasury evaluates proposals, funds or rejects               ││││
+  │                      funded → insert into live trade map                          ││││
+  │                      rejected → stays paper                                      ││││
+  │                                                                                  ││││
+  └─ next candle ◄───────────────────────────────────────────────────────────────────┘┘┘┘
+```
 
-For each live entry, the treasury checks the current price against the trigger. If the stop fired — the trade closes NOW, before anyone thinks.
+### Signal flow diagram
 
-The treasury holds active trades as a map: `(TupleJournal, Trade)` pairs. The tuple journal is the key — it identifies the (market, exit) pair that owns the trade. The treasury iterates this map every candle. When a trade closes: settle, propagate, remove from the map. When a new trade is funded: insert into the map. The map IS the set of live trades. Nothing else tracks them.
+```
+                         ┌──────────┐
+                   ┌────▶│  Market   │─── (label, thoughts) ──┐
+                   │     │ Observers │                         │
+                   │     └──────────┘                         │
+                   │                                          ▼
+  ┌─────────┐     │     ┌──────────┐     ┌──────────┐   ┌─────────┐
+  ��  OHLCV  │─────┤     │   Exit   │◀────│  Tuple   │◀──│Treasury │
+  │ (candle) │     │     │ Observers│────▶│ Journals │──▶│  (map)  │
+  └─────────┘     ���     └──────────┘     └──────────┘   └─────────┘
+                   │          │                ▲              │
+                   │          │  proposals     │  propagate   │
+                   │          └────────────────┘──────��───────┘
+                   │                                Grace/Violence
+                   └── price ──────────────────────▶ settle
+```
 
-For each closed trade, the treasury settles FIRST, then signals:
+Signals and their types:
+- `OHLCV → Market Observers`: raw candle data
+- `Market Observers → Exit Observers`: `(label, Vec<Vector>)` — named thoughts
+- `Exit Observers → Tuple Journals`: proposals `(market_thought, distance, conviction)`
+- `Tuple Journals → Treasury`: funding requests (pair identity, direction, distance)
+- `Treasury → Tuple Journals`: `propagate(outcome, closes, entry_price)` — reality
+- `Tuple Journals → Exit Observers`: optimal distance from hindsight
+- `Tuple Journals → Market Observers`: Win/Loss label
 
+No signal crosses without going through the tuple journal. The tuple journal is the central routing fiber. Every other connection is point-to-point.
+
+**Phase 1: SETTLE** — Reality first. Money before thoughts.
+
+The treasury holds active trades as a map: `(TupleJournal, Trade)` pairs. The map IS the set of live trades.
+
+For each live entry, check the current price against the trigger. If the stop fired — close NOW.
+
+For each closed trade:
 1. Execute the swap (target → source, with fees and slippage).
 2. Update the balance sheet (units moved, fees charged, accumulation recorded).
 3. Compute Grace/Violence from the actual P&L (including fees — the most honest number).
-4. Call the tuple journal:
+4. `tuple_journal.propagate(outcome, &closes, entry_price)` — one call, the tuple does the rest.
 
+When a trade closes: settle, propagate, remove from the map. Clean.
 
-```rust
-tuple_journal.propagate(outcome, &closes, entry_price);
-```
+**Phase 2: THINK** — Market observers encode the candle.
 
-The treasury knows: this trade ended, here's the outcome, here's the prices. That's all. The tuple journal does the rest:
-1. Records Grace/Violence on its own track record.
-2. Computes optimal distance from the price history (`compute_optimal_distance`).
-3. Feeds the owning exit observer's LearnedStop with (thought, optimal_distance, residue).
-4. Labels the owning market observer Win/Loss.
-5. Updates allocation based on cumulative grace/violence.
+Each market observer encodes its thought through its vocabulary lens, strips noise, predicts direction. Produces `(label, thoughts)`. Broadcasts to ALL exit observers.
 
-One call. The tuple journal IS the interface between the treasury and the learning system. The treasury doesn't know about learned stops or observer journals or optimal distances. It knows outcomes and prices. The tuple routes everything.
+Every market thought registers as a paper entry with every exit observer.
 
-For each proposal from the previous candle that's waiting for funding:
-- Is the TupleJournal for this (market, exit) pair proven? (curve_valid)
-- Is capital available?
-- Does the risk branch allow it?
+**Phase 3: MANAGE** — Active entries get fresh triggers.
 
-If funded, the paper entry becomes a live entry. If not, it remains paper. Paper entries learn. Live entries learn AND accumulate capital.
+For each active entry (paper and live), the owning (market, exit) pair uses the CURRENT thoughts from Phase 2:
 
-**Pass 2: Market observers think.**
+- Resolved entries → compute optimal distance, feed LearnedStop, label market observer, update TupleJournal.
+- Active entries → tick DualExcursion, adjust trailing stop from LearnedStop's current recommendation.
 
-OHLCV arrives. Indicators compute. Each market observer encodes its thought through its vocabulary lens, strips noise, predicts direction. Each market observer produces a thought vector and a directional prediction. It broadcasts this thought to ALL exit observers — "here is what I thought at this candle."
+**Phase 4: PROPOSE** — Exit observers propose new trades.
 
-Every market thought registers as a paper entry with every exit observer. Each exit observer manages ALL registered thoughts — paper and live. Paper entries learn the optimal distance without risking capital. Live entries are the subset an exit observer proposed and the treasury funded.
+Each exit observer queries `recommended_distance(thought)` for new market thoughts. If experienced + high conviction → propose. Multiple exits may propose for the same thought. Proposals collected.
 
-**Pass 3: Exit observers manage.**
+**Phase 5: FUND** — Treasury evaluates proposals.
 
-For each registered thought (paper or live), each exit observer checks the current price.
-
-If the entry resolved (trailing stop fired on either side of the DualExcursion):
-- Compute the optimal distance from hindsight.
-- Feed the learning: `learned_stop.observe(thought, optimal_distance, residue_weight)`.
-- Propagate Grace/Violence to the TupleJournal.
-- Label the market observer: each exit observer's resolution becomes a Win/Loss signal for the market observer whose thought it managed.
-
-If the entry is still active:
-- Update the DualExcursion (tick MFE, MAE, trailing stops for both sides).
-- Adjust the live position's trailing stop using the LearnedStop's current recommendation for this thought. The distance is not fixed — it changes as the LearnedStop accumulates experience from other resolved entries.
-
-For NEW market thoughts (just registered this candle):
-- Each exit observer queries `recommended_distance(thought)`. If its LearnedStop has enough experience with this kind of thought (not returning the default), and the market observer's conviction is high, that exit observer PROPOSES the trade to the treasury. Multiple exit observers may propose independently for the same market thought.
-- The exit observer proposes because it is the entity that will manage the trade. It is on the hook.
-- Proposals are queued for the treasury's Pass 1 on the NEXT candle.
+For each proposal: TupleJournal proven? Capital available? Risk allows? If yes → insert into the live trade map. If no → stays paper.
 
 ### The exit observer is a LearnedStop wrapper
 
