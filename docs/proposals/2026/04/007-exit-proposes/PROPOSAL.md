@@ -38,38 +38,38 @@ The single-pass candle loop becomes three independent passes. Each is a CSP stag
 
 **Pass 1: Market observers think.**
 
-OHLCV arrives. Indicators compute. Each market observer encodes its thought through its vocabulary lens, strips noise, predicts direction. Unchanged from today. The market observer produces a thought vector and a directional prediction. It registers this thought with the exit observer -- "here is what I thought at this candle."
+OHLCV arrives. Indicators compute. Each market observer encodes its thought through its vocabulary lens, strips noise, predicts direction. Unchanged from today. Each market observer produces a thought vector and a directional prediction. It broadcasts this thought to ALL exit observers -- "here is what I thought at this candle."
 
-Every market thought registers as a paper entry. The exit observer manages ALL registered thoughts -- paper and live. Paper entries learn the optimal distance without risking capital. Live entries are the subset the exit observer proposed and the treasury funded.
+Every market thought registers as a paper entry with every exit observer. Each exit observer manages ALL registered thoughts -- paper and live. Paper entries learn the optimal distance without risking capital. Live entries are the subset an exit observer proposed and the treasury funded.
 
 **Pass 2: Exit observers manage.**
 
-For each registered thought (paper or live), the exit observer checks the current price.
+For each registered thought (paper or live), each exit observer checks the current price.
 
 If the entry resolved (trailing stop fired on either side of the DualExcursion):
 - Compute the optimal distance from hindsight (`compute_optimal_distance` on the resolved price history).
 - Feed the learning: `learned_stop.observe(thought, optimal_distance, residue_weight)`.
 - Propagate Grace/Violence to the TupleJournal.
-- Label the market observer: the exit observer's resolution becomes the market observer's Win/Loss signal.
+- Label the market observer: each exit observer's resolution becomes a Win/Loss signal for the market observer whose thought it managed.
 
 If the entry is still active:
 - Update the DualExcursion (tick MFE, MAE, trailing stops for both sides).
 - Adjust the live position's trailing stop using the LearnedStop's current recommendation for this thought. The distance is not fixed -- it changes as the LearnedStop accumulates experience from other resolved entries.
 
 For NEW market thoughts (just registered this candle):
-- The exit observer queries `recommended_distance(thought)`. If the LearnedStop has enough experience with this kind of thought (not returning the default), and the market observer's conviction is high, the exit observer PROPOSES the trade to the treasury.
+- Each exit observer queries `recommended_distance(thought)`. If its LearnedStop has enough experience with this kind of thought (not returning the default), and the market observer's conviction is high, that exit observer PROPOSES the trade to the treasury. Multiple exit observers may propose independently for the same market thought.
 - The exit observer proposes because it is the entity that will manage the trade. It is on the hook.
 
 **Pass 3: Treasury settles.**
 
-For each proposal the exit observer made, the treasury checks:
+For each proposal any exit observer made, the treasury checks:
 - Is the TupleJournal for this (market, exit) pair proven? (curve_valid)
 - Is capital available?
 - Does the risk branch allow it?
 
 If funded, the paper entry becomes a live entry. If not, it remains paper. Paper entries learn. Live entries learn AND accumulate capital.
 
-For each live entry that resolved this candle, the treasury computes Grace/Violence from the actual P&L and cascades the signal to both the market observer and the exit observer.
+For each live entry that resolved this candle, the treasury computes Grace/Violence from the actual P&L and cascades the signal to both the market observer and the specific exit observer that owned the trade.
 
 ### The exit observer is a LearnedStop wrapper
 
