@@ -536,32 +536,36 @@ The generalist is just another lens. No special treatment.
 
 ---
 
-### ExitObserver (depends on: LearnedStop)
+### ExitObserver (depends on: Journal concept — scalar readout)
 
-Predicts exit distance. Learned. LearnedStop IS its brain.
+Predicts exit distance. Learned. Its journal IS the LearnedStop —
+accumulated observations with scalar readout. Same geometry as the
+market observer's journal. Different output.
+
 Has a judgment vocabulary (volatility, structure, timing, generalist).
 Composes market thoughts with its own judgment facts.
-One LearnedStop per exit observer — M instances, not N×M.
+One per exit lens — M instances, not N×M.
 The composed thought carries the market observer's signal in superposition.
 
 ```
 (struct exit-observer
-  lens            ; ExitLens enum — which judgment vocabulary
-  learned-stop)   ; LearnedStop — nearest neighbor regression
+  lens              ; ExitLens enum — which judgment vocabulary
+  observations      ; the journal — accumulated experience, decays
+  default-distance) ; f64 — the crutch, returned when empty (ignorance)
 ```
 
 **Interface:**
-- `(new-exit-observer lens max-pairs default-distance) → ExitObserver`
+- `(new-exit-observer lens default-distance) → ExitObserver`
 - `(encode-exit-facts exit-obs candle ctx) → Vec<Vector>`
   pure: candle → judgment fact vectors for this lens
 - `(compose exit-obs market-thought exit-fact-vecs) → Vector`
   bundle market thought with exit facts
 - `(recommended-distance exit-obs composed) → f64`
-  query the LearnedStop
+  query the journal — cosine-weighted average from similar experience
 - `(observe-distance exit-obs composed optimal-distance weight)`
-  feed the LearnedStop — called by tuple journal propagation
-- `(can-propose? exit-obs composed) → bool`
-  has the LearnedStop accumulated pairs?
+  the market spoke — the journal learns
+- `(experienced? exit-obs) → bool`
+  has the journal accumulated any observations? empty = ignorance
 
 ---
 
