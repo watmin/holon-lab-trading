@@ -377,7 +377,7 @@ impl Enterprise {
                 if let Some(ctx) = ctx {
                     let distance = self.learned_stops[i].recommended_distance(&composed);
                     let entry_price = candle.map(|c| c.close).unwrap_or(1.0);
-                    let entry_atr = candle.map(|c| c.atr).unwrap_or(0.01);
+                    let entry_atr = candle.map(|c| c.atr_r).unwrap_or(0.01);
                     journal.register_paper(
                         composed.clone(),
                         entry_price,
