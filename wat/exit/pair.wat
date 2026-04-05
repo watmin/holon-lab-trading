@@ -210,6 +210,10 @@
   (when-let ((disc (discriminant (:journal pair) (:grace-label pair))))
     (cosine disc (atom "trail-adjust"))))
 
+;; rune:assay(prose) — lines 213-294 describe orchestration that lives in
+;; enterprise.rs, not in the pair itself. Kept here for completeness of the
+;; CSP channel diagram. The code sections above are the pair's program.
+
 ;; -- The N x M generator ------------------------------------------------------
 ;; The pair journals are not a data structure. They are a computation.
 ;; The cross-product of market thoughts and exit judgments, evaluated lazily,
@@ -220,6 +224,16 @@
 ;;   (new-pair-journal market-name exit-name dims recalib-interval)
 ;; Storage: flat vec of PairJournal, indexed by (market-idx * M + exit-idx).
 ;; No nested data structure. The flatness is the simplicity.
+
+;; rune:scry(aspirational) — per-candle management learning: each management
+;; decision (tighten/loosen) gets independently labeled by what happened next.
+;; The resolve-pair function currently fires once per trade at final resolution.
+;; Future: per-candle management decisions accumulate and resolve individually.
+
+;; rune:scry(aspirational) — trail-adjust scalar write-side: the optimal k_trail
+;; is computable retroactively after resolution. Encoding it as a fact via
+;; (bind (atom "trail-adjust") (encode-log optimal-k)) is described in the proposal
+;; but not yet expressed as an executable form. Future: add to composition pipeline.
 
 ;; -- The ownership loop -------------------------------------------------------
 ;;
