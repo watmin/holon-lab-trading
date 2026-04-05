@@ -279,6 +279,23 @@ Owned by the enterprise. Passed to posts.
   compositions)         ; LRU cache: key → Vector (optimistic, self-evicting)
 ```
 
+**The AST — what the vocabulary speaks:**
+
+```scheme
+(enum thought-ast
+  (Atom name)                           ; dictionary lookup
+  (Linear name value scale)             ; bind(atom, encode-linear)
+  (Log name value)                      ; bind(atom, encode-log)
+  (Circular name value period)          ; bind(atom, encode-circular)
+  (Bind left right)                     ; composition of two sub-trees
+  (Bundle children))                    ; superposition of sub-trees
+```
+
+The vocabulary produces trees of this. Cheap. No vectors. No 10,000-dim
+computation. Just "here is what I want to say." The calls to bind and
+encode are deferred — the vocabulary knows what it wants, the encoder
+decides how to compute it efficiently.
+
 **Interface:**
 - `(encode thought-encoder ast) → Vector`
   walk the AST bottom-up, hit cache where possible, compute where necessary
