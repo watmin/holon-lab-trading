@@ -209,6 +209,23 @@ many facts → bundle → thought (a vector)
 thought → cosine against discriminant → prediction
 ```
 
+**Scalars are always bounded.** The vocabulary normalizes every measurement
+to its natural coordinate system before encoding. The scale is not magic —
+it is coupled at point-in-code where the domain knowledge lives.
+
+- Bollinger position: [-1, 1] — where on the band. The band IS the bounds.
+- RSI: [0, 1] — Wilder's formula defines the range.
+- ATR ratio: [0, 1] — volatility relative to price.
+- Close-to-SMA: [-1, 1] — distance as fraction of typical range.
+- Stochastic %K: [0, 1] — where in the recent range.
+
+The vocabulary doesn't invent bounds. It discovers them in the math.
+The vocabulary owns the encode AND the decode — it put the value on
+the scalar, it can take it back. That's why scalar accumulators work.
+
+The encoding receives normalized values. The scale is uniform.
+The domain knowledge lives in the vocabulary, not in the encoder.
+
 The ThoughtEncoder in the Rust is a cache and a renderer — an
 optimization that pre-computes common compositions. But the concept
 has no intermediate form. Atoms compose. Vectors result. Thoughts bundle.
