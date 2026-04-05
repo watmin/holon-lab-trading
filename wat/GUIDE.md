@@ -124,7 +124,8 @@ think about.
       (max-window 2016))
   (make-window-sampler seed min-window max-window))  → WindowSampler
 
-(make-scalar-accumulator "trail-distance")           → ScalarAccumulator
+(let ((name "trail-distance"))
+  (make-scalar-accumulator name))                    → ScalarAccumulator
 
 ;; ── Candle — produced by indicator bank from raw candle ─────────────
 
@@ -138,7 +139,8 @@ think about.
 
 ;; ── ThoughtEncoder — evaluates the vocabulary's ASTs ────────────────
 
-(make-thought-encoder vector-manager)                → ThoughtEncoder
+(let ((vector-manager (make-vector-manager dims)))
+  (make-thought-encoder vector-manager))             → ThoughtEncoder
 (encode thought-encoder ast)                         → Vector
 
 ;; ── Lenses — which vocabulary subset an observer thinks through ─────
@@ -159,7 +161,10 @@ think about.
 (let ((lens :momentum)
       (dims 10000)
       (recalib-interval 500)
-      (sampler (make-window-sampler 7919 12 2016)))
+      (seed 7919)
+      (min-window 12)
+      (max-window 2016)
+      (sampler (make-window-sampler seed min-window max-window)))
   (make-market-observer lens dims recalib-interval
     sampler))                                        → MarketObserver
 
@@ -241,7 +246,10 @@ think about.
 
 ;; ── Enterprise — the coordination plane ─────────────────────────────
 
-(make-enterprise posts treasury thought-encoder)     → Enterprise
+(let ((posts (list btc-post sol-post))
+      (treasury (make-treasury denomination balances))
+      (thought-encoder (make-thought-encoder vector-manager)))
+  (make-enterprise posts treasury thought-encoder))  → Enterprise
 ```
 
 ---
