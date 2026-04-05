@@ -83,6 +83,7 @@ by what the market actually said.
 ## Definitions — the thoughts themselves
 
 Before the structs. Before the constructors. The meanings.
+Each definition can only reference definitions above it.
 
 - **Candle** — one period of market data. Raw: six numbers (open, high, low,
   close, volume, timestamp). Enriched: the raw data plus 100+ computed
@@ -92,19 +93,33 @@ Before the structs. Before the constructors. The meanings.
   Bollinger Bands. Each one is a streaming computation — it needs all
   prior candles to produce the current value.
 
+- **Fact** — a named observation about the world, composed from atoms. "RSI
+  is at 0.73." The composition IS a vector. The vector IS the fact.
+
+- **ThoughtAST** — a deferred fact. Data describing a composition, not yet
+  computed. The vocabulary produces these. The encoder evaluates them.
+
+- **Thought** — a bundle of facts. Many fact-vectors superposed into one
+  vector. The thought is what an observer perceived about this candle.
+
 - **Lens** — which vocabulary subset an observer thinks through. A momentum
   lens selects momentum-related facts. A regime lens selects regime-related
   facts. A generalist lens selects all facts. The lens IS the observer's
   identity — it determines what thoughts the observer thinks.
 
-- **Fact** — a named observation about the world, composed from atoms. "RSI
-  is at 0.73." The composition IS a vector. The vector IS the fact.
+- **Observer** — an entity that perceives and learns. It has a lens, a
+  journal, and accumulated experience. Two kinds: market observers predict
+  direction (Win/Loss). Exit observers predict distance (optimal exit).
 
-- **ThoughtAST** — a deferred fact. Data describing a composition, not yet
-  computed. The vocabulary produces these. The ThoughtEncoder evaluates them.
+- **LearnedStop** — nearest-neighbor regression. "For a thought like THIS,
+  what distance did the market say was optimal?" Stores observations.
+  Query by cosine similarity → the answer for this kind of thought.
+  Replaces magic numbers with measurement. Lives on the exit observer.
 
-- **Thought** — a bundle of facts. Many fact-vectors superposed into one
-  vector. The thought is what the observer perceived about this candle.
+- **ScalarAccumulator** — per-magic-number f64 learning. Separates Grace
+  and Violence observations. Extracts the value Grace prefers overall.
+  Global per-pair — one answer regardless of thought. The fallback when
+  the LearnedStop has no experience for a particular thought.
 
 - **Paper trade** — a "what if." A hypothetical trade that tracks what WOULD
   have happened. Both sides (buy and sell) are tracked simultaneously.
@@ -112,25 +127,21 @@ Before the structs. Before the constructors. The meanings.
   been optimal? Papers are the fast learning stream — cheap, many, every
   candle.
 
-- **LearnedStop** — nearest-neighbor regression. "For a thought like THIS,
-  what distance did the market say was optimal?" Stores (thought, distance,
-  weight) observations. Query by cosine similarity → the answer for this
-  kind of thought. Replaces magic numbers with measurement.
-
-- **Propagation** — routing resolved outcomes to the entities that need to
-  learn from them. When a trade or paper resolves, the outcome (Grace or
-  Violence) flows to the market observer (Win/Loss), the exit observer
-  (optimal distance), and the tuple journal (accountability).
-
 - **Proof curve** — the gate. Has this entity demonstrated predictive edge?
   Computed from the history of (conviction, correct?) predictions. When
   high-conviction predictions are correct more than 52% of the time, the
   curve validates. The entity earns the right to propose trades.
 
-- **Closure** — a function that captured its environment. The tuple journal
-  is a closure over (market-observer, exit-observer). It references both.
-  It routes signals to both. The struct is the implementation. The closure
-  is the thought.
+- **Tuple journal** — a closure over two observers (market + exit). The
+  accountability primitive. It measures how successful the pair is — Grace
+  or Violence. It owns paper trades. When papers or real trades resolve,
+  it routes outcomes to both observers. The struct is the implementation.
+  The closure is the thought.
+
+- **Propagation** — routing resolved outcomes through the tuple journal to
+  the observers that need to learn. Grace/Violence to the tuple journal's
+  own record. Win/Loss to the market observer. Optimal distance to the
+  exit observer.
 
 - **Post** — a self-contained unit for one asset pair. The (USDC, WBTC)
   post. The (USDC, SOL) post. Each post has its own observers, its own
