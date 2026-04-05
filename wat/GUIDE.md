@@ -448,13 +448,15 @@ Each learns independently. Each starts ignorant — returns `default-distance`
 is replaced by learned values. No hard switch. The LearnedStop blends from
 ignorance to competence.
 
-Three learning streams feed each LearnedStop:
+Two learning streams feed each LearnedStop:
 - **Paper** (fast/cheap) — resolved paper entries from tick-papers
-- **Live** (per-candle) — the current thought keeps queries contextual
 - **Reality** (on close) — compute_optimal_distance from hindsight
 
-All three feed the same LearnedStop. Paper fills it fast. Reality
-corrects it with the most honest signal.
+Paper fills it fast. Reality corrects it with the most honest signal.
+
+The treasury QUERIES the LearnedStop per-candle to manage active trades —
+"what distance for this thought right now?" — but the query is not
+learning. It reads. It does not write. Two learnings. One query.
 
 ```
 (struct learned-stop
