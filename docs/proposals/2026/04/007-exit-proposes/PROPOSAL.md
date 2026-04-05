@@ -65,41 +65,46 @@ Four steps. Sequential. The parallelism is horizontal inside Step 2 — N market
 
 ```mermaid
 flowchart TD
-    OHLCV[OHLCV candle] -->|raw price| Treasury
-    OHLCV -->|raw price| Market[Market Observers]
+    OHLCV[OHLCV candle]
 
-    subgraph "Phase 1: SETTLE"
-        Treasury -->|"propagate(outcome, closes, price)"| Tuple[Tuple Journals]
+    subgraph Treasury
+        Registry["registry: HashMap‹(M,E), TupleJournal›"]
+        Proposed["proposed_trades: HashMap‹Id, Proposal›"]
+        Active["active_trades: HashMap‹Id, Trade›"]
     end
 
-    subgraph "Phase 2: THINK"
-        Market -->|"(label, thoughts)"| Exit[Exit Observers]
+    subgraph "Step 1: RESOLVE"
+        OHLCV -->|price| Active
+        Active -->|"triggered? → settle"| Registry
+        Registry -->|"propagate()"| Market[Market Observers]
+        Registry -->|"propagate()"| Exit[Exit Observers]
     end
 
-    subgraph "Phase 3: MANAGE"
-        Exit -->|"tick + adjust triggers"| Tuple
-        Tuple -->|"optimal distance"| Exit
-        Tuple -->|"Win/Loss label"| Market
+    subgraph "Step 2: COMPUTE + DISPATCH"
+        OHLCV -->|candle| Market
+        Market -->|"(label, thought)"| Exit
+        Exit -->|"get_or_create_journal()"| Registry
+        Exit -->|"propose_trade()"| Proposed
     end
 
-    subgraph "Phase 4: PROPOSE"
-        Exit -->|"(thought, distance, conviction)"| Proposals[Proposal Queue]
+    subgraph "Step 3: PROCESS"
+        Market -->|"fresh thoughts"| Active
+        Exit -->|"recommended_distance()"| Active
     end
 
-    subgraph "Phase 5: FUND"
-        Proposals -->|funding request| Treasury
-        Treasury -->|"funded: insert map"| Tuple
+    subgraph "Step 4: COLLECT + FUND"
+        Proposed -->|"fund or reject"| Active
     end
 ```
 
 Signals and their types:
 - `OHLCV → Market Observers`: raw candle data
 - `Market Observer[i] → Exit Observer[j]`: `(label, Vector)` — one named thought per (market, exit) pair
-- `Exit Observers → Tuple Journals`: proposals `(market_thought, distance, conviction)`
-- `Tuple Journals → Treasury`: funding requests (pair identity, direction, distance)
-- `Treasury → Tuple Journals`: `propagate(outcome, closes, entry_price)` — reality
-- `Tuple Journals → Exit Observers`: optimal distance from hindsight
-- `Tuple Journals → Market Observers`: Win/Loss label
+- `Exit Observer → Treasury.registry`: `get_or_create_journal(market_id, exit_id)` — journal lives on treasury
+- `Exit Observer → Treasury.proposed_trades`: `propose_trade(journal, composed, distance, conviction)`
+- `Treasury.registry → Market Observer`: Win/Loss label (via tuple_journal.propagate)
+- `Treasury.registry → Exit Observer`: optimal distance from hindsight (via tuple_journal.propagate)
+- `Treasury.proposed_trades → Treasury.active_trades`: funded proposals move, rejected discard
 
 No signal crosses without going through the tuple journal. The tuple journal is the central routing fiber. Every other connection is point-to-point.
 
