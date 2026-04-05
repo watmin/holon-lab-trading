@@ -62,6 +62,8 @@ pub struct Pending {
     pub exit_reason:       Option<ExitReason>, // why the trade closed
     pub exit_pct:          f64,    // actual exit price change (for P&L)
 
+    // ── Dual-sided excursion (proposal 006) ──────────────────────────
+    pub dual: DualExcursion,     // both sides tracked independently
 }
 
 // rune:reap(aspirational) — TrailingStop and TakeProfit are matched in ledger display
@@ -204,17 +206,125 @@ pub enum PositionExit {
 }
 
 // ─── Outcome-based labeling ─────────────────────────────────────────────────
-// MFE vs MAE at horizon drain. See wat/market/observer.wat: classify-excursion.
-// The exit panel (proposal 005) will replace this with learned resolution.
+// See wat/exit/observer.wat: classify-dual-excursion.
+// See docs/proposals/2026/04/006-co-learning-honest/RESOLUTION.md.
 
 /// The classified outcome: Win or Loss. No third state.
-/// Win: MFE > |MAE| — the trade went right before it went wrong.
-/// Loss: MFE ≤ |MAE| — the trade went wrong before it went right.
-/// Weight = |MFE - |MAE|| — how decisively the market answered.
+/// Win: buy was better (buy_grace > sell_grace).
+/// Loss: sell was better (sell_grace > buy_grace).
+/// Weight = |buy_grace - sell_grace| — how decisively one side won.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Outcome {
     Win { weight: f64 },
     Loss { weight: f64 },
+}
+
+// ─── Dual-sided excursion ───────────────────────────────────────────────────
+// Both sides played from the same candle. No prediction decides the label.
+// The market decides. See wat/exit/observer.wat: dual-excursion.
+//
+// Crutches: k_stop, k_tp, k_trail are magic numbers. The trailing stop
+// parameters determine when each side resolves. Better than a horizon timer —
+// the market's movement triggers resolution — but still parameters we chose.
+// Future: the exit observer's curve learns the optimal multipliers.
+
+/// Dual-sided excursion state for one pending entry.
+/// Tracks buy-side and sell-side independently. Each resolves organically
+/// when its trailing stop or take-profit fires.
+pub struct DualExcursion {
+    // ── Buy side (rate going up is favorable) ──
+    pub buy_mfe: f64,           // max favorable excursion (positive)
+    pub buy_mae: f64,           // max adverse excursion (negative)
+    pub buy_extreme: f64,       // best rate in buy direction
+    pub buy_trail_stop: f64,    // trailing stop level
+    pub buy_resolved: bool,
+    // ── Sell side (rate going down is favorable) ──
+    pub sell_mfe: f64,          // max favorable excursion (positive, inverted)
+    pub sell_mae: f64,          // max adverse excursion (negative, inverted)
+    pub sell_extreme: f64,      // best rate in sell direction (lowest)
+    pub sell_trail_stop: f64,   // trailing stop level
+    pub sell_resolved: bool,
+    // ── Entry context ──
+    pub entry_rate: f64,
+    pub entry_atr: f64,
+}
+
+impl DualExcursion {
+    /// Create a new dual excursion from entry rate and ATR.
+    /// Both sides start at zero excursion. Stops computed from ATR.
+    pub fn new(entry_rate: f64, entry_atr: f64, k_stop: f64) -> Self {
+        Self {
+            buy_mfe: 0.0, buy_mae: 0.0,
+            buy_extreme: entry_rate,
+            buy_trail_stop: entry_rate * (1.0 - k_stop * entry_atr),
+            buy_resolved: false,
+            sell_mfe: 0.0, sell_mae: 0.0,
+            sell_extreme: entry_rate,
+            sell_trail_stop: entry_rate * (1.0 + k_stop * entry_atr),
+            sell_resolved: false,
+            entry_rate, entry_atr,
+        }
+    }
+
+    /// Tick both sides with current price. Each resolves independently.
+    /// Buy: rate up = favorable. Sell: rate down = favorable.
+    pub fn tick(&mut self, current_rate: f64, k_trail: f64, k_tp: f64) {
+        let entry = self.entry_rate;
+        let atr = self.entry_atr;
+
+        // ── Buy side ──
+        if !self.buy_resolved {
+            let buy_move = current_rate - entry;
+            self.buy_mfe = self.buy_mfe.max(buy_move);
+            self.buy_mae = self.buy_mae.min(buy_move);
+            // Trail upward
+            if current_rate > self.buy_extreme { self.buy_extreme = current_rate; }
+            let trail = self.buy_extreme * (1.0 - k_trail * atr);
+            if trail > self.buy_trail_stop { self.buy_trail_stop = trail; }
+            // Resolve
+            if current_rate <= self.buy_trail_stop {
+                self.buy_resolved = true;
+            } else if current_rate >= entry * (1.0 + k_tp * atr) {
+                self.buy_resolved = true;
+            }
+        }
+
+        // ── Sell side ──
+        if !self.sell_resolved {
+            let sell_move = entry - current_rate;
+            self.sell_mfe = self.sell_mfe.max(sell_move);
+            self.sell_mae = self.sell_mae.min(sell_move);
+            // Trail downward
+            if current_rate < self.sell_extreme { self.sell_extreme = current_rate; }
+            let trail = self.sell_extreme * (1.0 + k_trail * atr);
+            if trail < self.sell_trail_stop { self.sell_trail_stop = trail; }
+            // Resolve
+            if current_rate >= self.sell_trail_stop {
+                self.sell_resolved = true;
+            } else if current_rate <= entry * (1.0 - k_tp * atr) {
+                self.sell_resolved = true;
+            }
+        }
+    }
+
+    /// Are both sides resolved?
+    pub fn both_resolved(&self) -> bool {
+        self.buy_resolved && self.sell_resolved
+    }
+
+    /// Classify: which side experienced more grace?
+    /// Returns Some(Outcome) if both sides resolved, None otherwise.
+    pub fn classify(&self) -> Option<Outcome> {
+        if !self.both_resolved() { return None; }
+        let buy_grace = self.buy_mfe - self.buy_mae.abs();
+        let sell_grace = self.sell_mfe - self.sell_mae.abs();
+        let gap = (buy_grace - sell_grace).abs().max(0.01);
+        if buy_grace > sell_grace {
+            Some(Outcome::Win { weight: gap })   // Buy was better
+        } else {
+            Some(Outcome::Loss { weight: gap })  // Sell was better
+        }
+    }
 }
 
 #[cfg(test)]

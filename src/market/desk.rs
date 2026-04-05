@@ -27,7 +27,7 @@ use crate::ledger::LogEntry;
 use crate::market::manager::{ManagerContext, encode_manager_thought, find_proven_band};
 use crate::market::observer::Observer;
 use crate::portfolio::{Phase, Portfolio};
-use crate::position::{CrossingSnapshot, ExitObservation, ExitReason, ManagedPosition, Pending, PositionEntry, PositionExit, PositionPhase, TrailFactor};
+use crate::position::{CrossingSnapshot, DualExcursion, ExitObservation, ExitReason, ManagedPosition, Pending, PositionEntry, PositionExit, PositionPhase, TrailFactor};
 use crate::sizing::{curve_win_rate, half_kelly_position, kelly_frac};
 use crate::treasury::{AccumulationLedger, Asset, Treasury};
 use crate::window_sampler::WindowSampler;
@@ -739,6 +739,7 @@ impl Desk {
             max_adverse:       0.0,
             exit_reason:       None,
             exit_pct:          0.0,
+            dual: DualExcursion::new(candle.close, candle.atr_r, ctx.k_stop),
         });
 
         // Candle snapshot: every indicator value at entry time.
@@ -803,20 +804,20 @@ impl Desk {
         let tht_sell = self.tht_sell();
 
         // ── CSP: tick all pending entries (parallel, no observer mutation) ──
-        // Each entry tracks MFE/MAE — the market's actual excursion.
-        // No simulation labels here. Observer learning happens at horizon resolution
-        // where we know the full picture: did it go right before it went wrong?
+        // Dual-sided excursion: both buy and sell hypotheses tracked independently.
+        // Each side resolves organically when its trailing stop or TP fires.
+        // No simulation labels. No horizon. The market resolves both sides.
         let current_price = candle.close;
         {
             use rayon::prelude::*;
             let pending_slice = self.pending.make_contiguous();
+            let k_trail = ctx.k_trail;
+            let k_tp = ctx.k_tp;
             pending_slice.par_iter_mut().for_each(|entry| {
                 let entry_price = entry.entry_price;
                 let pct = (current_price - entry_price) / entry_price;
 
-                // Track directional excursion
-                // Buy: price up = favorable. Sell: price down = favorable.
-                // No direction: raw price change (up = favorable).
+                // Legacy single-sided tracking (used for ledger MFE/MAE columns)
                 let directional_pct = if entry.meta_dir == Some(tht_buy) {
                     pct
                 } else if entry.meta_dir == Some(tht_sell) {
@@ -830,6 +831,9 @@ impl Desk {
                 if directional_pct < entry.max_adverse {
                     entry.max_adverse = directional_pct;
                 }
+
+                // Dual-sided: tick both buy and sell hypotheses
+                entry.dual.tick(current_price, k_trail, k_tp);
             });
         }
 
@@ -838,16 +842,18 @@ impl Desk {
             self.on_recalibration(&candle, &panel_state, tht_buy, tht_sell, ctx);
         }
 
-        // ── Resolve entries: horizon expiry ──────────────────────────
-        // ManagedPosition owns trade lifecycle (stop/TP).
-        // Pending entries resolve at safety max (10× horizon) for learning.
+        // ── Resolve entries: organic (dual sides resolved) or buffer eviction ──
+        // Entries resolve when BOTH sides of the dual excursion fire (organic).
+        // Buffer safety valve: entries older than max_pending_age evict without labeling.
         let max_pending_age = ctx.horizon * 10;
         let resolved_indices: Vec<usize> = {
             use rayon::prelude::*;
             let pending_slice = self.pending.make_contiguous();
             pending_slice.par_iter().enumerate()
                 .filter_map(|(qi, entry)| {
-                    if i - entry.candle_idx >= max_pending_age { Some(qi) } else { None }
+                    let organic = entry.dual.both_resolved();
+                    let evict = i - entry.candle_idx >= max_pending_age;
+                    if organic || evict { Some(qi) } else { None }
                 }).collect()
         };
         // Drain in reverse order to preserve indices.
@@ -862,69 +868,70 @@ impl Desk {
 
         for mut entry in resolved_entries {
             // Pending entries resolve at horizon. The market has spoken.
-            entry.exit_reason = Some(ExitReason::HorizonExpiry);
             entry.exit_pct = (current_price - entry.entry_price) / entry.entry_price;
 
-            // ── Observer learning: MFE vs MAE ────────────────────────────
-            // Did the trade go right before it went wrong?
-            // favorable_first → Win (84% actual profitability from the data).
-            // adverse_first   → Loss (16% actual profitability from the data).
-            // Weight = |MFE - |MAE|| — how decisively the market answered.
-            // Near the boundary: soft lesson. Far from it: hard lesson.
-            // MFE vs MAE: did it go right before it went wrong?
-            // Observers ALWAYS learn — they don't need the manager's opinion.
-            // The market tells us the label. The observers learn from it.
-            let favorable_first = entry.max_favorable > entry.max_adverse.abs();
-            let weight_magnitude = (entry.max_favorable - entry.max_adverse.abs()).abs();
+            // ── Dual-sided resolution ────────────────────────────────────
+            // Organic: both sides' trailing stops fired. The market spoke.
+            // Buffer eviction: neither side resolved in time. Silence. Don't learn.
+            let dual_outcome = entry.dual.classify(); // Some if both resolved, None if evicted
 
-            let outcome = if favorable_first {
-                crate::position::Outcome::Win { weight: weight_magnitude.max(0.01) }
-            } else {
-                crate::position::Outcome::Loss { weight: weight_magnitude.max(0.01) }
-            };
+            if let Some(outcome) = dual_outcome {
+                // Organic resolution — the market answered honestly
+                entry.exit_reason = Some(match outcome {
+                    crate::position::Outcome::Win { .. } => ExitReason::TakeProfit,
+                    crate::position::Outcome::Loss { .. } => ExitReason::TrailingStop,
+                });
 
-            // Parallel observer resolution — each observer learns from its own thought
-            let obs_logs: Vec<Option<(String, f64, String, i32)>> = {
-                use rayon::prelude::*;
-                self.observers.par_iter_mut().enumerate().map(|(ei, obs)| {
-                    if ei < entry.observer_vecs.len() {
-                        if let Some(log) = obs.resolve(
-                            &entry.observer_vecs[ei], &entry.observer_preds[ei], outcome,
-                            ctx.conviction_quantile, ctx.conviction_window,
-                        ) {
-                            return Some((
-                                log.name.as_str().to_string(),
-                                log.conviction,
-                                obs.journal.label_name(log.direction).unwrap_or("?").to_string(),
-                                log.correct as i32,
-                            ));
+                // Parallel observer resolution — each observer learns from its own thought
+                let obs_logs: Vec<Option<(String, f64, String, i32)>> = {
+                    use rayon::prelude::*;
+                    self.observers.par_iter_mut().enumerate().map(|(ei, obs)| {
+                        if ei < entry.observer_vecs.len() {
+                            if let Some(log) = obs.resolve(
+                                &entry.observer_vecs[ei], &entry.observer_preds[ei], outcome,
+                                ctx.conviction_quantile, ctx.conviction_window,
+                            ) {
+                                return Some((
+                                    log.name.as_str().to_string(),
+                                    log.conviction,
+                                    obs.journal.label_name(log.direction).unwrap_or("?").to_string(),
+                                    log.correct as i32,
+                                ));
+                            }
                         }
-                    }
-                    None
-                }).collect()
-            };
-            if ctx.diagnostics {
-                for log in obs_logs.into_iter().flatten() {
-                    self.pending_logs.push(LogEntry::ObserverLog {
-                        step: self.log_step,
-                        observer: log.0,
-                        conviction: log.1,
-                        direction: log.2,
-                        correct: log.3,
-                    });
+                        None
+                    }).collect()
+                };
+                if ctx.diagnostics {
+                    for log in obs_logs.into_iter().flatten() {
+                        self.pending_logs.push(LogEntry::ObserverLog {
+                            step: self.log_step,
+                            observer: log.0,
+                            conviction: log.1,
+                            direction: log.2,
+                            correct: log.3,
+                        });
                 }
             }
-            self.labeled_count += 1;
+                self.labeled_count += 1;
 
-            // Set crossing for downstream (ledger, manager)
-            let crossing_label = if favorable_first { tht_buy } else { tht_sell };
-            entry.crossing = Some(CrossingSnapshot {
-                label: crossing_label,
-                pct: entry.exit_pct,
-                candles: i - entry.candle_idx,
-                ts: candle_ts.clone(),
-                price: candle.close,
-            });
+                // Set crossing for downstream (ledger, manager)
+                let crossing_label = match outcome {
+                    crate::position::Outcome::Win { .. } => tht_buy,
+                    crate::position::Outcome::Loss { .. } => tht_sell,
+                };
+                entry.crossing = Some(CrossingSnapshot {
+                    label: crossing_label,
+                    pct: entry.exit_pct,
+                    candles: i - entry.candle_idx,
+                    ts: candle_ts.clone(),
+                    price: candle.close,
+                });
+            } else {
+                // Buffer eviction — silence. Don't learn from it.
+                entry.exit_reason = Some(ExitReason::HorizonExpiry);
+                self.noise_count += 1;
+            }
 
             let final_out: Option<Label> = entry.crossing.as_ref().map(|c| c.label);
 
@@ -1642,17 +1649,17 @@ mod tests {
 
         let (_treasury, _portfolio, _peak) = run_candles(&mut desk, 250, &ctx);
 
-        // After 250 candles, pending should have accumulated entries.
-        // Each candle pushes one Pending. Resolution happens at horizon*10 = 360 candles.
-        // So with 250 candles, none should have expired yet — all 250 should be pending.
-        assert_eq!(desk.pending.len(), 250,
-            "all 250 entries should still be pending (horizon*10 = 360)");
+        // After 250 candles, entries may have resolved organically via dual-sided
+        // excursion (both sides' trailing stops fire). Ascending prices resolve
+        // early entries quickly. The pending queue is smaller than 250.
+        assert!(desk.pending.len() < 250,
+            "organic resolution should drain some entries before age limit");
+        assert!(desk.pending.len() > 0,
+            "recent entries should still be pending");
         assert_eq!(desk.encode_count, 250);
-        // Crossings now happen at horizon drain (MFE vs MAE), not during the pending loop.
-        // At 250 candles, no entries have drained yet, so no crossings.
-        let crossed = desk.pending.iter().filter(|p| p.crossing.is_some()).count();
-        assert_eq!(crossed, 0,
-            "crossings happen at horizon drain, not mid-life");
+        // Some entries should have resolved and gotten crossings during drain
+        assert!(desk.labeled_count > 0 || desk.noise_count > 0,
+            "some entries should have resolved by now");
     }
 
     #[test]
@@ -1749,8 +1756,11 @@ mod tests {
             desk.on_candle(i, &raw, &mut shared, &ctx);
         }
 
-        // Now we have 10 pending entries with candle_idx 0..9.
-        assert_eq!(desk.pending.len(), 10);
+        // With dual-sided excursion, entries may resolve organically before
+        // the age limit. Ascending prices fire buy-side TP and sell-side stop.
+        // We just need some entries to still be pending.
+        assert!(desk.pending.len() <= 10,
+            "entries can resolve organically before age limit");
 
         // max_pending_age = horizon * 10 = 36 * 10 = 360.
         // To resolve entry at candle_idx=0, we need i >= 360.
