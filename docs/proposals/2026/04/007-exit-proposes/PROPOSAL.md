@@ -103,6 +103,16 @@ Live entries are a subset of paper entries that were:
 
 Both paper and live entries produce learning. Paper is the training ground. Live is the exam.
 
+### Three learning streams — all simultaneous
+
+**Paper stream** (every candle, every market thought): the exit observer receives the thought, manages the paper entry, adjusts the paper trigger. When the paper entry resolves, the exit observer computes the optimal distance and learns. This is the fast stream. Thousands of data points per run. Cheap lessons.
+
+**Live management stream** (every candle, every open position): the treasury asks the owning exit observer "what's the trigger now?" The exit observer queries its LearnedStop with the CURRENT thought — not the entry thought, the current one, because the market changed. The trigger moves every candle. This is the active stream. Real money, real adjustment, real time.
+
+**Reality stream** (on position close): the treasury reports Grace/Violence with the actual amount. The exit observer learns from reality. The market observer receives the Win/Loss label. The TupleJournal records the pair's track record. This is the slow stream. Most honest. Final.
+
+All three feed the same LearnedStop. Paper fills it fast with cheap lessons. Live management keeps it current with the market's state. Reality corrects it with the most honest signal. The learning never stops.
+
 ### The optimal distance replaces ALL magic numbers
 
 The market does not use formulas. It uses measurement. `compute_optimal_distance` sweeps 100+ candidate distances against the actual price history from entry to resolution. It finds the peak residue. That is the market's answer.
