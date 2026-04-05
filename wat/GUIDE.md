@@ -30,7 +30,7 @@ These are NOT specified in this tree. They are provided by holon-rs.
   - `(encode-log value) → Vector`
   - `(encode-linear value scale) → Vector`
   - `(encode-circular value period) → Vector`
-- **Primitives** — the six
+- **Primitives** — atom, bind, bundle, cosine, journal, curve
   - `(atom name) → Vector`
   - `(bind a b) → Vector`
   - `(bundle &vecs) → Vector`
