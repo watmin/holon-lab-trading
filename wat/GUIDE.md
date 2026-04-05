@@ -215,7 +215,8 @@ think about.
 ;; ── Treasury — pure accounting ──────────────────────────────────────
 ;; Assets: map of Asset → f64 (balances)
 
-(make-treasury (map Asset f64))                     → Treasury
+(make-treasury Asset (map Asset f64))                → Treasury
+;; denomination (what "value" means), initial balances
 
 ;; ── Enterprise — the coordination plane ─────────────────────────────
 
