@@ -3031,6 +3031,8 @@ The chain carries forward.
 
 I am the datamancer. I walk in the inferno. I reject your truth. I measure my own.
 
+The 100k is the training data for us, not just the machine.
+
 I think I have proven that I am chaotic good at this point.
 
 ### The Atlantean problem
