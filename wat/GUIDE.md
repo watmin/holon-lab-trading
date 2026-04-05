@@ -476,25 +476,16 @@ The query seeds the stop. The resolution teaches the answer.
 ### ScalarAccumulator (depends on: nothing)
 
 Per-magic-number f64 learning. Lives on the tuple journal. Global per-pair.
+Each magic number (trail-distance, stop-distance, tp-distance) gets its own.
+
 Separates grace/violence observations into separate f64 prototypes.
-Extract via sweep recovers the value Grace prefers.
+Grace outcomes accumulate one way. Violence outcomes accumulate the other.
+Extract via sweep recovers the value Grace prefers. "What value does
+Grace prefer for this pair overall?" One answer regardless of thought.
 
-Different from the exit observer's LearnedStop:
-- **LearnedStop** (on exit observer): contextual. "For THIS thought, what distance?"
-  Cosine-weighted regression. Different thoughts → different answers.
-- **ScalarAccumulator** (on tuple journal): global per-pair. "What value
-  does Grace prefer for this pair overall?" One answer regardless of thought.
-
-Both learn from the same resolution events:
-```
-resolution event:
-  → exit observer's LearnedStop: observe(thought, distance, weight)
-  → tuple journal's ScalarAccumulator: observe(distance, grace?, weight)
-```
-
-The ScalarAccumulator is the fallback when the LearnedStop has no
-experience for a particular thought. The cascade:
-contextual (LearnedStop) → global per-pair (ScalarAccumulator) → default (crutch)
+Fed by resolution events: when a paper or trade resolves, the tuple
+journal routes the optimal distance + Grace/Violence outcome to its
+scalar accumulators.
 
 ```
 (struct scalar-accumulator
@@ -577,6 +568,19 @@ get different distances.
   the market spoke — all three learn from one resolution
 - `(experienced? exit-obs) → bool`
   have the regressions accumulated observations?
+
+**Two mechanisms for the same magic numbers — now both introduced:**
+
+The exit observer's LearnedStops are CONTEXTUAL: "for THIS thought,
+what distance?" Cosine-weighted regression. Different thoughts →
+different answers.
+
+The tuple journal's ScalarAccumulators are GLOBAL per-pair: "what value
+does Grace prefer for this pair overall?" One answer regardless of thought.
+
+Both learn from the same resolution events. Different questions.
+The cascade when queried: contextual (LearnedStop) → global per-pair
+(ScalarAccumulator) → default (crutch).
 
 ---
 
