@@ -62,21 +62,33 @@ candle arrives
 
 ### Signal flow diagram
 
-```
-                         ┌──────────┐
-                   ┌────▶│  Market   │─── (label, thoughts) ──┐
-                   │     │ Observers │                         │
-                   │     └──────────┘                         │
-                   │                                          ▼
-  ┌─────────┐     │     ┌──────────┐     ┌──────────┐   ┌─────────┐
-  ��  OHLCV  │─────┤     │   Exit   │◀────│  Tuple   │◀──│Treasury │
-  │ (candle) │     │     │ Observers│────▶│ Journals │──▶│  (map)  │
-  └─────────┘     ���     └──────────┘     └──────────┘   └─────────┘
-                   │          │                ▲              │
-                   │          │  proposals     │  propagate   │
-                   │          └────────────────┘──────��───────┘
-                   │                                Grace/Violence
-                   └── price ──────────────────────▶ settle
+```mermaid
+flowchart TD
+    OHLCV[OHLCV candle] -->|raw price| Treasury
+    OHLCV -->|raw price| Market[Market Observers]
+
+    subgraph "Phase 1: SETTLE"
+        Treasury -->|"propagate(outcome, closes, price)"| Tuple[Tuple Journals]
+    end
+
+    subgraph "Phase 2: THINK"
+        Market -->|"(label, thoughts)"| Exit[Exit Observers]
+    end
+
+    subgraph "Phase 3: MANAGE"
+        Exit -->|"tick + adjust triggers"| Tuple
+        Tuple -->|"optimal distance"| Exit
+        Tuple -->|"Win/Loss label"| Market
+    end
+
+    subgraph "Phase 4: PROPOSE"
+        Exit -->|"(thought, distance, conviction)"| Proposals[Proposal Queue]
+    end
+
+    subgraph "Phase 5: FUND"
+        Proposals -->|funding request| Treasury
+        Treasury -->|"funded: insert map"| Tuple
+    end
 ```
 
 Signals and their types:
