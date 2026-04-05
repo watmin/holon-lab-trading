@@ -41,7 +41,11 @@ These are NOT specified in this tree. They are provided by holon-rs.
   - **curve** evaluates the journal's quality over time. Has the journal
     demonstrated predictive edge? The curve answers yes or no. This is
     the proof gate — it decides when an observer or tuple journal has
-    earned the right to propose trades.
+    earned the right to propose trades. Not a struct — a computation
+    over the journal's resolved predictions. Input: the journal's
+    history of (conviction, correct?) pairs. Output: `curve-valid` (bool).
+    The curve validates when high-conviction predictions are correct
+    more than 52% of the time.
 - **VectorManager** — deterministic atom → vector allocation
   - `(get-vector vm name) → Vector`
 
@@ -136,6 +140,7 @@ think about.
 ;; The vocabulary speaks a DSL of ThoughtASTs — data, not execution
 
 (oscillator-facts candle)                            → Vec<ThoughtAST>
+;; ThoughtAST: data describing a composition — not vectors, not execution
 
 ;; ── ThoughtEncoder — evaluates the vocabulary's ASTs ────────────────
 
@@ -203,7 +208,7 @@ think about.
 
 (struct proposal
   composed-thought     ; Vector — the thought that proposed this
-  direction            ; Label — Grace or Violence prediction
+  prediction           ; Label — Grace or Violence (from the tuple journal)
   distances)           ; (trail, stop, tp) — from the exit observer
 
 ;; ── Trade — an active position the treasury holds ───────────────────
@@ -394,7 +399,7 @@ Three domains. Each domain has scoped subfiles.
 - **risk/** — portfolio health. Coordinate for future work. Not in 007.
 
 **Interface (per module):**
-- `(encode-*-facts context) → Vec<Vector>`
+- `(encode-*-facts context) → Vec<ThoughtAST>`
   context is whatever the domain thinks about — candles, portfolio, trade state
 
 A **fact** is a composition of atoms. The composition IS a vector.
@@ -564,7 +569,7 @@ encoder doesn't know about RSI. The quoted list is the interface.
 
 The observer composes the thought:
 ```
-observer calls vocab(context, cache) → Vec<Vector>  ; fact-vectors (cached per-candle)
+observer calls vocab(context) → Vec<ThoughtAST>      ; AST nodes — data, not vectors
 observer calls bundle(facts)         → Vector        ; the thought
 ```
 
@@ -724,7 +729,7 @@ get different distances.
 
 **Interface:**
 - `(new-exit-observer lens default-trail default-stop default-tp) → ExitObserver`
-- `(encode-exit-facts exit-obs candle ctx) → Vec<Vector>`
+- `(encode-exit-facts exit-obs candle ctx) → Vec<ThoughtAST>`
   pure: candle → judgment fact vectors for this lens
 - `(compose exit-obs market-thought exit-fact-vecs) → Vector`
   bundle market thought with exit facts
@@ -759,8 +764,8 @@ to both observers.
 The tuple journal does NOT own the observers — it references them.
 The post owns the observers. The tuple journal accesses them.
 
-The tuple journal does NOT own the exit observer's journal — that's on
-the exit observer. The tuple journal routes training data TO it.
+The tuple journal does NOT own the exit observer's LearnedStops — those
+are on the exit observer. The tuple journal routes training data TO them.
 
 The tuple journal does NOT own proposals or active trades — those are
 the treasury's. The tuple journal proposes TO the treasury.
@@ -964,7 +969,7 @@ The proposal is the source of truth for what each entity does.
 
 ---
 
-## The CSP per candle
+## The CSP (Communicating Sequential Processes) per candle
 
 ```
 Step 1: RESOLVE     — treasury settles triggered trades
