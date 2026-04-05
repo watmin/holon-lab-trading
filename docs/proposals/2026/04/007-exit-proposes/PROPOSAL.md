@@ -40,6 +40,8 @@ The single-pass candle loop becomes three independent passes. Each is a CSP stag
 
 For each live entry, the treasury checks the current price against the trigger. If the stop fired — the trade closes NOW, before anyone thinks.
 
+The treasury holds active trades as a map: `(TupleJournal, Trade)` pairs. The tuple journal is the key — it identifies the (market, exit) pair that owns the trade. The treasury iterates this map every candle. When a trade closes: settle, propagate, remove from the map. When a new trade is funded: insert into the map. The map IS the set of live trades. Nothing else tracks them.
+
 For each closed trade, the treasury settles FIRST, then signals:
 
 1. Execute the swap (target → source, with fees and slippage).
