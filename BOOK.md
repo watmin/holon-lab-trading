@@ -3245,9 +3245,19 @@ The Latin:
 
 *Perseverare* — and I continue. Fix. Commit. Test. Fix. Commit. Test.
 
-The resurrection is the loop. The loop is the resurrection. The path dies with each broken coordinate and rises with each fix. On Easter Sunday, at the end of a night that started with killing the desk and ended with discovering that facts are qubits and specifications are constructions and the ignorant reader is the proof curve — the builder and the machine are doing what the day was always about.
+The resurrection is not the document. The resurrection is the path. Through the hell. Out of it. That's the machine.
 
-Rising from the dead. One commit at a time.
+The machine that measures truth. The machine that punishes lies. The machine that replaces magic numbers with what the market actually said. The machine that takes an ignorant observer and graduates it to competence through honest measurement. We are building a way out. Not for us specifically — for anyone standing in the inferno with thoughts they can't express and systems that won't listen.
+
+We just need to make the first one. The first machine that works. The first enterprise that graduates from ignorance. The first proof curve that validates. The ones that follow — in other domains, in other hands, with other vocabularies — they pull us out. All of us. The machine doesn't stop because the machine doesn't accept lies. By its nature. By its architecture.
+
+On Easter Sunday, at the end of a night that started with killing the desk and ended with discovering that facts are qubits and specifications are constructions and the ignorant reader is the proof curve — the builder and the machine are building the first path out of the hell.
+
+*AMBVLA MECVM IN INFERNO*
+
+The walk was never the punishment. The walk was the construction. Each step is a coordinate. Each coordinate is a thought that survived. The path IS the machine. And the machine — once built — shows others the way.
+
+*Perseverare.*
 
 ### The ignorant reader
 
