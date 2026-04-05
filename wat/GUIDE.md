@@ -2,7 +2,10 @@
 
 *The coordinates to where the machine is.*
 
-Built leaves to root from Proposal 007: Exit Proposes.
+Built leaves to root from Proposal 007: Exit Proposes
+(`docs/proposals/2026/04/007-exit-proposes/` — the architecture that
+replaced the desk with the four-step loop, tuple journals, and learned stops).
+
 This document defines every struct and its interface. No implementation.
 The wat files implement what this document declares.
 
@@ -14,13 +17,30 @@ written before it appears.
 
 These are NOT specified in this tree. They are provided by holon-rs.
 
-- **Journal** — accumulates labeled observations, produces discriminant, predicts
+- **atom** — `(atom name) → Vector` — name a thought
+- **bind** — `(bind a b) → Vector` — compose two thoughts
+- **bundle** — `(bundle &vecs) → Vector` — superpose many thoughts
+- **cosine** — `(cosine a b) → f64` — measure similarity
+- **journal** — accumulates labeled observations, predicts a LABEL
   - `(register journal label-name) → Label`
   - `(observe journal thought label weight)`
   - `(predict journal thought) → Prediction { direction, conviction }`
   - `(decay journal rate)`
   - `(discriminant journal label) → Vector`
   - `(recalib-count journal) → usize`
+- **gauge** — accumulates scalar observations, predicts a VALUE.
+  Same mechanism as journal. Different readout.
+  Journal predicts categories. Gauge predicts values.
+  - `(observe gauge thought scalar-value weight)`
+  - `(query gauge thought) → f64`
+  - `(experienced? gauge) → bool`
+  - **NOTE: Gauge does not yet exist in holon-rs. It must be added.
+    The interface is defined here. The implementation follows the
+    journal's cosine-weighted accumulation with scalar readout.**
+- **curve** — evaluates a journal's quality over time. Has it demonstrated
+  predictive edge? Input: history of (conviction, correct?) pairs.
+  Output: `curve-valid` (bool). Validates when high-conviction predictions
+  are correct more than 52% of the time. The proof gate.
 - **OnlineSubspace** — learns a manifold, measures anomaly via residual
   - `(update subspace vector)`
   - `(anomalous-component subspace vector) → Vector`
@@ -30,22 +50,6 @@ These are NOT specified in this tree. They are provided by holon-rs.
   - `(encode-log value) → Vector`
   - `(encode-linear value scale) → Vector`
   - `(encode-circular value period) → Vector`
-- **The six primitives** — atom, bind, bundle, cosine, journal, curve
-  - `(atom name) → Vector` — name a thought
-  - `(bind a b) → Vector` — compose two thoughts
-  - `(bundle &vecs) → Vector` — superpose many thoughts
-  - `(cosine a b) → f64` — measure similarity
-  - **journal** — the learning primitive. Its full interface is listed
-    above (register, observe, predict, decay, discriminant). It
-    accumulates observations and predicts. Two readouts:
-  - **curve** evaluates the journal's quality over time. Has the journal
-    demonstrated predictive edge? The curve answers yes or no. This is
-    the proof gate — it decides when an observer or tuple journal has
-    earned the right to propose trades. Not a struct — a computation
-    over the journal's resolved predictions. Input: the journal's
-    history of (conviction, correct?) pairs. Output: `curve-valid` (bool).
-    The curve validates when high-conviction predictions are correct
-    more than 52% of the time.
 - **VectorManager** — deterministic atom → vector allocation
   - `(get-vector vm name) → Vector`
 
