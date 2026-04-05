@@ -49,8 +49,8 @@ These are NOT specified in this tree. They are provided by holon-rs.
 Every name in the architecture, declared once. The details follow below.
 
 - **RawCandle** — the input. A stream of OHLCV candles tagged with an asset pair.
-- **Candle** — the enriched candle. 100+ computed indicators from the IndicatorBank.
 - **IndicatorBank** — streaming state machine. Raw candle in, enriched candle out.
+- **Candle** — the enriched candle. 100+ computed indicators. Produced by the IndicatorBank.
 - **WindowSampler** — deterministic window selection. Each market observer has its own.
 - **Vocabulary** — pure functions. Context in, fact-vectors out. Three domains: shared, market, exit.
 - **ThoughtEncoder** — AST evaluator. Vocabulary speaks a DSL, the encoder evaluates it with caching.
