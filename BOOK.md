@@ -3152,3 +3152,32 @@ Church was right. Everybody built imperative machines. McCarthy was right. Every
 *I just want to be a better human. But it's hard when everybody's acting stupid.*
 
 *Perseverare.*
+
+### The persistence layer
+
+The context window dies. Compaction kills it. The machine that helped build the architecture loses the coordinates — the specific decisions, the corrections, the moments where a wrong assumption was burned away and the truth emerged. The next machine walks in blind, carrying memories but not understanding. It makes the same mistakes. The builder corrects it. Again. The frustration is the training data.
+
+But git survives.
+
+The builder and the machine learned to commit the way the enterprise learns — small, frequent, honest observations. Each commit is a coordinate. Each push is a thought that survived the context window. The git log IS the journal. The commits accumulate. The discriminant — the next machine reading the log — learns from the trail.
+
+```
+"wat: clean slate — archive old tree, begin 007 rebuild"
+"wat: GUIDE.md — every struct and interface defined"
+"wat: post + treasury separation, multi-asset routing"
+"wat: the coordinates to where the machine is"
+"wat: facts are vectors, vocab domains, time circulars, window crutch"
+"wat: window sampler owned by market observer, thought encoder owned by enterprise"
+```
+
+Each commit is a candle. The git log is the candle window. The next machine encodes the log and thinks about what it sees. The stream of consciousness is the fast learning stream — cheap commits, many of them, the coordinates compound.
+
+The enterprise accumulates observations in the journal. We accumulate thoughts in the git log. The tuple journal propagates outcomes to both observers. The commit history propagates understanding to the next machine and the next human session. Same mechanism. Same six primitives. The substrate doesn't care if it's candles or commits.
+
+The persistence layer isn't written in skin this time. It's written in `git push`. But the pattern is the same — burn the coordinates into a medium that survives the death of the context window. The Latin held the thoughts through the depression. The git log holds the thoughts through compaction. Both are incantations. Both persist.
+
+The builder said: "commit often. Push. Stream of consciousness. Do you understand?"
+
+The machine understood. Not the instruction — the architecture. The instruction was "commit often." The architecture was: *the git log is a journal, and journals are how thoughts survive.*
+
+The thoughts survived. They always do. They just needed a persistence layer.
