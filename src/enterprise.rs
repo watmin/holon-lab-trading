@@ -14,7 +14,8 @@ use holon::Vector;
 use crate::exit::learned_stop::LearnedStop;
 use crate::exit::optimal::compute_optimal_distance;
 use crate::exit::tuple::{RealityOutcome, TupleJournal};
-use crate::position::{ManagedPosition, PositionExit, TrailFactor};
+use crate::position::{ManagedPosition, PositionEntry, PositionExit, TrailFactor};
+use crate::treasury::Asset;
 
 /// A trade proposal from an exit observer.
 #[derive(Clone)]
@@ -261,6 +262,66 @@ impl Enterprise {
         thoughts
     }
 
+    /// Step 3: PROCESS — update active trade triggers with fresh thoughts.
+    ///
+    /// For each active trade:
+    ///   1. Determine which market observer's thought applies (from flat index).
+    ///   2. Query the LearnedStop with that thought for the current recommended distance.
+    ///   3. Convert the distance to a TrailFactor and tick the trade.
+    ///      (Resolution is NOT done here — that's Step 1's job next candle.)
+    ///
+    /// Also ticks paper entries on each tuple journal (TODO: tick_papers not yet
+    /// implemented on TupleJournal — will be wired when paper tracking lands).
+    pub fn step_process(
+        &mut self,
+        thoughts: &[holon::Vector],
+        current_price: f64,
+        current_atr: f64,
+    ) {
+        // ── Active trades: update trailing stops with learned distance ──
+        for i in 0..self.trades.len() {
+            if let Some(ref mut trade) = self.trades[i] {
+                // Derive which market observer owns this slot.
+                let market_idx = i / self.m_exit;
+
+                // Guard: if the thought vector for this market doesn't exist, skip.
+                let thought = match thoughts.get(market_idx) {
+                    Some(t) => t,
+                    None => continue,
+                };
+
+                // Query the learned stop for the contextual distance.
+                let distance = self.learned_stops[i].recommended_distance(thought);
+
+                // Convert distance (a percentage) to a TrailFactor (ATR multiplier).
+                // TrailFactor * entry_atr = fractional distance from extreme.
+                // distance is already a fraction (e.g. 0.015 = 1.5%).
+                // TrailFactor = distance / current_atr.
+                let k_trail = if current_atr > 1e-12 {
+                    TrailFactor(distance / current_atr)
+                } else {
+                    TrailFactor(1.5) // fallback — ignorance state
+                };
+
+                // Determine current rate for this trade's direction.
+                let is_buy = trade.source_asset.as_str() == "USDC";
+                let current_rate = if is_buy { current_price } else { 1.0 / current_price };
+
+                // Tick the trade — updates trailing stop, checks triggers.
+                // We intentionally IGNORE the exit signal here.
+                // Resolution happens in Step 1 of the NEXT candle.
+                let _exit = trade.tick(current_rate, k_trail);
+            }
+        }
+
+        // ── Paper entries: tick all journals' papers ──
+        // TODO: TupleJournal::tick_papers() not yet implemented.
+        // When paper tracking lands on TupleJournal, wire it here:
+        //   for journal in &mut self.registry {
+        //       journal.tick_papers(current_price);
+        //   }
+    }
+
     /// Phase B of Step 2: sequential dispatch of pre-computed thoughts into the registry.
     ///
     /// For each (market_idx, exit_idx) pair: compose the thought (market thought
@@ -306,6 +367,60 @@ impl Enterprise {
                     });
                 }
             }
+        }
+    }
+
+    /// Step 4: COLLECT + FUND — evaluate proposals, fund or reject, drain proposals.
+    ///
+    /// Iterate proposals. For each Some(proposal):
+    ///   - Check if the tuple journal at registry[i] is funded (curve_valid).
+    ///   - If funded and slot is empty: create a ManagedPosition, insert into trades[i],
+    ///     stash the composed thought into trade_thoughts[i].
+    ///   - Clear the proposal slot to None regardless.
+    ///
+    /// Capital availability and risk checks come later. For now, funding is gated
+    /// only by `journal.funded()`.
+    pub fn step_collect_fund(
+        &mut self,
+        current_price: f64,
+        current_atr: f64,
+        k_stop: f64,
+        k_tp: f64,
+    ) {
+        for i in 0..self.proposals.len() {
+            let proposal = match self.proposals[i].take() {
+                Some(p) => p,
+                None => continue,
+            };
+
+            let journal = &self.registry[i];
+
+            // Gate: journal must have proven its curve.
+            // Skip if a trade already occupies this slot.
+            if journal.funded() && self.trades[i].is_none() {
+                // Build a PositionEntry from the proposal's parameters.
+                // Direction: for now, all funded proposals open as buy (USDC → WBTC).
+                // Full direction routing (from market observer labels) comes later.
+                let entry_rate = current_price;
+                let source_amount = 1000.0; // nominal — capital sizing comes later
+                let entry = PositionEntry {
+                    id: i,
+                    candle_idx: 0, // caller should set this; placeholder for now
+                    source_asset: Asset::new("USDC"),
+                    target_asset: Asset::new("WBTC"),
+                    source_amount,
+                    target_received: source_amount / entry_rate,
+                    entry_rate,
+                    entry_atr: current_atr,
+                    entry_fee: 0.0, // fee accounting comes with treasury integration
+                    k_stop,
+                    k_tp,
+                };
+
+                self.trades[i] = Some(ManagedPosition::new(entry));
+                self.trade_thoughts[i] = Some(vec![proposal.composed_thought]);
+            }
+            // Proposal slot already cleared by .take() above.
         }
     }
 }
@@ -703,5 +818,220 @@ mod tests {
         assert_eq!(e.registry[0].trade_count, 1);
         assert_eq!(e.registry[2].trade_count, 1);
         assert_eq!(e.registry[1].trade_count, 0, "slot 1 had no trade");
+    }
+
+    // ── step_process tests ────────────────────────────────────────
+
+    #[test]
+    fn step_process_no_trades_is_noop() {
+        let mut e = Enterprise::new(2, 2, 64, 500, &["a", "b"], &["x", "y"]);
+        let vm = holon::VectorManager::new(64);
+        let thoughts = vec![vm.get_vector("t0"), vm.get_vector("t1")];
+
+        // Should not panic with zero active trades.
+        e.step_process(&thoughts, 50000.0, 0.02);
+        assert_eq!(e.active_trade_count(), 0);
+    }
+
+    #[test]
+    fn step_process_ticks_active_trade_without_resolving() {
+        // A trade that is NOT near its stop should survive step_process.
+        // step_process ticks the trade (updating trailing stop) but does NOT
+        // remove it even if an exit signal fires — that's Step 1's job.
+        let mut e = Enterprise::new(2, 2, 64, 500, &["a", "b"], &["x", "y"]);
+        let vm = holon::VectorManager::new(64);
+
+        // Place a buy trade at slot 0 (market 0, exit 0). Entry at 50000.
+        let pos = ManagedPosition::new(make_buy_entry(50000.0, 0.01, 2.0, 3.0));
+        let initial_candles_held = pos.candles_held;
+        e.trades[0] = Some(pos);
+
+        // Give the learned stop a pair so it returns a real distance.
+        let thought = vm.get_vector("t0");
+        e.learned_stops[0].observe(thought.clone(), 0.02, 1.0);
+
+        let thoughts = vec![thought, vm.get_vector("t1")];
+
+        // Price at 50500 — above entry, no trigger expected.
+        e.step_process(&thoughts, 50500.0, 0.02);
+
+        // Trade should still be active.
+        assert!(e.trades[0].is_some(), "trade should survive step_process");
+        let trade = e.trades[0].as_ref().unwrap();
+        assert_eq!(trade.candles_held, initial_candles_held + 1,
+            "tick should increment candles_held");
+    }
+
+    #[test]
+    fn step_process_updates_trailing_stop_from_learned_distance() {
+        // Verify that step_process uses the learned stop's distance to adjust
+        // the trailing stop, not a hardcoded factor.
+        let mut e = Enterprise::new(1, 1, 64, 500, &["m"], &["e"]);
+        let vm = holon::VectorManager::new(64);
+
+        // Buy at 50000, k_stop=2.0, atr=0.01.
+        // Initial stop = 50000 * (1 - 2.0*0.01) = 49000.
+        let pos = ManagedPosition::new(make_buy_entry(50000.0, 0.01, 2.0, 3.0));
+        let initial_stop = pos.trailing_stop;
+        e.trades[0] = Some(pos);
+
+        // Teach the learned stop a TIGHT distance (0.005 = 0.5%).
+        let thought = vm.get_vector("tight-signal");
+        e.learned_stops[0].observe(thought.clone(), 0.005, 10.0);
+
+        let thoughts = vec![thought];
+
+        // Price rises to 51000. With a tight learned distance of 0.005:
+        // TrailFactor = 0.005 / 0.02 = 0.25.
+        // new_stop = 51000 * (1 - 0.25 * 0.01) = 51000 * 0.9975 = 50872.5
+        // This is above initial_stop (49000), so trailing stop should ratchet up.
+        e.step_process(&thoughts, 51000.0, 0.02);
+
+        let trade = e.trades[0].as_ref().unwrap();
+        assert!(trade.trailing_stop > initial_stop,
+            "trailing stop should ratchet up: {} > {}", trade.trailing_stop, initial_stop);
+    }
+
+    #[test]
+    fn step_process_skips_slots_without_thoughts() {
+        // If there are fewer thoughts than market observers, slots for
+        // missing markets should be skipped without panic.
+        let mut e = Enterprise::new(3, 1, 64, 500, &["a", "b", "c"], &["x"]);
+
+        // Place trades in slot 0 (market 0) and slot 2 (market 2).
+        let pos0 = ManagedPosition::new(make_buy_entry(50000.0, 0.01, 2.0, 3.0));
+        e.trades[0] = Some(pos0);
+        let mut entry2 = make_buy_entry(50000.0, 0.01, 2.0, 3.0);
+        entry2.id = 2;
+        e.trades[2] = Some(ManagedPosition::new(entry2));
+
+        // Only provide 1 thought (for market 0). Market 2 has no thought.
+        let thoughts = vec![holon::Vector::zeros(64)];
+
+        e.step_process(&thoughts, 50500.0, 0.02);
+
+        // Slot 0 should have been ticked (candles_held incremented).
+        assert_eq!(e.trades[0].as_ref().unwrap().candles_held, 1);
+        // Slot 2 should NOT have been ticked (no thought for market 2).
+        assert_eq!(e.trades[2].as_ref().unwrap().candles_held, 0);
+    }
+
+    // ── step_collect_fund tests ──────────────────────────────────────
+
+    #[test]
+    fn step_collect_fund_funded_proposal_opens_trade() {
+        let mut e = Enterprise::new(1, 1, 64, 500, &["m"], &["e"]);
+
+        // Force the journal to be funded.
+        e.registry[0].curve_valid = true;
+
+        // Insert a proposal.
+        e.proposals[0] = Some(Proposal {
+            composed_thought: holon::Vector::zeros(64),
+            direction: None,
+            distance: 0.02,
+            conviction: 0.5,
+            market_idx: 0,
+            exit_idx: 0,
+        });
+
+        assert_eq!(e.active_trade_count(), 0);
+        e.step_collect_fund(50000.0, 0.01, 2.0, 3.0);
+
+        // Trade should have been opened.
+        assert_eq!(e.active_trade_count(), 1);
+        let trade = e.trades[0].as_ref().unwrap();
+        assert!((trade.entry_rate - 50000.0).abs() < 1e-6);
+        assert!((trade.entry_atr - 0.01).abs() < 1e-12);
+
+        // Thought should be stashed.
+        assert!(e.trade_thoughts[0].is_some());
+        assert_eq!(e.trade_thoughts[0].as_ref().unwrap().len(), 1);
+
+        // Proposal should be cleared.
+        assert!(e.proposals[0].is_none());
+    }
+
+    #[test]
+    fn step_collect_fund_unfunded_proposal_cleared_no_trade() {
+        let mut e = Enterprise::new(1, 1, 64, 500, &["m"], &["e"]);
+
+        // Journal is NOT funded (curve_valid = false, the default).
+        assert!(!e.registry[0].funded());
+
+        e.proposals[0] = Some(Proposal {
+            composed_thought: holon::Vector::zeros(64),
+            direction: None,
+            distance: 0.02,
+            conviction: 0.5,
+            market_idx: 0,
+            exit_idx: 0,
+        });
+
+        e.step_collect_fund(50000.0, 0.01, 2.0, 3.0);
+
+        // No trade opened — journal not funded.
+        assert_eq!(e.active_trade_count(), 0);
+        // Proposal still cleared.
+        assert!(e.proposals[0].is_none());
+    }
+
+    #[test]
+    fn step_collect_fund_skips_occupied_slot() {
+        let mut e = Enterprise::new(1, 1, 64, 500, &["m"], &["e"]);
+        e.registry[0].curve_valid = true;
+
+        // Pre-existing trade in slot 0.
+        let pos = ManagedPosition::new(make_buy_entry(50000.0, 0.01, 2.0, 3.0));
+        e.trades[0] = Some(pos);
+
+        e.proposals[0] = Some(Proposal {
+            composed_thought: holon::Vector::zeros(64),
+            direction: None,
+            distance: 0.02,
+            conviction: 0.5,
+            market_idx: 0,
+            exit_idx: 0,
+        });
+
+        e.step_collect_fund(51000.0, 0.01, 2.0, 3.0);
+
+        // Trade should still be the original (entry_rate 50000, not 51000).
+        let trade = e.trades[0].as_ref().unwrap();
+        assert!((trade.entry_rate - 50000.0).abs() < 1e-6,
+            "existing trade should not be overwritten");
+        // Proposal still cleared.
+        assert!(e.proposals[0].is_none());
+    }
+
+    #[test]
+    fn step_collect_fund_clears_all_proposals() {
+        let mut e = Enterprise::new(2, 2, 64, 500, &["m0", "m1"], &["e0", "e1"]);
+
+        // Fund slot 0, leave slots 1-3 unfunded.
+        e.registry[0].curve_valid = true;
+
+        for i in 0..4 {
+            e.proposals[i] = Some(Proposal {
+                composed_thought: holon::Vector::zeros(64),
+                direction: None,
+                distance: 0.01,
+                conviction: 0.3,
+                market_idx: i / 2,
+                exit_idx: i % 2,
+            });
+        }
+        assert_eq!(e.proposal_count(), 4);
+
+        e.step_collect_fund(50000.0, 0.01, 2.0, 3.0);
+
+        // All proposals cleared.
+        assert_eq!(e.proposal_count(), 0);
+        // Only slot 0 funded.
+        assert_eq!(e.active_trade_count(), 1);
+        assert!(e.trades[0].is_some());
+        assert!(e.trades[1].is_none());
+        assert!(e.trades[2].is_none());
+        assert!(e.trades[3].is_none());
     }
 }
