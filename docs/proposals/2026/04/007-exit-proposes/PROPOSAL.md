@@ -283,7 +283,7 @@ Both paper and live entries produce learning. Paper is the training ground. Live
 
 **Live management stream** (every candle, every open position): the tuple journal closure queries its LearnedStop with the CURRENT composed thought — not the entry thought, the current one, because the market changed. The trigger moves every candle. The tuple journal is the authority. The treasury holds the trade, the closure manages it. Real money, real adjustment, real time.
 
-**Reality stream** (on position close): the treasury reports Grace/Violence with the actual amount. The exit observer learns from reality. The market observer receives the Win/Loss label. The TupleJournal records the pair's track record. This is the slow stream. Most honest. Final.
+**Reality stream** (on position close): the treasury calls `tuple_journal.propagate(outcome, closes, entry_price)`. One call. The closure does the rest — records Grace/Violence on its track record, computes the optimal distance, feeds its LearnedStop, labels its market observer Win/Loss. This is the slow stream. Most honest. Final.
 
 All three feed the same LearnedStop. Paper fills it fast with cheap lessons. Live management keeps it current with the market's state. Reality corrects it with the most honest signal. The learning never stops.
 
