@@ -1,14 +1,14 @@
-//! Pair journal — the accountability primitive.
+//! Tuple journal — the accountability primitive.
 //!
-//! One journal per (market observer, exit observer) pair.
-//! This IS the manager. Not a separate aggregator. The pair's own journal
+//! One journal per (market observer, exit observer) tuple.
+//! This IS the manager. Not a separate aggregator. The tuple's own journal
 //! tracking its own history. Direction × magnitude → grace or violence.
 //!
 //! Labels: Grace / Violence (from treasury reality feedback).
 //! Input: the composed thought (market thought bundled with judgment).
 //! The proof curve gates treasury funding.
 //!
-//! See wat/exit/pair.wat for the specification.
+//! See wat/exit/tuple.wat for the specification.
 
 use std::collections::VecDeque;
 
@@ -25,7 +25,7 @@ const MIN_RESOLVED_FOR_PROOF: usize = 100;
 const PROOF_CONVICTION_FACTOR: f64 = 0.8;
 /// Minimum high-conviction samples to evaluate accuracy.
 const MIN_PROOF_SAMPLES: usize = 20;
-/// Accuracy above this means the pair has proven edge.
+/// Accuracy above this means the tuple has proven edge.
 const PROOF_ACCURACY_THRESHOLD: f64 = 0.52;
 /// Minimum accuracy to snapshot a discriminant as "good state" during engram recalibration.
 const ENGRAM_MIN_ACC: f64 = 0.55;
@@ -44,14 +44,14 @@ fn quantile(data: &VecDeque<f64>, q: f64) -> f64 {
     buf[idx]
 }
 
-/// The pair identity. Cheap. Copyable. The unit of accountability.
+/// The tuple identity. Cheap. Copyable. The unit of accountability.
 #[derive(Clone, Debug)]
-pub struct PairId {
+pub struct TupleId {
     pub market_observer: String,
     pub exit_observer: String,
 }
 
-impl PairId {
+impl TupleId {
     pub fn new(market: &str, exit: &str) -> Self {
         Self {
             market_observer: market.to_string(),
@@ -60,7 +60,7 @@ impl PairId {
     }
 
     pub fn name(&self) -> String {
-        format!("pair-{}-{}", self.market_observer, self.exit_observer)
+        format!("tuple-{}-{}", self.market_observer, self.exit_observer)
     }
 }
 
@@ -73,14 +73,14 @@ pub enum RealityOutcome {
     Violence { amount: f64 },
 }
 
-/// The pair journal. Third journal in the stack.
+/// The tuple journal. Third journal in the stack.
 ///
 /// Three journals, three questions:
 ///   1. Market observer journal: "which direction?" (Win/Loss)
 ///   2. Exit observer journal:   "which side was better?" (Buy/Sell)
-///   3. Pair journal:            "did this combination produce grace?" (Grace/Violence)
-pub struct PairJournal {
-    pub id: PairId,
+///   3. Tuple journal:            "did this combination produce grace?" (Grace/Violence)
+pub struct TupleJournal {
+    pub id: TupleId,
     pub journal: Journal,
     pub noise_subspace: OnlineSubspace,
     pub grace_label: Label,
@@ -105,10 +105,10 @@ pub struct PairJournal {
     pub last_recalib_count: usize,
 }
 
-impl PairJournal {
-    /// Create a pair journal for one (market, exit) tuple.
+impl TupleJournal {
+    /// Create a tuple journal for one (market, exit) tuple.
     pub fn new(market_name: &str, exit_name: &str, dims: usize, recalib_interval: usize) -> Self {
-        let id = PairId::new(market_name, exit_name);
+        let id = TupleId::new(market_name, exit_name);
         let name = id.name();
         let mut journal = Journal::new(&name, dims, recalib_interval);
         let grace_label = journal.register("Grace");
@@ -153,7 +153,7 @@ impl PairJournal {
     }
 
     /// Predict: will this composed thought produce grace or violence?
-    /// Updates noise subspace. The pair does not decide to trade —
+    /// Updates noise subspace. The tuple does not decide to trade —
     /// it offers a prediction. The treasury decides based on the proof curve.
     pub fn propose(&mut self, composed_thought: &Vector) -> Prediction {
         let f64_data: Vec<f64> = composed_thought.data().iter().map(|&v| v as f64).collect();
@@ -162,12 +162,12 @@ impl PairJournal {
         self.journal.predict(&residual)
     }
 
-    /// Can this pair request capital from the treasury?
+    /// Can this tuple request capital from the treasury?
     pub fn funded(&self) -> bool {
         self.curve_valid
     }
 
-    /// How much of its maximum should this pair deploy?
+    /// How much of its maximum should this tuple deploy?
     /// Proportional to cumulative grace minus violence.
     pub fn allocation_fraction(&self) -> f64 {
         if self.trade_count == 0 { return 0.0; }
@@ -220,7 +220,7 @@ impl PairJournal {
             self.recalib_total = 0;
         }
 
-        // 4-6: Only if the pair had a directional prediction
+        // 4-6: Only if the tuple had a directional prediction
         let pred_dir = match prediction.direction {
             Some(d) => d,
             None => return,
@@ -277,8 +277,8 @@ mod tests {
     const TEST_DIMS: usize = 64;
 
     #[test]
-    fn pair_journal_new() {
-        let pj = PairJournal::new("momentum", "volatility", TEST_DIMS, 500);
+    fn tuple_journal_new() {
+        let pj = TupleJournal::new("momentum", "volatility", TEST_DIMS, 500);
         assert_eq!(pj.id.market_observer, "momentum");
         assert_eq!(pj.id.exit_observer, "volatility");
         assert!(!pj.funded());
@@ -287,8 +287,8 @@ mod tests {
     }
 
     #[test]
-    fn pair_journal_propose_does_not_crash() {
-        let mut pj = PairJournal::new("generalist", "timing", TEST_DIMS, 500);
+    fn tuple_journal_propose_does_not_crash() {
+        let mut pj = TupleJournal::new("generalist", "timing", TEST_DIMS, 500);
         let thought = holon::Vector::zeros(TEST_DIMS);
         let pred = pj.propose(&thought);
         // No discriminant yet → no direction
@@ -296,8 +296,8 @@ mod tests {
     }
 
     #[test]
-    fn pair_journal_resolve_accumulates() {
-        let mut pj = PairJournal::new("momentum", "vol", TEST_DIMS, 20);
+    fn tuple_journal_resolve_accumulates() {
+        let mut pj = TupleJournal::new("momentum", "vol", TEST_DIMS, 20);
         let thought = holon::Vector::zeros(TEST_DIMS);
         let pred = pj.propose(&thought);
 
@@ -311,8 +311,8 @@ mod tests {
     }
 
     #[test]
-    fn pair_journal_allocation_fraction() {
-        let mut pj = PairJournal::new("regime", "structure", TEST_DIMS, 20);
+    fn tuple_journal_allocation_fraction() {
+        let mut pj = TupleJournal::new("regime", "structure", TEST_DIMS, 20);
         let thought = holon::Vector::zeros(TEST_DIMS);
         let pred = pj.propose(&thought);
 
