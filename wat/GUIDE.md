@@ -50,6 +50,28 @@ The construction order. Each line can only reference what's above it —
 those are the things that exist when this thing is constructed. The
 constructor calls ARE the dependency graph.
 
+### The path from market to thought
+
+The market produces price data at regular intervals. For one time
+period (5 minutes for BTC), five measurements:
+
+- **Open** — price at the start of the period
+- **High** — highest price during the period
+- **Low** — lowest price during the period
+- **Close** — price at the end of the period
+- **Volume** — how much was traded during the period
+
+This is a **RawCandle**. Tagged with its asset pair — which market
+produced it. The enterprise consumes a stream of these. One per period.
+
+The **IndicatorBank** consumes raw candles and computes technical
+indicators — moving averages, oscillators, volatility measures,
+momentum, structure. The output is an enriched **Candle** — the raw
+data plus 100+ derived measurements. This is what the observers
+think about.
+
+### The construction order
+
 ```scheme
 ;; ── Leaves — depend on nothing ──────────────────────────────────────
 
