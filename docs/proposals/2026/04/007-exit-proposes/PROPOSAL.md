@@ -151,17 +151,28 @@ For each closed trade:
 
 When a trade closes: settle, propagate, remove from the map. Clean.
 
-**Step 2: COMPUTE** — The CSP pipeline. Parallel inside, sequential outside.
+**Step 2: COMPUTE + DISPATCH** — Market encodes, exit dispatches to treasury.
 
 ```
-par_iter(market_observers) → thoughts                          collect()
-par_iter(exit_observers × thoughts) → composed thoughts        collect()
-    → each exit observer composes: bundle(market_thought, judgment_facts)
-    → each exit observer queries: recommended_distance(composed_thought)
-    → if experienced + high conviction → emit proposal
+par_iter(market_observers) → [(label, thought), ...]                     collect()
+
+for each (market_observer, thought):
+    for each exit_observer:
+        composed = bundle(thought, exit_judgment_facts)
+        journal = treasury.get_or_create_journal(market_id, exit_id)
+        distance = exit_observer.recommended_distance(composed)
+        if experienced AND high_conviction:
+            treasury.propose_trade(journal, composed, distance, conviction)
 ```
 
-Returns everything Step 3 and Step 4 need: composed thoughts, distances, proposals. The parallelism is here — N × M pairs computed simultaneously.
+The market encoding is parallel (par_iter). The exit dispatch is sequential — it MUTATES the treasury (creates journals, inserts proposals). The treasury's registry and `proposed_trades` grow during this step.
+
+Returns: `[(market_label, market_thought), ...]` — the fresh thoughts for Step 3.
+
+After this step:
+- Registry may have new (market, exit) journals
+- `proposed_trades` has this candle's proposals
+- Fresh thoughts are ready for active trade management
 
 **Step 3: PROCESS** — Update active entries with fresh thoughts.
 
