@@ -40,11 +40,20 @@ The single-pass candle loop becomes three independent passes. Each is a CSP stag
 
 For each live entry, the treasury checks the current price against the trigger. If the stop fired — the trade closes NOW, before anyone thinks.
 
-For each closed trade:
-- Compute Grace/Violence from the actual P&L.
-- Compute the optimal distance from hindsight (`compute_optimal_distance` on the full price history).
-- Cascade the signal to the owning exit observer (learns the optimal distance) and the market observer (receives Win/Loss label).
-- Update the TupleJournal for this (market, exit) pair.
+For each closed trade, the treasury calls one method:
+
+```rust
+tuple_journal.propagate(outcome, &closes, entry_price);
+```
+
+The treasury knows: this trade ended, here's the outcome, here's the prices. That's all. The tuple journal does the rest:
+1. Records Grace/Violence on its own track record.
+2. Computes optimal distance from the price history (`compute_optimal_distance`).
+3. Feeds the owning exit observer's LearnedStop with (thought, optimal_distance, residue).
+4. Labels the owning market observer Win/Loss.
+5. Updates allocation based on cumulative grace/violence.
+
+One call. The tuple journal IS the interface between the treasury and the learning system. The treasury doesn't know about learned stops or observer journals or optimal distances. It knows outcomes and prices. The tuple routes everything.
 
 For each proposal from the previous candle that's waiting for funding:
 - Is the TupleJournal for this (market, exit) pair proven? (curve_valid)
