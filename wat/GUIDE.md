@@ -422,38 +422,32 @@ The encoder walks them all the same way. The mechanism doesn't change.
 
 ---
 
-### LearnedStop (depends on: Journal — it IS a journal)
+### Scalar journal (the mechanism — not a struct)
 
-The exit observer's brain. Replaces every magic number with measurement.
-It is a journal. Same geometry. Different readout.
+The exit observer's journal. Not a separate entity. The mechanism
+that lives INSIDE the exit observer, on its `observations` field.
 
-The Journal accumulates observations, decays, predicts by cosine →
-returns a LABEL (Win/Loss). The LearnedStop accumulates observations,
-decays, predicts by cosine → returns a SCALAR (distance). Same mechanism.
-Different output.
+Same geometry as the market observer's journal. Different readout.
+The market observer's journal returns a LABEL (Win/Loss). The exit
+observer's journal returns a SCALAR (distance). Same cosine. Same
+accumulation. Same decay.
 
-k_trail, k_stop, k_tp — someone made these up. The LearnedStop replaces
-them with what the market actually said. `compute_optimal_distance` sweeps
-candidate distances against real price history and finds the one that
-maximized residue. That answer — the market's answer — is stored as an
-observation. Many answers accumulate. Old ones decay. The irrelevant fades.
+k_trail, k_stop, k_tp — someone made these up. The exit observer's
+journal replaces them with what the market actually said.
+`compute_optimal_distance` sweeps candidate distances against real price
+history and finds the one that maximized residue. That answer is stored
+as an observation. Many answers accumulate. Old ones decay.
 
-When a new composed thought arrives, the LearnedStop queries: "what did
-the market say about thoughts like this?" The answer is the cosine-weighted
-average of distances from similar experience. The cosine IS the kernel.
-Similar thoughts → similar distances. Different thoughts → different distances.
-
-Each magic number gets its own LearnedStop:
-- **Trail**: "given this thought, what trailing stop distance?"
-- **Stop**: "given this thought, how far should the safety stop be?"
-- **TP**: "given this thought, what take-profit distance?"
+Each magic number gets its own exit observer:
+- **Trail observer**: "given this thought, what trailing stop distance?"
+- **Stop observer**: "given this thought, how far should the safety stop be?"
+- **TP observer**: "given this thought, what take-profit distance?"
 
 Each learns independently. Each starts ignorant — returns `default-distance`
-(the current ATR multiplier, the crutch). As observations accumulate, the
-crutch is replaced by learned values. No hard switch. Ignorance blends
-to competence.
+(the ATR multiplier crutch). As observations accumulate, the crutch is
+replaced by learned values. Ignorance blends to competence.
 
-Two learning streams feed each LearnedStop:
+Two learning streams feed each exit observer:
 - **Paper** (fast/cheap) — resolved paper entries from tick-papers
 - **Reality** (on close) — compute_optimal_distance from hindsight
 
@@ -469,21 +463,6 @@ Both read. Neither writes. The writing happens on RESOLUTION:
 - **Trade resolves** (treasury settles, routes to post) → compute_optimal_distance → observe (write)
 
 The query seeds the stop. The resolution teaches the answer.
-
-```
-(struct learned-stop
-  observations      ; accumulated experience — decays like a journal
-  default-distance) ; f64 — the crutch, returned when empty (ignorance)
-```
-
-**Interface:**
-- `(new-learned-stop default-distance) → LearnedStop`
-- `(recommended-distance learned-stop composed-thought) → f64`
-  cosine-weighted average of distances from similar experience
-- `(observe-distance learned-stop composed-thought optimal-distance weight)`
-  the market spoke — store the observation
-- `(experienced? learned-stop) → bool`
-  has it accumulated any observations? empty = ignorance
 
 ---
 
@@ -538,7 +517,7 @@ The generalist is just another lens. No special treatment.
 
 ### ExitObserver (depends on: Journal concept — scalar readout)
 
-Predicts exit distance. Learned. Its journal IS the LearnedStop —
+Predicts exit distance. Learned. Its journal is a scalar journal —
 accumulated observations with scalar readout. Same geometry as the
 market observer's journal. Different output.
 
@@ -578,8 +557,8 @@ to both observers.
 The tuple journal does NOT own the observers — it references them.
 The post owns the observers. The tuple journal accesses them.
 
-The tuple journal does NOT own the LearnedStop — that's the exit
-observer's brain. The tuple journal routes training data TO it.
+The tuple journal does NOT own the exit observer's journal — that's on
+the exit observer. The tuple journal routes training data TO it.
 
 The tuple journal does NOT own proposals or active trades — those are
 the treasury's. The tuple journal proposes TO the treasury.
@@ -766,10 +745,9 @@ indicator-bank.wat      → (depends on RawCandle)
 window-sampler.wat      → (no deps)
 vocab/                  → (depends on Candle)
 thought-encoder.wat     → (depends on Vocabulary, VectorManager)
-learned-stop.wat        → (no deps)
 scalar-accumulator.wat  → (no deps)
 market/observer.wat     → (depends on Journal, OnlineSubspace, WindowSampler)
-exit/observer.wat       → (depends on LearnedStop)
+exit/observer.wat       → (depends on Journal concept — scalar readout)
 tuple-journal.wat       → (depends on Journal, OnlineSubspace, ScalarAccumulator,
                             MarketObserver, ExitObserver)
 post.wat                → (depends on IndicatorBank, MarketObserver, ExitObserver,
@@ -807,9 +785,9 @@ Step 4: COLLECT     — treasury funds proven proposals, rejects the rest
 
 - Manager journal → tuple journals (each pair IS its own manager)
 - Pending queue + horizon labels → paper trades (fast learning)
-- Exit journal (Buy/Sell) → LearnedStop regression (distance)
+- Exit journal (Buy/Sell) → scalar journal on exit observer (distance)
 - Panel engram → not needed
 - Observer noise learning on market observer → tuple journal has its own
-- Fixed ATR multipliers → LearnedStop predicts from experience
+- Fixed ATR multipliers → exit observer's journal predicts from experience
 - GENERALIST_IDX → the generalist is just another lens
 - Desk → Post (clean per-pair unit, no monolithic fold)
