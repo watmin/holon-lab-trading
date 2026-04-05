@@ -4,6 +4,10 @@ Built leaves to root from Proposal 007: Exit Proposes.
 This document defines every struct and its interface. No implementation.
 The wat files implement what this document declares.
 
+Each section declares its dependencies. The order of sections IS the build
+order — leaves first, root last. Each file's dependencies are already
+written before it appears.
+
 ## Holon-rs primitives (provided by the substrate)
 
 These are NOT specified in this tree. They are provided by holon-rs.
@@ -36,9 +40,29 @@ These are NOT specified in this tree. They are provided by holon-rs.
 
 ## Structs and interfaces
 
-### 1. Candle (leaf)
+### RawCandle (the input — depends on: nothing)
+
+The enterprise consumes a stream of raw candles. This is the only input.
+Everything else is derived. Each raw candle identifies its asset pair —
+the pair IS the routing key. Only the post for that pair receives it.
+
+```
+(struct raw-candle
+  source-asset    ; Asset — e.g. USDC
+  target-asset    ; Asset — e.g. WBTC
+  ts open high low close volume)
+```
+
+Eight fields. From the parquet. From the websocket. The enterprise doesn't
+care which. The asset pair IS the identity of the stream.
+
+---
+
+### Candle (depends on: RawCandle)
 
 The enriched candle. Raw OHLCV in, 100+ computed indicators out.
+Produced by IndicatorBank.tick(raw-candle). The post's first act
+every candle.
 
 ```
 (struct candle
@@ -66,21 +90,28 @@ The enriched candle. Raw OHLCV in, 100+ computed indicators out.
   hour day-of-week)
 ```
 
-### 2. IndicatorBank (leaf)
+---
+
+### IndicatorBank (depends on: RawCandle)
 
 Streaming state machine. Advances all indicators by one raw candle.
+Stateful — ring buffers, EMA accumulators, Wilder smoothers.
+One per post (one per asset pair).
 
 ```
-(struct indicator-bank ...)  ; internal state — ring buffers, EMA accumulators, etc.
+(struct indicator-bank ...)  ; internal state — implementation detail
 ```
 
 **Interface:**
-- `(tick indicator-bank raw-candle) → Candle`
 - `(new-indicator-bank) → IndicatorBank`
+- `(tick indicator-bank raw-candle) → Candle`
 
-### 3. WindowSampler (leaf)
+---
+
+### WindowSampler (depends on: nothing)
 
 Deterministic log-uniform window selection. Each observer gets its own seed.
+The seed determines the time scale this observer explores.
 
 ```
 (struct window-sampler
@@ -88,10 +119,12 @@ Deterministic log-uniform window selection. Each observer gets its own seed.
 ```
 
 **Interface:**
-- `(sample window-sampler encode-count) → usize`  — the window size for this candle
 - `(new-window-sampler seed min max) → WindowSampler`
+- `(sample window-sampler encode-count) → usize`
 
-### 4. Vocabulary (leaf)
+---
+
+### Vocabulary (depends on: Candle)
 
 Pure functions. Candle in, facts out. No state.
 Each module covers a domain of technical analysis.
@@ -99,14 +132,18 @@ Each module covers a domain of technical analysis.
 **Interface (per module):**
 - `(encode-*-facts candle) → Vec<Fact>`
 
-Modules: oscillators, flow, persistence, regime, divergence, ichimoku, stochastic, fibonacci, keltner, momentum, price-action, timeframe.
+Modules: oscillators, flow, persistence, regime, divergence, ichimoku,
+stochastic, fibonacci, keltner, momentum, price-action, timeframe.
 
 A **Fact** is `{ name: &str, value: f64, scale: f64, mode: ScalarMode }`.
 The ThoughtEncoder renders facts to vectors via bind + scalar encoding.
 
-### 5. ThoughtEncoder (leaf)
+---
 
-Renders facts to geometry. Shared across all observers. Immutable after construction.
+### ThoughtEncoder (depends on: Vocabulary, VectorManager)
+
+Renders facts to geometry. Shared across all posts. Immutable after
+construction. Pre-computes comparison facts, zone facts, fibonacci facts.
 
 ```
 (struct thought-encoder
@@ -117,27 +154,33 @@ Renders facts to geometry. Shared across all observers. Immutable after construc
 - `(encode-thought encoder candles vm lens) → Vector`
 - `(encode-facts encoder facts) → Vec<Vector>`
 
-### 6. LearnedStop (leaf)
+---
+
+### LearnedStop (depends on: nothing)
 
 Nearest-neighbor kernel regression. The exit observer's brain.
 Cosine-weighted average of (thought, distance) pairs.
+Empty at construction — returns default-distance until pairs accumulate.
 
 ```
 (struct learned-stop
-  pairs         ; Vec<(Vector, f64, f64)> — (thought, distance, weight)
-  max-pairs     ; usize — cap
-  default-distance)  ; f64 — returned when empty (ignorance)
+  pairs            ; Vec<(Vector, f64, f64)> — (thought, distance, weight)
+  max-pairs        ; usize — cap
+  default-distance); f64 — returned when empty (ignorance)
 ```
 
 **Interface:**
+- `(new-learned-stop max-pairs default-distance) → LearnedStop`
 - `(recommended-distance learned-stop composed-thought) → f64`
 - `(observe-stop learned-stop composed-thought optimal-distance weight)`
 - `(pair-count learned-stop) → usize`
-- `(new-learned-stop max-pairs default-distance) → LearnedStop`
 
-### 7. ScalarAccumulator (leaf)
+---
+
+### ScalarAccumulator (depends on: nothing)
 
 Per-magic-number f64 learning. Separates grace/violence observations.
+Each magic number (trail-distance, k-stop, k-tp) gets its own accumulator.
 
 ```
 (struct scalar-accumulator
@@ -145,51 +188,60 @@ Per-magic-number f64 learning. Separates grace/violence observations.
 ```
 
 **Interface:**
+- `(new-scalar-accumulator name) → ScalarAccumulator`
 - `(observe-scalar acc value grace? weight)`
 - `(extract-scalar acc) → f64`
-- `(new-scalar-accumulator name) → ScalarAccumulator`
 
-### 8. MarketObserver (depends on: Journal, OnlineSubspace, WindowSampler)
+---
 
-Predicts direction. Learned. Labels from tuple journal propagation.
+### MarketObserver (depends on: Journal, OnlineSubspace, WindowSampler)
+
+Predicts direction. Learned. Labels come from tuple journal propagation —
+Win/Loss from resolved paper and real trades. The market observer does NOT
+label itself. Reality labels it.
+
+The generalist is just another lens. No special treatment.
 
 ```
 (struct market-observer
-  lens              ; Lens enum
-  journal           ; Journal — Win/Loss
-  noise-subspace    ; OnlineSubspace — background model
-  window-sampler    ; WindowSampler — own time scale
+  lens                 ; Lens enum
+  journal              ; Journal — Win/Loss
+  noise-subspace       ; OnlineSubspace — background model
+  window-sampler       ; WindowSampler — own time scale
   ;; Proof tracking
-  resolved          ; deque of (conviction, correct)
-  conviction-history
-  conviction-threshold
-  curve-valid
-  cached-accuracy
+  resolved conviction-history conviction-threshold
+  curve-valid cached-accuracy
   ;; Engram gating
-  good-state-subspace
-  recalib-wins recalib-total last-recalib-count)
+  good-state-subspace recalib-wins recalib-total last-recalib-count)
 ```
 
 **Interface:**
+- `(new-market-observer lens dims recalib-interval seed) → MarketObserver`
 - `(observe-candle observer candles vm) → Prediction`
   encode → noise update → strip noise → predict
 - `(resolve observer thought prediction outcome weight q window)`
   called by tuple journal propagation — journal learns Win/Loss
 - `(strip-noise observer thought) → Vector`
 - `(funded? observer) → bool` — proof gate
-- `(new-market-observer lens dims recalib-interval seed) → MarketObserver`
 
-### 9. ExitObserver (depends on: LearnedStop)
+---
 
-Predicts exit distance. Learned. LearnedStop is its brain.
+### ExitObserver (depends on: LearnedStop)
+
+Predicts exit distance. Learned. LearnedStop IS its brain.
+Has a judgment vocabulary (volatility, structure, timing, generalist).
+Composes market thoughts with its own judgment facts.
+One LearnedStop per exit observer — M instances, not N×M.
+The composed thought carries the market observer's signal in superposition.
 
 ```
 (struct exit-observer
-  lens           ; ExitLens enum — which judgment vocabulary
-  learned-stop)  ; LearnedStop — nearest neighbor regression
+  lens            ; ExitLens enum — which judgment vocabulary
+  learned-stop)   ; LearnedStop — nearest neighbor regression
 ```
 
 **Interface:**
+- `(new-exit-observer lens max-pairs default-distance) → ExitObserver`
 - `(encode-exit-facts exit-obs candle ctx) → Vec<Vector>`
   pure: candle → judgment fact vectors for this lens
 - `(compose exit-obs market-thought exit-fact-vecs) → Vector`
@@ -200,20 +252,29 @@ Predicts exit distance. Learned. LearnedStop is its brain.
   feed the LearnedStop — called by tuple journal propagation
 - `(can-propose? exit-obs composed) → bool`
   has the LearnedStop accumulated pairs?
-- `(new-exit-observer lens max-pairs default-distance) → ExitObserver`
 
-### 10. TupleJournal (depends on: Journal, OnlineSubspace, ScalarAccumulator, MarketObserver, ExitObserver)
+---
 
-The closure over (market-observer, exit-observer). Accountability primitive.
-Papers live inside. Propagate routes to both observers.
+### TupleJournal (depends on: Journal, OnlineSubspace, ScalarAccumulator, MarketObserver, ExitObserver)
+
+The closure over (market-observer, exit-observer). The accountability
+primitive. The manager replacement. Papers live inside. Propagate routes
+to both observers.
+
+The tuple journal does NOT own the observers — it references them.
+The post owns the observers. The tuple journal accesses them.
+
+The tuple journal does NOT own the LearnedStop — that's the exit
+observer's brain. The tuple journal routes training data TO it.
+
+The tuple journal does NOT own proposals or active trades — those are
+the treasury's. The tuple journal proposes TO the treasury.
 
 ```
 (struct tuple-journal
   market-name exit-name
   ;; Accountability
-  journal           ; Journal — Grace/Violence
-  noise-subspace    ; OnlineSubspace
-  grace-label violence-label
+  journal noise-subspace grace-label violence-label
   ;; Track record
   resolved conviction-history conviction-threshold
   curve-valid cached-acc
@@ -227,6 +288,7 @@ Papers live inside. Propagate routes to both observers.
 ```
 
 **Interface:**
+- `(new-tuple-journal market-name exit-name dims recalib-interval) → TupleJournal`
 - `(propose tj composed) → Prediction`
   noise update → strip noise → predict Grace/Violence
 - `(funded? tj) → bool` — proof curve gate
@@ -237,71 +299,172 @@ Papers live inside. Propagate routes to both observers.
 - `(propagate tj thought outcome amount optimal market-observer exit-observer)`
   route to market observer (Win/Loss), exit observer (distance), self (Grace/Violence)
 - `(paper-count tj) → usize`
-- `(new-tuple-journal market-name exit-name dims recalib-interval) → TupleJournal`
 
-### 11. Treasury (leaf — pure accounting)
+---
 
-Holds capital. Executes swaps. Settles trades.
+### Post (depends on: IndicatorBank, MarketObserver, ExitObserver, TupleJournal)
+
+A self-contained unit for one asset pair. The post is where the thinking
+happens. It owns the observers, the tuple journals, the indicator bank.
+It does NOT own proposals or trades — those belong to the treasury.
+
+Each post watches one market. (USDC, WBTC) is one post. (USDC, SOL) is
+another. No cross-talk. Observers within a post learn together. Observers
+across posts are independent.
+
+The post proposes to the treasury. The treasury decides. When a trade
+closes, the treasury routes the outcome back to the post for
+accountability — to the tuple journal that proposed it.
 
 ```
-(struct treasury
-  assets)           ; map of asset → balance
+(struct post
+  ;; Identity
+  source-asset         ; Asset — e.g. USDC
+  target-asset         ; Asset — e.g. WBTC
+
+  ;; Data pipeline
+  indicator-bank       ; IndicatorBank — streaming indicators for this pair
+  candle-window        ; VecDeque<Candle> — bounded history
+  max-window-size      ; capacity
+
+  ;; Observers — both are learned, both are per-pair
+  market-observers     ; Vec<MarketObserver> [N]
+  exit-observers       ; Vec<ExitObserver> [M]
+
+  ;; Accountability — N×M tuple journals
+  registry             ; Vec<TupleJournal> [N×M] — closures, permanent
+
+  ;; Counter
+  encode-count)
 ```
 
 **Interface:**
-- `(settle treasury trade outcome) → settlement`
-  execute swap, update balances
+- `(new-post source target dims recalib-interval max-window-size) → Post`
+- `(post-on-candle post raw-candle ctx) → Vec<Proposal>`
+  tick indicators → push window → encode → compose → propose → tick papers
+  returns proposals for the treasury to evaluate
+- `(post-update-triggers post trades thoughts) `
+  update active trade triggers with fresh thoughts (treasury passes its trades)
+- `(post-propagate post slot-idx thought outcome amount optimal)`
+  treasury routes a resolved trade back to the post for accountability
+
+---
+
+### Treasury (depends on: nothing — pure accounting, but receives proposals from Posts)
+
+Holds capital. Receives proposals from posts. Accepts or rejects.
+Holds active trades. Settles trades. Routes outcomes back to posts
+for accountability.
+
+The treasury is where the money happens. It does not think. It counts.
+It decides based on capital availability and proof curves.
+
+The treasury maps each active trade back to its post and tuple journal
+so that on settlement, propagate reaches the right observers.
+
+```
+(struct treasury
+  ;; Capital
+  assets               ; map of Asset → balance
+
+  ;; Proposals — received from posts each candle, drained after funding
+  proposals            ; Vec<Proposal> — cleared every candle
+
+  ;; Active trades — funded proposals become trades
+  trades               ; map of TradeId → Trade
+  trade-origins        ; map of TradeId → { post, slot-idx, thought }
+)
+```
+
+**Interface:**
+- `(submit-proposal treasury proposal post slot-idx)`
+  a post submits a proposal for the treasury to evaluate
+- `(fund-proposals treasury)`
+  evaluate all proposals, fund proven ones, reject the rest, drain
+- `(settle-triggered treasury current-price) → Vec<Settlement>`
+  check all active trades, settle what triggered, return settlements
+  each settlement includes the post and slot-idx for propagation
 - `(capital-available? treasury direction) → bool`
-  is there capital to deploy in this direction?
-- `(open-trade treasury proposal price atr) → Trade`
-  deploy capital, create position
 - `(deposit treasury asset amount)`
 - `(balance treasury asset) → f64`
 
-### 12. Enterprise (depends on: everything above)
+---
 
-The four-step loop. Owns everything.
+### Enterprise (depends on: everything above)
+
+The coordination plane. The CSP sync point.
+
+The enterprise is the only entity that sees the whole picture. Every other
+entity is an independent process — it takes input and produces output.
+It does not know about parallelism, ordering, or other entities.
+
+The enterprise holds posts and a treasury. It routes raw candles to the
+right post. It coordinates the four-step loop across all posts and the
+treasury.
+
+The enterprise knows:
+- **What runs parallel** — market observers encode simultaneously (par_iter)
+- **What runs sequential** — exit dispatch into registry (disjoint slots)
+- **What order** — RESOLVE before COMPUTE before PROCESS before COLLECT
+- **What flows where** — proposals from posts to treasury, settlements from treasury to posts
+- **What gets cleared** — proposals empty after funding, every candle
 
 ```
 (struct enterprise
-  indicator-bank candle-window max-window-size
-  market-observers    ; Vec<MarketObserver> [N]
-  exit-observers      ; Vec<ExitObserver> [M]
-  encode-count
-  treasury            ; Treasury
-  registry            ; Vec<TupleJournal> [N×M]
-  proposals           ; Vec<Option<Proposal>> [N×M]
-  trades              ; Vec<Option<Trade>> [N×M]
-  trade-thoughts      ; Vec<Option<Vector>> [N×M]
+  ;; The posts — one per asset pair
+  posts                ; Vec<Post> — each watches one market
+
+  ;; The treasury — shared across all posts
+  treasury             ; Treasury — holds capital, funds trades, settles
+
+  ;; Shared resources
+  thought-encoder      ; ThoughtEncoder — immutable, shared across all posts
+  vector-manager       ; VectorManager — immutable, shared
+
+  ;; Logging
   pending-logs)
 ```
 
 **Interface:**
-- `(on-candle enterprise raw ctx)`
-  tick indicators → push window → four steps
-- `(step-resolve enterprise current-price candle-window)`
-- `(step-compute-dispatch enterprise candle ctx) → thoughts`
-- `(step-process enterprise thoughts current-price)`
-- `(step-collect-fund enterprise current-price current-atr)`
-- `(enterprise-index market-idx exit-idx exit-count) → slot-idx`
+- `(on-candle enterprise raw-candle)`
+  route to the right post, then four steps
+- `(step-resolve enterprise)`
+  treasury settles triggered trades
+  for each settlement: route to the post for propagation
+- `(step-compute-dispatch enterprise candle post) → proposals`
+  post encodes, composes, proposes — returns proposals for the treasury
+- `(step-process enterprise post thoughts)`
+  post ticks papers, treasury passes active trades for trigger updates
+- `(step-collect-fund enterprise)`
+  treasury funds or rejects all proposals, drains
 
 ---
 
 ## The build order
 
+The order of sections above IS the build order. Each section declares its
+dependencies. Each wat file is written after its dependencies exist.
+
 ```
-1. candle.wat              — Candle struct, IndicatorBank interface
-2. window-sampler.wat      — WindowSampler struct + sample
-3. vocab/                  — fact modules (pure: candle → facts)
-4. market/observer.wat     — MarketObserver struct + full interface
-5. exit/observer.wat       — ExitObserver struct + LearnedStop interface
-6. tuple-journal.wat       — TupleJournal struct + propagate + papers
-7. treasury.wat            — Treasury struct + settle/fund interface
-8. enterprise.wat          — Enterprise struct + four-step loop
+raw-candle.wat          → (no deps)
+candle.wat              → (depends on RawCandle)
+indicator-bank.wat      → (depends on RawCandle)
+window-sampler.wat      → (no deps)
+vocab/                  → (depends on Candle)
+thought-encoder.wat     → (depends on Vocabulary, VectorManager)
+learned-stop.wat        → (no deps)
+scalar-accumulator.wat  → (no deps)
+market/observer.wat     → (depends on Journal, OnlineSubspace, WindowSampler)
+exit/observer.wat       → (depends on LearnedStop)
+tuple-journal.wat       → (depends on Journal, OnlineSubspace, ScalarAccumulator,
+                            MarketObserver, ExitObserver)
+post.wat                → (depends on IndicatorBank, MarketObserver, ExitObserver,
+                            TupleJournal)
+treasury.wat            → (no structural deps — receives proposals from Posts)
+enterprise.wat          → (depends on Post, Treasury, ThoughtEncoder)
 ```
 
 Each file is agreed upon before the next is written.
-Each file's dependencies must already exist.
 The proposal is the source of truth for what each entity does.
 
 ---
@@ -310,19 +473,19 @@ The proposal is the source of truth for what each entity does.
 
 ```
 Step 1: RESOLVE     — treasury settles triggered trades
-                      propagate → market observer (Win/Loss)
-                      propagate → exit observer (optimal distance)
-                      propagate → tuple journal (Grace/Violence)
+                      for each settlement: enterprise routes to post
+                      post.propagate → tuple journal → both observers learn
 
-Step 2: COMPUTE     — market observers encode (parallel)
-         DISPATCH   — exit observers compose + propose (sequential)
-                      register paper on every tuple journal
-                      propose if funded + experienced
+Step 2: COMPUTE     — each post: market observers encode (parallel)
+         DISPATCH   — each post: exit observers compose + propose (sequential)
+                      each post: register paper on every tuple journal
+                      proposals submitted to treasury
 
-Step 3: PROCESS     — exit observer queries distance for active trades
-                      tuple journal ticks papers → propagate resolved
+Step 3: PROCESS     — each post: tuple journals tick papers → propagate resolved
+                      treasury passes active trades to posts for trigger updates
+                      exit observers query distance for each active trade
 
-Step 4: COLLECT     — treasury funds proven proposals
+Step 4: COLLECT     — treasury funds proven proposals, rejects the rest
          FUND        proposals drain → empty after step 4
 ```
 
@@ -335,3 +498,4 @@ Step 4: COLLECT     — treasury funds proven proposals
 - Observer noise learning on market observer → tuple journal has its own
 - Fixed ATR multipliers → LearnedStop predicts from experience
 - GENERALIST_IDX → the generalist is just another lens
+- Desk → Post (clean per-pair unit, no monolithic fold)
