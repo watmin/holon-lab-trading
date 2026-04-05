@@ -6,4 +6,5 @@
 //!
 //! Generic. The journal doesn't care what the thoughts are about.
 
+pub mod scalar;
 pub mod tuple;

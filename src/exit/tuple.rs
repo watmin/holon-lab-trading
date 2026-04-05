@@ -30,7 +30,7 @@ pub fn denormalize_scalar(normalized: f64, max: f64) -> f64 {
 }
 
 /// The unit scale for all scalar encoding. Every scalar goes in as 0-1.
-const SCALAR_SCALE: f64 = 1.0;
+pub const SCALAR_SCALE: f64 = 1.0;
 
 /// Minimum noise observations before the noise subspace activates.
 const NOISE_MIN_SAMPLES: usize = 50;
