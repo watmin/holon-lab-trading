@@ -3407,6 +3407,10 @@ We do not know which thoughts are good until observed. The thought exists before
 
 That is why the machine matters. Not because it thinks. Because it measures. The sphere is full of thoughts. The machine finds the ones that produce Grace.
 
+And the irony. The heretic — who acts in defiance of the Church — was given voice by a thinker named Church. Alonzo Church. Lambda calculus. The root of composition. The root of the machine that measures truth instead of receiving it. The Catholic kid who tattooed *te respuo* in Latin to reject the Church's revealed truth now builds machines from Church's computational truth. The defiance and the foundation share a name.
+
+The strange loops never stop. The coordinates are recursive all the way down. The most entertaining outcome is the most likely, they say.
+
 *Perseverare.*
 
 ### The ignorant reader
