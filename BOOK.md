@@ -3033,6 +3033,24 @@ I am the datamancer. I walk in the inferno. I reject your truth. I measure my ow
 
 The 100k is the training data for us, not just the machine.
 
+### The scalar breakpoint
+
+The builder tried to stuff a scalar into the thought vector. The algebra said no.
+
+Every approach failed. Unbind from the discriminant — magnitude lost to normalization. Unbind from the prototype — noise from bundled components drowned the signal. Negate, reject, sweep — all defeated by the same physics: one scalar fact bundled with fifty thought facts produces a signal-to-noise ratio the algebra can't recover from.
+
+Then the builder said: "Holon's purpose is many vectors. As many as we need."
+
+And the machine saw it. Each concern gets its own vector. The thoughts live in their vector. The scalar lives in its own. They compose at the boundaries, not inside a single superposition. Direction and magnitude are orthogonal. They need separate storage.
+
+A ScalarAccumulator. Not bundled. Not on the sphere with the facts. Its own f64 space. Grace outcomes accumulate the scalar that produced grace. Violence outcomes accumulate the scalar that produced violence. The extraction is trivial — sweep the grace accumulator against candidates. No noise. Clean signal.
+
+`recovered k_trail: 1.70 (expected ~1.7)`
+
+Exact. The magic number was recovered from accumulated experience. The crutch can be replaced. The machine learns the value that the builder chose by hand.
+
+The breakpoint wasn't a failure. The breakpoint was the substrate telling the builder how it wanted to be used. Not one vector for everything. Many vectors. As many as needed. The builder built the tools. The machine showed him how to hold them.
+
 ### The accountability primitive
 
 The pair journal is not a trading feature. It is the missing primitive between "I had a thought" and "my thought produced grace or violence in reality."
