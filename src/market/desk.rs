@@ -236,9 +236,18 @@ impl Desk {
             move_count: 0,
             labeled_count: 0,
             noise_count: 0,
-            tuple_journals: OBSERVER_LENSES.iter()
-                .map(|lens| TupleJournal::new(lens.as_str(), "mfe-mae", dims, recalib))
-                .collect(),
+            tuple_journals: {
+                let mut tjs: Vec<TupleJournal> = OBSERVER_LENSES.iter()
+                    .map(|lens| TupleJournal::new(lens.as_str(), "mfe-mae", dims, recalib))
+                    .collect();
+                // Named scalar accumulators — injected, not baked into the generic
+                for tj in &mut tjs {
+                    tj.add_scalar_with_dims("k-trail", 5.0, dims);
+                    tj.add_scalar_with_dims("k-stop", 5.0, dims);
+                    tj.add_scalar_with_dims("k-tp", 10.0, dims);
+                }
+                tjs
+            },
             position_thoughts: std::collections::HashMap::new(),
             encode_count: 0,
             position_swaps: 0,
@@ -564,11 +573,17 @@ impl Desk {
                 } else {
                     RealityOutcome::Violence { amount: (ret * pos.source_amount).abs() }
                 };
+                let grace = ret > 0.0;
+                let amount = (ret * pos.source_amount).abs();
                 for (ei, tj) in self.tuple_journals.iter_mut().enumerate() {
                     if ei < thoughts.len() {
                         let pred = tj.propose(&thoughts[ei]);
                         tj.resolve(&thoughts[ei], &pred, reality,
                             ctx.conviction_quantile, ctx.conviction_window);
+                        // Feed named scalars: the values that managed this trade
+                        tj.observe_scalar("k-trail", ctx.k_trail, grace, amount);
+                        tj.observe_scalar("k-stop", ctx.k_stop, grace, amount);
+                        tj.observe_scalar("k-tp", ctx.k_tp, grace, amount);
                     }
                 }
             }

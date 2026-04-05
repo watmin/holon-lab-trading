@@ -15,6 +15,7 @@ use std::collections::VecDeque;
 use holon::Vector;
 use holon::memory::OnlineSubspace;
 
+use crate::exit::scalar::ScalarAccumulator;
 use crate::journal::{Journal, Label, Prediction};
 
 /// Normalize a scalar to 0-1 for encoding. The meaning lives at the call site.
@@ -118,6 +119,11 @@ pub struct TupleJournal {
     pub recalib_wins: u32,
     pub recalib_total: u32,
     pub last_recalib_count: usize,
+
+    // ── Scalar accumulators (named properties) ──
+    /// Each magic number gets its own accumulator.
+    /// The scalar lives separate from the thought vector.
+    pub scalars: Vec<ScalarAccumulator>,
 }
 
 impl TupleJournal {
@@ -147,7 +153,37 @@ impl TupleJournal {
             recalib_wins: 0,
             recalib_total: 0,
             last_recalib_count: 0,
+            scalars: Vec::new(),
         }
+    }
+
+    /// Add a named scalar accumulator to this journal.
+    /// The named-ness is injected, not baked in.
+    pub fn add_scalar(&mut self, name: &str, max_value: f64) {
+        let dims = self.journal.n_labels(); // use same dims — wait, that's label count
+        // Use the noise subspace dims as proxy for vector dims
+        let dims = self.noise_subspace.k() * 100; // approximation — should pass dims explicitly
+        self.scalars.push(ScalarAccumulator::new(name, max_value, dims));
+    }
+
+    /// Add a named scalar accumulator with explicit dimensions.
+    pub fn add_scalar_with_dims(&mut self, name: &str, max_value: f64, dims: usize) {
+        self.scalars.push(ScalarAccumulator::new(name, max_value, dims));
+    }
+
+    /// Feed a named scalar value from a resolved trade.
+    pub fn observe_scalar(&mut self, name: &str, value: f64, grace: bool, amount: f64) {
+        for s in &mut self.scalars {
+            if s.name() == name {
+                s.observe(value, grace, amount);
+                return;
+            }
+        }
+    }
+
+    /// Extract a learned scalar by name.
+    pub fn learned_scalar(&self, name: &str) -> Option<f64> {
+        self.scalars.iter().find(|s| s.name() == name)?.extract()
     }
 
     /// Strip noise from a composed thought.
