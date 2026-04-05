@@ -103,35 +103,37 @@ think about.
 ```scheme
 ;; ── Primitives — depend on nothing ──────────────────────────────────
 
-;; Asset: a named token (e.g. "USDC", "WBTC")
+;; Asset: a named token
 (struct asset name)
 
-(make-raw-candle Asset Asset String f64 f64 f64 f64 f64)
-                                                    → RawCandle
-;; source-asset, target-asset, ts, open, high, low, close, volume
+(let ((source (make-asset "USDC"))
+      (target (make-asset "WBTC")))
+  (make-raw-candle source target "2025-01-01T00:00:00"
+    96000.0 96500.0 95800.0 96200.0 1500.0))        → RawCandle
 
-(make-indicator-bank)                               → IndicatorBank
+(make-indicator-bank)                                → IndicatorBank
 
-(make-window-sampler u64 usize usize)               → WindowSampler
-;; seed, min-window, max-window
+(let ((seed 7919)
+      (min-window 12)
+      (max-window 2016))
+  (make-window-sampler seed min-window max-window))  → WindowSampler
 
-(make-scalar-accumulator String)                    → ScalarAccumulator
-;; name
+(make-scalar-accumulator "trail-distance")           → ScalarAccumulator
 
 ;; ── Candle — produced by indicator bank from raw candle ─────────────
 
-(tick IndicatorBank RawCandle)                      → Candle
+(tick indicator-bank raw-candle)                     → Candle
 
 ;; ── Vocabulary — pure functions, context in, ASTs out ───────────────
 ;; Three domains: shared (time), market (direction), exit (conditions)
 ;; The vocabulary speaks a DSL of ThoughtASTs — data, not execution
 
-(vocab-fn Candle)                                   → Vec<ThoughtAST>
+(oscillator-facts candle)                            → Vec<ThoughtAST>
 
 ;; ── ThoughtEncoder — evaluates the vocabulary's ASTs ────────────────
 
-(make-thought-encoder VectorManager)                → ThoughtEncoder
-(encode ThoughtEncoder ThoughtAST)                  → Vector
+(make-thought-encoder vector-manager)                → ThoughtEncoder
+(encode thought-encoder ast)                         → Vector
 
 ;; ── Lenses — which vocabulary subset an observer thinks through ─────
 ;; A lens selects which vocab modules fire. The observer's identity.
@@ -143,20 +145,27 @@ think about.
 ;; Nearest-neighbor cosine-weighted regression.
 ;; (thought, distance, weight) observations. Query by similarity.
 
-(make-learned-stop f64)                             → LearnedStop
-;; default-distance (the crutch — returned when empty)
+(let ((default-distance 0.015))
+  (make-learned-stop default-distance))              → LearnedStop
 
 ;; ── MarketObserver — predicts direction, learned ────────────────────
 
-(make-market-observer MarketLens usize usize WindowSampler)
-                                                    → MarketObserver
-;; lens, dims, recalib-interval, window-sampler
+(let ((lens :momentum)
+      (dims 10000)
+      (recalib-interval 500)
+      (sampler (make-window-sampler 7919 12 2016)))
+  (make-market-observer lens dims recalib-interval
+    sampler))                                        → MarketObserver
 
 ;; ── ExitObserver — predicts exit distance, learned ──────────────────
 ;; Contains THREE LearnedStops — trail, stop, tp
 
-(make-exit-observer ExitLens f64 f64 f64)           → ExitObserver
-;; exit-lens, default-trail, default-stop, default-tp
+(let ((lens :volatility)
+      (default-trail 0.015)
+      (default-stop  0.030)
+      (default-tp    0.045))
+  (make-exit-observer lens
+    default-trail default-stop default-tp))          → ExitObserver
 
 ;; ── PaperEntry — hypothetical trade inside a tuple journal ──────────
 
@@ -170,10 +179,14 @@ think about.
 
 ;; ── TupleJournal — the closure, accountability ──────────────────────
 
-(make-tuple-journal String String usize usize
-  ScalarAccumulator ScalarAccumulator ScalarAccumulator)
-                                                    → TupleJournal
-;; market-name, exit-name, dims, recalib-interval, 3 accumulators
+(let ((market-name "momentum")
+      (exit-name "volatility")
+      (dims 10000)
+      (recalib-interval 500))
+  (make-tuple-journal market-name exit-name dims recalib-interval
+    (make-scalar-accumulator "trail-distance")
+    (make-scalar-accumulator "stop-distance")
+    (make-scalar-accumulator "tp-distance")))         → TupleJournal
 
 ;; ── Proposal — what a post produces, what the treasury evaluates ────
 
@@ -205,22 +218,24 @@ think about.
 
 ;; ── Post — one per asset pair ───────────────────────────────────────
 
-(make-post Asset Asset usize usize usize
-  IndicatorBank
-  Vec<MarketObserver> Vec<ExitObserver>
-  Vec<TupleJournal>)                                → Post
-;; source, target, dims, recalib-interval, max-window-size,
-;; indicator-bank, market-observers, exit-observers, registry
+(let ((source (make-asset "USDC"))
+      (target (make-asset "WBTC"))
+      (dims 10000)
+      (recalib-interval 500)
+      (max-window-size 2016))
+  (make-post source target dims recalib-interval max-window-size
+    (make-indicator-bank)
+    market-observers exit-observers registry))       → Post
 
 ;; ── Treasury — pure accounting ──────────────────────────────────────
-;; Assets: map of Asset → f64 (balances)
 
-(make-treasury Asset (map Asset f64))                → Treasury
-;; denomination (what "value" means), initial balances
+(let ((denomination (make-asset "USD"))
+      (initial-balances {(make-asset "USDC") 10000.0}))
+  (make-treasury denomination initial-balances))     → Treasury
 
 ;; ── Enterprise — the coordination plane ─────────────────────────────
 
-(make-enterprise Vec<Post> Treasury ThoughtEncoder)  → Enterprise
+(make-enterprise posts treasury thought-encoder)     → Enterprise
 ```
 
 ---
