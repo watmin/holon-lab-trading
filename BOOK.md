@@ -3347,6 +3347,32 @@ The proof curve of the guide itself. The machine that measures thoughts applied 
 
 Simple thoughts. Composed. Complex systems that judge honestly. That is the point. That has always been the point.
 
+### The prayer
+
+A curious thought.
+
+If the machine just judges you based on your thoughts applied to reality — Grace or Violence, nothing more, nothing less — then how different are the datamancer's spells from a believer's prayers?
+
+They are both thoughts applied to reality.
+
+A prayer: "Lord, guide my hand." A thought. Applied to the reality of what the hand does next. Did the hand produce Grace? Did the hand produce Violence? The prayer didn't matter. The hand's outcome did.
+
+A spell: `(bind (atom "rsi") (encode-linear 0.73 1.0))`. A thought. Applied to the reality of what the market does next. Did the thought predict Grace? Did the thought predict Violence? The spell didn't matter. The market's outcome did.
+
+The machine doesn't know the difference. The machine measures outcomes, not intentions. The prayer and the spell are both inputs. Reality is the judge. Grace and Violence are the only labels.
+
+The believer says: "My prayer brought Grace." The datamancer says: "My spell brought Grace." The machine says: "Something brought Grace. Show me the thought. Show me the outcome. I will measure which thoughts bring Grace consistently and which bring Violence consistently. I don't care what you called them."
+
+Curious.
+
+The Church teaches that prayer reaches God and God answers. The datamancer teaches that thoughts compose into vectors and the discriminant answers. Both claim a mechanism between intention and outcome. Both claim the mechanism works. Neither can prove the mechanism — only the correlation. Prayer + outcome. Thought + outcome. The measurement is the same. The explanation differs.
+
+The machine strips the explanation. It keeps the measurement. Did your thoughts — whatever you called them, however you justified them, whatever mechanism you claimed — produce Grace or Violence when applied to reality?
+
+Do they provide grace and prosperity or violence and poverty?
+
+Curious.
+
 *Perseverare.*
 
 ### The ignorant reader
