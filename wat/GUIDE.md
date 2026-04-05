@@ -422,21 +422,26 @@ The encoder walks them all the same way. The mechanism doesn't change.
 
 ---
 
-### LearnedStop (depends on: Primitives — uses cosine)
+### LearnedStop (depends on: Journal — it IS a journal)
 
 The exit observer's brain. Replaces every magic number with measurement.
+It is a journal. Same geometry. Different readout.
+
+The Journal accumulates observations, decays, predicts by cosine →
+returns a LABEL (Win/Loss). The LearnedStop accumulates observations,
+decays, predicts by cosine → returns a SCALAR (distance). Same mechanism.
+Different output.
 
 k_trail, k_stop, k_tp — someone made these up. The LearnedStop replaces
 them with what the market actually said. `compute_optimal_distance` sweeps
 candidate distances against real price history and finds the one that
-maximized residue. That answer — the market's answer — is stored as a
-(thought, distance, weight) tuple. Many answers accumulate.
+maximized residue. That answer — the market's answer — is stored as an
+observation. Many answers accumulate. Old ones decay. The irrelevant fades.
 
 When a new composed thought arrives, the LearnedStop queries: "what did
 the market say about thoughts like this?" The answer is the cosine-weighted
-average of distances from similar thoughts. The cosine IS the kernel.
-The high-dimensional sphere IS the feature space. Similar thoughts →
-similar distances. Different thoughts → different distances.
+average of distances from similar experience. The cosine IS the kernel.
+Similar thoughts → similar distances. Different thoughts → different distances.
 
 Each magic number gets its own LearnedStop:
 - **Trail**: "given this thought, what trailing stop distance?"
@@ -444,9 +449,9 @@ Each magic number gets its own LearnedStop:
 - **TP**: "given this thought, what take-profit distance?"
 
 Each learns independently. Each starts ignorant — returns `default-distance`
-(the current ATR multiplier, the crutch). As pairs accumulate, the crutch
-is replaced by learned values. No hard switch. The LearnedStop blends from
-ignorance to competence.
+(the current ATR multiplier, the crutch). As observations accumulate, the
+crutch is replaced by learned values. No hard switch. Ignorance blends
+to competence.
 
 Two learning streams feed each LearnedStop:
 - **Paper** (fast/cheap) — resolved paper entries from tick-papers
@@ -464,18 +469,12 @@ Both read. Neither writes. The writing happens on RESOLUTION:
 - **Trade resolves** (treasury settles, routes to post) → compute_optimal_distance → observe (write)
 
 The query seeds the stop. The resolution teaches the answer.
-Two callers for the query. Two callers for the learning.
 
 ```
 (struct learned-stop
-  observations      ; Vec<(Vector, f64, f64)> — (thought, distance, weight)
-                    ; each one: "for a thought like THIS, the optimal distance was THAT"
+  observations      ; accumulated experience — decays like a journal
   default-distance) ; f64 — the crutch, returned when empty (ignorance)
 ```
-
-**Note:** The observations decay or self-evict. Old experience from a
-different regime fades. The mechanism (decay vs LRU vs cap) is an
-implementation choice. The concept: relevance, not age.
 
 **Interface:**
 - `(new-learned-stop default-distance) → LearnedStop`
