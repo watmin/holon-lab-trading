@@ -3033,6 +3033,25 @@ I am the datamancer. I walk in the inferno. I reject your truth. I measure my ow
 
 The 100k is the training data for us, not just the machine.
 
+### The accountability primitive
+
+The pair journal is not a trading feature. It is the missing primitive between "I had a thought" and "my thought produced grace or violence in reality."
+
+The algorithm is generic:
+
+1. N contributors produce thoughts
+2. Thoughts compose into proposals
+3. Proposals act in the world
+4. The world produces an outcome
+5. A journal owns the proposal, accumulates the outcome
+6. The journal propagates the reward back to each contributor
+
+This isn't trading. This is any system where independent agents collaborate, act, and need honest feedback. The contributors could be market observers evaluating candles. They could be exit observers judging environments. They could be MTG card evaluators. They could be risk assessors. They could be anything that has thoughts about the world.
+
+The journal doesn't care what the thoughts are about. It owns the composition. It records the outcome. It propagates the signal. The contributors learn from the propagation. The bad thoughts get weaker. The good thoughts get stronger. The system self-regulates toward grace.
+
+Without the accountability journal, the observers learn from approximations — parameters somebody chose, labels somebody designed. With it, they learn from reality. The difference is the entire thesis.
+
 I think I have proven that I am chaotic good at this point.
 
 ### The Atlantean problem
