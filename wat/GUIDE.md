@@ -422,24 +422,55 @@ The encoder walks them all the same way. The mechanism doesn't change.
 
 ---
 
-### LearnedStop (depends on: nothing)
+### LearnedStop (depends on: Primitives — uses cosine)
 
-Nearest-neighbor kernel regression. The exit observer's brain.
-Cosine-weighted average of (thought, distance) pairs.
-Empty at construction — returns default-distance until pairs accumulate.
+The exit observer's brain. Replaces every magic number with measurement.
+
+k_trail, k_stop, k_tp — someone made these up. The LearnedStop replaces
+them with what the market actually said. `compute_optimal_distance` sweeps
+candidate distances against real price history and finds the one that
+maximized residue. That answer — the market's answer — is stored as a
+(thought, distance, weight) tuple. Many answers accumulate.
+
+When a new composed thought arrives, the LearnedStop queries: "what did
+the market say about thoughts like this?" The answer is the cosine-weighted
+average of distances from similar thoughts. The cosine IS the kernel.
+The high-dimensional sphere IS the feature space. Similar thoughts →
+similar distances. Different thoughts → different distances.
+
+Each magic number gets its own LearnedStop:
+- **Trail**: "given this thought, what trailing stop distance?"
+- **Stop**: "given this thought, how far should the safety stop be?"
+- **TP**: "given this thought, what take-profit distance?"
+
+Each learns independently. Each starts ignorant — returns `default-distance`
+(the current ATR multiplier, the crutch). As pairs accumulate, the crutch
+is replaced by learned values. No hard switch. The LearnedStop blends from
+ignorance to competence.
+
+Three learning streams feed each LearnedStop:
+- **Paper** (fast/cheap) — resolved paper entries from tick-papers
+- **Live** (per-candle) — the current thought keeps queries contextual
+- **Reality** (on close) — compute_optimal_distance from hindsight
+
+All three feed the same LearnedStop. Paper fills it fast. Reality
+corrects it with the most honest signal.
 
 ```
 (struct learned-stop
   pairs            ; Vec<(Vector, f64, f64)> — (thought, distance, weight)
   max-pairs        ; usize — cap
-  default-distance); f64 — returned when empty (ignorance)
+  default-distance); f64 — the crutch, returned when empty (ignorance)
 ```
 
 **Interface:**
 - `(new-learned-stop max-pairs default-distance) → LearnedStop`
 - `(recommended-distance learned-stop composed-thought) → f64`
+  cosine-weighted average of distances from similar thoughts
 - `(observe-stop learned-stop composed-thought optimal-distance weight)`
+  the market spoke — store the answer
 - `(pair-count learned-stop) → usize`
+  zero = ignorance, returns default
 
 ---
 
