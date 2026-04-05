@@ -147,6 +147,14 @@ pub enum LogEntry {
         // Time
         hour: f64, day_of_week: f64,
     },
+    LearnedStopLog {
+        step: i64,
+        candle_idx: i64,
+        recommended_distance_pct: f64,  // what the learned stop said
+        learned_k_trail: f64,           // distance / ATR
+        pair_count: i64,                // how many (thought, distance) pairs accumulated
+        atr: f64,                       // current ATR for context
+    },
     BatchCommit,
 }
 
@@ -347,6 +355,15 @@ pub fn flush_logs(entries: &[LogEntry], conn: &Connection) {
                     ],
                 ).map_err(|e| eprintln!("candle_snapshot insert error: {}", e)).ok();
             }
+            LogEntry::LearnedStopLog {
+                step, candle_idx, recommended_distance_pct, learned_k_trail, pair_count, atr,
+            } => {
+                conn.execute(
+                    "INSERT INTO learned_stop_log (step,candle_idx,recommended_distance_pct,learned_k_trail,pair_count,atr)
+                     VALUES (?1,?2,?3,?4,?5,?6)",
+                    params![step, candle_idx, recommended_distance_pct, learned_k_trail, pair_count, atr],
+                ).ok();
+            }
             LogEntry::BatchCommit => {
                 conn.execute_batch("COMMIT; BEGIN").ok();
             }
@@ -440,6 +457,15 @@ pub fn init_ledger(path: &str) -> Connection {
             recent_acc    REAL,
             equity_pct    REAL,     -- equity change from initial
             won           INTEGER
+        );
+
+        CREATE TABLE IF NOT EXISTS learned_stop_log (
+            step                      INTEGER,
+            candle_idx                INTEGER,
+            recommended_distance_pct  REAL,
+            learned_k_trail           REAL,
+            pair_count                INTEGER,
+            atr                       REAL
         );
 
         -- The ledger. One row per resolved trade. Pure accounting — no hallucination.

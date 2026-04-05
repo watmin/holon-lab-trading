@@ -463,6 +463,16 @@ impl Desk {
             ctx.k_trail // fallback if ATR is zero
         };
 
+        // Log the learned stop state to the DB — our diagnostic tool
+        self.pending_logs.push(LogEntry::LearnedStopLog {
+            step: self.log_step,
+            candle_idx: i as i64,
+            recommended_distance_pct: learned_trail_distance * 100.0,
+            learned_k_trail,
+            pair_count: self.learned_stop.pair_count() as i64,
+            atr: candle.atr_r,
+        });
+
         // Pass 1: parallel tick — each position is independent.
         // Produces exit signals + exit observations as messages.
         struct TickResult {
