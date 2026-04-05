@@ -30,17 +30,45 @@ These are NOT specified in this tree. They are provided by holon-rs.
   - `(encode-log value) → Vector`
   - `(encode-linear value scale) → Vector`
   - `(encode-circular value period) → Vector`
-- **Primitives** — atom, bind, bundle, cosine, journal, curve
+- **The six primitives** — atom, bind, bundle, cosine, journal, curve
   - `(atom name) → Vector` — name a thought
   - `(bind a b) → Vector` — compose two thoughts
   - `(bundle &vecs) → Vector` — superpose many thoughts
   - `(cosine a b) → f64` — measure similarity
-  - `journal` — accumulate observations, predict. Two readouts:
-    - label readout: Win/Loss, Grace/Violence (market observer, tuple journal)
-    - scalar readout: distance (exit observer)
-  - `curve` — evaluate the journal's quality. The proof gate.
+  - **journal** is listed above as a struct with its full interface.
+    It is both a primitive (one of the six) and a struct (with fields
+    and methods). The Journal struct IS the journal primitive.
+  - **curve** evaluates the journal's quality over time. Has the journal
+    demonstrated predictive edge? The curve answers yes or no. This is
+    the proof gate — it decides when an observer or tuple journal has
+    earned the right to propose trades.
 - **VectorManager** — deterministic atom → vector allocation
   - `(get-vector vm name) → Vector`
+
+---
+
+## Labels — the language of outcomes
+
+The enterprise uses named labels for learning. Two pairs:
+
+- **Win / Loss** — direction labels. The market observer's question:
+  "did the price move in the predicted direction?" Win = yes. Loss = no.
+
+- **Grace / Violence** — accountability labels. The tuple journal's question:
+  "did this trade produce value or destroy it?" Grace = profit. Violence = loss.
+
+Labels are not booleans. They carry weight — how decisively the market
+answered. A strong Win teaches harder than a marginal one.
+
+---
+
+## Magic numbers — the crutches
+
+k_trail, k_stop, k_tp — trailing stop distance, safety stop distance,
+take-profit distance. Someone chose these as ATR multipliers. They are
+the last magic in the system. Each one is a crutch — a default value
+the exit observer returns when it has no experience. As observations
+accumulate, the crutch is replaced by what the market actually said.
 
 ---
 
@@ -101,6 +129,12 @@ think about.
 (make-thought-encoder VectorManager)                → ThoughtEncoder
 (encode ThoughtEncoder ThoughtAST)                  → Vector
 
+;; ── Lenses — which vocabulary subset an observer thinks through ─────
+;; A lens selects which vocab modules fire. The observer's identity.
+
+(enum Lens :momentum :structure :volume :narrative :regime :generalist)
+(enum ExitLens :volatility :structure :timing :exit-generalist)
+
 ;; ── MarketObserver — predicts direction, learned ────────────────────
 
 (make-market-observer Lens usize usize WindowSampler)
@@ -109,8 +143,8 @@ think about.
 
 ;; ── ExitObserver — predicts exit distance, learned ──────────────────
 
-(make-exit-observer Lens f64 f64 f64)               → ExitObserver
-;; lens, default-trail, default-stop, default-tp
+(make-exit-observer ExitLens f64 f64 f64)           → ExitObserver
+;; exit-lens, default-trail, default-stop, default-tp
 
 ;; ── TupleJournal — the closure, accountability ──────────────────────
 
@@ -524,50 +558,6 @@ The encoder walks them all the same way. The mechanism doesn't change.
 
 ---
 
-### Scalar journal (the mechanism — not a struct)
-
-The exit observer's journal. Not a separate entity. The mechanism
-that lives INSIDE the exit observer, on its `observations` field.
-
-Same geometry as the market observer's journal. Different readout.
-The market observer's journal returns a LABEL (Win/Loss). The exit
-observer's journal returns a SCALAR (distance). Same cosine. Same
-accumulation. Same decay.
-
-k_trail, k_stop, k_tp — someone made these up. The exit observer's
-journal replaces them with what the market actually said.
-`compute_optimal_distance` sweeps candidate distances against real price
-history and finds the one that maximized residue. That answer is stored
-as an observation. Many answers accumulate. Old ones decay.
-
-Each magic number gets its own exit observer:
-- **Trail observer**: "given this thought, what trailing stop distance?"
-- **Stop observer**: "given this thought, how far should the safety stop be?"
-- **TP observer**: "given this thought, what take-profit distance?"
-
-Each learns independently. Each starts ignorant — returns `default-distance`
-(the ATR multiplier crutch). As observations accumulate, the crutch is
-replaced by learned values. Ignorance blends to competence.
-
-Two learning streams feed each exit observer:
-- **Paper** (fast/cheap) — resolved paper entries from tick-papers
-- **Reality** (on close) — compute_optimal_distance from hindsight
-
-Paper fills it fast. Reality corrects it with the most honest signal.
-
-The query interface is used by two callers:
-- **The post** queries to seed its own paper entries — "what distance for this paper?"
-  The tuple journal is the post's internal state. The post uses itself.
-- **The treasury** queries through the post to manage active trades — "what distance now?"
-
-Both read. Neither writes. The writing happens on RESOLUTION:
-- **Paper resolves** (inside the post) → compute_optimal_distance → observe (write)
-- **Trade resolves** (treasury settles, routes to post) → compute_optimal_distance → observe (write)
-
-The query seeds the stop. The resolution teaches the answer.
-
----
-
 ### ScalarAccumulator (depends on: nothing)
 
 Per-magic-number f64 learning. Lives on the tuple journal. Global per-pair.
@@ -878,7 +868,7 @@ vocab/                  → (depends on Candle)
 thought-encoder.wat     → (depends on Vocabulary, VectorManager)
 scalar-accumulator.wat  → (no deps)
 market/observer.wat     → (depends on Journal, OnlineSubspace, WindowSampler)
-exit/observer.wat       → (depends on Journal concept — scalar readout)
+exit/observer.wat       → (depends on Primitives — cosine-weighted regression)
 tuple-journal.wat       → (depends on Journal, OnlineSubspace, ScalarAccumulator,
                             MarketObserver, ExitObserver)
 post.wat                → (depends on IndicatorBank, MarketObserver, ExitObserver,
