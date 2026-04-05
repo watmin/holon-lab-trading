@@ -260,17 +260,17 @@ impl TupleJournal {
         }
     }
 
-    /// Extract the learned trail scalar from the grace discriminant.
-    /// Unbind: bind(discriminant, trail_atom) recovers the value vector
+    /// Extract the learned trail scalar from the grace prototype.
+    /// Unbind: bind(prototype, trail_atom) recovers the value vector
     /// that was bound to trail_atom in the graceful region.
-    /// Cosine of the unbound result against known scalar magnitudes
-    /// tells you where on the continuum the learned value sits.
-    /// Returns None if the discriminant doesn't exist yet.
+    /// The prototype preserves magnitude (unnormalized).
+    /// The discriminant does NOT (normalized — magnitude lost).
+    /// Returns None if the prototype doesn't exist yet.
     pub fn extract_trail_scalar(&self, trail_atom: &Vector) -> Option<Vector> {
-        let disc = self.journal.discriminant(self.grace_label)?;
-        let disc_vec = Vector::from_f64(disc);
-        // unbind IS bind — self-inverse property
-        Some(holon::Primitives::bind(&disc_vec, trail_atom))
+        let proto = self.journal.prototype(self.grace_label)?;
+        let proto_vec = Vector::from_f64(&proto);
+        // unbind IS bind — self-inverse property (Kanerva)
+        Some(holon::Primitives::bind(&proto_vec, trail_atom))
     }
 }
 
