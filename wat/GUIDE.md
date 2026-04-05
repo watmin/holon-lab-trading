@@ -373,42 +373,48 @@ The AST IS a function. `bind(atom("rsi"), encode-linear(x, 1.0))` — the
 structure is fixed. Only x varies. The encoder recognizes the structure
 and reuses everything except the fresh scalar.
 
-**The AST can be as complex as the thought requires:**
+**The AST can be as complex as the thought requires.** These are data —
+quoted expressions the vocabulary returns. The ThoughtEncoder evaluates them.
 
 ```scheme
-;; A scalar fact — one atom, one value
-(bind (atom "rsi") (encode-linear 0.73 1.0))
+;; A scalar fact — one atom, one signed value
+(Linear "rsi" 0.73 1.0)
 
-;; A relationship with magnitude — not "above", how far above
-(bind (atom "close-sma20") (encode-linear 0.023 0.1))
+;; A signed relationship — 2.3% above. Negative would be below.
+(Linear "close-sma20" 0.023 0.1)
 
 ;; A structural observation — RSI diverging from price, both magnitudes
-(bind (atom "divergence")
-  (bind (bind (atom "close-delta") (encode-linear 0.03 0.1))
-        (bind (atom "rsi-delta") (encode-linear -0.05 1.0))))
+(Bind (Atom "divergence")
+  (Bind (Linear "close-delta" 0.03 0.1)
+        (Linear "rsi-delta" -0.05 1.0)))
 
-;; A moving average stack — the entire structure as relational distances
-(bundle
-  (bind (atom "close-sma20") (encode-linear 0.023 0.1))
-  (bind (atom "sma20-sma50") (encode-linear 0.011 0.1))
-  (bind (atom "sma50-sma200") (encode-linear -0.035 0.1)))
+;; A moving average stack — the entire structure as signed distances
+(Bundle
+  (Linear "close-sma20" 0.023 0.1)
+  (Linear "sma20-sma50" 0.011 0.1)
+  (Linear "sma50-sma200" -0.035 0.1))
 
 ;; A conditional fact — the vocabulary chose this path, not both
-(bind (atom "bb-breakout-lower") (encode-log 1.3))     ;; beyond: how far (log)
-(bind (atom "bb-position") (encode-linear -0.7 1.0))   ;; inside: where (linear)
+(Log "bb-breakout-lower" 1.3)          ;; beyond: how far (log)
+(Linear "bb-position" -0.7 1.0)        ;; inside: where (linear)
 
 ;; A temporal change — MACD histogram 3 candles ago vs now
-(bind (atom "macd-hist-change")
-  (bind (bind (atom "now") (encode-linear -0.001 0.01))
-        (bind (atom "3-ago") (encode-linear 0.002 0.01))))
+(Bind (Atom "macd-hist-change")
+  (Bind (Linear "now" -0.001 0.01)
+        (Linear "3-ago" 0.002 0.01)))
+
+;; Time — circular scalars that wrap
+(Circular "hour" 14.0 24.0)
+(Circular "minute" 35.0 60.0)
+(Circular "day-of-week" 3.0 7.0)
 
 ;; A deep confluence — multi-timeframe + oscillator + momentum
-(bundle
-  (bind (atom "tf-1h-trend") (encode-linear 0.7 1.0))
-  (bind (atom "tf-4h-structure") (encode-linear 0.6 1.0))
-  (bind (atom "rsi") (encode-linear 0.82 1.0))
-  (bind (atom "macd-hist") (encode-linear -0.0005 0.01))
-  (bind (atom "macd-hist-from-peak") (encode-log 0.167)))
+(Bundle
+  (Linear "tf-1h-trend" 0.7 1.0)
+  (Linear "tf-4h-structure" 0.6 1.0)
+  (Linear "rsi" 0.82 1.0)
+  (Linear "macd-hist" -0.0005 0.01)
+  (Log "macd-hist-from-peak" 0.167))
 ```
 
 Simple thoughts are shallow trees. Complex thoughts are deep trees.
