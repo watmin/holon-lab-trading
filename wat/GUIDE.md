@@ -831,6 +831,7 @@ so that on settlement, propagate reaches the right observers.
 ```
 (struct treasury
   ;; Capital
+  denomination         ; Asset — what "value" means (e.g. USD)
   assets               ; map of Asset → balance
 
   ;; Proposals — received from posts each candle, drained after funding
