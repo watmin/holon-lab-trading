@@ -329,7 +329,7 @@ No new algebraic structures. The market observers use the existing pipeline (bin
 
 The LearnedStop is `cosine(query, stored) * weight` summed over pairs. That is the same operation as journal prediction -- weighted similarity against accumulated experience. The difference is the output: the journal outputs a label (Win/Loss), the LearnedStop outputs a scalar (distance). Same geometry, different readout.
 
-The TupleJournal uses the full algebra: bind, bundle, journal, noise subspace, curve. It operates on composed thoughts (market thought bundled with exit context). It is the third journal in the stack, alongside the market observer journal and the manager journal.
+The TupleJournal uses the full algebra: bind, bundle, journal, noise subspace, curve. It operates on composed thoughts (market thought bundled with exit judgment). It replaces the manager journal — there is no separate manager. The tuple journal IS the manager for its (market, exit) pair. Two journals per pair: the market observer journal (direction) and the tuple journal (accountability). The manager is gone.
 
 The coupling between passes is data flow: Pass 1 produces thoughts, Pass 2 consumes them and produces proposals + resolutions, Pass 3 consumes proposals and produces reality labels. No algebraic coupling. No shared vectors mutated across passes. CSP.
 
