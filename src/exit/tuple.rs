@@ -293,63 +293,91 @@ impl TupleJournal {
             paper.dual.tick(current_price, k_trail, k_tp);
         }
 
-        // Drain resolved papers from the front (oldest first).
-        while let Some(front) = self.papers.front() {
-            if !front.dual.both_resolved() {
-                break;
-            }
-            let paper = self.papers.pop_front().unwrap();
+        // Drain ALL resolved papers (front first, then scan for out-of-order).
+        // Unified resolution logic — one path, no duplication (sever fix).
+        let mut resolved_papers: Vec<PaperEntry> = Vec::new();
 
-            // Classify: which side had more grace?
+        // Front drain
+        while let Some(front) = self.papers.front() {
+            if !front.dual.both_resolved() { break; }
+            resolved_papers.push(self.papers.pop_front().unwrap());
+        }
+        // Out-of-order drain
+        let mut i = 0;
+        while i < self.papers.len() {
+            if self.papers[i].dual.both_resolved() {
+                resolved_papers.push(self.papers.remove(i).unwrap());
+            } else {
+                i += 1;
+            }
+        }
+
+        // Resolve each paper through the FULL path — journal + proof curve.
+        for paper in resolved_papers {
             let outcome = paper.dual.classify();
-            let (label, weight) = match outcome {
+            let (label, weight, correct) = match outcome {
                 Some(crate::position::Outcome::Win { weight }) => {
-                    (self.grace_label, weight)
+                    (self.grace_label, weight, true)
                 }
                 Some(crate::position::Outcome::Loss { weight }) => {
-                    (self.violence_label, weight)
+                    (self.violence_label, weight, false)
                 }
-                None => continue, // shouldn't happen after both_resolved
+                None => continue,
             };
 
-            // Feed the journal with the paper's direction label.
+            // 1. Feed journal prototypes
             let residual = self.strip_noise(&paper.composed_thought);
             self.journal.observe(&residual, label, weight);
 
-            // Collect for the caller to feed to LearnedStop.
+            // 2. Track cumulative grace/violence
+            if correct {
+                self.cumulative_grace += weight;
+            } else {
+                self.cumulative_violence += weight;
+            }
+            self.trade_count += 1;
+
+            // 3. Feed proof curve (resolved deque + conviction history)
+            // Use the journal's last prediction as the "prediction" for this paper
+            let pred = self.journal.predict(&residual);
+            if let Some(_dir) = pred.direction {
+                self.resolved.push_back((pred.conviction, correct));
+                if self.resolved.len() > 2000 {
+                    self.resolved.pop_front();
+                }
+                self.conviction_history.push_back(pred.conviction);
+                if self.conviction_history.len() > 2000 {
+                    self.conviction_history.pop_front();
+                }
+                // Update conviction threshold
+                if self.conviction_history.len() >= 200
+                    && self.resolved.len() % 50 == 0
+                {
+                    self.conviction_threshold = quantile(&self.conviction_history, 0.5);
+                }
+                // Proof gate
+                let proof_threshold = self.conviction_threshold * 0.8;
+                let (total, all_correct, proof_count, proof_correct) = self.resolved.iter().fold(
+                    (0usize, 0usize, 0usize, 0usize),
+                    |(t, ac, pn, pc), (conv, win)| (
+                        t + 1,
+                        ac + *win as usize,
+                        pn + (*conv >= proof_threshold) as usize,
+                        pc + (*conv >= proof_threshold && *win) as usize,
+                    ),
+                );
+                self.cached_acc = if total == 0 { 0.0 } else { all_correct as f64 / total as f64 };
+                if total >= 100 && proof_count >= 20 {
+                    self.curve_valid = proof_correct as f64 / proof_count as f64 > 0.52;
+                }
+            }
+
+            // 4. Collect for the caller to feed to LearnedStop
             learned_stop_observations.push((
                 paper.composed_thought,
                 paper.recommended_distance,
                 weight,
             ));
-        }
-
-        // Also drain resolved papers that aren't at the front (out-of-order resolution).
-        let mut i = 0;
-        while i < self.papers.len() {
-            if self.papers[i].dual.both_resolved() {
-                let paper = self.papers.remove(i).unwrap();
-                let outcome = paper.dual.classify();
-                let (label, weight) = match outcome {
-                    Some(crate::position::Outcome::Win { weight }) => {
-                        (self.grace_label, weight)
-                    }
-                    Some(crate::position::Outcome::Loss { weight }) => {
-                        (self.violence_label, weight)
-                    }
-                    None => continue,
-                };
-                let residual = self.strip_noise(&paper.composed_thought);
-                self.journal.observe(&residual, label, weight);
-                learned_stop_observations.push((
-                    paper.composed_thought,
-                    paper.recommended_distance,
-                    weight,
-                ));
-                // Don't increment i — removal shifts elements down.
-            } else {
-                i += 1;
-            }
         }
 
         learned_stop_observations
