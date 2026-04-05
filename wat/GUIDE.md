@@ -468,19 +468,23 @@ Two callers for the query. Two callers for the learning.
 
 ```
 (struct learned-stop
-  pairs            ; Vec<(Vector, f64, f64)> — (thought, distance, weight)
-  max-pairs        ; usize — cap
-  default-distance); f64 — the crutch, returned when empty (ignorance)
+  observations      ; Vec<(Vector, f64, f64)> — (thought, distance, weight)
+                    ; each one: "for a thought like THIS, the optimal distance was THAT"
+  default-distance) ; f64 — the crutch, returned when empty (ignorance)
 ```
 
+**Note:** The observations decay or self-evict. Old experience from a
+different regime fades. The mechanism (decay vs LRU vs cap) is an
+implementation choice. The concept: relevance, not age.
+
 **Interface:**
-- `(new-learned-stop max-pairs default-distance) → LearnedStop`
+- `(new-learned-stop default-distance) → LearnedStop`
 - `(recommended-distance learned-stop composed-thought) → f64`
-  cosine-weighted average of distances from similar thoughts
-- `(observe-stop learned-stop composed-thought optimal-distance weight)`
-  the market spoke — store the answer
-- `(pair-count learned-stop) → usize`
-  zero = ignorance, returns default
+  cosine-weighted average of distances from similar experience
+- `(observe-distance learned-stop composed-thought optimal-distance weight)`
+  the market spoke — store the observation
+- `(experienced? learned-stop) → bool`
+  has it accumulated any observations? empty = ignorance
 
 ---
 
