@@ -475,8 +475,26 @@ The query seeds the stop. The resolution teaches the answer.
 
 ### ScalarAccumulator (depends on: nothing)
 
-Per-magic-number f64 learning. Separates grace/violence observations.
-Each magic number (trail-distance, k-stop, k-tp) gets its own accumulator.
+Per-magic-number f64 learning. Lives on the tuple journal. Global per-pair.
+Separates grace/violence observations into separate f64 prototypes.
+Extract via sweep recovers the value Grace prefers.
+
+Different from the exit observer's LearnedStop:
+- **LearnedStop** (on exit observer): contextual. "For THIS thought, what distance?"
+  Cosine-weighted regression. Different thoughts → different answers.
+- **ScalarAccumulator** (on tuple journal): global per-pair. "What value
+  does Grace prefer for this pair overall?" One answer regardless of thought.
+
+Both learn from the same resolution events:
+```
+resolution event:
+  → exit observer's LearnedStop: observe(thought, distance, weight)
+  → tuple journal's ScalarAccumulator: observe(distance, grace?, weight)
+```
+
+The ScalarAccumulator is the fallback when the LearnedStop has no
+experience for a particular thought. The cascade:
+contextual (LearnedStop) → global per-pair (ScalarAccumulator) → default (crutch)
 
 ```
 (struct scalar-accumulator
@@ -522,11 +540,12 @@ The generalist is just another lens. No special treatment.
 
 ---
 
-### ExitObserver (depends on: Journal concept — scalar readout)
+### ExitObserver (depends on: Primitives — cosine-weighted regression)
 
-Predicts exit distance. Learned. Its journal is a scalar journal —
-accumulated observations with scalar readout. Same geometry as the
-market observer's journal. Different output.
+Predicts exit distance. Learned. Each exit observer has THREE LearnedStops —
+one per magic number (trail, stop, tp). Each is a nearest-neighbor
+regression over (thought, distance, weight) observations. Not a journal.
+A regression. The proposal explicitly replaced the exit journal with this.
 
 Has a judgment vocabulary (volatility, structure, timing, generalist).
 Composes market thoughts with its own judgment facts.
@@ -535,23 +554,29 @@ The composed thought carries the market observer's signal in superposition.
 
 ```
 (struct exit-observer
-  lens              ; ExitLens enum — which judgment vocabulary
-  observations      ; the journal — accumulated experience, decays
-  default-distance) ; f64 — the crutch, returned when empty (ignorance)
+  lens                ; ExitLens enum — which judgment vocabulary
+  trail-stop          ; LearnedStop — trailing stop distance regression
+  safety-stop         ; LearnedStop — safety stop distance regression
+  take-profit-stop    ; LearnedStop — take-profit distance regression
+  default-distances)  ; (trail, stop, tp) — the crutches, returned when empty
 ```
 
+Each LearnedStop: `(thought, distance, weight)` observations. Query by
+cosine → distance for THIS thought. Contextual — different thoughts
+get different distances.
+
 **Interface:**
-- `(new-exit-observer lens default-distance) → ExitObserver`
+- `(new-exit-observer lens default-trail default-stop default-tp) → ExitObserver`
 - `(encode-exit-facts exit-obs candle ctx) → Vec<Vector>`
   pure: candle → judgment fact vectors for this lens
 - `(compose exit-obs market-thought exit-fact-vecs) → Vector`
   bundle market thought with exit facts
-- `(recommended-distance exit-obs composed) → f64`
-  query the journal — cosine-weighted average from similar experience
-- `(observe-distance exit-obs composed optimal-distance weight)`
-  the market spoke — the journal learns
+- `(recommended-distances exit-obs composed) → (trail, stop, tp)`
+  query all three regressions — one call, three answers
+- `(observe-distances exit-obs composed optimal-trail optimal-stop optimal-tp weight)`
+  the market spoke — all three learn from one resolution
 - `(experienced? exit-obs) → bool`
-  has the journal accumulated any observations? empty = ignorance
+  have the regressions accumulated observations?
 
 ---
 
