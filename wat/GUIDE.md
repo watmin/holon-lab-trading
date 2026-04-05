@@ -193,11 +193,21 @@ The vector IS the fact. It doesn't need a separate name. It simply is.
 "hour is 14:00"              → (bind (atom "hour") (encode-circular 14.0 24.0))       → Vector
 ```
 
-Every relationship carries its magnitude. Not "close is above SMA20" —
-"close is 2.3% above SMA20." The boolean throws away the signal. The
-scalar preserves it. The discriminant learns that 0.1% above is noise
-and 5% above is signal. The sign carries direction. The magnitude
-carries conviction. The vector holds both.
+Every relationship is a signed scalar. Not "close is above SMA20" —
+the relative distance, with sign.
+
+`(bind (atom "close-sma20") (encode-linear  0.023 0.1))` — 2.3% above.
+`(bind (atom "close-sma20") (encode-linear -0.041 0.1))` — 4.1% below.
+
+Same atom. Same encoding. The sign IS the direction. The magnitude IS
+the distance. No "above" atom. No "below" atom. No boolean. Just the
+number. The discriminant learns what positive means and what negative
+means. The word "above" doesn't exist in the vector space. The number
+0.023 does. The number -0.041 does.
+
+The boolean threw away the signal. The scalar preserves it. The
+discriminant learns that 0.1% above is noise and 5% above is signal.
+The sign carries direction. The magnitude carries conviction.
 
 The vocabulary observes. It composes atoms. The result is a vector.
 Many fact-vectors get bundled into one thought-vector. That's the
