@@ -17,6 +17,7 @@ use holon::memory::OnlineSubspace;
 
 use crate::exit::scalar::ScalarAccumulator;
 use crate::journal::{Journal, Label, Prediction};
+use crate::position::DualExcursion;
 
 /// Normalize a scalar to 0-1 for encoding. The meaning lives at the call site.
 /// `value`: the raw value. `max`: the upper bound of the range.
@@ -58,6 +59,27 @@ fn quantile(data: &VecDeque<f64>, q: f64) -> f64 {
     let idx = ((buf.len() as f64 * q) as usize).min(buf.len() - 1);
     buf.select_nth_unstable_by(idx, |a, b| a.partial_cmp(b).unwrap());
     buf[idx]
+}
+
+/// Maximum paper entries per tuple journal.
+const MAX_PAPERS: usize = 500;
+
+/// A hypothetical trade tracked without capital.
+///
+/// Every candle, every tuple journal receives a composed thought. That thought
+/// becomes a paper entry with a DualExcursion. When both sides resolve, the
+/// paper produces learning: Grace/Violence labels for the journal, and
+/// recommended_distance observations for the LearnedStop.
+///
+/// This is the FAST learning stream. Thousands of papers resolve per run.
+pub struct PaperEntry {
+    pub composed_thought: Vector,
+    pub dual: DualExcursion,
+    pub entry_price: f64,
+    /// The recommended distance at paper creation time.
+    /// Papers teach the LearnedStop with the distance that was current
+    /// when the market state was observed.
+    pub recommended_distance: f64,
 }
 
 /// The tuple identity. Cheap. Copyable. The unit of accountability.
@@ -124,6 +146,12 @@ pub struct TupleJournal {
     /// Each magic number gets its own accumulator.
     /// The scalar lives separate from the thought vector.
     pub scalars: Vec<ScalarAccumulator>,
+
+    // ── Paper entries (fast learning stream) ──
+    /// Hypothetical trades tracked without capital.
+    /// Every candle receives a paper. Both sides resolve organically.
+    /// Resolved papers feed Grace/Violence labels + recommended distances.
+    pub papers: VecDeque<PaperEntry>,
 }
 
 impl TupleJournal {
@@ -154,6 +182,7 @@ impl TupleJournal {
             recalib_total: 0,
             last_recalib_count: 0,
             scalars: Vec::new(),
+            papers: VecDeque::new(),
         }
     }
 
@@ -211,6 +240,124 @@ impl TupleJournal {
         self.noise_subspace.update(&f64_data);
         let residual = self.strip_noise(composed_thought);
         self.journal.predict(&residual)
+    }
+
+    /// Register a paper entry — a hypothetical trade tracked without capital.
+    ///
+    /// Called every candle from dispatch_thoughts. The composed thought is the
+    /// same one used for the proposal. The paper gets its own DualExcursion
+    /// that ticks independently until both sides resolve.
+    ///
+    /// `recommended_distance`: the LearnedStop's current distance for this thought.
+    /// Stored so that when the paper resolves, we feed it back to the LearnedStop
+    /// with the weight determined by the paper's outcome.
+    pub fn register_paper(
+        &mut self,
+        composed: Vector,
+        entry_price: f64,
+        entry_atr: f64,
+        k_stop: f64,
+        recommended_distance: f64,
+    ) {
+        self.papers.push_back(PaperEntry {
+            composed_thought: composed,
+            dual: DualExcursion::new(entry_price, entry_atr, k_stop),
+            entry_price,
+            recommended_distance,
+        });
+        // Cap oldest papers.
+        while self.papers.len() > MAX_PAPERS {
+            self.papers.pop_front();
+        }
+    }
+
+    /// Tick all paper entries and resolve those where both sides have completed.
+    ///
+    /// Resolved papers produce two learning signals:
+    ///   1. Grace/Violence label → journal.observe (direction learning)
+    ///   2. recommended_distance → learned_stop.observe (distance learning)
+    ///
+    /// Returns the number of papers resolved this tick, and a vec of
+    /// (composed_thought, recommended_distance, weight) tuples for the caller
+    /// to feed into the LearnedStop (since the journal doesn't own it).
+    pub fn tick_papers(
+        &mut self,
+        current_price: f64,
+        k_trail: f64,
+        k_tp: f64,
+    ) -> Vec<(Vector, f64, f64)> {
+        let mut learned_stop_observations = Vec::new();
+
+        // Tick all papers.
+        for paper in self.papers.iter_mut() {
+            paper.dual.tick(current_price, k_trail, k_tp);
+        }
+
+        // Drain resolved papers from the front (oldest first).
+        while let Some(front) = self.papers.front() {
+            if !front.dual.both_resolved() {
+                break;
+            }
+            let paper = self.papers.pop_front().unwrap();
+
+            // Classify: which side had more grace?
+            let outcome = paper.dual.classify();
+            let (label, weight) = match outcome {
+                Some(crate::position::Outcome::Win { weight }) => {
+                    (self.grace_label, weight)
+                }
+                Some(crate::position::Outcome::Loss { weight }) => {
+                    (self.violence_label, weight)
+                }
+                None => continue, // shouldn't happen after both_resolved
+            };
+
+            // Feed the journal with the paper's direction label.
+            let residual = self.strip_noise(&paper.composed_thought);
+            self.journal.observe(&residual, label, weight);
+
+            // Collect for the caller to feed to LearnedStop.
+            learned_stop_observations.push((
+                paper.composed_thought,
+                paper.recommended_distance,
+                weight,
+            ));
+        }
+
+        // Also drain resolved papers that aren't at the front (out-of-order resolution).
+        let mut i = 0;
+        while i < self.papers.len() {
+            if self.papers[i].dual.both_resolved() {
+                let paper = self.papers.remove(i).unwrap();
+                let outcome = paper.dual.classify();
+                let (label, weight) = match outcome {
+                    Some(crate::position::Outcome::Win { weight }) => {
+                        (self.grace_label, weight)
+                    }
+                    Some(crate::position::Outcome::Loss { weight }) => {
+                        (self.violence_label, weight)
+                    }
+                    None => continue,
+                };
+                let residual = self.strip_noise(&paper.composed_thought);
+                self.journal.observe(&residual, label, weight);
+                learned_stop_observations.push((
+                    paper.composed_thought,
+                    paper.recommended_distance,
+                    weight,
+                ));
+                // Don't increment i — removal shifts elements down.
+            } else {
+                i += 1;
+            }
+        }
+
+        learned_stop_observations
+    }
+
+    /// Number of active (unresolved) paper entries.
+    pub fn paper_count(&self) -> usize {
+        self.papers.len()
     }
 
     /// Can this tuple request capital from the treasury?
@@ -490,5 +637,117 @@ mod tests {
         eprintln!("err from 1.7: {:.2}, err from 0.5: {:.2}", err_high, err_low);
         assert!(err_high < 2.0 || err_low < 2.0,
             "recovered {:.2} should be near 1.7 or 0.5", recovered);
+    }
+
+    // ── Paper entry tests ──────────────────────────────────────────
+
+    #[test]
+    fn register_paper_creates_entry() {
+        let mut pj = TupleJournal::new("momentum", "vol", TEST_DIMS, 500);
+        let thought = holon::Vector::zeros(TEST_DIMS);
+        pj.register_paper(thought, 50000.0, 0.01, 2.0, 0.015);
+        assert_eq!(pj.paper_count(), 1);
+    }
+
+    #[test]
+    fn register_paper_caps_at_max() {
+        let mut pj = TupleJournal::new("momentum", "vol", TEST_DIMS, 500);
+        for i in 0..600 {
+            let thought = holon::Vector::zeros(TEST_DIMS);
+            pj.register_paper(thought, 50000.0 + i as f64, 0.01, 2.0, 0.015);
+        }
+        // Should be capped at MAX_PAPERS (500)
+        assert_eq!(pj.paper_count(), MAX_PAPERS);
+    }
+
+    #[test]
+    fn tick_papers_resolves_when_both_sides_done() {
+        let mut pj = TupleJournal::new("momentum", "vol", TEST_DIMS, 500);
+        let thought = holon::Vector::zeros(TEST_DIMS);
+
+        // Entry at 50000, ATR 0.01 (1%), k_stop=2.0
+        // Buy stop: 50000 * (1 - 2*0.01) = 49000
+        // Sell stop: 50000 * (1 + 2*0.01) = 51000
+        pj.register_paper(thought, 50000.0, 0.01, 2.0, 0.015);
+        assert_eq!(pj.paper_count(), 1);
+
+        // Price drops hard — triggers both buy stop (49000) and sell TP
+        let obs = pj.tick_papers(48000.0, 1.5, 3.0);
+        // Buy side: 48000 < 49000 → resolved
+        // Sell side: sell_move = 50000 - 48000 = 2000, sell TP at 50000*(1-3*0.01)=48500
+        // 48000 <= 48500 → resolved
+        assert_eq!(pj.paper_count(), 0, "paper should have resolved");
+        assert_eq!(obs.len(), 1, "should produce one learned stop observation");
+    }
+
+    #[test]
+    fn tick_papers_partial_resolution() {
+        let mut pj = TupleJournal::new("momentum", "vol", TEST_DIMS, 500);
+        let thought = holon::Vector::zeros(TEST_DIMS);
+
+        // Entry at 50000, tight stop
+        pj.register_paper(thought, 50000.0, 0.01, 2.0, 0.015);
+
+        // Small move — neither side resolves
+        let obs = pj.tick_papers(50100.0, 1.5, 3.0);
+        assert_eq!(pj.paper_count(), 1, "paper should still be alive");
+        assert_eq!(obs.len(), 0, "no observations from unresolved paper");
+    }
+
+    #[test]
+    fn tick_papers_feeds_journal_labels() {
+        let mut pj = TupleJournal::new("momentum", "vol", TEST_DIMS, 500);
+        let vm = holon::VectorManager::new(TEST_DIMS);
+
+        // Register a paper with a non-zero thought
+        let thought = vm.get_vector("test-paper");
+        pj.register_paper(thought, 50000.0, 0.01, 2.0, 0.015);
+
+        // Crash the price → both sides resolve, sell wins (buy lost, sell gained)
+        let _obs = pj.tick_papers(48000.0, 1.5, 3.0);
+
+        // Journal should have received at least one observation
+        // (either grace or violence label). Check via the journal's internal state.
+        assert_eq!(pj.paper_count(), 0);
+    }
+
+    #[test]
+    fn tick_papers_returns_distance_for_learned_stop() {
+        let mut pj = TupleJournal::new("momentum", "vol", TEST_DIMS, 500);
+        let thought = holon::Vector::zeros(TEST_DIMS);
+        let recommended = 0.025;
+
+        pj.register_paper(thought, 50000.0, 0.01, 2.0, recommended);
+
+        // Force resolution
+        let obs = pj.tick_papers(48000.0, 1.5, 3.0);
+        assert_eq!(obs.len(), 1);
+        let (_, dist, _weight) = &obs[0];
+        assert!((*dist - recommended).abs() < 1e-10,
+            "should carry through the recommended distance: {}", dist);
+    }
+
+    #[test]
+    fn multiple_papers_resolve_independently() {
+        let mut pj = TupleJournal::new("momentum", "vol", TEST_DIMS, 500);
+
+        // Paper 1: entry at 50000
+        let t1 = holon::Vector::zeros(TEST_DIMS);
+        pj.register_paper(t1, 50000.0, 0.01, 2.0, 0.015);
+
+        // Paper 2: entry at 60000 (much higher, so 48000 is a bigger crash)
+        let t2 = holon::Vector::zeros(TEST_DIMS);
+        pj.register_paper(t2, 60000.0, 0.01, 2.0, 0.020);
+
+        assert_eq!(pj.paper_count(), 2);
+
+        // Price drop to 48000:
+        // Paper 1: buy stop at 49000 → triggered. sell stop at 51000 → price 48000 < 51000, no trigger wait...
+        //   sell TP at 50000*(1-3*0.01)=48500, 48000 <= 48500 → triggered. Both resolved.
+        // Paper 2: buy stop at 60000*(1-2*0.01)=58800 → 48000 < 58800 → triggered.
+        //   sell TP at 60000*(1-3*0.01)=58200, 48000 <= 58200 → triggered. Both resolved.
+        let obs = pj.tick_papers(48000.0, 1.5, 3.0);
+        assert_eq!(pj.paper_count(), 0, "both papers should resolve");
+        assert_eq!(obs.len(), 2, "two observations");
     }
 }

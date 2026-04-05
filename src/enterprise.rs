@@ -273,13 +273,16 @@ impl Enterprise {
     ///   3. Convert the distance to a TrailFactor and tick the trade.
     ///      (Resolution is NOT done here — that's Step 1's job next candle.)
     ///
-    /// Also ticks paper entries on each tuple journal (TODO: tick_papers not yet
-    /// implemented on TupleJournal — will be wired when paper tracking lands).
+    /// Also ticks paper entries on each tuple journal. Resolved papers feed
+    /// Grace/Violence labels into the journal and recommended distances into
+    /// the LearnedStop — the fast learning stream.
     pub fn step_process(
         &mut self,
         thoughts: &[holon::Vector],
         current_price: f64,
         current_atr: f64,
+        paper_k_trail: f64,
+        paper_k_tp: f64,
     ) {
         // ── Active trades: update trailing stops with learned distance ──
         for i in 0..self.trades.len() {
@@ -317,11 +320,17 @@ impl Enterprise {
         }
 
         // ── Paper entries: tick all journals' papers ──
-        // TODO: TupleJournal::tick_papers() not yet implemented.
-        // When paper tracking lands on TupleJournal, wire it here:
-        //   for journal in &mut self.registry {
-        //       journal.tick_papers(current_price);
-        //   }
+        for i in 0..self.registry.len() {
+            let observations = self.registry[i].tick_papers(
+                current_price,
+                paper_k_trail,
+                paper_k_tp,
+            );
+            // Feed resolved paper observations into the LearnedStop.
+            for (thought, distance, weight) in observations {
+                self.learned_stops[i].observe(thought, distance, weight);
+            }
+        }
     }
 
     /// Phase B of Step 2: sequential dispatch of pre-computed thoughts into the registry.
@@ -362,6 +371,21 @@ impl Enterprise {
 
                 // Propose: updates noise subspace, predicts grace/violence.
                 let prediction = journal.propose(&composed);
+
+                // Register a paper entry — hypothetical trade for fast learning.
+                // Every candle, every tuple gets a paper. No funding gate.
+                if let Some(ctx) = ctx {
+                    let distance = self.learned_stops[i].recommended_distance(&composed);
+                    let entry_price = candle.map(|c| c.close).unwrap_or(1.0);
+                    let entry_atr = candle.map(|c| c.atr).unwrap_or(0.01);
+                    journal.register_paper(
+                        composed.clone(),
+                        entry_price,
+                        entry_atr,
+                        ctx.k_stop,
+                        distance,
+                    );
+                }
 
                 // Check proposal conditions:
                 //   - journal must have proven its curve (funded)
@@ -415,7 +439,7 @@ impl Enterprise {
         let thoughts = self.step_compute_dispatch(observers, candle_window, encode_count, ctx);
 
         // Step 3: PROCESS — update triggers, tick papers
-        self.step_process(&thoughts, current_price, current_atr);
+        self.step_process(&thoughts, current_price, current_atr, ctx.k_trail, ctx.k_tp);
 
         // Step 4: COLLECT + FUND — evaluate proposals, fund or reject
         self.step_collect_fund(current_price, current_atr, ctx.k_stop, ctx.k_tp);
@@ -1070,7 +1094,7 @@ mod tests {
         let thoughts = vec![vm.get_vector("t0"), vm.get_vector("t1")];
 
         // Should not panic with zero active trades.
-        e.step_process(&thoughts, 50000.0, 0.02);
+        e.step_process(&thoughts, 50000.0, 0.02, 1.5, 3.0);
         assert_eq!(e.active_trade_count(), 0);
     }
 
@@ -1094,7 +1118,7 @@ mod tests {
         let thoughts = vec![thought, vm.get_vector("t1")];
 
         // Price at 50500 — above entry, no trigger expected.
-        e.step_process(&thoughts, 50500.0, 0.02);
+        e.step_process(&thoughts, 50500.0, 0.02, 1.5, 3.0);
 
         // Trade should still be active.
         assert!(e.trades[0].is_some(), "trade should survive step_process");
@@ -1126,7 +1150,7 @@ mod tests {
         // TrailFactor = 0.005 / 0.02 = 0.25.
         // new_stop = 51000 * (1 - 0.25 * 0.01) = 51000 * 0.9975 = 50872.5
         // This is above initial_stop (49000), so trailing stop should ratchet up.
-        e.step_process(&thoughts, 51000.0, 0.02);
+        e.step_process(&thoughts, 51000.0, 0.02, 1.5, 3.0);
 
         let trade = e.trades[0].as_ref().unwrap();
         assert!(trade.trailing_stop > initial_stop,
@@ -1149,7 +1173,7 @@ mod tests {
         // Only provide 1 thought (for market 0). Market 2 has no thought.
         let thoughts = vec![holon::Vector::zeros(64)];
 
-        e.step_process(&thoughts, 50500.0, 0.02);
+        e.step_process(&thoughts, 50500.0, 0.02, 1.5, 3.0);
 
         // Slot 0 should have been ticked (candles_held incremented).
         assert_eq!(e.trades[0].as_ref().unwrap().candles_held, 1);
