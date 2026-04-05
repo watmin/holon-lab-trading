@@ -253,35 +253,45 @@ has no intermediate form. Atoms compose. Vectors result. Thoughts bundle.
 
 ---
 
-### AtomCache (depends on: VectorManager)
+### ThoughtCache (depends on: VectorManager)
 
-The enterprise's memory for atom vectors. A permanent memo table.
-The thought IS its own identity function — `atom("rsi")` always produces
-the same vector. Once computed, always known. Familiar thoughts are cheap.
+The enterprise's memory. Two levels. Guards against infinite compositions
+without losing the components that recur.
 
-Not the API surface — the observer is. The observer knows what it thinks
-about. The observer calls its vocab modules. The observer gets fact-vectors.
-The observer bundles them into a thought.
+**Permanent: atoms.** The named concepts. Finite set. Never evicted.
+`atom("rsi")` computed once, used forever. The thought IS its own identity
+function — same name, same vector, always.
 
-The AtomCache pre-computes the structural parts so observers don't
-re-derive them every candle. Atoms are eternal. Only scalar bindings
-are fresh each candle (the 0.73, the 0.023 — those change with the market).
+**Per-candle: fact-vectors.** Within one candle, RSI is 0.73 for every
+observer. If momentum and generalist both want the RSI fact, compute
+once, share. Cleared at end of candle. The infinite qubit space is
+guarded — we only hold the facts for THIS candle, not all candles.
 
-Owned by the enterprise. Immutable after construction. Passed to posts.
+At candle end: atoms stay. Fact-vectors are forgotten. The components
+persist. The compositions flow through.
+
+Owned by the enterprise. Passed to posts.
 
 ```
-(struct atom-cache
-  atoms)                ; map of name → Vector (permanent, deterministic)
+(struct thought-cache
+  atoms                 ; map of name → Vector (permanent, deterministic)
+  candle-facts)         ; map of fact-key → Vector (per-candle, cleared each candle)
 ```
 
 **Interface:**
-- `(lookup cache name) → Vector`
-  the atom vector for this name — always the same
+- `(lookup-atom cache name) → Vector`
+  permanent — the atom vector for this name
+- `(lookup-fact cache key) → Option<Vector>`
+  per-candle — returns cached fact-vector if already computed this candle
+- `(store-fact cache key vector)`
+  per-candle — memoize a fact-vector for reuse within this candle
+- `(clear-candle-facts cache)`
+  called at candle end — forget the compositions, keep the atoms
 
 The observer composes the thought:
 ```
-observer calls vocab(context) → Vec<Vector>    ; fact-vectors
-observer calls bundle(facts)  → Vector         ; the thought
+observer calls vocab(context, cache) → Vec<Vector>  ; fact-vectors (cached per-candle)
+observer calls bundle(facts)         → Vector        ; the thought
 ```
 
 The lens is not a parameter. The lens is on the observer. The observer
