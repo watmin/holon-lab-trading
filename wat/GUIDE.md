@@ -101,10 +101,14 @@ think about.
 ### The construction order
 
 ```scheme
-;; ── Leaves — depend on nothing ──────────────────────────────────────
+;; ── Primitives — depend on nothing ──────────────────────────────────
+
+;; Asset: a named token (e.g. "USDC", "WBTC")
+(struct asset name)
 
 (make-raw-candle Asset Asset String f64 f64 f64 f64 f64)
                                                     → RawCandle
+;; source-asset, target-asset, ts, open, high, low, close, volume
 
 (make-indicator-bank)                               → IndicatorBank
 
@@ -135,6 +139,13 @@ think about.
 (enum MarketLens :momentum :structure :volume :narrative :regime :generalist)
 (enum ExitLens :volatility :structure :timing :generalist)
 
+;; ── LearnedStop — the exit observer's regression ────────────────────
+;; Nearest-neighbor cosine-weighted regression.
+;; (thought, distance, weight) observations. Query by similarity.
+
+(make-learned-stop f64)                             → LearnedStop
+;; default-distance (the crutch — returned when empty)
+
 ;; ── MarketObserver — predicts direction, learned ────────────────────
 
 (make-market-observer MarketLens usize usize WindowSampler)
@@ -142,9 +153,20 @@ think about.
 ;; lens, dims, recalib-interval, window-sampler
 
 ;; ── ExitObserver — predicts exit distance, learned ──────────────────
+;; Contains THREE LearnedStops — trail, stop, tp
 
 (make-exit-observer ExitLens f64 f64 f64)           → ExitObserver
 ;; exit-lens, default-trail, default-stop, default-tp
+
+;; ── PaperEntry — hypothetical trade inside a tuple journal ──────────
+
+(struct paper-entry
+  composed-thought     ; Vector
+  entry-price          ; f64
+  entry-atr            ; f64
+  recommended-distance ; f64 — from the exit observer at entry
+  buy-extreme buy-trail-stop sell-extreme sell-trail-stop
+  buy-resolved sell-resolved)
 
 ;; ── TupleJournal — the closure, accountability ──────────────────────
 
@@ -152,6 +174,34 @@ think about.
   ScalarAccumulator ScalarAccumulator ScalarAccumulator)
                                                     → TupleJournal
 ;; market-name, exit-name, dims, recalib-interval, 3 accumulators
+
+;; ── Proposal — what a post produces, what the treasury evaluates ────
+
+(struct proposal
+  composed-thought     ; Vector — the thought that proposed this
+  direction            ; Label — Grace or Violence prediction
+  distances)           ; (trail, stop, tp) — from the exit observer
+
+;; ── Trade — an active position the treasury holds ───────────────────
+
+(struct trade
+  id                   ; slot-idx — which post, which tuple journal
+  source-asset         ; Asset — what was deployed
+  target-asset         ; Asset — what was acquired
+  entry-rate           ; f64
+  entry-atr            ; f64
+  source-amount        ; f64 — how much was deployed
+  trail-stop           ; f64 — current trailing stop level
+  candles-held)        ; usize — how long open
+
+;; ── Settlement — result of closing a trade ──────────────────────────
+
+(struct settlement
+  trade                ; Trade — which trade closed
+  outcome              ; :grace or :violence
+  amount               ; f64 — how much value gained or lost
+  post-idx             ; usize — which post to route back to
+  slot-idx)            ; usize — which tuple journal for propagation
 
 ;; ── Post — one per asset pair ───────────────────────────────────────
 
@@ -163,8 +213,9 @@ think about.
 ;; indicator-bank, market-observers, exit-observers, registry
 
 ;; ── Treasury — pure accounting ──────────────────────────────────────
+;; Assets: map of Asset → f64 (balances)
 
-(make-treasury Assets)                              → Treasury
+(make-treasury (map Asset f64))                     → Treasury
 
 ;; ── Enterprise — the coordination plane ─────────────────────────────
 
