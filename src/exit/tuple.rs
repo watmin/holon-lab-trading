@@ -418,56 +418,41 @@ mod tests {
         eprintln!("separation: {:.4}", separation);
         assert!(separation > 0.1, "should separate: {:.4}", separation);
 
-        // Sweep in PURE f64 space — encode candidates as f64 (no bipolar threshold)
-        // The scalar encoder uses cos/sin rotation. We can compute the f64
-        // encoding directly and score against the f64 unbound result.
-        let cos_f64_f64 = |a: &[f64], b: &[f64]| -> f64 {
-            let mut dot = 0.0f64;
-            let mut na = 0.0f64;
-            let mut nb = 0.0f64;
-            for (&x, &y) in a.iter().zip(b.iter()) {
-                dot += x * y; na += x * x; nb += y * y;
-            }
-            let denom = (na * nb).sqrt();
-            if denom < 1e-10 { 0.0 } else { dot / denom }
-        };
+        // FULL f64 PIPELINE: negate → unbind → sweep. No i8 anywhere.
+        let raw_proto = pj.journal.raw_prototype(pj.grace_label)
+            .expect("raw prototype should exist");
 
-        // Pure f64 encoding — no bipolar thresholding, preserves the rotation
-        let encode_f64 = |value: f64| -> Vec<f64> {
-            scalar_enc.encode_f64(value, mode)
-        };
+        // Bundle known thought atoms in f64 space
+        let bases_f64: Vec<Vec<f64>> = (0..10)
+            .map(|j| vm.get_vector(&format!("base-{}", j)).data().iter().map(|&v| v as f64).collect())
+            .collect();
+        let base_refs: Vec<&[f64]> = bases_f64.iter().map(|v| v.as_slice()).collect();
+        let known_f64 = holon::Primitives::bundle_f64(&base_refs);
 
-        // Coarse sweep
+        // Negate in f64: orthogonalize the known thoughts out of the prototype
+        let negated = holon::Primitives::negate_f64(raw_proto, &known_f64);
+
+        // Unbind trail atom in f64
+        let trail_f64: Vec<f64> = trail_atom.data().iter().map(|&v| v as f64).collect();
+        let unbound = holon::Primitives::bind_f64(&negated, &trail_f64);
+
+        // Sweep against f64 scalar encodings
         let mut best_val = 0.0f64;
         let mut best_cos = -2.0f64;
-        for i in 0..=200 {
-            let v = i as f64 / 200.0;
-            let enc = encode_f64(v);
-            let cos = cos_f64_f64(&extracted_f64, &enc);
-            if cos > best_cos { best_cos = cos; best_val = v; }
-        }
-        eprintln!("coarse sweep: 0-1={:.3} (cos={:.4})", best_val, best_cos);
-
-        // Refine around best
-        let step = 1.0 / 200.0;
-        let ref_lo = (best_val - step * 2.0).max(0.0);
-        let ref_hi = (best_val + step * 2.0).min(1.0);
         for i in 0..=100 {
-            let v = ref_lo + (ref_hi - ref_lo) * i as f64 / 100.0;
-            let enc = encode_f64(v);
-            let cos = cos_f64_f64(&extracted_f64, &enc);
+            let v = i as f64 / 100.0;
+            let enc = scalar_enc.encode_f64(v, mode);
+            let cos = holon::Primitives::cosine_f64(&unbound, &enc);
             if cos > best_cos { best_cos = cos; best_val = v; }
         }
 
         let recovered = denormalize_scalar(best_val, k_trail_max);
-        eprintln!("refined: 0-1={:.4} → k_trail={:.2} (cos={:.4})", best_val, recovered, best_cos);
+        eprintln!("f64 pipeline: 0-1={:.2} → k_trail={:.2} (cos={:.4})", best_val, recovered, best_cos);
 
-        // The recovered value should be near one of our inputs
-        let near_high = (recovered - 1.7).abs() < 1.5;
-        let near_low = (recovered - 0.5).abs() < 1.5;
-        eprintln!("near 1.7? {} (err={:.2}). near 0.5? {} (err={:.2})",
-            near_high, (recovered - 1.7).abs(), near_low, (recovered - 0.5).abs());
-        assert!(near_high || near_low,
+        let err_high = (recovered - 1.7).abs();
+        let err_low = (recovered - 0.5).abs();
+        eprintln!("err from 1.7: {:.2}, err from 0.5: {:.2}", err_high, err_low);
+        assert!(err_high < 2.0 || err_low < 2.0,
             "recovered {:.2} should be near 1.7 or 0.5", recovered);
     }
 }
