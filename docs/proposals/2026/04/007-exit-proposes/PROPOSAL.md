@@ -34,35 +34,32 @@ The exit module has the primitives to fill this gap -- LearnedStop predicts dist
 
 ### Five CSP phases per candle
 
-The single-pass candle loop becomes four sequential steps. Reality first. The parallelism is WITHIN step 2 — all (market, exit) pairs compute simultaneously via par_iter. Steps are sequential. The CSP is in the collect().
+The single-pass candle loop becomes four sequential steps. Reality first. The parallelism is WITHIN Step 2 — all (market, exit) pairs compute simultaneously via par_iter. Steps are sequential. The CSP is in the collect().
 
 ```
 candle arrives
   │
   ├─ Step 1: RESOLVE     treasury closes triggered trades
   │                       accounting, propagate through tuple journals
-  │                       fund proposals from PREVIOUS candle
   │
   ├─ Step 2: COMPUTE     par_iter(market_observers) → thoughts            collect()
   │                       par_iter(exit_observers × thoughts) → compose    collect()
   │                       → composed thoughts ready
   │                       → proposals populated
   │                       → distances computed
-  │                       returns: [(market_id, exit_id, composed_thought, distance, conviction)]
   │
   ├─ Step 3: PROCESS     using fresh composed thoughts from Step 2:
   │                       iterate active_trades → update triggers
   │                       iterate paper entries → tick, resolve → learning
   │
-  ├─ Step 4: COLLECT     proposals from Step 2 → insert into proposed_trades
-  │                       (funded next candle in Step 1)
+  ├─ Step 4: COLLECT     evaluate proposals from Step 2
+  │                       fund or reject — all in this candle
+  │                       proposed_trades is EMPTY after this step
   │
-  └─ next candle
+  └─ next candle (proposed_trades empty, active_trades updated)
 ```
 
-Four steps. Sequential. The parallelism is horizontal inside Step 2 — N market observers × M exit observers compute simultaneously. Each par_iter completes before the next starts. Collect is the handoff. No async in the OS sense — rayon parallelism with collect boundaries.
-
-Step 1 uses LAST candle's proposals. Step 2 produces THIS candle's thoughts and proposals. Step 3 uses THIS candle's thoughts. Step 4 queues THIS candle's proposals for NEXT candle's Step 1. One candle delay between proposal and funding.
+Four steps. Sequential. The parallelism is horizontal inside Step 2 — N market observers × M exit observers compute simultaneously. Each par_iter completes before the next starts. Collect is the handoff. No carry across candles. Propose and fund in the same candle. The proposed_trades map fills in Step 2, drains in Step 4, empty at the end. Clean.
 
 ### Signal flow diagram
 
@@ -122,15 +119,13 @@ The **proposed_trades** map is the queue. Phase 4 (PROPOSE) inserts proposals. P
 
 The **active_trades** map is the current state. Phase 1 (SETTLE) iterates it — closes what triggered, propagates, removes closed trades. Phase 3 (MANAGE) iterates it — updates triggers from fresh thoughts.
 
-Three maps. The lifecycle across candles:
-- PROPOSE (end of candle N) → insert into `proposed_trades`
-- SETTLE (start of candle N+1) → close triggered trades, remove from `active_trades`
-- FUND (candle N+1, after settle) → evaluate `proposed_trades` at NEW price, fund → `active_trades`, reject → discard
-- THINK (candle N+1) → market encodes
-- MANAGE (candle N+1) → update triggers on `active_trades`
-- PROPOSE (end of candle N+1) → new proposals for candle N+2
+Three maps. The lifecycle within one candle:
+- RESOLVE → close triggered trades, remove from `active_trades`, propagate
+- COMPUTE → market × exit pipeline fills `proposed_trades`
+- PROCESS → update triggers on `active_trades` with fresh thoughts
+- COLLECT → fund from `proposed_trades` into `active_trades`, drain `proposed_trades`
 
-One candle delay between proposal and funding. The market confirms the price before capital moves. The proposal queue carries across candles.
+No carry across candles. `proposed_trades` is empty at the end of every candle. Registry grows permanently. `active_trades` reflects the current state.
 
 When an exit observer wants to propose a trade with a market observer's thought:
 1. Look up `(market_id, exit_id)` in the registry.
@@ -139,14 +134,14 @@ When an exit observer wants to propose a trade with a market observer's thought:
 
 **Step 1: RESOLVE** — Reality first. Money before thoughts.
 
-Close triggered trades. For each live entry in `active_trades`, check current price against trigger. If fired — settle, propagate, remove.
+Close triggered trades. For each live entry in `active_trades`, check current price against trigger. If fired:
+1. Execute the swap (fees, slippage).
+2. Update the balance sheet.
+3. Compute Grace/Violence from actual P&L.
+4. `tuple_journal.propagate(outcome, &closes, entry_price)` — one call, the tuple does the rest.
+5. Remove from `active_trades`.
 
-Then fund proposals from the PREVIOUS candle. For each proposal in `proposed_trades`:
-- Look up `(market_id, exit_id)` in the registry. Create the tuple journal if new.
-- Is the pair's curve proven? Is capital available? Does risk allow it?
-- Funded → move to `active_trades`. Rejected → discard.
-
-The proposal queue is drained. The funding decision uses THIS candle's price. One candle delay.
+Nothing else happens in Step 1. Just reality.
 
 For each closed trade:
 1. Execute the swap (target → source, with fees and slippage).
@@ -175,9 +170,14 @@ Using the composed thoughts from Step 2:
 - Resolved entries → compute optimal distance, feed LearnedStop, label market observer, update TupleJournal.
 - Paper entries → tick, resolve, learn.
 
-**Step 4: COLLECT** — Queue proposals for next candle.
+**Step 4: COLLECT + FUND** — Evaluate and fund proposals from this candle.
 
-Proposals from Step 2 → insert into `proposed_trades`. They will be funded (or rejected) in NEXT candle's Step 1. One candle delay between proposal and action.
+For each proposal from Step 2:
+- Look up `(market_id, exit_id)` in the registry. Create the tuple journal if new.
+- Is the pair's curve proven? Is capital available? Does risk allow it?
+- Funded → insert into `active_trades`. Rejected → discard.
+
+`proposed_trades` is empty after this step. No carry across candles. Propose and fund in the same candle.
 
 ### The exit observer has its own vocabulary
 
