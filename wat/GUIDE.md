@@ -80,6 +80,67 @@ by what the market actually said.
 
 ---
 
+## Definitions — the thoughts themselves
+
+Before the structs. Before the constructors. The meanings.
+
+- **Candle** — one period of market data. Raw: six numbers (open, high, low,
+  close, volume, timestamp). Enriched: the raw data plus 100+ computed
+  indicators (moving averages, oscillators, volatility, momentum, structure).
+
+- **Indicator** — a derived measurement from price history. RSI, MACD, ATR,
+  Bollinger Bands. Each one is a streaming computation — it needs all
+  prior candles to produce the current value.
+
+- **Lens** — which vocabulary subset an observer thinks through. A momentum
+  lens selects momentum-related facts. A regime lens selects regime-related
+  facts. A generalist lens selects all facts. The lens IS the observer's
+  identity — it determines what thoughts the observer thinks.
+
+- **Fact** — a named observation about the world, composed from atoms. "RSI
+  is at 0.73." The composition IS a vector. The vector IS the fact.
+
+- **ThoughtAST** — a deferred fact. Data describing a composition, not yet
+  computed. The vocabulary produces these. The ThoughtEncoder evaluates them.
+
+- **Thought** — a bundle of facts. Many fact-vectors superposed into one
+  vector. The thought is what the observer perceived about this candle.
+
+- **Paper trade** — a "what if." A hypothetical trade that tracks what WOULD
+  have happened. Both sides (buy and sell) are tracked simultaneously.
+  When both sides resolve, the paper teaches: what distance would have
+  been optimal? Papers are the fast learning stream — cheap, many, every
+  candle.
+
+- **LearnedStop** — nearest-neighbor regression. "For a thought like THIS,
+  what distance did the market say was optimal?" Stores (thought, distance,
+  weight) observations. Query by cosine similarity → the answer for this
+  kind of thought. Replaces magic numbers with measurement.
+
+- **Propagation** — routing resolved outcomes to the entities that need to
+  learn from them. When a trade or paper resolves, the outcome (Grace or
+  Violence) flows to the market observer (Win/Loss), the exit observer
+  (optimal distance), and the tuple journal (accountability).
+
+- **Proof curve** — the gate. Has this entity demonstrated predictive edge?
+  Computed from the history of (conviction, correct?) predictions. When
+  high-conviction predictions are correct more than 52% of the time, the
+  curve validates. The entity earns the right to propose trades.
+
+- **Closure** — a function that captured its environment. The tuple journal
+  is a closure over (market-observer, exit-observer). It references both.
+  It routes signals to both. The struct is the implementation. The closure
+  is the thought.
+
+- **Post** — a self-contained unit for one asset pair. The (USDC, WBTC)
+  post. The (USDC, SOL) post. Each post has its own observers, its own
+  tuple journals, its own indicator bank. No cross-talk between posts.
+
+- **Denomination** — what "value" means. The treasury counts in a
+  denomination. USD today. Could be EUR, could be SOL.
+
+---
+
 ## Forward declarations
 
 The construction order. Each line can only reference what's above it —
