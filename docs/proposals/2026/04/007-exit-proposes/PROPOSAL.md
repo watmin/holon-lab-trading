@@ -102,9 +102,25 @@ Signals and their types:
 
 No signal crosses without going through the tuple journal. The tuple journal is the central routing fiber. Every other connection is point-to-point.
 
-**Phase 1: SETTLE** — Reality first. Money before thoughts.
+### The treasury as registry
 
-The treasury holds active trades as a map: `(TupleJournal, Trade)` pairs. The map IS the set of live trades.
+The treasury holds two maps:
+
+```rust
+registry:      HashMap<(MarketId, ExitId), TupleJournal>  // all known pairs, never shrinks
+active_trades: HashMap<TupleJournalId, Trade>             // live trades, insert/remove
+```
+
+The **registry** is the institutional memory. Every (market, exit) pair that has ever proposed a trade has a tuple journal here. The journal accumulates Grace/Violence across ALL trades this pair has done. It persists across trades. When a trade closes, the journal stays — only the trade is removed. The registry grows. It never shrinks. The track record is permanent.
+
+The **active_trades** map is the current state. Insert on fund. Remove on close. The tuple journal ID is the key — it points back to the registry.
+
+When an exit observer wants to propose a trade with a market observer's thought:
+1. Look up `(market_id, exit_id)` in the registry.
+2. If it doesn't exist → create it. Fresh tuple journal. No history. Ignorance.
+3. If it exists → use it. Check the track record. Is the curve proven? Does it have allocation?
+
+**Phase 1: SETTLE** — Reality first. Money before thoughts.
 
 For each live entry, check the current price against the trigger. If the stop fired — close NOW.
 
