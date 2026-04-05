@@ -129,12 +129,26 @@ The closure captures the pair. The closure routes the signal. The closure accumu
 The treasury holds three maps:
 
 ```rust
-registry:        HashMap<(MarketId, ExitId), TupleJournal>  // O(1) lookup, closures, never shrinks
-proposed_trades: HashMap<TupleJournalId, Proposal>          // waiting for funding
-active_trades:   HashMap<TupleJournalId, Trade>             // live, being managed
+registry:  Vec<TupleJournal>       // N×M, pre-allocated at startup, permanent
+proposals: Vec<Option<Proposal>>   // N×M, pre-allocated, cleared every candle
+trades:    Vec<Option<Trade>>      // N×M, pre-allocated, insert/remove
 ```
 
-The **registry** is a hashmap of closures. O(1) lookup by (market, exit) pair — the exit observer needs to find its journal fast. Each closure knows its pair, routes signals, accumulates track record. The closures persist across trades — when a trade closes, the closure stays. The registry grows as new pairs are discovered. It never shrinks. The track record is permanent.
+Index: `i = market_idx * M + exit_idx`. The index IS the pair identity. O(1) by arithmetic, not by hash.
+
+All three are flat vecs. Pre-allocated at startup. Fixed size N×M. Never grow. Never shrink. Each slot is owned by exactly one (market, exit) pair. No two threads ever touch the same slot.
+
+**Mutex-free parallel updates.** Rayon's `par_iter_mut` writes to disjoint slots. No mutex. No atomic. No lock. The borrow checker proves the writes are disjoint by construction. The flat vec IS the lock-free CSP channel. Each slot is an independent mailbox.
+
+- `registry[i]` — only pair `i` reads or writes its journal
+- `proposals[i]` — only pair `i` writes its proposal in Step 2, only Step 4 reads
+- `trades[i]` — only pair `i` manages its trade in Step 3, only Step 1 settles
+
+The **registry** is permanent. Each slot is a closure over (market_observer, exit_observer). Accumulates Grace/Violence across all trades. Never cleared. The institutional memory.
+
+The **proposals** vec is cleared at the end of every candle. Step 2 fills slots. Step 4 drains them. Empty after Step 4.
+
+The **trades** vec has Some for active positions, None for empty slots. Step 1 settles and clears to None. Step 4 funds and sets to Some.
 
 The **proposed_trades** map is the queue. Step 2 (COMPUTE + DISPATCH) inserts proposals via `treasury.propose_trade()`. Step 4 (COLLECT + FUND) iterates them — sorted by pair track record, conviction, or whatever metric the treasury uses to prioritize — funds the best, rejects the rest. Funded proposals move to `active_trades`. Rejected proposals are removed. The queue is empty after Step 4.
 
