@@ -1,5 +1,6 @@
 pub mod candle;
 pub mod event;
+pub mod exit;
 pub mod indicators;
 pub mod journal;
 pub mod market;
