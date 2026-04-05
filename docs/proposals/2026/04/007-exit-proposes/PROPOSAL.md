@@ -279,7 +279,7 @@ Both paper and live entries produce learning. Paper is the training ground. Live
 
 ### Three learning streams — all simultaneous
 
-**Paper stream** (every candle, every market thought): the exit observer receives the thought, manages the paper entry, adjusts the paper trigger. When the paper entry resolves, the exit observer computes the optimal distance and learns. This is the fast stream. Thousands of data points per run. Cheap lessons.
+**Paper stream** (every candle, every market thought): the tuple journal closure receives the composed thought, ticks its paper entries, adjusts triggers. When a paper entry resolves, the closure computes the optimal distance and feeds the LearnedStop. This is the fast stream. N×M closures, each accumulating thousands of data points. Cheap lessons.
 
 **Live management stream** (every candle, every open position): the treasury asks the owning exit observer "what's the trigger now?" The exit observer queries its LearnedStop with the CURRENT thought — not the entry thought, the current one, because the market changed. The trigger moves every candle. This is the active stream. Real money, real adjustment, real time.
 
