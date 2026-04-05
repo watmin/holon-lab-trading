@@ -36,21 +36,22 @@
 
 (define (step-resolve treasury current-price)
   "Iterate active trades. Check triggers. Settle what fired."
-  (for-each-some (:trades treasury)
-    (lambda (i trade)
-      (when (triggered? trade current-price)
-        ;; 1. Execute the swap
-        (let ((result (settle trade (:assets treasury))))
-          ;; 2. Update balance sheet
-          (apply-settlement (:assets treasury) result)
-          ;; 3. Compute Grace/Violence
-          (let ((outcome (classify-outcome result))
-                (closes  (price-history trade))
-                (journal (nth (:registry treasury) i)))
-            ;; 4. One call. The closure does the rest.
-            (propagate journal outcome closes (:entry-price trade))
-            ;; 5. Remove from active
-            (set! (nth (:trades treasury) i) false)))))))
+  (for-each (range (len (:trades treasury)))
+    (lambda (i)
+      (when-let ((trade (nth (:trades treasury) i)))
+        (when (triggered? trade current-price)
+          ;; 1. Execute the swap
+          (let ((result (settle trade (:assets treasury))))
+            ;; 2. Update balance sheet
+            (apply-settlement (:assets treasury) result)
+            ;; 3. Compute Grace/Violence
+            (let ((outcome (classify-outcome result))
+                  (closes  (price-history trade))
+                  (journal (nth (:registry treasury) i)))
+              ;; 4. One call. The closure does the rest.
+              (propagate journal outcome closes (:entry-price trade))
+              ;; 5. Remove from active
+              (set! (nth (:trades treasury) i) false))))))))
 
 ;; -- Step 2: COMPUTE + DISPATCH -------------------------------------------------
 ;; Market observers encode (parallel). Exit observers compose + propose (sequential).
@@ -67,17 +68,18 @@
                         market-observers)))
 
     ;; Phase B: sequential dispatch into treasury
-    (for-each-indexed market-observers
-      (lambda (mi market-obs)
-        (let ((thought (nth thoughts mi)))
-          (for-each-indexed exit-observers
-            (lambda (ei exit-obs)
-              (let* ((i       (treasury-index mi ei (len exit-observers)))
+    (for-each (range (len market-observers))
+      (lambda (market-idx)
+        (let ((thought (nth thoughts market-idx)))
+          (for-each (range (len exit-observers))
+            (lambda (exit-idx)
+              (let* ((exit-obs (nth exit-observers exit-idx))
+                     (i       (treasury-index market-idx exit-idx (len exit-observers)))
                      (journal (nth (:registry treasury) i))
                      ;; Exit observer composes: market thought + judgment facts
                      (composed (compose exit-obs thought candle))
                      ;; Query the learned stop
-                     (distance (recommended-distance (:learned-stop journal) composed)))
+                     (distance (query (:learned-stop journal) composed)))
 
                 ;; Register paper entry on the journal
                 (register-paper journal composed candle)
@@ -85,7 +87,7 @@
                 ;; Propose if conditions met
                 (when (and (funded? journal)
                            (> (:conviction (predict (:journal journal) composed)) 0.2)
-                           (not (default-distance? (:learned-stop journal) distance)))
+                           (> (pair-count (:learned-stop journal)) 0))
                   (set! (nth (:proposals treasury) i)
                         (proposal :composed composed
                                   :direction (:direction thought)
@@ -103,17 +105,18 @@
   "Use fresh thoughts to manage active trades and paper entries."
 
   ;; Active trades: update triggers
-  (for-each-some (:trades treasury)
-    (lambda (i trade)
-      (let* ((mi (market-idx-from i (len exit-observers)))
-             (ei (exit-idx-from i (len exit-observers)))
-             (thought (nth thoughts mi))
-             (exit-obs (nth exit-observers ei))
-             (composed (compose exit-obs thought current-price))
-             (journal  (nth (:registry treasury) i))
-             (distance (recommended-distance (:learned-stop journal) composed)))
-        ;; Adjust the trailing stop from the learned distance
-        (adjust-trigger trade distance current-price))))
+  (for-each (range (len (:trades treasury)))
+    (lambda (i)
+      (when-let ((trade (nth (:trades treasury) i)))
+        (let* ((market-idx (quotient i (len exit-observers)))
+               (exit-idx   (remainder i (len exit-observers)))
+               (thought    (nth thoughts market-idx))
+               (exit-obs   (nth exit-observers exit-idx))
+               (composed   (compose exit-obs thought current-price))
+               (journal    (nth (:registry treasury) i))
+               (distance   (query (:learned-stop journal) composed)))
+          ;; Adjust the trailing stop from the learned distance
+          (adjust-trigger trade distance current-price)))))
 
   ;; Paper entries: tick all journals' papers
   (for-each (:registry treasury)
@@ -125,17 +128,18 @@
 
 (define (step-collect-fund treasury)
   "Iterate proposals. Fund the proven ones. Clear the vec."
-  (for-each-some (:proposals treasury)
-    (lambda (i proposal)
-      (let ((journal (nth (:registry treasury) i)))
-        (when (and (funded? journal)
-                   (capital-available? treasury (:direction proposal))
-                   (risk-allows? treasury))
-          ;; Fund: execute the swap, insert into active trades
-          (let ((trade (open-trade treasury proposal)))
-            (set! (nth (:trades treasury) i) trade))))
-      ;; Clear the proposal slot regardless
-      (set! (nth (:proposals treasury) i) false))))
+  (for-each (range (len (:proposals treasury)))
+    (lambda (i)
+      (when-let ((proposal (nth (:proposals treasury) i)))
+        (let ((journal (nth (:registry treasury) i)))
+          (when (and (funded? journal)
+                     (capital-available? treasury (:direction proposal))
+                     (risk-allows? treasury))
+            ;; Fund: execute the swap, insert into active trades
+            (let ((trade (open-trade treasury proposal)))
+              (set! (nth (:trades treasury) i) trade))))
+        ;; Clear the proposal slot regardless
+        (set! (nth (:proposals treasury) i) false)))))
 
 ;; -- The candle loop ------------------------------------------------------------
 ;; Four steps. Sequential. Reality first. The parallelism is inside Step 2.
