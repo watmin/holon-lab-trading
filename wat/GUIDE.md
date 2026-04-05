@@ -368,10 +368,13 @@ walks it:
 ```
 evaluate(node)
   → atom?        → dictionary (always succeeds)
-  → scalar?      → compute fresh (the value changed)
-  → bind/encode? → cache check → hit: reuse / miss: compute, store
+  → any other?   → cache check → hit: reuse / miss: compute, store
   → bundle?      → always fresh (per-observer, per-candle)
 ```
+
+Scalars, binds, encodes — all go through the cache. Same structure,
+same vector. Scalars may evict quickly (values change each candle),
+but within a candle the same scalar is reused across observers.
 
 The AST IS a function. `bind(atom("rsi"), encode-linear(x, 1.0))` — the
 structure is fixed. Only x varies. The encoder recognizes the structure
