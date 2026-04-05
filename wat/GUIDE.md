@@ -454,9 +454,16 @@ Two learning streams feed each LearnedStop:
 
 Paper fills it fast. Reality corrects it with the most honest signal.
 
-The treasury QUERIES the LearnedStop per-candle to manage active trades —
-"what distance for this thought right now?" — but the query is not
-learning. It reads. It does not write. Two learnings. One query.
+The query interface is used by two callers:
+- **Treasury** queries to manage active trades — "what distance now?"
+- **Tuple journal** queries to seed paper entries — "what distance for this paper?"
+
+Both read. Neither writes. The writing happens on RESOLUTION:
+- **Paper resolves** → compute_optimal_distance → observe (write)
+- **Trade resolves** → compute_optimal_distance → observe (write)
+
+The query seeds the stop. The resolution teaches the answer.
+Two callers for the query. Two callers for the learning.
 
 ```
 (struct learned-stop
