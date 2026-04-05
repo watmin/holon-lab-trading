@@ -253,26 +253,30 @@ has no intermediate form. Atoms compose. Vectors result. Thoughts bundle.
 
 ---
 
-### ThoughtEncoder (depends on: Vocabulary, VectorManager)
+### AtomCache (depends on: VectorManager)
 
-A cache. Not the API surface — the observer is. The observer knows what
-it thinks about (its lens). The observer calls its vocab modules. The
-observer gets fact-vectors. The observer bundles them into a thought.
+The enterprise's memory for atom vectors. A permanent memo table.
+The thought IS its own identity function — `atom("rsi")` always produces
+the same vector. Once computed, always known. Familiar thoughts are cheap.
 
-The ThoughtEncoder pre-computes common atom vectors so the observers
-don't re-derive them every candle. Owned by the enterprise. Immutable
-after construction. Passed to posts. Not a singleton — owned.
+Not the API surface — the observer is. The observer knows what it thinks
+about. The observer calls its vocab modules. The observer gets fact-vectors.
+The observer bundles them into a thought.
+
+The AtomCache pre-computes the structural parts so observers don't
+re-derive them every candle. Atoms are eternal. Only scalar bindings
+are fresh each candle (the 0.73, the 0.023 — those change with the market).
+
+Owned by the enterprise. Immutable after construction. Passed to posts.
 
 ```
-(struct thought-encoder
-  atom-cache)           ; pre-computed atom → vector mappings
+(struct atom-cache
+  atoms)                ; map of name → Vector (permanent, deterministic)
 ```
 
 **Interface:**
-- `(cached-atom encoder name) → Vector`
-  fast lookup of a named atom vector
-- `(cached-scalar encoder name value scale) → Vector`
-  fast bind(atom, encode(value)) with cached atom
+- `(lookup cache name) → Vector`
+  the atom vector for this name — always the same
 
 The observer composes the thought:
 ```
