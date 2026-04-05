@@ -114,6 +114,58 @@ mod tests {
     }
 
     #[test]
+    fn emergence_from_ignorance() {
+        // Start with no knowledge. Feed diverse price histories.
+        // The scalar accumulator learns the optimal distance from nothing.
+        use crate::exit::scalar::ScalarAccumulator;
+
+        let mut acc = ScalarAccumulator::new("trail-distance", 0.10, 10000); // max 10%
+
+        // Simulate 200 trades with different shapes
+        for i in 0..200 {
+            let entry = 50000.0;
+            let mut closes = vec![entry];
+
+            // Varied market shapes
+            match i % 4 {
+                0 => { // trending up
+                    for j in 1..50 { closes.push(entry + j as f64 * 100.0); }
+                }
+                1 => { // trending up then reversal
+                    for j in 1..25 { closes.push(entry + j as f64 * 200.0); }
+                    for j in 0..25 { closes.push(entry + 5000.0 - j as f64 * 300.0); }
+                }
+                2 => { // choppy with uptrend
+                    for j in 1..50 {
+                        let noise = if j % 3 == 0 { -400.0 } else { 150.0 };
+                        closes.push(entry + j as f64 * 30.0 + noise);
+                    }
+                }
+                _ => { // crash
+                    for j in 1..50 { closes.push(entry - j as f64 * 150.0); }
+                }
+            }
+
+            // Compute the optimal distance for this trade
+            let opt = compute_optimal_distance(&closes, entry, 100, 0.05);
+            if let Some(opt) = opt {
+                let grace = opt.residue > 0.0;
+                let amount = opt.residue.abs() * entry;
+                acc.observe(opt.distance_pct, grace, amount.max(1.0));
+            }
+        }
+
+        let learned = acc.extract();
+        assert!(learned.is_some(), "should have learned from 200 trades");
+        let d = learned.unwrap();
+        eprintln!("emerged from ignorance: optimal distance = {:.4}% ({:.1} observations)",
+            d * 100.0, acc.grace_count() + acc.violence_count());
+        // Should be somewhere reasonable — not 0, not max
+        assert!(d > 0.001, "should have learned a nonzero distance: {}", d);
+        assert!(d < 0.05, "should not be at the maximum: {}", d);
+    }
+
+    #[test]
     fn optimal_distance_from_real_data_shape() {
         // Simulate a realistic BTC-like move: up 3%, retrace 1%, up 2%, crash 5%
         let entry = 50000.0;

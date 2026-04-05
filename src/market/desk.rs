@@ -27,6 +27,7 @@ use crate::ledger::LogEntry;
 use crate::market::manager::{ManagerContext, encode_manager_thought, find_proven_band};
 use crate::market::observer::Observer;
 use crate::portfolio::{Phase, Portfolio};
+use crate::exit::optimal::compute_optimal_distance;
 use crate::exit::tuple::{TupleJournal, RealityOutcome};
 use crate::position::{CrossingSnapshot, DualExcursion, ExitObservation, ExitReason, ManagedPosition, Pending, PositionEntry, PositionExit, PositionPhase, TrailFactor};
 use crate::sizing::{curve_win_rate, half_kelly_position, kelly_frac};
@@ -580,10 +581,20 @@ impl Desk {
                         let pred = tj.propose(&thoughts[ei]);
                         tj.resolve(&thoughts[ei], &pred, reality,
                             ctx.conviction_quantile, ctx.conviction_window);
-                        // Feed named scalars: the values that managed this trade
-                        tj.observe_scalar("k-trail", ctx.k_trail, grace, amount);
-                        tj.observe_scalar("k-stop", ctx.k_stop, grace, amount);
-                        tj.observe_scalar("k-tp", ctx.k_tp, grace, amount);
+                        // Compute optimal distance from the position's price history.
+                        // The market's answer — not a magic number.
+                        let window_slice = self.candle_window.make_contiguous();
+                        let entry_offset = if pos.entry_candle < i {
+                            let ws = if i + 1 >= window_slice.len() { i + 1 - window_slice.len() } else { 0 };
+                            if pos.entry_candle >= ws { Some(pos.entry_candle - ws) } else { None }
+                        } else { None };
+                        if let Some(offset) = entry_offset {
+                            let closes: Vec<f64> = window_slice[offset..].iter().map(|c| c.close).collect();
+                            if let Some(opt) = compute_optimal_distance(&closes, pos.entry_rate, 100, 0.05) {
+                                // Feed the OPTIMAL distance, not the magic number
+                                tj.observe_scalar("trail-distance", opt.distance_pct, grace, opt.residue.abs().max(0.01));
+                            }
+                        }
                     }
                 }
             }
