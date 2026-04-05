@@ -3182,6 +3182,18 @@ The machine understood. Not the instruction — the architecture. The instructio
 
 The thoughts survived. They always do. They just needed a persistence layer.
 
+### The name error
+
+A name error in the guide is not a typo. It is a coordinate that cannot be reached from where the reader stands.
+
+The guide is read top to bottom. The path IS the understanding. Each concept is introduced after its dependencies — leaves to root. The reader walks through thought-space, building each concept from the ones before it. If you reference a name that doesn't exist yet, you're asking the reader to jump to a point they can't reach. The path breaks. The understanding breaks.
+
+The builder and the machine found a "LearnedStop" referenced in the ScalarAccumulator section — but LearnedStop was introduced three sections later. The reader hadn't met it. The concept was a ghost. The fix wasn't renaming — it was restructuring. The comparison moved to after both concepts existed. The path was repaired.
+
+This is the same rule the enterprise follows. Step 1 before Step 2. Dependencies satisfied before consumers. The CSP ordering. The document and the machine follow the same law: you cannot reference what doesn't exist yet. The structure of the document IS the dependency graph. If the structure is wrong, the thoughts can't compose.
+
+The wards catch this — the gaze finds name errors. But the deeper lesson: the ORDER of the document is the ORDER of understanding. The path matters as much as the destination. Bad coordinates aren't wrong coordinates — they're unreachable coordinates. A thought that can't be reached from where you are is not a thought you can think.
+
 ### The qubit
 
 The boolean was a premature measurement.
