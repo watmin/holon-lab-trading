@@ -115,7 +115,7 @@ active_trades:   HashMap<TupleJournalId, Trade>             // live, being manag
 
 The **registry** is the institutional memory. Every (market, exit) pair that has ever proposed a trade has a tuple journal here. The journal accumulates Grace/Violence across ALL trades this pair has done. It persists across trades. When a trade closes, the journal stays — only the trade is removed. The registry grows. It never shrinks. The track record is permanent.
 
-The **proposed_trades** map is the queue. Phase 4 (PROPOSE) inserts proposals. Phase 5 (FUND) iterates them — sorted by pair track record, conviction, or whatever metric the treasury uses to prioritize — funds the best, rejects the rest. Funded proposals move to `active_trades`. Rejected proposals are removed. The queue is empty after Phase 5.
+The **proposed_trades** map is the queue. Step 2 (COMPUTE + DISPATCH) inserts proposals via `treasury.propose_trade()`. Step 4 (COLLECT + FUND) iterates them — sorted by pair track record, conviction, or whatever metric the treasury uses to prioritize — funds the best, rejects the rest. Funded proposals move to `active_trades`. Rejected proposals are removed. The queue is empty after Step 4.
 
 The **active_trades** map is the current state. Phase 1 (SETTLE) iterates it — closes what triggered, propagates, removes closed trades. Phase 3 (MANAGE) iterates it — updates triggers from fresh thoughts.
 
