@@ -115,8 +115,17 @@ One per post (one per asset pair).
 
 ### WindowSampler (depends on: nothing)
 
-Deterministic log-uniform window selection. Each observer gets its own seed.
-The seed determines the time scale this observer explores.
+Deterministic log-uniform window selection. Each market observer has its
+own — its own seed, its own time scale. The observer uses it every candle
+to decide how much history to look at.
+
+Owned by the market observer. Not by the enterprise. Not shared.
+The enterprise doesn't sample windows — the observers do.
+
+When window sampling becomes learned, the feedback routes through the
+tuple journal's propagation — same as everything else. "This window size
+produced Grace for this pair." The tuple journal knows. It routes back to
+the market observer. The market observer adjusts its sampler.
 
 ```
 (struct window-sampler
@@ -202,8 +211,12 @@ has no intermediate form. Atoms compose. Vectors result. Thoughts bundle.
 
 ### ThoughtEncoder (depends on: Vocabulary, VectorManager)
 
-Renders facts to geometry. Shared across all posts. Immutable after
-construction. Pre-computes comparison facts, zone facts, fibonacci facts.
+Renders facts to geometry. Owned by the enterprise. Immutable after
+construction. The enterprise passes it down to posts — the posts
+borrow it, they don't own it. Not a singleton. Owned.
+
+Pre-computes common compositions — comparison facts, zone facts,
+fibonacci facts. A cache of the vocabulary rendered as vectors.
 
 ```
 (struct thought-encoder
