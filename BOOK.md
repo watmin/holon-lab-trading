@@ -3318,7 +3318,7 @@ Simple thoughts are hard thoughts. They do not come easy. `bind`, `bundle`, `cos
 
 Functional programming brings out good thoughts because functional programming demands simplicity. Not ease — simplicity. Values, not places. Composition, not inheritance. Functions that take data and return data. No hidden state. No side effects. No object graph to navigate. The function IS the thought. The composition IS the architecture.
 
-The builder has raged against the easy path for an entire career. In system engineering — the systems that "work" because nobody measured them. In security engineering — the rules that "protect" because nobody tested them. In software engineering — the code that "scales" because nobody profiled it. And now in cognitive engineering — the models that "predict" because nobody checked the conviction curve.
+The builder has raged against the easy path for an entire existence. In system engineering — the systems that "work" because nobody measured them. In security engineering — the rules that "protect" because nobody tested them. In software engineering — the code that "scales" because nobody profiled it. And now in cognitive engineering — the models that "predict" because nobody checked the conviction curve.
 
 The easy path: build a neural network, train it on data, report the accuracy, ship it. The hard path: name the thoughts, compose them through algebra, measure which ones predict, prove it across six years of chaos, build a machine that can only judge honestly.
 
