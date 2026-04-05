@@ -108,17 +108,33 @@ Signals and their types:
 
 No signal crosses without going through the tuple journal. The tuple journal is the central routing fiber. Every other connection is point-to-point.
 
+### The tuple journal is a closure
+
+The tuple journal is a closure over `(market_observer, exit_observer)`. Its identity IS the pair it captured. `propagate()` is the anonymous function — it knows how to route to THOSE two specific observers because it closed over them.
+
+```rust
+// Conceptually:
+let propagate = |outcome, closes, entry_price| {
+    let optimal = compute_optimal_distance(closes, entry_price, 100, 0.05);
+    exit_observer.learned_stop.observe(thought, optimal.distance, optimal.residue);
+    market_observer.resolve(thought, outcome_to_label(outcome));
+    self.track_record.update(outcome);
+};
+```
+
+The closure captures the pair. The closure routes the signal. The closure accumulates the track record. In Rust it's implemented as a struct (closures with state need a struct). But the concept: the tuple journal IS the anonymous function that routes reality to the right observers. The struct is the implementation. The closure is the thought.
+
 ### The treasury as registry
 
 The treasury holds three maps:
 
 ```rust
-registry:        HashMap<(MarketId, ExitId), TupleJournal>  // permanent memory, never shrinks
+registry:        Vec<TupleJournal>                          // closures, permanent, never shrinks
 proposed_trades: HashMap<TupleJournalId, Proposal>          // waiting for funding
 active_trades:   HashMap<TupleJournalId, Trade>             // live, being managed
 ```
 
-The **registry** is the institutional memory. Every (market, exit) pair that has ever proposed a trade has a tuple journal here. The journal accumulates Grace/Violence across ALL trades this pair has done. It persists across trades. When a trade closes, the journal stays — only the trade is removed. The registry grows. It never shrinks. The track record is permanent.
+The **registry** is a collection of closures. Each closure knows its (market, exit) pair. Each accumulates Grace/Violence across ALL trades this pair has done. The closures persist across trades — when a trade closes, the closure stays with its track record. The registry grows as new pairs are discovered. It never shrinks. The track record is permanent.
 
 The **proposed_trades** map is the queue. Step 2 (COMPUTE + DISPATCH) inserts proposals via `treasury.propose_trade()`. Step 4 (COLLECT + FUND) iterates them — sorted by pair track record, conviction, or whatever metric the treasury uses to prioritize — funds the best, rejects the rest. Funded proposals move to `active_trades`. Rejected proposals are removed. The queue is empty after Step 4.
 
