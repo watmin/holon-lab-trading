@@ -93,7 +93,7 @@ flowchart TD
 
 Signals and their types:
 - `OHLCV → Market Observers`: raw candle data
-- `Market Observers → Exit Observers`: `(label, Vec<Vector>)` — named thoughts
+- `Market Observer[i] → Exit Observer[j]`: `(label, Vector)` — one named thought per (market, exit) pair
 - `Exit Observers → Tuple Journals`: proposals `(market_thought, distance, conviction)`
 - `Tuple Journals → Treasury`: funding requests (pair identity, direction, distance)
 - `Treasury → Tuple Journals`: `propagate(outcome, closes, entry_price)` — reality
