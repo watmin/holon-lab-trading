@@ -10,3 +10,4 @@ pub mod learned_stop;
 pub mod optimal;
 pub mod scalar;
 pub mod tuple;
+pub mod vocab;

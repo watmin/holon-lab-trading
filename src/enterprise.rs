@@ -126,11 +126,7 @@ impl Enterprise {
 
         for (i, slot) in self.trades.iter_mut().enumerate() {
             if let Some(ref mut trade) = slot {
-                // Determine direction: source_asset is what we sold to enter.
-                // Buy: sold base (USDC) for quote (WBTC) → rate = base_per_quote = price.
-                // Sell: sold quote (WBTC) for base (USDC) → rate = quote_per_base = 1/price.
-                let is_buy = trade.source_asset.as_str() == "USDC";
-                let current_rate = if is_buy { current_price } else { 1.0 / current_price };
+                let current_rate = trade.current_rate(current_price);
 
                 if let Some(exit) = trade.tick(current_rate, k_trail) {
                     let ret = trade.return_pct(current_rate);
@@ -143,9 +139,9 @@ impl Enterprise {
         for (i, _exit, ret) in resolved {
             let trade = self.trades[i].as_ref().unwrap();
             let entry_price = trade.entry_rate;
-            let entry_candle = trade.entry_candle;
+            let candles_held = trade.candles_held;
             let source_amount = trade.source_amount;
-            let is_buy = trade.source_asset.as_str() == "USDC";
+            let is_buy = trade.is_buy();
 
             // Classify: Grace (profit) or Violence (loss).
             let reality = if ret > 0.0 {
@@ -156,8 +152,8 @@ impl Enterprise {
             let grace = ret > 0.0;
 
             // Compute optimal distance from price history (hindsight).
-            // Find the entry candle offset in the window, extract closes from entry to now.
-            let optimal_dist = find_closes_from_entry(candle_window, entry_candle)
+            // Slice from entry forward using candles_held as the offset from window end.
+            let optimal_dist = find_closes_from_entry(candle_window, candles_held)
                 .and_then(|closes| compute_optimal_distance(&closes, entry_price, 100, 0.05));
 
             // Propagate through the tuple journal: resolve + observe_scalars.
@@ -304,8 +300,7 @@ impl Enterprise {
                 };
 
                 // Determine current rate for this trade's direction.
-                let is_buy = trade.source_asset.as_str() == "USDC";
-                let current_rate = if is_buy { current_price } else { 1.0 / current_price };
+                let current_rate = trade.current_rate(current_price);
 
                 // Tick the trade — updates trailing stop, checks triggers.
                 // We intentionally IGNORE the exit signal here.
@@ -338,15 +333,9 @@ impl Enterprise {
                 let i = self.idx(market_idx, exit_idx);
                 let journal = &mut self.registry[i];
 
-                // For now, composed = market thought directly.
-                // Exit vocabulary composition comes later.
-                let composed = thought.clone();
-
                 // Propose: updates noise subspace, predicts grace/violence.
-                let prediction = journal.propose(&composed);
-
-                // Query the learned stop for this slot's distance.
-                let distance = self.learned_stops[i].recommended_distance(&composed);
+                // Pass by reference — no need to clone.
+                let prediction = journal.propose(thought);
 
                 // Check proposal conditions:
                 //   - journal must have proven its curve (funded)
@@ -357,8 +346,11 @@ impl Enterprise {
                     && prediction.conviction > 0.2
                     && self.learned_stops[i].pair_count() > 0
                 {
+                    // Query the learned stop only when we need the distance.
+                    let distance = self.learned_stops[i].recommended_distance(thought);
+
                     self.proposals[i] = Some(Proposal {
-                        composed_thought: composed,
+                        composed_thought: thought.clone(),
                         direction: prediction.direction,
                         distance,
                         conviction: prediction.conviction,
@@ -432,15 +424,25 @@ impl Enterprise {
             // Skip if a trade already occupies this slot.
             if journal.funded() && self.trades[i].is_none() {
                 // Build a PositionEntry from the proposal's parameters.
-                // Direction: for now, all funded proposals open as buy (USDC → WBTC).
-                // Full direction routing (from market observer labels) comes later.
-                let entry_rate = current_price;
+                // Direction from the journal prediction: Grace = buy, Violence = sell.
+                // If direction is None or matches violence_label, open as sell (WBTC → USDC).
+                let is_sell = proposal.direction.is_none()
+                    || proposal.direction == Some(journal.violence_label);
+                let (source, target) = if is_sell {
+                    (Asset::new("WBTC"), Asset::new("USDC"))
+                } else {
+                    (Asset::new("USDC"), Asset::new("WBTC"))
+                };
+
+                // Rate is always source_per_target.
+                // Buy (USDC→WBTC): rate = price. Sell (WBTC→USDC): rate = 1/price.
+                let entry_rate = if is_sell { 1.0 / current_price } else { current_price };
                 let source_amount = 1000.0; // nominal — capital sizing comes later
                 let entry = PositionEntry {
                     id: i,
                     candle_idx: 0, // caller should set this; placeholder for now
-                    source_asset: Asset::new("USDC"),
-                    target_asset: Asset::new("WBTC"),
+                    source_asset: source,
+                    target_asset: target,
                     source_amount,
                     target_received: source_amount / entry_rate,
                     entry_rate,
@@ -458,32 +460,27 @@ impl Enterprise {
     }
 }
 
-/// Extract close prices from the candle window starting at the entry candle.
-/// Returns None if the entry candle is not within the window.
-fn find_closes_from_entry(candle_window: &[crate::candle::Candle], _entry_candle: usize) -> Option<Vec<f64>> {
-    // The candle window is a slice of recent candles. We need to figure out
-    // which index in the window corresponds to entry_candle.
-    // Convention: the last candle in the window is the current candle.
-    // If candle_window has N candles and the current global candle index is C,
-    // then window[0] is candle C-N+1, window[N-1] is candle C.
-    // We don't know C directly, but we can search by candle index if available,
-    // or assume the window covers a contiguous range.
-    //
-    // Since we don't have explicit candle indices on the Candle struct for ordering,
-    // we use the position: entry_candle relative to the window's implied range.
-    // The caller must ensure the window covers from entry to now.
-    //
-    // Simple approach: if the window length > (current_candle - entry_candle),
-    // the entry is within the window. We assume the last candle is the most recent.
+/// Extract close prices from the candle window starting at the entry point.
+///
+/// `candles_held`: how many candles the trade has been open. The entry is
+/// `candles_held` candles back from the end of the window. If the entry is
+/// older than the window, the full window is used as best available.
+fn find_closes_from_entry(candle_window: &[crate::candle::Candle], candles_held: usize) -> Option<Vec<f64>> {
     let window_len = candle_window.len();
     if window_len < 2 { return None; }
 
-    // We don't know the absolute candle index of the window. Use a heuristic:
-    // scan from the end. If a candle has close matching entry_price... too fragile.
-    // Better: just return all closes. The caller already passed the right window.
-    // The optimal distance function handles the full history.
-    let closes: Vec<f64> = candle_window.iter().map(|c| c.close).collect();
-    if closes.len() >= 2 { Some(closes) } else { None }
+    // Slice from entry forward. If entry is older than the window, use full window.
+    let offset = if candles_held >= window_len {
+        0
+    } else {
+        window_len - candles_held
+    };
+
+    let slice = &candle_window[offset..];
+    if slice.len() < 2 { return None; }
+
+    let closes: Vec<f64> = slice.iter().map(|c| c.close).collect();
+    Some(closes)
 }
 
 #[cfg(test)]
@@ -760,7 +757,10 @@ mod tests {
     fn step_resolve_feeds_learned_stop() {
         let mut e = Enterprise::new(1, 1, 64, 500, &["a"], &["x"]);
 
-        let pos = ManagedPosition::new(make_buy_entry(50000.0, 0.01, 2.0, 3.0));
+        let mut pos = ManagedPosition::new(make_buy_entry(50000.0, 0.01, 2.0, 3.0));
+        // Simulate a trade that has been open for 30 candles so that
+        // find_closes_from_entry has enough price history for compute_optimal_distance.
+        pos.candles_held = 30;
         e.trades[0] = Some(pos);
         e.trade_thoughts[0] = Some(vec![holon::Vector::zeros(64)]);
 
@@ -957,11 +957,12 @@ mod tests {
 
         // Force the journal to be funded.
         e.registry[0].curve_valid = true;
+        let grace = e.registry[0].grace_label;
 
-        // Insert a proposal.
+        // Insert a proposal with Grace direction (buy: USDC → WBTC).
         e.proposals[0] = Some(Proposal {
             composed_thought: holon::Vector::zeros(64),
-            direction: None,
+            direction: Some(grace),
             distance: 0.02,
             conviction: 0.5,
             market_idx: 0,
@@ -971,11 +972,12 @@ mod tests {
         assert_eq!(e.active_trade_count(), 0);
         e.step_collect_fund(50000.0, 0.01, 2.0, 3.0);
 
-        // Trade should have been opened.
+        // Trade should have been opened as buy (Grace direction).
         assert_eq!(e.active_trade_count(), 1);
         let trade = e.trades[0].as_ref().unwrap();
         assert!((trade.entry_rate - 50000.0).abs() < 1e-6);
         assert!((trade.entry_atr - 0.01).abs() < 1e-12);
+        assert!(trade.is_buy(), "Grace direction should open a buy");
 
         // Thought should be stashed.
         assert!(e.trade_thoughts[0].is_some());
@@ -983,6 +985,33 @@ mod tests {
 
         // Proposal should be cleared.
         assert!(e.proposals[0].is_none());
+    }
+
+    #[test]
+    fn step_collect_fund_violence_direction_opens_sell() {
+        let mut e = Enterprise::new(1, 1, 64, 500, &["m"], &["e"]);
+
+        // Force the journal to be funded.
+        e.registry[0].curve_valid = true;
+        let violence = e.registry[0].violence_label;
+
+        // Insert a proposal with Violence direction (sell: WBTC → USDC).
+        e.proposals[0] = Some(Proposal {
+            composed_thought: holon::Vector::zeros(64),
+            direction: Some(violence),
+            distance: 0.02,
+            conviction: 0.5,
+            market_idx: 0,
+            exit_idx: 0,
+        });
+
+        e.step_collect_fund(50000.0, 0.01, 2.0, 3.0);
+
+        assert_eq!(e.active_trade_count(), 1);
+        let trade = e.trades[0].as_ref().unwrap();
+        // Sell: rate = 1/price
+        assert!((trade.entry_rate - 1.0 / 50000.0).abs() < 1e-12);
+        assert!(!trade.is_buy(), "Violence direction should open a sell");
     }
 
     #[test]

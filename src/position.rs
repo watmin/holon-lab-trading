@@ -129,6 +129,17 @@ pub struct ManagedPosition {
 }
 
 impl ManagedPosition {
+    /// Is this a buy position? Buy: sold base (USDC) for quote (WBTC).
+    pub fn is_buy(&self) -> bool {
+        self.source_asset.as_str() == "USDC"
+    }
+
+    /// Current rate for this position's direction.
+    /// Buy: rate = price (source_per_target). Sell: rate = 1/price.
+    pub fn current_rate(&self, price: f64) -> f64 {
+        if self.is_buy() { price } else { 1.0 / price }
+    }
+
     /// Construct from a swap. One formula for stop/TP.
     /// Rate going up = profit. Stop below entry. TP above entry.
     pub fn new(entry: PositionEntry) -> Self {
