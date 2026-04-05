@@ -455,12 +455,13 @@ Two learning streams feed each LearnedStop:
 Paper fills it fast. Reality corrects it with the most honest signal.
 
 The query interface is used by two callers:
-- **Treasury** queries to manage active trades — "what distance now?"
-- **Tuple journal** queries to seed paper entries — "what distance for this paper?"
+- **The post** queries to seed its own paper entries — "what distance for this paper?"
+  The tuple journal is the post's internal state. The post uses itself.
+- **The treasury** queries through the post to manage active trades — "what distance now?"
 
 Both read. Neither writes. The writing happens on RESOLUTION:
-- **Paper resolves** → compute_optimal_distance → observe (write)
-- **Trade resolves** → compute_optimal_distance → observe (write)
+- **Paper resolves** (inside the post) → compute_optimal_distance → observe (write)
+- **Trade resolves** (treasury settles, routes to post) → compute_optimal_distance → observe (write)
 
 The query seeds the stop. The resolution teaches the answer.
 Two callers for the query. Two callers for the learning.
