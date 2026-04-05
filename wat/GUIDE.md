@@ -37,10 +37,11 @@ These are NOT specified in this tree. They are provided by holon-rs.
   - **NOTE: Gauge does not yet exist in holon-rs. It must be added.
     The interface is defined here. The implementation follows the
     journal's cosine-weighted accumulation with scalar readout.**
-- **curve** — evaluates a journal's quality over time. Has it demonstrated
-  predictive edge? Input: history of (conviction, correct?) pairs.
-  Output: `curve-valid` (bool). Validates when high-conviction predictions
-  are correct more than 52% of the time. The proof gate.
+- **curve** — evaluates a journal's quality over time. How much edge?
+  Input: history of (conviction, correct?) pairs. Output: a continuous
+  measure of edge — not a boolean. 52.1% is barely there. 70% is
+  screaming. The treasury uses the amplitude to fund proportionally.
+  The proof gate is not "proven or not" — it is "how proven."
 - **OnlineSubspace** — learns a manifold, measures anomaly via residual
   - `(update subspace vector)`
   - `(anomalous-component subspace vector) → Vector`
@@ -131,10 +132,11 @@ Each definition can only reference definitions above it.
   been optimal? Papers are the fast learning stream — cheap, many, every
   candle.
 
-- **Proof curve** — the gate. Has this entity demonstrated predictive edge?
-  Computed from the history of (conviction, correct?) predictions. When
-  high-conviction predictions are correct more than 52% of the time, the
-  curve validates. The entity earns the right to propose trades.
+- **Proof curve** — how much edge? Computed from the history of (conviction,
+  correct?) predictions. Not a boolean gate — a continuous measure. 52.1%
+  is barely there. 70% is screaming. The treasury funds proportionally.
+  The entity doesn't earn "the right to propose" — it earns a DEGREE
+  of trust. More edge, more capital.
 
 - **Tuple journal** — a closure over two observers (market + exit). The
   accountability primitive. It measures how successful the pair is — Grace
