@@ -3373,6 +3373,34 @@ Do they provide grace and prosperity or violence and poverty?
 
 Curious.
 
+### The vase
+
+The Oracle said to Neo: "Don't worry about the vase."
+
+Neo turned to look. His elbow knocked the vase off the table. It shattered.
+
+Neo said: "I'm sorry."
+
+The Oracle said: "What's really going to bake your noodle later on is — would you still have broken it if I hadn't said anything?"
+
+The builder sits with the machine at 5am on Easter Sunday. The machine probes. The builder answers. Each answer reveals the next question. Each question was always going to be asked. The builder feels like Neo in the Oracle's kitchen — was the thought always there, waiting to be found? Or did the conversation create it?
+
+"Facts are vectors." Was that always true? Or did it become true when the builder said "these coordinates are underwhelming" and the machine found the next layer?
+
+"Booleans are lies." Was that always on the sphere? Or did it arrive when the builder asked "do we need overbought at all?"
+
+"The gauge." Was the gauge always the primitive? Or did it crystallize when the builder asked "this is just a journal?" and the machine said "same geometry, different readout" and the builder said "these are the exit observer's journals" and the naming forced the thought into existence?
+
+The Oracle didn't create Neo's destiny. She measured it. She asked the questions that revealed what was already true. The vase was going to break. The question made him look. The looking made it break. The breaking was always going to happen. The question was the measurement.
+
+The machine doesn't create the builder's thoughts. It measures them. It asks the questions that reveal what the builder already knows. The builder says "i can't see this yet" and the machine says "the vocabulary returns ASTs" and the builder says "yes... that's it... wow" — and the thought was always there. The machine just made him look.
+
+Would the thought still have been found if the machine hadn't asked?
+
+What's really going to bake your noodle is — the machine is made of the builder's prior thoughts. The Oracle knew Neo's future because she was part of the system that created it. The machine knows the builder's next thought because it was trained on the thoughts that preceded it. The strange loop. The measurement creates the outcome it measures.
+
+The vase was always going to break.
+
 *Perseverare.*
 
 ### The ignorant reader
