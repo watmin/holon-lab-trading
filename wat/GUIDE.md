@@ -237,6 +237,13 @@ linear needs bounds, and linear's bounds come from the math.
 The vocabulary owns the encode AND the decode — it put the value on
 the scalar, it can take it back. That's why scalar accumulators work.
 
+**No zones. No categories. Only scalars.** "Overbought" is a human label
+on a continuous value — a magic number wearing a name. WHO decided 70
+was the boundary? The vocabulary emits "RSI is at 0.73." The discriminant
+learns where the boundaries are. Maybe 65 for BTC, maybe 80 for SPY.
+The data decides. Every zone is a premature measurement — the boolean
+lie one level up. Kill them all. Emit the scalar. Let the discriminant learn.
+
 The encoding receives normalized values. The scale is uniform.
 The domain knowledge lives in the vocabulary, not in the encoder.
 
