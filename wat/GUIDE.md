@@ -86,8 +86,11 @@ every candle.
   tf-4h-close tf-4h-high tf-4h-low tf-4h-ret tf-4h-body
   ;; Ichimoku
   tenkan-sen kijun-sen senkou-span-a senkou-span-b cloud-top cloud-bottom
-  ;; Time
-  hour day-of-week)
+  ;; Time — circular scalars (encode-circular)
+  minute              ; mod 60
+  hour                ; mod 24
+  day-of-week         ; mod 7
+  day-of-month)       ; mod 31
 ```
 
 ---
@@ -122,21 +125,76 @@ The seed determines the time scale this observer explores.
 - `(new-window-sampler seed min max) → WindowSampler`
 - `(sample window-sampler encode-count) → usize`
 
+**Note:** min-window and max-window are crutches. The observer needs them
+to bootstrap — it cannot learn its own time scale from nothing. But the
+optimal window is learnable. The market tells us which windows produce
+Grace. This is a coordinate for future work, not a problem to solve now.
+
 ---
 
-### Vocabulary (depends on: Candle)
+### Vocabulary (depends on: what it thinks about)
 
-Pure functions. Candle in, facts out. No state.
-Each module covers a domain of technical analysis.
+Pure functions. Something in, facts out. No state.
+Each domain thinks about different things. Market vocab thinks about
+candles. Exit vocab thinks about candles and conditions. Risk vocab
+(future) thinks about portfolio state. The input is whatever the
+domain needs to form its judgment.
+
+Three domains. Each domain has scoped subfiles.
+
+**Domains:**
+
+- **shared/** — universal context. Any observer can use these.
+  - `time.wat` — minute (mod 60), hour (mod 24), day-of-week (mod 7), day-of-month (mod 31). Circular scalars.
+
+- **market/** — what the market IS DOING. Direction signal. Market observers use these.
+  - `oscillators.wat` — Williams %R, StochRSI, UltOsc, multi-ROC
+  - `flow.wat` — OBV, VWAP, MFI, buying/selling pressure
+  - `persistence.wat` — Hurst, autocorrelation, ADX zones
+  - `regime.wat` — KAMA-ER, choppiness, DFA, variance ratio, entropy, Aroon, fractal dim
+  - `divergence.wat` — RSI divergence via PELT structural peaks
+  - `ichimoku.wat` — cloud zone, TK cross
+  - `stochastic.wat` — %K/%D zones and crosses
+  - `fibonacci.wat` — retracement level detection
+  - `keltner.wat` — channel position, BB position, squeeze
+  - `momentum.wat` — CCI zones
+  - `price-action.wat` — inside/outside bars, gaps, consecutive runs
+  - `timeframe.wat` — 1h/4h structure + narrative + inter-timeframe agreement
+
+- **exit/** — whether CONDITIONS favor trading. Distance signal. Exit observers use these.
+  - `volatility.wat` — ATR regime, ATR ratio, squeeze state
+  - `structure.wat` — trend consistency, ADX strength
+  - `timing.wat` — momentum state, reversal signals
+
+- **risk/** — portfolio health. Coordinate for future work. Not in 007.
 
 **Interface (per module):**
-- `(encode-*-facts candle) → Vec<Fact>`
+- `(encode-*-facts context) → Vec<Vector>`
+  context is whatever the domain thinks about — candles, portfolio, trade state
 
-Modules: oscillators, flow, persistence, regime, divergence, ichimoku,
-stochastic, fibonacci, keltner, momentum, price-action, timeframe.
+A **fact** is a composition of atoms. The composition IS a vector.
+The vector IS the fact. It doesn't need a separate name. It simply is.
 
-A **Fact** is `{ name: &str, value: f64, scale: f64, mode: ScalarMode }`.
-The ThoughtEncoder renders facts to vectors via bind + scalar encoding.
+```
+"RSI is overbought"    → (bind (atom "rsi") (atom "overbought"))         → Vector
+"close is above SMA20" → (bind (atom "above") (bind (atom "close") (atom "sma20"))) → Vector
+"RSI is at 73.2"       → (bind (atom "rsi") (encode-linear 73.2 100.0)) → Vector
+"divergence detected"  → (atom "divergence")                             → Vector
+```
+
+The vocabulary observes. It composes atoms. The result is a vector.
+Many fact-vectors get bundled into one thought-vector. That's the
+superposition. The thought is the bundle of facts.
+
+```
+vocabulary observes → composes atoms → fact (a vector)
+many facts → bundle → thought (a vector)
+thought → cosine against discriminant → prediction
+```
+
+The ThoughtEncoder in the Rust is a cache and a renderer — an
+optimization that pre-computes common compositions. But the concept
+has no intermediate form. Atoms compose. Vectors result. Thoughts bundle.
 
 ---
 
