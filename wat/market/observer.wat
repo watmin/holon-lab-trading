@@ -1,8 +1,8 @@
 ;; -- market/observer.wat -- a leaf node in the enterprise tree ---------------
 ;;
 ;; Each observer thinks different thoughts at their own time scale.
-;; The manager aggregates their predictions -- it does not encode candle data.
-;; Observers perceive, they don't decide.
+;; The tuple journal routes resolved outcomes back — Win/Loss from reality.
+;; Observers perceive and learn. They don't decide trades.
 
 (require core/primitives)
 (require core/structural)
@@ -17,6 +17,7 @@
 ;; -- Lens (enum) -----------------------------------------------------------
 ;; The compiler guards renames — no silent string mismatches.
 ;; Each lens selects which eval methods fire during thought encoding.
+;; The generalist is just another lens. No special treatment.
 
 (enum lens :momentum :structure :volume :narrative :regime :generalist)
 
@@ -24,7 +25,7 @@
 
 (struct observer
   lens                   ; lens enum — which vocabulary this observer thinks through
-  journal                ; Journal -- Template 1: learns Win/Loss from residual
+  journal                ; Journal -- Template 1: learns Win/Loss from resolved trades
   noise-subspace         ; OnlineSubspace -- Template 2: learns the texture of all thoughts
   resolved               ; (deque (conviction, correct)) -- resolved predictions
   good-state-subspace    ; OnlineSubspace -- engram of discriminant states with > 55% accuracy
@@ -74,8 +75,7 @@
 ;; The noise subspace learns from ALL thoughts, every candle. It is the
 ;; background model — what thoughts normally look like. The residual after
 ;; subtraction is what's UNUSUAL about this candle. The journal learns only
-;; from resolved simulations (Win/Loss), weighted by grace and violence,
-;; scaled by residual norm.
+;; from resolved outcomes (Win/Loss), routed by the tuple journal.
 
 (define (strip-noise observer thought)
   "Subtract noise manifold, L2-normalize the residual.
@@ -102,58 +102,22 @@
     (let ((residual (strip-noise observer thought)))
       (predict (:journal observer) residual))))
 
-;; -- Outcome: MFE vs MAE -------------------------------------------------------
-;;
-;; The market tells us the label. Not the simulation.
-;; Every pending entry tracks two values as it ages:
-;;   max-favorable-excursion (MFE): biggest move in our direction
-;;   max-adverse-excursion   (MAE): biggest move against us
-;;
-;; At horizon drain, the question is binary:
-;;   MFE > |MAE|  →  Win  (the trade went right before it went wrong)
-;;   MFE ≤ |MAE|  →  Loss (the trade went wrong before it went right)
-;;
-;; Weight = |MFE - |MAE|| — how decisively the market answered.
-;; Strong favorable-first = high weight Win. The journal learns hard.
-;; Near the boundary = ambiguous. The journal learns softly.
-;;
-;; This produces ~50/50 labels in a random walk.
-;; Deviations from 50/50 are real signal — that's what the journal learns.
-;;
-;; No k-stop, k-tp, k-trail in the label. Those exist for position management
-;; (ManagedPosition lifecycle), not for observer learning.
-;; The observers learn what the market DOES, not what we parameterized.
-
-(define (classify-excursion mfe mae)
-  "Classify a pending entry's excursion into Win or Loss.
-   mfe: max favorable excursion (positive).
-   mae: max adverse excursion (negative).
-   Returns (:win weight) or (:loss weight)."
-  (let ((favorable-first (> mfe (abs mae)))
-        (weight (max (abs (- mfe (abs mae))) 0.01)))
-    (if favorable-first
-        (list :win weight)
-        (list :loss weight))))
-
 ;; -- Resolve ----------------------------------------------------------------
-
-;; The central method. Handles: learning, accuracy tracking, engram gating,
-;; curve validation, conviction threshold update, resolved prediction tracking.
-;; Returns a resolve-log if the observer had a directional prediction.
 ;;
-;; Labels are excursion-based (discovered from data analysis):
-;;   Win:  MFE > |MAE| — the trade went right before it went wrong (84% profitable)
-;;   Loss: MFE ≤ |MAE| — the trade went wrong before it went right (16% profitable)
+;; Called by the tuple journal's propagate when a trade or paper resolves.
+;; The tuple journal routes Win/Loss + weight to the market observer.
+;; The market observer did NOT compute this label — it received it from reality
+;; flowing through the tuple journal.
 ;;
-;; No Outcome::Noise. The noise subspace learns from ALL thoughts every candle
-;; (in observe-candle). The journal learns only at horizon drain.
-;; Weight = |MFE - |MAE|| — how decisively the market spoke.
+;; Win:  the trade produced Grace (profit)
+;; Loss: the trade produced Violence (loss)
+;; Weight: how decisively reality spoke — residue magnitude, or |MFE - |MAE||.
 
 (define (resolve observer thought-vec prediction outcome weight
                  conviction-quantile conviction-window)
   "Resolve a prediction against an observed outcome.
-   outcome: :win or :loss (from classify-excursion at horizon drain).
-   weight: |MFE - |MAE|| — decisiveness of the market's answer."
+   outcome: :win or :loss — routed from tuple journal propagation.
+   weight: how decisively reality spoke."
 
   ;; 1. Learn: journal sees the residual, weighted by outcome magnitude
   (let ((residual (strip-noise observer thought-vec))
@@ -215,26 +179,27 @@
 
 ;; -- Learning flow summary ---------------------------------------------------
 ;;
-;; Every candle:
-;;   1. Encode thought from candle window
+;; Every candle (in step-compute-dispatch):
+;;   1. Encode thought from candle window at sampled time scale
 ;;   2. noise-subspace.update(thought)       ← learns from ALL thoughts
 ;;   3. residual = strip-noise(thought)
 ;;   4. prediction = journal.predict(residual)
-;;   5. Buffer (thought, prediction, MFE=0, MAE=0) in pending ring buffer
+;;   5. Thought goes to exit observers for composition → tuple journals
 ;;
-;; Each pending entry, each candle:
-;;   6. Track MFE (max favorable excursion) and MAE (max adverse excursion)
+;; On paper resolution (in tuple journal tick-papers):
+;;   6. Tuple journal classifies Grace/Violence
+;;   7. propagate routes Win/Loss + weight back to this market observer
+;;   8. observer.resolve(thought, prediction, outcome, weight)
+;;   9. Journal learns. Accuracy tracks. Engram gates. Curve validates.
 ;;
-;; At horizon drain (max-pending-age reached):
-;;   7. classify-excursion(MFE, MAE) → Win or Loss
-;;   8. weight = |MFE - |MAE|| — how decisive the market was
-;;   9. observer.resolve(thought, prediction, outcome, weight)
-;;   10. Remove from pending
+;; On real trade resolution (in step-resolve):
+;;   Same path as paper — propagate routes through the tuple journal.
+;;   The most honest signal. The market's final answer.
 ;;
 ;; The noise subspace is the background model (every candle).
-;; The journal is the foreground model (horizon drain only).
-;; Weight scales by decisiveness — ambiguous trades teach softly.
-;; ~50/50 Win/Loss in a random walk. Deviations are signal.
+;; The journal is the foreground model (resolved outcomes only).
+;; Labels come from the tuple journal — NOT from self-computed MFE/MAE.
+;; The market observer does not label itself. Reality labels it.
 
 ;; -- The Observer is domain-agnostic -------------------------------------------
 ;;
@@ -245,16 +210,14 @@
 ;;   |-----------|--------------------------------------|--------------------|
 ;;   | Market    | RSI, MACD, harmonics, regime, ...    | Win / Loss         |
 ;;   | Risk      | drawdown, accuracy, streak, ...      | Healthy / Unhealthy|
-;;   | Exit      | P&L, hold duration, MFE, stop, ...   | Hold / Exit        |
 ;;
 ;; The pipeline is the same: facts → noise subspace → residual → journal.
-;; The vocabulary is configuration. The manager sees (name, direction, conviction).
+;; The vocabulary is configuration.
 ;;
 ;; The noise subspace and the journal are coupled through strip-noise:
 ;; the journal sees thought MINUS noise-model. A fibered dependency —
 ;; the journal operates on a fiber over the noise subspace's state.
 ;; What the noise subspace learns changes what the journal sees.
-;; (Proposal 004, Resolution: Grothendieck construction, not entanglement.)
 
 ;; -- Transparency -------------------------------------------------------------
 ;;
@@ -264,18 +227,10 @@
 ;; Same vector. Same cosine. Same algebra.
 ;; The glass box. Nothing to explain because nothing is hidden.
 
-;; -- Johnson-Lindenstrauss regime ----------------------------------------------
-;;
-;; Every thought vector lives on the surface of a D-dimensional unit sphere.
-;; JL lemma guarantees that D = O(log N / epsilon^2) dimensions preserve
-;; pairwise distances among N fact combinations. At D=10,000 and ~53 facts
-;; with scalar encodings, the structure is preserved with high fidelity.
-;; The codebook atoms are labeled points on the sphere. The prototypes are
-;; centroids. The discriminant separates Win from Loss on the sphere.
-
 ;; -- What observers do NOT do -----------------------------------------------
-;; - Do NOT decide trades (that's the manager + treasury)
+;; - Do NOT decide trades (that's the tuple journal + treasury)
 ;; - Do NOT encode candle data themselves (that's ThoughtEncoder)
 ;; - Do NOT see other observers' predictions (they are independent)
 ;; - Do NOT manage positions (that's the position lifecycle)
-;; - They perceive, filter noise, learn from the residual, and offer opinions.
+;; - Do NOT label themselves (labels come from tuple journal propagation)
+;; - They perceive, filter noise, learn from resolved outcomes, and offer opinions.
