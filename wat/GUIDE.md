@@ -35,9 +35,9 @@ These are NOT specified in this tree. They are provided by holon-rs.
   - `(bind a b) → Vector` — compose two thoughts
   - `(bundle &vecs) → Vector` — superpose many thoughts
   - `(cosine a b) → f64` — measure similarity
-  - **journal** is listed above as a struct with its full interface.
-    It is both a primitive (one of the six) and a struct (with fields
-    and methods). The Journal struct IS the journal primitive.
+  - **journal** — the learning primitive. Its full interface is listed
+    above (register, observe, predict, decay, discriminant). It
+    accumulates observations and predicts. Two readouts:
   - **curve** evaluates the journal's quality over time. Has the journal
     demonstrated predictive edge? The curve answers yes or no. This is
     the proof gate — it decides when an observer or tuple journal has
@@ -53,26 +53,30 @@ These are NOT specified in this tree. They are provided by holon-rs.
 
 ## Labels — the language of outcomes
 
-The enterprise uses named labels for learning. Two pairs:
+The system uses named labels for learning. Two pairs:
 
-- **Win / Loss** — direction labels. The market observer's question:
-  "did the price move in the predicted direction?" Win = yes. Loss = no.
+- **Win / Loss** — direction labels. "Did the price move in the predicted
+  direction?" Win = yes. Loss = no.
 
-- **Grace / Violence** — accountability labels. The tuple journal's question:
-  "did this trade produce value or destroy it?" Grace = profit. Violence = loss.
+- **Grace / Violence** — accountability labels. "Did this action produce
+  value or destroy it?" Grace = profit. Violence = loss.
 
 Labels are not booleans. They carry weight — how decisively the market
 answered. A strong Win teaches harder than a marginal one.
+
+Different parts of the system use different labels. Which part uses which
+is described in the detailed sections below.
 
 ---
 
 ## Magic numbers — the crutches
 
 k_trail, k_stop, k_tp — trailing stop distance, safety stop distance,
-take-profit distance. Someone chose these as ATR multipliers. They are
-the last magic in the system. Each one is a crutch — a default value
-the exit observer returns when it has no experience. As observations
-accumulate, the crutch is replaced by what the market actually said.
+take-profit distance. Someone chose these as ATR (Average True Range —
+a measure of volatility) multipliers. They are the last magic in the
+system. Each one is a crutch — a default value returned when the system
+has no experience. As observations accumulate, the crutch is replaced
+by what the market actually said.
 
 ---
 
@@ -184,14 +188,23 @@ think about.
     default-trail default-stop default-tp))          → ExitObserver
 
 ;; ── PaperEntry — hypothetical trade inside a tuple journal ──────────
+;; A paper trade is a "what if." Every candle, every pair gets one.
+;; It tracks what WOULD have happened if a trade was opened here.
+;; Both sides (buy and sell) are tracked simultaneously.
+;; When both sides resolve (their trailing stops fire), the paper
+;; teaches the system: what distance would have been optimal?
 
 (struct paper-entry
-  composed-thought     ; Vector
-  entry-price          ; f64
-  entry-atr            ; f64
-  recommended-distance ; f64 — from the exit observer at entry
-  buy-extreme buy-trail-stop sell-extreme sell-trail-stop
-  buy-resolved sell-resolved)
+  composed-thought     ; Vector — the thought at entry
+  entry-price          ; f64 — price when the paper was created
+  entry-atr            ; f64 — volatility at entry
+  recommended-distance ; f64 — what the exit observer predicted at entry
+  buy-extreme          ; f64 — best price in buy direction so far
+  buy-trail-stop       ; f64 — trailing stop level for buy side
+  sell-extreme         ; f64 — best price in sell direction so far
+  sell-trail-stop      ; f64 — trailing stop level for sell side
+  buy-resolved         ; bool — buy side's stop fired
+  sell-resolved)       ; bool — sell side's stop fired
 
 ;; ── TupleJournal — the closure, accountability ──────────────────────
 
@@ -342,9 +355,9 @@ Owned by the market observer. Not by the enterprise. Not shared.
 The enterprise doesn't sample windows — the observers do.
 
 When window sampling becomes learned, the feedback routes through the
-tuple journal's propagation — same as everything else. "This window size
-produced Grace for this pair." The tuple journal knows. It routes back to
-the market observer. The market observer adjusts its sampler.
+same resolution mechanism that teaches everything else. "This window size
+produced Grace." The system knows. It routes back to the market observer.
+The market observer adjusts its sampler.
 
 ```
 (struct window-sampler
@@ -692,7 +705,7 @@ The generalist is just another lens. No special treatment.
 ```
 
 **Interface:**
-- `(new-market-observer lens dims recalib-interval seed) → MarketObserver`
+- `(make-market-observer lens dims recalib-interval window-sampler) → MarketObserver`
 - `(observe-candle observer candles vm) → Prediction`
   encode → noise update → strip noise → predict
 - `(resolve observer thought prediction outcome weight q window)`
