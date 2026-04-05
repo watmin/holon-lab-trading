@@ -75,56 +75,66 @@ think about.
 ```scheme
 ;; ── Leaves — depend on nothing ──────────────────────────────────────
 
-(struct raw-candle source-asset target-asset ts open high low close volume)
+(make-raw-candle Asset Asset String f64 f64 f64 f64 f64)
+                                                    → RawCandle
 
-(new-indicator-bank)                                → IndicatorBank
-(new-window-sampler seed min-window max-window)     → WindowSampler
-(new-scalar-accumulator name)                       → ScalarAccumulator
+(make-indicator-bank)                               → IndicatorBank
 
-;; ── Candle — produced by indicator bank ─────────────────────────────
+(make-window-sampler u64 usize usize)               → WindowSampler
+;; seed, min-window, max-window
+
+(make-scalar-accumulator String)                    → ScalarAccumulator
+;; name
+
+;; ── Candle — produced by indicator bank from raw candle ─────────────
 
 (tick IndicatorBank RawCandle)                      → Candle
 
-;; ── Vocabulary — pure functions, context in, fact-vectors out ───────
+;; ── Vocabulary — pure functions, context in, ASTs out ───────────────
 ;; Three domains: shared (time), market (direction), exit (conditions)
 ;; The vocabulary speaks a DSL of ThoughtASTs — data, not execution
 
-(vocab-fn context)                                  → Vec<ThoughtAST>
+(vocab-fn Candle)                                   → Vec<ThoughtAST>
 
 ;; ── ThoughtEncoder — evaluates the vocabulary's ASTs ────────────────
 
-(new-thought-encoder VectorManager)                 → ThoughtEncoder
+(make-thought-encoder VectorManager)                → ThoughtEncoder
 (encode ThoughtEncoder ThoughtAST)                  → Vector
 
-;; ── Observers — both are learned ────────────────────────────────────
+;; ── MarketObserver — predicts direction, learned ────────────────────
 
-(new-market-observer Lens dims interval
-  WindowSampler)                                    → MarketObserver
+(make-market-observer Lens usize usize WindowSampler)
+                                                    → MarketObserver
+;; lens, dims, recalib-interval, window-sampler
 
-(new-exit-observer Lens
-  default-trail default-stop default-tp)            → ExitObserver
+;; ── ExitObserver — predicts exit distance, learned ──────────────────
 
-;; ── TupleJournal — the closure, takes both observers ────────────────
+(make-exit-observer Lens f64 f64 f64)               → ExitObserver
+;; lens, default-trail, default-stop, default-tp
 
-(new-tuple-journal market-name exit-name
-  dims interval
-  ScalarAccumulator ScalarAccumulator
-  ScalarAccumulator)                                → TupleJournal
+;; ── TupleJournal — the closure, accountability ──────────────────────
 
-;; ── Post — one per asset pair, takes observers + journals ───────────
+(make-tuple-journal String String usize usize
+  ScalarAccumulator ScalarAccumulator ScalarAccumulator)
+                                                    → TupleJournal
+;; market-name, exit-name, dims, recalib-interval, 3 accumulators
 
-(new-post Asset Asset dims interval max-window-size
+;; ── Post — one per asset pair ───────────────────────────────────────
+
+(make-post Asset Asset usize usize usize
+  IndicatorBank
   Vec<MarketObserver> Vec<ExitObserver>
   Vec<TupleJournal>)                                → Post
+;; source, target, dims, recalib-interval, max-window-size,
+;; indicator-bank, market-observers, exit-observers, registry
 
 ;; ── Treasury — pure accounting ──────────────────────────────────────
 
-(new-treasury initial-assets)                       → Treasury
+(make-treasury Assets)                              → Treasury
 
-;; ── Enterprise — the coordination plane, takes everything ───────────
+;; ── Enterprise — the coordination plane ─────────────────────────────
 
-(new-enterprise
-  Vec<Post> Treasury ThoughtEncoder)                → Enterprise
+(make-enterprise Vec<Post> Treasury ThoughtEncoder)  → Enterprise
 ```
 
 ---
