@@ -255,38 +255,27 @@ has no intermediate form. Atoms compose. Vectors result. Thoughts bundle.
 
 ### ThoughtCache (depends on: VectorManager)
 
-The enterprise's memory. Two levels. Guards against infinite compositions
-without losing the components that recur.
+The enterprise's memory. One cache. One mechanism.
 
-**Permanent: atoms.** The named concepts. Finite set. Never evicted.
-`atom("rsi")` computed once, used forever. The thought IS its own identity
-function — same name, same vector, always.
+The thought IS its own identity function — same composition, same vector.
+Try the cache. Hit → use it. Miss → compute from sub-components (recurse),
+store, done. If memory pressure → evict least recently used.
 
-**Per-candle: fact-vectors.** Within one candle, RSI is 0.73 for every
-observer. If momentum and generalist both want the RSI fact, compute
-once, share. Cleared at end of candle. The infinite qubit space is
-guarded — we only hold the facts for THIS candle, not all candles.
-
-At candle end: atoms stay. Fact-vectors are forgotten. The components
-persist. The compositions flow through.
+Atoms never evict because they're used every candle — always recent.
+Scalars stick if the same values recur. Compositions stick if multiple
+observers need them this candle. The cache manages itself. No tiers.
+No policies. Just an LRU.
 
 Owned by the enterprise. Passed to posts.
 
 ```
 (struct thought-cache
-  atoms                 ; map of name → Vector (permanent, deterministic)
-  candle-facts)         ; map of fact-key → Vector (per-candle, cleared each candle)
+  lru)                  ; LRU cache: composition-key → Vector
 ```
 
 **Interface:**
-- `(lookup-atom cache name) → Vector`
-  permanent — the atom vector for this name
-- `(lookup-fact cache key) → Option<Vector>`
-  per-candle — returns cached fact-vector if already computed this candle
-- `(store-fact cache key vector)`
-  per-candle — memoize a fact-vector for reuse within this candle
-- `(clear-candle-facts cache)`
-  called at candle end — forget the compositions, keep the atoms
+- `(lookup cache key) → Option<Vector>`
+- `(store cache key vector)`
 
 The observer composes the thought:
 ```
@@ -297,17 +286,21 @@ observer calls bundle(facts)         → Vector        ; the thought
 The lens is not a parameter. The lens is on the observer. The observer
 knows which vocab modules are its domain.
 
-**Thought composition is recursive cache lookup.** The recursion bottoms
-out at atoms (always cached) and scalars (always fresh). Everything in
-between is a memo.
+**Thought composition is recursive cache lookup.** One mechanism at
+every level of the recursion:
 
 ```
-atom("rsi")                    → cache hit (permanent)
-encode-linear(0.73, 1.0)      → compute (fresh scalar)
-bind(atom, scalar)             → compute, store (per-candle cache)
-next observer wants rsi fact   → cache hit (per-candle)
-bundle(all facts)              → compute (the thought — never cached)
+compose(thing)
+  → cache lookup
+    → hit: done
+    → miss: compute from sub-components (recurse), store, done
 ```
+
+Atoms always hit — they're used every candle, never evicted.
+Scalars hit if the same value recurs. Compositions hit if another
+observer needs the same fact this candle. The cache is the optimization
+AND the guard — prevents infinite growth (LRU cap) and wasted work
+(reuse) with the same structure.
 
 ---
 
