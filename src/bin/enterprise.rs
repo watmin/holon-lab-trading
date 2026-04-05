@@ -471,7 +471,7 @@ fn main() {
             }
 
             // Enterprise diagnostics — sample every 1000 candles to keep row count sane.
-            if candle_idx % 1000 == 0 {
+            if desk.encode_count % 500 == 0 && desk.encode_count > 0 {
                 let diag_logs = ent.emit_diagnostics(candle_idx);
                 enterprise::ledger::flush_logs(&diag_logs, &ledger);
             }
