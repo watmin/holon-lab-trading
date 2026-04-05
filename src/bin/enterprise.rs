@@ -473,7 +473,9 @@ fn main() {
             // Enterprise diagnostics — sample every 1000 candles to keep row count sane.
             if desk.encode_count % 500 == 0 && desk.encode_count > 0 {
                 let diag_logs = ent.emit_diagnostics(candle_idx);
+                ledger.execute_batch("COMMIT; BEGIN").ok();
                 enterprise::ledger::flush_logs(&diag_logs, &ledger);
+                ledger.execute_batch("COMMIT; BEGIN").ok();
             }
         }
 
