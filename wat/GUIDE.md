@@ -46,22 +46,64 @@ These are NOT specified in this tree. They are provided by holon-rs.
 
 ## Forward declarations
 
-Every name in the architecture, declared once. The details follow below.
+The construction order. Each line can only reference what's above it —
+those are the things that exist when this thing is constructed. The
+constructor calls ARE the dependency graph.
 
-- **RawCandle** — the input. A stream of OHLCV candles tagged with an asset pair.
-- **IndicatorBank** — streaming state machine. Raw candle in, enriched candle out.
-- **Candle** — the enriched candle. 100+ computed indicators. Produced by the IndicatorBank.
-- **WindowSampler** — deterministic window selection. Each market observer has its own.
-- **Vocabulary** — pure functions. Context in, fact-vectors out. Three domains: shared, market, exit.
-- **ThoughtEncoder** — AST evaluator. Vocabulary speaks a DSL, the encoder evaluates it with caching.
-- **ScalarAccumulator** — per-magic-number f64 learning. Grace vs violence. Global per-pair. On the tuple journal.
-- **MarketObserver** — predicts direction. Learned. Journal with label readout (Win/Loss).
-- **ExitObserver** — predicts exit distance. Learned. Three LearnedStops (trail, stop, tp) — regression, not journal.
-- **LearnedStop** — nearest-neighbor regression. (thought, distance, weight) observations. The exit observer's brain.
-- **TupleJournal** — closure over (market, exit). Accountability. Papers. Propagate. On the post.
-- **Post** — one per asset pair. Owns observers + tuple journals. The thinking happens here.
-- **Treasury** — holds capital. Receives proposals. Funds or rejects. Settles. Routes outcomes to posts.
-- **Enterprise** — the coordination plane. Routes candles to posts. The four-step CSP.
+```scheme
+;; ── Leaves — depend on nothing ──────────────────────────────────────
+
+(struct raw-candle source-asset target-asset ts open high low close volume)
+
+(new-indicator-bank)                          ; streaming state machine
+
+(new-window-sampler seed min-window max-window) ; deterministic window selection
+
+(new-scalar-accumulator name)                 ; per-magic-number f64 learning
+
+;; ── Candle — produced by indicator bank ─────────────────────────────
+
+(tick indicator-bank raw-candle)              ; → Candle (100+ computed indicators)
+
+;; ── Vocabulary — pure functions, context in, fact-vectors out ───────
+;; Three domains: shared (time), market (direction), exit (conditions)
+;; The vocabulary speaks a DSL of ThoughtASTs — data, not execution
+
+;; ── ThoughtEncoder — evaluates the vocabulary's ASTs ────────────────
+
+(new-thought-encoder vector-manager)          ; dictionary (atoms) + cache (compositions)
+
+;; ── Observers — both are learned ────────────────────────────────────
+
+(new-market-observer lens dims recalib-interval  ; predicts direction (Win/Loss)
+  (new-window-sampler seed min max))             ; takes a window sampler
+
+(new-exit-observer lens                       ; predicts exit distance
+  default-trail default-stop default-tp)      ; three regressions, start ignorant
+
+;; ── TupleJournal — the closure, takes both observers ────────────────
+
+(new-tuple-journal                            ; accountability primitive
+  market-name exit-name dims recalib-interval  ; identity of the pair
+  (new-scalar-accumulator "trail-distance")   ; takes scalar accumulators
+  (new-scalar-accumulator "stop-distance")
+  (new-scalar-accumulator "tp-distance"))
+
+;; ── Post — one per asset pair, takes observers + journals ───────────
+
+(new-post source-asset target-asset           ; the thinking unit
+  dims recalib-interval max-window-size       ; takes config
+  market-observers exit-observers registry)   ; takes what's above
+
+;; ── Treasury — pure accounting ──────────────────────────────────────
+
+(new-treasury initial-assets)                 ; holds capital, settles trades
+
+;; ── Enterprise — the coordination plane, takes everything ───────────
+
+(new-enterprise                               ; the CSP sync point
+  posts treasury thought-encoder)             ; takes all of the above
+```
 
 ---
 
