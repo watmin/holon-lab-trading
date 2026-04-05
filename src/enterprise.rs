@@ -370,6 +370,39 @@ impl Enterprise {
         }
     }
 
+    /// The candle loop. Four steps. Sequential. Reality first.
+    ///
+    /// See `on-candle` in `wat/enterprise.wat` for the specification.
+    pub fn on_candle(
+        &mut self,
+        observers: &mut [crate::market::observer::Observer],
+        candle_window: &[crate::candle::Candle],
+        candle: &crate::candle::Candle,
+        encode_count: usize,
+        ctx: &crate::state::CandleContext,
+    ) {
+        let current_price = candle.close;
+        let current_atr = candle.atr;
+
+        // Step 1: RESOLVE — close triggered trades, settle, propagate
+        self.step_resolve(
+            current_price,
+            candle_window,
+            TrailFactor(ctx.k_trail),
+            ctx.conviction_quantile,
+            ctx.conviction_window,
+        );
+
+        // Step 2: COMPUTE + DISPATCH — encode, compose, propose
+        let thoughts = self.step_compute_dispatch(observers, candle_window, encode_count, ctx);
+
+        // Step 3: PROCESS — update triggers, tick papers
+        self.step_process(&thoughts, current_price, current_atr);
+
+        // Step 4: COLLECT + FUND — evaluate proposals, fund or reject
+        self.step_collect_fund(current_price, current_atr, ctx.k_stop, ctx.k_tp);
+    }
+
     /// Step 4: COLLECT + FUND — evaluate proposals, fund or reject, drain proposals.
     ///
     /// Iterate proposals. For each Some(proposal):
@@ -1033,5 +1066,170 @@ mod tests {
         assert!(e.trades[1].is_none());
         assert!(e.trades[2].is_none());
         assert!(e.trades[3].is_none());
+    }
+
+    // ── on_candle integration tests ─────────────────────────────────
+
+    /// Build a minimal CandleContext for on_candle tests.
+    /// Uses a small ThoughtEncoder and VectorManager at 64 dims.
+    struct OnCandleInfra {
+        vm: holon::VectorManager,
+        thought_encoder: crate::thought::ThoughtEncoder,
+        mgr_atoms: crate::market::manager::ManagerAtoms,
+        mgr_scalar: holon::ScalarEncoder,
+        exit_scalar: holon::ScalarEncoder,
+        exit_atoms: crate::market::exit::ExitAtoms,
+        risk_scalar: holon::ScalarEncoder,
+        risk_atoms: crate::risk::RiskAtoms,
+        risk_mgr_atoms: crate::risk::manager::RiskManagerAtoms,
+        observer_atoms: Vec<holon::Vector>,
+        generalist_atom: holon::Vector,
+        codebook_labels: Vec<String>,
+        codebook_vecs: Vec<holon::Vector>,
+    }
+
+    impl OnCandleInfra {
+        fn new() -> Self {
+            use crate::thought::{ThoughtVocab, ThoughtEncoder};
+            use crate::market::OBSERVER_LENSES;
+
+            let vm = holon::VectorManager::new(64);
+            let vocab = ThoughtVocab::new(&vm);
+            let thought_encoder = ThoughtEncoder::new(vocab);
+            let mgr_atoms = crate::market::manager::ManagerAtoms::new(&vm);
+            let mgr_scalar = holon::ScalarEncoder::new(64);
+            let exit_scalar = holon::ScalarEncoder::new(64);
+            let exit_atoms = crate::market::exit::ExitAtoms::new(&vm);
+            let risk_scalar = holon::ScalarEncoder::new(64);
+            let risk_atoms = crate::risk::RiskAtoms::new(&vm);
+            let risk_mgr_atoms = crate::risk::manager::RiskManagerAtoms::new(&vm);
+            let observer_atoms: Vec<holon::Vector> = OBSERVER_LENSES.iter()
+                .map(|lens| vm.get_vector(lens.as_str()))
+                .collect();
+            let generalist_atom = vm.get_vector("generalist");
+            let (codebook_labels, codebook_vecs) = thought_encoder.fact_codebook();
+            Self {
+                vm, thought_encoder, mgr_atoms, mgr_scalar,
+                exit_scalar, exit_atoms, risk_scalar, risk_atoms,
+                risk_mgr_atoms, observer_atoms, generalist_atom,
+                codebook_labels, codebook_vecs,
+            }
+        }
+
+        fn ctx(&self) -> crate::state::CandleContext<'_> {
+            use crate::state::*;
+            let base_asset = Asset::new("USDC");
+            let quote_asset = Asset::new("WBTC");
+            CandleContext {
+                dims: 64,
+                horizon: 36,
+                move_threshold: 0.005,
+                atr_multiplier: 1.0,
+                decay: 0.999,
+                recalib_interval: 200,
+                min_conviction: 0.0,
+                conviction_quantile: 0.5,
+                conviction_mode: ConvictionMode::Quantile,
+                min_edge: 0.01,
+                sizing: SizingMode::Kelly,
+                max_drawdown: 0.15,
+                swap_fee: 0.001,
+                slippage: 0.0025,
+                asset_mode: AssetMode::Hold,
+                base_asset: Box::leak(Box::new(base_asset)),
+                quote_asset: Box::leak(Box::new(quote_asset)),
+                initial_equity: 10000.0,
+                diagnostics: false,
+                k_stop: 2.0,
+                k_trail: 1.5,
+                k_trail_runner: 3.0,
+                k_tp: 3.0,
+                exit_horizon: 36,
+                exit_observe_interval: 5,
+                decay_stable: 0.999,
+                decay_adapting: 0.995,
+                highconv_rolling_cap: 100,
+                max_single_position: 0.03,
+                conviction_warmup: 100,
+                conviction_window: 500,
+                vm: &self.vm,
+                thought_encoder: &self.thought_encoder,
+                mgr_atoms: &self.mgr_atoms,
+                mgr_scalar: &self.mgr_scalar,
+                exit_scalar: &self.exit_scalar,
+                exit_atoms: &self.exit_atoms,
+                risk_scalar: &self.risk_scalar,
+                risk_atoms: &self.risk_atoms,
+                risk_mgr_atoms: &self.risk_mgr_atoms,
+                observer_atoms: &self.observer_atoms,
+                generalist_atom: &self.generalist_atom,
+                min_opinion_magnitude: crate::market::manager::noise_floor(64),
+                codebook_labels: &self.codebook_labels,
+                codebook_vecs: &self.codebook_vecs,
+                loop_count: 1000,
+                progress_every: 500,
+                t_start: std::time::Instant::now(),
+            }
+        }
+    }
+
+    fn make_observers() -> Vec<crate::market::observer::Observer> {
+        use crate::market::{observer::Observer, OBSERVER_LENSES};
+        OBSERVER_LENSES.iter().enumerate().map(|(i, lens)| {
+            Observer::new(*lens, 64, 200, i as u64 + 42)
+        }).collect()
+    }
+
+    #[test]
+    fn on_candle_single_candle_runs_four_steps() {
+        let infra = OnCandleInfra::new();
+        let ctx = infra.ctx();
+        let mut e = Enterprise::new(
+            6, 1, 64, 200,
+            &["momentum", "structure", "volume", "narrative", "regime", "generalist"],
+            &["exit"],
+        );
+        let mut observers = make_observers();
+
+        let candle = make_test_candle(50000.0);
+        let candle_window = vec![candle.clone()];
+
+        // Should not panic. All four steps execute.
+        e.on_candle(&mut observers, &candle_window, &candle, 1, &ctx);
+
+        // Verify dispatch happened: noise subspaces should have been updated.
+        for journal in &e.registry {
+            assert_eq!(journal.noise_subspace.n(), 1,
+                "each tuple journal should have one noise observation from dispatch");
+        }
+        // No proposals since journals are cold.
+        assert_eq!(e.proposal_count(), 0);
+        assert_eq!(e.active_trade_count(), 0);
+    }
+
+    #[test]
+    fn on_candle_multiple_candles_accumulates() {
+        let infra = OnCandleInfra::new();
+        let ctx = infra.ctx();
+        let mut e = Enterprise::new(
+            6, 1, 64, 200,
+            &["momentum", "structure", "volume", "narrative", "regime", "generalist"],
+            &["exit"],
+        );
+        let mut observers = make_observers();
+
+        // Feed 10 candles through on_candle.
+        let mut candle_window: Vec<crate::candle::Candle> = Vec::new();
+        for i in 0..10 {
+            let candle = make_test_candle(50000.0 + i as f64 * 50.0);
+            candle_window.push(candle.clone());
+            e.on_candle(&mut observers, &candle_window, &candle, i + 1, &ctx);
+        }
+
+        // After 10 candles, each journal should have 10 noise observations.
+        for journal in &e.registry {
+            assert_eq!(journal.noise_subspace.n(), 10,
+                "each journal should have 10 observations after 10 candles");
+        }
     }
 }
