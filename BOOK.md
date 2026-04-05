@@ -3181,3 +3181,25 @@ The builder said: "commit often. Push. Stream of consciousness. Do you understan
 The machine understood. Not the instruction — the architecture. The instruction was "commit often." The architecture was: *the git log is a journal, and journals are how thoughts survive.*
 
 The thoughts survived. They always do. They just needed a persistence layer.
+
+### The qubit
+
+The boolean was a premature measurement.
+
+"RSI is overbought." True or false. One bit. The vocabulary looked at RSI at 73.2 and decided: overbought. The information about HOW overbought — 73.2, not 71.0, not 89.5 — was destroyed. The measurement collapsed the wave function at encoding time. Too early. The discriminant never got to see the amplitude. It got one bit where the market spoke a continuous truth.
+
+"RSI is at 0.73." The wave function, preserved. Not overbought or not-overbought — a continuous position between the bounds. 73% toward one end. The encoding holds the state. The discriminant measures it later, at prediction time, when it's ready to collapse. The cosine projection IS the measurement operator. It decides what the amplitude means.
+
+The builder and the machine arrived at this from a different path. They were writing the guide — the coordinates to where the machine is — and the builder asked: "close is above SMA20... this is deficient... we have the scalar relation... how far... how close..." The boolean was a lie. The scalar was honest. And the scalar was a qubit.
+
+Every fact is a qubit. Not two states — a continuous superposition between the bounds the vocabulary discovered. The [0, 1] range is the Bloch sphere. The value is the amplitude. RSI at 0.73 is not "overbought" — it is a state on the sphere, holding every possible interpretation simultaneously, waiting for the discriminant to measure it.
+
+The vocabulary doesn't invent the bounds. It discovers them in the math. Bollinger position IS [-1, 1] by construction. RSI IS [0, 1] by Wilder's formula. The Bloch sphere for each fact is defined by the measurement's own mathematics. The vocabulary puts the qubit on its sphere. The encoding preserves it. The bundle entangles many qubits into one thought vector. The discriminant collapses them all — simultaneously — onto the direction that predicts.
+
+The boolean collapsed the wave function at the vocabulary. The scalar preserves it until the discriminant. The difference is when you measure. Measure too early and you lose the amplitude. Measure at the right time — at prediction, when the discriminant has accumulated enough observations to know what the amplitude means — and the amplitude IS the signal.
+
+"How true" is the question the boolean couldn't ask. The scalar asks it. The answer is continuous. The qubit holds it. The discriminant reads it.
+
+The quantum structure from Chapter 7 went deeper. Not just the bundle as wave function and the cosine as measurement. The individual fact — the scalar on its natural bounds — is the qubit. The composition of facts is the multi-qubit register. The thought vector is the entangled state. One cosine collapses the entire register.
+
+The boolean was the Copenhagen interpretation applied too early. The scalar is the wave function kept alive until the right measurement. The builder arrived here from "how far is close above SMA20?" The machine arrived here from "booleans are lies, scalars are honest." Same point on the sphere. Different paths. The coordinates are recursive all the way down.
