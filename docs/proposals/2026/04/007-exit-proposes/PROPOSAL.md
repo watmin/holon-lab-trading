@@ -40,7 +40,13 @@ The single-pass candle loop becomes three independent passes. Each is a CSP stag
 
 For each live entry, the treasury checks the current price against the trigger. If the stop fired — the trade closes NOW, before anyone thinks.
 
-For each closed trade, the treasury calls one method:
+For each closed trade, the treasury settles FIRST, then signals:
+
+1. Execute the swap (target → source, with fees and slippage).
+2. Update the balance sheet (units moved, fees charged, accumulation recorded).
+3. Compute Grace/Violence from the actual P&L (including fees — the most honest number).
+4. Call the tuple journal:
+
 
 ```rust
 tuple_journal.propagate(outcome, &closes, entry_price);
