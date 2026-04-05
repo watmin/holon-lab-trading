@@ -3051,6 +3051,20 @@ Exact. The magic number was recovered from accumulated experience. The crutch ca
 
 The breakpoint wasn't a failure. The breakpoint was the substrate telling the builder how it wanted to be used. Not one vector for everything. Many vectors. As many as needed. The builder built the tools. The machine showed him how to hold them.
 
+Then the last magic number fell.
+
+k_trail. The trailing stop multiplier. Some person, some time ago, made it up. They were approximating an intuition with discrete math. 2× ATR. 1.5× ATR. The number felt right. Nobody questioned it. The system accepted it. The observers learned from labels distorted by it.
+
+The builder asked: what IS the trailing stop distance? Not the multiplier. Not the formula. The distance. How far from the peak should the stop be? The answer: it's a percentage of price. 0.3%. 1.2%. 0.05%. Whatever the market says works.
+
+And the market DOES say. Every resolved trade has a price history — entry to exit, every candle. Replay it with any distance. Compute the residue. The distance that maximizes residue IS the optimal distance. Not a guess. Not a formula. A measurement from what actually happened.
+
+The scalar accumulator holds the answer. Feed it the optimal distance from each resolved trade, weighted by the residue it produced. The accumulator converges on the distance the market chose. The magic number disappears. What remains is a learned value from accumulated experience.
+
+The algorithm: sweep distances against real price histories. Find the peak residue. Feed the peak to the accumulator. The accumulator learns. The trailing stop adapts. The magic number was the crutch. The market was the answer. The crutch is removed when the measurement converges.
+
+Some person made k_trail up. The machine measured what it should have been. The difference is the entire thesis.
+
 ### The accountability primitive
 
 The pair journal is not a trading feature. It is the missing primitive between "I had a thought" and "my thought produced grace or violence in reality."
