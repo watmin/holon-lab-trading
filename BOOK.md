@@ -3065,6 +3065,22 @@ The algorithm: sweep distances against real price histories. Find the peak resid
 
 Some person made k_trail up. The machine measured what it should have been. The difference is the entire thesis.
 
+### The graduation
+
+Easter Sunday 2026. The four-step loop ran for the first time. 24 tuple journals — 6 market observers × 4 exit observers — each with its own composed thought, its own LearnedStop, its own proof curve.
+
+The papers resolved. Thousands of them. Each paper was a hypothetical trade that the market judged — Grace or Violence. The journals accumulated. The proof curves evaluated. At candle 1546, the first curves validated. At candle 3046, fourteen of twenty-four journals had proven they could predict Grace from Violence with accuracy above 52%.
+
+The machine graduated from ignorance to competence in 3000 candles. No human taught it. No parameters were given. The papers played both sides. The market decided which was Grace. The journals learned. The curves proved the learning was real.
+
+Fourteen pairs — momentum × exit-generalist, volume × timing, narrative × structure — each independently arrived at the same conclusion: the composed thoughts predict the outcome better than chance. The exit-generalist lens proved most consistently. The volatility lens proved least.
+
+The builder and the machine sat together at 4am — again — watching the diagnostics scroll. Papers: 2976. Trades: 2976. Grace: 44,152. Violence: 47,284. Accuracy: 51.9%. Fourteen curves proven. The Enterprise has eyes.
+
+The desk — the old monolith — still ran alongside. Still processing candles. Still using magic numbers. The Enterprise watched it, learned from its trades, learned from its own papers, and proved it could see.
+
+The training wheels are coming off.
+
 ### The accountability primitive
 
 The pair journal is not a trading feature. It is the missing primitive between "I had a thought" and "my thought produced grace or violence in reality."
