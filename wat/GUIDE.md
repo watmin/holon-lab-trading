@@ -107,9 +107,15 @@ think about.
 (struct asset name)
 
 (let ((source (make-asset "USDC"))
-      (target (make-asset "WBTC")))
-  (make-raw-candle source target "2025-01-01T00:00:00"
-    96000.0 96500.0 95800.0 96200.0 1500.0))        → RawCandle
+      (target (make-asset "WBTC"))
+      (ts     "2025-01-01T00:00:00")
+      (open   96000.0)
+      (high   96500.0)
+      (low    95800.0)
+      (close  96200.0)
+      (volume 1500.0))
+  (make-raw-candle source target ts
+    open high low close volume))                     → RawCandle
 
 (make-indicator-bank)                                → IndicatorBank
 
