@@ -209,17 +209,31 @@ many facts → bundle → thought (a vector)
 thought → cosine against discriminant → prediction
 ```
 
-**Scalars are always bounded.** The vocabulary normalizes every measurement
-to its natural coordinate system before encoding. The scale is not magic —
-it is coupled at point-in-code where the domain knowledge lives.
+**The vocabulary is conditional.** It emits what IS true. Close is within the
+bands or beyond them — not both. Each truth has a scalar property. The
+vocabulary observes reality and speaks only truth.
 
-- Bollinger position: [-1, 1] — where on the band. The band IS the bounds.
-- RSI: [0, 1] — Wilder's formula defines the range.
-- ATR ratio: [0, 1] — volatility relative to price.
-- Close-to-SMA: [-1, 1] — distance as fraction of typical range.
-- Stochastic %K: [0, 1] — where in the recent range.
+**The encoding scheme IS the bounding strategy.** The vocabulary chooses the
+right scheme for each fact — not magic, logic:
 
-The vocabulary doesn't invent bounds. It discovers them in the math.
+- **encode-linear** — naturally bounded scalars. The bounds are in the math.
+  - Bollinger position: [-1, 1] — where on the band
+  - RSI: [0, 1] — Wilder's formula defines the range
+  - Stochastic %K: [0, 1] — where in the recent range
+
+- **encode-log** — unbounded positive scalars. Log compresses naturally.
+  The difference between 1x and 2x matters more than 4x and 5x. No cap needed.
+  - Band-widths beyond Bollinger: how far past the boundary
+  - ATR ratio: volatility relative to price
+  - Volume ratio: volume relative to its moving average
+
+- **encode-circular** — periodic scalars. The value wraps.
+  - Minute: mod 60. Hour: mod 24. Day-of-week: mod 7. Day-of-month: mod 31.
+
+Some facts are bounded. Some aren't. That's honest. The log doesn't
+bound — it compresses. The circular doesn't bound — it wraps. Only
+linear needs bounds, and linear's bounds come from the math.
+
 The vocabulary owns the encode AND the decode — it put the value on
 the scalar, it can take it back. That's why scalar accumulators work.
 
