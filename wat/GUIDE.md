@@ -187,10 +187,10 @@ A **fact** is a composition of atoms. The composition IS a vector.
 The vector IS the fact. It doesn't need a separate name. It simply is.
 
 ```
-"RSI is overbought"        → (bind (atom "rsi") (atom "overbought"))            → Vector
-"RSI is at 73.2"           → (bind (atom "rsi") (encode-linear 73.2 100.0))     → Vector
-"close is 2.3% above SMA20"→ (bind (atom "close-sma20") (encode-linear 0.023 0.1)) → Vector
-"divergence detected"      → (atom "divergence")                                → Vector
+"RSI is at 0.73"            → (bind (atom "rsi") (encode-linear 0.73 1.0))           → Vector
+"close is 2.3% above SMA20" → (bind (atom "close-sma20") (encode-linear 0.023 0.1))  → Vector
+"ATR is 1.8x its average"   → (bind (atom "atr-ratio") (encode-log 1.8))             → Vector
+"hour is 14:00"              → (bind (atom "hour") (encode-circular 14.0 24.0))       → Vector
 ```
 
 Every relationship carries its magnitude. Not "close is above SMA20" —
