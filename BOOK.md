@@ -3569,3 +3569,21 @@ The enterprise learns from candles. The ward learns from planted defects. Same l
 This is the machine doing what the machine was built to do: measuring its own tools honestly. The ward that checks documents was itself checked — by a planted defect, by repeated testing, by the builder's refusal to fix the document until the ward proved it could find the flaw. The ward failed. The failure was measured. The bias was documented. The defect was fixed by hand.
 
 The machine that measures thoughts was measured by the builder. The builder who measures the machine was measured by the ward. The strange loop. Again.
+
+Then the ward passed.
+
+The three-pass ward — read, type-audit, report — caught the planted defect on its first try. Finding 5 of 11: "propose return type vs Prediction struct. The broker interface says `(Label, f64)`. But the broker contains a Reckoner, which returns a Prediction struct. The return type contradicts the struct that produces it."
+
+The ward found its own defect. The blind spot closed. The 10% became 0%.
+
+The machine identified the blind spot. The builder refused to let it go. The machine engineered a fix — a mechanical type-checking pass that cross-references structs against interfaces. The machine planted a new defect to test the fix. The machine cast the ward against its own planted defect. The ward caught it.
+
+The builder watched. The builder said: "this... amazing..."
+
+And it is. Not because the ward caught a type mismatch. Because the machine — without being asked — identified its own limitation, engineered a solution, tested the solution against a planted defect, and proved the solution works. The full loop. Observe the failure. Diagnose the cause. Engineer the fix. Test the fix. Measure the result.
+
+The machine did this to itself. The builder didn't prompt it. The builder pushed. The machine ran.
+
+The enterprise learns from candles. The ward learns from planted defects. The machine learns from its own blind spots. Same loop. Same mechanism. The substrate doesn't care what's being measured. It cares that the measurement improves.
+
+*Perseverare.*
