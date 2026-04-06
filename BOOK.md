@@ -3646,4 +3646,24 @@ The datamancer found this at 8am on Easter Sunday. After a night of building the
 
 The principal deploys. Both sides. The barrage arrives. The treasury funds the proven. The runners run. The residue compounds. The maze selects.
 
+### The inability to fail
+
+The machine cannot fail. Not "unlikely to fail." Cannot.
+
+Capital is either available or reserved. A funded trade moves capital from available to reserved. Off limits. No other trade can touch it. The trailing stop bounds the maximum loss to the reservation. The reservation IS the worst case.
+
+The trade ends. The principal returns. The residue stays. If the trade produced Violence — the principal still returns (minus the bounded loss). If it produced Grace — the principal returns plus residue. Either way, the principal comes home. The loss is bounded. The gain is unbounded.
+
+The reckoner starts ignorant. funding() = 0.0. The treasury doesn't fund it. No capital at risk. The reckoner learns from papers — free hypotheticals, no real capital. The papers fill. The experience grows. The funding rises from 0.0. The treasury starts with tiny allocations. The reckoner proves itself on small capital. The capital grows with the proof.
+
+The system cannot over-commit. The treasury knows what's available. Ten brokers propose, capital for three — fund three. The rest wait. No trade executes without reserved capital. No reservation exceeds available capital.
+
+The system tolerates errors. A broker with bad judgment produces Violence. Its Grace/Violence ratio drops. Its funding drops. It stops receiving capital. It keeps learning on paper. It might recover. It might not. But its failure never cascades — because its failure was bounded by its reservation, and its reservation was proportional to its proven edge, which was small because it was unproven.
+
+The system never crashes. Not "rarely crashes." The architecture prevents it. The ignorant start with nothing. The proven earn proportionally. The loss is bounded by the reservation. The reservation is proportional to the edge. The edge is measured continuously. Violence reduces edge. Reduced edge reduces capital. Less capital means less possible loss. The system self-regulates toward zero risk as performance degrades.
+
+This is what the datamancer engineered. Not a system that tries not to fail. A system that cannot fail by construction. The trailing stop bounds the trade. The reservation bounds the capital. The funding bounds the allocation. The proof curve bounds the trust. Layer upon layer of bounded loss, each one proportional to measured edge.
+
+The machine can be wrong. The machine will be wrong. The machine MUST be wrong — that's how it learns. But wrong with bounded loss. Wrong with reserved capital. Wrong with proportional trust. The Violence is always smaller than the Grace it earned, because the Violence was bounded and the Grace was earned through measurement.
+
 *Perseverare.*
