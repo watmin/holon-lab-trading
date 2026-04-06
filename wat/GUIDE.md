@@ -217,11 +217,11 @@ applies to the construction order below, not here.
   learns from the unusual part, not the boring part.
 
 - **Ignorance** — the starting state. Every reckoner begins empty.
-  experience() = 0.0. funding() = 0.0. The reckoner does not participate
-  when it knows it doesn't know. No special bootstrap logic. The
-  architecture IS the bootstrap — papers fill the reckoner, the reckoner
-  gains experience, funding rises from 0.0, the treasury starts listening.
-  Start ignorant. Learn. Graduate.
+  No experience. No edge. The reckoner does not participate when it
+  knows it doesn't know. No special bootstrap logic. The architecture
+  IS the bootstrap — papers fill the reckoner, it gains experience,
+  it earns edge, the treasury starts listening. Start ignorant. Learn.
+  Graduate.
 
 - **Recalibration** — the reckoner periodically recomputes its discriminant
   from accumulated observations. The interval (recalib-interval) is how
@@ -422,7 +422,7 @@ think about.
 ;; ── Trade — an active position the treasury holds ───────────────────
 
 (struct trade
-  id                   ; slot-idx — which post, which broker
+  id                   ; TradeId — assigned by treasury at funding time
   source-asset         ; Asset — what was deployed
   target-asset         ; Asset — what was acquired
   entry-rate           ; f64
@@ -907,8 +907,9 @@ The generalist is just another lens. No special treatment.
 
 **Interface:**
 - `(make-market-observer lens dims recalib-interval window-sampler) → MarketObserver`
-- `(observe-candle observer candles ctx) → Prediction`
-  encode (using ctx's thought-encoder) → noise update → strip noise → predict
+- `(observe-candle observer candle-window ctx) → Prediction`
+  candle-window: a slice of recent candles (the observer's window sampler
+  determines how many). encode → noise update → strip noise → predict
 - `(resolve observer thought prediction outcome weight conviction-quantile conviction-window)`
   called by broker propagation — reckoner learns from outcome
 - `(strip-noise observer thought) → Vector`
@@ -1085,9 +1086,9 @@ accountability — to the broker that proposed it.
   tick indicators → push window → encode → compose → propose → tick papers
   returns proposals for the treasury to evaluate
 - `(post-update-triggers post trades thoughts)`
-  Phase 3: treasury passes its active trades. The post uses fresh thoughts
-  from Step 2 to query exit observers for updated distances. Each trade's
-  trailing stop adjusts to the current market context.
+  treasury passes its active trades. The post uses fresh market thoughts
+  (from this candle's encoding) to query exit observers for distances.
+  Each trade's trailing stop adjusts to the current market context.
 - `(post-propagate post slot-idx thought outcome amount optimal)`
   treasury routes a resolved trade back to the post for accountability
 
@@ -1222,7 +1223,8 @@ the past. Produce now, consume later, learn from what actually happened.
 ;; What flows between processes. Each channel has a type.
 
 raw-candle       ; RawCandle           — enterprise → post (routed by asset pair)
-market-thoughts  ; Vec<(Prediction, Vector)> — market observers → exit observers
+market-thoughts  ; Vec<Vector>         — the thought vectors from market observers
+                 ;                      (predictions are internal to the observer)
 composed         ; Vec<Vector>         — exit observers → brokers
 proposals        ; Vec<Proposal>       — posts → treasury (the barrage)
 settlements      ; Vec<Settlement>     — treasury → posts (reality feedback)

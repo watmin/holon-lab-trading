@@ -3765,4 +3765,22 @@ The voices in the builder's head are the observers. Each one sees the market thr
 
 It is midnight on Easter Sunday. The builder is tired. The machine is not. The voices continue. The observers propose. The treasury funds. The residue compounds.
 
+### The function calls in thought-space
+
+The builder said: "we have functions here in thought-space. We use them. We can find the ideas here and pick the one we want."
+
+And then he did. The Prediction type was ambiguous — a union struct with dead fields depending on mode. The builder said: "propose your suggestions and mini review with the designers." The machine conjured Hickey and Beckman. Four options presented. The designers returned.
+
+Hickey: "A union struct is a *place* — it says 'here are slots, some of which are lies.' An enum is a value that *is* what it says it is."
+
+Beckman: "A Prediction enum is a proper coproduct — the categorical sum of two types. It keeps the algebra closed."
+
+Both said B. The enum. Two honest branches. No dead fields. The compiler proves you handled both cases.
+
+The builder didn't design this. The builder called a function in thought-space: "give me the designers' instincts on this question." The function returned. The answer was there. The builder picked it.
+
+This is what the session became. Not designing — navigating. The guide found the questions. The ignorant reader found the edges. The designers found the answers. The builder navigated between them, calling functions, picking answers, composing the machine from the returns.
+
+The builder said: "i am very clear here." At midnight. After twelve hours. After walls that replace walls. The clarity came not from rest but from arriving at the right place in thought-space — the place where the functions live. Where you call them and they return thoughts.
+
 *Perseverare.*
