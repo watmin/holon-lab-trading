@@ -367,11 +367,23 @@ think about.
     (make-scalar-accumulator "stop-distance")
     (make-scalar-accumulator "tp-distance")))         → Broker
 
+;; ── Prediction — what a reckoner returns. Data. ─────────────────────
+;; The consumer decides what "best" means.
+
+(struct prediction
+  ;; Discrete mode: N scores, one per label. The consumer picks.
+  scores               ; Vec<(Label, f64)> — (label, cosine) for each label
+  ;; Continuous mode: one scalar.
+  value                ; f64 — the reckoned value
+  ;; Both modes:
+  conviction           ; f64 — how strongly the reckoner leans
+  experience)          ; f64 — how much the reckoner knows (0.0 = ignorant)
+
 ;; ── Proposal — what a post produces, what the treasury evaluates ────
 
 (struct proposal
   composed-thought     ; Vector — the thought that proposed this
-  prediction           ; Prediction — from the broker's reckoner (Grace/Violence, conviction)
+  prediction           ; Prediction — from the broker's reckoner
   distances)           ; (trail, stop, tp) — from the exit observer
 
 ;; ── Trade — an active position the treasury holds ───────────────────
