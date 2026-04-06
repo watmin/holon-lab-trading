@@ -409,9 +409,9 @@ think about.
       (dims 10000)
       (recalib-interval 500))
   (make-broker observers dims recalib-interval
-    (make-scalar-accumulator "trail-distance")
-    (make-scalar-accumulator "stop-distance")
-    (make-scalar-accumulator "tp-distance")))         → Broker
+    (list (make-scalar-accumulator "trail-distance")
+          (make-scalar-accumulator "stop-distance")
+          (make-scalar-accumulator "tp-distance"))))  → Broker
 
 ;; ── Proposal — what a post produces, what the treasury evaluates ────
 
@@ -495,6 +495,15 @@ think about.
 (let ((denomination (make-asset "USD"))
       (initial-balances {(make-asset "USDC") 10000.0}))
   (make-treasury denomination initial-balances))     → Treasury
+
+;; ── Enterprise — the coordination plane ─────────────────────────────
+
+;; ── Ctx — the immutable world. Born at startup. Never changes. ───────
+
+(struct ctx
+  thought-encoder      ; ThoughtEncoder (contains VectorManager)
+  dims                 ; usize — vector dimensionality
+  recalib-interval)    ; usize — observations between recalibrations
 
 ;; ── Enterprise — the coordination plane ─────────────────────────────
 
@@ -626,6 +635,14 @@ Three domains. Each domain has scoped subfiles.
   - `time.wat` — minute (mod 60), hour (mod 24), day-of-week (mod 7), day-of-month (mod 31). Circular scalars.
 
 - **market/** — what the market IS DOING. Direction signal. Market observers use these.
+  MarketLens → modules:
+  - `:momentum` → oscillators, momentum, stochastic
+  - `:structure` → keltner, fibonacci, ichimoku, price-action
+  - `:volume` → flow
+  - `:narrative` → timeframe, divergence
+  - `:regime` → regime, persistence
+  - `:generalist` → all of the above
+  Files:
   - `oscillators.wat` — Williams %R, StochRSI, UltOsc, multi-ROC
   - `flow.wat` — OBV, VWAP, MFI, buying/selling pressure
   - `persistence.wat` — Hurst, autocorrelation, ADX zones
@@ -955,8 +972,10 @@ The generalist is just another lens. No special treatment.
   `(sample (:window-sampler observer) encode-count)` to get the window
   size, slices the candle window, and passes the slice. The observer
   encodes → noise update → strip noise → predict.
-- `(resolve observer thought prediction outcome weight)`
-  called by broker propagation — reckoner learns from outcome
+- `(resolve observer thought outcome weight)`
+  called by broker propagation — reckoner learns from the actual
+  direction (Up/Down). No prediction needed — the observer learns
+  what happened, not what it predicted.
 - `(strip-noise observer thought) → Vector`
 - `(experience observer) → f64` — how much has this observer learned?
 
@@ -1220,7 +1239,7 @@ treasury.
 The enterprise knows:
 - **What runs parallel** — market observers encode simultaneously (par_iter)
 - **What runs sequential** — exit dispatch into registry (disjoint slots)
-- **What order** — Step 1: RESOLVE → Step 2: COMPUTE+DISPATCH → Step 3a: TICK (parallel) → Step 3b: PROPAGATE → Step 4: COLLECT+FUND
+- **What order** — Step 1: RESOLVE → Step 2: COMPUTE+DISPATCH → Step 3a: TICK (parallel) → Step 3b: PROPAGATE → Step 3c: UPDATE TRIGGERS → Step 4: COLLECT+FUND
 - **What flows where** — proposals from posts to treasury, settlements from treasury to posts
 - **What gets cleared** — proposals empty after funding, every candle
 
@@ -1300,9 +1319,10 @@ proposals        ; Vec<Proposal>       — posts → treasury (the barrage)
 settlements      ; Vec<Settlement>     — treasury → posts (reality feedback)
 trade-triggers   ; Vec<(TradeId, Trade)> — treasury → posts (active trades for update)
 distances        ; (trail, stop, tp)   — exit observers → proposals + papers
-propagation      ; (outcome, optimal)  — broker → market observer (Up/Down)
-                                       — broker → exit observer (distance)
-                                       — broker → self (Grace/Violence)
+propagation      ; (thought, outcome, weight)
+                 ;   broker → market observer.resolve (Up/Down)
+                 ;   broker → exit observer.observe-distances (optimal)
+                 ;   broker → self reckoner (Grace/Violence)
 ```
 
 ### The four steps — who produces, who consumes
@@ -1332,7 +1352,11 @@ Step 3b: PROPAGATE (sequential — cheap)
   fold over resolutions: apply to shared observers
   market observers learn Up/Down. Exit observers learn distance.
   brokers learn Grace/Violence. Sequential because observers are shared.
-  treasury produces: trade-triggers → posts update trailing stops
+
+Step 3c: UPDATE TRIGGERS (sequential)
+  treasury passes active trades to posts.
+  posts compose fresh thoughts, query exit observers for distances.
+  posts compute new stop levels. Treasury applies new values to trades.
 
 Step 4: COLLECT + FUND
   treasury reads:   proposals, available capital, broker funding levels
