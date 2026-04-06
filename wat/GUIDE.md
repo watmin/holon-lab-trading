@@ -859,7 +859,7 @@ The generalist is just another lens. No special treatment.
 - `(resolve observer thought prediction outcome weight conviction-quantile conviction-window)`
   called by broker propagation — journal learns Win/Loss
 - `(strip-noise observer thought) → Vector`
-- `(funded? observer) → bool` — proof gate
+- `(funding observer) → f64` — how much edge? 0.0 = no edge.
 
 ---
 
@@ -964,7 +964,8 @@ runtime:       frozen map (read-only) → slot-idx → &mut broker (disjoint)
   observers: Set<String> — the set of observer names
 - `(propose broker composed) → Prediction`
   noise update → strip noise → predict Grace/Violence
-- `(funded? broker) → bool` — proof curve gate
+- `(funding broker) → f64` — how much edge? The curve's answer. 0.0 = no edge.
+  The treasury funds proportionally. More edge, more capital.
 - `(register-paper broker composed entry-price entry-atr k-stop distance)`
   create a paper entry — every candle, every broker
 - `(tick-papers broker current-price observers) → observations`
