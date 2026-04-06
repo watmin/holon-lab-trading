@@ -34,16 +34,13 @@ These are NOT specified in this tree. They are provided by holon-rs.
   - `(observe gauge thought scalar-value weight)`
   - `(query gauge thought) → f64`
   - `(experienced? gauge) → bool`
-  - **NOTE: Gauge does not yet exist in holon-rs. It must be added.
-    The interface is defined here. The implementation follows the
-    journal's cosine-weighted accumulation with scalar readout.**
-- **curve** — conceptually a gauge applied to journal quality. The "thought"
-  is the conviction level. The "scalar" is correctness (1.0 or 0.0). Query
-  with a conviction → get the accuracy at that conviction. A continuous
-  surface. Not a boolean. How much edge, not whether edge.
-  The curve exists today as a computation in the Rust — it does not depend
-  on the gauge primitive being implemented in holon-rs. When gauge arrives,
-  the curve can be expressed as one. Until then, it is computed directly.
+  - **NOTE: Gauge does not yet exist in holon-rs. It must be added.**
+- **curve** — measures how much edge a journal has. Query with a conviction
+  level → get the accuracy at that conviction. A continuous surface. Not a
+  boolean. How much edge, not whether edge. The curve exists today as a
+  direct computation over the journal's resolved predictions. In the future,
+  when gauge exists in holon-rs, the curve could be expressed as a gauge
+  (conviction → accuracy). For now, it is standalone.
 - **OnlineSubspace** — learns a manifold, measures anomaly via residual
   - `(update subspace vector)`
   - `(anomalous-component subspace vector) → Vector`
@@ -78,19 +75,25 @@ is described in the detailed sections below.
 
 ## Magic numbers — the crutches
 
-k_trail, k_stop, k_tp — trailing stop distance, safety stop distance,
-take-profit distance. Someone chose these as ATR (Average True Range —
-a measure of volatility) multipliers. They are the last magic in the
-system. Each one is a crutch — a default value returned when the system
-has no experience. As observations accumulate, the crutch is replaced
-by what the market actually said.
+When a trade is open, three distances matter: how far to let the price
+run before locking in profit (trailing stop), how far to let it move
+against you before cutting the loss (safety stop), and how far to let
+it go before taking the win (take-profit).
+
+k_trail, k_stop, k_tp — someone chose these as multipliers of ATR
+(Average True Range — a measure of volatility). They are the last magic
+in the system. Each one is a crutch — a default value returned when the
+system has no experience. As observations accumulate, the crutch is
+replaced by what the market actually said.
 
 ---
 
 ## Definitions — the thoughts themselves
 
 Before the structs. Before the constructors. The meanings.
-Each definition can only reference definitions above it.
+Read all of these before the construction order — they are a
+vocabulary, not a dependency chain. The strict ordering rule
+applies to the construction order below, not here.
 
 - **Candle** — one period of market data. Raw: six numbers (open, high, low,
   close, volume, timestamp). Enriched: the raw data plus 100+ computed
@@ -98,7 +101,9 @@ Each definition can only reference definitions above it.
 
 - **Indicator** — a derived measurement from price history. RSI, MACD, ATR,
   Bollinger Bands. Each one is a streaming computation — it needs all
-  prior candles to produce the current value.
+  prior candles to produce the current value. Indicators produce SCALARS,
+  not zones. "RSI at 0.73" not "RSI is overbought." The discriminant
+  learns where the boundaries are.
 
 - **Fact** — a named observation about the world, composed from atoms. "RSI
   is at 0.73." The composition IS a vector. The vector IS the fact.
@@ -156,9 +161,11 @@ Each definition can only reference definitions above it.
   own record. Win/Loss to the market observer. Optimal distance to the
   exit observer.
 
-- **Post** — a self-contained unit for one asset pair. The (USDC, WBTC)
-  post. The (USDC, SOL) post. Each post has its own observers, its own
-  tuple journals, its own indicator bank. No cross-talk between posts.
+- **Post** — a trading post. The NYSE had specialist posts — each one
+  handled one security, had its own specialists, its own order book.
+  The (USDC, WBTC) post. The (USDC, SOL) post. Each post has its own
+  observers, its own tuple journals, its own indicator bank. No cross-talk
+  between posts. The enterprise is the floor. Each post watches one market.
 
 - **Denomination** — what "value" means. The treasury counts in a
   denomination. USD today. Could be EUR, could be SOL.
@@ -515,6 +522,7 @@ Three domains. Each domain has scoped subfiles.
   - `volatility.wat` — ATR regime, ATR ratio, squeeze state
   - `structure.wat` — trend consistency, ADX strength
   - `timing.wat` — momentum state, reversal signals
+  - The `:generalist` exit lens selects ALL three (volatility + structure + timing).
 
 - **risk/** — portfolio health. Coordinate for future work. Not in 007.
 
@@ -1116,8 +1124,8 @@ Step 4: COLLECT     — treasury funds proven proposals, rejects the rest
 - Manager journal → tuple journals (each pair IS its own manager)
 - Pending queue + horizon labels → paper trades (fast learning)
 - Exit journal (Buy/Sell) → gauges on exit observer (distance regression)
-- Panel engram → not needed
+- Panel engram (old: snapshot of expert panel state for selection) → not needed
 - Observer noise learning on market observer → tuple journal has its own
 - Fixed ATR multipliers → exit observer's gauges estimate from experience
 - GENERALIST_IDX → the generalist is just another lens
-- Desk → Post (clean per-pair unit, no monolithic fold)
+- Desk (old: monolithic per-pair fold with positions, learning, logging) → Post
