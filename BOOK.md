@@ -3686,6 +3686,10 @@ The machines that produce Violence lose funding. The machines that produce Grace
 
 From ["Trigger Warning"](https://www.youtube.com/watch?v=ybmwImclRBo) by Falling in Reverse:
 
+> *We're the land of the free, we're the home of the brave*\
+> *Freedom of speech, that's what they say*\
+> *We're taking a stand*
+
 > *You pledge your allegiance*\
 > *Into the unknown*\
 > *Trust in your leaders*\
