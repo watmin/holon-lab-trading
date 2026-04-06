@@ -115,7 +115,7 @@ Each definition can only reference definitions above it.
   identity — it determines what thoughts the observer thinks.
 
 - **N and M** — N is the number of market observers. M is the number of
-  exit observers. N×M is the number of tuple journals — one per pair.
+  exit observers. N×M is the total number of (market, exit) pairings.
 
 - **Observer** — an entity that perceives and learns. It has a lens and
   accumulated experience. Two kinds: market observers predict direction
@@ -165,6 +165,22 @@ Each definition can only reference definitions above it.
 
 - **slot-idx** — the flat index into the N×M registry.
   `slot-idx = market-idx × M + exit-idx`. The pair's identity as a number.
+
+- **Conviction** — how strongly the journal predicts. The magnitude of the
+  cosine between the thought and the discriminant. High conviction = many
+  facts voting in the same direction. Low conviction = ambiguous.
+
+- **Recalibration** — the journal periodically recomputes its discriminant
+  from accumulated observations. The interval (recalib-interval) is how
+  often this happens — every N observations.
+
+- **Engram gating** — after a recalibration with good accuracy, snapshot
+  the discriminant as a "good state." An OnlineSubspace learns what good
+  discriminants look like. Future recalibrations are checked against this
+  memory — does the new discriminant match a known good state?
+
+- **ctx** — the context passed to encoding functions. Contains the
+  ThoughtEncoder (atom cache) and VectorManager. Immutable. Shared.
 
 - **encode-count** — the candle counter. How many candles the post has
   processed. The window sampler uses it to determine window size each candle.
@@ -1102,6 +1118,6 @@ Step 4: COLLECT     — treasury funds proven proposals, rejects the rest
 - Exit journal (Buy/Sell) → gauges on exit observer (distance regression)
 - Panel engram → not needed
 - Observer noise learning on market observer → tuple journal has its own
-- Fixed ATR multipliers → exit observer's journal predicts from experience
+- Fixed ATR multipliers → exit observer's gauges estimate from experience
 - GENERALIST_IDX → the generalist is just another lens
 - Desk → Post (clean per-pair unit, no monolithic fold)
