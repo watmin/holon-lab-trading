@@ -866,7 +866,7 @@ The generalist is just another lens. No special treatment.
 
 ---
 
-### ExitObserver (depends on: Primitives — cosine-weighted regression)
+### ExitObserver (depends on: Reckoner :continuous)
 
 Estimates exit distance. Learned. Each exit observer has THREE continuous
 reckoners — one per magic number (trail, stop, tp). Each reckoner
@@ -922,7 +922,7 @@ The cascade when queried: contextual (reckoner) → global per-pair
 
 The accountability primitive. Binds a set of observers as a team.
 Holds papers. Propagates resolved outcomes to every observer in the set.
-Measures Grace or Violence. The manager replacement.
+Measures Grace or Violence.
 
 The broker's identity IS the set of observer names it closes over.
 `{"momentum", "volatility"}` is one broker. `{"regime", "timing"}` is
@@ -1146,13 +1146,3 @@ Step 4: COLLECT     — treasury funds proven proposals, rejects the rest
          FUND        proposals drain → empty after step 4
 ```
 
-## What 007 replaced
-
-- Manager journal → brokers (each pair IS its own manager)
-- Pending queue + horizon labels → paper trades (fast learning)
-- Exit reckoner (Buy/Sell) → continuous reckoners on exit observer (distance)
-- Panel engram (old: snapshot of expert panel state for selection) → not needed
-- Observer noise learning on market observer → broker has its own
-- Fixed ATR multipliers → exit observer's reckoners estimate from experience
-- GENERALIST_IDX → the generalist is just another lens
-- Desk (old: monolithic per-pair fold with positions, learning, logging) → Post
