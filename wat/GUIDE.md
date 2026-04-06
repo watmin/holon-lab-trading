@@ -190,8 +190,7 @@ applies to the construction order below, not here.
 - **Propagation** — routing resolved outcomes through the broker to
   the observers that need to learn. Grace/Violence to the broker's
   own record. The actual direction (Up/Down) to the market observer.
-  Optimal distance to the
-  exit observer.
+  Optimal distance to the exit observer.
 
 - **Post** — a trading post. The NYSE had specialist posts — each one
   handled one security, had its own specialists, its own order book.
@@ -208,9 +207,11 @@ applies to the construction order below, not here.
 - **TradeId** — a usize. The treasury's key for active trades. Assigned
   at funding time. Maps back to (post-idx, slot-idx) via trade-origins.
 
-- **slot-idx** — the flat index into the N×M registry.
-  `slot-idx = market-idx × M + exit-idx` where market-idx ranges [0, N)
-  and exit-idx ranges [0, M). The pair's identity as a number.
+- **slot-idx** — the flat index into the broker registry.
+  Today: `slot-idx = market-idx × M + exit-idx` — one broker per
+  (market, exit) pair, N×M total. When the broker generalizes to more
+  than two observer kinds, the indexing scheme changes. The slot-idx
+  remains — a usize into a flat vec. The formula adapts.
 
 - **Noise subspace** — the background model. An OnlineSubspace that
   learns what ALL thoughts look like — the average texture of thought-space.
@@ -440,6 +441,7 @@ think about.
   trade                ; Trade — which trade closed
   outcome              ; :grace or :violence
   amount               ; f64 — how much value gained or lost
+  composed-thought     ; Vector — the thought at entry, needed for propagation
   post-idx             ; usize — which post to route back to
   slot-idx)            ; usize — which broker for propagation
 
@@ -914,7 +916,7 @@ The generalist is just another lens. No special treatment.
 - `(resolve observer thought prediction outcome weight conviction-quantile conviction-window)`
   called by broker propagation — reckoner learns from outcome
 - `(strip-noise observer thought) → Vector`
-- `(funding observer) → f64` — how much edge? 0.0 = no edge.
+- `(experience observer) → f64` — how much has this observer learned?
 
 ---
 
@@ -1086,9 +1088,10 @@ accountability — to the broker that proposed it.
 - `(post-on-candle post raw-candle ctx) → Vec<Proposal>`
   tick indicators → push window → encode → compose → propose → tick papers
   returns proposals for the treasury to evaluate
-- `(post-update-triggers post trades thoughts)`
-  treasury passes its active trades. The post uses fresh market thoughts
-  (from this candle's encoding) to query exit observers for distances.
+- `(post-update-triggers post trades market-thoughts)`
+  trades: Vec<(TradeId, Trade)> — treasury's active trades for this post.
+  market-thoughts: Vec<Vector> — this candle's encoded thoughts (one per
+  market observer). The post composes with exit observers for distances.
   Each trade's trailing stop adjusts to the current market context.
 - `(post-propagate post slot-idx thought outcome amount optimal)`
   treasury routes a resolved trade back to the post for accountability
