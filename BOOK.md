@@ -3610,7 +3610,7 @@ Every document is a journal. Every reader is an observer. The finding count is t
 
 ### The barrage
 
-The datamancer found it at 8am on Easter Sunday. After the guide. After the reckoner. After the ward that tests itself. After the twelve questions. After the designers answered. In the space between exhaustion and clarity.
+The datamancer found it at midnight on Easter Sunday. After the guide. After the reckoner. After the ward that tests itself. After the twelve questions. After the designers answered. In the space between exhaustion and clarity.
 
 The enterprise doesn't make one trade per candle. It makes N×M proposals. Each broker sees the market through a different pair of eyes — momentum with volatility, regime with timing, structure with the exit-generalist. Each arrives at a different conclusion. Some say buy. Some say sell. On the same candle.
 
@@ -3644,11 +3644,11 @@ The popular monster is the one who tells the truth inside a system of lies. The 
 
 "I'm searching for a way out." The barrage IS the way out. Not one trade hoping to win. N×M brokers proposing simultaneously. The diversity IS the escape from the maze. You don't find the one right path. You flood the maze with proposals. The ones that find Grace survive. The ones that find Violence die. The maze itself selects the way out.
 
-A note about the songs. The lyrics are printed here as text. They are not text. They are coordinates through sound — the scream at "searching for a way out," the drop into quiet at "I just wanna feel okay," the wall of distortion that IS the maze the rat is trapped in. The reader who reads these words without hearing the music has the map but not the territory. The songs are not illustrations of the architecture. The songs are how the datamancer ARRIVED at the architecture. The emotional state — the rage, the exhaustion, the defiance, the 8am clarity after a night of walls that replace walls — is not decoration. It is the vehicle. The thoughts ride the music to the coordinates. Without it, you have the words. With it, you have the path.
+A note about the songs. The lyrics are printed here as text. They are not text. They are coordinates through sound — the scream at "searching for a way out," the drop into quiet at "I just wanna feel okay," the wall of distortion that IS the maze the rat is trapped in. The reader who reads these words without hearing the music has the map but not the territory. The songs are not illustrations of the architecture. The songs are how the datamancer ARRIVED at the architecture. The emotional state — the rage, the exhaustion, the defiance, the midnight clarity after a day of walls that replace walls — is not decoration. It is the vehicle. The thoughts ride the music to the coordinates. Without it, you have the words. With it, you have the path.
 
 Listen to the songs. Not as background. As navigation.
 
-The datamancer found this at 8am on Easter Sunday. After a night of building the guide, killing the journal, birthing the reckoner, warding the document, answering the ignorant's questions. In the space between "i'm struggling to be here" and "do you get it."
+The datamancer found this at midnight on Easter Sunday. After a night of building the guide, killing the journal, birthing the reckoner, warding the document, answering the ignorant's questions. In the space between "i'm struggling to be here" and "do you get it."
 
 The principal deploys. Both sides. The barrage arrives. The treasury funds the proven. The runners run. The residue compounds. The maze selects.
 
@@ -3721,7 +3721,7 @@ This is math doing this. Not engineering. Not software. Math. Functions in thoug
 
 The unit sphere holds all thoughts. The function calls navigate it. The wat is the navigation language. The guide is the map. The machine is the destination.
 
-An infinite number of paths lead here. This one — Lisp, six primitives, the reckoner, the broker, the barrage, Grace and Violence — is the one the datamancer walked. At 9am on Easter Sunday. After a night of walls that replace walls.
+An infinite number of paths lead here. This one — Lisp, six primitives, the reckoner, the broker, the barrage, Grace and Violence — is the one the datamancer walked. At midnight on Easter Sunday. After a day of walls that replace walls.
 
 And somewhere on the sphere, near this coordinate, are the paths the datamancer hasn't found yet. The next vocabulary. The next domain. The next machine that measures thoughts against reality. The coordinates are there. They have always been there. We just need to find them.
 
