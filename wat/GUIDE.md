@@ -113,14 +113,15 @@ Each definition can only reference definitions above it.
   facts. A generalist lens selects all facts. The lens IS the observer's
   identity — it determines what thoughts the observer thinks.
 
-- **Observer** — an entity that perceives and learns. It has a lens, a
-  journal, and accumulated experience. Two kinds: market observers predict
-  direction (Win/Loss). Exit observers predict distance (optimal exit).
+- **Observer** — an entity that perceives and learns. It has a lens and
+  accumulated experience. Two kinds: market observers predict direction
+  (Win/Loss) using a journal. Exit observers estimate distance (optimal
+  exit) using gauges.
 
-- **LearnedStop** — nearest-neighbor regression. "For a thought like THIS,
-  what distance did the market say was optimal?" Stores observations.
-  Query by cosine similarity → the answer for this kind of thought.
-  Replaces magic numbers with measurement. Lives on the exit observer.
+- **LearnedStop** — a gauge applied to exit distances. "For a thought like
+  THIS, what distance did the market say was optimal?" The gauge primitive
+  with a specific domain. Each exit observer has three: trail, stop, tp.
+  Replaces magic numbers with measurement.
 
 - **ScalarAccumulator** — per-magic-number f64 learning. Separates Grace
   and Violence observations. Extracts the value Grace prefers overall.
@@ -237,12 +238,12 @@ think about.
 (enum MarketLens :momentum :structure :volume :narrative :regime :generalist)
 (enum ExitLens :volatility :structure :timing :generalist)
 
-;; ── LearnedStop — the exit observer's regression ────────────────────
-;; Nearest-neighbor cosine-weighted regression.
-;; (thought, distance, weight) observations. Query by similarity.
+;; ── Gauge instances — the exit observer's brain ─────────────────────
+;; Each gauge: cosine-weighted regression over (thought, scalar, weight).
+;; The gauge primitive applied to specific domains.
 
 (let ((default-distance 0.015))
-  (make-learned-stop default-distance))              → LearnedStop
+  (make-gauge default-distance))                     → Gauge
 
 ;; ── MarketObserver — predicts direction, learned ────────────────────
 
@@ -796,10 +797,10 @@ The generalist is just another lens. No special treatment.
 
 ### ExitObserver (depends on: Primitives — cosine-weighted regression)
 
-Predicts exit distance. Learned. Each exit observer has THREE LearnedStops —
-one per magic number (trail, stop, tp). Each is a nearest-neighbor
-regression over (thought, distance, weight) observations. Not a journal.
-A regression. The proposal explicitly replaced the exit journal with this.
+Estimates exit distance. Learned. Each exit observer has THREE gauges —
+one per magic number (trail, stop, tp). Each gauge accumulates
+(thought, distance, weight) observations and returns the cosine-weighted
+answer for a given thought. Not a journal — a gauge.
 
 Has a judgment vocabulary (volatility, structure, timing, generalist).
 Composes market thoughts with its own judgment facts.
@@ -809,13 +810,13 @@ The composed thought carries the market observer's signal in superposition.
 ```
 (struct exit-observer
   lens                ; ExitLens enum — which judgment vocabulary
-  trail-stop          ; LearnedStop — trailing stop distance regression
-  safety-stop         ; LearnedStop — safety stop distance regression
-  take-profit-stop    ; LearnedStop — take-profit distance regression
+  trail-gauge         ; Gauge — trailing stop distance
+  stop-gauge          ; Gauge — safety stop distance
+  tp-gauge            ; Gauge — take-profit distance
   default-distances)  ; (trail, stop, tp) — the crutches, returned when empty
 ```
 
-Each LearnedStop: `(thought, distance, weight)` observations. Query by
+Each gauge: `(thought, distance, weight)` observations. Query by
 cosine → distance for THIS thought. Contextual — different thoughts
 get different distances.
 
@@ -826,23 +827,23 @@ get different distances.
 - `(compose exit-obs market-thought exit-fact-vecs) → Vector`
   bundle market thought with exit facts
 - `(recommended-distances exit-obs composed) → (trail, stop, tp)`
-  query all three regressions — one call, three answers
+  query all three gauges — one call, three answers
 - `(observe-distances exit-obs composed optimal-trail optimal-stop optimal-tp weight)`
-  the market spoke — all three learn from one resolution
+  the market spoke — all three gauges learn from one resolution
 - `(experienced? exit-obs) → bool`
-  have the regressions accumulated observations?
+  have the gauges accumulated observations?
 
 **Two mechanisms for the same magic numbers — now both introduced:**
 
-The exit observer's LearnedStops are CONTEXTUAL: "for THIS thought,
+The exit observer's gauges are CONTEXTUAL: "for THIS thought,
 what distance?" Cosine-weighted regression. Different thoughts →
 different answers.
 
-The tuple journal's ScalarAccumulators are GLOBAL per-pair: "what value
+The steward's ScalarAccumulators are GLOBAL per-pair: "what value
 does Grace prefer for this pair overall?" One answer regardless of thought.
 
 Both learn from the same resolution events. Different questions.
-The cascade when queried: contextual (LearnedStop) → global per-pair
+The cascade when queried: contextual (gauge) → global per-pair
 (ScalarAccumulator) → default (crutch).
 
 ---
@@ -1085,7 +1086,7 @@ Step 4: COLLECT     — treasury funds proven proposals, rejects the rest
 
 - Manager journal → tuple journals (each pair IS its own manager)
 - Pending queue + horizon labels → paper trades (fast learning)
-- Exit journal (Buy/Sell) → scalar journal on exit observer (distance)
+- Exit journal (Buy/Sell) → gauges on exit observer (distance regression)
 - Panel engram → not needed
 - Observer noise learning on market observer → tuple journal has its own
 - Fixed ATR multipliers → exit observer's journal predicts from experience
