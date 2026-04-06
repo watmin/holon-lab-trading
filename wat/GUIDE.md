@@ -194,6 +194,9 @@ applies to the construction order below, not here.
 - **Denomination** — what "value" means. The treasury counts in a
   denomination. USD today. Could be EUR, could be SOL.
 
+- **TradeId** — a usize. The treasury's key for active trades. Assigned
+  at funding time. Maps back to (post-idx, slot-idx) via trade-origins.
+
 - **slot-idx** — the flat index into the N×M registry.
   `slot-idx = market-idx × M + exit-idx` where market-idx ranges [0, N)
   and exit-idx ranges [0, M). The pair's identity as a number.
@@ -213,7 +216,8 @@ applies to the construction order below, not here.
   memory — does the new discriminant match a known good state?
 
 - **ctx** — the context passed to encoding functions. Contains the
-  ThoughtEncoder (atom cache) and VectorManager. Immutable. Shared.
+  ThoughtEncoder (which contains the VectorManager internally).
+  Immutable. Shared.
 
 - **encode-count** — the candle counter. How many candles the post has
   processed. The window sampler uses it to determine window size each candle.
@@ -338,10 +342,12 @@ think about.
 ;; Contains THREE LearnedStops — trail, stop, tp
 
 (let ((lens :volatility)
+      (dims 10000)
+      (recalib-interval 500)
       (default-trail 0.015)
       (default-stop  0.030)
       (default-tp    0.045))
-  (make-exit-observer lens
+  (make-exit-observer lens dims recalib-interval
     default-trail default-stop default-tp))          → ExitObserver
 
 ;; ── PaperEntry — hypothetical trade inside a broker ──────────
@@ -914,7 +920,7 @@ cosine → distance for THIS thought. Contextual — different thoughts
 get different distances.
 
 **Interface:**
-- `(new-exit-observer lens default-trail default-stop default-tp) → ExitObserver`
+- `(make-exit-observer lens dims recalib-interval default-trail default-stop default-tp) → ExitObserver`
 - `(encode-exit-facts exit-obs candle ctx) → Vec<ThoughtAST>`
   pure: candle → judgment fact vectors for this lens
 - `(compose exit-obs market-thought exit-fact-vecs) → Vector`
@@ -993,8 +999,9 @@ runtime:       frozen map (read-only) → slot-idx → &mut broker (disjoint)
   noise update → strip noise → predict Grace/Violence
 - `(funding broker) → f64` — how much edge? The curve's answer. 0.0 = no edge.
   The treasury funds proportionally. More edge, more capital.
-- `(register-paper broker composed entry-price entry-atr k-stop distance)`
-  create a paper entry — every candle, every broker
+- `(register-paper broker composed entry-price entry-atr distances)`
+  create a paper entry — every candle, every broker.
+  distances: (trail, stop, tp) from the exit observer.
 - `(tick-papers broker current-price observers) → observations`
   tick all papers, resolve completed, propagate to all observers in the set
 - `(propagate broker thought outcome amount optimal observers)`
@@ -1137,7 +1144,7 @@ The enterprise knows:
 - `(step-resolve enterprise)`
   treasury settles triggered trades
   for each settlement: route to the post for propagation
-- `(step-compute-dispatch enterprise candle post) → proposals`
+- `(step-compute-dispatch enterprise post ctx) → proposals`
   post encodes, composes, proposes — returns proposals for the treasury
 - `(step-process enterprise post thoughts)`
   post ticks papers, treasury passes active trades for trigger updates
