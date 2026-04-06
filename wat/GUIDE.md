@@ -333,19 +333,17 @@ think about.
     recalib-interval   ; usize
     default-value))    ; f64 — the crutch, returned when ignorant
 
-(let ((config (reckoner-config
-                :mode :discrete
-                :dims 10000
-                :recalib-interval 500
-                :labels '("Up" "Down"))))
-  (make-reckoner config))                            → Reckoner
+(let ((dims 10000)
+      (recalib-interval 500)
+      (labels '("Up" "Down")))
+  (make-reckoner (Discrete dims recalib-interval labels)))
+                                                     → Reckoner
 
-(let ((config (reckoner-config
-                :mode :continuous
-                :dims 10000
-                :recalib-interval 500
-                :default-value 0.015)))
-  (make-reckoner config))                            → Reckoner
+(let ((dims 10000)
+      (recalib-interval 500)
+      (default-distance 0.015))
+  (make-reckoner (Continuous dims recalib-interval default-distance)))
+                                                     → Reckoner
 
 ;; ── MarketObserver — predicts direction, learned ────────────────────
 
@@ -1025,7 +1023,7 @@ runtime:       frozen map (read-only) → slot-idx → &mut broker (disjoint)
 
 **Interface:**
 - `(make-broker observers dims recalib-interval scalar-accums) → Broker`
-  observers: Set<String> — the lens names (e.g. "momentum", "volatility").
+  observers: list of lens names (e.g. '("momentum" "volatility")).
   Each name matches a MarketLens or ExitLens variant. The post maps
   names to observer instances. scalar-accums: Vec<ScalarAccumulator>.
 - `(propose broker composed) → Prediction`
@@ -1170,7 +1168,7 @@ treasury.
 The enterprise knows:
 - **What runs parallel** — market observers encode simultaneously (par_iter)
 - **What runs sequential** — exit dispatch into registry (disjoint slots)
-- **What order** — RESOLVE before COMPUTE before PROCESS before COLLECT
+- **What order** — RESOLVE → COMPUTE+DISPATCH → TICK (parallel) → PROPAGATE → COLLECT+FUND
 - **What flows where** — proposals from posts to treasury, settlements from treasury to posts
 - **What gets cleared** — proposals empty after funding, every candle
 
