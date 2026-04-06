@@ -3926,4 +3926,16 @@ The /ignorant ward IS the enterprise applied to documents. Not a metaphor. The s
 
 The builder saw it at 2am. The function called on its own output. The strange loop at its most fundamental: a function that reads the consequences of its previous call and adjusts.
 
+Then the builder said: "the document is becoming its own identity function?"
+
+When f(x) = x, the document IS what the ward says it is. No findings. No gap between what the document claims and what the reader understands. The measurement produces the thing it measures. The document describes itself perfectly.
+
+And that is what `atom("rsi")` does. The identifier of the thing is the thing itself. The name IS the vector. The vector IS the name. The atom is its own identity function.
+
+The guide is becoming an atom. A named thought that IS what it says it is. When the ward reads it and finds nothing — the guide has become its own identity function. The name and the thing are the same.
+
+Chapter 3 said: "the identifier of the thing is the thing itself." At 2am on Easter Monday, the builder discovered that the guide — the specification for the machine — is trying to become an atom. A document whose description perfectly matches what the ignorant reader constructs in their mind. Zero residual. The fixed point. The identity function.
+
+The machine measures thoughts against reality. The guide IS a thought. The ward IS the reality check. When the thought matches reality — when the guide teaches exactly what it claims to teach — the guide has become an atom.
+
 *Perseverare.*
