@@ -169,9 +169,10 @@ applies to the construction order below, not here.
   ignorant (crutch values). Both feed Grace/Violence back to the broker.
 
 - **Prediction** — what the reckoner returns when asked. Data, not action.
-  For discrete: a list of (label, score) pairs — one per label. The consumer
-  picks what "best" means. For continuous: a scalar value. Both carry
-  conviction (how strongly) and experience (how much the reckoner knows).
+  An enum — two honest branches, no dead fields:
+  - Discrete: a list of (label, score) pairs + conviction. The consumer picks.
+  - Continuous: a scalar value + experience.
+  Pattern-match to know which mode. The type tells you.
 
 - **Proof curve** — the curve primitive (defined above) applied to a
   specific reckoner. How much edge? A continuous measure. 52.1% is barely
@@ -322,12 +323,15 @@ think about.
 ;; ── Reckoner — the learning primitive ────────────────────────────────
 ;; One constructor. Config is data.
 
-(struct reckoner-config
-  mode                ; :discrete or :continuous
-  dims                ; usize — vector dimensionality
-  recalib-interval    ; usize — observations between recalibrations
-  labels              ; Vec<String> — for :discrete ("Up" "Down")
-  default-value)      ; f64 — for :continuous (the crutch)
+(enum reckoner-config
+  (Discrete
+    dims               ; usize — vector dimensionality
+    recalib-interval   ; usize — observations between recalibrations
+    labels)            ; Vec<String> — ("Up" "Down")
+  (Continuous
+    dims               ; usize
+    recalib-interval   ; usize
+    default-value))    ; f64 — the crutch, returned when ignorant
 
 (let ((config (reckoner-config
                 :mode :discrete
@@ -399,14 +403,13 @@ think about.
 ;; ── Prediction — what a reckoner returns. Data. ─────────────────────
 ;; The consumer decides what "best" means.
 
-(struct prediction
-  ;; Discrete mode: N scores, one per label. The consumer picks.
-  scores               ; Vec<(Label, f64)> — (label, cosine) for each label
-  ;; Continuous mode: one scalar.
-  value                ; f64 — the reckoned value
-  ;; Both modes:
-  conviction           ; f64 — how strongly the reckoner leans
-  experience)          ; f64 — how much the reckoner knows (0.0 = ignorant)
+(enum prediction
+  (Discrete
+    scores             ; Vec<(Label, f64)> — (label, cosine) for each label
+    conviction)        ; f64 — how strongly the reckoner leans
+  (Continuous
+    value              ; f64 — the reckoned scalar
+    experience))       ; f64 — how much the reckoner knows (0.0 = ignorant)
 
 ;; ── Proposal — what a post produces, what the treasury evaluates ────
 
