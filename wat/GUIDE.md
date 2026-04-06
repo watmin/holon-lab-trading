@@ -155,14 +155,14 @@ applies to the construction order below, not here.
   "Proof curve" and "curve" are the same thing — one is the primitive,
   the other is its name when applied.
 
-- **Tuple journal** — a closure over two observers (market + exit). The
+- **Broker** — a closure over two observers (market + exit). The
   accountability primitive. It measures how successful the pair is — Grace
   or Violence. It owns paper trades. When papers or real trades resolve,
   it routes outcomes to both observers. The struct is the implementation.
   The closure is the thought.
 
-- **Propagation** — routing resolved outcomes through the tuple journal to
-  the observers that need to learn. Grace/Violence to the tuple journal's
+- **Propagation** — routing resolved outcomes through the broker to
+  the observers that need to learn. Grace/Violence to the broker's
   own record. Win/Loss to the market observer. Optimal distance to the
   exit observer.
 
@@ -172,7 +172,7 @@ applies to the construction order below, not here.
   Any asset pair. The post doesn't care what the pair IS — it watches a
   stream of candles, acquires capital from the treasury, and the treasury
   holds it accountable. Grace or Violence. Each post has its own observers,
-  its own tuple journals, its own indicator bank. No cross-talk between posts.
+  its own brokers, its own indicator bank. No cross-talk between posts.
   The enterprise is the floor. Each post watches one market.
 
 - **Denomination** — what "value" means. The treasury counts in a
@@ -332,7 +332,7 @@ think about.
   (make-exit-observer lens
     default-trail default-stop default-tp))          → ExitObserver
 
-;; ── PaperEntry — hypothetical trade inside a tuple journal ──────────
+;; ── PaperEntry — hypothetical trade inside a broker ──────────
 ;; A paper trade is a "what if." Every candle, every pair gets one.
 ;; It tracks what WOULD have happened if a trade was opened here.
 ;; Both sides (buy and sell) are tracked simultaneously.
@@ -351,28 +351,28 @@ think about.
   buy-resolved         ; bool — buy side's stop fired
   sell-resolved)       ; bool — sell side's stop fired
 
-;; ── TupleJournal — the closure, accountability ──────────────────────
+;; ── Broker — the closure, accountability ──────────────────────
 
 (let ((market-name "momentum")
       (exit-name "volatility")
       (dims 10000)
       (recalib-interval 500))
-  (make-tuple-journal market-name exit-name dims recalib-interval
+  (make-broker market-name exit-name dims recalib-interval
     (make-scalar-accumulator "trail-distance")
     (make-scalar-accumulator "stop-distance")
-    (make-scalar-accumulator "tp-distance")))         → TupleJournal
+    (make-scalar-accumulator "tp-distance")))         → Broker
 
 ;; ── Proposal — what a post produces, what the treasury evaluates ────
 
 (struct proposal
   composed-thought     ; Vector — the thought that proposed this
-  prediction           ; Label — Grace or Violence (from the tuple journal)
+  prediction           ; Label — Grace or Violence (from the broker)
   distances)           ; (trail, stop, tp) — from the exit observer
 
 ;; ── Trade — an active position the treasury holds ───────────────────
 
 (struct trade
-  id                   ; slot-idx — which post, which tuple journal
+  id                   ; slot-idx — which post, which broker
   source-asset         ; Asset — what was deployed
   target-asset         ; Asset — what was acquired
   entry-rate           ; f64
@@ -388,7 +388,7 @@ think about.
   outcome              ; :grace or :violence
   amount               ; f64 — how much value gained or lost
   post-idx             ; usize — which post to route back to
-  slot-idx)            ; usize — which tuple journal for propagation
+  slot-idx)            ; usize — which broker for propagation
 
 ;; ── Post — one per asset pair ───────────────────────────────────────
 
@@ -806,7 +806,7 @@ The encoder walks them all the same way. The mechanism doesn't change.
 
 ### ScalarAccumulator (depends on: nothing)
 
-Per-magic-number f64 learning. Lives on the tuple journal. Global per-pair.
+Per-magic-number f64 learning. Lives on the broker. Global per-pair.
 Each magic number (trail-distance, stop-distance, tp-distance) gets its own.
 
 Separates grace/violence observations into separate f64 prototypes.
@@ -815,8 +815,8 @@ Extract recovers the value Grace prefers — sweep candidate values against
 the Grace accumulator, find the one with highest cosine. "What value does
 Grace prefer for this pair overall?" One answer regardless of thought.
 
-Fed by resolution events: when a paper or trade resolves, the tuple
-tuple journal routes the optimal distance + Grace/Violence outcome to its
+Fed by resolution events: when a paper or trade resolves, the
+broker routes the optimal distance + Grace/Violence outcome to its
 scalar accumulators.
 
 ```
@@ -833,7 +833,7 @@ scalar accumulators.
 
 ### MarketObserver (depends on: Reckoner, OnlineSubspace, WindowSampler)
 
-Predicts direction. Learned. Labels come from tuple journal propagation —
+Predicts direction. Learned. Labels come from broker propagation —
 Win/Loss from resolved paper and real trades. The market observer does NOT
 label itself. Reality labels it.
 
@@ -857,7 +857,7 @@ The generalist is just another lens. No special treatment.
 - `(observe-candle observer candles vm) → Prediction`
   encode → noise update → strip noise → predict
 - `(resolve observer thought prediction outcome weight conviction-quantile conviction-window)`
-  called by tuple journal propagation — journal learns Win/Loss
+  called by broker propagation — journal learns Win/Loss
 - `(strip-noise observer thought) → Vector`
 - `(funded? observer) → bool` — proof gate
 
@@ -906,7 +906,7 @@ get different distances.
 The exit observer's continuous reckoners are CONTEXTUAL: "for THIS thought,
 what distance?" Different thoughts → different answers.
 
-The tuple journal's ScalarAccumulators are GLOBAL per-pair: "what value
+The broker's ScalarAccumulators are GLOBAL per-pair: "what value
 does Grace prefer for this pair overall?" One answer regardless of thought.
 
 Both learn from the same resolution events. Different questions.
@@ -915,57 +915,70 @@ The cascade when queried: contextual (reckoner) → global per-pair
 
 ---
 
-### TupleJournal (depends on: Reckoner, OnlineSubspace, ScalarAccumulator, MarketObserver, ExitObserver)
+### Broker (depends on: Reckoner, OnlineSubspace, ScalarAccumulator)
 
-The closure over (market-observer, exit-observer). The accountability
-primitive. The manager replacement. Papers live inside. Propagate routes
-to both observers.
+The accountability primitive. Binds a set of observers as a team.
+Holds papers. Propagates resolved outcomes to every observer in the set.
+Measures Grace or Violence. The manager replacement.
 
-The tuple journal does NOT own the observers — it references them.
-The post owns the observers. The tuple journal accesses them.
+The broker's identity IS the set of observer names it closes over.
+`{"momentum", "volatility"}` is one broker. `{"regime", "timing"}` is
+another. `{"momentum", "volatility", "drawdown"}` is a third — N observers,
+not locked to two.
 
-The tuple journal does NOT own the exit observer's gauges — those
-are on the exit observer. The tuple journal routes training data TO them.
+The broker does NOT own the observers — it references them.
+The post owns the observers. The broker accesses them.
 
-The tuple journal does NOT own proposals or active trades — those are
-the treasury's. The tuple journal proposes TO the treasury.
+The broker does NOT own proposals or active trades — those are
+the treasury's. The broker proposes TO the treasury.
+
+**Lock-free parallel access.** At construction, the enterprise enumerates
+all broker sets. Each set gets a slot in a flat vec. The mapping
+`Set<String> → slot-idx` is built once, then frozen. Never written to
+again. At runtime, all access is by slot-idx into the flat vec. Disjoint
+slots. No mutex. The borrow checker proves the writes are disjoint.
 
 ```
-(struct tuple-journal
-  market-name exit-name
+construction:  enumerate all sets → allocate flat vec → build frozen map
+runtime:       frozen map (read-only) → slot-idx → &mut broker (disjoint)
+```
+
+```
+(struct broker
+  observers          ; Set<String> — the identity IS the set
   ;; Accountability
-  reckoner noise-subspace grace-label violence-label  ; Reckoner :discrete — Grace/Violence
+  reckoner           ; Reckoner :discrete — Grace/Violence
+  noise-subspace     ; OnlineSubspace
   ;; Track record
-  resolved conviction-history conviction-threshold
-  curve-valid cached-acc
   cumulative-grace cumulative-violence trade-count
   ;; Papers — the fast learning stream
-  papers            ; deque of PaperEntry, capped
+  papers             ; deque of PaperEntry, capped
   ;; Scalar learning
-  scalar-accums     ; Vec<ScalarAccumulator>
+  scalar-accums      ; Vec<ScalarAccumulator>
   ;; Engram gating
   good-state-subspace recalib-wins recalib-total last-recalib-count)
 ```
 
 **Interface:**
-- `(new-tuple-journal market-name exit-name dims recalib-interval) → TupleJournal`
-- `(propose tj composed) → Prediction`
+- `(make-broker observers dims recalib-interval) → Broker`
+  observers: Set<String> — the set of observer names
+- `(propose broker composed) → Prediction`
   noise update → strip noise → predict Grace/Violence
-- `(funded? tj) → bool` — proof curve gate
-- `(register-paper tj composed entry-price entry-atr k-stop distance)`
-  create a paper entry — every candle, every tuple
-- `(tick-papers tj current-price market-observer exit-observer) → observations`
-  tick all papers, resolve completed, propagate to both observers
-- `(propagate tj thought outcome amount optimal market-observer exit-observer)`
-  route to market observer (Win/Loss), exit observer (distance), self (Grace/Violence)
-- `(paper-count tj) → usize`
+- `(funded? broker) → bool` — proof curve gate
+- `(register-paper broker composed entry-price entry-atr k-stop distance)`
+  create a paper entry — every candle, every broker
+- `(tick-papers broker current-price observers) → observations`
+  tick all papers, resolve completed, propagate to all observers in the set
+- `(propagate broker thought outcome amount optimal observers)`
+  route outcome to every observer in the set + self (Grace/Violence)
+- `(paper-count broker) → usize`
 
 ---
 
-### Post (depends on: IndicatorBank, MarketObserver, ExitObserver, TupleJournal)
+### Post (depends on: IndicatorBank, MarketObserver, ExitObserver, Broker)
 
 A self-contained unit for one asset pair. The post is where the thinking
-happens. It owns the observers, the tuple journals, the indicator bank.
+happens. It owns the observers, the brokers, the indicator bank.
 It does NOT own proposals or trades — those belong to the treasury.
 
 Each post watches one market. (USDC, WBTC) is one post. (USDC, SOL) is
@@ -974,7 +987,7 @@ across posts are independent.
 
 The post proposes to the treasury. The treasury decides. When a trade
 closes, the treasury routes the outcome back to the post for
-accountability — to the tuple journal that proposed it.
+accountability — to the broker that proposed it.
 
 ```
 (struct post
@@ -991,8 +1004,8 @@ accountability — to the tuple journal that proposed it.
   market-observers     ; Vec<MarketObserver> [N]
   exit-observers       ; Vec<ExitObserver> [M]
 
-  ;; Accountability — N×M tuple journals
-  registry             ; Vec<TupleJournal> [N×M] — closures, permanent
+  ;; Accountability — N×M brokers
+  registry             ; Vec<Broker> [N×M] — closures, permanent
 
   ;; Counter
   encode-count)
@@ -1019,7 +1032,7 @@ for accountability.
 The treasury is where the money happens. It does not think. It counts.
 It decides based on capital availability and proof curves.
 
-The treasury maps each active trade back to its post and tuple journal
+The treasury maps each active trade back to its post and broker
 so that on settlement, propagate reaches the right observers.
 
 ```
@@ -1114,14 +1127,14 @@ upon before the next is written.
 ```
 Step 1: RESOLVE     — treasury settles triggered trades
                       for each settlement: enterprise routes to post
-                      post.propagate → tuple journal → both observers learn
+                      post.propagate → broker → both observers learn
 
 Step 2: COMPUTE     — each post: market observers encode (parallel)
          DISPATCH   — each post: exit observers compose + propose (sequential)
-                      each post: register paper on every tuple journal
+                      each post: register paper on every broker
                       proposals submitted to treasury
 
-Step 3: PROCESS     — each post: tuple journals tick papers → propagate resolved
+Step 3: PROCESS     — each post: brokers tick papers → propagate resolved
                       treasury passes active trades to posts for trigger updates
                       exit observers query distance for each active trade
 
@@ -1131,11 +1144,11 @@ Step 4: COLLECT     — treasury funds proven proposals, rejects the rest
 
 ## What 007 replaced
 
-- Manager journal → tuple journals (each pair IS its own manager)
+- Manager journal → brokers (each pair IS its own manager)
 - Pending queue + horizon labels → paper trades (fast learning)
 - Exit reckoner (Buy/Sell) → continuous reckoners on exit observer (distance)
 - Panel engram (old: snapshot of expert panel state for selection) → not needed
-- Observer noise learning on market observer → tuple journal has its own
+- Observer noise learning on market observer → broker has its own
 - Fixed ATR multipliers → exit observer's reckoners estimate from experience
 - GENERALIST_IDX → the generalist is just another lens
 - Desk (old: monolithic per-pair fold with positions, learning, logging) → Post
