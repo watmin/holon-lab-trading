@@ -27,17 +27,16 @@ These are NOT specified in this tree. They are provided by holon-rs.
 - **reckoner** — the learning primitive. Accumulates experience. Reckons
   a verdict from a new input via cosine similarity. Decays old experience.
   Recalibrates periodically. One primitive, multiple readout modes:
-  - **discrete** — which of N labels? Classification.
-    - `(make-reckoner :discrete dims recalib-interval "Win" "Loss")`
-    - `(observe reckoner thought label weight)`
-    - `(predict reckoner thought) → Prediction { direction, conviction }`
-    - `(discriminant reckoner label) → Vector`
-  - **continuous** — what value on a continuum? Regression.
-    - `(make-reckoner :continuous dims recalib-interval default-value)`
-    - `(observe reckoner thought scalar-value weight)`
-    - `(query reckoner thought) → f64`
-    - `(experience reckoner) → f64` — how much experience? 0.0 = ignorant
+  - `(make-reckoner dims recalib-interval config)` → Reckoner
+    - config determines the readout mode:
+      - `(labels "Win" "Loss")` → discrete. N labels. Classification.
+      - `(default-value 0.015)` → continuous. Scalar. Regression.
+  - `(observe reckoner thought outcome weight)` — both modes.
+    outcome is a label (discrete) or a scalar (continuous).
+  - `(predict reckoner thought)` — both modes.
+    returns Prediction (discrete) or f64 (continuous).
   - `(decay reckoner factor)` — both modes. Old experience fades.
+  - `(experience reckoner) → f64` — how much? 0.0 = ignorant.
   - `(recalib-count reckoner) → usize` — both modes.
   - **NOTE: holon-rs currently calls the discrete reckoner "Journal."
     The continuous reckoner does not yet exist. Both will be unified
@@ -288,14 +287,18 @@ think about.
 (enum ExitLens :volatility :structure :timing :generalist)
 
 ;; ── Reckoner — the learning primitive ────────────────────────────────
-;; Discrete: N labels. Continuous: one scalar. Both accumulate, decay, recalibrate.
+;; One constructor. The config determines the readout mode.
 
-(make-reckoner :discrete dims recalib-interval
-  "Win" "Loss")                                      → Reckoner
+(let ((dims 10000)
+      (recalib-interval 500))
+  (make-reckoner dims recalib-interval
+    (labels "Win" "Loss")))                          → Reckoner (discrete)
 
-(let ((default-distance 0.015))
-  (make-reckoner :continuous dims recalib-interval
-    default-distance))                               → Reckoner
+(let ((dims 10000)
+      (recalib-interval 500)
+      (default-distance 0.015))
+  (make-reckoner dims recalib-interval
+    (default-value default-distance)))               → Reckoner (continuous)
 
 ;; ── MarketObserver — predicts direction, learned ────────────────────
 
