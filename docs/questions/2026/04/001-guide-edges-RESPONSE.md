@@ -49,13 +49,21 @@ Phase 3 of the 4-step loop:
 **Fix the guide.**
 
 ## Q7: Distance units
-The scalar return value from the exit observer's reckoner defines the
-trigger condition. It is applied to the price to make a condition
-statement — the trigger. WHAT the scalar is and HOW it's applied to
-price — these coordinates are not known yet. Something exists in
-wat-archived or Rust that attempts this.
+**RESOLVED by designer judgment.**
 
-**Coordinate for later.**
+Percentage of price. Not ATR-relative. A dimensionless ratio. 0.015 = 1.5%
+from the extreme. Means the same thing tomorrow as today. Composes cleanly.
+
+Static at entry. The trailing stop MOVES (follows the extreme). The
+distance DOESN'T (it's the thesis at birth). One moving part per mechanism.
+
+Hickey: "a value, not a place." Beckman: "one function sets initial
+conditions, another evolves. That's decomposition."
+
+The conversion: `stop_level = extreme × (1 - distance_pct)` for buy side.
+`stop_level = extreme × (1 + distance_pct)` for sell side.
+
+**Fix the guide.**
 
 ## Q8: Cold-start behavior
 The reckoner does not participate when it knows it doesn't know enough.
