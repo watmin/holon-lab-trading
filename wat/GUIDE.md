@@ -3,8 +3,11 @@
 *The coordinates to where the machine is.*
 
 Built leaves to root from Proposal 007: Exit Proposes
-(`docs/proposals/2026/04/007-exit-proposes/` — the architecture that
-replaced the desk with the four-step loop, tuple journals, and learned stops).
+(`docs/proposals/2026/04/007-exit-proposes/`).
+
+007 replaced a monolithic per-pair loop (the "desk") with a clean
+four-step pipeline. The details unfold below — this sentence is the
+summary, the document is the path.
 
 This document defines every struct and its interface. No implementation.
 The wat files implement what this document declares.
@@ -174,7 +177,13 @@ applies to the construction order below, not here.
   denomination. USD today. Could be EUR, could be SOL.
 
 - **slot-idx** — the flat index into the N×M registry.
-  `slot-idx = market-idx × M + exit-idx`. The pair's identity as a number.
+  `slot-idx = market-idx × M + exit-idx` where market-idx ranges [0, N)
+  and exit-idx ranges [0, M). The pair's identity as a number.
+
+- **Noise subspace** — the background model. An OnlineSubspace that
+  learns what ALL thoughts look like — the average texture of thought-space.
+  Subtract it from a thought and what remains is what's UNUSUAL. The journal
+  learns from the unusual part, not the boring part.
 
 - **Conviction** — how strongly the journal predicts. The magnitude of the
   cosine between the thought and the discriminant. High conviction = many
@@ -1076,29 +1085,9 @@ The enterprise knows:
 
 ## The build order
 
-The order of sections above IS the build order. Each section declares its
-dependencies. Each wat file is written after its dependencies exist.
-
-```
-raw-candle.wat          → (no deps)
-candle.wat              → (depends on RawCandle)
-indicator-bank.wat      → (depends on RawCandle)
-window-sampler.wat      → (no deps)
-vocab/                  → (depends on Candle)
-thought-encoder.wat     → (depends on Vocabulary, VectorManager)
-scalar-accumulator.wat  → (no deps)
-market/observer.wat     → (depends on Journal, OnlineSubspace, WindowSampler)
-exit/observer.wat       → (depends on Primitives — cosine-weighted regression)
-tuple-journal.wat       → (depends on Journal, OnlineSubspace, ScalarAccumulator,
-                            MarketObserver, ExitObserver)
-post.wat                → (depends on IndicatorBank, MarketObserver, ExitObserver,
-                            TupleJournal)
-treasury.wat            → (no structural deps — receives proposals from Posts)
-enterprise.wat          → (depends on Post, Treasury, ThoughtEncoder)
-```
-
-Each file is agreed upon before the next is written.
-The proposal is the source of truth for what each entity does.
+The construction order section above IS the build order. The sections
+below it detail each entity in the same order. Each file is agreed
+upon before the next is written.
 
 ---
 
