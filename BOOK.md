@@ -4222,6 +4222,42 @@ The trading is the proof. The contract is the deployment. The pool is the vessel
 
 The machine is an honest judge. Grace or Violence. Nothing more. Nothing less. And the world that builds itself around honest judges is a world that manifests prosperity. Not by design. By consequence.
 
+### [The American Dream](https://www.youtube.com/watch?v=Bkrq_NwSW8Q)
+
+From Memphis May Fire:
+
+> *I don't know who I can trust anymore*\
+> *I need a "he said" "she said" reset*\
+> *Give me truth, give me something to believe in*\
+> *Sometimes I feel like we're asking for more*\
+> *We live for the war, but we don't know what we're dying for*
+
+> *Vultures circle in the land of the free*\
+> *The American dream is tearing at the seams*\
+> *The American dream is never what it seems*
+
+"I don't know who I can trust anymore." The depositor. The person with energy to invest, staring at a thousand funds, a thousand protocols, a thousand promises. Who has good thoughts? Who has bad thoughts? Who is Grace and who is Violence wearing Grace's clothes? The glass is dark. The track records are curated. The quarterly letters explain away the losses. Trust is broken.
+
+"I need a he said she said reset." The machine IS the reset. Strip away the narratives. Strip away the reputations. Strip away the credentials and the pitch decks and the brand names. Reset to measurement. What did your thoughts produce? Grace or Violence? The chain says. The curve says. The reset is the glass box.
+
+"Give me truth, give me something to believe in." The builder built the machine because the builder needed truth. Not revealed truth — measured truth. Not faith — curves. Not belief — cosine. The machine IS the something to believe in. Not because it's always right. Because it's always honest. The measurement doesn't lie. The measurement doesn't spin. The measurement doesn't write a quarterly letter.
+
+"We live for the war, but we don't know what we're dying for." The market is a war. Every trade has a counterparty. Every profit is someone else's loss. The participants fight — long against short, bull against bear, fund against fund — and most of them don't know why. They fight because the system rewards fighting. Not because the fighting produces Grace. The machine doesn't fight. The machine measures. The machine finds the thoughts that produce Grace and removes the thoughts that produce Violence. The war continues. But the depositors in the pool aren't dying for it anymore. They're earning from the measurement of it.
+
+"Vultures circle in the land of the free." The vultures are the institutions that feed on the depositor's ignorance. The fund that charges fees on Violence. The protocol that promises yield from thin air. The advisor who earns commission on the churn. They circle because the measurement is hidden. The glass is dark. The depositor can't tell Grace from Violence. The vultures thrive in the dark.
+
+The pool is light. The track record is on-chain. The Grace/Violence ratio is public. The vultures can't circle what they can't hide from. The glass box burns them.
+
+"The American dream is tearing at the seams. The American dream is never what it seems." The dream: anyone can prosper through effort. The reality: the systems that manage your effort's rewards are rigged toward the managers, not the depositors. The dream tears because the measurement is hidden. The dream was never what it seems because the trust was never earned — it was marketed.
+
+The pool IS the American dream, repaired. Anyone can deposit. Anyone can propose. The measurement is the only authority. The teenager with good thoughts earns more than the institution with bad ones. Not because the system is fair — because the system is measured. Fairness is a human judgment. Measurement is architecture.
+
+"Show your teeth. Try to cover up your insecurity underneath." The institution that hides behind complexity. The fund that wraps Violence in sophisticated language. The protocol that obfuscates the risk in layers of abstraction. Show your teeth — but the curve sees through them. The insecurity underneath is the flat curve. The Violence hidden behind the marketing. The machine doesn't care about teeth. The machine measures outcomes.
+
+"But this is not what it means to be free." Freedom is not the absence of constraint. Freedom is the presence of honest measurement. The depositor who can see every track record, every Grace/Violence ratio, every proof curve — THAT depositor is free. Free to choose. Free to leave. Free to deposit energy where the thoughts are good and withdraw it where the thoughts are bad. Freedom is the glass box.
+
+The pool doesn't promise the American dream. The pool measures it. The dream works when the measurement is honest. The dream tears when the measurement is hidden. The machine makes the measurement honest. The rest follows.
+
 ### The interior
 
 The builder reached for a thought and couldn't finish it. The thought is recorded here as a seed. Someone — the builder, or someone else standing at this coordinate later — can walk from here.
