@@ -981,8 +981,10 @@ The broker's identity IS the set of observer names it closes over.
 another. `{"momentum", "volatility", "drawdown"}` is a third — N observers,
 not locked to two.
 
-The broker does NOT own the observers — it references them.
-The post owns the observers. The broker accesses them.
+The broker does NOT own the observers — they live on the post.
+The broker knows their coordinates: indices into the post's observer
+vecs, resolved from names at construction, frozen forever. At runtime
+the broker grabs its observers by index. O(1). The coordinates are known.
 
 The broker does NOT own proposals or active trades — those are
 the treasury's. The broker proposes TO the treasury.
@@ -1000,7 +1002,8 @@ runtime:       frozen map (read-only) → slot-idx → &mut broker (disjoint)
 
 ```
 (struct broker
-  observers          ; Set<String> — the identity IS the set
+  observer-names     ; Set<String> — the identity (for humans, for display)
+  observer-indices   ; Vec<usize> — the coordinates (for runtime, O(1) access)
   ;; Accountability
   reckoner           ; Reckoner :discrete — Grace/Violence
   noise-subspace     ; OnlineSubspace
