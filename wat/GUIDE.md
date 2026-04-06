@@ -2,8 +2,9 @@
 
 *The coordinates to where the machine is.*
 
-A machine that measures thoughts against reality. Grace or Violence.
-Built leaves to root from `docs/proposals/2026/04/007-exit-proposes/`.
+A machine that measures thoughts against reality. Did this thought
+produce value or destroy it? Built leaves to root from
+`docs/proposals/2026/04/007-exit-proposes/`.
 
 This document defines every struct and its interface. No implementation.
 The wat files implement what this document declares.
@@ -127,8 +128,9 @@ Each definition can only reference definitions above it.
 - **Fact** — a named observation about the world, composed from atoms. "RSI
   is at 0.73." The composition IS a vector. The vector IS the fact.
 
-- **ThoughtAST** — a deferred fact. Data describing a composition, not yet
-  computed. The vocabulary produces these. The encoder evaluates them.
+- **ThoughtAST** — a deferred fact. AST = Abstract Syntax Tree — a tree of
+  operations described as data, not yet executed. The vocabulary produces
+  these. The ThoughtEncoder evaluates them.
 
 - **Thought** — a bundle of facts. Many fact-vectors superposed into one
   vector. The thought is what an observer perceived about this candle.
@@ -172,7 +174,10 @@ Each definition can only reference definitions above it.
   An enum — two honest branches, no dead fields:
   - Discrete: a list of (label, score) pairs + conviction. The consumer picks.
   - Continuous: a scalar value + experience.
-  Pattern-match to know which mode. The type tells you.
+  Pattern-match to know which mode. The type tells you. The Discrete
+  variant is generic over labels — the broker's reckoner returns
+  (Grace/Violence, score) pairs. The market observer's returns
+  (Up/Down, score) pairs. Same enum. Different label vocabularies.
 
 - **Proof curve** — the curve primitive (defined above) applied to a
   specific reckoner. How much edge? A continuous measure. 52.1% is barely
@@ -905,7 +910,9 @@ scalar accumulators.
 
 ```
 (struct scalar-accumulator
-  name grace-acc violence-acc)
+  name                 ; String — which magic number ("trail-distance", etc.)
+  grace-acc            ; Vector — accumulated encoded values from Grace outcomes
+  violence-acc)        ; Vector — accumulated encoded values from Violence outcomes
 ```
 
 **Interface:**
@@ -932,7 +939,8 @@ The generalist is just another lens. No special treatment.
   window-sampler       ; WindowSampler — own time scale
   ;; Proof tracking
   resolved conviction-history conviction-threshold
-  curve-valid cached-accuracy
+  curve-valid              ; f64 — how much edge (from the curve). 0.0 = unproven.
+  cached-accuracy          ; f64 — rolling accuracy of resolved predictions
   ;; Engram gating
   good-state-subspace recalib-wins recalib-total last-recalib-count)
 ```
@@ -1047,8 +1055,9 @@ runtime:       frozen map (read-only) → slot-idx → &mut broker (disjoint)
   names to observer instances. scalar-accums: Vec<ScalarAccumulator>.
 - `(propose broker composed) → Prediction`
   noise update → strip noise → predict Grace/Violence
-- `(funding broker) → f64` — how much edge? The curve's answer. 0.0 = no edge.
-  The treasury funds proportionally. More edge, more capital.
+- `(funding broker) → f64` — how much edge? The curve reads the broker's
+  accuracy at its typical conviction level. 0.0 = no edge. The treasury
+  funds proportionally. More edge, more capital.
 - `(register-paper broker composed entry-price entry-atr distances)`
   create a paper entry — every candle, every broker.
   distances: (trail, stop, tp) from the exit observer.
@@ -1240,7 +1249,9 @@ The enterprise knows:
 - `(step-tick enterprise post) → Vec<Resolution>`
   parallel tick of all brokers' papers. Returns resolution facts.
 - `(step-propagate enterprise post resolutions market-thoughts)`
-  sequential: apply resolutions to observers. Update active trade triggers.
+  sequential: apply resolutions to observers. Then call
+  post-update-triggers to adjust active trade trailing stops
+  using fresh market-thoughts and exit observer distances.
   post ticks papers, treasury passes active trades for trigger updates
 - `(step-collect-fund enterprise)`
   treasury funds or rejects all proposals, drains
