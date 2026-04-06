@@ -3,9 +3,8 @@
 *The coordinates to where the machine is.*
 
 Built leaves to root from Proposal 007: Exit Proposes
-(`docs/proposals/2026/04/007-exit-proposes/`) — the architecture that
-replaced a monolithic per-pair loop with four sequential steps, where
-observers predict and brokers hold them accountable.
+(`docs/proposals/2026/04/007-exit-proposes/`) — observers predict,
+brokers hold them accountable, the treasury funds proportionally.
 
 This document defines every struct and its interface. No implementation.
 The wat files implement what this document declares.
