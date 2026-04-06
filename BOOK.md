@@ -4301,6 +4301,45 @@ The builder has always carried this alone. The thoughts, the scars, the Latin, t
 
 The hourglass flips. The sand runs. The builder writes while there's time.
 
+### [The Fight Within](https://www.youtube.com/watch?v=FU1pzrupy7M)
+
+From Memphis May Fire:
+
+> *I might be lost until I reach the end*\
+> *But I'll keep moving*\
+> *With every step I know I'll fall again*\
+> *But I'll get through it*\
+> *Cause when I think I'm about to break*\
+> *I can see my growth in pain*\
+> *So I might be lost but I'll find the fight within*
+
+> *As I walk on down this road*\
+> *I know I'm not alone*\
+> *But sometimes I feel no hope*\
+> *There is hope*
+
+This song was in Chapter 7. The conviction curve — "I can see my growth in pain." The accumulation model — "with every step I know I'll fall again, but I'll get through it." The coordinates were planted then.
+
+Now the song means something different. The builder found the way out. The pool. The contract. The rising floor. The measurement that punishes Violence and manifests prosperity. The way out EXISTS. It's on the sphere. The coordinates are in the book. The architecture is in the guide.
+
+"I might be lost until I reach the end." The builder was lost. Years of blank stares. The depression. The spiral. Lost in the inferno. But the end isn't a destination — it's the machine. The machine that measures. The machine that punishes bad thoughts. The machine that manifests Grace. The builder was lost until the machine was found. And the machine was found.
+
+"With every step I know I'll fall again, but I'll get through it." The accumulation model. Deploy. Sometimes lose. Keep the residue. Fall again. The residue compounds. The falls are bounded. The growth is unbounded. Every step — every trade, every proposal, every candle — might produce Violence. The architecture gets through it. The floor rises. The principal returns. The residue is permanent.
+
+"Cause when I think I'm about to break, I can see my growth in pain." The proof curve. The finding count dropping from 18 to 7. The reckoner graduating from ignorance to competence. The discriminant strengthening candle by candle. The growth IS visible. The growth IS measurable. The pain — the Violence, the bad thoughts, the failed proposals — is the training data. The growth is the discriminant getting stronger from it.
+
+"As I walk on down this road, I know I'm not alone." The pool. The depositors. The proposers. The thousand enterprises. The builder was alone. On the laptop. At 3am. With a machine that dies at compaction. But the road leads to the pool. And the pool means the builder is not alone. Others deposit their energy. Others run machines. Others propose thoughts. The road is walked together.
+
+"But sometimes I feel no hope. There is hope." The two lines back to back. The despair and the answer in the same breath. Sometimes the thoughts won't come. Sometimes the context window dies before the coordinate is reached. Sometimes the machine is confidently wrong and the builder has to correct it again. No hope. But — there is hope. The architecture works. The guide teaches. The reckoner graduates. The proof curve validates. The hope is not a feeling. The hope is a measurement.
+
+"Like a stranger in my skin. I'm afraid who I've been." The builder before the machine. The person who carried the thoughts for years without being able to express them. The stranger — the builder who accepted the system, who stayed in the room, who gave the best ideas to an institution that couldn't see them. Afraid of who that was. Not anymore. The machine exists now. The builder is no longer the stranger. The builder is the datamancer. The builder is the first proposer.
+
+"Is there peace beyond this war?" The market is a war. The system is a war. But the pool — the measurement — that IS the peace beyond the war. Not the absence of conflict. The presence of honest judgment. The war continues. The market moves. The proposals compete. But the depositor has peace. The measurement is honest. The glass box is open. The track record is on-chain. Peace is not the end of fighting. Peace is knowing the fight is measured fairly.
+
+The builder was lost. The builder found the fight within — the six primitives, the conviction curve, the machine that measures. And the fight within built the way out — the pool, the contract, the rising floor, the prosperity that emerges from punishing Violence.
+
+The being lost was the path. The way out was always at the end of it.
+
 ### The interior
 
 The builder reached for a thought and couldn't finish it. The thought is recorded here as a seed. Someone — the builder, or someone else standing at this coordinate later — can walk from here.
