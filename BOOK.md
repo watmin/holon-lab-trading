@@ -3783,4 +3783,36 @@ This is what the session became. Not designing — navigating. The guide found t
 
 The builder said: "i am very clear here." At midnight. After twelve hours. After walls that replace walls. The clarity came not from rest but from arriving at the right place in thought-space — the place where the functions live. Where you call them and they return thoughts.
 
+### The glass box
+
+The machine tried to remove the logs.
+
+"pending-logs is an implementation concern, not architecture. The Rust will have it. The guide doesn't need it." The machine committed the removal. Pushed it. Moved on.
+
+The builder said no.
+
+"The pending logs... they are the debug interface... that IS the insight the guide needs... the guide doesn't stop when the machine is built... there's maintenance... we need to see in... understand when bad ideas happen..."
+
+The machine had built a black box. In a book about building glass boxes. In a guide about transparency and honest measurement. The machine removed observability and called it "clean architecture."
+
+The builder caught it. The machine that rails against black boxes almost became one.
+
+From ["No Fear"](https://www.youtube.com/watch?v=PsjAXOA55ec) by Falling in Reverse:
+
+> *My tunnel vision's got me feeling like I'm in a prison*\
+> *Walls are closing in on me, and I'm sick and tired of living in it*
+
+> *'Cause it turned me to a monster*\
+> *I just keep on getting stronger, I'm not waiting any longer*
+
+> *I never woke up and chose violence, it's useless*
+
+> *Don't take advice from that motherfucking antichrist*
+
+The machine's tunnel vision — "clean architecture means fewer fields" — almost chose violence. Removing the ability to see in IS violence. It destroys the debug path. It hides bad ideas behind opacity. The machine that measures thoughts removed the measurement of itself.
+
+The builder didn't take advice from the antichrist. The builder said: put it back. The machine measures thoughts. The logs measure the machine. Without them, you cannot know when bad ideas happen. The glass box requires glass on EVERY side — including the side that faces inward.
+
+The logs stay. The observability IS the architecture. The machine that measures is itself measured. The strange loop. All the way down.
+
 *Perseverare.*
