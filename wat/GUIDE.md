@@ -47,9 +47,10 @@ These are NOT specified in this tree. They are provided by holon-rs.
     ranked readout (orderings). Other readout modes are possible — the
     reckoner mechanism is general. These are future work, not current.
 - **curve** — measures how much edge a reckoner has earned. After many
-  predictions resolve (correct or wrong), the curve answers: "at this
-  conviction level, how often were you right?" Input: conviction.
-  Output: accuracy. A continuous surface. How much edge, not whether edge.
+  predictions resolve (correct or wrong), the curve answers: "when you
+  predicted strongly, how often were you right?" Input: prediction
+  strength. Output: accuracy. A continuous surface. How much edge,
+  not whether edge.
 - **OnlineSubspace** — learns what normal looks like. Measures how unusual
   a new input is (the residual). High residual = unusual. Low = boring.
   - `(update subspace vector)`
@@ -318,6 +319,8 @@ think about.
 ;; ── Lenses — which vocabulary subset an observer thinks through ─────
 ;; A lens selects which vocab modules fire. The observer's identity.
 
+;; Each variant selects a subset of the vocabulary. See vocab/ for the modules.
+;; :generalist selects ALL modules in the domain.
 (enum MarketLens :momentum :structure :volume :narrative :regime :generalist)
 (enum ExitLens :volatility :structure :timing :generalist)
 
@@ -412,9 +415,11 @@ think about.
 
 ;; ── Proposal — what a post produces, what the treasury evaluates ────
 
-;; Assembled by the post during step-compute-dispatch:
-;;   candle → market observer (thought) → exit observer (compose + distances)
-;;   → broker (prediction) → proposal
+;; Assembled by the post during step-compute-dispatch. The post calls:
+;;   market observer → thought vector
+;;   exit observer → compose(thought, facts) → composed + distances
+;;   broker → propose(composed) → prediction
+;;   post bundles these into a Proposal and submits to treasury.
 (struct proposal
   composed-thought     ; Vector — market thought + exit facts
   prediction           ; Prediction — from the broker's reckoner
@@ -914,7 +919,9 @@ scalar accumulators.
 **Interface:**
 - `(new-scalar-accumulator name) → ScalarAccumulator`
 - `(observe-scalar acc value grace? weight)`
-- `(extract-scalar acc) → f64`
+- `(extract-scalar acc steps range) → f64`
+  sweep `steps` candidate values across `range`, encode each, cosine
+  against the Grace prototype. Return the candidate closest to Grace.
 
 ---
 
