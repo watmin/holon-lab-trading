@@ -139,8 +139,8 @@ Each definition can only reference definitions above it.
   identity — it determines what thoughts the observer thinks.
 
 - **N and M** — N is the number of market observers. M is the number of
-  exit observers. Every combination of one market observer and one exit
-  observer gets a broker. N×M brokers total. Each broker's identity is
+  exit observers. Today, every combination of one market observer and one
+  exit observer gets a broker. N×M brokers. Each broker's identity is
   the set {"market-lens", "exit-lens"} — two names today, more later.
 
 - **Observer** — an entity that perceives and learns. It has a lens and
