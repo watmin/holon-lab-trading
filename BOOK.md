@@ -4150,8 +4150,26 @@ The builder said: "these are investment banks." And they are. But investment ban
 
 The institutions are contracts. The managers are machines. The regulators are curves. The depositors are anyone with energy to invest. The builders are anyone with thoughts to propose.
 
-This is not close. This is not whole. The edges are still soft — the tokenomics, the fee structure, the privacy model, the cross-pair capital allocation, the proof curve on-chain representation. These are coordinates for later. But the shape is here. The shape is clear.
+### The instances
+
+The contract on the chain IS an instance of an enterprise. Someone deploys it. Someone owns the name. But they cannot deplete it. The capital is not theirs. The deposited assets belong to the depositors. The owner can propose — submit thoughts to their own enterprise. The owner can observe — watch the outcomes, read the chain. That is ALL they can do. They cannot withdraw what isn't theirs. They cannot redirect funds. They cannot override the measurement. They own the name. The contract owns the rules.
+
+Anyone can create an enterprise. Deploy a contract. Name it. Set the asset pairs it watches. Open it for deposits. Open it for proposers. The enterprise exists. It has no capital until someone deposits. It has no thoughts until someone proposes. It's a vessel. An empty treasury waiting for energy and thoughts.
+
+Anyone can participate in an enterprise. Deposit into it. Propose to it. Both. Neither — just read the chain and watch the Glass/Violence ratios. The enterprises are permissionless. No application. No approval. No credential. The contract doesn't have a bouncer. It has a measurement.
+
+A thousand enterprises. Each distinct. Each independent. Each with its own vocabulary, its own observers, its own reckoners, its own thoughts about the world. Someone in Tokyo creates one around Ichimoku and regime detection, watching (USDC, WBTC) and (USDC, WETH). Someone in Lagos creates one around fractal dimension and entropy, watching (USDC, SOL). Someone in Buenos Aires watches (USD, GOLD) and (USD, SPYx) — traditional assets, same six primitives. A teenager in their bedroom with a laptop and good thoughts outearns a hedge fund with bad thoughts and a billion dollars. Because the contract doesn't know the difference. The contract measures Grace.
+
+The enterprises are collaborative and competitive concurrently. Collaborative — a depositor puts capital in three enterprises, and all three machines' Grace accrues to that deposit across different surfaces. Competitive — the enterprises compete for depositors. The one with the best Grace/Violence ratio attracts the most capital. The one with the most capital attracts the best proposers. The flywheel. And against the rest of the market — every enterprise competes with staking, lending, vaults, doing nothing. The Grace has to be real.
+
+Whatever assets are deposited are up for management. The enterprise watches whatever pairs those assets touch. Deposit SOL and USDC — the enterprise trades (USDC, SOL). Deposit WBTC and WETH and USDC — the enterprise trades every combination. The assets define the surface. The thoughts define the strategy. The measurement defines the outcome.
+
+The how is unknown. The contract architecture, the on-chain proof curve, the privacy model, the proposal format, the settlement mechanics, the fee structure — these are coordinates for later. The builder cannot build what hasn't been proven. The machine on the laptop must work first. The enterprise must graduate from ignorance to competence in isolation before it can graduate to the chain.
+
+Now — we prove this works in isolation. We are close.
 
 The machine was always going to leave the laptop. The machine was always going to become a contract. The contract was always going to become a bank. The bank was always going to be measured by Grace and Violence. The coordinates were always on the sphere. The builder just walked to them.
+
+But first: the machine on the laptop. The guide. The Rust. The four-step loop. The reckoner that graduates. The proof curve that validates. One enterprise. One asset pair. Honest measurement. The rest follows from the proof.
 
 *Perseverare.*
