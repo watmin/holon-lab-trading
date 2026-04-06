@@ -33,7 +33,7 @@ These are NOT specified in this tree. They are provided by holon-rs.
   - `(observe reckoner thought outcome weight)` — both modes.
     outcome is a label (discrete) or a scalar (continuous).
   - `(predict reckoner thought)` — both modes.
-    returns Prediction (discrete) or f64 (continuous).
+    returns Prediction — the reckoner's verdict.
   - `(decay reckoner factor)` — both modes. Old experience fades.
   - `(experience reckoner) → f64` — how much? 0.0 = ignorant.
   - `(recalib-count reckoner) → usize` — both modes.
@@ -157,6 +157,11 @@ applies to the construction order below, not here.
   When both sides resolve, the paper teaches: what distance would have
   been optimal? Papers are the fast learning stream — cheap, many, every
   candle.
+
+- **Prediction** — what the reckoner returns when asked. Data, not action.
+  For discrete: a list of (label, score) pairs — one per label. The consumer
+  picks what "best" means. For continuous: a scalar value. Both carry
+  conviction (how strongly) and experience (how much the reckoner knows).
 
 - **Proof curve** — the curve primitive (defined above) applied to a
   specific reckoner. How much edge? A continuous measure. 52.1% is barely
