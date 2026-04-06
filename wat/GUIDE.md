@@ -23,9 +23,11 @@ These are NOT specified in this tree. They are provided by holon-rs.
 - **cosine** — `(cosine a b) → f64` — measure similarity
 - **reckoner** — the learning primitive. "Reckon" means both "to count"
   and "to judge." A reckoner keeps accounts and delivers a verdict.
-  It accumulates experience. It reckons a verdict from a new input via
-  cosine similarity. Old experience decays. The verdict sharpens over
-  time through recalibration. One primitive, multiple readout modes:
+  It accumulates experience. Internally it builds a discriminant — the
+  direction that separates outcomes. It reckons a verdict from a new
+  input via cosine against the discriminant. Old experience decays.
+  The verdict sharpens over time through recalibration. One primitive,
+  multiple readout modes:
   - `(make-reckoner config)` → Reckoner
     - config is a `reckoner-config` struct (defined in construction order)
       containing dims, recalib-interval, and readout mode:
@@ -63,9 +65,10 @@ These are NOT specified in this tree. They are provided by holon-rs.
 
 ---
 
-## Labels — the language of outcomes
+## Definitions — the thoughts themselves
 
-The system uses named labels for learning. Two pairs:
+Before the structs. Before the constructors. The meanings.
+Each definition can only reference definitions above it.
 
 - **Up / Down** — direction labels. The market observer predicts: the price
   will go up or the price will go down. That's the prediction. When a trade
@@ -78,43 +81,27 @@ The system uses named labels for learning. Two pairs:
   "do we trust this broker?" More Grace, more capital. More Violence,
   less capital.
 
-Labels are not booleans. They carry weight — how decisively the market
-answered. A strong Grace teaches harder than a marginal one.
-
-Two pairs. Direction (Up/Down) and accountability (Grace/Violence).
-Nothing else is needed.
-
----
-
-## Magic numbers — the crutches
-
-When a trade is open, three distances matter: how far to let the price
-run before locking in profit (trailing stop), how far to let it move
-against you before cutting the loss (safety stop), and how far to let
-it go before taking the win (take-profit).
-
-k_trail, k_stop, k_tp — someone chose these as multipliers of ATR
-(Average True Range — a measure of volatility). They are the last magic
-in the system. Each one is a crutch — a default value returned when the
-system has no experience. As observations accumulate, the crutch is
-replaced by what the market actually said.
-
----
-
-## Definitions — the thoughts themselves
-
-Before the structs. Before the constructors. The meanings.
-Each definition can only reference definitions above it.
+- **Labels** — Up/Down and Grace/Violence are labels. Labels are not
+  booleans. They carry weight — how decisively the market answered.
+  A strong Grace teaches harder than a marginal one. Two pairs.
+  Direction and accountability. Nothing else is needed.
 
 - **Candle** — one period of market data. Raw: six numbers (open, high, low,
   close, volume, timestamp). Enriched: the raw data plus 100+ computed
   indicators (moving averages, oscillators, volatility, momentum, structure).
 
-- **Indicator** — a derived measurement from price history. RSI, MACD, ATR,
-  Bollinger Bands. Each one is a streaming computation — it needs all
-  prior candles to produce the current value. Indicators produce SCALARS,
-  not zones. "RSI at 0.73" not "RSI is overbought." The discriminant
-  learns where the boundaries are.
+- **Indicator** — a derived measurement from price history. RSI, MACD,
+  ATR (Average True Range — a measure of volatility), Bollinger Bands.
+  Each one is a streaming computation — it needs all prior candles to
+  produce the current value. Indicators produce SCALARS, not zones.
+  "RSI at 0.73" not "RSI is overbought." The reckoner learns where the
+  boundaries are.
+
+- **Magic numbers** — k_trail, k_stop, k_tp. When a trade is open, three
+  distances matter: trailing stop, safety stop, take-profit. Someone chose
+  these as multipliers of ATR (defined above). They are the last magic in
+  the system — crutches returned when the system has no experience. As
+  observations accumulate, the crutch is replaced by what the market said.
 
 - **Discriminant** — the direction in thought-space that separates two
   outcomes. The reckoner builds it from accumulated observations. "Which
@@ -964,9 +951,10 @@ reckoners — one per magic number (trail, stop, tp). Each reckoner
 accumulates (thought, distance, weight) observations and returns the
 cosine-weighted answer for a given thought.
 
-Has a judgment vocabulary (volatility, structure, timing, generalist).
-The generalist is just another lens — selects all three vocabularies.
-No special treatment. Same as the market observer's generalist.
+Has a judgment vocabulary matching its ExitLens:
+`:volatility` → `exit/volatility.wat`, `:structure` → `exit/structure.wat`,
+`:timing` → `exit/timing.wat`, `:generalist` → all three.
+The generalist is just another lens. No special treatment.
 Composes market thoughts with its own judgment facts.
 One per exit lens — M instances, not N×M.
 The composed thought carries the market observer's signal in superposition.
@@ -1001,7 +989,8 @@ get different distances.
 
 ### Broker (depends on: Reckoner, OnlineSubspace, ScalarAccumulator)
 
-The accountability primitive. Binds a set of observers as a team.
+The accountability primitive. Today: binds one market observer + one
+exit observer. N×M brokers total. Tomorrow: more observer kinds may join.
 Holds papers. Propagates resolved outcomes to every observer in the set.
 Measures Grace or Violence.
 
