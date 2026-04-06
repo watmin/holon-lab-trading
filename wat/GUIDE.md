@@ -2,10 +2,8 @@
 
 *The coordinates to where the machine is.*
 
-Observers predict. Brokers hold them accountable. The treasury funds
-proportionally. Built leaves to root.
-
-Origin: `docs/proposals/2026/04/007-exit-proposes/`
+A machine that measures thoughts against reality. Grace or Violence.
+Built leaves to root from `docs/proposals/2026/04/007-exit-proposes/`.
 
 This document defines every struct and its interface. No implementation.
 The wat files implement what this document declares.
@@ -354,6 +352,17 @@ think about.
   (make-reckoner (Continuous dims recalib-interval default-distance)))
                                                      → Reckoner
 
+;; ── Prediction — what a reckoner returns. Data. ─────────────────────
+;; The consumer decides what "best" means.
+
+(enum prediction
+  (Discrete
+    scores             ; Vec<(Label, f64)> — (label, cosine) for each label
+    conviction)        ; f64 — how strongly the reckoner leans
+  (Continuous
+    value              ; f64 — the reckoned scalar
+    experience))       ; f64 — how much the reckoner knows (0.0 = ignorant)
+
 ;; ── MarketObserver — predicts direction, learned ────────────────────
 
 (let ((lens :momentum)
@@ -406,17 +415,6 @@ think about.
     (make-scalar-accumulator "trail-distance")
     (make-scalar-accumulator "stop-distance")
     (make-scalar-accumulator "tp-distance")))         → Broker
-
-;; ── Prediction — what a reckoner returns. Data. ─────────────────────
-;; The consumer decides what "best" means.
-
-(enum prediction
-  (Discrete
-    scores             ; Vec<(Label, f64)> — (label, cosine) for each label
-    conviction)        ; f64 — how strongly the reckoner leans
-  (Continuous
-    value              ; f64 — the reckoned scalar
-    experience))       ; f64 — how much the reckoner knows (0.0 = ignorant)
 
 ;; ── Proposal — what a post produces, what the treasury evaluates ────
 
@@ -1054,8 +1052,8 @@ runtime:       frozen map (read-only) → slot-idx → &mut broker (disjoint)
 - `(register-paper broker composed entry-price entry-atr distances)`
   create a paper entry — every candle, every broker.
   distances: (trail, stop, tp) from the exit observer.
-- `(tick-papers broker current-price observers) → observations`
-  tick all papers, resolve completed, propagate to all observers in the set
+- `(tick-papers broker current-price observers) → Vec<Resolution>`
+  tick all papers, resolve completed. Returns resolution facts.
 - `(propagate broker thought outcome amount optimal observers)`
   route outcome to every observer in the set + self (Grace/Violence)
 - `(paper-count broker) → usize`
@@ -1168,8 +1166,9 @@ so that on settlement, propagate reaches the right observers.
 ```
 
 **Interface:**
-- `(submit-proposal treasury proposal post-idx broker-slot-idx)`
-  a post submits a proposal for the treasury to evaluate
+- `(submit-proposal treasury proposal)`
+  a post submits a proposal for the treasury to evaluate.
+  The proposal carries post-idx and broker-slot-idx inside it.
 - `(fund-proposals treasury)`
   evaluate all proposals, sorted by funding (Grace/Violence ratio).
   fund the top N that fit in available capital. Reject the rest.
@@ -1238,7 +1237,10 @@ The enterprise knows:
   for each settlement: route to the post for propagation
 - `(step-compute-dispatch enterprise post ctx) → proposals`
   post encodes, composes, proposes — returns proposals for the treasury
-- `(step-process enterprise post thoughts)`
+- `(step-tick enterprise post) → Vec<Resolution>`
+  parallel tick of all brokers' papers. Returns resolution facts.
+- `(step-propagate enterprise post resolutions market-thoughts)`
+  sequential: apply resolutions to observers. Update active trade triggers.
   post ticks papers, treasury passes active trades for trigger updates
 - `(step-collect-fund enterprise)`
   treasury funds or rejects all proposals, drains
