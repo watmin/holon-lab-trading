@@ -24,26 +24,29 @@ These are NOT specified in this tree. They are provided by holon-rs.
 - **bind** — `(bind a b) → Vector` — compose two thoughts
 - **bundle** — `(bundle &vecs) → Vector` — superpose many thoughts
 - **cosine** — `(cosine a b) → f64` — measure similarity
-- **journal** — accumulates labeled observations, predicts a LABEL
-  - `(register journal label-name) → Label`
-  - `(observe journal thought label weight)`
-  - `(predict journal thought) → Prediction { direction, conviction }`
-  - `(decay journal rate)`
-  - `(discriminant journal label) → Vector`
-  - `(recalib-count journal) → usize`
-- **gauge** — accumulates scalar observations, predicts a VALUE.
-  Same mechanism as journal. Different readout.
-  Journal predicts categories. Gauge predicts values.
-  - `(observe gauge thought scalar-value weight)`
-  - `(query gauge thought) → f64`
-  - `(experienced? gauge) → bool`
-  - **NOTE: Gauge does not yet exist in holon-rs. It must be added.**
-- **curve** — measures how much edge a journal has. Query with a conviction
-  level → get the accuracy at that conviction. A continuous surface. Not a
-  boolean. How much edge, not whether edge. The curve exists today as a
-  direct computation over the journal's resolved predictions. In the future,
-  when gauge exists in holon-rs, the curve could be expressed as a gauge
-  (conviction → accuracy). For now, it is standalone.
+- **reckoner** — the learning primitive. Accumulates experience. Reckons
+  a verdict from a new input via cosine similarity. Decays old experience.
+  Recalibrates periodically. One primitive, multiple readout modes:
+  - **discrete** — which of N labels? Classification.
+    - `(make-reckoner :discrete dims recalib-interval "Win" "Loss")`
+    - `(observe reckoner thought label weight)`
+    - `(predict reckoner thought) → Prediction { direction, conviction }`
+    - `(discriminant reckoner label) → Vector`
+  - **continuous** — what value on a continuum? Regression.
+    - `(make-reckoner :continuous dims recalib-interval default-value)`
+    - `(observe reckoner thought scalar-value weight)`
+    - `(query reckoner thought) → f64`
+    - `(experience reckoner) → f64` — how much experience? 0.0 = ignorant
+  - `(decay reckoner factor)` — both modes. Old experience fades.
+  - `(recalib-count reckoner) → usize` — both modes.
+  - **NOTE: holon-rs currently calls the discrete reckoner "Journal."
+    The continuous reckoner does not yet exist. Both will be unified
+    under "Reckoner" in holon-rs.**
+  - Coordinates for later: circular readout (periodic), ranked readout
+    (ordering). These exist on the sphere, waiting to be found.
+- **curve** — a continuous reckoner applied to reckoner quality. Input:
+  conviction level. Output: accuracy at that conviction. How much edge,
+  not whether edge. A continuous surface.
 - **OnlineSubspace** — learns a manifold, measures anomaly via residual
   - `(update subspace vector)`
   - `(anomalous-component subspace vector) → Vector`
@@ -127,13 +130,13 @@ applies to the construction order below, not here.
 
 - **Observer** — an entity that perceives and learns. It has a lens and
   accumulated experience. Two kinds: market observers predict direction
-  (Win/Loss) using a journal. Exit observers estimate distance (optimal
-  exit) using gauges.
+  (Win/Loss) using a discrete reckoner. Exit observers estimate distance
+  (optimal exit) using continuous reckoners.
 
-- **LearnedStop** — a gauge applied to exit distances. "For a thought like
-  THIS, what distance did the market say was optimal?" The gauge primitive
-  with a specific domain. Each exit observer has three: trail, stop, tp.
-  Replaces magic numbers with measurement.
+- **LearnedStop** — a continuous reckoner applied to exit distances. "For a
+  thought like THIS, what distance did the market say was optimal?" Each
+  exit observer has three: trail, stop, tp. Replaces magic numbers with
+  measurement.
 
 - **ScalarAccumulator** — per-magic-number f64 learning. Separates Grace
   and Violence observations. Extracts the value Grace prefers overall.
@@ -284,12 +287,15 @@ think about.
 (enum MarketLens :momentum :structure :volume :narrative :regime :generalist)
 (enum ExitLens :volatility :structure :timing :generalist)
 
-;; ── Gauge instances — the exit observer's brain ─────────────────────
-;; Each gauge: cosine-weighted regression over (thought, scalar, weight).
-;; The gauge primitive applied to specific domains.
+;; ── Reckoner — the learning primitive ────────────────────────────────
+;; Discrete: N labels. Continuous: one scalar. Both accumulate, decay, recalibrate.
+
+(make-reckoner :discrete dims recalib-interval
+  "Win" "Loss")                                      → Reckoner
 
 (let ((default-distance 0.015))
-  (make-gauge default-distance))                     → Gauge
+  (make-reckoner :continuous dims recalib-interval
+    default-distance))                               → Reckoner
 
 ;; ── MarketObserver — predicts direction, learned ────────────────────
 
@@ -823,7 +829,7 @@ The generalist is just another lens. No special treatment.
 ```
 (struct market-observer
   lens                 ; MarketLens enum
-  journal              ; Journal — Win/Loss
+  reckoner             ; Reckoner :discrete — Win/Loss
   noise-subspace       ; OnlineSubspace — background model
   window-sampler       ; WindowSampler — own time scale
   ;; Proof tracking
@@ -846,10 +852,10 @@ The generalist is just another lens. No special treatment.
 
 ### ExitObserver (depends on: Primitives — cosine-weighted regression)
 
-Estimates exit distance. Learned. Each exit observer has THREE gauges —
-one per magic number (trail, stop, tp). Each gauge accumulates
-(thought, distance, weight) observations and returns the cosine-weighted
-answer for a given thought. Not a journal — a gauge.
+Estimates exit distance. Learned. Each exit observer has THREE continuous
+reckoners — one per magic number (trail, stop, tp). Each reckoner
+accumulates (thought, distance, weight) observations and returns the
+cosine-weighted answer for a given thought.
 
 Has a judgment vocabulary (volatility, structure, timing, generalist).
 Composes market thoughts with its own judgment facts.
@@ -859,13 +865,13 @@ The composed thought carries the market observer's signal in superposition.
 ```
 (struct exit-observer
   lens                ; ExitLens enum — which judgment vocabulary
-  trail-gauge         ; Gauge — trailing stop distance
-  stop-gauge          ; Gauge — safety stop distance
-  tp-gauge            ; Gauge — take-profit distance
+  trail-reckoner      ; Reckoner :continuous — trailing stop distance
+  stop-reckoner       ; Reckoner :continuous — safety stop distance
+  tp-reckoner         ; Reckoner :continuous — take-profit distance
   default-distances)  ; (trail, stop, tp) — the crutches, returned when empty
 ```
 
-Each gauge: `(thought, distance, weight)` observations. Query by
+Each reckoner: `(thought, distance, weight)` observations. Query by
 cosine → distance for THIS thought. Contextual — different thoughts
 get different distances.
 
@@ -876,23 +882,22 @@ get different distances.
 - `(compose exit-obs market-thought exit-fact-vecs) → Vector`
   bundle market thought with exit facts
 - `(recommended-distances exit-obs composed) → (trail, stop, tp)`
-  query all three gauges — one call, three answers
+  query all three reckoners — one call, three answers
 - `(observe-distances exit-obs composed optimal-trail optimal-stop optimal-tp weight)`
-  the market spoke — all three gauges learn from one resolution
+  the market spoke — all three reckoners learn from one resolution
 - `(experienced? exit-obs) → bool`
-  have the gauges accumulated observations?
+  have the reckoners accumulated observations?
 
 **Two mechanisms for the same magic numbers — now both introduced:**
 
-The exit observer's gauges are CONTEXTUAL: "for THIS thought,
-what distance?" Cosine-weighted regression. Different thoughts →
-different answers.
+The exit observer's continuous reckoners are CONTEXTUAL: "for THIS thought,
+what distance?" Different thoughts → different answers.
 
 The tuple journal's ScalarAccumulators are GLOBAL per-pair: "what value
 does Grace prefer for this pair overall?" One answer regardless of thought.
 
 Both learn from the same resolution events. Different questions.
-The cascade when queried: contextual (gauge) → global per-pair
+The cascade when queried: contextual (reckoner) → global per-pair
 (ScalarAccumulator) → default (crutch).
 
 ---
@@ -916,7 +921,7 @@ the treasury's. The tuple journal proposes TO the treasury.
 (struct tuple-journal
   market-name exit-name
   ;; Accountability
-  journal noise-subspace grace-label violence-label
+  reckoner noise-subspace grace-label violence-label  ; Reckoner :discrete — Grace/Violence
   ;; Track record
   resolved conviction-history conviction-threshold
   curve-valid cached-acc
@@ -1115,9 +1120,9 @@ Step 4: COLLECT     — treasury funds proven proposals, rejects the rest
 
 - Manager journal → tuple journals (each pair IS its own manager)
 - Pending queue + horizon labels → paper trades (fast learning)
-- Exit journal (Buy/Sell) → gauges on exit observer (distance regression)
+- Exit journal (Buy/Sell) → continuous reckoners on exit observer (distance)
 - Panel engram (old: snapshot of expert panel state for selection) → not needed
 - Observer noise learning on market observer → tuple journal has its own
-- Fixed ATR multipliers → exit observer's gauges estimate from experience
+- Fixed ATR multipliers → exit observer's reckoners estimate from experience
 - GENERALIST_IDX → the generalist is just another lens
 - Desk (old: monolithic per-pair fold with positions, learning, logging) → Post
