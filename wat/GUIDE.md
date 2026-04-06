@@ -39,8 +39,8 @@ These are NOT specified in this tree. They are provided by holon-rs.
   - `(experience reckoner) → f64` — how much? 0.0 = ignorant.
   - `(recalib-count reckoner) → usize` — both modes.
   - **holon-rs has both modes.** `Reckoner` with `ReckConfig::Discrete`
-    and `ReckConfig::Continuous`. The old `Journal` remains for backward
-    compatibility — it will be removed when consumers migrate.
+    and `ReckConfig::Continuous`. The Reckoner is the only learning
+    primitive in holon-rs.
   - Coordinates for later: circular readout (periodic), ranked readout
     (ordering). These exist on the sphere, waiting to be found.
 - **curve** — a continuous reckoner applied to reckoner quality. Input:
@@ -149,7 +149,7 @@ applies to the construction order below, not here.
   candle.
 
 - **Proof curve** — the curve primitive (defined above) applied to a
-  specific journal. How much edge? A continuous measure. 52.1% is barely
+  specific reckoner. How much edge? A continuous measure. 52.1% is barely
   there. 70% is screaming. The treasury funds proportionally. The entity
   earns a DEGREE of trust, not a binary gate. More edge, more capital.
   "Proof curve" and "curve" are the same thing — one is the primitive,
@@ -184,14 +184,14 @@ applies to the construction order below, not here.
 
 - **Noise subspace** — the background model. An OnlineSubspace that
   learns what ALL thoughts look like — the average texture of thought-space.
-  Subtract it from a thought and what remains is what's UNUSUAL. The journal
+  Subtract it from a thought and what remains is what's UNUSUAL. The reckoner
   learns from the unusual part, not the boring part.
 
-- **Conviction** — how strongly the journal predicts. The magnitude of the
+- **Conviction** — how strongly the reckoner predicts. The magnitude of the
   cosine between the thought and the discriminant. High conviction = many
   facts voting in the same direction. Low conviction = ambiguous.
 
-- **Recalibration** — the journal periodically recomputes its discriminant
+- **Recalibration** — the reckoner periodically recomputes its discriminant
   from accumulated observations. The interval (recalib-interval) is how
   often this happens — every N observations.
 
@@ -816,7 +816,7 @@ the Grace accumulator, find the one with highest cosine. "What value does
 Grace prefer for this pair overall?" One answer regardless of thought.
 
 Fed by resolution events: when a paper or trade resolves, the tuple
-journal routes the optimal distance + Grace/Violence outcome to its
+tuple journal routes the optimal distance + Grace/Violence outcome to its
 scalar accumulators.
 
 ```
@@ -831,7 +831,7 @@ scalar accumulators.
 
 ---
 
-### MarketObserver (depends on: Journal, OnlineSubspace, WindowSampler)
+### MarketObserver (depends on: Reckoner, OnlineSubspace, WindowSampler)
 
 Predicts direction. Learned. Labels come from tuple journal propagation —
 Win/Loss from resolved paper and real trades. The market observer does NOT
@@ -915,7 +915,7 @@ The cascade when queried: contextual (reckoner) → global per-pair
 
 ---
 
-### TupleJournal (depends on: Journal, OnlineSubspace, ScalarAccumulator, MarketObserver, ExitObserver)
+### TupleJournal (depends on: Reckoner, OnlineSubspace, ScalarAccumulator, MarketObserver, ExitObserver)
 
 The closure over (market-observer, exit-observer). The accountability
 primitive. The manager replacement. Papers live inside. Propagate routes
@@ -1133,7 +1133,7 @@ Step 4: COLLECT     — treasury funds proven proposals, rejects the rest
 
 - Manager journal → tuple journals (each pair IS its own manager)
 - Pending queue + horizon labels → paper trades (fast learning)
-- Exit journal (Buy/Sell) → continuous reckoners on exit observer (distance)
+- Exit reckoner (Buy/Sell) → continuous reckoners on exit observer (distance)
 - Panel engram (old: snapshot of expert panel state for selection) → not needed
 - Observer noise learning on market observer → tuple journal has its own
 - Fixed ATR multipliers → exit observer's reckoners estimate from experience
