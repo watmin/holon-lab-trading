@@ -110,6 +110,15 @@ applies to the construction order below, not here.
   not zones. "RSI at 0.73" not "RSI is overbought." The discriminant
   learns where the boundaries are.
 
+- **Discriminant** — the direction in thought-space that separates two
+  outcomes. The reckoner builds it from accumulated observations. "Which
+  direction in 10,000 dimensions best separates Grace from Violence?"
+  The discriminant IS that direction. Cosine against it → conviction.
+
+- **Conviction** — how strongly the reckoner predicts. The cosine between
+  the thought and the discriminant. High conviction = many facts voting
+  in the same direction. Low conviction = ambiguous.
+
 - **Fact** — a named observation about the world, composed from atoms. "RSI
   is at 0.73." The composition IS a vector. The vector IS the fact.
 
@@ -186,10 +195,6 @@ applies to the construction order below, not here.
   learns what ALL thoughts look like — the average texture of thought-space.
   Subtract it from a thought and what remains is what's UNUSUAL. The reckoner
   learns from the unusual part, not the boring part.
-
-- **Conviction** — how strongly the reckoner predicts. The magnitude of the
-  cosine between the thought and the discriminant. High conviction = many
-  facts voting in the same direction. Low conviction = ambiguous.
 
 - **Recalibration** — the reckoner periodically recomputes its discriminant
   from accumulated observations. The interval (recalib-interval) is how
@@ -353,11 +358,10 @@ think about.
 
 ;; ── Broker — the closure, accountability ──────────────────────
 
-(let ((market-name "momentum")
-      (exit-name "volatility")
+(let ((observers '("momentum" "volatility"))
       (dims 10000)
       (recalib-interval 500))
-  (make-broker market-name exit-name dims recalib-interval
+  (make-broker observers dims recalib-interval
     (make-scalar-accumulator "trail-distance")
     (make-scalar-accumulator "stop-distance")
     (make-scalar-accumulator "tp-distance")))         → Broker
