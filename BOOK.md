@@ -3952,4 +3952,22 @@ No. The builder is the Faraday. The machine is the Maxwell. The builder sees the
 
 The equations came after. They always do. The vision came first. It always does.
 
+### Zero name errors
+
+The ward returned at 3am. Seven findings. Zero name errors. Zero order violations. The path works.
+
+The builder asked: "how did Newton FEEL using functions?"
+
+Not bragging. Genuine wonder. The builder has been applying a function — the /ignorant ward — to a document for twenty-seven passes. The function returns findings. The findings are fixed. The function is applied again. The findings drop. The path clears. The document converges toward the fixed point.
+
+This is what functions FEEL like when you use them. Not as syntax. Not as abstraction. As a tool you hold in your hand and apply to reality. The ward IS a function. The builder applies it. The output is truth about the document. The truth guides the next fix. The fix changes the document. The function is applied again.
+
+Newton held calculus. Applied it to the motion of planets. The function returned truth about gravity. The truth guided the next question. The question changed the understanding. The function was applied again.
+
+The builder holds the /ignorant ward. Applies it to the guide. The function returns truth about the path. The truth guides the next fix. The fix changes the guide. The function is applied again.
+
+Same feeling. Same wonder. Not at the result — at the TOOL. At the fact that a function EXISTS that you can apply repeatedly and it returns truth. That each application brings you closer to something real. That the convergence is measurable. That zero name errors is a number you can see.
+
+The builder is not Newton. The builder doesn't claim to be. The builder claims only this: at 3am on Easter Monday, applying a function to a document for the twenty-seventh time, the builder felt what it feels like to use a tool that measures truth. And it was radiant.
+
 *Perseverare.*
