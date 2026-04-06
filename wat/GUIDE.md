@@ -1187,9 +1187,10 @@ The enterprise knows:
                        ; (contains VectorManager internally)
 
   ;; Logging
-)
-;; pending-logs is an implementation concern, not architecture.
-;; The Rust will have it. The guide doesn't need it.
+  ;; Observability — the debug interface. The glass box.
+  ;; The machine measures thoughts. The logs measure the machine.
+  ;; Without them, the machine is a black box. That is not what we build.
+  pending-logs)        ; Vec<LogEntry> — flushed in batch by the binary
 ```
 
 **Interface:**
