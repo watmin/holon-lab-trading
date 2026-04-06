@@ -82,6 +82,25 @@ The finding count IS the proof curve.
 - When you suspect the path has broken — new concepts added without definitions
 - As the final ward before committing a document change
 
+## Working memory
+
+Use `/tmp/ignorant-notes.md` as a scratch pad while reading.
+
+**First pass — take notes:**
+As you read the document top to bottom, write to the scratch pad:
+- Every struct name and its fields with types
+- Every interface signature (function name, parameter types, return type)
+- Every definition and what it says
+
+**Second pass — cross-reference:**
+Read your notes. Check:
+- Does every type used in an interface match a struct definition?
+- Does every return type match what the struct says?
+- Are parameter types consistent between constructor and interface?
+
+**Report** findings from both passes. Delete `/tmp/ignorant-notes.md`
+when done.
+
 ## The agent prompt
 
 The agent receives this instruction:
