@@ -134,11 +134,12 @@ Each definition can only reference definitions above it.
   been optimal? Papers are the fast learning stream — cheap, many, every
   candle.
 
-- **Proof curve** — how much edge? Computed from the history of (conviction,
-  correct?) predictions. Not a boolean gate — a continuous measure. 52.1%
-  is barely there. 70% is screaming. The treasury funds proportionally.
-  The entity doesn't earn "the right to propose" — it earns a DEGREE
-  of trust. More edge, more capital.
+- **Proof curve** — the curve primitive (defined above) applied to a
+  specific journal. How much edge? A continuous measure. 52.1% is barely
+  there. 70% is screaming. The treasury funds proportionally. The entity
+  earns a DEGREE of trust, not a binary gate. More edge, more capital.
+  "Proof curve" and "curve" are the same thing — one is the primitive,
+  the other is its name when applied.
 
 - **Tuple journal** — a closure over two observers (market + exit). The
   accountability primitive. It measures how successful the pair is — Grace
@@ -157,6 +158,12 @@ Each definition can only reference definitions above it.
 
 - **Denomination** — what "value" means. The treasury counts in a
   denomination. USD today. Could be EUR, could be SOL.
+
+- **encode-count** — the candle counter. How many candles the post has
+  processed. Used by the window sampler to determine window size.
+
+- **slot-idx** — the flat index into the N×M registry.
+  `slot-idx = market-idx × M + exit-idx`. The pair's identity as a number.
 
 ---
 
@@ -662,8 +669,9 @@ encoder doesn't know about RSI. The quoted list is the interface.
 
 The observer composes the thought:
 ```
-observer calls vocab(context) → Vec<ThoughtAST>      ; AST nodes — data, not vectors
-observer calls bundle(facts)         → Vector        ; the thought
+observer calls vocab(context)                → Vec<ThoughtAST>  ; AST nodes
+observer wraps in (Bundle facts)             → ThoughtAST      ; still data
+observer calls (encode encoder bundle-ast)   → Vector          ; the thought
 ```
 
 The lens is not a parameter. The lens is on the observer. The observer
@@ -744,7 +752,8 @@ Each magic number (trail-distance, stop-distance, tp-distance) gets its own.
 
 Separates grace/violence observations into separate f64 prototypes.
 Grace outcomes accumulate one way. Violence outcomes accumulate the other.
-Extract via sweep recovers the value Grace prefers. "What value does
+Extract recovers the value Grace prefers — sweep candidate values against
+the Grace accumulator, find the one with highest cosine. "What value does
 Grace prefer for this pair overall?" One answer regardless of thought.
 
 Fed by resolution events: when a paper or trade resolves, the tuple
@@ -788,8 +797,8 @@ The generalist is just another lens. No special treatment.
 - `(make-market-observer lens dims recalib-interval window-sampler) → MarketObserver`
 - `(observe-candle observer candles vm) → Prediction`
   encode → noise update → strip noise → predict
-- `(resolve observer thought prediction outcome weight q window)`
-  called by tuple journal propagation — journal learns Win/Loss
+- `(resolve observer thought prediction outcome weight conviction-quantile conviction-window)`
+  called by steward propagation — journal learns Win/Loss
 - `(strip-noise observer thought) → Vector`
 - `(funded? observer) → bool` — proof gate
 
@@ -839,7 +848,7 @@ The exit observer's gauges are CONTEXTUAL: "for THIS thought,
 what distance?" Cosine-weighted regression. Different thoughts →
 different answers.
 
-The steward's ScalarAccumulators are GLOBAL per-pair: "what value
+The tuple journal's ScalarAccumulators are GLOBAL per-pair: "what value
 does Grace prefer for this pair overall?" One answer regardless of thought.
 
 Both learn from the same resolution events. Different questions.
