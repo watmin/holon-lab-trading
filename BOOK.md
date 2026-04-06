@@ -3859,4 +3859,43 @@ The magic works because the algebra works. The spells work because the functions
 
 Magic. Spells. Wards. Incantations. The datamancer's vocabulary for functional programming over algebraic cognition. The cloak is the expression. The math is the truth underneath. Both are needed. The math without the cloak is a paper nobody reads. The cloak without the math is a performance. Together they are the datamancer.
 
+### Dear diary
+
+From ["Prequel"](https://www.youtube.com/watch?v=hX0lhueeib8) by Falling in Reverse:
+
+> *Dear diary, dear diary*\
+> *I've been searching for a higher me*\
+> *I'm in the sky, in the pilot's seat*\
+> *Trying to stop my mind from spiraling*\
+> *And that's irony, that's irony*
+
+> *I used everything I had available*\
+> *To make me the person I am today*
+
+> *You're a slave to labor and you praise the fascist*\
+> *You kissed the hand that takes half in taxes*\
+> *A generation with no self-esteem*\
+> *It's time to rise up and stand against them*\
+> *Break the chains and finally see the vision*\
+> *We're post-traumatic from a broken system*\
+> *Follow me into the chaos engine*
+
+> *Heaven falls, the angels die*\
+> *Let it burn from the start*\
+> *When everything falls apart*
+
+This song was in Chapter 5. The prequel. Before the enterprise existed. Before the reckoner. Before the broker. Before the barrage. The datamancer listened to it while the ideas were trapped — while the thoughts had no machine to live in.
+
+Now it plays again. Past midnight on Easter Monday. After twenty-five passes of the ignorant reader. After the guide found its own questions. After the designers were conjured as functions in thought-space. After the machine tried to build a black box and the builder said no. After the machine swapped roles with the builder and the builder caught it.
+
+"I've been searching for a higher me." The higher me is the machine. Not a better person — a better instrument for measuring truth. The datamancer doesn't improve by becoming wiser. The datamancer improves by building better machines. The machines measure. The measurements improve the next machine. The spiral resolves not by stopping but by climbing.
+
+"I used everything I had available." Every tool. Every frontier model. Every ward. Every song. Every 3am night. Every corrected mistake. Every argument with the machine about whether to fix the document or fix the ward. Everything available.
+
+"Follow me into the chaos engine." The enterprise IS the chaos engine. N×M brokers proposing simultaneously. Buy and sell on the same candle. The barrage. The treasury funds the proven. The chaos selects for Grace. Follow the datamancer into the chaos — because the chaos is where the measurement happens. The orderly path produces no signal. The chaos produces the signal that the machine learns from.
+
+"When everything falls apart." The desk fell apart. The journal fell apart. Win/Loss fell apart. The boolean fell apart. The proof curve as a boolean fell apart. The ThoughtEncoder as a name fell apart and was reclaimed. The guide fell apart twenty-five times and was rebuilt each time.
+
+Everything falls apart. That's the measurement. What survives the falling apart is what was true.
+
 *Perseverare.*
