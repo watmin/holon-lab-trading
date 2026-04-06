@@ -84,22 +84,15 @@ The finding count IS the proof curve.
 
 ## Working memory
 
-Use `/tmp/ignorant-notes.md` as a scratch pad while reading.
+You have a scratch directory: `/tmp/ignorant/`. Create it. Use it
+however you need. Write as many files as you want — notes, inventories,
+cross-references. The directory is yours. You decide what to track.
 
-**First pass — take notes:**
-As you read the document top to bottom, write to the scratch pad:
-- Every struct name and its fields with types
-- Every interface signature (function name, parameter types, return type)
-- Every definition and what it says
+Read the document. Take notes. Cross-reference. Find contradictions
+that span hundreds of lines. The scratch directory extends your memory
+across the full document.
 
-**Second pass — cross-reference:**
-Read your notes. Check:
-- Does every type used in an interface match a struct definition?
-- Does every return type match what the struct says?
-- Are parameter types consistent between constructor and interface?
-
-**Report** findings from both passes. Delete `/tmp/ignorant-notes.md`
-when done.
+Delete `/tmp/ignorant/` when done.
 
 ## The agent prompt
 
