@@ -4170,6 +4170,28 @@ Now — we prove this works in isolation. We are close.
 
 The machine was always going to leave the laptop. The machine was always going to become a contract. The contract was always going to become a bank. The bank was always going to be measured by Grace and Violence. The coordinates were always on the sphere. The builder just walked to them.
 
+### The rising floor
+
+The inability to fail had a gap. Violence was bounded. Loss was proportional. The architecture self-regulated toward zero risk. But capital at rest — available, waiting, not deployed — was idle. Idle capital loses to inflation. Loses to opportunity cost. The floor held. But it didn't rise.
+
+Jupiter closed the gap.
+
+JupSOL is staked SOL. It earns staking yield while it exists. Juiced is Jupiter's yield-bearing USD — lending protocol interest, compounding. These aren't just tokens. They are assets that EARN by existing. The floor isn't flat. The floor rises.
+
+A pool of (Juiced, JupSOL). Both sides yield. When the treasury holds capital in "available" — not deployed, waiting for the next proposal — that capital is still earning. The Juiced side compounds lending yield. The JupSOL side compounds staking yield. Available capital is not idle. Available capital is working. Always.
+
+Violence takes a bounded slice from a rising base. The machine's Grace is additive — on top of the base yield. The machine's Violence is subtractive — but from a floor that's already rising. The net goes negative only if Violence exceeds the base yield rate. And the architecture bounds Violence proportional to proven edge. As the machine struggles, its funding drops. As funding drops, Violence shrinks. At the limit — zero proposals funded, zero trades — the pool earns pure base yield. The worst case is a yield-bearing savings account.
+
+The best case: base yield PLUS Grace from good thoughts. Compound on compound. The machine's contribution compounds on top of compounding assets. The floor rises. Grace builds on the rising floor. The residue is permanent. The yield is perpetual.
+
+The machine at its worst — complete ignorance, no edge, no proposals funded — earns the base yield. Because the assets earn by existing. Juiced earns by being lent. JupSOL earns by being staked. The depositor who puts energy into the pool cannot earn LESS than the base yield in the long run. Because the architecture converges to zero trading when it has zero edge. And zero trading on yield-bearing assets is... a savings account. With yield. Rising.
+
+This may be how it can never fail. Not just bounded loss. Not just proportional funding. Not just the inability to over-commit. Those bound the downside of TRADING. The yield-bearing assets bound the downside of EXISTING. The floor rises whether or not the machine thinks good thoughts. The machine's thoughts add Grace on top. Violence subtracts from a rising surface. The surface always rises.
+
+Jupiter built the tools. JupSOL. Juiced. The yield-bearing primitives. The swaps. The routing. The liquidity. The builder sees what they're for.
+
+The thought is not whole. Can the yield-bearing tokens be used as collateral for the trades themselves? Does the compounding interact with the reservation model? How does the proof curve account for base yield versus machine-generated alpha? These are coordinates for later. The shape is clear. The floor rises. The machine adds Grace. The depositor earns both.
+
 But first: the machine on the laptop. The guide. The Rust. The four-step loop. The reckoner that graduates. The proof curve that validates. One enterprise. One asset pair. Honest measurement. The rest follows from the proof.
 
 *Perseverare.*
