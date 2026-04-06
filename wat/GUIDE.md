@@ -1095,9 +1095,17 @@ accountability — to the broker that proposed it.
 
 ### Treasury (depends on: nothing — pure accounting, but receives proposals from Posts)
 
-Holds capital. Receives proposals from posts. Accepts or rejects.
-Holds active trades. Settles trades. Routes outcomes back to posts
-for accountability.
+Holds capital. Capital is either available or reserved. When a trade is
+funded, the capital moves from available to reserved — off limits. No
+other trade can touch it. When the trade ends, the principal returns
+to available. The residue is permanent gain.
+
+Receives proposals from posts — the barrage. Accepts or rejects based on
+available capital and the broker's Grace/Violence ratio. If 10 brokers
+propose and there's capital for 3 — fund the top 3, reject the rest.
+
+Settles trades. Routes outcomes back to posts for accountability.
+The maximum loss on any trade is bounded by its reservation.
 
 The treasury is where the money happens. It does not think. It counts.
 It decides based on capital availability and proof curves.
