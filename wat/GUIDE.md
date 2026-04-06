@@ -1211,21 +1211,54 @@ upon before the next is written.
 
 ## The CSP (Communicating Sequential Processes) per candle
 
+Every boundary is a channel. Every process reads from its channels and
+writes to its channels. Nobody reaches across. The coupling is data flow,
+not shared mutation. Nothing learns in the moment. Everything learns from
+the past. Produce now, consume later, learn from what actually happened.
+
+### Channels — the typed boundaries
+
+```scheme
+;; What flows between processes. Each channel has a type.
+
+raw-candle       ; RawCandle           — enterprise → post (routed by asset pair)
+market-thoughts  ; Vec<(Prediction, Vector)> — market observers → exit observers
+composed         ; Vec<Vector>         — exit observers → brokers
+proposals        ; Vec<Proposal>       — posts → treasury (the barrage)
+settlements      ; Vec<Settlement>     — treasury → posts (reality feedback)
+trade-triggers   ; Vec<(TradeId, Trade)> — treasury → posts (active trades for update)
+distances        ; (trail, stop, tp)   — exit observers → proposals + papers
+propagation      ; (outcome, optimal)  — broker → market observer (Up/Down)
+                                       — broker → exit observer (distance)
+                                       — broker → self (Grace/Violence)
 ```
-Step 1: RESOLVE     — treasury settles triggered trades
-                      for each settlement: enterprise routes to post
-                      post.propagate → broker → both observers learn
 
-Step 2: COMPUTE     — each post: market observers encode (parallel)
-         DISPATCH   — each post: exit observers compose + propose (sequential)
-                      each post: register paper on every broker
-                      proposals submitted to treasury
+### The four steps — who produces, who consumes
 
-Step 3: PROCESS     — each post: brokers tick papers → propagate resolved
-                      treasury passes active trades to posts for trigger updates
-                      exit observers query distance for each active trade
+```
+Step 1: RESOLVE
+  treasury reads:   active trades, current price
+  treasury produces: settlements
+  enterprise routes: settlements → posts
+  posts consume:    settlements → brokers → propagation → observers learn
 
-Step 4: COLLECT     — treasury funds proven proposals, rejects the rest
-         FUND        proposals drain → empty after step 4
+Step 2: COMPUTE + DISPATCH
+  posts read:       raw-candle
+  market observers produce: market-thoughts (parallel, par_iter)
+  exit observers consume:   market-thoughts → compose → composed
+  brokers consume:          composed → propose → register paper
+  posts produce:    proposals (the barrage)
+  treasury receives: proposals
+
+Step 3: PROCESS
+  treasury produces: trade-triggers (its active trades)
+  posts consume:    trade-triggers + fresh market-thoughts
+  exit observers produce: distances for each active trade
+  brokers consume:  papers tick → propagation on resolved papers
+
+Step 4: COLLECT + FUND
+  treasury reads:   proposals, available capital, broker funding levels
+  treasury produces: funded trades (move capital: available → reserved)
+  treasury drains:  proposals → empty
 ```
 
