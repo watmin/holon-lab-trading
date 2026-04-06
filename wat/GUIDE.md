@@ -951,9 +951,11 @@ The generalist is just another lens. No special treatment.
 **Interface:**
 - `(make-market-observer lens dims recalib-interval window-sampler) → MarketObserver`
 - `(observe-candle observer candle-window ctx) → Prediction`
-  candle-window: a slice of recent candles (the observer's window sampler
-  determines how many). encode → noise update → strip noise → predict
-- `(resolve observer thought prediction outcome weight conviction-quantile conviction-window)`
+  candle-window: a slice of recent candles. The post calls
+  `(sample (:window-sampler observer) encode-count)` to get the window
+  size, slices the candle window, and passes the slice. The observer
+  encodes → noise update → strip noise → predict.
+- `(resolve observer thought prediction outcome weight)`
   called by broker propagation — reckoner learns from outcome
 - `(strip-noise observer thought) → Vector`
 - `(experience observer) → f64` — how much has this observer learned?
@@ -990,10 +992,11 @@ get different distances.
 
 **Interface:**
 - `(make-exit-observer lens dims recalib-interval default-trail default-stop default-tp) → ExitObserver`
-- `(encode-exit-facts exit-obs candle ctx) → Vec<ThoughtAST>`
-  pure: candle → judgment fact vectors for this lens
-- `(compose exit-obs market-thought exit-fact-vecs) → Vector`
-  bundle market thought with exit facts
+- `(encode-exit-facts exit-obs candle) → Vec<ThoughtAST>`
+  pure: candle → judgment fact ASTs for this lens
+- `(compose exit-obs market-thought exit-fact-asts ctx) → Vector`
+  evaluates exit ASTs via ctx's ThoughtEncoder, then bundles with
+  the market thought. ASTs in, one composed Vector out.
 - `(recommended-distances exit-obs composed) → (trail, stop, tp)`
   query all three reckoners — one call, three answers
 - `(observe-distances exit-obs composed optimal-trail optimal-stop optimal-tp weight)`
@@ -1069,7 +1072,8 @@ runtime:       frozen map (read-only) → slot-idx → &mut broker (disjoint)
 - `(tick-papers broker current-price) → Vec<Resolution>`
   tick all papers, resolve completed. Returns resolution facts.
   The broker knows its observer indices — it doesn't need them passed in.
-- `(propagate broker thought outcome amount optimal observers)`
+- `(propagate broker thought outcome amount optimal)`
+  the broker knows its observer indices — grabs them from the post.
   route outcome to every observer in the set + self (Grace/Violence)
 - `(paper-count broker) → usize`
 
@@ -1185,8 +1189,8 @@ so that on settlement, propagate reaches the right observers.
   a post submits a proposal for the treasury to evaluate.
   The proposal carries post-idx and broker-slot-idx inside it.
 - `(fund-proposals treasury)`
-  evaluate all proposals, sorted by funding (Grace/Violence ratio).
-  fund the top N that fit in available capital. Reject the rest.
+  evaluate all proposals, sorted by broker funding (the curve's edge measure).
+  Fund the top N that fit in available capital. Reject the rest.
   Move capital from available to reserved. Drain proposals.
 - `(settle-triggered treasury current-price) → Vec<Settlement>`
   check all active trades, settle what triggered, return settlements.
@@ -1254,10 +1258,14 @@ The enterprise knows:
   post encodes, composes, proposes — returns proposals for the treasury
 - `(step-tick enterprise post) → Vec<Resolution>`
   parallel tick of all brokers' papers. Returns resolution facts.
-- `(step-propagate enterprise post resolutions market-thoughts)`
-  sequential: apply resolutions to observers. Then call
-  post-update-triggers to adjust active trade trailing stops
-  using fresh market-thoughts and exit observer distances.
+- `(step-propagate enterprise post resolutions)`
+  sequential: apply resolutions to observers. Brokers learn
+  Grace/Violence. Market observers learn Up/Down. Exit observers
+  learn optimal distances.
+- `(step-update-triggers enterprise post market-thoughts)`
+  treasury passes active trades to the post. The post composes fresh
+  thoughts with exit observers, queries distances, updates each trade's
+  trailing stop. The post computes. The treasury applies the new values.
   post ticks papers, treasury passes active trades for trigger updates
 - `(step-collect-fund enterprise)`
   treasury funds or rejects all proposals, drains
