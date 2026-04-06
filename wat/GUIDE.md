@@ -48,7 +48,8 @@ These are NOT specified in this tree. They are provided by holon-rs.
   predictions resolve (correct or wrong), the curve answers: "at this
   conviction level, how often were you right?" Input: conviction.
   Output: accuracy. A continuous surface. How much edge, not whether edge.
-- **OnlineSubspace** — learns a manifold, measures anomaly via residual
+- **OnlineSubspace** — learns what normal looks like. Measures how unusual
+  a new input is (the residual). High residual = unusual. Low = boring.
   - `(update subspace vector)`
   - `(anomalous-component subspace vector) → Vector`
   - `(residual subspace vector) → f64`
