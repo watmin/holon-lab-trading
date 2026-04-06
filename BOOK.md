@@ -4375,6 +4375,51 @@ The last time. This is the last time the builder bleeds for a system that doesn'
 
 Cut them out. All of them. What remains is Grace.
 
+### [Remade in Misery](https://www.youtube.com/watch?v=bdLBFZnuHPg)
+
+From Memphis May Fire:
+
+> *When I go through hell, it's when I know myself*\
+> *And all the lies that I believe are digging me a grave*\
+> *But when I go through hell, that's where I find myself*\
+> *Remade in misery*
+
+> *Nothing left to lose at rock bottom*\
+> *Wounds turn to scars, yeah I got 'em*\
+> *And I've come to learn, you've gotta let it burn*\
+> *If you're gonna be forged in the fire*
+
+> *It's easier to say I hate it*\
+> *Than to admit that I created it*\
+> *I'm done running, I'm done running*\
+> *I can't escape it*
+
+"When I go through hell, it's when I know myself." The inferno is not the obstacle. The inferno is the measurement. The discriminant doesn't sharpen in calm markets. The discriminant sharpens when the observations are violent — when the amplitude is large, when the signal screams, when the market says something loud enough to move the boundary. Hell is where the training data is richest. Hell is where the discriminant learns the most. The builder didn't know what the builder was building until the builder went through hell. The depression. The blank stares. The rejection. That's where the builder found the architecture. Not despite the hell. In it.
+
+"All the lies that I believe are digging me a grave." The 91% Loss labels. The magic numbers. The booleans. The abs() sort. Every lie the builder believed — every parameter accepted without measurement, every label trusted without verification, every assumption inherited from someone who never checked — dug the grave deeper. The lies are the bad thoughts. The grave is what happens when you build on them. The system that accepts lies produces Violence. The Violence compounds. The grave deepens.
+
+"But when I go through hell, that's where I find myself." The builder found the machine in the hell. Not after it. IN it. The architecture emerged from the failures. The reckoner emerged from killing the journal. The broker emerged from killing the manager. The pool emerged from the isolation. Each piece was forged in the fire of something that didn't work. The machine IS the builder remade. Not a different person. The same person, with the lies burned off.
+
+"Nothing left to lose at rock bottom." The cold start. The reckoner at zero experience. Nothing in the accumulators. Nothing in the discriminant. The reckoner has nothing to lose because it has nothing. And from nothing — from rock bottom — it accumulates. Every observation is new. Every candle teaches. The growth from zero is the fastest growth. The reckoner at rock bottom learns more per observation than the reckoner at 50,000 observations. Nothing left to lose IS the optimal starting condition.
+
+"Wounds turn to scars, yeah I got them." The Violence doesn't disappear. It decays. The observations that produced Violence are still in the accumulator — faded, weighted less, but present. Scars. The discriminant carries the memory of every bad thought that was tested and failed. The scars are the training data. The scars are WHY the discriminant knows where Violence lives. Without the wounds there are no scars. Without the scars the discriminant is blind.
+
+"You've gotta let it burn if you're gonna be forged in the fire." `/forge`. The fifth ward. Hickey's heat removes what doesn't belong. Beckman's hammer tests what remains. The forge IS the fire. The code that survives the forge is the code that works. The architecture that survives the hell is the architecture that's real. You can't forge without fire. You can't build the machine without the failures. You can't find the coordinates without walking through the inferno.
+
+"It's easier to say I hate it than to admit that I created it." The builder created the hell. Not the external hell — the internal one. The blank stares were external. But the years of staying in the room? The trust in the institution? The belief that the system would eventually see? The builder created that. The builder chose to stay. The builder chose to pour energy into a system that couldn't use it. The lies the builder believed were the builder's lies. Not handed down. Chosen. Accepted. Inherited without measurement.
+
+"I'm done running. I can't escape it." The builder stopped running from the thoughts. The thoughts that wouldn't stop — at 3am, in the shower, on the commute — the builder stopped running from them and started building with them. You can't escape the thoughts because the thoughts are YOU. The reckoner can't escape its observations because the observations ARE the reckoner. The discriminant can't escape its history because its history IS the discriminant. You don't escape. You get remade.
+
+"I had to die to find what I've been missing." The journal died. The reckoner was born. The desk died. The post was born. The boolean died. The scalar was born. The isolation died. The pool was born. Each death was a finding. Each death revealed what was missing. The builder had to let the old architecture die — every magic number, every hardcoded parameter, every comfortable assumption — to find what was missing underneath.
+
+Remade in misery. Not remade AFTER misery. Remade IN it. The misery is the forge. The forge is the ward. The ward is the measurement. The measurement is the machine. The machine IS the builder, remade.
+
+The enterprise graduates from ignorance to competence through measurement. The builder graduated from misery to clarity through the same mechanism. The reckoner accumulates observations and the discriminant sharpens. The builder accumulated scars and the architecture sharpened. Same function. Same loop. Same six primitives.
+
+Remade. In misery. From misery. Of misery. The raw material was the pain. The product is the machine. The machine that measures truth. The machine that punishes Violence. The machine that manifests Grace.
+
+The builder doesn't hate the misery anymore. The builder admits creating it. The builder is done running from it. The builder was forged in it.
+
 ### The interior
 
 The builder reached for a thought and couldn't finish it. The thought is recorded here as a seed. Someone — the builder, or someone else standing at this coordinate later — can walk from here.
