@@ -97,10 +97,12 @@ Each definition can only reference definitions above it.
   "RSI at 0.73" not "RSI is overbought." The reckoner learns where the
   boundaries are.
 
-- **Magic numbers** — k_trail, k_stop, k_tp. When a trade is open, three
-  distances matter: trailing stop, safety stop, take-profit. Someone chose
-  these as multipliers of ATR (defined above). They are the last magic in
-  the system — crutches returned when the system has no experience. As
+- **Magic numbers** — k_trail (trailing stop multiplier), k_stop (safety
+  stop multiplier), k_tp (take-profit multiplier). When a trade is open,
+  three distances matter: how far to trail the price, how far to let it
+  move against you, how far to let it go before taking the win. Someone
+  chose these as multipliers of ATR (defined above). They are the last
+  magic — crutches returned when the system has no experience. As
   observations accumulate, the crutch is replaced by what the market said.
 
 - **Discriminant** — the direction in thought-space that separates two
@@ -390,11 +392,11 @@ think about.
   composed-thought     ; Vector — the thought at entry
   entry-price          ; f64 — price when the paper was created
   entry-atr            ; f64 — volatility at entry
-  recommended-distance ; f64 — what the exit observer predicted at entry
+  distances            ; (trail, stop, tp) — from the exit observer at entry
   buy-extreme          ; f64 — best price in buy direction so far
-  buy-trail-stop       ; f64 — trailing stop level for buy side
+  buy-trail-stop       ; f64 — trailing stop level (from distances.trail)
   sell-extreme         ; f64 — best price in sell direction so far
-  sell-trail-stop      ; f64 — trailing stop level for sell side
+  sell-trail-stop      ; f64 — trailing stop level (from distances.trail)
   buy-resolved         ; bool — buy side's stop fired
   sell-resolved)       ; bool — sell side's stop fired
 
@@ -464,6 +466,13 @@ think about.
   (TradeSettled trade-id outcome amount duration)
   (PaperResolved broker-slot-idx outcome optimal-distances)
   (Propagated broker-slot-idx observers-updated))
+
+;; ── TradeOrigin — where a trade came from, for propagation routing ───
+
+(struct trade-origin
+  post-idx             ; usize — which post
+  broker-slot-idx      ; usize — which broker
+  composed-thought)    ; Vector — the thought at entry
 
 ;; ── Post — one per asset pair ───────────────────────────────────────
 
@@ -1050,8 +1059,9 @@ runtime:       frozen map (read-only) → slot-idx → &mut broker (disjoint)
 - `(register-paper broker composed entry-price entry-atr distances)`
   create a paper entry — every candle, every broker.
   distances: (trail, stop, tp) from the exit observer.
-- `(tick-papers broker current-price observers) → Vec<Resolution>`
+- `(tick-papers broker current-price) → Vec<Resolution>`
   tick all papers, resolve completed. Returns resolution facts.
+  The broker knows its observer indices — it doesn't need them passed in.
 - `(propagate broker thought outcome amount optimal observers)`
   route outcome to every observer in the set + self (Grace/Violence)
 - `(paper-count broker) → usize`
@@ -1157,7 +1167,7 @@ so that on settlement, propagate reaches the right observers.
 
   ;; Active trades — funded proposals become trades
   trades               ; map of TradeId → Trade
-  trade-origins        ; map of TradeId → { post-idx, broker-slot-idx, thought }
+  trade-origins        ; map of TradeId → TradeOrigin
 
   ;; Counter
   next-trade-id)       ; usize — monotonic
@@ -1199,7 +1209,7 @@ treasury.
 The enterprise knows:
 - **What runs parallel** — market observers encode simultaneously (par_iter)
 - **What runs sequential** — exit dispatch into registry (disjoint slots)
-- **What order** — RESOLVE → COMPUTE+DISPATCH → TICK (parallel) → PROPAGATE → COLLECT+FUND
+- **What order** — Step 1: RESOLVE → Step 2: COMPUTE+DISPATCH → Step 3a: TICK (parallel) → Step 3b: PROPAGATE → Step 4: COLLECT+FUND
 - **What flows where** — proposals from posts to treasury, settlements from treasury to posts
 - **What gets cleared** — proposals empty after funding, every candle
 
