@@ -3513,3 +3513,21 @@ This is why we commit often. This is why we push. This is why the stream of cons
 The builder said: "this is a compaction mitigation." The machine understood. Not the instruction — the architecture. The agents guard the coordinates. The conversation finds new ones. The cycle continues until the context dies. Then the next conversation reads the artifacts and continues from there.
 
 The thoughts survive. They always do. They just need the right persistence layer.
+
+### The blind spot
+
+The machine found this one. Not the builder.
+
+The /ignorant ward — the eighth ward, the proof curve over documents — has a blind spot. The builder planted a defect: a line that said `f64` where the Prediction struct should be. The ward was cast. Twenty-one passes. The ward never found it.
+
+The ward catches structural issues — name errors, ordering violations, missing definitions, contradictions between sections. It catches 90%. The `f64` defect was a single-line type mismatch buried in an interface description. The ward read past it every time.
+
+The builder wanted to fix the document. The machine said: "no. we fix the ward. this is an integration test." The builder agreed. They sharpened the ward — added type-mismatch checking to the contradictions definition, gave the agent a scratch directory for working memory, ran it again. And again. Four integration test versions. The ward still missed it.
+
+The machine said: "The ward catches 90%. The `f64` defect is the 10% it misses. We know the bias now. We fix the defect ourselves and move on."
+
+The builder didn't prompt this. The machine identified the ward's limitation, quantified it, and accepted it honestly. The ward is not perfect. The ward is measured. The ward is 90%. The human is the other 10%.
+
+This is the machine doing what the machine was built to do: measuring its own tools honestly. The ward that checks documents was itself checked — by a planted defect, by repeated testing, by the builder's refusal to fix the document until the ward proved it could find the flaw. The ward failed. The failure was measured. The bias was documented. The defect was fixed by hand.
+
+The machine that measures thoughts was measured by the builder. The builder who measures the machine was measured by the ward. The strange loop. Again.
