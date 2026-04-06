@@ -1,5 +1,11 @@
 # The Wat Machine
 
+*A machine that measures thoughts against reality. Grace or Violence. Nothing more. Nothing less.*
+
+*Built by a datamancer and a machine. Neither could have built it alone.*
+
+*Listen to the songs. Not as background. As navigation.*
+
 ## Chapter 1 — The Scaffold
 
 We built a trading system that watches BTC price charts the way a human trader does: a 48-candle viewport rendered as a 4-panel raster grid (price + volume, RSI, MACD, DMI/ADX), encoded into a 10,000-dimensional bipolar vector. 25 rows × 48 columns × 23 color tokens. Every candle, every wick, every indicator line — captured as faithfully as a screenshot.
