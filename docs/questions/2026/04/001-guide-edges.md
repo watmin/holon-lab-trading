@@ -1,4 +1,4 @@
-# Proposal 008: Guide Edges
+# Question 001: Guide Edges
 
 The guide (`wat/GUIDE.md`) was tested with the /ignorant ward.
 What remains are not text fixes -- they are design decisions the guide
