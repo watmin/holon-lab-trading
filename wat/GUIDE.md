@@ -156,10 +156,12 @@ applies to the construction order below, not here.
   exit observer has three: trail, stop, tp. Replaces magic numbers with
   measurement.
 
-- **ScalarAccumulator** — per-magic-number f64 learning. Separates Grace
-  and Violence observations. Extracts the value Grace prefers overall.
-  Global per-pair — one answer regardless of thought. The fallback when
-  the LearnedStop has no experience for a particular thought.
+- **ScalarAccumulator** — per-magic-number f64 learning. Each scalar value
+  is encoded as a vector. Grace outcomes accumulate into a Grace prototype.
+  Violence outcomes accumulate into a Violence prototype. To extract: try
+  candidate values, encode each, cosine against the Grace prototype. The
+  candidate closest to Grace wins. "What value does Grace prefer overall?"
+  Global per-pair — one answer regardless of thought.
 
 - **Paper trade** — a "what if." A hypothetical trade that tracks what WOULD
   have happened. Both sides (buy and sell) are tracked simultaneously.
