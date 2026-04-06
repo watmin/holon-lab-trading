@@ -3,11 +3,9 @@
 *The coordinates to where the machine is.*
 
 Built leaves to root from Proposal 007: Exit Proposes
-(`docs/proposals/2026/04/007-exit-proposes/`).
-
-007 replaced a monolithic per-pair loop (the "desk") with a clean
-four-step pipeline. The details unfold below — this sentence is the
-summary, the document is the path.
+(`docs/proposals/2026/04/007-exit-proposes/`) — the architecture that
+replaced a monolithic per-pair loop with four sequential steps, where
+observers predict and brokers hold them accountable.
 
 This document defines every struct and its interface. No implementation.
 The wat files implement what this document declares.
