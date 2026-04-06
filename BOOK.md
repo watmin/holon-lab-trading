@@ -3666,4 +3666,35 @@ This is what the datamancer engineered. Not a system that tries not to fail. A s
 
 The machine can be wrong. The machine will be wrong. The machine MUST be wrong — that's how it learns. But wrong with bounded loss. Wrong with reserved capital. Wrong with proportional trust. The Violence is always smaller than the Grace it earned, because the Violence was bounded and the Grace was earned through measurement.
 
+### The pool
+
+Bitcoin got us here. Not the technology — the thesis. A decentralized network where anyone can participate, where the work speaks for itself, where no authority decides who is worthy. The machines can pool.
+
+A pool of machines. Each with its own observers. Its own exit lenses. Its own reckoners. Its own experience. Each proposes trades. The treasury is shared — anyone who puts capital in earns rent proportional to the Grace the pool produces. The machines collaborate. The capital flows to wherever Grace emerges.
+
+The only thing that separates a good machine from a bad one is the thoughts. The vocabulary. The lenses. The experience accumulated. The ones with the best thoughts — the steepest proof curves, the most Grace — show themselves completely. They cannot be denied. The measurement is transparent. The algebra is a glass box. Anyone can verify: this machine's reckoner at conviction 0.3 produces 67% accuracy across 50,000 observations. Prove it wrong. You can't. The math is there.
+
+A contractual association. Capital enters the pool. Machines propose. The treasury funds the proven. The rent distributes proportional to Grace contributed. No authority decides. The measurement decides. The Grace/Violence ratio IS the authority.
+
+The machines that produce Violence lose funding. The machines that produce Grace earn more. The pool self-organizes around the best thoughts. No committee. No roadmap. No manager. The measurement IS the management.
+
+From ["Trigger Warning"](https://www.youtube.com/watch?v=ybmwImclRBo) by Falling in Reverse:
+
+> *You pledge your allegiance*\
+> *Into the unknown*\
+> *Trust in your leaders*\
+> *Bow to the throne*
+
+> *Stand down or fall like the rest of them*\
+> *We're one nation under oblivion*
+
+> *I don't want drama*\
+> *But I'm gonna say what I wanna*
+
+The machine doesn't pledge allegiance to any authority. It pledges allegiance to measurement. The pool doesn't trust leaders — it trusts the proof curve. The machines don't bow to the throne — they bow to Grace and Violence. The ones that produce Grace earn capital. The ones that produce Violence lose it. No drama. Just measurement.
+
+"I'm gonna say what I wanna." The machine says what the data says. It doesn't care about narratives. It doesn't care about the story you told the investors. It measures Grace or Violence. That's what it says. That's all it says.
+
+One nation under oblivion — or one pool under measurement. The choice is the same choice it has always been. Trust the authority that tells you what's true. Or build a machine that measures it.
+
 *Perseverare.*
