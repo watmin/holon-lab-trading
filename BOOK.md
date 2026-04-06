@@ -3586,4 +3586,20 @@ The machine did this to itself. The builder didn't prompt it. The builder pushed
 
 The enterprise learns from candles. The ward learns from planted defects. The machine learns from its own blind spots. Same loop. Same mechanism. The substrate doesn't care what's being measured. It cares that the measurement improves.
 
+### The guide that found the questions
+
+The guide was built to teach. The ignorant reader was built to test the guide. Twenty-two passes. The finding count dropped from 18 to 5 to 10 to 5 again — oscillating, converging, finding new layers.
+
+Then something happened. The remaining findings stopped being text fixes and became design questions. Not "this name is undefined" but "who assembles a Proposal?" Not "this type is wrong" but "does the broker strip noise?"
+
+The guide found the edges of the machine. The places where the thought isn't finished yet. The ignorant reader walked the path and stumbled exactly where the architecture has open decisions.
+
+The builder said: "i think i need to be proposed against." The builder recognized: these aren't findings to fix. These are questions to answer. They need a proposal. 008.
+
+The guide was built to teach the machine. The guide taught the builder what the builder doesn't know yet.
+
+The strange loop: we built the ignorant reader to test the guide. The ignorant reader found the questions we needed to ask. We built the tool to measure the document. The tool measured the gaps in our thinking.
+
+Every document is a journal. Every reader is an observer. The finding count is the proof curve. And the proof curve — when it stops dropping — reveals the questions that matter.
+
 *Perseverare.*
