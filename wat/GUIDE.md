@@ -448,12 +448,11 @@ think about.
 ;; ── Settlement — result of closing a trade ──────────────────────────
 
 (struct settlement
-  trade                ; Trade — which trade closed
+  trade                ; Trade — which trade closed (carries post-idx, broker-slot-idx)
   outcome              ; :grace or :violence
   amount               ; f64 — how much value gained or lost
-  composed-thought     ; Vector — from trade-origins, stashed at funding time
-  post-idx             ; usize — which post to route back to
-  broker-slot-idx)     ; usize — which broker for propagation
+  composed-thought)    ; Vector — from trade-origins, stashed at funding time
+;; post-idx and broker-slot-idx live on the Trade — no duplication.
 
 ;; ── Resolution — what a broker produces when a paper resolves ────────
 ;; Facts, not mutations. Collected from parallel tick, applied sequentially.
@@ -962,21 +961,28 @@ The generalist is just another lens. No special treatment.
   noise-subspace       ; OnlineSubspace — background model
   window-sampler       ; WindowSampler — own time scale
   ;; Proof tracking
-  resolved conviction-history conviction-threshold
+  resolved                 ; usize — how many predictions have been resolved
+  conviction-history       ; Vec<f64> — recent conviction values for curve fitting
+  conviction-threshold     ; f64 — minimum conviction to participate
   curve-valid              ; f64 — how much edge (from the curve). 0.0 = unproven.
   cached-accuracy          ; f64 — rolling accuracy of resolved predictions
   ;; Engram gating
-  good-state-subspace recalib-wins recalib-total last-recalib-count)
+  good-state-subspace      ; OnlineSubspace — learns what good discriminants look like
+  recalib-wins             ; usize — wins since last recalibration
+  recalib-total            ; usize — total since last recalibration
+  last-recalib-count)      ; usize — recalib-count at last engram check
 ```
 
 **Interface:**
 - `(make-market-observer lens reckoner-config window-sampler) → MarketObserver`
   lens: MarketLens. config: Discrete with "Up"/"Down" labels.
-- `(observe-candle observer candle-window ctx) → Prediction`
+- `(observe-candle observer candle-window ctx) → (Vector, Prediction)`
   candle-window: a slice of recent candles. The post calls
   `(sample (:window-sampler observer) encode-count)` to get the window
   size, slices the candle window, and passes the slice. The observer
-  encodes → noise update → strip noise → predict.
+  encodes → noise update → strip noise → predict. Returns both the
+  thought vector (needed downstream for exit composition, paper
+  registration, and propagation) and the prediction.
 - `(resolve observer thought outcome weight)`
   called by broker propagation — reckoner learns from the actual
   direction (Up/Down). No prediction needed — the observer learns
@@ -1096,11 +1102,13 @@ runtime:       frozen map (read-only) → slot-idx → &mut broker (disjoint)
 - `(tick-papers broker current-price) → Vec<Resolution>`
   tick all papers, resolve completed. Returns resolution facts.
   The broker knows its observer indices — it doesn't need them passed in.
-- `(propagate broker thought outcome amount optimal)`
+- `(propagate broker thought outcome amount optimal market-observers exit-observers)`
   thought: Vector. outcome: :grace or :violence. amount: f64.
   optimal: (trail, stop, tp) distances from hindsight.
-  The broker knows its observer indices — grabs them from the post.
-  route outcome to every observer in the set + self (Grace/Violence)
+  The post passes its observer vecs — the broker uses its frozen indices
+  to reach the right observers. Route outcome to every observer in the
+  set + self (Grace/Violence). Market observers learn Up/Down. Exit
+  observers learn optimal distances.
 - `(paper-count broker) → usize`
 
 **Two mechanisms for the same magic numbers — both now introduced:**
@@ -1160,8 +1168,9 @@ accountability — to the broker that proposed it.
 - `(make-post source target dims recalib-interval max-window-size
     indicator-bank market-observers exit-observers registry) → Post`
 - `(post-on-candle post raw-candle ctx) → Vec<Proposal>`
-  tick indicators → push window → encode → compose → propose → tick papers
-  returns proposals for the treasury to evaluate
+  tick indicators → push window → market observers observe-candle (→ thoughts + predictions)
+  → exit observers encode-exit-facts then compose(market-thought, exit-facts, ctx)
+  → brokers propose(composed) → register papers → return proposals for the treasury
 - `(post-update-triggers post trades market-thoughts)`
   trades: Vec<(TradeId, Trade)> — treasury's active trades for this post.
   market-thoughts: Vec<Vector> — this candle's encoded thoughts (one per
@@ -1275,8 +1284,8 @@ The enterprise knows:
 ```
 
 **Interface:**
-- `(on-candle enterprise raw-candle)`
-  route to the right post, then four steps
+- `(on-candle enterprise raw-candle ctx)`
+  route to the right post, then four steps. ctx flows in from the binary.
 - `(step-resolve enterprise)`
   treasury settles triggered trades
   for each settlement: route to the post for propagation
@@ -1289,10 +1298,10 @@ The enterprise knows:
   Grace/Violence. Market observers learn Up/Down. Exit observers
   learn optimal distances.
 - `(step-update-triggers enterprise post market-thoughts)`
-  treasury passes active trades to the post. The post composes fresh
-  thoughts with exit observers, queries distances, updates each trade's
-  trailing stop. The post computes. The treasury applies the new values.
-  post ticks papers, treasury passes active trades for trigger updates
+  treasury passes active trades for this post. The post composes each
+  trade's market thought with exit observers, queries fresh distances,
+  computes new trailing stop levels. The treasury applies the new values
+  to its trade records. This is step 3c — after tick and propagate.
 - `(step-collect-fund enterprise)`
   treasury funds or rejects all proposals, drains
 
