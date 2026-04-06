@@ -472,7 +472,8 @@ every candle.
   minute              ; mod 60
   hour                ; mod 24
   day-of-week         ; mod 7
-  day-of-month)       ; mod 31
+  day-of-month        ; mod 31
+  month-of-year)      ; mod 12
 ```
 
 ---
