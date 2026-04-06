@@ -40,11 +40,13 @@ These are NOT specified in this tree. They are provided by holon-rs.
   - **holon-rs has both modes.** `Reckoner` with `ReckConfig::Discrete`
     and `ReckConfig::Continuous`. The Reckoner is the only learning
     primitive in holon-rs.
-  - Coordinates for later: circular readout (periodic), ranked readout
-    (ordering). These exist on the sphere, waiting to be found.
-- **curve** — a continuous reckoner applied to reckoner quality. Input:
-  conviction level. Output: accuracy at that conviction. How much edge,
-  not whether edge. A continuous surface.
+  - Coordinates for later: circular readout (periodic values that wrap),
+    ranked readout (orderings). Other readout modes are possible — the
+    reckoner mechanism is general. These are future work, not current.
+- **curve** — measures how much edge a reckoner has earned. After many
+  predictions resolve (correct or wrong), the curve answers: "at this
+  conviction level, how often were you right?" Input: conviction.
+  Output: accuracy. A continuous surface. How much edge, not whether edge.
 - **OnlineSubspace** — learns a manifold, measures anomaly via residual
   - `(update subspace vector)`
   - `(anomalous-component subspace vector) → Vector`
@@ -163,11 +165,11 @@ applies to the construction order below, not here.
   "Proof curve" and "curve" are the same thing — one is the primitive,
   the other is its name when applied.
 
-- **Broker** — a closure over two observers (market + exit). The
-  accountability primitive. It measures how successful the pair is — Grace
-  or Violence. It owns paper trades. When papers or real trades resolve,
-  it routes outcomes to both observers. The struct is the implementation.
-  The closure is the thought.
+- **Broker** — binds a set of observers as a team. Any number — two today
+  (market + exit), three tomorrow (market + exit + risk). The accountability
+  primitive. It measures how successful the team is — Grace or Violence.
+  It owns paper trades. When papers or real trades resolve, it routes
+  outcomes to every observer in the set.
 
 - **Propagation** — routing resolved outcomes through the broker to
   the observers that need to learn. Grace/Violence to the broker's
@@ -369,7 +371,7 @@ think about.
 
 (struct proposal
   composed-thought     ; Vector — the thought that proposed this
-  prediction           ; Label — Grace or Violence (from the broker)
+  prediction           ; Prediction — from the broker's reckoner (Grace/Violence, conviction)
   distances)           ; (trail, stop, tp) — from the exit observer
 
 ;; ── Trade — an active position the treasury holds ───────────────────
@@ -965,7 +967,9 @@ runtime:       frozen map (read-only) → slot-idx → &mut broker (disjoint)
 
 **Interface:**
 - `(make-broker observers dims recalib-interval) → Broker`
-  observers: Set<String> — the set of observer names
+  observers: Set<String> — the lens names (e.g. "momentum", "volatility").
+  Each name matches a MarketLens or ExitLens variant. The post maps
+  names to observer instances.
 - `(propose broker composed) → Prediction`
   noise update → strip noise → predict Grace/Violence
 - `(funding broker) → f64` — how much edge? The curve's answer. 0.0 = no edge.
