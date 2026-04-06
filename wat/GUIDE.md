@@ -141,7 +141,9 @@ applies to the construction order below, not here.
   identity — it determines what thoughts the observer thinks.
 
 - **N and M** — N is the number of market observers. M is the number of
-  exit observers. N×M is the total number of (market, exit) pairings.
+  exit observers. Every combination of one market observer and one exit
+  observer gets a broker. N×M brokers total. Each broker's identity is
+  the set {"market-lens", "exit-lens"} — two names today, more later.
 
 - **Observer** — an entity that perceives and learns. It has a lens and
   accumulated experience. Two kinds: market observers predict direction
@@ -162,7 +164,9 @@ applies to the construction order below, not here.
   have happened. Both sides (buy and sell) are tracked simultaneously.
   When both sides resolve, the paper teaches: what distance would have
   been optimal? Papers are the fast learning stream — cheap, many, every
-  candle.
+  candle. Papers and active trades are treated equally by the learning
+  system. Both use whatever the reckoner knows at the time. Both start
+  ignorant (crutch values). Both feed Grace/Violence back to the broker.
 
 - **Prediction** — what the reckoner returns when asked. Data, not action.
   For discrete: a list of (label, score) pairs — one per label. The consumer
@@ -211,6 +215,13 @@ applies to the construction order below, not here.
   learns what ALL thoughts look like — the average texture of thought-space.
   Subtract it from a thought and what remains is what's UNUSUAL. The reckoner
   learns from the unusual part, not the boring part.
+
+- **Ignorance** — the starting state. Every reckoner begins empty.
+  experience() = 0.0. funding() = 0.0. The reckoner does not participate
+  when it knows it doesn't know. No special bootstrap logic. The
+  architecture IS the bootstrap — papers fill the reckoner, the reckoner
+  gains experience, funding rises from 0.0, the treasury starts listening.
+  Start ignorant. Learn. Graduate.
 
 - **Recalibration** — the reckoner periodically recomputes its discriminant
   from accumulated observations. The interval (recalib-interval) is how
@@ -399,10 +410,14 @@ think about.
 
 ;; ── Proposal — what a post produces, what the treasury evaluates ────
 
+;; Assembled by the post during step-compute-dispatch:
+;;   candle → market observer (thought) → exit observer (compose + distances)
+;;   → broker (prediction) → proposal
 (struct proposal
-  composed-thought     ; Vector — the thought that proposed this
+  composed-thought     ; Vector — market thought + exit facts
   prediction           ; Prediction — from the broker's reckoner
-  distances)           ; (trail, stop, tp) — from the exit observer
+  distances            ; (trail, stop, tp) — from the exit observer
+  broker-slot-idx)     ; usize — which broker proposed this
 
 ;; ── Trade — an active position the treasury holds ───────────────────
 
@@ -909,6 +924,8 @@ accumulates (thought, distance, weight) observations and returns the
 cosine-weighted answer for a given thought.
 
 Has a judgment vocabulary (volatility, structure, timing, generalist).
+The generalist is just another lens — selects all three vocabularies.
+No special treatment. Same as the market observer's generalist.
 Composes market thoughts with its own judgment facts.
 One per exit lens — M instances, not N×M.
 The composed thought carries the market observer's signal in superposition.
@@ -1062,8 +1079,10 @@ accountability — to the broker that proposed it.
 - `(post-on-candle post raw-candle ctx) → Vec<Proposal>`
   tick indicators → push window → encode → compose → propose → tick papers
   returns proposals for the treasury to evaluate
-- `(post-update-triggers post trades thoughts) `
-  update active trade triggers with fresh thoughts (treasury passes its trades)
+- `(post-update-triggers post trades thoughts)`
+  Phase 3: treasury passes its active trades. The post uses fresh thoughts
+  from Step 2 to query exit observers for updated distances. Each trade's
+  trailing stop adjusts to the current market context.
 - `(post-propagate post slot-idx thought outcome amount optimal)`
   treasury routes a resolved trade back to the post for accountability
 
