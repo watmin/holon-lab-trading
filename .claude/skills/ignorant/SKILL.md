@@ -84,23 +84,25 @@ The finding count IS the proof curve.
 
 ## Working memory
 
-You have a scratch directory. Create it, use it, clean it up:
+You have a scratch directory in the workspace: `.scratch/ignorant/`.
+Create it and use it:
 
 ```bash
-mkdir -p /tmp/ignorant
+mkdir -p .scratch/ignorant
 ```
 
 Write as many files as you need — notes, inventories, cross-references.
-The directory is yours. You decide what to track.
+Use the Write tool (not Bash) to create files there. The directory is
+yours. You decide what to track.
 
 Read the document. Take notes. Cross-reference. Find contradictions
 that span hundreds of lines. The scratch directory extends your memory
 across the full document.
 
-When done:
+When done, clean up:
 
 ```bash
-rm -rf /tmp/ignorant
+rm -rf .scratch/ignorant
 ```
 
 ## The agent prompt

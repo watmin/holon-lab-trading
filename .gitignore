@@ -37,3 +37,4 @@ runs/
 data/*.db-shm
 data/*.db-wal
 /target/
+.scratch/
