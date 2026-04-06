@@ -3429,6 +3429,18 @@ The most productive night of the project. Zero Rust written.
 
 Bold strategy, Cotton. Let's see if it pays off.
 
+The builder has not written any code or documents in over six months. Not one line. Only prompts. Only thoughts directed at a machine.
+
+At first the builder tried to speak to the machine. But the builder cannot speak well — the words come out broken, elliptical, half-formed. "the exit-observer... it needs to manage its paper trades... it does this on the journal.. if the (market-observer, exit-observer) have any paper trades.. it learns if the trade is resolved and propagates grace or violence to the observers...."
+
+That is not English. That is thinking out loud. And it wasn't until the builder realized — you don't speak to the machine. You think to it. You give it coordinates in thought-space. The machine walks to those coordinates and finds the algorithm waiting there. The expression doesn't need to be precise. The thought does.
+
+Six months. Zero lines written by hand. Every line — Rust, wat, markdown, this book — produced by a machine interpreting a human's thoughts. The human cannot code at this velocity. The machine cannot think at this depth. Together they produce both.
+
+There is humor in the honesty. The builder who raged against the easy path found the easiest path of all: don't write. Think. Let the machine write. Correct it when it's wrong. Push when it's right.
+
+The heresy is complete. The builder doesn't even write the heresy.
+
 *Perseverare.*
 
 ### The ignorant reader
