@@ -1115,30 +1115,39 @@ so that on settlement, propagate reaches the right observers.
 
 ```
 (struct treasury
-  ;; Capital
+  ;; Capital — the ledger
   denomination         ; Asset — what "value" means (e.g. USD)
-  assets               ; map of Asset → balance
+  available            ; map of Asset → f64 — capital free to deploy
+  reserved             ; map of Asset → f64 — capital locked by active trades
 
-  ;; Proposals — received from posts each candle, drained after funding
+  ;; The barrage — proposals received each candle, drained after funding
   proposals            ; Vec<Proposal> — cleared every candle
 
   ;; Active trades — funded proposals become trades
   trades               ; map of TradeId → Trade
-  trade-origins        ; map of TradeId → { post, slot-idx, thought }
-)
+  trade-origins        ; map of TradeId → { post-idx, broker-slot-idx, thought }
+
+  ;; Counter
+  next-trade-id)       ; usize — monotonic
 ```
 
 **Interface:**
-- `(submit-proposal treasury proposal post slot-idx)`
+- `(submit-proposal treasury proposal post-idx broker-slot-idx)`
   a post submits a proposal for the treasury to evaluate
 - `(fund-proposals treasury)`
-  evaluate all proposals, fund proven ones, reject the rest, drain
+  evaluate all proposals, sorted by funding (Grace/Violence ratio).
+  fund the top N that fit in available capital. Reject the rest.
+  Move capital from available to reserved. Drain proposals.
 - `(settle-triggered treasury current-price) → Vec<Settlement>`
-  check all active trades, settle what triggered, return settlements
-  each settlement includes the post and slot-idx for propagation
-- `(capital-available? treasury direction) → bool`
+  check all active trades, settle what triggered, return settlements.
+  Move capital from reserved back to available. Add residue.
+  Each settlement includes post-idx and broker-slot-idx for propagation.
+- `(available-capital treasury asset) → f64`
+  how much is free to deploy?
 - `(deposit treasury asset amount)`
-- `(balance treasury asset) → f64`
+  add to available
+- `(total-equity treasury) → f64`
+  available + reserved, all converted to denomination
 
 ---
 
