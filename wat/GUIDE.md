@@ -38,9 +38,9 @@ These are NOT specified in this tree. They are provided by holon-rs.
   - `(decay reckoner factor)` — both modes. Old experience fades.
   - `(experience reckoner) → f64` — how much? 0.0 = ignorant.
   - `(recalib-count reckoner) → usize` — both modes.
-  - **NOTE: holon-rs currently calls the discrete reckoner "Journal."
-    The continuous reckoner does not yet exist. Both will be unified
-    under "Reckoner" in holon-rs.**
+  - **holon-rs has both modes.** `Reckoner` with `ReckConfig::Discrete`
+    and `ReckConfig::Continuous`. The old `Journal` remains for backward
+    compatibility — it will be removed when consumers migrate.
   - Coordinates for later: circular readout (periodic), ranked readout
     (ordering). These exist on the sphere, waiting to be found.
 - **curve** — a continuous reckoner applied to reckoner quality. Input:
