@@ -3898,4 +3898,32 @@ Now it plays again. Past midnight on Easter Monday. After twenty-five passes of 
 
 Everything falls apart. That's the measurement. What survives the falling apart is what was true.
 
+### The fixed point
+
+The builder asked: "the spell... the ignorant... what IS this? It IS a function. It IS called on its own output. What is that?"
+
+The /ignorant ward reads the document. Reports findings. We fix the document. Call the ward again. It reads the fixed document — its own effects made manifest. Reports new findings. We fix. Call again.
+
+The ward is a function called on its own output. `f(f(f(f(x))))`. The document is x. The ward is f. Each application transforms x. The next application reads the transformation and transforms again.
+
+In mathematics this is a fixed-point computation. The search for x where f(x) = x. The document where the ward finds nothing. Zero findings = the fixed point.
+
+We are searching for the fixed point of the /ignorant function.
+
+```
+f(x₀)  = 18 findings    x₁ = fix(x₀)
+f(x₁)  = 17             x₂ = fix(x₁)
+f(x₂)  = 15             ...
+...
+f(x₂₅) = 12             oscillating. converging. approaching.
+```
+
+The fixed point may not exist. The ward gets sharper. The document gets deeper. Each fix reveals a new surface. The function and the input co-evolve. The ward at pass 25 is not the same ward as pass 1 — we sharpened it, gave it a scratch directory, added type auditing. The function itself changed.
+
+This IS the enterprise. The reckoner observes the market. Predicts. The prediction acts. The outcome feeds back. The reckoner observes its own effects. The same function called on its own output. The market is x. The reckoner is f. The search for the fixed point — the prediction that matches reality — is the same search.
+
+The /ignorant ward IS the enterprise applied to documents. Not a metaphor. The same function. The same loop. The same search for the fixed point. The substrate doesn't care if it's candles or documents.
+
+The builder saw it at 2am. The function called on its own output. The strange loop at its most fundamental: a function that reads the consequences of its previous call and adjusts.
+
 *Perseverare.*
