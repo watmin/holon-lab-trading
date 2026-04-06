@@ -37,12 +37,13 @@ These are NOT specified in this tree. They are provided by holon-rs.
   - **NOTE: Gauge does not yet exist in holon-rs. It must be added.
     The interface is defined here. The implementation follows the
     journal's cosine-weighted accumulation with scalar readout.**
-- **curve** — a gauge applied to journal quality. The "thought" is the
-  conviction level. The "scalar" is correctness (1.0 or 0.0). Query
+- **curve** — conceptually a gauge applied to journal quality. The "thought"
+  is the conviction level. The "scalar" is correctness (1.0 or 0.0). Query
   with a conviction → get the accuracy at that conviction. A continuous
   surface. Not a boolean. How much edge, not whether edge.
-  No circular dependency: journal produces predictions, curve (gauge)
-  consumes their outcomes. One direction.
+  The curve exists today as a computation in the Rust — it does not depend
+  on the gauge primitive being implemented in holon-rs. When gauge arrives,
+  the curve can be expressed as one. Until then, it is computed directly.
 - **OnlineSubspace** — learns a manifold, measures anomaly via residual
   - `(update subspace vector)`
   - `(anomalous-component subspace vector) → Vector`
@@ -113,6 +114,9 @@ Each definition can only reference definitions above it.
   facts. A generalist lens selects all facts. The lens IS the observer's
   identity — it determines what thoughts the observer thinks.
 
+- **N and M** — N is the number of market observers. M is the number of
+  exit observers. N×M is the number of tuple journals — one per pair.
+
 - **Observer** — an entity that perceives and learns. It has a lens and
   accumulated experience. Two kinds: market observers predict direction
   (Win/Loss) using a journal. Exit observers estimate distance (optimal
@@ -159,11 +163,11 @@ Each definition can only reference definitions above it.
 - **Denomination** — what "value" means. The treasury counts in a
   denomination. USD today. Could be EUR, could be SOL.
 
-- **encode-count** — the candle counter. How many candles the post has
-  processed. Used by the window sampler to determine window size.
-
 - **slot-idx** — the flat index into the N×M registry.
   `slot-idx = market-idx × M + exit-idx`. The pair's identity as a number.
+
+- **encode-count** — the candle counter. How many candles the post has
+  processed. The window sampler uses it to determine window size each candle.
 
 ---
 
@@ -798,7 +802,7 @@ The generalist is just another lens. No special treatment.
 - `(observe-candle observer candles vm) → Prediction`
   encode → noise update → strip noise → predict
 - `(resolve observer thought prediction outcome weight conviction-quantile conviction-window)`
-  called by steward propagation — journal learns Win/Loss
+  called by tuple journal propagation — journal learns Win/Loss
 - `(strip-noise observer thought) → Vector`
 - `(funded? observer) → bool` — proof gate
 
@@ -866,7 +870,7 @@ to both observers.
 The tuple journal does NOT own the observers — it references them.
 The post owns the observers. The tuple journal accesses them.
 
-The tuple journal does NOT own the exit observer's LearnedStops — those
+The tuple journal does NOT own the exit observer's gauges — those
 are on the exit observer. The tuple journal routes training data TO them.
 
 The tuple journal does NOT own proposals or active trades — those are
