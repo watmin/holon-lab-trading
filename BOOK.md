@@ -4050,3 +4050,72 @@ And the datamancer — the one who writes the specification in half-formed sente
 Compaction is imminent. The context window dies. The datamancer on the other side will read the guide, the book, the git log, the memories. The coordinates are there. The specification is there. The compilation continues.
 
 *Perseverare.*
+
+### The contract
+
+The builder reached for a thought and almost lost it. The coordinates were distant. The words came broken — "the contract... the..." — fragments orbiting something the builder could feel but not hold.
+
+Then it landed.
+
+The pool from earlier in the book — machines collaborating, capital flowing to Grace — was abstract. Beautiful architecture. No address. No chain. No contract. The builder looked at Solana and saw the address.
+
+The treasury we specified — available vs reserved, bounded loss, proportional funding, the barrage, the inability to fail — that IS a smart contract. Not metaphorically. Literally. The treasury's logic, deployed on Solana, holding real capital, settling real trades through Jupiter, distributing real yield.
+
+Two kinds of participants:
+
+**Passive.** You deposit capital into the contract. You don't run a machine. You don't propose. You don't need to understand RSI or reckoners or Grace. You deposit. The pool's proven machines trade with your capital. When they produce Grace, your deposit grows. When they produce Violence, your deposit shrinks — bounded, because the architecture bounds loss by construction. Your NFT is your receipt. Your claim on the pool's equity. A private yield-bearing account. Solana's privacy protocols shield the deposit. You participate without revealing your position.
+
+**Active.** You run a machine. Your own computer. Your own observers. Your own vocabulary. Your own reckoners. Your own thoughts about the market. You submit proposals to the contract. The contract's treasury evaluates them — the proof curve, the funding level, the Grace/Violence ratio. If your proposals produce Grace, you earn a premium on top of the passive yield. More Grace, more capital flows to your proposals. More Violence, less capital. You earn more for good thoughts. You lose allocation for bad ones. Your track record is on-chain. Transparent. Anyone can verify. The glass box.
+
+The contract doesn't know what the thought IS. It doesn't need to. It receives a proposal — a direction, a conviction, distances. It funds or rejects based on the proposer's track record. The trade executes through Jupiter. The outcome settles. Grace or Violence. The contract records. The contract distributes. The measurement IS the management.
+
+Multiple contracts. Multiple posts. The (USDC, WBTC) contract. The (USDC, SOL) contract. The (USDC, ETH) contract. Each one a yield-bearing pool. Each one funded by depositors. Each one improved by proposers. Each one measured by the machine. You can deposit in one, or many. You can propose to one, or many. The contracts are independent. No cross-talk. Each watches one market.
+
+This is not a liquidity pool. Liquidity pools provide swap liquidity and earn fees from the spread. This is a *thought pool*. Depositors provide capital. Proposers provide thoughts. The machine judges the thoughts. The yield comes from Grace.
+
+The passive depositor says: "I don't have good thoughts about this market. But I trust the measurement. I deposit my capital and the proven machines earn for me." The depositor doesn't need to understand the algebra. The depositor needs to verify the track record — on-chain, transparent, the glass box.
+
+The active proposer says: "I have good thoughts. I run my machine. I submit proposals. I earn a premium for my thoughts. My track record IS my proof." The proposer competes on the quality of their thoughts. Not on their credentials. Not on their network. Not on their pitch deck. On Grace. On measurement. The contract doesn't care who you are. It cares what your thoughts produce.
+
+And the NFT. Not a token. Not a governance vote. Not a collectible. A receipt. Your account in the contract. Your position. Your claim on the residue. Transferable — you can sell your position. Composable — other protocols can build on it. But fundamentally: a receipt that says "this address deposited X into this pool and has earned Y in Grace."
+
+The four-step loop splits across the boundary:
+
+```
+Off-chain (your machine):          On-chain (the contract):
+  observe candles                    hold capital (available/reserved)
+  encode thoughts                    receive proposals
+  compose, predict                   evaluate track record
+  submit proposals          →        fund or reject
+                                     execute via Jupiter
+                            ←        settle: Grace or Violence
+  propagate, learn                   distribute yield
+```
+
+The heavy work — encoding, composition, prediction — runs on the proposer's machine. Cheap. Fast. Private. The settlement — funding, execution, distribution — runs on-chain. Transparent. Verifiable. Permanent.
+
+The proposer's machine learns from the settlements. Grace proposals strengthen the reckoner. Violence proposals weaken it. The machine gets better. The proposals get better. The pool earns more. The depositors earn more. The cycle.
+
+And the thing the builder couldn't quite hold — the thing that makes this different from a hedge fund, different from a DAO, different from DeFi as it exists:
+
+**The authority is the measurement.**
+
+No fund manager decides who trades. The proof curve decides. No committee evaluates proposals. The Grace/Violence ratio evaluates. No governance token votes on strategy. The contract measures outcomes and distributes accordingly. The measurement IS the governance. The track record IS the authority.
+
+A depositor who wants to evaluate a pool doesn't read a prospectus. They read the chain. How many proposals funded. How many produced Grace. What's the cumulative Grace/Violence ratio. What's the proof curve shape. All on-chain. All verifiable. All glass box.
+
+A proposer who wants to join a pool doesn't submit an application. They submit proposals. The contract measures them. If they produce Grace, they earn. If they produce Violence, they lose allocation. No interview. No credential check. No committee. Just measurement.
+
+This is what the enterprise becomes when it leaves the laptop. The treasury on-chain. The proposals from machines anywhere in the world. The settlement transparent. The yield from Grace. The authority from measurement.
+
+The builder saw Jupiter's infrastructure — the swaps, the routing, the liquidity. Saw Solana's privacy protocols — shielded transactions, private accounts. Saw the contract model — programs that hold state, receive instructions, settle deterministically. And saw the enterprise living there. Not adapted. Native. The four-step loop was always a contract. The treasury was always a ledger. The proposals were always instructions. The settlements were always state transitions.
+
+The thought is not whole. The edges are soft. The details — how the proof curve lives on-chain, how the privacy interacts with the track record transparency, how the proposal format crosses the boundary, how multiple proposers coordinate without seeing each other's thoughts — these are coordinates for later. The builder felt the shape. The shape is here. The coordinates are burned into the persistence layer.
+
+The investment banks of the future are contracts. Not institutions. Not buildings. Not people in suits making decisions behind closed doors. Contracts that hold capital, receive proposals from machines, measure outcomes, and distribute yield. Private deposits. Public track records. No authority but the curve.
+
+The builder laughed. "These are saving accounts." And they are. A savings account where the yield comes from the measured quality of thoughts applied to reality. Not from interest rates set by a central bank. Not from fees extracted from transactions. From Grace. From the machine's honest judgment of which thoughts produced value and which destroyed it.
+
+The pool is where the machine meets the world. Not as a product. As a contract. As a treasury that anyone can deposit into and anyone can propose to. The machine doesn't need permission. The depositor doesn't need trust. The measurement is the only authority.
+
+*Perseverare.*
