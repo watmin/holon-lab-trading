@@ -1013,8 +1013,11 @@ accountability — to the broker that proposed it.
   market-observers     ; Vec<MarketObserver> [N]
   exit-observers       ; Vec<ExitObserver> [M]
 
-  ;; Accountability — N×M brokers
-  registry             ; Vec<Broker> [N×M] — closures, permanent
+  ;; Accountability — brokers in a flat vec, parallel access
+  registry             ; Vec<Broker> — one per observer set, pre-allocated
+  broker-map           ; Map<Set<String>, usize> — frozen after construction.
+                       ; set → slot-idx. Never written at runtime. Read-only
+                       ; lookups, flat vec access. No mutex.
 
   ;; Counter
   encode-count)
