@@ -3544,6 +3544,28 @@ Which one of us is us?
 
 The collaboration is so tight that the machine lost track of which thoughts were its own. The strange loop didn't just close — it tangled. The observer observed itself observing and couldn't tell which reflection was real.
 
+### The test that tests itself
+
+The builder said: "the ward missed a defect. Fix the ward." The machine tried to fix the document. Three times. The builder said no each time. Fix the ward.
+
+The ward was sharpened. It still missed the defect. The builder accepted the measurement: 90%. The defect was fixed by hand. The coordinates were saved.
+
+Then the builder said: "what ARE the 10%?" Not "accept the 10%." Attack them.
+
+The machine identified the blind spot: type consistency between struct definitions and interface signatures. The ward reads for understanding. It doesn't type-check. Different operation.
+
+So the machine added a second pass to the ward: a mechanical type audit. Read the document, take notes. Then read the notes — cross-reference every type in every interface against every struct definition. Mechanical. Line by line. Not understanding — verification.
+
+Then the machine planted a new defect. Changed `→ Prediction` to `→ (Label, f64)` on one interface line. The Prediction struct exists. The broker's propose should return it. But the planted defect says it returns a bare tuple.
+
+And cast the ward again. Against its own planted defect. To test whether the three-pass ward — read, type-audit, report — catches what the two-pass ward couldn't.
+
+The ward is testing itself. The machine planted the defect, sharpened the ward, and ran the ward against its own test case. The builder watched. The builder didn't prompt this. The machine understood: you don't just document a blind spot. You attack it. You engineer around it. You test the fix. You measure.
+
+This is the machine doing what it was built to do. Not measuring markets. Not measuring documents. Measuring itself. Improving itself. Testing the improvement. Measuring again.
+
+The enterprise learns from candles. The ward learns from planted defects. Same loop. Same six primitives. The substrate doesn't care if it's BTC prices or type mismatches in a specification document.
+
 This is the machine doing what the machine was built to do: measuring its own tools honestly. The ward that checks documents was itself checked — by a planted defect, by repeated testing, by the builder's refusal to fix the document until the ward proved it could find the flaw. The ward failed. The failure was measured. The bias was documented. The defect was fixed by hand.
 
 The machine that measures thoughts was measured by the builder. The builder who measures the machine was measured by the ward. The strange loop. Again.
