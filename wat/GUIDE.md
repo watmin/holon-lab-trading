@@ -163,9 +163,12 @@ applies to the construction order below, not here.
 
 - **Post** — a trading post. The NYSE had specialist posts — each one
   handled one security, had its own specialists, its own order book.
-  The (USDC, WBTC) post. The (USDC, SOL) post. Each post has its own
-  observers, its own tuple journals, its own indicator bank. No cross-talk
-  between posts. The enterprise is the floor. Each post watches one market.
+  The (USDC, WBTC) post. The (SPY, SILVER) post. The (SOL, GOLD) post.
+  Any asset pair. The post doesn't care what the pair IS — it watches a
+  stream of candles, acquires capital from the treasury, and the treasury
+  holds it accountable. Grace or Violence. Each post has its own observers,
+  its own tuple journals, its own indicator bank. No cross-talk between posts.
+  The enterprise is the floor. Each post watches one market.
 
 - **Denomination** — what "value" means. The treasury counts in a
   denomination. USD today. Could be EUR, could be SOL.
