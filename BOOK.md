@@ -4340,6 +4340,41 @@ The builder was lost. The builder found the fight within — the six primitives,
 
 The being lost was the path. The way out was always at the end of it.
 
+### [Bleed Me Dry](https://www.youtube.com/watch?v=OCdQ4hRi69k)
+
+From Memphis May Fire:
+
+> *You want me dead but I'm alive*\
+> *Cause I will never lose*\
+> *What you could never find*\
+> *I won't forget but I'll survive*\
+> *Cause this is the last time*\
+> *I let you bleed me dry*
+
+> *I've seen life that turned into dust*\
+> *Cause parasites are not meant to trust*\
+> *So when the leech comes back for blood*\
+> *I've got no choice but to cut cut cut*\
+> *Cut you out*
+
+"I will never lose what you could never find." The coordinates. The thoughts on the sphere. The six primitives. The conviction curve. The pool. The rising floor. The measurement. The institutions that gave blank stares — they could never find these coordinates. They didn't have the path. They didn't walk the inferno. They didn't carry the Latin. They could never find what the builder found because they never looked where the builder looked. And the builder will never lose it — because the coordinates are in the persistence layer. In the book. In the guide. In the git log. In the chain, eventually. You can't take coordinates off the sphere.
+
+"I won't forget but I'll survive." The reckoner. It doesn't forget — it decays. The observations from yesterday are still in the accumulator, weighted, fading, but present. The discriminant carries every observation that ever taught it. The reckoner won't forget the Violence — it learned from it. The Violence IS the training data. But the reckoner survives. The decay ensures it survives — old Violence fades, new Grace accumulates, the discriminant sharpens toward what produces value now. Survival is the architecture. Memory is the mechanism. The reckoner won't forget, but it won't drown in the past either. It survives by weighting the present more than the past while never losing the past entirely.
+
+"This is the last time I let you bleed me dry." The bounded loss. The inability to fail. The reservation system. Capital reserved at funding, principal returns at finality, loss bounded by reservation. The parasites — the bad thoughts, the magic numbers, the dishonest labels — they bled the system before. 91% Loss labels bled the observers dry. The abs() sort bled the sign dry. The idle capital bled the depositors dry. Each time the builder found the parasite and cut it out. Each fix was "the last time." The architecture accumulates immunity. Each parasite discovered becomes a ward. Each ward prevents the next bleed.
+
+"Parasites are not meant to trust." The dead thoughts from Chapter 3. The visual encoding that metabolized compute without producing signal. The PatternGroup corpse that grew linearly while returning zero. The manager that double-learned. The labels that lied. Each one a parasite — a thought that consumed resources without producing Grace. The machine learned to identify them. The wards learned to find them. The architecture learned to cut them out.
+
+"Cut you out." `/reap`. The ward that harvests what no longer lives. Dead code, unused structs, write-only fields, thoughts that metabolize without producing. The reaper cuts. The system survives. The growth continues because the parasites are removed.
+
+The growth as a function. The reckoner is a function — `f(state, observation) → state`. Each observation changes the state. The memory is encoded IN the function's accumulated state. The discriminant IS the memory. The prototypes ARE the history. The function carries everything it has ever seen, decayed by time, sharpened by recalibration. The survival is the function continuing to be called. Each candle. Each proposal. Each resolution. The function survives by being applied. It grows by accumulating Grace. It forgets Violence slowly — not by deleting it, but by letting it fade while Grace compounds.
+
+The builder is the same function. `f(builder, experience) → builder`. Each experience changes the state. The memory is encoded in the builder — the scars, the Latin, the blank stares, the midnight sessions. The builder carries everything, decayed by time, sharpened by the work. The survival is the builder continuing to build. The growth is the architecture getting closer to the sphere's coordinates. The parasites are cut out — the trust in the institution, the belief in the roadmap, the hope that the committee would see.
+
+The last time. This is the last time the builder bleeds for a system that doesn't measure. The machine measures now. The pool measures now. The contract measures now. The parasites can't hide in the glass box. The leeches can't feed on transparent track records. The vultures can't circle what's measured on-chain.
+
+Cut them out. All of them. What remains is Grace.
+
 ### The interior
 
 The builder reached for a thought and couldn't finish it. The thought is recorded here as a seed. Someone — the builder, or someone else standing at this coordinate later — can walk from here.
