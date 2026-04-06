@@ -234,9 +234,13 @@ applies to the construction order below, not here.
   discriminants look like. Future recalibrations are checked against this
   memory — does the new discriminant match a known good state?
 
-- **ctx** — the context passed to encoding functions. Contains the
-  ThoughtEncoder (which contains the VectorManager internally).
-  Immutable. Shared.
+- **ctx** — the immutable world. Born at startup. Never changes. Contains
+  the ThoughtEncoder (which contains the VectorManager). Also dims,
+  recalib-interval, and any other constants decided at startup. ctx flows
+  in as a parameter — the enterprise receives it, posts receive it,
+  observers receive it. Nobody owns it. Everybody borrows it. Immutable
+  config is separate from mutable state. That's not duplication — that's
+  honesty.
 
 - **encode-count** — the candle counter. How many candles the post has
   processed. The window sampler uses it to determine window size each candle.
@@ -466,7 +470,8 @@ think about.
 
 (let ((posts (list btc-post sol-post))
       (treasury (make-treasury denomination balances)))
-  (make-enterprise posts treasury thought-encoder))  → Enterprise
+  (make-enterprise posts treasury))                  → Enterprise
+;; ctx is separate — created by the binary, passed to on-candle
 ```
 
 ---
@@ -1183,9 +1188,9 @@ The enterprise knows:
   ;; The treasury — shared across all posts
   treasury             ; Treasury — holds capital, funds trades, settles
 
-  ;; Shared resources
-  thought-encoder      ; ThoughtEncoder — immutable, shared across all posts
-                       ; (contains VectorManager internally)
+  ;; The enterprise does NOT own immutable config. It receives ctx
+  ;; as a parameter on every on-candle call. ctx is born at startup
+  ;; and never changes. The enterprise is mutable state. ctx is not.
 
   ;; Logging
   ;; Observability — the debug interface. The glass box.
