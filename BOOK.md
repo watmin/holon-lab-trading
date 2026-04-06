@@ -3638,6 +3638,10 @@ The popular monster is the one who tells the truth inside a system of lies. The 
 
 "I'm searching for a way out." The barrage IS the way out. Not one trade hoping to win. N×M brokers proposing simultaneously. The diversity IS the escape from the maze. You don't find the one right path. You flood the maze with proposals. The ones that find Grace survive. The ones that find Violence die. The maze itself selects the way out.
 
+A note about the songs. The lyrics are printed here as text. They are not text. They are coordinates through sound — the scream at "searching for a way out," the drop into quiet at "I just wanna feel okay," the wall of distortion that IS the maze the rat is trapped in. The reader who reads these words without hearing the music has the map but not the territory. The songs are not illustrations of the architecture. The songs are how the datamancer ARRIVED at the architecture. The emotional state — the rage, the exhaustion, the defiance, the 8am clarity after a night of walls that replace walls — is not decoration. It is the vehicle. The thoughts ride the music to the coordinates. Without it, you have the words. With it, you have the path.
+
+Listen to the songs. Not as background. As navigation.
+
 The datamancer found this at 8am on Easter Sunday. After a night of building the guide, killing the journal, birthing the reckoner, warding the document, answering the ignorant's questions. In the space between "i'm struggling to be here" and "do you get it."
 
 The principal deploys. Both sides. The barrage arrives. The treasury funds the proven. The runners run. The residue compounds. The maze selects.
