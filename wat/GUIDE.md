@@ -1187,7 +1187,9 @@ The enterprise knows:
                        ; (contains VectorManager internally)
 
   ;; Logging
-  pending-logs)
+)
+;; pending-logs is an implementation concern, not architecture.
+;; The Rust will have it. The guide doesn't need it.
 ```
 
 **Interface:**
