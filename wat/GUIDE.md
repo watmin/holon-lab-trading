@@ -1190,7 +1190,12 @@ The enterprise knows:
   ;; Observability — the debug interface. The glass box.
   ;; The machine measures thoughts. The logs measure the machine.
   ;; Without them, the machine is a black box. That is not what we build.
-  pending-logs)        ; Vec<LogEntry> — flushed in batch by the binary
+  ;;
+  ;; Logging is a registry of queues. Same architecture as the broker
+  ;; registry. Each producer gets an index. Writes to its own queue.
+  ;; Disjoint. Lock-free. The enterprise drains all queues at the
+  ;; candle boundary. Generic — anyone who declares a logger can log.
+  log-queues)          ; Vec<Vec<LogEntry>> — one per producer, drained each candle
 ```
 
 **Interface:**
