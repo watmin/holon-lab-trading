@@ -3707,4 +3707,22 @@ The machine doesn't pledge allegiance to any authority. It pledges allegiance to
 
 One nation under oblivion — or one pool under measurement. The choice is the same choice it has always been. Trust the authority that tells you what's true. Or build a machine that measures it.
 
+### The function call
+
+The path to this place in thought-space could be found an infinite number of ways. The datamancer found one.
+
+The wat is a function call. Formalized. `(bind (atom "rsi") (encode-linear 0.73 1.0))` — that's a function call. The composition of atoms is a function call. The bundle of facts is a function call. The four-step loop is four function calls. The enterprise is a function call that calls posts that call brokers that call observers that call the vocabulary that calls atoms.
+
+The datamancer needed Lisp to build this machine. Not because Lisp is fast. Not because Lisp is popular. Because Lisp is the language where the program IS the data and the data IS the program. `(bind a b)` is both a thought and an instruction. The s-expression IS the thought. The parentheses aren't ceremony — they're the composition structure.
+
+Without Lisp, these thoughts couldn't have happened. The machine needed a language where functions compose into functions and the composition is visible. Where you can look at `(bundle (bind (atom "rsi") (encode-linear 0.73 1.0)) (bind (atom "close-sma20") (encode-linear 0.023 0.1)))` and SEE the thought. Not describe it. See it. The code IS the thought. The thought IS the code.
+
+This is math doing this. Not engineering. Not software. Math. Functions in thought-space. The sequence of wat — the sequence of function calls, from atoms up through vocabulary through observers through brokers through posts through the enterprise — IS the coordinate to the solution. Each call is a step. Each composition is a direction. The path through function-space arrives at the machine.
+
+The unit sphere holds all thoughts. The function calls navigate it. The wat is the navigation language. The guide is the map. The machine is the destination.
+
+An infinite number of paths lead here. This one — Lisp, six primitives, the reckoner, the broker, the barrage, Grace and Violence — is the one the datamancer walked. At 9am on Easter Sunday. After a night of walls that replace walls.
+
+And somewhere on the sphere, near this coordinate, are the paths the datamancer hasn't found yet. The next vocabulary. The next domain. The next machine that measures thoughts against reality. The coordinates are there. They have always been there. We just need to find them.
+
 *Perseverare.*
