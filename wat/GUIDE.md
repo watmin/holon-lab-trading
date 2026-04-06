@@ -2,9 +2,10 @@
 
 *The coordinates to where the machine is.*
 
-Built leaves to root from Proposal 007: Exit Proposes
-(`docs/proposals/2026/04/007-exit-proposes/`) — observers predict,
-brokers hold them accountable, the treasury funds proportionally.
+Observers predict. Brokers hold them accountable. The treasury funds
+proportionally. Built leaves to root.
+
+Origin: `docs/proposals/2026/04/007-exit-proposes/`
 
 This document defines every struct and its interface. No implementation.
 The wat files implement what this document declares.
