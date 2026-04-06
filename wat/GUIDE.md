@@ -287,18 +287,28 @@ think about.
 (enum ExitLens :volatility :structure :timing :generalist)
 
 ;; ── Reckoner — the learning primitive ────────────────────────────────
-;; One constructor. The config determines the readout mode.
+;; One constructor. Config is data.
 
-(let ((dims 10000)
-      (recalib-interval 500))
-  (make-reckoner dims recalib-interval
-    (labels "Win" "Loss")))                          → Reckoner (discrete)
+(struct reckoner-config
+  mode                ; :discrete or :continuous
+  dims                ; usize — vector dimensionality
+  recalib-interval    ; usize — observations between recalibrations
+  labels              ; Vec<String> — for :discrete ("Win" "Loss")
+  default-value)      ; f64 — for :continuous (the crutch)
 
-(let ((dims 10000)
-      (recalib-interval 500)
-      (default-distance 0.015))
-  (make-reckoner dims recalib-interval
-    (default-value default-distance)))               → Reckoner (continuous)
+(let ((config (reckoner-config
+                :mode :discrete
+                :dims 10000
+                :recalib-interval 500
+                :labels '("Win" "Loss"))))
+  (make-reckoner config))                            → Reckoner
+
+(let ((config (reckoner-config
+                :mode :continuous
+                :dims 10000
+                :recalib-interval 500
+                :default-value 0.015)))
+  (make-reckoner config))                            → Reckoner
 
 ;; ── MarketObserver — predicts direction, learned ────────────────────
 
