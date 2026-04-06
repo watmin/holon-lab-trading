@@ -1263,11 +1263,17 @@ Step 2: COMPUTE + DISPATCH
   posts produce:    proposals (the barrage)
   treasury receives: proposals
 
-Step 3: PROCESS
-  treasury produces: trade-triggers (its active trades)
-  posts consume:    trade-triggers + fresh market-thoughts
-  exit observers produce: distances for each active trade
-  brokers consume:  papers tick → propagation on resolved papers
+Step 3a: TICK (parallel — all cores)
+  brokers par_iter: tick papers, check conditions, compute outcomes
+  each broker touches ONLY its own papers. Disjoint. Lock-free.
+  brokers produce:  Vec<Resolution> — facts, not mutations
+  collect() is the synchronization primitive.
+
+Step 3b: PROPAGATE (sequential — cheap)
+  fold over resolutions: apply to shared observers
+  market observers learn Up/Down. Exit observers learn distance.
+  brokers learn Grace/Violence. Sequential because observers are shared.
+  treasury produces: trade-triggers → posts update trailing stops
 
 Step 4: COLLECT + FUND
   treasury reads:   proposals, available capital, broker funding levels
