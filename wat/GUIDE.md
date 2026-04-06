@@ -1002,8 +1002,10 @@ runtime:       frozen map (read-only) → slot-idx → &mut broker (disjoint)
 
 ```
 (struct broker
-  observer-names     ; Set<String> — the identity (for humans, for display)
-  observer-indices   ; Vec<usize> — the coordinates (for runtime, O(1) access)
+  observer-names     ; Vec<String> — the identity, in order. Position is meaning.
+  observer-indices   ; Vec<usize> — coordinates into the post's observer vecs.
+                     ; same order as names. index 0 = first observer, etc.
+                     ; the broker received them in this order at construction.
   ;; Accountability
   reckoner           ; Reckoner :discrete — Grace/Violence
   noise-subspace     ; OnlineSubspace
