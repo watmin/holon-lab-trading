@@ -130,19 +130,20 @@ Each definition can only reference definitions above it.
   facts. A generalist lens selects all facts. The lens IS the observer's
   identity — it determines what thoughts the observer thinks.
 
-- **N and M** — N is the number of market observers. M is the number of
-  exit observers. Today, every combination of one market observer and one
-  exit observer gets a broker. N×M brokers. Each broker's identity is
-  the set {"market-lens", "exit-lens"} — two names today, more later.
+- **N and M** — N is the number of market observers (today: 6, one per
+  MarketLens variant). M is the number of exit observers (today: 4, one
+  per ExitLens variant). Every combination gets a broker. N×M = 24 brokers
+  today. Each broker's identity is the set {"market-lens", "exit-lens"} —
+  two names today, more later.
 
 - **Observer** — an entity that perceives and learns. It has a lens and
   accumulated experience. Two kinds: market observers predict direction
   (Up/Down) using a discrete reckoner. Exit observers estimate distance
   (optimal exit) using continuous reckoners.
 
-- **LearnedStop** — a continuous reckoner applied to exit distances. "For a
-  thought like THIS, what distance did the market say was optimal?" Each
-  exit observer has three: trail, stop, tp. Replaces magic numbers with
+- **Exit reckoners** — the exit observer has three continuous reckoners,
+  one per magic number: trail, stop, tp. "For a thought like THIS, what
+  distance did the market say was optimal?" Replaces magic numbers with
   measurement.
 
 - **ScalarAccumulator** — per-magic-number f64 learning. Each scalar value
@@ -369,11 +370,12 @@ think about.
       (min-window 12)
       (max-window 2016)
       (sampler (make-window-sampler seed min-window max-window)))
-  (make-market-observer lens dims recalib-interval
+  (make-market-observer lens
+    (Discrete dims recalib-interval '("Up" "Down"))
     sampler))                                        → MarketObserver
 
 ;; ── ExitObserver — predicts exit distance, learned ──────────────────
-;; Contains THREE LearnedStops — trail, stop, tp
+;; Contains three continuous reckoners — trail, stop, tp
 
 (let ((lens :volatility)
       (dims 10000)
@@ -431,6 +433,8 @@ think about.
 
 (struct trade
   id                   ; TradeId — assigned by treasury at funding time
+  post-idx             ; usize — which post
+  broker-slot-idx      ; usize — which broker (for trigger routing)
   source-asset         ; Asset — what was deployed
   target-asset         ; Asset — what was acquired
   entry-rate           ; f64
@@ -449,7 +453,7 @@ think about.
   amount               ; f64 — how much value gained or lost
   composed-thought     ; Vector — from trade-origins, stashed at funding time
   post-idx             ; usize — which post to route back to
-  slot-idx)            ; usize — which broker for propagation
+  broker-slot-idx)     ; usize — which broker for propagation
 
 ;; ── Resolution — what a broker produces when a paper resolves ────────
 ;; Facts, not mutations. Collected from parallel tick, applied sequentially.
@@ -966,7 +970,8 @@ The generalist is just another lens. No special treatment.
 ```
 
 **Interface:**
-- `(make-market-observer lens dims recalib-interval window-sampler) → MarketObserver`
+- `(make-market-observer lens reckoner-config window-sampler) → MarketObserver`
+  lens: MarketLens. config: Discrete with "Up"/"Down" labels.
 - `(observe-candle observer candle-window ctx) → Prediction`
   candle-window: a slice of recent candles. The post calls
   `(sample (:window-sampler observer) encode-count)` to get the window
@@ -1092,7 +1097,9 @@ runtime:       frozen map (read-only) → slot-idx → &mut broker (disjoint)
   tick all papers, resolve completed. Returns resolution facts.
   The broker knows its observer indices — it doesn't need them passed in.
 - `(propagate broker thought outcome amount optimal)`
-  the broker knows its observer indices — grabs them from the post.
+  thought: Vector. outcome: :grace or :violence. amount: f64.
+  optimal: (trail, stop, tp) distances from hindsight.
+  The broker knows its observer indices — grabs them from the post.
   route outcome to every observer in the set + self (Grace/Violence)
 - `(paper-count broker) → usize`
 
