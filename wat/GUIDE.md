@@ -219,12 +219,14 @@ applies to the construction order below, not here.
   Subtract it from a thought and what remains is what's UNUSUAL. The reckoner
   learns from the unusual part, not the boring part.
 
-- **Ignorance** — the starting state. Every reckoner begins empty.
-  No experience. No edge. The reckoner does not participate when it
-  knows it doesn't know. No special bootstrap logic. The architecture
-  IS the bootstrap — papers fill the reckoner, it gains experience,
-  it earns edge, the treasury starts listening. Start ignorant. Learn.
-  Graduate.
+- **Experience** — how much a reckoner has learned. 0.0 = empty. Grows
+  with each observation. The reckoner's self-knowledge of its own depth.
+
+- **Ignorance** — the starting state. Every reckoner begins with zero
+  experience. No edge. The reckoner does not participate when it knows
+  it doesn't know. No special bootstrap logic. The architecture IS the
+  bootstrap — papers fill the reckoner, experience grows, the treasury
+  starts listening. Start ignorant. Learn. Graduate.
 
 - **Recalibration** — the reckoner periodically recomputes its discriminant
   from accumulated observations. The interval (recalib-interval) is how
@@ -424,6 +426,7 @@ think about.
   composed-thought     ; Vector — market thought + exit facts
   prediction           ; Prediction — from the broker's reckoner
   distances            ; (trail, stop, tp) — from the exit observer
+  post-idx             ; usize — which post this came from
   broker-slot-idx)     ; usize — which broker proposed this
 
 ;; ── Trade — an active position the treasury holds ───────────────────
@@ -446,9 +449,30 @@ think about.
   trade                ; Trade — which trade closed
   outcome              ; :grace or :violence
   amount               ; f64 — how much value gained or lost
-  composed-thought     ; Vector — the thought at entry, needed for propagation
+  composed-thought     ; Vector — from trade-origins, stashed at funding time
   post-idx             ; usize — which post to route back to
   slot-idx)            ; usize — which broker for propagation
+
+;; ── Resolution — what a broker produces when a paper resolves ────────
+;; Facts, not mutations. Collected from parallel tick, applied sequentially.
+
+(struct resolution
+  broker-slot-idx      ; usize — which broker produced this
+  composed-thought     ; Vector — the thought that was tested
+  outcome              ; :grace or :violence
+  amount               ; f64 — how much value
+  optimal-distances)   ; (trail, stop, tp) — hindsight optimal
+
+;; ── LogEntry — the glass box. What happened. ────────────────────────
+;; Generic. Any producer can emit log entries to its queue.
+
+(enum log-entry
+  (ProposalSubmitted broker-slot-idx composed-thought distances)
+  (ProposalFunded trade-id broker-slot-idx amount-reserved)
+  (ProposalRejected broker-slot-idx reason)
+  (TradeSettled trade-id outcome amount duration)
+  (PaperResolved broker-slot-idx outcome optimal-distances)
+  (Propagated broker-slot-idx observers-updated))
 
 ;; ── Post — one per asset pair ───────────────────────────────────────
 
