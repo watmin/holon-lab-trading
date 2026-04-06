@@ -35,6 +35,10 @@ The agent reports:
 
 3. **Contradictions** — two different things said about the same
    concept. The path forks and the reader can't follow both.
+   This includes type mismatches: if a struct is defined with
+   specific fields, but an interface claims a different return type,
+   that is a contradiction. Check that struct definitions match
+   how they are used in interfaces.
 
 4. **Missing links** — a concept used in an interface but never
    defined. A name without a shape.
