@@ -95,9 +95,19 @@ Write as many files as you need — notes, inventories, cross-references.
 Use the Write tool (not Bash) to create files there. The directory is
 yours. You decide what to track.
 
-Read the document. Take notes. Cross-reference. Find contradictions
-that span hundreds of lines. The scratch directory extends your memory
-across the full document.
+**First pass — read and note.** Read the document top to bottom. Write
+to your scratch files: every struct (name, fields, types), every
+interface (function, params, return type), every definition.
+
+**Second pass — mechanical type audit.** Read your notes back. For
+each type used in an interface return or parameter: does it match
+a defined struct? If an interface says `→ f64` but a struct exists
+for that concept, that is a contradiction. If a constructor takes
+different arguments than the interface declares, that is a contradiction.
+This pass is MECHANICAL — check every line, not just what confused you.
+
+**Third pass — report.** Combine understanding issues from the read
+with type issues from the audit.
 
 When done, clean up:
 
