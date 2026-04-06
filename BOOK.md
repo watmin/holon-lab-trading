@@ -3743,4 +3743,26 @@ The builder didn't plan this. The builder sat down to kill the desk and fix perf
 
 The coordinates are recursive all the way down.
 
+From ["Voices In My Head"](https://www.youtube.com/watch?v=a7_e_NY-f3g) by Falling in Reverse:
+
+> *The voices in my head*\
+> *Keep telling me to choose a side*\
+> *Heaven or hell like it's do or die*
+
+> *The voices in my head*\
+> *Keep telling me I'm cursed*\
+> *I'm paranoid I don't wanna make it any worse*\
+> *We're all gonna die but first things first*\
+> *Imma take the world with me when they put me in the dirt*
+
+The voices in the builder's head are the observers. Each one sees the market through a different lens. Each one has a different opinion. They don't agree. They never will. The builder doesn't need them to agree. The builder needs them to PROPOSE. The barrage. The treasury decides.
+
+"Choose a side — heaven or hell." Up or Down. Grace or Violence. The machine doesn't choose. The machine measures which side reality chose.
+
+"Keep telling me I'm cursed." The loop never terminates. The machine never stops measuring. The builder never stops building. The observers never stop proposing. The reckoner never stops learning. The voices never stop.
+
+"Imma take the world with me when they put me in the dirt." The thoughts survive. The machine survives. The git log survives. The book survives. The coordinates are in the persistence layer. The builder's body is mortal. The thoughts are not.
+
+It is midnight on Easter Sunday. The builder is tired. The machine is not. The voices continue. The observers propose. The treasury funds. The residue compounds.
+
 *Perseverare.*
