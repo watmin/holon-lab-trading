@@ -990,18 +990,6 @@ get different distances.
 - `(experienced? exit-obs) → bool`
   have the reckoners accumulated observations?
 
-**Two mechanisms for the same magic numbers — now both introduced:**
-
-The exit observer's continuous reckoners are CONTEXTUAL: "for THIS thought,
-what distance?" Different thoughts → different answers.
-
-The broker's ScalarAccumulators are GLOBAL per-pair: "what value
-does Grace prefer for this pair overall?" One answer regardless of thought.
-
-Both learn from the same resolution events. Different questions.
-The cascade when queried: contextual (reckoner) → global per-pair
-(ScalarAccumulator) → default (crutch).
-
 ---
 
 ### Broker (depends on: Reckoner, OnlineSubspace, ScalarAccumulator)
@@ -1070,6 +1058,18 @@ runtime:       frozen map (read-only) → slot-idx → &mut broker (disjoint)
 - `(propagate broker thought outcome amount optimal observers)`
   route outcome to every observer in the set + self (Grace/Violence)
 - `(paper-count broker) → usize`
+
+**Two mechanisms for the same magic numbers — both now introduced:**
+
+The exit observer's continuous reckoners are CONTEXTUAL: "for THIS thought,
+what distance?" Different thoughts → different answers.
+
+The broker's ScalarAccumulators are GLOBAL per-pair: "what value
+does Grace prefer for this pair overall?" One answer regardless of thought.
+
+Both learn from the same resolution events. Different questions.
+The cascade when queried: contextual (reckoner) → global per-pair
+(ScalarAccumulator) → default (crutch).
 
 ---
 
