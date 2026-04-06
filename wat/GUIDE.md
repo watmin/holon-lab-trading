@@ -105,9 +105,7 @@ replaced by what the market actually said.
 ## Definitions — the thoughts themselves
 
 Before the structs. Before the constructors. The meanings.
-Read all of these before the construction order — they are a
-vocabulary, not a dependency chain. The strict ordering rule
-applies to the construction order below, not here.
+Each definition can only reference definitions above it.
 
 - **Candle** — one period of market data. Raw: six numbers (open, high, low,
   close, volume, timestamp). Enriched: the raw data plus 100+ computed
