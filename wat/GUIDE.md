@@ -21,9 +21,11 @@ These are NOT specified in this tree. They are provided by holon-rs.
 - **bind** — `(bind a b) → Vector` — compose two thoughts
 - **bundle** — `(bundle &vecs) → Vector` — superpose many thoughts
 - **cosine** — `(cosine a b) → f64` — measure similarity
-- **reckoner** — the learning primitive. Accumulates experience. Reckons
-  a verdict from a new input via cosine similarity. Decays old experience.
-  Recalibrates periodically. One primitive, multiple readout modes:
+- **reckoner** — the learning primitive. "Reckon" means both "to count"
+  and "to judge." A reckoner keeps accounts and delivers a verdict.
+  It accumulates experience. It reckons a verdict from a new input via
+  cosine similarity. Old experience decays. The verdict sharpens over
+  time through recalibration. One primitive, multiple readout modes:
   - `(make-reckoner dims recalib-interval config)` → Reckoner
     - config determines the readout mode:
       - `(labels "Win" "Loss")` → discrete. N labels. Classification.
