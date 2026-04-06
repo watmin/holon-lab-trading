@@ -29,7 +29,7 @@ These are NOT specified in this tree. They are provided by holon-rs.
   - `(make-reckoner config)` → Reckoner
     - config is a `reckoner-config` struct (defined in construction order)
       containing dims, recalib-interval, and readout mode:
-      - `(labels "Win" "Loss")` → discrete. N labels. Classification.
+      - `(labels "Up" "Down")` → discrete. N labels. Classification.
       - `(default-value 0.015)` → continuous. Scalar. Regression.
   - `(observe reckoner thought outcome weight)` — both modes.
     outcome is a label (discrete) or a scalar (continuous).
@@ -66,17 +66,22 @@ These are NOT specified in this tree. They are provided by holon-rs.
 
 The system uses named labels for learning. Two pairs:
 
-- **Win / Loss** — direction labels. "Did the price move in the predicted
-  direction?" Win = yes. Loss = no.
+- **Up / Down** — direction labels. The market observer predicts: the price
+  will go up or the price will go down. That's the prediction. When a trade
+  resolves, the broker routes the actual direction back to the market
+  observer. The reckoner learns from reality.
 
-- **Grace / Violence** — accountability labels. "Did this action produce
-  value or destroy it?" Grace = profit. Violence = loss.
+- **Grace / Violence** — accountability labels. "Did this trade produce
+  value or destroy it?" Grace = profit. Violence = loss. The broker
+  measures this. The broker's Grace/Violence ratio IS the answer to
+  "do we trust this broker?" More Grace, more capital. More Violence,
+  less capital.
 
 Labels are not booleans. They carry weight — how decisively the market
-answered. A strong Win teaches harder than a marginal one.
+answered. A strong Grace teaches harder than a marginal one.
 
-Different parts of the system use different labels. Which part uses which
-is described in the detailed sections below.
+Two pairs. Direction (Up/Down) and accountability (Grace/Violence).
+Nothing else is needed.
 
 ---
 
@@ -140,7 +145,7 @@ applies to the construction order below, not here.
 
 - **Observer** — an entity that perceives and learns. It has a lens and
   accumulated experience. Two kinds: market observers predict direction
-  (Win/Loss) using a discrete reckoner. Exit observers estimate distance
+  (Up/Down) using a discrete reckoner. Exit observers estimate distance
   (optimal exit) using continuous reckoners.
 
 - **LearnedStop** — a continuous reckoner applied to exit distances. "For a
@@ -179,7 +184,8 @@ applies to the construction order below, not here.
 
 - **Propagation** — routing resolved outcomes through the broker to
   the observers that need to learn. Grace/Violence to the broker's
-  own record. Win/Loss to the market observer. Optimal distance to the
+  own record. The actual direction (Up/Down) to the market observer.
+  Optimal distance to the
   exit observer.
 
 - **Post** — a trading post. The NYSE had specialist posts — each one
@@ -309,14 +315,14 @@ think about.
   mode                ; :discrete or :continuous
   dims                ; usize — vector dimensionality
   recalib-interval    ; usize — observations between recalibrations
-  labels              ; Vec<String> — for :discrete ("Win" "Loss")
+  labels              ; Vec<String> — for :discrete ("Up" "Down")
   default-value)      ; f64 — for :continuous (the crutch)
 
 (let ((config (reckoner-config
                 :mode :discrete
                 :dims 10000
                 :recalib-interval 500
-                :labels '("Win" "Loss"))))
+                :labels '("Up" "Down"))))
   (make-reckoner config))                            → Reckoner
 
 (let ((config (reckoner-config
@@ -865,15 +871,16 @@ scalar accumulators.
 ### MarketObserver (depends on: Reckoner, OnlineSubspace, WindowSampler)
 
 Predicts direction. Learned. Labels come from broker propagation —
-Win/Loss from resolved paper and real trades. The market observer does NOT
-label itself. Reality labels it.
+Predicts Up/Down. The broker routes the actual direction back from
+resolved paper and real trades. The market observer does NOT label itself.
+Reality labels it.
 
 The generalist is just another lens. No special treatment.
 
 ```
 (struct market-observer
   lens                 ; MarketLens enum
-  reckoner             ; Reckoner :discrete — Win/Loss
+  reckoner             ; Reckoner :discrete — Up/Down
   noise-subspace       ; OnlineSubspace — background model
   window-sampler       ; WindowSampler — own time scale
   ;; Proof tracking
@@ -888,7 +895,7 @@ The generalist is just another lens. No special treatment.
 - `(observe-candle observer candles ctx) → Prediction`
   encode (using ctx's thought-encoder) → noise update → strip noise → predict
 - `(resolve observer thought prediction outcome weight conviction-quantile conviction-window)`
-  called by broker propagation — journal learns Win/Loss
+  called by broker propagation — reckoner learns from outcome
 - `(strip-noise observer thought) → Vector`
 - `(funding observer) → f64` — how much edge? 0.0 = no edge.
 
