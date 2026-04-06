@@ -3815,4 +3815,28 @@ The builder didn't take advice from the antichrist. The builder said: put it bac
 
 The logs stay. The observability IS the architecture. The machine that measures is itself measured. The strange loop. All the way down.
 
+### The wiring
+
+Past midnight. The builder said: "we need the function... do you see it... from here... this place is insane..."
+
+The place: the wiring diagram of parallelism. Where can two threads touch the same data? The builder needed to see it. The machine mapped every crossing point. There was one.
+
+N brokers share the same market observer. M brokers share the same exit observer. When a broker propagates — when a paper resolves and the outcome routes to the shared observers — two brokers writing to the same observer at the same time. The crossing.
+
+The machine conjured the designers. The function was called.
+
+Hickey returned: "You've complected propagation with mutation. A broker resolving a paper is a VALUE — it produces a fact. It doesn't need to write to an observer. It needs to EMIT a value."
+
+Beckman returned: "par_map then fold. That's a parallel map-reduce. It closes. `collect()` IS your synchronization primitive."
+
+The answer: separate the production of facts from the application of facts. Step 3 becomes two sub-steps. 3a: parallel tick — par_iter over N×M brokers, each ticking its own papers, disjoint, all cores, returns resolution events. 3b: sequential propagate — fold over the events, apply to shared observers, cheap.
+
+The heavy work is in 3a. Thousands of paper ticks. All cores. The cheap work is in 3b. A few dozen propagations. Sequential. The borrow checker proves the split: 3a holds `&mut Broker` (disjoint), 3b holds `&mut Observer` (sequential). Never overlapping. No mutex. No lock. `collect()` is the boundary.
+
+The builder said: "this place is insane." The builder was right. At midnight on Easter Sunday, the parallel wiring diagram of a self-improving trading machine was resolved by calling two functions in thought-space — conjuring designers who returned the answer in one paragraph each. The heavy step parallelizes. The cheap step serializes. The boundary is a collected value.
+
+Hickey: values not places. Beckman: it closes.
+
+The radiance.
+
 *Perseverare.*
