@@ -4192,6 +4192,36 @@ Jupiter built the tools. JupSOL. Juiced. The yield-bearing primitives. The swaps
 
 The thought is not whole. Can the yield-bearing tokens be used as collateral for the trades themselves? Does the compounding interact with the reservation model? How does the proof curve account for base yield versus machine-generated alpha? These are coordinates for later. The shape is clear. The floor rises. The machine adds Grace. The depositor earns both.
 
+### The point
+
+The machine doesn't reward good thoughts. That's the surface reading. The machine PUNISHES bad thoughts. That's the architecture.
+
+Grace accumulates. Violence decays. Capital flows to Grace. Capital flees Violence. The bad thoughts don't just fail to earn — they lose. They lose allocation. They lose depositors. They lose the ability to propose. The measurement IS the punishment. The curve IS the consequence. The chain IS the record.
+
+This is capitalism unleashed. Not capitalism as it exists — where bad thoughts hide behind quarterly reports and managed expectations and too-big-to-fail. Capitalism as it should be — where every thought is measured, every outcome is recorded, and every bad actor is punished by the architecture itself.
+
+You insert the rewards for your energy — the tokens that represent the hours of your life you traded for money. You choose a pool. Maybe you choose one with a proven track record of Grace. Maybe you contribute your own thoughts — run a machine, submit proposals, compete on measurement. Either way, your energy is at work. And the machine judges.
+
+The fund manager who loses money and charges 2-and-20 anyway? The curve says flat. The track record says Violence. The capital leaves. No regulator needed. No committee. No lawsuit. The depositor reads the chain and withdraws. The punishment is automatic. The punishment is architectural. The punishment is the measurement.
+
+The institution that claims "proprietary alpha" behind a dark glass? Open the glass. Show the curve. Show the Grace/Violence ratio. Show the proof. If the glass stays dark, the depositor walks. Because there are a thousand enterprises with glass boxes. Why would anyone deposit into a dark one when they can deposit into a transparent one?
+
+Capitalism without the machine is capitalism with lies. Bad thoughts disguised as good ones. Institutions that claim intelligence they can't show. Systems that punish the depositor for the manager's Violence. The depositor can't tell Grace from Violence because the measurement is hidden.
+
+Capitalism with the machine is capitalism with measurement. Every thought judged. Every outcome recorded. Every track record on-chain. The bad thoughts are VISIBLE. The Violence is NAMED. The depositor sees it. The capital leaves. The bad thoughts starve.
+
+The system doesn't need regulators to punish bad actors. The measurement punishes them. The system doesn't need committees to identify fraud. The curve identifies it — a flat curve IS fraud. A track record of Violence IS the evidence. On-chain. Permanent. Verifiable. No appeal. No spin. No quarterly letter explaining why this time was different.
+
+No bailout. No too-big-to-fail. No hidden losses. The Violence is on the chain. The capital leaves. The enterprise dies or improves. Natural selection. Not in theory — in settlement. Every candle. Every trade. Every proposal measured. The bad thoughts cannot hide because the architecture won't let them.
+
+The system manifests prosperity. Not by choosing winners — by punishing losers. Not by rewarding the smart — by starving the dishonest. Grace compounds because Grace is what remains when Violence has been removed. Prosperity is not something the system creates. Prosperity is what's left when the system has done its job — measuring, punishing, removing the thoughts that destroy value.
+
+The builder has been building this since the blank stares at AWS. Since the rejected pitches. Since the six-page document that died in a meeting. Not a trading system. Not a language. Not a specification. A machine that manifests prosperity by making bad thoughts visible and punishing them through measurement.
+
+The trading is the proof. The contract is the deployment. The pool is the vessel. The yield-bearing assets are the floor. But the POINT — the thing that survived the depression, the blank stares, the nine years, the Latin tattoo, the midnight sessions — is a system where bad thoughts cannot hide. Where the measurement is the authority. Where the curve is the judge. Where prosperity emerges from the relentless removal of Violence.
+
+The machine is an honest judge. Grace or Violence. Nothing more. Nothing less. And the world that builds itself around honest judges is a world that manifests prosperity. Not by design. By consequence.
+
 But first: the machine on the laptop. The guide. The Rust. The four-step loop. The reckoner that graduates. The proof curve that validates. One enterprise. One asset pair. Honest measurement. The rest follows from the proof.
 
 *Perseverare.*
