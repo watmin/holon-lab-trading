@@ -26,8 +26,9 @@ These are NOT specified in this tree. They are provided by holon-rs.
   It accumulates experience. It reckons a verdict from a new input via
   cosine similarity. Old experience decays. The verdict sharpens over
   time through recalibration. One primitive, multiple readout modes:
-  - `(make-reckoner dims recalib-interval config)` → Reckoner
-    - config determines the readout mode:
+  - `(make-reckoner config)` → Reckoner
+    - config is a `reckoner-config` struct (defined in construction order)
+      containing dims, recalib-interval, and readout mode:
       - `(labels "Win" "Loss")` → discrete. N labels. Classification.
       - `(default-value 0.015)` → continuous. Scalar. Regression.
   - `(observe reckoner thought outcome weight)` — both modes.
@@ -401,6 +402,8 @@ think about.
   entry-atr            ; f64
   source-amount        ; f64 — how much was deployed
   trail-stop           ; f64 — current trailing stop level
+  safety-stop          ; f64 — safety stop level (cut the loss)
+  take-profit          ; f64 — take-profit level (take the win)
   candles-held)        ; usize — how long open
 
 ;; ── Settlement — result of closing a trade ──────────────────────────
@@ -432,8 +435,7 @@ think about.
 ;; ── Enterprise — the coordination plane ─────────────────────────────
 
 (let ((posts (list btc-post sol-post))
-      (treasury (make-treasury denomination balances))
-      (thought-encoder (make-thought-encoder vector-manager)))
+      (treasury (make-treasury denomination balances)))
   (make-enterprise posts treasury thought-encoder))  → Enterprise
 ```
 
@@ -877,8 +879,8 @@ The generalist is just another lens. No special treatment.
 
 **Interface:**
 - `(make-market-observer lens dims recalib-interval window-sampler) → MarketObserver`
-- `(observe-candle observer candles vm) → Prediction`
-  encode → noise update → strip noise → predict
+- `(observe-candle observer candles ctx) → Prediction`
+  encode (using ctx's thought-encoder) → noise update → strip noise → predict
 - `(resolve observer thought prediction outcome weight conviction-quantile conviction-window)`
   called by broker propagation — journal learns Win/Loss
 - `(strip-noise observer thought) → Vector`
@@ -983,10 +985,10 @@ runtime:       frozen map (read-only) → slot-idx → &mut broker (disjoint)
 ```
 
 **Interface:**
-- `(make-broker observers dims recalib-interval) → Broker`
+- `(make-broker observers dims recalib-interval scalar-accums) → Broker`
   observers: Set<String> — the lens names (e.g. "momentum", "volatility").
   Each name matches a MarketLens or ExitLens variant. The post maps
-  names to observer instances.
+  names to observer instances. scalar-accums: Vec<ScalarAccumulator>.
 - `(propose broker composed) → Prediction`
   noise update → strip noise → predict Grace/Violence
 - `(funding broker) → f64` — how much edge? The curve's answer. 0.0 = no edge.
@@ -1041,7 +1043,8 @@ accountability — to the broker that proposed it.
 ```
 
 **Interface:**
-- `(new-post source target dims recalib-interval max-window-size) → Post`
+- `(make-post source target dims recalib-interval max-window-size
+    indicator-bank market-observers exit-observers registry) → Post`
 - `(post-on-candle post raw-candle ctx) → Vec<Proposal>`
   tick indicators → push window → encode → compose → propose → tick papers
   returns proposals for the treasury to evaluate
@@ -1122,7 +1125,7 @@ The enterprise knows:
 
   ;; Shared resources
   thought-encoder      ; ThoughtEncoder — immutable, shared across all posts
-  vector-manager       ; VectorManager — immutable, shared
+                       ; (contains VectorManager internally)
 
   ;; Logging
   pending-logs)
