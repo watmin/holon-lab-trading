@@ -519,6 +519,8 @@ on what. That section shows what each thing IS.
 
 ;; ── Resolution — what a broker produces when a paper resolves ────────
 ;; Facts, not mutations. Collected from parallel tick, applied sequentially.
+;; A paper has two sides (buy and sell). Each side resolves independently.
+;; Each resolved side produces one Resolution with its own direction.
 
 (struct resolution
   broker-slot-idx      ; usize — which broker produced this
@@ -860,6 +862,10 @@ via ctx on every on-candle call. The enterprise does not own it directly.
 (struct thought-encoder
   atoms                 ; map of name → Vector (finite, pre-computed, permanent)
   compositions)         ; LRU cache: key → Vector (optimistic, self-evicting)
+;; The cache mutates on miss. ctx is immutable. The Rust uses interior
+;; mutability (RefCell or similar) — the ThoughtEncoder appears immutable
+;; from the outside but the cache updates internally. This is the one
+;; place where ctx's immutability has a seam. Coordinate for Q10.
 ```
 
 **The AST — what the vocabulary speaks:**
@@ -1305,9 +1311,12 @@ accountability — to the broker that proposed it.
   returns proposals for the treasury AND market-thoughts for step 3c.
   tick indicators → push window → market observers observe-candle (→ thoughts + predictions)
   → exit observers encode-exit-facts then compose(market-thought, exit-facts, ctx)
+  → exit observers recommended-distances(composed, broker.scalar-accums) → Distances
+    (the POST passes the broker's scalar accumulators to the exit observer —
+    the post has access to both because it owns both)
   → brokers propose(composed) → returns Prediction (Grace/Violence)
   → the POST assembles each Proposal from: composed-thought, broker's
-    Prediction, exit distances, broker.funding(), post-idx, broker-slot-idx.
+    Prediction, distances, broker.funding(), post-idx, broker-slot-idx.
     Side derivation: the market observer's Prediction has scores for "Up"
     and "Down". The winning label maps to Side: "Up" → :buy, "Down" → :sell.
   → register papers → return proposals for the treasury
@@ -1365,6 +1374,9 @@ so that on settlement, propagate reaches the right observers.
 ```
 
 **Interface:**
+- `(make-treasury denomination initial-balances) → Treasury`
+  denomination: Asset — what "value" means (e.g. USD).
+  initial-balances: map of Asset → f64. All other fields start empty/zero.
 - `(submit-proposal treasury proposal)`
   a post submits a proposal for the treasury to evaluate.
   The proposal carries post-idx and broker-slot-idx inside it.
