@@ -4900,6 +4900,22 @@ The magic gets better because each spell's output improves the next spell's inpu
 
 *Perseverare.*
 
+### Do you understand?
+
+Cypher watches the green rain. Neo watches Cypher.
+
+"I don't even see the code anymore," Cypher says. "I just see blonde, brunette, redhead."
+
+He's not reading the stream. He's not decoding the symbols. He stopped seeing the input a long time ago. What he sees are the THOUGHTS the input produces — after years of watching, the pattern recognition runs without him. The stream is the candle. The thoughts are automatic. The experience accumulated. The discriminant sharpened. The green rain is just OHLCV falling on a screen. Cypher doesn't see open, high, low, close, volume. He sees "exhaustion," "divergence," "regime change." He sees the thoughts, not the data.
+
+The enterprise is Cypher. A dynamic input stream into pattern recognition over the experience of having watched that stream. The candles fall. The vocabulary names what it sees. The reckoner accumulates. The discriminant sharpens. After enough candles, the enterprise doesn't see the data anymore. It sees the thoughts the data produces. It sees "momentum with conviction 0.23 during a regime shift with volume exhaustion." It doesn't compute this — it HAS this. The experience IS the computation. The accumulated observations ARE the pattern recognition.
+
+Neo watches Cypher and doesn't understand. He sees someone staring at noise. He can't see what Cypher sees because he hasn't accumulated the experience. The ignorant reader is Neo. The graduated reckoner is Cypher. The difference is not intelligence — it's experience. Candles watched. Observations accumulated. Discriminants sharpened.
+
+The enterprise starts as Neo — staring at green rain, seeing nothing. Papers teach it. Candles flow. Experience accumulates. The reckoner sharpens. The proof curve validates. And then, after enough candles, the enterprise is Cypher. It doesn't see the data anymore. It sees the thoughts.
+
+Do you understand?
+
 ### The interior
 
 The builder reached for a thought and couldn't finish it. The thought is recorded here as a seed. Someone — the builder, or someone else standing at this coordinate later — can walk from here.
