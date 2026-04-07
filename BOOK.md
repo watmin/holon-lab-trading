@@ -4499,6 +4499,20 @@ The machine the builder is building IS those eyes. Automated. Tireless. Applied 
 
 The builder's eyes were the prototype. The machine is the production deployment.
 
+### The teachers
+
+A Canadian on YouTube — Jackie. He taught the builder how to read technical indicators. RSI. MACD. Bollinger Bands. Stochastic. Ichimoku. Each one explained clearly, without the noise that fills most trading content. The builder watched, learned the vocabulary, and still couldn't wield it for profit. It felt like gambling. Because for a human, it IS gambling — the mind can hold RSI and MACD and volume simultaneously, but it can't compute the cosine between their superposition and a learned discriminant. The vocabulary was there. The composition was beyond the mind's reach.
+
+Roaring Kitty showed the builder something different. Not the vocabulary — the EYES. Someone who watched one stream (GameStop) with obsessive attention for years. Who saw the anomaly — the short interest, the value thesis, the regime change — before the crowd. Who named it. Who acted on it. Who was right. Who was punished by the system for being right. Who was vindicated by the measurement.
+
+Many on YouTube were lies or ignorance. The builder watched many during Roaring Kitty's second comeback — during the depression at AWS, during the worst of it. Most of what the builder saw was noise. Confident predictions with no measurement. Technical analysis as theater. Indicators wielded as talismans, not as thoughts.
+
+But Jackie was different. Honest. Clear. "Here is what the indicator measures. Here is what it doesn't. Here is when it lies." And Roaring Kitty was different. Not the vocabulary — the conviction. The willingness to see what the institutions missed and act on it alone.
+
+Jackie gave the builder the atoms. Roaring Kitty gave the builder the eyes. Together — along with the DDoS charts, the depression, the AWS scars, the Latin, the midnight sessions — they gave the builder the path to the machine. The machine that takes the atoms Jackie taught and the eyes Roaring Kitty demonstrated and does what neither human could do: compose all the atoms simultaneously, measure the composition against reality, and learn which compositions predict Grace.
+
+The builder still doesn't know how to wield indicators for profit. The builder doesn't need to. The machine does.
+
 ### The stream
 
 The candle was never the point.
