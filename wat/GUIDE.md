@@ -89,8 +89,10 @@ Each definition can only reference definitions above it.
 
 - **Labels** — Up/Down and Grace/Violence are labels. Labels are not
   booleans. They carry weight — how decisively the market answered.
-  A strong Grace teaches harder than a marginal one. Two pairs.
-  Direction and accountability. Nothing else is needed.
+  A strong Grace teaches harder than a marginal one. Two pairs for
+  learning: Direction (Up/Down) and Accountability (Grace/Violence).
+  A third pair for action: Side (Buy/Sell) — derived from Up/Down,
+  used on proposals and trades.
 
 - **Candle** — one period of market data. Raw: six numbers (open, high, low,
   close, volume, timestamp). Enriched: the raw data plus 100+ computed
@@ -337,7 +339,10 @@ on what. That section shows what each thing IS.
   (make-thought-encoder vector-manager))             → ThoughtEncoder
 (encode thought-encoder ast)                         → Vector
 
-;; ── Label enums — the three pairs ───────────────────────────────────
+;; ── Label enums ─────────────────────────────────────────────────────
+;; Side is action (what the trader does). Direction is observation (what
+;; the price did). They are related (Up → Buy, Down → Sell) but distinct
+;; types — one is a decision, the other is a measurement.
 
 (enum Side :buy :sell)              ; trading action — on Proposal and Trade
 (enum Direction :up :down)          ; price movement — used in propagation
@@ -400,7 +405,15 @@ on what. That section shows what each thing IS.
     (Discrete dims recalib-interval '("Up" "Down"))
     sampler))                                        → MarketObserver
 
-;; ── ExitObserver — depends on: Reckoner :continuous (×3) ────────────
+;; ── Distances — the three exit values, used everywhere ──────────
+;; A named tuple. Appears on PaperEntry, Proposal, Resolution, Settlement.
+
+(struct distances
+  trail                ; f64 — trailing stop distance (percentage of price)
+  stop                 ; f64 — safety stop distance
+  tp)                  ; f64 — take-profit distance
+
+;; ── ExitObserver — depends on: Reckoner :continuous (×3), Distances ──
 
 (let ((lens :volatility)
       (dims 10000)
@@ -410,14 +423,6 @@ on what. That section shows what each thing IS.
       (default-tp    0.045))
   (make-exit-observer lens dims recalib-interval
     default-trail default-stop default-tp))          → ExitObserver
-
-;; ── Distances — the three exit values, used everywhere ──────────
-;; A named tuple. Appears on PaperEntry, Proposal, Resolution, Settlement.
-
-(struct distances
-  trail                ; f64 — trailing stop distance (percentage of price)
-  stop                 ; f64 — safety stop distance
-  tp)                  ; f64 — take-profit distance
 
 ;; ── PaperEntry — hypothetical trade inside a broker ──────────
 ;; A paper trade is a "what if." Every candle, every pair gets one.
@@ -515,7 +520,10 @@ on what. That section shows what each thing IS.
 (struct resolution
   broker-slot-idx      ; usize — which broker produced this
   composed-thought     ; Vector — the thought that was tested
-  outcome              ; :grace or :violence
+  direction            ; Direction — :up or :down. Each paper side resolves
+                       ; independently: buy-side stop fires → :up (price rose
+                       ; then retraced). sell-side stop fires → :down.
+  outcome              ; Outcome — :grace or :violence
   amount               ; f64 — how much value
   optimal-distances)   ; Distances — hindsight optimal
 
@@ -1441,7 +1449,7 @@ The enterprise knows:
   sequential: apply resolutions to observers. Brokers learn
   Grace/Violence. Market observers learn Up/Down. Exit observers
   learn optimal distances.
-- `(step-update-triggers enterprise post market-thoughts)`
+- `(step-update-triggers enterprise post market-thoughts ctx)`
   the enterprise queries the treasury for active trades belonging to this
   post, then calls post-update-triggers(post, trades, market-thoughts, ctx).
   The post composes each trade's market thought with exit observers,
