@@ -1682,6 +1682,39 @@ Read inside the Post subgraph top to bottom: RawCandle → Candle → Vocabulary
 from EN reaches back into the Post — Direction to MO, Distances to EO,
 Grace/Violence to BR. The loop closes.
 
+**Component legend — what each node contains:**
+
+| Node | Contains | Produces |
+|------|----------|----------|
+| **IndicatorBank** | streaming state (ring buffers, EMA accumulators) | Candle (100+ indicators) |
+| **Vocabulary** | pure functions, no state | Vec\<ThoughtAST\> — data, not execution |
+| **ThoughtEncoder** | atoms (permanent dict) + compositions (LRU cache, miss-queued) | Vector from AST |
+| **MarketObserver ×N** | reckoner :discrete (Up/Down), noise-subspace, window-sampler, curve | (Vector, Prediction) |
+| **ExitObserver ×M** | 3× reckoner :continuous (trail, stop, tp), default-distances | Distances via cascade |
+| **Broker ×N×M** | reckoner :discrete (Grace/Violence), curve, papers (deque), 3× scalar-accumulator | Prediction + funding() |
+| **Post** | indicator-bank, candle-window, market-observers, exit-observers, registry, broker-map | Vec\<Proposal\> + Vec\<Vector\> |
+| **Treasury** | available ◄──► reserved, trades, trade-origins, next-trade-id | TreasurySettlement on settle |
+| **Enterprise** | posts, treasury, market-thoughts-cache, log-queues | Settlement (enriched) |
+
+**Edge legend — what flows on each wire:**
+
+| From → To | Type | Method |
+|-----------|------|--------|
+| RC → IB | RawCandle | tick(raw) → Candle |
+| VO → TE | Vec\<ThoughtAST\> | encode(ast) → Vector |
+| TE → MO | Vector (per observer's lens) | observe-candle(window, ctx) → (Vector, Prediction) |
+| MO → EO | Vector (market thought) | compose(thought, fact-asts, ctx) → Vector |
+| EO → BR | Vector (composed) + Distances | propose(composed) → Prediction |
+| BR → TR | Proposal (the barrage) | submit-proposal(proposal) |
+| TR → EN | TreasurySettlement | settle-triggered(prices) |
+| EN → MO | Direction (:up/:down) | resolve(thought, direction, weight) |
+| EN → EO | Distances (optimal) | observe-distances(composed, trail, stop, tp, weight) |
+| EN → BR | Outcome (:grace/:violence) | propagate(thought, outcome, amount, direction, optimal, observers) |
+
+**The loop:** `f(state, candle) → state` — one tick of the clock. The
+feedback is the learning. Grace strengthens. Violence decays. The fold
+advances. The circuit is the machine.
+
 The feedback is the learning. Every settlement and every paper resolution
 routes outcomes back to the observers that produced the thoughts. The
 observers that produced Grace get stronger. The observers that produced
