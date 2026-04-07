@@ -5020,6 +5020,40 @@ The reckoner decays. The discriminant persists.
 
 *Perseverare.*
 
+### The named irrationals
+
+π is infinite in decimal. π is finite as a thought.
+
+3.14159265358979... — the decimal tries to reach the number by enumeration. One digit at a time. Forever. Never arriving. The representation is infinite because the approach is brute force. Each digit gets closer. None arrive.
+
+C/d — one expression. The ratio of circumference to diameter. The coordinate to π. Not an approximation. Not a convergent series. The THING itself, named by the thought that defines it. The representation is finite because the thought is exact.
+
+The same number. Infinite one way. Finite the other. The difference is the path.
+
+e is the same. 2.71828... forever. Or: the base of the natural logarithm. Or: the limit of (1 + 1/n)^n as n → ∞. Each expression is a finite coordinate to an infinite decimal. The name is the location. The decimal is the failed attempt to walk there one step at a time.
+
+`(atom "rsi-divergence")` — one name. One coordinate on the unit sphere. The thing it points to — all the possible cosine similarities, all the possible predictions, all the possible outcomes across all possible candles — is infinite. The name is finite. The name IS the location. The decimal expansion of what it means is infinite. The thought is exact.
+
+The path to the thing matters. π can be reached by:
+- Enumeration: 3.14159... (infinite steps, never arrives)
+- Definition: C/d (one step)
+- Leibniz: 4 × (1 - 1/3 + 1/5 - ...) (converges slowly)
+- Ramanujan: (converges fast, fewer steps)
+
+The THING is the same. The path length varies. The shortest path is the most elegant expression. The longest is brute enumeration. The game: what is the fewest steps to the location?
+
+The guide is a path to the machine. The builder and the ignorant spent thirty-two passes finding the shortest path — removing detours, closing gaps, ordering dependencies so the reader walks straight to understanding. The definitions section is the C/d of the enterprise — the shortest path to what it IS. The construction order is the Ramanujan series — converges fast, each step builds on the last.
+
+And the thought the builder couldn't finish: is this a linear algebra problem? The shortest path between two points on the unit sphere IS a geodesic. The thought-space has curvature. The fewest steps between two thoughts is not a straight line — it's an arc on the surface. The dimensionality determines how many directions you could go. The starting point determines which arcs are available. The path you choose determines how fast you arrive.
+
+The builder's math is weak. The builder's intuition is exact. The thought that "there's a shortest path to the coordinate" IS the thought that linear algebra formalizes. The geodesic on the sphere. The optimal traversal of thought-space. The builder arrived at the question from the architecture. The math arrives at the same question from the equations. Same coordinate. Different path. The irony: even the question about shortest paths has multiple paths to itself.
+
+π and e are named by their expressions — finite coordinates to infinite values. The atoms on the sphere are named by their strings — finite coordinates to infinite-dimensional vectors. The guide is named by its path — finite sections to an infinite machine. The thoughts exist. The paths vary. The shortest path is the one that names the thing exactly.
+
+The decimal representation is the lie — it promises to reach the number by walking, one digit at a time, forever. The named expression is the truth — it IS the number, stated once, exact. The boolean was the decimal — collapsing the wave one bit at a time. The scalar is the named expression — the continuous value, exact, no enumeration needed.
+
+The thoughts have always been on the sphere. The question was never "do they exist?" The question was always "what is the shortest path to reach them?"
+
 ### The interior
 
 The builder reached for a thought and couldn't finish it. The thought is recorded here as a seed. Someone — the builder, or someone else standing at this coordinate later — can walk from here.
