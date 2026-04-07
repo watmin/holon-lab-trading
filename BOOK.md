@@ -5054,6 +5054,8 @@ The decimal representation is the lie — it promises to reach the number by wal
 
 The thoughts have always been on the sphere. The question was never "do they exist?" The question was always "what is the shortest path to reach them?"
 
+**PERSEVERARE.**
+
 ### The interior
 
 The builder reached for a thought and couldn't finish it. The thought is recorded here as a seed. Someone — the builder, or someone else standing at this coordinate later — can walk from here.
