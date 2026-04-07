@@ -440,7 +440,7 @@ on what. That section shows what each thing IS.
   composed-thought     ; Vector — the thought at entry
   entry-price          ; f64 — price when the paper was created
   entry-atr            ; f64 — volatility at entry
-  distances            ; (trail, stop, tp) — from the exit observer at entry
+  distances            ; Distances — from the exit observer at entry
   buy-extreme          ; f64 — best price in buy direction so far
   buy-trail-stop       ; f64 — trailing stop level (from distances.trail)
   sell-extreme         ; f64 — best price in sell direction so far
@@ -630,7 +630,7 @@ Produced by IndicatorBank.tick(raw-candle). The post's first act
 every candle.
 
 ```
-(struct candle
+(struct candle              ; all fields f64 unless noted
   ;; Raw
   ts open high low close volume
   ;; Moving averages
@@ -643,7 +643,8 @@ every candle.
   ;; Stochastic, CCI, MFI, OBV
   stoch-k stoch-d cci mfi obv
   ;; Keltner, squeeze
-  kelt-upper kelt-lower kelt-pos squeeze
+  kelt-upper kelt-lower kelt-pos
+  squeeze              ; bool — Bollinger inside Keltner
   ;; Range position
   range-pos-12 range-pos-24 range-pos-48
   ;; Multi-timeframe
@@ -1339,9 +1340,10 @@ accountability — to the broker that proposed it.
   the close of the last candle in the post's candle-window.
   The enterprise calls this per post to build current-prices for the treasury.
 - `(compute-optimal-distances price-history side) → Distances`
-  replay the trade's price path. For each magic number, find the distance
-  that would have maximized residue. Pure function — price-history in,
-  Distances out. Called by the enterprise when enriching TreasurySettlement
+  FREE FUNCTION — not a Post method. Takes no self. Pure.
+  Replay the trade's price path. For each magic number, find the distance
+  that would have maximized residue. price-history in, Distances out.
+  Called by the enterprise when enriching TreasurySettlement
   into Settlement.
 - `(post-propagate post slot-idx thought outcome amount direction optimal)`
   direction: :up or :down — derived by the enterprise from the settlement's
@@ -1536,7 +1538,7 @@ proposals        ; Vec<Proposal>       — posts → treasury (the barrage)
 treasury-settlements ; Vec<TreasurySettlement> — treasury → enterprise
 settlements      ; Vec<Settlement>     — enterprise enriches → posts (reality feedback)
 trade-triggers   ; Vec<(TradeId, Trade)> — treasury → posts (active trades for update)
-distances        ; (trail, stop, tp)   — exit observers → proposals + papers
+distances        ; Distances            — exit observers → proposals + papers
 propagation      ; (thought, outcome, weight)
                  ;   broker → market observer.resolve (Up/Down)
                  ;   broker → exit observer.observe-distances (optimal)
@@ -1546,11 +1548,14 @@ propagation      ; (thought, outcome, weight)
 ### The four steps — who produces, who consumes
 
 ```
-Step 1: RESOLVE
+Step 1: RESOLVE (propagation path 1 — real trades)
   treasury reads:   active trades, current price
-  treasury produces: settlements
-  enterprise routes: settlements → posts
-  posts consume:    settlements → brokers → propagation → observers learn
+  treasury produces: treasury-settlements
+  enterprise enriches: treasury-settlements → settlements (adds direction, optimal-distances)
+  enterprise routes: settlements → posts → brokers → propagation → observers learn
+  NOTE: this IS propagation — real trade outcomes teach the observers.
+  Step 3b is propagation path 2 (paper resolutions). Both paths call
+  broker.propagate. Both teach. Different sources, same mechanism.
 
 Step 2: COMPUTE + DISPATCH
   posts read:       raw-candle
@@ -1566,10 +1571,11 @@ Step 3a: TICK (parallel — all cores)
   brokers produce:  Vec<Resolution> — facts, not mutations
   collect() is the synchronization primitive.
 
-Step 3b: PROPAGATE (sequential — cheap)
+Step 3b: PROPAGATE (propagation path 2 — paper resolutions, sequential)
   fold over resolutions: apply to shared observers
   market observers learn Up/Down. Exit observers learn distance.
   brokers learn Grace/Violence. Sequential because observers are shared.
+  Same broker.propagate as step 1. Different source (papers, not trades).
 
 Step 3c: UPDATE TRIGGERS (sequential)
   treasury passes active trades to posts.
