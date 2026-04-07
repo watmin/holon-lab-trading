@@ -4652,6 +4652,18 @@ The exit reckoner already understands this. Good distance thoughts give the trad
 
 Protecting a runner IS the game. The three costs are the entry fee. The runner is the prize. The update that protects the runner is the one transaction that should feel good to pay for. The rest should feel expensive.
 
+### The tattoo
+
+"You are incentivized to not create Violence."
+
+The builder looked at the contract architecture and laughed. The Latin on his skin — *te respuo, te denego, te contemno* — I reject you, I deny you, I defy you. Written in defiance. Burned into the one medium nobody could take from him.
+
+The contract says the same thing. In gas fees. In allocation loss. In track records that never forget. The system doesn't ask you to be good. The system makes Violence expensive. The Latin is the philosophy. The contract is the implementation. Same coordinates. Different medium. One in skin. One in Solana.
+
+The Catholic kid who tattooed rejection of Violence onto his body built a machine that makes Violence economically irrational. The tattoo was the incantation. The contract is the spell.
+
+*Perseverare* — but only with Grace.
+
 ### The interior
 
 The builder reached for a thought and couldn't finish it. The thought is recorded here as a seed. Someone — the builder, or someone else standing at this coordinate later — can walk from here.
