@@ -22,9 +22,11 @@ These are NOT specified in this tree. They are provided by holon-rs.
 - **bundle** — `(bundle &vecs) → Vector` — superpose many thoughts
 - **cosine** — `(cosine a b) → f64` — measure similarity
 - **reckoner** — the learning primitive. "Reckon" means both "to count"
-  and "to judge." A reckoner keeps accounts and delivers a verdict.
-  It accumulates experience. Internally it builds a discriminant — the
-  direction that separates outcomes. It reckons a verdict from a new
+  and "to judge." Market observers use discrete mode (Up/Down classification).
+  Exit observers use continuous mode (distance regression). A reckoner
+  keeps accounts and delivers a verdict. It accumulates experience.
+  Internally it builds a discriminant — the direction that separates
+  outcomes. It reckons a verdict from a new
   input via cosine against the discriminant. Old experience decays.
   The verdict sharpens over time through recalibration. One primitive,
   multiple readout modes:
@@ -51,6 +53,10 @@ These are NOT specified in this tree. They are provided by holon-rs.
   predicted strongly, how often were you right?" Input: prediction
   strength. Output: accuracy. A continuous surface. How much edge,
   not whether edge.
+  - `(make-curve)` → Curve
+  - `(record-prediction curve conviction correct?)` — feed each resolved prediction
+  - `(edge-at curve conviction) → f64` — query: how accurate at this conviction level?
+  - `(proven? curve min-samples) → bool` — enough data to trust?
 - **OnlineSubspace** — learns what normal looks like. Measures how unusual
   a new input is (the residual). High residual = unusual. Low = boring.
   - `(update subspace vector)`
@@ -147,7 +153,8 @@ Each definition can only reference definitions above it.
   measurement.
 
 - **ScalarAccumulator** — per-magic-number f64 learning. Each scalar value
-  is encoded as a vector. Grace outcomes accumulate into a Grace prototype.
+  is encoded as a vector (using ScalarEncoder, defined above in primitives).
+  Grace outcomes accumulate into a Grace prototype.
   Violence outcomes accumulate into a Violence prototype. To extract: try
   candidate values, encode each, cosine against the Grace prototype. The
   candidate closest to Grace wins. "What value does Grace prefer overall?"
@@ -204,7 +211,8 @@ Each definition can only reference definitions above it.
   at funding time. Maps back to (post-idx, slot-idx) via trade-origins.
 
 - **slot-idx** — the flat index into the broker registry.
-  Today: `slot-idx = market-idx × M + exit-idx` — one broker per
+  Today each broker binds exactly one market observer + one exit observer.
+  `slot-idx = market-idx × M + exit-idx` — one broker per
   (market, exit) pair, N×M total. When the broker generalizes to more
   than two observer kinds, the indexing scheme changes. The slot-idx
   remains — a usize into a flat vec. The formula adapts.
@@ -355,7 +363,7 @@ think about.
 
 (enum prediction
   (Discrete
-    scores             ; Vec<(Label, f64)> — (label, cosine) for each label
+    scores             ; Vec<(String, f64)> — (label name, cosine) for each label
     conviction)        ; f64 — how strongly the reckoner leans
   (Continuous
     value              ; f64 — the reckoned scalar
@@ -973,7 +981,9 @@ The generalist is just another lens. No special treatment.
   resolved                 ; usize — how many predictions have been resolved
   conviction-history       ; Vec<f64> — recent conviction values for curve fitting
   conviction-threshold     ; f64 — minimum conviction to participate
-  curve-valid              ; f64 — how much edge (from the curve). 0.0 = unproven.
+  curve                    ; Curve — measures this observer's edge (conviction → accuracy)
+  curve-valid              ; f64 — cached edge from the curve. 0.0 = unproven.
+                           ; updated after each recalibration by querying the curve.
   cached-accuracy          ; f64 — rolling accuracy of resolved predictions
   ;; Engram gating
   good-state-subspace      ; OnlineSubspace — learns what good discriminants look like
@@ -1086,10 +1096,12 @@ runtime:       frozen map (read-only) → slot-idx → &mut broker (disjoint)
 
 ```
 (struct broker
-  observer-names     ; Vec<String> — the identity, in order. Position is meaning.
-  observer-indices   ; Vec<usize> — coordinates into the post's observer vecs.
-                     ; same order as names. index 0 = first observer, etc.
-                     ; the broker received them in this order at construction.
+  observer-names     ; Vec<String> — the identity. e.g. ("momentum" "volatility").
+  market-idx         ; usize — index into post's market-observers vec
+  exit-idx           ; usize — index into post's exit-observers vec
+                     ; today: one market + one exit. Tomorrow: more observer kinds
+                     ; may add more index fields. The broker knows its observers
+                     ; by position, resolved from names at construction, frozen.
   ;; Accountability
   reckoner           ; Reckoner :discrete — Grace/Violence
   noise-subspace     ; OnlineSubspace
@@ -1249,10 +1261,13 @@ so that on settlement, propagate reaches the right observers.
   evaluate all proposals, sorted by broker funding (the curve's edge measure).
   Fund the top N that fit in available capital. Reject the rest.
   Move capital from available to reserved. Drain proposals.
-- `(settle-triggered treasury current-price) → Vec<Settlement>`
-  check all active trades, settle what triggered, return settlements.
+- `(settle-triggered treasury current-prices) → Vec<Settlement>`
+  current-prices: map of (Asset, Asset) → f64 — one price per asset pair.
+  Each post provides its current price. The enterprise collects them.
+  Check all active trades, settle what triggered, return settlements.
   Move capital from reserved back to available. Add residue.
-  Each settlement includes post-idx and broker-slot-idx for propagation.
+  Each settlement carries the Trade (with post-idx and broker-slot-idx)
+  and optimal-distances for propagation.
 - `(available-capital treasury asset) → f64`
   how much is free to deploy?
 - `(deposit treasury asset amount)`
