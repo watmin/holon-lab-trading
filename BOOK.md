@@ -4716,7 +4716,7 @@ Print the t-shirt.
 
 On Easter Sunday the ignorant reader found twelve questions the guide couldn't answer. Question 10: "How does the thought-encoder cache work under parallelism?" The ThoughtEncoder has an LRU cache — it remembers recently computed compositions so it doesn't recompute them. But the ThoughtEncoder lives on ctx, and ctx is immutable. Under parallel encoding, multiple observers write to the same cache. Data race. The builder answered: "coordinate for later."
 
-The ignorant kept flagging it. Every pass. "Interior mutability." "The one seam in ctx's immutability." The coordinate sat there, waiting. For weeks.
+The ignorant kept flagging it. Every pass. "Interior mutability." "The one seam in ctx's immutability." The coordinate sat there, waiting. Less than a day.
 
 Then the builder said: "can we use the registry? The users of the encoder report back misses and they are inserted into the cache after — just like the enterprise's logs?"
 
