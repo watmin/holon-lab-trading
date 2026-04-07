@@ -1124,7 +1124,7 @@ No interface — Distances is pure data. Four f64 fields: trail, stop, tp, runne
 ### ScalarAccumulator (depends on: nothing)
 
 Per-magic-number f64 learning. Lives on the broker. Global per-pair.
-Each magic number (trail-distance, stop-distance, tp-distance) gets its own.
+Each distance (trail, stop, tp, runner-trail) gets its own.
 
 Separates grace/violence observations into separate f64 prototypes.
 Grace outcomes accumulate one way. Violence outcomes accumulate the other.
@@ -1220,7 +1220,7 @@ The generalist is just another lens. No special treatment.
 ### ExitObserver (depends on: Reckoner :continuous)
 
 Estimates exit distance. Learned. Each exit observer has FOUR continuous
-reckoners — one per magic number (trail, stop, tp). No noise-subspace,
+reckoners — one per distance (trail, stop, tp, runner-trail). No noise-subspace,
 no curve, no engram gating — intentionally simpler than MarketObserver.
 The exit observer's quality is measured through the BROKER's curve, not
 its own. The broker's Grace/Violence ratio reflects the combined quality

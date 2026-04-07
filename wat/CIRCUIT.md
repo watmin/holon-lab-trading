@@ -49,7 +49,7 @@ Vectors. Vocabulary and ThoughtEncoder are tools, not upstream producers.
 | **Broker ×N×M** | reckoner :discrete (Grace/Violence), curve, papers (deque), 4× scalar-accumulator | Prediction + funding() |
 | **Post** | indicator-bank, candle-window, market-observers, exit-observers, registry, broker-map | Vec\<Proposal\> + Vec\<Vector\> |
 | **Treasury** | available ◄──► reserved, trades, trade-origins, next-trade-id | TreasurySettlement on settle |
-| **Enterprise** | posts, treasury, market-thoughts-cache, log-queues | Settlement (enriched) |
+| **Enterprise** | posts, treasury, market-thoughts-cache, cache-miss-queues, log-queues | Settlement (enriched) |
 
 **Edge legend — data flow (solid arrows):**
 
