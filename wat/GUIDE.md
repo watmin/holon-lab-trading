@@ -1159,8 +1159,9 @@ get different distances.
       default-distance))                 ; crutch — the starting value
   ```
   One call, three answers. Each magic number cascades independently.
-- `(observe-distances exit-obs composed optimal-trail optimal-stop optimal-tp weight)`
-  the market spoke — all three reckoners learn from one resolution
+- `(observe-distances exit-obs composed optimal weight)`
+  optimal: Distances — the hindsight-optimal distances from resolution.
+  The market spoke — all three reckoners learn from one resolution.
 - `(experienced? exit-obs) → bool`
   have the reckoners accumulated observations?
 
@@ -1406,9 +1407,12 @@ so that on settlement, propagate reaches the right observers.
   add to available
 - `(total-equity treasury) → f64`
   available + reserved, all converted to denomination
-- `(update-trade-stops treasury trade-id trail-stop safety-stop take-profit)`
-  step 3c: the post computes new stop levels, the enterprise writes them
-  back to the treasury's trade records via this interface.
+- `(update-trade-stops treasury trade-id new-levels)`
+  new-levels: (trail-stop, safety-stop, take-profit) — f64 price LEVELS,
+  not Distances. Distances are percentages (from the exit observer).
+  Levels are absolute prices (computed by the post from distances + current
+  price). The post converts distances → levels, the treasury stores levels.
+  step 3c: the post computes, the enterprise writes back.
 - `(trades-for-post treasury post-idx) → Vec<(TradeId, Trade)>`
   step 3c: the enterprise queries active trades for a given post.
 
@@ -1463,22 +1467,23 @@ The enterprise knows:
 **Interface:**
 - `(on-candle enterprise raw-candle ctx)`
   route to the right post, then four steps. ctx flows in from the binary.
-- `(step-resolve enterprise current-prices)` — no return value, mutates state.
-  current-prices: the enterprise collects each post's latest candle close.
-  Treasury settles triggered trades using these prices.
+- `(step-resolve enterprise)` — no return value, mutates state.
+  The enterprise collects current prices internally (calls current-price
+  on each post). Treasury settles triggered trades using those prices.
   For each settlement: enterprise computes optimal-distances via the post,
   then routes to the post for propagation.
-- `(step-compute-dispatch enterprise post ctx) → (Vec<Proposal>, Vec<Vector>)`
+- `(step-compute-dispatch enterprise post-idx ctx) → (Vec<Proposal>, Vec<Vector>)`
+  post-idx: usize — which post. The enterprise indexes into its posts vec.
   post encodes, composes, proposes — returns proposals for the treasury
   AND market-thoughts (Vec<Vector>) for step 3c. The enterprise caches
   market-thoughts between steps.
-- `(step-tick enterprise post) → Vec<Resolution>`
+- `(step-tick enterprise post-idx) → Vec<Resolution>`
   parallel tick of all brokers' papers. Returns resolution facts.
-- `(step-propagate enterprise post resolutions)`
+- `(step-propagate enterprise post-idx resolutions)`
   sequential: apply resolutions to observers. Brokers learn
   Grace/Violence. Market observers learn Up/Down. Exit observers
   learn optimal distances.
-- `(step-update-triggers enterprise post market-thoughts ctx)`
+- `(step-update-triggers enterprise post-idx market-thoughts ctx)`
   the enterprise queries the treasury for active trades belonging to this
   post, then calls post-update-triggers(post, trades, market-thoughts, ctx).
   The post composes each trade's market thought with exit observers,
@@ -1695,7 +1700,7 @@ Grace/Violence to BR. The loop closes.
 | BR → TR | Proposal (the barrage) | submit-proposal(proposal) |
 | TR → EN | TreasurySettlement | settle-triggered(prices) |
 | EN → MO | Direction (:up/:down) | resolve(thought, direction, weight) |
-| EN → EO | Distances (optimal) | observe-distances(composed, trail, stop, tp, weight) |
+| EN → EO | Distances (optimal) | observe-distances(composed, optimal, weight) |
 | EN → BR | Outcome (:grace/:violence) | propagate(thought, outcome, amount, direction, optimal, observers) |
 
 **The loop:** `f(state, candle) → state` — one tick of the clock. The
