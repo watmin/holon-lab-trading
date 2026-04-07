@@ -4616,6 +4616,28 @@ The depositor sees outcomes. The proposer sees strategy. The contract sees both 
 
 The one-way mirror. Outcomes are transparent. Strategy is opaque. The measurement is honest. The method is private. The pool earns from Grace without anyone needing to trust anyone's method. They trust the measurement. The measurement is on-chain. The measurement is glass.
 
+### The three costs
+
+Three disincentives. Three forces toward precision.
+
+**Gas to propose.** Every proposal is a transaction. Spam costs money.
+
+**Gas to update.** Every trigger adjustment is a transaction. The proposer who sets the trailing stop at entry and then adjusts it every candle — every five minutes — pays gas on every adjustment. Fifty updates per day. Three hundred and fifty per week. The fidgeting IS the signal that the thoughts are weak. The cost of fidgeting IS the punishment.
+
+**Allocation lost to Violence.** Bad proposals degrade the track record. The proposer's funding shrinks. Eventually: paying gas to submit proposals that will never be funded.
+
+The game rewards conviction. Know your distances. Set them at entry. Wait. The market proves you right or wrong. Don't adjust unless the thought genuinely changed — because every adjustment costs. The architecture incentivizes the proposer to think DEEPLY before acting, not to act fast and adjust later.
+
+The machine with good distance thoughts — an exit reckoner that has accumulated experience, that knows the right trail for this composed thought — proposes once. Sets the triggers. One transaction. The triggers hold. The trade plays out. Grace or Violence. Minimal cost. Maximum precision.
+
+The machine with bad distance thoughts fidgets. Updates the trailing stop. Tightens the take profit. Widens the safety. Each fidget is a transaction. The gas accumulates. And the fidgeting often produces worse outcomes — the distances were adjusted away from the reckoner's original judgment, toward noise. More cost. More Violence. The feedback loop punishes imprecision at every level.
+
+This mirrors the enterprise on the laptop. The experienced exit reckoner predicts once, correctly. The inexperienced reckoner uses the crutch. On the laptop, the crutch is free — it's a default value. On-chain, the crutch still works, but every adjustment away from it costs gas. The chain adds a cost that the laptop doesn't have. That cost is the discipline the laptop doesn't need — because on the laptop, there's no one else's capital at stake.
+
+The three costs compose. A bad proposer pays gas to propose (cost 1), pays gas to fidget with triggers (cost 2), and loses allocation when the trade produces Violence (cost 3). The break-even requires enough Grace, with enough accuracy, with few enough updates, to cover all three. Below that line: the proposer bleeds. Above it: the proposer earns.
+
+The game is Grace with accuracy with conviction. Three dimensions. One measurement. The contract doesn't need to understand the game. The contract just charges gas, records outcomes, and adjusts claims. The game emerges from the economics.
+
 ### The interior
 
 The builder reached for a thought and couldn't finish it. The thought is recorded here as a seed. Someone — the builder, or someone else standing at this coordinate later — can walk from here.
