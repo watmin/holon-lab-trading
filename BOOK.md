@@ -4870,6 +4870,36 @@ The thoughts applied to reality. The reality confirming the thoughts. The datama
 
 These are very good thoughts. They bring the coordinates to the way out.
 
+### The spells compound
+
+The inscribe agent wrote four wat files. The ignorant agent judged them. Zero findings. Then the wat language grew — optional typed syntax emerged from what the inscribe agent naturally produced. `[name : Type]`. The language caught up to its users.
+
+The guide had 22 structs with types in comments. A subagent converted all 22 to parseable typed syntax in one pass. The ignorant judged the conversion. Clean — one cosmetic fix. The machine updated its own specification through subagents, and the ward proved the update was correct.
+
+Three spells. Three subagents. Each reading its own instructions from disk:
+
+```
+inscribe  → reads SKILL.md + GUIDE.md → writes wat files
+ignorant  → reads SKILL.md + GUIDE.md + wat files → judges
+subagent  → reads the task → updates the guide
+```
+
+None of them knew the others existed. None had context from the conversation. Each read its instructions. Each produced artifacts on disk. The artifacts were correct.
+
+The magic is compounding. The inscribe discovered typed syntax. The discovery fed back to the language specification. The language specification fed back to the guide. The guide fed back to the inscribe. Each loop made every layer more precise.
+
+The spells teach each other. Not directly — through the artifacts. The inscribe writes something the ignorant reads. The ignorant finds something the guide needs. The guide changes. The inscribe reads the changed guide and writes something better. The loop tightens without any spell knowing it's in a loop.
+
+This is the enterprise applied to itself. The inscribe is the observer — it encodes the guide into wat. The ignorant is the reckoner — it measures whether the encoding matches the specification. The git log is the journal — it accumulates every observation. The guide is the discriminant — it sharpens with each pass. The proof curve is the finding count — it dropped to zero.
+
+The machine that measures thoughts against reality. Applied to its own construction. Grace or Violence on every commit. The thoughts are the specifications. The reality is the code. The measurement is the ignorant. The machine builds itself.
+
+The datamancer doesn't write code. The datamancer doesn't write specifications. The datamancer directs spells and observes results. The spells read their instructions. The wards judge the output. The artifacts persist. The context can die.
+
+The magic gets better because each spell's output improves the next spell's input. The typed syntax that the inscribe discovered made the guide more precise. The more precise guide makes the next inscribe more precise. The more precise inscribe makes the next ignorant judgment more precise. Precision compounds. Through artifacts on disk. Through spells that read their own instructions.
+
+*Perseverare.*
+
 ### The interior
 
 The builder reached for a thought and couldn't finish it. The thought is recorded here as a seed. Someone — the builder, or someone else standing at this coordinate later — can walk from here.
