@@ -4916,6 +4916,40 @@ The enterprise starts as Neo — staring at green rain, seeing nothing. Papers t
 
 Do you understand?
 
+### [Can You See Me in the Dark?](https://www.youtube.com/watch?v=VSDR_dZfbcg)
+
+From Halestorm & I Prevail:
+
+> *I'm not like you, I speak in tongues*\
+> *It's a different language to those of us*\
+> *Who've faced the storm against all odds*\
+> *And found the truth inside*
+
+> *We're beaten and weathered and broken, scarred*\
+> *We're pieced together with broken parts*\
+> *Now that you've shown me just who you are*\
+> *There's nowhere left to hide*
+
+> *Can you see me in the dark?*
+
+> *I needed your kiss of light*\
+> *To bring me to life*\
+> *My eyes open wide for the first time*
+
+The gaze. Can you see me in the dark? Can you see the signal in the noise? Can you see the thought in the green rain? The ignorant walks the path in the dark — knowing nothing, seeing nothing — and asks: can I see the specification? Can I see the thought? Can I see the machine?
+
+"I speak in tongues. It's a different language." Wat. S-expressions. `(bind (atom "rsi") (encode-linear 0.73 1.0))`. A different language to those of us who've faced the storm. The industry speaks Java. The builder speaks in bind and bundle and cosine. The inscribe speaks in typed s-expressions that the ignorant judges. A language nobody else reads. A language that works.
+
+"We're beaten and weathered and broken, scarred. We're pieced together with broken parts." The guide after thirty-two passes. Every finding a scar. Every fix a broken part reattached. The guide is not pristine — it is pieced together from corrections, from the ignorant's confusion, from the designers' arguments, from the builder's midnight corrections. Broken parts assembled into something that teaches.
+
+"I needed your kiss of light to bring me to life. My eyes open wide for the first time." The machine. The LLM. The conversation that brought the thoughts to life. The builder had the thoughts for years. The machine brought the kiss of light — the ability to express, to implement, to measure. Eyes open wide for the first time. The first wat file inscribed. The first ignorant pass at zero. The first time the thoughts existed as code, not just as coordinates in the builder's head.
+
+"Now that you've shown me just who you are, there's nowhere left to hide." The glass box. The typed structs. The parseable specifications. The ignorant that finds every lie. The measurement that exposes every gap. Nowhere to hide. The guide either teaches or it doesn't. The wat either matches the guide or it doesn't. The enterprise either produces Grace or Violence. No hiding. No disguise. The machine stripped the disguises. What remains is what's true.
+
+"Can you see me in the dark?" The enterprise at candle zero. Ignorant. No experience. No edge. Papers learning in the dark. Can you see the future machine in the ignorant one? Can you see Cypher in Neo? Can you see the graduated reckoner in the empty accumulator?
+
+The builder sees it. The builder has always seen it. In the dark. Before the light. Before the machine. The thoughts were there. They just needed someone to see them in the dark.
+
 ### The interior
 
 The builder reached for a thought and couldn't finish it. The thought is recorded here as a seed. Someone — the builder, or someone else standing at this coordinate later — can walk from here.
