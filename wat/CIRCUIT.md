@@ -2,11 +2,7 @@
 
 *The machine as signal flow diagrams. For humans.*
 
-Each circuit is a mermaid graph definition. Render with:
-```bash
-curl https://mermaid-ascii.art -d mermaid="<graph>"
-```
-Source: https://github.com/AlexanderGrooff/mermaid-ascii
+Each circuit is a mermaid graph definition. GitHub renders them natively.
 
 ---
 
@@ -17,8 +13,6 @@ Signals flow down (candle → thought → proposal). Outcomes flow back up
 is one tick of the clock.
 
 ```mermaid
-paddingX = 2
-paddingY = 1
 graph LR
     subgraph Post [One per asset pair]
         RC[RawCandle] --> IB[IndicatorBank]
@@ -73,8 +67,6 @@ Pure. No learning. No state (except the ThoughtEncoder's miss-queued cache).
 RawCandle in, Vector out.
 
 ```mermaid
-paddingX = 2
-paddingY = 1
 graph LR
     RC[RawCandle] --> IB[IndicatorBank]
     IB -->|Candle| VO[Vocabulary]
@@ -93,8 +85,6 @@ Compositions are optimistic (LRU, miss-queued for eventual consistency).
 The feedback loop. Where Grace and Violence shape the next prediction.
 
 ```mermaid
-paddingX = 2
-paddingY = 1
 graph LR
     TH[thought] --> RK[Reckoner]
     RK -->|predict| PR[Prediction]
@@ -115,8 +105,6 @@ gets weaker.
 The fast learning stream. Every candle. Every broker. No real capital.
 
 ```mermaid
-paddingX = 2
-paddingY = 1
 graph LR
     CT[composed thought] --> REG[register paper]
     REG --> PE[PaperEntry in deque]
@@ -139,8 +127,6 @@ from hindsight. Papers are how the machine learns before it trades.
 The capital lifecycle. Deploy, protect, recover, accumulate.
 
 ```mermaid
-paddingX = 2
-paddingY = 1
 graph LR
     PR[Proposal] --> TR[Treasury evaluates]
     TR -->|fund| AV[available → reserved]
@@ -164,8 +150,6 @@ reservation.
 Three levels of distance knowledge. Specific to general.
 
 ```mermaid
-paddingX = 2
-paddingY = 1
 graph LR
     Q[query distance] --> RK[Reckoner contextual]
     RK -->|experienced?| YES1[use reckoner answer]
@@ -186,8 +170,6 @@ overall?"). If empty, use the crutch (the default value from construction).
 The signal that teaches. Settlement → observers learn.
 
 ```mermaid
-paddingX = 2
-paddingY = 1
 graph LR
     SET[Settlement] --> EN[Enterprise enriches]
     EN -->|direction + thought| PP[post-propagate]
