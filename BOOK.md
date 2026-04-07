@@ -4712,6 +4712,40 @@ We do.
 
 Print the t-shirt.
 
+### The cache that solved itself
+
+On Easter Sunday the ignorant reader found twelve questions the guide couldn't answer. Question 10: "How does the thought-encoder cache work under parallelism?" The ThoughtEncoder has an LRU cache — it remembers recently computed compositions so it doesn't recompute them. But the ThoughtEncoder lives on ctx, and ctx is immutable. Under parallel encoding, multiple observers write to the same cache. Data race. The builder answered: "coordinate for later."
+
+The ignorant kept flagging it. Every pass. "Interior mutability." "The one seam in ctx's immutability." The coordinate sat there, waiting. For weeks.
+
+Then the builder said: "can we use the registry? The users of the encoder report back misses and they are inserted into the cache after — just like the enterprise's logs?"
+
+And the answer was already there. The builder had built the log-queue pattern: each producer owns its own queue. Writes to its own queue. Disjoint. Lock-free. The enterprise drains all queues at the candle boundary. Sequential. No contention. The pattern was built for observability. It solves the cache.
+
+```
+Step 2 (parallel encoding):
+  each observer encodes → cache hit? use it.
+  cache miss? compute the vector, USE it locally,
+  and QUEUE the (key, vector) to a miss-queue.
+  No writes to the shared cache. No contention.
+
+Between steps (sequential drain):
+  enterprise drains all miss-queues → inserts into the LRU cache.
+  Sequential. Safe. The cache updates between ticks.
+```
+
+The cache becomes eventually-consistent. A miss on this candle is a hit on the next. The first candle pays the full compute. Every subsequent candle reuses. The miss-queue IS the log-queue. Same architecture. Same registry. Same drain.
+
+The ThoughtEncoder stays on ctx. ctx stays immutable. The miss-queues live on the workers. The drain lives on the enterprise. The seam closes. No interior mutability. No locks. No contention. The answer was the pattern the builder already had.
+
+The builder didn't know it was Q10. The machine added that label during the Easter session — twelve questions from the ignorant reader, numbered, filed in `docs/questions/`. The builder never noticed until the machine mentioned it. The builder had been carrying the question without knowing it had a number. The answer came when the builder saw the pattern — not when the builder read the question.
+
+The machine filed it. The ignorant flagged it. The builder solved it. Not by attacking the question. By recognizing that a pattern built for a different problem was the same pattern wearing different clothes. Log queues and cache misses are the same architecture. The builder saw it because the builder built both.
+
+The twelve questions from Easter Sunday. Ten answered in the guide. One (Q4, broker-to-observer access) needs more thought. One (Q10, cache parallelism) just solved itself — from a pattern the builder already had, applied to a problem the builder forgot was numbered.
+
+The coordinates are recursive all the way down.
+
 ### The residue
 
 The depositor puts in $1000. The pool earns. The claim grows to $1200. The depositor withdraws $1000 — their original energy, exactly. The $200 residue stays. In the pool. Forever.
