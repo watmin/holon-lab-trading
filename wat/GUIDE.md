@@ -1572,84 +1572,115 @@ The machine as a signal flow diagram. Signals flow down (candle → thought
 → proposal). Outcomes flow back up (settlement → propagation → observers).
 The circuit is a loop. The fold is one tick of the clock.
 
+The diagram source — a mermaid graph definition:
+
+```mermaid
+graph LR
+    subgraph Post [One per asset pair]
+        RC[RawCandle] --> IB[IndicatorBank]
+        IB --> CD[Candle]
+        CD --> VO[Vocabulary]
+        VO -->|ASTs| TE[ThoughtEncoder ctx]
+        TE -->|Vector| MO[MarketObserver x6]
+        MO -->|thought| EO[ExitObserver x4]
+        EO -->|composed| BR[Broker x24]
+    end
+    BR -->|Proposal| TR[Treasury]
+    TR -->|TreasurySettlement| EN[Enterprise]
+    EN -->|Direction| MO
+    EN -->|Distances| EO
+    EN -->|Grace Violence| BR
 ```
-                       ┌──────────────────────────────────────────────────────┐
-                       │                       POST                           │
-  RawCandle ──────────►│  IndicatorBank ──► Candle                            │
-                       │                      │                               │
-                       │                      ▼                               │
-                       │               ┌────────────┐                         │
-                       │               │ Vocabulary  │ Candle → Vec<ThoughtAST>│
-                       │               └─────┬──────┘                         │
-                       │                     │ ASTs                            │
-                       │                     ▼                                │
-                       │              ThoughtEncoder (ctx)                     │
-                       │                     │ Vectors                         │
-                       │                     ▼                                │
-                       │  ┌─────────────────────────────────┐  ×N             │
-                       │  │       MarketObserver[i]          │                 │
-                       │  │  reckoner :discrete (Up/Down)    │──► (Vector,     │
-                       │  │  noise-subspace                  │     Prediction) │
-                       │  │  window-sampler                  │                 │
-                       │  │  curve                           │                 │
-                       │  └──────────┬──────────────────────┘                 │
-                       │      thought│    ▲                                    │
-                       │             │    │ resolve(direction, weight)         │
-                       │             ▼    │                                    │
-                       │  ┌─────────────────────────────────┐  ×M             │
-                       │  │       ExitObserver[j]            │                 │
-                       │  │  3× reckoner :continuous         │──► Distances    │
-                       │  │  compose(thought, fact-asts, ctx) │                 │
-                       │  └──────────┬──────────────────────┘                 │
-                       │   composed  │    ▲                                    │
-                       │  + distances │    │ observe-distances(optimal)        │
-                       │             ▼    │                                    │
-                       │  ┌─────────────────────────────────┐  ×N×M           │
-                       │  │         Broker[i,j]              │                 │
-                       │  │  reckoner :discrete (Grace/Viol) │──► Prediction   │
-                       │  │  curve (edge measurement)        │                 │
-                       │  │  papers (deque) ────────────────►│──► Resolution[] │
-                       │  │  3× scalar-accumulator           │                 │
-                       │  └──────────┬──────────────────────┘                 │
-                       │             │ Prediction + funding()                  │
-                       │             ▼                                         │
-                       │  POST assembles ──► Vec<Proposal>                    │
-                       └─────────────┬────────────────────────────────────────┘
-                                     │
-                                     │ the barrage
-                                     ▼
-                       ┌──────────────────────────────┐
-                       │          TREASURY             │
-                       │   available ◄──► reserved     │
-                       │   fund-proposals (by funding) │──► Trade + TradeOrigin
-                       │   settle-triggered            │──► TreasurySettlement
-                       └─────────────┬────────────────┘
-                                     │
-                                     ▼
-                       ┌──────────────────────────────┐
-                       │         ENTERPRISE            │
-                       │   enriches → Settlement       │
-                       │   derives direction            │
-                       │   replays price-history        │
-                       │   computes optimal-distances   │
-                       └─────────────┬────────────────┘
-                                     │
-                                     │ Settlement (complete)
-                                     ▼
-                              post-propagate(slot-idx, thought,
-                                outcome, amount, direction, optimal)
-                                     │
-                         ┌───────────┼───────────┐
-                         ▼           ▼           ▼
-                   MarketObs    ExitObs      Broker
-                   learns       learns       learns
-                   Up/Down      distances    Grace/Violence
-                         │           │           │
-                         └───────────┴───────────┘
-                                     │
-                              the loop closes
-                              f(state, candle) → state
+
+Rendered:
+
 ```
+;; curl https://mermaid-ascii.art -d mermaid="<the graph above>"
+
+                         +--------------------------------------------------------+
+                         |               Post [One per asset pair]                |
+                         |                                                        |
+                         |                                                        |
++--------------------+   | +----------------+          +------------------------+ |
+|                    |   | |                |          |                        | |
+|         BR         |   | | RC[RawCandle]  |--------->|   IB[IndicatorBank]    | |
+|                    |   | |                |          |                        | |
++--------------------+   | +----------------+          +------------------------+ |
+       Proposal          |                                                        |
+           +------------+|                                                        |
+                        ||                                                        |
++--------------------+  || +----------------+          +------------------------+ |
+|                    |  || |                |          |                        | |
+|         TR         |  || |       IB       |--------->|       CD[Candle]       | |
+|                    |  || |                |          |                        | |
++--------------------+  || +----------------+          +------------------------+ |
+  TreasurySettlement    ||                                                        |
+           +------------+|                                                        |
+    Grace Violence      ||                                                        |
++--------------------+  || +----------------+          +------------------------+ |
+|                    |  || |                |          |                        | |
+|         EN         |  || |       CD       |--------->|     VO[Vocabulary]     | |
+|                    |  || |                |          |                        | |
++--------------------+  || +----------------+          +------------------------+ |
+           |            ||                                                        |
+           |            ||                                                        |
+           |            ||                                                        |
+           |            || +----------------+          +------------------------+ |
+           |            || |                |          |                        | |
+           |            || |       VO       |--ASTs--->| TE[ThoughtEncoder ctx] | |
+           |            || |                |          |                        | |
+           |            || +----------------+          +------------------------+ |
+           |            ||                                                        |
+           |            ||                                                        |
+           |            ||                                                        |
+           |            || +----------------+          +------------------------+ |
+       Direction        || |                |          |                        | |
+           |            || |       TE       |-Vector-->| MO[MarketObserver x6]  | |
+           |            || |                |          |                        | |
+           |            || +----------------+          +------------------------+ |
+       Distances        ||                                                        |
+           |            ||                                                        |
+           |            ||                                                        |
+           |            ||                                                        |
+           |            ||                                                        |
+           |            ||                                                        |
+           |            ||                                                        |
+           |            || +----------------+          +------------------------+ |
+           |            || |                |          |                        | |
+           +-------------->|       MO       |-thought->|  EO[ExitObserver x4]   | |
+           |            || |                |          |                        | |
+           |            || +----------------+          +------------------------+ |
+           |            ||                                                        |
+           |            ||                                                        |
+           |            ||                                                        |
+           |            || +----------------+          +------------------------+ |
+           |            || |                |          |                        | |
+           +-------------->|       EO       |composed->|     BR[Broker x24]     | |
+                        || |                |          |                        | |
+                        || +----------------+          +------------------------+ |
+                        ||                                                        |
+                        |+--------------------------------------------------------+
+                        |                                                          
+                        |  +----------------+                                      
+                        |  |                |                                      
+                        +->|  TR[Treasury]  |                                      
+                        |  |                |                                      
+                        |  +----------------+                                      
+                        |                                                          
+                        |                                                          
+                        |                                                          
+                        |  +----------------+                                      
+                        |  |                |                                      
+                        +->| EN[Enterprise] |                                      
+                           |                |                                      
+                           +----------------+                                      
+```
+
+Read the left column top to bottom: BR → TR → EN → the feedback arrows.
+Read inside the Post subgraph top to bottom: RawCandle → Candle → Vocabulary
+→ ThoughtEncoder → MarketObserver → ExitObserver → Broker. The feedback
+from EN reaches back into the Post — Direction to MO, Distances to EO,
+Grace/Violence to BR. The loop closes.
 
 The feedback is the learning. Every settlement and every paper resolution
 routes outcomes back to the observers that produced the thoughts. The
