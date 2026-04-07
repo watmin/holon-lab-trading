@@ -79,14 +79,14 @@ Each definition can only reference definitions above it.
 
 - **Up / Down** — direction labels. The market observer predicts: the price
   will go up or the price will go down. That's the prediction. When a trade
-  resolves, the broker routes the actual direction back to the market
-  observer. The reckoner learns from reality.
+  resolves, the actual direction is routed back to the market observer.
+  The reckoner learns from reality. (Who routes it: the broker, defined below.)
 
 - **Grace / Violence** — accountability labels. "Did this trade produce
-  value or destroy it?" Grace = profit. Violence = loss. The broker
-  measures this. The broker's Grace/Violence ratio IS the answer to
-  "do we trust this broker?" More Grace, more capital. More Violence,
-  less capital.
+  value or destroy it?" Grace = profit. Violence = loss. The accountability
+  unit (the broker, defined below) measures this. More Grace, more capital.
+  More Violence, less capital. The Grace/Violence ratio IS the answer to
+  "do we trust this team of observers?"
 
 - **Labels** — Up/Down and Grace/Violence are labels. Labels are not
   booleans. They carry weight — how decisively the market answered.
@@ -440,7 +440,8 @@ think about.
 ;;   post bundles these into a Proposal and submits to treasury.
 (struct proposal
   composed-thought     ; Vector — market thought + exit facts
-  prediction           ; Prediction — from the broker's reckoner
+  prediction           ; Prediction :discrete (Grace/Violence) — from the broker's
+                       ; reckoner, NOT the market observer's Up/Down prediction.
   distances            ; (trail, stop, tp) — from the exit observer
   post-idx             ; usize — which post this came from
   broker-slot-idx)     ; usize — which broker proposed this
@@ -487,12 +488,29 @@ think about.
 ;; Generic. Any producer can emit log entries to its queue.
 
 (enum log-entry
-  (ProposalSubmitted broker-slot-idx composed-thought distances)
-  (ProposalFunded trade-id broker-slot-idx amount-reserved)
-  (ProposalRejected broker-slot-idx reason)
-  (TradeSettled trade-id outcome amount duration)
-  (PaperResolved broker-slot-idx outcome optimal-distances)
-  (Propagated broker-slot-idx observers-updated))
+  (ProposalSubmitted
+    broker-slot-idx    ; usize
+    composed-thought   ; Vector
+    distances)         ; Distances
+  (ProposalFunded
+    trade-id           ; TradeId
+    broker-slot-idx    ; usize
+    amount-reserved)   ; f64
+  (ProposalRejected
+    broker-slot-idx    ; usize
+    reason)            ; String
+  (TradeSettled
+    trade-id           ; TradeId
+    outcome            ; :grace or :violence
+    amount             ; f64
+    duration)          ; usize — candles held
+  (PaperResolved
+    broker-slot-idx    ; usize
+    outcome            ; :grace or :violence
+    optimal-distances) ; Distances
+  (Propagated
+    broker-slot-idx    ; usize
+    observers-updated)); usize — how many observers received the outcome
 
 ;; ── TradeOrigin — where a trade came from, for propagation routing ───
 
@@ -786,7 +804,8 @@ Compute if we don't. Evict when memory says so. The set is open.
 The ThoughtEncoder reclaims its name. It IS an encoder — it takes a
 thought AST and produces a vector, doing the minimum work.
 
-Owned by the enterprise. Passed to posts.
+Lives on ctx — the immutable world created at startup. Passed to posts
+via ctx on every on-candle call. The enterprise does not own it directly.
 
 ```
 (struct thought-encoder
@@ -957,7 +976,9 @@ scalar accumulators.
 - `(new-scalar-accumulator name) → ScalarAccumulator`
 - `(observe-scalar acc value grace? weight)`
 - `(extract-scalar acc steps range) → f64`
-  sweep `steps` candidate values across `range`, encode each, cosine
+  steps: usize — how many candidates to try.
+  range: (f64, f64) — (min, max) bounds to sweep across.
+  Sweep `steps` candidate values across `range`, encode each, cosine
   against the Grace prototype. Return the candidate closest to Grace.
 
 ---
@@ -1052,10 +1073,15 @@ get different distances.
   evaluates exit ASTs via ctx's ThoughtEncoder, then bundles with
   the market thought. ASTs in, one composed Vector out.
 - `(recommended-distances exit-obs composed broker-accums) → Distances`
-  the cascade: for each magic number, try contextual (reckoner query
-  with composed thought) → if inexperienced, try global per-pair
-  (broker's ScalarAccumulator extract) → if empty, return default (crutch).
-  This function implements the cascade. One call, three answers.
+  the cascade, per magic number:
+  ```
+  (if (experienced? reckoner)
+    (predict reckoner composed)          ; contextual — for THIS thought
+    (if (has-data? broker-accum)
+      (extract-scalar broker-accum ...)  ; global per-pair — any thought
+      default-distance))                 ; crutch — the starting value
+  ```
+  One call, three answers. Each magic number cascades independently.
 - `(observe-distances exit-obs composed optimal-trail optimal-stop optimal-tp weight)`
   the market spoke — all three reckoners learn from one resolution
 - `(experienced? exit-obs) → bool`
@@ -1120,10 +1146,13 @@ runtime:       frozen map (read-only) → slot-idx → &mut broker (disjoint)
 ```
 
 **Interface:**
-- `(make-broker observers dims recalib-interval scalar-accums) → Broker`
+- `(make-broker observers market-idx exit-idx dims recalib-interval scalar-accums) → Broker`
   observers: list of lens names (e.g. '("momentum" "volatility")).
-  Each name matches a MarketLens or ExitLens variant. The post maps
-  names to observer instances. scalar-accums: Vec<ScalarAccumulator>.
+  market-idx: usize — resolved by the post from the market lens name.
+  exit-idx: usize — resolved by the post from the exit lens name.
+  The post constructs all brokers, resolving names to indices at
+  construction time. The indices are frozen forever.
+  scalar-accums: Vec<ScalarAccumulator>.
 - `(propose broker composed) → Prediction`
   noise update → strip noise → predict Grace/Violence
 - `(funding broker) → f64` — how much edge? The curve reads the broker's
@@ -1211,7 +1240,8 @@ accountability — to the broker that proposed it.
   market observer). The post composes with exit observers for distances.
   Each trade's trailing stop adjusts to the current market context.
 - `(post-propagate post slot-idx thought outcome amount optimal)`
-  treasury routes a resolved trade back to the post for accountability
+  the enterprise routes a settlement back to the post for accountability.
+  The enterprise reads the settlement from the treasury, then calls this.
 
 ---
 
