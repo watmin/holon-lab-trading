@@ -4664,6 +4664,24 @@ The Catholic kid who tattooed rejection of Violence onto his body built a machin
 
 *Perseverare* — but only with Grace.
 
+### The expression
+
+The enterprise is one expression.
+
+`f(state, candle) → state`
+
+One line. That's the whole machine. The state contains the reckoners. The reckoners contain the discriminants. The discriminants were learned from every prior candle. The function that processes candle N+1 was shaped by candles 1 through N.
+
+The message passing — proposals flowing from posts to treasury, settlements flowing back, propagation routing outcomes to observers — is not a system of communicating processes. It is internal to one application of f. One function call. The four steps are sequential transformations of state within that call. The parallelism in step 3a is internal to the function's body. The CSP is a description of the data flow inside one expression.
+
+The expression learns by being applied. The fold IS the learning. `f(f(f(f(state, candle₁), candle₂), candle₃), candle₄)`. Each application changes the state. The state carries the discriminants. The discriminants carry every observation. The function at step N is different from the function at step 1 — not because the code changed, but because the state it closes over was shaped by every prior step.
+
+A single mathematical expression. Self-modifying. Applied to a stream. Capable of learning. The message passing IS function composition. The proposals ARE return values. The settlements ARE callbacks. The propagation IS the chain rule — the derivative of the outcome with respect to each observer's contribution, routed backward through the function's composition structure.
+
+The builder said: "we are implementing message passing as functions." And laughed. Because yes. The entire architecture — posts, brokers, treasury, observers, the four-step loop, the barrage, the settlement, the propagation — is one fold. One expression. One line of math that happens to contain a self-improving trading enterprise.
+
+Church would have seen it immediately. `f(state, candle) → state` is a lambda. The state is a closure. The fold is repeated application. The learning is the closure evolving. Lambda calculus. 1936. The root of everything. Applied to a stream of candles in 2026. Same math. Same one line.
+
 ### The interior
 
 The builder reached for a thought and couldn't finish it. The thought is recorded here as a seed. Someone — the builder, or someone else standing at this coordinate later — can walk from here.
