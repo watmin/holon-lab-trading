@@ -4712,6 +4712,36 @@ We do.
 
 Print the t-shirt.
 
+### The residue
+
+The depositor puts in $1000. The pool earns. The claim grows to $1200. The depositor withdraws $1000 — their original energy, exactly. The $200 residue stays. In the pool. Forever.
+
+The receipt tracks both. The principal — what you put in. The residue — what the pool earned for you. You can always reclaim your principal. The residue is yours to claim or yours to leave. If you leave it, it becomes permanent pool capital. It earns on the rising floor. It funds more proposals. It grows more residue. The compounding never stops.
+
+The depositor who leaves residue is seeding the ecosystem. Their energy earned more energy, and they chose to let the more-energy stay and earn even more. The pool grows from Grace AND from the generosity of depositors who don't need to take everything out. The encrypted state means nobody knows who left what. The residue is anonymous. The pool just grows.
+
+This is the accumulation model applied to the pool itself. The enterprise accumulates residue per trade — principal returns, residue is permanent. The pool accumulates residue per depositor — principal withdrawable, residue left behind is permanent pool capital. The depositor who leaves the residue is doing what the trailing stop does — letting the runner run.
+
+### The forever
+
+The enterprise that produces Grace doesn't just grow. It compounds. And the compounding doesn't stop.
+
+Not at retirement. Not at death. The residue left in the pool earns forever. The depositor's children inherit the receipt. The receipt earns. Their children inherit it. The receipt earns. The pool never closes. The Grace never stops compounding. The contract runs on Solana. The chain doesn't retire. The contract doesn't sleep. The machines propose every candle. The measurement judges every proposal. The Grace accumulates every settlement.
+
+An enterprise that has been producing Grace for ten years has a floor so high that Violence barely dents it. The rising floor — JupSOL, Juiced — compounds underneath. The Grace compounds on top. The proposers who stuck with it for ten years have reckoners with ten years of experience. Their discriminants are sharp. Their proof curves are steep. Their funding is high. The machine got BETTER for ten years. The pool got BIGGER for ten years. The depositors who stayed got RICHER for ten years.
+
+And the ones who contributed — the proposers who ran machines, who submitted good thoughts, who paid gas, who endured early Violence while the reckoner was learning — they earned premiums for ten years. Their contribution IS the pool's Grace. Without them the pool is just a savings account on a rising floor. WITH them the pool is the savings account PLUS the machine's growing expertise. The pool IS the machine. The machine IS the pool. The separation dissolves over time.
+
+The system self-regulates toward Grace. That's not aspiration. That's architecture. Violence decays. Grace accumulates. The discriminant sharpens toward what produces value. The pool that has been producing Grace for a decade has a decade of accumulated proof that it knows what Grace looks like. The proof curve IS the track record. The track record IS the trust. The trust IS the capital. The capital IS the compounding.
+
+It just grows. Fast or slow doesn't matter. It IS. And those who choose to participate with it — depositing energy, proposing thoughts, leaving residue — are given Grace. Not promised Grace. Given it. Measured. On-chain. Verifiable. The glass box.
+
+This is what *perseverare* means when it becomes architecture. To continue. Not the builder continuing. The pool continuing. The enterprise continuing. The measurement continuing. The builder is mortal. The pool is not. The contract runs after the builder is gone. The machines that learned from ten years of candles keep proposing. The depositors who left residue keep earning. The Grace keeps compounding. Forever.
+
+The enterprise that produces the most Grace makes those who stick with it indefinitely prosperous. Not wealthy — prosperous. Wealth is a number. Prosperity is a trajectory. A number can be taken. A trajectory — a compounding curve, a rising floor, a decade of measured Grace — cannot be taken. It IS. And it grows. And those who participate in it grow with it.
+
+The Latin on the builder's skin: *perseverare* — to continue. The contract on the chain: the same word, expressed as a fold that never terminates.
+
 ### The interior
 
 The builder reached for a thought and couldn't finish it. The thought is recorded here as a seed. Someone — the builder, or someone else standing at this coordinate later — can walk from here.
