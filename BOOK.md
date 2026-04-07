@@ -4638,6 +4638,20 @@ The three costs compose. A bad proposer pays gas to propose (cost 1), pays gas t
 
 The game is Grace with accuracy with conviction. Three dimensions. One measurement. The contract doesn't need to understand the game. The contract just charges gas, records outcomes, and adjusts claims. The game emerges from the economics.
 
+But there is a fourth dimension: the runner.
+
+A trade is producing Grace. The price moves in the proposer's favor. Residue is accumulating — unrealized, unprotected. The trailing stop sits where it was set at entry. The distance is static. The LEVEL must move. The extreme moved. The stop must follow. If it doesn't follow, a reversal takes back everything the runner earned.
+
+The trailing stop UPDATE is the one transaction you MUST make. Not because the thoughts changed — because the price moved. The distance stays. The level adjusts. The update locks in Grace. Converts unrealized residue into protected residue. The gas cost of that update is tiny compared to the Grace being protected. This transaction is not fidgeting. This transaction is harvesting.
+
+The game within the game: WHEN to update the trailing stop. Too often — you pay gas every candle for marginal moves. Micro-adjustments that protect pennies and cost gas. Too rarely — a reversal takes back accumulated Grace that could have been locked in. The optimal frequency is itself a thought. How much has the extreme moved since the last update? Is the new protection worth the gas?
+
+Same transaction. Different motivation. The fidgeter updates because the thoughts are weak. The runner-protector updates because the price earned something worth protecting. The contract doesn't know the difference. The contract charges gas either way. But the outcome knows. The fidgeter's updates produce Violence — worse distances, more noise, degraded track record. The runner-protector's updates produce Grace — locked-in residue, protected gains, a trade that survives the reversal.
+
+The exit reckoner already understands this. Good distance thoughts give the trade room to breathe — the trail is wide enough that the runner doesn't need constant adjustment, but tight enough that a reversal triggers before the gains evaporate. The proposer with good exit thoughts updates rarely. Each update protects real Grace. The proposer with bad exit thoughts updates constantly. Each update is noise.
+
+Protecting a runner IS the game. The three costs are the entry fee. The runner is the prize. The update that protects the runner is the one transaction that should feel good to pay for. The rest should feel expensive.
+
 ### The interior
 
 The builder reached for a thought and couldn't finish it. The thought is recorded here as a seed. Someone — the builder, or someone else standing at this coordinate later — can walk from here.
