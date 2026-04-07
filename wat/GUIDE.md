@@ -334,6 +334,7 @@ think about.
 ;; :generalist selects ALL modules in the domain.
 (enum MarketLens :momentum :structure :volume :narrative :regime :generalist)
 (enum ExitLens :volatility :structure :timing :generalist)
+;; See Vocabulary section below for lens → module mappings.
 
 ;; ── Reckoner — the learning primitive ────────────────────────────────
 ;; One constructor. Config is data.
@@ -446,7 +447,10 @@ think about.
   composed-thought     ; Vector — market thought + exit facts
   prediction           ; Prediction :discrete (Grace/Violence) — from the broker's
                        ; reckoner, NOT the market observer's Up/Down prediction.
-  distances            ; (trail, stop, tp) — from the exit observer
+  distances            ; Distances — from the exit observer
+  funding              ; f64 — broker's edge level, from broker.funding().
+                       ; The treasury sorts proposals by this value.
+  direction            ; :buy or :sell — from the market observer's prediction
   post-idx             ; usize — which post this came from
   broker-slot-idx)     ; usize — which broker proposed this
 
@@ -478,7 +482,8 @@ think about.
   composed-thought     ; Vector — from trade-origins, stashed at funding time
   optimal-distances)   ; Distances — computed from the trade's price history
 ;; post-idx, broker-slot-idx, direction live on the Trade — no duplication.
-;; optimal-distances: replay the trade's price path, find the distances
+;; optimal-distances: the treasury computes these at settlement time by
+;; replaying the trade's price path from entry to exit. Find the distances
 ;; that would have maximized residue. These propagate to exit observers.
 
 ;; ── Resolution — what a broker produces when a paper resolves ────────
@@ -489,7 +494,7 @@ think about.
   composed-thought     ; Vector — the thought that was tested
   outcome              ; :grace or :violence
   amount               ; f64 — how much value
-  optimal-distances)   ; (trail, stop, tp) — hindsight optimal
+  optimal-distances)   ; Distances — hindsight optimal
 
 ;; ── LogEntry — the glass box. What happened. ────────────────────────
 ;; Generic. Any producer can emit log entries to its queue.
@@ -982,7 +987,9 @@ scalar accumulators.
 **Interface:**
 - `(new-scalar-accumulator name) → ScalarAccumulator`
 - `(observe-scalar acc value grace? weight)`
+  value: f64 — the scalar to accumulate (e.g. a distance).
   grace?: bool — true if outcome was Grace, false if Violence.
+  weight: f64 — scales the contribution. Larger weight = stronger signal.
 - `(extract-scalar acc steps range) → f64`
   steps: usize — how many candidates to try.
   range: (f64, f64) — (min, max) bounds to sweep across.
@@ -1023,6 +1030,7 @@ The generalist is just another lens. No special treatment.
 
 **Interface:**
 - `(make-market-observer lens reckoner-config window-sampler) → MarketObserver`
+  noise-subspace: created empty (new OnlineSubspace). Learns from observations.
   lens: MarketLens. config: Discrete with "Up"/"Down" labels.
   All proof-tracking and engram-gating fields initialize to zero/empty.
 - `(observe-candle observer candle-window ctx) → (Vector, Prediction)`
@@ -1250,7 +1258,10 @@ accountability — to the broker that proposed it.
 - `(post-on-candle post raw-candle ctx) → Vec<Proposal>`
   tick indicators → push window → market observers observe-candle (→ thoughts + predictions)
   → exit observers encode-exit-facts then compose(market-thought, exit-facts, ctx)
-  → brokers propose(composed) → register papers → return proposals for the treasury
+  → brokers propose(composed) → returns Prediction (Grace/Violence)
+  → the POST assembles each Proposal from: composed-thought, broker's
+    Prediction, exit distances, post-idx, broker-slot-idx
+  → register papers → return proposals for the treasury
 - `(post-update-triggers post trades market-thoughts)`
   trades: Vec<(TradeId, Trade)> — treasury's active trades for this post.
   market-thoughts: Vec<Vector> — this candle's encoded thoughts (one per
