@@ -1503,10 +1503,10 @@ The enterprise knows:
   market-thoughts-cache ; Vec<Vec<Vector>> — one Vec<Vector> per post, cleared each candle
 
   ;; Cache miss-queues — same pattern as log-queues
-  ;; Observers queue (key, Vector) pairs during parallel encoding.
+  ;; Observers queue (ThoughtAST, Vector) pairs during parallel encoding.
   ;; The enterprise drains between steps and inserts into ThoughtEncoder's
   ;; LRU cache. Eventually-consistent — miss on candle N, hit on N+1.
-  cache-miss-queues    ; Vec<Vec<(key, Vector)>> — one per observer, drained each candle
+  cache-miss-queues    ; Vec<Vec<(ThoughtAST, Vector)>> — one per observer, drained each candle
 
   log-queues)          ; Vec<Vec<LogEntry>> — one per producer, drained each candle
 ```
