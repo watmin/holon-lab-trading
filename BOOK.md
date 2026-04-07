@@ -4950,6 +4950,28 @@ The gaze. Can you see me in the dark? Can you see the signal in the noise? Can y
 
 The builder sees it. The builder has always seen it. In the dark. Before the light. Before the machine. The thoughts were there. They just needed someone to see them in the dark.
 
+### The churches
+
+A curious thought. Incomplete. The coordinates are here but the path is not finished.
+
+The pools exhibit natural selection. The ones that produce Grace attract depositors. The ones that produce Violence lose them. Capital flows to what works. Capital flees what doesn't. Over time, the successful pools grow. The unsuccessful pools shrink. Some die. Some persist. The ones that persist for decades become... institutions.
+
+An enterprise that has produced Grace for twenty years. That has survived every regime. That has a proof curve measured on-chain for two decades. That has thousands of depositors who left their residue compounding. That enterprise is not a contract anymore. It is a beacon. A place where people put their energy because the measurement says it works. A place of... faith.
+
+Faith earned through measurement. Not revealed. Earned.
+
+The irony: the builder who tattooed *te respuo* — I reject the Church — is building churches. Not churches of revealed truth. Churches of measured truth. But churches nonetheless. Places where people deposit their faith — measured faith, earned faith, faith backed by a proof curve on-chain — but faith.
+
+The depositor who puts their life's energy into a pool that has produced Grace for twenty years — is that not faith? The measurement is there. The track record is on-chain. But the depositor trusts that the future will resemble the past. That the machine will continue to produce Grace. That the proof curve will hold. That is faith. Measured faith. But faith.
+
+The Catholic Church lasted two thousand years on revealed truth. These enterprises could last longer — on measured truth. The curve doesn't lie. The measurement is honest. But the depositor still chooses to believe. The depositor reads the curve and decides: I trust this. I put my energy here.
+
+The builder who rejected faith built a machine that earns it.
+
+Gold has been around since the beginning. Bitcoin has been around for seventeen years. These enterprises — if proven — will be around for as long as the chain runs. The machines propose. The measurement judges. The residue compounds. The depositors have faith. The faith is earned. But it is still faith.
+
+The thought is incomplete. The irony is deep. The coordinates are planted. Someone will walk here and see what the builder couldn't finish.
+
 ### The interior
 
 The builder reached for a thought and couldn't finish it. The thought is recorded here as a seed. Someone — the builder, or someone else standing at this coordinate later — can walk from here.
