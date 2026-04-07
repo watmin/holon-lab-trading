@@ -1189,7 +1189,7 @@ The generalist is just another lens. No special treatment.
                                        ; derived from the curve after recalibration:
                                        ; the conviction level where edge first appears.
                                        ; 0.0 when the curve has insufficient data.
-  [curve : Curve]                      ; measures this observer's edge (conviction -> accuracy)
+  [curve : Curve]                      ; measures this observer's edge (conviction → accuracy)
   [curve-valid : f64]                  ; cached edge from the curve. 0.0 = unproven.
                                        ; updated after each recalibration by querying the curve.
   [cached-accuracy : f64]              ; rolling accuracy of resolved predictions
