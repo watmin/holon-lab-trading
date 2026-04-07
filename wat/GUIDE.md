@@ -1160,6 +1160,9 @@ get different distances.
   ```
   One call, three answers. Each magic number cascades independently.
 - `(observe-distances exit-obs composed optimal weight)`
+  composed: Vector — the COMPOSED thought (market + exit facts), not the
+  raw market thought. The exit observer learns from the same vector it
+  produced via compose(). This is what makes the learning contextual.
   optimal: Distances — the hindsight-optimal distances from resolution.
   The market spoke — all three reckoners learn from one resolution.
 - `(experienced? exit-obs) → bool`
@@ -1497,6 +1500,11 @@ The enterprise knows:
   This is step 3c — after tick and propagate.
 - `(step-collect-fund enterprise)`
   treasury funds or rejects all proposals, drains
+- `(drain-logs enterprise) → Vec<LogEntry>`
+  drain all log-queues. Each producer's queue is emptied. Returns the
+  concatenated entries. Called at the candle boundary by the binary —
+  the enterprise produces logs, the binary decides what to do with them
+  (write to DB, print, discard).
 
 ---
 

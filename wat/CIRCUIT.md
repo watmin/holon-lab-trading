@@ -19,7 +19,7 @@ graph TD
         IB --> CD[Candle]
         CD --> MO[MarketObserver x6]
         CD --> EO[ExitObserver x4]
-        MO -->|thought + prediction| EO
+        MO -->|thought Vector| EO
         EO -->|composed + distances| BR[Broker x24]
     end
     MO -.->|uses| VO[Vocabulary]
@@ -28,9 +28,9 @@ graph TD
     EO -.->|uses| TE
     BR -->|Proposals| TR[Treasury]
     TR -->|TreasurySettlement| EN[Enterprise]
-    EN -->|Direction| MO
-    EN -->|Distances| EO
-    EN -->|Grace Violence| BR
+    EN -->|thought + Direction + weight| MO
+    EN -->|composed + optimal Distances + weight| EO
+    EN -->|thought + outcome + amount + direction + optimal| BR
 ```
 
 Note: dashed arrows (-.->|uses|) show tools the observers call, not data
