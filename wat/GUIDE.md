@@ -240,7 +240,9 @@ Each definition can only reference definitions above it.
   discriminants look like. Future recalibrations are checked against this
   memory — does the new discriminant match a known good state?
 
-- **ctx** — the immutable world. Born at startup. Never changes. Contains
+- **ctx** — the immutable world. Lowercase intentionally — ctx is a parameter
+  that flows through function calls, not a type you instantiate like Post
+  or Treasury. Born at startup. Never changes. Contains
   the ThoughtEncoder (which contains the VectorManager). Also dims,
   recalib-interval, and any other constants decided at startup. ctx flows
   in as a parameter — the enterprise receives it, posts receive it,
@@ -456,8 +458,9 @@ think about.
   broker-slot-idx      ; usize — which broker (for trigger routing)
   source-asset         ; Asset — what was deployed
   target-asset         ; Asset — what was acquired
+  direction            ; :buy or :sell — which side of the pair
   entry-rate           ; f64
-  entry-atr            ; f64
+  entry-atr            ; f64 — from candle.atr at funding time
   source-amount        ; f64 — how much was deployed
   trail-stop           ; f64 — current trailing stop level
   safety-stop          ; f64 — safety stop level (cut the loss)
@@ -467,12 +470,14 @@ think about.
 ;; ── Settlement — result of closing a trade ──────────────────────────
 
 (struct settlement
-  trade                ; Trade — which trade closed (carries post-idx, broker-slot-idx)
+  trade                ; Trade — which trade closed (carries post-idx, broker-slot-idx, direction)
+  exit-price           ; f64 — price at settlement. Direction derived:
+                       ; if exit-price > entry-rate → :up, else → :down.
   outcome              ; :grace or :violence
   amount               ; f64 — how much value gained or lost
   composed-thought     ; Vector — from trade-origins, stashed at funding time
-  optimal-distances)   ; (trail, stop, tp) — computed from the trade's price history
-;; post-idx and broker-slot-idx live on the Trade — no duplication.
+  optimal-distances)   ; Distances — computed from the trade's price history
+;; post-idx, broker-slot-idx, direction live on the Trade — no duplication.
 ;; optimal-distances: replay the trade's price path, find the distances
 ;; that would have maximized residue. These propagate to exit observers.
 
@@ -1021,7 +1026,9 @@ The generalist is just another lens. No special treatment.
   lens: MarketLens. config: Discrete with "Up"/"Down" labels.
   All proof-tracking and engram-gating fields initialize to zero/empty.
 - `(observe-candle observer candle-window ctx) → (Vector, Prediction)`
-  candle-window: a slice of recent candles. The post calls
+  returns both; only the Vector flows downstream to exit composition and
+  brokers. The Prediction is used by the post for logging and conviction
+  tracking. candle-window: a slice of recent candles. The post calls
   `(sample (:window-sampler observer) encode-count)` to get the window
   size, slices the candle window, and passes the slice. The observer
   encodes → noise update → strip noise → predict. Returns both the
@@ -1076,6 +1083,7 @@ get different distances.
   evaluates exit ASTs via ctx's ThoughtEncoder, then bundles with
   the market thought. ASTs in, one composed Vector out.
 - `(recommended-distances exit-obs composed broker-accums) → Distances`
+  broker-accums: Vec<ScalarAccumulator> — the broker's global per-pair learners.
   the cascade, per magic number:
   ```
   (if (experienced? reckoner)
@@ -1212,6 +1220,7 @@ accountability — to the broker that proposed it.
 ```
 (struct post
   ;; Identity
+  post-idx             ; usize — this post's index in the enterprise's posts vec
   source-asset         ; Asset — e.g. USDC
   target-asset         ; Asset — e.g. WBTC
 
@@ -1247,9 +1256,10 @@ accountability — to the broker that proposed it.
   market-thoughts: Vec<Vector> — this candle's encoded thoughts (one per
   market observer). The post composes with exit observers for distances.
   Each trade's trailing stop adjusts to the current market context.
-- `(post-propagate post slot-idx thought outcome amount optimal)`
-  the enterprise routes a settlement back to the post for accountability.
-  The enterprise reads the settlement from the treasury, then calls this.
+- `(post-propagate post slot-idx thought outcome amount direction optimal)`
+  direction: :up or :down — derived by the enterprise from the settlement's
+  trade (exit-price vs entry-rate). The enterprise routes a settlement back
+  to the post. The post calls broker.propagate with its observer vecs.
 
 ---
 
