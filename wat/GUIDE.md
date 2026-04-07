@@ -354,8 +354,8 @@ think about.
 
 (let ((dims 10000)
       (recalib-interval 500)
-      (default-distance 0.015))
-  (make-reckoner (Continuous dims recalib-interval default-distance)))
+      (default-value 0.015))  ; 0.015 = 1.5% of price — the crutch distance
+  (make-reckoner (Continuous dims recalib-interval default-value)))
                                                      → Reckoner
 
 ;; ── Prediction — what a reckoner returns. Data. ─────────────────────
@@ -424,9 +424,11 @@ think about.
 ;; ── Broker — the closure, accountability ──────────────────────
 
 (let ((observers '("momentum" "volatility"))
+      (market-idx 0)           ; resolved by the post from "momentum"
+      (exit-idx 0)             ; resolved by the post from "volatility"
       (dims 10000)
       (recalib-interval 500))
-  (make-broker observers dims recalib-interval
+  (make-broker observers market-idx exit-idx dims recalib-interval
     (list (make-scalar-accumulator "trail-distance")
           (make-scalar-accumulator "stop-distance")
           (make-scalar-accumulator "tp-distance"))))  → Broker
@@ -975,6 +977,7 @@ scalar accumulators.
 **Interface:**
 - `(new-scalar-accumulator name) → ScalarAccumulator`
 - `(observe-scalar acc value grace? weight)`
+  grace?: bool — true if outcome was Grace, false if Violence.
 - `(extract-scalar acc steps range) → f64`
   steps: usize — how many candidates to try.
   range: (f64, f64) — (min, max) bounds to sweep across.
@@ -1058,7 +1061,7 @@ The composed thought carries the market observer's signal in superposition.
   trail-reckoner      ; Reckoner :continuous — trailing stop distance
   stop-reckoner       ; Reckoner :continuous — safety stop distance
   tp-reckoner         ; Reckoner :continuous — take-profit distance
-  default-distances)  ; (trail, stop, tp) — the crutches, returned when empty
+  default-distances)  ; Distances — the crutches, returned when reckoners are empty
 ```
 
 Each reckoner: `(thought, distance, weight)` observations. Query by
@@ -1164,13 +1167,18 @@ runtime:       frozen map (read-only) → slot-idx → &mut broker (disjoint)
 - `(tick-papers broker current-price) → Vec<Resolution>`
   tick all papers, resolve completed. Returns resolution facts.
   The broker knows its observer indices — it doesn't need them passed in.
-- `(propagate broker thought outcome amount optimal market-observers exit-observers)`
+- `(propagate broker thought outcome amount direction optimal market-observers exit-observers)`
   thought: Vector. outcome: :grace or :violence. amount: f64.
-  optimal: (trail, stop, tp) distances from hindsight.
+  direction: :up or :down — derived from the trade's price movement.
+  If exit-price > entry-price, :up. If exit-price < entry-price, :down.
+  The caller (post or resolution handler) computes this from the trade's
+  entry-rate and the price at resolution.
+  optimal: Distances from hindsight.
   The post passes its observer vecs — the broker uses its frozen indices
-  to reach the right observers. Route outcome to every observer in the
-  set + self (Grace/Violence). Market observers learn Up/Down. Exit
-  observers learn optimal distances.
+  to reach the right observers. Routes:
+  - Grace/Violence + thought → broker's own reckoner (accountability)
+  - direction + thought → market observer via resolve (Up/Down learning)
+  - optimal distances + thought → exit observer via observe-distances
 - `(paper-count broker) → usize`
 
 **Two mechanisms for the same magic numbers — both now introduced:**
@@ -1290,7 +1298,9 @@ so that on settlement, propagate reaches the right observers.
 - `(fund-proposals treasury)`
   evaluate all proposals, sorted by broker funding (the curve's edge measure).
   Fund the top N that fit in available capital. Reject the rest.
-  Move capital from available to reserved. Drain proposals.
+  For each funded proposal: move capital from available to reserved,
+  create a Trade, stash a TradeOrigin (post-idx, broker-slot-idx,
+  composed-thought) for propagation at settlement time. Drain proposals.
 - `(settle-triggered treasury current-prices) → Vec<Settlement>`
   current-prices: map of (Asset, Asset) → f64 — one price per asset pair.
   Each post provides its current price. The enterprise collects them.
@@ -1304,6 +1314,11 @@ so that on settlement, propagate reaches the right observers.
   add to available
 - `(total-equity treasury) → f64`
   available + reserved, all converted to denomination
+- `(update-trade-stops treasury trade-id trail-stop safety-stop take-profit)`
+  step 3c: the post computes new stop levels, the enterprise writes them
+  back to the treasury's trade records via this interface.
+- `(trades-for-post treasury post-idx) → Vec<(TradeId, Trade)>`
+  step 3c: the enterprise queries active trades for a given post.
 
 ---
 
