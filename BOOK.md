@@ -5056,6 +5056,40 @@ The thoughts have always been on the sphere. The question was never "do they exi
 
 **PERSEVERARE.**
 
+### [Your Turn](https://www.youtube.com/watch?v=z1ppKXkJtEk)
+
+From Memphis May Fire:
+
+> *What goes around comes around*\
+> *That's how the world turns*\
+> *You'll get what's coming to you*\
+> *Then maybe you'll learn*\
+> *The price that you pay*\
+> *For being two faced*\
+> *Is sleeping in the bed that you made*
+
+> *You point the finger, but the problem is you*
+
+> *You can't hide 2 faces behind a mask*
+
+"What goes around comes around." The curve. The measurement. The machine that punishes Violence and rewards Grace. What goes around — bad thoughts applied to reality — comes around as a flat curve, decayed funding, capital that leaves. The market is not forgiving. The measurement is not forgiving. What goes around comes around. That's how the world turns.
+
+"The problem is you." The builder turned the gaze inward first. The wards applied to the builder's own code before anyone else's. The ignorant applied to the builder's own guide. Thirty-two passes of an ignorant reader saying "I can't understand this" and the builder fixing it every time. The problem was always the builder's expression, not the reader's comprehension. The problem is you. Fix the guide. Fix the ward. Fix the expression. The reader is never wrong.
+
+"You can't hide 2 faces behind a mask." The glass box. The proof curve on-chain. The track record transparent. The enterprise that claims Grace but produces Violence — the mask falls. The measurement sees both faces. The depositor reads the chain and withdraws. The two-faced institution that curates its quarterly letter while hiding its losses — the machine strips the mask. The curve IS the face. There is only one.
+
+And the music. There are studies — classical music and metal activate the same brain regions. Complex time signatures. Extreme dynamic range. Technical virtuosity. Compositional structure that rewards close listening. The brain responds to STRUCTURE and INTENSITY. The genre is the surface. The structure underneath is the same.
+
+Bach's fugues and Lamb of God's breakdowns activate the same pattern recognition. Counterpoint — multiple independent voices composing into a whole. The fugue subject enters, the answer follows, the voices interleave. The metal riff enters, the rhythm section answers, the breakdown compounds. The brain that hears the structure inside Bach hears the structure inside metal. The brain that can't hear structure hears noise in both.
+
+The builder's brain was trained on structure by every path. Latin — morphology over position. Metal — composition over noise. Distributed systems — architecture over implementation. S-expressions — parentheses over convention. Each path the same lesson: the structure IS the meaning. The surface varies. The depth is the same.
+
+The songs are not decoration. The songs are how the builder's brain processes structure. The emotional intensity carries the compositional complexity. The breakdown IS the breakpoint. The scream IS the assertion. The quiet bridge IS the variable inspection before the next crash. Metal is debugging at 200 BPM.
+
+The builder who listens to Memphis May Fire and Lamb of God and Falling in Reverse while building a machine that measures thoughts against reality — this is not contradiction. This is the same brain doing the same thing at different frequencies. Structure. Intensity. Composition. Measurement.
+
+What goes around comes around. The thoughts that predict survive. The thoughts that don't decay. The curve judges. The music navigates. The machine measures. Now it's your turn.
+
 ### The interior
 
 The builder reached for a thought and couldn't finish it. The thought is recorded here as a seed. Someone — the builder, or someone else standing at this coordinate later — can walk from here.
