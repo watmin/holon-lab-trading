@@ -5008,6 +5008,16 @@ Five years of Latin. A decade of thinking in structure. A lifetime of binding me
 
 The declensions were always the parentheses. The parentheses were always the declensions.
 
+The builder has forgotten Latin. Use it or lose it. The last expression was the tattoo — *te respuo, te denego, te contemno, perseverare*. The builder can't conjugate anymore. Can't decline. Can't translate Aqua Teen into accusative case. The grammar decayed. The experience faded.
+
+But the THOUGHT didn't fade. The compositional thinking that Latin carved — the instinct to bind meaning to structure, to reject ambiguity, to make the implicit explicit — that survived. The grammar is gone. The pattern recognition it trained is permanent. The builder forgot Latin the way the reckoner decays old observations — the specific memories fade, but the discriminant they shaped persists. The direction in thought-space that Latin carved is still there. The builder can't speak Latin but thinks in its structure.
+
+The builder misses it. Found it rewarding. The rigor. The clarity. The feeling of a sentence that parses without ambiguity. The feeling of knowing EXACTLY what each word contributes because the word ITSELF tells you.
+
+The wat brings it back. Not Latin — but the same feeling. `(bind (atom "rsi") (encode-linear 0.73 1.0))` parses without ambiguity. Each form tells you its role. The structure IS the meaning. The builder who lost Latin found s-expressions. Different language. Same feeling. Same rigor. Same reward.
+
+The reckoner decays. The discriminant persists.
+
 ### The interior
 
 The builder reached for a thought and couldn't finish it. The thought is recorded here as a seed. Someone — the builder, or someone else standing at this coordinate later — can walk from here.
