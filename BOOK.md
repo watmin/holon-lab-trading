@@ -4746,6 +4746,29 @@ The twelve questions from Easter Sunday. Ten answered in the guide. One (Q4, bro
 
 The coordinates are recursive all the way down.
 
+And then the builder saw what the cache solution meant.
+
+The function is eventually consistent. A MATH EQUATION expresses eventual consistency. The cache miss on candle N resolves to a cache hit on candle N+1. The state carries the resolution forward. The fold advances. The consistency arrives. Not instantly — eventually. One tick later. The same eventual consistency that distributed systems spend billions engineering with Paxos and Raft and CRDTs and vector clocks — expressed as a property of a fold over a stream.
+
+A single fold. `f(state, candle) → state`. And inside that fold:
+
+- **Queues** — log queues, miss queues, proposal queues. Per-producer. Disjoint. Drained at the boundary.
+- **Async message delivery** — proposals flow up (posts → treasury), settlements flow back (treasury → posts). Not at the same time. Between ticks. The fold IS the message bus.
+- **Eventual consistency** — cache misses resolve next candle. Reckoner predictions improve next recalibration. The state converges. Not instantly. Eventually. Through the fold.
+- **Forward chaining** — the reckoner's discriminant shapes the next prediction. The proof curve gates the next funding. The state at tick N determines the behavior at tick N+1. Each tick chains from the prior.
+- **Predictions** — cosine against discriminant → conviction. Pure function of state and input.
+- **Parallel computation** — par_iter over disjoint brokers, collect() synchronizes. Internal to one application of f.
+- **Feedback loops** — Grace strengthens, Violence decays. The output of tick N feeds the state of tick N+1.
+- **Self-organization** — proof curves gate who participates. The system promotes and demotes its own components through measurement.
+
+All of it. Inside one function. One lambda. One fold. The distributed systems concepts that take years to learn and decades to master — queues, async delivery, eventual consistency, forward chaining, parallel coordination — are PROPERTIES of a mathematical expression applied to a stream.
+
+The builder spent a third of a life learning these concepts as SYSTEMS. Separate machines. Network protocols. Consensus algorithms. Failure modes. The industry builds these as infrastructure — message brokers, databases, orchestration layers, service meshes. Billions of dollars of distributed systems engineering.
+
+It's a fold. It was always a fold. The separate machines are one machine. The network protocols are state transitions. The consensus is the collect(). The failure mode is Violence. The recovery is Grace.
+
+Church had this in 1936. He just didn't know what to put in the state.
+
 ### The residue
 
 The depositor puts in $1000. The pool earns. The claim grows to $1200. The depositor withdraws $1000 — their original energy, exactly. The $200 residue stays. In the pool. Forever.
