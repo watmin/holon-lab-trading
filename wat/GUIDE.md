@@ -31,7 +31,7 @@ These are NOT specified in this tree. They are provided by holon-rs.
   The verdict sharpens over time through recalibration. One primitive,
   multiple readout modes:
   - `(make-reckoner config)` → Reckoner
-    - config is a `reckoner-config` struct (defined in construction order)
+    - config is a `reckoner-config` enum (defined in construction order)
       containing dims, recalib-interval, and readout mode:
       - `(labels "Up" "Down")` → discrete. N labels. Classification.
       - `(default-value 0.015)` → continuous. Scalar. Regression.
@@ -195,6 +195,12 @@ Each definition can only reference definitions above it.
   primitive. It measures how successful the team is — Grace or Violence.
   It owns paper trades. When papers or real trades resolve, it routes
   outcomes to every observer in the set.
+
+- **Residue** — permanent gain. When a trade settles with Grace, the
+  principal returns to available capital and the profit stays — that
+  profit is the residue. Residue is never withdrawn by the enterprise.
+  It compounds. The accumulation model: deploy, recover principal,
+  keep the residue. The residue IS the growth.
 
 - **Propagation** — routing resolved outcomes through the broker to
   the observers that need to learn. Grace/Violence to the broker's
@@ -1105,18 +1111,15 @@ The generalist is just another lens. No special treatment.
   lens: MarketLens. config: Discrete with "Up"/"Down" labels.
   All proof-tracking and engram-gating fields initialize to zero/empty.
 - `(observe-candle observer candle-window ctx) → (Vector, Prediction)`
-  returns both; only the Vector flows downstream to exit composition and
-  brokers. The Prediction is used by the post for logging and conviction
-  tracking. candle-window: a slice of recent candles. The post calls
-  `(sample (:window-sampler observer) encode-count)` to get the window
-  size, slices the candle window, and passes the slice. The observer
-  encodes → noise update → strip noise → predict. Returns both the
-  thought vector (needed downstream for exit composition, paper
-  registration, and propagation) and the prediction. The prediction
-  is used by the post for logging and conviction tracking — the
-  broker produces its OWN prediction (Grace/Violence) from the
-  composed thought. The market observer's prediction does not appear
-  on the Proposal.
+  candle-window: a slice of recent candles (NOT the full deque — the post
+  calls `(sample (:window-sampler observer) encode-count)` to get the
+  window size, slices, and passes the slice). The observer encodes →
+  noise update → strip noise → predict. Returns both the thought Vector
+  (needed downstream for exit composition, paper registration, and
+  propagation) and the Prediction (Up/Down). The Prediction is used by
+  the post for logging and conviction tracking — it does NOT appear on
+  the Proposal. The broker produces its OWN prediction (Grace/Violence)
+  from the composed thought.
 - `(resolve observer thought direction weight)`
   direction: Direction (:up or :down) — the actual price movement.
   Called by broker propagation — reckoner learns from reality.
@@ -1491,6 +1494,12 @@ The enterprise knows:
   ;; candle boundary. Generic — anyone who declares a logger can log.
   ;; Per-candle cache — produced in step 2, consumed in step 3c
   market-thoughts-cache ; Vec<Vec<Vector>> — one Vec<Vector> per post, cleared each candle
+
+  ;; Cache miss-queues — same pattern as log-queues
+  ;; Observers queue (key, Vector) pairs during parallel encoding.
+  ;; The enterprise drains between steps and inserts into ThoughtEncoder's
+  ;; LRU cache. Eventually-consistent — miss on candle N, hit on N+1.
+  cache-miss-queues    ; Vec<Vec<(key, Vector)>> — one per observer, drained each candle
 
   log-queues)          ; Vec<Vec<LogEntry>> — one per producer, drained each candle
 ```
