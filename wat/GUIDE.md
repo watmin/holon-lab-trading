@@ -161,7 +161,8 @@ Each definition can only reference definitions above it.
   distance did the market say was optimal?" Replaces magic numbers with
   measurement.
 
-- **ScalarAccumulator** — per-magic-number f64 learning. Each scalar value
+- **ScalarAccumulator** — per-magic-number f64 learning (extraction mechanism
+  detailed in the ExitObserver section below). Each scalar value
   is encoded as a vector (using ScalarEncoder, defined above in primitives).
   Grace outcomes accumulate into a Grace prototype.
   Violence outcomes accumulate into a Violence prototype. To extract: try
@@ -424,8 +425,11 @@ on what. That section shows what each thing IS.
     (Discrete dims recalib-interval '("Up" "Down"))
     sampler))                                        → MarketObserver
 
-;; ── Distances — the three exit values, used everywhere ──────────
-;; A named tuple. Appears on PaperEntry, Proposal, Resolution, Settlement.
+;; ── Distances and Levels — two representations of exit thresholds ────
+;; Distances are percentages (from the exit observer — scale-free).
+;; Levels are absolute prices (from the post — computed from distance × price).
+;; Observers think in Distances. Trades execute at Levels. Different types
+;; because they are different concepts that happen to share three fields.
 
 (struct distances
   trail                ; f64 — trailing stop distance (percentage of price)
@@ -894,13 +898,13 @@ via ctx on every on-candle call. The enterprise does not own it directly.
 (struct thought-encoder
   atoms                 ; map of name → Vector (finite, pre-computed, permanent)
   compositions)         ; LRU cache: key → Vector (optimistic, self-evicting)
-;; The cache mutates on miss. ctx is immutable. The Rust uses interior
-;; mutability (RefCell or similar) — the ThoughtEncoder appears immutable
-;; from the outside but the cache updates internally. This is the one
-;; place where ctx's immutability has a seam. The solution: observers
-;; queue cache misses during parallel encoding, the enterprise drains
-;; the miss-queues between steps (same pattern as log-queues). The
-;; cache becomes eventually-consistent — miss on candle N, hit on N+1.
+;; The cache is eventually-consistent: observers queue misses during
+;; parallel encoding, the enterprise drains the queues between steps
+;; (miss on candle N, hit on N+1 — same pattern as log-queues).
+;; WHY: the cache mutates on miss, but ctx is immutable. This is the
+;; one seam. The Rust uses interior mutability for the drain, not for
+;; concurrent writes — the parallel phase queues, the sequential phase
+;; drains. No locks during encoding.
 ```
 
 **The AST — what the vocabulary speaks:**
