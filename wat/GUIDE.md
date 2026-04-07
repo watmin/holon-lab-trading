@@ -364,7 +364,8 @@ on what. That section shows what each thing IS.
 ;; ── Primitives — depend on nothing ──────────────────────────────────
 
 ;; Asset: a named token
-(struct asset name)
+(struct asset
+  [name : String])
 
 (let ((source (make-asset "USDC"))
       (target (make-asset "WBTC"))
@@ -482,17 +483,17 @@ on what. That section shows what each thing IS.
 ;; because they are different concepts with the same four fields.
 
 (struct distances
-  trail                ; f64 — trailing stop distance (percentage of price)
-  stop                 ; f64 — safety stop distance
-  tp                   ; f64 — take-profit distance
-  runner-trail)        ; f64 — runner trailing stop distance (wider than trail,
-                       ; because the cost of stopping out a runner is zero)
+  [trail : f64]                ; trailing stop distance (percentage of price)
+  [stop : f64]                 ; safety stop distance
+  [tp : f64]                   ; take-profit distance
+  [runner-trail : f64])        ; runner trailing stop distance (wider than trail,
+                               ; because the cost of stopping out a runner is zero)
 
 (struct levels
-  trail-stop           ; f64 — absolute price level for trailing stop
-  safety-stop          ; f64 — absolute price level for safety stop
-  take-profit          ; f64 — absolute price level for take-profit
-  runner-trail-stop)   ; f64 — absolute price level for runner trailing stop
+  [trail-stop : f64]           ; absolute price level for trailing stop
+  [safety-stop : f64]          ; absolute price level for safety stop
+  [take-profit : f64]          ; absolute price level for take-profit
+  [runner-trail-stop : f64])   ; absolute price level for runner trailing stop
 ;; Distances are percentages (from exit observer). Levels are prices
 ;; (computed by the post: distance × current price → level). Trade
 ;; stores Levels. Proposal carries Distances. Different concepts.
@@ -518,16 +519,16 @@ on what. That section shows what each thing IS.
 ;; teaches the system: what distance would have been optimal?
 
 (struct paper-entry
-  composed-thought     ; Vector — the thought at entry
-  entry-price          ; f64 — price when the paper was created
-  entry-atr            ; f64 — volatility at entry
-  distances            ; Distances — from the exit observer at entry
-  buy-extreme          ; f64 — best price in buy direction so far
-  buy-trail-stop       ; f64 — trailing stop level (from distances.trail)
-  sell-extreme         ; f64 — best price in sell direction so far
-  sell-trail-stop      ; f64 — trailing stop level (from distances.trail)
-  buy-resolved         ; bool — buy side's stop fired
-  sell-resolved)       ; bool — sell side's stop fired
+  [composed-thought : Vector]  ; the thought at entry
+  [entry-price : f64]          ; price when the paper was created
+  [entry-atr : f64]            ; volatility at entry
+  [distances : Distances]      ; from the exit observer at entry
+  [buy-extreme : f64]          ; best price in buy direction so far
+  [buy-trail-stop : f64]       ; trailing stop level (from distances.trail)
+  [sell-extreme : f64]         ; best price in sell direction so far
+  [sell-trail-stop : f64]      ; trailing stop level (from distances.trail)
+  [buy-resolved : bool]        ; buy side's stop fired
+  [sell-resolved : bool])      ; sell side's stop fired
 
 ;; ── Broker — depends on: Reckoner :discrete, ScalarAccumulator ──────
 
@@ -551,20 +552,20 @@ on what. That section shows what each thing IS.
 ;;   broker → propose(composed) → prediction
 ;;   post bundles these into a Proposal and submits to treasury.
 (struct proposal
-  composed-thought     ; Vector — market thought + exit facts
-  prediction           ; Prediction :discrete (Grace/Violence) — from the broker's
-                       ; reckoner, NOT the market observer's Up/Down prediction.
-  distances            ; Distances — from the exit observer
-  funding              ; f64 — the broker's edge. [0.0, 1.0]. Raw accuracy
-                       ; from the broker's curve at its current conviction.
-                       ; This IS the edge from the message protocol.
-                       ; The treasury sorts proposals by this value.
-  side                 ; :buy or :sell — trading action, from the market observer's
-                       ; Up/Down prediction. Up → :buy, Down → :sell.
-                       ; Distinct from "direction" (:up/:down) which describes
-                       ; price movement used in propagation.
-  post-idx             ; usize — which post this came from
-  broker-slot-idx)     ; usize — which broker proposed this
+  [composed-thought : Vector]  ; market thought + exit facts
+  [prediction : Prediction]    ; :discrete (Grace/Violence) — from the broker's
+                               ; reckoner, NOT the market observer's Up/Down prediction.
+  [distances : Distances]      ; from the exit observer
+  [funding : f64]              ; the broker's edge. [0.0, 1.0]. Raw accuracy
+                               ; from the broker's curve at its current conviction.
+                               ; This IS the edge from the message protocol.
+                               ; The treasury sorts proposals by this value.
+  [side : Side]                ; :buy or :sell — trading action, from the market observer's
+                               ; Up/Down prediction. Up → :buy, Down → :sell.
+                               ; Distinct from "direction" (:up/:down) which describes
+                               ; price movement used in propagation.
+  [post-idx : usize]           ; which post this came from
+  [broker-slot-idx : usize])   ; which broker proposed this
 
 ;; ── TradePhase — the state machine of a position's lifecycle ─────────
 
@@ -576,38 +577,38 @@ on what. That section shows what each thing IS.
 ;; ── Trade — an active position the treasury holds ───────────────────
 
 (struct trade
-  id                   ; TradeId — assigned by treasury at funding time
-  post-idx             ; usize — which post
-  broker-slot-idx      ; usize — which broker (for trigger routing)
-  phase                ; TradePhase — :active, :principal-recovered, or :settled
-  source-asset         ; Asset — what was deployed
-  target-asset         ; Asset — what was acquired
-  side                 ; Side — copied from the funding Proposal at treasury funding time
-  entry-rate           ; f64
-  entry-atr            ; f64 — from candle.atr at funding time
-  source-amount        ; f64 — how much was deployed
-  stop-levels          ; Levels — current trailing stop, safety stop, take-profit
-                       ; absolute price levels, updated by step 3c
-  candles-held         ; usize — how long open
-  price-history)       ; Vec<f64> — close prices from entry to now. Appended each
-                       ; candle. The trade closes over its own history. Pure.
+  [id : TradeId]               ; assigned by treasury at funding time
+  [post-idx : usize]           ; which post
+  [broker-slot-idx : usize]    ; which broker (for trigger routing)
+  [phase : TradePhase]         ; :active, :principal-recovered, or :settled
+  [source-asset : Asset]       ; what was deployed
+  [target-asset : Asset]       ; what was acquired
+  [side : Side]                ; copied from the funding Proposal at treasury funding time
+  [entry-rate : f64]
+  [entry-atr : f64]            ; from candle.atr at funding time
+  [source-amount : f64]        ; how much was deployed
+  [stop-levels : Levels]       ; current trailing stop, safety stop, take-profit
+                               ; absolute price levels, updated by step 3c
+  [candles-held : usize]       ; how long open
+  [price-history : Vec<f64>])  ; close prices from entry to now. Appended each
+                               ; candle. The trade closes over its own history. Pure.
 
 ;; ── TreasurySettlement — what the treasury produces when a trade closes ──
 
 (struct treasury-settlement
-  trade                ; Trade — which trade closed (carries post-idx, broker-slot-idx, side)
-  exit-price           ; f64 — price at settlement
-  outcome              ; Outcome — :grace or :violence
-  amount               ; f64 — how much value gained or lost
-  composed-thought)    ; Vector — from trade-origins, stashed at funding time
+  [trade : Trade]              ; which trade closed (carries post-idx, broker-slot-idx, side)
+  [exit-price : f64]           ; price at settlement
+  [outcome : Outcome]          ; :grace or :violence
+  [amount : f64]               ; how much value gained or lost
+  [composed-thought : Vector]) ; from trade-origins, stashed at funding time
 ;; The treasury produces this. It does NOT have optimal-distances.
 
 ;; ── Settlement — the complete record, after enterprise enrichment ─────
 
 (struct settlement
-  treasury-settlement  ; TreasurySettlement — the treasury's accounting
-  direction            ; Direction — :up or :down, derived from exit-price vs entry-rate
-  optimal-distances)   ; Distances — replay trade's price-history, maximize residue
+  [treasury-settlement : TreasurySettlement] ; the treasury's accounting
+  [direction : Direction]                    ; :up or :down, derived from exit-price vs entry-rate
+  [optimal-distances : Distances])           ; replay trade's price-history, maximize residue
 ;; The enterprise builds this by enriching a TreasurySettlement.
 ;; The trade's price-history (on the Trade) provides the replay data.
 
@@ -617,18 +618,18 @@ on what. That section shows what each thing IS.
 ;; Each resolved side produces one Resolution with its own direction.
 
 (struct resolution
-  broker-slot-idx      ; usize — which broker produced this
-  composed-thought     ; Vector — the thought that was tested
-  direction            ; Direction — :up or :down. Each paper side resolves
-                       ; independently: buy-side stop fires → :up (price rose
-                       ; then retraced). sell-side stop fires → :down.
-                       ; The direction matches the side that was TESTED, not
-                       ; the outcome — a buy-side paper only triggers because
-                       ; price moved up, so direction is :up regardless of
-                       ; whether outcome was Grace or Violence.
-  outcome              ; Outcome — :grace or :violence
-  amount               ; f64 — how much value
-  optimal-distances)   ; Distances — hindsight optimal
+  [broker-slot-idx : usize]    ; which broker produced this
+  [composed-thought : Vector]  ; the thought that was tested
+  [direction : Direction]      ; :up or :down. Each paper side resolves
+                               ; independently: buy-side stop fires → :up (price rose
+                               ; then retraced). sell-side stop fires → :down.
+                               ; The direction matches the side that was TESTED, not
+                               ; the outcome — a buy-side paper only triggers because
+                               ; price moved up, so direction is :up regardless of
+                               ; whether outcome was Grace or Violence.
+  [outcome : Outcome]          ; :grace or :violence
+  [amount : f64]               ; how much value
+  [optimal-distances : Distances]) ; hindsight optimal
 
 ;; ── LogEntry — the glass box. What happened. ────────────────────────
 ;; Generic. Any producer can emit log entries to its queue.
@@ -661,9 +662,9 @@ on what. That section shows what each thing IS.
 ;; ── TradeOrigin — where a trade came from, for propagation routing ───
 
 (struct trade-origin
-  post-idx             ; usize — which post
-  broker-slot-idx      ; usize — which broker
-  composed-thought)    ; Vector — the thought at entry
+  [post-idx : usize]           ; which post
+  [broker-slot-idx : usize]    ; which broker
+  [composed-thought : Vector]) ; the thought at entry
 
 ;; ── Post — depends on: IndicatorBank, MarketObserver, ExitObserver, Broker ──
 
@@ -685,9 +686,9 @@ on what. That section shows what each thing IS.
 ;; ── Ctx — the immutable world. Born at startup. Never changes. ───────
 
 (struct ctx              ; this is the complete set — three fields, nothing else
-  thought-encoder      ; ThoughtEncoder (contains VectorManager)
-  dims                 ; usize — vector dimensionality
-  recalib-interval)    ; usize — observations between recalibrations
+  [thought-encoder : ThoughtEncoder] ; contains VectorManager
+  [dims : usize]                     ; vector dimensionality
+  [recalib-interval : usize])        ; observations between recalibrations
 
 ;; ── Enterprise — the coordination plane ─────────────────────────────
 
@@ -709,9 +710,14 @@ the pair IS the routing key. Only the post for that pair receives it.
 
 ```
 (struct raw-candle
-  source-asset    ; Asset — e.g. USDC
-  target-asset    ; Asset — e.g. WBTC
-  ts open high low close volume)
+  [source-asset : Asset]   ; e.g. USDC
+  [target-asset : Asset]   ; e.g. WBTC
+  [ts : String]
+  [open : f64]
+  [high : f64]
+  [low : f64]
+  [close : f64]
+  [volume : f64])
 ```
 
 Eight fields. From the parquet. From the websocket. The enterprise doesn't
@@ -726,34 +732,34 @@ Produced by IndicatorBank.tick(raw-candle). The post's first act
 every candle.
 
 ```
-(struct candle              ; all fields f64 unless noted
+(struct candle
   ;; Raw
-  ts open high low close volume
+  [ts : String] [open : f64] [high : f64] [low : f64] [close : f64] [volume : f64]
   ;; Moving averages
-  sma20 sma50 sma200
+  [sma20 : f64] [sma50 : f64] [sma200 : f64]
   ;; Bollinger
-  bb-upper bb-lower bb-width bb-pos
+  [bb-upper : f64] [bb-lower : f64] [bb-width : f64] [bb-pos : f64]
   ;; RSI, MACD, DMI, ATR
-  rsi macd macd-signal macd-hist
-  plus-di minus-di adx atr atr-r
+  [rsi : f64] [macd : f64] [macd-signal : f64] [macd-hist : f64]
+  [plus-di : f64] [minus-di : f64] [adx : f64] [atr : f64] [atr-r : f64]
   ;; Stochastic, CCI, MFI, OBV
-  stoch-k stoch-d cci mfi obv
+  [stoch-k : f64] [stoch-d : f64] [cci : f64] [mfi : f64] [obv : f64]
   ;; Keltner, squeeze
-  kelt-upper kelt-lower kelt-pos
-  squeeze              ; bool — Bollinger inside Keltner
+  [kelt-upper : f64] [kelt-lower : f64] [kelt-pos : f64]
+  [squeeze : bool]           ; Bollinger inside Keltner
   ;; Range position
-  range-pos-12 range-pos-24 range-pos-48
+  [range-pos-12 : f64] [range-pos-24 : f64] [range-pos-48 : f64]
   ;; Multi-timeframe
-  tf-1h-close tf-1h-high tf-1h-low tf-1h-ret tf-1h-body
-  tf-4h-close tf-4h-high tf-4h-low tf-4h-ret tf-4h-body
+  [tf-1h-close : f64] [tf-1h-high : f64] [tf-1h-low : f64] [tf-1h-ret : f64] [tf-1h-body : f64]
+  [tf-4h-close : f64] [tf-4h-high : f64] [tf-4h-low : f64] [tf-4h-ret : f64] [tf-4h-body : f64]
   ;; Ichimoku
-  tenkan-sen kijun-sen senkou-span-a senkou-span-b cloud-top cloud-bottom
+  [tenkan-sen : f64] [kijun-sen : f64] [senkou-span-a : f64] [senkou-span-b : f64] [cloud-top : f64] [cloud-bottom : f64]
   ;; Time — circular scalars (encode-circular)
-  minute              ; mod 60
-  hour                ; mod 24
-  day-of-week         ; mod 7
-  day-of-month        ; mod 31
-  month-of-year)      ; mod 12
+  [minute : f64]             ; mod 60
+  [hour : f64]               ; mod 24
+  [day-of-week : f64]        ; mod 7
+  [day-of-month : f64]       ; mod 31
+  [month-of-year : f64])     ; mod 12
   ;; ... additional fields computed by IndicatorBank as the vocabulary grows.
   ;; This struct lists the current set. "100+" in the definitions is the
   ;; target — the actual count grows with the vocabulary.
@@ -793,7 +799,9 @@ The market observer adjusts its sampler.
 
 ```
 (struct window-sampler
-  seed min-window max-window)
+  [seed : usize]
+  [min-window : usize]
+  [max-window : usize])
 ```
 
 **Interface:**
@@ -961,8 +969,8 @@ via ctx on every on-candle call. The enterprise does not own it directly.
 
 ```
 (struct thought-encoder
-  atoms                 ; map of name → Vector (finite, pre-computed, permanent)
-  compositions)         ; LRU cache: key → Vector (optimistic, self-evicting)
+  [atoms : Map<String, Vector>]          ; finite, pre-computed, permanent
+  [compositions : LruCache<ThoughtAST, Vector>]) ; optimistic, self-evicting
 ;; The cache is eventually-consistent: observers queue misses during
 ;; parallel encoding, the enterprise drains the queues between steps
 ;; (miss on candle N, hit on N+1 — same pattern as log-queues).
@@ -1138,10 +1146,10 @@ scalar accumulators.
 
 ```
 (struct scalar-accumulator
-  name                 ; String — which magic number ("trail-distance", etc.)
-  grace-acc            ; Vector — accumulated encoded values from Grace outcomes
-  violence-acc         ; Vector — accumulated encoded values from Violence outcomes
-  count)               ; usize — number of observations. 0 = no data.
+  [name : String]              ; which magic number ("trail-distance", etc.)
+  [grace-acc : Vector]         ; accumulated encoded values from Grace outcomes
+  [violence-acc : Vector]      ; accumulated encoded values from Violence outcomes
+  [count : usize])             ; number of observations. 0 = no data.
 ```
 
 **Interface:**
@@ -1170,26 +1178,26 @@ The generalist is just another lens. No special treatment.
 
 ```
 (struct market-observer
-  lens                 ; MarketLens enum
-  reckoner             ; Reckoner :discrete — Up/Down
-  noise-subspace       ; OnlineSubspace — background model
-  window-sampler       ; WindowSampler — own time scale
+  [lens : MarketLens]
+  [reckoner : Reckoner]                ; :discrete — Up/Down
+  [noise-subspace : OnlineSubspace]    ; background model
+  [window-sampler : WindowSampler]     ; own time scale
   ;; Proof tracking
-  resolved                 ; usize — how many predictions have been resolved
-  conviction-history       ; Vec<f64> — recent conviction values for curve fitting
-  conviction-threshold     ; f64 — minimum conviction to participate.
-                           ; derived from the curve after recalibration:
-                           ; the conviction level where edge first appears.
-                           ; 0.0 when the curve has insufficient data.
-  curve                    ; Curve — measures this observer's edge (conviction → accuracy)
-  curve-valid              ; f64 — cached edge from the curve. 0.0 = unproven.
-                           ; updated after each recalibration by querying the curve.
-  cached-accuracy          ; f64 — rolling accuracy of resolved predictions
+  [resolved : usize]                   ; how many predictions have been resolved
+  [conviction-history : Vec<f64>]      ; recent conviction values for curve fitting
+  [conviction-threshold : f64]         ; minimum conviction to participate.
+                                       ; derived from the curve after recalibration:
+                                       ; the conviction level where edge first appears.
+                                       ; 0.0 when the curve has insufficient data.
+  [curve : Curve]                      ; measures this observer's edge (conviction -> accuracy)
+  [curve-valid : f64]                  ; cached edge from the curve. 0.0 = unproven.
+                                       ; updated after each recalibration by querying the curve.
+  [cached-accuracy : f64]              ; rolling accuracy of resolved predictions
   ;; Engram gating
-  good-state-subspace      ; OnlineSubspace — learns what good discriminants look like
-  recalib-wins             ; usize — wins since last recalibration
-  recalib-total            ; usize — total since last recalibration
-  last-recalib-count)      ; usize — recalib-count at last engram check
+  [good-state-subspace : OnlineSubspace] ; learns what good discriminants look like
+  [recalib-wins : usize]               ; wins since last recalibration
+  [recalib-total : usize]              ; total since last recalibration
+  [last-recalib-count : usize])        ; recalib-count at last engram check
 ```
 
 **Interface:**
@@ -1240,12 +1248,12 @@ The composed thought carries the market observer's signal in superposition.
 
 ```
 (struct exit-observer
-  lens                ; ExitLens enum — which judgment vocabulary
-  trail-reckoner      ; Reckoner :continuous — trailing stop distance
-  stop-reckoner       ; Reckoner :continuous — safety stop distance
-  tp-reckoner         ; Reckoner :continuous — take-profit distance
-  runner-reckoner     ; Reckoner :continuous — runner trailing stop distance (wider)
-  default-distances)  ; Distances — the crutches (all four), returned when empty
+  [lens : ExitLens]                    ; which judgment vocabulary
+  [trail-reckoner : Reckoner]          ; :continuous — trailing stop distance
+  [stop-reckoner : Reckoner]           ; :continuous — safety stop distance
+  [tp-reckoner : Reckoner]             ; :continuous — take-profit distance
+  [runner-reckoner : Reckoner]         ; :continuous — runner trailing stop distance (wider)
+  [default-distances : Distances])     ; the crutches (all four), returned when empty
 ```
 
 Each reckoner: `(thought, distance, weight)` observations. Query by
@@ -1326,27 +1334,30 @@ runtime:       frozen map (read-only) → slot-idx → &mut broker (disjoint)
 
 ```
 (struct broker
-  observer-names     ; Vec<String> — the identity. e.g. ("momentum" "volatility").
-  market-idx         ; usize — index into post's market-observers vec
-  exit-idx           ; usize — index into post's exit-observers vec
-                     ; today: one market + one exit. Tomorrow: more observer kinds
-                     ; may add more index fields. The broker knows its observers
-                     ; by position, resolved from names at construction, frozen.
+  [observer-names : Vec<String>]       ; the identity. e.g. ("momentum" "volatility").
+  [market-idx : usize]                 ; index into post's market-observers vec
+  [exit-idx : usize]                   ; index into post's exit-observers vec
+                                       ; today: one market + one exit. Tomorrow: more observer kinds
+                                       ; may add more index fields. The broker knows its observers
+                                       ; by position, resolved from names at construction, frozen.
   ;; Accountability
-  reckoner           ; Reckoner :discrete — Grace/Violence
-  noise-subspace     ; OnlineSubspace
-  curve              ; Curve — measures how much edge this broker has earned.
-                     ; fed by the reckoner's resolved predictions.
+  [reckoner : Reckoner]                ; :discrete — Grace/Violence
+  [noise-subspace : OnlineSubspace]
+  [curve : Curve]                      ; measures how much edge this broker has earned.
+                                       ; fed by the reckoner's resolved predictions.
   ;; Track record
-  cumulative-grace   ; f64
-  cumulative-violence ; f64
-  trade-count        ; usize
+  [cumulative-grace : f64]
+  [cumulative-violence : f64]
+  [trade-count : usize]
   ;; Papers — the fast learning stream
-  papers             ; deque of PaperEntry, capped
+  [papers : VecDeque<PaperEntry>]      ; capped
   ;; Scalar learning
-  scalar-accums      ; Vec<ScalarAccumulator>
+  [scalar-accums : Vec<ScalarAccumulator>]
   ;; Engram gating
-  good-state-subspace recalib-wins recalib-total last-recalib-count)
+  [good-state-subspace : OnlineSubspace]
+  [recalib-wins : usize]
+  [recalib-total : usize]
+  [last-recalib-count : usize])
 ```
 
 **Interface:**
@@ -1412,28 +1423,28 @@ accountability — to the broker that proposed it.
 ```
 (struct post
   ;; Identity
-  post-idx             ; usize — this post's index in the enterprise's posts vec
-  source-asset         ; Asset — e.g. USDC
-  target-asset         ; Asset — e.g. WBTC
+  [post-idx : usize]                   ; this post's index in the enterprise's posts vec
+  [source-asset : Asset]               ; e.g. USDC
+  [target-asset : Asset]               ; e.g. WBTC
 
   ;; Data pipeline
-  indicator-bank       ; IndicatorBank — streaming indicators for this pair
-  candle-window        ; VecDeque<Candle> — bounded history
-  max-window-size      ; capacity
+  [indicator-bank : IndicatorBank]     ; streaming indicators for this pair
+  [candle-window : VecDeque<Candle>]   ; bounded history
+  [max-window-size : usize]            ; capacity
 
   ;; Observers — both are learned, both are per-pair
-  market-observers     ; Vec<MarketObserver> [N]
-  exit-observers       ; Vec<ExitObserver> [M]
+  [market-observers : Vec<MarketObserver>]  ; [N]
+  [exit-observers : Vec<ExitObserver>]      ; [M]
 
   ;; Accountability — brokers in a flat vec, parallel access
-  registry             ; Vec<Broker> — one per observer set, pre-allocated
-  broker-map           ; Map<Set<String>, usize> — derived from registry at
-                       ; construction: iterate brokers, map each observer-names
-                       ; set to its index. Frozen forever. Never written at
-                       ; runtime. Read-only lookups, flat vec access. No mutex.
+  [registry : Vec<Broker>]             ; one per observer set, pre-allocated
+  [broker-map : Map<Set<String>, usize>] ; derived from registry at
+                                       ; construction: iterate brokers, map each observer-names
+                                       ; set to its index. Frozen forever. Never written at
+                                       ; runtime. Read-only lookups, flat vec access. No mutex.
 
   ;; Counter
-  encode-count)
+  [encode-count : usize])
 ```
 
 **Interface:**
@@ -1500,19 +1511,19 @@ so that on settlement, propagate reaches the right observers.
 ```
 (struct treasury
   ;; Capital — the ledger
-  denomination         ; Asset — what "value" means (e.g. USD)
-  available            ; map of Asset → f64 — capital free to deploy
-  reserved             ; map of Asset → f64 — capital locked by active trades
+  [denomination : Asset]               ; what "value" means (e.g. USD)
+  [available : Map<Asset, f64>]        ; capital free to deploy
+  [reserved : Map<Asset, f64>]         ; capital locked by active trades
 
   ;; The barrage — proposals received each candle, drained after funding
-  proposals            ; Vec<Proposal> — cleared every candle
+  [proposals : Vec<Proposal>]          ; cleared every candle
 
   ;; Active trades — funded proposals become trades
-  trades               ; map of TradeId → Trade
-  trade-origins        ; map of TradeId → TradeOrigin
+  [trades : Map<TradeId, Trade>]
+  [trade-origins : Map<TradeId, TradeOrigin>]
 
   ;; Counter
-  next-trade-id)       ; usize — monotonic
+  [next-trade-id : usize])             ; monotonic
 ```
 
 **Interface:**
@@ -1573,10 +1584,10 @@ The enterprise knows:
 ```
 (struct enterprise
   ;; The posts — one per asset pair
-  posts                ; Vec<Post> — each watches one market
+  [posts : Vec<Post>]                  ; each watches one market
 
   ;; The treasury — shared across all posts
-  treasury             ; Treasury — holds capital, funds trades, settles
+  [treasury : Treasury]                ; holds capital, funds trades, settles
 
   ;; The enterprise does NOT own immutable config. It receives ctx
   ;; as a parameter on every on-candle call. ctx is born at startup
@@ -1592,15 +1603,15 @@ The enterprise knows:
   ;; Disjoint. Lock-free. The enterprise drains all queues at the
   ;; candle boundary. Generic — anyone who declares a logger can log.
   ;; Per-candle cache — produced in step 2, consumed in step 3c
-  market-thoughts-cache ; Vec<Vec<Vector>> — one Vec<Vector> per post, cleared each candle
+  [market-thoughts-cache : Vec<Vec<Vector>>] ; one Vec<Vector> per post, cleared each candle
 
   ;; Cache miss-queues — same pattern as log-queues
   ;; Observers queue (ThoughtAST, Vector) pairs during parallel encoding.
   ;; The enterprise drains between steps and inserts into ThoughtEncoder's
   ;; LRU cache. Eventually-consistent — miss on candle N, hit on N+1.
-  cache-miss-queues    ; Vec<Vec<(ThoughtAST, Vector)>> — one per observer, drained each candle
+  [cache-miss-queues : Vec<Vec<(ThoughtAST, Vector)>>] ; one per observer, drained each candle
 
-  log-queues)          ; Vec<Vec<LogEntry>> — one per producer, drained each candle
+  [log-queues : Vec<Vec<LogEntry>>])   ; one per producer, drained each candle
 ```
 
 **Interface:**
