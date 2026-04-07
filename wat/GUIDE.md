@@ -851,8 +851,7 @@ Three domains. Each domain has scoped subfiles.
   - `:timing` → timing.wat — momentum state, reversal signals
   - `:generalist` → all three (volatility + structure + timing)
 
-- **risk/** — dissolved. Risk is not a separate vocabulary or entity.
-  Risk is the architecture's construction:
+- **risk/** — not a vocabulary domain. Risk is the architecture itself:
   - Papers learn for free — no capital at risk during bootstrap
   - funding() starts at 0.0 — ignorant reckoners receive nothing
   - Funding is proportional to edge — small edge, small bets
@@ -862,8 +861,7 @@ Three domains. Each domain has scoped subfiles.
   - The runner recovers principal — winners return the stake
   The treasury cannot trade into the negative. The treasury cannot
   trade while ignorant. The treasury self-regulates through capital
-  constraints. No separate risk branch needed. The accounting IS the
-  risk management.
+  constraints. The accounting IS the risk management.
 
 **Interface (per module):**
 - `(encode-<domain>-facts candle) → Vec<ThoughtAST>`
