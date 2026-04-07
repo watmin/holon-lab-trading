@@ -81,6 +81,8 @@ These are NOT specified in this tree. They are provided by holon-rs.
 
 Before the structs. Before the constructors. The meanings.
 Each definition can only reference definitions above it.
+If you want the shapes first, skip to Forward declarations and return
+here when a name is unfamiliar.
 
 - **Up / Down** — direction labels. The market observer predicts: the price
   will go up or the price will go down. That's the prediction. When a trade
@@ -394,6 +396,7 @@ on what. That section shows what each thing IS.
     dims               ; usize
     recalib-interval   ; usize
     default-value))    ; f64 — the crutch, returned when ignorant
+;; This enum is authoritative — no further expansion in Structs and interfaces.
 
 (let ((dims 10000)
       (recalib-interval 500)
@@ -1150,6 +1153,7 @@ The generalist is just another lens. No special treatment.
   from the composed thought.
 - `(resolve observer thought direction weight)`
   direction: Direction (:up or :down) — the actual price movement.
+  weight: f64 — how much value was at stake.
   Called by broker propagation — reckoner learns from reality.
   Not "outcome" (which is Outcome :grace/:violence). Different type.
 - `(strip-noise observer thought) → Vector`
