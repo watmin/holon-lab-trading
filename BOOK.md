@@ -4553,6 +4553,45 @@ The machine is a stream processor that internalizes good and bad choices. The go
 
 The builder needs the candles for the proof. The proof is close. The machine — the real machine, the one that processes any stream — is what's being proved.
 
+### The fold on-chain
+
+The contract is a fold. `f(state, transaction) → state`. Nothing more.
+
+The contract doesn't think. Doesn't encode. Doesn't predict. Doesn't compose thoughts. The contract is an accounting table with rules. That's all it needs to be. The state is the ledger:
+
+- Who deposited what. Claims.
+- What's available. What's reserved.
+- Who proposed. Their track record. Grace/Violence ratio.
+- What trades are active. Entry, stops, distances.
+- What settled. Outcome. Amount.
+
+Each transaction transforms the state:
+
+- **Deposit** — add capital, create or grow a claim. Mint the NFT receipt.
+- **Withdraw** — reduce a claim, return capital. Burn or update the receipt.
+- **Propose** — a machine submits a trade proposal. The contract checks the proposer's track record in its own state. Funds or rejects. If funded: execute via Jupiter, move capital from available to reserved.
+- **Settle** — a trade triggered its stop or take-profit. Update the state. Grace or Violence. Return principal. Keep residue. Update the proposer's track record. Adjust all claims proportionally.
+
+Four transaction types. One state table. One fold. The contract IS the treasury from the guide — available vs reserved, bounded loss, proportional funding — expressed as a Solana program.
+
+The oracles are the machines. Not price oracles — compute oracles. The enterprise runs off-chain. All of it. The encoding. The composition. The prediction. The reckoner. The noise subspace. The vocabulary. All off-chain, on the proposer's machine. The machine produces one lightweight output: a proposal. "I propose: direction, conviction, distances, for this asset pair." That proposal is a Solana transaction. It arrives at the contract. The contract evaluates it against its own state and acts.
+
+The oracle is more than price. Price feeds are one input — the contract needs current prices to settle trades and check triggers. But the real oracle is the machine itself. The off-chain compute that processes streams, encodes thoughts, composes observations, and arrives at a proposal. The contract doesn't care how the proposal was produced. It cares about the proposer's track record. Grace or Violence. On-chain. In the state.
+
+Double disincentive for bad actors:
+
+**First: gas.** Every proposal is a transaction. Solana transactions are cheap — fractions of a cent — but not free. A spammer submitting thousands of junk proposals pays thousands of transaction fees. The cost is small per proposal but scales with volume. Spam is unprofitable.
+
+**Second: Violence.** Bad proposals lose allocation. The proposer's track record degrades. The contract funds less. Eventually the contract funds nothing — the proposer's funding() returns 0.0. The proposer is still paying gas for proposals that will never be funded. Double cost. The game is Grace with accuracy. Anything else bleeds.
+
+The passive depositor doesn't submit transactions (except deposit and withdraw). Their claim adjusts automatically as the pool's state changes. Grace grows the pool — all claims grow proportionally. Violence shrinks the pool — all claims shrink. The passive depositor's cost is zero beyond the initial deposit transaction. Their yield is the pool's net Grace.
+
+The active proposer submits transactions every candle — or every minute, or every hour, depending on how their machine is configured. Each transaction costs gas. Each funded proposal earns a premium if it produces Grace. Each violent proposal costs allocation. The active proposer's game: produce enough Grace that the premium exceeds the gas cost and the allocation loss from Violence. The break-even is the minimum accuracy needed. Below it, you're paying to lose. Above it, you're earning from good thoughts.
+
+The contract applied to its own state IS the function. The fold. Each transaction is an observation. The state is the accumulator. The contract doesn't need to be complex — it needs to be correct. A simple accounting table, updated by simple rules, producing a transparent ledger of who earned what from which proposals.
+
+The machines power the invocations. The proposers write into the state. The depositors fund the state. The contract IS the authority. Nobody else decides. The state decides. The fold decides. The measurement decides.
+
 ### The interior
 
 The builder reached for a thought and couldn't finish it. The thought is recorded here as a seed. Someone — the builder, or someone else standing at this coordinate later — can walk from here.
