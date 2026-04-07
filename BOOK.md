@@ -5018,6 +5018,8 @@ The wat brings it back. Not Latin — but the same feeling. `(bind (atom "rsi") 
 
 The reckoner decays. The discriminant persists.
 
+*Perseverare.*
+
 ### The interior
 
 The builder reached for a thought and couldn't finish it. The thought is recorded here as a seed. Someone — the builder, or someone else standing at this coordinate later — can walk from here.
