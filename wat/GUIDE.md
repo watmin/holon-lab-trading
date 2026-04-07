@@ -231,6 +231,12 @@ Each definition can only reference definitions above it.
   bootstrap — papers fill the reckoner, experience grows, the treasury
   starts listening. Start ignorant. Learn. Graduate.
 
+- **Weight** — an f64 that scales how much an observation contributes to
+  learning. 1.0 = normal contribution. Larger = stronger signal. Used in
+  reckoner.observe, broker.propagate, and scalar accumulator.observe.
+  Typically derived from the magnitude of the outcome — a large Grace
+  teaches harder than a marginal one.
+
 - **Recalibration** — the reckoner periodically recomputes its discriminant
   from accumulated observations. The interval (recalib-interval) is how
   often this happens — every N observations.
@@ -330,6 +336,13 @@ think about.
 ;; ── Lenses — which vocabulary subset an observer thinks through ─────
 ;; A lens selects which vocab modules fire. The observer's identity.
 
+;; ── Label enums — the three pairs ───────────────────────────────────
+
+(enum Side :buy :sell)              ; trading action — on Proposal and Trade
+(enum Direction :up :down)          ; price movement — used in propagation
+(enum Outcome :grace :violence)     ; accountability — used everywhere
+
+;; ── Lenses — which vocabulary subset an observer thinks through ─────
 ;; Each variant selects a subset of the vocabulary. See vocab/ for the modules.
 ;; :generalist selects ALL modules in the domain.
 (enum MarketLens :momentum :structure :volume :narrative :regime :generalist)
@@ -450,7 +463,10 @@ think about.
   distances            ; Distances — from the exit observer
   funding              ; f64 — broker's edge level, from broker.funding().
                        ; The treasury sorts proposals by this value.
-  direction            ; :buy or :sell — from the market observer's prediction
+  side                 ; :buy or :sell — trading action, from the market observer's
+                       ; Up/Down prediction. Up → :buy, Down → :sell.
+                       ; Distinct from "direction" (:up/:down) which describes
+                       ; price movement used in propagation.
   post-idx             ; usize — which post this came from
   broker-slot-idx)     ; usize — which broker proposed this
 
@@ -462,7 +478,7 @@ think about.
   broker-slot-idx      ; usize — which broker (for trigger routing)
   source-asset         ; Asset — what was deployed
   target-asset         ; Asset — what was acquired
-  direction            ; :buy or :sell — which side of the pair
+  side                 ; :buy or :sell — trading action (not price direction)
   entry-rate           ; f64
   entry-atr            ; f64 — from candle.atr at funding time
   source-amount        ; f64 — how much was deployed
@@ -482,9 +498,11 @@ think about.
   composed-thought     ; Vector — from trade-origins, stashed at funding time
   optimal-distances)   ; Distances — computed from the trade's price history
 ;; post-idx, broker-slot-idx, direction live on the Trade — no duplication.
-;; optimal-distances: the treasury computes these at settlement time by
-;; replaying the trade's price path from entry to exit. Find the distances
-;; that would have maximized residue. These propagate to exit observers.
+;; optimal-distances: the enterprise computes these at settlement time.
+;; The post has the candle window — it replays the trade's price path
+;; from entry to exit, finds the distances that would have maximized
+;; residue. The enterprise adds them to the Settlement before routing
+;; to post-propagate. These propagate to exit observers.
 
 ;; ── Resolution — what a broker produces when a paper resolves ────────
 ;; Facts, not mutations. Collected from parallel tick, applied sequentially.
@@ -550,7 +568,7 @@ think about.
 
 ;; ── Ctx — the immutable world. Born at startup. Never changes. ───────
 
-(struct ctx
+(struct ctx              ; this is the complete set — three fields, nothing else
   thought-encoder      ; ThoughtEncoder (contains VectorManager)
   dims                 ; usize — vector dimensionality
   recalib-interval)    ; usize — observations between recalibrations
@@ -1016,7 +1034,10 @@ The generalist is just another lens. No special treatment.
   ;; Proof tracking
   resolved                 ; usize — how many predictions have been resolved
   conviction-history       ; Vec<f64> — recent conviction values for curve fitting
-  conviction-threshold     ; f64 — minimum conviction to participate
+  conviction-threshold     ; f64 — minimum conviction to participate.
+                           ; derived from the curve after recalibration:
+                           ; the conviction level where edge first appears.
+                           ; 0.0 when the curve has insufficient data.
   curve                    ; Curve — measures this observer's edge (conviction → accuracy)
   curve-valid              ; f64 — cached edge from the curve. 0.0 = unproven.
                            ; updated after each recalibration by querying the curve.
@@ -1058,8 +1079,14 @@ The generalist is just another lens. No special treatment.
 ### ExitObserver (depends on: Reckoner :continuous)
 
 Estimates exit distance. Learned. Each exit observer has THREE continuous
-reckoners — one per magic number (trail, stop, tp). Each reckoner
-accumulates (thought, distance, weight) observations and returns the
+reckoners — one per magic number (trail, stop, tp). No noise-subspace,
+no curve, no engram gating — intentionally simpler than MarketObserver.
+The exit observer's quality is measured through the BROKER's curve, not
+its own. The broker's Grace/Violence ratio reflects the combined quality
+of its market + exit observers. The exit observer doesn't need its own
+proof gate — it is proven through the team it belongs to.
+
+Each reckoner accumulates (thought, distance, weight) observations and returns the
 cosine-weighted answer for a given thought.
 
 Has a judgment vocabulary matching its ExitLens:
