@@ -97,7 +97,11 @@ Each definition can only reference definitions above it.
   A strong Grace teaches harder than a marginal one. Two pairs for
   learning: Direction (Up/Down) and Accountability (Grace/Violence).
   A third pair for action: Side (Buy/Sell) — derived from Up/Down,
-  used on proposals and trades.
+  used on proposals and trades. Note: Side × Direction forms a 2×2 grid
+  where Buy+Up = Grace and Buy+Down = Violence. This is a THEOREM —
+  true when the system is coherent — not a definition. Outcome is
+  measured independently because incoherence (the system acting against
+  its own prediction) is where the machine learns the most.
 
 - **Candle** — one period of market data. Raw: six data values (open, high,
   low, close, volume, timestamp) plus an asset pair for routing (source-asset,
