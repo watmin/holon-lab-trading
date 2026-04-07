@@ -386,6 +386,14 @@ think about.
   (make-exit-observer lens dims recalib-interval
     default-trail default-stop default-tp))          → ExitObserver
 
+;; ── Distances — the three exit values, used everywhere ──────────
+;; A named tuple. Appears on PaperEntry, Proposal, Resolution, Settlement.
+
+(struct distances
+  trail                ; f64 — trailing stop distance (percentage of price)
+  stop                 ; f64 — safety stop distance
+  tp)                  ; f64 — take-profit distance
+
 ;; ── PaperEntry — hypothetical trade inside a broker ──────────
 ;; A paper trade is a "what if." Every candle, every pair gets one.
 ;; It tracks what WOULD have happened if a trade was opened here.
@@ -451,8 +459,11 @@ think about.
   trade                ; Trade — which trade closed (carries post-idx, broker-slot-idx)
   outcome              ; :grace or :violence
   amount               ; f64 — how much value gained or lost
-  composed-thought)    ; Vector — from trade-origins, stashed at funding time
+  composed-thought     ; Vector — from trade-origins, stashed at funding time
+  optimal-distances)   ; (trail, stop, tp) — computed from the trade's price history
 ;; post-idx and broker-slot-idx live on the Trade — no duplication.
+;; optimal-distances: replay the trade's price path, find the distances
+;; that would have maximized residue. These propagate to exit observers.
 
 ;; ── Resolution — what a broker produces when a paper resolves ────────
 ;; Facts, not mutations. Collected from parallel tick, applied sequentially.
@@ -498,8 +509,6 @@ think about.
 (let ((denomination (make-asset "USD"))
       (initial-balances {(make-asset "USDC") 10000.0}))
   (make-treasury denomination initial-balances))     → Treasury
-
-;; ── Enterprise — the coordination plane ─────────────────────────────
 
 ;; ── Ctx — the immutable world. Born at startup. Never changes. ───────
 
@@ -976,13 +985,18 @@ The generalist is just another lens. No special treatment.
 **Interface:**
 - `(make-market-observer lens reckoner-config window-sampler) → MarketObserver`
   lens: MarketLens. config: Discrete with "Up"/"Down" labels.
+  All proof-tracking and engram-gating fields initialize to zero/empty.
 - `(observe-candle observer candle-window ctx) → (Vector, Prediction)`
   candle-window: a slice of recent candles. The post calls
   `(sample (:window-sampler observer) encode-count)` to get the window
   size, slices the candle window, and passes the slice. The observer
   encodes → noise update → strip noise → predict. Returns both the
   thought vector (needed downstream for exit composition, paper
-  registration, and propagation) and the prediction.
+  registration, and propagation) and the prediction. The prediction
+  is used by the post for logging and conviction tracking — the
+  broker produces its OWN prediction (Grace/Violence) from the
+  composed thought. The market observer's prediction does not appear
+  on the Proposal.
 - `(resolve observer thought outcome weight)`
   called by broker propagation — reckoner learns from the actual
   direction (Up/Down). No prediction needed — the observer learns
@@ -1027,8 +1041,11 @@ get different distances.
 - `(compose exit-obs market-thought exit-fact-asts ctx) → Vector`
   evaluates exit ASTs via ctx's ThoughtEncoder, then bundles with
   the market thought. ASTs in, one composed Vector out.
-- `(recommended-distances exit-obs composed) → (trail, stop, tp)`
-  query all three reckoners — one call, three answers
+- `(recommended-distances exit-obs composed broker-accums) → Distances`
+  the cascade: for each magic number, try contextual (reckoner query
+  with composed thought) → if inexperienced, try global per-pair
+  (broker's ScalarAccumulator extract) → if empty, return default (crutch).
+  This function implements the cascade. One call, three answers.
 - `(observe-distances exit-obs composed optimal-trail optimal-stop optimal-tp weight)`
   the market spoke — all three reckoners learn from one resolution
 - `(experienced? exit-obs) → bool`
@@ -1076,8 +1093,12 @@ runtime:       frozen map (read-only) → slot-idx → &mut broker (disjoint)
   ;; Accountability
   reckoner           ; Reckoner :discrete — Grace/Violence
   noise-subspace     ; OnlineSubspace
+  curve              ; Curve — measures how much edge this broker has earned.
+                     ; fed by the reckoner's resolved predictions.
   ;; Track record
-  cumulative-grace cumulative-violence trade-count
+  cumulative-grace   ; f64
+  cumulative-violence ; f64
+  trade-count        ; usize
   ;; Papers — the fast learning stream
   papers             ; deque of PaperEntry, capped
   ;; Scalar learning
@@ -1156,9 +1177,10 @@ accountability — to the broker that proposed it.
 
   ;; Accountability — brokers in a flat vec, parallel access
   registry             ; Vec<Broker> — one per observer set, pre-allocated
-  broker-map           ; Map<Set<String>, usize> — frozen after construction.
-                       ; set → slot-idx. Never written at runtime. Read-only
-                       ; lookups, flat vec access. No mutex.
+  broker-map           ; Map<Set<String>, usize> — derived from registry at
+                       ; construction: iterate brokers, map each observer-names
+                       ; set to its index. Frozen forever. Never written at
+                       ; runtime. Read-only lookups, flat vec access. No mutex.
 
   ;; Counter
   encode-count)
@@ -1298,10 +1320,12 @@ The enterprise knows:
   Grace/Violence. Market observers learn Up/Down. Exit observers
   learn optimal distances.
 - `(step-update-triggers enterprise post market-thoughts)`
-  treasury passes active trades for this post. The post composes each
-  trade's market thought with exit observers, queries fresh distances,
-  computes new trailing stop levels. The treasury applies the new values
-  to its trade records. This is step 3c — after tick and propagate.
+  the enterprise queries the treasury for active trades belonging to this
+  post, then calls post-update-triggers(post, trades, market-thoughts).
+  The post composes each trade's market thought with exit observers,
+  queries fresh distances, computes new trailing stop levels. The
+  enterprise writes the new values back to the treasury's trade records.
+  This is step 3c — after tick and propagate.
 - `(step-collect-fund enterprise)`
   treasury funds or rejects all proposals, drains
 
