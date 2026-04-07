@@ -11,10 +11,10 @@
 (require primitives)
 
 (struct scalar-accumulator
-  name                ; String — which magic number ("trail-distance", etc.)
-  grace-acc           ; Vector — accumulated encoded values from Grace outcomes
-  violence-acc        ; Vector — accumulated encoded values from Violence outcomes
-  count)              ; usize — number of observations. 0 = no data.
+  [name         : String]
+  [grace-acc    : Vector]
+  [violence-acc : Vector]
+  [count        : usize])
 
 ;; Interface
 

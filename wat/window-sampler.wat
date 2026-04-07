@@ -9,9 +9,9 @@
 (require primitives)
 
 (struct window-sampler
-  seed                ; usize — deterministic RNG seed
-  min-window          ; usize — minimum window size (crutch)
-  max-window)         ; usize — maximum window size (crutch)
+  [seed       : usize]
+  [min-window : usize]
+  [max-window : usize])
 
 ;; Interface
 
