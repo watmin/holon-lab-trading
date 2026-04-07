@@ -1200,6 +1200,8 @@ get different distances.
   broker-accums: Vec<ScalarAccumulator> — the broker's global per-pair learners.
   the cascade, per magic number:
   ```
+  ;; experienced? = (> (experience reckoner) 0.0) — convenience predicate
+  ;; has-data? = (> (len (:grace-acc accum)) 0) — at least one observation
   (if (experienced? reckoner)
     (predict reckoner composed)          ; contextual — for THIS thought
     (if (has-data? broker-accum)
@@ -1390,7 +1392,9 @@ accountability — to the broker that proposed it.
 - `(current-price post) → f64`
   the close of the last candle in the post's candle-window.
   The enterprise calls this per post to build current-prices for the treasury.
-- `(compute-optimal-distances price-history side) → Distances`
+- `(compute-optimal-distances price-history direction) → Distances`
+  direction: Direction — :up or :down. Which way the price moved.
+  This is observation (what the price did), not action (what the trader did).
   FREE FUNCTION — not a Post method. Takes no self. Pure.
   Replay the trade's price path. For each magic number, find the distance
   that would have maximized residue. price-history in, Distances out.
