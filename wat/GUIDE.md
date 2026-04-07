@@ -354,6 +354,10 @@ on what. That section shows what each thing IS.
 (enum Direction :up :down)          ; price movement — used in propagation
 (enum Outcome :grace :violence)     ; accountability — used everywhere
 
+;; ── Newtypes ────────────────────────────────────────────────────────
+
+(newtype TradeId usize)             ; treasury's key for active trades
+
 ;; ── Lenses — which vocabulary subset an observer thinks through ─────
 ;; A lens selects which vocab modules fire. The observer's identity.
 ;; Each variant selects a subset of the vocabulary. See vocab/ for the modules.
@@ -465,7 +469,7 @@ on what. That section shows what each thing IS.
 
 ;; Assembled by the post during step-compute-dispatch. The post calls:
 ;;   market observer → thought vector
-;;   exit observer → compose(thought, facts) → composed + distances
+;;   exit observer → evaluate-and-compose(thought, fact-asts, ctx) → composed + distances
 ;;   broker → propose(composed) → prediction
 ;;   post bundles these into a Proposal and submits to treasury.
 (struct proposal
@@ -1020,8 +1024,8 @@ levels. Appears on PaperEntry, Proposal, Resolution, Settlement. The
 post converts Distances to price levels (trail-stop, safety-stop,
 take-profit on Trade) using the current price at the time of conversion.
 
-Defined in the forward declarations section (L416-419). No interface —
-Distances is pure data. Three f64 fields: trail, stop, tp.
+Defined in the forward declarations section (search for `struct distances`).
+No interface — Distances is pure data. Three f64 fields: trail, stop, tp.
 
 ---
 
@@ -1160,9 +1164,11 @@ get different distances.
 - `(make-exit-observer lens dims recalib-interval default-trail default-stop default-tp) → ExitObserver`
 - `(encode-exit-facts exit-obs candle) → Vec<ThoughtAST>`
   pure: candle → judgment fact ASTs for this lens
-- `(compose exit-obs market-thought exit-fact-asts ctx) → Vector`
-  evaluates exit ASTs via ctx's ThoughtEncoder, then bundles with
-  the market thought. ASTs in, one composed Vector out.
+- `(evaluate-and-compose exit-obs market-thought exit-fact-asts ctx) → Vector`
+  two operations, honestly named:
+  1. EVALUATE: encode exit-fact-asts into Vectors via ctx's ThoughtEncoder
+  2. COMPOSE: bundle the evaluated exit vectors with the market thought
+  ASTs in, one composed Vector out. The name says what it does.
 - `(recommended-distances exit-obs composed broker-accums) → Distances`
   broker-accums: Vec<ScalarAccumulator> — the broker's global per-pair learners.
   the cascade, per magic number:
@@ -1177,7 +1183,7 @@ get different distances.
 - `(observe-distances exit-obs composed optimal weight)`
   composed: Vector — the COMPOSED thought (market + exit facts), not the
   raw market thought. The exit observer learns from the same vector it
-  produced via compose(). This is what makes the learning contextual.
+  produced via evaluate-and-compose(). This is what makes the learning contextual.
   optimal: Distances — the hindsight-optimal distances from resolution.
   The market spoke — all three reckoners learn from one resolution.
 - `(experienced? exit-obs) → bool`
@@ -1336,7 +1342,7 @@ accountability — to the broker that proposed it.
 - `(post-on-candle post raw-candle ctx) → (Vec<Proposal>, Vec<Vector>)`
   returns proposals for the treasury AND market-thoughts for step 3c.
   tick indicators → push window → market observers observe-candle (→ thoughts + predictions)
-  → exit observers encode-exit-facts then compose(market-thought, exit-facts, ctx)
+  → exit observers encode-exit-facts then evaluate-and-compose(market-thought, exit-fact-asts, ctx)
   → exit observers recommended-distances(composed, broker.scalar-accums) → Distances
     (the POST passes the broker's scalar accumulators to the exit observer —
     the post has access to both because it owns both)
@@ -1492,7 +1498,8 @@ The enterprise knows:
 **Interface:**
 - `(on-candle enterprise raw-candle ctx)`
   route to the right post, then four steps. ctx flows in from the binary.
-- `(step-resolve enterprise)` — no return value, mutates state.
+- `(step-resolve enterprise)` — no return value, mutates state. No ctx needed —
+  settlement and propagation use pre-existing vectors, no encoding happens.
   The enterprise collects current prices internally (calls current-price
   on each post). Treasury settles triggered trades using those prices.
   For each settlement: enterprise computes optimal-distances via the post,
