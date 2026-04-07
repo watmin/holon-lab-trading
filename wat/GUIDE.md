@@ -867,7 +867,10 @@ via ctx on every on-candle call. The enterprise does not own it directly.
 ;; The cache mutates on miss. ctx is immutable. The Rust uses interior
 ;; mutability (RefCell or similar) — the ThoughtEncoder appears immutable
 ;; from the outside but the cache updates internally. This is the one
-;; place where ctx's immutability has a seam. Coordinate for Q10.
+;; place where ctx's immutability has a seam. The solution: observers
+;; queue cache misses during parallel encoding, the enterprise drains
+;; the miss-queues between steps (same pattern as log-queues). The
+;; cache becomes eventually-consistent — miss on candle N, hit on N+1.
 ```
 
 **The AST — what the vocabulary speaks:**
@@ -1512,7 +1515,8 @@ market-thoughts  ; Vec<Vector>         — the thought vectors from market obser
                  ;                      (predictions are internal to the observer)
 composed         ; Vec<Vector>         — exit observers → brokers
 proposals        ; Vec<Proposal>       — posts → treasury (the barrage)
-settlements      ; Vec<Settlement>     — treasury → posts (reality feedback)
+treasury-settlements ; Vec<TreasurySettlement> — treasury → enterprise
+settlements      ; Vec<Settlement>     — enterprise enriches → posts (reality feedback)
 trade-triggers   ; Vec<(TradeId, Trade)> — treasury → posts (active trades for update)
 distances        ; (trail, stop, tp)   — exit observers → proposals + papers
 propagation      ; (thought, outcome, weight)
@@ -1595,7 +1599,7 @@ The circuit is a loop. The fold is one tick of the clock.
                        │  ┌─────────────────────────────────┐  ×M             │
                        │  │       ExitObserver[j]            │                 │
                        │  │  3× reckoner :continuous         │──► Distances    │
-                       │  │  compose(thought, facts, ctx)    │                 │
+                       │  │  compose(thought, fact-asts, ctx) │                 │
                        │  └──────────┬──────────────────────┘                 │
                        │   composed  │    ▲                                    │
                        │  + distances │    │ observe-distances(optimal)        │
