@@ -46,6 +46,15 @@ The agent reports:
 5. **Order violations** — a section that appears before its
    dependencies have been detailed. The construction order is wrong.
 
+6. **Rough paths** — places where the reader succeeded but had to
+   work harder than necessary. An assumption the document forced the
+   reader to make. A connection between concepts that the reader had
+   to infer alone. A definition that was technically present but not
+   grounded enough to carry the reader through the next section.
+   These aren't broken paths — they're paths that would have been
+   easier with a sentence or two more. Report what you assumed and
+   where, so the author can decide whether to smooth it.
+
 ## The loop
 
 Fix, commit, test. The same loop as the enterprise.
@@ -127,6 +136,12 @@ The agent receives this instruction:
 > Report: name errors, confusion, contradictions, missing links, order
 > violations. If a sentence assumes knowledge you don't have yet from
 > THIS document, flag it.
+>
+> Also report: rough paths — places where you understood but had to
+> work harder than necessary. Where an assumption you had to make
+> would have been easier if the document had stated it. Where a
+> sentence or two more would have carried you through the next section.
+> These are suggestions, not findings. Report what you assumed and where.
 >
 > Be thorough. Report with line references. Keep under 600 words.
 
