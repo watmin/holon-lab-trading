@@ -583,7 +583,7 @@ on what. That section shows what each thing IS.
 ;; ── Treasury — pure accounting ──────────────────────────────────────
 
 (let ((denomination (make-asset "USD"))
-      (initial-balances {(make-asset "USDC") 10000.0}))
+      (initial-balances (map-of (make-asset "USDC") 10000.0)))
   (make-treasury denomination initial-balances))     → Treasury
 
 ;; ── Ctx — the immutable world. Born at startup. Never changes. ───────
