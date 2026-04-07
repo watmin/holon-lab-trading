@@ -783,8 +783,11 @@ Three domains. Each domain has scoped subfiles.
 - **risk/** — portfolio health. Coordinate for future work. Not in 007.
 
 **Interface (per module):**
-- `(encode-*-facts context) → Vec<ThoughtAST>`
-  context is whatever the domain thinks about — candles, portfolio, trade state
+- `(encode-<domain>-facts candle) → Vec<ThoughtAST>`
+  e.g. `(encode-oscillator-facts candle)`, `(encode-flow-facts candle)`.
+  Each module is a pure function: candle in, ASTs out. The observer
+  calls the modules matching its lens, collects the ASTs, and passes
+  them to evaluate-and-compose.
 
 A **fact** is a composition of atoms. The composition IS a vector.
 The vector IS the fact. It doesn't need a separate name. It simply is.
@@ -1207,7 +1210,10 @@ get different distances.
   optimal: Distances — the hindsight-optimal distances from resolution.
   The market spoke — all three reckoners learn from one resolution.
 - `(experienced? exit-obs) → bool`
-  have the reckoners accumulated observations?
+  true if ALL THREE reckoners have accumulated enough observations to
+  produce meaningful predictions (experience > 0.0 on each). If any
+  reckoner is ignorant, the exit observer is inexperienced — the cascade
+  falls through to the ScalarAccumulator or crutch.
 
 ---
 
@@ -1387,9 +1393,11 @@ accountability — to the broker that proposed it.
   Called by the enterprise when enriching TreasurySettlement
   into Settlement.
 - `(post-propagate post slot-idx thought outcome amount direction optimal)`
-  direction: :up or :down — derived by the enterprise from the settlement's
-  trade (exit-price vs entry-rate). The enterprise routes a settlement back
-  to the post. The post calls broker.propagate with its observer vecs.
+  direction: Direction. The enterprise routes a settlement back to the post.
+  The post passes its OWN observer vecs to broker.propagate — they don't
+  appear on post-propagate's signature because the post owns them (self).
+  The broker.propagate signature takes them explicitly because the broker
+  does NOT own them.
 
 ---
 
