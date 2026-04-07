@@ -94,9 +94,11 @@ Each definition can only reference definitions above it.
   A third pair for action: Side (Buy/Sell) — derived from Up/Down,
   used on proposals and trades.
 
-- **Candle** — one period of market data. Raw: six numbers (open, high, low,
-  close, volume, timestamp). Enriched: the raw data plus 100+ computed
-  indicators (moving averages, oscillators, volatility, momentum, structure).
+- **Candle** — one period of market data. Raw: six data values (open, high,
+  low, close, volume, timestamp) plus an asset pair for routing (source-asset,
+  target-asset) — eight fields total on the RawCandle struct. Enriched: the
+  raw data plus 100+ computed indicators (moving averages, oscillators,
+  volatility, momentum, structure).
 
 - **Indicator** — a derived measurement from price history. RSI, MACD,
   ATR (Average True Range — a measure of volatility), Bollinger Bands.
@@ -1029,9 +1031,10 @@ scalar accumulators.
 
 **Interface:**
 - `(new-scalar-accumulator name) → ScalarAccumulator`
-- `(observe-scalar acc value grace? weight)`
+- `(observe-scalar acc value outcome weight)`
   value: f64 — the scalar to accumulate (e.g. a distance).
-  grace?: bool — true if outcome was Grace, false if Violence.
+  outcome: Outcome — :grace or :violence. Determines which accumulator
+  receives the encoded value.
   weight: f64 — scales the contribution. Larger weight = stronger signal.
 - `(extract-scalar acc steps range) → f64`
   steps: usize — how many candidates to try.
