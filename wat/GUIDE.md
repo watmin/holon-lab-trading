@@ -2,8 +2,10 @@
 
 *The coordinates to where the machine is.*
 
-A machine that measures thoughts against reality. Did this thought
-produce value or destroy it? Built leaves to root from
+A machine that measures thoughts against reality. (A "thought" is a
+vector — the machine encodes a candle into a high-dimensional vector
+and measures whether that vector predicted value or destruction.) Did
+this thought produce value or destroy it? Built leaves to root from
 `docs/proposals/2026/04/007-exit-proposes/`.
 
 This document defines every struct and its interface. No implementation.
@@ -509,7 +511,7 @@ on what. That section shows what each thing IS.
   broker-slot-idx      ; usize — which broker (for trigger routing)
   source-asset         ; Asset — what was deployed
   target-asset         ; Asset — what was acquired
-  side                 ; :buy or :sell — trading action (not price direction)
+  side                 ; Side — copied from the funding Proposal at treasury funding time
   entry-rate           ; f64
   entry-atr            ; f64 — from candle.atr at funding time
   source-amount        ; f64 — how much was deployed
@@ -550,6 +552,10 @@ on what. That section shows what each thing IS.
   direction            ; Direction — :up or :down. Each paper side resolves
                        ; independently: buy-side stop fires → :up (price rose
                        ; then retraced). sell-side stop fires → :down.
+                       ; The direction matches the side that was TESTED, not
+                       ; the outcome — a buy-side paper only triggers because
+                       ; price moved up, so direction is :up regardless of
+                       ; whether outcome was Grace or Violence.
   outcome              ; Outcome — :grace or :violence
   amount               ; f64 — how much value
   optimal-distances)   ; Distances — hindsight optimal
@@ -1181,6 +1187,9 @@ get different distances.
   1. EVALUATE: encode exit-fact-asts into Vectors via ctx's ThoughtEncoder
   2. COMPOSE: bundle the evaluated exit vectors with the market thought
   ASTs in, one composed Vector out. The name says what it does.
+  The observer returns ASTs rather than vectors because it does not own
+  the ThoughtEncoder — ctx does, so evaluation is deferred to the call
+  site which has ctx in scope.
 - `(recommended-distances exit-obs composed broker-accums) → Distances`
   broker-accums: Vec<ScalarAccumulator> — the broker's global per-pair learners.
   the cascade, per magic number:
