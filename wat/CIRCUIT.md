@@ -13,7 +13,7 @@ Signals flow down (candle → thought → proposal). Outcomes flow back up
 is one tick of the clock.
 
 ```mermaid
-graph LR
+graph TD
     subgraph Post [One per asset pair]
         RC[RawCandle] --> IB[IndicatorBank]
         IB --> CD[Candle]
@@ -67,7 +67,7 @@ Pure. No learning. No state (except the ThoughtEncoder's miss-queued cache).
 RawCandle in, Vector out.
 
 ```mermaid
-graph LR
+graph TD
     RC[RawCandle] --> IB[IndicatorBank]
     IB -->|Candle| VO[Vocabulary]
     VO -->|ThoughtASTs| TE[ThoughtEncoder]
@@ -85,7 +85,7 @@ Compositions are optimistic (LRU, miss-queued for eventual consistency).
 The feedback loop. Where Grace and Violence shape the next prediction.
 
 ```mermaid
-graph LR
+graph TD
     TH[thought] --> RK[Reckoner]
     RK -->|predict| PR[Prediction]
     PR --> ACT[action in world]
@@ -105,7 +105,7 @@ gets weaker.
 The fast learning stream. Every candle. Every broker. No real capital.
 
 ```mermaid
-graph LR
+graph TD
     CT[composed thought] --> REG[register paper]
     REG --> PE[PaperEntry in deque]
     PE -->|tick with price| CHK[check stops]
@@ -127,7 +127,7 @@ from hindsight. Papers are how the machine learns before it trades.
 The capital lifecycle. Deploy, protect, recover, accumulate.
 
 ```mermaid
-graph LR
+graph TD
     PR[Proposal] --> TR[Treasury evaluates]
     TR -->|fund| AV[available → reserved]
     AV --> TD[Trade active]
@@ -150,7 +150,7 @@ reservation.
 Three levels of distance knowledge. Specific to general.
 
 ```mermaid
-graph LR
+graph TD
     Q[query distance] --> RK[Reckoner contextual]
     RK -->|experienced?| YES1[use reckoner answer]
     RK -->|inexperienced| SA[ScalarAccumulator global]
@@ -170,7 +170,7 @@ overall?"). If empty, use the crutch (the default value from construction).
 The signal that teaches. Settlement → observers learn.
 
 ```mermaid
-graph LR
+graph TD
     SET[Settlement] --> EN[Enterprise enriches]
     EN -->|direction + thought| PP[post-propagate]
     PP --> BR[Broker]
