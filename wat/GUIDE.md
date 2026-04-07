@@ -80,13 +80,12 @@ Each definition can only reference definitions above it.
 - **Up / Down** — direction labels. The market observer predicts: the price
   will go up or the price will go down. That's the prediction. When a trade
   resolves, the actual direction is routed back to the market observer.
-  The reckoner learns from reality. (Who routes it: the broker, defined below.)
+  The reckoner learns from reality.
 
 - **Grace / Violence** — accountability labels. "Did this trade produce
-  value or destroy it?" Grace = profit. Violence = loss. The accountability
-  unit (the broker, defined below) measures this. More Grace, more capital.
-  More Violence, less capital. The Grace/Violence ratio IS the answer to
-  "do we trust this team of observers?"
+  value or destroy it?" Grace = profit. Violence = loss. More Grace, more
+  capital. More Violence, less capital. The Grace/Violence ratio IS the
+  answer to "do we trust this team of observers?"
 
 - **Labels** — Up/Down and Grace/Violence are labels. Labels are not
   booleans. They carry weight — how decisively the market answered.
@@ -388,7 +387,7 @@ on what. That section shows what each thing IS.
     value              ; f64 — the reckoned scalar
     experience))       ; f64 — how much the reckoner knows (0.0 = ignorant)
 
-;; ── MarketObserver — predicts direction, learned ────────────────────
+;; ── MarketObserver — depends on: Reckoner :discrete, WindowSampler ──
 
 (let ((lens :momentum)
       (dims 10000)
@@ -401,8 +400,7 @@ on what. That section shows what each thing IS.
     (Discrete dims recalib-interval '("Up" "Down"))
     sampler))                                        → MarketObserver
 
-;; ── ExitObserver — predicts exit distance, learned ──────────────────
-;; Contains three continuous reckoners — trail, stop, tp
+;; ── ExitObserver — depends on: Reckoner :continuous (×3) ────────────
 
 (let ((lens :volatility)
       (dims 10000)
@@ -440,7 +438,7 @@ on what. That section shows what each thing IS.
   buy-resolved         ; bool — buy side's stop fired
   sell-resolved)       ; bool — sell side's stop fired
 
-;; ── Broker — the closure, accountability ──────────────────────
+;; ── Broker — depends on: Reckoner :discrete, ScalarAccumulator ──────
 
 (let ((observers '("momentum" "volatility"))
       (market-idx 0)           ; resolved by the post from "momentum"
@@ -488,24 +486,28 @@ on what. That section shows what each thing IS.
   trail-stop           ; f64 — current trailing stop level
   safety-stop          ; f64 — safety stop level (cut the loss)
   take-profit          ; f64 — take-profit level (take the win)
-  candles-held)        ; usize — how long open
+  candles-held         ; usize — how long open
+  price-history)       ; Vec<f64> — close prices from entry to now. Appended each
+                       ; candle. The trade closes over its own history. Pure.
 
-;; ── Settlement — result of closing a trade ──────────────────────────
+;; ── TreasurySettlement — what the treasury produces when a trade closes ──
+
+(struct treasury-settlement
+  trade                ; Trade — which trade closed (carries post-idx, broker-slot-idx, side)
+  exit-price           ; f64 — price at settlement
+  outcome              ; Outcome — :grace or :violence
+  amount               ; f64 — how much value gained or lost
+  composed-thought)    ; Vector — from trade-origins, stashed at funding time
+;; The treasury produces this. It does NOT have optimal-distances.
+
+;; ── Settlement — the complete record, after enterprise enrichment ─────
 
 (struct settlement
-  trade                ; Trade — which trade closed (carries post-idx, broker-slot-idx, direction)
-  exit-price           ; f64 — price at settlement. Direction derived:
-                       ; if exit-price > entry-rate → :up, else → :down.
-  outcome              ; :grace or :violence
-  amount               ; f64 — how much value gained or lost
-  composed-thought     ; Vector — from trade-origins, stashed at funding time
-  optimal-distances)   ; Distances — computed from the trade's price history
-;; post-idx, broker-slot-idx, direction live on the Trade — no duplication.
-;; optimal-distances: the enterprise computes these at settlement time.
-;; The post has the candle window — it replays the trade's price path
-;; from entry to exit, finds the distances that would have maximized
-;; residue. The enterprise adds them to the Settlement before routing
-;; to post-propagate. These propagate to exit observers.
+  treasury-settlement  ; TreasurySettlement — the treasury's accounting
+  direction            ; Direction — :up or :down, derived from exit-price vs entry-rate
+  optimal-distances)   ; Distances — replay trade's price-history, maximize residue
+;; The enterprise builds this by enriching a TreasurySettlement.
+;; The trade's price-history (on the Trade) provides the replay data.
 
 ;; ── Resolution — what a broker produces when a paper resolves ────────
 ;; Facts, not mutations. Collected from parallel tick, applied sequentially.
@@ -552,7 +554,7 @@ on what. That section shows what each thing IS.
   broker-slot-idx      ; usize — which broker
   composed-thought)    ; Vector — the thought at entry
 
-;; ── Post — one per asset pair ───────────────────────────────────────
+;; ── Post — depends on: IndicatorBank, MarketObserver, ExitObserver, Broker ──
 
 (let ((source (make-asset "USDC"))
       (target (make-asset "WBTC"))
@@ -1356,17 +1358,14 @@ so that on settlement, propagate reaches the right observers.
   For each funded proposal: move capital from available to reserved,
   create a Trade, stash a TradeOrigin (post-idx, broker-slot-idx,
   composed-thought) for propagation at settlement time. Drain proposals.
-- `(settle-triggered treasury current-prices) → Vec<Settlement>`
+- `(settle-triggered treasury current-prices) → Vec<TreasurySettlement>`
   current-prices: map of (Asset, Asset) → f64 — one price per asset pair.
   Each post provides its latest candle close as its current price.
-  Check all active trades, settle what triggered, return settlements.
+  Check all active trades, settle what triggered, return treasury-settlements.
   Move capital from reserved back to available. Add residue.
-  The treasury fills all Settlement fields EXCEPT optimal-distances
-  (set to default). The enterprise then asks the post to compute
-  optimal-distances from its candle window and fills them in before
-  routing to post-propagate.
-  Each settlement carries the Trade (with post-idx and broker-slot-idx)
-  and optimal-distances for propagation.
+  The enterprise enriches each TreasurySettlement into a Settlement
+  (derives direction, replays trade's price-history for optimal-distances)
+  before routing to post-propagate.
 - `(available-capital treasury asset) → f64`
   how much is free to deploy?
 - `(deposit treasury asset amount)`
