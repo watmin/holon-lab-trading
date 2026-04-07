@@ -62,6 +62,16 @@ These are NOT specified in this tree. They are provided by holon-rs.
   - `(record-prediction curve conviction correct?)` — feed each resolved prediction
   - `(edge-at curve conviction) → f64` — query: how accurate at this conviction level?
   - `(proven? curve min-samples) → bool` — enough data to trust?
+  The curve self-evaluates — it reports amplitude and exponent from
+  accumulated data. That is measurement, not learning.
+  **Coordinate for later: curve learning.** The curve's parameters
+  (amplitude, exponent) are meta-observations about the reckoner's
+  quality. A meta-journal could feed them back as thoughts — the system
+  thinking about how well it thinks. But feeding the curve's output
+  back into encoding creates a circular dependency whose convergence
+  is unknown. 007 ships the open loop: the curve measures, the builder
+  observes. The loop closes later, after the open-loop dynamics are
+  understood.
 - **OnlineSubspace** — learns what normal looks like. Measures how unusual
   a new input is (the residual). High residual = unusual. Low = boring.
   - `(update subspace vector)`
@@ -213,6 +223,12 @@ here when a name is unfamiliar.
   profit is the residue. Residue is never withdrawn by the enterprise.
   It compounds. The accumulation model: deploy, recover principal,
   keep the residue. The residue IS the growth.
+  **Coordinate for later: the runner phase.** In 007, trades are
+  Active → Settled. The full accumulation model has a third state:
+  PrincipalRecovered → Runner, where the residue rides with a wider
+  stop on house money. This requires observing the residue distribution
+  first — you cannot design the runner until you know what residue
+  looks like in practice. 007 builds the thing that produces the data.
 
 - **Propagation** — routing resolved outcomes through the broker to
   the observers that need to learn. Grace/Violence to the broker's
