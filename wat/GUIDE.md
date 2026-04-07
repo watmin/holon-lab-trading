@@ -182,9 +182,9 @@ Each definition can only reference definitions above it.
   - Discrete: a list of (label, score) pairs + conviction. The consumer picks.
   - Continuous: a scalar value + experience.
   Pattern-match to know which mode. The type tells you. The Discrete
-  variant is generic over labels — the broker's reckoner returns
-  (Grace/Violence, score) pairs. The market observer's returns
-  (Up/Down, score) pairs. Same enum. Different label vocabularies.
+  variant is keyed by label name (String) — the broker's reckoner returns
+  ("Grace"/"Violence", score) pairs. The market observer's returns
+  ("Up"/"Down", score) pairs. Same enum. Different label names.
 
 - **Proof curve** — the curve primitive (defined above) applied to a
   specific reckoner. How much edge? A continuous measure. 52.1% is barely
@@ -515,9 +515,8 @@ on what. That section shows what each thing IS.
   entry-rate           ; f64
   entry-atr            ; f64 — from candle.atr at funding time
   source-amount        ; f64 — how much was deployed
-  trail-stop           ; f64 — current trailing stop level
-  safety-stop          ; f64 — safety stop level (cut the loss)
-  take-profit          ; f64 — take-profit level (take the win)
+  stop-levels          ; Levels — current trailing stop, safety stop, take-profit
+                       ; absolute price levels, updated by step 3c
   candles-held         ; usize — how long open
   price-history)       ; Vec<f64> — close prices from entry to now. Appended each
                        ; candle. The trade closes over its own history. Pure.
@@ -602,7 +601,7 @@ on what. That section shows what each thing IS.
       (dims 10000)
       (recalib-interval 500)
       (max-window-size 2016))
-  (make-post source target dims recalib-interval max-window-size
+  (make-post post-idx source target dims recalib-interval max-window-size
     (make-indicator-bank)
     market-observers exit-observers registry))       → Post
 
@@ -1358,7 +1357,7 @@ accountability — to the broker that proposed it.
 ```
 
 **Interface:**
-- `(make-post source target dims recalib-interval max-window-size
+- `(make-post post-idx source target dims recalib-interval max-window-size
     indicator-bank market-observers exit-observers registry) → Post`
 - `(post-on-candle post raw-candle ctx) → (Vec<Proposal>, Vec<Vector>)`
   returns proposals for the treasury AND market-thoughts for step 3c.
@@ -1483,7 +1482,7 @@ treasury.
 The enterprise knows:
 - **What runs parallel** — market observers encode simultaneously (par_iter)
 - **What runs sequential** — exit dispatch into registry (disjoint slots)
-- **What order** — Step 1: RESOLVE → Step 2: COMPUTE+DISPATCH → Step 3a: TICK (parallel) → Step 3b: PROPAGATE → Step 3c: UPDATE TRIGGERS → Step 4: COLLECT+FUND
+- **What order** — Step 1: RESOLVE+PROPAGATE → Step 2: COMPUTE+DISPATCH → Step 3a: TICK (parallel) → Step 3b: PROPAGATE (papers) → Step 3c: UPDATE TRIGGERS → Step 4: COLLECT+FUND
 - **What flows where** — proposals from posts to treasury, settlements from treasury to posts
 - **What gets cleared** — proposals empty after funding, every candle
 
@@ -1523,7 +1522,7 @@ The enterprise knows:
 **Interface:**
 - `(on-candle enterprise raw-candle ctx)`
   route to the right post, then four steps. ctx flows in from the binary.
-- `(step-resolve enterprise)` — no return value, mutates state. No ctx needed —
+- `(step-resolve-and-propagate enterprise)` — no return value, mutates state. No ctx needed —
   settlement and propagation use pre-existing vectors, no encoding happens.
   The enterprise collects current prices internally (calls current-price
   on each post). Treasury settles triggered trades using those prices.
@@ -1595,7 +1594,7 @@ propagation      ; (thought, outcome, weight)
 ### The four steps — who produces, who consumes
 
 ```
-Step 1: RESOLVE (propagation path 1 — real trades)
+Step 1: RESOLVE + PROPAGATE (propagation path 1 — real trades)
   treasury reads:   active trades, current price
   treasury produces: treasury-settlements
   enterprise enriches: treasury-settlements → settlements (adds direction, optimal-distances)
