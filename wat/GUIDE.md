@@ -38,8 +38,10 @@ These are NOT specified in this tree. They are provided by holon-rs.
       containing dims, recalib-interval, and readout mode:
       - `(labels "Up" "Down")` → discrete. N labels. Classification.
       - `(default-value 0.015)` → continuous. Scalar. Regression.
-  - `(observe reckoner thought outcome weight)` — both modes.
-    outcome is a label (discrete) or a scalar (continuous).
+  - `(observe reckoner thought observation weight)` — both modes.
+    observation is a label (discrete) or a scalar (continuous).
+    Not the Outcome enum — observation is the general term for what
+    the reckoner learns from. Outcome is a specific kind of observation.
   - `(predict reckoner thought)` — both modes.
     returns Prediction — the reckoner's verdict.
   - `(decay reckoner factor)` — both modes. Old experience fades.
