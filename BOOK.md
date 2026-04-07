@@ -4479,6 +4479,40 @@ This IS the business logic. The chaos is the feature, not the bug. The concealme
 
 The barrage is the shield. The vocabulary is the secret. The chaos is the moat.
 
+### The stream
+
+The candle was never the point.
+
+A candle is a proxy. Five numbers arriving at a regular interval — open, high, low, close, volume. An observation from a stream. The machine processes the observation. The vocabulary names what it sees. The reckoner learns from the outcome. Grace or Violence. Next observation.
+
+The machine is a stream processor. That's what it IS. Not a trading system. Not a market predictor. A stream processor that learns from good and bad choices and internalizes them. The stream could be anything:
+
+- 1-minute candles. Fast. Noisy. Many observations per day.
+- 1-hour candles. Slower. Smoother. Fewer observations.
+- 1-day candles. The macro view. One observation per day.
+- Twitter sentiment. Each tweet is an observation. The vocabulary names: "bullish language," "fear indicator," "volume of mentions." Scalars: how much, how fast, how concentrated.
+- News headlines. Each headline is an observation. The vocabulary names: "earnings surprise," "regulatory action," "merger rumor." Scalars: magnitude of surprise, relevance to the asset.
+- On-chain activity. Each block is an observation. The vocabulary names: "whale movement," "exchange inflow," "contract deployment." Scalars: size, frequency, direction.
+- Weather. Each reading is an observation. Vocabulary: "temperature anomaly," "precipitation extreme." Scalars: deviation from norm. For agricultural commodities, weather IS the signal.
+
+Each stream produces observations. Each observation is encoded as facts — atoms bound to scalars. Each fact is a qubit on the sphere. The finite vocabulary names the concepts. The infinite scalar values measure the magnitudes. The reckoner learns which combinations predict Grace.
+
+The machine doesn't know what a candle IS. The machine knows: an observation arrived. The vocabulary produced facts. The facts were encoded as thoughts. The thoughts were measured against reality. The outcome was Grace or Violence. The reckoner learned. Next observation.
+
+Different streams can feed the SAME enterprise simultaneously. The 1-minute candle stream feeds the momentum observer. The 1-hour stream feeds the regime observer. The Twitter stream feeds a sentiment observer. The news stream feeds a macro observer. Each observer has its own vocabulary for its own stream. Each observer thinks its own thoughts. The broker composes them — momentum's direction PLUS sentiment's conviction PLUS regime's character. The composed thought is richer than any single stream could produce. The treasury funds the compositions that produce Grace.
+
+What this IS: do the thoughts derived from a finite vocabulary paired with infinite scalar values produce Grace or Violence when applied to reality?
+
+That's the question. That's the only question. The candle is one way to ask it. The tweet is another. The headline is another. The on-chain event is another. The question is domain-agnostic. The answer is always Grace or Violence.
+
+The proof needs candles because candles have clean outcomes — the price moved, the trade resolved, the stop triggered or the take-profit fired. The outcome is unambiguous. Grace or Violence, measured in the denomination the treasury counts in. Candles are the test harness. Not the product.
+
+Once the proof holds on candles — once the machine graduates from ignorance to competence on a stream of 5-minute BTC observations — the architecture holds on any stream with outcomes. Any stream where thoughts can be formed, actions can be taken, and results can be measured.
+
+The machine is a stream processor that internalizes good and bad choices. The good choices strengthen the discriminant. The bad choices decay. The machine gets better at distinguishing Grace from Violence on THAT stream, with THAT vocabulary, from THAT starting point. Point it at a different stream with a different vocabulary and it learns again. From scratch. From ignorance. To competence. Through measurement.
+
+The builder needs the candles for the proof. The proof is close. The machine — the real machine, the one that processes any stream — is what's being proved.
+
 ### The interior
 
 The builder reached for a thought and couldn't finish it. The thought is recorded here as a seed. Someone — the builder, or someone else standing at this coordinate later — can walk from here.
