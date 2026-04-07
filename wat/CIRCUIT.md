@@ -17,18 +17,25 @@ graph TD
     subgraph Post [One per asset pair]
         RC[RawCandle] --> IB[IndicatorBank]
         IB --> CD[Candle]
-        CD --> VO[Vocabulary]
-        VO -->|ASTs| TE[ThoughtEncoder]
-        TE -->|Vector| MO[MarketObserver x6]
-        MO -->|thought| EO[ExitObserver x4]
-        EO -->|composed| BR[Broker x24]
+        CD --> MO[MarketObserver x6]
+        CD --> EO[ExitObserver x4]
+        MO -->|thought + prediction| EO
+        EO -->|composed + distances| BR[Broker x24]
     end
+    MO -.->|uses| VO[Vocabulary]
+    MO -.->|uses| TE[ThoughtEncoder ctx]
+    EO -.->|uses| VO
+    EO -.->|uses| TE
     BR -->|Proposals| TR[Treasury]
     TR -->|TreasurySettlement| EN[Enterprise]
     EN -->|Direction| MO
     EN -->|Distances| EO
     EN -->|Grace Violence| BR
 ```
+
+Note: dashed arrows (-.->|uses|) show tools the observers call, not data
+flow. The observer calls Vocabulary for ASTs, then ThoughtEncoder for
+Vectors. Vocabulary and ThoughtEncoder are tools, not upstream producers.
 
 **Component legend:**
 
@@ -44,13 +51,13 @@ graph TD
 | **Treasury** | available ◄──► reserved, trades, trade-origins, next-trade-id | TreasurySettlement on settle |
 | **Enterprise** | posts, treasury, market-thoughts-cache, log-queues | Settlement (enriched) |
 
-**Edge legend:**
+**Edge legend — data flow (solid arrows):**
 
 | From → To | Type | Method |
 |-----------|------|--------|
 | RC → IB | RawCandle | tick(raw) → Candle |
-| VO → TE | Vec\<ThoughtAST\> | encode(ast) → Vector |
-| TE → MO | Vector (per observer's lens) | observe-candle(window, ctx) → (Vector, Prediction) |
+| CD → MO | Candle (via candle-window slice) | observe-candle(window, ctx) → (Vector, Prediction) |
+| CD → EO | Candle (for exit facts) | encode-exit-facts(candle) → Vec\<ThoughtAST\> |
 | MO → EO | Vector (market thought) | compose(thought, fact-asts, ctx) → Vector |
 | EO → BR | Vector (composed) + Distances | propose(composed) → Prediction |
 | BR → TR | Proposal (the barrage) | submit-proposal(proposal) |
@@ -58,6 +65,13 @@ graph TD
 | EN → MO | Direction (:up/:down) | resolve(thought, direction, weight) |
 | EN → EO | Distances (optimal) | observe-distances(composed, optimal, weight) |
 | EN → BR | Outcome (:grace/:violence) | propagate(thought, outcome, amount, direction, optimal, observers) |
+
+**Tool usage (dashed arrows):**
+
+| Observer | Tool | Purpose |
+|----------|------|---------|
+| MO, EO | Vocabulary | produce Vec\<ThoughtAST\> from Candle |
+| MO, EO | ThoughtEncoder (ctx) | evaluate ASTs into Vectors |
 
 ---
 

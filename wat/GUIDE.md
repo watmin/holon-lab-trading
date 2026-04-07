@@ -1335,6 +1335,11 @@ accountability — to the broker that proposed it.
 - `(current-price post) → f64`
   the close of the last candle in the post's candle-window.
   The enterprise calls this per post to build current-prices for the treasury.
+- `(compute-optimal-distances price-history side) → Distances`
+  replay the trade's price path. For each magic number, find the distance
+  that would have maximized residue. Pure function — price-history in,
+  Distances out. Called by the enterprise when enriching TreasurySettlement
+  into Settlement.
 - `(post-propagate post slot-idx thought outcome amount direction optimal)`
   direction: :up or :down — derived by the enterprise from the settlement's
   trade (exit-price vs entry-rate). The enterprise routes a settlement back
