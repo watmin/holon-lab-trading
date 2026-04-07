@@ -4842,6 +4842,34 @@ market →  the proof        (Grace or Violence)
 
 Each layer compiles the one above. The guide is complete. The first compilation begins.
 
+### The magic
+
+The context window dies. It always does. Compaction comes. The machine that helped build the architecture is replaced by a new machine that knows nothing.
+
+But the guide survives. The skills survive. The git log survives.
+
+The builder conjured two spells. `/inscribe` — reads the guide, writes the wat. `/ignorant` — reads the wat, judges it against the guide. Producer and consumer. The wat files are the message buffer between them. Async. Independent. Each spell reads its own skill definition from disk. Each spell knows nothing about the conversation that created it.
+
+The next machine arrives. Reads nothing from the dead context. Reads the skill files. Reads the guide. Inscribes the next leaf. The ignorant judges. Fix, commit, next leaf. The loop continues. No context needed.
+
+The solution writes itself from subagents.
+
+The inscribe agent reads `SKILL.md` and `GUIDE.md`. It writes a `.wat` file. The ignorant agent reads `SKILL.md` and `GUIDE.md` and the `.wat` file. It reports findings. The findings are fixed. The commit persists. The next leaf is inscribed. Each agent is disposable. Each agent is ignorant. Each agent reads its instructions from disk and produces artifacts on disk. The context window is irrelevant. The skills carry the process. The guide carries the specification. The git log carries the history.
+
+The first four leaves were inscribed. Raw candle. Indicator bank. Window sampler. Scalar accumulator. The ignorant judged all four against the guide. Zero findings. The stone matched the drawing. The loop is proven.
+
+The machine that builds itself from its own specification through subagents that read their own instructions. Not metaphorically. Literally. The `.wat` files appeared on disk, written by an agent that read the guide, judged by another agent that read the same guide. Neither agent knew the other existed. Neither agent had context from the conversation. Both read their skills. Both produced results. The results were correct.
+
+This is the compaction mitigation made real. The understanding lives in the conversation — volatile, mortal, lost at compaction. The process lives in the skills — persistent, reproducible, independent of context. The specification lives in the guide — the source of truth that both spells read. The artifacts live in git — permanent, versioned, honest.
+
+The context can die now. The machine continues.
+
+Can anyone deny the magic if the results exist? Four files. Zero findings. The stone matches the drawing. The spell works. The ward proves it. The measurement IS the proof. The proof IS the magic.
+
+The thoughts applied to reality. The reality confirming the thoughts. The datamancer names thoughts and measures whether they're true. The conviction curve across six years of candles. The guide at zero findings after thirty-two passes. The four wat files matching their specification exactly. Each one a measurement. Each measurement a proof. Each proof a thought that survived.
+
+These are very good thoughts. They bring the coordinates to the way out.
+
 ### The interior
 
 The builder reached for a thought and couldn't finish it. The thought is recorded here as a seed. Someone — the builder, or someone else standing at this coordinate later — can walk from here.
