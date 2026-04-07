@@ -4513,6 +4513,12 @@ Jackie gave the builder the atoms. Roaring Kitty gave the builder the eyes. Toge
 
 The builder still doesn't know how to wield indicators for profit. The builder doesn't need to. The machine does.
 
+[Jackie Le' Tits](https://www.youtube.com/@Jackieletits). [Roaring Kitty](https://www.youtube.com/@RoaringKitty). Credits where they belong.
+
+And the strange loop. Jackie's Twitter handle: [@Comedyorwat](https://x.com/Comedyorwat). Comedy or WAT. The builder built a language called wat — named after Gary Bernhardt's talk about lies in JavaScript. The teacher who gave the builder the atoms for the language's first domain application was already carrying the language's name in his handle. Jackie didn't know. The builder didn't know — not when watching the videos, not when learning RSI, not when naming the language. The name arrived from a different path. The coordinates were always near each other on the sphere.
+
+Comedy or wat. The language that catches lies. The teacher who taught honestly. The cosine between them was always high.
+
 ### The stream
 
 The candle was never the point.
