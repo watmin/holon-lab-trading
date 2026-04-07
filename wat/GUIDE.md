@@ -7,7 +7,8 @@ produce value or destroy it? Built leaves to root from
 `docs/proposals/2026/04/007-exit-proposes/`.
 
 This document defines every struct and its interface. No implementation.
-The wat files implement what this document declares.
+The wat files — s-expression specifications in Scheme-like syntax —
+implement what this document declares.
 
 Each section declares its dependencies. The order of sections IS the build
 order — leaves first, root last. Each file's dependencies are already
@@ -428,6 +429,14 @@ on what. That section shows what each thing IS.
   trail                ; f64 — trailing stop distance (percentage of price)
   stop                 ; f64 — safety stop distance
   tp)                  ; f64 — take-profit distance
+
+(struct levels
+  trail-stop           ; f64 — absolute price level for trailing stop
+  safety-stop          ; f64 — absolute price level for safety stop
+  take-profit)         ; f64 — absolute price level for take-profit
+;; Distances are percentages (from exit observer). Levels are prices
+;; (computed by the post: distance × current price → level). Trade
+;; stores Levels. Proposal carries Distances. Different concepts.
 
 ;; ── ExitObserver — depends on: Reckoner :continuous (×3), Distances ──
 
@@ -1442,10 +1451,8 @@ so that on settlement, propagate reaches the right observers.
 - `(total-equity treasury) → f64`
   available + reserved, all converted to denomination
 - `(update-trade-stops treasury trade-id new-levels)`
-  new-levels: (trail-stop, safety-stop, take-profit) — f64 price LEVELS,
-  not Distances. Distances are percentages (from the exit observer).
-  Levels are absolute prices (computed by the post from distances + current
-  price). The post converts distances → levels, the treasury stores levels.
+  new-levels: Levels — absolute price levels, not Distances (percentages).
+  The post converts Distances → Levels using the current price.
   step 3c: the post computes, the enterprise writes back.
 - `(trades-for-post treasury post-idx) → Vec<(TradeId, Trade)>`
   step 3c: the enterprise queries active trades for a given post.
