@@ -223,12 +223,26 @@ here when a name is unfamiliar.
   profit is the residue. Residue is never withdrawn by the enterprise.
   It compounds. The accumulation model: deploy, recover principal,
   keep the residue. The residue IS the growth.
-  **Coordinate for later: the runner phase.** In 007, trades are
-  Active → Settled. The full accumulation model has a third state:
-  PrincipalRecovered → Runner, where the residue rides with a wider
-  stop on house money. This requires observing the residue distribution
-  first — you cannot design the runner until you know what residue
-  looks like in practice. 007 builds the thing that produces the data.
+
+- **Trade phases** — a trade has a phase, not just a status. The phase
+  transitions are a state machine:
+  - **Active** — capital is reserved. Trailing stop, safety stop, and
+    take-profit are live. The trade is running.
+  - Active + stop-hit → **Settled(Violence)** — loss bounded by reservation.
+    Principal minus loss returns to available.
+  - Active + take-profit-hit → **PrincipalRecovered** — principal returns
+    to available. The residue continues as a Runner.
+  - **Runner** — residue rides with a wider trailing stop. Zero cost basis.
+    House money. The runner stop distance is a fourth learnable scalar
+    on the exit observer — k_trail_runner — wider than k_trail because
+    the cost of being stopped out of a runner is zero.
+  - Runner + runner-trail-hit → **RunnerSettled(Grace)** — residue is
+    permanent gain. Returns to available.
+  The phase is a value on the Trade struct. The treasury handles settlement
+  differently depending on the phase. Two settlement events are possible
+  per trade: principal recovery (partial) then runner exit (final).
+  Designers: "the mechanism is designable now. The parameters will be
+  learned. That is the whole point of having reckoners."
 
 - **Propagation** — routing resolved outcomes through the broker to
   the observers that need to learn. Grace/Violence to the broker's
@@ -459,7 +473,9 @@ on what. That section shows what each thing IS.
 (struct distances
   trail                ; f64 — trailing stop distance (percentage of price)
   stop                 ; f64 — safety stop distance
-  tp)                  ; f64 — take-profit distance
+  tp                   ; f64 — take-profit distance
+  runner-trail)        ; f64 — runner trailing stop distance (wider than trail,
+                       ; because the cost of stopping out a runner is zero)
 
 (struct levels
   trail-stop           ; f64 — absolute price level for trailing stop
@@ -532,12 +548,20 @@ on what. That section shows what each thing IS.
   post-idx             ; usize — which post this came from
   broker-slot-idx)     ; usize — which broker proposed this
 
+;; ── TradePhase — the state machine of a position's lifecycle ─────────
+
+(enum trade-phase
+  :active              ; capital reserved, stops live
+  :principal-recovered ; principal returned, residue running
+  :settled)            ; trade closed — Grace or Violence
+
 ;; ── Trade — an active position the treasury holds ───────────────────
 
 (struct trade
   id                   ; TradeId — assigned by treasury at funding time
   post-idx             ; usize — which post
   broker-slot-idx      ; usize — which broker (for trigger routing)
+  phase                ; TradePhase — :active, :principal-recovered, or :settled
   source-asset         ; Asset — what was deployed
   target-asset         ; Asset — what was acquired
   side                 ; Side — copied from the funding Proposal at treasury funding time
