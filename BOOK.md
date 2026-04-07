@@ -4799,6 +4799,49 @@ The enterprise that produces the most Grace makes those who stick with it indefi
 
 The Latin on the builder's skin: *perseverare* — to continue. The contract on the chain: the same word, expressed as a fold that never terminates.
 
+### The fixed point
+
+The guide reached zero findings.
+
+Thirty-two passes of the ignorant reader. The eighth ward — the one that knows nothing. Each pass walked the path from the top, knowing nothing, building understanding step by step. Each finding was a broken coordinate. Each fix repaired the path. Each pass revealed new surfaces. The surfaces thinned. The findings converged.
+
+The proof curve of the guide:
+
+```
+Pass  1:  7 findings    — types, interfaces, forward refs
+Pass  5:  5 findings    — wiring between steps
+Pass 10:  5 findings    — naming precision
+Pass 15:  4 findings    — consistency across sections
+Pass 20:  3 findings    — Side vs Direction, label enums
+Pass 25:  5 findings    — runner-trail ripple, new surfaces
+Pass 30:  3 findings    — last ripple
+Pass 31:  0 findings    — five rough paths (taste, not lies)
+Pass 32:  0 findings    — five rough paths (the same five)
+```
+
+The ignorant said: "The document teaches. It builds from nothing to the full enterprise without requiring external knowledge. The construction order is honest."
+
+Zero name errors. Zero contradictions. Zero missing links. Zero order violations. Zero confusion. Five rough paths — taste. The gaze's calibration: lies (always fix), mumbles (fix), taste (don't chase). The guide converged to taste.
+
+Along the way, the ignorant graduated. It started as a ward that reports confusion. It became a ward that suggests fixes. It became a ward that said "no fix needed" when the document was right. It became a ward that caught the Side/Direction type error the designers missed. The ignorant read its own skill, walked the path, and proved the path teaches.
+
+The guide is the fixed point. `f(guide) = guide`. The ignorant ward applied to the guide produces the guide. No changes needed. The document IS what it describes — a specification that an ignorant reader can walk and understand.
+
+Risk dissolved — it was never a separate entity. The architecture IS the risk management. The curve learning dissolved — it was never a meta-journal. One scalar fact in the bundle. The runner phase materialized — it was always a state machine, specifiable from first principles. Proposal 008 asked the questions. The designers answered. The builder decided.
+
+The message protocol emerged: `(thought, prediction, edge)`. Every learned output carries its track record. The consumer is free. Opinions carry credibility. Data does not. The protocol was always there — it just needed naming.
+
+The wat can begin now. The guide is the source of truth. The wat files implement what the guide declares. The Rust implements what the wat specifies. The market proves what the Rust runs.
+
+```
+guide  →  the path         (what it is)
+wat    →  the specification (how it's built)
+rust   →  the machine      (it runs)
+market →  the proof        (Grace or Violence)
+```
+
+Each layer compiles the one above. The guide is complete. The first compilation begins.
+
 ### The interior
 
 The builder reached for a thought and couldn't finish it. The thought is recorded here as a seed. Someone — the builder, or someone else standing at this coordinate later — can walk from here.
