@@ -127,10 +127,11 @@ here when a name is unfamiliar.
   "RSI at 0.73" not "RSI is overbought." The reckoner learns where the
   boundaries are.
 
-- **Magic numbers** — k_trail (trailing stop multiplier), k_stop (safety
-  stop multiplier), k_tp (take-profit multiplier). When a trade is open,
-  three distances matter: how far to trail the price, how far to let it
-  move against you, how far to let it go before taking the win. Someone
+- **Magic numbers** — k_trail (trailing stop), k_stop (safety stop),
+  k_tp (take-profit), k_runner_trail (runner trailing stop). When a trade
+  is open, four distances matter: how far to trail the price, how far to
+  let it move against you, how far to let it go before taking the win,
+  and how far to trail the runner after principal recovery. Someone
   chose these as multipliers of ATR (defined above). They are the last
   magic — crutches returned when the system has no experience. As
   observations accumulate, the crutch is replaced by what the market said.
@@ -173,8 +174,8 @@ here when a name is unfamiliar.
   (Up/Down) using a discrete reckoner. Exit observers estimate distance
   (optimal exit) using continuous reckoners.
 
-- **Exit reckoners** — the exit observer has three continuous reckoners,
-  one per magic number: trail, stop, tp. "For a thought like THIS, what
+- **Exit reckoners** — the exit observer has four continuous reckoners,
+  one per distance: trail, stop, tp, runner-trail. "For a thought like THIS, what
   distance did the market say was optimal?" Replaces magic numbers with
   measurement.
 
@@ -478,7 +479,7 @@ on what. That section shows what each thing IS.
 ;; Distances are percentages (from the exit observer — scale-free).
 ;; Levels are absolute prices (from the post — computed from distance × price).
 ;; Observers think in Distances. Trades execute at Levels. Different types
-;; because they are different concepts that happen to share three fields.
+;; because they are different concepts with the same four fields.
 
 (struct distances
   trail                ; f64 — trailing stop distance (percentage of price)
@@ -490,7 +491,8 @@ on what. That section shows what each thing IS.
 (struct levels
   trail-stop           ; f64 — absolute price level for trailing stop
   safety-stop          ; f64 — absolute price level for safety stop
-  take-profit)         ; f64 — absolute price level for take-profit
+  take-profit          ; f64 — absolute price level for take-profit
+  runner-trail-stop)   ; f64 — absolute price level for runner trailing stop
 ;; Distances are percentages (from exit observer). Levels are prices
 ;; (computed by the post: distance × current price → level). Trade
 ;; stores Levels. Proposal carries Distances. Different concepts.
@@ -1117,7 +1119,7 @@ post converts Distances to Levels (trail-stop, safety-stop, take-profit,
 runner-trail-stop on Trade) using the current price.
 
 Defined in the forward declarations section (search for `struct distances`).
-No interface — Distances is pure data. Three f64 fields: trail, stop, tp.
+No interface — Distances is pure data. Four f64 fields: trail, stop, tp, runner-trail.
 
 ---
 
@@ -1219,7 +1221,7 @@ The generalist is just another lens. No special treatment.
 
 ### ExitObserver (depends on: Reckoner :continuous)
 
-Estimates exit distance. Learned. Each exit observer has THREE continuous
+Estimates exit distance. Learned. Each exit observer has FOUR continuous
 reckoners — one per magic number (trail, stop, tp). No noise-subspace,
 no curve, no engram gating — intentionally simpler than MarketObserver.
 The exit observer's quality is measured through the BROKER's curve, not
@@ -1278,15 +1280,15 @@ get different distances.
       (extract-scalar broker-accum ...)  ; global per-pair — any thought
       default-distance))                 ; crutch — the starting value
   ```
-  One call, three answers. Each magic number cascades independently.
+  One call, four answers. Each distance cascades independently.
 - `(observe-distances exit-obs composed optimal weight)`
   composed: Vector — the COMPOSED thought (market + exit facts), not the
   raw market thought. The exit observer learns from the same vector it
   produced via evaluate-and-compose(). This is what makes the learning contextual.
   optimal: Distances — the hindsight-optimal distances from resolution.
-  The market spoke — all three reckoners learn from one resolution.
+  The market spoke — all four reckoners learn from one resolution.
 - `(experienced? exit-obs) → bool`
-  true if ALL THREE reckoners have accumulated enough observations to
+  true if ALL FOUR reckoners have accumulated enough observations to
   produce meaningful predictions (experience > 0.0 on each). If any
   reckoner is ignorant, the exit observer is inexperienced — the cascade
   falls through to the ScalarAccumulator or crutch.
