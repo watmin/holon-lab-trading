@@ -1181,15 +1181,15 @@ The generalist is just another lens. No special treatment.
   noise-subspace: created empty (new OnlineSubspace). Learns from observations.
   lens: MarketLens. config: Discrete with "Up"/"Down" labels.
   All proof-tracking and engram-gating fields initialize to zero/empty.
-- `(observe-candle observer candle-window ctx) → (Vector, Prediction)`
+- `(observe-candle observer candle-window ctx) → (Vector, Prediction, f64)`
+  returns: thought Vector, Prediction (Up/Down), curve-valid (f64 — the
+  observer's current edge, from its curve). Every learned output carries
+  its track record. The consumer decides what to do with it.
   candle-window: a slice of recent candles (NOT the full deque — the post
   calls `(sample (:window-sampler observer) encode-count)` to get the
   window size, slices, and passes the slice). The observer encodes →
-  noise update → strip noise → predict. Returns both the thought Vector
-  (needed downstream for exit composition, paper registration, and
-  propagation) and the Prediction (Up/Down). The Prediction is used by
-  the post for logging and conviction tracking — it does NOT appear on
-  the Proposal. The broker produces its OWN prediction (Grace/Violence)
+  noise update → strip noise → predict. The Prediction does NOT appear
+  on the Proposal. The broker produces its OWN prediction (Grace/Violence)
   from the composed thought.
 - `(resolve observer thought direction weight)`
   direction: Direction (:up or :down) — the actual price movement.
@@ -1247,7 +1247,9 @@ get different distances.
   The observer returns ASTs rather than vectors because it does not own
   the ThoughtEncoder — ctx does, so evaluation is deferred to the call
   site which has ctx in scope.
-- `(recommended-distances exit-obs composed broker-accums) → Distances`
+- `(recommended-distances exit-obs composed broker-accums) → (Distances, f64)`
+  returns: Distances + experience (f64 — how much the exit observer knows).
+  Every learned output carries its track record. The consumer filters.
   broker-accums: Vec<ScalarAccumulator> — the broker's global per-pair learners.
   the cascade, per magic number:
   ```

@@ -56,10 +56,10 @@ Vectors. Vocabulary and ThoughtEncoder are tools, not upstream producers.
 | From → To | Type | Method |
 |-----------|------|--------|
 | RC → IB | RawCandle | tick(raw) → Candle |
-| CD → MO | Candle (via candle-window slice) | observe-candle(window, ctx) → (Vector, Prediction) |
+| CD → MO | Candle (via candle-window slice) | observe-candle(window, ctx) → (Vector, Prediction, curve-valid) |
 | CD → EO | Candle (for exit facts) | encode-exit-facts(candle) → Vec\<ThoughtAST\> |
 | MO → EO | Vector (market thought) | evaluate-and-compose(thought, fact-asts, ctx) → Vector |
-| EO → BR | Vector (composed) + Distances | propose(composed) → Prediction |
+| EO → BR | Vector (composed) + (Distances, experience) | propose(composed) → Prediction |
 | BR → TR | Proposal (the barrage) | submit-proposal(proposal) |
 | TR → EN | TreasurySettlement | settle-triggered(prices) |
 | EN → MO | Direction (:up/:down) | resolve(thought, direction, weight) |
