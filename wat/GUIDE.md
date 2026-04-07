@@ -289,6 +289,11 @@ think about.
 
 ### The construction order
 
+This section shows the dependency graph as constructor calls — a sketch.
+The "Structs and interfaces" section below is the authority — full field
+definitions, full interface signatures. This section shows what depends
+on what. That section shows what each thing IS.
+
 ```scheme
 ;; ── Primitives — depend on nothing ──────────────────────────────────
 
@@ -333,9 +338,6 @@ think about.
   (make-thought-encoder vector-manager))             → ThoughtEncoder
 (encode thought-encoder ast)                         → Vector
 
-;; ── Lenses — which vocabulary subset an observer thinks through ─────
-;; A lens selects which vocab modules fire. The observer's identity.
-
 ;; ── Label enums — the three pairs ───────────────────────────────────
 
 (enum Side :buy :sell)              ; trading action — on Proposal and Trade
@@ -343,6 +345,7 @@ think about.
 (enum Outcome :grace :violence)     ; accountability — used everywhere
 
 ;; ── Lenses — which vocabulary subset an observer thinks through ─────
+;; A lens selects which vocab modules fire. The observer's identity.
 ;; Each variant selects a subset of the vocabulary. See vocab/ for the modules.
 ;; :generalist selects ALL modules in the domain.
 (enum MarketLens :momentum :structure :volume :narrative :regime :generalist)
@@ -1067,10 +1070,10 @@ The generalist is just another lens. No special treatment.
   broker produces its OWN prediction (Grace/Violence) from the
   composed thought. The market observer's prediction does not appear
   on the Proposal.
-- `(resolve observer thought outcome weight)`
-  called by broker propagation — reckoner learns from the actual
-  direction (Up/Down). No prediction needed — the observer learns
-  what happened, not what it predicted.
+- `(resolve observer thought direction weight)`
+  direction: Direction (:up or :down) — the actual price movement.
+  Called by broker propagation — reckoner learns from reality.
+  Not "outcome" (which is Outcome :grace/:violence). Different type.
 - `(strip-noise observer thought) → Vector`
 - `(experience observer) → f64` — how much has this observer learned?
 
@@ -1287,13 +1290,17 @@ accountability — to the broker that proposed it.
   → exit observers encode-exit-facts then compose(market-thought, exit-facts, ctx)
   → brokers propose(composed) → returns Prediction (Grace/Violence)
   → the POST assembles each Proposal from: composed-thought, broker's
-    Prediction, exit distances, post-idx, broker-slot-idx
+    Prediction, exit distances, broker.funding(), side (from market
+    observer's Up/Down → :buy/:sell), post-idx, broker-slot-idx
   → register papers → return proposals for the treasury
-- `(post-update-triggers post trades market-thoughts)`
+- `(post-update-triggers post trades market-thoughts ctx)`
   trades: Vec<(TradeId, Trade)> — treasury's active trades for this post.
   market-thoughts: Vec<Vector> — this candle's encoded thoughts (one per
   market observer). The post composes with exit observers for distances.
   Each trade's trailing stop adjusts to the current market context.
+- `(current-price post) → f64`
+  the close of the last candle in the post's candle-window.
+  The enterprise calls this per post to build current-prices for the treasury.
 - `(post-propagate post slot-idx thought outcome amount direction optimal)`
   direction: :up or :down — derived by the enterprise from the settlement's
   trade (exit-price vs entry-rate). The enterprise routes a settlement back
@@ -1351,9 +1358,13 @@ so that on settlement, propagate reaches the right observers.
   composed-thought) for propagation at settlement time. Drain proposals.
 - `(settle-triggered treasury current-prices) → Vec<Settlement>`
   current-prices: map of (Asset, Asset) → f64 — one price per asset pair.
-  Each post provides its current price. The enterprise collects them.
+  Each post provides its latest candle close as its current price.
   Check all active trades, settle what triggered, return settlements.
   Move capital from reserved back to available. Add residue.
+  The treasury fills all Settlement fields EXCEPT optimal-distances
+  (set to default). The enterprise then asks the post to compute
+  optimal-distances from its candle window and fills them in before
+  routing to post-propagate.
   Each settlement carries the Trade (with post-idx and broker-slot-idx)
   and optimal-distances for propagation.
 - `(available-capital treasury asset) → f64`
@@ -1416,11 +1427,15 @@ The enterprise knows:
 **Interface:**
 - `(on-candle enterprise raw-candle ctx)`
   route to the right post, then four steps. ctx flows in from the binary.
-- `(step-resolve enterprise)`
-  treasury settles triggered trades
-  for each settlement: route to the post for propagation
-- `(step-compute-dispatch enterprise post ctx) → proposals`
+- `(step-resolve enterprise current-prices)`
+  current-prices: the enterprise collects each post's latest candle close.
+  Treasury settles triggered trades using these prices.
+  For each settlement: enterprise computes optimal-distances via the post,
+  then routes to the post for propagation.
+- `(step-compute-dispatch enterprise post ctx) → (Vec<Proposal>, Vec<Vector>)`
   post encodes, composes, proposes — returns proposals for the treasury
+  AND market-thoughts (Vec<Vector>) for step 3c. The enterprise caches
+  market-thoughts between steps.
 - `(step-tick enterprise post) → Vec<Resolution>`
   parallel tick of all brokers' papers. Returns resolution facts.
 - `(step-propagate enterprise post resolutions)`
@@ -1429,7 +1444,7 @@ The enterprise knows:
   learn optimal distances.
 - `(step-update-triggers enterprise post market-thoughts)`
   the enterprise queries the treasury for active trades belonging to this
-  post, then calls post-update-triggers(post, trades, market-thoughts).
+  post, then calls post-update-triggers(post, trades, market-thoughts, ctx).
   The post composes each trade's market thought with exit observers,
   queries fresh distances, computes new trailing stop levels. The
   enterprise writes the new values back to the treasury's trade records.
