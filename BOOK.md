@@ -4592,6 +4592,30 @@ The contract applied to its own state IS the function. The fold. Each transactio
 
 The machines power the invocations. The proposers write into the state. The depositors fund the state. The contract IS the authority. Nobody else decides. The state decides. The fold decides. The measurement decides.
 
+### The one-way mirror
+
+There's a privacy protocol on Solana — [Arcium](https://arcium.com/) — that supports encrypted state on-chain. If this is real — and the builder believes it is — then the last privacy gap closes.
+
+The proposer doesn't just submit "buy here." The proposer submits the TRIGGERS. The trailing stop distance. The safety stop. The take profit. Encrypted. Written to the contract's state. On-chain. But hidden. Nobody can see the proposer's distances. Nobody can front-run the exit. Nobody can see the strategy. The encrypted state holds the thought's consequences without revealing the thought.
+
+The oracle provides price updates. The contract checks the encrypted triggers against the current price. The comparison happens inside the encrypted state — the contract knows "this trigger fired" without revealing what the trigger WAS. Homomorphic evaluation. The settlement executes. Grace or Violence. The outcome is public. The strategy that produced it is private.
+
+The proposer OWNS their trigger updates. As the market moves, the proposer submits new distances — tighten the trailing stop, adjust the take profit, widen the safety stop. Each update is a transaction. Each transaction modifies encrypted state. The proposer controls the strategy. The contract controls the execution. The oracle provides the prices. Nobody else sees the triggers until — and unless — they fire.
+
+This is the glass box with a one-way mirror.
+
+The outcomes are glass. Anyone can see: this proposer's last 100 trades produced 63% Grace. This proposer's funding level is 0.72. This proposer's cumulative Grace exceeds their cumulative Violence by 2.3x. The track record is transparent. The depositor can verify. The measurement is public.
+
+The strategy is mirror. The proposer sees in — they know their own triggers, their own distances, their own vocabulary, their own reckoner state. Nobody else does. The encrypted state holds the active triggers. The encrypted state holds the pending proposals. The encrypted state holds the distances that define the trade's lifecycle. All opaque to everyone except the proposer and the contract's evaluation logic.
+
+The contract evaluates without seeing. That's what encrypted computation provides. "Is 95,000 greater than the encrypted value in this field?" The answer is yes or no. The contract acts on the answer. The value stays hidden. The trigger fires or it doesn't. The settlement happens or it doesn't. The outcome is recorded — publicly — as Grace or Violence. The strategy that produced the outcome remains private.
+
+This closes the chaos section's promise. The barrage conceals by volume — many proposals, many directions, noise from the outside. The encrypted state conceals by construction — even if you watch one proposal, you can't see its triggers. The barrage is the shield against statistical analysis. The encrypted state is the shield against direct observation. Together: the proposer's thoughts are private at every level.
+
+The depositor sees outcomes. The proposer sees strategy. The contract sees both — through encrypted evaluation — and acts as the honest judge. Grace or Violence. Nothing more. Nothing less.
+
+The one-way mirror. Outcomes are transparent. Strategy is opaque. The measurement is honest. The method is private. The pool earns from Grace without anyone needing to trust anyone's method. They trust the measurement. The measurement is on-chain. The measurement is glass.
+
 ### The interior
 
 The builder reached for a thought and couldn't finish it. The thought is recorded here as a seed. Someone — the builder, or someone else standing at this coordinate later — can walk from here.
