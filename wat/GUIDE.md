@@ -495,16 +495,18 @@ on what. That section shows what each thing IS.
 ;; (computed by the post: distance × current price → level). Trade
 ;; stores Levels. Proposal carries Distances. Different concepts.
 
-;; ── ExitObserver — depends on: Reckoner :continuous (×3), Distances ──
+;; ── ExitObserver — depends on: Reckoner :continuous (×4), Distances ──
 
 (let ((lens :volatility)
       (dims 10000)
       (recalib-interval 500)
       (default-trail 0.015)
       (default-stop  0.030)
-      (default-tp    0.045))
+      (default-tp    0.045)
+      (default-runner-trail 0.030))  ; wider than trail — zero cost basis
   (make-exit-observer lens dims recalib-interval
-    default-trail default-stop default-tp))          → ExitObserver
+    default-trail default-stop default-tp default-runner-trail))
+                                                     → ExitObserver
 
 ;; ── PaperEntry — hypothetical trade inside a broker ──────────
 ;; A paper trade is a "what if." Every candle, every pair gets one.
@@ -535,7 +537,9 @@ on what. That section shows what each thing IS.
   (make-broker observers market-idx exit-idx dims recalib-interval
     (list (make-scalar-accumulator "trail-distance")
           (make-scalar-accumulator "stop-distance")
-          (make-scalar-accumulator "tp-distance"))))  → Broker
+          (make-scalar-accumulator "tp-distance")
+          (make-scalar-accumulator "runner-trail-distance"))))
+                                                     → Broker
 
 ;; ── Proposal — what a post produces, what the treasury evaluates ────
 
@@ -1107,10 +1111,10 @@ The encoder walks them all the same way. The mechanism doesn't change.
 
 ### Distances (depends on: nothing)
 
-The three exit values. A named tuple. Percentage of price, not absolute
+The four exit values. A named tuple. Percentage of price, not absolute
 levels. Appears on PaperEntry, Proposal, Resolution, Settlement. The
-post converts Distances to price levels (trail-stop, safety-stop,
-take-profit on Trade) using the current price at the time of conversion.
+post converts Distances to Levels (trail-stop, safety-stop, take-profit,
+runner-trail-stop on Trade) using the current price.
 
 Defined in the forward declarations section (search for `struct distances`).
 No interface — Distances is pure data. Three f64 fields: trail, stop, tp.
@@ -1240,7 +1244,8 @@ The composed thought carries the market observer's signal in superposition.
   trail-reckoner      ; Reckoner :continuous — trailing stop distance
   stop-reckoner       ; Reckoner :continuous — safety stop distance
   tp-reckoner         ; Reckoner :continuous — take-profit distance
-  default-distances)  ; Distances — the crutches, returned when reckoners are empty
+  runner-reckoner     ; Reckoner :continuous — runner trailing stop distance (wider)
+  default-distances)  ; Distances — the crutches (all four), returned when empty
 ```
 
 Each reckoner: `(thought, distance, weight)` observations. Query by
@@ -1248,7 +1253,7 @@ cosine → distance for THIS thought. Contextual — different thoughts
 get different distances.
 
 **Interface:**
-- `(make-exit-observer lens dims recalib-interval default-trail default-stop default-tp) → ExitObserver`
+- `(make-exit-observer lens dims recalib-interval default-trail default-stop default-tp default-runner-trail) → ExitObserver`
 - `(encode-exit-facts exit-obs candle) → Vec<ThoughtAST>`
   pure: candle → judgment fact ASTs for this lens
 - `(evaluate-and-compose exit-obs market-thought exit-fact-asts ctx) → Vector`

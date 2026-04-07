@@ -30,7 +30,7 @@ graph TD
     TR -->|TreasurySettlement| EN[Enterprise]
     EN -->|thought + Direction + weight| MO
     EN -->|composed + optimal Distances + weight| EO
-    EN -->|thought + outcome + amount + direction + optimal| BR
+    EN -->|thought + outcome + weight + direction + optimal| BR
 ```
 
 Note: dashed arrows (-.->|uses|) show tools the observers call, not data
@@ -44,8 +44,8 @@ Vectors. Vocabulary and ThoughtEncoder are tools, not upstream producers.
 | **IndicatorBank** | streaming state (ring buffers, EMA accumulators) | Candle (100+ indicators) |
 | **Vocabulary** | pure functions, no state | Vec\<ThoughtAST\> — data, not execution |
 | **ThoughtEncoder** | atoms (permanent dict) + compositions (LRU cache, miss-queued) | Vector from AST |
-| **MarketObserver ×N** | reckoner :discrete (Up/Down), noise-subspace, window-sampler, curve | (Vector, Prediction) |
-| **ExitObserver ×M** | 3× reckoner :continuous (trail, stop, tp), default-distances | Distances via cascade |
+| **MarketObserver ×N** | reckoner :discrete (Up/Down), noise-subspace, window-sampler, curve | (Vector, Prediction, edge) |
+| **ExitObserver ×M** | 4× reckoner :continuous (trail, stop, tp, runner-trail), default-distances | (Distances, experience) via cascade |
 | **Broker ×N×M** | reckoner :discrete (Grace/Violence), curve, papers (deque), 3× scalar-accumulator | Prediction + funding() |
 | **Post** | indicator-bank, candle-window, market-observers, exit-observers, registry, broker-map | Vec\<Proposal\> + Vec\<Vector\> |
 | **Treasury** | available ◄──► reserved, trades, trade-origins, next-trade-id | TreasurySettlement on settle |
@@ -64,7 +64,7 @@ Vectors. Vocabulary and ThoughtEncoder are tools, not upstream producers.
 | TR → EN | TreasurySettlement | settle-triggered(prices) |
 | EN → MO | Direction (:up/:down) | resolve(thought, direction, weight) |
 | EN → EO | Distances (optimal) | observe-distances(composed, optimal, weight) |
-| EN → BR | Outcome (:grace/:violence) | propagate(thought, outcome, amount, direction, optimal, observers) |
+| EN → BR | Outcome (:grace/:violence) | propagate(thought, outcome, weight, direction, optimal, observers) |
 
 **Tool usage (dashed arrows):**
 
@@ -185,7 +185,8 @@ The signal that teaches. Settlement → observers learn.
 
 ```mermaid
 graph TD
-    SET[Settlement] --> EN[Enterprise enriches]
+    TS[TreasurySettlement] --> EN[Enterprise enriches]
+    EN --> SET[Settlement]
     EN -->|direction + thought| PP[post-propagate]
     PP --> BR[Broker]
     BR -->|Grace/Violence + thought| BRK[broker reckoner]
