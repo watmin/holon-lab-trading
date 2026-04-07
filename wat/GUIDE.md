@@ -1081,7 +1081,8 @@ scalar accumulators.
 (struct scalar-accumulator
   name                 ; String — which magic number ("trail-distance", etc.)
   grace-acc            ; Vector — accumulated encoded values from Grace outcomes
-  violence-acc)        ; Vector — accumulated encoded values from Violence outcomes
+  violence-acc         ; Vector — accumulated encoded values from Violence outcomes
+  count)               ; usize — number of observations. 0 = no data.
 ```
 
 **Interface:**
@@ -1207,7 +1208,7 @@ get different distances.
   the cascade, per magic number:
   ```
   ;; experienced? = (> (experience reckoner) 0.0) — convenience predicate
-  ;; has-data? = (> (len (:grace-acc accum)) 0) — at least one observation
+  ;; has-data? = (> (:count accum) 0) — at least one observation
   (if (experienced? reckoner)
     (predict reckoner composed)          ; contextual — for THIS thought
     (if (has-data? broker-accum)
@@ -1304,19 +1305,17 @@ runtime:       frozen map (read-only) → slot-idx → &mut broker (disjoint)
 - `(tick-papers broker current-price) → Vec<Resolution>`
   tick all papers, resolve completed. Returns resolution facts.
   The broker knows its observer indices — it doesn't need them passed in.
-- `(propagate broker thought outcome amount direction optimal market-observers exit-observers)`
-  thought: Vector. outcome: :grace or :violence. amount: f64.
-  direction: :up or :down — derived from the trade's price movement.
+- `(propagate broker thought outcome weight direction optimal market-observers exit-observers)`
+  thought: Vector. outcome: Outcome. weight: f64 — how much value was at
+  stake. A $500 Grace teaches harder than a $5 Grace.
+  direction: Direction — derived from the trade's price movement.
   If exit-price > entry-price, :up. If exit-price < entry-price, :down.
-  The caller (post or resolution handler) computes this from the trade's
-  entry-rate and the price at resolution.
   optimal: Distances from hindsight.
   The post passes its observer vecs — the broker uses its frozen indices
-  to reach the right observers. `amount` IS the weight — how much value
-  was at stake. A $500 Grace teaches harder than a $5 Grace. Routes:
-  - Grace/Violence + thought + weight(amount) → broker's own reckoner
-  - direction + thought + weight(amount) → market observer via resolve
-  - optimal distances + composed thought + weight(amount) → exit observer via observe-distances
+  to reach the right observers. Routes:
+  - Grace/Violence + thought + weight → broker's own reckoner
+  - direction + thought + weight → market observer via resolve
+  - optimal distances + composed thought + weight → exit observer via observe-distances
 - `(paper-count broker) → usize`
 
 **Two mechanisms for the same magic numbers — both now introduced:**
@@ -1406,7 +1405,7 @@ accountability — to the broker that proposed it.
   that would have maximized residue. price-history in, Distances out.
   Called by the enterprise when enriching TreasurySettlement
   into Settlement.
-- `(post-propagate post slot-idx thought outcome amount direction optimal)`
+- `(post-propagate post slot-idx thought outcome weight direction optimal)`
   direction: Direction. The enterprise routes a settlement back to the post.
   The post passes its OWN observer vecs to broker.propagate — they don't
   appear on post-propagate's signature because the post owns them (self).
@@ -1660,10 +1659,11 @@ Step 4: COLLECT + FUND
 
 ## The circuit
 
-See `wat/CIRCUIT.md` — the machine as signal flow diagrams. The full
-enterprise circuit, plus sub-circuits for encoding, learning, papers,
-funding, cascade, and propagation. Mermaid source + rendered ASCII +
-component and edge legends.
+See `wat/CIRCUIT.md` — the machine as signal flow diagrams. No new
+definitions; it visualizes the components and interfaces declared above.
+The full enterprise circuit, plus sub-circuits for encoding, learning,
+papers, funding, cascade, and propagation. Mermaid source + component
+and edge legends.
 
 `f(state, candle) → state` — one tick of the clock.
 
