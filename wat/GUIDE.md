@@ -213,7 +213,8 @@ Each definition can only reference definitions above it.
 - **Denomination** — what "value" means. The treasury counts in a
   denomination. USD today. Could be EUR, could be SOL.
 
-- **TradeId** — a usize. The treasury's key for active trades. Assigned
+- **TradeId** — a newtype over usize. Not a raw integer — a distinct type
+  that the compiler enforces. The treasury's key for active trades. Assigned
   at funding time. Maps back to (post-idx, slot-idx) via trade-origins.
 
 - **slot-idx** — the flat index into the broker registry.
@@ -749,10 +750,11 @@ Three domains. Each domain has scoped subfiles.
   - `timeframe.wat` — 1h/4h structure + narrative + inter-timeframe agreement
 
 - **exit/** — whether CONDITIONS favor trading. Distance signal. Exit observers use these.
-  - `volatility.wat` — ATR regime, ATR ratio, squeeze state
-  - `structure.wat` — trend consistency, ADX strength
-  - `timing.wat` — momentum state, reversal signals
-  - The `:generalist` exit lens selects ALL three (volatility + structure + timing).
+  ExitLens → modules:
+  - `:volatility` → volatility.wat — ATR regime, ATR ratio, squeeze state
+  - `:structure` → structure.wat — trend consistency, ADX strength
+  - `:timing` → timing.wat — momentum state, reversal signals
+  - `:generalist` → all three (volatility + structure + timing)
 
 - **risk/** — portfolio health. Coordinate for future work. Not in 007.
 
@@ -1011,6 +1013,18 @@ The encoder walks them all the same way. The mechanism doesn't change.
 
 ---
 
+### Distances (depends on: nothing)
+
+The three exit values. A named tuple. Percentage of price, not absolute
+levels. Appears on PaperEntry, Proposal, Resolution, Settlement. The
+post converts Distances to price levels (trail-stop, safety-stop,
+take-profit on Trade) using the current price at the time of conversion.
+
+Defined in the forward declarations section (L416-419). No interface —
+Distances is pure data. Three f64 fields: trail, stop, tp.
+
+---
+
 ### ScalarAccumulator (depends on: nothing)
 
 Per-magic-number f64 learning. Lives on the broker. Global per-pair.
@@ -1254,10 +1268,11 @@ runtime:       frozen map (read-only) → slot-idx → &mut broker (disjoint)
   entry-rate and the price at resolution.
   optimal: Distances from hindsight.
   The post passes its observer vecs — the broker uses its frozen indices
-  to reach the right observers. Routes:
-  - Grace/Violence + thought → broker's own reckoner (accountability)
-  - direction + thought → market observer via resolve (Up/Down learning)
-  - optimal distances + thought → exit observer via observe-distances
+  to reach the right observers. `amount` IS the weight — how much value
+  was at stake. A $500 Grace teaches harder than a $5 Grace. Routes:
+  - Grace/Violence + thought + weight(amount) → broker's own reckoner
+  - direction + thought + weight(amount) → market observer via resolve
+  - optimal distances + composed thought + weight(amount) → exit observer via observe-distances
 - `(paper-count broker) → usize`
 
 **Two mechanisms for the same magic numbers — both now introduced:**
