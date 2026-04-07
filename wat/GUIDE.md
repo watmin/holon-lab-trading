@@ -64,14 +64,13 @@ These are NOT specified in this tree. They are provided by holon-rs.
   - `(proven? curve min-samples) → bool` — enough data to trust?
   The curve self-evaluates — it reports amplitude and exponent from
   accumulated data. That is measurement, not learning.
-  **Coordinate for later: curve learning.** The curve's parameters
-  (amplitude, exponent) are meta-observations about the reckoner's
-  quality. A meta-journal could feed them back as thoughts — the system
-  thinking about how well it thinks. But feeding the curve's output
-  back into encoding creates a circular dependency whose convergence
-  is unknown. 007 ships the open loop: the curve measures, the builder
-  observes. The loop closes later, after the open-loop dynamics are
-  understood.
+  **Resolved: the curve communicates via one scalar.** The producer
+  calls `edge-at(conviction)` and attaches the result to its message.
+  The consumer encodes it as a fact: `(Linear "producer-edge" edge 1.0)`.
+  The consumer's reckoner learns whether the edge predicts Grace.
+  No meta-journal. No curve snapshot. No new primitives. One f64.
+  The problem was never "how do I learn a curve" — it was "how do I
+  communicate what a curve knows." One number. The tools compose.
 - **OnlineSubspace** — learns what normal looks like. Measures how unusual
   a new input is (the residual). High residual = unusual. Low = boring.
   - `(update subspace vector)`
@@ -243,6 +242,17 @@ here when a name is unfamiliar.
   per trade: principal recovery (partial) then runner exit (final).
   Designers: "the mechanism is designable now. The parameters will be
   learned. That is the whole point of having reckoners."
+
+- **Message protocol** — every learned message carries three things:
+  `(thought: Vector, prediction: Prediction, edge: f64)`.
+  Thought = what you know. Prediction = what you think will happen.
+  Edge = how accurate you are when you predict this strongly.
+  edge ∈ [0.0, 1.0]. Raw accuracy from the curve at this conviction.
+  0.50 = noise. Above = correlated. Below = anti-correlated (the flip).
+  The consumer encodes the edge as a fact and is free to gate, weight,
+  sort, or ignore. Every producer that has learned from experience
+  attaches a measure of that experience to its output. Opinions carry
+  credibility. Data (candles, raw facts) does not.
 
 - **Propagation** — routing resolved outcomes through the broker to
   the observers that need to learn. Grace/Violence to the broker's
@@ -539,7 +549,9 @@ on what. That section shows what each thing IS.
   prediction           ; Prediction :discrete (Grace/Violence) — from the broker's
                        ; reckoner, NOT the market observer's Up/Down prediction.
   distances            ; Distances — from the exit observer
-  funding              ; f64 — broker's edge level, from broker.funding().
+  funding              ; f64 — the broker's edge. [0.0, 1.0]. Raw accuracy
+                       ; from the broker's curve at its current conviction.
+                       ; This IS the edge from the message protocol.
                        ; The treasury sorts proposals by this value.
   side                 ; :buy or :sell — trading action, from the market observer's
                        ; Up/Down prediction. Up → :buy, Down → :sell.
