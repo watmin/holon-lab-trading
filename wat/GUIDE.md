@@ -1534,3 +1534,99 @@ Step 4: COLLECT + FUND
   treasury drains:  proposals → empty
 ```
 
+---
+
+## The circuit
+
+The machine as a signal flow diagram. Signals flow down (candle → thought
+→ proposal). Outcomes flow back up (settlement → propagation → observers).
+The circuit is a loop. The fold is one tick of the clock.
+
+```
+                       ┌──────────────────────────────────────────────────────┐
+                       │                       POST                           │
+  RawCandle ──────────►│  IndicatorBank ──► Candle                            │
+                       │                      │                               │
+                       │                      ▼                               │
+                       │               ┌────────────┐                         │
+                       │               │ Vocabulary  │ Candle → Vec<ThoughtAST>│
+                       │               └─────┬──────┘                         │
+                       │                     │ ASTs                            │
+                       │                     ▼                                │
+                       │              ThoughtEncoder (ctx)                     │
+                       │                     │ Vectors                         │
+                       │                     ▼                                │
+                       │  ┌─────────────────────────────────┐  ×N             │
+                       │  │       MarketObserver[i]          │                 │
+                       │  │  reckoner :discrete (Up/Down)    │──► (Vector,     │
+                       │  │  noise-subspace                  │     Prediction) │
+                       │  │  window-sampler                  │                 │
+                       │  │  curve                           │                 │
+                       │  └──────────┬──────────────────────┘                 │
+                       │      thought│    ▲                                    │
+                       │             │    │ resolve(direction, weight)         │
+                       │             ▼    │                                    │
+                       │  ┌─────────────────────────────────┐  ×M             │
+                       │  │       ExitObserver[j]            │                 │
+                       │  │  3× reckoner :continuous         │──► Distances    │
+                       │  │  compose(thought, facts, ctx)    │                 │
+                       │  └──────────┬──────────────────────┘                 │
+                       │   composed  │    ▲                                    │
+                       │  + distances │    │ observe-distances(optimal)        │
+                       │             ▼    │                                    │
+                       │  ┌─────────────────────────────────┐  ×N×M           │
+                       │  │         Broker[i,j]              │                 │
+                       │  │  reckoner :discrete (Grace/Viol) │──► Prediction   │
+                       │  │  curve (edge measurement)        │                 │
+                       │  │  papers (deque) ────────────────►│──► Resolution[] │
+                       │  │  3× scalar-accumulator           │                 │
+                       │  └──────────┬──────────────────────┘                 │
+                       │             │ Prediction + funding()                  │
+                       │             ▼                                         │
+                       │  POST assembles ──► Vec<Proposal>                    │
+                       └─────────────┬────────────────────────────────────────┘
+                                     │
+                                     │ the barrage
+                                     ▼
+                       ┌──────────────────────────────┐
+                       │          TREASURY             │
+                       │   available ◄──► reserved     │
+                       │   fund-proposals (by funding) │──► Trade + TradeOrigin
+                       │   settle-triggered            │──► TreasurySettlement
+                       └─────────────┬────────────────┘
+                                     │
+                                     ▼
+                       ┌──────────────────────────────┐
+                       │         ENTERPRISE            │
+                       │   enriches → Settlement       │
+                       │   derives direction            │
+                       │   replays price-history        │
+                       │   computes optimal-distances   │
+                       └─────────────┬────────────────┘
+                                     │
+                                     │ Settlement (complete)
+                                     ▼
+                              post-propagate(slot-idx, thought,
+                                outcome, amount, direction, optimal)
+                                     │
+                         ┌───────────┼───────────┐
+                         ▼           ▼           ▼
+                   MarketObs    ExitObs      Broker
+                   learns       learns       learns
+                   Up/Down      distances    Grace/Violence
+                         │           │           │
+                         └───────────┴───────────┘
+                                     │
+                              the loop closes
+                              f(state, candle) → state
+```
+
+The feedback is the learning. Every settlement and every paper resolution
+routes outcomes back to the observers that produced the thoughts. The
+observers that produced Grace get stronger. The observers that produced
+Violence get weaker. The discriminant sharpens. The fold advances.
+
+One circuit. One clock. One tick per candle. The enterprise is a signal
+processor with a feedback loop. The signal is the candle. The output is
+Grace or Violence. The feedback is the learning. The circuit is the machine.
+
