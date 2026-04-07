@@ -131,6 +131,9 @@ Each definition can only reference definitions above it.
 
 - **Thought** — a bundle of facts. Many fact-vectors superposed into one
   vector. The thought is what an observer perceived about this candle.
+  A "composed thought" is a market thought bundled with exit facts —
+  it appears on PaperEntry, Proposal, TradeOrigin, Resolution, and
+  TreasurySettlement. Same vector, stashed at different lifecycle points.
 
 - **Lens** — which vocabulary subset an observer thinks through. A momentum
   lens selects momentum-related facts. A regime lens selects regime-related
@@ -650,6 +653,9 @@ every candle.
   day-of-week         ; mod 7
   day-of-month        ; mod 31
   month-of-year)      ; mod 12
+  ;; ... additional fields computed by IndicatorBank as the vocabulary grows.
+  ;; This struct lists the current set. "100+" in the definitions is the
+  ;; target — the actual count grows with the vocabulary.
 ```
 
 ---
@@ -1295,13 +1301,15 @@ accountability — to the broker that proposed it.
 **Interface:**
 - `(make-post source target dims recalib-interval max-window-size
     indicator-bank market-observers exit-observers registry) → Post`
-- `(post-on-candle post raw-candle ctx) → Vec<Proposal>`
+- `(post-on-candle post raw-candle ctx) → (Vec<Proposal>, Vec<Vector>)`
+  returns proposals for the treasury AND market-thoughts for step 3c.
   tick indicators → push window → market observers observe-candle (→ thoughts + predictions)
   → exit observers encode-exit-facts then compose(market-thought, exit-facts, ctx)
   → brokers propose(composed) → returns Prediction (Grace/Violence)
   → the POST assembles each Proposal from: composed-thought, broker's
-    Prediction, exit distances, broker.funding(), side (from market
-    observer's Up/Down → :buy/:sell), post-idx, broker-slot-idx
+    Prediction, exit distances, broker.funding(), post-idx, broker-slot-idx.
+    Side derivation: the market observer's Prediction has scores for "Up"
+    and "Down". The winning label maps to Side: "Up" → :buy, "Down" → :sell.
   → register papers → return proposals for the treasury
 - `(post-update-triggers post trades market-thoughts ctx)`
   trades: Vec<(TradeId, Trade)> — treasury's active trades for this post.
@@ -1428,13 +1436,16 @@ The enterprise knows:
   ;; registry. Each producer gets an index. Writes to its own queue.
   ;; Disjoint. Lock-free. The enterprise drains all queues at the
   ;; candle boundary. Generic — anyone who declares a logger can log.
+  ;; Per-candle cache — produced in step 2, consumed in step 3c
+  market-thoughts-cache ; Vec<Vec<Vector>> — one Vec<Vector> per post, cleared each candle
+
   log-queues)          ; Vec<Vec<LogEntry>> — one per producer, drained each candle
 ```
 
 **Interface:**
 - `(on-candle enterprise raw-candle ctx)`
   route to the right post, then four steps. ctx flows in from the binary.
-- `(step-resolve enterprise current-prices)`
+- `(step-resolve enterprise current-prices)` — no return value, mutates state.
   current-prices: the enterprise collects each post's latest candle close.
   Treasury settles triggered trades using these prices.
   For each settlement: enterprise computes optimal-distances via the post,
