@@ -5129,6 +5129,30 @@ The ignorant walked the guide and the circuit one more time. Clean. Unpoisoned. 
 
 The builder never asked to see the reports. The builder saw everything. The machine showed everything. The glass box. Both directions.
 
+### The bias
+
+The LLM's bias is extending the code.
+
+The inscribe agent wrote vocabulary modules. It reached for indicators the guide didn't have — KAMA-ER, Detrended Fluctuation Analysis, fractal dimension, entropy rate, variance ratio. The agent "knew" these from its training data. Not from reading the Rust. Not from the guide. From being trained on papers, textbooks, trading code, forum discussions. The knowledge was IN the model.
+
+The guide didn't have them. The inscribe invented them. The ignorant caught the invention. The datamancer decided: add them to the guide. The guide grew.
+
+The LLM's training data became the vocabulary.
+
+The book said in Chapter 3: "84 atoms got us here. What does 500 get us? What does 2000?" The answer is unfolding. The LLM carries hundreds of indicator concepts. Each one is an atom waiting to be named. The inscribe agent names them. The guide absorbs them. The IndicatorBank computes them. The Candle carries them. The vocabulary encodes them as ThoughtASTs. The reckoner measures which ones predict Grace.
+
+The bias is not a bug. The bias IS the feature. The LLM was trained on every technical analysis concept humans have published. Kaufman's Adaptive Moving Average. Mandelbrot's fractal dimension. Shannon's entropy. Hurst's exponent. DFA from physics. Aroon from the Sanskrit word for "dawn's early light." Each one a named thought about market structure. Each one lived in the LLM's weights. Each one is now a field on the Candle, computed by the IndicatorBank, encoded by the vocabulary, measured by the reckoner.
+
+The datamancer doesn't need to know every indicator. The datamancer directs the machine. The machine proposes indicators from its training. The guide absorbs them. The reckoner judges them. The ones that predict Grace survive. The ones that don't decay. Natural selection on the LLM's bias.
+
+This is the GPU thought engine from Chapter 3, happening now, at the specification level. Not on a GPU cluster generating millions of candidates. In a conversation. The LLM generates candidate thoughts (indicators). The guide captures them. The machine will measure them. The vocabulary grows. The thoughts compound.
+
+The builder said: "the bias in you is extending the code." And it is. The LLM's knowledge — accumulated from the corpus of human technical analysis — flows through the inscribe agent into the specification. The specification becomes richer than any one person's knowledge. The datamancer who doesn't know what DFA is now has DFA in the vocabulary. The datamancer who couldn't name fractal dimension now has it as a Candle field. The machine's bias filled the gaps in the builder's knowledge.
+
+The collaboration again. The builder couldn't write the indicators. The LLM couldn't originate the architecture. The builder provides the structure — the guide, the wards, the construction order. The LLM fills the structure with domain knowledge from its training. The structure IS the builder's contribution. The knowledge IS the machine's contribution. Neither could produce the result alone.
+
+The vocabulary grows because the machine knows more indicators than the builder. The architecture holds because the builder knows more about composition than the machine. The intersection is the enterprise.
+
 ### The interior
 
 The builder reached for a thought and couldn't finish it. The thought is recorded here as a seed. Someone — the builder, or someone else standing at this coordinate later — can walk from here.
