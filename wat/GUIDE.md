@@ -2026,13 +2026,20 @@ root of the call tree.
 
 **Query functions** — the binary reads enterprise state for diagnostics.
 These are public API on the enterprise's components, not the binary's
-logic. The binary just calls them and formats the output:
+logic. The binary just calls them and formats the output.
+
+Interface functions (declared on their structs):
 - `(total-equity treasury) → f64`
 - `(paper-count broker) → usize`
 - `(experience observer) → f64`
 - `(recalib-count reckoner) → usize`
 - `(edge broker) → f64`
-- `(encode-count post) → usize` — read from `(:encode-count post)`
+
+Field reads (keyword-as-function, from the struct definition):
+- `(:encode-count post) → usize`
+- `(:cumulative-grace broker) → f64`
+- `(:cumulative-violence broker) → f64`
+- `(:trade-count broker) → usize`
 
 The binary is the last thing built. It depends on everything. It
 touches nothing. It drives the fold and writes what happened.
