@@ -780,50 +780,43 @@ One per post (one per asset pair).
 The streaming primitives — the building blocks of indicator state:
 
 ```
-(struct sma-state
-  [buffer : RingBuffer]
-  [sum    : f64]
-  [period : usize])
+;; Leaves — depend on nothing
+(struct ring-buffer
+  [data     : Vec<f64>]
+  [capacity : usize]
+  [head     : usize]
+  [len      : usize])
 
 (struct ema-state
-  [value    : f64]
+  [value     : f64]
   [smoothing : f64]
-  [period   : usize])
+  [period    : usize])
 
 (struct rsi-state
-  [avg-gain : f64]
-  [avg-loss : f64]
-  [period   : usize]
+  [avg-gain   : f64]
+  [avg-loss   : f64]
+  [period     : usize]
   [prev-close : f64])
-
-(struct ring-buffer
-  [data : Vec<f64>]
-  [capacity : usize]
-  [head : usize]
-  [len  : usize])
-
-(struct rolling-stddev
-  [buffer : RingBuffer]
-  [sum    : f64]
-  [sum-sq : f64])
-
-(struct macd-state
-  [fast-ema : EmaState]
-  [slow-ema : EmaState]
-  [signal-ema : EmaState])
-
-(struct dmi-state
-  [plus-dm-smooth  : f64]
-  [minus-dm-smooth : f64]
-  [tr-smooth       : f64]
-  [dx-ema          : EmaState]
-  [prev-high       : f64]
-  [prev-low        : f64])
 
 (struct atr-state
   [atr        : f64]
   [period     : usize]
   [prev-close : f64])
+
+(struct obv-state
+  [obv        : f64]
+  [prev-close : f64])
+
+;; Depend on RingBuffer
+(struct sma-state
+  [buffer : RingBuffer]
+  [sum    : f64]
+  [period : usize])
+
+(struct rolling-stddev
+  [buffer : RingBuffer]
+  [sum    : f64]
+  [sum-sq : f64])
 
 (struct stoch-state
   [high-buf : RingBuffer]
@@ -838,17 +831,24 @@ The streaming primitives — the building blocks of indicator state:
   [neg-flow-buf : RingBuffer]
   [prev-tp      : f64])
 
-(struct obv-state
-  [obv        : f64]
-  [prev-close : f64])
-
 (struct ichimoku-state
-  [high-9  : RingBuffer]
-  [low-9   : RingBuffer]
-  [high-26 : RingBuffer]
-  [low-26  : RingBuffer]
-  [high-52 : RingBuffer]
-  [low-52  : RingBuffer])
+  [high-9  : RingBuffer]  [low-9  : RingBuffer]
+  [high-26 : RingBuffer]  [low-26 : RingBuffer]
+  [high-52 : RingBuffer]  [low-52 : RingBuffer])
+
+;; Depend on EmaState
+(struct macd-state
+  [fast-ema   : EmaState]
+  [slow-ema   : EmaState]
+  [signal-ema : EmaState])
+
+(struct dmi-state
+  [plus-dm-smooth  : f64]
+  [minus-dm-smooth : f64]
+  [tr-smooth       : f64]
+  [dx-ema          : EmaState]
+  [prev-high       : f64]
+  [prev-low        : f64])
 ```
 
 The indicator bank — composed from the streaming primitives:
