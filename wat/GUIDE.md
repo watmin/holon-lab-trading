@@ -1886,7 +1886,7 @@ The enterprise knows:
   learn optimal distances.
 - `(step-update-triggers enterprise post-idx market-thoughts ctx)`
   the enterprise queries the treasury for active trades belonging to this
-  post, then calls post-update-triggers(post, trades, market-thoughts, ctx).
+  post, then calls post-update-triggers(post, trades, market-thoughts, miss-queues, ctx).
   The post composes each trade's market thought with exit observers,
   queries fresh distances, computes new trailing stop levels. The
   enterprise writes the new values back to the treasury's trade records.
