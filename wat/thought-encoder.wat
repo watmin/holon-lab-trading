@@ -49,8 +49,12 @@
 ;; its structure is its identity. Same structure, same vector.
 
 (define (encode [encoder : ThoughtEncoder]
-                [ast : ThoughtAST])
+                [ast : ThoughtAST]
+                [miss-queue : Vec<(ThoughtAST, Vector)>])
   : Vector
+  ;; On cache hit: return immediately. On miss: compute, queue, return.
+  ;; The encode function NEVER writes to the cache. The parallel phase
+  ;; queues misses. The enterprise drains between steps.
   (or (lookup (:compositions encoder) ast)        ; cache hit → done
       (let ((result
               (match ast
@@ -58,26 +62,26 @@
                   (lookup-atom (:atoms encoder) name))
 
                 ((Linear name value scale)
-                  (bind (encode encoder (Atom name))
+                  (bind (encode encoder (Atom name) miss-queue)
                         (encode-linear value scale)))
 
                 ((Log name value)
-                  (bind (encode encoder (Atom name))
+                  (bind (encode encoder (Atom name) miss-queue)
                         (encode-log value)))
 
                 ((Circular name value period)
-                  (bind (encode encoder (Atom name))
+                  (bind (encode encoder (Atom name) miss-queue)
                         (encode-circular value period)))
 
                 ((Bind left right)
-                  (bind (encode encoder left)
-                        (encode encoder right)))
+                  (bind (encode encoder left miss-queue)
+                        (encode encoder right miss-queue)))
 
                 ((Bundle children)
                   (apply bundle
-                    (map (lambda (c) (encode encoder c)) children))))))
+                    (map (lambda (c) (encode encoder c miss-queue)) children))))))
 
-        (store (:compositions encoder) ast result)
+        (push! miss-queue (list ast result))      ; queue the miss
         result)))
 
 ;; ── lookup-atom — dictionary access ─────────────────────────────────

@@ -413,7 +413,7 @@ on what. That section shows what each thing IS.
 
 (let ((vector-manager (make-vector-manager dims)))
   (make-thought-encoder vector-manager))             → ThoughtEncoder
-(encode thought-encoder ast)                         → Vector
+(encode thought-encoder ast miss-queue)               → Vector
 
 ;; ── Label enums ─────────────────────────────────────────────────────
 ;; Side is action (what the trader does). Direction is observation (what
@@ -1210,7 +1210,13 @@ encode are deferred — the vocabulary knows what it wants, the encoder
 decides how to compute it efficiently.
 
 **Interface:**
-- `(encode thought-encoder ast) → Vector`
+- `(encode thought-encoder ast miss-queue) → Vector`
+  miss-queue: Vec<(ThoughtAST, Vector)> — the observer's miss-queue.
+  On cache hit: return the vector. On cache miss: compute the vector,
+  push (ast, vector) to the miss-queue, return the vector. The observer
+  accumulates misses. The enterprise drains all miss-queues between steps
+  and inserts into the cache. The encode function NEVER writes to the cache.
+  The parallel phase queues. The sequential phase drains.
 
 One function. Recursive. Cache at every node. The cache key IS the AST
 node — its structure is its identity. Same structure, same vector.
