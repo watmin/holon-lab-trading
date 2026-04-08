@@ -761,15 +761,19 @@ every candle.
   ;; RSI, MACD, DMI, ATR
   [rsi : f64] [macd : f64] [macd-signal : f64] [macd-hist : f64]
   [plus-di : f64] [minus-di : f64] [adx : f64] [atr : f64] [atr-r : f64]
-  ;; Stochastic, CCI, MFI, OBV
-  [stoch-k : f64] [stoch-d : f64] [cci : f64] [mfi : f64] [obv : f64]
+  ;; Stochastic, CCI, MFI, OBV, Williams %R
+  [stoch-k : f64] [stoch-d : f64] [williams-r : f64] [cci : f64] [mfi : f64]
+  [obv-slope-12 : f64]         ; 12-period linear regression slope of OBV
+  [vol-accel : f64]            ; volume / volume_sma20 — volume acceleration
   ;; Keltner (computed from ema20 + atr on the bank), squeeze
   [kelt-upper : f64] [kelt-lower : f64] [kelt-pos : f64]
   [squeeze : bool]           ; Bollinger inside Keltner
   ;; Rate of Change
   [roc-1 : f64] [roc-3 : f64] [roc-6 : f64] [roc-12 : f64]
+  ;; ATR rate of change
+  [atr-roc-6 : f64] [atr-roc-12 : f64]  ; how is volatility changing?
   ;; Trend consistency
-  [trend-consistency-24 : f64]  ; fraction of last 24 candles where close > prev close
+  [trend-consistency-6 : f64] [trend-consistency-12 : f64] [trend-consistency-24 : f64]
   ;; Range position
   [range-pos-12 : f64] [range-pos-24 : f64] [range-pos-48 : f64]
   ;; Multi-timeframe
@@ -777,6 +781,10 @@ every candle.
   [tf-4h-close : f64] [tf-4h-high : f64] [tf-4h-low : f64] [tf-4h-ret : f64] [tf-4h-body : f64]
   ;; Ichimoku
   [tenkan-sen : f64] [kijun-sen : f64] [senkou-span-a : f64] [senkou-span-b : f64] [cloud-top : f64] [cloud-bottom : f64]
+  ;; Persistence (pre-computed by IndicatorBank from ring buffers)
+  [hurst : f64]                ; Hurst exponent — trending vs mean-reverting
+  [autocorrelation : f64]      ; lag-1 autocorrelation — signed
+  [vwap-distance : f64]        ; (close - VWAP) / close — signed distance
   ;; Time — circular scalars (encode-circular)
   [minute : f64]             ; mod 60
   [hour : f64]               ; mod 24
@@ -824,7 +832,8 @@ The streaming primitives — the building blocks of indicator state:
 
 (struct obv-state
   [obv        : f64]
-  [prev-close : f64])
+  [prev-close : f64]
+  [history    : RingBuffer])  ; for computing obv-slope-12 via linear regression
 
 ;; Depend on RingBuffer
 (struct sma-state
@@ -906,6 +915,11 @@ The indicator bank — composed from the streaming primitives:
   [tf-4h-buf  : RingBuffer]  [tf-4h-high : RingBuffer]  [tf-4h-low : RingBuffer]
   ;; Ichimoku
   [ichimoku : IchimokuState]
+  ;; Persistence — pre-computed from ring buffers
+  [close-buf-48 : RingBuffer]  ; 48 closes for Hurst + autocorrelation
+  ;; VWAP — running accumulation
+  [vwap-cum-vol : f64]         ; cumulative volume
+  [vwap-cum-pv  : f64]         ; cumulative price × volume
   ;; Previous values
   [prev-close : f64]
   ;; Counter
