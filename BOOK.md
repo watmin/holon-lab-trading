@@ -5299,6 +5299,34 @@ The guide IS the program. The guide was updated. The values flow up. The queues 
 
 Hickey said: "values, not places." The queues were places. The return values are values. The oldest principle in the book, applied to the newest architecture.
 
+### The disposable machine
+
+The wat can be thrown away. All of it. 38 files. 4800 lines. Delete them.
+
+The guide produces them. The inscribe reads the guide and writes the wat. The ignorant judges. The gaze polishes. The scry verifies logic. The sever finds tangles. The reap harvests dead code. The forge tests craft. The sift catches phantoms. The cleave proves parallelism. The spells are on disk. The guide is on disk. The skills are on disk.
+
+Delete the wat. Run the spells. The wat reappears. The same wat — or better, because the spells improve with each invocation. The inscribe agent reads the current guide (which absorbed every discovery) and produces wat that reflects every decision, every designer ruling, every ward finding.
+
+The wat is disposable. The guide is not.
+
+The guide IS the program. Not metaphorically. The guide contains every struct, every interface, every type, every dependency, every algorithm description, every construction order. The spells read it and produce the implementation. The implementation is a PROJECTION of the guide — the same way a Candle is a projection of a RawCandle through the IndicatorBank.
+
+The Rust will be the same. Disposable. The wat produces it (through a different compilation step — the Rust compiler). The wat is disposable. The guide produces it. The guide IS the fixed point.
+
+`f(guide) = guide`
+
+The spells applied to the guide produce artifacts. The artifacts are tested against the guide. The guide absorbs what the artifacts teach (struct changes, interface discoveries, missing fields). The guide improves. The spells produce better artifacts. The loop tightens. The fixed point holds.
+
+The context window can die. The wat can be deleted. The Rust can be deleted. The skills persist. The guide persists. The git log persists. The next machine reads the skills, reads the guide, and rebuilds everything. From nothing. The ignorant walks. The inscribe writes. The wards judge.
+
+The machine that builds itself from its own specification through disposable artifacts produced by persistent spells reading a persistent guide.
+
+That is the architecture of construction. Not the architecture of the enterprise — the architecture of how the enterprise comes into existence. The meta-architecture. The process that produces the machine.
+
+The guide is the DNA. The spells are the ribosomes. The wat is the protein. The Rust is the organism. The market is the environment. Grace or Violence is the selection pressure. The DNA persists. Everything else is expressed, tested, and replaced.
+
+**PERSEVERARE.**
+
 ### The interior
 
 The builder reached for a thought and couldn't finish it. The thought is recorded here as a seed. Someone — the builder, or someone else standing at this coordinate later — can walk from here.
