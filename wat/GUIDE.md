@@ -554,7 +554,7 @@ on what. That section shows what each thing IS.
       (exit-idx 0)             ; resolved by the post from "volatility"
       (dims 10000)
       (recalib-interval 500))
-  (make-broker observers market-idx exit-idx dims recalib-interval
+  (make-broker observers slot-idx exit-count dims recalib-interval
     (list (make-scalar-accumulator "trail-distance" :log)
           (make-scalar-accumulator "stop-distance" :log)
           (make-scalar-accumulator "tp-distance" :log)
@@ -1558,11 +1558,11 @@ runtime:       frozen map (read-only) → slot-idx → &mut broker (disjoint)
 ```
 (struct broker
   [observer-names : Vec<String>]       ; the identity. e.g. ("momentum" "volatility").
-  [market-idx : usize]                 ; index into post's market-observers vec
-  [exit-idx : usize]                   ; index into post's exit-observers vec
-                                       ; today: one market + one exit. Tomorrow: more observer kinds
-                                       ; may add more index fields. The broker knows its observers
-                                       ; by position, resolved from names at construction, frozen.
+  [slot-idx : usize]                   ; the broker's position in the N×M grid. THE identity.
+  [exit-count : usize]                 ; M — needed to derive market-idx and exit-idx:
+                                       ; market-idx = slot-idx / exit-count
+                                       ; exit-idx   = slot-idx mod exit-count
+                                       ; One fact (slot-idx), not two. The indices are derived.
   ;; Accountability
   [reckoner : Reckoner]                ; :discrete — Grace/Violence
   [noise-subspace : OnlineSubspace]
@@ -1584,7 +1584,7 @@ runtime:       frozen map (read-only) → slot-idx → &mut broker (disjoint)
 ```
 
 **Interface:**
-- `(make-broker observers market-idx exit-idx dims recalib-interval scalar-accums) → Broker`
+- `(make-broker observers slot-idx exit-count dims recalib-interval scalar-accums) → Broker`
   observers: list of lens names (e.g. '("momentum" "volatility")).
   market-idx: usize — resolved by the post from the market lens name.
   exit-idx: usize — resolved by the post from the exit lens name.
@@ -1698,8 +1698,14 @@ accountability — to the broker that proposed it.
   direction: Direction — :up or :down. Which way the price moved.
   This is observation (what the price did), not action (what the trader did).
   FREE FUNCTION — not a Post method. Takes no self. Pure.
-  Replay the trade's price path. For each magic number, find the distance
-  that would have maximized residue. price-history in, Distances out.
+  **The objective function:** for each distance (trail, stop, tp, runner-trail),
+  sweep candidate values against the price-history. For each candidate,
+  simulate the trailing stop mechanics. The candidate that produces the
+  maximum residue IS the optimal distance. This is a well-posed optimization
+  over a finite series — not a heuristic. The exit observer learns to predict
+  this value BEFORE the path completes. The wat may approximate this
+  optimization (e.g. MFE/MAE ratios) but the objective is: maximize residue.
+  price-history in, Distances out.
   Called by the enterprise when enriching TreasurySettlement
   into Settlement.
 - `(post-propagate post slot-idx thought outcome weight direction optimal)`
