@@ -206,7 +206,7 @@
 ;; to reach the right observers.
 
 (define (propagate [brkr : Broker]
-                   [thought : Vector]
+                   [composed-thought : Vector]
                    [outcome : Outcome]
                    [weight : f64]
                    [direction : Direction]
@@ -219,8 +219,8 @@
                   (:grace    "Grace")
                   (:violence "Violence")))
          ;; Strip noise before learning
-         (_ (update (:noise-subspace brkr) thought))
-         (denoised (anomalous-component (:noise-subspace brkr) thought)))
+         (_ (update (:noise-subspace brkr) composed-thought))
+         (denoised (anomalous-component (:noise-subspace brkr) composed-thought)))
     (observe (:reckoner brkr) denoised label weight)
 
     ;; 2. Feed the curve — was the prediction correct?
@@ -264,11 +264,11 @@
 
     ;; 5. Direction -> market observer via resolve
     (let ((mkt-obs (nth market-observers (/ (:slot-idx brkr) (:exit-count brkr)))))
-      (resolve mkt-obs thought direction weight))
+      (resolve mkt-obs composed-thought direction weight))
 
     ;; 6. Optimal distances -> exit observer via observe-distances
     (let ((exit-obs (nth exit-observers (mod (:slot-idx brkr) (:exit-count brkr)))))
-      (observe-distances exit-obs thought optimal weight))
+      (observe-distances exit-obs composed-thought optimal weight))
 
     ;; 7. Scalar accumulators learn the optimal distances
     ;;    Each distance feeds its corresponding accumulator.

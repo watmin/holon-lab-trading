@@ -1,7 +1,7 @@
 ;; persistence.wat — Hurst, autocorrelation, ADX
 ;;
 ;; Depends on: candle
-;; Domain: market (MarketLens :regime)
+;; Domain: market (MarketLens :regime, paired with regime.wat)
 ;;
 ;; Properties of the price series. Not direction — character.
 ;; "Is this market trending or mean-reverting? Persistent or random?"
