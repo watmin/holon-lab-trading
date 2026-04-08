@@ -570,9 +570,11 @@ on what. That section shows what each thing IS.
 ;; ── TradePhase — the state machine of a position's lifecycle ─────────
 
 (enum trade-phase
-  :active              ; capital reserved, stops live
-  :principal-recovered ; principal returned, residue running
-  :settled)            ; trade closed — Grace or Violence
+  :active              ; capital reserved, all stops live
+  :principal-recovered ; principal returned to available, residue continues
+  :runner              ; residue riding with wider trailing stop, zero cost basis
+  :settled-violence    ; stop-loss fired — bounded loss
+  :settled-grace)      ; runner trail fired or take-profit — residue is permanent gain
 
 ;; ── Trade — an active position the treasury holds ───────────────────
 
