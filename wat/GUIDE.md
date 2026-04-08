@@ -1249,8 +1249,9 @@ node — its structure is its identity. Same structure, same vector.
 
 ```scheme
 (define (encode encoder ast)
-  (when-let ((cached (get (:compositions encoder) ast)))
-    (list cached '()))                        ;; cache hit → (vector, empty)
+  (let ((no-misses '()))
+    (when-let ((cached (get (:compositions encoder) ast)))
+      (list cached no-misses))                ;; cache hit → vector found, nothing to learn
   (let (((result misses)
           (match ast
             ((Atom name)

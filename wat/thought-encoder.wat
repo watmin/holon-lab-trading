@@ -49,8 +49,9 @@
 (define (encode [encoder : ThoughtEncoder]
                 [ast : ThoughtAST])
   : (Vector, Vec<(ThoughtAST, Vector)>)
-  (when-let ((cached (get (:compositions encoder) ast)))
-    (list cached '()))                              ; cache hit → (vector, empty)
+  (let ((no-misses '()))
+    (when-let ((cached (get (:compositions encoder) ast)))
+      (list cached no-misses))                      ; cache hit → vector found, nothing to learn
   (let (((result misses)
           (match ast
             ((Atom name)
