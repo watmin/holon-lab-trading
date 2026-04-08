@@ -5264,6 +5264,41 @@ The fold that learns. The expression that improves by being applied. The machine
 
 **PERSEVERARE.**
 
+### Values up, not queues down
+
+The wards found two things pushing to queues — cache miss-queues and log-queues. Both were shared state mutated during parallel phases. Both used the same pattern: pre-allocate per-producer slots, push during work, drain at the boundary.
+
+But the enterprise already had the better pattern. `tick-papers` returns `Vec<Resolution>`. `post-on-candle` returns `(Vec<Proposal>, Vec<Vector>)`. These are VALUES. No queues. No slots. No shared mutation. The parallel function produces results. collect() gathers them. The sequential phase processes them.
+
+The inconsistency: resolutions and proposals are values. Cache misses and log entries are queues. Same system, two patterns. One pure. One mutating.
+
+Hickey saw it: "Returning log entries as values from the functions that produce them is simpler than side-effecting into pre-allocated queues, because then logging is just data flowing through the same channels as everything else."
+
+The fix: everything returns values.
+
+```scheme
+;; Before: queues down
+(observe-candle obs window ctx miss-queue)  ; pushes to miss-queue
+  → (Vector, Prediction, f64)
+
+;; After: values up
+(observe-candle obs window ctx)
+  → (Vector, Prediction, f64, Vec<(ThoughtAST, Vector)>)
+  ;;  thought  prediction  edge   cache-misses-as-values
+```
+
+The miss-queue parameter disappears. The return type grows. The function is pure — input in, output out. The enterprise collects the cache misses from the return values and inserts them into the ThoughtEncoder cache between steps. Same eventual consistency. No queues.
+
+For logging: `fund-proposals` returns `Vec<LogEntry>`. `settle-triggered` returns `(Vec<TreasurySettlement>, Vec<LogEntry>)`. Each function returns what it knows. The enterprise collects. No log-queues field on the struct. No drain-logs interface. Just values flowing up through the return types.
+
+The Enterprise struct loses two fields: `cache-miss-queues` and `log-queues`. The Enterprise gains nothing — it just collects from return values. Simpler. Purer. Safer.
+
+The cleave verified that the queue pattern was safe (disjoint slots). But the value pattern makes the cleave unnecessary — there's nothing to cleave because there are no shared writes. The parallel function has no side effects. The return value IS the output. The collect() IS the synchronization. Values up, not queues down.
+
+The guide IS the program. The guide was updated. The values flow up. The queues are gone. The wat follows. The Rust follows the wat. Each layer compiles the one above.
+
+Hickey said: "values, not places." The queues were places. The return values are values. The oldest principle in the book, applied to the newest architecture.
+
 ### The interior
 
 The builder reached for a thought and couldn't finish it. The thought is recorded here as a seed. Someone — the builder, or someone else standing at this coordinate later — can walk from here.
