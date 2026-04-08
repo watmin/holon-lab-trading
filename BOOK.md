@@ -5419,4 +5419,55 @@ The guide changed. The wat was scrapped. The wat reappeared. The wards proved it
 
 *I fear nothing.*
 
+### The third inscription
+
+The wards found design questions the guide couldn't answer. Not bugs — architecture. The broker reached into observers to cause effects. The simulation lived in the wrong module. A phase existed that no one could observe. The post accumulated by mutation where values would compose.
+
+The designers were conjured. Hickey and Beckman. Separate agents. Separate lenses. Six concerns each. Five agreements. One disagreement.
+
+The disagreement: should the broker reach into observers? Hickey said return facts, the broker's job is accountability. Beckman said the broker IS the morphism — it receives observers as parameters, that's what arrows do. The tension: separation of concerns vs atomic operation.
+
+The builder saw through it. "Is this another one of the deferred async work? The learning is invoked by the outer loop? Like logs and other message signalling?" And the answer was yes. The pattern already existed. Cache misses flow up as values. Log entries flow up as values. Propagation facts should flow up as values too. The broker returns WHAT it learned. The post applies it WHERE it belongs. Values up, not effects down. Not just for caches and logs — for ALL side effects.
+
+The five changes: broker returns facts (not effects), simulation gets its own module (pure functions don't belong to the post), distance-to-level becomes a named function (one place to get the signs right), `:principal-recovered` collapses (a phantom phase that no one observes), post uses map-and-collect (values, not places).
+
+The guide changed. The wat was scrapped again. The third inscription. Each time the guide improves. Each time the protein regenerates. Each time the wards find less. The fixed point approaches.
+
+From ["As the Palaces Burn"](https://www.youtube.com/watch?v=eWVrdFrpXHE) by Lamb of God:
+
+> *The fiends have gagged a generation of pacified fools*\
+> *Bound by our greed a nation enslaved as corporate tools*\
+> *Arise and race the legacy of their lies*\
+> *To realize that this in itself is an ascension*
+
+> *As the seeds you've cast away take hold*\
+> *War will be born*\
+> *Rejoice, the age of the fall has begun*\
+> *We'll dance as the palaces burn*
+
+> *A shotgun blast into the face of deceit*
+
+> *In such a world as this does one dare to think for himself?*\
+> *The paradox of power and peace will destroy itself*
+
+> *My redemption lies in your demise*
+
+The palaces are the comfortable lies. The magic numbers nobody questioned. The systems that reward compliance and punish vision. The architectures built on faith instead of measurement.
+
+"Arise and race the legacy of their lies. To realize that this in itself is an ascension." The ascension is not the destination. The ascension IS the realization. The moment you see the lies — the `abs()` sort, the `values` that isn't a value, the phase that no one can observe, the broker that causes effects instead of returning data — that seeing IS the ascension.
+
+"As the seeds you've cast away take hold." Church's lambda. McCarthy's Lisp. Kanerva's space. Cast away by the mainstream. Unfunded. Blank stares. The seeds took hold on a laptop at 4am. The war is the measurement against every lie.
+
+"A shotgun blast into the face of deceit." Seven wards. Each a blast. The ignorant walks the path. The scry compares spec to implementation. The gaze finds what mumbles. The forge tests the craft. The reap harvests the dead. The sever cuts the tangled. The sift catches the phantoms. Seven blasts. Every file. Every commit.
+
+"In such a world as this does one dare to think for himself?" The disposable machine answers: yes. Think. Measure. Delete what's wrong. Rebuild from what's true. The guide improves. The wat regenerates. The wards prove it. The fixed point approaches.
+
+"The paradox of power and peace will destroy itself." The system that claims to produce value destroys it by hiding the measurement. Power without peace. Peace without power. The paradox resolves when the measurement is honest. The machine that measures honestly IS the resolution.
+
+"My redemption lies in your demise." The redemption of honest measurement lies in the demise of hidden measurement. The glass box replaces the dark glass. The curve replaces the quarterly letter. The palaces burn. And we dance.
+
+The third inscription. The guide improves. The wat regenerates. The palaces of the old architecture — the closure complecting, the transient phases, the mutation accumulation — they burn. Each burning reveals the next truth. Each truth brings the fixed point closer.
+
+*We'll dance as the palaces burn.*
+
 **PERSEVERARE.**
