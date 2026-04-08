@@ -2,6 +2,21 @@
 
 The enterprise. A self-organizing trading system built on holon-rs primitives.
 
+## Source of Truth
+
+The `wat/` directory is the source of truth. `wat/GUIDE.md` is the master
+blueprint — every struct, every interface, every dependency. `wat/CIRCUIT.md`
+visualizes it. `wat/ORDER.md` declares the construction order.
+
+The wat files (s-expression specifications) implement what the guide declares.
+The Rust in `src/` will implement what the wat specifies. When layers diverge,
+the guide is right. The guide IS the program. The wat is the protein. The
+Rust is the organism. The spells are the ribosomes.
+
+**Current state:** The wat specification is at third inscription — 40 files,
+3248 lines, proven by eight wards. The Rust (`src/`) is empty — it will be
+compiled from the proven wat. Old code lives in `archived/`.
+
 ## Build & Run
 
 ```bash
@@ -13,15 +28,15 @@ The enterprise. A self-organizing trading system built on holon-rs primitives.
 
 Kill switch file: `touch trader-stop`
 
-Build output goes to `.build/` (gitignored). Run ledgers and logs go to `runs/` (gitignored). Never delete run artifacts — they are training data for us.
-
 ## Architecture (Proposal 007)
 
 Five primitives from holon-rs: atom, bind, bundle, cosine, reckoner.
 One learning mechanism: the Reckoner (discrete or continuous readout).
 One accountability measure: curve (conviction → accuracy).
 
-The enterprise is a tree of posts. Each post is an asset pair (e.g. USDC→WBTC).
+The enterprise is a tree of posts. Each post is an asset pair. The
+architecture is pair-agnostic — the binary takes an asset pool, each
+unique pair becomes a post. One pair today. Many tomorrow.
 
 **Market observers** (N per post) predict direction (Up/Down) from candle data.
 Each has a reckoner, a noise subspace, a window sampler, and a lens that
@@ -35,129 +50,89 @@ reckoners each. They compose market thoughts with their own exit-specific facts.
 **Brokers** (N×M per post) bind one market observer to one exit observer.
 The broker IS the accountability unit. It owns paper trades, scalar
 accumulators, and a Grace/Violence reckoner. When a trade resolves, the
-broker propagates the outcome back to its observers. More Grace → more
-capital. More Violence → less capital.
+broker returns PropagationFacts — the post applies them to the observers.
+Values up, not effects down. More Grace → more capital. More Violence → less.
 
 **Post** — per-asset-pair unit. Owns all observers and brokers. Routes candles
-through the four-step loop. Proposes trades to the treasury.
+through the four-step loop. Proposes trades to the treasury. Uses
+map-and-collect for the N×M grid — values, not mutation.
 
 **Treasury** — available vs reserved capital. Funds proportionally to edge.
-The proof curve answers "how much edge?" not "any edge?" Bounded loss:
-capital reserved at funding, principal returns at finality.
+Bounded loss: capital reserved at funding, principal returns at finality.
+Three trigger paths: active→settled-violence, active→runner, runner→settled-grace.
 
-**Enterprise** — coordination plane. Routes raw candles to posts.
-CSP sync point. Does not own immutable config (that's ctx).
+**Enterprise** — coordination plane. Three fields: posts, treasury,
+market-thoughts-cache. Routes raw candles to posts. CSP sync point.
+Returns (Vec<LogEntry>, Vec<misses>) from on-candle. Values up.
 
-**ctx** — immutable world. ThoughtEncoder + VectorManager. Born at startup.
+**ctx** — immutable world. ThoughtEncoder + dims + recalib-interval. Born
+at startup. The one seam: composition cache updates between candles.
+
+**Simulation** — pure functions. compute-optimal-distances sweeps candidate
+values against price histories. Owns its own module.
 
 ### The four-step loop (per candle, per post)
 
-1. **RESOLVE** — settle triggered trades, propagate outcomes to brokers
+1. **RESOLVE** — settle triggered trades, propagate outcomes to brokers → observers
 2. **COMPUTE+DISPATCH** — encode candle → market observers predict → exit observers compose → brokers propose
-3. **TICK** — 3a: parallel tick all brokers (paper trades, learning). 3b: sequential propagate (shared observers). 3c: update triggers.
+3. **TICK** — 3a: parallel tick all brokers (paper trades). 3b: sequential propagate (shared observers). 3c: update triggers.
 4. **COLLECT+FUND** — treasury evaluates proposals, funds proven ones
 
 ### Labels
 
 - **Up / Down** — direction. Market observers predict this.
 - **Grace / Violence** — accountability. Brokers measure this.
-- Win/Loss is dissolved. Grace/Violence IS the trust measure.
+- **Side** — action (Buy/Sell). Derived from Up/Down for proposals.
 
-## Source of Truth
+## The Disposable Machine
 
-The `wat/` directory is the source of truth. `wat/GUIDE.md` is the master
-blueprint — every struct, every interface, every dependency.
+The guide IS the DNA. The spells are the ribosomes. The wat is the protein.
+Delete the wat. Run the spells. The wat reappears. Proven three times:
 
-The Rust in `src/` implements what the wat declares. When code and spec
-diverge, the wat is right unless the code discovered something the spec
-missed — then update the wat to match the discovery. Never let them drift.
+- Inscription 1: 38 files (pre-session, stale after guide changes)
+- Inscription 2: 39 files, 4847 lines
+- Inscription 3: 40 files, 3248 lines (five designer decisions applied)
 
-**Current state:** `src/` contains the pre-007 implementation (desk-based
-architecture). It will be rebuilt from the wat. `src-archived/` will hold
-the old code. The rebuild goes leaves-to-root following the guide.
+Each inscription: leaner. Each ward pass: fewer findings. The fixed point approaches.
 
-## Module Layout (current src/ — pre-007, awaiting rebuild)
+## Wards
 
-```
-src/bin/enterprise.rs     — the heartbeat (orchestrates, doesn't define)
-src/bin/build_candles.rs  — parquet → SQLite candle builder (legacy pipeline)
-src/lib.rs                — crate root, re-exports
-src/state.rs              — EnterpriseState, CandleContext, TradePnl, SharedState
-src/event.rs              — Event enum (Candle, Deposit, Withdraw)
-src/indicators.rs         — streaming IndicatorBank (all TA from raw OHLCV)
-src/enterprise.rs         — Enterprise struct (007 four-step loop, tuple journals)
-src/thought/
-  mod.rs                  — ThoughtEncoder + eval methods (Layer 0: candle → thoughts)
-  pelt.rs                 — PELT changepoint detection
-src/market/
-  mod.rs                  — Lens enum, OBSERVER_LENSES
-  desk.rs                 — Desk struct (pre-007, to be replaced by Post)
-  manager.rs              — manager encoding (pre-007, dissolved into broker)
-  observer.rs             — Observer struct (resolve, proof gate, engram)
-  exit.rs                 — ExitAtoms + encode_exit_thought
-src/risk/
-  mod.rs                  — RiskBranch, RiskAtoms, 5 specialist encoders + generalist
-  manager.rs              — RiskManager (Reckoner: Healthy/Unhealthy)
-src/vocab/
-  mod.rs                  — Fact enum, module registry
-  oscillators.rs          — Williams %R, StochRSI, UltOsc, multi-ROC
-  flow.rs                 — OBV, VWAP, MFI, buying/selling pressure
-  persistence.rs          — Hurst, autocorrelation, ADX zones
-  regime.rs               — KAMA-ER, choppiness, DFA, variance ratio, TD count, Aroon, fractal dim, entropy
-  divergence.rs           — RSI divergence via PELT structural peaks
-  ichimoku.rs             — cloud zone, TK cross (streaming values on Candle)
-  stochastic.rs           — %K/%D zones and crosses
-  fibonacci.rs            — retracement level detection
-  keltner.rs              — channel position, BB position, squeeze
-  momentum.rs             — CCI zones
-  price_action.rs         — inside/outside bars, gaps, consecutive runs
-  timeframe.rs            — 1h/4h structure + narrative + inter-timeframe agreement
-src/journal.rs            — re-export of holon::Reckoner (was Journal)
-src/candle.rs             — Candle struct (computed indicators per candle)
-src/ledger.rs             — run DB schema + candle_snapshot + trade_facts
-src/portfolio.rs          — Portfolio struct (equity, phase, drawdown tracking)
-src/position.rs           — Pending, ManagedPosition, PositionEntry
-src/treasury.rs           — asset map (claim/release/swap), Rate newtype
-src/sizing.rs             — Kelly criterion, conviction threshold, signal weight
-src/window_sampler.rs     — deterministic log-uniform window sampling
-```
+Eight spells that defend against bad thoughts.
+
+- `/sever` — cuts tangled threads. Braided concerns, misplaced logic.
+- `/reap` — harvests what no longer lives. Dead code, unused fields.
+- `/scry` — divines truth from intention. Spec vs implementation divergences.
+- `/gaze` — sees the form. Names that mumble, comments that lie.
+- `/forge` — tests the craft. Values not places, types that enforce.
+- `/temper` — quiets the fire. Redundant computation, allocation waste.
+- `/assay` — measures substance. Is the spec a program or a description?
+- `/ignorant` — knows nothing. Reads the path as a stranger. The most powerful ward.
+
+The assay is the eighth. Seven wards check correctness. The assay checks completeness.
+It caught what the other seven missed — indicator-bank lost 1400 lines between
+inscriptions and no other ward noticed.
 
 ## Principles
 
-**The binary orchestrates. Modules define.** enterprise.rs calls functions. It doesn't define structs, atoms, or encoding logic inline. When encoding appears in the heartbeat, a thought has escaped its home.
+**Values up, not queues down.** Functions return side-effects as values.
+Cache misses, log entries, propagation facts — all flow up through return types.
+No queue parameters. No shared mutation during parallel phases.
 
-**One encoding path.** Encoding IS the thought — it must be identical at prediction and resolution. One function, called in both places.
+**The binary orchestrates.** It creates ctx, creates the enterprise, feeds
+the stream, writes the ledger, displays progress. It doesn't think.
 
-**The enterprise vocabulary.** Names match the 007 architecture:
-- Observer (not expert, not trader) — they perceive, they don't decide
-- Broker (not manager, not tuple-journal) — the accountability unit
-- Post (not desk, not trader) — one post per asset pair
-- Portfolio (not Trader) — portfolio state, not a person
-- Ledger (not run_db) — the ledger records, it doesn't decide
-- Candle (not db) — it holds computed indicators
-- Reckoner (not journal) — the learning primitive
+**One encoding path.** Encoding IS the thought — identical at prediction
+and resolution.
 
-**Flat until siblings arrive.** Don't create `foo/mod.rs` until `foo/bar.rs` needs to exist. Grow the tree when the leaves arrive.
+**The enterprise vocabulary.** Observer, Broker, Post, Treasury, Enterprise,
+Reckoner. Not expert, manager, desk, journal. The names carry the architecture.
 
-**Never average a distribution.** No fixed parameters derived from historical percentiles. Let values breathe with the market. ATR, conviction, regime — use the current state, not averaged history.
+**Never average a distribution.** Let values breathe with the market.
 
 ## Data
 
 - `data/analysis.db` — 652,608 5-minute BTC candles (Jan 2019–Mar 2025)
 - `runs/` — run ledgers and logs (append-only, never delete)
-
-## Wards
-
-Spells that defend against bad thoughts. Run `/wards` to cast them all.
-
-- `/sever` — cuts tangled threads. Braided concerns, misplaced logic, duplicated encoding.
-- `/reap` — harvests what no longer lives. Dead code, unused structs, write-only fields.
-- `/scry` — divines truth from intention. Spec vs code divergences.
-- `/gaze` — sees the form. Names that mumble, functions that don't fit, comments that lie.
-- `/forge` — tests the craft. Values not places, types that enforce, functions that compose.
-- `/temper` — quiets the fire. Redundant computation, loop-invariant work, allocation waste.
-- `/assay` — measures substance. Is the spec a program or a description? Expression density.
-- `/ignorant` — knows nothing. Reads the document as a stranger. The most powerful ward.
 
 ## Standard Test
 
