@@ -1434,7 +1434,7 @@ The generalist is just another lens. No special treatment.
   noise-subspace: created empty (new OnlineSubspace). Learns from observations.
   lens: MarketLens. config: Discrete with "Up"/"Down" labels.
   All proof-tracking and engram-gating fields initialize to zero/empty.
-- `(observe-candle observer candle-window ctx) → (Vector, Prediction, f64)`
+- `(observe-candle observer candle-window ctx miss-queue) → (Vector, Prediction, f64)`
   returns: thought Vector, Prediction (Up/Down), curve-valid (f64 — the
   observer's current edge, from its curve). Every learned output carries
   its track record. The consumer decides what to do with it.
@@ -1493,7 +1493,7 @@ get different distances.
 - `(make-exit-observer lens dims recalib-interval default-trail default-stop default-tp default-runner-trail) → ExitObserver`
 - `(encode-exit-facts exit-obs candle) → Vec<ThoughtAST>`
   pure: candle → judgment fact ASTs for this lens
-- `(evaluate-and-compose exit-obs market-thought exit-fact-asts ctx) → Vector`
+- `(evaluate-and-compose exit-obs market-thought exit-fact-asts ctx miss-queue) → Vector`
   two operations, honestly named:
   1. EVALUATE: encode exit-fact-asts into Vectors via ctx's ThoughtEncoder
   2. COMPOSE: bundle the evaluated exit vectors with the market thought
