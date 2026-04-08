@@ -53,6 +53,25 @@ For each spec section, verify:
 
 8. **Host forms preserved.** When the wat uses a host language form (`quantile`, `sort`, `mean`, `fold`, `encode-linear`, etc.), the Rust should implement it as ONE operation, not expand it into multiple steps. If the wat says `(quantile xs q)`, the Rust should call a quantile function — not inline `collect → sort → index`. The host form is an abstraction. Inlining it in the Rust breaks the abstraction and may introduce inefficiency. Check: for each host form used in the wat, does the Rust preserve it as a single operation? Refer to docs/COMPILATION.md for the expected mappings.
 
+## Internal consistency (within a document)
+
+Before checking between layers, scry checks within. The guide describes
+behavior in prose AND declares interfaces. These must agree.
+
+For every prose description of runtime behavior:
+- Does the interface signature have the parameters for that behavior?
+- "The prose says X queues Y" → does X take Y as a parameter?
+- "The prose says the enterprise drains Z between steps" → does the
+  enterprise have a drain interface?
+
+If the prose says a behavior happens but the interface can't support it,
+the specification lies about what it can do. The intention and the
+expression must match within the same document.
+
+This is how the cache miss-queue gap was found: the prose described
+observers queuing misses, but encode(encoder, ast) had no queue parameter.
+The interface couldn't do what the prose said it did.
+
 ## What to report
 
 For each divergence:
