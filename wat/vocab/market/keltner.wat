@@ -43,4 +43,4 @@
         (Linear "bb-pos" (clamp (:bb-pos candle) 0.0 1.0) 1.0)
         (Log "bb-width" (max (:bb-width candle) 0.0001))
         (Log "squeeze-ratio" (max squeeze-ratio 0.0001))
-        (Linear "bk-spread" (- (:kelt-pos candle) (:bb-pos candle)) 1.0)))))
+        (Linear "bb-kelt-spread" (- (:kelt-pos candle) (:bb-pos candle)) 1.0)))))

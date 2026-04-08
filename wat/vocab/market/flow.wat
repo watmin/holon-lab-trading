@@ -41,7 +41,7 @@
                       (Linear "obv-slope" (:obv-slope-12 candle) 1.0)
 
                       ;; Volume acceleration — ratio, log-encoded
-                      (Log "vol-accel" (max (:vol-accel candle) 0.001))
+                      (Log "volume-accel" (max (:vol-accel candle) 0.001))
 
                       ;; VWAP distance — pre-computed, signed
                       (Linear "vwap-dist" (:vwap-distance candle) 0.1))))

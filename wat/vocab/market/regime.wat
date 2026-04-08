@@ -63,7 +63,7 @@
     (Linear "range-pos-48" (:range-pos-48 candle) 1.0)
 
     ;; Volatility character
-    (Log "bb-width" (max (:bb-width candle) 0.0001))
+    (Log "regime-bb-width" (max (:bb-width candle) 0.0001))
 
     ;; Regime indicators — efficiency and choppiness
     (Linear "kama-er" (:kama-er candle) 1.0)

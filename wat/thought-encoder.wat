@@ -24,6 +24,8 @@
 (struct thought-encoder
   [atoms : Map<String, Vector>]                   ; finite, pre-computed, permanent
   [compositions : LruCache<ThoughtAST, Vector>])  ; optimistic, self-evicting
+;; LruCache is an opaque host type (Rust: lru::LruCache). make-lru-cache
+;; constructs it. Access via (get cache key) → value or None.
 
 ; Constructor: takes a VectorManager, pre-populates atom dictionary.
 (define (make-thought-encoder [vm : VectorManager])
@@ -47,8 +49,8 @@
 (define (encode [encoder : ThoughtEncoder]
                 [ast : ThoughtAST])
   : (Vector, Vec<(ThoughtAST, Vector)>)
-  (if (lookup (:compositions encoder) ast)        ; cache hit → (vector, empty)
-      (values (lookup (:compositions encoder) ast) '())
+  (if (get (:compositions encoder) ast)            ; cache hit → (vector, empty)
+      (values (get (:compositions encoder) ast) '())
       (let-values (((result misses)
               (match ast
                 ((Atom name)

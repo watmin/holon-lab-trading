@@ -42,7 +42,7 @@
     (if (< range 1e-10)
       (list)
       (let* ((facts (list
-               (Linear "body-ratio" (/ body range) 1.0)
+               (Linear "pa-body-ratio" (/ body range) 1.0)
                (Linear "upper-wick" (/ (- (:high candle) body-top) range) 1.0)
                (Linear "lower-wick" (/ (- body-bot (:low candle)) range) 1.0)))
 
