@@ -61,7 +61,7 @@ These are NOT specified in this tree. They are provided by holon-rs.
   strength. Output: accuracy. A continuous surface. How much edge,
   not whether edge.
   - `(make-curve)` → Curve
-  - `(record-prediction curve conviction correct?)` — feed each resolved prediction
+  - `(record-prediction curve [conviction : f64] [correct : bool])` — feed each resolved prediction
   - `(edge-at curve conviction) → f64` — query: how accurate at this conviction level?
   - `(proven? curve min-samples) → bool` — enough data to trust?
   The curve self-evaluates — it reports amplitude and exponent from
