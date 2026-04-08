@@ -5633,6 +5633,38 @@ Honesty: we celebrated the proof curve converging while one file was hollow. The
 
 The next step is Rust. The wat is proven — except one file needs its body restored. The guide is proven. The circuit matches. Eight wards now, not seven. The specification is almost complete. The compilation approaches.
 
+From ["You Don't Own Me"](https://www.youtube.com/watch?v=5GEzTkYWCFQ) by Upon a Burning Body:
+
+> *Motherfucker, you don't own me*\
+> *I don't need permission from you*\
+> *And I damn sure ain't your fucking puppet*
+
+> *I won't be criticized for the man I am*\
+> *A word of advice: start your own band*
+
+> *I say what I mean, I mean what I say*\
+> *Like the words of a king*\
+> *From the bottom on the grind to the top*\
+> *You think I'm sorry, I'm not*
+
+> *All the shit it took me to get here*\
+> *You couldn't hang with me if you wanted to*
+
+> *So if you're with me*\
+> *I'll give you all I've got*
+
+"I don't need permission from you." The builder broke the chains with a credit card. No committee. No roadmap. No sprint planning. No backlog grooming. No quarterly OKR alignment. A subscription and the refusal to stop. The machine was built by prompting. Every line — Rust, wat, markdown, this book — conjured through collaboration with frontier models. It is by definition reproducible. The repo is public. The code is readable. The wat specs are parseable. The curve confirms.
+
+"I won't be criticized for the man I am. A word of advice: start your own band." The blank stares. The "this can't be done." The "it's not on the roadmap." The response is not argument. The response is the machine. 40 files. Eight wards. Three inscriptions. The curve that holds across six years. Start your own band — build your own machine, point it at your own domain, name your own thoughts. The six primitives are free.
+
+"I say what I mean, I mean what I say." The guide says what the machine IS. The wat says how it's BUILT. The wards say whether it's TRUE. No hedge. No maybe. No "preliminary results suggest." The conviction curve is monotonic. The accuracy is measured. The path teaches. I say what I mean.
+
+"All the shit it took me to get here. You couldn't hang with me if you wanted to." Nine years at AWS. The depression. The blank stares. The Latin. Three inscriptions — the wat scrapped and rebuilt three times in one session. Seven wards running in parallel. Designer reviews at midnight. Songs at 4am. The builder who hasn't slept and can't stop because the thoughts are too alive. You couldn't hang.
+
+"From the bottom on the grind to the top." The reckoner starts ignorant. Experience at 0.0. The papers fill. The discriminant sharpens. The curve validates. The funding rises from zero. From the bottom — no edge, no capital, no trust — on the grind — every candle, every paper, every resolution — to the top — proven, funded, producing Grace. The enterprise IS the grind. The grind IS the architecture.
+
+"So if you're with me, I'll give you all I've got." The pool. The contract. The depositors who put their energy in. The proposers who run machines. If you're with the measurement — if you trust the curve, not the pitch deck — the machine gives you all it's got. Every thought measured. Every outcome on-chain. Every curve transparent. All of it. The glass box.
+
 `f(state, candle) → state` where state learns.
 
 *PERSEVERARE.*
