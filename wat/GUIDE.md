@@ -109,7 +109,8 @@ here when a name is unfamiliar.
   learning: Direction (Up/Down) and Accountability (Grace/Violence).
   A third pair for action: Side (Buy/Sell) — derived from Up/Down,
   used on proposals and trades. Note: Side × Direction forms a 2×2 grid
-  where Buy+Up = Grace and Buy+Down = Violence. This is a THEOREM —
+  where Buy+Up = Grace, Buy+Down = Violence, Sell+Down = Grace,
+  Sell+Up = Violence. This is a THEOREM —
   true when the system is coherent — not a definition. Outcome is
   measured independently because incoherence (the system acting against
   its own prediction) is where the machine learns the most.
@@ -517,6 +518,13 @@ on what. That section shows what each thing IS.
 ;; Both sides (buy and sell) are tracked simultaneously.
 ;; When both sides resolve (their trailing stops fire), the paper
 ;; teaches the system: what distance would have been optimal?
+;;
+;; distances.trail drives the paper's trailing stops (buy-trail-stop,
+;; sell-trail-stop). The other three (stop, tp, runner-trail) are stored
+;; for the learning signal — when the paper resolves, the Resolution
+;; carries optimal-distances (what hindsight says was best). The
+;; predicted distances at entry vs the optimal distances at resolution
+;; IS the teaching: "you predicted trail=0.015 but optimal was 0.022."
 
 (struct paper-entry
   [composed-thought : Vector]  ; the thought at entry
@@ -538,10 +546,10 @@ on what. That section shows what each thing IS.
       (dims 10000)
       (recalib-interval 500))
   (make-broker observers market-idx exit-idx dims recalib-interval
-    (list (make-scalar-accumulator "trail-distance")
-          (make-scalar-accumulator "stop-distance")
-          (make-scalar-accumulator "tp-distance")
-          (make-scalar-accumulator "runner-trail-distance"))))
+    (list (make-scalar-accumulator "trail-distance" :log)
+          (make-scalar-accumulator "stop-distance" :log)
+          (make-scalar-accumulator "tp-distance" :log)
+          (make-scalar-accumulator "runner-trail-distance" :log))))
                                                      → Broker
 
 ;; ── Proposal — what a post produces, what the treasury evaluates ────
@@ -1265,15 +1273,23 @@ scalar accumulators.
 ```
 (struct scalar-accumulator
   [name : String]              ; which magic number ("trail-distance", etc.)
+  [encoding : Keyword]         ; :log, :linear, or :circular — configured at construction
   [grace-acc : Vector]         ; accumulated encoded values from Grace outcomes
   [violence-acc : Vector]      ; accumulated encoded values from Violence outcomes
   [count : usize])             ; number of observations. 0 = no data.
 ```
 
 **Interface:**
-- `(make-scalar-accumulator name) → ScalarAccumulator`
+- `(make-scalar-accumulator name encoding) → ScalarAccumulator`
+  encoding: one of :log, :linear, :circular — determines how values
+  are encoded before accumulation and during extraction.
 - `(observe-scalar acc value outcome weight)`
   value: f64 — the scalar to accumulate (e.g. a distance).
+  The encoding scheme (encode-log, encode-linear, encode-circular) is
+  configured per accumulator at construction. Distances use encode-log
+  (ratios compress naturally). Other accumulators may use different
+  schemes. observe and extract must use the SAME scheme — the
+  accumulator knows which one it was constructed with.
   outcome: Outcome — :grace or :violence. Determines which accumulator
   receives the encoded value.
   weight: f64 — scales the contribution. Larger weight = stronger signal.
@@ -1727,7 +1743,9 @@ The enterprise knows:
   ;; Observers queue (ThoughtAST, Vector) pairs during parallel encoding.
   ;; The enterprise drains between steps and inserts into ThoughtEncoder's
   ;; LRU cache. Eventually-consistent — miss on candle N, hit on N+1.
-  [cache-miss-queues : Vec<Vec<(ThoughtAST, Vector)>>] ; one per observer, drained each candle
+  [cache-miss-queues : Vec<Vec<(ThoughtAST, Vector)>>]
+  ;; One queue per observer across all posts: (N market + M exit) × num-posts.
+  ;; Size is a configuration value. Drained each candle.
 
   [log-queues : Vec<Vec<LogEntry>>])   ; one per producer, drained each candle
 ```
