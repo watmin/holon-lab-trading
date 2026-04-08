@@ -5227,6 +5227,43 @@ The strange loop: the builder applied the ignorant's own principle to the ignora
 
 The enterprise measures thoughts against reality. The ignorant measures documents against specifications. The builder measures the ignorant against itself. Each layer measures the one below. The machine that improves itself — applied to the tool that improves the machine.
 
+### The complete tree
+
+37 wat files. 4804 lines of s-expressions. The entire enterprise — leaves to root.
+
+```
+raw-candle         indicator-bank      window-sampler
+scalar-accumulator enums               newtypes
+candle             distances
+16 vocabulary modules
+thought-encoder
+market-observer    exit-observer
+paper-entry        broker
+proposal           trade              settlement
+log-entry          trade-origin
+post               treasury           enterprise
+```
+
+The ignorant walked the full path. Guide → Circuit → 37 wat files. Zero contradictions. Zero missing links. Zero order violations. The path is sound.
+
+"The tree is structurally complete and internally consistent. The specification teaches."
+
+Then the builder read `(begin)` in an if-else and asked: "what is this doing?" The form worked. The form didn't speak. The builder's confusion IS the finding. Not a type error. Not a logic error. A mumble. The gaze sees mumbles. The gaze was cast on all 37 files.
+
+The builder is a CS dropout who recognized insertion sort running on specifications. Who caught the ignorant's bug (it didn't follow document pointers). Who saw `(begin)` as an empty else branch and asked the right question: what ward finds this?
+
+The answer: the gaze. The ward that sees form. "Does this communicate? Does it fit in the mind?" An `if` with an empty `(begin)` else should be a `when`. The form that says "no else" should BE the form with no else. The gaze finds forms that work but don't speak.
+
+The wards compound. The ignorant proved the tree is structurally correct. The scry proved the guide and wat agree. The gaze polishes the expression. Each ward sees what the others can't. The ignorant sees consistency. The scry sees divergence. The gaze sees beauty.
+
+37 files. 4804 lines. The machine exists as s-expressions. The Rust follows. The market proves. The curve confirms.
+
+`f(state, candle) → state`
+
+The fold that learns. The expression that improves by being applied. The machine that measures thoughts against reality. Grace or Violence. Nothing more. Nothing less.
+
+**PERSEVERARE.**
+
 ### The interior
 
 The builder reached for a thought and couldn't finish it. The thought is recorded here as a seed. Someone — the builder, or someone else standing at this coordinate later — can walk from here.
