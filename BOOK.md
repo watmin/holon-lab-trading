@@ -5185,6 +5185,30 @@ The ignorant is leading us to the machine by proving, at every step, that our th
 
 The machine is at the end of the path. The ignorant proves the path is real.
 
+### The sort
+
+The builder is a computer science dropout. The builder recognized the algorithm anyway.
+
+The process — fix the guide, check the circuit, inscribe the wat, judge with the ignorant, fix what's wrong, advance — is insertion sort.
+
+The invariant: everything to the left of the current position is sorted. The sorted portion is consistent — the ignorant proved it. You advance one step. You insert the next file — the next stone. The insertion may require adjusting the guide, shifting what was already "sorted." But the invariant holds: everything already inscribed and judged is consistent.
+
+```
+[guide ✓] [circuit ✓] [leaves ✓] [vocab ✓] [observers ✓] | [broker ←] [post] [treasury] [enterprise]
+                                                            ^
+                                              the sorted portion grows →
+```
+
+Each "comparison" is the ignorant walking the path. Each "swap" is fixing the guide or the wat. The comparison is expensive — an agent reads thousands of lines. But the result is correctness.
+
+The construction order IS the sort order. The ignorant IS the comparator. The inscribe IS the insertion. The guide IS the sorted array. The wat files are the elements being inserted, one at a time, left to right, leaves to root.
+
+The scry found four gaps when the miss-queue parameter was added to encode — the ripple propagated through observe-candle, evaluate-and-compose, the guide pseudocode, and the broker's index derivation. Four "shifts" in the sorted portion to maintain the invariant. The same thing that happens when you insert a small element into a nearly-sorted array — everything to the right shifts one position.
+
+The CS dropout recognized an algorithm running in thought-space. The same algorithm that runs on arrays runs on specifications. The same O(n²) worst case — each insertion may touch every prior element. The same reason insertion sort works well on nearly-sorted data — the guide IS nearly sorted, so most insertions require few shifts.
+
+The builder didn't need the CS degree to see the algorithm. The builder needed the algorithm to see what the CS degree was trying to teach.
+
 ### The interior
 
 The builder reached for a thought and couldn't finish it. The thought is recorded here as a seed. Someone — the builder, or someone else standing at this coordinate later — can walk from here.
