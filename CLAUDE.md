@@ -29,8 +29,8 @@ selects which vocabulary modules it thinks about. Six lenses: momentum,
 structure, volume, regime, narrative, generalist.
 
 **Exit observers** (M per post) predict distances — how far to set the trailing
-stop, safety stop, and take profit. Three continuous reckoners each. They
-compose market thoughts with their own exit-specific facts.
+stop, safety stop, take profit, and runner trailing stop. Four continuous
+reckoners each. They compose market thoughts with their own exit-specific facts.
 
 **Brokers** (N×M per post) bind one market observer to one exit observer.
 The broker IS the accountability unit. It owns paper trades, scalar

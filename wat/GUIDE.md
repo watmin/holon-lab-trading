@@ -1757,11 +1757,10 @@ accountability — to the broker that proposed it.
   Called by the enterprise when enriching TreasurySettlement
   into Settlement.
 - `(post-propagate post slot-idx thought outcome weight direction optimal) → Vec<LogEntry>`
-  direction: Direction. The enterprise routes a settlement back to the post.
-  Returns Propagated log entries. The post passes its OWN observer vecs to
-  broker.propagate — they don't appear on post-propagate's signature because
-  the post owns them (self). The broker.propagate signature takes them
-  explicitly because the broker does NOT own them.
+  direction: Direction. No observer vecs in the signature — the post owns
+  them (self) and passes them to broker.propagate internally.
+  The enterprise routes a settlement back to the post.
+  Returns Propagated log entries.
 
 ---
 
@@ -1820,12 +1819,20 @@ so that on settlement, propagate reaches the right observers.
 - `(settle-triggered treasury current-prices) → (Vec<TreasurySettlement>, Vec<LogEntry>)`
   current-prices: map of (Asset, Asset) → f64 — one price per asset pair.
   Each post provides its latest candle close as its current price.
-  Check all active trades, settle what triggered, return treasury-settlements
-  and TradeSettled log entries.
-  Move capital from reserved back to available. Add residue.
-  The enterprise enriches each TreasurySettlement into a Settlement
-  (derives direction, replays trade's price-history for optimal-distances)
-  before routing to post-propagate.
+  Check all active trades against their stop-levels, settle what triggered.
+  Returns treasury-settlements and TradeSettled log entries.
+  **Three trigger paths per trade phase:**
+  - **:active + safety-stop-hit** → phase becomes :settled-violence.
+    Principal minus loss returns to available. Trade is done.
+  - **:active + take-profit-hit** → phase becomes :principal-recovered.
+    Principal returns to available. Trade continues as a runner —
+    residue rides with the runner-trail-stop. Zero cost basis.
+  - **:runner + runner-trail-hit** (or :principal-recovered + runner-trail-hit)
+    → phase becomes :settled-grace. Residue is permanent gain. Returns to
+    available. Trade is done.
+  Each settled trade produces a TreasurySettlement. The enterprise enriches
+  it into a Settlement (derives direction, replays trade's price-history
+  for optimal-distances) before routing to post-propagate.
 - `(available-capital treasury asset) → f64`
   how much is free to deploy?
 - `(deposit treasury asset amount)`
@@ -1886,13 +1893,14 @@ The enterprise knows:
 ```
 
 **Interface:**
-- `(on-candle enterprise raw-candle ctx) → Vec<LogEntry>`
+- `(on-candle enterprise raw-candle ctx) → (Vec<LogEntry>, Vec<(ThoughtAST, Vector)>)`
   route to the right post, then four steps. ctx flows in from the binary.
   Each step returns its log entries and cache misses as values. The
-  enterprise collects all cache misses and inserts them into the
-  ThoughtEncoder cache after all steps complete. Returns the concatenated
-  log entries from all steps — the binary decides what to do with them
-  (write to DB, print, discard).
+  enterprise collects all cache misses from all steps and returns them
+  alongside the concatenated log entries. The BINARY inserts the misses
+  into ctx's ThoughtEncoder cache between candles — the enterprise cannot,
+  because it does not own ctx. Returns: log entries (for the ledger) and
+  cache misses (for the seam).
 - `(step-resolve-and-propagate enterprise) → Vec<LogEntry>`
   Returns TradeSettled and Propagated log entries. No ctx needed —
   settlement and propagation use pre-existing vectors, no encoding happens.
@@ -1991,7 +1999,7 @@ root of the call tree.
    ```
    for raw-candle in stream:
      if kill-file exists → abort
-     log-entries = on-candle(enterprise, raw-candle, ctx)
+     (log-entries, cache-misses) = on-candle(enterprise, raw-candle, ctx)
      insert cache-misses into ctx.thought-encoder  ; the one seam
      flush log-entries to ledger (in batches)
      if progress-interval → display diagnostics
