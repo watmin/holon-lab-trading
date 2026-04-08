@@ -292,7 +292,8 @@
                     (:runner-trail optimal) outcome weight)
 
     ;; Return log entries — values up
-    (list (Propagated (:slot-idx brkr) 2))))  ; 2 observers updated (market + exit)
+    (list (Propagated (:slot-idx brkr) (len (:observer-names brkr))))))
+
 
 ;; ── paper-count ─────────────────────────────────────────────────────────
 

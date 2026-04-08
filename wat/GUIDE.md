@@ -1734,12 +1734,13 @@ accountability — to the broker that proposed it.
     architecture does not yet consume it. The value is produced and returned
     so the path exists when the broker is ready to use it.
   → register papers → return proposals, market-thoughts, and collected misses
-- `(post-update-triggers post trades market-thoughts ctx) → Vec<(ThoughtAST, Vector)>`
+- `(post-update-triggers post trades market-thoughts ctx) → (Vec<(TradeId, Levels)>, Vec<(ThoughtAST, Vector)>)`
   trades: Vec<(TradeId, Trade)> — treasury's active trades for this post.
   market-thoughts: Vec<Vector> — this candle's encoded thoughts (one per
-  market observer). Returns cache misses from exit observer composition.
-  The post composes with exit observers for distances. Each trade's
-  trailing stop adjusts to the current market context.
+  market observer). Returns level updates (TradeId + new Levels for the
+  enterprise to write back to the treasury) AND cache misses from exit
+  observer composition. The post composes with exit observers for fresh
+  distances, converts to Levels, and returns both. Values up.
 - `(current-price post) → f64`
   the close of the last candle in the post's candle-window.
   The enterprise calls this per post to build current-prices for the treasury.
@@ -1927,10 +1928,9 @@ The enterprise knows:
 - `(step-update-triggers enterprise post-idx market-thoughts ctx) → Vec<(ThoughtAST, Vector)>`
   the enterprise queries the treasury for active trades belonging to this
   post, then calls post-update-triggers(post, trades, market-thoughts, ctx).
-  The post composes each trade's market thought with exit observers,
-  queries fresh distances, computes new trailing stop levels. Returns
-  cache misses from exit observer composition. The enterprise writes the
-  new values back to the treasury's trade records and collects the misses.
+  The post returns `(Vec<(TradeId, Levels)>, Vec<misses>)` — level updates
+  and cache misses. The enterprise writes the level updates back to the
+  treasury via update-trade-stops, and collects the misses.
   This is step 3c — after tick and propagate.
 - `(step-collect-fund enterprise) → Vec<LogEntry>`
   treasury funds or rejects all proposals, returns log entries, drains
