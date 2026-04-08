@@ -802,8 +802,7 @@ every candle.
   ;; Stochastic cross delta (stochastic.wat)
   [stoch-cross-delta : f64]    ; (%K - %D) change from prev candle — signed
   ;; Price action (pre-computed by IndicatorBank — price-action.wat)
-  [inside-bar : f64]           ; compression ratio — current range / prev range. < 1 = inside
-  [outside-bar : f64]          ; expansion ratio — current range / prev range. > 1 = outside
+  [range-ratio : f64]          ; current range / prev range. < 1 = compression, > 1 = expansion
   [gap : f64]                  ; signed — (open - prev close) / prev close
   [consecutive-up : f64]       ; run count of consecutive bullish closes
   [consecutive-down : f64]     ; run count of consecutive bearish closes
@@ -978,7 +977,7 @@ The indicator bank — composed from the streaming primitives:
   ;; Stochastic cross delta — prev K-D spread
   [prev-stoch-kd : f64]        ; (stoch-k - stoch-d) from previous candle
   ;; Price action — state for price-action.wat fields
-  [prev-range : f64]           ; previous candle range (high - low) for inside/outside bar
+  [prev-range : f64]           ; previous candle range (high - low) for range-ratio
   [consecutive-up-count : usize]  ; running count of consecutive bullish closes
   [consecutive-down-count : usize] ; running count of consecutive bearish closes
   ;; Timeframe agreement — prev returns for direction comparison
@@ -1062,7 +1061,7 @@ Three domains. Each domain has scoped subfiles.
   - `fibonacci.wat` — retracement level detection
   - `keltner.wat` — channel position, BB position, squeeze
   - `momentum.wat` — CCI zones
-  - `price-action.wat` — inside/outside bars, gaps, consecutive runs
+  - `price-action.wat` — range-ratio, gaps, consecutive runs
   - `timeframe.wat` — 1h/4h structure + narrative + inter-timeframe agreement
 
 - **exit/** — whether CONDITIONS favor trading. Distance signal. Exit observers use these.

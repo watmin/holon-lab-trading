@@ -120,8 +120,7 @@
   [stoch-cross-delta : f64]    ; (%K - %D) change from prev candle — signed
 
   ;; Price action (pre-computed by IndicatorBank — price-action.wat)
-  [inside-bar : f64]           ; compression ratio — current range / prev range. < 1 = inside
-  [outside-bar : f64]          ; expansion ratio — current range / prev range. > 1 = outside
+  [range-ratio : f64]          ; current range / prev range. < 1 = compression, > 1 = expansion
   [gap : f64]                  ; signed — (open - prev close) / prev close
   [consecutive-up : f64]       ; run count of consecutive bullish closes
   [consecutive-down : f64]     ; run count of consecutive bearish closes

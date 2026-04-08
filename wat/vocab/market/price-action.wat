@@ -50,16 +50,10 @@
                (Linear "candle-dir"
                  (signum (- (:close candle) (:open candle))) 1.0)))
 
-             ;; Inside bar — compression ratio
-             (ib (:inside-bar candle))
-             (facts (if (> ib 0.0)
-                      (append facts (list (Log "inside-bar" ib)))
-                      facts))
-
-             ;; Outside bar — expansion ratio
-             (ob (:outside-bar candle))
-             (facts (if (> ob 0.0)
-                      (append facts (list (Log "outside-bar" ob)))
+             ;; Range ratio — one scalar, one atom. < 1 = compression, > 1 = expansion
+             (rr (:range-ratio candle))
+             (facts (if (> rr 0.0)
+                      (append facts (list (Log "range-ratio" rr)))
                       facts))
 
              ;; Gap — signed distance

@@ -1526,11 +1526,8 @@
          ;; ── 15. Price action ───────────────────────────────────────────
          (candle-range (- high low))
 
-         ;; Inside/outside bar — ratio of current range to previous range
-         (inside-bar  (if (> (:prev-range bank) 1e-10)
-                        (/ candle-range (:prev-range bank))
-                        1.0))
-         (outside-bar (if (> (:prev-range bank) 1e-10)
+         ;; Range ratio — current range / prev range. One scalar.
+         (range-ratio (if (> (:prev-range bank) 1e-10)
                         (/ candle-range (:prev-range bank))
                         1.0))
          (_ (set! (:prev-range bank) candle-range))
@@ -1614,7 +1611,7 @@
       ;; Cross deltas
       tk-cross-delta stoch-cross-delta
       ;; Price action
-      inside-bar outside-bar gap consecutive-up consecutive-down
+      range-ratio gap consecutive-up consecutive-down
       ;; Timeframe agreement
       tf-agreement
       ;; Time
