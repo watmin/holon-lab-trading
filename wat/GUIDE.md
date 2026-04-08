@@ -550,8 +550,8 @@ on what. That section shows what each thing IS.
 ;; ── Broker — depends on: Reckoner :discrete, ScalarAccumulator ──────
 
 (let ((observers '("momentum" "volatility"))
-      (market-idx 0)           ; resolved by the post from "momentum"
-      (exit-idx 0)             ; resolved by the post from "volatility"
+      (slot-idx 0)             ; position in the N×M grid, assigned by the post
+      (exit-count 4)           ; M — number of exit observers
       (dims 10000)
       (recalib-interval 500))
   (make-broker observers slot-idx exit-count dims recalib-interval
@@ -1586,10 +1586,10 @@ runtime:       frozen map (read-only) → slot-idx → &mut broker (disjoint)
 **Interface:**
 - `(make-broker observers slot-idx exit-count dims recalib-interval scalar-accums) → Broker`
   observers: list of lens names (e.g. '("momentum" "volatility")).
-  market-idx: usize — resolved by the post from the market lens name.
-  exit-idx: usize — resolved by the post from the exit lens name.
-  The post constructs all brokers, resolving names to indices at
-  construction time. The indices are frozen forever.
+  slot-idx: usize — the broker's position in the N×M grid. Assigned by
+  the post at construction. THE identity. market-idx and exit-idx are
+  derived: market-idx = slot-idx / exit-count, exit-idx = slot-idx mod exit-count.
+  exit-count: usize — M, the number of exit observers.
   scalar-accums: Vec<ScalarAccumulator>.
 - `(propose broker composed) → Prediction`
   noise update → strip noise → predict Grace/Violence
@@ -1598,10 +1598,15 @@ runtime:       frozen map (read-only) → slot-idx → &mut broker (disjoint)
   funds proportionally. More edge, more capital.
 - `(register-paper broker composed entry-price entry-atr distances)`
   create a paper entry — every candle, every broker.
-  distances: (trail, stop, tp) from the exit observer.
+  distances: Distances (all four: trail, stop, tp, runner-trail) from the exit observer.
 - `(tick-papers broker current-price) → Vec<Resolution>`
   tick all papers, resolve completed. Returns resolution facts.
-  The broker knows its observer indices — it doesn't need them passed in.
+  **Paper optimal-distances:** papers don't carry price-history. They
+  derive optimal distances from their tracked extremes (MFE/MAE):
+  buy-extreme and sell-extreme relative to entry-price. This is a
+  simpler approximation than the full replay used for real trades.
+  The objective is the same (maximize residue) but the data is limited
+  to what the paper tracked. The wat implements the approximation.
 - `(propagate broker thought outcome weight direction optimal market-observers exit-observers)`
   thought: Vector. outcome: Outcome. weight: f64 — how much value was at
   stake. A $500 Grace teaches harder than a $5 Grace.
