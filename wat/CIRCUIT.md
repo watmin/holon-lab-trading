@@ -172,7 +172,7 @@ graph TD
     SA -->|empty| DEF[default crutch]
 ```
 
-For each magic number (trail, stop, tp): try the contextual answer first
+For each distance (trail, stop, tp, runner-trail): try the contextual answer first
 (reckoner — "for THIS thought, what distance?"). If inexperienced, try the
 global answer (scalar accumulator — "what does Grace prefer for this pair
 overall?"). If empty, use the crutch (the default value from construction).

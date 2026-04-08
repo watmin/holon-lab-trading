@@ -21,11 +21,11 @@ satisfied before the consumers. The order IS the construction order
 from the guide.
 
 ```
-;; ── Leaves — depend on nothing ──────────────────────────────
+;; ── Leaves — depend on nothing (or only enums) ─────────────
 raw-candle.wat              ; Asset, RawCandle
 indicator-bank.wat          ; IndicatorBank (streaming primitives inside)
 window-sampler.wat          ; WindowSampler
-scalar-accumulator.wat      ; ScalarAccumulator
+scalar-accumulator.wat      ; ScalarAccumulator (requires Outcome from enums)
 
 ;; ── Candle — depends on: indicator-bank ─────────────────────
 candle.wat                  ; Candle struct (the output of tick)
