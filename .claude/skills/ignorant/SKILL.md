@@ -104,9 +104,13 @@ Write as many files as you need — notes, inventories, cross-references.
 Use the Write tool (not Bash) to create files there. The directory is
 yours. You decide what to track.
 
-**First pass — read and note.** Read the document top to bottom. Write
-to your scratch files: every struct (name, fields, types), every
-interface (function, params, return type), every definition.
+**First pass — read and note.** Read the document top to bottom. When
+the document references another file as a source of truth or dependency
+(e.g. "defined in LANGUAGE.md", "see CIRCUIT.md"), FOLLOW THE POINTER
+and read that file too. A real reader follows references. The ignorant
+is a real reader. Write to your scratch files: every struct (name,
+fields, types), every interface (function, params, return type), every
+definition.
 
 **Second pass — mechanical type audit.** Read your notes back. For
 each type used in an interface return or parameter: does it match
