@@ -701,6 +701,8 @@
 
 ;; ════════════════════════════════════════════════════════════════════════
 ;; Linear regression slope — general numeric utility
+;; rune:sever(co-location) — only indicator-bank uses this today (obv-step!,
+;; compute-dfa). Extract to a shared numeric module when a sibling arrives.
 ;; ════════════════════════════════════════════════════════════════════════
 
 (define (linreg-slope [vals : List<f64>])
