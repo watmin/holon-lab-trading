@@ -68,7 +68,7 @@ These are NOT specified in this tree. They are provided by holon-rs.
   accumulated data. That is measurement, not learning.
   **Resolved: the curve communicates via one scalar.** The producer
   calls `edge-at(conviction)` and attaches the result to its message.
-  The consumer encodes it as a fact: `(Linear "producer-edge" edge 1.0)`.
+  The consumer encodes it as a scalar fact: `(bind (atom "producer-edge") (encode-linear edge 1.0))`.
   The consumer's reckoner learns whether the edge predicts Grace.
   No meta-journal. No curve snapshot. No new primitives. One f64.
   The problem was never "how do I learn a curve" — it was "how do I
@@ -104,6 +104,8 @@ Each definition can only reference definitions above it.
 If you want the shapes first, skip to Forward declarations and return
 here when a name is unfamiliar.
 
+#### Labels and measurement
+
 - **Up / Down** — direction labels. The market observer predicts: the price
   will go up or the price will go down. That's the prediction. When a trade
   resolves, the actual direction is routed back to the market observer.
@@ -125,6 +127,8 @@ here when a name is unfamiliar.
   true when the system is coherent — not a definition. Outcome is
   measured independently because incoherence (the system acting against
   its own prediction) is where the machine learns the most.
+
+#### Data and encoding
 
 - **Candle** — one period of market data. Raw: six data values (open, high,
   low, close, volume, timestamp) plus an asset pair for routing (source-asset,
@@ -169,6 +173,8 @@ here when a name is unfamiliar.
   A "composed thought" is a market thought bundled with exit facts —
   it appears on PaperEntry, Proposal, TradeOrigin, Resolution, and
   TreasurySettlement. Same vector, stashed at different lifecycle points.
+
+#### Observers and learning
 
 - **Lens** — which vocabulary subset an observer thinks through. A momentum
   lens selects momentum-related facts. A regime lens selects regime-related
@@ -224,6 +230,8 @@ here when a name is unfamiliar.
   "Proof curve" and "curve" are the same thing — one is the primitive,
   the other is its name when applied.
 
+#### Trade lifecycle
+
 - **Broker** — binds a set of observers as a team. Any number — two today
   (market + exit), three tomorrow (market + exit + risk). The accountability
   primitive. It measures how successful the team is — Grace or Violence.
@@ -271,6 +279,8 @@ here when a name is unfamiliar.
   the observers that need to learn. Grace/Violence to the broker's
   own record. The actual direction (Up/Down) to the market observer.
   Optimal distance to the exit observer.
+
+#### Infrastructure
 
 - **Post** — a trading post. The NYSE had specialist posts — each one
   handled one security, had its own specialists, its own order book.
@@ -322,17 +332,23 @@ here when a name is unfamiliar.
 - **Engram gating** — after a recalibration with good accuracy, snapshot
   the discriminant as a "good state." An OnlineSubspace learns what good
   discriminants look like. Future recalibrations are checked against this
-  memory — does the new discriminant match a known good state?
+  memory — does the new discriminant match a known good state? Used by
+  any entity that has a reckoner — market observers gate their direction
+  predictions, brokers gate their Grace/Violence predictions. Same
+  mechanism, same four fields, different reckoner, different purpose.
 
 - **ctx** — the immutable world. Lowercase intentionally — ctx is a parameter
   that flows through function calls, not a type you instantiate like Post
-  or Treasury. Born at startup. Never changes. Contains
-  the ThoughtEncoder (which contains the VectorManager). Also dims,
-  recalib-interval, and any other constants decided at startup. ctx flows
-  in as a parameter — the enterprise receives it, posts receive it,
-  observers receive it. Nobody owns it. Everybody borrows it. Immutable
-  config is separate from mutable state. That's not duplication — that's
-  honesty.
+  or Treasury. Born at startup. Contains the ThoughtEncoder (which
+  contains the VectorManager), dims, recalib-interval. ctx flows in as a
+  parameter — the enterprise receives it, posts receive it, observers
+  receive it. Nobody owns it. Everybody borrows it. Immutable config is
+  separate from mutable state. That's not duplication — that's honesty.
+  **The one seam:** the ThoughtEncoder's composition cache is mutable.
+  During encoding (parallel), the cache is read-only — misses are returned
+  as values. Between candles (sequential), the enterprise inserts collected
+  misses into the cache. ctx is immutable DURING a candle. The cache
+  updates BETWEEN candles. The seam is bounded by the fold boundary.
 
 - **encode-count** — the candle counter. How many candles the post has
   processed. The window sampler uses it to determine window size each candle.
@@ -397,8 +413,9 @@ on what. That section shows what each thing IS.
       (max-window 2016))
   (make-window-sampler seed min-window max-window))  → WindowSampler
 
-(let ((name "trail-distance"))
-  (make-scalar-accumulator name))                    → ScalarAccumulator
+(let ((name "trail-distance")
+      (encoding :log))
+  (make-scalar-accumulator name encoding))           → ScalarAccumulator
 
 ;; ── Candle — produced by indicator bank from raw candle ─────────────
 
@@ -550,6 +567,8 @@ on what. That section shows what each thing IS.
   [sell-resolved : bool])      ; sell side's stop fired
 
 ;; ── Broker — depends on: Reckoner :discrete, ScalarAccumulator ──────
+;; :log below is a ScalarEncoding variant (defined in ScalarAccumulator section).
+;; It means: encode values with encode-log (ratios compress naturally).
 
 (let ((observers '("momentum" "volatility"))
       (slot-idx 0)             ; position in the N×M grid, assigned by the post
@@ -575,10 +594,11 @@ on what. That section shows what each thing IS.
   [prediction : Prediction]    ; :discrete (Grace/Violence) — from the broker's
                                ; reckoner, NOT the market observer's Up/Down prediction.
   [distances : Distances]      ; from the exit observer
-  [funding : f64]              ; the broker's edge. [0.0, 1.0]. Raw accuracy
+  [edge : f64]                 ; the broker's edge. [0.0, 1.0]. Raw accuracy
                                ; from the broker's curve at its current conviction.
                                ; This IS the edge from the message protocol.
-                               ; The treasury sorts proposals by this value.
+                               ; The treasury sorts proposals by this value and
+                               ; funds proportionally — more edge, more capital.
   [side : Side]                ; :buy or :sell — trading action, from the market observer's
                                ; Up/Down prediction. Up → :buy, Down → :sell.
                                ; Distinct from "direction" (:up/:down) which describes
@@ -704,10 +724,12 @@ on what. That section shows what each thing IS.
       (initial-balances (map-of (make-asset "USDC") 10000.0)))
   (make-treasury denomination initial-balances))     → Treasury
 
-;; ── Ctx — the immutable world. Born at startup. Never changes. ───────
+;; ── Ctx — the immutable world. Born at startup. ────────────────────
+;; Immutable DURING each candle. The ThoughtEncoder's composition cache
+;; is the one seam — updated BETWEEN candles from collected misses.
 
 (struct ctx              ; this is the complete set — three fields, nothing else
-  [thought-encoder : ThoughtEncoder] ; contains VectorManager
+  [thought-encoder : ThoughtEncoder] ; contains VectorManager + composition cache (the seam)
   [dims : usize]                     ; vector dimensionality
   [recalib-interval : usize])        ; observations between recalibrations
 
@@ -1601,7 +1623,7 @@ runtime:       frozen map (read-only) → slot-idx → &mut broker (disjoint)
   scalar-accums: Vec<ScalarAccumulator>.
 - `(propose broker composed) → Prediction`
   noise update → strip noise → predict Grace/Violence
-- `(funding broker) → f64` — how much edge? The curve reads the broker's
+- `(edge broker) → f64` — how much edge? The curve reads the broker's
   accuracy at its typical conviction level. 0.0 = no edge. The treasury
   funds proportionally. More edge, more capital.
 - `(register-paper broker composed entry-price entry-atr distances)`
@@ -1686,16 +1708,22 @@ accountability — to the broker that proposed it.
 - `(post-on-candle post raw-candle ctx) → (Vec<Proposal>, Vec<Vector>, Vec<(ThoughtAST, Vector)>)`
   Returns proposals for the treasury, market-thoughts for step 3c, AND all
   collected cache misses from encoding. No queues — misses are values.
-  tick indicators → push window → market observers observe-candle (→ thoughts + predictions + misses)
+  tick indicators → push window → market observers observe-candle (→ thoughts + predictions + edge + misses)
   → exit observers encode-exit-facts then evaluate-and-compose(market-thought, exit-fact-asts, ctx) → (composed + misses)
   → exit observers recommended-distances(composed, broker.scalar-accums) → Distances
     (the POST passes the broker's scalar accumulators to the exit observer —
     the post has access to both because it owns both)
   → brokers propose(composed) → returns Prediction (Grace/Violence)
   → the POST assembles each Proposal from: composed-thought, broker's
-    Prediction, distances, broker.funding(), post-idx, broker-slot-idx.
+    Prediction, distances, broker.edge(), post-idx, broker-slot-idx.
     Side derivation: the market observer's Prediction has scores for "Up"
     and "Down". The winning label maps to Side: "Up" → :buy, "Down" → :sell.
+    The market observer's edge (curve-valid, the third return value) is
+    available to the broker as a fact per the message protocol — the broker
+    MAY encode it as `(bind (atom "market-edge") (encode-linear edge 1.0))`
+    in its composed thought. This is a coordinate for later — the current
+    architecture does not yet consume it. The value is produced and returned
+    so the path exists when the broker is ready to use it.
   → register papers → return proposals, market-thoughts, and collected misses
 - `(post-update-triggers post trades market-thoughts ctx) → Vec<(ThoughtAST, Vector)>`
   trades: Vec<(TradeId, Trade)> — treasury's active trades for this post.
@@ -1775,7 +1803,7 @@ so that on settlement, propagate reaches the right observers.
   a post submits a proposal for the treasury to evaluate.
   The proposal carries post-idx and broker-slot-idx inside it.
 - `(fund-proposals treasury) → Vec<LogEntry>`
-  evaluate all proposals, sorted by broker funding (the curve's edge measure).
+  evaluate all proposals, sorted by proposal edge (the curve's accuracy measure).
   Fund the top N that fit in available capital. Reject the rest.
   Returns ProposalFunded and ProposalRejected log entries.
   For each funded proposal: move capital from available to reserved,
@@ -1964,7 +1992,7 @@ Step 3c: UPDATE TRIGGERS (sequential)
   posts compute new stop levels. Treasury applies new values to trades.
 
 Step 4: COLLECT + FUND
-  treasury reads:   proposals, available capital, broker funding levels
+  treasury reads:   proposals, available capital, broker edge levels
   treasury produces: funded trades (move capital: available → reserved)
   treasury drains:  proposals → empty
 ```
