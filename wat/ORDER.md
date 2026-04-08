@@ -21,10 +21,13 @@ satisfied before the consumers. The order IS the construction order
 from the guide.
 
 ```
-;; ── Leaves — depend on nothing (or only enums) ─────────────
+;; ── Leaves — depend on nothing ──────────────────────────────
 raw-candle.wat              ; Asset, RawCandle
 indicator-bank.wat          ; IndicatorBank (streaming primitives inside)
 window-sampler.wat          ; WindowSampler
+enums.wat                   ; Side, Direction, Outcome, TradePhase,
+                            ; reckoner-config, prediction, ScalarEncoding
+newtypes.wat                ; TradeId
 scalar-accumulator.wat      ; ScalarAccumulator (requires Outcome from enums)
 
 ;; ── Candle — depends on: indicator-bank ─────────────────────
@@ -50,10 +53,6 @@ vocab/exit/timing.wat
 
 ;; ── ThoughtEncoder — depends on: vocabulary ─────────────────
 thought-encoder.wat         ; ThoughtAST enum, ThoughtEncoder struct + encode
-
-;; ── Enums and newtypes — depend on nothing ──────────────────
-enums.wat                   ; Side, Direction, Outcome, TradePhase, reckoner-config, prediction
-newtypes.wat                ; TradeId
 
 ;; ── Distances and Levels — depend on nothing ────────────────
 distances.wat               ; Distances, Levels

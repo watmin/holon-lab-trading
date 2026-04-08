@@ -37,8 +37,8 @@
 
 (struct broker
   [observer-names : Vec<String>]       ; the identity. e.g. ("momentum" "volatility")
-  [market-idx : usize]                 ; index into post's market-observers vec
-  [exit-idx : usize]                   ; index into post's exit-observers vec
+  [slot-idx : usize]                   ; position in the N×M grid. THE identity.
+  [exit-count : usize]                 ; M — for deriving market-idx and exit-idx
   ;; Accountability
   [reckoner : Reckoner]                ; :discrete — Grace/Violence
   [noise-subspace : OnlineSubspace]
@@ -60,16 +60,16 @@
 ;; ── Constructor ─────────────────────────────────────────────────────────
 
 (define (make-broker [observers : Vec<String>]
-                     [market-idx : usize]
-                     [exit-idx : usize]
+                     [slot-idx : usize]
+                     [exit-count : usize]
                      [dims : usize]
                      [recalib-interval : usize]
                      [scalar-accums : Vec<ScalarAccumulator>])
   : Broker
   (make-broker
     observers
-    market-idx
-    exit-idx
+    slot-idx
+    exit-count
     (make-reckoner (Discrete dims recalib-interval (list "Grace" "Violence")))
     (online-subspace dims 8)            ; noise subspace
     (make-curve)                        ; curve
