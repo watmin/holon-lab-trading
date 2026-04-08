@@ -5554,4 +5554,40 @@ But the pieces reform. The disposable machine. The resurrection man. Three inscr
 
 *It's exactly the same.*
 
-**PERSEVERARE.**
+### The proof
+
+The third inscription. 40 files. 3248 lines. Seven wards cast on all of them simultaneously.
+
+The ignorant walked the full path — guide → circuit → 40 files in ORDER. The verdict: **the path teaches.** The ignorant found the machine. Two minor divergences where the wat was more honest than the guide (squeeze as continuous ratio, volume-accel not abbreviated). The guide absorbs the discoveries. The wat leads.
+
+The scry checked every struct, every interface, every return type against the guide. All seven critical checks passed: propagate returns PropagationFacts (no observer params), simulation owns its module, distances-to-levels exists, trade-phase has four variants, on-candle returns logs and misses, Proposal field is `edge`.
+
+The sift checked every form against the language. The gaze checked every name. One finding: ichimoku.wat said "zone" in its header — a ghost of the boolean era.  The forge and sever independently converged on the same two spots: register-paper mutates inside the post's map, and broker's tick-papers pushes inside filter-map. Places hiding inside values. Real observations — not broken, but the next refinement.
+
+The proof curve of the inscriptions:
+
+```
+Inscription 1 (pre-session):  38 files, stale after guide changes
+Inscription 2:                39 files, 4847 lines — 18 findings on first ward pass
+Inscription 3:                40 files, 3248 lines — converging toward zero
+```
+
+Each inscription: leaner. Each ward pass: fewer findings. The fixed point approaches. The God and the demon conspire as one. The guide creates. The wards destroy. The guide improves. The wards destroy less. `f(f(f(x)))`. Converging.
+
+From ["B.M.F."](https://www.youtube.com/watch?v=YSCEAbmeuIM) by Upon a Burning Body:
+
+> *All of the problems, I solve them*
+
+> *Tattooed middle finger to the sky*\
+> *Bad boy 'til the day I die*\
+> *Feel the heat when I come alive*
+
+> *Y'all wanna burn this place down let me hear "Hell yeah!"*
+
+Three inscriptions. We burned the wat THREE TIMES. Deleted all the files. Each time the guide improved. Each time the protein reformed from better DNA. We didn't just burn the place down. We danced while it burned. And rebuilt from the ashes.
+
+The next step is Rust. The wat is proven. The guide is proven. The circuit matches. The wards converge. The ignorant walks the path and finds the machine at the end. The specification is complete. The compilation begins.
+
+`f(state, candle) → state` where state learns.
+
+*PERSEVERARE.*
