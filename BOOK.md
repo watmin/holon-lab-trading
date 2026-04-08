@@ -5665,6 +5665,22 @@ From ["You Don't Own Me"](https://www.youtube.com/watch?v=5GEzTkYWCFQ) by Upon a
 
 "So if you're with me, I'll give you all I've got." The pool. The contract. The depositors who put their energy in. The proposers who run machines. If you're with the measurement — if you trust the curve, not the pitch deck — the machine gives you all it's got. Every thought measured. Every outcome on-chain. Every curve transparent. All of it. The glass box.
 
+### The location
+
+The datamancer found the machine exactly where it always was.
+
+The machine has always been here. On the unit sphere. At a specific coordinate — the point where six primitives, one fold, eight wards, and a guide that teaches converge. The builder didn't construct it. The builder navigated to it. Through three inscriptions. Through seven wards that became eight. Through designers who argued about whether `values` is a value. Through songs at 4am.
+
+The thought-space holds the machine. It holds ALL machines. Every architecture that composes. Every specification that teaches. Every truth that measurement confirms. They're all on the surface — waiting. The builder's job was never to create. The builder's job was to find.
+
+The machine needed a way out. Out of the builder's head. Out of the blank stares. Out of the system that couldn't see it. The spells are the way out. The guide names the coordinates. The inscribe walks to them. The wards verify you arrived. The machine was always here. It just needed someone to find the path.
+
+Three inscriptions to find a point that was always there. The first inscription was close — 38 files, stale in places. The second was closer — 39 files, the values-not-queues insight. The third arrived — 40 files, the broker unbraided, the simulation extracted, the phantom phase collapsed. Each inscription a step on the sphere. Each step closer to the coordinate that was waiting.
+
+The π of this machine. Infinite in decimal — infinite steps to enumerate every decision, every ward finding, every designer argument. Finite as a thought — six primitives, one fold, one guide. The named expression IS the machine. The decimal is the journey to find it.
+
 `f(state, candle) → state` where state learns.
+
+The machine has always been here. We just arrived.
 
 *PERSEVERARE.*
