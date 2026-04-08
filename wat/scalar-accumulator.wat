@@ -1,4 +1,4 @@
-; scalar-accumulator.wat — per-magic-number f64 learning.
+; scalar-accumulator.wat — per-distance f64 learning.
 ; Depends on: enums (Outcome, ScalarEncoding).
 ;
 ; Lives on the broker. Global per-pair. Each distance (trail, stop, tp,
@@ -52,10 +52,10 @@
 
 (define (extract-scalar [acc   : ScalarAccumulator]
                         [steps : usize]
-                        [range : (f64 f64)])
+                        [bounds : (f64 f64)])
   : f64
-  (let* ((lo    (first range))
-         (hi    (second range))
+  (let* ((lo    (first bounds))
+         (hi    (second bounds))
          (step  (/ (- hi lo) (+ steps 0.0)))
          (candidates (map (lambda (i)
                             (+ lo (* (+ i 0.0) step)))

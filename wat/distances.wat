@@ -7,8 +7,6 @@
 ;; Observers think in Distances. Trades execute at Levels. Different types
 ;; because they are different concepts with the same four fields.
 
-(require primitives)
-
 ;; ── Distances — percentages from the exit observer ───────────────────
 (struct distances
   [trail : f64]                ; trailing stop distance (percentage of price)

@@ -726,7 +726,7 @@
 (define (compute-roc [buf : RingBuffer] [close : f64] [period : usize])
   : f64
   ; (close - close_N_ago) / close_N_ago. 0.0 if not enough data.
-  (if (< (ring-len buf) period)
+  (if (<= (ring-len buf) period)
     0.0
     (let* ((old (ring-get-from-end buf period)))
       (if (< (abs old) 1e-10) 0.0 (/ (- close old) old)))))
