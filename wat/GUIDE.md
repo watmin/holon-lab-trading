@@ -1925,9 +1925,9 @@ The outer shell. The driver of the fold. The binary creates the world,
 feeds candles, writes the ledger, and displays progress. It does not
 think. It does not predict. It does not learn. It orchestrates.
 
-The binary is NOT a wat file — it is Rust. But the guide specifies its
-shape because every other entity's interface is designed to be called
-from here. The binary is the root of the call tree.
+The binary has a wat file like everything else — `bin/enterprise.wat`.
+The wat specifies the shape. The Rust implements it. The binary is the
+root of the call tree.
 
 **Responsibilities:**
 
