@@ -12,7 +12,7 @@
 
 ;; Interface
 
-(define (new-indicator-bank)
+(define (make-indicator-bank)
   ; → IndicatorBank
   ; Creates a fresh indicator bank with zeroed accumulators.
   (make-indicator-bank))

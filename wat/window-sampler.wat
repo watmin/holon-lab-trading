@@ -15,7 +15,7 @@
 
 ;; Interface
 
-(define (new-window-sampler [seed : usize]
+(define (make-window-sampler [seed : usize]
                             [min  : usize]
                             [max  : usize])
   : WindowSampler

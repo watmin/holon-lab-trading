@@ -744,9 +744,13 @@ every candle.
   [plus-di : f64] [minus-di : f64] [adx : f64] [atr : f64] [atr-r : f64]
   ;; Stochastic, CCI, MFI, OBV
   [stoch-k : f64] [stoch-d : f64] [cci : f64] [mfi : f64] [obv : f64]
-  ;; Keltner, squeeze
+  ;; Keltner (computed from ema20 + atr on the bank), squeeze
   [kelt-upper : f64] [kelt-lower : f64] [kelt-pos : f64]
   [squeeze : bool]           ; Bollinger inside Keltner
+  ;; Rate of Change
+  [roc-1 : f64] [roc-3 : f64] [roc-6 : f64] [roc-12 : f64]
+  ;; Trend consistency
+  [trend-consistency-24 : f64]  ; fraction of last 24 candles where close > prev close
   ;; Range position
   [range-pos-12 : f64] [range-pos-24 : f64] [range-pos-48 : f64]
   ;; Multi-timeframe
@@ -823,7 +827,8 @@ The streaming primitives — the building blocks of indicator state:
 
 (struct stoch-state
   [high-buf : RingBuffer]
-  [low-buf  : RingBuffer])
+  [low-buf  : RingBuffer]
+  [k-buf    : RingBuffer])  ; %K history for computing %D (3-period SMA of %K)
 
 (struct cci-state
   [tp-buf : RingBuffer])
@@ -854,7 +859,7 @@ The indicator bank — composed from the streaming primitives:
   [sma20  : SmaState]
   [sma50  : SmaState]
   [sma200 : SmaState]
-  [ema20  : EmaState]
+  [ema20  : EmaState]         ; internal — for Keltner channel computation
   ;; Bollinger
   [bb-stddev : RollingStddev]
   ;; Oscillators
@@ -866,9 +871,9 @@ The indicator bank — composed from the streaming primitives:
   [cci  : CciState]
   [mfi  : MfiState]
   [obv  : ObvState]
-  [volume-sma20 : SmaState]
+  [volume-sma20 : SmaState]   ; internal — for volume ratio computation in flow vocab
   ;; ROC
-  [roc-buf : RingBuffer]
+  [roc-buf : RingBuffer]      ; 12-period close buffer — ROC 1/3/6/12 index into this
   ;; Range position
   [range-high-12 : RingBuffer]  [range-low-12 : RingBuffer]
   [range-high-24 : RingBuffer]  [range-low-24 : RingBuffer]
@@ -876,7 +881,7 @@ The indicator bank — composed from the streaming primitives:
   ;; Trend consistency
   [trend-buf-24 : RingBuffer]
   ;; ATR history
-  [atr-history : RingBuffer]
+  [atr-history : RingBuffer]  ; for computing atr-r (ATR ratio) on Candle
   ;; Multi-timeframe
   [tf-1h-buf  : RingBuffer]  [tf-1h-high : RingBuffer]  [tf-1h-low : RingBuffer]
   [tf-4h-buf  : RingBuffer]  [tf-4h-high : RingBuffer]  [tf-4h-low : RingBuffer]
@@ -889,7 +894,7 @@ The indicator bank — composed from the streaming primitives:
 ```
 
 **Interface:**
-- `(new-indicator-bank) → IndicatorBank`
+- `(make-indicator-bank) → IndicatorBank`
 - `(tick indicator-bank raw-candle) → Candle`
 
 ---
@@ -916,7 +921,7 @@ The market observer adjusts its sampler.
 ```
 
 **Interface:**
-- `(new-window-sampler seed min max) → WindowSampler`
+- `(make-window-sampler seed min max) → WindowSampler`
 - `(sample window-sampler encode-count) → usize`
 
 **Note:** min-window and max-window are crutches. The observer needs them
@@ -1264,7 +1269,7 @@ scalar accumulators.
 ```
 
 **Interface:**
-- `(new-scalar-accumulator name) → ScalarAccumulator`
+- `(make-scalar-accumulator name) → ScalarAccumulator`
 - `(observe-scalar acc value outcome weight)`
   value: f64 — the scalar to accumulate (e.g. a distance).
   outcome: Outcome — :grace or :violence. Determines which accumulator

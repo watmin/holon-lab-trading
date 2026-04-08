@@ -18,7 +18,7 @@
 
 ;; Interface
 
-(define (new-scalar-accumulator [name : String])
+(define (make-scalar-accumulator [name : String])
   : ScalarAccumulator
   ; grace-acc and violence-acc start as zero vectors.
   ; count starts at 0.
