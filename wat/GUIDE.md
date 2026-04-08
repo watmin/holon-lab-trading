@@ -252,13 +252,14 @@ here when a name is unfamiliar.
     take-profit are live. The trade is running.
   - Active + stop-hit → **Settled(Violence)** — loss bounded by reservation.
     Principal minus loss returns to available.
-  - Active + take-profit-hit → **PrincipalRecovered** — principal returns
-    to available. The residue continues as a Runner.
+  - Active + take-profit-hit → **Runner** — principal returns to available
+    AND residue continues with runner-trail-stop. One transition, not two.
+    The transition to Runner implies principal recovery — it's one event.
   - **Runner** — residue rides with a wider trailing stop. Zero cost basis.
     House money. The runner stop distance is a fourth learnable scalar
     on the exit observer — k_trail_runner — wider than k_trail because
     the cost of being stopped out of a runner is zero.
-  - Runner + runner-trail-hit → **RunnerSettled(Grace)** — residue is
+  - Runner + runner-trail-hit → **Settled(Grace)** — residue is
     permanent gain. Returns to available.
   The phase is a value on the Trade struct. The treasury handles settlement
   differently depending on the phase. Two settlement events are possible
@@ -614,10 +615,9 @@ on what. That section shows what each thing IS.
 
 (enum trade-phase
   :active              ; capital reserved, all stops live
-  :principal-recovered ; principal returned to available, residue continues
-  :runner              ; residue riding with wider trailing stop, zero cost basis
+  :runner              ; residue riding, principal already returned
   :settled-violence    ; stop-loss fired — bounded loss
-  :settled-grace)      ; runner trail fired or take-profit — residue is permanent gain
+  :settled-grace)      ; runner trail fired — residue is permanent gain
 
 ;; ── Trade — an active position the treasury holds ───────────────────
 
@@ -625,7 +625,7 @@ on what. That section shows what each thing IS.
   [id : TradeId]               ; assigned by treasury at funding time
   [post-idx : usize]           ; which post
   [broker-slot-idx : usize]    ; which broker (for trigger routing)
-  [phase : TradePhase]         ; :active → :principal-recovered → :runner → :settled-*
+  [phase : TradePhase]         ; :active → :runner → :settled-*
   [source-asset : Asset]       ; what was deployed
   [target-asset : Asset]       ; what was acquired
   [side : Side]                ; copied from the funding Proposal at treasury funding time
@@ -1376,7 +1376,13 @@ post converts Distances to Levels (trail-stop, safety-stop, take-profit,
 runner-trail-stop on Trade) using the current price.
 
 Defined in the forward declarations section (search for `struct distances`).
-No interface — Distances is pure data. Four f64 fields: trail, stop, tp, runner-trail.
+Four f64 fields: trail, stop, tp, runner-trail.
+
+**Interface:**
+- `(distances-to-levels distances price side) → Levels`
+  Converts percentage distances to absolute price levels. Side-dependent:
+  buy stops are below price, sell stops are above. One place to get the
+  signs right.
 
 ---
 
@@ -1426,6 +1432,40 @@ scalar accumulators.
   range: (f64, f64) — (min, max) bounds to sweep across.
   Sweep `steps` candidate values across `range`, encode each, cosine
   against the Grace prototype. Return the candidate closest to Grace.
+
+---
+
+### Simulation (depends on: Distances)
+
+Pure functions that simulate trailing stop mechanics against price
+histories. `simulation.wat`. No post state. Vec<f64> in, f64 out.
+
+- `(compute-optimal-distances price-history direction) → Distances`
+  direction: Direction — :up or :down. Which way the price moved.
+  This is observation (what the price did), not action (what the trader did).
+  Takes no self. Pure.
+  **The objective function:** for each distance (trail, stop, tp, runner-trail),
+  sweep candidate values against the price-history. For each candidate,
+  simulate the trailing stop mechanics. The candidate that produces the
+  maximum residue IS the optimal distance. This is a well-posed optimization
+  over a finite series — not a heuristic. The exit observer learns to predict
+  this value BEFORE the path completes. The wat may approximate this
+  optimization (e.g. MFE/MAE ratios) but the objective is: maximize residue.
+  price-history in, Distances out.
+  Called by the enterprise when enriching TreasurySettlement
+  into Settlement.
+- `(best-distance price-history simulate-fn) → f64`
+  Sweep candidates, evaluate each via simulate-fn, return the best.
+- `(simulate-trail price-history distance) → f64`
+  Simulate a trailing stop at the given distance. Returns residue.
+- `(simulate-stop price-history distance) → f64`
+  Simulate a safety stop at the given distance. Returns residue.
+- `(simulate-tp price-history distance) → f64`
+  Simulate a take-profit at the given distance. Returns residue.
+- `(simulate-runner-trail price-history distance) → f64`
+  Simulate a runner trailing stop at the given distance. Returns residue.
+
+All pure. Vec<f64> in, f64 out. No post state.
 
 ---
 
@@ -1620,6 +1660,16 @@ runtime:       frozen map (read-only) → slot-idx → &mut broker (disjoint)
   [last-recalib-count : usize])
 ```
 
+```
+(struct propagation-facts
+  [market-idx : usize]           ; which market observer should learn
+  [exit-idx : usize]             ; which exit observer should learn
+  [direction : Direction]        ; for the market observer
+  [composed-thought : Vector]    ; for both observers
+  [optimal : Distances]          ; for the exit observer
+  [weight : f64])                ; for both observers
+```
+
 **Interface:**
 - `(make-broker observers slot-idx exit-count dims recalib-interval scalar-accums) → Broker`
   observers: list of lens names (e.g. '("momentum" "volatility")).
@@ -1647,17 +1697,15 @@ runtime:       frozen map (read-only) → slot-idx → &mut broker (disjoint)
   simpler approximation than the full replay used for real trades.
   The objective is the same (maximize residue) but the data is limited
   to what the paper tracked. The wat implements the approximation.
-- `(propagate broker thought outcome weight direction optimal market-observers exit-observers)`
+- `(propagate broker thought outcome weight direction optimal) → (Vec<LogEntry>, PropagationFacts)`
   thought: Vector. outcome: Outcome. weight: f64 — how much value was at
   stake. A $500 Grace teaches harder than a $5 Grace.
   direction: Direction — derived from the trade's price movement.
   If exit-price > entry-price, :up. If exit-price < entry-price, :down.
   optimal: Distances from hindsight.
-  The post passes its observer vecs — the broker uses its frozen indices
-  to reach the right observers. Routes:
-  - Grace/Violence + thought + weight → broker's own reckoner
-  - direction + thought + weight → market observer via resolve
-  - optimal distances + composed thought + weight → exit observer via observe-distances
+  The broker learns its OWN lessons (reckoner, curve, engram, track record,
+  scalars). It RETURNS what the observers need — the post applies the facts
+  to its own observers. Values up, not effects down.
 - `(paper-count broker) → usize`
 
 **Two mechanisms for the same magic numbers — both now introduced:**
@@ -1717,6 +1765,9 @@ accountability — to the broker that proposed it.
 - `(post-on-candle post raw-candle ctx) → (Vec<Proposal>, Vec<Vector>, Vec<(ThoughtAST, Vector)>)`
   Returns proposals for the treasury, market-thoughts for step 3c, AND all
   collected cache misses from encoding. No queues — misses are values.
+  The N×M composition uses map-and-collect: map the grid producing
+  (Proposal, misses) per cell, then unzip. Values, not places. The loop
+  does not accumulate by mutation.
   tick indicators → push window → market observers observe-candle (→ thoughts + predictions + edge + misses)
   → exit observers encode-exit-facts then evaluate-and-compose(market-thought, exit-fact-asts, ctx) → (composed + misses)
   → exit observers recommended-distances(composed, broker.scalar-accums) → Distances
@@ -1745,24 +1796,13 @@ accountability — to the broker that proposed it.
   the close of the last candle in the post's candle-window.
   The enterprise calls this per post to build current-prices for the treasury.
 - `(compute-optimal-distances price-history direction) → Distances`
-  direction: Direction — :up or :down. Which way the price moved.
-  This is observation (what the price did), not action (what the trader did).
-  FREE FUNCTION — not a Post method. Takes no self. Pure.
-  **The objective function:** for each distance (trail, stop, tp, runner-trail),
-  sweep candidate values against the price-history. For each candidate,
-  simulate the trailing stop mechanics. The candidate that produces the
-  maximum residue IS the optimal distance. This is a well-posed optimization
-  over a finite series — not a heuristic. The exit observer learns to predict
-  this value BEFORE the path completes. The wat may approximate this
-  optimization (e.g. MFE/MAE ratios) but the objective is: maximize residue.
-  price-history in, Distances out.
-  Called by the enterprise when enriching TreasurySettlement
-  into Settlement.
+  Lives in simulation.wat. The post calls it. See Simulation section.
 - `(post-propagate post slot-idx thought outcome weight direction optimal) → Vec<LogEntry>`
-  direction: Direction. No observer vecs in the signature — the post owns
-  them (self) and passes them to broker.propagate internally.
-  The enterprise routes a settlement back to the post.
-  Returns Propagated log entries.
+  direction: Direction. The post calls broker.propagate to get
+  PropagationFacts, then applies them: direction + thought + weight →
+  market observer via resolve, optimal + composed + weight → exit observer
+  via observe-distances. The enterprise routes a settlement back to the
+  post. Returns Propagated log entries.
 
 ---
 
@@ -1826,12 +1866,11 @@ so that on settlement, propagate reaches the right observers.
   **Three trigger paths per trade phase:**
   - **:active + safety-stop-hit** → phase becomes :settled-violence.
     Principal minus loss returns to available. Trade is done.
-  - **:active + take-profit-hit** → phase becomes :principal-recovered.
-    Principal returns to available. Trade continues as a runner —
-    residue rides with the runner-trail-stop. Zero cost basis.
-  - **:runner + runner-trail-hit** (or :principal-recovered + runner-trail-hit)
-    → phase becomes :settled-grace. Residue is permanent gain. Returns to
-    available. Trade is done.
+  - **:active + take-profit-hit** → phase becomes :runner. Principal returns
+    to available. Residue continues with runner-trail-stop. One transition,
+    not two.
+  - **:runner + runner-trail-hit** → phase becomes :settled-grace. Residue
+    is permanent gain. Returns to available. Trade is done.
   Each settled trade produces a TreasurySettlement. The enterprise enriches
   it into a Settlement (derives direction, replays trade's price-history
   for optimal-distances) before routing to post-propagate.
