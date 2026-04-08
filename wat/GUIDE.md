@@ -1264,7 +1264,7 @@ No interface — Distances is pure data. Four f64 fields: trail, stop, tp, runne
 
 ---
 
-### ScalarAccumulator (depends on: nothing)
+### ScalarAccumulator (depends on: Outcome enum)
 
 Per-magic-number f64 learning. Lives on the broker. Global per-pair.
 Each distance (trail, stop, tp, runner-trail) gets its own.
