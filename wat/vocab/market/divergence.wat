@@ -8,6 +8,7 @@
 ;; PELT peak detection on aligned price/RSI buffers.
 
 (require primitives)
+(require enums)       ; ThoughtAST constructors
 (require candle)
 
 ;; rsi-divergence-bull — bullish divergence magnitude.

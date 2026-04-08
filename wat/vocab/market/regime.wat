@@ -8,6 +8,7 @@
 ;; All values are pre-computed fields on the enriched Candle.
 
 (require primitives)
+(require enums)       ; ThoughtAST constructors
 (require candle)
 
 ;; Trend consistency — pre-computed on Candle at three scales.

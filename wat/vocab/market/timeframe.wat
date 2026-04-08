@@ -7,6 +7,7 @@
 ;; All values are pre-computed fields on the enriched Candle.
 
 (require primitives)
+(require enums)       ; ThoughtAST constructors
 (require candle)
 
 ;; 1h/4h body ratio — how decisive is the higher-timeframe candle?

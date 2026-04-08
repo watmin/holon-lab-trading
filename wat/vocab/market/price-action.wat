@@ -9,6 +9,7 @@
 ;; pre-computed by the IndicatorBank on the enriched Candle.
 
 (require primitives)
+(require enums)       ; ThoughtAST constructors
 (require candle)
 
 ;; Body ratio: body / range. Range [0, 1].

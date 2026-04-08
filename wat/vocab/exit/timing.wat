@@ -7,6 +7,7 @@
 ;; affect optimal exit timing. Not direction — urgency.
 
 (require primitives)
+(require enums)       ; ThoughtAST constructors
 (require candle)
 
 ;; RSI — pre-computed on Candle. Range [0, 100]. Normalized to [0, 1].

@@ -7,6 +7,7 @@
 ;; where the boundaries are.
 
 (require primitives)
+(require enums)       ; ThoughtAST constructors
 (require candle)
 
 ;; Williams %R — pre-computed on Candle. Range [-100, 0].

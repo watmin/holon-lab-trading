@@ -8,6 +8,7 @@
 ;; Positive = above average. Negative = below. Magnitude = extremity.
 
 (require primitives)
+(require enums)       ; ThoughtAST constructors
 (require candle)
 
 ;; CCI — pre-computed on Candle. Unbounded but typically [-300, 300].

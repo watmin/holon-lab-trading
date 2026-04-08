@@ -2,7 +2,7 @@
 ;;
 ;; Depends on: nothing
 ;; Side, Direction, Outcome, TradePhase, reckoner-config, prediction,
-;; ScalarEncoding
+;; ScalarEncoding, ThoughtAST
 
 (require primitives)
 
@@ -64,3 +64,14 @@
   :log
   (Linear [scale : f64])
   (Circular [period : f64]))
+
+;; ── thought-ast — the tree of deferred thoughts ─────────────────────
+;; Recursive. Bind and Bundle reference ThoughtAST. The vocabulary
+;; produces these — data, not execution. The ThoughtEncoder evaluates them.
+(enum thought-ast
+  (Atom [name : String])
+  (Linear [name : String] [value : f64] [scale : f64])
+  (Log [name : String] [value : f64])
+  (Circular [name : String] [value : f64] [period : f64])
+  (Bind [left : ThoughtAST] [right : ThoughtAST])
+  (Bundle [children : Vec<ThoughtAST>]))

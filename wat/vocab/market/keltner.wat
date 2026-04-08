@@ -8,6 +8,7 @@
 ;; relationship between them — BB inside Keltner = compression.
 
 (require primitives)
+(require enums)       ; ThoughtAST constructors
 (require candle)
 
 ;; Keltner position — pre-computed on Candle. Range [0, 1].

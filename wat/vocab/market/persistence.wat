@@ -9,6 +9,7 @@
 ;; by the IndicatorBank (from close-buf-48).
 
 (require primitives)
+(require enums)       ; ThoughtAST constructors
 (require candle)
 
 ;; Hurst exponent — pre-computed on Candle.

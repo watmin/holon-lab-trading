@@ -8,6 +8,7 @@
 ;; state and optimal exit distance.
 
 (require primitives)
+(require enums)       ; ThoughtAST constructors
 (require candle)
 
 ;; ATR ratio (atr-r) — pre-computed on Candle. ATR / close.

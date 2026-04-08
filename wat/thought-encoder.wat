@@ -1,8 +1,8 @@
-;; thought-encoder.wat — ThoughtAST enum, ThoughtEncoder struct + encode
+;; thought-encoder.wat — ThoughtEncoder struct + encode
 ;;
-;; Depends on: vocabulary (all vocab modules produce ThoughtAST)
+;; Depends on: enums (ThoughtAST)
 ;;
-;; The vocabulary produces ASTs — the specification of WHAT to think.
+;; The vocabulary produces ThoughtASTs — data, not execution.
 ;; The ThoughtEncoder evaluates them — HOW to think efficiently.
 ;; It walks the AST bottom-up, checking its memory at every node.
 ;; The minimum computation happens.
@@ -12,20 +12,7 @@
 ;;   Compositions: a cache. Optimistic. Self-evicting.
 
 (require primitives)
-
-;; ── ThoughtAST — the vocabulary's language ──────────────────────────
-;;
-;; Data describing a composition — not vectors, not execution.
-;; The vocabulary produces trees of this. Cheap. No 10,000-dim
-;; computation. Just "here is what I want to say."
-
-(enum thought-ast
-  (Atom [name : String])                          ; dictionary lookup
-  (Linear [name : String] [value : f64] [scale : f64])  ; bind(atom, encode-linear)
-  (Log [name : String] [value : f64])             ; bind(atom, encode-log)
-  (Circular [name : String] [value : f64] [period : f64]) ; bind(atom, encode-circular)
-  (Bind [left : ThoughtAST] [right : ThoughtAST]) ; composition of two sub-trees
-  (Bundle [children : Vec<ThoughtAST>]))           ; superposition of sub-trees
+(require enums)    ; ThoughtAST
 
 ;; ── ThoughtEncoder — evaluates ASTs into vectors ────────────────────
 

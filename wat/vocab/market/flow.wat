@@ -7,6 +7,7 @@
 ;; Price without volume is opinion. Price with volume is fact.
 
 (require primitives)
+(require enums)       ; ThoughtAST constructors
 (require candle)
 
 ;; OBV slope — pre-computed on Candle (obv-slope-12: 12-period linear

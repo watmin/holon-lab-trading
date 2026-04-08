@@ -7,6 +7,7 @@
 ;; for tight stops or chaotic enough to need wide ones.
 
 (require primitives)
+(require enums)       ; ThoughtAST constructors
 (require candle)
 
 ;; Trend consistency — pre-computed on Candle at three scales.

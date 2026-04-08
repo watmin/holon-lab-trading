@@ -7,6 +7,7 @@
 ;; encode-circular wraps the value at the period boundary.
 
 (require primitives)
+(require enums)       ; ThoughtAST constructors
 (require candle)
 
 ;; Interface: candle in, ThoughtASTs out. Pure function. No state.

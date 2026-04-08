@@ -7,6 +7,7 @@
 ;; %K = raw position. %D = smoothed. All pre-computed on Candle.
 
 (require primitives)
+(require enums)       ; ThoughtAST constructors
 (require candle)
 
 ;; %K and %D — pre-computed on Candle. Range [0, 100].

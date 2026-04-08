@@ -7,6 +7,7 @@
 ;; Cloud position and TK relationship are signed scalars, not zones.
 
 (require primitives)
+(require enums)       ; ThoughtAST constructors
 (require candle)
 
 ;; Cloud position: signed distance from cloud center.

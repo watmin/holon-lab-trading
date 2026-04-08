@@ -8,6 +8,7 @@
 ;; The discriminant learns which scale matters.
 
 (require primitives)
+(require enums)       ; ThoughtAST constructors
 (require candle)
 
 ;; Range position at 12, 24, 48 periods — pre-computed on Candle.
