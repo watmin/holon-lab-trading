@@ -15,9 +15,9 @@
 ;; that recalibration. If accuracy exceeds 0.55, snapshots the
 ;; discriminant into the good-state subspace. Resets counters.
 ;;
-;; Returns: (wins : usize, total : usize, last-count : usize)
-;; After a gate fires (accuracy > 0.55), counters reset to (0, 0, current-recalib).
+;; Returns: (new-wins : usize, new-total : usize, new-last-count : usize)
 ;; The caller stores these back into its own fields.
+;; After a gate fires (accuracy > 0.55), counters reset — returns (0, 0, current-recalib).
 ;; The label parameter: which label's discriminant to snapshot.
 ;; For MarketObserver pass "Up" (or "Down"). For Broker pass "Grace".
 
