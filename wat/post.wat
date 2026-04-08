@@ -45,7 +45,6 @@
   [exit-observers : Vec<ExitObserver>]      ; [M]
   ;; Accountability
   [registry : Vec<Broker>]             ; one per observer set, pre-allocated
-  [broker-map : Map<Set<String>, usize>] ; frozen at construction, read-only
   ;; Counter
   [encode-count : usize])
 
@@ -62,21 +61,15 @@
                    [exit-observers : Vec<ExitObserver>]
                    [registry : Vec<Broker>])
   : Post
-  ;; Build the frozen broker-map from registry at construction
-  (let ((bmap (fold (lambda (m brkr)
-                      (assoc m (:observer-names brkr) (:slot-idx brkr)))
-                    (map-of)
-                    registry)))
-    (make-post
-      post-idx source target
-      indicator-bank
-      (deque)                          ; candle-window — empty
-      max-window-size
-      market-observers
-      exit-observers
-      registry
-      bmap
-      0)))                             ; encode-count
+  (make-post
+    post-idx source target
+    indicator-bank
+    (deque)                          ; candle-window — empty
+    max-window-size
+    market-observers
+    exit-observers
+    registry
+    0))                              ; encode-count
 
 ;; ---- post-on-candle --------------------------------------------------------
 ;; Step 2: COMPUTE + DISPATCH.

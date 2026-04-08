@@ -15,6 +15,7 @@
 (require enums)             ; Direction, Prediction, reckoner-config, MarketLens
 (require window-sampler)
 (require thought-encoder)
+(require engram-gate)       ; check-engram-gate
 
 ;; ── Struct ──────────────────────────────────────────────────────────────
 
@@ -25,15 +26,9 @@
   [window-sampler : WindowSampler]     ; own time scale
   ;; Proof tracking
   [resolved : usize]                   ; how many predictions have been resolved
-  [conviction-history : Vec<f64>]      ; recent conviction values for curve fitting
-  [conviction-threshold : f64]         ; minimum conviction to participate.
-                                       ; derived from the curve after recalibration:
-                                       ; the conviction level where edge first appears.
-                                       ; 0.0 when the curve has insufficient data.
   [curve : Curve]                      ; measures this observer's edge (conviction -> accuracy)
   [curve-valid : f64]                  ; cached edge from the curve. 0.0 = unproven.
                                        ; updated after each recalibration by querying the curve.
-  [cached-accuracy : f64]              ; rolling accuracy of resolved predictions
   ;; Engram gating
   [good-state-subspace : OnlineSubspace] ; learns what good discriminants look like
   [recalib-wins : usize]               ; wins since last recalibration
@@ -55,11 +50,8 @@
     (online-subspace (:dims config) 8)    ; noise subspace — k=8 components
     sampler
     0                                     ; resolved
-    (list)                                ; conviction-history
-    0.0                                   ; conviction-threshold
     (make-curve)                          ; curve
     0.0                                   ; curve-valid
-    0.0                                   ; cached-accuracy
     (online-subspace (:dims config) 4)    ; good-state-subspace — k=4
     0                                     ; recalib-wins
     0                                     ; recalib-total
@@ -193,35 +185,26 @@
     ;; 5. Update proof tracking
     (inc! (:resolved obs))
 
-    ;; 6. Engram gating — check if recalibration happened
-    (let ((current-recalib (recalib-count (:reckoner obs))))
-      (when (> current-recalib (:last-recalib-count obs))
-        ;; A recalibration happened. Update engram gate.
-        (begin
-          ;; Check accuracy since last recalib
-          (when correct
-            (inc! (:recalib-wins obs)))
-          (inc! (:recalib-total obs))
+    ;; 6. Engram gating — shared logic
+    (let* ((old-recalib (:last-recalib-count obs))
+           (gate-result (check-engram-gate
+                          (:reckoner obs)
+                          (:good-state-subspace obs)
+                          (:recalib-wins obs)
+                          (:recalib-total obs)
+                          old-recalib
+                          correct
+                          "Up")))
+      (set! (:recalib-wins obs) (first gate-result))
+      (set! (:recalib-total obs) (second gate-result))
+      (set! (:last-recalib-count obs) (nth gate-result 2))
 
-          ;; If enough data and good accuracy, snapshot the discriminant
-          (when (and (> (:recalib-total obs) 0)
-                     (> (/ (+ (:recalib-wins obs) 0.0)
-                           (+ (:recalib-total obs) 0.0))
-                        0.55))
-            (let ((disc (discriminant (:reckoner obs) "Up")))
-              (when-let ((d (Some disc)))
-                (update (:good-state-subspace obs) d))))
-
-          ;; Update cached edge from the curve
-          (set! (:curve-valid obs)
-                (if (proven? (:curve obs) 50)
-                    (edge-at (:curve obs) 0.5)
-                    0.0))
-
-          ;; Reset recalib counters
-          (set! (:recalib-wins obs) 0)
-          (set! (:recalib-total obs) 0)
-          (set! (:last-recalib-count obs) current-recalib))))))
+      ;; Update cached edge from the curve when recalibration happened
+      (when (> (nth gate-result 2) old-recalib)
+        (set! (:curve-valid obs)
+              (if (proven? (:curve obs) 50)
+                  (edge-at (:curve obs) 0.5)
+                  0.0)))))
 
 ;; ── experience — how much has this observer learned? ────────────────────
 

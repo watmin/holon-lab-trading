@@ -21,6 +21,7 @@
 (require paper-entry)         ; PaperEntry, make-paper-entry, tick-paper, fully-resolved?
 (require market-observer)     ; MarketObserver, resolve
 (require exit-observer)       ; ExitObserver, observe-distances
+(require engram-gate)         ; check-engram-gate
 
 ;; ── Resolution — what a broker produces when a paper resolves ───────────
 ;; Facts, not mutations. Collected from parallel tick, applied sequentially.
@@ -243,23 +244,18 @@
                        (+ (:cumulative-violence brkr) weight))))
     (inc! (:trade-count brkr))
 
-    ;; 4. Engram gating — check for recalibration
-    (let ((current-recalib (recalib-count (:reckoner brkr))))
-      (when (> current-recalib (:last-recalib-count brkr))
-        (when (= outcome :grace)
-          (inc! (:recalib-wins brkr)))
-        (inc! (:recalib-total brkr))
-        ;; Snapshot discriminant if good accuracy
-        (when (and (> (:recalib-total brkr) 0)
-                   (> (/ (+ (:recalib-wins brkr) 0.0)
-                         (+ (:recalib-total brkr) 0.0))
-                      0.55))
-          (let ((disc (discriminant (:reckoner brkr) "Grace")))
-            (when-let ((d (Some disc)))
-              (update (:good-state-subspace brkr) d))))
-        (set! (:recalib-wins brkr) 0)
-        (set! (:recalib-total brkr) 0)
-        (set! (:last-recalib-count brkr) current-recalib)))
+    ;; 4. Engram gating — shared logic
+    (let* ((gate-result (check-engram-gate
+                          (:reckoner brkr)
+                          (:good-state-subspace brkr)
+                          (:recalib-wins brkr)
+                          (:recalib-total brkr)
+                          (:last-recalib-count brkr)
+                          (= outcome :grace)
+                          "Grace")))
+      (set! (:recalib-wins brkr) (first gate-result))
+      (set! (:recalib-total brkr) (second gate-result))
+      (set! (:last-recalib-count brkr) (nth gate-result 2)))
 
     ;; 5. Direction -> market observer via resolve
     (let ((mkt-obs (nth market-observers (/ (:slot-idx brkr) (:exit-count brkr)))))

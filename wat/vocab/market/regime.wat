@@ -4,7 +4,8 @@
 ;; Domain: market (MarketLens :regime)
 ;;
 ;; Abstract properties of the price series: is it trending or choppy?
-;; Persistent or mean-reverting? Orderly or chaotic?
+;; Orderly or chaotic? Efficient or noisy?
+;; Persistence facts (hurst, autocorr, adx) live in persistence.wat.
 ;; All values are pre-computed fields on the enriched Candle.
 
 (require primitives)
@@ -18,20 +19,6 @@
 ;; Range position — pre-computed on Candle at three scales.
 ;; Where is price in the recent [low, high] range?
 ;; Range [0, 1]. 0.0 = at the low. 1.0 = at the high.
-;;
-;; Hurst exponent — pre-computed on Candle.
-;; > 0.5: persistent. < 0.5: anti-persistent. = 0.5: random walk.
-;; Range [0, 1].
-;;
-;; Autocorrelation — pre-computed on Candle.
-;; Positive: momentum. Negative: mean-reversion.
-;; Range [-1, 1]. Signed.
-;;
-;; ADX — pre-computed on Candle. Range [0, 100]. Normalized to [0, 1].
-;; Measures trend strength, not direction.
-;;
-;; ATR ratio — pre-computed on Candle. ATR / close.
-;; Log-encoded because ratio. Volatility character.
 ;;
 ;; BB width — pre-computed on Candle. Band width as fraction of price.
 ;; Log-encoded. Wider = more volatile.
@@ -75,15 +62,7 @@
     (Linear "range-pos-24" (:range-pos-24 candle) 1.0)
     (Linear "range-pos-48" (:range-pos-48 candle) 1.0)
 
-    ;; Persistence character — from pre-computed fields
-    (Linear "hurst" (clamp (:hurst candle) 0.0 1.0) 1.0)
-    (Linear "autocorr" (:autocorrelation candle) 1.0)
-
-    ;; Trend strength
-    (Linear "adx" (/ (:adx candle) 100.0) 1.0)
-
     ;; Volatility character
-    (Log "atr-ratio" (max (:atr-r candle) 0.0001))
     (Log "bb-width" (max (:bb-width candle) 0.0001))
 
     ;; Regime indicators — efficiency and choppiness

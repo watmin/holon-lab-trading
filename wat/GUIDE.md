@@ -1415,15 +1415,9 @@ The generalist is just another lens. No special treatment.
   [window-sampler : WindowSampler]     ; own time scale
   ;; Proof tracking
   [resolved : usize]                   ; how many predictions have been resolved
-  [conviction-history : Vec<f64>]      ; recent conviction values for curve fitting
-  [conviction-threshold : f64]         ; minimum conviction to participate.
-                                       ; derived from the curve after recalibration:
-                                       ; the conviction level where edge first appears.
-                                       ; 0.0 when the curve has insufficient data.
   [curve : Curve]                      ; measures this observer's edge (conviction → accuracy)
   [curve-valid : f64]                  ; cached edge from the curve. 0.0 = unproven.
                                        ; updated after each recalibration by querying the curve.
-  [cached-accuracy : f64]              ; rolling accuracy of resolved predictions
   ;; Engram gating
   [good-state-subspace : OnlineSubspace] ; learns what good discriminants look like
   [recalib-wins : usize]               ; wins since last recalibration
@@ -1674,10 +1668,6 @@ accountability — to the broker that proposed it.
 
   ;; Accountability — brokers in a flat vec, parallel access
   [registry : Vec<Broker>]             ; one per observer set, pre-allocated
-  [broker-map : Map<Set<String>, usize>] ; derived from registry at
-                                       ; construction: iterate brokers, map each observer-names
-                                       ; set to its index. Frozen forever. Never written at
-                                       ; runtime. Read-only lookups, flat vec access. No mutex.
 
   ;; Counter
   [encode-count : usize])

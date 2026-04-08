@@ -36,6 +36,16 @@
   :settled-violence
   :settled-grace)
 
+;; ── MarketLens — which vocabulary subset a market observer thinks through ─
+;; Each variant selects a subset of the market vocabulary.
+;; :generalist selects ALL market modules.
+(enum market-lens :momentum :structure :volume :narrative :regime :generalist)
+
+;; ── ExitLens — which vocabulary subset an exit observer thinks through ────
+;; Each variant selects a subset of the exit vocabulary.
+;; :generalist selects ALL exit modules.
+(enum exit-lens :volatility :structure :timing :generalist)
+
 ;; ── reckoner-config — configuration for the learning primitive ───────
 ;; One constructor, two modes. Config is data.
 (enum reckoner-config
