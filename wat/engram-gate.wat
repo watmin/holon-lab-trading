@@ -41,9 +41,8 @@
                      (> (/ (+ new-wins 0.0)
                            (+ new-total 0.0))
                         0.55))
-            (let ((disc (discriminant reckoner label)))
-              (when-let ((d (Some disc)))
-                (update good-state-subspace d))))
+            (when-let ((d (discriminant reckoner label)))
+              (update good-state-subspace d)))
 
           ;; Reset counters
           (list 0 0 current-recalib)))))

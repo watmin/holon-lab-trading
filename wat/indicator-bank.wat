@@ -373,18 +373,18 @@
   ; At count == period: initial average.
   ; After: Wilder smooth = (prev * (period - 1) + value) / period.
   (inc! (:count s))
-  (let* ((pf (+ (:period s) 0.0)))
+  (let* ((period-float (+ (:period s) 0.0)))
     (if (<= (:count s) (:period s))
       (begin
         (set! (:accum s) (+ (:accum s) value))
         (if (= (:count s) (:period s))
           (begin
-            (set! (:value s) (/ (:accum s) pf))
+            (set! (:value s) (/ (:accum s) period-float))
             (:value s))
           0.0))
       (begin
         (set! (:value s)
-              (/ (+ (* (:value s) (- pf 1.0)) value) pf))
+              (/ (+ (* (:value s) (- period-float 1.0)) value) period-float))
         (:value s)))))
 
 
@@ -726,7 +726,7 @@
 (define (compute-roc [buf : RingBuffer] [close : f64] [period : usize])
   : f64
   ; (close - close_N_ago) / close_N_ago. 0.0 if not enough data.
-  (if (<= (ring-len buf) period)
+  (if (< (ring-len buf) period)
     0.0
     (let* ((old (ring-get-from-end buf period)))
       (if (< (abs old) 1e-10) 0.0 (/ (- close old) old)))))
