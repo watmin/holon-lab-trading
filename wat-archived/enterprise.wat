@@ -1,264 +1,297 @@
-;; -- enterprise.wat -- the four-step candle loop --------------------------------
-;;
-;; One candle. Four steps. Sequential. Reality first.
-;; The parallelism is WITHIN Step 2 (par_iter with collect).
-;; Steps are sequential. The CSP is in the collect().
-;;
-;; The desk is gone. The enterprise IS the desk.
-;; The manager is gone. The tuple journal IS the manager.
+; enterprise.wat — the coordination plane. The CSP sync point.
+;
+; Depends on: Post, Treasury, TreasurySettlement, Settlement,
+;             Direction, Outcome, Distances, LogEntry,
+;             ThoughtAST, ThoughtEncoder.
+;
+; The enterprise is the only entity that sees the whole picture.
+; Every other entity is an independent process. The enterprise
+; holds posts and a treasury. It routes raw candles to the right
+; post. It coordinates the four-step loop.
+;
+; The four steps per candle:
+;   1. RESOLVE + PROPAGATE — settle triggered trades, teach observers
+;   2. COMPUTE + DISPATCH  — encode, compose, propose
+;   3a. TICK               — parallel paper ticks
+;   3b. PROPAGATE          — sequential paper resolution fan-out
+;   3c. UPDATE TRIGGERS    — fresh stop levels for active trades
+;   4. COLLECT + FUND      — treasury evaluates and funds proposals
 
-(require core/primitives)
-(require market/observer)       ; encode-thought, resolve (direction learning)
-(require exit/observer)         ; encode-exit-facts, compose (exit learning)
-(require tuple-journal)         ; register-paper, tick-papers, propose, funded?, propagate
-(require position)              ; triggered?, classify-outcome, adjust-trigger, open-trade
-(require candle)                ; tick (indicator-bank)
-(require window-sampler)        ; sample
+(require primitives)
+(require enums)               ; Direction, Outcome
+(require distances)           ; Distances
+(require raw-candle)          ; RawCandle, Asset
+(require log-entry)           ; LogEntry
+(require settlement)          ; TreasurySettlement, Settlement
+(require trade)               ; Trade
+(require post)                ; Post, post-on-candle, post-update-triggers,
+                              ;   current-price, compute-optimal-distances,
+                              ;   post-propagate
+(require treasury)            ; Treasury, submit-proposal, fund-proposals,
+                              ;   settle-triggered, update-trade-stops,
+                              ;   trades-for-post
+(require thought-encoder)     ; ThoughtAST, ThoughtEncoder
+(require broker)              ; Resolution
 
-;; -- The enterprise ---------------------------------------------------------------
-;; Owns the data pipeline, observers, and the N×M registry.
-;; N market observers × M exit observers = N×M tuple journals.
-;; Index: slot-idx = market-idx * M + exit-idx
+;; ---- Struct ----------------------------------------------------------------
 
 (struct enterprise
-  ;; Data pipeline
-  indicator-bank       ; streaming indicator state machine
-  candle-window        ; VecDeque<Candle>, bounded at max-window-size
-  max-window-size      ; capacity (2016)
+  ;; The posts — one per asset pair
+  [posts : Vec<Post>]                  ; each watches one market
+  ;; The treasury — shared across all posts
+  [treasury : Treasury]                ; holds capital, funds trades, settles
+  ;; Per-candle cache — produced in step 2, consumed in step 3c
+  [market-thoughts-cache : Vec<Vec<Vector>>] ; one Vec<Vector> per post, cleared each candle
+  ;; Cache miss-queues — observers queue (ThoughtAST, Vector) during parallel encoding
+  ;; The enterprise drains between steps and inserts into ThoughtEncoder's LRU cache.
+  [cache-miss-queues : Vec<Vec<(ThoughtAST, Vector)>>]
+  ;; Logging — one queue per producer, drained each candle
+  [log-queues : Vec<Vec<LogEntry>>])
 
-  ;; Observers — both are learned
-  market-observers     ; Vec<MarketObserver> — predict direction, learn Win/Loss
-  exit-observers       ; Vec<ExitObserver>   — predict exit distance, learn to maximize residue
+;; ---- Constructor -----------------------------------------------------------
 
-  ;; Candle counter
-  encode-count
+(define (make-enterprise [posts : Vec<Post>]
+                         [treasury : Treasury])
+  : Enterprise
+  ;; Allocate per-post market-thoughts-cache, plus miss-queues for all observers
+  (let* ((num-posts (len posts))
+         (cache (map (lambda (_) (list)) (range num-posts)))
+         ;; One miss-queue per observer across all posts: (N + M) per post
+         (num-queues (fold (lambda (sum p)
+                             (+ sum (len (:market-observers p))
+                                    (len (:exit-observers p))))
+                           0 posts))
+         (miss-queues (map (lambda (_) (list)) (range num-queues)))
+         ;; One log-queue per producer — brokers + treasury + posts
+         (num-log-queues (fold (lambda (sum p)
+                                 (+ sum (len (:registry p))))
+                               0 posts))
+         (log-qs (map (lambda (_) (list)) (range (+ num-log-queues 1)))))
+    (make-enterprise
+      posts
+      treasury
+      cache
+      miss-queues
+      log-qs)))
 
-  ;; Treasury — holds capital, executes swaps, settles trades
-  treasury             ; Treasury — holds capital, executes swaps, settles trades
+;; ---- on-candle — the four-step loop ----------------------------------------
+;; Route to the right post, then four steps.
+;; ctx flows in from the binary.
 
-  ;; N×M registry — pre-allocated, disjoint slots, mutex-free
-  registry             ; Vec<TupleJournal>       — closures over (market, exit), permanent
-  proposals            ; Vec<Option<Proposal>>   — cleared every candle
-  trades               ; Vec<Option<Trade>>      — insert/remove
-  trade-thoughts       ; Vec<Option<Vector>>     — stashed at entry for resolution
+(define (on-candle [ent : Enterprise]
+                   [raw : RawCandle]
+                   [ctx : Ctx])
+  ;; Find the post for this raw candle's asset pair
+  (let* ((target-post-idx
+           (fold (lambda (found idx)
+                   (if (some? found) found
+                       (let ((p (nth (:posts ent) idx)))
+                         (if (and (= (:name (:source-asset raw))
+                                     (:name (:source-asset p)))
+                                  (= (:name (:target-asset raw))
+                                     (:name (:target-asset p))))
+                             (Some idx)
+                             None))))
+                 None
+                 (range (len (:posts ent))))))
 
-  ;; Logging
-  pending-logs)        ; Vec<LogEntry>, flushed in batch by the binary
+    (when-let ((post-idx (Some target-post-idx)))
 
-;; -- Market observers -------------------------------------------------------------
-;; A market observer perceives direction from candle data.
-;; It has a window sampler, a lens, and a journal.
-;; It encodes candles into thought vectors. It predicts direction.
-;; It learns Win/Loss from trade and paper resolutions via propagate.
-;; The generalist is just another lens. No special treatment.
+      ;; ── Step 1: RESOLVE + PROPAGATE ──────────────────────────────
+      (step-resolve-and-propagate ent)
 
-;; -- Exit observers ---------------------------------------------------------------
-;; An exit observer learns exit strategy — how to maximize residue.
-;; It has a judgment vocabulary (volatility, structure, timing).
-;; It composes market thoughts with its own judgment facts.
-;; It learns optimal distances from trade and paper resolutions via propagate.
-;; The LearnedStop IS its brain — it lives on the tuple journal,
-;; which is the closure over (market-observer, exit-observer).
-;; ExitGeneralist = all three vocabularies.
+      ;; ── Step 2: COMPUTE + DISPATCH ───────────────────────────────
+      (let* ((result (step-compute-dispatch ent post-idx raw ctx))
+             (proposals (first result))
+             (market-thoughts (second result)))
 
-(define (enterprise-index market-idx exit-idx exit-count)
-  "Flat index into N×M vecs. The index IS the pair identity."
-  (+ (* market-idx exit-count) exit-idx))
+        ;; Cache market thoughts for step 3c
+        (set! (nth (:market-thoughts-cache ent) post-idx) market-thoughts)
 
-;; -- Step 1: RESOLVE ------------------------------------------------------------
-;; Reality first. Money before thoughts.
-;; Close triggered trades. Propagate through tuple journals.
-;; Propagate routes to BOTH observers: market learns direction, exit learns distance.
+        ;; ── Step 3a: TICK (parallel) ───────────────────────────────
+        (let ((resolutions (step-tick ent post-idx)))
 
-(define (step-resolve enterprise current-price candle-window)
-  "Iterate active trades. Check triggers. Settle what fired."
-  (for-each (range (len (:trades enterprise)))
-    (lambda (slot-idx)
-      (when-let ((trade (nth (:trades enterprise) slot-idx)))
-        (when (triggered? trade current-price)
-          (let* ((outcome (classify-outcome trade current-price))
-                 (closes  (find-closes-from-entry candle-window trade))
-                 (journal (nth (:registry enterprise) slot-idx))
-                 (optimal (compute-optimal-distance closes (:entry-price trade))))
+          ;; ── Step 3b: PROPAGATE (sequential — paper resolutions) ──
+          (step-propagate ent post-idx resolutions)
 
-            ;; Propagate through the closure — routes to both observers
-            (when-let ((thought (nth (:trade-thoughts enterprise) slot-idx)))
-              (propagate journal thought outcome optimal))
+          ;; ── Step 3c: UPDATE TRIGGERS ─────────────────────────────
+          (step-update-triggers ent post-idx market-thoughts ctx))
 
-            ;; Settle through treasury — execute swap, update balances
-            (settle (:treasury enterprise) trade outcome)
+        ;; ── Step 4: COLLECT + FUND ─────────────────────────────────
+        ;; Submit proposals to treasury
+        (for-each (lambda (prop) (submit-proposal (:treasury ent) prop))
+                  proposals)
+        (step-collect-fund ent))
 
-            ;; Clear the slot
-            (set! (nth (:trades enterprise) slot-idx) none)
-            (set! (nth (:trade-thoughts enterprise) slot-idx) none)))))))
+      ;; Drain cache miss-queues into ThoughtEncoder
+      (drain-miss-queues ent ctx))))
 
-;; -- Step 2: COMPUTE + DISPATCH -------------------------------------------------
-;; Market observers encode (parallel). Exit observers compose + propose (sequential).
-;; Returns: fresh market thought vectors for Step 3.
-;;
-;; Exit facts are computed ONCE per candle per lens, reused across all market observers.
+;; ---- step-resolve-and-propagate --------------------------------------------
+;; Step 1: settle triggered trades, enrich into Settlements, propagate.
+;; No ctx needed — uses pre-existing vectors, no encoding.
 
-(define (step-compute-dispatch enterprise candle ctx)
-  "Parallel encode, sequential dispatch. Returns fresh thoughts."
+(define (step-resolve-and-propagate [ent : Enterprise])
+  ;; Collect current prices from all posts
+  (let* ((current-prices
+           (fold (lambda (m p)
+                   (assoc m
+                          (list (:source-asset p) (:target-asset p))
+                          (current-price p)))
+                 (map-of)
+                 (:posts ent)))
 
-  ;; Phase A: parallel market encoding
-  (let ((thoughts (pmap (lambda (obs)
-                          (let ((w (sample (:window-sampler obs) (:encode-count enterprise)))
-                                (slice (window-slice (:candle-window enterprise) w)))
-                            (encode-thought obs slice ctx)))
-                        (:market-observers enterprise)))
+         ;; Treasury settles triggered trades
+         (treasury-settlements
+           (settle-triggered (:treasury ent) current-prices)))
 
-        ;; Pre-compute exit fact vectors: one per exit lens, reused across markets
-        (exit-fact-vecs (map (lambda (exit-obs)
-                              (encode-exit-facts exit-obs candle ctx))
-                            (:exit-observers enterprise))))
+    ;; Enrich each TreasurySettlement into a Settlement and propagate
+    (for-each
+      (lambda (ts)
+        (let* ((trade (:trade ts))
+               ;; Derive direction from exit-price vs entry-rate
+               (direction (if (> (:exit-price ts) (:entry-rate trade))
+                              :up :down))
+               ;; Replay trade's price-history for optimal-distances
+               (optimal (compute-optimal-distances
+                          (:price-history trade)
+                          direction))
+               ;; Build the full settlement
+               (settlement (make-settlement ts direction optimal))
+               ;; Route to the right post for propagation
+               (p (nth (:posts ent) (:post-idx trade)))
+               (slot-idx (:broker-slot-idx trade)))
 
-    ;; Phase B: sequential dispatch into registry
-    (for-each (range (len (:market-observers enterprise)))
-      (lambda (market-idx)
-        (let ((thought (nth thoughts market-idx)))
-          (for-each (range (len (:exit-observers enterprise)))
-            (lambda (exit-idx)
-              (let* ((slot-idx  (enterprise-index market-idx exit-idx
-                                  (len (:exit-observers enterprise))))
-                     (journal   (nth (:registry enterprise) slot-idx))
-                     (exit-obs  (nth (:exit-observers enterprise) exit-idx))
-                     (exit-facts (nth exit-fact-vecs exit-idx))
-                     ;; Compose: bundle market thought with exit facts
-                     (composed  (bundle thought exit-facts))
-                     ;; Query the exit observer — ONCE per slot per candle
-                     (distance  (recommended-distance exit-obs composed)))
+          ;; Propagate through the post -> broker -> observers
+          (post-propagate p
+                          slot-idx
+                          (:composed-thought ts)
+                          (:outcome ts)
+                          (:amount ts)
+                          direction
+                          optimal)))
+      treasury-settlements)))
 
-                ;; Register paper entry — every candle, every pair
-                (register-paper journal composed candle distance)
+;; ---- step-compute-dispatch -------------------------------------------------
+;; Step 2: the post encodes, composes, proposes.
+;; Returns (Vec<Proposal>, Vec<Vector>).
 
-                ;; Propose if conditions met
-                (when (and (funded? journal)
-                           (> (:conviction (propose journal composed)) 0.2)
-                           (can-propose? exit-obs composed))
-                  (set! (nth (:proposals enterprise) slot-idx)
-                        (proposal :composed composed
-                                  :direction (:direction (propose journal composed)))))))))))
+(define (step-compute-dispatch [ent : Enterprise]
+                                [post-idx : usize]
+                                [raw : RawCandle]
+                                [ctx : Ctx])
+  : (Vec<Proposal>, Vec<Vector>)
+  ;; Delegate to the post's on-candle — encodes the candle,
+  ;; composes market + exit thoughts, and collects broker proposals.
+  (let* ((p (nth (:posts ent) post-idx))
+         (miss-queues (slice-miss-queues ent post-idx)))
+    (post-on-candle p raw miss-queues ctx)))
 
-    ;; Return the fresh thoughts for Step 3
-    thoughts))
+;; ---- step-tick -------------------------------------------------------------
+;; Step 3a: parallel tick of all brokers' papers.
 
-;; -- Step 3: PROCESS ------------------------------------------------------------
-;; Update active trade triggers with fresh thoughts.
-;; Tick paper entries. Resolved papers → propagate to both observers.
+(define (step-tick [ent : Enterprise]
+                   [post-idx : usize])
+  : Vec<Resolution>
+  (let* ((p (nth (:posts ent) post-idx))
+         (price (current-price p)))
+    ;; Parallel tick — each broker touches only its own papers
+    (flatten
+      (pmap (lambda (brkr) (tick-papers brkr price))
+            (:registry p)))))
 
-(define (step-process enterprise thoughts current-price)
-  "Use fresh thoughts to manage active trades and paper entries."
+;; ---- step-propagate --------------------------------------------------------
+;; Step 3b: sequential — apply paper resolutions to shared observers.
 
-  ;; Active trades: query the tuple journal's learned stop for the trigger distance
-  (for-each (range (len (:trades enterprise)))
-    (lambda (slot-idx)
-      (when-let ((trade (nth (:trades enterprise) slot-idx)))
-        (let* ((market-idx (quotient slot-idx (len (:exit-observers enterprise))))
-               (exit-idx   (remainder slot-idx (len (:exit-observers enterprise))))
-               (exit-obs   (nth (:exit-observers enterprise) exit-idx))
-               (thought    (nth thoughts market-idx))
-               (distance   (recommended-distance exit-obs thought)))
-          (adjust-trigger trade distance current-price)))))
+(define (step-propagate [ent : Enterprise]
+                        [post-idx : usize]
+                        [resolutions : Vec<Resolution>])
+  (let ((p (nth (:posts ent) post-idx)))
+    ;; Sequential — observers are shared, mutations must not race
+    (for-each
+      (lambda (res)
+        (post-propagate p
+                        (:broker-slot-idx res)
+                        (:composed-thought res)
+                        (:outcome res)
+                        (:amount res)
+                        (:direction res)
+                        (:optimal-distances res)))
+      resolutions)))
 
-  ;; Paper entries: tick all journals' papers
-  ;; Resolved papers propagate to both observers — the fast learning stream
-  (for-each (range (len (:registry enterprise)))
-    (lambda (slot-idx)
-      (let ((journal (nth (:registry enterprise) slot-idx)))
-        (tick-papers journal current-price)))))
+;; ---- step-update-triggers --------------------------------------------------
+;; Step 3c: fresh stop levels for active trades.
+;; Query treasury for trades belonging to this post. The post composes
+;; fresh thoughts, queries exit observers, computes new levels.
+;; The enterprise writes the new values back to the treasury.
 
-;; -- Step 4: COLLECT + FUND ----------------------------------------------------
-;; Evaluate proposals. Fund or reject. Drain proposals vec.
+(define (step-update-triggers [ent : Enterprise]
+                               [post-idx : usize]
+                               [market-thoughts : Vec<Vector>]
+                               [ctx : Ctx])
+  (let* ((p (nth (:posts ent) post-idx))
+         (miss-queues (slice-miss-queues ent post-idx))
+         (trade-pairs (trades-for-post (:treasury ent) post-idx))
+         ;; Post computes new levels — returns Vec<(TradeId, Levels)>
+         (updates (post-update-triggers p trade-pairs market-thoughts miss-queues ctx)))
 
-(define (step-collect-fund enterprise current-price current-atr)
-  "Iterate proposals. Fund the proven ones. Clear the vec."
-  (for-each (range (len (:proposals enterprise)))
-    (lambda (slot-idx)
-      (when-let ((proposal (nth (:proposals enterprise) slot-idx)))
-        (let ((journal (nth (:registry enterprise) slot-idx)))
-          (when (and (funded? journal)
-                     (not (nth (:trades enterprise) slot-idx))
-                     (capital-available? (:treasury enterprise) (:direction proposal))
-                     true) ; risk-allows? — always true for now, not in 007
-            (let ((trade (open-trade (:treasury enterprise) proposal current-price current-atr)))
-              (set! (nth (:trades enterprise) slot-idx) trade)
-              (set! (nth (:trade-thoughts enterprise) slot-idx) (:composed proposal)))))
-        ;; Clear the proposal slot regardless
-        (set! (nth (:proposals enterprise) slot-idx) none)))))
+    ;; Write new levels back to treasury
+    (for-each
+      (lambda (update)
+        (update-trade-stops (:treasury ent) (first update) (second update)))
+      updates)))
 
-;; -- The candle loop ------------------------------------------------------------
-;; One candle. Four steps.
-;; The enterprise owns the data pipeline. It ticks its own indicators.
+;; ---- step-collect-fund -----------------------------------------------------
+;; Step 4: treasury evaluates proposals and funds proven ones.
 
-(define (on-candle enterprise raw ctx)
-  "One raw candle in. Four steps. The enterprise owns everything."
+(define (step-collect-fund [ent : Enterprise])
+  (fund-proposals (:treasury ent)))
 
-  ;; Tick indicators → produce computed candle
-  (let* ((candle (tick (:indicator-bank enterprise) raw))
-         (current-price (:close candle)))
+;; ---- slice-miss-queues -----------------------------------------------------
+;; Return the slice of cache-miss-queues belonging to a given post.
+;; Layout: (N market + M exit) per post, contiguous.
 
-    ;; Push to window, trim
-    (push! (:candle-window enterprise) candle)
-    (when (> (len (:candle-window enterprise)) (:max-window-size enterprise))
-      (pop-front (:candle-window enterprise)))
+(define (slice-miss-queues [ent : Enterprise]
+                           [post-idx : usize])
+  : Vec<&Vec<(ThoughtAST, Vector)>>
+  (let* ((offset (fold (lambda (sum idx)
+                          (let ((p (nth (:posts ent) idx)))
+                            (+ sum (len (:market-observers p))
+                                   (len (:exit-observers p)))))
+                        0
+                        (range post-idx)))
+         (p (nth (:posts ent) post-idx))
+         (count (+ (len (:market-observers p))
+                   (len (:exit-observers p)))))
+    (subvec (:cache-miss-queues ent) offset (+ offset count))))
 
-    ;; Advance the counter
-    (inc! (:encode-count enterprise))
+;; ---- drain-miss-queues -----------------------------------------------------
+;; Drain all cache miss-queues into the ThoughtEncoder's LRU cache.
+;; Called between steps — the sequential phase.
 
-    ;; Step 1: RESOLVE — close triggered trades, propagate to both observers
-    (step-resolve enterprise current-price (:candle-window enterprise))
+(define (drain-miss-queues [ent : Enterprise]
+                           [ctx : Ctx])
+  (for-each
+    (lambda (queue)
+      (for-each
+        (lambda (entry)
+          ;; entry is (ThoughtAST, Vector) — insert into cache
+          ;; The ThoughtEncoder's cache uses interior mutability for this.
+          (cache-insert (:thought-encoder ctx) (first entry) (second entry)))
+        queue)
+      ;; Clear the queue
+      (set! queue (list)))
+    (:cache-miss-queues ent)))
 
-    ;; Step 2: COMPUTE + DISPATCH — encode, compose, propose
-    (let ((thoughts (step-compute-dispatch enterprise candle ctx)))
+;; ---- drain-logs ------------------------------------------------------------
+;; Drain all log-queues. Each producer's queue is emptied.
+;; Returns the concatenated entries. Called at the candle boundary
+;; by the binary — the enterprise produces logs, the binary decides
+;; what to do with them (write to DB, print, discard).
 
-      ;; Step 3: PROCESS — update triggers, tick papers, propagate resolved
-      (step-process enterprise thoughts current-price))
-
-    ;; Step 4: COLLECT + FUND — evaluate proposals, fund or reject
-    (step-collect-fund enterprise current-price (:atr candle))))
-
-;; -- Ownership summary ----------------------------------------------------------
-;;
-;; Enterprise owns:
-;;   indicator-bank         — streaming indicators (stateful, one per asset)
-;;   candle-window          — bounded VecDeque<Candle>
-;;   market-observers[N]    — predict direction, learn Win/Loss from propagation
-;;   exit-observers[M]      — predict exit distance, learn to maximize residue
-;;   treasury               — holds capital, executes swaps, settles trades
-;;   registry[N×M]          — tuple journal closures over (market, exit), permanent
-;;   proposals[N×M]         — Option<Proposal> (cleared every candle)
-;;   trades[N×M]            — Option<Trade> (insert/remove)
-;;   trade-thoughts[N×M]    — Option<Vector> (stashed at entry for resolution)
-;;   encode-count           — candle counter
-;;   pending-logs           — log buffer, flushed by binary
-;;
-;; Each TupleJournal is a closure over (market-observer, exit-observer):
-;;   journal                — Grace/Violence labels (the pair's accountability)
-;;   noise-subspace         — the closure's own noise model
-;;   scalar-accums          — per-magic-number f64 accumulators
-;;   papers                 — paper entries for this pair
-;;   track-record           — cumulative grace/violence
-;;
-;;   propagate routes to BOTH observers:
-;;     market-observer.resolve(thought, Win/Loss)              — direction learning
-;;     exit-observer.observe-distance(thought, optimal, weight) — exit learning
-;;     track-record ← Grace/Violence                           — accountability
-;;
-;; Market observers own:
-;;   window-sampler         — log-uniform window sampling with seed
-;;   lens                   — which vocabulary subset to encode
-;;   journal                — direction prediction (Win/Loss)
-;;   noise-subspace         — noise model for strip-noise
-;;   The generalist is just another lens. No special treatment.
-;;
-;; Exit observers own:
-;;   lens                   — judgment vocabulary (volatility, structure, timing)
-;;   learned-stop           — nearest neighbor regression (the exit observer's brain)
-;;   One LearnedStop per exit observer. M instances total. Not N×M.
-;;   The composed thought carries the market observer's signal in superposition.
-;;   The cosine regression recovers the right distance per thought region.
-;;   ExitGeneralist = all three vocabularies.
-;;
-;; The desk is gone. The enterprise IS the desk.
-;; The manager is gone. The tuple journal IS the manager.
+(define (drain-logs [ent : Enterprise])
+  : Vec<LogEntry>
+  (let ((all-logs (flatten (:log-queues ent))))
+    ;; Clear all queues
+    (for-each (lambda (q) (set! q (list)))
+              (:log-queues ent))
+    all-logs))
