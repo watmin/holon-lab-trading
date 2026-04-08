@@ -2,7 +2,7 @@
 ;
 ; Depends on: IndicatorBank, MarketObserver, ExitObserver, Broker,
 ;             Proposal, Side, Direction, Distances, Levels,
-;             ThoughtAST, ThoughtEncoder.
+;             ThoughtAST.
 ;
 ; The post is where the thinking happens. It owns the observers,
 ; the brokers, the indicator bank. It does NOT own proposals or
@@ -27,7 +27,6 @@
                               ;   recommended-distances
 (require broker)              ; Broker, propose, funding, register-paper, propagate
 (require proposal)            ; Proposal
-(require thought-encoder)     ; ThoughtEncoder, encode
 
 ;; ---- Struct ----------------------------------------------------------------
 

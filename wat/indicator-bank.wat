@@ -6,8 +6,39 @@
 
 (require primitives)
 (require raw-candle)
-(require vocab/shared/time)  ; parse-minute, parse-hour, parse-day-of-week,
-                             ; parse-day-of-month, parse-month
+
+;; ── Time parsing — extract temporal components from timestamp string ──
+;; These live here because parsing timestamps from raw candles is
+;; indicator-bank's concern. time.wat uses the parsed Candle fields.
+
+(define (parse-minute [ts : String])
+  : f64
+  (+ (substring ts 14 16) 0.0))
+
+(define (parse-hour [ts : String])
+  : f64
+  (+ (substring ts 11 13) 0.0))
+
+(define (parse-day-of-week [ts : String])
+  : f64
+  ; Tomohiko Sakamoto's algorithm. 0 = Sunday.
+  (let* ((y (+ (substring ts 0 4) 0))
+         (m (+ (substring ts 5 7) 0))
+         (d (+ (substring ts 8 10) 0))
+         (t (list 0 3 2 5 0 3 5 1 4 6 2 4))
+         (y2 (if (< m 3) (- y 1) y)))
+    (+ (mod (+ y2 (/ y2 4) (- (/ y2 100)) (/ y2 400)
+               (nth t (- m 1)) d)
+            7)
+       0.0)))
+
+(define (parse-day-of-month [ts : String])
+  : f64
+  (+ (substring ts 8 10) 0.0))
+
+(define (parse-month [ts : String])
+  : f64
+  (+ (substring ts 5 7) 0.0))
 
 ;; ── Streaming primitives — the building blocks of indicator state ────
 

@@ -47,7 +47,7 @@ Vectors. Vocabulary and ThoughtEncoder are tools, not upstream producers.
 | **MarketObserver ×N** | reckoner :discrete (Up/Down), noise-subspace, window-sampler, curve | (Vector, Prediction, edge) |
 | **ExitObserver ×M** | 4× reckoner :continuous (trail, stop, tp, runner-trail), default-distances | (Distances, experience) via cascade |
 | **Broker ×N×M** | reckoner :discrete (Grace/Violence), curve, papers (deque), 4× scalar-accumulator | Prediction + funding() |
-| **Post** | indicator-bank, candle-window, market-observers, exit-observers, registry, broker-map | Vec\<Proposal\> + Vec\<Vector\> |
+| **Post** | indicator-bank, candle-window, market-observers, exit-observers, registry | Vec\<Proposal\> + Vec\<Vector\> |
 | **Treasury** | available ◄──► reserved, trades, trade-origins, next-trade-id | TreasurySettlement on settle |
 | **Enterprise** | posts, treasury, market-thoughts-cache, cache-miss-queues, log-queues | Settlement (enriched) |
 

@@ -29,6 +29,7 @@ enums.wat                   ; Side, Direction, Outcome, TradePhase,
                             ; reckoner-config, prediction, ScalarEncoding
 newtypes.wat                ; TradeId
 scalar-accumulator.wat      ; ScalarAccumulator (requires Outcome from enums)
+engram-gate.wat             ; check-engram-gate (requires primitives only)
 
 ;; ── Candle — depends on: indicator-bank ─────────────────────
 candle.wat                  ; Candle struct (the output of tick)
@@ -53,6 +54,9 @@ vocab/exit/timing.wat
 
 ;; ── ThoughtEncoder — depends on: vocabulary ─────────────────
 thought-encoder.wat         ; ThoughtAST enum, ThoughtEncoder struct + encode
+
+;; ── Ctx — depends on: thought-encoder ───────────────────────
+ctx.wat                     ; Ctx struct (thought-encoder, dims, recalib-interval)
 
 ;; ── Distances and Levels — depend on nothing ────────────────
 distances.wat               ; Distances, Levels

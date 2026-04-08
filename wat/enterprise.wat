@@ -1,7 +1,7 @@
 ; enterprise.wat — the coordination plane. The CSP sync point.
 ;
 ; Depends on: Post, Treasury, TreasurySettlement, Settlement,
-;             Direction, Outcome, Distances, LogEntry, TradeOrigin,
+;             Direction, Outcome, Distances, LogEntry,
 ;             ThoughtAST, ThoughtEncoder.
 ;
 ; The enterprise is the only entity that sees the whole picture.
@@ -24,7 +24,6 @@
 (require log-entry)           ; LogEntry
 (require settlement)          ; TreasurySettlement, Settlement
 (require trade)               ; Trade
-(require trade-origin)        ; TradeOrigin
 (require post)                ; Post, post-on-candle, post-update-triggers,
                               ;   current-price, compute-optimal-distances,
                               ;   post-propagate
