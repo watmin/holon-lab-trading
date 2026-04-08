@@ -159,20 +159,19 @@ graph TD
     AV --> TD[Trade :active]
     TD -->|safety-stop hit| SV[Settled :violence]
     SV --> RET1[principal - loss → available]
-    TD -->|take-profit hit| PR2[PrincipalRecovered]
-    PR2 --> RET2[principal → available]
-    PR2 --> RN[Runner :runner]
+    TD -->|take-profit hit| RN[Runner :runner]
+    RN --> RET2[principal → available]
     RN -->|runner-trail hit| SG[Settled :grace]
     SG --> RES[residue → available — permanent gain]
     TR -->|reject| DR[drained]
 ```
 
 The treasury funds proven proposals. Capital moves from available to
-reserved. The trade is :active. Three trigger paths:
+reserved. The trade is :active. Two trigger paths:
 - **Safety-stop hit** → :settled-violence. Principal minus loss returns.
   Bounded by the reservation.
-- **Take-profit hit** → :principal-recovered. Principal returns to
-  available. Residue continues as a :runner with a wider trailing stop.
+- **Take-profit hit** → :runner. Principal returns to available AND
+  residue continues with a wider trailing stop. One transition, not two.
   Zero cost basis — house money.
 - **Runner-trail hit** → :settled-grace. Residue is permanent gain.
   Returns to available. The trade is done.
