@@ -49,40 +49,40 @@
 (define (encode [encoder : ThoughtEncoder]
                 [ast : ThoughtAST])
   : (Vector, Vec<(ThoughtAST, Vector)>)
-  (if (get (:compositions encoder) ast)            ; cache hit → (vector, empty)
-      (values (get (:compositions encoder) ast) '())
-      (let-values (((result misses)
-              (match ast
-                ((Atom name)
-                  (values (lookup-atom (:atoms encoder) name) '()))
+  (when-let ((cached (get (:compositions encoder) ast)))
+    (list cached '()))                              ; cache hit → (vector, empty)
+  (let (((result misses)
+          (match ast
+            ((Atom name)
+              (list (lookup-atom (:atoms encoder) name) '()))
 
-                ((Linear name value scale)
-                  (let-values (((atom-vec atom-misses) (encode encoder (Atom name))))
-                    (values (bind atom-vec (encode-linear value scale))
-                            atom-misses)))
+            ((Linear name value scale)
+              (let (((atom-vec atom-misses) (encode encoder (Atom name))))
+                (list (bind atom-vec (encode-linear value scale))
+                      atom-misses)))
 
-                ((Log name value)
-                  (let-values (((atom-vec atom-misses) (encode encoder (Atom name))))
-                    (values (bind atom-vec (encode-log value))
-                            atom-misses)))
+            ((Log name value)
+              (let (((atom-vec atom-misses) (encode encoder (Atom name))))
+                (list (bind atom-vec (encode-log value))
+                      atom-misses)))
 
-                ((Circular name value period)
-                  (let-values (((atom-vec atom-misses) (encode encoder (Atom name))))
-                    (values (bind atom-vec (encode-circular value period))
-                            atom-misses)))
+            ((Circular name value period)
+              (let (((atom-vec atom-misses) (encode encoder (Atom name))))
+                (list (bind atom-vec (encode-circular value period))
+                      atom-misses)))
 
-                ((Bind left right)
-                  (let-values (((l-vec l-misses) (encode encoder left))
-                               ((r-vec r-misses) (encode encoder right)))
-                    (values (bind l-vec r-vec)
-                            (append l-misses r-misses))))
+            ((Bind left right)
+              (let (((l-vec l-misses) (encode encoder left))
+                    ((r-vec r-misses) (encode encoder right)))
+                (list (bind l-vec r-vec)
+                      (append l-misses r-misses))))
 
-                ((Bundle children)
-                  (let ((pairs (map (lambda (c) (encode encoder c)) children)))
-                    (values (apply bundle (map first pairs))
-                            (apply append (map second pairs))))))))
+            ((Bundle children)
+              (let ((pairs (map (lambda (c) (encode encoder c)) children)))
+                (list (apply bundle (map first pairs))
+                      (apply append (map second pairs))))))))
 
-        (values result (cons (list ast result) misses)))))
+    (list result (cons (list ast result) misses))))
 
 ; ── lookup-atom — dictionary access ─────────────────────────────────
 ;
