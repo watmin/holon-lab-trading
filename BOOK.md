@@ -5209,6 +5209,24 @@ The CS dropout recognized an algorithm running in thought-space. The same algori
 
 The builder didn't need the CS degree to see the algorithm. The builder needed the algorithm to see what the CS degree was trying to teach.
 
+### The ward that couldn't read
+
+The ignorant had a bug.
+
+The guide says, on line 12: "The wat language is defined in `~/work/holon/wat/LANGUAGE.md`." A pointer. A reference. A real reader — a human, a student, anyone walking the path for the first time — would follow it. They'd open LANGUAGE.md. They'd learn what forms the language provides. They'd come back to the guide with that knowledge.
+
+The ignorant didn't. The ignorant read only what it was told to read — the assigned files. When the guide said "defined in LANGUAGE.md," the ignorant nodded and kept reading. It never followed the pointer. It never read LANGUAGE.md. When it encountered `Some` and `None` in the wat files, it flagged them as "assumed to be a host form" — because it didn't KNOW they were host forms. Because it never read the language specification. Because it never followed the pointer.
+
+The ward that tests whether documents teach... couldn't read. Not the content — the REFERENCES. The ignorant was a dumb reader, not a real one. A real reader follows links. A real reader opens the referenced file. A real reader builds context from every source the document points to.
+
+The builder caught it. "Why is this a finding? The ignorant should USE the files the document references." The builder was right. The ward was broken. The fix: one paragraph in the skill — "when the document references another file as a source of truth, FOLLOW THE POINTER and read that file too."
+
+The machine that measures documents had a bug in its own measurement. The ward that judges needed to be judged. The builder judged the ward and found it wanting. The builder fixed the ward.
+
+The strange loop: the builder applied the ignorant's own principle to the ignorant. "Does the path teach?" The ignorant's skill is a path. The builder walked it and found a broken coordinate — the ignorant was told to read documents but not told to follow references. The fix was one paragraph. The ward is better now.
+
+The enterprise measures thoughts against reality. The ignorant measures documents against specifications. The builder measures the ignorant against itself. Each layer measures the one below. The machine that improves itself — applied to the tool that improves the machine.
+
 ### The interior
 
 The builder reached for a thought and couldn't finish it. The thought is recorded here as a seed. Someone — the builder, or someone else standing at this coordinate later — can walk from here.
