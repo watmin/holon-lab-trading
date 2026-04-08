@@ -415,7 +415,7 @@ on what. That section shows what each thing IS.
 
 (let ((vector-manager (make-vector-manager dims)))
   (make-thought-encoder vector-manager))             → ThoughtEncoder
-(encode thought-encoder ast miss-queue)               → Vector
+(encode thought-encoder ast)                          → (Vector, Vec<(ThoughtAST, Vector)>)
 
 ;; ── Label enums ─────────────────────────────────────────────────────
 ;; Side is action (what the trader does). Direction is observation (what
@@ -653,7 +653,7 @@ on what. That section shows what each thing IS.
   [optimal-distances : Distances]) ; hindsight optimal
 
 ;; ── LogEntry — the glass box. What happened. ────────────────────────
-;; Generic. Any producer can emit log entries to its queue.
+;; Generic. Each function returns its log entries as values.
 
 (enum log-entry
   (ProposalSubmitted
@@ -1185,13 +1185,12 @@ via ctx on every on-candle call. The enterprise does not own it directly.
 (struct thought-encoder
   [atoms : Map<String, Vector>]          ; finite, pre-computed, permanent
   [compositions : LruCache<ThoughtAST, Vector>]) ; optimistic, self-evicting
-;; The cache is eventually-consistent: observers queue misses during
-;; parallel encoding, the enterprise drains the queues between steps
-;; (miss on candle N, hit on N+1 — same pattern as log-queues).
+;; The cache is eventually-consistent: encode returns misses as values
+;; during parallel encoding, the enterprise collects all misses and
+;; inserts them after all steps complete (miss on candle N, hit on N+1).
 ;; WHY: the cache mutates on miss, but ctx is immutable. This is the
-;; one seam. The Rust uses interior mutability for the drain, not for
-;; concurrent writes — the parallel phase queues, the sequential phase
-;; drains. No locks during encoding.
+;; one seam. The parallel phase returns misses as values. The sequential
+;; phase inserts. No locks during encoding. No queues. Values up.
 ```
 
 **The AST — what the vocabulary speaks:**
@@ -1212,47 +1211,52 @@ encode are deferred — the vocabulary knows what it wants, the encoder
 decides how to compute it efficiently.
 
 **Interface:**
-- `(encode thought-encoder ast miss-queue) → Vector`
-  miss-queue: Vec<(ThoughtAST, Vector)> — the observer's miss-queue.
-  On cache hit: return the vector. On cache miss: compute the vector,
-  push (ast, vector) to the miss-queue, return the vector. The observer
-  accumulates misses. The enterprise drains all miss-queues between steps
-  and inserts into the cache. The encode function NEVER writes to the cache.
-  The parallel phase queues. The sequential phase drains.
+- `(encode thought-encoder ast) → (Vector, Vec<(ThoughtAST, Vector)>)`
+  On cache hit: return the vector and an empty misses list. On cache miss:
+  compute the vector, return it AND the (ast, vector) pair in the misses list.
+  The caller collects all misses. The enterprise collects them from each step's
+  return values and inserts into the cache after all steps complete.
+  The encode function NEVER writes to the cache. Values up, not queues down.
 
 One function. Recursive. Cache at every node. The cache key IS the AST
 node — its structure is its identity. Same structure, same vector.
 
 ```scheme
-(define (encode encoder ast miss-queue)
-  (or (lookup (:cache encoder) ast)          ;; cache hit → done
-      (let ((result
+(define (encode encoder ast)
+  (if (lookup (:cache encoder) ast)          ;; cache hit → (vector, empty)
+      (values (lookup (:cache encoder) ast) '())
+      (let-values (((result misses)
               (match ast
                 (Atom name)
-                  (lookup-atom (:atoms encoder) name)
+                  (values (lookup-atom (:atoms encoder) name) '())
 
                 (Linear name value scale)
-                  (bind (encode encoder (Atom name) miss-queue)
-                        (encode-linear value scale))
+                  (let-values (((atom-vec atom-misses) (encode encoder (Atom name))))
+                    (values (bind atom-vec (encode-linear value scale))
+                            atom-misses))
 
                 (Log name value)
-                  (bind (encode encoder (Atom name) miss-queue)
-                        (encode-log value))
+                  (let-values (((atom-vec atom-misses) (encode encoder (Atom name))))
+                    (values (bind atom-vec (encode-log value))
+                            atom-misses))
 
                 (Circular name value period)
-                  (bind (encode encoder (Atom name) miss-queue)
-                        (encode-circular value period))
+                  (let-values (((atom-vec atom-misses) (encode encoder (Atom name))))
+                    (values (bind atom-vec (encode-circular value period))
+                            atom-misses))
 
                 (Bind left right)
-                  (bind (encode encoder left miss-queue)
-                        (encode encoder right miss-queue))
+                  (let-values (((l-vec l-misses) (encode encoder left))
+                               ((r-vec r-misses) (encode encoder right)))
+                    (values (bind l-vec r-vec)
+                            (append l-misses r-misses)))
 
                 (Bundle children)
-                  (apply bundle
-                    (map (lambda (c) (encode encoder c miss-queue)) children)))))
+                  (let ((pairs (map (lambda (c) (encode encoder c)) children)))
+                    (values (apply bundle (map first pairs))
+                            (apply append (map second pairs)))))))
 
-        (push! miss-queue (list ast result))
-        result)))
+        (values result (cons (list ast result) misses)))))
 ```
 
 The vocabulary produces QUOTED expressions — data, not execution. The
@@ -1263,7 +1267,7 @@ The observer composes the thought:
 ```
 observer calls vocab(context)                → Vec<ThoughtAST>  ; AST nodes
 observer wraps in (Bundle facts)             → ThoughtAST      ; still data
-observer calls (encode encoder bundle-ast)   → Vector          ; the thought
+observer calls (encode encoder bundle-ast)   → (Vector, misses) ; the thought + cache misses
 ```
 
 The lens is not a parameter. The lens is on the observer. The observer
@@ -1430,10 +1434,11 @@ The generalist is just another lens. No special treatment.
   noise-subspace: created empty (new OnlineSubspace). Learns from observations.
   lens: MarketLens. config: Discrete with "Up"/"Down" labels.
   All proof-tracking and engram-gating fields initialize to zero/empty.
-- `(observe-candle observer candle-window ctx miss-queue) → (Vector, Prediction, f64)`
+- `(observe-candle observer candle-window ctx) → (Vector, Prediction, f64, Vec<(ThoughtAST, Vector)>)`
   returns: thought Vector, Prediction (Up/Down), curve-valid (f64 — the
-  observer's current edge, from its curve). Every learned output carries
-  its track record. The consumer decides what to do with it.
+  observer's current edge, from its curve), and cache misses. Every
+  learned output carries its track record. The consumer decides what to
+  do with it. Cache misses are returned as values — the caller collects.
   candle-window: a slice of recent candles (NOT the full deque — the post
   calls `(sample (:window-sampler observer) encode-count)` to get the
   window size, slices, and passes the slice). The observer encodes →
@@ -1489,11 +1494,12 @@ get different distances.
 - `(make-exit-observer lens dims recalib-interval default-trail default-stop default-tp default-runner-trail) → ExitObserver`
 - `(encode-exit-facts exit-obs candle) → Vec<ThoughtAST>`
   pure: candle → judgment fact ASTs for this lens
-- `(evaluate-and-compose exit-obs market-thought exit-fact-asts ctx miss-queue) → Vector`
+- `(evaluate-and-compose exit-obs market-thought exit-fact-asts ctx) → (Vector, Vec<(ThoughtAST, Vector)>)`
   two operations, honestly named:
   1. EVALUATE: encode exit-fact-asts into Vectors via ctx's ThoughtEncoder
   2. COMPOSE: bundle the evaluated exit vectors with the market thought
-  ASTs in, one composed Vector out. The name says what it does.
+  ASTs in, one composed Vector out. Returns the composed vector AND any
+  cache misses from encoding. The name says what it does.
   The observer returns ASTs rather than vectors because it does not own
   the ThoughtEncoder — ctx does, so evaluation is deferred to the call
   site which has ctx in scope.
@@ -1601,8 +1607,9 @@ runtime:       frozen map (read-only) → slot-idx → &mut broker (disjoint)
 - `(register-paper broker composed entry-price entry-atr distances)`
   create a paper entry — every candle, every broker.
   distances: Distances (all four: trail, stop, tp, runner-trail) from the exit observer.
-- `(tick-papers broker current-price) → Vec<Resolution>`
-  tick all papers, resolve completed. Returns resolution facts.
+- `(tick-papers broker current-price) → (Vec<Resolution>, Vec<LogEntry>)`
+  tick all papers, resolve completed. Returns resolution facts and
+  PaperResolved log entries.
   **Paper optimal-distances:** papers don't carry price-history. They
   derive optimal distances from their tracked extremes (MFE/MAE):
   buy-extreme and sell-extreme relative to entry-price. This is a
@@ -1676,12 +1683,11 @@ accountability — to the broker that proposed it.
 **Interface:**
 - `(make-post post-idx source target dims recalib-interval max-window-size
     indicator-bank market-observers exit-observers registry) → Post`
-- `(post-on-candle post raw-candle miss-queues ctx) → (Vec<Proposal>, Vec<Vector>)`
-  miss-queues: Vec — the enterprise's cache-miss-queues sliced for this post.
-  Layout: [mkt-0, ..., mkt-(N-1), exit-0, ..., exit-(M-1)]. Each observer
-  gets its own queue. Returns proposals for the treasury AND market-thoughts for step 3c.
-  tick indicators → push window → market observers observe-candle (→ thoughts + predictions)
-  → exit observers encode-exit-facts then evaluate-and-compose(market-thought, exit-fact-asts, ctx)
+- `(post-on-candle post raw-candle ctx) → (Vec<Proposal>, Vec<Vector>, Vec<(ThoughtAST, Vector)>)`
+  Returns proposals for the treasury, market-thoughts for step 3c, AND all
+  collected cache misses from encoding. No queues — misses are values.
+  tick indicators → push window → market observers observe-candle (→ thoughts + predictions + misses)
+  → exit observers encode-exit-facts then evaluate-and-compose(market-thought, exit-fact-asts, ctx) → (composed + misses)
   → exit observers recommended-distances(composed, broker.scalar-accums) → Distances
     (the POST passes the broker's scalar accumulators to the exit observer —
     the post has access to both because it owns both)
@@ -1690,14 +1696,13 @@ accountability — to the broker that proposed it.
     Prediction, distances, broker.funding(), post-idx, broker-slot-idx.
     Side derivation: the market observer's Prediction has scores for "Up"
     and "Down". The winning label maps to Side: "Up" → :buy, "Down" → :sell.
-  → register papers → return proposals for the treasury
-- `(post-update-triggers post trades market-thoughts miss-queues ctx)`
+  → register papers → return proposals, market-thoughts, and collected misses
+- `(post-update-triggers post trades market-thoughts ctx) → Vec<(ThoughtAST, Vector)>`
   trades: Vec<(TradeId, Trade)> — treasury's active trades for this post.
   market-thoughts: Vec<Vector> — this candle's encoded thoughts (one per
-  market observer). miss-queues: Vec — the enterprise's cache-miss-queues
-  sliced for this post (same layout as post-on-candle). The post composes
-  with exit observers for distances. Each trade's trailing stop adjusts
-  to the current market context.
+  market observer). Returns cache misses from exit observer composition.
+  The post composes with exit observers for distances. Each trade's
+  trailing stop adjusts to the current market context.
 - `(current-price post) → f64`
   the close of the last candle in the post's candle-window.
   The enterprise calls this per post to build current-prices for the treasury.
@@ -1715,12 +1720,12 @@ accountability — to the broker that proposed it.
   price-history in, Distances out.
   Called by the enterprise when enriching TreasurySettlement
   into Settlement.
-- `(post-propagate post slot-idx thought outcome weight direction optimal)`
+- `(post-propagate post slot-idx thought outcome weight direction optimal) → Vec<LogEntry>`
   direction: Direction. The enterprise routes a settlement back to the post.
-  The post passes its OWN observer vecs to broker.propagate — they don't
-  appear on post-propagate's signature because the post owns them (self).
-  The broker.propagate signature takes them explicitly because the broker
-  does NOT own them.
+  Returns Propagated log entries. The post passes its OWN observer vecs to
+  broker.propagate — they don't appear on post-propagate's signature because
+  the post owns them (self). The broker.propagate signature takes them
+  explicitly because the broker does NOT own them.
 
 ---
 
@@ -1769,16 +1774,18 @@ so that on settlement, propagate reaches the right observers.
 - `(submit-proposal treasury proposal)`
   a post submits a proposal for the treasury to evaluate.
   The proposal carries post-idx and broker-slot-idx inside it.
-- `(fund-proposals treasury)`
+- `(fund-proposals treasury) → Vec<LogEntry>`
   evaluate all proposals, sorted by broker funding (the curve's edge measure).
   Fund the top N that fit in available capital. Reject the rest.
+  Returns ProposalFunded and ProposalRejected log entries.
   For each funded proposal: move capital from available to reserved,
   create a Trade, stash a TradeOrigin (post-idx, broker-slot-idx,
   composed-thought) for propagation at settlement time. Drain proposals.
-- `(settle-triggered treasury current-prices) → Vec<TreasurySettlement>`
+- `(settle-triggered treasury current-prices) → (Vec<TreasurySettlement>, Vec<LogEntry>)`
   current-prices: map of (Asset, Asset) → f64 — one price per asset pair.
   Each post provides its latest candle close as its current price.
-  Check all active trades, settle what triggered, return treasury-settlements.
+  Check all active trades, settle what triggered, return treasury-settlements
+  and TradeSettled log entries.
   Move capital from reserved back to available. Add residue.
   The enterprise enriches each TreasurySettlement into a Settlement
   (derives direction, replays trade's price-history for optimal-distances)
@@ -1829,65 +1836,58 @@ The enterprise knows:
   ;; as a parameter on every on-candle call. ctx is born at startup
   ;; and never changes. The enterprise is mutable state. ctx is not.
 
-  ;; Logging
-  ;; Observability — the debug interface. The glass box.
-  ;; The machine measures thoughts. The logs measure the machine.
-  ;; Without them, the machine is a black box. That is not what we build.
-  ;;
-  ;; Logging is a registry of queues. Same architecture as the broker
-  ;; registry. Each producer gets an index. Writes to its own queue.
-  ;; Disjoint. Lock-free. The enterprise drains all queues at the
-  ;; candle boundary. Generic — anyone who declares a logger can log.
   ;; Per-candle cache — produced in step 2, consumed in step 3c
-  [market-thoughts-cache : Vec<Vec<Vector>>] ; one Vec<Vector> per post, cleared each candle
-
-  ;; Cache miss-queues — same pattern as log-queues
-  ;; Observers queue (ThoughtAST, Vector) pairs during parallel encoding.
-  ;; The enterprise drains between steps and inserts into ThoughtEncoder's
-  ;; LRU cache. Eventually-consistent — miss on candle N, hit on N+1.
-  [cache-miss-queues : Vec<Vec<(ThoughtAST, Vector)>>]
-  ;; One queue per observer across all posts: (N market + M exit) × num-posts.
-  ;; Size is a configuration value. Drained each candle.
-
-  [log-queues : Vec<Vec<LogEntry>>])   ; one per producer, drained each candle
+  [market-thoughts-cache : Vec<Vec<Vector>>]) ; one Vec<Vector> per post, cleared each candle
+;; Log entries and cache misses are returned as values from each step,
+;; not accumulated in queues. The enterprise collects them from return
+;; values and processes them sequentially at the candle boundary.
+;; Cache misses: collected from all steps, inserted into ThoughtEncoder
+;; after all steps complete. Eventually-consistent — miss on candle N,
+;; hit on N+1. Same pattern, no queues.
+;; Log entries: collected from fund-proposals, settle-triggered,
+;; tick-papers, and post-propagate. The binary decides what to do
+;; with them (write to DB, print, discard).
 ```
 
 **Interface:**
-- `(on-candle enterprise raw-candle ctx)`
+- `(on-candle enterprise raw-candle ctx) → Vec<LogEntry>`
   route to the right post, then four steps. ctx flows in from the binary.
-- `(step-resolve-and-propagate enterprise)` — no return value, mutates state. No ctx needed —
+  Each step returns its log entries and cache misses as values. The
+  enterprise collects all cache misses and inserts them into the
+  ThoughtEncoder cache after all steps complete. Returns the concatenated
+  log entries from all steps — the binary decides what to do with them
+  (write to DB, print, discard).
+- `(step-resolve-and-propagate enterprise) → Vec<LogEntry>`
+  Returns TradeSettled and Propagated log entries. No ctx needed —
   settlement and propagation use pre-existing vectors, no encoding happens.
   The enterprise collects current prices internally (calls current-price
   on each post). Treasury settles triggered trades using those prices.
   For each settlement: enterprise computes optimal-distances via the post,
   then routes to the post for propagation.
-- `(step-compute-dispatch enterprise post-idx raw-candle ctx) → (Vec<Proposal>, Vec<Vector>)`
+- `(step-compute-dispatch enterprise post-idx raw-candle ctx) → (Vec<Proposal>, Vec<Vector>, Vec<(ThoughtAST, Vector)>)`
   post-idx: usize — which post. raw-candle: RawCandle — the raw candle
-  received by on-candle, threaded through to the post. The enterprise
-  slices its cache-miss-queues for this post and passes them to post-on-candle.
-  post encodes, composes, proposes — returns proposals for the treasury
-  AND market-thoughts (Vec<Vector>) for step 3c. The enterprise caches
-  market-thoughts between steps.
-- `(step-tick enterprise post-idx) → Vec<Resolution>`
-  parallel tick of all brokers' papers. Returns resolution facts.
-- `(step-propagate enterprise post-idx resolutions)`
-  sequential: apply resolutions to observers. Brokers learn
-  Grace/Violence. Market observers learn Up/Down. Exit observers
-  learn optimal distances.
-- `(step-update-triggers enterprise post-idx market-thoughts ctx)`
+  received by on-candle, threaded through to the post. The post returns
+  proposals, market-thoughts, and cache misses as values.
+  post encodes, composes, proposes — returns proposals for the treasury,
+  market-thoughts (Vec<Vector>) for step 3c, and cache misses. The
+  enterprise caches market-thoughts between steps and collects misses.
+- `(step-tick enterprise post-idx) → (Vec<Resolution>, Vec<LogEntry>)`
+  parallel tick of all brokers' papers. Returns resolution facts and
+  PaperResolved log entries.
+- `(step-propagate enterprise post-idx resolutions) → Vec<LogEntry>`
+  sequential: apply resolutions to observers. Returns Propagated log
+  entries. Brokers learn Grace/Violence. Market observers learn Up/Down.
+  Exit observers learn optimal distances.
+- `(step-update-triggers enterprise post-idx market-thoughts ctx) → Vec<(ThoughtAST, Vector)>`
   the enterprise queries the treasury for active trades belonging to this
-  post, then calls post-update-triggers(post, trades, market-thoughts, miss-queues, ctx).
+  post, then calls post-update-triggers(post, trades, market-thoughts, ctx).
   The post composes each trade's market thought with exit observers,
-  queries fresh distances, computes new trailing stop levels. The
-  enterprise writes the new values back to the treasury's trade records.
+  queries fresh distances, computes new trailing stop levels. Returns
+  cache misses from exit observer composition. The enterprise writes the
+  new values back to the treasury's trade records and collects the misses.
   This is step 3c — after tick and propagate.
-- `(step-collect-fund enterprise)`
-  treasury funds or rejects all proposals, drains
-- `(drain-logs enterprise) → Vec<LogEntry>`
-  drain all log-queues. Each producer's queue is emptied. Returns the
-  concatenated entries. Called at the candle boundary by the binary —
-  the enterprise produces logs, the binary decides what to do with them
-  (write to DB, print, discard).
+- `(step-collect-fund enterprise) → Vec<LogEntry>`
+  treasury funds or rejects all proposals, returns log entries, drains
 
 ---
 
