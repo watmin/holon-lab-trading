@@ -92,6 +92,8 @@ These are NOT specified in this tree. They are provided by holon-rs.
   - `(difference a b) → Vector` — subtract
   - `(blend a b ratio) → Vector` — weighted interpolation
   - `(prototype vecs) → Vector` — normalized average
+  - `(online-subspace dims k) → OnlineSubspace` — constructor (k = principal components)
+  - `(discriminant reckoner label) → Vector | None` — the learned separation direction
 
 ---
 
