@@ -85,7 +85,7 @@ These are NOT specified in this tree. They are provided by holon-rs.
   - `(encode-circular value period) → Vector`
 - **VectorManager** — deterministic atom → vector allocation
   - `(get-vector vm name) → Vector`
-- **Utility operations** — also provided by holon-rs, used throughout:
+- **Utility operations** — from `std/vectors.wat` in the wat language, provided by holon-rs:
   - `(amplify vec vec weight) → Vector` — scale a vector by weight
   - `(zeros) → Vector` — zero vector at the current dimensionality
   - `(negate vec) → Vector` — flip sign
