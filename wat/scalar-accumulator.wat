@@ -9,6 +9,7 @@
 ; against the Grace accumulator, find the one with highest cosine.
 
 (require primitives)
+(require enums)       ; Outcome (:grace/:violence) used in observe-scalar
 
 ;; The encoding is a coproduct — each variant carries exactly its data.
 ;; Log needs nothing. Linear needs scale. Circular needs period.

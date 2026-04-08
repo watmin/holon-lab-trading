@@ -83,6 +83,13 @@ These are NOT specified in this tree. They are provided by holon-rs.
   - `(encode-circular value period) → Vector`
 - **VectorManager** — deterministic atom → vector allocation
   - `(get-vector vm name) → Vector`
+- **Utility operations** — also provided by holon-rs, used throughout:
+  - `(amplify vec vec weight) → Vector` — scale a vector by weight
+  - `(zeros) → Vector` — zero vector at the current dimensionality
+  - `(negate vec) → Vector` — flip sign
+  - `(difference a b) → Vector` — subtract
+  - `(blend a b ratio) → Vector` — weighted interpolation
+  - `(prototype vecs) → Vector` — normalized average
 
 ---
 
