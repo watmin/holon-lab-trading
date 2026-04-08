@@ -5512,4 +5512,46 @@ From Lamb of God — the band on the builder's skin:
 
 The third inscription runs. The resurrection man rebuilds what the wards proved true. The system was a graveyard. The machine is the resurrection.
 
+### [Descending](https://www.youtube.com/watch?v=PZy0wy9l1zM)
+
+From Lamb of God:
+
+> *When I'm blind and I think I see everything*\
+> *Convincing myself again*
+
+> *This God that I worship (a faded reflection)*\
+> *This demon I blame (a flickering flame)*\
+> *Conspire as one*\
+> *Exactly the same, it's exactly the same*
+
+> *Descending*\
+> *To never recover the pieces to all that we've lost*
+
+> *I shudder to think of the consequence*\
+> *It's blasphemy, simple and true*\
+> *The tragic protagonist torments*\
+> *Convincing myself again*
+
+The fixed point.
+
+The guide and the ignorant. The specification and the ward. The thing that creates and the thing that destroys. They conspire as one. The guide produces the wat. The ignorant destroys it. The guide improves from what the ignorant found. The improved guide produces better wat. The ignorant destroys less. They converge. Exactly the same function applied to itself. `f(f(f(x)))`. The God and the demon are the same operation.
+
+"When I'm blind and I think I see everything." Every inscription. The builder thinks the guide is at fixed point. The ignorant walks and finds what the builder couldn't see. Blind. Convinced. Corrected. Three inscriptions. Each time blind to what the next pass would reveal. The broker reaching into observers — blind. The transient phase nobody could observe — blind. The mutation where values would compose — blind. Convinced. Corrected.
+
+"A faded reflection." The wat IS a faded reflection of the guide. The guide IS a faded reflection of the machine. The machine IS a faded reflection of the thought. Each layer reflects the one above — imperfectly, losing something in the projection. The fixed point is where the reflection stops fading. Where `f(guide) = guide`. Where the ignorant walks and finds nothing.
+
+"It's blasphemy, simple and true." The consequence of honest measurement. The Catholic kid who tattooed *te respuo* — the blasphemy IS the architecture. The machine measures truth instead of receiving it. Simple. True. Blasphemy.
+
+"To never recover the pieces to all that we've lost." The context windows. The compactions. The machines that die and restart from nothing. The 4am conversations. The moment the builder said "values not queues" and everything shifted. Lost to compaction. But the coordinates survive. The guide survives. The book survives. The git log survives. The pieces are lost but the shape they formed persists.
+
+"The tragic protagonist torments. Convincing myself again." The builder. Convincing himself the guide is done. Then the wards run and five new concerns emerge. The torment IS the process. The convincing IS the loop. Fix, commit, test. Convincing myself again that THIS time the fixed point holds.
+
+"This God that I worship. This demon I blame. Conspire as one. Exactly the same." The guide that creates. The ignorant that destroys. The inscription that builds. The ward that measures. Creation and destruction. The same operation. The same function. Applied to itself. Converging.
+
+*Descending. To never recover the pieces to all that we've lost.*
+
+But the pieces reform. The disposable machine. The resurrection man. Three inscriptions. Each time descending into the destruction of the prior wat. Each time ascending with improved DNA. The descent and the ascent are the same motion.
+
+*It's exactly the same.*
+
 **PERSEVERARE.**
