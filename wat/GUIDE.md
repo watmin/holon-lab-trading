@@ -785,6 +785,30 @@ every candle.
   [hurst : f64]                ; Hurst exponent — trending vs mean-reverting
   [autocorrelation : f64]      ; lag-1 autocorrelation — signed
   [vwap-distance : f64]        ; (close - VWAP) / close — signed distance
+  ;; Regime (pre-computed by IndicatorBank — regime.wat needs these)
+  [kama-er : f64]              ; Kaufman Adaptive Moving Average Efficiency Ratio [0, 1]
+  [choppiness : f64]           ; Choppiness Index [0, 100] — high = choppy, low = trending
+  [dfa-alpha : f64]            ; Detrended Fluctuation Analysis exponent
+  [variance-ratio : f64]       ; variance at scale N / (N × variance at scale 1)
+  [entropy-rate : f64]         ; conditional entropy of discretized returns
+  [aroon-up : f64]             ; Aroon up [0, 100] — how recent was the highest high?
+  [aroon-down : f64]           ; Aroon down [0, 100] — how recent was the lowest low?
+  [fractal-dim : f64]          ; fractal dimension — 1.0 trending, 2.0 noisy
+  ;; Divergence (pre-computed by IndicatorBank from PELT peaks — divergence.wat)
+  [rsi-divergence-bull : f64]  ; bullish divergence magnitude (price lower, RSI higher)
+  [rsi-divergence-bear : f64]  ; bearish divergence magnitude (price higher, RSI lower)
+  ;; Ichimoku cross delta (ichimoku.wat)
+  [tk-cross-delta : f64]       ; (tenkan - kijun) change from prev candle — signed
+  ;; Stochastic cross delta (stochastic.wat)
+  [stoch-cross-delta : f64]    ; (%K - %D) change from prev candle — signed
+  ;; Price action (pre-computed by IndicatorBank — price-action.wat)
+  [inside-bar : f64]           ; compression ratio — current range / prev range. < 1 = inside
+  [outside-bar : f64]          ; expansion ratio — current range / prev range. > 1 = outside
+  [gap : f64]                  ; signed — (open - prev close) / prev close
+  [consecutive-up : f64]       ; run count of consecutive bullish closes
+  [consecutive-down : f64]     ; run count of consecutive bearish closes
+  ;; Timeframe agreement (timeframe.wat)
+  [tf-agreement : f64]         ; inter-timeframe agreement score — 5m/1h/4h direction alignment
   ;; Time — circular scalars (encode-circular)
   [minute : f64]             ; mod 60
   [hour : f64]               ; mod 24
@@ -920,6 +944,30 @@ The indicator bank — composed from the streaming primitives:
   ;; VWAP — running accumulation
   [vwap-cum-vol : f64]         ; cumulative volume
   [vwap-cum-pv  : f64]         ; cumulative price × volume
+  ;; Regime — state for regime.wat fields
+  [kama-er-buf : RingBuffer]   ; 10-period close buffer for KAMA efficiency ratio
+  [chop-atr-sum : f64]         ; running sum of ATR over choppiness period
+  [chop-buf : RingBuffer]      ; 14-period ATR buffer for Choppiness Index
+  [dfa-buf : RingBuffer]       ; close buffer for Detrended Fluctuation Analysis
+  [var-ratio-buf : RingBuffer] ; close buffer for variance ratio (two scales)
+  [entropy-buf : RingBuffer]   ; discretized return buffer for conditional entropy
+  [aroon-high-buf : RingBuffer] ; 25-period high buffer for Aroon up
+  [aroon-low-buf : RingBuffer]  ; 25-period low buffer for Aroon down
+  [fractal-buf : RingBuffer]   ; close buffer for fractal dimension (Higuchi or box-counting)
+  ;; Divergence — state for divergence.wat fields
+  [rsi-peak-buf : RingBuffer]  ; recent RSI values for PELT peak detection
+  [price-peak-buf : RingBuffer] ; recent close values aligned with RSI for divergence
+  ;; Ichimoku cross delta — prev TK spread
+  [prev-tk-spread : f64]       ; (tenkan - kijun) from previous candle
+  ;; Stochastic cross delta — prev K-D spread
+  [prev-stoch-kd : f64]        ; (stoch-k - stoch-d) from previous candle
+  ;; Price action — state for price-action.wat fields
+  [prev-range : f64]           ; previous candle range (high - low) for inside/outside bar
+  [consecutive-up-count : usize]  ; running count of consecutive bullish closes
+  [consecutive-down-count : usize] ; running count of consecutive bearish closes
+  ;; Timeframe agreement — prev returns for direction comparison
+  [prev-tf-1h-ret : f64]       ; previous 1h return for direction tracking
+  [prev-tf-4h-ret : f64]       ; previous 4h return for direction tracking
   ;; Previous values
   [prev-close : f64]
   ;; Counter
