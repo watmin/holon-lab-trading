@@ -100,6 +100,7 @@
                                [composed : Vector]
                                [broker-accums : Vec<ScalarAccumulator>])
   : (Distances, f64)
+  ;; broker-accums convention: 0=trail, 1=stop, 2=tp, 3=runner-trail
   (let* ((trail-accum  (nth broker-accums 0))
          (stop-accum   (nth broker-accums 1))
          (tp-accum     (nth broker-accums 2))

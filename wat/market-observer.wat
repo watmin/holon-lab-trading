@@ -178,6 +178,7 @@
          ;; 3. Record the prediction's outcome for the curve
          ;;    Was the reckoner's prediction correct?
          (pred  (predict (:reckoner obs) thought))
+         ;; scores are in registration order: first='Up', second='Down'
          (predicted-dir (match pred
                           ((Discrete scores conviction)
                             (if (> (second (first scores)) (second (second scores)))
@@ -198,9 +199,8 @@
         ;; A recalibration happened. Update engram gate.
         (begin
           ;; Check accuracy since last recalib
-          (if correct
-              (inc! (:recalib-wins obs))
-              (begin))
+          (when correct
+            (inc! (:recalib-wins obs)))
           (inc! (:recalib-total obs))
 
           ;; If enough data and good accuracy, snapshot the discriminant

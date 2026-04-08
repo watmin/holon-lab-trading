@@ -196,7 +196,7 @@
   ; The most recent value pushed.
   (if (= (:len rb) 0)
     0.0
-    (let* ((idx (mod (- (:head rb) 1 + (:capacity rb)) (:capacity rb))))
+    (let* ((idx (mod (+ (- (:head rb) 1) (:capacity rb)) (:capacity rb))))
       (nth (:data rb) idx))))
 
 (define (ring-full? [rb : RingBuffer])

@@ -180,17 +180,9 @@
                                 [post-idx : usize]
                                 [ctx : Ctx])
   : (Vec<Proposal>, Vec<Vector>)
-  ;; Delegate to the post's on-candle
-  ;; The raw candle has already been routed; the post received it
-  ;; via its indicator-bank tick in post-on-candle.
-  ;; The caller (on-candle) passes the raw-candle to post-on-candle directly.
-  ;; Here we return the result from post-on-candle.
-  ;; NOTE: in practice, the enterprise calls post-on-candle in on-candle above.
-  ;; This step function is the logical boundary.
+  ;; Delegate to the post's on-candle — encodes the candle,
+  ;; composes market + exit thoughts, and collects broker proposals.
   (let ((p (nth (:posts ent) post-idx)))
-    ;; post-on-candle was already called — this returns its cached result.
-    ;; In the actual flow, on-candle calls post-on-candle and this function
-    ;; IS that call. See on-candle for the real dispatch.
     (post-on-candle p (last (:candle-window p)) ctx)))
 
 ;; ---- step-tick -------------------------------------------------------------

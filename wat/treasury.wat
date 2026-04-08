@@ -67,11 +67,7 @@
 
     (for-each
       (lambda (prop)
-        (let* ((source (:source-asset (nth (:posts prop) (:post-idx prop))))  ; not available here
-               ;; The source-asset comes from the proposal's context.
-               ;; In practice: the enterprise knows which post has which asset.
-               ;; The treasury uses a fixed denomination for sizing.
-               (asset (:denomination t))
+        (let* ((asset (:denomination t))
                (avail (get (:available t) asset 0.0))
                ;; Position sizing: funding * available * fraction (capped)
                (max-per-trade (* avail 0.10))          ; cap at 10% of available per trade

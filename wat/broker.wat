@@ -246,9 +246,8 @@
     ;; 4. Engram gating — check for recalibration
     (let ((current-recalib (recalib-count (:reckoner brkr))))
       (when (> current-recalib (:last-recalib-count brkr))
-        (if (= outcome :grace)
-            (inc! (:recalib-wins brkr))
-            (begin))
+        (when (= outcome :grace)
+          (inc! (:recalib-wins brkr)))
         (inc! (:recalib-total brkr))
         ;; Snapshot discriminant if good accuracy
         (when (and (> (:recalib-total brkr) 0)
@@ -271,7 +270,7 @@
       (observe-distances exit-obs composed-thought optimal weight))
 
     ;; 7. Scalar accumulators learn the optimal distances
-    ;;    Each distance feeds its corresponding accumulator.
+    ;;    Convention: 0=trail, 1=stop, 2=tp, 3=runner-trail
     (observe-scalar (nth (:scalar-accums brkr) 0)
                     (:trail optimal) outcome weight)
     (observe-scalar (nth (:scalar-accums brkr) 1)
