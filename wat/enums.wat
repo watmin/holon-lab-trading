@@ -7,21 +7,21 @@
 ; ── Side — trading action ──────────────────────────────────────────────
 ; What the trader does. On Proposal and Trade.
 
-(enum Side
+(enum side
   :buy
   :sell)
 
 ; ── Direction — price movement ─────────────────────────────────────────
 ; What the price did. Used in propagation.
 
-(enum Direction
+(enum direction
   :up
   :down)
 
 ; ── Outcome — accountability ───────────────────────────────────────────
 ; Used everywhere. Grace is gain, Violence is loss.
 
-(enum Outcome
+(enum outcome
   :grace
   :violence)
 
@@ -37,7 +37,7 @@
 ; ── MarketLens — which vocabulary subset a market observer thinks through
 ; Each variant selects a subset of the vocabulary. :generalist selects ALL.
 
-(enum MarketLens
+(enum market-lens
   :momentum
   :structure
   :volume
@@ -47,7 +47,7 @@
 
 ; ── ExitLens — which vocabulary subset an exit observer thinks through
 
-(enum ExitLens
+(enum exit-lens
   :volatility
   :structure
   :timing
