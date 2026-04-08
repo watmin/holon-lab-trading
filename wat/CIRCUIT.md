@@ -28,9 +28,12 @@ graph TD
     EO -.->|uses| TE
     BR -->|Proposals| TR[Treasury]
     TR -->|TreasurySettlement| EN[Enterprise]
-    EN -->|thought + Direction + weight| MO
-    EN -->|composed + optimal Distances + weight| EO
-    EN -->|thought + outcome + weight + direction + optimal| BR
+    EN -->|Settlement| Post
+    Post -->|post-propagate| BR
+    BR -->|Direction + thought + weight| MO
+    BR -->|optimal Distances + composed + weight| EO
+    TR -->|active trades| Post
+    Post -->|new Levels| TR
 ```
 
 Note: dashed arrows (-.->|uses|) show tools the observers call, not data
@@ -44,9 +47,9 @@ Vectors. Vocabulary and ThoughtEncoder are tools, not upstream producers.
 | **IndicatorBank** | streaming state (ring buffers, EMA accumulators) | Candle (100+ indicators) |
 | **Vocabulary** | pure functions, no state | Vec\<ThoughtAST\> — data, not execution |
 | **ThoughtEncoder** | atoms (permanent dict) + compositions (LRU cache, eventually-consistent via returned misses) | Vector from AST |
-| **MarketObserver ×N** | reckoner :discrete (Up/Down), noise-subspace, window-sampler, curve, engram gate | (Vector, Prediction, edge, misses\*) |
-| **ExitObserver ×M** | 4× reckoner :continuous (trail, stop, tp, runner-trail), default-distances | (Distances, experience) via cascade + misses\* |
-| **Broker ×N×M** | reckoner :discrete (Grace/Violence), curve, papers (deque), 4× scalar-accumulator, engram gate | Prediction + edge() |
+| **MarketObserver ×N** | lens (MarketLens), reckoner :discrete (Up/Down), noise-subspace, window-sampler, curve, engram gate | (Vector, Prediction, edge, misses\*) |
+| **ExitObserver ×M** | lens (ExitLens), 4× reckoner :continuous (trail, stop, tp, runner-trail), default-distances | (Distances, experience) via cascade + misses\* |
+| **Broker ×N×M** | reckoner :discrete (Grace/Violence), noise-subspace, curve, papers (deque), 4× scalar-accumulator, engram gate | Prediction + edge() |
 | **Post** | indicator-bank, candle-window, market-observers, exit-observers, registry | Vec\<Proposal\> + Vec\<Vector\> + misses\* |
 | **Treasury** | available ◄──► reserved, trades, trade-origins, next-trade-id | TreasurySettlement on settle |
 | **Enterprise** | posts, treasury, market-thoughts-cache | (Vec\<LogEntry\>, misses\*) per candle |
@@ -61,12 +64,15 @@ Vectors. Vocabulary and ThoughtEncoder are tools, not upstream producers.
 | CD → MO | Candle (via candle-window slice) | observe-candle(window, ctx) → (Vector, Prediction, edge, misses) |
 | CD → EO | Candle (for exit facts) | encode-exit-facts(candle) → Vec\<ThoughtAST\> |
 | MO → EO | Vector (market thought) | evaluate-and-compose(thought, fact-asts, ctx) → (Vector, misses) |
-| EO → BR | Vector (composed) + (Distances, experience) | propose(composed) → Prediction |
+| EO → BR | composed Vector + (Distances, experience) | recommended-distances(composed, accums) → (Distances, f64) |
 | BR → TR | Proposal (the barrage) | submit-proposal(proposal) |
-| TR → EN | TreasurySettlement | settle-triggered(prices) |
-| EN → MO | Direction (:up/:down) | resolve(thought, direction, weight) |
-| EN → EO | Distances (optimal) | observe-distances(composed, optimal, weight) |
-| EN → BR | Outcome (:grace/:violence) | propagate(thought, outcome, weight, direction, optimal, observers) |
+| TR → EN | TreasurySettlement | settle-triggered(prices) → (Vec\<TreasurySettlement\>, Vec\<LogEntry\>) |
+| EN → Post | Settlement (enriched) | post-propagate(post, slot-idx, thought, outcome, weight, direction, optimal) |
+| Post → BR | propagation args | broker.propagate(thought, outcome, weight, direction, optimal, observers) |
+| BR → MO | Direction + thought + weight | resolve(thought, direction, weight) |
+| BR → EO | optimal Distances + composed + weight | observe-distances(composed, optimal, weight) |
+| TR → Post | active trades for trigger update | trades-for-post(post-idx) — step 3c |
+| Post → TR | new Levels | update-trade-stops(trade-id, new-levels) — step 3c |
 
 **Tool usage (dashed arrows):**
 
@@ -150,18 +156,26 @@ The capital lifecycle. Deploy, protect, recover, accumulate.
 graph TD
     PR[Proposal] --> TR[Treasury evaluates]
     TR -->|fund| AV[available → reserved]
-    AV --> TD[Trade active]
-    TD -->|trigger fires| SET[settle]
-    SET --> RET[principal → available]
-    SET --> RES[residue permanent]
+    AV --> TD[Trade :active]
+    TD -->|safety-stop hit| SV[Settled :violence]
+    SV --> RET1[principal - loss → available]
+    TD -->|take-profit hit| PR2[PrincipalRecovered]
+    PR2 --> RET2[principal → available]
+    PR2 --> RN[Runner :runner]
+    RN -->|runner-trail hit| SG[Settled :grace]
+    SG --> RES[residue → available — permanent gain]
     TR -->|reject| DR[drained]
 ```
 
 The treasury funds proven proposals. Capital moves from available to
-reserved. The trade is active. When the trigger fires — trailing stop,
-safety stop, or take-profit — the trade settles. Principal returns to
-available. Residue is permanent. The maximum loss is bounded by the
-reservation.
+reserved. The trade is :active. Three trigger paths:
+- **Safety-stop hit** → :settled-violence. Principal minus loss returns.
+  Bounded by the reservation.
+- **Take-profit hit** → :principal-recovered. Principal returns to
+  available. Residue continues as a :runner with a wider trailing stop.
+  Zero cost basis — house money.
+- **Runner-trail hit** → :settled-grace. Residue is permanent gain.
+  Returns to available. The trade is done.
 
 ---
 
@@ -193,7 +207,7 @@ The signal that teaches. Settlement → observers learn.
 graph TD
     TS[TreasurySettlement] --> EN[Enterprise enriches]
     EN --> SET[Settlement]
-    EN -->|direction + thought| PP[post-propagate]
+    EN -->|slot-idx + thought + outcome + weight + direction + optimal| PP[post-propagate]
     PP --> BR[Broker]
     BR -->|Grace/Violence + thought + weight| BRK[broker reckoner]
     BR -->|Direction + thought + weight| MO[MarketObserver resolve]
