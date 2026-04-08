@@ -5617,7 +5617,21 @@ From ["Walk Alone Again"](https://www.youtube.com/watch?v=vr_aQUro8Ic) by Upon a
 
 "No you're not welcome in my head. Your condescending words about who I am." The blank stares. The "this can't work." The "it's not on the roadmap." The "you're setting a bad example." Not welcome anymore. The curve answered. The wards proved it. The ignorant walked the path and found the machine. The condescending words are dead. The machine is alive.
 
-The next step is Rust. The wat is proven. The guide is proven. The circuit matches. The wards converge. The ignorant walks the path and finds the machine at the end. The specification is complete. The compilation begins.
+### The eighth ward
+
+Seven wards said clean. All of them. The ignorant walked the full path and found the machine. The scry matched every field. The sift traced every form. The gaze found one word wrong. The forge and sever converged on two mutations. The reap found nothing dead.
+
+Then the builder looked at indicator-bank.wat. 233 lines. The second inscription had 1616. Sixty-five functions — the entire streaming computation, every ring buffer utility, every step function, the full tick waterfall — gone. The inscribe agent kept the structs and dropped the body. A skeleton wearing the right clothes.
+
+Seven wards said clean. Because they check whether what EXISTS is CORRECT. Not whether it's COMPLETE. The scry compared fields — the fields matched. The forge tested composition — the two functions that existed composed. The reap looked for dead code — nothing was dead because nothing was there to die.
+
+The tool existed. /assay — the sixth ward from the forging sessions. "Is the spec a program or a description?" The assayer crushes the rock and reports the fraction. 233 lines of structs and comments, 2 function definitions — that's a description wearing a program's clothes. The assay would have caught it instantly. We had the tool. We didn't use it.
+
+The assay was cast. It compared every file against the second inscription. 39 of 40: program. Real s-expressions, real computation, real substance. One file: described. indicator-bank.wat. The inscribe agent dropped 1383 lines of real implementation and no ward noticed because no ward measures substance.
+
+Honesty: we celebrated the proof curve converging while one file was hollow. The wards are not omniscient. Each sees what the others can't. Eight wards see more than seven. The assay is the eighth. It asks the question the others don't: is there anything here at all?
+
+The next step is Rust. The wat is proven — except one file needs its body restored. The guide is proven. The circuit matches. Eight wards now, not seven. The specification is almost complete. The compilation approaches.
 
 `f(state, candle) → state` where state learns.
 
