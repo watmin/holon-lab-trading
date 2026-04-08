@@ -43,22 +43,24 @@ Vectors. Vocabulary and ThoughtEncoder are tools, not upstream producers.
 |------|----------|----------|
 | **IndicatorBank** | streaming state (ring buffers, EMA accumulators) | Candle (100+ indicators) |
 | **Vocabulary** | pure functions, no state | Vec\<ThoughtAST\> — data, not execution |
-| **ThoughtEncoder** | atoms (permanent dict) + compositions (LRU cache, miss-queued) | Vector from AST |
-| **MarketObserver ×N** | reckoner :discrete (Up/Down), noise-subspace, window-sampler, curve | (Vector, Prediction, edge) |
-| **ExitObserver ×M** | 4× reckoner :continuous (trail, stop, tp, runner-trail), default-distances | (Distances, experience) via cascade |
-| **Broker ×N×M** | reckoner :discrete (Grace/Violence), curve, papers (deque), 4× scalar-accumulator | Prediction + funding() |
-| **Post** | indicator-bank, candle-window, market-observers, exit-observers, registry | Vec\<Proposal\> + Vec\<Vector\> |
+| **ThoughtEncoder** | atoms (permanent dict) + compositions (LRU cache, eventually-consistent via returned misses) | Vector from AST |
+| **MarketObserver ×N** | reckoner :discrete (Up/Down), noise-subspace, window-sampler, curve, engram gate | (Vector, Prediction, edge, misses\*) |
+| **ExitObserver ×M** | 4× reckoner :continuous (trail, stop, tp, runner-trail), default-distances | (Distances, experience) via cascade + misses\* |
+| **Broker ×N×M** | reckoner :discrete (Grace/Violence), curve, papers (deque), 4× scalar-accumulator, engram gate | Prediction + edge() |
+| **Post** | indicator-bank, candle-window, market-observers, exit-observers, registry | Vec\<Proposal\> + Vec\<Vector\> + misses\* |
 | **Treasury** | available ◄──► reserved, trades, trade-origins, next-trade-id | TreasurySettlement on settle |
-| **Enterprise** | posts, treasury, market-thoughts-cache, cache-miss-queues, log-queues | Settlement (enriched) |
+| **Enterprise** | posts, treasury, market-thoughts-cache | (Vec\<LogEntry\>, misses\*) per candle |
+
+\*misses = Vec\<(ThoughtAST, Vector)\> — cache misses returned as values, inserted by the binary between candles.
 
 **Edge legend — data flow (solid arrows):**
 
 | From → To | Type | Method |
 |-----------|------|--------|
 | RC → IB | RawCandle | tick(raw) → Candle |
-| CD → MO | Candle (via candle-window slice) | observe-candle(window, ctx) → (Vector, Prediction, curve-valid) |
+| CD → MO | Candle (via candle-window slice) | observe-candle(window, ctx) → (Vector, Prediction, edge, misses) |
 | CD → EO | Candle (for exit facts) | encode-exit-facts(candle) → Vec\<ThoughtAST\> |
-| MO → EO | Vector (market thought) | evaluate-and-compose(thought, fact-asts, ctx) → Vector |
+| MO → EO | Vector (market thought) | evaluate-and-compose(thought, fact-asts, ctx) → (Vector, misses) |
 | EO → BR | Vector (composed) + (Distances, experience) | propose(composed) → Prediction |
 | BR → TR | Proposal (the barrage) | submit-proposal(proposal) |
 | TR → EN | TreasurySettlement | settle-triggered(prices) |
@@ -77,20 +79,24 @@ Vectors. Vocabulary and ThoughtEncoder are tools, not upstream producers.
 
 ## 2. The encoding circuit
 
-Pure. No learning. No state (except the ThoughtEncoder's miss-queued cache).
-RawCandle in, Vector out.
+Pure. No learning. No state (except the ThoughtEncoder's eventually-consistent
+cache). RawCandle in, Vector out.
 
 ```mermaid
 graph TD
     RC[RawCandle] --> IB[IndicatorBank]
-    IB -->|Candle| VO[Vocabulary]
-    VO -->|ThoughtASTs| TE[ThoughtEncoder]
-    TE -->|Vector| OUT[thought vector]
+    IB -->|Candle| OBS[Observer selects lens]
+    OBS -->|lens modules| VO[Vocabulary]
+    VO -->|ThoughtASTs| OBS
+    OBS -->|Bundle AST| TE[ThoughtEncoder]
+    TE -->|Vector + misses| OUT[thought vector]
 ```
 
-The vocabulary produces ASTs — data describing what to think. The encoder
-evaluates them — computing the minimum work via cache. Atoms are permanent.
-Compositions are optimistic (LRU, miss-queued for eventual consistency).
+The observer selects which vocabulary modules fire (its lens). The
+vocabulary produces ASTs — data describing what to think. The observer
+wraps them in a Bundle. The encoder evaluates — computing the minimum
+work via cache. Atoms are permanent. Compositions are optimistic (LRU,
+eventually-consistent via returned misses).
 
 ---
 
@@ -189,18 +195,19 @@ graph TD
     EN --> SET[Settlement]
     EN -->|direction + thought| PP[post-propagate]
     PP --> BR[Broker]
-    BR -->|Grace/Violence + thought| BRK[broker reckoner]
-    BR -->|Direction + thought| MO[MarketObserver resolve]
-    BR -->|optimal Distances + thought| EO[ExitObserver observe-distances]
-    BR -->|value + outcome| SA[ScalarAccumulators]
+    BR -->|Grace/Violence + thought + weight| BRK[broker reckoner]
+    BR -->|Direction + thought + weight| MO[MarketObserver resolve]
+    BR -->|optimal Distances + composed + weight| EO[ExitObserver observe-distances]
+    BR -->|value + outcome + weight| SA[ScalarAccumulators]
 ```
 
 The enterprise enriches a TreasurySettlement into a Settlement (derives
-direction, replays price-history for optimal distances). Routes to the
-post. The post calls broker.propagate. The broker fans out: Grace/Violence
-to its own reckoner, Direction to the market observer, optimal Distances
-to the exit observer, scalar values to the accumulators. Everyone learns
-from one resolution.
+direction, replays price-history via compute-optimal-distances). Routes
+to the post. The post calls broker.propagate. The broker fans out —
+weight on every edge, because a large Grace teaches harder than a
+marginal one: Grace/Violence to its own reckoner, Direction to the
+market observer, optimal Distances to the exit observer, scalar values
+to the accumulators. Everyone learns from one resolution.
 
 ---
 
