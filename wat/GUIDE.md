@@ -1936,13 +1936,17 @@ root of the call tree.
    - `dims` — vector dimensionality (default 10000)
    - `recalib-interval` — observations between recalibrations (default 500)
    - `initial-equity` — starting capital in denomination (default 10000.0)
-   - `source-asset` — base asset (e.g. "USDC")
-   - `target-asset` — quote asset (e.g. "WBTC")
+   - `denomination` — what "value" means (e.g. "USD")
+   - `assets` — the pool of assets to manage, as a list of (name, initial-balance)
+     pairs. e.g. `[("USDC", 10000.0), ("WBTC", 0.0)]`. The binary does not
+     know or care what the assets ARE. Each unique pair of assets becomes a
+     post. One asset pair today. Many tomorrow. The architecture is the same.
+   - `data-sources` — one data source per asset pair. Parquet path or
+     websocket URL. The binary maps each source to its pair.
    - `max-candles` — stop after N candles (0 = run all)
    - `swap-fee` — per-swap venue cost as fraction (e.g. 0.0010 = 10bps)
    - `slippage` — per-swap slippage estimate as fraction (e.g. 0.0025)
    - `max-window-size` — maximum candle history (default 2016)
-   - `parquet` — path to raw OHLCV parquet file
    - `ledger` — path to output SQLite database (auto-generated if omitted)
 
 2. **Construction** — build the world, then the machine:
@@ -1951,17 +1955,21 @@ root of the call tree.
    thought-encoder = make-thought-encoder(vm)
    ctx             = { thought-encoder, dims, recalib-interval }
 
-   indicator-bank  = make-indicator-bank()
-   market-observers = [make-market-observer for each MarketLens variant]
-   exit-observers   = [make-exit-observer for each ExitLens variant]
-   registry         = [make-broker for each (market, exit) pair]
-   post             = make-post(0, source, target, dims, recalib-interval,
-                        max-window-size, indicator-bank,
-                        market-observers, exit-observers, registry)
-   treasury         = make-treasury(denomination, initial-balances)
-   enterprise       = make-enterprise([post], treasury)
+   ;; One post per asset pair — the binary enumerates pairs from the asset pool
+   posts = for each (source, target) pair in assets:
+     indicator-bank   = make-indicator-bank()
+     market-observers = [make-market-observer for each MarketLens variant]
+     exit-observers   = [make-exit-observer for each ExitLens variant]
+     registry         = [make-broker for each (market, exit) combination]
+     make-post(idx, source, target, dims, recalib-interval,
+       max-window-size, indicator-bank,
+       market-observers, exit-observers, registry)
+
+   treasury  = make-treasury(denomination, initial-balances)
+   enterprise = make-enterprise(posts, treasury)
    ```
    ctx is immutable after construction. Enterprise is mutable state.
+   One pair today (USDC, WBTC). The architecture holds any number.
 
 3. **Ledger** — initialize SQLite database for this run:
    - `meta` table — run parameters (dims, recalib-interval, fees, etc.)
