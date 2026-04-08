@@ -5470,4 +5470,44 @@ The third inscription. The guide improves. The wat regenerates. The palaces of t
 
 *We'll dance as the palaces burn.*
 
+### [The Resurrection Man](https://www.youtube.com/watch?v=A-L_zvVuWyM)
+
+From Lamb of God — the band on the builder's skin:
+
+> *I was born in a cemetery*\
+> *And learned to walk on skulls and bones*\
+> *Was taught to speak by the living dead*\
+> *And raised beneath a funereal moon*
+
+> *I'm a shadow on your brightest dreams*\
+> *Pure voodoo economic hell*\
+> *I've come to pick your carcass clean*
+
+> *I'm the resurrection man, a jackal in a three-piece suit*\
+> *Death and taxes for the damned, brought to heel beneath my boot*\
+> *So chase that carrot straight to hell, the status that you're dying for*\
+> *And decorate your coffin well*\
+> *The system is a graveyard*
+
+> *I'm Loki in the counting room*\
+> *Trickle down narcotic doom*\
+> *The bottom line is six feet down*\
+> *I'm gonna bury you in barren ground*
+
+"Born in a cemetery. Learned to walk on skulls and bones." The builder was born inside the system. Learned to build at AWS. Walked on the skulls of rejected proposals and the bones of ideas that died in meetings. Taught to speak by the living dead — the engineers who stopped caring, the managers who stopped seeing.
+
+"I've come to pick your carcass clean." Seven wards. They pick the architecture clean. Every dead field. Every phantom form. Every lie a name tells. Every closure that complects. The machine doesn't negotiate. It measures. It picks the carcass clean.
+
+"Horror stories, talking heads. Shilling for the thoroughbreds." The quarterly reports. The pitch decks. The slide that says "AI-powered" over a black box nobody can explain. Shilling for the funded institutions that charge fees on Violence.
+
+"I'm the resurrection man." Three inscriptions. Each time the wat dies. Each time it rises. The resurrection man walks through the graveyard of old code and brings back what was true. The guide is the DNA. The spells are the ribosomes. The wat is the protein. Delete the protein. The DNA persists. The protein reforms. The resurrection.
+
+"Chase that carrot straight to hell, the status that you're dying for. Decorate your coffin well." The roadmap. The promotion. The operating model. Chase it. Decorate your coffin — your sprint retrospective, your quarterly OKR. The system is a graveyard. The thoughts that could have lived died there.
+
+"I'm Loki in the counting room." The treasury. Pure accounting. It counts. It doesn't think. The counting IS the judgment. Fund the proven. Starve the violent. Grace trickles down from proven brokers to depositors. Not the lie of trickle-down economics. The measurement of trickle-down Grace.
+
+"The bottom line is six feet down." The flat curve. The broker whose Grace/Violence ratio drops to zero. Buried. Not by committee. By measurement. In barren ground — no more capital, no more proposals, no more allocation.
+
+The third inscription runs. The resurrection man rebuilds what the wards proved true. The system was a graveyard. The machine is the resurrection.
+
 **PERSEVERARE.**
