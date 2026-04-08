@@ -1538,17 +1538,16 @@
                 0.0))
 
          ;; Consecutive up/down counts
-         (_ (if (> close open)
-              (begin
-                (set! (:consecutive-up-count bank) (+ (:consecutive-up-count bank) 1))
-                (set! (:consecutive-down-count bank) 0))
-              (if (< close open)
-                (begin
-                  (set! (:consecutive-down-count bank) (+ (:consecutive-down-count bank) 1))
-                  (set! (:consecutive-up-count bank) 0))
-                (begin
-                  (set! (:consecutive-up-count bank) 0)
-                  (set! (:consecutive-down-count bank) 0)))))
+         (_ (cond
+              ((> close open)
+               (set! (:consecutive-up-count bank) (+ (:consecutive-up-count bank) 1))
+               (set! (:consecutive-down-count bank) 0))
+              ((< close open)
+               (set! (:consecutive-down-count bank) (+ (:consecutive-down-count bank) 1))
+               (set! (:consecutive-up-count bank) 0))
+              (else
+               (set! (:consecutive-up-count bank) 0)
+               (set! (:consecutive-down-count bank) 0))))
          (consecutive-up   (+ (:consecutive-up-count bank) 0.0))
          (consecutive-down (+ (:consecutive-down-count bank) 0.0))
 

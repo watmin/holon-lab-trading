@@ -104,13 +104,14 @@
          ;; Each returns (thought, prediction, edge)
          ;; miss-queues layout: [mkt-0, mkt-1, ..., mkt-(N-1), exit-0, ..., exit-(M-1)]
          (market-results
-           (pmap-indexed (lambda (mi obs)
-                   (let* ((window-size (sample (:window-sampler obs)
+           (pmap (lambda (mi)
+                   (let* ((obs (nth (:market-observers p) mi))
+                          (window-size (sample (:window-sampler obs)
                                                (:encode-count p)))
                           (window (last-n (:candle-window p) window-size)))
                      ;; observe-candle takes the observer's miss-queue
                      (observe-candle obs window ctx (nth miss-queues mi))))
-                 (:market-observers p)))
+                 (range (len (:market-observers p)))))
 
          ;; Extract market thoughts (the Vector part of each result)
          (market-thoughts (map first market-results))

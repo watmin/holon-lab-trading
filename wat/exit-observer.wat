@@ -172,11 +172,10 @@
                            [composed : Vector]
                            [optimal : Distances]
                            [weight : f64])
-  (begin
-    (observe (:trail-reckoner exit-obs)  composed (:trail optimal)        weight)
-    (observe (:stop-reckoner exit-obs)   composed (:stop optimal)         weight)
-    (observe (:tp-reckoner exit-obs)     composed (:tp optimal)           weight)
-    (observe (:runner-reckoner exit-obs) composed (:runner-trail optimal) weight)))
+  (observe (:trail-reckoner exit-obs)  composed (:trail optimal)        weight)
+  (observe (:stop-reckoner exit-obs)   composed (:stop optimal)         weight)
+  (observe (:tp-reckoner exit-obs)     composed (:tp optimal)           weight)
+  (observe (:runner-reckoner exit-obs) composed (:runner-trail optimal) weight))
 
 ;; ── experienced? — are ALL four reckoners past ignorance? ───────────────
 

@@ -73,53 +73,50 @@
                (max-per-trade (* avail 0.10))          ; cap at 10% of available per trade
                (size (* (:funding prop) max-per-trade)))
 
-          (if (and (> size 0.0)
-                   (> (:funding prop) 0.0)
-                   (> avail size))
-              ;; Fund this proposal
-              (let* ((trade-id (TradeId (:next-trade-id t)))
-                     ;; Compute initial stop levels from distances + entry rate
-                     ;; Entry rate: the current price is implicit from the proposal context.
-                     ;; The treasury creates the trade; the post will supply the current price
-                     ;; via step 3c on the next candle. Initial levels use proposal distances.
-                     ;; The entry rate is communicated via the candle context.
-                     (trade (make-trade
-                              trade-id
-                              (:post-idx prop)
-                              (:broker-slot-idx prop)
-                              :active
-                              (:denomination t)           ; source-asset
-                              (:denomination t)           ; target-asset (placeholder)
-                              (:side prop)
-                              0.0                         ; entry-rate — set by enterprise
-                              0.0                         ; entry-atr — set by enterprise
-                              size                        ; source-amount
-                              (make-levels 0.0 0.0 0.0 0.0)  ; initial levels — set by step 3c
-                              0                           ; candles-held
-                              (list)))                    ; price-history — empty
-                     (origin (make-trade-origin
-                               (:post-idx prop)
-                               (:broker-slot-idx prop)
-                               (:composed-thought prop))))
+          (when (and (> size 0.0)
+                     (> (:funding prop) 0.0)
+                     (> avail size))
+            ;; Fund this proposal
+            (let* ((trade-id (TradeId (:next-trade-id t)))
+                   ;; Compute initial stop levels from distances + entry rate
+                   ;; Entry rate: the current price is implicit from the proposal context.
+                   ;; The treasury creates the trade; the post will supply the current price
+                   ;; via step 3c on the next candle. Initial levels use proposal distances.
+                   ;; The entry rate is communicated via the candle context.
+                   (trade (make-trade
+                            trade-id
+                            (:post-idx prop)
+                            (:broker-slot-idx prop)
+                            :active
+                            (:denomination t)           ; source-asset
+                            (:denomination t)           ; target-asset (placeholder)
+                            (:side prop)
+                            0.0                         ; entry-rate — set by enterprise
+                            0.0                         ; entry-atr — set by enterprise
+                            size                        ; source-amount
+                            (make-levels 0.0 0.0 0.0 0.0)  ; initial levels — set by step 3c
+                            0                           ; candles-held
+                            (list)))                    ; price-history — empty
+                   (origin (make-trade-origin
+                             (:post-idx prop)
+                             (:broker-slot-idx prop)
+                             (:composed-thought prop))))
 
-                ;; Move capital: available -> reserved
-                (set! (:available t)
-                      (assoc (:available t) asset (- avail size)))
-                (set! (:reserved t)
-                      (assoc (:reserved t) asset
-                             (+ (get (:reserved t) asset 0.0) size)))
+              ;; Move capital: available -> reserved
+              (set! (:available t)
+                    (assoc (:available t) asset (- avail size)))
+              (set! (:reserved t)
+                    (assoc (:reserved t) asset
+                           (+ (get (:reserved t) asset 0.0) size)))
 
-                ;; Record the trade
-                (set! (:trades t)
-                      (assoc (:trades t) trade-id trade))
-                (set! (:trade-origins t)
-                      (assoc (:trade-origins t) trade-id origin))
+              ;; Record the trade
+              (set! (:trades t)
+                    (assoc (:trades t) trade-id trade))
+              (set! (:trade-origins t)
+                    (assoc (:trade-origins t) trade-id origin))
 
-                ;; Advance the counter
-                (inc! (:next-trade-id t)))
-
-              ;; Reject — insufficient capital or no edge
-              (begin))))
+              ;; Advance the counter
+              (inc! (:next-trade-id t))))))
       sorted)
 
     ;; Drain proposals
