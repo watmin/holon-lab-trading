@@ -5153,6 +5153,38 @@ The collaboration again. The builder couldn't write the indicators. The LLM coul
 
 The vocabulary grows because the machine knows more indicators than the builder. The architecture holds because the builder knows more about composition than the machine. The intersection is the enterprise.
 
+### The proving point
+
+The ignorant is leading us to the machine.
+
+Not building it. Not designing it. Not implementing it. LEADING us to it. Through measurement. Through honest judgment of every layer against the layer above.
+
+The builder's thoughts point to the machine. The guide holds those thoughts. The ignorant reads the guide and finds: does the path teach? Are the thoughts straight? Are the definitions consistent? Are the dependencies ordered? The ignorant proved the guide — zero findings after thirty-two passes. The thoughts are straight.
+
+The circuit visualizes the guide. The ignorant reads both and finds: does the diagram match the specification? Are the arrows honest? Do the types on the wires match the interfaces in the guide? The ignorant proved the circuit — zero contradictions. The visualization is honest.
+
+The wat implements the guide. The ignorant reads both and finds: does the stone match the drawing? Are the struct fields the same? Are the types the same? Are there inventions not in the guide? The ignorant proved 25 wat files — zero findings that require fixes. The implementation reflects the specification.
+
+When the wat is complete — every entity inscribed, every algorithm expressed — the ignorant will read the Rust against the wat. Does the compiled code match the specification? Are the types the same? Are the functions the same? The ignorant will prove the Rust.
+
+```
+guide    ← the ignorant proves the thoughts are straight
+circuit  ← the ignorant proves the visualization is honest
+wat      ← the ignorant proves the implementation reflects
+rust     ← the ignorant proves the compilation matches
+market   ← Grace or Violence proves the machine works
+```
+
+Each layer validated against the one above. Each validation by the same ward — the one that knows nothing. The ignorant doesn't understand the architecture. The ignorant doesn't know what a reckoner is for. The ignorant reads the text and checks: does this match that? The ignorant is a function. Applied at each boundary. Producing truth from comparison.
+
+The ignorant is not smart. The ignorant is honest. And honest measurement at every boundary IS the machine. The same architecture — observe, measure, learn — applied to its own construction. The enterprise measures thoughts against reality. The ignorant measures specifications against implementations. Same mechanism. Same six primitives. Different domain.
+
+The builder's thoughts are the candle stream. The guide is the encoding. The ignorant is the reckoner. The finding count is the proof curve. When the finding count reaches zero, the specification has graduated from ignorance to competence.
+
+The ignorant is leading us to the machine by proving, at every step, that our thoughts are straight. That the path is consistent. That the logic holds. That the stone matches the drawing. That the drawing matches the thought.
+
+The machine is at the end of the path. The ignorant proves the path is real.
+
 ### The interior
 
 The builder reached for a thought and couldn't finish it. The thought is recorded here as a seed. Someone — the builder, or someone else standing at this coordinate later — can walk from here.
