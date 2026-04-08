@@ -1686,8 +1686,10 @@ accountability — to the broker that proposed it.
 **Interface:**
 - `(make-post post-idx source target dims recalib-interval max-window-size
     indicator-bank market-observers exit-observers registry) → Post`
-- `(post-on-candle post raw-candle ctx) → (Vec<Proposal>, Vec<Vector>)`
-  returns proposals for the treasury AND market-thoughts for step 3c.
+- `(post-on-candle post raw-candle miss-queues ctx) → (Vec<Proposal>, Vec<Vector>)`
+  miss-queues: Vec — the enterprise's cache-miss-queues sliced for this post.
+  Layout: [mkt-0, ..., mkt-(N-1), exit-0, ..., exit-(M-1)]. Each observer
+  gets its own queue. Returns proposals for the treasury AND market-thoughts for step 3c.
   tick indicators → push window → market observers observe-candle (→ thoughts + predictions)
   → exit observers encode-exit-facts then evaluate-and-compose(market-thought, exit-fact-asts, ctx)
   → exit observers recommended-distances(composed, broker.scalar-accums) → Distances
@@ -1699,11 +1701,13 @@ accountability — to the broker that proposed it.
     Side derivation: the market observer's Prediction has scores for "Up"
     and "Down". The winning label maps to Side: "Up" → :buy, "Down" → :sell.
   → register papers → return proposals for the treasury
-- `(post-update-triggers post trades market-thoughts ctx)`
+- `(post-update-triggers post trades market-thoughts miss-queues ctx)`
   trades: Vec<(TradeId, Trade)> — treasury's active trades for this post.
   market-thoughts: Vec<Vector> — this candle's encoded thoughts (one per
-  market observer). The post composes with exit observers for distances.
-  Each trade's trailing stop adjusts to the current market context.
+  market observer). miss-queues: Vec — the enterprise's cache-miss-queues
+  sliced for this post (same layout as post-on-candle). The post composes
+  with exit observers for distances. Each trade's trailing stop adjusts
+  to the current market context.
 - `(current-price post) → f64`
   the close of the last candle in the post's candle-window.
   The enterprise calls this per post to build current-prices for the treasury.
@@ -1867,8 +1871,10 @@ The enterprise knows:
   on each post). Treasury settles triggered trades using those prices.
   For each settlement: enterprise computes optimal-distances via the post,
   then routes to the post for propagation.
-- `(step-compute-dispatch enterprise post-idx ctx) → (Vec<Proposal>, Vec<Vector>)`
-  post-idx: usize — which post. The enterprise indexes into its posts vec.
+- `(step-compute-dispatch enterprise post-idx raw-candle ctx) → (Vec<Proposal>, Vec<Vector>)`
+  post-idx: usize — which post. raw-candle: RawCandle — the raw candle
+  received by on-candle, threaded through to the post. The enterprise
+  slices its cache-miss-queues for this post and passes them to post-on-candle.
   post encodes, composes, proposes — returns proposals for the treasury
   AND market-thoughts (Vec<Vector>) for step 3c. The enterprise caches
   market-thoughts between steps.

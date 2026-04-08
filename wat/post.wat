@@ -88,6 +88,7 @@
 
 (define (post-on-candle [p : Post]
                         [raw : RawCandle]
+                        [miss-queues : Vec<&Vec<(ThoughtAST, Vector)>>]
                         [ctx : Ctx])
   : (Vec<Proposal>, Vec<Vector>)
   ;; 1. Tick indicators -> enriched candle
@@ -101,14 +102,14 @@
 
          ;; 3. Market observers observe in parallel
          ;; Each returns (thought, prediction, edge)
+         ;; miss-queues layout: [mkt-0, mkt-1, ..., mkt-(N-1), exit-0, ..., exit-(M-1)]
          (market-results
-           (pmap (lambda (obs)
+           (pmap-indexed (lambda (mi obs)
                    (let* ((window-size (sample (:window-sampler obs)
                                                (:encode-count p)))
-                          (window (last-n (:candle-window p) window-size))
-                          (miss-queue (list)))
-                     ;; observe-candle takes miss-queue
-                     (observe-candle obs window ctx miss-queue)))
+                          (window (last-n (:candle-window p) window-size)))
+                     ;; observe-candle takes the observer's miss-queue
+                     (observe-candle obs window ctx (nth miss-queues mi))))
                  (:market-observers p)))
 
          ;; Extract market thoughts (the Vector part of each result)
@@ -134,9 +135,10 @@
                      ;; Exit observer encodes its own facts
                      (exit-asts (encode-exit-facts exit-obs candle))
                      ;; Compose: market thought + exit facts -> composed vector
-                     (miss-queue (list))
+                     ;; Exit miss-queue starts after N market queues
+                     (exit-miss-queue (nth miss-queues (+ n ei)))
                      (composed (evaluate-and-compose exit-obs mkt-thought
-                                                     exit-asts ctx miss-queue))
+                                                     exit-asts ctx exit-miss-queue))
                      ;; Exit observer recommends distances using the cascade
                      (dist-result (recommended-distances exit-obs composed
                                                          (:scalar-accums brkr)))
@@ -174,6 +176,7 @@
 (define (post-update-triggers [p : Post]
                               [trades : Vec<(TradeId, Trade)>]
                               [market-thoughts : Vec<Vector>]
+                              [miss-queues : Vec<&Vec<(ThoughtAST, Vector)>>]
                               [ctx : Ctx])
   ;; For each active trade, re-compose and compute fresh distances
   (map
@@ -192,9 +195,10 @@
              (exit-obs (nth (:exit-observers p) exit-idx))
              (candle (last (:candle-window p)))
              (exit-asts (encode-exit-facts exit-obs candle))
-             (miss-queue (list))
+             ;; Exit miss-queue: after N market queues
+             (exit-miss-queue (nth miss-queues (+ (len (:market-observers p)) exit-idx)))
              (composed (evaluate-and-compose exit-obs mkt-thought
-                                             exit-asts ctx miss-queue))
+                                             exit-asts ctx exit-miss-queue))
              ;; Fresh distances from the cascade
              (dist-result (recommended-distances exit-obs composed
                                                   (:scalar-accums brkr)))

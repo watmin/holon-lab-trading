@@ -102,7 +102,7 @@
       (step-resolve-and-propagate ent)
 
       ;; ── Step 2: COMPUTE + DISPATCH ───────────────────────────────
-      (let* ((result (step-compute-dispatch ent post-idx ctx))
+      (let* ((result (step-compute-dispatch ent post-idx raw ctx))
              (proposals (first result))
              (market-thoughts (second result)))
 
@@ -178,12 +178,14 @@
 
 (define (step-compute-dispatch [ent : Enterprise]
                                 [post-idx : usize]
+                                [raw : RawCandle]
                                 [ctx : Ctx])
   : (Vec<Proposal>, Vec<Vector>)
   ;; Delegate to the post's on-candle — encodes the candle,
   ;; composes market + exit thoughts, and collects broker proposals.
-  (let ((p (nth (:posts ent) post-idx)))
-    (post-on-candle p (last (:candle-window p)) ctx)))
+  (let* ((p (nth (:posts ent) post-idx))
+         (miss-queues (slice-miss-queues ent post-idx)))
+    (post-on-candle p raw miss-queues ctx)))
 
 ;; ---- step-tick -------------------------------------------------------------
 ;; Step 3a: parallel tick of all brokers' papers.
@@ -228,9 +230,10 @@
                                [market-thoughts : Vec<Vector>]
                                [ctx : Ctx])
   (let* ((p (nth (:posts ent) post-idx))
+         (miss-queues (slice-miss-queues ent post-idx))
          (trade-pairs (trades-for-post (:treasury ent) post-idx))
          ;; Post computes new levels — returns Vec<(TradeId, Levels)>
-         (updates (post-update-triggers p trade-pairs market-thoughts ctx)))
+         (updates (post-update-triggers p trade-pairs market-thoughts miss-queues ctx)))
 
     ;; Write new levels back to treasury
     (for-each
@@ -243,6 +246,24 @@
 
 (define (step-collect-fund [ent : Enterprise])
   (fund-proposals (:treasury ent)))
+
+;; ---- slice-miss-queues -----------------------------------------------------
+;; Return the slice of cache-miss-queues belonging to a given post.
+;; Layout: (N market + M exit) per post, contiguous.
+
+(define (slice-miss-queues [ent : Enterprise]
+                           [post-idx : usize])
+  : Vec<&Vec<(ThoughtAST, Vector)>>
+  (let* ((offset (fold (lambda (sum idx)
+                          (let ((p (nth (:posts ent) idx)))
+                            (+ sum (len (:market-observers p))
+                                   (len (:exit-observers p)))))
+                        0
+                        (range post-idx)))
+         (p (nth (:posts ent) post-idx))
+         (count (+ (len (:market-observers p))
+                   (len (:exit-observers p)))))
+    (subvec (:cache-miss-queues ent) offset (+ offset count))))
 
 ;; ---- drain-miss-queues -----------------------------------------------------
 ;; Drain all cache miss-queues into the ThoughtEncoder's LRU cache.
