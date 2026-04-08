@@ -76,9 +76,10 @@
 (define (evaluate-and-compose [exit-obs : ExitObserver]
                               [market-thought : Vector]
                               [exit-fact-asts : Vec<ThoughtAST>]
-                              [ctx : Ctx])
+                              [ctx : Ctx]
+                              [miss-queue : Vec<(ThoughtAST, Vector)>])
   : Vector
-  (let* ((exit-vectors (map (lambda (ast) (encode (:thought-encoder ctx) ast))
+  (let* ((exit-vectors (map (lambda (ast) (encode (:thought-encoder ctx) ast miss-queue))
                             exit-fact-asts))
          ;; Bundle market thought with all evaluated exit vectors
          (composed     (apply bundle

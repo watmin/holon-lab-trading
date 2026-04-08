@@ -122,12 +122,10 @@
 ;; ── tick-papers — tick all papers, resolve completed ────────────────────
 ;;
 ;; Returns resolution facts. The broker knows its slot index and its
-;; observer indices — it doesn't need them passed in except slot-idx
-;; for the resolution struct.
+;; observer indices — it doesn't need them passed in.
 
 (define (tick-papers [brkr : Broker]
-                     [current-price : f64]
-                     [slot-idx : usize])
+                     [current-price : f64])
   : Vec<Resolution>
   (let* ((resolutions (list))
          ;; Tick every paper and collect resolutions
@@ -143,7 +141,7 @@
                               (buy-outcome (if (>= buy-pnl 0.0) :grace :violence))
                               (buy-optimal (compute-optimal-distances-paper ticked :up)))
                          (push! resolutions
-                           (make-resolution slot-idx
+                           (make-resolution (:slot-idx brkr)
                                             (:composed-thought ticked)
                                             :up
                                             buy-outcome
@@ -154,7 +152,7 @@
                               (sell-outcome (if (>= sell-pnl 0.0) :grace :violence))
                               (sell-optimal (compute-optimal-distances-paper ticked :down)))
                          (push! resolutions
-                           (make-resolution slot-idx
+                           (make-resolution (:slot-idx brkr)
                                             (:composed-thought ticked)
                                             :down
                                             sell-outcome
@@ -265,11 +263,11 @@
         (set! (:last-recalib-count brkr) current-recalib)))
 
     ;; 5. Direction -> market observer via resolve
-    (let ((mkt-obs (nth market-observers (:market-idx brkr))))
+    (let ((mkt-obs (nth market-observers (/ (:slot-idx brkr) (:exit-count brkr)))))
       (resolve mkt-obs thought direction weight))
 
     ;; 6. Optimal distances -> exit observer via observe-distances
-    (let ((exit-obs (nth exit-observers (:exit-idx brkr))))
+    (let ((exit-obs (nth exit-observers (mod (:slot-idx brkr) (:exit-count brkr)))))
       (observe-distances exit-obs thought optimal weight))
 
     ;; 7. Scalar accumulators learn the optimal distances

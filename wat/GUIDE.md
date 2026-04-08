@@ -1222,7 +1222,7 @@ One function. Recursive. Cache at every node. The cache key IS the AST
 node — its structure is its identity. Same structure, same vector.
 
 ```scheme
-(define (encode encoder ast)
+(define (encode encoder ast miss-queue)
   (or (lookup (:cache encoder) ast)          ;; cache hit → done
       (let ((result
               (match ast
@@ -1230,26 +1230,26 @@ node — its structure is its identity. Same structure, same vector.
                   (lookup-atom (:atoms encoder) name)
 
                 (Linear name value scale)
-                  (bind (encode encoder (Atom name))
+                  (bind (encode encoder (Atom name) miss-queue)
                         (encode-linear value scale))
 
                 (Log name value)
-                  (bind (encode encoder (Atom name))
+                  (bind (encode encoder (Atom name) miss-queue)
                         (encode-log value))
 
                 (Circular name value period)
-                  (bind (encode encoder (Atom name))
+                  (bind (encode encoder (Atom name) miss-queue)
                         (encode-circular value period))
 
                 (Bind left right)
-                  (bind (encode encoder left)
-                        (encode encoder right))
+                  (bind (encode encoder left miss-queue)
+                        (encode encoder right miss-queue))
 
                 (Bundle children)
                   (apply bundle
-                    (map (lambda (c) (encode encoder c)) children)))))
+                    (map (lambda (c) (encode encoder c miss-queue)) children)))))
 
-        (store (:cache encoder) ast result)
+        (push! miss-queue (list ast result))
         result)))
 ```
 

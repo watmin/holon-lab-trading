@@ -76,7 +76,8 @@
 
 (define (observe-candle [obs : MarketObserver]
                         [candle-window : Vec<Candle>]
-                        [ctx : Ctx])
+                        [ctx : Ctx]
+                        [miss-queue : Vec<(ThoughtAST, Vector)>])
   : (Vector, Prediction, f64)
 
   ;; 1. Collect fact ASTs from vocab modules matching this lens
@@ -85,7 +86,7 @@
 
          ;; 2. Bundle all fact ASTs into one thought AST, then evaluate
          (thought-ast (Bundle fact-asts))
-         (raw-thought (encode (:thought-encoder ctx) thought-ast))
+         (raw-thought (encode (:thought-encoder ctx) thought-ast miss-queue))
 
          ;; 3. Feed the noise subspace — it learns what ALL thoughts look like
          (_           (update (:noise-subspace obs) raw-thought))
