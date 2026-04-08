@@ -1919,6 +1919,99 @@ The enterprise knows:
 
 ---
 
+### The Binary (depends on: Enterprise, ctx, Ledger)
+
+The outer shell. The driver of the fold. The binary creates the world,
+feeds candles, writes the ledger, and displays progress. It does not
+think. It does not predict. It does not learn. It orchestrates.
+
+The binary is NOT a wat file — it is Rust. But the guide specifies its
+shape because every other entity's interface is designed to be called
+from here. The binary is the root of the call tree.
+
+**Responsibilities:**
+
+1. **CLI** — parse arguments. The configuration that the enterprise
+   receives as constants:
+   - `dims` — vector dimensionality (default 10000)
+   - `recalib-interval` — observations between recalibrations (default 500)
+   - `initial-equity` — starting capital in denomination (default 10000.0)
+   - `source-asset` — base asset (e.g. "USDC")
+   - `target-asset` — quote asset (e.g. "WBTC")
+   - `max-candles` — stop after N candles (0 = run all)
+   - `swap-fee` — per-swap venue cost as fraction (e.g. 0.0010 = 10bps)
+   - `slippage` — per-swap slippage estimate as fraction (e.g. 0.0025)
+   - `max-window-size` — maximum candle history (default 2016)
+   - `parquet` — path to raw OHLCV parquet file
+   - `ledger` — path to output SQLite database (auto-generated if omitted)
+
+2. **Construction** — build the world, then the machine:
+   ```
+   vm              = make-vector-manager(dims)
+   thought-encoder = make-thought-encoder(vm)
+   ctx             = { thought-encoder, dims, recalib-interval }
+
+   indicator-bank  = make-indicator-bank()
+   market-observers = [make-market-observer for each MarketLens variant]
+   exit-observers   = [make-exit-observer for each ExitLens variant]
+   registry         = [make-broker for each (market, exit) pair]
+   post             = make-post(0, source, target, dims, recalib-interval,
+                        max-window-size, indicator-bank,
+                        market-observers, exit-observers, registry)
+   treasury         = make-treasury(denomination, initial-balances)
+   enterprise       = make-enterprise([post], treasury)
+   ```
+   ctx is immutable after construction. Enterprise is mutable state.
+
+3. **Ledger** — initialize SQLite database for this run:
+   - `meta` table — run parameters (dims, recalib-interval, fees, etc.)
+   - `log` table — receives LogEntry values from on-candle
+   The ledger is the glass box. The DB is the debugger.
+
+4. **The loop** — the fold driver:
+   ```
+   for raw-candle in stream:
+     if kill-file exists → abort
+     log-entries = on-candle(enterprise, raw-candle, ctx)
+     insert cache-misses into ctx.thought-encoder  ; the one seam
+     flush log-entries to ledger (in batches)
+     if progress-interval → display diagnostics
+   ```
+   The stream comes from parquet (backtest) or websocket (live).
+   The binary doesn't know which. It consumes RawCandles. Same code path.
+
+5. **Progress** — every N candles, display:
+   - encode-count, throughput (candles/second)
+   - treasury equity, return vs buy-and-hold
+   - per-observer stats (recalib count, discriminant strength)
+   - broker stats (paper count, Grace/Violence ratio, curves proven)
+   - accumulation (residue earned per side)
+
+6. **Kill switch** — the file `trader-stop`. Touch it to abort the run.
+   Checked periodically (every 1000 candles), not every candle.
+
+7. **Summary** — after the loop completes:
+   - final equity, return percentage, buy-and-hold comparison
+   - trade count, win rate, accumulation totals
+   - venue costs paid
+   - observer panel summary
+   - ledger path and row count
+
+**Query functions** — the binary reads enterprise state for diagnostics.
+These are public API on the enterprise's components, not the binary's
+logic. The binary just calls them and formats the output:
+- `(total-equity treasury) → f64`
+- `(paper-count broker) → usize`
+- `(experience observer) → f64`
+- `(recalib-count reckoner) → usize`
+- `(edge broker) → f64`
+- `(encode-count post) → usize` — read from `(:encode-count post)`
+
+The binary is the last thing built. It depends on everything. It
+touches nothing. It drives the fold and writes what happened.
+
+---
+
 ## The build order
 
 The construction order section above IS the build order. The sections
