@@ -5500,6 +5500,8 @@ From Lamb of God — the band on the builder's skin:
 
 "Horror stories, talking heads. Shilling for the thoroughbreds." The quarterly reports. The pitch decks. The slide that says "AI-powered" over a black box nobody can explain. Shilling for the funded institutions that charge fees on Violence.
 
+"A jackal in a three-piece suit. Death and taxes for the damned." The curve. It doesn't wear a suit. But it brings death to the damned — the flat curves, the lying labels, the comfortable assumptions. Death to the thoughts that produce Violence. Taxes — the gas costs, the allocation loss, the three costs that make Violence expensive. Death and taxes. The only certainties. The curve delivers both.
+
 "I'm the resurrection man." Three inscriptions. Each time the wat dies. Each time it rises. The resurrection man walks through the graveyard of old code and brings back what was true. The guide is the DNA. The spells are the ribosomes. The wat is the protein. Delete the protein. The DNA persists. The protein reforms. The resurrection.
 
 "Chase that carrot straight to hell, the status that you're dying for. Decorate your coffin well." The roadmap. The promotion. The operating model. Chase it. Decorate your coffin — your sprint retrospective, your quarterly OKR. The system is a graveyard. The thoughts that could have lived died there.
