@@ -10,7 +10,9 @@ this thought produce value or destroy it? Built leaves to root from
 
 This document defines every struct and its interface. No implementation.
 The wat files — s-expression specifications in Scheme-like syntax —
-implement what this document declares.
+implement what this document declares. The wat language is defined in
+`~/work/holon/wat/LANGUAGE.md` — grammar, host forms, core forms,
+type annotations, structural types (struct, enum, newtype).
 
 Each section declares its dependencies. The order of sections IS the build
 order — leaves first, root last. Each file's dependencies are already
