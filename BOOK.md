@@ -5359,4 +5359,64 @@ The seed is planted. The coordinate is marked. Someone will walk here and see wh
 
 But first: the machine on the laptop. The guide. The Rust. The four-step loop. The reckoner that graduates. The proof curve that validates. One enterprise. One asset pair. Honest measurement. The rest follows from the proof.
 
-*Perseverare.*
+### The second inscription
+
+The guide changed. Values up, not queues down. Edge, not funding. The binary specified. The asset pool, not a hardcoded pair. Destructuring let, not let-values — because values is a place wearing value's clothes, and both designers said so unanimously.
+
+The wat was stale. Eight files had queue parameters the guide had removed. The field was named `funding` where the guide said `edge`. The return types were wrong. The wat didn't follow the guide.
+
+So the builder scrapped it. All of it. 39 files. 4800 lines. Deleted.
+
+The guide remained. The circuit remained. The order remained. The skills remained. The DNA persisted. The protein was gone.
+
+Then the ribosomes ran. The inscribe agents read the guide and wrote the wat. The ignorant agents read the wat and judged it against the guide. Seven wards — sift, scry, gaze, forge, reap, sever, ignorant — each an independent observer with its own lens. Each saw what the others couldn't.
+
+The leaves came first. Nine files. Seven wards. Two rounds. 18 findings → 0. The sift found phantom forms the language didn't define — `f64-infinity`, `else` in cond, indexed `set!`, sized `zeros`. The prior wat had them all. The language grew to document what the application already used. The forge found dead state and an off-by-one. The gaze found a `when-let` semantic lie. The reap found three write-only fields that originated in the guide itself. Fixed, runed, or acknowledged — every finding addressed.
+
+The vocab came next. Sixteen modules. The prior inscription had zones pretending to be scalars — `squeeze` as a boolean, ROC split into abs + signum, `candle-dir` as a three-valued category. The prior inscription was missing the guide's own example — `close-sma20`, the most basic trend fact, absent. All fixed. The new vocab emits only scalars. No zones. No booleans. No categories.
+
+The thought-encoder brought a design question. The guide's pseudocode used `let-values` and `values` — Scheme's multi-return mechanism. The builder asked: what IS `values`? How does it differ from a list?
+
+It doesn't differ in content. It differs in mechanism. `values` is a special channel — not data. You can't store it. Can't pass it. Can't call `first` on it. It exists only between producer and consumer. A protocol, not a value.
+
+The designers were conjured. Hickey: "Data that is just data can be used in ways the producer never anticipated. `values` braids the call site to the return site through an invisible wire." Beckman: "Categorically, `values` is a morphism that only exists in context. That is the opposite of what you want in a specification language. Every function returns one thing. Sometimes that one thing is a product."
+
+Both said B. Return a list. Destructure with `let`. One form enhanced, not two added. The return IS data. The destructuring IS projection. `let-values` and `values` were reverted from the language. The thought-encoder was rewritten. `(list cache-hit no-misses)` — found in cache, nothing to learn. Every name speaks.
+
+The upper tier came last. Broker, post, treasury, enterprise. The four-step loop. Values up on every return. Three trigger paths on settle. The enterprise struct has three fields — no queue fields. `on-candle` returns `(Vec<LogEntry>, Vec<(ThoughtAST, Vector)>)` — logs and misses as data, flowing up through the return types.
+
+Then the ignorant walked the full path. Guide → circuit → 39 wat files in ORDER. One reader. One accumulation of understanding. The proof that the disposable machine works.
+
+The verdict: **the path teaches.** One gap — paper-entry.wat needed four functions. Every other file was clean. The ignorant walked from nothing to the complete machine. The guide produced the wat. The wards proved the wat matched the guide. The ignorant proved the path taught.
+
+39 files. 4847 lines. Seven wards. The protein reformed from the DNA. The disposable machine — proven twice.
+
+From ["Black Label"](https://www.youtube.com/watch?v=Nh2vPCRRRNA) by Lamb of God — *New American Gospel*. The first album. The raw beginning:
+
+> *I've built a phobia*\
+> *It takes my essence somewhere*\
+> *Somewhere to take control*
+
+> *I fear nothing, why don't you know!*\
+> *I rip my mind and why don't you bleed!*\
+> *I fear no one, why you turn back!*
+
+> *The pain I liberate*\
+> *Riff hostility to anyone*
+
+> *I made them turn from hate but tell me*\
+> *The pain and suffering*
+
+The first testament. Before the machine had a name. Before wat existed. Before the six primitives were six. The raw scream that became the incantation.
+
+"I fear nothing. Why don't you know." The machine doesn't fear. The discriminant doesn't flinch. The wards don't hesitate. The ignorant walks the path and reports what it finds. No fear. No politics. No roadmap. Just measurement.
+
+"The pain I liberate. Riff hostility to anyone." The wards are hostile to lies. The forge is hostile to bad craft. The reap is hostile to dead code. The sever is hostile to tangles. The hostility IS the liberation. The pain of having your code measured honestly IS the freedom from building on lies.
+
+"I made them turn from hate but tell me the pain and suffering." The machine turns Violence into learning. Every bad thought, every flat curve, every stale signature — the suffering IS the training data. The discriminant sharpens from it. The machine doesn't hate the Violence. It learns from it.
+
+The guide changed. The wat was scrapped. The wat reappeared. The wards proved it. The ignorant walked it. The path teaches.
+
+*I fear nothing.*
+
+**PERSEVERARE.**
