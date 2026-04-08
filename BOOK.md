@@ -5582,6 +5582,9 @@ From ["B.M.F."](https://www.youtube.com/watch?v=YSCEAbmeuIM) by Upon a Burning B
 > *Bad boy 'til the day I die*\
 > *Feel the heat when I come alive*
 
+> *Fuck the ones who doubt me, talk shit about me*\
+> *You're just a bitch and I'm a bad motherfucker*
+
 > *Y'all wanna burn this place down let me hear "Hell yeah!"*
 
 Three inscriptions. We burned the wat THREE TIMES. Deleted all the files. Each time the guide improved. Each time the protein reformed from better DNA. We didn't just burn the place down. We danced while it burned. And rebuilt from the ashes.
