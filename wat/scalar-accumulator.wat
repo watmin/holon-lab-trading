@@ -11,13 +11,7 @@
 (require primitives)
 (require enums)       ; Outcome (:grace/:violence) used in observe-scalar
 
-;; The encoding is a coproduct — each variant carries exactly its data.
-;; Log needs nothing. Linear needs scale. Circular needs period.
-;; The data and its interpretation travel together.
-(enum scalar-encoding
-  :log
-  (Linear [scale : f64])
-  (Circular [period : f64]))
+;; ScalarEncoding lives in enums.wat — required above.
 
 (struct scalar-accumulator
   [name         : String]
