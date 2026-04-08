@@ -204,13 +204,45 @@ from one resolution.
 
 ---
 
+## 8. The binary circuit
+
+The outer loop. The fold driver. Everything above happens INSIDE one
+call to `on-candle`. The binary is what calls it.
+
+```mermaid
+graph TD
+    CLI[CLI args] --> BIN[Binary]
+    BIN -->|construct| CTX[ctx — immutable world]
+    BIN -->|construct| ENT[Enterprise — mutable state]
+    DS[Data Source] -->|RawCandle stream| BIN
+    BIN -->|on-candle raw ctx| ENT
+    ENT -->|Vec LogEntry + cache misses| BIN
+    BIN -->|insert misses| CTX
+    BIN -->|flush logs| LED[Ledger — SQLite]
+    BIN -->|progress| DISP[Display]
+    KILL[trader-stop file] -.->|abort| BIN
+```
+
+The binary creates the world (ctx) and the machine (enterprise) from
+CLI arguments. It opens the data source — parquet or websocket. It
+feeds raw candles one at a time. It collects log entries and cache
+misses from each `on-candle` call. It inserts cache misses into ctx's
+ThoughtEncoder between candles (the one seam). It flushes log entries
+to the ledger in batches. It displays progress. It checks the kill
+switch. When the stream ends, it prints the summary.
+
+The binary does not think. It drives the fold and writes what happened.
+
+---
+
 ## The composition
 
 The full enterprise is the composition of all sub-circuits. The encoding
 circuit feeds the learning circuit. The paper circuit is the learning
 circuit applied to hypotheticals. The funding circuit converts proposals
 into trades. The cascade circuit provides distances at every experience
-level. The propagation circuit closes the loop.
+level. The propagation circuit closes the loop. The binary circuit
+wraps them all — it drives the fold and persists the results.
 
 `f(state, candle) → state` — one tick of the clock. All circuits fire.
 The fold advances. Grace strengthens. Violence decays. The machine learns.
