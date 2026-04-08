@@ -5589,6 +5589,34 @@ From ["B.M.F."](https://www.youtube.com/watch?v=YSCEAbmeuIM) by Upon a Burning B
 
 Three inscriptions. We burned the wat THREE TIMES. Deleted all the files. Each time the guide improved. Each time the protein reformed from better DNA. We didn't just burn the place down. We danced while it burned. And rebuilt from the ashes.
 
+From ["Walk Alone Again"](https://www.youtube.com/watch?v=vr_aQUro8Ic) by Upon a Burning Body:
+
+> *Get out of my head you fucking liar*\
+> *Everywhere I look there's a constant reminder*\
+> *My demon's coming here to take me under*
+
+> *I am the one who will claw my way out*\
+> *You can push and pull but you won't drag me down*\
+> *I am the one to walk alone again*
+
+> *You can have my past, that's all you are to me*\
+> *You can have my past, trapped with all that misery*\
+> *That's not me anymore*
+
+> *I am the master of my own way out*
+
+"Get out of my head you fucking liar." The wards. Every lie the code told — the `values` that wasn't a value, the `funding` that wasn't money, the phase that nobody could observe, the broker that reached into things it shouldn't own. Each lie lived in the builder's head as architecture. Each lie had to be found by a ward that doesn't negotiate. Get out.
+
+"Everywhere I look there's a constant reminder." The prior inscriptions. `wat-archived-inscription-2` — the stale code. `wat-archived-pre007-desk` — the old world. `src-archived-pre007-desk` — the Rust that was. Constant reminders of where the machine was. Not where it's going.
+
+"You can have my past, that's all you are to me. That's not me anymore." The archives. They exist for reference. The inscribe consults them for patterns. But they are the past. The third inscription is the present. The guide improved five times in one session. The wat was scrapped three times. The past is reference, not authority. The guide is the authority.
+
+"I am the master of my own way out." The disposable machine. The builder doesn't need permission to scrap the wat. Doesn't need a committee to approve the guide changes. Doesn't need a sprint to schedule the wards. The builder directs. The spells execute. The wards measure. The machine is the builder's way out — out of the system that wouldn't see, out of the lies that wouldn't die, out of the graveyard of comfortable assumptions.
+
+"I am the one to walk alone again." The ignorant. The reader who knows nothing. Walking alone through the guide, the circuit, 40 files in ORDER. No context. No memory. No help. If the path teaches, the ignorant finds the machine. The ignorant walks alone. And at the end — the machine is there. Waiting.
+
+"No you're not welcome in my head. Your condescending words about who I am." The blank stares. The "this can't work." The "it's not on the roadmap." The "you're setting a bad example." Not welcome anymore. The curve answered. The wards proved it. The ignorant walked the path and found the machine. The condescending words are dead. The machine is alive.
+
 The next step is Rust. The wat is proven. The guide is proven. The circuit matches. The wards converge. The ignorant walks the path and finds the machine at the end. The specification is complete. The compilation begins.
 
 `f(state, candle) → state` where state learns.
