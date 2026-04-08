@@ -4,8 +4,7 @@
 ;; Domain: market (MarketLens :narrative)
 ;;
 ;; Multi-timeframe analysis. 5-minute candles aggregate into 1h and 4h.
-;; Structure: where is price geometrically? Narrative: what's the story?
-;; Agreement: do timeframes confirm or contradict?
+;; All values are pre-computed fields on the enriched Candle.
 
 (require primitives)
 (require candle)
@@ -19,11 +18,11 @@
 ;; 1h/4h return — signed. How much has the higher-timeframe moved?
 ;; Linear-encoded with scale 0.05 (5% is a large hourly move for BTC).
 ;;
-;; Inter-timeframe agreement — do 5m, 1h, and 4h all point the same way?
-;; Scalar: -1 = all disagree, +1 = all agree. Intermediate = partial.
+;; tf-agreement — pre-computed on Candle. Inter-timeframe agreement score.
+;; 5m/1h/4h direction alignment. High = all timeframes agree. Low = conflict.
+;; Linear-encoded with scale 1.0.
 
-(define (encode-timeframe-facts [candle : Candle]
-                                [candles : Vec<Candle>])
+(define (encode-timeframe-facts [candle : Candle])
   : Vec<ThoughtAST>
   (let* ((facts (list))
 
@@ -53,22 +52,8 @@
                   (append facts (list (Linear "tf-4h-ret" (:tf-4h-ret candle) 0.05)))
                   facts))
 
-         ;; Inter-timeframe agreement
-         (facts (if (>= (len candles) 2)
-                  (let* ((prev     (nth candles (- (len candles) 2)))
-                         (m5-dir   (signum (- (:close candle) (:close prev))))
-                         (h1-dir   (signum (:tf-1h-ret candle)))
-                         (h4-dir   (signum (:tf-4h-ret candle)))
-                         ;; Agreement score: mean of pairwise agreements
-                         ;; Each pair: +1 if same sign, -1 if opposite, 0 if either zero
-                         (agree-m5-1h (if (or (= m5-dir 0.0) (= h1-dir 0.0)) 0.0
-                                        (if (= m5-dir h1-dir) 1.0 -1.0)))
-                         (agree-m5-4h (if (or (= m5-dir 0.0) (= h4-dir 0.0)) 0.0
-                                        (if (= m5-dir h4-dir) 1.0 -1.0)))
-                         (agree-1h-4h (if (or (= h1-dir 0.0) (= h4-dir 0.0)) 0.0
-                                        (if (= h1-dir h4-dir) 1.0 -1.0)))
-                         (agreement   (/ (+ agree-m5-1h agree-m5-4h agree-1h-4h) 3.0)))
-                    (append facts (list (Linear "tf-agreement" agreement 1.0))))
-                  facts)))
+         ;; Inter-timeframe agreement — how aligned are 5m/1h/4h?
+         (facts (append facts
+                  (list (Linear "tf-agreement" (:tf-agreement candle) 1.0)))))
 
     facts))

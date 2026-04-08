@@ -1,100 +1,82 @@
-;; price-action.wat — inside/outside bars, gaps, consecutive runs
+;; price-action.wat — inside/outside bars, gaps, consecutive runs, body ratio
 ;;
 ;; Depends on: candle
 ;; Domain: market (MarketLens :structure)
 ;;
-;; Candlestick structure. Each pattern is a scalar fact, not a zone.
-;; Inside bars compress. Outside bars expand. Gaps show momentum.
-;; Consecutive runs show conviction.
+;; Candlestick structure from a single candle. Body ratio encodes
+;; decisiveness. Range and body geometry encode the candle's character.
+;; Cross-candle patterns (inside bars, gaps, consecutive runs) are
+;; pre-computed by the IndicatorBank on the enriched Candle.
 
 (require primitives)
 (require candle)
 
-;; Inside bar: current range within previous range.
-;; Scalar: how much of the previous range does the current cover?
-;; 0.0 = tiny inside bar (extreme compression). 1.0 = barely inside.
+;; Body ratio: body / range. Range [0, 1].
+;; 1.0 = no wicks (decisive). 0.0 = all wick (indecisive).
 ;;
-;; Outside bar: current range engulfs previous.
-;; Scalar: how much bigger is the current range vs previous?
-;; Log-encoded because ratio.
+;; Upper wick ratio: (high - body-top) / range. How much rejection above.
+;; Lower wick ratio: (body-bottom - low) / range. How much rejection below.
 ;;
-;; Gap: (open - prev_close) / prev_close. Signed. Log magnitude.
+;; Candle direction: +1 bullish, -1 bearish, 0 doji.
+;; ROC-1 captures the magnitude.
 ;;
-;; Consecutive runs: how many candles in the same direction?
-;; Signed: positive = consecutive up, negative = consecutive down.
-;; Log-encoded because the difference between 3 and 4 matters
-;; more than 8 and 9.
+;; Inside bar — pre-computed on Candle. Compression ratio: current range / prev range.
+;; < 1 = inside bar (range contracted). The further below 1.0, the tighter.
+;;
+;; Outside bar — pre-computed on Candle. Expansion ratio: current range / prev range.
+;; > 1 = outside bar (range expanded). The further above 1.0, the wider.
+;;
+;; Gap — pre-computed on Candle. Signed: (open - prev close) / prev close.
+;; Positive = gap up. Negative = gap down.
+;;
+;; Consecutive up/down — pre-computed on Candle.
+;; Run count of consecutive bullish or bearish closes.
+;; Linear-encoded. Longer runs = stronger momentum or exhaustion signal.
 
-(define (encode-price-action-facts [candle : Candle]
-                                   [candles : Vec<Candle>])
+(define (encode-price-action-facts [candle : Candle])
   : Vec<ThoughtAST>
-  (let ((n (len candles)))
-    (if (< n 3)
+  (let* ((range    (- (:high candle) (:low candle)))
+         (body-top (max (:close candle) (:open candle)))
+         (body-bot (min (:close candle) (:open candle)))
+         (body     (- body-top body-bot)))
+
+    ;; Only emit single-candle geometry when range is meaningful
+    (if (< range 1e-10)
       (list)
-      (let* ((now       candle)
-             (prev      (nth candles (- n 2)))
-             (now-range (- (:high now) (:low now)))
-             (prev-range (- (:high prev) (:low prev)))
-             (facts     (list))
+      (let* ((facts (list
+               (Linear "body-ratio" (/ body range) 1.0)
+               (Linear "upper-wick" (/ (- (:high candle) body-top) range) 1.0)
+               (Linear "lower-wick" (/ (- body-bot (:low candle)) range) 1.0)
+               (Linear "candle-dir"
+                 (signum (- (:close candle) (:open candle))) 1.0)))
 
-             ;; Inside bar
-             (facts (if (and (<= (:high now) (:high prev))
-                             (>= (:low now) (:low prev))
-                             (> prev-range 1e-10))
-                      (append facts
-                        (list (Linear "inside-bar"
-                                (/ now-range prev-range) 1.0)))
+             ;; Inside bar — compression ratio
+             (ib (:inside-bar candle))
+             (facts (if (> ib 0.0)
+                      (append facts (list (Log "inside-bar" ib)))
                       facts))
 
-             ;; Outside bar
-             (facts (if (and (> (:high now) (:high prev))
-                             (< (:low now) (:low prev))
-                             (> prev-range 1e-10))
-                      (append facts
-                        (list (Log "outside-bar"
-                               (max (/ now-range prev-range) 1.0))))
+             ;; Outside bar — expansion ratio
+             (ob (:outside-bar candle))
+             (facts (if (> ob 0.0)
+                      (append facts (list (Log "outside-bar" ob)))
                       facts))
 
-             ;; Gap
-             (gap (/ (- (:open now) (:close prev)) (:close prev)))
-             (facts (if (> (abs gap) 0.001)
-                      (append facts
-                        (list (Bind (Atom "gap")
-                                (Bind (Linear "gap-sign" (signum gap) 1.0)
-                                      (Log "gap-mag" (max (abs gap) 0.001))))))
+             ;; Gap — signed distance
+             (g (:gap candle))
+             (facts (if (!= g 0.0)
+                      (append facts (list (Linear "gap" g 0.05)))
                       facts))
 
-             ;; Consecutive runs
-             (runs  (consecutive-runs candles))
-             (up-ct (first runs))
-             (dn-ct (second runs))
-             (facts (if (>= up-ct 2)
-                      (append facts
-                        (list (Log "consec-up" (+ up-ct 0.0))))
+             ;; Consecutive runs — bullish and bearish
+             (cup (:consecutive-up candle))
+             (facts (if (> cup 0.0)
+                      (append facts (list (Linear "consecutive-up" cup 10.0)))
                       facts))
-             (facts (if (>= dn-ct 2)
-                      (append facts
-                        (list (Log "consec-down" (+ dn-ct 0.0))))
+
+             (cdn (:consecutive-down candle))
+             (facts (if (> cdn 0.0)
+                      (append facts (list (Linear "consecutive-down" cdn 10.0)))
                       facts)))
 
         facts))))
-
-;; Count consecutive same-direction candles from the most recent backwards.
-;; Returns (up-count, down-count). At most one can be non-zero.
-(define (consecutive-runs [candles : Vec<Candle>])
-  : (usize usize)
-  (let loop ((i (- (len candles) 1))
-             (up 0) (down 0))
-    (if (< i 0)
-      (list up down)
-      (let ((c (nth candles i)))
-        (cond
-          ((> (:close c) (:open c))
-           (if (> down 0)
-             (list up down)
-             (loop (- i 1) (+ up 1) down)))
-          ((< (:close c) (:open c))
-           (if (> up 0)
-             (list up down)
-             (loop (- i 1) up (+ down 1))))
-          (true (list up down)))))))
