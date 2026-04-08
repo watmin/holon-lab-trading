@@ -1,6 +1,6 @@
 ;; candle.wat — the enriched candle
 ;;
-;; Depends on: raw-candle, indicator-bank
+;; Depends on: primitives (pure data struct — no require on indicator-bank)
 ;; Produced by: (tick indicator-bank raw-candle) → Candle
 ;;
 ;; Raw OHLCV in, 100+ computed indicators out. The post's first act

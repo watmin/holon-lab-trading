@@ -1,5 +1,5 @@
 ; scalar-accumulator.wat — per-magic-number f64 learning.
-; Depends on: nothing (uses scalar encoding from stdlib).
+; Depends on: enums (Outcome, ScalarEncoding).
 ;
 ; Lives on the broker. Global per-pair. Each distance (trail, stop, tp,
 ; runner-trail) gets its own accumulator.
