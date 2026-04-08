@@ -841,23 +841,32 @@ The streaming primitives — the building blocks of indicator state:
 (struct ema-state
   [value     : f64]
   [smoothing : f64]
-  [period    : usize])
+  [period    : usize]
+  [count     : usize]
+  [accum     : f64])
+
+(struct wilder-state
+  [value  : f64]
+  [period : usize]
+  [count  : usize]
+  [accum  : f64])
 
 (struct rsi-state
-  [avg-gain   : f64]
-  [avg-loss   : f64]
-  [period     : usize]
-  [prev-close : f64])
+  [gain-smoother : WilderState]
+  [loss-smoother : WilderState]
+  [prev-close    : f64]
+  [started       : bool])
 
 (struct atr-state
-  [atr        : f64]
-  [period     : usize]
-  [prev-close : f64])
+  [wilder     : WilderState]
+  [prev-close : f64]
+  [started    : bool])
 
 (struct obv-state
   [obv        : f64]
   [prev-close : f64]
-  [history    : RingBuffer])  ; for computing obv-slope-12 via linear regression
+  [history    : RingBuffer]
+  [started    : bool])  ; for computing obv-slope-12 via linear regression
 
 ;; Depend on RingBuffer
 (struct sma-state
@@ -868,7 +877,8 @@ The streaming primitives — the building blocks of indicator state:
 (struct rolling-stddev
   [buffer : RingBuffer]
   [sum    : f64]
-  [sum-sq : f64])
+  [sum-sq : f64]
+  [period : usize])
 
 (struct stoch-state
   [high-buf : RingBuffer]
@@ -876,12 +886,14 @@ The streaming primitives — the building blocks of indicator state:
   [k-buf    : RingBuffer])  ; %K history for computing %D (3-period SMA of %K)
 
 (struct cci-state
-  [tp-buf : RingBuffer])
+  [tp-buf : RingBuffer]
+  [tp-sma : SmaState])
 
 (struct mfi-state
   [pos-flow-buf : RingBuffer]
   [neg-flow-buf : RingBuffer]
-  [prev-tp      : f64])
+  [prev-tp      : f64]
+  [started      : bool])
 
 (struct ichimoku-state
   [high-9  : RingBuffer]  [low-9  : RingBuffer]
@@ -895,12 +907,16 @@ The streaming primitives — the building blocks of indicator state:
   [signal-ema : EmaState])
 
 (struct dmi-state
-  [plus-dm-smooth  : f64]
-  [minus-dm-smooth : f64]
-  [tr-smooth       : f64]
-  [dx-ema          : EmaState]
-  [prev-high       : f64]
-  [prev-low        : f64])
+  [plus-smoother  : WilderState]
+  [minus-smoother : WilderState]
+  [tr-smoother    : WilderState]
+  [adx-smoother   : WilderState]
+  [prev-high      : f64]
+  [prev-low       : f64]
+  [prev-close     : f64]
+  [started        : bool]
+  [count          : usize]
+  [period         : usize])
 ```
 
 The indicator bank — composed from the streaming primitives:
