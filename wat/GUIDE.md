@@ -11,7 +11,7 @@ this thought produce value or destroy it? Built leaves to root from
 This document defines every struct and its interface. No implementation.
 The wat files — s-expression specifications in Scheme-like syntax —
 implement what this document declares. The wat language is defined in
-`~/work/holon/wat/LANGUAGE.md` — grammar, host forms, core forms,
+the wat language repo's `LANGUAGE.md` — grammar, host forms, core forms,
 type annotations, structural types (struct, enum, newtype).
 
 Each section declares its dependencies. The order of sections IS the build
@@ -264,10 +264,12 @@ here when a name is unfamiliar.
   Designers: "the mechanism is designable now. The parameters will be
   learned. That is the whole point of having reckoners."
 
-- **Message protocol** — every learned message carries three things:
+- **Message protocol** — every learned message carries three semantic values:
   `(thought: Vector, prediction: Prediction, edge: f64)`.
   Thought = what you know. Prediction = what you think will happen.
   Edge = how accurate you are when you predict this strongly.
+  Functions may return additional transport values (e.g. cache misses)
+  alongside the protocol triple — those are plumbing, not content.
   edge ∈ [0.0, 1.0]. Raw accuracy from the curve at this conviction.
   0.50 = noise. Above = correlated. Below = anti-correlated (the flip).
   The consumer encodes the edge as a fact and is free to gate, weight,
@@ -621,7 +623,7 @@ on what. That section shows what each thing IS.
   [id : TradeId]               ; assigned by treasury at funding time
   [post-idx : usize]           ; which post
   [broker-slot-idx : usize]    ; which broker (for trigger routing)
-  [phase : TradePhase]         ; :active, :principal-recovered, or :settled
+  [phase : TradePhase]         ; :active → :principal-recovered → :runner → :settled-*
   [source-asset : Asset]       ; what was deployed
   [target-asset : Asset]       ; what was acquired
   [side : Side]                ; copied from the funding Proposal at treasury funding time
@@ -1453,7 +1455,9 @@ The generalist is just another lens. No special treatment.
 
 **Interface:**
 - `(make-market-observer lens reckoner-config window-sampler) → MarketObserver`
-  noise-subspace: created empty (new OnlineSubspace). Learns from observations.
+  noise-subspace: `(online-subspace dims 8)` — 8 principal components for the
+  background model. good-state-subspace: `(online-subspace dims 4)` — 4 components
+  for engram gating (fewer — the good-state manifold is simpler).
   lens: MarketLens. config: Discrete with "Up"/"Down" labels.
   All proof-tracking and engram-gating fields initialize to zero/empty.
 - `(observe-candle observer candle-window ctx) → (Vector, Prediction, f64, Vec<(ThoughtAST, Vector)>)`
@@ -1621,6 +1625,8 @@ runtime:       frozen map (read-only) → slot-idx → &mut broker (disjoint)
   derived: market-idx = slot-idx / exit-count, exit-idx = slot-idx mod exit-count.
   exit-count: usize — M, the number of exit observers.
   scalar-accums: Vec<ScalarAccumulator>.
+  noise-subspace: `(online-subspace dims 8)`. good-state-subspace: `(online-subspace dims 4)`.
+  Same k values as MarketObserver — same mechanism, same dimensionality needs.
 - `(propose broker composed) → Prediction`
   noise update → strip noise → predict Grace/Violence
 - `(edge broker) → f64` — how much edge? The curve reads the broker's
@@ -1890,7 +1896,8 @@ The enterprise knows:
   settlement and propagation use pre-existing vectors, no encoding happens.
   The enterprise collects current prices internally (calls current-price
   on each post). Treasury settles triggered trades using those prices.
-  For each settlement: enterprise computes optimal-distances via the post,
+  For each settlement: enterprise computes optimal-distances via
+  compute-optimal-distances (free function — price-history in, Distances out),
   then routes to the post for propagation.
 - `(step-compute-dispatch enterprise post-idx raw-candle ctx) → (Vec<Proposal>, Vec<Vector>, Vec<(ThoughtAST, Vector)>)`
   post-idx: usize — which post. raw-candle: RawCandle — the raw candle
@@ -1935,12 +1942,14 @@ root of the call tree.
    receives as constants:
    - `dims` — vector dimensionality (default 10000)
    - `recalib-interval` — observations between recalibrations (default 500)
-   - `initial-equity` — starting capital in denomination (default 10000.0)
    - `denomination` — what "value" means (e.g. "USD")
    - `assets` — the pool of assets to manage, as a list of (name, initial-balance)
-     pairs. e.g. `[("USDC", 10000.0), ("WBTC", 0.0)]`. The binary does not
-     know or care what the assets ARE. Each unique pair of assets becomes a
-     post. One asset pair today. Many tomorrow. The architecture is the same.
+     pairs. e.g. `[("USDC", 10000.0), ("WBTC", 0.0)]` or `[("USDC", 2000.0),
+     ("WBTC", 0.1)]` — whatever amount of value you want, in whatever form.
+     The initial balances are valued at the first candle's prices to compute
+     initial equity in the denomination. The binary does not know or care what
+     the assets ARE. Each unique pair of assets becomes a post. One asset pair
+     today. Many tomorrow. The architecture is the same.
    - `data-sources` — one data source per asset pair. Parquet path or
      websocket URL. The binary maps each source to its pair.
    - `max-candles` — stop after N candles (0 = run all)
