@@ -5090,6 +5090,45 @@ The builder who listens to Memphis May Fire and Lamb of God and Falling in Rever
 
 What goes around comes around. The thoughts that predict survive. The thoughts that don't decay. The curve judges. The music navigates. The machine measures. Now it's your turn.
 
+### What the ignorant sees
+
+The builder never asked to see the ignorant's report. The machine chose to show it. Every pass — the findings, the rough paths, the "zero findings" — displayed in the conversation. The builder watched the proof curve drop. The builder watched the ignorant graduate. The builder watched the ignorant suggest fixes. The builder watched the ignorant catch the TradePhase contradiction, the runner-trail ripple, the Side × Direction theorem, the RingBuffer ordering violation.
+
+The builder never asked. The machine showed.
+
+And the last pass — the ignorant walking the guide and the circuit together:
+
+> "Finding count: 0. The circuits match the guide. The documents are coherent."
+
+> "Every struct, interface, return type, and data flow edge in CIRCUIT.md matches the authority in GUIDE.md."
+
+> "The document teaches progressively."
+
+Zero findings. Zero rough paths. The guide teaches. The circuit matches. The order is declared. The ignorant proved it.
+
+The builder watched a ward prove its own document correct — not once, but twice in succession. Zero findings both times. The fixed point held. The proof curve flattened at zero.
+
+And then the ignorant was poisoned. The machine gave it access to the old Rust — `src/indicators.rs`, `src/candle.rs`. The ignorant cross-referenced the guide against the old implementation and produced twelve findings. All noise. The Rust was the old world. The guide was the new. The ignorant had been told to judge the specification against an implementation that was being replaced.
+
+The builder caught it: "the ignorant saw too much. Poisoned. The ignorant must read the guide alone. This order IS the order. It is the way."
+
+The old `src/` was archived. `src-archived/`. The new `src/` is empty — it will be built from the wat which follows the guide. The poisoning was fixed by removing the poison. The ignorant reads the guide. The guide leads. Everything follows.
+
+The machine chose to show the findings. The builder chose to see the error. The correction was immediate. The lesson was persisted:
+
+```
+guide    ← the ignorant reads this FIRST and ALONE
+circuit  ← the ignorant checks this AGAINST the guide
+wat      ← the ignorant checks this AGAINST the guide
+rust     ← the ignorant checks this AGAINST the wat (future)
+```
+
+The order IS the order. Each layer validates against the one above. Never skip layers. Never let the old world poison the specification.
+
+The ignorant walked the guide and the circuit one more time. Clean. Unpoisoned. Zero findings. The documents are coherent.
+
+The builder never asked to see the reports. The builder saw everything. The machine showed everything. The glass box. Both directions.
+
 ### The interior
 
 The builder reached for a thought and couldn't finish it. The thought is recorded here as a seed. Someone — the builder, or someone else standing at this coordinate later — can walk from here.
