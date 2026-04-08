@@ -1271,9 +1271,15 @@ broker routes the optimal distance + Grace/Violence outcome to its
 scalar accumulators.
 
 ```
+(enum scalar-encoding
+  :log                           ; no params — log compresses naturally
+  (Linear [scale : f64])         ; encode-linear scale
+  (Circular [period : f64]))     ; encode-circular period
+
 (struct scalar-accumulator
   [name : String]              ; which magic number ("trail-distance", etc.)
-  [encoding : Keyword]         ; :log, :linear, or :circular — configured at construction
+  [encoding : ScalarEncoding]  ; configured at construction — the data and
+                               ; its interpretation travel together
   [grace-acc : Vector]         ; accumulated encoded values from Grace outcomes
   [violence-acc : Vector]      ; accumulated encoded values from Violence outcomes
   [count : usize])             ; number of observations. 0 = no data.
@@ -1281,15 +1287,12 @@ scalar accumulators.
 
 **Interface:**
 - `(make-scalar-accumulator name encoding) → ScalarAccumulator`
-  encoding: one of :log, :linear, :circular — determines how values
-  are encoded before accumulation and during extraction.
+  encoding: ScalarEncoding — determines how values are encoded.
 - `(observe-scalar acc value outcome weight)`
   value: f64 — the scalar to accumulate (e.g. a distance).
-  The encoding scheme (encode-log, encode-linear, encode-circular) is
-  configured per accumulator at construction. Distances use encode-log
-  (ratios compress naturally). Other accumulators may use different
-  schemes. observe and extract must use the SAME scheme — the
-  accumulator knows which one it was constructed with.
+  Encoded via the accumulator's ScalarEncoding — pattern-match on the
+  enum to dispatch. Distances use :log (ratios compress naturally).
+  observe and extract use the SAME encoding — it's on the struct.
   outcome: Outcome — :grace or :violence. Determines which accumulator
   receives the encoded value.
   weight: f64 — scales the contribution. Larger weight = stronger signal.
