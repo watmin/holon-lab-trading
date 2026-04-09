@@ -263,7 +263,7 @@ here when a name is unfamiliar.
     the cost of being stopped out of a runner is zero.
   - Runner + runner-trail-hit → **Settled(Grace)** — residue is
     permanent gain. Returns to available.
-  Venue cost reality: the violence path costs 2 swaps (entry + exit). The grace path via runner costs 3 swaps (entry + principal recovery + residue capture). Each swap incurs `swap-fee + slippage`. The third swap is the price of letting house money ride — the cost of the wider trailing stop window. The edge must exceed the total venue cost rate for the trade to be worth taking.
+  Venue cost reality: both paths cost 2 swaps. Violence: entry swap (USDC→WBTC) + stop-loss swap (WBTC→USDC). Grace: entry swap (USDC→WBTC) + take-profit partial swap (enough WBTC→USDC to recover principal). The residue stays as WBTC — no third swap. The runner stop reclassifies residue from reserved to available. The residue IS the target asset. Each swap incurs `swap-fee + slippage`. The edge must exceed the total venue cost rate for the trade to be worth taking.
   The phase is a value on the Trade struct. The treasury handles settlement
   differently depending on the phase. Two settlement events are possible
   per trade: principal recovery (partial) then runner exit (final).
@@ -2008,7 +2008,7 @@ The treasury NEVER deploys more than available capital. The loss on any trade is
   evaluate all proposals, sorted by proposal edge (the curve's accuracy measure).
   Fund the top N that fit in available capital. Reject the rest.
   Returns ProposalFunded and ProposalRejected log entries.
-  Before funding, the treasury computes the expected venue cost: `(swap-fee + slippage) × amount × expected-swaps`. The violence path costs 2 swaps (entry + stop-loss exit). The grace path via runner costs 3 swaps (entry + principal recovery at take-profit + residue capture at runner stop). The treasury reserves `amount + worst-case-venue-costs` (3 swaps). A proposal whose edge does not exceed the total venue cost rate is rejected — negative expected value. The system never takes a trade it can't afford to lose.
+  Before funding, the treasury computes the expected venue cost: `(swap-fee + slippage) × amount × 2`. Both paths cost 2 swaps — violence (entry + stop-loss) and grace (entry + take-profit partial recovery). The residue from grace stays as the target asset and never swaps back. The treasury reserves `amount + worst-case-venue-costs` (2 swaps). A proposal whose edge does not exceed the total venue cost rate is rejected — negative expected value. The system never takes a trade it can't afford to lose.
   For each funded proposal: move capital from available to reserved,
   create a Trade, stash a TradeOrigin (post-idx, broker-slot-idx,
   composed-thought, prediction) for propagation at settlement time. Drain proposals.
