@@ -381,18 +381,18 @@
   ; At count == period: initial average.
   ; After: Wilder smooth = (prev × (period - 1) + value) / period.
   (inc! (:count s))
-  (let* ((pf (+ (:period s) 0.0)))
+  (let* ((period-float (+ (:period s) 0.0)))
     (if (<= (:count s) (:period s))
       (begin
         (set! (:accum s) (+ (:accum s) value))
         (if (= (:count s) (:period s))
           (begin
-            (set! (:value s) (/ (:accum s) pf))
+            (set! (:value s) (/ (:accum s) period-float))
             (:value s))
           0.0))
       (begin
         (set! (:value s)
-              (/ (+ (* (:value s) (- pf 1.0)) value) pf))
+              (/ (+ (* (:value s) (- period-float 1.0)) value) period-float))
         (:value s)))))
 
 
@@ -665,23 +665,10 @@
         (else nil))
       (set! (:prev-close s) close)
       (ring-push! (:history s) (:obv s))
-      ;; Linear regression slope over history
+      ;; Linear regression slope over history — calls linreg-slope (defined below)
       (if (< (ring-len (:history s)) 2)
         0.0
-        (let* ((n   (+ (ring-len (:history s)) 0.0))
-               (vals (ring-to-list (:history s)))
-               ;; Sums for least-squares fit
-               (sx  (fold + 0.0 (map (lambda (i) (+ i 0.0))
-                                     (range 0 (ring-len (:history s))))))
-               (sy  (fold + 0.0 vals))
-               (sxx (fold + 0.0 (map (lambda (i) (* (+ i 0.0) (+ i 0.0)))
-                                     (range 0 (ring-len (:history s))))))
-               (sxy (fold + 0.0 (map (lambda (i) (* (+ i 0.0) (nth vals i)))
-                                     (range 0 (ring-len (:history s))))))
-               (denom (- (* n sxx) (* sx sx))))
-          (if (< (abs denom) 1e-10)
-            0.0
-            (/ (- (* n sxy) (* sx sy)) denom)))))))
+        (linreg-slope (ring-to-list (:history s)))))))
 
 
 ;; ════════════════════════════════════════════════════════════════════════
@@ -791,7 +778,8 @@
 
 ;; ════════════════════════════════════════════════════════════════════════
 ;; Linear regression slope — general numeric utility.
-;; Lives here because its only consumer is the indicator bank (OBV slope).
+;; rune:sever(co-location) — consumers: obv-step! (OBV slope) and compute-dfa.
+;; Extract to a shared numeric module when a sibling outside indicator-bank arrives.
 ;; ════════════════════════════════════════════════════════════════════════
 
 (define (linreg-slope [vals : List<f64>])
