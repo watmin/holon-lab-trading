@@ -34,6 +34,9 @@ engram-gate.wat             ; check-engram-gate (requires primitives only)
 ;; ── Candle — depends on: indicator-bank ─────────────────────
 candle.wat                  ; Candle struct (the output of tick)
 
+;; ── Simulation — depends on: distances ─────────────────────
+simulation.wat              ; pure functions: compute-optimal-distances + helpers
+
 ;; ── Vocabulary — depends on: candle ─────────────────────────
 vocab/shared/time.wat
 vocab/market/oscillators.wat
@@ -86,6 +89,9 @@ treasury.wat                ; Treasury struct + interface
 
 ;; ── Enterprise — depends on: post, treasury ─────────────────
 enterprise.wat              ; Enterprise struct + interface + four-step loop
+
+;; ── Binary — depends on: everything ─────────────────────────
+bin/enterprise.wat          ; the outer shell — drives the fold, writes the ledger
 ```
 
 ## The rule
