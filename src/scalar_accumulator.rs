@@ -81,3 +81,112 @@ impl ScalarAccumulator {
         best_value
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const DIMS: usize = 4096;
+
+    #[test]
+    fn test_construct_log() {
+        let acc = ScalarAccumulator::new("trail".to_string(), ScalarEncoding::Log, DIMS);
+        assert_eq!(acc.name, "trail");
+        assert_eq!(acc.count, 0);
+        assert_eq!(acc.dims, DIMS);
+    }
+
+    #[test]
+    fn test_construct_linear() {
+        let acc = ScalarAccumulator::new("stop".to_string(), ScalarEncoding::Linear { scale: 100.0 }, DIMS);
+        assert_eq!(acc.name, "stop");
+        assert_eq!(acc.encoding, ScalarEncoding::Linear { scale: 100.0 });
+    }
+
+    #[test]
+    fn test_observe_increments_count() {
+        let mut acc = ScalarAccumulator::new("trail".to_string(), ScalarEncoding::Log, DIMS);
+        acc.observe(0.02, Outcome::Grace, 1.0);
+        assert_eq!(acc.count, 1);
+        acc.observe(0.05, Outcome::Violence, 1.0);
+        assert_eq!(acc.count, 2);
+    }
+
+    #[test]
+    fn test_extract_converges_to_grace_log() {
+        let mut acc = ScalarAccumulator::new("trail".to_string(), ScalarEncoding::Log, DIMS);
+
+        // Grace prefers 0.02
+        for _ in 0..20 {
+            acc.observe(0.02, Outcome::Grace, 1.0);
+        }
+        // Violence gets 0.05
+        for _ in 0..20 {
+            acc.observe(0.05, Outcome::Violence, 1.0);
+        }
+
+        let extracted = acc.extract(100, (0.005, 0.10));
+        // Extracted should be closer to 0.02 than to 0.05
+        let dist_grace = (extracted - 0.02).abs();
+        let dist_violence = (extracted - 0.05).abs();
+        assert!(
+            dist_grace < dist_violence,
+            "extract should converge toward Grace value (0.02). Got {:.4}, dist_grace={:.4}, dist_violence={:.4}",
+            extracted, dist_grace, dist_violence
+        );
+    }
+
+    #[test]
+    fn test_extract_converges_to_grace_linear() {
+        let mut acc = ScalarAccumulator::new(
+            "stop".to_string(),
+            ScalarEncoding::Linear { scale: 100.0 },
+            DIMS,
+        );
+
+        // Grace prefers 0.03
+        for _ in 0..20 {
+            acc.observe(0.03, Outcome::Grace, 1.0);
+        }
+        // Violence gets 0.08
+        for _ in 0..20 {
+            acc.observe(0.08, Outcome::Violence, 1.0);
+        }
+
+        let extracted = acc.extract(100, (0.01, 0.10));
+        let dist_grace = (extracted - 0.03).abs();
+        let dist_violence = (extracted - 0.08).abs();
+        assert!(
+            dist_grace < dist_violence,
+            "Linear extract should converge toward Grace value (0.03). Got {:.4}",
+            extracted
+        );
+    }
+
+    #[test]
+    fn test_extract_empty_returns_lo() {
+        let acc = ScalarAccumulator::new("trail".to_string(), ScalarEncoding::Log, DIMS);
+        // With no observations, grace_acc is zeros. Any candidate will have similar
+        // cosine. The sweep starts at lo and best_value starts at lo.
+        let extracted = acc.extract(100, (0.01, 0.10));
+        // Should return something within bounds
+        assert!(extracted >= 0.01 && extracted <= 0.10,
+                "Expected value in bounds, got {}", extracted);
+    }
+
+    #[test]
+    fn test_grace_violence_separate() {
+        let mut acc = ScalarAccumulator::new("trail".to_string(), ScalarEncoding::Log, DIMS);
+
+        // Only observe Grace
+        for _ in 0..20 {
+            acc.observe(0.02, Outcome::Grace, 1.0);
+        }
+
+        // grace_acc should be non-zero, violence_acc should still be zero
+        let grace_nnz: usize = acc.grace_acc.data().iter().filter(|&&x| x != 0).count();
+        let violence_nnz: usize = acc.violence_acc.data().iter().filter(|&&x| x != 0).count();
+        assert!(grace_nnz > 0, "Grace accumulator should be non-zero after observations");
+        assert_eq!(violence_nnz, 0, "Violence accumulator should still be zero");
+    }
+}

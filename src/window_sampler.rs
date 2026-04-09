@@ -33,3 +33,80 @@ impl WindowSampler {
         raw.clamp(self.min_window, self.max_window)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_deterministic_same_seed_same_count() {
+        let ws = WindowSampler::new(42, 10, 1000);
+        let a = ws.sample(100);
+        let b = ws.sample(100);
+        assert_eq!(a, b, "Same seed + same encode_count must produce same result");
+    }
+
+    #[test]
+    fn test_deterministic_across_instances() {
+        let ws1 = WindowSampler::new(42, 10, 1000);
+        let ws2 = WindowSampler::new(42, 10, 1000);
+        for i in 0..50 {
+            assert_eq!(ws1.sample(i), ws2.sample(i),
+                       "Two instances with same params must agree at encode_count={}", i);
+        }
+    }
+
+    #[test]
+    fn test_different_seeds_different_results() {
+        let ws1 = WindowSampler::new(1, 10, 1000);
+        let ws2 = WindowSampler::new(9999, 10, 1000);
+        // At least some samples should differ
+        let mut differ = false;
+        for i in 0..100 {
+            if ws1.sample(i) != ws2.sample(i) {
+                differ = true;
+                break;
+            }
+        }
+        assert!(differ, "Different seeds should produce different results for at least some inputs");
+    }
+
+    #[test]
+    fn test_output_within_bounds() {
+        let ws = WindowSampler::new(7, 10, 500);
+        for i in 0..1000 {
+            let s = ws.sample(i);
+            assert!(s >= 10, "Sample {} below min: {}", i, s);
+            assert!(s <= 500, "Sample {} above max: {}", i, s);
+        }
+    }
+
+    #[test]
+    fn test_log_uniform_spans_range() {
+        // Over many samples, we should see both small and large values
+        let ws = WindowSampler::new(0, 10, 10000);
+        let mut min_seen = usize::MAX;
+        let mut max_seen = 0;
+        for i in 0..10000 {
+            let s = ws.sample(i);
+            min_seen = min_seen.min(s);
+            max_seen = max_seen.max(s);
+        }
+        // Should see values near the bottom (< 100) and near the top (> 5000)
+        assert!(min_seen < 100,
+                "Expected some small values, min seen was {}", min_seen);
+        assert!(max_seen > 5000,
+                "Expected some large values, max seen was {}", max_seen);
+    }
+
+    #[test]
+    fn test_different_encode_counts_vary() {
+        let ws = WindowSampler::new(42, 10, 1000);
+        let mut seen = std::collections::HashSet::new();
+        for i in 0..100 {
+            seen.insert(ws.sample(i));
+        }
+        // Should produce more than one distinct value
+        assert!(seen.len() > 1, "Expected variation across encode_counts, got {} distinct values", seen.len());
+    }
+}

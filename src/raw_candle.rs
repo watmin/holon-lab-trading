@@ -50,3 +50,45 @@ impl RawCandle {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_asset_construct() {
+        let a = Asset::new("BTC".to_string());
+        assert_eq!(a.name, "BTC");
+    }
+
+    #[test]
+    fn test_asset_clone_eq() {
+        let a = Asset::new("ETH".to_string());
+        let b = a.clone();
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn test_raw_candle_construct_all_fields() {
+        let src = Asset::new("BTC".to_string());
+        let tgt = Asset::new("USDT".to_string());
+        let rc = RawCandle::new(
+            src.clone(),
+            tgt.clone(),
+            "2025-01-01T00:00:00Z".to_string(),
+            100.0,
+            110.0,
+            90.0,
+            105.0,
+            1000.0,
+        );
+        assert_eq!(rc.source_asset, src);
+        assert_eq!(rc.target_asset, tgt);
+        assert_eq!(rc.ts, "2025-01-01T00:00:00Z");
+        assert_eq!(rc.open, 100.0);
+        assert_eq!(rc.high, 110.0);
+        assert_eq!(rc.low, 90.0);
+        assert_eq!(rc.close, 105.0);
+        assert_eq!(rc.volume, 1000.0);
+    }
+}
