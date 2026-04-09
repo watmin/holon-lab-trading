@@ -17,10 +17,10 @@ graph TD
     subgraph Post [One per asset pair]
         RC[RawCandle] --> IB[IndicatorBank]
         IB --> CD[Candle]
-        CD --> MO[MarketObserver x6]
-        CD --> EO[ExitObserver x4]
+        CD --> MO[MarketObserver xN]
+        CD --> EO[ExitObserver xM]
         MO -->|thought Vector| EO
-        EO -->|composed + distances| BR[Broker x24]
+        EO -->|composed + distances| BR[Broker xNxM]
     end
     MO -.->|uses| VO[Vocabulary]
     MO -.->|uses| TE[ThoughtEncoder ctx]
@@ -47,9 +47,9 @@ Vectors. Vocabulary and ThoughtEncoder are tools, not upstream producers.
 | **IndicatorBank** | streaming state (ring buffers, EMA accumulators) | Candle (100+ indicators) |
 | **Vocabulary** | pure functions, no state | Vec\<ThoughtAST\> — data, not execution |
 | **ThoughtEncoder** | atoms (permanent dict) + compositions (LRU cache, eventually-consistent via returned misses) | Vector from AST |
-| **MarketObserver ×N** | lens (MarketLens), reckoner :discrete (Up/Down), noise-subspace, window-sampler, curve, engram gate | (Vector, Prediction, edge, misses\*) |
+| **MarketObserver ×N** | lens (MarketLens), reckoner :discrete (Up/Down, curve internal), noise-subspace, window-sampler, engram gate | (Vector, Prediction, edge, misses\*) |
 | **ExitObserver ×M** | lens (ExitLens), 4× reckoner :continuous (trail, stop, tp, runner-trail), default-distances | (Distances, experience) via cascade + misses\* |
-| **Broker ×N×M** | reckoner :discrete (Grace/Violence), noise-subspace, curve, papers (deque), 4× scalar-accumulator, engram gate | Prediction + edge() |
+| **Broker ×N×M** | reckoner :discrete (Grace/Violence, curve internal), noise-subspace, papers (deque), 4× scalar-accumulator, engram gate | Prediction + edge() |
 | **Post** | indicator-bank, candle-window, market-observers, exit-observers, registry | Vec\<Proposal\> + Vec\<Vector\> + misses\* |
 | **Treasury** | available ◄──► reserved, trades, trade-origins, next-trade-id | TreasurySettlement on settle |
 | **Enterprise** | posts, treasury, market-thoughts-cache | (Vec\<LogEntry\>, misses\*) per candle |

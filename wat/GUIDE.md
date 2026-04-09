@@ -185,11 +185,11 @@ here when a name is unfamiliar.
   facts. A generalist lens selects all facts. The lens IS the observer's
   identity — it determines what thoughts the observer thinks.
 
-- **N and M** — N is the number of market observers (today: 6, one per
-  MarketLens variant). M is the number of exit observers (today: 4, one
-  per ExitLens variant). Every combination gets a broker. N×M = 24 brokers
-  today. Each broker's identity is the set {"market-lens", "exit-lens"} —
-  two names today, more later.
+- **N and M** — N is the number of market observers (one per MarketLens
+  variant). M is the number of exit observers (one per ExitLens variant).
+  N and M are determined by the lens enums — add a variant, add an observer.
+  Every combination gets a broker. N×M brokers total. Each broker's identity
+  is the set {"market-lens", "exit-lens"} — two names today, more later.
 
 - **Observer** — an entity that perceives and learns. It has a lens and
   accumulated experience. Two kinds: market observers predict direction
@@ -1174,7 +1174,7 @@ Three domains. Each domain has scoped subfiles.
   - `persistence.wat` — Hurst, autocorrelation, ADX
   - `regime.wat` — KAMA-ER, choppiness, DFA, variance ratio, entropy, Aroon, fractal dim
   - `divergence.wat` — RSI divergence via PELT structural peaks
-  - `ichimoku.wat` — cloud zone, TK cross
+  - `ichimoku.wat` — cloud position, TK cross
   - `stochastic.wat` — %K/%D spread and crosses
   - `fibonacci.wat` — retracement level detection
   - `keltner.wat` — channel position, BB position, squeeze

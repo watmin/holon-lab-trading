@@ -1,4 +1,4 @@
-;; vocab/market/ichimoku.wat — cloud zone, TK cross
+;; vocab/market/ichimoku.wat — cloud position, TK cross
 ;; Depends on: candle
 ;; MarketLens :structure selects this module.
 
