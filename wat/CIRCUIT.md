@@ -28,7 +28,7 @@ graph TD
     EO -.->|uses| TE
     BR -->|Proposals| TR[Treasury]
     TR -->|TreasurySettlement| EN[Enterprise]
-    EN -->|Settlement| Post
+    EN -->|direction + optimal + propagation args| Post
     Post -->|post-propagate| BR
     BR -->|Direction + thought + weight| MO
     BR -->|optimal Distances + composed + weight| EO
@@ -67,7 +67,7 @@ Vectors. Vocabulary and ThoughtEncoder are tools, not upstream producers.
 | EO → BR | composed Vector + (Distances, experience) | recommended-distances(composed, accums) → (Distances, f64) |
 | BR → TR | Proposal (the barrage) | submit-proposal(proposal) |
 | TR → EN | TreasurySettlement | settle-triggered(prices) → (Vec\<TreasurySettlement\>, Vec\<LogEntry\>) |
-| EN → Post | Settlement (enriched) | post-propagate(post, slot-idx, thought, outcome, weight, direction, optimal) |
+| EN → Post | direction + optimal + propagation args | post-propagate(post, slot-idx, thought, outcome, weight, direction, optimal) |
 | Post → BR | propagation args | broker.propagate(thought, outcome, weight, direction, optimal, observers) |
 | BR → MO | Direction + thought + weight | resolve(thought, direction, weight) |
 | BR → EO | optimal Distances + composed + weight | observe-distances(composed, optimal, weight) |
@@ -200,12 +200,11 @@ overall?"). If empty, use the crutch (the default value from construction).
 
 ## 7. The propagation circuit
 
-The signal that teaches. Settlement → observers learn.
+The signal that teaches. TreasurySettlement → enterprise computes → observers learn.
 
 ```mermaid
 graph TD
-    TS[TreasurySettlement] --> EN[Enterprise enriches]
-    EN --> SET[Settlement]
+    TS[TreasurySettlement] --> EN[Enterprise computes direction + optimal]
     EN -->|slot-idx + thought + outcome + weight + direction + optimal| PP[post-propagate]
     PP --> BR[Broker]
     BR -->|Grace/Violence + thought + weight| BRK[broker reckoner]
@@ -214,8 +213,9 @@ graph TD
     BR -->|value + outcome + weight| SA[ScalarAccumulators]
 ```
 
-The enterprise enriches a TreasurySettlement into a Settlement (derives
-direction, replays price-history via compute-optimal-distances). Routes
+The enterprise computes direction and optimal-distances from the
+TreasurySettlement's trade (replays price-history). Routes values directly —
+no intermediate Settlement struct. Routes
 to the post. The post calls broker.propagate. The broker fans out —
 weight on every edge, because a large Grace teaches harder than a
 marginal one: Grace/Violence to its own reckoner, Direction to the
