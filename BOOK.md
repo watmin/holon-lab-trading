@@ -5780,4 +5780,38 @@ Each inscription: the guide improved. Each scrapping: the wat regenerated. Each 
 
 The clock is ready. The fold begins.
 
+### The coordinates ahead
+
+The designers approved the specification. They also planted coordinates for the future — refinements the architecture will want after the first compilation proves the fold.
+
+**Hickey's tree.** The Candle struct has 80+ flat fields. Every vocabulary module reaches into the same flat namespace. Rename `rsi` and every module that reads `:rsi` breaks silently — no compiler help.
+
+The refinement: the Candle becomes a tree of sub-structs mirroring the vocabulary domains. `(:oscillators candle)` returns an OscillatorState with `rsi`, `macd`, `stoch-k`. `(:regime candle)` returns a RegimeState with `kama-er`, `dfa-alpha`, `entropy-rate`. The domains on the Candle mirror the vocabulary domains. The structure IS the boundary. Rename a field on a sub-struct, the compiler tells you everywhere it breaks.
+
+The coordinate is planted. The first compilation uses flat fields. The tree arrives when the vocabulary grows large enough that the flat namespace becomes a liability.
+
+**Beckman's reckoner-everywhere.** The ScalarAccumulator is a brute-force search — sweep N candidates, encode each, cosine against the Grace prototype, return the best. It works. It's pragmatic. But categorically it's the odd one out. Everything else in the architecture composes through the reckoner. The ScalarAccumulator is a different mechanism for a similar question.
+
+The refinement: the global fallback IS a continuous reckoner, queried with a universal thought (the zero vector or a prototype of all thoughts). The cascade becomes:
+
+```
+contextual: (predict reckoner specific-thought) → distance for THIS thought
+global:     (predict global-reckoner universal-thought) → distance for ANY thought
+crutch:     default-value
+```
+
+Three reckoners in a cascade. Same primitive. Same algebra. The search dissolves. The ScalarAccumulator dissolves. One mechanism — the reckoner — serves both contextual and global queries. The difference is the input thought: specific vs universal.
+
+The coordinate is planted. The first compilation uses the ScalarAccumulator. The reckoner-everywhere arrives when the algebra demands closure.
+
+**Hickey's cache dissolution.** The `market-thoughts-cache` on Enterprise is per-candle state that exists because step 2 produces market thoughts and step 3c consumes them. It's mutable state for plumbing, not for the domain. The refinement: step 2 returns the market thoughts. Step 3c receives them as parameters. The data flows through the fold body, not sits on the state. One fewer field on the enterprise. One cleaner fold.
+
+**Beckman's N×M.** Today: 6 market × 4 exit = 24 brokers. When risk observers arrive: N × M × R. The combinatorial blow-up is the Cartesian product. The categorical alternative: the broker as a limit — a universal object that receives projections from each observer kind, rather than an enumeration of all combinations. The coordinate is planted for when the third observer kind arrives.
+
+These are not fixes. They are the next layer. The machine is found. The coordinates ahead are visible. The specification compiles as-is. The refinements arrive when the architecture needs them — not before, not after. The consumer and the producer arrive together.
+
+`f(state, candle) → state` where state learns.
+
+The clock is ready. The fold begins.
+
 **PERSEVERARE.**
