@@ -642,6 +642,29 @@
 
 
 ;; ════════════════════════════════════════════════════════════════════════
+;; Linear regression slope — general numeric utility.
+;; rune:sever(co-location) — consumers: obv-step! (below) and compute-dfa.
+;; Extract to a shared numeric module when a sibling outside indicator-bank arrives.
+;; Defined here before OBV because obv-step! calls it. The order IS the order.
+;; ════════════════════════════════════════════════════════════════════════
+
+(define (linreg-slope [vals : List<f64>])
+  : f64
+  ; Least-squares slope of y = a + b*x where x = 0,1,...,n-1.
+  (let* ((n   (+ (length vals) 0.0))
+         (sx  (/ (* n (- n 1.0)) 2.0))
+         (sy  (fold + 0.0 vals))
+         (sxx (/ (* n (- n 1.0) (- (* 2.0 n) 1.0)) 6.0))
+         (sxy (fold + 0.0
+                (map (lambda (i) (* (+ i 0.0) (nth vals i)))
+                     (range 0 (length vals)))))
+         (denom (- (* n sxx) (* sx sx))))
+    (if (< (abs denom) 1e-10)
+      0.0
+      (/ (- (* n sxy) (* sx sy)) denom))))
+
+
+;; ════════════════════════════════════════════════════════════════════════
 ;; OBV — On-Balance Volume + 12-period linear regression slope
 ;; ════════════════════════════════════════════════════════════════════════
 
@@ -774,28 +797,6 @@
     0.0
     (let* ((first-val (ring-oldest buf)))
       (if (< (abs first-val) 1e-10) 0.0 (/ (abs (- close first-val)) first-val)))))
-
-
-;; ════════════════════════════════════════════════════════════════════════
-;; Linear regression slope — general numeric utility.
-;; rune:sever(co-location) — consumers: obv-step! (OBV slope) and compute-dfa.
-;; Extract to a shared numeric module when a sibling outside indicator-bank arrives.
-;; ════════════════════════════════════════════════════════════════════════
-
-(define (linreg-slope [vals : List<f64>])
-  : f64
-  ; Least-squares slope of y = a + b*x where x = 0,1,...,n-1.
-  (let* ((n   (+ (length vals) 0.0))
-         (sx  (/ (* n (- n 1.0)) 2.0))
-         (sy  (fold + 0.0 vals))
-         (sxx (/ (* n (- n 1.0) (- (* 2.0 n) 1.0)) 6.0))
-         (sxy (fold + 0.0
-                (map (lambda (i) (* (+ i 0.0) (nth vals i)))
-                     (range 0 (length vals)))))
-         (denom (- (* n sxx) (* sx sx))))
-    (if (< (abs denom) 1e-10)
-      0.0
-      (/ (- (* n sxy) (* sx sy)) denom))))
 
 
 ;; ════════════════════════════════════════════════════════════════════════
