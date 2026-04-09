@@ -273,7 +273,7 @@ here when a name is unfamiliar.
   Edge = how accurate you are when you predict this strongly.
   Functions may return additional transport values (e.g. cache misses)
   alongside the protocol triple — those are plumbing, not content.
-  edge ∈ [0.0, 1.0]. Raw accuracy from the curve at this conviction.
+  edge ∈ [0.0, 1.0]. Accuracy from the curve at this conviction. 0.0 when unproven.
   0.50 = noise. Above = correlated. Below = anti-correlated (the flip).
   The consumer encodes the edge as a fact and is free to gate, weight,
   sort, or ignore. Every producer that has learned from experience
@@ -312,8 +312,9 @@ here when a name is unfamiliar.
 
 - **Noise subspace** — the background model. An OnlineSubspace that
   learns what ALL thoughts look like — the average texture of thought-space.
-  Subtract it from a thought and what remains is what's UNUSUAL. The reckoner
-  learns from the unusual part, not the boring part.
+  The anomalous component IS what's unusual — the part the subspace cannot
+  explain. strip-noise returns it directly. The reckoner learns from the
+  residual.
 
 - **Experience** — how much a reckoner has learned. 0.0 = empty. Grows
   with each observation. The reckoner's self-knowledge of its own depth.
@@ -599,8 +600,9 @@ on what. That section shows what each thing IS.
   [prediction : Prediction]    ; :discrete (Grace/Violence) — from the broker's
                                ; reckoner, NOT the market observer's Up/Down prediction.
   [distances : Distances]      ; from the exit observer
-  [edge : f64]                 ; the broker's edge. [0.0, 1.0]. Raw accuracy
-                               ; from the broker's curve at its current conviction.
+  [edge : f64]                 ; the broker's edge. [0.0, 1.0]. Accuracy from
+                               ; the broker's curve at its current conviction.
+                               ; 0.0 when unproven.
                                ; This IS the edge from the message protocol.
                                ; The treasury sorts proposals by this value and
                                ; funds proportionally — more edge, more capital.
@@ -608,6 +610,8 @@ on what. That section shows what each thing IS.
                                ; Up/Down prediction. Up → :buy, Down → :sell.
                                ; Distinct from "direction" (:up/:down) which describes
                                ; price movement used in propagation.
+  [source-asset : Asset]       ; what is deployed (e.g. USDC)
+  [target-asset : Asset]       ; what is acquired (e.g. WBTC)
   [post-idx : usize]           ; which post this came from
   [broker-slot-idx : usize])   ; which broker proposed this
 
@@ -1192,6 +1196,12 @@ Three domains. Each domain has scoped subfiles.
   calls the modules matching its lens, collects the ASTs, and passes
   them to evaluate-and-compose.
 
+Each lens maps to multiple vocabulary modules. The observer calls each
+module for its lens, appends the resulting AST lists into one
+Vec<ThoughtAST>, then wraps in a Bundle for encoding. Example:
+`:momentum` calls encode-oscillator-facts, encode-momentum-facts, and
+encode-stochastic-facts, then appends all three lists.
+
 A **fact** is a composition of atoms. The composition IS a vector.
 The vector IS the fact. It doesn't need a separate name. It simply is.
 
@@ -1579,7 +1589,8 @@ The generalist is just another lens. No special treatment.
   [good-state-subspace : OnlineSubspace] ; learns what good discriminants look like
   [recalib-wins : usize]               ; wins since last recalibration
   [recalib-total : usize]              ; total since last recalibration
-  [last-recalib-count : usize])        ; recalib-count at last engram check
+  [last-recalib-count : usize]         ; recalib-count at last engram check
+  [last-prediction : Direction])       ; set by observe-candle, read by resolve
 ```
 
 **Interface:**
@@ -1597,7 +1608,8 @@ The generalist is just another lens. No special treatment.
   candle-window: a slice of recent candles (NOT the full deque — the post
   calls `(sample (:window-sampler observer) encode-count)` to get the
   window size, slices, and passes the slice). The observer encodes →
-  noise update → strip noise → predict. The Prediction does NOT appear
+  noise update → strip noise → predict. Stores the predicted direction
+  on the observer for resolve to compare against the actual direction. The Prediction does NOT appear
   on the Proposal. The broker produces its OWN prediction (Grace/Violence)
   from the composed thought.
 - `(resolve observer thought direction weight)`
@@ -1605,7 +1617,13 @@ The generalist is just another lens. No special treatment.
   weight: f64 — how much value was at stake.
   Called by broker propagation — reckoner learns from reality.
   Not "outcome" (which is Outcome :grace/:violence). Different type.
+  Compares last-prediction against the actual direction. Match → :grace.
+  Mismatch → :violence. The engram gate learns from real accuracy, not
+  a constant.
 - `(strip-noise observer thought) → Vector`
+  return the anomalous component — what the noise subspace CANNOT explain.
+  The residual IS the signal. The reckoner learns from what is unusual,
+  not what is normal.
 - `(experience observer) → f64` — how much has this observer learned?
 
 ---
@@ -1861,7 +1879,9 @@ accountability — to the broker that proposed it.
     the post has access to both because it owns both)
   → brokers propose(composed) → returns Prediction (Grace/Violence)
   → the POST assembles each Proposal from: composed-thought, broker's
-    Prediction, distances, broker.edge(), post-idx, broker-slot-idx.
+    Prediction, distances, broker.edge(), side, source-asset, target-asset,
+    post-idx, broker-slot-idx. The post knows its source-asset and
+    target-asset — it copies them to the Proposal at assembly time.
     Side derivation: the market observer's Prediction has scores for "Up"
     and "Down". The winning label maps to Side: "Up" → :buy, "Down" → :sell.
     The market observer's edge (curve-valid, the third return value) is
