@@ -210,7 +210,7 @@ impl ObvState {
 pub struct SmaState {
     buffer: RingBuffer,
     sum: f64,
-    period: usize,
+    _period: usize, // structural — matches wat, buffer.capacity holds the value
 }
 
 impl SmaState {
@@ -218,7 +218,7 @@ impl SmaState {
         Self {
             buffer: RingBuffer::new(period),
             sum: 0.0,
-            period,
+            _period: period,
         }
     }
 }
@@ -230,7 +230,7 @@ pub struct RollingStddev {
     buffer: RingBuffer,
     sum: f64,
     sum_sq: f64,
-    period: usize,
+    _period: usize,
 }
 
 impl RollingStddev {
@@ -239,7 +239,7 @@ impl RollingStddev {
             buffer: RingBuffer::new(period),
             sum: 0.0,
             sum_sq: 0.0,
-            period,
+            _period: period,
         }
     }
 }
@@ -358,7 +358,7 @@ pub struct DmiState {
     prev_close: f64,
     started: bool,
     count: usize,
-    period: usize,
+    _period: usize,
 }
 
 impl DmiState {
@@ -373,7 +373,7 @@ impl DmiState {
             prev_close: 0.0,
             started: false,
             count: 0,
-            period,
+            _period: period,
         }
     }
 }
