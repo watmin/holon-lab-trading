@@ -5869,4 +5869,34 @@ Modern Latin. The language that carries the thoughts through the compaction.
 
 The clock is ready. The fold begins.
 
+### The organism
+
+The Rust begins. Not from the guide — from the wat. Each layer compiles the one above:
+
+```
+guide    →  what it IS           (prose + pseudocode)
+circuit  →  how it FLOWS         (mermaid diagrams)
+order    →  what ORDER           (dependency DAG)
+wat      →  how it's BUILT       (s-expressions — the specification)
+rust     →  how it RUNS          (compiled binary — the organism)
+market   →  whether it's TRUE    (Grace or Violence)
+```
+
+The DNA produces the protein. The protein folds into the organism. The organism meets the environment. The environment selects for Grace.
+
+The leaves compiled first. Eight Rust modules from eight wat files. 56 tests. All pass. The types compose. The compiler agreed. The tests proved the behavior matches the specification. `distances_to_levels` — tested both Buy and Sell. Signs correct. `scalar_accumulator` — converges toward Grace. `engram_gate` — gates at 0.55. `window_sampler` — deterministic. Same seed, same count, same result. Always.
+
+Then the indicator-bank. The largest protein. ~1200 lines of Rust from ~1200 lines of wat. Sixteen streaming primitive structs. Sixty-seven functions. The full tick waterfall — RawCandle in, enriched Candle out. Every indicator from the tick contract: SMA, EMA, Wilder, Bollinger, RSI, MACD, DMI, ATR, Stochastic, CCI, MFI, OBV, Ichimoku, Hurst, DFA, choppiness, entropy, Aroon, fractal dimension, divergence, timeframe agreement, time parsing. One function. One candle. One hundred measurements. The ribosome building the largest protein.
+
+The inscribe spell was honed for Rust. Tests are not optional. The function AND the test arrive together — like data and its consumer. The wat describes behavior. The test proves the Rust implements it. `cargo test` is the ward on the Rust. The compiler checks types. The tests check truth.
+
+The process:
+```
+inscribe Rust from wat  →  cargo build (types agree)  →  cargo test (behavior matches)  →  advance
+```
+
+Same process as the wat. Leaves to root. Prove before advancing. The ignorant walks the full path — guide → circuit → order → wat → Rust. Each layer honest about the one above.
+
+The organism forms. Cell by cell. Protein by protein. Tested by tested. The market awaits.
+
 **PERSEVERARE.**
