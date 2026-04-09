@@ -792,10 +792,10 @@ every candle.
   ;; Stochastic, CCI, MFI, OBV, Williams %R
   [stoch-k : f64] [stoch-d : f64] [williams-r : f64] [cci : f64] [mfi : f64]
   [obv-slope-12 : f64]         ; 12-period linear regression slope of OBV
-  [vol-accel : f64]            ; volume / volume_sma20 — volume acceleration
+  [volume-accel : f64]            ; volume / volume_sma20 — volume acceleration
   ;; Keltner (computed from ema20 + atr on the bank), squeeze
   [kelt-upper : f64] [kelt-lower : f64] [kelt-pos : f64]
-  [squeeze : bool]           ; Bollinger inside Keltner
+  [squeeze : f64]            ; bb-width / kelt-width ratio — continuous, not bool
   ;; Rate of Change
   [roc-1 : f64] [roc-3 : f64] [roc-6 : f64] [roc-12 : f64]
   ;; ATR rate of change
@@ -1042,7 +1042,7 @@ Directional movement:
 
 Volume:
   OBV:   cumulative on-balance-volume. obv-slope-12 = 12-period linear regression slope.
-  vol-accel: volume / SMA(volume, 20). Ratio — how unusual is current volume.
+  volume-accel: volume / SMA(volume, 20). Ratio — how unusual is current volume.
 
 Ichimoku:
   tenkan-sen = midpoint of high/low over 9 periods.

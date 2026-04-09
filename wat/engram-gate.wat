@@ -27,7 +27,7 @@
                            [wins : usize]
                            [total : usize]
                            [last-count : usize]
-                           [correct : bool]
+                           [outcome : Outcome]
                            [label : String])
   : (usize, usize, usize)
 
@@ -37,7 +37,8 @@
         (list wins total last-count)
 
         ;; Recalibration happened — update engram gate
-        (let* ((new-wins  (if correct (+ wins 1) wins))
+        (let* ((correct (= outcome :grace))
+               (new-wins  (if correct (+ wins 1) wins))
                (new-total (+ total 1)))
 
           ;; If enough data and good accuracy, snapshot the discriminant
