@@ -563,7 +563,6 @@ on what. That section shows what each thing IS.
 (struct paper-entry
   [composed-thought : Vector]  ; the thought at entry
   [entry-price : f64]          ; price when the paper was created
-  [entry-atr : f64]            ; volatility at entry
   [distances : Distances]      ; from the exit observer at entry
   [buy-extreme : f64]          ; best price in buy direction so far
   [buy-trail-stop : f64]       ; trailing stop level (from distances.trail)
@@ -597,8 +596,6 @@ on what. That section shows what each thing IS.
 ;;   post bundles these into a Proposal and submits to treasury.
 (struct proposal
   [composed-thought : Vector]  ; market thought + exit facts
-  [prediction : Prediction]    ; :discrete (Grace/Violence) — from the broker's
-                               ; reckoner, NOT the market observer's Up/Down prediction.
   [distances : Distances]      ; from the exit observer
   [edge : f64]                 ; the broker's edge. [0.0, 1.0]. Accuracy from
                                ; the broker's curve at its current conviction.
@@ -626,7 +623,10 @@ on what. That section shows what each thing IS.
 ;; ── Trade — an active position the treasury holds ───────────────────
 
 (struct trade
-  [id : TradeId]               ; assigned by treasury at funding time
+  [id : TradeId]               ; assigned by treasury at funding time.
+                               ; The trade's name. It travels with the trade —
+                               ; TreasurySettlement, log entries, routing. A Trade that
+                               ; can't say its own name is half a value.
   [post-idx : usize]           ; which post
   [broker-slot-idx : usize]    ; which broker (for trigger routing)
   [phase : TradePhase]         ; :active → :runner → :settled-*
@@ -634,7 +634,6 @@ on what. That section shows what each thing IS.
   [target-asset : Asset]       ; what was acquired
   [side : Side]                ; copied from the funding Proposal at treasury funding time
   [entry-rate : f64]
-  [entry-atr : f64]            ; from candle.atr at funding time
   [source-amount : f64]        ; how much was deployed
   [stop-levels : Levels]       ; current trailing stop, safety stop, take-profit
                                ; absolute price levels, updated by step 3c
@@ -651,15 +650,6 @@ on what. That section shows what each thing IS.
   [amount : f64]               ; how much value gained or lost
   [composed-thought : Vector]) ; from trade-origins, stashed at funding time
 ;; The treasury produces this. It does NOT have optimal-distances.
-
-;; ── Settlement — the complete record, after enterprise enrichment ─────
-
-(struct settlement
-  [treasury-settlement : TreasurySettlement] ; the treasury's accounting
-  [direction : Direction]                    ; :up or :down, derived from exit-price vs entry-rate
-  [optimal-distances : Distances])           ; replay trade's price-history, maximize residue
-;; The enterprise builds this by enriching a TreasurySettlement.
-;; The trade's price-history (on the Trade) provides the replay data.
 
 ;; ── Resolution — what a broker produces when a paper resolves ────────
 ;; Facts, not mutations. Collected from parallel tick, applied sequentially.
@@ -713,7 +703,11 @@ on what. That section shows what each thing IS.
 (struct trade-origin
   [post-idx : usize]           ; which post
   [broker-slot-idx : usize]    ; which broker
-  [composed-thought : Vector]) ; the thought at entry
+  [composed-thought : Vector]  ; the thought at entry
+  [prediction : Prediction])   ; :discrete (Grace/Violence) — the broker's prediction
+                               ; at funding time. The archaeological record of WHY this
+                               ; trade exists. Belongs here alongside composed-thought,
+                               ; not on the funding request (Proposal).
 
 ;; ── Post — depends on: IndicatorBank, MarketObserver, ExitObserver, Broker ──
 
@@ -786,10 +780,19 @@ every candle.
 (struct candle
   ;; Raw
   [ts : String] [open : f64] [high : f64] [low : f64] [close : f64] [volume : f64]
+  ;; Raw fields are retained on the enriched Candle. The vocabulary currently
+  ;; reads only derived indicators, but the binary writes raw values to the
+  ;; ledger, and future vocabulary modules (volume profile, gap detection,
+  ;; session boundaries) will need them. Dropping input information because
+  ;; it's not consumed now has always backfired. The cost of carrying it is small.
   ;; Moving averages
   [sma20 : f64] [sma50 : f64] [sma200 : f64]
   ;; Bollinger
   [bb-upper : f64] [bb-lower : f64] [bb-width : f64] [bb-pos : f64]
+  ;; bb-upper/lower retained. The vocabulary reads bb-pos and bb-width, but
+  ;; the raw bounds carry information future observers may need (breakout
+  ;; detection, band touch events). Derivable from pos + width + close, but
+  ;; carrying them avoids reconstruction.
   ;; RSI, MACD, DMI, ATR
   [rsi : f64] [macd : f64] [macd-signal : f64] [macd-hist : f64]
   [plus-di : f64] [minus-di : f64] [adx : f64] [atr : f64] [atr-r : f64]
@@ -813,6 +816,11 @@ every candle.
   [tf-4h-close : f64] [tf-4h-high : f64] [tf-4h-low : f64] [tf-4h-ret : f64] [tf-4h-body : f64]
   ;; Ichimoku
   [tenkan-sen : f64] [kijun-sen : f64] [senkou-span-a : f64] [senkou-span-b : f64] [cloud-top : f64] [cloud-bottom : f64]
+  ;; senkou-span-a/b retained. The vocabulary reads cloud-top/bottom (the
+  ;; max/min), but the raw spans carry information the vocabulary may need
+  ;; later (span crossover, span direction). The cost of the fields is small.
+  ;; The cost of reconstructing the spans from the tick function would require
+  ;; re-computing Ichimoku's 52-period midpoints.
   ;; Persistence (pre-computed by IndicatorBank from ring buffers)
   [hurst : f64]                ; Hurst exponent — trending vs mean-reverting
   [autocorrelation : f64]      ; lag-1 autocorrelation — signed
@@ -1467,7 +1475,7 @@ The encoder walks them all the same way. The mechanism doesn't change.
 ### Distances (depends on: nothing)
 
 The four exit values. A named tuple. Percentage of price, not absolute
-levels. Appears on PaperEntry, Proposal, Resolution, Settlement. The
+levels. Appears on PaperEntry, Proposal, and Resolution. The
 post converts Distances to Levels (trail-stop, safety-stop, take-profit,
 runner-trail-stop on Trade) using the current price.
 
@@ -1548,8 +1556,7 @@ histories. `simulation.wat`. No post state. Vec<f64> in, f64 out.
   this value BEFORE the path completes. The wat may approximate this
   optimization (e.g. MFE/MAE ratios) but the objective is: maximize residue.
   price-history in, Distances out.
-  Called by the enterprise when enriching TreasurySettlement
-  into Settlement.
+  Called by the enterprise during step 1 (resolve and propagate).
 - `(best-distance price-history simulate-fn) → f64`
   Sweep candidates, evaluate each via simulate-fn, return the best.
 - `(simulate-trail price-history distance) → f64`
@@ -1741,6 +1748,10 @@ runtime:       frozen map (read-only) → slot-idx → &mut broker (disjoint)
 ```
 (struct broker
   [observer-names : Vec<String>]       ; the identity. e.g. ("momentum" "volatility").
+                                       ; Diagnostic identity for the ledger. The binary reads
+                                       ; observer-names for human-readable log entries. Derivable
+                                       ; from slot-idx + lens enums, but carrying the names avoids
+                                       ; modular arithmetic in every log line.
   [slot-idx : usize]                   ; the broker's position in the N×M grid. THE identity.
   [exit-count : usize]                 ; M — needed to derive market-idx and exit-idx:
                                        ; market-idx = slot-idx / exit-count
@@ -1791,7 +1802,7 @@ runtime:       frozen map (read-only) → slot-idx → &mut broker (disjoint)
 - `(edge broker) → f64` — how much edge? Reads from the reckoner's
   internal curve via `(edge-at (:reckoner broker) conviction)`.
   0.0 = no edge. The treasury funds proportionally. More edge, more capital.
-- `(register-paper broker composed entry-price entry-atr distances)`
+- `(register-paper broker composed entry-price distances)`
   create a paper entry — every candle, every broker.
   distances: Distances (all four: trail, stop, tp, runner-trail) from the exit observer.
 - `(tick-papers broker current-price) → (Vec<Resolution>, Vec<LogEntry>)`
@@ -1882,9 +1893,11 @@ accountability — to the broker that proposed it.
     (the POST passes the broker's scalar accumulators to the exit observer —
     the post has access to both because it owns both)
   → brokers propose(composed) → returns Prediction (Grace/Violence)
-  → the POST assembles each Proposal from: composed-thought, broker's
-    Prediction, distances, broker.edge(), side, source-asset, target-asset,
-    post-idx, broker-slot-idx. The post knows its source-asset and
+  → the POST assembles each Proposal from: composed-thought, distances,
+    broker.edge(), side, source-asset, target-asset, post-idx,
+    broker-slot-idx. The broker's Prediction is not on the Proposal — it
+    is stashed on the TradeOrigin at funding time (the archaeological
+    record of why the trade exists). The post knows its source-asset and
     target-asset — it copies them to the Proposal at assembly time.
     Side derivation: the market observer's Prediction has scores for "Up"
     and "Down". The winning label maps to Side: "Up" → :buy, "Down" → :sell.
@@ -1940,7 +1953,12 @@ so that on settlement, propagate reaches the right observers.
 ```
 (struct treasury
   ;; Capital — the ledger
-  [denomination : Asset]               ; what "value" means (e.g. USD)
+  [denomination : Asset]               ; what "value" means (e.g. USD).
+                                       ; The unit of measurement. total-equity converts all
+                                       ; assets to this denomination. Currently the consumer
+                                       ; (total-equity) does not reference the field — this is
+                                       ; a wiring gap, not a dead field. The denomination IS how
+                                       ; the treasury answers "how much is everything worth?"
   [available : Map<Asset, f64>]        ; capital free to deploy
   [reserved : Map<Asset, f64>]         ; capital locked by active trades
 
@@ -1968,7 +1986,7 @@ so that on settlement, propagate reaches the right observers.
   Returns ProposalFunded and ProposalRejected log entries.
   For each funded proposal: move capital from available to reserved,
   create a Trade, stash a TradeOrigin (post-idx, broker-slot-idx,
-  composed-thought) for propagation at settlement time. Drain proposals.
+  composed-thought, prediction) for propagation at settlement time. Drain proposals.
 - `(settle-triggered treasury current-prices) → (Vec<TreasurySettlement>, Vec<LogEntry>)`
   current-prices: map of (Asset, Asset) → f64 — one price per asset pair.
   Each post provides its latest candle close as its current price.
@@ -1982,9 +2000,10 @@ so that on settlement, propagate reaches the right observers.
     not two.
   - **:runner + runner-trail-hit** → phase becomes :settled-grace. Residue
     is permanent gain. Returns to available. Trade is done.
-  Each settled trade produces a TreasurySettlement. The enterprise enriches
-  it into a Settlement (derives direction, replays trade's price-history
-  for optimal-distances) before routing to post-propagate.
+  Each settled trade produces a TreasurySettlement. The enterprise computes
+  direction and optimal-distances directly (derives direction from
+  exit-price vs entry-rate, replays trade's price-history for
+  optimal-distances) and passes them to post-propagate.
 - `(available-capital treasury asset) → f64`
   how much is free to deploy?
 - `(deposit treasury asset amount)`
@@ -2016,7 +2035,7 @@ The enterprise knows:
 - **What runs parallel** — market observers encode simultaneously (par_iter)
 - **What runs sequential** — exit dispatch into registry (disjoint slots)
 - **What order** — Step 1: RESOLVE+PROPAGATE → Step 2: COMPUTE+DISPATCH → Step 3a: TICK (parallel) → Step 3b: PROPAGATE (papers) → Step 3c: UPDATE TRIGGERS → Step 4: COLLECT+FUND
-- **What flows where** — proposals from posts to treasury, settlements from treasury to posts
+- **What flows where** — proposals from posts to treasury, treasury-settlements from treasury to enterprise to posts
 - **What gets cleared** — proposals empty after funding, every candle
 
 ```
@@ -2223,7 +2242,8 @@ market-thoughts  ; Vec<Vector>         — the thought vectors from market obser
 composed         ; Vec<Vector>         — exit observers → brokers
 proposals        ; Vec<Proposal>       — posts → treasury (the barrage)
 treasury-settlements ; Vec<TreasurySettlement> — treasury → enterprise
-settlements      ; Vec<Settlement>     — enterprise enriches → posts (reality feedback)
+                 ;   enterprise computes direction + optimal-distances directly
+                 ;   and passes them to posts (reality feedback)
 trade-triggers   ; Vec<(TradeId, Trade)> — treasury → posts (active trades for update)
 distances        ; Distances            — exit observers → proposals + papers
 propagation      ; (thought, outcome, weight)
@@ -2238,8 +2258,8 @@ propagation      ; (thought, outcome, weight)
 Step 1: RESOLVE + PROPAGATE (propagation path 1 — real trades)
   treasury reads:   active trades, current price
   treasury produces: treasury-settlements
-  enterprise enriches: treasury-settlements → settlements (adds direction, optimal-distances)
-  enterprise routes: settlements → posts → brokers → propagation → observers learn
+  enterprise computes: direction + optimal-distances from each treasury-settlement directly
+  enterprise routes: treasury-settlements + direction + optimal-distances → posts → brokers → propagation → observers learn
   NOTE: this IS propagation — real trade outcomes teach the observers.
   Step 3b is propagation path 2 (paper resolutions). Both paths call
   broker.propagate. Both teach. Different sources, same mechanism.
