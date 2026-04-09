@@ -254,42 +254,49 @@ here when a name is unfamiliar.
     take-profit are live. The trade is running.
   - Active + stop-hit → **Settled(Violence)** — loss bounded by reservation.
     Principal minus loss returns to available.
-  - Active + take-profit-hit → **Runner** — principal returns to available
-    AND residue continues with runner-trail-stop. One transition, not two.
-    The transition to Runner implies principal recovery — it's one event.
-  - **Runner** — residue rides with a wider trailing stop. Zero cost basis.
-    House money. The runner stop distance is a fourth learnable scalar
-    on the exit observer — k_trail_runner — wider than k_trail because
-    the cost of being stopped out of a runner is zero.
-  - Runner + runner-trail-hit → **Settled(Grace)** — residue is
-    permanent gain. Returns to available.
+  - Active + price moves favorably → **Runner** — the trailing stop has
+    moved far enough that exit would recover the principal. The trade is
+    NOT exited. The trailing stop WIDENS. The trade continues riding.
+    The "runner" is a stop-management phase, not a settlement event.
+    The wider stop gives the trade room to breathe — because if it
+    exits now, the principal is already covered. Zero effective risk.
+  - **Runner** — the trade is still open. Still one position. The
+    trailing stop is wider (runner-trail distance, a fourth learnable
+    scalar). The trade rides until the runner stop fires.
+  - Active/Runner + stop fires → **Settled** — one exit. One swap.
+    The full position swaps back. The treasury computes:
+    - If exit amount > principal: **Grace.** Principal returns to
+      available. Residue (exit minus principal minus fees) is
+      permanent gain.
+    - If exit amount ≤ principal: **Violence.** What remains returns
+      to available. Loss bounded by reservation.
+
   **Concrete example — the number flow:**
   ```
-  Entry:  $50 USDC → WBTC at $100,000/BTC = 0.0005 BTC (minus swap fees)
-  Price rises to $120,000.
-  Position now worth: 0.0005 × $120,000 = $60.00
+  Entry:  $50 USDC → WBTC at $100,000/BTC (one swap, minus fees)
 
-  Take-profit fires. The position SPLITS:
-    Swap enough WBTC → USDC to recover $50 principal (minus fees)
-    Remaining WBTC = ~$10.00 worth. That's the residue.
+  Price rises. Trailing stop ratchets up. At some point, the stop
+  level implies exit would recover the principal → phase becomes :runner.
+  No swap. No exit. The stop just widens. The trade continues.
 
-  Principal ($50 USDC) returns to available. Deployed again next candle.
-  Residue (~$10 WBTC) rides as a Runner. Zero cost basis. House money.
+  Price keeps rising to $120,000. Then reverses.
+  Runner trailing stop fires at $115,000.
 
-  Runner's trailing stop fires at $110,000.
-  Residue returns to available — as WBTC. No swap. Already the target asset.
-  The WBTC accumulates. The portfolio grows on both sides of the pair.
+  Exit:   FULL position WBTC → USDC at $115,000 (one swap, minus fees)
+  Proceeds: ~$57.50 USDC (after fees)
+
+  Treasury splits the proceeds:
+    Principal: $50 USDC → returns to available. Deployed again next candle.
+    Residue:   $7.50 USDC → permanent gain. The accumulation.
   ```
 
-  Both paths cost 2 swaps. Violence: entry + stop-loss. Grace: entry +
-  take-profit partial swap. The residue stays as the target asset — no
-  third swap. The runner stop reclassifies residue from reserved to
-  available. Each swap incurs `swap-fee + slippage`. The edge must
-  exceed the total venue cost rate for the trade to be worth taking.
+  Two swaps total. Entry and exit. The runner is NOT a swap — it is the
+  stop widening. One trade. One entry. One exit. The treasury splits the
+  proceeds after exit. Each swap incurs `swap-fee + slippage`. The edge
+  must exceed the venue cost rate for the trade to be worth taking.
 
-  The phase is a value on the Trade struct. The treasury handles settlement
-  differently depending on the phase. Two settlement events are possible
-  per trade: principal recovery (partial) then runner exit (final).
+  The phase is a value on the Trade struct. The runner phase changes
+  stop management, not the position. ONE settlement event per trade.
   Designers: "the mechanism is designable now. The parameters will be
   learned. That is the whole point of having reckoners."
 

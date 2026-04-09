@@ -157,24 +157,25 @@ graph TD
     PR[Proposal] --> TR[Treasury evaluates]
     TR -->|fund| AV[available → reserved]
     AV --> TD[Trade :active]
-    TD -->|safety-stop hit| SV[Settled :violence]
-    SV --> RET1[principal - loss → available]
-    TD -->|take-profit hit| RN[Runner :runner]
-    RN --> RET2[principal → available]
-    RN -->|runner-trail hit| SG[Settled :grace]
-    SG --> RES[residue → available — permanent gain]
+    TD -->|stop widens past principal| RN[Runner :runner — stop widens, no swap]
+    TD -->|safety-stop fires| SV[Settled :violence]
+    RN -->|runner-trail fires| SG[Settled :grace]
+    SV --> EXIT1[swap back → principal - loss → available]
+    SG --> EXIT2[swap back → principal + residue → available]
     TR -->|reject| DR[drained]
 ```
 
 The treasury funds proven proposals. Capital moves from available to
-reserved. The trade is :active. Both paths cost 2 swaps. Violence: entry swap + stop-loss swap. Grace: entry swap + take-profit partial swap (recover principal). The residue stays as the target asset — no third swap. The runner stop reclassifies residue from reserved to available. Each swap costs `swap-fee + slippage`. Two trigger paths:
-- **Safety-stop hit** → :settled-violence. Principal minus loss returns.
-  Bounded by the reservation.
-- **Take-profit hit** → :runner. Principal returns to available AND
-  residue continues with a wider trailing stop. One transition, not two.
-  Zero cost basis — house money.
-- **Runner-trail hit** → :settled-grace. Residue is permanent gain.
-  Returns to available. The trade is done.
+reserved. The trade is :active. One entry swap, one exit swap. Two
+swaps total. The runner is NOT a swap — the stop widens. The trade
+rides until exit. Each swap costs `swap-fee + slippage`.
+- **Safety-stop fires** → :settled-violence. Full position swaps back.
+  Principal minus loss returns. Bounded by reservation.
+- **Price moves favorably** → :runner. No swap. No exit. The trailing
+  stop widens. The trade continues. Zero effective risk — exit would
+  recover the principal.
+- **Runner-trail fires** → :settled-grace. Full position swaps back.
+  Treasury splits proceeds: principal returns, residue is permanent gain.
 
 ---
 
