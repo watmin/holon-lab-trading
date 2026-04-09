@@ -272,6 +272,18 @@ here when a name is unfamiliar.
   market says breathe. This continuous stop management IS the mechanism
   for maximizing value extraction — the trade captures as much residue
   as the market will give, bounded by the learned distances.
+
+  **Update cost.** Trigger updates have a cost. In-memory: 0% — update
+  every candle, no reason not to. On-chain: each update is a transaction
+  with gas cost. Over-eager updating hurts — micro-adjustments that cost
+  gas but don't materially change the stop levels produce Violence.
+  The update-cost is a configurable parameter on the enterprise (default
+  0.0 for in-memory). When non-zero, step 3c compares new levels against
+  current levels: if the change is not worth the cost, skip the update.
+  The machine should LEARN this — the reckoner can observe whether
+  updates of a given magnitude produced Grace or Violence after accounting
+  for the update cost. The optimal update frequency emerges from the
+  learning, not from a hardcoded threshold.
   - Active/Runner + stop fires → **Settled** — one exit. One swap.
     The full position swaps back. The treasury computes:
     - If exit amount > principal: **Grace.** Principal returns to
@@ -2061,14 +2073,16 @@ The treasury NEVER deploys more than available capital. The loss on any trade is
   costs `2 × (swap-fee + slippage)`. The treasury deducts these from the
   returned capital before computing residue. Venue costs flow through the
   treasury's accounting, not through the enterprise or the binary.
-  **Three trigger paths per trade phase:**
-  - **:active + safety-stop-hit** → phase becomes :settled-violence.
-    Principal minus loss returns to available. Trade is done.
-  - **:active + take-profit-hit** → phase becomes :runner. Principal returns
-    to available. Residue continues with runner-trail-stop. One transition,
-    not two.
-  - **:runner + runner-trail-hit** → phase becomes :settled-grace. Residue
-    is permanent gain. Returns to available. Trade is done.
+  **Two settlement paths (step 1 — triggers fire against price):**
+  - **:active + safety-stop fires** → :settled-violence.
+    Full position swaps back. Principal minus loss returns. Trade is done.
+  - **:active or :runner + trailing-stop fires** → :settled.
+    Full position swaps back. Treasury splits proceeds:
+    if proceeds > principal → :settled-grace (residue is permanent gain).
+    if proceeds ≤ principal → :settled-violence (loss bounded by reservation).
+  The runner phase does NOT trigger a settlement. The runner phase is
+  set by step 3c when the stop has moved past the break-even point.
+  Step 1 only checks: did a stop-level fire? One entry. One exit.
   Each settled trade produces a TreasurySettlement. The enterprise computes
   direction and optimal-distances directly (derives direction from
   exit-price vs entry-rate, replays trade's price-history for
@@ -2377,8 +2391,8 @@ Step 4: COLLECT + FUND
 See `wat/CIRCUIT.md` — the machine as signal flow diagrams. No new
 definitions; it visualizes the components and interfaces declared above.
 The full enterprise circuit, plus sub-circuits for encoding, learning,
-papers, funding, cascade, and propagation. Mermaid source + component
-and edge legends.
+papers, funding, breathing stops, cascade, propagation, and the binary.
+Nine circuits. Mermaid source + component and edge legends.
 
 `f(state, candle) → state` — one tick of the clock.
 
