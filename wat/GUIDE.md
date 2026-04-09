@@ -37,11 +37,14 @@ These are NOT specified in this tree. They are provided by holon-rs.
   input via cosine against the discriminant. Old experience decays.
   The verdict sharpens over time through recalibration. One primitive,
   multiple readout modes:
-  - `(make-reckoner config)` → Reckoner
+  - `(make-reckoner name dims recalib-interval config)` → Reckoner
+    - name: String — identifies the reckoner (e.g. "direction", "trail").
+    - dims: usize — vector dimensionality. Separate from config.
+    - recalib-interval: usize — observations between recalibrations. Separate from config.
     - config is a `reckoner-config` enum (defined in construction order)
-      containing dims, recalib-interval, and readout mode:
-      - `(labels "Up" "Down")` → discrete. N labels. Classification.
-      - `(default-value 0.015)` → continuous. Scalar. Regression.
+      specifying the readout mode only:
+      - `(Discrete (labels "Up" "Down"))` → discrete. N labels. Classification.
+      - `(Continuous (default-value 0.015))` → continuous. Scalar. Regression.
   - `(observe reckoner thought observation weight)` — both modes.
     observation is a label (discrete) or a scalar (continuous).
     Not the Outcome enum — observation is the general term for what
@@ -57,19 +60,18 @@ These are NOT specified in this tree. They are provided by holon-rs.
   - Coordinates for later: circular readout (periodic values that wrap),
     ranked readout (orderings). Other readout modes are possible — the
     reckoner mechanism is general. These are future work, not current.
-- **curve** — measures how much edge a reckoner has earned. After many
-  predictions resolve (correct or wrong), the curve answers: "when you
-  predicted strongly, how often were you right?" Input: prediction
-  strength. Output: accuracy. A continuous surface. How much edge,
-  not whether edge.
-  - `(make-curve)` → Curve
-  - `(record-prediction curve conviction correct?)` — feed each resolved prediction
-  - `(edge-at curve conviction) → f64` — query: how accurate at this conviction level?
-  - `(proven? curve min-samples) → bool` — enough data to trust?
+- **curve** — the reckoner's self-evaluation. The reckoner carries its own
+  curve internally. After many predictions resolve (correct or wrong), the
+  curve answers: "when you predicted strongly, how often were you right?"
+  Input: prediction strength. Output: accuracy. A continuous surface.
+  How much edge, not whether edge. resolve() feeds it. edge-at() reads it.
+  - `(resolve reckoner conviction correct?)` — feed a resolved prediction to the reckoner's internal curve
+  - `(edge-at reckoner conviction) → f64` — how accurate at this conviction level?
+  - `(proven? reckoner min-samples) → bool` — enough data to trust?
   The curve self-evaluates — it reports amplitude and exponent from
   accumulated data. That is measurement, not learning.
   **Resolved: the curve communicates via one scalar.** The producer
-  calls `edge-at(conviction)` and attaches the result to its message.
+  calls `(edge-at reckoner conviction)` and attaches the result to its message.
   The consumer encodes it as a scalar fact: `(bind (atom "producer-edge") (encode-linear edge 1.0))`.
   The consumer's reckoner learns whether the edge predicts Grace.
   No meta-journal. No curve snapshot. No new primitives. One f64.
@@ -225,12 +227,12 @@ here when a name is unfamiliar.
   ("Grace"/"Violence", score) pairs. The market observer's returns
   ("Up"/"Down", score) pairs. Same enum. Different label names.
 
-- **Proof curve** — the curve primitive (defined above) applied to a
-  specific reckoner. How much edge? A continuous measure. 52.1% is barely
-  there. 70% is screaming. The treasury funds proportionally. The entity
-  earns a DEGREE of trust, not a binary gate. More edge, more capital.
-  "Proof curve" and "curve" are the same thing — one is the primitive,
-  the other is its name when applied.
+- **Proof curve** — the reckoner's self-evaluation. The reckoner carries
+  its own curve. resolve() feeds it. edge-at() reads it. How much edge?
+  A continuous measure. 52.1% is barely there. 70% is screaming. The
+  treasury funds proportionally. The entity earns a DEGREE of trust, not
+  a binary gate. More edge, more capital. Not a separate object — it IS
+  the reckoner's internal accountability surface.
 
 #### Trade lifecycle
 
@@ -466,25 +468,23 @@ on what. That section shows what each thing IS.
 
 (enum reckoner-config
   (Discrete
-    dims               ; usize — vector dimensionality
-    recalib-interval   ; usize — observations between recalibrations
     labels)            ; Vec<String> — ("Up" "Down")
   (Continuous
-    dims               ; usize
-    recalib-interval   ; usize
     default-value))    ; f64 — the crutch, returned when ignorant
+;; dims and recalib-interval are separate parameters to the constructor,
+;; not inside the config. The config specifies the readout mode only.
 ;; This enum is authoritative — no further expansion in Structs and interfaces.
 
 (let ((dims 10000)
       (recalib-interval 500)
       (labels '("Up" "Down")))
-  (make-reckoner (Discrete dims recalib-interval labels)))
+  (make-reckoner "direction" dims recalib-interval (Discrete labels)))
                                                      → Reckoner
 
 (let ((dims 10000)
       (recalib-interval 500)
       (default-value 0.015))  ; 0.015 = 1.5% of price — the crutch distance
-  (make-reckoner (Continuous dims recalib-interval default-value)))
+  (make-reckoner "trail" dims recalib-interval (Continuous default-value)))
                                                      → Reckoner
 
 ;; ── Prediction — what a reckoner returns. Data. ─────────────────────
@@ -508,7 +508,7 @@ on what. That section shows what each thing IS.
       (max-window 2016)
       (sampler (make-window-sampler seed min-window max-window)))
   (make-market-observer lens
-    (Discrete dims recalib-interval '("Up" "Down"))
+    (make-reckoner "direction" dims recalib-interval (Discrete '("Up" "Down")))
     sampler))                                        → MarketObserver
 
 ;; ── Distances and Levels — two representations of exit thresholds ────
@@ -1582,9 +1582,9 @@ The generalist is just another lens. No special treatment.
   [window-sampler : WindowSampler]     ; own time scale
   ;; Proof tracking
   [resolved : usize]                   ; how many predictions have been resolved
-  [curve : Curve]                      ; measures this observer's edge (conviction → accuracy)
-  [curve-valid : f64]                  ; cached edge from the curve. 0.0 = unproven.
-                                       ; updated after each recalibration by querying the curve.
+  ;; The reckoner carries its own curve. resolve() feeds it. edge-at() reads it.
+  ;; No separate curve field — use (edge-at (:reckoner obs) conviction) and
+  ;; (proven? (:reckoner obs) min-samples).
   ;; Engram gating
   [good-state-subspace : OnlineSubspace] ; learns what good discriminants look like
   [recalib-wins : usize]               ; wins since last recalibration
@@ -1601,10 +1601,11 @@ The generalist is just another lens. No special treatment.
   lens: MarketLens. config: Discrete with "Up"/"Down" labels.
   All proof-tracking and engram-gating fields initialize to zero/empty.
 - `(observe-candle observer candle-window ctx) → (Vector, Prediction, f64, Vec<(ThoughtAST, Vector)>)`
-  returns: thought Vector, Prediction (Up/Down), curve-valid (f64 — the
-  observer's current edge, from its curve), and cache misses. Every
-  learned output carries its track record. The consumer decides what to
-  do with it. Cache misses are returned as values — the caller collects.
+  returns: thought Vector, Prediction (Up/Down), edge (f64 — the
+  observer's current edge, from `(edge-at (:reckoner observer) conviction)`),
+  and cache misses. Every learned output carries its track record. The
+  consumer decides what to do with it. Cache misses are returned as
+  values — the caller collects.
   candle-window: a slice of recent candles (NOT the full deque — the post
   calls `(sample (:window-sampler observer) encode-count)` to get the
   window size, slices, and passes the slice). The observer encodes →
@@ -1617,9 +1618,10 @@ The generalist is just another lens. No special treatment.
   weight: f64 — how much value was at stake.
   Called by broker propagation — reckoner learns from reality.
   Not "outcome" (which is Outcome :grace/:violence). Different type.
-  Compares last-prediction against the actual direction. Match → :grace.
-  Mismatch → :violence. The engram gate learns from real accuracy, not
-  a constant.
+  Compares last-prediction against the actual direction. Match → correct.
+  Mismatch → incorrect. Feeds the reckoner's internal curve via
+  `(resolve (:reckoner observer) conviction correct?)`. The engram gate
+  learns from real accuracy, not a constant.
 - `(strip-noise observer thought) → Vector`
   return the anomalous component — what the noise subspace CANNOT explain.
   The residual IS the signal. The reckoner learns from what is unusual,
@@ -1747,8 +1749,8 @@ runtime:       frozen map (read-only) → slot-idx → &mut broker (disjoint)
   ;; Accountability
   [reckoner : Reckoner]                ; :discrete — Grace/Violence
   [noise-subspace : OnlineSubspace]
-  [curve : Curve]                      ; measures how much edge this broker has earned.
-                                       ; fed by the reckoner's resolved predictions.
+  ;; The reckoner carries its own curve. resolve() feeds it. edge-at() reads it.
+  ;; No separate curve field.
   ;; Track record
   [cumulative-grace : f64]
   [cumulative-violence : f64]
@@ -1786,9 +1788,9 @@ runtime:       frozen map (read-only) → slot-idx → &mut broker (disjoint)
   Same k values as MarketObserver — same mechanism, same dimensionality needs.
 - `(propose broker composed) → Prediction`
   noise update → strip noise → predict Grace/Violence
-- `(edge broker) → f64` — how much edge? The curve reads the broker's
-  accuracy at its typical conviction level. 0.0 = no edge. The treasury
-  funds proportionally. More edge, more capital.
+- `(edge broker) → f64` — how much edge? Reads from the reckoner's
+  internal curve via `(edge-at (:reckoner broker) conviction)`.
+  0.0 = no edge. The treasury funds proportionally. More edge, more capital.
 - `(register-paper broker composed entry-price entry-atr distances)`
   create a paper entry — every candle, every broker.
   distances: Distances (all four: trail, stop, tp, runner-trail) from the exit observer.
@@ -1807,9 +1809,11 @@ runtime:       frozen map (read-only) → slot-idx → &mut broker (disjoint)
   direction: Direction — derived from the trade's price movement.
   If exit-price > entry-price, :up. If exit-price < entry-price, :down.
   optimal: Distances from hindsight.
-  The broker learns its OWN lessons (reckoner, curve, engram, track record,
-  scalars). It RETURNS what the observers need — the post applies the facts
-  to its own observers. Values up, not effects down.
+  The broker learns its OWN lessons (reckoner + its internal curve, engram,
+  track record, scalars) — feeds the curve via
+  `(resolve (:reckoner broker) conviction correct?)`. It RETURNS what the
+  observers need — the post applies the facts to its own observers.
+  Values up, not effects down.
 - `(paper-count broker) → usize`
 
 **Two mechanisms for the same magic numbers — both now introduced:**
@@ -1884,9 +1888,10 @@ accountability — to the broker that proposed it.
     target-asset — it copies them to the Proposal at assembly time.
     Side derivation: the market observer's Prediction has scores for "Up"
     and "Down". The winning label maps to Side: "Up" → :buy, "Down" → :sell.
-    The market observer's edge (curve-valid, the third return value) is
-    available to the broker as a fact per the message protocol — the broker
-    MAY encode it as `(bind (atom "market-edge") (encode-linear edge 1.0))`
+    The market observer's edge (from `(edge-at (:reckoner obs) conviction)`,
+    the third return value) is available to the broker as a fact per the
+    message protocol — the broker MAY encode it as
+    `(bind (atom "market-edge") (encode-linear edge 1.0))`
     in its composed thought. This is a coordinate for later — the current
     architecture does not yet consume it. The value is produced and returned
     so the path exists when the broker is ready to use it.
