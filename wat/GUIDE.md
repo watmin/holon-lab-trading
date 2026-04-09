@@ -263,7 +263,30 @@ here when a name is unfamiliar.
     the cost of being stopped out of a runner is zero.
   - Runner + runner-trail-hit → **Settled(Grace)** — residue is
     permanent gain. Returns to available.
-  Venue cost reality: both paths cost 2 swaps. Violence: entry swap (USDC→WBTC) + stop-loss swap (WBTC→USDC). Grace: entry swap (USDC→WBTC) + take-profit partial swap (enough WBTC→USDC to recover principal). The residue stays as WBTC — no third swap. The runner stop reclassifies residue from reserved to available. The residue IS the target asset. Each swap incurs `swap-fee + slippage`. The edge must exceed the total venue cost rate for the trade to be worth taking.
+  **Concrete example — the number flow:**
+  ```
+  Entry:  $50 USDC → WBTC at $100,000/BTC = 0.0005 BTC (minus swap fees)
+  Price rises to $120,000.
+  Position now worth: 0.0005 × $120,000 = $60.00
+
+  Take-profit fires. The position SPLITS:
+    Swap enough WBTC → USDC to recover $50 principal (minus fees)
+    Remaining WBTC = ~$10.00 worth. That's the residue.
+
+  Principal ($50 USDC) returns to available. Deployed again next candle.
+  Residue (~$10 WBTC) rides as a Runner. Zero cost basis. House money.
+
+  Runner's trailing stop fires at $110,000.
+  Residue returns to available — as WBTC. No swap. Already the target asset.
+  The WBTC accumulates. The portfolio grows on both sides of the pair.
+  ```
+
+  Both paths cost 2 swaps. Violence: entry + stop-loss. Grace: entry +
+  take-profit partial swap. The residue stays as the target asset — no
+  third swap. The runner stop reclassifies residue from reserved to
+  available. Each swap incurs `swap-fee + slippage`. The edge must
+  exceed the total venue cost rate for the trade to be worth taking.
+
   The phase is a value on the Trade struct. The treasury handles settlement
   differently depending on the phase. Two settlement events are possible
   per trade: principal recovery (partial) then runner exit (final).
