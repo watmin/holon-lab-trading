@@ -167,7 +167,7 @@ graph TD
 ```
 
 The treasury funds proven proposals. Capital moves from available to
-reserved. The trade is :active. Two trigger paths:
+reserved. The trade is :active. Violence path: 2 swaps (entry + stop-loss). Grace path via runner: 3 swaps (entry + take-profit recovery + runner capture). Each swap costs `swap-fee + slippage`. Two trigger paths:
 - **Safety-stop hit** → :settled-violence. Principal minus loss returns.
   Bounded by the reservation.
 - **Take-profit hit** → :runner. Principal returns to available AND

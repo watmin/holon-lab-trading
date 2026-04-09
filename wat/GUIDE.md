@@ -263,6 +263,7 @@ here when a name is unfamiliar.
     the cost of being stopped out of a runner is zero.
   - Runner + runner-trail-hit → **Settled(Grace)** — residue is
     permanent gain. Returns to available.
+  Venue cost reality: the violence path costs 2 swaps (entry + exit). The grace path via runner costs 3 swaps (entry + principal recovery + residue capture). Each swap incurs `swap-fee + slippage`. The third swap is the price of letting house money ride — the cost of the wider trailing stop window. The edge must exceed the total venue cost rate for the trade to be worth taking.
   The phase is a value on the Trade struct. The treasury handles settlement
   differently depending on the phase. Two settlement events are possible
   per trade: principal recovery (partial) then runner exit (final).
@@ -1992,6 +1993,8 @@ so that on settlement, propagate reaches the right observers.
   [next-trade-id : usize])             ; monotonic
 ```
 
+The treasury NEVER deploys more than available capital. The loss on any trade is bounded by its reservation. This is not a policy — it is the architecture. The treasury cannot over-commit. No trade can push available below zero. No reservation can exceed what was available at funding time.
+
 **Interface:**
 - `(make-treasury denomination initial-balances swap-fee slippage) → Treasury`
   denomination: Asset — what "value" means (e.g. USD).
@@ -2005,6 +2008,7 @@ so that on settlement, propagate reaches the right observers.
   evaluate all proposals, sorted by proposal edge (the curve's accuracy measure).
   Fund the top N that fit in available capital. Reject the rest.
   Returns ProposalFunded and ProposalRejected log entries.
+  Before funding, the treasury computes the expected venue cost: `(swap-fee + slippage) × amount × expected-swaps`. The violence path costs 2 swaps (entry + stop-loss exit). The grace path via runner costs 3 swaps (entry + principal recovery at take-profit + residue capture at runner stop). The treasury reserves `amount + worst-case-venue-costs` (3 swaps). A proposal whose edge does not exceed the total venue cost rate is rejected — negative expected value. The system never takes a trade it can't afford to lose.
   For each funded proposal: move capital from available to reserved,
   create a Trade, stash a TradeOrigin (post-idx, broker-slot-idx,
   composed-thought, prediction) for propagation at settlement time. Drain proposals.
