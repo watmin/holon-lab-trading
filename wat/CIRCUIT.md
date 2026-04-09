@@ -179,7 +179,36 @@ rides until exit. Each swap costs `swap-fee + slippage`.
 
 ---
 
-## 6. The cascade circuit
+## 6. The breathing stops circuit
+
+Step 3c. Every candle. The stops adapt to the current market context.
+
+```mermaid
+graph TD
+    CD[Candle arrives] --> MO[MarketObserver encodes thought]
+    MO -->|market thought| EO[ExitObserver composes + queries reckoner]
+    EO -->|fresh Distances| POST[Post converts to Levels]
+    POST -->|new Levels| TR[Treasury updates trade stops]
+    TR -->|stops move| TRADE[Trade breathes]
+    TRADE -->|next candle| CD
+```
+
+The exit observer's reckoner learned from every prior resolution which
+distances produced Grace. Step 3c applies that learning to active trades
+continuously. The reckoner sees the current thought — volatility,
+momentum, regime — and predicts: "for THIS context, trail at 1.8%,
+stop at 3.2%." The distances convert to price levels. The trailing
+stop moves. The trade breathes.
+
+This IS the value extraction mechanism. Not set-and-forget. Continuous
+adaptation. The trade captures as much residue as the market will give,
+bounded by the learned distances. The runner's wider stop is learned
+by the fourth reckoner (runner-trail) — wider because losing house
+money costs nothing.
+
+---
+
+## 7. The cascade circuit
 
 Three levels of distance knowledge. Specific to general.
 
@@ -199,7 +228,7 @@ overall?"). If empty, use the crutch (the default value from construction).
 
 ---
 
-## 7. The propagation circuit
+## 8. The propagation circuit
 
 The signal that teaches. TreasurySettlement → enterprise computes → observers learn.
 
@@ -225,7 +254,7 @@ to the accumulators. Everyone learns from one resolution.
 
 ---
 
-## 8. The binary circuit
+## 9. The binary circuit
 
 The outer loop. The fold driver. Everything above happens INSIDE one
 call to `on-candle`. The binary is what calls it.
@@ -261,9 +290,11 @@ The binary does not think. It drives the fold and writes what happened.
 The full enterprise is the composition of all sub-circuits. The encoding
 circuit feeds the learning circuit. The paper circuit is the learning
 circuit applied to hypotheticals. The funding circuit converts proposals
-into trades. The cascade circuit provides distances at every experience
-level. The propagation circuit closes the loop. The binary circuit
-wraps them all — it drives the fold and persists the results.
+into trades. The breathing stops circuit adapts active trades every
+candle — the value extraction mechanism. The cascade circuit provides
+distances at every experience level. The propagation circuit closes
+the loop. The binary circuit wraps them all — it drives the fold and
+persists the results.
 
 `f(state, candle) → state` — one tick of the clock. All circuits fire.
 The fold advances. Grace strengthens. Violence decays. The machine learns.
