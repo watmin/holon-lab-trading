@@ -161,7 +161,7 @@ graph TD
     TD -->|safety-stop fires| SV[Settled :violence]
     RN -->|runner-trail fires| SG[Settled :grace]
     SV --> EXIT1[swap back → principal - loss → available]
-    SG --> EXIT2[swap principal back → USDC available. Residue stays as WBTC → available]
+    SG --> EXIT2[swap principal back → source-asset available. Residue stays as target-asset → available]
     TR -->|reject| DR[drained]
 ```
 
