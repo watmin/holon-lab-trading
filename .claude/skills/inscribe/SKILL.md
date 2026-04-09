@@ -84,3 +84,45 @@ No interpretation. Transcription with precision.
 
 The guide is the architect's drawing. The wat is the stone. Inscribe
 is the chisel.
+
+## Rust compilation
+
+The inscribe also compiles wat to Rust. The wat IS the specification.
+The Rust implements it. Same chisel, different material.
+
+**What the agent reads:**
+- The wat file for this entity (the specification)
+- The holon-rs API (`holon-rs/src/lib.rs`) for primitive types and operations
+- The existing Rust modules (for imports and type references)
+
+**What the agent writes:**
+- One `.rs` file in `src/` implementing the wat specification
+- Tests in `#[cfg(test)] mod tests` at the bottom of the same file
+
+**The Rust inscription includes tests.** Every function in the wat gets at
+least one test in the Rust. The wat describes behavior. The test proves
+the Rust implements it. `cargo test` is the ward on the Rust — the
+compiler checks types, the tests check truth.
+
+**Test coverage targets:**
+- Every constructor: construct and verify fields
+- Every function: call with known inputs, verify outputs
+- Every match arm: at least one test per variant
+- Every side-dependent operation: test both Buy and Sell
+- Every cascade: test contextual, global, and crutch paths
+- Every boundary: test edge cases (empty, zero, max)
+
+**Compilation rules:**
+- `(struct name [field : Type])` → Rust struct with pub fields
+- `(enum name variant)` → Rust enum with `#[derive(Clone, Debug)]`
+- `(newtype Name inner)` → `pub struct Name(pub inner);`
+- `(define (name [param : Type]) body)` → `pub fn name(&self, param: Type) -> ReturnType`
+- `set!` → `&mut self` methods
+- `match` → Rust `match` (exhaustive)
+- Holon-rs types: `Vector`, `Reckoner`, `OnlineSubspace`, `ScalarEncoder`, `Primitives`
+- `(list a b)` → tuple `(A, B)` or a struct — Rust has no anonymous products
+- Destructuring `let` → Rust tuple destructuring `let (a, b) = f(x);`
+
+The test is not optional. The inscribe writes the function AND the test.
+The wat is the specification. The Rust is the implementation. The test
+is the proof that they agree.
