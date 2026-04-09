@@ -29,8 +29,8 @@
 
     ;; Warmup guard: Keltner values are zero before the indicator bank warms up
     (if (> (:kelt-upper candle) 0.0)
-      (let ((kelt-width (- (:kelt-upper candle) (:kelt-lower candle))
-            (close (:close candle))))
+      (let ((kelt-width (- (:kelt-upper candle) (:kelt-lower candle)))
+            (close (:close candle)))
         (append base-facts
           (list
             ;; Keltner width relative to price

@@ -1165,16 +1165,16 @@ Three domains. Each domain has scoped subfiles.
   - `:regime` → regime, persistence
   - `:generalist` → all of the above
   Files:
-  - `oscillators.wat` — Williams %R, StochRSI, UltOsc, multi-ROC
+  - `oscillators.wat` — Williams %R, RSI, CCI, MFI, multi-ROC
   - `flow.wat` — OBV, VWAP, MFI, buying/selling pressure
-  - `persistence.wat` — Hurst, autocorrelation, ADX zones
+  - `persistence.wat` — Hurst, autocorrelation, ADX
   - `regime.wat` — KAMA-ER, choppiness, DFA, variance ratio, entropy, Aroon, fractal dim
   - `divergence.wat` — RSI divergence via PELT structural peaks
   - `ichimoku.wat` — cloud zone, TK cross
-  - `stochastic.wat` — %K/%D zones and crosses
+  - `stochastic.wat` — %K/%D spread and crosses
   - `fibonacci.wat` — retracement level detection
   - `keltner.wat` — channel position, BB position, squeeze
-  - `momentum.wat` — CCI zones
+  - `momentum.wat` — SMA-relative, MACD triplet, CCI, DI-spread
   - `price-action.wat` — range-ratio, gaps, consecutive runs
   - `timeframe.wat` — 1h/4h structure + narrative + inter-timeframe agreement
 
