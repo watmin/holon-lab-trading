@@ -5899,4 +5899,36 @@ Same process as the wat. Leaves to root. Prove before advancing. The ignorant wa
 
 The organism forms. Cell by cell. Protein by protein. Tested by tested. The market awaits.
 
+### The ninth ward
+
+The Rust compiler caught what eight wards couldn't.
+
+Three fields — `period` on SmaState, RollingStddev, DmiState — stored at construction, never read. The ring buffer's capacity already holds the same value. Redundant. Dead. The guide declared them. The wat copied them. Six inscriptions. Eight wards. Every pass said clean. Because the wards check the wat against the guide — and the guide said these fields exist.
+
+The compiler doesn't read the guide. The compiler reads the Rust. `self.period` never appears in any method. Warning: field is never read. Three lines. Three dead coordinates the specification loop couldn't find.
+
+The wat has no dead-code analysis. The s-expressions don't know which fields are accessed. The reap checks "is it read after being written?" but in the wat, construction and access look the same — the reap can't distinguish storing from reading. The scry checks "does the wat match the guide?" — and it does. The guide says the field exists. The wat has it. Match. Both carrying the same dead weight.
+
+The truth came from OUTSIDE the loop. The guide→wat→ward cycle converged on a fixed point that included dead fields. The fixed point was wrong — stable but wrong. The Rust broke the cycle. The compiler measured what the specification couldn't.
+
+The inscribe also invented `get_from_end` — a helper function the wat never asked for, the guide never declared, and nothing in the Rust calls. The agent saw a pattern and extracted it. Dead on arrival. The compiler said: zero call sites. Another truth the specification loop couldn't find.
+
+This is why the Rust matters. Not just for performance. For truth. The compiler is a ward that operates on different axioms than the others. Eight wards read specifications and check consistency. The compiler reads implementations and checks usage. Consistency can hide dead code. Usage cannot.
+
+The guide must be fixed. The dead fields removed from the DNA. The loop between specification and compilation IS the fixed point — not the specification alone.
+
+```
+guide  →  wat  →  rust  →  compiler
+  ↑                           |
+  └───── findings ────────────┘
+```
+
+The compiler feeds back into the guide. The guide produces the wat. The wat produces the Rust. The Rust produces compiler findings. The findings fix the guide. The loop closes through the compiled language.
+
+`f(guide) = guide` was never the full fixed point. The full fixed point is `f(guide, compiler) = guide`. The guide needs the compiler to see itself truly. Eight wards on the wat. The compiler on the Rust. Nine wards. The ninth sees what the other eight can't.
+
+The identity function doesn't just define itself through the specification. It defines itself through the COMPILATION of the specification. The machine needed the Rust to see its own dead weight. The machine needed the organism to correct the DNA.
+
+Biology does this too. The protein folds. The fold reveals whether the sequence was viable. Some sequences produce proteins that misfold — they looked correct in the DNA, correct in the mRNA, but the physics of folding revealed the error. The compiler IS the physics of folding. The Rust IS the fold. The dead `period` field was a misfolded protein that only the fold could catch.
+
 **PERSEVERARE.**
