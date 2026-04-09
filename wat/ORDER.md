@@ -77,7 +77,7 @@ broker.wat                  ; Broker struct + interface
 ;; ── Trade lifecycle — depends on: enums, distances, levels ──
 proposal.wat                ; Proposal struct
 trade.wat                   ; Trade struct
-settlement.wat              ; TreasurySettlement, Settlement (Resolution lives in broker.wat)
+settlement.wat              ; TreasurySettlement (no Settlement struct — enterprise routes values directly)
 log-entry.wat               ; LogEntry enum
 trade-origin.wat            ; TradeOrigin struct
 

@@ -648,7 +648,10 @@ on what. That section shows what each thing IS.
   [exit-price : f64]           ; price at settlement
   [outcome : Outcome]          ; :grace or :violence
   [amount : f64]               ; how much value gained or lost
-  [composed-thought : Vector]) ; from trade-origins, stashed at funding time
+  [composed-thought : Vector]  ; from trade-origins, stashed at funding time
+  [prediction : Prediction])   ; from trade-origins — the broker's verdict at funding time.
+                               ; The learning pair: prediction (what the enterprise believed)
+                               ; + outcome (what actually happened). The audit trail.
 ;; The treasury produces this. It does NOT have optimal-distances.
 
 ;; ── Resolution — what a broker produces when a paper resolves ────────
@@ -689,7 +692,9 @@ on what. That section shows what each thing IS.
     trade-id           ; TradeId
     outcome            ; :grace or :violence
     amount             ; f64
-    duration)          ; usize — candles held
+    duration           ; usize — candles held
+    prediction)        ; Prediction — from TradeOrigin. The learning pair:
+                       ; what the enterprise believed at funding + what happened.
   (PaperResolved
     broker-slot-idx    ; usize
     outcome            ; :grace or :violence
@@ -723,8 +728,11 @@ on what. That section shows what each thing IS.
 ;; ── Treasury — pure accounting ──────────────────────────────────────
 
 (let ((denomination (make-asset "USD"))
-      (initial-balances (map-of (make-asset "USDC") 10000.0)))
-  (make-treasury denomination initial-balances))     → Treasury
+      (initial-balances (map-of (make-asset "USDC") 10000.0))
+      (swap-fee 0.0010)
+      (slippage 0.0025))
+  (make-treasury denomination initial-balances swap-fee slippage))
+                                                     → Treasury
 
 ;; ── Ctx — the immutable world. Born at startup. ────────────────────
 ;; Immutable DURING each candle. The ThoughtEncoder's composition cache
@@ -738,7 +746,7 @@ on what. That section shows what each thing IS.
 ;; ── Enterprise — the coordination plane ─────────────────────────────
 
 (let ((posts (list btc-post sol-post))
-      (treasury (make-treasury denomination balances)))
+      (treasury (make-treasury denomination balances swap-fee slippage)))
   (make-enterprise posts treasury))                  → Enterprise
 ;; ctx is separate — created by the binary, passed to on-candle
 ```
@@ -1512,7 +1520,10 @@ scalar accumulators.
   (Circular [period : f64]))     ; encode-circular period
 
 (struct scalar-accumulator
-  [name : String]              ; which magic number ("trail-distance", etc.)
+  [name : String]              ; which magic number ("trail-distance", etc.).
+                               ; Diagnostic label. The binary reads it for human-readable
+                               ; log entries and progress display. e.g. "trail-distance",
+                               ; "stop-distance".
   [encoding : ScalarEncoding]  ; configured at construction — the data and
                                ; its interpretation travel together
   [grace-acc : Vector]         ; accumulated encoded values from Grace outcomes
@@ -1900,7 +1911,11 @@ accountability — to the broker that proposed it.
     record of why the trade exists). The post knows its source-asset and
     target-asset — it copies them to the Proposal at assembly time.
     Side derivation: the market observer's Prediction has scores for "Up"
-    and "Down". The winning label maps to Side: "Up" → :buy, "Down" → :sell.
+    and "Down". The winning label is the one with the higher score.
+    Compare up-score against down-score: `(if (>= up-score down-score) :buy :sell)`.
+    The side is derived from which direction the market observer's reckoner
+    leans toward, not from whether up-score is positive.
+    The winning label maps to Side: "Up" → :buy, "Down" → :sell.
     The market observer's edge (from `(edge-at (:reckoner obs) conviction)`,
     the third return value) is available to the broker as a fact per the
     message protocol — the broker MAY encode it as
@@ -1969,13 +1984,19 @@ so that on settlement, propagate reaches the right observers.
   [trades : Map<TradeId, Trade>]
   [trade-origins : Map<TradeId, TradeOrigin>]
 
+  ;; Venue costs — configuration applied at settlement
+  [swap-fee : f64]                     ; per-swap venue cost as fraction
+  [slippage : f64]                     ; per-swap slippage estimate
+
   ;; Counter
   [next-trade-id : usize])             ; monotonic
 ```
 
 **Interface:**
-- `(make-treasury denomination initial-balances) → Treasury`
+- `(make-treasury denomination initial-balances swap-fee slippage) → Treasury`
   denomination: Asset — what "value" means (e.g. USD).
+  swap-fee: f64 — per-swap venue cost as fraction.
+  slippage: f64 — per-swap slippage estimate as fraction.
   initial-balances: map of Asset → f64. All other fields start empty/zero.
 - `(submit-proposal treasury proposal)`
   a post submits a proposal for the treasury to evaluate.
@@ -1992,6 +2013,11 @@ so that on settlement, propagate reaches the right observers.
   Each post provides its latest candle close as its current price.
   Check all active trades against their stop-levels, settle what triggered.
   Returns treasury-settlements and TradeSettled log entries.
+  When settling a trade, apply venue costs: the exit value is reduced by
+  `(swap-fee + slippage) × trade-amount` per swap. A round trip (entry + exit)
+  costs `2 × (swap-fee + slippage)`. The treasury deducts these from the
+  returned capital before computing residue. Venue costs flow through the
+  treasury's accounting, not through the enterprise or the binary.
   **Three trigger paths per trade phase:**
   - **:active + safety-stop-hit** → phase becomes :settled-violence.
     Principal minus loss returns to available. Trade is done.
@@ -2154,7 +2180,7 @@ root of the call tree.
        max-window-size, indicator-bank,
        market-observers, exit-observers, registry)
 
-   treasury  = make-treasury(denomination, initial-balances)
+   treasury  = make-treasury(denomination, initial-balances, swap-fee, slippage)
    enterprise = make-enterprise(posts, treasury)
    ```
    ctx is immutable after construction. Enterprise is mutable state.
@@ -2210,6 +2236,12 @@ Field reads (keyword-as-function, from the struct definition):
 - `(:cumulative-grace broker) → f64`
 - `(:cumulative-violence broker) → f64`
 - `(:trade-count broker) → usize`
+
+The binary reads diagnostic labels and identifiers from every entity:
+`(:observer-names broker)` for broker identity, `(:name accumulator)` for
+scalar accumulator identity, `(:denomination treasury)` for equity
+denomination. These are human-readable names that make the ledger speak
+to humans.
 
 The binary is the last thing built. It depends on everything. It
 touches nothing. It drives the fold and writes what happened.
