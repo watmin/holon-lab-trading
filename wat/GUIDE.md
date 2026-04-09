@@ -902,14 +902,14 @@ The streaming primitives — the building blocks of indicator state:
 ;; Depend on RingBuffer
 (struct sma-state
   [buffer : RingBuffer]
-  [sum    : f64]
-  [period : usize])
+  [sum    : f64])
+;; period is the buffer's capacity — one source of truth, not two.
 
 (struct rolling-stddev
   [buffer : RingBuffer]
   [sum    : f64]
-  [sum-sq : f64]
-  [period : usize])
+  [sum-sq : f64])
+;; period is the buffer's capacity.
 
 (struct stoch-state
   [high-buf : RingBuffer]
@@ -946,8 +946,8 @@ The streaming primitives — the building blocks of indicator state:
   [prev-low       : f64]
   [prev-close     : f64]
   [started        : bool]
-  [count          : usize]
-  [period         : usize])
+  [count          : usize])
+;; period is implicit in the WilderState smoothers — one source of truth.
 ```
 
 The indicator bank — composed from the streaming primitives:

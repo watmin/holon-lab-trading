@@ -54,6 +54,35 @@ let exit_pending: Vec<ExitObservation> = Vec::new();
 
 Categories: `scaffolding`, `unused-struct`, `always-none`, `never-populated`, `always-same-branch`.
 
+## Wat files — field-level dead code
+
+The wat has no compiler. The reap must be the compiler.
+
+In wat, struct construction is positional: `(sma-state buffer sum period)`.
+Field access is named: `(:period state)`. These look different. The reap
+must distinguish them.
+
+**For each field on a wat struct:** search the file for `(:field-name` —
+the keyword-as-function access pattern. If the field name never appears
+as a keyword accessor, the field is dead. It was stored at construction
+but never read.
+
+Construction: `(make-sma period)` — writes `period` positionally.
+Access: `(:period state)` — reads `period` by name.
+
+If `:period` never appears anywhere in the file (or in any file that
+requires it), the field is write-only. Dead. The guide encoded dead
+protein. The reap catches it.
+
+This is how the `period` fields on SmaState, RollingStddev, and DmiState
+were missed through six inscriptions and eight ward passes. The ring
+buffer's capacity already held the period. The field was redundant. The
+reap couldn't see it because it didn't distinguish construction from
+access in s-expressions. Now it does.
+
+The Rust compiler IS this check — `warning: field is never read`. The
+honed reap is the compiler's equivalent for wat.
+
 ## What to do
 
 Remove the dead code. Don't comment it out. Don't add `_` prefix. Don't keep it "for compatibility." If it's dead, it's gone. Git remembers.
