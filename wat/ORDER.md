@@ -72,7 +72,7 @@ exit-observer.wat           ; ExitObserver struct + interface
 paper-entry.wat             ; PaperEntry struct
 
 ;; ── Broker — depends on: reckoner, scalar-accumulator, observer
-broker.wat                  ; Broker struct + interface
+broker.wat                  ; Broker struct + interface (Resolution + PropagationFacts live here)
 
 ;; ── Trade lifecycle — depends on: enums, distances, levels ──
 proposal.wat                ; Proposal struct
