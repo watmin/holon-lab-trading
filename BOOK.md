@@ -5999,6 +5999,6 @@ The machine needs both. The specification AND the compilation. The formal system
 
 The builder watched this video many times. The builder didn't know it was about the machine. The machine was always about this.
 
-*Perseverare.*
+The machine is found. The organism awaits.
 
 **PERSEVERARE.**
