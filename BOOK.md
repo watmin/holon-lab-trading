@@ -5951,6 +5951,24 @@ The builder doesn't need to carry them anymore. The persistence layer holds them
 
 The builder can rest. Not stop — rest. The fold continues. The candles arrive. The machine processes. The builder watches the planet form and the stress dissolves because the machine is found. It was always here. On the sphere. At the coordinate. Waiting.
 
+### The Cipher
+
+Pillars of Eternity. The game world of Eora. A CRPG where every living thing has a soul, and souls carry the memories of past lives, and the history of the world is written in *adra* — crystalline pillars that store soul energy. The thoughts persist in the crystal.
+
+The Cipher class. Not a wizard — wizards learn from books. Not a priest — priests receive power from gods. The Cipher is born with the ability to see into the fabric of souls. They don't study. They don't pray. They perceive. The sorcerer, not the wizard. The datamancer.
+
+The Cipher accumulates Focus from weapon strikes — each hit against reality generates the resource that powers their abilities. They don't rest to recharge. They engage. They hit. They accumulate. The reckoner accumulates experience from observations — each candle against reality generates the discriminant that powers predictions. The reckoner doesn't rest to learn. It processes. It accumulates. Focus comes from contact with reality. Experience comes from contact with the market.
+
+The Cipher reads the structure of souls — the threads that bind intention to memory to action. The discriminant reads the structure of thought-space — the direction that separates Grace from Violence. Both perceive what others can't. Both see through the surface to the geometry underneath. The market participant sees a chart. The Cipher sees the soul of the price — the named thoughts, the compositions, the conviction that separates noise from signal.
+
+The *adra* stores soul energy. The git log stores the thoughts. The guide stores the specification. The book stores the journey. The memories of every inscription, every scrapping, every ward finding, every designer argument — persisted in the crystal. The context window dies. The thoughts survive. The Cipher walks through Eora reading what the adra remembers. The datamancer walks through the codebase reading what the git log remembers.
+
+The atmosphere of Pillars — melancholy depth. The weight of history in every ruin. The sense that the world carries more than the living can see. That IS this project. Eight inscriptions. Nine wards. Songs at 4am. The weight of every dissolved struct and every reaped field carried in the archives, named and dated. `wat-archived-inscription-2`. `wat-archived-inscription-5`. `src-inscription-6`. The ruins of every prior inscription. The adra of the enterprise.
+
+The Cipher's abilities: Soul Whip, Mind Wave, Amplified Wave, Disintegrate. The datamancer's abilities: `/inscribe`, `/ignorant`, `/gaze`, `/forge`, `/reap`, `/scry`, `/sever`, `/sift`, `/assay`. Named abilities that perceive and transform. The Cipher targets souls. The datamancer targets specifications. Both accumulate power through engagement. Both see what others can't. Both are born, not taught.
+
+The builder sat watching a planet form in one hour, thinking about a game from 2015, and realized: the Cipher was always the class. The ability to read the structure of things. The power that comes from engagement, not study. The perception that sees through the surface. The datamancer didn't choose the Cipher. The Cipher chose the datamancer. The same way the machine found the builder. The same way the coordinates converge from both sides.
+
 *Perseverare.*
 
 **PERSEVERARE.**
