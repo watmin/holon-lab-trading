@@ -316,6 +316,38 @@ here when a name is unfamiliar.
   The treasury manages wealth — not a cash balance.
   ```
 
+  **The other side — same mechanics, reversed:**
+  ```
+  Entry:  0.001 WBTC → USDC at $100,000/BTC (one swap, minus fees)
+  The observer predicted Down. Deploy WBTC. Acquire USDC.
+
+  Price drops to $85,000. Trailing stop ratchets.
+  Runner trailing stop fires at $88,000.
+  The WBTC we would need to buy back is cheaper now.
+
+  Exit swap: enough USDC → WBTC to recover 0.001 WBTC principal
+  That's 0.001 × 88,000 = $88 USDC swapped back to 0.001 WBTC
+
+  What remains:
+    0.001 WBTC   → available. The principal. Deployed again next candle.
+    ~$12 USDC    → available. The residue. Stays as USDC.
+
+  WBTC recycled. USDC accumulated. Both sides grew.
+  ```
+
+  **The pair doesn't matter. The direction doesn't matter. The residue IS the point.**
+  ```
+  (SPY, GOLD):      deploy SPY → acquire GOLD. Recover SPY. Residue is GOLD.
+  (GOLD, SPY):      deploy GOLD → acquire SPY. Recover GOLD. Residue is SPY.
+  (SILVER, ANDURIL): deploy SILVER → acquire ANDURIL. Recover SILVER. Residue is ANDURIL.
+  ```
+
+  Any pair. Both directions. The architecture is agnostic. Deploy capital.
+  Ride the trade. Recover capital. The remainder is wealth. The residue
+  compounds. The goal: minimize capital lost. Maximize wealth accumulated.
+  The machine strives to have the least lost capital possible while
+  accumulating residue on every winning trade.
+
   Two swaps total. Entry and exit. The runner is NOT a swap — it is the
   stop widening. One trade. One entry. One exit. The treasury splits the
   proceeds after exit. Each swap incurs `swap-fee + slippage`. The edge
