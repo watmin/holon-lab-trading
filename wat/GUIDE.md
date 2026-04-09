@@ -1017,6 +1017,92 @@ The indicator bank — composed from the streaming primitives:
   [count : usize])
 ```
 
+**The tick contract** — what each computation IS, its parameters, its output:
+
+```
+Moving averages:
+  SMA:  simple moving average. Periods: 20, 50, 200.
+  EMA:  exponential moving average. Period: 20 (internal — for Keltner channel).
+
+Bollinger Bands:
+  bb-upper/lower = SMA(20) ± 2 × rolling-stddev(20).
+  bb-width = (upper - lower) / close. bb-pos = (close - lower) / (upper - lower).
+
+Oscillators:
+  RSI:   Wilder-smoothed relative strength, period 14. Raw [0, 100].
+  MACD:  fast EMA(12) - slow EMA(26). Signal = EMA(9) of MACD. Hist = MACD - signal.
+  Stoch: %K = (close - low14) / (high14 - low14) × 100. %D = SMA(3) of %K.
+  CCI:   (typical-price - SMA(tp, 20)) / (0.015 × mean-deviation). Period 20.
+  MFI:   money-flow-ratio over 14 periods. Positive/negative flow by typical-price direction.
+  Williams %R: (highest14 - close) / (highest14 - lowest14) × -100.
+
+Directional movement:
+  DMI:   Wilder-smoothed +DI, -DI, ADX. Period 14. ADX smoothed from DX.
+  ATR:   Wilder-smoothed true range, period 14. atr-r = atr / close.
+
+Volume:
+  OBV:   cumulative on-balance-volume. obv-slope-12 = 12-period linear regression slope.
+  vol-accel: volume / SMA(volume, 20). Ratio — how unusual is current volume.
+
+Ichimoku:
+  tenkan-sen = midpoint of high/low over 9 periods.
+  kijun-sen = midpoint of high/low over 26 periods.
+  senkou-span-a = (tenkan + kijun) / 2.
+  senkou-span-b = midpoint of high/low over 52 periods.
+  cloud-top = max(senkou-a, senkou-b). cloud-bottom = min.
+
+Rate of change:
+  ROC-N = (close - close_N_ago) / close_N_ago. Periods: 1, 3, 6, 12. Buffer capacity: 12.
+  ATR ROC: same formula applied to ATR. Periods: 6, 12.
+
+Range position:
+  range-pos-N = (close - lowest-N) / (highest-N - lowest-N). Periods: 12, 24, 48.
+
+Trend consistency:
+  Fraction of candles in a window where close > prev-close. Periods: 6, 12, 24.
+
+Multi-timeframe:
+  1h = aggregate 12 5-min candles. 4h = aggregate 48. Emit close, high, low, return, body-ratio.
+  tf-agreement: directional agreement score across 5m/1h/4h returns.
+
+Persistence:
+  Hurst exponent: R/S analysis over close buffer(48). >0.5 trending, <0.5 mean-reverting.
+  Autocorrelation: lag-1 autocorrelation of close buffer(48). Signed.
+  VWAP distance: (close - cumulative-VWAP) / close. Signed.
+
+Regime:
+  KAMA-ER: Kaufman efficiency ratio over 10-period close buffer. [0, 1].
+  Choppiness: 100 × log(sum(ATR, 14) / range(14)) / log(14). [0, 100].
+  DFA-alpha: detrended fluctuation analysis exponent over close buffer(48).
+  Variance-ratio: variance at scale N / (N × variance at scale 1). Close buffer(30).
+  Entropy-rate: conditional entropy of discretized returns over buffer(30).
+  Aroon-up/down: 100 × (25 - periods-since-highest/lowest) / 25. Period 25.
+  Fractal-dim: box-counting or Higuchi method over close buffer(30). 1.0 trending, 2.0 noisy.
+
+Divergence:
+  RSI divergence: PELT peak detection on price and RSI buffers.
+  Bull: price makes lower low, RSI makes higher low. Bear: opposite.
+  Magnitude = absolute difference in slopes.
+
+Cross deltas:
+  tk-cross-delta = (tenkan - kijun) change from prev candle. Signed.
+  stoch-cross-delta = (%K - %D) change from prev candle. Signed.
+
+Price action:
+  range-ratio: current range / prev range. Compression vs expansion.
+  gap: (open - prev-close) / prev-close. Signed.
+  consecutive-up/down: run count of bullish/bearish closes.
+
+Time:
+  minute (mod 60), hour (mod 24), day-of-week (mod 7),
+  day-of-month (mod 31), month-of-year (mod 12).
+  Parsed from the timestamp string on the raw candle.
+```
+
+Each line is the tick contract for that indicator family. The inscribe
+writes the implementation. The parameters are specified here — not in
+the Rust, not in the wat comments. Here. One source of truth.
+
 **Interface:**
 - `(make-indicator-bank) → IndicatorBank`
 - `(tick indicator-bank raw-candle) → Candle`
