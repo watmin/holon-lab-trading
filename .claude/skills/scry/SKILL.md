@@ -72,6 +72,30 @@ This is how the cache miss-queue gap was found: the prose described
 observers queuing misses, but encode(encoder, ast) had no queue parameter.
 The interface couldn't do what the prose said it did.
 
+## Wiring (across files)
+
+The guide declares connections: "X calls Y." "The binary reads Z."
+"The post passes PropagationFacts to observers." These are wires.
+The scry verifies the wires are soldered.
+
+For every declared producer-consumer relationship in the guide:
+- Does the consumer's wat file actually CALL the producer's function?
+- "The guide says the binary queries paper-count" → does bin/enterprise.wat
+  call `(paper-count broker)`?
+- "The guide says the post applies PropagationFacts" → does post.wat
+  call `(resolve market-obs ...)` and `(observe-distances exit-obs ...)`?
+- "The guide lists query functions for the binary" → does the binary's
+  wat exercise ALL of them?
+
+A declared connection that doesn't exist in the wat is a lie the guide
+tells about the machine. The guide says the wire exists. The scry
+verifies the wire is soldered. Shapes AND wiring. Types AND calls.
+
+This is how the binary diagnostic gap was found: the guide declared
+paper-count, experience, edge as query functions for the binary. The
+scry checked signatures (they existed). The honed scry checks calls
+(the binary never called them). The wire was declared but not soldered.
+
 ## What to report
 
 For each divergence:
