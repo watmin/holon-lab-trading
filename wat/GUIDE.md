@@ -294,7 +294,7 @@ here when a name is unfamiliar.
 
   **Concrete example — the number flow:**
   ```
-  Entry:  $50 USDC → WBTC at $100,000/BTC (one swap, minus fees)
+  Entry:  $50 USDC → 0.0005 WBTC at $100,000/BTC (one swap, minus fees)
 
   Price rises. Trailing stop ratchets up. At some point, the stop
   level implies exit would recover the principal → phase becomes :runner.
@@ -302,13 +302,18 @@ here when a name is unfamiliar.
 
   Price keeps rising to $120,000. Then reverses.
   Runner trailing stop fires at $115,000.
+  Position value at exit: 0.0005 BTC × $115,000 = $57.50 worth
 
-  Exit:   FULL position WBTC → USDC at $115,000 (one swap, minus fees)
-  Proceeds: ~$57.50 USDC (after fees)
+  Exit swap: enough WBTC → USDC to recover $50 principal (one swap, minus fees)
+  That's 50 / 115,000 = ~0.000435 WBTC swapped back to ~$50 USDC
 
-  Treasury splits the proceeds:
-    Principal: $50 USDC → returns to available. Deployed again next candle.
-    Residue:   $7.50 USDC → permanent gain. The accumulation.
+  What remains:
+    $50 USDC       → available. The principal. Deployed again next candle.
+    ~0.000065 WBTC → available. The residue. ~$7.50 worth. Stays as WBTC.
+
+  Both sides of the pair grew. USDC recycled. WBTC accumulated.
+  The residue IS the target asset. Not converted. Not swapped.
+  The treasury manages wealth — not a cash balance.
   ```
 
   Two swaps total. Entry and exit. The runner is NOT a swap — it is the
@@ -2077,9 +2082,12 @@ The treasury NEVER deploys more than available capital. The loss on any trade is
   - **:active + safety-stop fires** → :settled-violence.
     Full position swaps back. Principal minus loss returns. Trade is done.
   - **:active or :runner + trailing-stop fires** → :settled.
-    Full position swaps back. Treasury splits proceeds:
-    if proceeds > principal → :settled-grace (residue is permanent gain).
-    if proceeds ≤ principal → :settled-violence (loss bounded by reservation).
+    The treasury swaps enough of the target asset back to the source
+    asset to recover the principal. The remainder IS the residue —
+    it stays as the target asset. Not converted. Not swapped.
+    if value at exit > principal → :settled-grace (residue is permanent gain).
+    if value at exit ≤ principal → :settled-violence (loss bounded by reservation).
+    Violence: the full position swaps back because there is no residue to keep.
   The runner phase does NOT trigger a settlement. The runner phase is
   set by step 3c when the stop has moved past the break-even point.
   Step 1 only checks: did a stop-level fire? One entry. One exit.
