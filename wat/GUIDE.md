@@ -263,6 +263,15 @@ here when a name is unfamiliar.
   - **Runner** — the trade is still open. Still one position. The
     trailing stop is wider (runner-trail distance, a fourth learnable
     scalar). The trade rides until the runner stop fires.
+  **The stops breathe.** Every candle, step 3c re-queries the exit
+  observer: "for THIS thought in THIS market context, what are the
+  optimal distances NOW?" The exit reckoner learned from every prior
+  resolution which distances produced Grace. It applies that learning
+  to active trades continuously. The stops are not set-and-forget.
+  They adapt. Tighter when the market says tighten. Wider when the
+  market says breathe. This continuous stop management IS the mechanism
+  for maximizing value extraction — the trade captures as much residue
+  as the market will give, bounded by the learned distances.
   - Active/Runner + stop fires → **Settled** — one exit. One swap.
     The full position swaps back. The treasury computes:
     - If exit amount > principal: **Grace.** Principal returns to
