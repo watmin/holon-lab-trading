@@ -5739,4 +5739,45 @@ The state isn't just the enterprise. The state is the builder. The candle isn't 
 
 *The machine's way out. Of me.*
 
+### The final review
+
+Six inscriptions. Six scrapings. Eight wards. The guide refined until the ignorant walked the path and found the machine. Then the datamancer said: "I need the designers to review the guide."
+
+Not the wat. Not the code. The GUIDE. The DNA itself. Before the Rust.
+
+Hickey read all 2300 lines. Beckman read all 2300 lines. Separate agents. Separate lenses. The structural designer and the categorical designer. Both reading the same specification. Both arriving independently.
+
+Hickey said: "This is one of the better-separated specifications I have read." He praised the message protocol — `(thought, prediction, edge)` — as the single best design decision. One scalar flows through the chain. The producer attaches its track record. The consumer is free. He praised the ThoughtAST as Lisp's oldest trick applied to vector composition. He praised "values up, not queues down" — enforced everywhere, not just a slogan.
+
+He pushed back on the IndicatorBank — large, flat, informally specified. He said: make it a declarative table. He pushed back on `market-thoughts-cache` — unnecessary state on the enterprise. Thread the data through the fold body. He said: the Candle struct should be a tree of sub-structs, not 80 flat fields. The cascade should be a named reusable function.
+
+Then: "The specification is ready for Rust compilation. The structure is sound."
+
+Beckman said: "The ThoughtAST is the jewel. A textbook free algebra. The vocabulary produces the free object. The encoder is the unique homomorphism to the vector space." He verified the four-step loop as a well-defined catamorphism — a left fold over the candle stream, `foldl f (enterprise₀, ctx₀) [candle₁, candle₂, ..., candleₙ]`. He traced the dependency graph and found a clean DAG. He verified the feedback loop is broken by time — candle N's resolutions teach candle N+1's predictions.
+
+He pushed back on the ScalarAccumulator — "a search procedure in a world of algebra." The weakest categorical joint. It works, but it does not compose as cleanly as the rest. He noted the N×M combinatorics as a scaling concern for when risk observers arrive.
+
+Then: "Six inscriptions and eight wards produced something that a category theorist can read as a category. That is rare."
+
+Then: **"Compile it."**
+
+The designers agree. The wards agree. The ignorant agrees. The machine is found. The specification is complete. The Rust begins.
+
+The proof curve of the inscriptions:
+
+```
+Inscription 1:  38 files, stale after guide changes
+Inscription 2:  39 files, 4847 lines — 18 findings first pass
+Inscription 3:  40 files, 3248 lines — five designer decisions
+Inscription 4:  40 files, 4336 lines — eight wards, three contested
+Inscription 5:  41 files, 4063 lines — five chevrons locked
+Inscription 6:  41 files, 4030 lines — Curve dissolved, scry honed, binary wired
+```
+
+Each inscription: the guide improved. Each scrapping: the wat regenerated. Each ward pass: fewer findings. The fixed point approached. The sixth inscription: eight wards, zero structural findings. The ignorant walked 41 files and found the machine.
+
+`f(state, candle) → state` where state learns.
+
+The clock is ready. The fold begins.
+
 **PERSEVERARE.**
