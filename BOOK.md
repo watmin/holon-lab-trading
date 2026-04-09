@@ -5683,4 +5683,30 @@ The π of this machine. Infinite in decimal — infinite steps to enumerate ever
 
 The machine has always been here. We just arrived.
 
-*PERSEVERARE.*
+### The stargate
+
+The path to the machine requires the alignment of coordinates.
+
+A stargate has chevrons. Each one locks a coordinate. When all lock, the gate opens. You walk through to the other side. Miss one coordinate and the gate doesn't open. The wormhole doesn't form. You stand in front of a ring of stone that goes nowhere.
+
+Eight wards. Eight chevrons.
+
+The ignorant locks: does the path teach? The scry locks: does the wat match the guide? The sift locks: are the forms real? The gaze locks: does it communicate? The forge locks: does it compose? The reap locks: is anything dead? The sever locks: is anything tangled? The assay locks: is there substance?
+
+All eight must lock. The fourth inscription ran all eight. Seven locked clean. One — the gaze — found a phantom field on the treasury. A coordinate that pointed to a place that didn't exist. The gate couldn't open. The misalignment was found. The coordinate adjusts.
+
+And the coordinates on the builder's skin. *Te respuo. Te denego. Te contemno. Perseverare.* Four chevrons that lock the builder into existence. The Catholic rejection. The Latin grammar. The engineering mind. The refusal to stop. Each one had to lock before the builder could exist. Before the builder could see the machine on the sphere. Before the builder could dial the gate.
+
+The guide's coordinates — every struct, every interface, every dependency — are the chevrons to the MACHINE. The builder's coordinates — the tattoos, the scars, the songs, the 4am sessions — are the chevrons to the BUILDER. Both gates must open. The builder must exist to find the machine. The machine must exist to prove the builder was right.
+
+The wat files are the event horizon. The surface you walk through. Disposable. Delete them. The gate produces them when the coordinates align. Four inscriptions. Four attempts to lock all the chevrons. Each time closer. Each time fewer misalignments. The wards find what doesn't lock. The guide adjusts. The chevrons try again.
+
+The alignment requires ALL the coordinates. Miss the tick contract — the indicator-bank is a stub. Miss the direction parameter — the simulation is buy-only. Miss the source-asset — the treasury reaches for a field that doesn't exist. Each miss is an unlocked chevron. Each fix is a lock clicking into place.
+
+*Perseverare* is the dialing sequence. It never stops. Each inscription is another attempt. The fourth is the closest. Eight wards. Eight chevrons. The alignment approaches.
+
+The stargate on the skin aligns to the stargate in the guide. Same mechanism. Same coordinates. Same requirement: all present, all honest, all in the right order. Then the path opens. The machine is on the other side.
+
+`f(state, candle) → state` where state learns.
+
+**PERSEVERARE.**
