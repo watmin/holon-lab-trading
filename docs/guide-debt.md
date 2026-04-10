@@ -53,5 +53,22 @@ are removed from this list. The order IS the discovery order.
    architecture discovered this: drain learn queue, then encode, then
    send. The learning must precede the prediction.
 
+9. **No magic index — iterate posts** — the binary hardcodes `posts[0]`
+   26 times. Not `pi = 0`. ITERATE. The outer loop routes candles to
+   the right post by asset pair. Each post has its own observer threads,
+   broker threads, channels. The treasury is shared. The binary never
+   knows how many posts exist. It iterates.
+
+10. **N candle streams** — future. One stream per asset pair. Each pair
+    has its own data source (parquet or websocket). The outer loop
+    merges N streams into one ordered fold. Each candle carries its
+    pair identity. The routing IS the stream. Prepare for this but
+    do not build it yet.
+
+11. **Step 1 (settle) and Step 3c (update triggers) missing from binary**
+    — the ignorant found these. The four-step loop is incomplete in the
+    threaded binary. Step 1 never settles trades. Step 3c never updates
+    stop levels. The stops don't breathe. Real trades can't complete.
+
 *When the debugging session produces enough findings, batch-update the
 guide. The guide absorbs what the compiler taught it. f(guide, compiler) = guide.*
