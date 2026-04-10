@@ -70,5 +70,27 @@ are removed from this list. The order IS the discovery order.
     threaded binary. Step 1 never settles trades. Step 3c never updates
     stop levels. The stops don't breathe. Real trades can't complete.
 
+12. **ThoughtEncoder: HashMap vs LRU** — the wat says `LruCache` with
+    eviction. The Rust uses `HashMap` — grows without bound. Over 652k
+    candles this could matter. The cache needs capacity-bounded eviction.
+
+13. **Encoding lifted from observers to post** — the wat says observers
+    encode (observe-candle takes candle-window + ctx). The Rust says the
+    post encodes (market_lens_facts + ThoughtEncoder.encode in post.rs).
+    The observer receives a pre-encoded thought. Architecturally different.
+    The wat or the Rust must change — one of them is wrong.
+
+14. **MarketLens / ExitLens enums undeclared in wat** — the Rust has them
+    in enums.rs with Display impls. No wat file defines the variants.
+    The guide lists the variants but they need a wat declaration.
+
+15. **Sell-side exit ratio** — treasury.rs added Side::Sell branch with
+    inverse ratio + zero-guard for settle_triggered. More correct than
+    the wat. The wat should absorb this.
+
+16. **on_candle_batch invented** — enterprise.rs has a 120-line batch
+    method not in any wat. It changes the execution model. Should be
+    removed or specified.
+
 *When the debugging session produces enough findings, batch-update the
 guide. The guide absorbs what the compiler taught it. f(guide, compiler) = guide.*
