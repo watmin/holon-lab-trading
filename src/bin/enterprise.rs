@@ -735,7 +735,17 @@ fn main() {
 
     let n = MARKET_LENSES.len();
     let m = EXIT_LENSES.len();
-    let mut ctx_arc = Arc::new(ctx);
+    let ctx_arc = Arc::new(ctx);
+
+    // Encoder service — the cache as a pipe.
+    // 6 observer handles + 24 grid handles + 1 step-3c handle = 31
+    let n_encoder_callers = n + (n * m) + 1;
+    let (encoder_service, mut encoder_handles) =
+        enterprise::encoder_service::EncoderService::spawn(n_encoder_callers, 65536);
+    // Split handles: observers get [0..n], grid gets [n..n+n*m], step3c gets the last
+    let step3c_handle = encoder_handles.pop().unwrap();
+    let grid_handles: Vec<_> = encoder_handles.drain(n..).collect();
+    let mut obs_encoder_handles: Vec<_> = encoder_handles.drain(..).collect();
 
     type ObsInput = (enterprise::candle::Candle, Vec<enterprise::candle::Candle>, usize);
     type ObsOutput = (holon::kernel::vector::Vector, holon::memory::Prediction, f64,
@@ -786,6 +796,7 @@ fn main() {
             let mut obs = std::mem::replace(&mut observers[i], MarketObserver::new(
                 MarketLens::Momentum, 10, 500, WindowSampler::new(0, 12, 2016)));
             let ctx_ref = Arc::clone(&ctx_arc);
+            let enc_handle = obs_encoder_handles.pop().unwrap(); // each observer gets their own
             let lens = obs.lens;
             let recalib = args.recalib_interval;
 
@@ -796,9 +807,21 @@ fn main() {
                     }
                     let facts = enterprise::post::market_lens_facts_pub(&lens, &candle, &window);
                     let bundle_ast = enterprise::thought_encoder::ThoughtAST::Bundle(facts);
-                    let (thought, misses) = ctx_ref.thought_encoder.encode(&bundle_ast);
+
+                    // Cache pipe: get from encoder service
+                    let thought = match enc_handle.get(&bundle_ast) {
+                        Some(cached) => cached,
+                        None => {
+                            // Miss — compute locally using ctx
+                            let (vec, _misses) = ctx_ref.thought_encoder.encode(&bundle_ast);
+                            // Fire and forget — cache learns
+                            enc_handle.set(bundle_ast, vec.clone());
+                            vec
+                        }
+                    };
+
                     let result = obs.observe(thought, Vec::new());
-                    let _ = thought_tx.send((result.thought, result.prediction, result.edge, misses));
+                    let _ = thought_tx.send((result.thought, result.prediction, result.edge, vec![]));
                 }
                 obs
             });
@@ -992,7 +1015,17 @@ fn main() {
                 let exit_facts = enterprise::post::exit_lens_facts_pub(
                     &exit_observers[ei].lens, &enriched);
                 let exit_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(exit_facts);
-                let (exit_vec, exit_misses) = ctx_ref.thought_encoder.encode(&exit_bundle);
+
+                // Cache pipe: check encoder service
+                let exit_vec = match grid_handles[slot_idx].get(&exit_bundle) {
+                    Some(cached) => cached,
+                    None => {
+                        let (vec, _) = ctx_ref.thought_encoder.encode(&exit_bundle);
+                        grid_handles[slot_idx].set(exit_bundle, vec.clone());
+                        vec
+                    }
+                };
+                let exit_misses: Vec<(enterprise::thought_encoder::ThoughtAST, holon::kernel::vector::Vector)> = vec![];
 
                 let composed = holon::kernel::primitives::Primitives::bundle(
                     &[&market_thoughts[mi], &exit_vec]);
@@ -1079,7 +1112,14 @@ fn main() {
                     let exit_facts = enterprise::post::exit_lens_facts_pub(
                         &post.exit_observers[ei].lens, &enriched);
                     let exit_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(exit_facts);
-                    let (exit_vec, _) = ctx_ref.thought_encoder.encode(&exit_bundle);
+                    let exit_vec = match step3c_handle.get(&exit_bundle) {
+                        Some(cached) => cached,
+                        None => {
+                            let (vec, _) = ctx_ref.thought_encoder.encode(&exit_bundle);
+                            step3c_handle.set(exit_bundle, vec.clone());
+                            vec
+                        }
+                    };
                     let composed = holon::kernel::primitives::Primitives::bundle(
                         &[&market_thoughts[mi], &exit_vec]);
                     let empty_accums: Vec<enterprise::scalar_accumulator::ScalarAccumulator> = Vec::new();
@@ -1146,11 +1186,18 @@ fn main() {
         ent.posts[post_idx].registry = restored_brokers;
     } // end per-post shutdown
 
-    // Insert accumulated cache misses — the one seam.
-    // All thread Arc clones are dropped (threads joined). Arc::get_mut works.
-    if let Some(ctx_mut) = Arc::get_mut(&mut ctx_arc) {
-        ctx_mut.insert_cache_misses(accumulated_misses);
-    }
+    // Shutdown encoder service — report cache stats
+    eprintln!("  Cache: {} hits, {} misses ({:.1}% hit rate)",
+        encoder_service.hit_count(),
+        encoder_service.miss_count(),
+        if encoder_service.hit_count() + encoder_service.miss_count() > 0 {
+            100.0 * encoder_service.hit_count() as f64
+                / (encoder_service.hit_count() + encoder_service.miss_count()) as f64
+        } else { 0.0 });
+    // Drop remaining handles so the encoder thread can exit
+    drop(grid_handles);
+    drop(step3c_handle);
+    encoder_service.shutdown();
 
     // Flush remaining logs
     flush_logs(&pending_logs, &ledger);
