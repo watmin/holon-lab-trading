@@ -68,7 +68,7 @@ Vectors. Vocabulary and ThoughtEncoder are tools, not upstream producers.
 | Post → TR | Proposal (the barrage) | post assembles from broker outputs, treasury evaluates |
 | TR → EN | TreasurySettlement | settle-triggered(prices) → (Vec\<TreasurySettlement\>, Vec\<LogEntry\>) |
 | EN → Post | direction + optimal + propagation args | post-propagate(post, slot-idx, thought, outcome, weight, direction, optimal) |
-| Post → BR | propagation args | broker.propagate(thought, outcome, weight, direction, optimal, observers) |
+| Post → BR | propagation args | broker.propagate(thought, outcome, weight, direction, optimal) |
 | BR → MO | Direction + thought + weight | resolve(thought, direction, weight) |
 | BR → EO | optimal Distances + composed + weight | observe-distances(composed, optimal, weight) |
 | TR → Post | active trades for trigger update | trades-for-post(post-idx) — step 3c |
@@ -162,7 +162,7 @@ graph TD
     TD -->|trail-stop fires, exit > principal| SG2[Settled :grace — trail]
     TD -->|trail-stop fires, exit ≤ principal| SV2[Settled :violence — trail]
     TD -.->|step 3c: stop moves past break-even| RN[Runner :runner — stop widens, no swap]
-    RN -->|runner-trail fires| SG3[Settled :grace — runner]
+    RN -->|runner-trail fires| SG3[Settled :grace — runner, by construction]
     SV --> EXIT1[swap back → principal - loss → available]
     SG1 --> EXIT2[recover principal → available. Residue stays as target-asset]
     SG2 --> EXIT2
@@ -200,13 +200,15 @@ Step 3c. Every candle. The stops adapt to the current market context.
 
 ```mermaid
 graph TD
-    CD[Candle arrives] --> MO[MarketObserver encodes thought]
-    MO -->|market thought| EO[ExitObserver composes + queries reckoner]
+    CACHE[market-thoughts-cache from step 2] --> EO[ExitObserver composes + queries reckoner]
     EO -->|fresh Distances| POST[Post converts to Levels]
     POST -->|new Levels| TR[Treasury updates trade stops]
     TR -->|stops move| TRADE[Trade breathes]
-    TRADE -->|next candle| CD
+    TRADE -->|next candle| CACHE
 ```
+
+Note: step 3c reuses the market thoughts from step 2's cache — no fresh
+encoding. The exit observer composes with the cached thoughts.
 
 The exit observer's reckoner learned from every prior resolution which
 distances produced Grace. Step 3c applies that learning to active trades

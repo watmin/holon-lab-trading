@@ -59,15 +59,15 @@ vocab/exit/volatility.wat
 vocab/exit/structure.wat
 vocab/exit/timing.wat
 
-;; ── ThoughtEncoder — depends on: vocabulary ─────────────────
+;; ── ThoughtEncoder — depends on: VectorManager (holon-rs) ───
 thought-encoder.wat         ; ThoughtAST enum, ThoughtEncoder struct + encode
 
 ;; ── Ctx — depends on: thought-encoder ───────────────────────
 ctx.wat                     ; Ctx struct (thought-encoder, dims, recalib-interval)
 
-;; ── Observers — depend on: reckoner, window-sampler, distances
-market-observer.wat         ; MarketObserver struct + interface
-exit-observer.wat           ; ExitObserver struct + interface
+;; ── Observers ───────────────────────────────────────────────
+market-observer.wat         ; depends on: Reckoner, OnlineSubspace, WindowSampler
+exit-observer.wat           ; depends on: Reckoner :continuous, Distances
 
 ;; ── Paper — depends on: distances ───────────────────────────
 paper-entry.wat             ; PaperEntry struct

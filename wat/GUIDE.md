@@ -1678,6 +1678,30 @@ scalar accumulators.
 
 ---
 
+### EngramGate (depends on: Outcome enum, Reckoner, OnlineSubspace)
+
+Shared utility for gating reckoner quality. After recalibration with
+good accuracy, snapshot the discriminant into a good-state subspace.
+The subspace learns what good discriminants look like. Used by both
+MarketObserver and Broker — the fields live on those structs, the
+function lives in `engram-gate.wat`.
+
+```
+(struct engram-gate-state
+  [recalib-wins : usize]
+  [recalib-total : usize]
+  [last-recalib-count : usize])
+```
+
+**Interface:**
+- `(check-engram-gate reckoner good-state-subspace gate-state recalib-interval accuracy-threshold) → EngramGateState`
+  Called after each resolved prediction. Tracks wins/total since last
+  recalibration. When recalib-count advances and accuracy exceeds the
+  threshold, snapshots the discriminant into the good-state subspace.
+  Returns the updated gate state.
+
+---
+
 ### Simulation (depends on: Distances)
 
 Pure functions that simulate trailing stop mechanics against price
