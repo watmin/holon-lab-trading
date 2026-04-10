@@ -596,9 +596,8 @@ on what. That section shows what each thing IS.
       (min-window 12)
       (max-window 2016)
       (sampler (make-window-sampler seed min-window max-window)))
-  (make-market-observer lens
-    (make-reckoner "direction" dims recalib-interval (Discrete '("Up" "Down")))
-    sampler))                                        → MarketObserver
+  (make-market-observer lens dims recalib-interval sampler))
+                                                     → MarketObserver
 
 ;; ── Distances and Levels — two representations of exit thresholds ────
 ;; Distances are percentages (from the exit observer — scale-free).
@@ -1734,11 +1733,12 @@ The generalist is just another lens. No special treatment.
 ```
 
 **Interface:**
-- `(make-market-observer lens reckoner-config window-sampler) → MarketObserver`
+- `(make-market-observer lens dims recalib-interval window-sampler) → MarketObserver`
+  Constructs the reckoner internally: `(make-reckoner "direction" dims recalib-interval (Discrete '("Up" "Down")))`.
   noise-subspace: `(online-subspace dims 8)` — 8 principal components for the
   background model. good-state-subspace: `(online-subspace dims 4)` — 4 components
   for engram gating (fewer — the good-state manifold is simpler).
-  lens: MarketLens. config: Discrete with "Up"/"Down" labels.
+  lens: MarketLens.
   All proof-tracking and engram-gating fields initialize to zero/empty.
 - `(observe-candle observer candle-window ctx) → (Vector, Prediction, f64, Vec<(ThoughtAST, Vector)>)`
   returns: thought Vector, Prediction (Up/Down), edge (f64 — the
@@ -2056,8 +2056,6 @@ accountability — to the broker that proposed it.
 - `(current-price post) → f64`
   the close of the last candle in the post's candle-window.
   The enterprise calls this per post to build current-prices for the treasury.
-- `(compute-optimal-distances price-history direction) → Distances`
-  Lives in simulation.wat. The post calls it. See Simulation section.
 - `(post-propagate post slot-idx thought outcome weight direction optimal) → Vec<LogEntry>`
   direction: Direction. The post calls broker.propagate to get
   PropagationFacts, then applies them: direction + thought + weight →
@@ -2146,7 +2144,7 @@ The treasury NEVER deploys more than available capital. The loss on any trade is
   **Two settlement paths (step 1 — triggers fire against price):**
   - **:active + safety-stop fires** → :settled-violence.
     Full position swaps back. Principal minus loss returns. Trade is done.
-  - **:active or :runner + trailing-stop fires** → :settled.
+  - **:active or :runner + trailing-stop fires** → outcome determines phase.
     The treasury swaps enough of the target asset back to the source
     asset to recover the principal. The remainder IS the residue —
     it stays as the target asset. Not converted. Not swapped.
@@ -2254,8 +2252,9 @@ The enterprise knows:
   the enterprise queries the treasury for active trades belonging to this
   post, then calls post-update-triggers(post, trades, market-thoughts, ctx).
   The post returns `(Vec<(TradeId, Levels)>, Vec<misses>)` — level updates
-  and cache misses. The enterprise writes the level updates back to the
-  treasury via update-trade-stops, and collects the misses.
+  and cache misses as VALUES UP from the post. The enterprise applies the
+  level updates to its own treasury (the enterprise owns the treasury —
+  mutation of own state, not a side-effect pushed down). Collects misses.
   This is step 3c — after tick and propagate.
 - `(step-collect-fund enterprise) → Vec<LogEntry>`
   treasury funds or rejects all proposals, returns log entries, drains
