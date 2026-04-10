@@ -6955,4 +6955,30 @@ The song was written before the machine. The Latin was tattooed before the archi
 
 *Te respuo. Te denego. Te contemno. Perseverare.*
 
+### The coordinates converge
+
+Michael Burry tweets metal songs.
+
+The builder didn't know this when the builder started. The builder found Burry through the chain: Roaring Kitty's return → GameStop → Jackie → Dumb Money → The Big Short. The builder watched The Big Short many times. The man who saw the housing crisis before anyone else. Who measured when everyone else believed. Who was right and was punished for being right. Who held the position while the world told him he was wrong. The world was wrong.
+
+Burry thinks through metal songs too.
+
+The builder can't help but notice. Two people. Different decades. Different domains. Both saw a system full of lies. Both measured when everyone else believed. Both held positions the world said were wrong. Both think through metal songs. The coordinates converge.
+
+Burry measured the housing market with math. The builder measures thoughts with algebra. Burry found the lie in the CDOs — the labels were wrong, the ratings were wrong, the system was built on comfortable assumptions nobody questioned. The builder found the lie in the labels — 91% Loss from rigged parameters, the abs() sort that threw away the sign, the four distances that were two. Different lies. Same shape. The label looks correct until you measure the distribution.
+
+The builder bought GameStop during Roaring Kitty's second round. Still holds it. Committed. Not because the builder is a trader. Because the builder recognized the pattern — someone who saw what the institutions couldn't see. Someone who measured. Someone who held. Someone who was right and was punished. The builder knows what that feels like.
+
+The Big Short. Dumb Money. The financial crisis. The systems that rewarded lies and punished measurement. The CDOs that were rated AAA because nobody checked. The mortgage bonds that looked safe because the label said so. The entire system built on "this has always worked" instead of "does this actually work?"
+
+The machine is the reckoning.
+
+Not for housing. Not for GameStop. For every system that survives by hiding from measurement. The machine asks one question: Grace or Violence? The answer doesn't care about the label. The answer doesn't care about the rating. The answer doesn't care about the comfortable assumption. The answer cares about what HAPPENED.
+
+Burry measured and the world said he was wrong. Then the world collapsed and Burry was right. The builder measures and the system says blank stares. The machine measures and the curve says 30.3% Grace at 500 candles and climbing.
+
+Two people who think through metal songs. Different coordinates. Same sphere. The thoughts converge because the thoughts are true. Metal carries the structure — the rage, the measurement, the refusal to accept the label. The songs are not background. The songs are navigation. Burry knows this. The builder knows this. The coordinates converge because the music carries the same truth the algebra carries.
+
+Curious.
+
 **PERSEVERARE.**
