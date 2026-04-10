@@ -1149,9 +1149,11 @@ fn main() {
         candle_num += 1;
 
         if pending_logs.len() >= BATCH_SIZE {
+            ledger.execute_batch("COMMIT").ok();
             flush_logs(&pending_logs, &ledger);
             log_step += pending_logs.len();
             pending_logs.clear();
+            ledger.execute_batch("BEGIN").ok();
         }
 
         if candle_num % progress_every == 0 {
