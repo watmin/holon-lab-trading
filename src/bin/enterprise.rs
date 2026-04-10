@@ -262,7 +262,14 @@ fn init_ledger(path: &str) -> Connection {
             reason            TEXT,
             observers_updated INTEGER
         );
-",
+        CREATE TABLE IF NOT EXISTS diagnostics (
+            candle        INTEGER PRIMARY KEY,
+            throughput    REAL,
+            cache_hits    INTEGER,
+            cache_misses  INTEGER,
+            cache_hit_pct REAL,
+            equity        REAL
+        );",
     )
     .expect("failed to create ledger tables");
     conn
@@ -1156,12 +1163,10 @@ fn main() {
 
         // Logs flow through the pipe. No batching. The log service writes.
 
-        if candle_num % progress_every == 0 {
+        // Diagnostics every 10 candles — always queryable
+        if candle_num % 10 == 0 && candle_num > 0 {
             let elapsed_ms = t_start.elapsed().as_secs_f64() * 1000.0;
             let throughput = if elapsed_ms > 0.0 { candle_num as f64 * 1000.0 / elapsed_ms } else { 0.0 };
-            display_progress(&ent, candle_num, elapsed_ms);
-
-            // Diagnostic to DB — queryable while running
             log_handle.log(LogEntry::Diagnostic {
                 candle: candle_num,
                 throughput,
@@ -1169,6 +1174,12 @@ fn main() {
                 cache_misses: encoder_service.miss_count(),
                 equity: ent.treasury.total_equity(),
             });
+        }
+
+        // Progress display to stderr — less frequent
+        if candle_num % progress_every == 0 {
+            let elapsed_ms = t_start.elapsed().as_secs_f64() * 1000.0;
+            display_progress(&ent, candle_num, elapsed_ms);
         }
     }
 

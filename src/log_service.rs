@@ -57,12 +57,19 @@ impl LogService {
             // WAL mode — readers don't block on writers. The DB is always queryable.
             conn.execute_batch("PRAGMA journal_mode=WAL;").ok();
 
-            let mut stmt = conn
+            let mut log_stmt = conn
                 .prepare_cached(
                     "INSERT INTO log (kind, broker_slot_idx, trade_id, outcome, amount, duration, reason, observers_updated)
                      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                 )
                 .expect("failed to prepare log insert");
+
+            let mut diag_stmt = conn
+                .prepare_cached(
+                    "INSERT OR REPLACE INTO diagnostics (candle, throughput, cache_hits, cache_misses, cache_hit_pct, equity)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                )
+                .expect("failed to prepare diagnostics insert");
 
 
             loop {
@@ -74,7 +81,7 @@ impl LogService {
                     loop {
                         match drains[i].try_recv() {
                             Ok(entry) => {
-                                write_entry(&mut stmt, &entry);
+                                write_entry(&mut log_stmt, &mut diag_stmt, &entry);
                                 rows_clone.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                                 did_work = true;
                             }
@@ -123,24 +130,28 @@ impl LogService {
     }
 }
 
-fn write_entry(stmt: &mut rusqlite::CachedStatement, entry: &LogEntry) {
+fn write_entry(
+    log_stmt: &mut rusqlite::CachedStatement,
+    diag_stmt: &mut rusqlite::CachedStatement,
+    entry: &LogEntry,
+) {
     match entry {
         LogEntry::ProposalSubmitted { broker_slot_idx, .. } => {
-            stmt.execute(params![
+            log_stmt.execute(params![
                 "ProposalSubmitted", *broker_slot_idx as i64,
                 None::<i64>, None::<String>, None::<f64>,
                 None::<i64>, None::<String>, None::<i64>
             ]).ok();
         }
         LogEntry::ProposalFunded { trade_id, broker_slot_idx, amount_reserved } => {
-            stmt.execute(params![
+            log_stmt.execute(params![
                 "ProposalFunded", *broker_slot_idx as i64,
                 trade_id.0 as i64, None::<String>, *amount_reserved,
                 None::<i64>, None::<String>, None::<i64>
             ]).ok();
         }
         LogEntry::ProposalRejected { broker_slot_idx, reason } => {
-            stmt.execute(params![
+            log_stmt.execute(params![
                 "ProposalRejected", *broker_slot_idx as i64,
                 None::<i64>, None::<String>, None::<f64>,
                 None::<i64>, reason, None::<i64>
@@ -151,7 +162,7 @@ fn write_entry(stmt: &mut rusqlite::CachedStatement, entry: &LogEntry) {
                 Outcome::Grace => "Grace",
                 Outcome::Violence => "Violence",
             };
-            stmt.execute(params![
+            log_stmt.execute(params![
                 "TradeSettled", None::<i64>, trade_id.0 as i64,
                 outcome_str, *amount, *duration as i64,
                 None::<String>, None::<i64>
@@ -162,25 +173,26 @@ fn write_entry(stmt: &mut rusqlite::CachedStatement, entry: &LogEntry) {
                 Outcome::Grace => "Grace",
                 Outcome::Violence => "Violence",
             };
-            stmt.execute(params![
+            log_stmt.execute(params![
                 "PaperResolved", *broker_slot_idx as i64,
                 None::<i64>, outcome_str, None::<f64>,
                 None::<i64>, None::<String>, None::<i64>
             ]).ok();
         }
         LogEntry::Propagated { broker_slot_idx, observers_updated } => {
-            stmt.execute(params![
+            log_stmt.execute(params![
                 "Propagated", *broker_slot_idx as i64,
                 None::<i64>, None::<String>, None::<f64>,
                 None::<i64>, None::<String>, *observers_updated as i64
             ]).ok();
         }
         LogEntry::Diagnostic { candle, throughput, cache_hits, cache_misses, equity } => {
-            stmt.execute(params![
-                "Diagnostic", *candle as i64,
-                None::<i64>, None::<String>, *throughput,
-                *cache_hits as i64, format!("misses={} equity={:.2}", cache_misses, equity),
-                *cache_misses as i64
+            let hit_pct = if *cache_hits + *cache_misses > 0 {
+                100.0 * *cache_hits as f64 / (*cache_hits + *cache_misses) as f64
+            } else { 0.0 };
+            diag_stmt.execute(params![
+                *candle as i64, throughput, *cache_hits as i64,
+                *cache_misses as i64, hit_pct, equity
             ]).ok();
         }
     }
