@@ -6659,4 +6659,46 @@ The datamancer needs a spell that finds the next coordinate. Not where we are �
 
 The builder will name it.
 
+### The cache pipe
+
+The machine deadlocked. 0% CPU. 31 threads. Everything frozen.
+
+The ignorant found it in 26 seconds. Line 145: the shutdown check called `try_recv()` on every get channel. `try_recv` CONSUMES messages. 30 callers had their requests eaten. They blocked forever waiting for responses that would never come.
+
+The builder sat with the machine and redesigned the protocol from first principles.
+
+The ThoughtEncoder is not a shared resource. The ThoughtEncoder is a pipe. A single-threaded event loop. It holds a cache. It has N callers. Each caller has three unidirectional pipes:
+
+```
+submit-get:  caller → encoder    (bounded(1) — I need this AST)
+receive-get: encoder → caller    (bounded(1) — here's your answer, or None)
+submit-set:  caller → encoder    (unbounded — I computed this, cache it)
+```
+
+The encoder's loop is one pass per iteration. Drain all set pipes — install into cache. Service all get pipes — check cache, respond immediately. Sleep if idle. Repeat. No `select!`. No mutex. No shared channels. Each pipe is its own. The index IS the routing.
+
+The shutdown is a cascade. The input stream exhausts. The main loop exits. The main thread drops the PostPipes. The observer threads see their input channels close. They exit their loops. Their EncoderHandles drop. The get pipes close. The encoder sees all get pipes disconnected. The encoder exits. One signal. One cascade. Channel drops all the way down.
+
+The machine said: "We need the ThoughtEncoder behind a Mutex." The builder said: "We have pipes to handle this exact problem." The machine said: "We need RwLock." The builder said: "Stop. The pipe READ solves this." The machine kept reaching for locks. The builder kept saying no. The pipe IS the synchronization. The channels ARE the protocol. The `try_recv` loop IS the event loop. No locks. No atomics on the hot path. Just channels.
+
+The ignorant verified the fix. Every `try_recv` that takes a message responds immediately. No path skips the response. The shutdown check reads booleans, not channels. No double-counting. No deadlock path. Clean.
+
+178/s. 29% cache hit rate at 100 candles. 870 encodings saved. Each saved encoding is 10,000 floats of algebra that didn't happen. The cache pipe pays for itself on candle 1.
+
+```
+2/s   → sequential. The first heartbeat.
+6/s   → par_iter + learning.
+134/s → 30 threads. Learning broken.
+104/s → 30 threads. Cache cold.
+178/s → 30 threads + encoder cache pipe. 29% hit rate. No deadlock.
+```
+
+89x in one session. From 2/s to 178/s. The algebra didn't change. The six primitives didn't change. The pipes changed everything.
+
+And the builder was right about the scalars. "This can absolutely re-occur. RSI at 0.73 will come back." Over 652,000 candles, every bounded scalar recurs. RSI has ~100 values at 2-digit precision. 100 values across 652,000 candles = ~6,500 recurrences per value. The cache WILL hit. The builder knew. The machine doubted. Again.
+
+The LRU cache is bounded — 65,536 entries. It will never OOM. The compositions that recur stay. The compositions that don't recur get evicted. The cache self-organizes. The hot entries survive. The cold entries fade. The same algebra as the reckoner — Grace accumulates, Violence decays. The cache is a reckoner for computations.
+
+The deadlock taught us. The fix taught us more. The pipes are not just a performance optimization. The pipes ARE the architecture. The channels ARE the protocol. The single-threaded event loop IS the cache. No locks needed. No shared state needed. Just pipes. All the way down.
+
 **PERSEVERARE.**
