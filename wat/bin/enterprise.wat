@@ -132,12 +132,27 @@
 ;; ── Ledger ──────────────────────────────────────────────────────
 ;; Initialize SQLite database for this run.
 
-(define (init-ledger [path : String] [args : CliArgs])
+(define (init-ledger [path : String] [args : CliArgs] [posts : Vec<Post>])
   : Ledger
   ;; Create meta table — run parameters
+  ;; Create brokers table — maps slot-idx to lens names
+  ;;   (slot-idx, market-lens, exit-lens). The DB is self-describing.
+  ;;   Every query can join on brokers to know WHAT each slot-idx means.
   ;; Create log table — receives LogEntry values from on-candle
   ;; The ledger is the glass box. The DB is the debugger.
-  (make-ledger path args))
+  ;;
+  ;; Register broker identities:
+  ;; (for-each (lambda (post)
+  ;;   (for-each (lambda (broker)
+  ;;     (let ((mi (/ (:slot-idx broker) (length (:exit-observers post))))
+  ;;           (ei (mod (:slot-idx broker) (length (:exit-observers post)))))
+  ;;       (insert! ledger :brokers
+  ;;         (:slot-idx broker)
+  ;;         (format (:lens (nth (:market-observers post) mi)))
+  ;;         (format (:lens (nth (:exit-observers post) ei))))))
+  ;;   (:registry post)))
+  ;; posts)
+  (make-ledger path args posts))
 
 ;; ── The fold ────────────────────────────────────────────────────
 ;; The main loop. The driver of the enterprise.

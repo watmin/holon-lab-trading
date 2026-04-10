@@ -244,6 +244,11 @@ fn init_ledger(path: &str) -> Connection {
             key   TEXT PRIMARY KEY,
             value TEXT
         );
+        CREATE TABLE IF NOT EXISTS brokers (
+            slot_idx      INTEGER PRIMARY KEY,
+            market_lens   TEXT NOT NULL,
+            exit_lens     TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS log (
             step              INTEGER PRIMARY KEY AUTOINCREMENT,
             kind              TEXT NOT NULL,
@@ -258,6 +263,20 @@ fn init_ledger(path: &str) -> Connection {
     )
     .expect("failed to create ledger tables");
     conn
+}
+
+fn register_brokers(conn: &Connection, post: &enterprise::post::Post) {
+    let mut stmt = conn
+        .prepare("INSERT INTO brokers (slot_idx, market_lens, exit_lens) VALUES (?1, ?2, ?3)")
+        .expect("failed to prepare broker insert");
+    let m = post.exit_observers.len();
+    for broker in &post.registry {
+        let mi = broker.slot_idx / m;
+        let ei = broker.slot_idx % m;
+        let market_name = format!("{}", post.market_observers[mi].lens);
+        let exit_name = format!("{}", post.exit_observers[ei].lens);
+        stmt.execute(rusqlite::params![broker.slot_idx as i64, market_name, exit_name]).ok();
+    }
 }
 
 fn flush_logs(logs: &[LogEntry], conn: &Connection) {
@@ -670,6 +689,8 @@ fn main() {
             stmt.execute(params![k, v]).ok();
         }
     }
+    // Register broker lens names
+    register_brokers(&ledger, &ent.posts[0]);
     eprintln!("  Run database: {}", ledger_path);
 
     // ─ Loop config ─
