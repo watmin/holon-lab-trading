@@ -92,5 +92,24 @@ are removed from this list. The order IS the discovery order.
     method not in any wat. It changes the execution model. Should be
     removed or specified.
 
+## Performance findings (from hot path audit)
+
+17. **to_f64 allocates 80KB per call, 60 calls per candle** — 4.8MB/candle
+    of heap allocations immediately discarded. The i8→f64→i8 round-trip
+    through OnlineSubspace. Fix: accept &[i8] directly or pre-allocate buffer.
+
+18. **Window cloned 7 times per candle** — up to 2016 candles x 7 copies.
+    Fix: Arc<Vec<Candle>> shared across observer threads.
+
+19. **ThoughtEncoder cache never warmed** — ctx behind Arc, misses collected
+    but never inserted during the run. Every encoding recomputes. Fix:
+    insert misses between candles (the seam the design specified).
+
+20. **bind() and bundle() not SIMD** — only cosine uses simsimd. The two
+    most-called primitives are scalar loops over 10K i8 elements.
+
+21. **from_f64 after every noise strip** — 30 × 80KB allocations per candle.
+    anomalous_component returns Vec<f64>, then Vector::from_f64 allocates again.
+
 *When the debugging session produces enough findings, batch-update the
 guide. The guide absorbs what the compiler taught it. f(guide, compiler) = guide.*
