@@ -48,8 +48,8 @@ Vectors. Vocabulary and ThoughtEncoder are tools, not upstream producers.
 | **Vocabulary** | pure functions, no state | Vec\<ThoughtAST\> — data, not execution |
 | **ThoughtEncoder** | atoms (permanent dict) + compositions (LRU cache, eventually-consistent via returned misses) | Vector from AST |
 | **MarketObserver ×N** | lens (MarketLens), reckoner :discrete (Up/Down, curve internal), noise-subspace, window-sampler, engram gate | (Vector, Prediction, edge, misses\*) |
-| **ExitObserver ×M** | lens (ExitLens), 4× reckoner :continuous (trail, stop, tp, runner-trail), default-distances | (Distances, experience) via cascade + misses\* |
-| **Broker ×N×M** | reckoner :discrete (Grace/Violence, curve internal), noise-subspace, papers (deque), 4× scalar-accumulator, engram gate | Prediction + edge() |
+| **ExitObserver ×M** | lens (ExitLens), 2× reckoner :continuous (trail, stop), default-distances | (Distances, experience) via cascade + misses\* |
+| **Broker ×N×M** | reckoner :discrete (Grace/Violence, curve internal), noise-subspace, papers (deque), 2× scalar-accumulator, engram gate | Prediction + edge() |
 | **Post** | indicator-bank, candle-window, market-observers, exit-observers, registry | Vec\<Proposal\> + Vec\<Vector\> + misses\* |
 | **Treasury** | available ◄──► reserved, trades, trade-origins, next-trade-id | TreasurySettlement on settle |
 | **Enterprise** | posts, treasury, market-thoughts-cache | (Vec\<LogEntry\>, misses\*) per candle |
@@ -158,39 +158,33 @@ graph TD
     TR -->|fund| AV[available → reserved]
     AV --> TD[Trade :active]
     TD -->|safety-stop fires| SV[Settled :violence]
-    TD -->|take-profit fires| SG1[Settled :grace — TP]
-    TD -->|trail-stop fires, exit > principal| SG2[Settled :grace — trail]
+    TD -->|trail-stop fires, exit > principal| SG[Settled :grace]
     TD -->|trail-stop fires, exit ≤ principal| SV2[Settled :violence — trail]
-    TD -.->|step 3c: stop moves past break-even| RN[Runner :runner — stop widens, no swap]
-    RN -->|runner-trail fires| SG3[Settled :grace — runner, by construction]
+    TD -.->|step 3c: trail passes break-even| RN[Runner :runner — same trail, no swap]
+    RN -->|trail-stop fires| SG
     SV --> EXIT1[swap back → principal - loss → available]
-    SG1 --> EXIT2[recover principal → available. Residue stays as target-asset]
-    SG2 --> EXIT2
-    SG3 --> EXIT2
+    SG --> EXIT2[recover principal → available. Residue stays as target-asset]
     SV2 --> EXIT1
     TR -->|reject| DR[drained]
 ```
 
 Note: dashed arrow (-.->|step 3c|) is the runner TRANSITION — a stop-
-management event in step 3c, not a settlement trigger. Solid arrows
-are settlement triggers that fire in step 1.
+management event in step 3c, not a settlement trigger. The trail
+continues to breathe — same distance, same reckoner. No separate
+runner-trail distance. Solid arrows are settlement triggers (step 1).
 
 The treasury funds proven proposals. Capital moves from available to
 reserved. The trade is :active. One entry swap, one exit swap. Two
-swaps total. The runner is NOT a swap — the stop widens. The trade
+swaps total. The runner is NOT a swap — the trail continues. The trade
 rides until exit. Each swap costs `swap-fee + slippage`.
 - **Safety-stop fires** → :settled-violence. Full position swaps back.
   Principal minus loss returns. Bounded by reservation.
-- **Take-profit fires** → :settled-grace. Price reached the TP level.
-  Principal recovers, residue stays as target asset.
-- **Trailing-stop fires on :active** → outcome depends on exit vs principal.
+- **Trailing-stop fires** → outcome depends on exit vs principal.
   Exit > principal → :settled-grace (residue is permanent gain).
   Exit ≤ principal → :settled-violence (loss bounded by reservation).
-- **Step 3c: stop moves past break-even** → :runner transition. No swap.
-  No exit. The trailing stop WIDENS. The trade continues. Zero effective
-  risk — exit would recover the principal.
-- **Runner-trail fires** → :settled-grace. Full position swaps back.
-  Treasury splits proceeds: principal returns, residue is permanent gain.
+- **Step 3c: trail passes break-even** → :runner transition. No swap.
+  No exit. The trail continues to breathe via step 3c. The trade
+  continues. Zero effective risk — exit would recover the principal.
 
 ---
 
@@ -219,9 +213,9 @@ stop moves. The trade breathes.
 
 This IS the value extraction mechanism. Not set-and-forget. Continuous
 adaptation. The trade captures as much residue as the market will give,
-bounded by the learned distances. The runner's wider stop is learned
-by the fourth reckoner (runner-trail) — wider because losing house
-money costs nothing.
+bounded by the learned distances. The runner uses the same trail —
+the reckoner adapts to the current market context through the composed
+thought. No separate runner distance.
 
 ---
 
@@ -238,7 +232,7 @@ graph TD
     SA -->|empty| DEF[default crutch]
 ```
 
-For each distance (trail, stop, tp, runner-trail): try the contextual answer first
+For each distance (trail, stop): try the contextual answer first
 (reckoner — "for THIS thought, what distance?"). If inexperienced, try the
 global answer (scalar accumulator — "what does Grace prefer for this pair
 overall?"). If empty, use the crutch (the default value from construction).
