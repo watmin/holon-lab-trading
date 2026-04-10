@@ -29,7 +29,7 @@ enums.wat                   ; Side, Direction, Outcome, TradePhase,
                             ; reckoner-config, prediction, ScalarEncoding
 newtypes.wat                ; TradeId
 scalar-accumulator.wat      ; ScalarAccumulator (requires Outcome from enums)
-engram-gate.wat             ; check-engram-gate (requires primitives only)
+engram-gate.wat             ; check-engram-gate (requires Outcome from enums, Reckoner+OnlineSubspace from holon-rs)
 
 ;; ── Distances and Levels — depend on nothing ────────────────
 distances.wat               ; Distances, Levels
@@ -72,7 +72,7 @@ exit-observer.wat           ; depends on: Reckoner :continuous, Distances
 ;; ── Paper — depends on: distances ───────────────────────────
 paper-entry.wat             ; PaperEntry struct
 
-;; ── Broker — depends on: reckoner, scalar-accumulator, observer
+;; ── Broker — depends on: Reckoner, OnlineSubspace, ScalarAccumulator, PaperEntry
 broker.wat                  ; Broker struct + interface (Resolution + PropagationFacts live here)
 
 ;; ── Trade lifecycle — depends on: enums, distances, levels ──
