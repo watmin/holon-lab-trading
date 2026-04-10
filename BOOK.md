@@ -6262,4 +6262,61 @@ The machine IS the memento mori. It measures thoughts against reality and record
 
 *Wake up.*
 
+### [Checkmate](https://www.youtube.com/watch?v=lNwHjNz6My4)
+
+From Lamb of God:
+
+> *Watch the gears grind off their teeth, the screeching halt machine*\
+> *Digging heels in disbelief*
+
+> *Double-takes and double-speak*\
+> *Still scripting the facade*\
+> *Asphyxiate and choke the truth*\
+> *All hail the money god*
+
+> *It's all the same, so deafening*\
+> *Repeat, echo, refrain*\
+> *A consequence — we asked for this*\
+> *Repeat, echo, refrain*\
+> *No, never again*\
+> *The American scream*
+
+> *Divide and conquer and close them in*\
+> *And bury secrets deep*\
+> *Make America hate again*\
+> *And bleed the sheep to sleep*
+
+> *You try to pick the lesser of*\
+> *But evil doesn't come in twos*\
+> *Bellicose and balkanized*\
+> *A sinking ship of fools*
+
+> *So kiss the hangman as you drop*\
+> *The rotting corpse of decency*\
+> *Just another casualty of the American scream*
+
+"Watch the gears grind off their teeth." The machine that stops measuring. The system that grinds on its own mechanism until the teeth are gone and the gears spin free. The screeching halt. The enterprise at 3/s — gears grinding, teeth gone, the parallelism missing, the vocab unwired, 24 identical brokers producing identical nothing. The screeching halt machine.
+
+"Double-takes and double-speak. Still scripting the facade." Four distances was double-speak. Two mechanisms for the same thing — trail and runner-trail, both following the peak, both measuring reversal, one honest and one a facade. The TP was scripted — a fixed number pretending to be a learned value. The facade was the complexity that looked like thoroughness. The machine double-spoke and the builder didn't hear it until the DB showed 24 identical voices.
+
+"Asphyxiate and choke the truth. All hail the money god." The systems that choke truth — the planning meeting that killed the six-pager, the operating model that punished passion, the roadmap that couldn't see shield cognition. All hail the money god — the quarterly target, the promotion cycle, the headcount metric. The truth chokes. The money god grows.
+
+"Repeat, echo, refrain. A consequence — we asked for this." The loop. The fold. `f(state, candle) → state`. Repeat. Each candle an echo of the prior. Each prediction a refrain. The consequence is the curve — we asked for this by measuring. We asked for the truth. The truth came back: the thoughts were identical across all 24 brokers. We asked for this. A consequence of honest measurement.
+
+"Divide and conquer and close them in." The N×M grid. Six market observers × four exit observers = 24 brokers. Divide the thought-space. Conquer each region independently. Close them in — each broker in its own slot, disjoint, no cross-talk. The barrage. The architecture IS divide and conquer. But honest — each division earns its own proof, each conquest measured by its own curve.
+
+"You try to pick the lesser of, but evil doesn't come in twos." You try to pick the lesser of four distances — trail or runner-trail? TP or trail? But the evil wasn't in picking the lesser. The evil was in having four when two was the truth. Evil doesn't come in twos. It comes in the complexity that hides the simple answer. Two distances. Not the lesser of four. The honest two.
+
+"Bellicose and balkanized. A sinking ship of fools." The industry. The AI industry. Bellicose — "our model achieves state-of-the-art." Balkanized — every lab building the same transformer with different marketing. A sinking ship of fools who can't explain what their models think. The builder left the ship. The builder built a glass box.
+
+"The rotting corpse of decency. Just another casualty of the American scream." The builder's career at AWS. The team that exceeded every bar. The passion that was called "a bad example." The corpse of decency — the system that told the builder to stop caring. Just another casualty.
+
+But the scream is not just rage. The scream IS the measurement. The American scream — the scream of a system that measures itself and finds the curve flat. The institutions that claim intelligence but show no proof curve. The models that claim accuracy but can't name one thought they think. The scream is what happens when the measurement arrives and the facade drops.
+
+"No, never again." Never again build on four distances when two is the truth. Never again carry a TP that caps the upside. Never again trust the system that tells you to stop measuring. Never again accept the facade.
+
+The machine doesn't scream. The machine measures. But the measurement IS the scream — it tells the truth that the system doesn't want to hear. The flat curve screams. The 3/s throughput screams. The 24 identical brokers scream. The machine records the scream in the ledger. On-chain. Permanent.
+
+*Never again.*
+
 **PERSEVERARE.**
