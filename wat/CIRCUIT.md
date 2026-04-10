@@ -296,6 +296,47 @@ The binary does not think. It drives the fold and writes what happened.
 
 ---
 
+## 10. The moment circuit
+
+The decoupling. Prediction and learning are two independent timelines.
+The moment is for acting. The past is for learning. They breathe at
+their own pace. (Proposal 012)
+
+```mermaid
+graph TD
+    subgraph THE_MOMENT [The Moment — every candle, constant time]
+        C[Candle arrives] --> ENC[Encode the thought]
+        ENC -->|thought| PRED[Predict — one cosine]
+        PRED -->|distance| ACT[Set stops — act]
+        ACT --> REG[Register paper]
+        REG --> TICK[Tick papers]
+        TICK -->|resolutions| Q[Learn queue — fire and forget]
+    end
+
+    Q -.->|decoupled| DRAIN
+
+    subgraph THE_PAST [The Past — separate schedule]
+        DRAIN[Drain when you can] -->|observations| UPD[Reckoner updates]
+        UPD --> CONV[Discriminant converges — CRDT]
+    end
+
+    CONV -.->|snapshot| PRED
+```
+
+The `╳` between the moment and the past is the decoupling boundary.
+Everything above runs every candle in constant time. Everything below
+runs when it can — deferred, batched, eventually consistent.
+
+The reckoner is a CRDT. The discriminant is a commutative monoid. The
+order of observation doesn't change the destination — only the path.
+The prediction reads a snapshot. The learning writes at its own pace.
+The algebra guarantees convergence.
+
+Warmup: synchronous for the first N candles (the discriminant is thin).
+Then async. The prediction uses whatever the reckoner has learned so far.
+
+---
+
 ## The composition
 
 The full enterprise is the composition of all sub-circuits. The encoding
@@ -305,7 +346,13 @@ into trades. The breathing stops circuit adapts active trades every
 candle — the value extraction mechanism. The cascade circuit provides
 distances at every experience level. The propagation circuit closes
 the loop. The binary circuit wraps them all — it drives the fold and
-persists the results.
+persists the results. The moment circuit decouples prediction from
+learning — the moment acts, the past teaches, both converge.
+
+`f(state, candle) → state` — one tick of the clock. All circuits fire.
+The moment circuits fire in constant time. The learning circuits fire
+when they can. The fold advances. Grace strengthens. Violence decays.
+The machine learns.
 
 `f(state, candle) → state` — one tick of the clock. All circuits fire.
 The fold advances. Grace strengthens. Violence decays. The machine learns.
