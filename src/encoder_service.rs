@@ -20,21 +20,21 @@ use crate::thought_encoder::ThoughtAST;
 
 /// A caller's pipe set. One per thread. Moved into the thread.
 pub struct EncoderHandle {
-    get_tx: Sender<ThoughtAST>,
-    get_rx: Receiver<Option<Vector>>,
-    set_tx: Sender<(ThoughtAST, Vector)>,
+    lookup: Sender<ThoughtAST>,
+    answer: Receiver<Option<Vector>>,
+    install: Sender<(ThoughtAST, Vector)>,
 }
 
 impl EncoderHandle {
-    /// Blocking get. Sends AST, waits for Some(Vector) or None.
+    /// Blocking lookup. Sends AST, waits for Some(Vector) or None.
     pub fn get(&self, ast: &ThoughtAST) -> Option<Vector> {
-        let _ = self.get_tx.send(ast.clone());
-        self.get_rx.recv().unwrap()
+        let _ = self.lookup.send(ast.clone());
+        self.answer.recv().unwrap()
     }
 
     /// Fire and forget. Cache learns.
     pub fn set(&self, ast: ThoughtAST, vec: Vector) {
-        let _ = self.set_tx.send((ast, vec));
+        let _ = self.install.send((ast, vec));
     }
 }
 
@@ -59,19 +59,19 @@ impl EncoderService {
         // When handles drop, channels close, cascade flows.
 
         for _ in 0..n_callers {
-            let (get_tx, get_rx) = channel::bounded::<ThoughtAST>(1);
-            let (resp_tx, resp_rx) = channel::bounded::<Option<Vector>>(1);
-            let (set_tx, set_rx) = channel::unbounded::<(ThoughtAST, Vector)>();
+            let (lookup_send, lookup_recv) = channel::bounded::<ThoughtAST>(1);
+            let (answer_send, answer_recv) = channel::bounded::<Option<Vector>>(1);
+            let (install_send, install_recv) = channel::unbounded::<(ThoughtAST, Vector)>();
 
             handles.push(EncoderHandle {
-                get_tx,
-                get_rx: resp_rx,
-                set_tx,
+                lookup: lookup_send,
+                answer: answer_recv,
+                install: install_send,
             });
 
-            get_rxs.push(get_rx);
-            resp_txs.push(resp_tx);
-            set_rxs.push(set_rx);
+            get_rxs.push(lookup_recv);
+            resp_txs.push(answer_send);
+            set_rxs.push(install_recv);
         }
 
         let hits = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));

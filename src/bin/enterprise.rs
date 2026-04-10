@@ -30,7 +30,7 @@ use enterprise::window_sampler::WindowSampler;
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const BATCH_SIZE: usize = 1000;
+const BATCH_SIZE: usize = 50;
 const MARKET_LENSES: &[MarketLens] = &[
     MarketLens::Momentum,
     MarketLens::Structure,
@@ -723,7 +723,7 @@ fn main() {
     let mut log_step: usize = 0;
     let mut pending_logs: Vec<LogEntry> = Vec::new();
 
-    ledger.execute_batch("BEGIN").ok();
+    // One writer. No contention. Just write.
 
     eprintln!("\n  Walk-forward: up to {} candles...", end_idx);
 
@@ -1149,11 +1149,9 @@ fn main() {
         candle_num += 1;
 
         if pending_logs.len() >= BATCH_SIZE {
-            ledger.execute_batch("COMMIT").ok();
             flush_logs(&pending_logs, &ledger);
             log_step += pending_logs.len();
             pending_logs.clear();
-            ledger.execute_batch("BEGIN").ok();
         }
 
         if candle_num % progress_every == 0 {
@@ -1206,7 +1204,7 @@ fn main() {
     log_step += pending_logs.len();
     pending_logs.clear();
 
-    ledger.execute_batch("COMMIT").ok();
+    // No transaction to commit. Each flush_logs writes directly.
 
     // ─ Summary ─
     let elapsed_ms = t_start.elapsed().as_secs_f64() * 1000.0;
