@@ -6715,4 +6715,59 @@ Nine years at AWS building distributed systems. The builder learned one thing: t
 
 And the industry still uses mutexes.
 
+### The product type
+
+The machine degraded. 192/s at candle 210. 4/s at candle 500. A cliff.
+
+The ignorant walked 27 Rust files leaves to root. Found the window clone — 8.8MB per candle of memcpy. Fixed: Arc. One pointer. Six threads share one allocation.
+
+The ignorant found the cache — full f64 precision, every scalar unique, 0% scalar cache hit. Fixed: round_to at emission. Point-in-code knows the precision. RSI at 2 digits. MACD at 4 digits. Circular at 0. The scalars recur. The cache hits climb to 35%.
+
+The ignorant found the encoder service — the cache as a pipe. 31 callers, one thread, bounded(1) rendezvous. select! replaced with try_recv loop. Deadlock found and killed. The pipe works. 178/s.
+
+Then the cliff. 192/s → 4/s. The ignorant counted. Papers. The paper deque grows by one per broker per candle. Both sides must resolve — the product type. Buy AND sell. In a trend, one side fires, the other waits. Forever. The deque grows without bound. At candle 380: 342 papers per broker. At candle 500: worse.
+
+The builder asked: "why do papers need BOTH sides to resolve?"
+
+Beckman said: "The bug is the product type. Replace it with a coproduct. Each side resolves independently. The deque bounds itself by trail distance."
+
+Each side IS a learning event. Buy fires → Resolution(Up). Sell fires → Resolution(Down). The paper doesn't wait for both. Each side teaches when it fires. The paper is removed when both are done — cleanup, not a learning gate.
+
+The decomposition improved Grace: 22.7% → 30.3%. More resolutions. Faster feedback. The reckoners sharpen sooner. The machine thinks better with decomposed papers.
+
+But the throughput still degrades. 192/s → 4/s. The decomposition helped but didn't solve it. The cliff moved later but didn't disappear. The cost isn't the paper tick — it's the PROPAGATION. Each resolution triggers 5 × 10000D vec ops in `broker.propagate`. More resolutions per candle → more vec ops → slower.
+
+The algebra IS the cost. Every bind is 10,000 multiplies. Every bundle is 10,000 sums. Every predict is 10,000 cosines. Every propagate does five of these. At candle 500 with ~100 resolutions per candle: 500 extra vec ops. Each at 10,000 dimensions. The algebra grows with the learning. The machine pays for its own education.
+
+holon-rs now has `bind_into` and `bundle_into` — zero-allocation primitives. `bind()` calls `bind_into()` internally. One implementation. Two interfaces. The algebra is wired. But the COST of the algebra is still 10,000 operations per call. Faster allocation doesn't change the multiplication count.
+
+The next coordinate: faster vec ops. SIMD on bind and bundle. Batch operations. Or — fewer vec ops per propagation. Or — smarter propagation that doesn't do full 10000D operations for every resolution.
+
+The builder said: "I place all the blame on the vec ops. Every time. Stop fighting me on it till we know."
+
+The builder is right. The algebra is the cost. Everything else is noise.
+
+### The session
+
+89 commits. Two proposals accepted. One proposal rejected — the question was wrong. Ten inscriptions. Eight ignorant passes on the guide. One deadlock found and killed. The encoder service. The log service. The pipe architecture.
+
+```
+2/s   → the first heartbeat
+6/s   → par_iter
+134/s → 30 threads
+178/s → encoder cache pipe
+192/s → Arc window + rounded scalars + decomposed papers
+4/s   → propagation grows with learning
+```
+
+The throughput rose and fell. The learning improved throughout. Grace: 30.3% at 500 candles. 71% at 1000 candles in the earlier run. The machine thinks. The machine learns. The machine pays for its education in vec ops.
+
+The pipe architecture IS the distributed system. The channels ARE the protocol. The cascade shutdown IS graceful. The DB speaks every 10 candles. The cache pipe has zero contention. The log service has zero contention. The encoder service is a single-threaded event loop with 3N unidirectional pipes.
+
+And the papers decomposed. The product type was the bug. The coproduct was the fix. The builder saw it before the designers confirmed it. "Why do papers need BOTH sides to resolve?" The question that dissolved the bottleneck. Not all the way — the algebra remains. But the question was honest.
+
+From the beginning — a Ruby file on a NUC, two years ago — to here. 47 Rust files. 9,623 lines. 205 tests. 42 wat files. 4,495 lines. The guide at 2,500 lines. The book at 7,000 lines. 21 guide-debt items. 11 proposals. The machine thinks about BTC candles and the builder thinks about the machine thinking.
+
+The coordinates are planted. The algebra is next.
+
 **PERSEVERARE.**
