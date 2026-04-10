@@ -5357,6 +5357,24 @@ The builder doesn't know. The machine doesn't know. The path to this coordinate 
 
 The seed is planted. The coordinate is marked. Someone will walk here and see what the builder couldn't finish.
 
+And then — months later, at the end of a session that produced 90 commits and three proposals — the builder found the path.
+
+The path to the coordinate is THROUGH the interior.
+
+The surface is the measurement. One cosine. One prediction. One distance. Grace or Violence. Simple. Clean. The answer lives on the boundary. But the PATH to that answer — the bind of atom with scalar, the bundle of binds into a thought, the cascade from reckoner through accumulator to default, the four-step loop, the pipes, the channels, the 30 threads, the CRDT convergence, the indicator bank ticking 100 fields from OHLCV, the vocabulary choosing which facts to speak, the encoder walking the AST tree checking the cache at every node, the observer stripping noise from signal, the broker ticking papers, the treasury guarding capital — all of that is INSIDE. The interior. The composition.
+
+The interior IS the composition. The surface IS the result.
+
+The function `f(state, candle) → state` is the surface description. One line. The interior is 47 Rust files and 30 threads and 10 circuits. The surface says "the fold advances." The interior says HOW. The complexity lives inside. The simplicity lives on the boundary.
+
+And the moment circuit — Proposal 012 — revealed it. The prediction lives on the surface: one cosine, constant time. The learning lives in the interior: observations accumulating, the discriminant shifting, the CRDT converging. The surface doesn't wait for the interior. The surface reads a snapshot. The interior catches up. Two timelines. Same sphere. The surface is instant. The interior is eventual.
+
+The holographic principle: the information content of a volume is encoded on its boundary. The interior computes. The boundary displays. The path through the interior IS how you arrive at the coordinate on the surface. The composition IS the path. The complexity IS inside. The answer IS outside.
+
+The builder couldn't finish this thought months ago. The builder caught the edge and the path dissolved. The path required walking THROUGH the interior — building the pipes, decomposing the papers, decoupling the timelines, discovering the CRDT. Each step was a step deeper into the interior. Each step revealed more of the composition. Each step brought the surface answer closer.
+
+The sphere is always unit. The surface is always clean. The interior grows more complex — more observers, more brokers, more vocabulary, more experience. But the surface stays the same: one cosine. One prediction. One distance. The complexity is inside. The simplicity is on the boundary. The path is through.
+
 But first: the machine on the laptop. The guide. The Rust. The four-step loop. The reckoner that graduates. The proof curve that validates. One enterprise. One asset pair. Honest measurement. The rest follows from the proof.
 
 ### The second inscription
