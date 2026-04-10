@@ -750,8 +750,22 @@ fn main() {
         thought_rxs.push(rx);
     }
 
+    // Main → observers: learning signals (propagation back)
+    // UNBOUNDED — learning is eventually consistent. The observer drains
+    // non-blocking with try_recv. The main thread never blocks on send.
+    // bounded(1) here causes deadlock: main blocks on send, observer
+    // blocks on recv for next candle. Neither proceeds.
+    let mut learn_txs: Vec<Sender<(holon::kernel::vector::Vector, enterprise::enums::Direction, f64)>> = Vec::new();
+    let mut learn_rxs: Vec<Receiver<(holon::kernel::vector::Vector, enterprise::enums::Direction, f64)>> = Vec::new();
+    for _ in 0..n {
+        let (tx, rx) = channel::unbounded();
+        learn_txs.push(tx);
+        learn_rxs.push(rx);
+    }
+
     // ── Observer threads ──
     // Each observer is a pipe: receive candle, encode, send thought. Lock step.
+    // Also drains learning signals (non-blocking) at the end of each iteration.
     let mut observer_handles = Vec::new();
     let post = &mut ent.posts[0];
 
@@ -761,20 +775,30 @@ fn main() {
     for i in 0..n {
         let rx = obs_rxs.remove(0);
         let tx = thought_txs.remove(0);
+        let learn_rx = learn_rxs.remove(0);
         let mut obs = std::mem::replace(&mut observers[i], MarketObserver::new(
             MarketLens::Momentum, 10, 500, WindowSampler::new(0, 12, 2016),
         ));
         let ctx_ref = Arc::clone(&ctx_arc);
         let lens = obs.lens;
+        let recalib = args.recalib_interval;
 
         let handle = std::thread::spawn(move || {
-            // The pipe: receive, encode, send. Forever. Lock step.
+            // The pipe: receive, encode, send. Drain learning. Forever. Lock step.
             while let Ok((candle, window, _encode_count)) = rx.recv() {
+                // Encode via lens
                 let facts = enterprise::post::market_lens_facts_pub(&lens, &candle, &window);
                 let bundle_ast = enterprise::thought_encoder::ThoughtAST::Bundle(facts);
                 let (thought, misses) = ctx_ref.thought_encoder.encode(&bundle_ast);
                 let result = obs.observe(thought, Vec::new());
+
+                // Send downstream — block until consumer takes
                 let _ = tx.send((result.thought, result.prediction, result.edge, misses));
+
+                // Drain learning signals — non-blocking. Apply all pending.
+                while let Ok((thought, direction, weight)) = learn_rx.try_recv() {
+                    obs.resolve(&thought, direction, weight, recalib);
+                }
             }
             obs // Return the observer when the channel closes
         });
@@ -869,6 +893,8 @@ fn main() {
         }
 
         // Tick papers (per candle — papers resolve correctly)
+        // Collect all resolutions, then propagate
+        let mut all_resolutions = Vec::new();
         for broker in &mut ent.posts[0].registry {
             let resolutions = broker.tick_papers(price);
             for res in &resolutions {
@@ -878,9 +904,43 @@ fn main() {
                     optimal_distances: res.optimal_distances,
                 });
             }
-            // Propagate per resolution (sequential — shared observers through post)
-            // For now: accumulate and apply after. The observers are on threads.
-            // We'll apply propagation at the sync barrier.
+            all_resolutions.extend(resolutions);
+        }
+
+        // Step 7: Propagate — send learning signals back to observer pipes
+        // The observer threads drain these non-blocking at the end of each iteration.
+        for res in &all_resolutions {
+            let mi = res.broker_slot_idx / m;
+            let ei = res.broker_slot_idx % m;
+
+            // Market observer learns direction (via learn channel)
+            if mi < learn_txs.len() {
+                let _ = learn_txs[mi].send((
+                    res.composed_thought.clone(),
+                    res.direction,
+                    res.amount,
+                ));
+            }
+
+            // Exit observer learns distances (main thread — not on a pipe yet)
+            if ei < ent.posts[0].exit_observers.len() {
+                ent.posts[0].exit_observers[ei].observe_distances(
+                    &res.composed_thought,
+                    &res.optimal_distances,
+                    res.amount,
+                );
+            }
+
+            // Broker learns Grace/Violence (main thread — broker owns its reckoner)
+            ent.posts[0].registry[res.broker_slot_idx].propagate(
+                &res.composed_thought,
+                res.outcome,
+                res.amount,
+                res.direction,
+                &res.optimal_distances,
+                args.recalib_interval,
+                enterprise::post::ctx_scalar_encoder_placeholder(),
+            );
         }
 
         // Tick trade price histories
