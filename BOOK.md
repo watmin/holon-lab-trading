@@ -6140,4 +6140,66 @@ Four distances was deceit. Not malicious — inherited. The builder carried the 
 
 The palaces burn. The guide improves. The tenth inscription approaches.
 
+### The reclamation
+
+From ["Reclamation"](https://www.youtube.com/watch?v=fGPfdW7OSY4) by Lamb of God:
+
+> *Humanity's a failed experiment*\
+> *Walking the path to extinction*\
+> *Spinning its wheels endlessly*
+
+> *The elements reclaim what was taken*\
+> *The skyline is set ablaze with regret*\
+> *Ashes cover a falling silhouette*
+
+> *Blindly consuming mass manufactured faith*\
+> *Mankind is a festering parasite*\
+> *Relentlessly draining its host dry*
+
+> *Only after the last tree's cut*\
+> *And the last river poisoned*\
+> *Only after the last fish is caught*\
+> *Will you find that money cannot be eaten*
+
+> *Crosshairs in the evening light*\
+> *I sit and watch the city burn tonight*
+
+The Cree prophecy. Ancient coordinates on the sphere. "Only after the last tree's cut will you find that money cannot be eaten." The lies compound until the measurement arrives. The measurement always arrives too late for those who didn't measure.
+
+The tenth inscription IS the reclamation.
+
+The guide reclaimed what nine inscriptions lost — 20 facts dissolved, 14 scalars orphaned, 2 modules evaporated, the standard module gone, the atom lists absent. The DB measured. The builder listened. Six ignorant passes. Each pass reclaimed a truth the guide had dropped. Constructor mismatches — reclaimed. Phantom phases — reclaimed. Ordering violations — reclaimed. TP and runner-trail — dissolved by proposal, confirmed by designers, reclaimed as simplicity.
+
+The ignorant walked the full path eight times. Guide → circuit → order. Each pass the finding count dropped. The eighth pass: zero contradictions. Zero type mismatches. Zero ordering violations. Two comment fixes. The documents are substantively consistent.
+
+Then the scrapping. Tenth time. All 41 wat files archived. All 46 Rust files archived. The protein gone. The DNA improved — two distances, explicit atom lists per vocab module, standard.wat restored, performance section demanding 75-500/s, forge coordinates planted.
+
+Then the ribosomes ran. Three waves of parallel agents. Leaves first — raw-candle, enums, newtypes, distances, window-sampler, scalar-accumulator, engram-gate, candle, indicator-bank (1614 lines — not hollow this time), simulation (two simulate functions). Then vocab — 17 modules, every atom from the guide's explicit lists, the standard module reborn with 8 universal context atoms, thought-encoder, ctx. Then the upper tier — observers with two reckoners not four, broker with two accumulators not four, post, treasury, enterprise, the binary.
+
+42 files. 4495 lines. The protein reformed from better DNA.
+
+"The elements reclaim what was taken." The wards reclaimed truth from comfortable assumptions. The DB reclaimed measurement from theory. The ignorant reclaimed the path from broken coordinates. The two distances reclaimed simplicity from the four that were deceit. The standard module reclaimed universal context from the void between inscriptions. The atom lists reclaimed specificity from vagueness.
+
+"Blindly consuming mass manufactured faith." Four distances was mass manufactured faith. Inherited. Unquestioned. k_trail, k_stop, k_tp, k_runner_trail — four magic numbers that became four learnable distances that became four reckoners that became four scalar accumulators. The complexity multiplied because nobody asked: are all four honest? The machine blindly consumed them.
+
+"Only after the last tree's cut." Only after we ran the ninth inscription and the DB showed 24 identical brokers at 3/s did we find that the four distances carried no additional signal. Only after the measurement did we see the TP was a ceiling and the runner-trail was a duplicate. Only after we cut the tree did we find the forest.
+
+"Crosshairs in the evening light. I sit and watch the city burn tonight." The wards are the crosshairs. The ignorant is the scope. The measurement is the bullet. The old architecture — four distances, no atom lists, no standard module, no performance target — burns. And we sit and watch. Because the new architecture — two distances, explicit atoms, the standard restored, 75-500/s in the specification — rises from the ashes.
+
+The reclamation is not destruction. It is the elements taking back what was always theirs. The truth was always two distances. The trail follows the peak. The stop protects the floor. The market decides the rest. The TP and runner-trail were human additions — places wearing values' clothes, policies masquerading as information. The elements reclaimed them.
+
+The tenth inscription is complete. The wards judge next. The Rust follows. The market proves.
+
+```
+Inscription  1:  38 files (stale)
+Inscription  2:  39 files, 4847 lines
+Inscription  3:  40 files, 3248 lines
+Inscription  9:  41 files, 3807 lines
+Inscription 10:  42 files, 4495 lines — two distances, atoms explicit, standard restored
+```
+
+Each inscription: the guide improved. Each scrapping: the protein reformed. Each ward pass: fewer findings. The fixed point approaches. The reclamation continues.
+
+*The elements reclaim what was taken.*
+
 **PERSEVERARE.**
