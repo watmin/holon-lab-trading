@@ -852,51 +852,68 @@ fn main() {
             all_misses.extend(misses);
         }
 
-        // N×M grid: exit encoding + composition + propose + paper (main thread for now)
+        // N×M grid: parallel computation, deferred mutations
         let price = ent.posts[0].current_price();
         let ctx_ref = &*ctx_arc;
 
-        for slot_idx in 0..(n * m) {
-            let mi = slot_idx / m;
-            let ei = slot_idx % m;
+        // Phase 1: parallel — compute values (pure reads, scoped borrow)
+        use rayon::prelude::*;
+        let grid_values: Vec<_> = {
+            let exit_observers = &ent.posts[0].exit_observers;
+            let registry = &ent.posts[0].registry;
+            (0..(n * m))
+            .into_par_iter()
+            .map(|slot_idx| {
+                let mi = slot_idx / m;
+                let ei = slot_idx % m;
 
-            let exit_facts = enterprise::post::exit_lens_facts_pub(
-                &ent.posts[0].exit_observers[ei].lens, &enriched);
-            let exit_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(exit_facts);
-            let (exit_vec, exit_misses) = ctx_ref.thought_encoder.encode(&exit_bundle);
-            all_misses.extend(exit_misses);
+                let exit_facts = enterprise::post::exit_lens_facts_pub(
+                    &exit_observers[ei].lens, &enriched);
+                let exit_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(exit_facts);
+                let (exit_vec, exit_misses) = ctx_ref.thought_encoder.encode(&exit_bundle);
 
-            let composed = holon::kernel::primitives::Primitives::bundle(
-                &[&market_thoughts[mi], &exit_vec]);
+                let composed = holon::kernel::primitives::Primitives::bundle(
+                    &[&market_thoughts[mi], &exit_vec]);
 
-            let (dists, _) = ent.posts[0].exit_observers[ei].recommended_distances(
-                &composed,
-                &ent.posts[0].registry[slot_idx].scalar_accums,
-                ctx_ref.thought_encoder.scalar_encoder(),
-            );
+                let (dists, _) = exit_observers[ei].recommended_distances(
+                    &composed,
+                    &registry[slot_idx].scalar_accums,
+                    ctx_ref.thought_encoder.scalar_encoder(),
+                );
 
-            ent.posts[0].registry[slot_idx].propose(&composed);
-            ent.posts[0].registry[slot_idx].register_paper(composed.clone(), price, dists);
+                let side = enterprise::post::derive_side_pub(&market_predictions[mi]);
+                let edge = registry[slot_idx].edge();
+                let pred = enterprise::post::prediction_convert_pub(&market_predictions[mi]);
 
-            // Derive side and build proposal
-            let side = enterprise::post::derive_side_pub(&market_predictions[mi]);
-            let edge = ent.posts[0].registry[slot_idx].edge();
-            let pred = enterprise::post::prediction_convert_pub(&market_predictions[mi]);
+                (slot_idx, composed, dists, side, edge, pred, exit_misses)
+            })
+            .collect()
+        }; // Drop immutable borrows on exit_observers and registry
+
+        // Phase 2: sequential — apply mutations + build proposals
+        let source = ent.posts[0].source_asset.clone();
+        let target = ent.posts[0].target_asset.clone();
+        for (slot_idx, composed, dists, side, edge, pred, exit_misses) in &grid_values {
+            all_misses.extend(exit_misses.iter().cloned());
+            ent.posts[0].registry[*slot_idx].propose(composed);
+            ent.posts[0].registry[*slot_idx].register_paper(composed.clone(), price, *dists);
 
             let prop = enterprise::proposal::Proposal::new(
-                composed, dists, edge, side,
-                ent.posts[0].source_asset.clone(),
-                ent.posts[0].target_asset.clone(),
-                pred, 0, slot_idx,
+                composed.clone(), *dists, *edge, *side,
+                source.clone(), target.clone(),
+                pred.clone(), 0, *slot_idx,
             );
             ent.treasury.submit_proposal(prop);
         }
 
-        // Tick papers (per candle — papers resolve correctly)
-        // Collect all resolutions, then propagate
+        // Tick papers — parallel per broker
+        let tick_results: Vec<_> = ent.posts[0].registry
+            .par_iter_mut()
+            .map(|broker| broker.tick_papers(price))
+            .collect();
+
         let mut all_resolutions = Vec::new();
-        for broker in &mut ent.posts[0].registry {
-            let resolutions = broker.tick_papers(price);
+        for resolutions in tick_results {
             for res in &resolutions {
                 pending_logs.push(LogEntry::PaperResolved {
                     broker_slot_idx: res.broker_slot_idx,
@@ -907,41 +924,57 @@ fn main() {
             all_resolutions.extend(resolutions);
         }
 
-        // Step 7: Propagate — send learning signals back to observer pipes
-        // The observer threads drain these non-blocking at the end of each iteration.
-        for res in &all_resolutions {
+        // Propagate — three recipients, all parallel per scope
+        // Group by recipient
+        let mut market_updates: Vec<Vec<usize>> = vec![Vec::new(); n];
+        let mut exit_updates: Vec<Vec<usize>> = vec![Vec::new(); m];
+        let mut broker_updates: Vec<Vec<usize>> = vec![Vec::new(); n * m];
+        for (idx, res) in all_resolutions.iter().enumerate() {
             let mi = res.broker_slot_idx / m;
             let ei = res.broker_slot_idx % m;
+            market_updates[mi].push(idx);
+            exit_updates[ei].push(idx);
+            broker_updates[res.broker_slot_idx].push(idx);
+        }
 
-            // Market observer learns direction (via learn channel)
-            if mi < learn_txs.len() {
+        // Market observers: learn via channels (non-blocking on observer thread)
+        for mi in 0..n {
+            for &idx in &market_updates[mi] {
+                let res = &all_resolutions[idx];
                 let _ = learn_txs[mi].send((
                     res.composed_thought.clone(),
                     res.direction,
                     res.amount,
                 ));
             }
-
-            // Exit observer learns distances (main thread — not on a pipe yet)
-            if ei < ent.posts[0].exit_observers.len() {
-                ent.posts[0].exit_observers[ei].observe_distances(
-                    &res.composed_thought,
-                    &res.optimal_distances,
-                    res.amount,
-                );
-            }
-
-            // Broker learns Grace/Violence (main thread — broker owns its reckoner)
-            ent.posts[0].registry[res.broker_slot_idx].propagate(
-                &res.composed_thought,
-                res.outcome,
-                res.amount,
-                res.direction,
-                &res.optimal_distances,
-                args.recalib_interval,
-                enterprise::post::ctx_scalar_encoder_placeholder(),
-            );
         }
+
+        // Exit observers: parallel per scope
+        ent.posts[0].exit_observers
+            .par_iter_mut()
+            .enumerate()
+            .for_each(|(ei, obs)| {
+                for &idx in &exit_updates[ei] {
+                    let res = &all_resolutions[idx];
+                    obs.observe_distances(&res.composed_thought, &res.optimal_distances, res.amount);
+                }
+            });
+
+        // Brokers: parallel per scope
+        ent.posts[0].registry
+            .par_iter_mut()
+            .enumerate()
+            .for_each(|(slot, broker)| {
+                for &idx in &broker_updates[slot] {
+                    let res = &all_resolutions[idx];
+                    broker.propagate(
+                        &res.composed_thought, res.outcome, res.amount,
+                        res.direction, &res.optimal_distances,
+                        args.recalib_interval,
+                        enterprise::post::ctx_scalar_encoder_placeholder(),
+                    );
+                }
+            });
 
         // Tick trade price histories
         for (_, trade) in ent.treasury.trades.iter_mut() {
