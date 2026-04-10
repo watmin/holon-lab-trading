@@ -192,32 +192,38 @@ impl Post {
             })
             .collect();
 
-        // Sequential phase: apply mutations, build proposals
-        let mut proposals = Vec::with_capacity(n * m);
-        for (slot_idx, composed, dists, side_val, edge_val, enterprise_pred, exit_misses) in grid_values {
-            all_misses.extend(exit_misses);
-
-            // Broker: propose (mutates reckoner)
-            let _broker_pred = self.registry[slot_idx].propose(&composed);
-
-            // Assemble proposal
-            let prop = Proposal::new(
-                composed.clone(),
-                dists,
-                edge_val,
-                side_val,
-                source.clone(),
-                target.clone(),
-                enterprise_pred,
-                post_idx,
-                slot_idx,
-            );
-
-            // Register paper (mutates broker papers)
-            self.registry[slot_idx].register_paper(composed, price, dists);
-
-            proposals.push(prop);
+        // Collect misses (sequential — cheap, just extending a vec)
+        for &(_, _, _, _, _, _, ref exit_misses) in &grid_values {
+            all_misses.extend(exit_misses.iter().cloned());
         }
+
+        // Build proposals (pure — struct construction, no mutation)
+        let proposals: Vec<_> = grid_values
+            .iter()
+            .map(|(slot_idx, composed, dists, side_val, edge_val, enterprise_pred, _)| {
+                Proposal::new(
+                    composed.clone(),
+                    *dists,
+                    *edge_val,
+                    *side_val,
+                    source.clone(),
+                    target.clone(),
+                    enterprise_pred.clone(),
+                    post_idx,
+                    *slot_idx,
+                )
+            })
+            .collect();
+
+        // Apply mutations per-broker in parallel (same trick — each broker is its own scope)
+        // grid_values is indexed by position (0..n*m), which IS the slot_idx.
+        self.registry
+            .par_iter_mut()
+            .zip(grid_values.into_par_iter())
+            .for_each(|(broker, (_, composed, dists, _, _, _, _))| {
+                broker.propose(&composed);
+                broker.register_paper(composed, price, dists);
+            });
 
         (proposals, market_thoughts, all_misses)
     }
