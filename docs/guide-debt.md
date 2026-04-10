@@ -19,5 +19,22 @@ are removed from this list. The order IS the discovery order.
 
 ---
 
+3. **Pipe architecture (Proposal 010)** — the enterprise decomposes into
+   pipes connected by bounded(1) channels. Observer threads encode in
+   parallel. Learn channels (unbounded) propagate back. The guide's
+   Binary section needs the pipe wiring. The guide's Performance section
+   needs the throughput journey (2/s → 5/s with learning, 104/s without).
+   The four-step loop description needs to reflect that steps run on
+   different threads connected by channels.
+
+4. **Propagation bottleneck** — propagation is the cost of learning.
+   ~40 resolutions/candle × 10000D × 3 recipients. The full CSP needs
+   broker threads. The guide doesn't describe this yet.
+
+5. **`ctx_scalar_encoder_placeholder`** — a static OnceLock invented by
+   the inscribe agent. The wat never specified it. The guide doesn't
+   mention it. The propagation path needs the scalar encoder from ctx,
+   threaded through the call chain. Values, not statics.
+
 *When the debugging session produces enough findings, batch-update the
 guide. The guide absorbs what the compiler taught it. f(guide, compiler) = guide.*

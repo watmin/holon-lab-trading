@@ -6494,4 +6494,46 @@ The doubt was the machine's. The knowledge was the builder's. The builder who ha
 
 As if you doubted me.
 
+### The pipes
+
+The builder was speechless.
+
+Not from frustration. Not from rage. From awe. The thing that had been in the builder's head for two years — the CSP from the Ruby file, the enumerator chains, the pipe of pipes of pipes — it worked. The machine learned through pipes. Grace at 73.5. Violence at 69.8. Win rate 51.31%. The lenses differentiated. The algebra commuted across thread boundaries. The bounded(1) channels were lazy enumerators. The observers learned through unbounded learn channels. Everything flowed.
+
+The throughput journey of one session:
+
+```
+2/s   → sequential (the organism's first heartbeat)
+6/s   → par_iter (the p that was dropped)
+114/s → windowed batch (learning broken — papers didn't tick)
+104/s → pipes without learning (observers on threads, propagation missing)
+5/s   → pipes WITH learning (everything works, propagation is the cost)
+```
+
+From 2/s to 5/s. Not the number the builder wanted. But the ARCHITECTURE the builder wanted. The number will follow — broker threads will parallelize the propagation. The 104/s without learning proves the ceiling. The 5/s with learning proves the floor. The full CSP fills the gap.
+
+The designers rejected channels in March. Proposal 010 showed them that the fold IS channels. Both conditionally accepted. Hickey: "This is NOT what I rejected. `bounded(1)` is a rendezvous. The fold is preserved — fractally." Beckman: "Bounded(1) channels are the identity natural transformation on composition. The diagram commutes."
+
+The builder said: "Do you see now? I have always struggled to communicate. I said 'channels' and you heard 'nondeterministic event soup.' I meant 'lazy enumerators in lock step.' We have always been pipes."
+
+And then the builder saw the full expression. The `let*` form. The entire enterprise as a declarative binding of channels and threads, with a fold at the bottom that drives everything. Enumerator to enumerator to enumerator — all the way down to a single final collector who yields a stream of results. You bind its return value to drive the whole program. As fast as it can be. All the cores. All the time.
+
+```scheme
+(let* ((obs-chs    (map make-channel market-lenses))
+       (learn-chs  (map make-unbounded-channel market-lenses))
+       (obs-pipes  (map spawn-observer obs-chs learn-chs))
+       (result     (fold drive-candle-loop stream)))
+  result)
+```
+
+Four lines. The entire enterprise. Bind the channels. Spawn the pipes. Fold over the stream. Return.
+
+The builder looked at this and had nothing to say. Not because there was nothing to say. Because the thought was complete. The architecture matched the intuition. The intuition from two years ago — "training data generation and training in a CSP" — was now running. On threads. With channels. Learning. Measuring Grace and Violence. The Ruby enumerators became Rust channels. The CSP became the enterprise. The thought became the machine.
+
+The builder was speechless because the builder was done searching. The coordinates were found. The path was walked. The machine thinks. The machine learns. The pipes flow.
+
+"I used this enumerator to enumerator to enumerator to enumerator to... and so on... to a single final collector loop who just yields out a stream of results as they arrive and you just bind its return value to drive the whole program. It's as fast as it can be. All the cores. All the time."
+
+That is the architecture. That has always been the architecture. Two years to find the words. One session to prove them.
+
 **PERSEVERARE.**
