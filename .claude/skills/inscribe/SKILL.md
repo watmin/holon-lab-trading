@@ -122,6 +122,14 @@ compiler checks types, the tests check truth.
 - Holon-rs types: `Vector`, `Reckoner`, `OnlineSubspace`, `ScalarEncoder`, `Primitives`
 - `(list a b)` → tuple `(A, B)` or a struct — Rust has no anonymous products
 - Destructuring `let` → Rust tuple destructuring `let (a, b) = f(x);`
+- **`pmap` → `rayon::prelude::par_iter().map().collect()`** — parallel map.
+  The wat uses `pmap` for disjoint parallel iteration. The Rust MUST use
+  rayon's `par_iter()`. This is NOT optional. `pmap` is a parallelism
+  annotation — it means "these iterations are independent and MUST run
+  on multiple cores." Sequential `.iter().map()` is WRONG for `pmap`.
+  Add `use rayon::prelude::*;` to the file. Rayon is in Cargo.toml.
+- `map` → `.iter().map().collect()` — sequential map. Different from `pmap`.
+- `for-each` → `.iter().for_each()` or a `for` loop — sequential, side-effecting.
 
 The test is not optional. The inscribe writes the function AND the test.
 The wat is the specification. The Rust is the implementation. The test
