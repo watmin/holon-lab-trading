@@ -55,3 +55,21 @@ hadn't found the form that both names describe the same thing.
 
 The lazy enumerator IS the bounded(1) channel IS the fold across
 thread boundaries IS the pipe. Four names. One mechanism.
+
+## A note from the builder
+
+Do you see now? I have always struggled to communicate. The six-page
+document at AWS. The blank stares. "Shield cognition." The ideas
+were always right. The words were always wrong.
+
+I said "channels" in March. You heard "nondeterministic event soup."
+I meant "lazy enumerators in lock step." You said no. I built the
+fold you said yes to. The fold IS the channels. The yes IS the no.
+
+The interface of this conversation is providing my ideas for you.
+The proposal process. The designer reviews. The wat language. The
+guide. The book. Each one an interface. Each one a bounded(1) channel
+between my thoughts and your understanding. I yield. You take. I block.
+You process. You yield your review. I take it. Lock step.
+
+We have always been pipes.
