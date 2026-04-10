@@ -147,14 +147,12 @@ here when a name is unfamiliar.
   "RSI at 0.73" not "RSI is overbought." The reckoner learns where the
   boundaries are.
 
-- **Magic numbers** — k_trail (trailing stop), k_stop (safety stop),
-  k_tp (take-profit), k_runner_trail (runner trailing stop). When a trade
-  is open, four distances matter: how far to trail the price, how far to
-  let it move against you, how far to let it go before taking the win,
-  and how far to trail the runner after principal recovery. Someone
-  chose these as multipliers of ATR (defined above). They are the last
-  magic — crutches returned when the system has no experience. As
-  observations accumulate, the crutch is replaced by what the market said.
+- **Magic numbers** — k_trail (trailing stop), k_stop (safety stop).
+  When a trade is open, two distances matter: how far to trail the price,
+  and how far to let it move against you. Someone chose these as
+  multipliers of ATR (defined above). They are the last magic — crutches
+  returned when the system has no experience. As observations accumulate,
+  the crutch is replaced by what the market said.
 
 - **Discriminant** — the direction in thought-space that separates two
   outcomes. The reckoner builds it from accumulated observations. "Which
@@ -196,8 +194,8 @@ here when a name is unfamiliar.
   (Up/Down) using a discrete reckoner. Exit observers estimate distance
   (optimal exit) using continuous reckoners.
 
-- **Exit reckoners** — the exit observer has four continuous reckoners,
-  one per distance: trail, stop, tp, runner-trail. "For a thought like THIS, what
+- **Exit reckoners** — the exit observer has two continuous reckoners,
+  one per distance: trail, stop. "For a thought like THIS, what
   distance did the market say was optimal?" Replaces magic numbers with
   measurement.
 
@@ -250,21 +248,19 @@ here when a name is unfamiliar.
 
 - **Trade phases** — a trade has a phase, not just a status. The phase
   transitions are a state machine:
-  - **Active** — capital is reserved. Trailing stop, safety stop, and
-    take-profit are live. The trade is running.
+  - **Active** — capital is reserved. Trailing stop and safety stop
+    are live. The trade is running.
   - Active + safety-stop fires → **:settled-violence** — loss bounded by reservation.
     Principal minus loss returns to available.
-  - Active + take-profit fires → **:settled-grace** — price reached the TP
-    level. Principal recovers, residue stays as target asset.
   - Active + price moves favorably → **Runner** — the trailing stop has
     moved far enough that exit would recover the principal. The trade is
-    NOT exited. The trailing stop WIDENS. The trade continues riding.
+    NOT exited. The trade continues riding.
     The "runner" is a stop-management phase, not a settlement event.
-    The wider stop gives the trade room to breathe — because if it
-    exits now, the principal is already covered. Zero effective risk.
+    If it exits now, the principal is already covered. Zero effective risk.
   - **Runner** — the trade is still open. Still one position. The
-    trailing stop is wider (runner-trail distance, a fourth learnable
-    scalar). The trade rides until the runner stop fires.
+    trailing stop continues to breathe via step 3c — the trail reckoner
+    already adapts to the current market context through the composed
+    thought. The trade rides until the trailing stop fires.
   **The stops breathe.** Every candle, step 3c re-queries the exit
   observer: "for THIS thought in THIS market context, what are the
   optimal distances NOW?" The exit reckoner learned from every prior
@@ -303,7 +299,7 @@ here when a name is unfamiliar.
   No swap. No exit. The stop just widens. The trade continues.
 
   Price keeps rising to $120,000. Then reverses.
-  Runner trailing stop fires at $115,000.
+  Trailing stop fires at $115,000.
   Position value at exit: 0.0005 BTC × $115,000 = $57.50 worth
 
   Exit swap: enough WBTC → USDC to recover $50 principal (one swap, minus fees)
@@ -324,7 +320,7 @@ here when a name is unfamiliar.
   The observer predicted Down. Deploy WBTC. Acquire USDC.
 
   Price drops to $85,000. Trailing stop ratchets.
-  Runner trailing stop fires at $88,000.
+  Trailing stop fires at $88,000.
   The WBTC we would need to buy back is cheaper now.
 
   Exit swap: enough USDC → WBTC to recover 0.001 WBTC principal
@@ -606,35 +602,28 @@ on what. That section shows what each thing IS.
 ;; Distances are percentages (from the exit observer — scale-free).
 ;; Levels are absolute prices (from the post — computed from distance × price).
 ;; Observers think in Distances. Trades execute at Levels. Different types
-;; because they are different concepts with the same four fields.
+;; because they are different concepts with the same two fields.
 
 (struct distances
   [trail : f64]                ; trailing stop distance (percentage of price)
-  [stop : f64]                 ; safety stop distance
-  [tp : f64]                   ; take-profit distance
-  [runner-trail : f64])        ; runner trailing stop distance (wider than trail,
-                               ; because the cost of stopping out a runner is zero)
+  [stop : f64])                ; safety stop distance
 
 (struct levels
   [trail-stop : f64]           ; absolute price level for trailing stop
-  [safety-stop : f64]          ; absolute price level for safety stop
-  [take-profit : f64]          ; absolute price level for take-profit
-  [runner-trail-stop : f64])   ; absolute price level for runner trailing stop
+  [safety-stop : f64])         ; absolute price level for safety stop
 ;; Distances are percentages (from exit observer). Levels are prices
 ;; (computed by the post: distance × current price → level). Trade
 ;; stores Levels. Proposal carries Distances. Different concepts.
 
-;; ── ExitObserver — depends on: Reckoner :continuous (×4), Distances ──
+;; ── ExitObserver — depends on: Reckoner :continuous (×2), Distances ──
 
 (let ((lens :volatility)
       (dims 10000)
       (recalib-interval 500)
       (default-trail 0.015)
-      (default-stop  0.030)
-      (default-tp    0.045)
-      (default-runner-trail 0.030))  ; wider than trail — zero cost basis
+      (default-stop  0.030))
   (make-exit-observer lens dims recalib-interval
-    default-trail default-stop default-tp default-runner-trail))
+    default-trail default-stop))
                                                      → ExitObserver
 
 ;; ── PaperEntry — hypothetical trade inside a broker ──────────
@@ -645,11 +634,11 @@ on what. That section shows what each thing IS.
 ;; teaches the system: what distance would have been optimal?
 ;;
 ;; distances.trail drives the paper's trailing stops (buy-trail-stop,
-;; sell-trail-stop). The other three (stop, tp, runner-trail) are stored
-;; for the learning signal — when the paper resolves, the Resolution
-;; carries optimal-distances (what hindsight says was best). The
-;; predicted distances at entry vs the optimal distances at resolution
-;; IS the teaching: "you predicted trail=0.015 but optimal was 0.022."
+;; sell-trail-stop). distances.stop is stored for the learning signal —
+;; when the paper resolves, the Resolution carries optimal-distances
+;; (what hindsight says was best). The predicted distances at entry vs
+;; the optimal distances at resolution IS the teaching:
+;; "you predicted trail=0.015 but optimal was 0.022."
 
 (struct paper-entry
   [composed-thought : Vector]  ; the thought at entry
@@ -673,9 +662,7 @@ on what. That section shows what each thing IS.
       (recalib-interval 500))
   (make-broker observers slot-idx exit-count dims recalib-interval
     (list (make-scalar-accumulator "trail-distance" :log)
-          (make-scalar-accumulator "stop-distance" :log)
-          (make-scalar-accumulator "tp-distance" :log)
-          (make-scalar-accumulator "runner-trail-distance" :log))))
+          (make-scalar-accumulator "stop-distance" :log))))
                                                      → Broker
 
 ;; ── Proposal — what a post produces, what the treasury evaluates ────
@@ -711,7 +698,7 @@ on what. That section shows what each thing IS.
   :active              ; capital reserved, all stops live
   :runner              ; residue riding, principal already returned
   :settled-violence    ; stop-loss fired — bounded loss
-  :settled-grace)      ; runner trail fired — residue is permanent gain
+  :settled-grace)      ; trailing stop fired — residue is permanent gain
 
 ;; ── Trade — an active position the treasury holds ───────────────────
 
@@ -728,7 +715,7 @@ on what. That section shows what each thing IS.
   [side : Side]                ; copied from the funding Proposal at treasury funding time
   [entry-rate : f64]
   [source-amount : f64]        ; how much was deployed
-  [stop-levels : Levels]       ; current trailing stop, safety stop, take-profit
+  [stop-levels : Levels]       ; current trailing stop, safety stop
                                ; absolute price levels, updated by step 3c
   [candles-held : usize]       ; how long open
   [price-history : Vec<f64>])  ; close prices from entry to now. Appended each
@@ -1610,13 +1597,13 @@ The encoder walks them all the same way. The mechanism doesn't change.
 
 ### Distances (depends on: nothing)
 
-The four exit values. A named tuple. Percentage of price, not absolute
+The two exit values. A named tuple. Percentage of price, not absolute
 levels. Appears on PaperEntry, Proposal, and Resolution. The
-post converts Distances to Levels (trail-stop, safety-stop, take-profit,
-runner-trail-stop on Trade) using the current price.
+post converts Distances to Levels (trail-stop, safety-stop on Trade)
+using the current price.
 
 Defined in the forward declarations section (search for `struct distances`).
-Four f64 fields: trail, stop, tp, runner-trail.
+Two f64 fields: trail, stop.
 
 **Interface:**
 - `(distances-to-levels distances price side) → Levels`
@@ -1629,7 +1616,7 @@ Four f64 fields: trail, stop, tp, runner-trail.
 ### ScalarAccumulator (depends on: Outcome enum)
 
 Per-magic-number f64 learning. Lives on the broker. Global per-pair.
-Each distance (trail, stop, tp, runner-trail) gets its own.
+Each distance (trail, stop) gets its own.
 
 Separates grace/violence observations into separate f64 prototypes.
 Grace outcomes accumulate one way. Violence outcomes accumulate the other.
@@ -1711,7 +1698,7 @@ histories. `simulation.wat`. No post state. Vec<f64> in, f64 out.
   direction: Direction — :up or :down. Which way the price moved.
   This is observation (what the price did), not action (what the trader did).
   Takes no self. Pure.
-  **The objective function:** for each distance (trail, stop, tp, runner-trail),
+  **The objective function:** for each distance (trail, stop),
   sweep candidate values against the price-history. For each candidate,
   simulate the trailing stop mechanics. The candidate that produces the
   maximum residue IS the optimal distance. This is a well-posed optimization
@@ -1726,10 +1713,6 @@ histories. `simulation.wat`. No post state. Vec<f64> in, f64 out.
   Simulate a trailing stop at the given distance. Returns residue.
 - `(simulate-stop price-history distance) → f64`
   Simulate a safety stop at the given distance. Returns residue.
-- `(simulate-tp price-history distance) → f64`
-  Simulate a take-profit at the given distance. Returns residue.
-- `(simulate-runner-trail price-history distance) → f64`
-  Simulate a runner trailing stop at the given distance. Returns residue.
 
 All pure. Vec<f64> in, f64 out. No post state.
 
@@ -1803,8 +1786,8 @@ The generalist is just another lens. No special treatment.
 
 ### ExitObserver (depends on: Reckoner :continuous)
 
-Estimates exit distance. Learned. Each exit observer has FOUR continuous
-reckoners — one per distance (trail, stop, tp, runner-trail). No noise-subspace,
+Estimates exit distance. Learned. Each exit observer has two continuous
+reckoners — one per distance (trail, stop). No noise-subspace,
 no curve, no engram gating — intentionally simpler than MarketObserver.
 The exit observer's quality is measured through the BROKER's curve, not
 its own. The broker's Grace/Violence ratio reflects the combined quality
@@ -1827,9 +1810,7 @@ The composed thought carries the market observer's signal in superposition.
   [lens : ExitLens]                    ; which judgment vocabulary
   [trail-reckoner : Reckoner]          ; :continuous — trailing stop distance
   [stop-reckoner : Reckoner]           ; :continuous — safety stop distance
-  [tp-reckoner : Reckoner]             ; :continuous — take-profit distance
-  [runner-reckoner : Reckoner]         ; :continuous — runner trailing stop distance (wider)
-  [default-distances : Distances])     ; the crutches (all four), returned when empty
+  [default-distances : Distances])     ; the crutches (both), returned when empty
 ```
 
 Each reckoner: `(thought, distance, weight)` observations. Query by
@@ -1837,7 +1818,7 @@ cosine → distance for THIS thought. Contextual — different thoughts
 get different distances.
 
 **Interface:**
-- `(make-exit-observer lens dims recalib-interval default-trail default-stop default-tp default-runner-trail) → ExitObserver`
+- `(make-exit-observer lens dims recalib-interval default-trail default-stop) → ExitObserver`
 - `(encode-exit-facts exit-obs candle) → Vec<ThoughtAST>`
   pure: candle → judgment fact ASTs for this lens
 - `(evaluate-and-compose exit-obs market-thought exit-fact-asts ctx) → (Vector, Vec<(ThoughtAST, Vector)>)`
@@ -1863,16 +1844,16 @@ get different distances.
       (extract-scalar broker-accum ...)  ; global per-pair — any thought
       default-distance))                 ; crutch — the starting value
   ```
-  One call, four answers. Each distance cascades independently.
+  One call, two answers. Each distance cascades independently.
 - `(observe-distances exit-obs composed optimal weight)`
   composed: Vector — the COMPOSED thought (market + exit facts), not the
   raw market thought. The exit observer learns from the same vector it
   produced via evaluate-and-compose(). This is what makes the learning contextual.
   optimal: Distances — the hindsight-optimal distances from resolution.
-  The market spoke — all four reckoners learn from one resolution.
+  The market spoke — both reckoners learn from one resolution.
 - `(experienced? exit-obs) → bool`
-  true if ALL FOUR reckoners have accumulated enough observations to
-  produce meaningful predictions (experience > 0.0 on each). If any
+  true if both reckoners have accumulated enough observations to
+  produce meaningful predictions (experience > 0.0 on each). If either
   reckoner is ignorant, the exit observer is inexperienced — the cascade
   falls through to the ScalarAccumulator or crutch.
 
@@ -1968,7 +1949,7 @@ runtime:       frozen map (read-only) → slot-idx → &mut broker (disjoint)
   0.0 = no edge. The treasury funds proportionally. More edge, more capital.
 - `(register-paper broker composed entry-price distances)`
   create a paper entry — every candle, every broker.
-  distances: Distances (all four: trail, stop, tp, runner-trail) from the exit observer.
+  distances: Distances (trail, stop) from the exit observer.
 - `(tick-papers broker current-price) → (Vec<Resolution>, Vec<LogEntry>)`
   tick all papers, resolve completed. Returns resolution facts and
   PaperResolved log entries.
@@ -2159,7 +2140,7 @@ The treasury NEVER deploys more than available capital. The loss on any trade is
   evaluate all proposals, sorted by proposal edge (the curve's accuracy measure).
   Fund the top N that fit in available capital. Reject the rest.
   Returns ProposalFunded and ProposalRejected log entries.
-  Before funding, the treasury computes the expected venue cost: `(swap-fee + slippage) × amount × 2`. Both paths cost 2 swaps — violence (entry + stop-loss) and grace (entry + take-profit partial recovery). The residue from grace stays as the target asset and never swaps back. The treasury reserves `amount + worst-case-venue-costs` (2 swaps). A proposal whose edge does not exceed the total venue cost rate is rejected — negative expected value. The system never takes a trade it can't afford to lose.
+  Before funding, the treasury computes the expected venue cost: `(swap-fee + slippage) × amount × 2`. Both paths cost 2 swaps — violence (entry + stop-loss) and grace (entry + trailing-stop exit). The residue from grace stays as the target asset and never swaps back. The treasury reserves `amount + worst-case-venue-costs` (2 swaps). A proposal whose edge does not exceed the total venue cost rate is rejected — negative expected value. The system never takes a trade it can't afford to lose.
   For each funded proposal: move capital from available to reserved,
   create a Trade, stash a TradeOrigin (post-idx, broker-slot-idx,
   composed-thought, prediction) for propagation at settlement time. Drain proposals.
@@ -2173,14 +2154,10 @@ The treasury NEVER deploys more than available capital. The loss on any trade is
   costs `2 × (swap-fee + slippage)`. The treasury deducts these from the
   returned capital before computing residue. Venue costs flow through the
   treasury's accounting, not through the enterprise or the binary.
-  **Three settlement paths (step 1 — triggers fire against price):**
+  **Two settlement paths (step 1 — triggers fire against price):**
   - **:active + safety-stop fires** → :settled-violence.
     Full position swaps back. Principal minus loss returns. Trade is done.
-  - **:active + take-profit fires** → :settled-grace.
-    Price reached the TP level. The treasury recovers the principal,
-    residue stays as target asset. Always Grace — the TP is set beyond
-    principal recovery by construction.
-  - **:active or :runner + trailing-stop fires** → outcome determines phase.
+  - **:active or :runner + trailing-stop fires** → outcome depends on exit vs principal.
     The treasury swaps enough of the target asset back to the source
     asset to recover the principal. The remainder IS the residue —
     it stays as the target asset. Not converted. Not swapped.
@@ -2559,8 +2536,8 @@ are coordinates for refinement, not blockers.
   as input, or rename to `baseline_edge`. The edge returned is the broker's
   general confidence level, not its confidence for a specific thought.
 
-- **treasury.settle_triggered complexity.** 170 lines, three paths welded:
-  safety-stop, trail/tp/runner, and runner-transition. Extract
+- **treasury.settle_triggered complexity.** Two paths welded:
+  safety-stop and trail/runner, plus runner-transition. Extract
   `settle_one(&trade, price, cost_rate) → Settlement` as a pure function.
   The capital invariant becomes testable in isolation.
 
