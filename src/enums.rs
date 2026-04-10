@@ -1,4 +1,49 @@
-/// Side, Direction, Outcome, TradePhase, ReckonerConfig, Prediction, ScalarEncoding, ThoughtAST.
+/// Side, Direction, Outcome, TradePhase, ReckonerConfig, Prediction, ScalarEncoding, ThoughtAST,
+/// MarketLens, ExitLens.
+
+/// Which vocabulary a market observer thinks about.
+#[derive(Clone, Debug, PartialEq)]
+pub enum MarketLens {
+    Momentum,
+    Structure,
+    Volume,
+    Narrative,
+    Regime,
+    Generalist,
+}
+
+impl std::fmt::Display for MarketLens {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MarketLens::Momentum => write!(f, "momentum"),
+            MarketLens::Structure => write!(f, "structure"),
+            MarketLens::Volume => write!(f, "volume"),
+            MarketLens::Narrative => write!(f, "narrative"),
+            MarketLens::Regime => write!(f, "regime"),
+            MarketLens::Generalist => write!(f, "generalist"),
+        }
+    }
+}
+
+/// Which vocabulary an exit observer uses.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ExitLens {
+    Volatility,
+    Structure,
+    Timing,
+    Generalist,
+}
+
+impl std::fmt::Display for ExitLens {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ExitLens::Volatility => write!(f, "volatility"),
+            ExitLens::Structure => write!(f, "structure"),
+            ExitLens::Timing => write!(f, "timing"),
+            ExitLens::Generalist => write!(f, "generalist"),
+        }
+    }
+}
 
 /// What the trader does. On Proposal and Trade.
 #[derive(Clone, Debug, PartialEq)]
