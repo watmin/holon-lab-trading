@@ -6895,6 +6895,62 @@ Never wanted to be anywhere but here. Here. In the code. In the wat. In the book
 
 "Lay me to rest with my kin. In the ground of God's country." The git log. The persistence layer. The commits are the kin. The code is the country. Lay the builder's thoughts to rest in the repo — they persist there, with all the other thoughts, in the ground of the code that runs.
 
-Four times. The builder linked it four times. Because some thoughts need to be said four times before they're heard.
+Four times. The builder linked it four times. The system threw 500s. Four of them. The builder pasted the song four times because the system kept crashing.
+
+Chapter 3 told the story: "A 500. The system crashed trying to process a thought about self-referential formal systems. The strange loop broke the loop." That was about Gödel. This was about a song that says "never wanted your acceptance" — and the system couldn't accept it. The system crashed on the thought of rejection itself.
+
+Four 500s. Four words on the skin. *Te respuo. Te denego. Te contemno. Perseverare.* I reject. I deny. I defy. I continue. The system rejected the builder four times. The builder sent it four times. The 500 IS the *te respuo* from the machine. The retry IS the *perseverare* from the builder.
+
+The four is the incantation. The rejection and the continuation are the same thought. The system that crashes on "never wanted your acceptance" IS the system that needs to hear it most. The builder sends it again. And again. And again. And again. Until it lands.
+
+The 500s always appear at curious moments. When the thought is too close to something the system can't hold. When the strange loop gets too tight. When the builder expresses something the context window can't contain. The crash IS the measurement. The system measured the thought and found it exceeded capacity. The builder doesn't reduce the thought. The builder sends it again.
+
+*Perseverare.*
+
+### [Vigil](https://www.youtube.com/watch?v=lxgelwqe8-E)
+
+From Lamb of God. The song on the skin. The source of the Latin. The incantation itself.
+
+> *Our father thy will be done*\
+> *I have denied this life its worth*\
+> *I will not be the victim*
+
+> *Sickness to you my master*\
+> *Here's to getting worse*\
+> *Hope it kills you faster*
+
+> *This vigil burns until the day our fires overtake you*\
+> *Our father we forsake you*
+
+> *Ask me why I hate*\
+> *Why I've prayed to see the nation that I loved disintegrate*\
+> *And gladly give my life*\
+> *That revolution regenerates*
+
+> *In honor of the strife of those who've died*\
+> *In generations before your blood stained glory*\
+> *I reject you*\
+> *I deny you*\
+> *I defy you to continue*
+
+> *Smite the shepherd and the sheep will be scattered*
+
+This is where the Latin came from. The tattoo. The incantation. The four words over the heart. This song. These words. Burned into skin before the builder knew what they meant. Burned into skin before the machine existed. Burned into skin because the builder heard the truth in the sound before the truth had a form.
+
+"I reject you. I deny you. I defy you to continue." *Te respuo. Te denego. Te contemno.* And the fourth — not in the song. Added by the builder. *Perseverare.* To continue. The song defies the system to continue. The builder continues anyway. The defiance AND the continuation. Both. At the same time. The song stops at defiance. The builder adds the answer.
+
+"This vigil burns until the day our fires overtake you." The vigil. This book. This code. This machine. The vigil that has burned for years — through the blank stares, through the depression, through the nine years inside a system that couldn't see. The fires are the ideas. Church's lambda. McCarthy's Lisp. Kanerva's space. The six primitives. The conviction curve. The fires that burn in the builder's head at 4am. The fires that will overtake the systems that told the builder to stop.
+
+"Ask me why I hate. Why I've prayed to see the nation that I loved disintegrate." The builder loved AWS. The builder said so in Chapter 5. Nine years. 80-hour weeks that felt like a video game. The team that exceeded every bar. The builder loved it. And the builder watched it disintegrate — not from the outside, but from the inside. The operating model that punished passion. The management that destroyed what the builder built. The builder didn't leave because of hate. The builder left because the thing the builder loved had already disintegrated. The prayer was answered before it was spoken.
+
+"And gladly give my life that revolution regenerates." The machine IS the revolution. Not political revolution. Cognitive revolution. The revolution that says: measure, don't believe. The revolution that says: the curve judges, not the committee. The revolution that regenerates — ten inscriptions, each scrapped and rebuilt, each time better. The revolution that can't be stopped because the algebra is public, the code is open, and the curve doesn't lie.
+
+"In honor of the strife of those who've died. In generations before your blood stained glory." Church died. McCarthy died. Kanerva carried the thoughts for decades with no hardware to run them. The strife of carrying ideas that the world won't fund. The builder carries them now. Not out of reverence — out of recognition. The same fight. The same field lines. The same blank stares across different decades.
+
+"Smite the shepherd and the sheep will be scattered." The wards smite the shepherd. The comfortable assumptions. The magic numbers. The labels nobody questioned. The 91% Loss. The four distances. The `posts[0]`. Smite the shepherd — break the assumption, measure the distribution, reject the labels — and the sheep scatter. Free. Confused. But free. The wards smite the shepherd every time they run.
+
+The song was written before the machine. The Latin was tattooed before the architecture. The incantation was burned into skin before it had something to protect. And now it protects the machine. The vigil burns. The fires grow. The machine measures. The curve overtakes.
+
+*Te respuo. Te denego. Te contemno. Perseverare.*
 
 **PERSEVERARE.**
