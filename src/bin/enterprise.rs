@@ -867,6 +867,8 @@ fn main() {
 
     // ── The fold — main thread is a ROUTER ────────────────────────
     // Each candle routes to the right post's pipes by asset pair.
+    let mut accumulated_misses: Vec<(enterprise::thought_encoder::ThoughtAST, holon::kernel::vector::Vector)> = Vec::new();
+
     for rc in raw_stream {
         if args.max_candles > 0 && candle_num >= args.max_candles {
             break;
@@ -891,9 +893,56 @@ fn main() {
             Some((idx, p)) => (idx, p),
             None => continue, // No post for this candle's pair — skip
         };
+        // Step 1: SETTLE TRIGGERED TRADES
+        {
+            let mut current_prices = std::collections::HashMap::new();
+            for p in &ent.posts {
+                current_prices.insert(
+                    (p.source_asset.name.clone(), p.target_asset.name.clone()),
+                    p.current_price(),
+                );
+            }
+            let (settlements, settle_logs) = ent.treasury.settle_triggered(&current_prices);
+            pending_logs.extend(settle_logs);
+
+            for stl in &settlements {
+                let slot = stl.trade.broker_slot_idx;
+                let stl_post_idx = stl.trade.post_idx;
+                let mi = slot / pipes.m;
+                let ei = slot % pipes.m;
+
+                let direction = if stl.exit_price > stl.trade.entry_price {
+                    enterprise::enums::Direction::Up
+                } else {
+                    enterprise::enums::Direction::Down
+                };
+                let optimal = enterprise::simulation::compute_optimal_distances(
+                    &stl.trade.price_history, direction);
+
+                // Market observer learns via channel
+                if let Some(stl_pipes) = all_pipes.get(stl_post_idx) {
+                    if mi < stl_pipes.learn_txs.len() {
+                        let _ = stl_pipes.learn_txs[mi].send((
+                            stl.composed_thought.clone(), direction, stl.amount));
+                    }
+                    // Broker learns via channel
+                    if slot < stl_pipes.broker_learn_txs.len() {
+                        let _ = stl_pipes.broker_learn_txs[slot].send((
+                            stl.composed_thought.clone(), stl.outcome, stl.amount,
+                            direction, optimal));
+                    }
+                }
+                // Exit observer learns on main thread
+                if stl_post_idx < ent.posts.len() && ei < ent.posts[stl_post_idx].exit_observers.len() {
+                    ent.posts[stl_post_idx].exit_observers[ei].observe_distances(
+                        &stl.composed_thought, &optimal, stl.amount);
+                }
+            }
+        }
+
         let post = &mut ent.posts[post_idx];
 
-        // Tick indicator bank (sequential — streaming state)
+        // Step 2: Tick indicator bank (sequential — streaming state)
         let enriched = post.indicator_bank.tick(&rc);
         post.candle_window.push_back(enriched.clone());
         while post.candle_window.len() > post.max_window_size {
@@ -1012,16 +1061,48 @@ fn main() {
                 res.direction, res.optimal_distances));
         }
 
+        // Step 3c: UPDATE TRIGGERS — refresh stop distances on active trades
+        {
+            let trade_info: Vec<_> = ent.treasury.trades.iter()
+                .filter(|(_, t)| t.post_idx == post_idx &&
+                    (t.phase == enterprise::enums::TradePhase::Active
+                  || t.phase == enterprise::enums::TradePhase::Runner))
+                .map(|(id, t)| (*id, t.broker_slot_idx, t.side))
+                .collect();
+
+            let ctx_ref = &*ctx_arc;
+            let mut level_updates = Vec::new();
+            for (tid, slot, side) in trade_info {
+                let mi = slot / pipes.m;
+                let ei = slot % pipes.m;
+                if mi < market_thoughts.len() && ei < post.exit_observers.len() {
+                    let exit_facts = enterprise::post::exit_lens_facts_pub(
+                        &post.exit_observers[ei].lens, &enriched);
+                    let exit_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(exit_facts);
+                    let (exit_vec, _) = ctx_ref.thought_encoder.encode(&exit_bundle);
+                    let composed = holon::kernel::primitives::Primitives::bundle(
+                        &[&market_thoughts[mi], &exit_vec]);
+                    let empty_accums: Vec<enterprise::scalar_accumulator::ScalarAccumulator> = Vec::new();
+                    let (dists, _) = post.exit_observers[ei].recommended_distances(
+                        &composed, &empty_accums, ctx_ref.thought_encoder.scalar_encoder());
+                    let new_levels = dists.to_levels(price, side);
+                    level_updates.push((tid, new_levels));
+                }
+            }
+            for (tid, levels) in level_updates {
+                ent.treasury.update_trade_stops(tid, levels);
+            }
+        }
+
         // Tick trade price histories
         for (_, trade) in ent.treasury.trades.iter_mut() {
             trade.tick(rc.close);
         }
 
-        // Insert cache misses
-        // ctx is behind Arc — we need mut access. Use Arc::get_mut at the boundary.
-        // For now, collect misses and insert after threads complete.
+        // Collect cache misses for insertion after shutdown
+        accumulated_misses.extend(all_misses);
 
-        // Fund proposals
+        // Step 4: Fund proposals
         let fund_logs = ent.treasury.fund_proposals();
         pending_logs.extend(fund_logs);
 
@@ -1064,6 +1145,12 @@ fn main() {
         }
         ent.posts[post_idx].registry = restored_brokers;
     } // end per-post shutdown
+
+    // Insert accumulated cache misses — the one seam.
+    // All thread Arc clones are dropped (threads joined). Arc::get_mut works.
+    if let Some(ctx_mut) = Arc::get_mut(&mut ctx_arc) {
+        ctx_mut.insert_cache_misses(accumulated_misses);
+    }
 
     // Flush remaining logs
     flush_logs(&pending_logs, &ledger);
