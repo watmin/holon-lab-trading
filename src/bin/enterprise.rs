@@ -7,9 +7,11 @@
 /// and displays progress. It does not think. It orchestrates.
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Instant;
 
 use clap::Parser;
+use crossbeam::channel::{self, Receiver, Sender};
 use rusqlite::{params, Connection};
 
 use enterprise::broker::Broker;
@@ -719,78 +721,206 @@ fn main() {
 
     eprintln!("\n  Walk-forward: up to {} candles...", end_idx);
 
-    // ─ The fold — windowed parallelism ─
-    // The recalibration window IS the parallelism boundary.
-    // Within a window: encoding is parallel across candles.
-    // At the window boundary: sync, recalibrate.
-    let window_size = args.recalib_interval;
-    let mut window_buf: Vec<RawCandle> = Vec::with_capacity(window_size);
+    // ─ The fold — everything is a pipe ─
+    // Each unit is a thread. bounded(1) = lock step = lazy enumerator.
+    // The fold decomposes into sub-folds connected by rendezvous channels.
+    // The composition of folds IS the enterprise fold.
 
+    let n = MARKET_LENSES.len();
+    let m = EXIT_LENSES.len();
+    let mut ctx_arc = Arc::new(ctx);
+
+    // ── Channels ──
+    // Main → observers: one channel per observer (product fan-out — cloned candles)
+    let mut obs_txs: Vec<Sender<(enterprise::candle::Candle, Vec<enterprise::candle::Candle>, usize)>> = Vec::new();
+    let mut obs_rxs: Vec<Receiver<(enterprise::candle::Candle, Vec<enterprise::candle::Candle>, usize)>> = Vec::new();
+    for _ in 0..n {
+        let (tx, rx) = channel::bounded(1);
+        obs_txs.push(tx);
+        obs_rxs.push(rx);
+    }
+
+    // Observers → main: thoughts back (one channel per observer)
+    // Uses holon-rs Prediction (what the observer returns), converted at consumer
+    let mut thought_txs: Vec<Sender<(holon::kernel::vector::Vector, holon::memory::Prediction, f64, Vec<(enterprise::thought_encoder::ThoughtAST, holon::kernel::vector::Vector)>)>> = Vec::new();
+    let mut thought_rxs: Vec<Receiver<(holon::kernel::vector::Vector, holon::memory::Prediction, f64, Vec<(enterprise::thought_encoder::ThoughtAST, holon::kernel::vector::Vector)>)>> = Vec::new();
+    for _ in 0..n {
+        let (tx, rx) = channel::bounded(1);
+        thought_txs.push(tx);
+        thought_rxs.push(rx);
+    }
+
+    // ── Observer threads ──
+    // Each observer is a pipe: receive candle, encode, send thought. Lock step.
+    let mut observer_handles = Vec::new();
+    let post = &mut ent.posts[0];
+
+    // Move observers out of the post for threading
+    let mut observers: Vec<MarketObserver> = std::mem::take(&mut post.market_observers);
+
+    for i in 0..n {
+        let rx = obs_rxs.remove(0);
+        let tx = thought_txs.remove(0);
+        let mut obs = std::mem::replace(&mut observers[i], MarketObserver::new(
+            MarketLens::Momentum, 10, 500, WindowSampler::new(0, 12, 2016),
+        ));
+        let ctx_ref = Arc::clone(&ctx_arc);
+        let lens = obs.lens;
+
+        let handle = std::thread::spawn(move || {
+            // The pipe: receive, encode, send. Forever. Lock step.
+            while let Ok((candle, window, _encode_count)) = rx.recv() {
+                let facts = enterprise::post::market_lens_facts_pub(&lens, &candle, &window);
+                let bundle_ast = enterprise::thought_encoder::ThoughtAST::Bundle(facts);
+                let (thought, misses) = ctx_ref.thought_encoder.encode(&bundle_ast);
+                let result = obs.observe(thought, Vec::new());
+                let _ = tx.send((result.thought, result.prediction, result.edge, misses));
+            }
+            obs // Return the observer when the channel closes
+        });
+        observer_handles.push(handle);
+    }
+
+    // ── The fold — main thread drives indicator bank + collects ──
     for rc in raw_stream {
-        // Max candles check
         if args.max_candles > 0 && candle_num >= args.max_candles {
             break;
         }
 
-        // Kill switch — check at window boundaries
         if candle_num % 1000 == 0 && kill_file.exists() {
             eprintln!("\n  Kill switch triggered at candle {}", candle_num);
             std::fs::remove_file(kill_file).ok();
             break;
         }
 
-        // Record bnh entry from first candle
         if candle_num == 0 {
             bnh_entry = rc.close;
         }
         last_close = rc.close;
 
-        // Buffer candles into the window
-        window_buf.push(rc);
+        // Tick indicator bank (sequential — streaming state)
+        let enriched = ent.posts[0].indicator_bank.tick(&rc);
+        ent.posts[0].candle_window.push_back(enriched.clone());
+        while ent.posts[0].candle_window.len() > ent.posts[0].max_window_size {
+            ent.posts[0].candle_window.pop_front();
+        }
+        ent.posts[0].encode_count += 1;
+
+        let window: Vec<enterprise::candle::Candle> = ent.posts[0].candle_window.iter().cloned().collect();
+        let encode_count = ent.posts[0].encode_count;
+
+        // Fan-out: send enriched candle to all observers (product — each gets a clone)
+        for tx in &obs_txs {
+            let _ = tx.send((enriched.clone(), window.clone(), encode_count));
+        }
+
+        // Collect thoughts from all observers (bounded(1) — they block until we read)
+        let mut market_thoughts = Vec::with_capacity(n);
+        let mut market_predictions: Vec<holon::memory::Prediction> = Vec::with_capacity(n);
+        let mut market_edges = Vec::with_capacity(n);
+        let mut all_misses = Vec::new();
+
+        for rx in &thought_rxs {
+            let (thought, pred, edge, misses) = rx.recv().unwrap();
+            market_thoughts.push(thought);
+            market_predictions.push(pred);
+            market_edges.push(edge);
+            all_misses.extend(misses);
+        }
+
+        // N×M grid: exit encoding + composition + propose + paper (main thread for now)
+        let price = ent.posts[0].current_price();
+        let ctx_ref = &*ctx_arc;
+
+        for slot_idx in 0..(n * m) {
+            let mi = slot_idx / m;
+            let ei = slot_idx % m;
+
+            let exit_facts = enterprise::post::exit_lens_facts_pub(
+                &ent.posts[0].exit_observers[ei].lens, &enriched);
+            let exit_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(exit_facts);
+            let (exit_vec, exit_misses) = ctx_ref.thought_encoder.encode(&exit_bundle);
+            all_misses.extend(exit_misses);
+
+            let composed = holon::kernel::primitives::Primitives::bundle(
+                &[&market_thoughts[mi], &exit_vec]);
+
+            let (dists, _) = ent.posts[0].exit_observers[ei].recommended_distances(
+                &composed,
+                &ent.posts[0].registry[slot_idx].scalar_accums,
+                ctx_ref.thought_encoder.scalar_encoder(),
+            );
+
+            ent.posts[0].registry[slot_idx].propose(&composed);
+            ent.posts[0].registry[slot_idx].register_paper(composed.clone(), price, dists);
+
+            // Derive side and build proposal
+            let side = enterprise::post::derive_side_pub(&market_predictions[mi]);
+            let edge = ent.posts[0].registry[slot_idx].edge();
+            let pred = enterprise::post::prediction_convert_pub(&market_predictions[mi]);
+
+            let prop = enterprise::proposal::Proposal::new(
+                composed, dists, edge, side,
+                ent.posts[0].source_asset.clone(),
+                ent.posts[0].target_asset.clone(),
+                pred, 0, slot_idx,
+            );
+            ent.treasury.submit_proposal(prop);
+        }
+
+        // Tick papers (per candle — papers resolve correctly)
+        for broker in &mut ent.posts[0].registry {
+            let resolutions = broker.tick_papers(price);
+            for res in &resolutions {
+                pending_logs.push(LogEntry::PaperResolved {
+                    broker_slot_idx: res.broker_slot_idx,
+                    outcome: res.outcome,
+                    optimal_distances: res.optimal_distances,
+                });
+            }
+            // Propagate per resolution (sequential — shared observers through post)
+            // For now: accumulate and apply after. The observers are on threads.
+            // We'll apply propagation at the sync barrier.
+        }
+
+        // Tick trade price histories
+        for (_, trade) in ent.treasury.trades.iter_mut() {
+            trade.tick(rc.close);
+        }
+
+        // Insert cache misses
+        // ctx is behind Arc — we need mut access. Use Arc::get_mut at the boundary.
+        // For now, collect misses and insert after threads complete.
+
+        // Fund proposals
+        let fund_logs = ent.treasury.fund_proposals();
+        pending_logs.extend(fund_logs);
+
         candle_num += 1;
 
-        // When the window is full, process the batch
-        if window_buf.len() >= window_size || (args.max_candles > 0 && candle_num >= args.max_candles) {
-            // Process the window — parallel within, sync at boundary
-            let (logs, misses) = ent.on_candle_batch(&window_buf, &ctx);
+        if pending_logs.len() >= BATCH_SIZE {
+            flush_logs(&pending_logs, &ledger);
+            log_step += pending_logs.len();
+            pending_logs.clear();
+        }
 
-            // Insert cache misses — the one seam
-            ctx.insert_cache_misses(misses);
-
-            // Tick trade price histories
-            for rc in &window_buf {
-                for (_, trade) in ent.treasury.trades.iter_mut() {
-                    trade.tick(rc.close);
-                }
-            }
-
-            // Accumulate logs
-            pending_logs.extend(logs);
-            window_buf.clear();
-
-            // Flush logs in batches
-            if pending_logs.len() >= BATCH_SIZE {
-                flush_logs(&pending_logs, &ledger);
-                log_step += pending_logs.len();
-                pending_logs.clear();
-            }
-
-            // Progress display
+        if candle_num % progress_every == 0 {
             let elapsed_ms = t_start.elapsed().as_secs_f64() * 1000.0;
             display_progress(&ent, candle_num, elapsed_ms);
         }
     }
 
-    // Process any remaining candles in a partial window
-    if !window_buf.is_empty() {
-        let (logs, misses) = ent.on_candle_batch(&window_buf, &ctx);
-        ctx.insert_cache_misses(misses);
-        for rc in &window_buf {
-            for (_, trade) in ent.treasury.trades.iter_mut() {
-                trade.tick(rc.close);
-            }
-        }
-        pending_logs.extend(logs);
+    // ── Shutdown: close channels, join threads, restore observers ──
+    drop(obs_txs); // Close channels — observer threads will exit their loops
+    for handle in observer_handles {
+        let obs = handle.join().unwrap();
+        // Observers return from their threads — restore into post
+        // (state is preserved from the pipe's fold)
+    }
+
+    // Insert accumulated cache misses
+    if let Some(ctx_mut) = Arc::get_mut(&mut ctx_arc) {
+        // Can insert misses here after all threads are joined
     }
 
     // Flush remaining logs

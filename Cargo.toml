@@ -20,6 +20,7 @@ holon = { path = "../holon-rs", features = ["simd"] }
 rusqlite = { version = "0.31", features = ["bundled"] }
 clap = { version = "4", features = ["derive"] }
 rayon = "1.10"
+crossbeam = "0.8"
 chrono = "0.4"
 parquet = { version = "53", optional = true }
 arrow = { version = "53", optional = true, features = ["prettyprint"] }

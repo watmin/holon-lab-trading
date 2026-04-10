@@ -408,6 +408,14 @@ fn exit_lens_facts(lens: &ExitLens, candle: &Candle) -> Vec<ThoughtAST> {
 }
 
 /// Derive Side from a holon-rs Prediction. Up -> Buy, Down -> Sell.
+pub fn derive_side_pub(pred: &holon::memory::Prediction) -> Side {
+    derive_side_from_prediction(pred)
+}
+
+pub fn prediction_convert_pub(pred: &holon::memory::Prediction) -> Prediction {
+    holon_prediction_to_enterprise(pred)
+}
+
 fn derive_side_from_prediction(pred: &holon::memory::Prediction) -> Side {
     if let Some(dir) = pred.direction {
         if dir.index() == 0 {
