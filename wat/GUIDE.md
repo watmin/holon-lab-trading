@@ -1954,11 +1954,14 @@ runtime:       frozen map (read-only) → slot-idx → &mut broker (disjoint)
   tick all papers, resolve completed. Returns resolution facts and
   PaperResolved log entries.
   **Paper optimal-distances:** papers don't carry price-history. They
-  derive optimal distances from their tracked extremes (MFE/MAE):
-  buy-extreme and sell-extreme relative to entry-price. This is a
-  simpler approximation than the full replay used for real trades.
-  The objective is the same (maximize residue) but the data is limited
-  to what the paper tracked. The wat implements the approximation.
+  derive optimal distances from their tracked extremes (MFE/MAE)
+  via `approximate-optimal-distances(entry, buy-extreme, sell-extreme)`.
+  This is a simpler approximation than `compute-optimal-distances`
+  (which replays full price-history for real trades in step 1).
+  Two paths to optimal distances:
+  - **Real trades** (step 1): `compute-optimal-distances(price-history, direction)` — full replay, in simulation.wat
+  - **Papers** (step 3a): `approximate-optimal-distances(entry, buy-extreme, sell-extreme)` — from tracked extremes, in broker.wat
+  Same objective (maximize residue). Different data availability.
 - `(propagate broker thought outcome weight direction optimal) → (Vec<LogEntry>, PropagationFacts)`
   thought: Vector. outcome: Outcome. weight: f64 — how much value was at
   stake. A $500 Grace teaches harder than a $5 Grace.
