@@ -502,12 +502,14 @@ fn display_progress(ent: &Enterprise, candle_num: usize, elapsed_ms: f64) {
         candle_num as f64 * 1000.0 / elapsed_ms
     };
     let equity = ent.treasury.total_equity();
-    let post = &ent.posts[0];
 
     eprintln!(
         "\n  candle={} throughput={:.0}/s equity={:.2}",
         candle_num, throughput, equity
     );
+
+    // Per-post stats — iterate all posts
+    for post in &ent.posts {
 
     // Per-observer stats
     for obs in &post.market_observers {
@@ -532,6 +534,8 @@ fn display_progress(ent: &Enterprise, candle_num: usize, elapsed_ms: f64) {
             b.edge(),
         );
     }
+
+    } // end per-post iteration
 }
 
 // ─── Summary ─────────────────────────────────────────────────────────────────
@@ -553,11 +557,9 @@ fn display_summary(
     } else {
         total_candles as f64 * 1000.0 / elapsed_ms
     };
-    let post = &ent.posts[0];
-
-    let total_trades: usize = post.registry.iter().map(|b| b.trade_count).sum();
-    let total_grace: f64 = post.registry.iter().map(|b| b.cumulative_grace).sum();
-    let total_violence: f64 = post.registry.iter().map(|b| b.cumulative_violence).sum();
+    let total_trades: usize = ent.posts.iter().flat_map(|p| &p.registry).map(|b| b.trade_count).sum();
+    let total_grace: f64 = ent.posts.iter().flat_map(|p| &p.registry).map(|b| b.cumulative_grace).sum();
+    let total_violence: f64 = ent.posts.iter().flat_map(|p| &p.registry).map(|b| b.cumulative_violence).sum();
     let win_rate = if total_trades == 0 {
         0.0
     } else {
@@ -605,17 +607,19 @@ fn display_summary(
         );
     }
 
-    // Observer panel
+    // Observer panel — iterate all posts
     eprintln!();
     eprintln!("  Observer panel:");
-    for obs in &post.market_observers {
-        eprintln!(
-            "    {}: recalib={} experience={:.2} resolved={}",
-            obs.lens,
-            obs.reckoner.recalib_count(),
-            obs.experience(),
-            obs.resolved,
-        );
+    for post in &ent.posts {
+        for obs in &post.market_observers {
+            eprintln!(
+                "    {}: recalib={} experience={:.2} resolved={}",
+                obs.lens,
+                obs.reckoner.recalib_count(),
+                obs.experience(),
+                obs.resolved,
+            );
+        }
     }
 
     eprintln!();
@@ -692,7 +696,9 @@ fn main() {
         }
     }
     // Register broker lens names
-    register_brokers(&ledger, &ent.posts[0]);
+    for post in &ent.posts {
+        register_brokers(&ledger, post);
+    }
     eprintln!("  Run database: {}", ledger_path);
 
     // ─ Loop config ─
@@ -725,151 +731,142 @@ fn main() {
     // Each unit is a thread. bounded(1) = lock step = lazy enumerator.
     // The fold decomposes into sub-folds connected by rendezvous channels.
     // The composition of folds IS the enterprise fold.
+    // Per-post pipes: the outer loop iterates posts. No magic index.
 
     let n = MARKET_LENSES.len();
     let m = EXIT_LENSES.len();
     let mut ctx_arc = Arc::new(ctx);
 
-    // ── Channels ──
-    // Main → observers: one channel per observer (product fan-out — cloned candles)
-    let mut obs_txs: Vec<Sender<(enterprise::candle::Candle, Vec<enterprise::candle::Candle>, usize)>> = Vec::new();
-    let mut obs_rxs: Vec<Receiver<(enterprise::candle::Candle, Vec<enterprise::candle::Candle>, usize)>> = Vec::new();
-    for _ in 0..n {
-        let (tx, rx) = channel::bounded(1);
-        obs_txs.push(tx);
-        obs_rxs.push(rx);
-    }
-
-    // Observers → main: thoughts back (one channel per observer)
-    // Uses holon-rs Prediction (what the observer returns), converted at consumer
-    let mut thought_txs: Vec<Sender<(holon::kernel::vector::Vector, holon::memory::Prediction, f64, Vec<(enterprise::thought_encoder::ThoughtAST, holon::kernel::vector::Vector)>)>> = Vec::new();
-    let mut thought_rxs: Vec<Receiver<(holon::kernel::vector::Vector, holon::memory::Prediction, f64, Vec<(enterprise::thought_encoder::ThoughtAST, holon::kernel::vector::Vector)>)>> = Vec::new();
-    for _ in 0..n {
-        let (tx, rx) = channel::bounded(1);
-        thought_txs.push(tx);
-        thought_rxs.push(rx);
-    }
-
-    // Main → observers: learning signals (propagation back)
-    // UNBOUNDED — learning is eventually consistent. The observer drains
-    // non-blocking with try_recv. The main thread never blocks on send.
-    // bounded(1) here causes deadlock: main blocks on send, observer
-    // blocks on recv for next candle. Neither proceeds.
-    let mut learn_txs: Vec<Sender<(holon::kernel::vector::Vector, enterprise::enums::Direction, f64)>> = Vec::new();
-    let mut learn_rxs: Vec<Receiver<(holon::kernel::vector::Vector, enterprise::enums::Direction, f64)>> = Vec::new();
-    for _ in 0..n {
-        let (tx, rx) = channel::unbounded();
-        learn_txs.push(tx);
-        learn_rxs.push(rx);
-    }
-
-    // ── Observer threads ──
-    // Each observer is a pipe: receive candle, encode, send thought. Lock step.
-    // Also drains learning signals (non-blocking) at the end of each iteration.
-    let mut observer_handles = Vec::new();
-    let post = &mut ent.posts[0];
-
-    // Move observers out of the post for threading
-    let mut observers: Vec<MarketObserver> = std::mem::take(&mut post.market_observers);
-
-    for i in 0..n {
-        let rx = obs_rxs.remove(0);
-        let tx = thought_txs.remove(0);
-        let learn_rx = learn_rxs.remove(0);
-        let mut obs = std::mem::replace(&mut observers[i], MarketObserver::new(
-            MarketLens::Momentum, 10, 500, WindowSampler::new(0, 12, 2016),
-        ));
-        let ctx_ref = Arc::clone(&ctx_arc);
-        let lens = obs.lens;
-        let recalib = args.recalib_interval;
-
-        let handle = std::thread::spawn(move || {
-            // The pipe: drain learning, encode, send. Forever. Lock step.
-            while let Ok((candle, window, _encode_count)) = rx.recv() {
-                // Drain learning signals FIRST — learn before predicting
-                while let Ok((thought, direction, weight)) = learn_rx.try_recv() {
-                    obs.resolve(&thought, direction, weight, recalib);
-                }
-
-                // Encode via lens
-                let facts = enterprise::post::market_lens_facts_pub(&lens, &candle, &window);
-                let bundle_ast = enterprise::thought_encoder::ThoughtAST::Bundle(facts);
-                let (thought, misses) = ctx_ref.thought_encoder.encode(&bundle_ast);
-                let result = obs.observe(thought, Vec::new());
-
-                // Send downstream — block until consumer takes
-                let _ = tx.send((result.thought, result.prediction, result.edge, misses));
-            }
-            obs // Return the observer when the channel closes
-        });
-        observer_handles.push(handle);
-    }
-
-    // ── Broker pipes — 24 threads, each owns its broker ──────────
-    // Main → brokers: (composed, dists, price, side, edge, pred)
+    type ObsInput = (enterprise::candle::Candle, Vec<enterprise::candle::Candle>, usize);
+    type ObsOutput = (holon::kernel::vector::Vector, holon::memory::Prediction, f64,
+                      Vec<(enterprise::thought_encoder::ThoughtAST, holon::kernel::vector::Vector)>);
+    type ObsLearn = (holon::kernel::vector::Vector, enterprise::enums::Direction, f64);
     type BrokerInput = (holon::kernel::vector::Vector, enterprise::distances::Distances, f64,
                         enterprise::enums::Side, f64, enterprise::enums::Prediction);
     type BrokerOutput = (enterprise::proposal::Proposal, Vec<enterprise::broker::Resolution>);
+    type BrokerLearn = (holon::kernel::vector::Vector, enterprise::enums::Outcome,
+                        f64, enterprise::enums::Direction, enterprise::distances::Distances);
 
-    let mut broker_in_txs: Vec<Sender<BrokerInput>> = Vec::new();
-    let mut broker_out_rxs: Vec<Receiver<BrokerOutput>> = Vec::new();
-    let mut broker_learn_txs: Vec<Sender<(holon::kernel::vector::Vector, enterprise::enums::Outcome,
-        f64, enterprise::enums::Direction, enterprise::distances::Distances)>> = Vec::new();
+    /// Per-post pipe wiring. One per asset pair. No magic index.
+    struct PostPipes {
+        source_asset: String,
+        target_asset: String,
+        obs_txs: Vec<Sender<ObsInput>>,
+        thought_rxs: Vec<Receiver<ObsOutput>>,
+        learn_txs: Vec<Sender<ObsLearn>>,
+        broker_in_txs: Vec<Sender<BrokerInput>>,
+        broker_out_rxs: Vec<Receiver<BrokerOutput>>,
+        broker_learn_txs: Vec<Sender<BrokerLearn>>,
+        observer_handles: Vec<std::thread::JoinHandle<MarketObserver>>,
+        broker_handles: Vec<std::thread::JoinHandle<Broker>>,
+        n: usize,
+        m: usize,
+    }
 
-    let mut brokers: Vec<Broker> = std::mem::take(&mut ent.posts[0].registry);
-    let mut broker_handles = Vec::new();
+    // ── Setup pipes for EACH post — iterate, never index ──
+    let mut all_pipes: Vec<PostPipes> = Vec::new();
 
-    for slot_idx in 0..(n * m) {
-        let (in_tx, in_rx) = channel::bounded::<BrokerInput>(1);
-        let (out_tx, out_rx) = channel::bounded::<BrokerOutput>(1);
-        let (learn_tx, learn_rx) = channel::unbounded();
+    for post in &mut ent.posts {
+        let mut obs_txs = Vec::new();
+        let mut thought_rxs = Vec::new();
+        let mut learn_txs = Vec::new();
+        let mut observer_handles = Vec::new();
 
-        broker_in_txs.push(in_tx);
-        broker_out_rxs.push(out_rx);
-        broker_learn_txs.push(learn_tx);
+        // Observer channels + threads
+        let mut observers: Vec<MarketObserver> = std::mem::take(&mut post.market_observers);
+        for i in 0..n {
+            let (obs_tx, obs_rx) = channel::bounded::<ObsInput>(1);
+            let (thought_tx, thought_rx) = channel::bounded::<ObsOutput>(1);
+            let (learn_tx, learn_rx) = channel::unbounded::<ObsLearn>();
 
-        let mut broker = std::mem::replace(&mut brokers[slot_idx], Broker::new(
-            vec![], 0, 0, 10, 500, vec![]));
-        let source_asset = ent.posts[0].source_asset.clone();
-        let target_asset = ent.posts[0].target_asset.clone();
-        let post_idx = 0usize;
-        let recalib = args.recalib_interval;
+            obs_txs.push(obs_tx);
+            thought_rxs.push(thought_rx);
+            learn_txs.push(learn_tx);
 
-        let handle = std::thread::spawn(move || {
-            while let Ok((composed, dists, price, side, edge, pred)) = in_rx.recv() {
-                // Drain learn channel FIRST — apply propagation from prior candles
-                // before processing the new one. The learning must precede the prediction.
-                while let Ok((thought, outcome, weight, direction, optimal)) = learn_rx.try_recv() {
-                    broker.propagate(
-                        &thought, outcome, weight, direction, &optimal,
-                        recalib,
-                        enterprise::post::ctx_scalar_encoder_placeholder(),
-                    );
+            let mut obs = std::mem::replace(&mut observers[i], MarketObserver::new(
+                MarketLens::Momentum, 10, 500, WindowSampler::new(0, 12, 2016)));
+            let ctx_ref = Arc::clone(&ctx_arc);
+            let lens = obs.lens;
+            let recalib = args.recalib_interval;
+
+            let handle = std::thread::spawn(move || {
+                while let Ok((candle, window, _encode_count)) = obs_rx.recv() {
+                    while let Ok((thought, direction, weight)) = learn_rx.try_recv() {
+                        obs.resolve(&thought, direction, weight, recalib);
+                    }
+                    let facts = enterprise::post::market_lens_facts_pub(&lens, &candle, &window);
+                    let bundle_ast = enterprise::thought_encoder::ThoughtAST::Bundle(facts);
+                    let (thought, misses) = ctx_ref.thought_encoder.encode(&bundle_ast);
+                    let result = obs.observe(thought, Vec::new());
+                    let _ = thought_tx.send((result.thought, result.prediction, result.edge, misses));
                 }
+                obs
+            });
+            observer_handles.push(handle);
+        }
 
-                // Propose (mutates reckoner)
-                broker.propose(&composed);
-                // Register paper (mutates paper deque)
-                broker.register_paper(composed.clone(), price, dists);
-                // Tick papers
-                let resolutions = broker.tick_papers(price);
+        // Broker channels + threads
+        let mut broker_in_txs = Vec::new();
+        let mut broker_out_rxs = Vec::new();
+        let mut broker_learn_txs = Vec::new();
+        let mut broker_handles = Vec::new();
+        let mut brokers: Vec<Broker> = std::mem::take(&mut post.registry);
+        let source_asset = post.source_asset.clone();
+        let target_asset = post.target_asset.clone();
 
-                // Build proposal
-                let prop = enterprise::proposal::Proposal::new(
-                    composed, dists, edge, side,
-                    source_asset.clone(), target_asset.clone(),
-                    pred, post_idx, broker.slot_idx,
-                );
+        for slot_idx in 0..(n * m) {
+            let (in_tx, in_rx) = channel::bounded::<BrokerInput>(1);
+            let (out_tx, out_rx) = channel::bounded::<BrokerOutput>(1);
+            let (blearn_tx, blearn_rx) = channel::unbounded::<BrokerLearn>();
 
-                // Send downstream
-                let _ = out_tx.send((prop, resolutions));
-            }
-            broker
+            broker_in_txs.push(in_tx);
+            broker_out_rxs.push(out_rx);
+            broker_learn_txs.push(blearn_tx);
+
+            let mut broker = std::mem::replace(&mut brokers[slot_idx], Broker::new(
+                vec![], 0, 0, 10, 500, vec![]));
+            let src = source_asset.clone();
+            let tgt = target_asset.clone();
+            let post_idx_for_broker = all_pipes.len(); // current post index
+            let recalib = args.recalib_interval;
+
+            let handle = std::thread::spawn(move || {
+                while let Ok((composed, dists, price, side, edge, pred)) = in_rx.recv() {
+                    while let Ok((thought, outcome, weight, direction, optimal)) = blearn_rx.try_recv() {
+                        broker.propagate(&thought, outcome, weight, direction, &optimal,
+                            recalib, enterprise::post::ctx_scalar_encoder_placeholder());
+                    }
+                    broker.propose(&composed);
+                    broker.register_paper(composed.clone(), price, dists);
+                    let resolutions = broker.tick_papers(price);
+                    let prop = enterprise::proposal::Proposal::new(
+                        composed, dists, edge, side, src.clone(), tgt.clone(),
+                        pred, post_idx_for_broker, broker.slot_idx);
+                    let _ = out_tx.send((prop, resolutions));
+                }
+                broker
+            });
+            broker_handles.push(handle);
+        }
+
+        all_pipes.push(PostPipes {
+            source_asset: source_asset.name.clone(),
+            target_asset: target_asset.name.clone(),
+            obs_txs,
+            thought_rxs,
+            learn_txs,
+            broker_in_txs,
+            broker_out_rxs,
+            broker_learn_txs,
+            observer_handles,
+            broker_handles,
+            n,
+            m,
         });
-        broker_handles.push(handle);
     }
 
     // ── The fold — main thread is a ROUTER ────────────────────────
+    // Each candle routes to the right post's pipes by asset pair.
     for rc in raw_stream {
         if args.max_candles > 0 && candle_num >= args.max_candles {
             break;
@@ -886,19 +883,29 @@ fn main() {
         }
         last_close = rc.close;
 
-        // Tick indicator bank (sequential — streaming state)
-        let enriched = ent.posts[0].indicator_bank.tick(&rc);
-        ent.posts[0].candle_window.push_back(enriched.clone());
-        while ent.posts[0].candle_window.len() > ent.posts[0].max_window_size {
-            ent.posts[0].candle_window.pop_front();
-        }
-        ent.posts[0].encode_count += 1;
+        // Route candle to the right post by asset pair
+        let pipes = all_pipes.iter().enumerate().find(|(_, p)| {
+            p.source_asset == rc.source_asset.name && p.target_asset == rc.target_asset.name
+        });
+        let (post_idx, pipes) = match pipes {
+            Some((idx, p)) => (idx, p),
+            None => continue, // No post for this candle's pair — skip
+        };
+        let post = &mut ent.posts[post_idx];
 
-        let window: Vec<enterprise::candle::Candle> = ent.posts[0].candle_window.iter().cloned().collect();
-        let encode_count = ent.posts[0].encode_count;
+        // Tick indicator bank (sequential — streaming state)
+        let enriched = post.indicator_bank.tick(&rc);
+        post.candle_window.push_back(enriched.clone());
+        while post.candle_window.len() > post.max_window_size {
+            post.candle_window.pop_front();
+        }
+        post.encode_count += 1;
+
+        let window: Vec<enterprise::candle::Candle> = post.candle_window.iter().cloned().collect();
+        let encode_count = post.encode_count;
 
         // Fan-out: send enriched candle to all observers (product — each gets a clone)
-        for tx in &obs_txs {
+        for tx in &pipes.obs_txs {
             let _ = tx.send((enriched.clone(), window.clone(), encode_count));
         }
 
@@ -908,7 +915,7 @@ fn main() {
         let mut market_edges = Vec::with_capacity(n);
         let mut all_misses = Vec::new();
 
-        for rx in &thought_rxs {
+        for rx in &pipes.thought_rxs {
             let (thought, pred, edge, misses) = rx.recv().unwrap();
             market_thoughts.push(thought);
             market_predictions.push(pred);
@@ -917,13 +924,13 @@ fn main() {
         }
 
         // N×M grid: parallel computation → send to broker pipes
-        let price = ent.posts[0].current_price();
+        let price = post.current_price();
         let ctx_ref = &*ctx_arc;
 
         // Compute values in parallel (pure reads, scoped borrow)
         use rayon::prelude::*;
         let grid_values: Vec<_> = {
-            let exit_observers = &ent.posts[0].exit_observers;
+            let exit_observers = &post.exit_observers;
             // Brokers are on threads — read scalar_accums from... we need them here.
             // For now: edge is 0.0 (brokers are on threads, we can't read them).
             // The broker thread will compute edge internally.
@@ -964,12 +971,12 @@ fn main() {
 
         // Send to broker pipes — bounded(1), each broker gets its input
         for (slot_idx, composed, dists, side, edge, pred, _) in grid_values {
-            let _ = broker_in_txs[slot_idx].send((composed, dists, price, side, edge, pred));
+            let _ = pipes.broker_in_txs[slot_idx].send((composed, dists, price, side, edge, pred));
         }
 
         // Collect from broker pipes — bounded(1), all 24 produce
         let mut all_resolutions = Vec::new();
-        for rx in &broker_out_rxs {
+        for rx in &pipes.broker_out_rxs {
             let (prop, resolutions) = rx.recv().unwrap();
             ent.treasury.submit_proposal(prop);
             for res in &resolutions {
@@ -988,19 +995,19 @@ fn main() {
             let ei = res.broker_slot_idx % m;
 
             // Market observer: learn via channel
-            if mi < learn_txs.len() {
-                let _ = learn_txs[mi].send((
+            if mi < pipes.learn_txs.len() {
+                let _ = pipes.learn_txs[mi].send((
                     res.composed_thought.clone(), res.direction, res.amount));
             }
 
             // Exit observer: main thread (not on a pipe yet)
-            if ei < ent.posts[0].exit_observers.len() {
-                ent.posts[0].exit_observers[ei].observe_distances(
+            if ei < post.exit_observers.len() {
+                post.exit_observers[ei].observe_distances(
                     &res.composed_thought, &res.optimal_distances, res.amount);
             }
 
             // Broker: learn via channel
-            let _ = broker_learn_txs[res.broker_slot_idx].send((
+            let _ = pipes.broker_learn_txs[res.broker_slot_idx].send((
                 res.composed_thought.clone(), res.outcome, res.amount,
                 res.direction, res.optimal_distances));
         }
@@ -1033,24 +1040,30 @@ fn main() {
     }
 
     // ── Shutdown: close channels, join threads, restore observers + brokers ──
-    drop(obs_txs); // Close observer input channels
-    drop(broker_in_txs); // Close broker input channels
+    // Iterate all posts — no magic index
+    for (post_idx, pipes) in all_pipes.into_iter().enumerate() {
+        // Drop senders to close channels — threads will exit their loops
+        drop(pipes.obs_txs);
+        drop(pipes.broker_in_txs);
+        drop(pipes.learn_txs);
+        drop(pipes.broker_learn_txs);
 
-    // Join observer threads — restore observers to the post
-    let mut restored_observers = Vec::new();
-    for handle in observer_handles {
-        let obs = handle.join().unwrap();
-        restored_observers.push(obs);
-    }
-    ent.posts[0].market_observers = restored_observers;
+        // Join observer threads — restore to post
+        let mut restored_observers = Vec::new();
+        for handle in pipes.observer_handles {
+            let obs = handle.join().unwrap();
+            restored_observers.push(obs);
+        }
+        ent.posts[post_idx].market_observers = restored_observers;
 
-    // Join broker threads — restore brokers to the post
-    let mut restored_brokers = Vec::new();
-    for handle in broker_handles {
-        let broker = handle.join().unwrap();
-        restored_brokers.push(broker);
-    }
-    ent.posts[0].registry = restored_brokers;
+        // Join broker threads — restore to post
+        let mut restored_brokers = Vec::new();
+        for handle in pipes.broker_handles {
+            let broker = handle.join().unwrap();
+            restored_brokers.push(broker);
+        }
+        ent.posts[post_idx].registry = restored_brokers;
+    } // end per-post shutdown
 
     // Flush remaining logs
     flush_logs(&pending_logs, &ledger);
