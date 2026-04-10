@@ -31,6 +31,11 @@ use enterprise::window_sampler::WindowSampler;
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const BATCH_SIZE: usize = 50;
+/// Max learn signals to drain per candle per thread.
+/// The reckoner is a CRDT — deferral is safe. The queue drains over
+/// subsequent candles. Production rate ~1/candle. Drain rate 5/candle.
+/// The queue converges to empty.
+const MAX_DRAIN: usize = 5;
 const MARKET_LENSES: &[MarketLens] = &[
     MarketLens::Momentum,
     MarketLens::Structure,
@@ -816,8 +821,20 @@ fn main() {
 
             let handle = std::thread::spawn(move || {
                 while let Ok((candle, window, _encode_count)) = obs_rx.recv() {
-                    while let Ok((thought, direction, weight)) = learn_rx.try_recv() {
-                        obs.resolve(&thought, direction, weight, recalib);
+                    // Drain at most MAX_DRAIN learn signals per candle.
+                    // The learning is eventually consistent — the CRDT converges.
+                    // The queue drains over subsequent candles.
+                    {
+                        let mut drained = 0;
+                        while drained < MAX_DRAIN {
+                            match learn_rx.try_recv() {
+                                Ok((thought, direction, weight)) => {
+                                    obs.resolve(&thought, direction, weight, recalib);
+                                    drained += 1;
+                                }
+                                Err(_) => break,
+                            }
+                        }
                     }
                     let facts = enterprise::post::market_lens_facts_pub(&lens, &candle, &*window);
                     let bundle_ast = enterprise::thought_encoder::ThoughtAST::Bundle(facts);
@@ -869,9 +886,21 @@ fn main() {
 
             let handle = std::thread::spawn(move || {
                 while let Ok((composed, dists, price, side, edge, pred)) = in_rx.recv() {
-                    while let Ok((thought, outcome, weight, direction, optimal)) = blearn_rx.try_recv() {
-                        broker.propagate(&thought, outcome, weight, direction, &optimal,
-                            recalib, enterprise::post::ctx_scalar_encoder_placeholder());
+                    // Drain at most MAX_DRAIN learn signals per candle.
+                    // The reckoner is a CRDT. Deferral is safe. The queue drains
+                    // over subsequent candles. Constant time per candle.
+                    {
+                        let mut drained = 0;
+                        while drained < MAX_DRAIN {
+                            match blearn_rx.try_recv() {
+                                Ok((thought, outcome, weight, direction, optimal)) => {
+                                    broker.propagate(&thought, outcome, weight, direction, &optimal,
+                                        recalib, enterprise::post::ctx_scalar_encoder_placeholder());
+                                    drained += 1;
+                                }
+                                Err(_) => break,
+                            }
+                        }
                     }
                     broker.propose(&composed);
                     broker.register_paper(composed.clone(), price, dists);
