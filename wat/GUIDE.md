@@ -1266,32 +1266,65 @@ Three domains. Each domain has scoped subfiles.
   - `time.wat` — minute (mod 60), hour (mod 24), day-of-week (mod 7), day-of-month (mod 31). Circular scalars.
 
 - **market/** — what the market IS DOING. Direction signal. Market observers use these.
-  MarketLens → modules:
+  MarketLens → modules (every lens also includes shared/time + standard):
   - `:momentum` → oscillators, momentum, stochastic
   - `:structure` → keltner, fibonacci, ichimoku, price-action
   - `:volume` → flow
   - `:narrative` → timeframe, divergence
   - `:regime` → regime, persistence
   - `:generalist` → all of the above
-  Files:
-  - `oscillators.wat` — Williams %R, RSI, CCI, MFI, multi-ROC
-  - `flow.wat` — OBV, VWAP, MFI, buying/selling pressure
-  - `persistence.wat` — Hurst, autocorrelation, ADX
-  - `regime.wat` — KAMA-ER, choppiness, DFA, variance ratio, entropy, Aroon, fractal dim
-  - `divergence.wat` — RSI divergence via PELT structural peaks
-  - `ichimoku.wat` — cloud position, TK cross
+  Files and atom lists (every atom each module MUST emit):
+  - `oscillators.wat` — oscillator positions as scalars
+    atoms: `rsi`, `cci`, `mfi`, `williams-r`, `roc-1`, `roc-3`, `roc-6`, `roc-12`
+  - `flow.wat` — volume and pressure
+    atoms: `obv-slope`, `vwap-distance`, `buying-pressure`, `selling-pressure`,
+           `volume-ratio`, `body-ratio`
+  - `persistence.wat` — memory in the series
+    atoms: `hurst`, `autocorrelation`, `adx`
+  - `regime.wat` — what KIND of market this is
+    atoms: `kama-er`, `choppiness`, `dfa-alpha`, `variance-ratio`,
+           `entropy-rate`, `aroon-up`, `aroon-down`, `fractal-dim`
+  - `divergence.wat` — RSI divergence via structural peaks
+    atoms: `rsi-divergence-bull`, `rsi-divergence-bear`, `divergence-spread`
+  - `ichimoku.wat` — cloud position, TK cross, distances
+    atoms: `cloud-position`, `cloud-thickness`, `tk-cross-delta`, `tk-spread`,
+           `tenkan-dist`, `kijun-dist`
   - `stochastic.wat` — %K/%D spread and crosses
-  - `fibonacci.wat` — retracement level detection
-  - `keltner.wat` — channel position, BB position, squeeze
-  - `momentum.wat` — SMA-relative, MACD triplet, CCI, DI-spread
-  - `price-action.wat` — range-ratio, gaps, consecutive runs
-  - `timeframe.wat` — 1h/4h structure + narrative + inter-timeframe agreement
+    atoms: `stoch-k`, `stoch-d`, `stoch-kd-spread`
+  - `fibonacci.wat` — retracement level distances
+    atoms: `range-pos-12`, `range-pos-24`, `range-pos-48`,
+           `fib-dist-236`, `fib-dist-382`, `fib-dist-500`, `fib-dist-618`, `fib-dist-786`
+  - `keltner.wat` — channel positions, squeeze
+    atoms: `bb-pos`, `bb-width`, `kelt-pos`, `squeeze`,
+           `kelt-upper-dist`, `kelt-lower-dist`
+  - `momentum.wat` — trend-relative, MACD, DI
+    atoms: `close-sma20`, `close-sma50`, `close-sma200`,
+           `macd-hist`, `di-spread`, `atr-ratio`
+  - `price-action.wat` — candlestick anatomy, range, gaps
+    atoms: `range-ratio`, `gap`, `consecutive-up`, `consecutive-down`,
+           `body-ratio-pa`, `upper-wick`, `lower-wick`
+  - `timeframe.wat` — 1h/4h structure + inter-timeframe agreement
+    atoms: `tf-1h-trend`, `tf-1h-ret`, `tf-4h-trend`, `tf-4h-ret`,
+           `tf-agreement`, `tf-5m-1h-align`
+  - `standard.wat` — universal context for all market observers.
+    Reads the candle WINDOW (not just the current candle) for recency
+    and distance computations. Interface: `(encode-standard-facts candle-window) → Vec<ThoughtAST>`.
+    atoms: `since-rsi-extreme`, `since-vol-spike`, `since-large-move`,
+           `dist-from-high`, `dist-from-low`, `dist-from-midpoint`,
+           `dist-from-sma200`, `session-depth`
+
+  Every MarketLens variant includes `shared/time` AND `standard` automatically.
+  The generalist includes ALL modules above.
 
 - **exit/** — whether CONDITIONS favor trading. Distance signal. Exit observers use these.
   ExitLens → modules:
   - `:volatility` → volatility.wat — ATR regime, ATR ratio, squeeze state
+    atoms: `atr-ratio`, `atr-r`, `atr-roc-6`, `atr-roc-12`, `squeeze`, `bb-width`
   - `:structure` → structure.wat — trend consistency, ADX strength
+    atoms: `trend-consistency-6`, `trend-consistency-12`, `trend-consistency-24`,
+           `adx`, `exit-kama-er`
   - `:timing` → timing.wat — momentum state, reversal signals
+    atoms: `rsi`, `stoch-k`, `stoch-kd-spread`, `macd-hist`, `cci`
   - `:generalist` → all three (volatility + structure + timing)
 
 **Interface (per module):**
@@ -2423,6 +2456,83 @@ Step 4: COLLECT + FUND
   treasury produces: funded trades (move capital: available → reserved)
   treasury drains:  proposals → empty
 ```
+
+---
+
+## Performance
+
+The machine must process enough candles to learn. 652,608 candles at 3/s
+takes 60 hours. At 250/s it takes 43 minutes. Throughput IS the ability
+to learn. Performance is not an optimization — it is a requirement.
+
+**Target:** 75-500 candles/second at 10,000 dimensions. The prior Rust
+(pre-007) sustained 251/s flat. The new architecture has more observers
+(10 vs 7) and more brokers (24 vs 7) but the same algebra. The target
+is achievable with correct parallelism.
+
+**What must be parallel:**
+
+- **Step 2: market observer encoding.** Six market observers encode the
+  same candle independently. Each has its own lens, its own window sampler,
+  its own reckoner. No shared mutable state during encoding. `par_iter`
+  over market observers, `collect()` the results. Each returns
+  `(Vector, Prediction, f64, Vec<misses>)`. This is the heaviest step —
+  six 10,000-dim encodings. Parallelism turns 6x into ~1x.
+
+- **Step 3a: broker tick.** 24 brokers tick their papers independently.
+  Each broker touches only its own paper deque. Disjoint. `par_iter`,
+  `collect()` the resolutions. Light per-broker (a few papers each) but
+  24 of them.
+
+**What must be sequential:**
+
+- **Step 2: exit observer dispatch.** Exit observers receive market thoughts
+  as input — they depend on step 2's market results. Sequential within
+  step 2, after the parallel market encoding.
+
+- **Step 3b: propagation.** Resolutions from 3a route to shared observers.
+  The market observer is shared across brokers. Sequential fold over
+  resolutions.
+
+- **Step 3c: trigger updates.** Queries shared observers and treasury.
+  Sequential.
+
+**SIMD:** holon-rs supports AVX2/NEON via `features = ["simd"]`. The
+`cosine`, `bind`, `bundle` operations are the hot path — called thousands
+of times per candle. SIMD gives ~5x on these primitives. Enable with
+`cargo build --release --features simd`.
+
+**The algebra is cheap. The parallelism makes it fast.** 10 observers ×
+~20 atoms each × 10,000 dimensions = ~2M float operations per candle.
+One core at ~10 GFLOPS can do this in microseconds. The bottleneck is
+the SERIAL execution of what should be parallel, not the algebra itself.
+
+---
+
+## Forge coordinates
+
+Known findings from the ninth inscription's Rust compilation. These
+are coordinates for refinement, not blockers.
+
+- **broker.edge on zero vector.** `edge()` calls `predict(&Vector::zeros(...))`.
+  A zero vector has no contextual meaning. Should take the composed thought
+  as input, or rename to `baseline_edge`. The edge returned is the broker's
+  general confidence level, not its confidence for a specific thought.
+
+- **treasury.settle_triggered complexity.** 170 lines, three paths welded:
+  safety-stop, trail/tp/runner, and runner-transition. Extract
+  `settle_one(&trade, price, cost_rate) → Settlement` as a pure function.
+  The capital invariant becomes testable in isolation.
+
+- **market_thoughts_cache.** Enterprise writes market-thoughts in step 2,
+  reads in step 3c. An explicit field on the struct. Threading as a return
+  value would eliminate the cache and make the fold body purer. Hickey's
+  coordinate from the designer review.
+
+- **Lifecycle tests missing.** enterprise.on_candle, treasury.fund_proposals,
+  treasury.settle_triggered, post.on_candle, broker.propagate,
+  broker.tick_papers — all untested. The component parts work (116 tests
+  pass) but the lifecycle has no end-to-end test at the Rust level.
 
 ---
 

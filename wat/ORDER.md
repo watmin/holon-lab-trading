@@ -51,6 +51,7 @@ vocab/market/keltner.wat
 vocab/market/momentum.wat
 vocab/market/price-action.wat
 vocab/market/timeframe.wat
+vocab/market/standard.wat       ; universal context — window-level recency/distance
 vocab/exit/volatility.wat
 vocab/exit/structure.wat
 vocab/exit/timing.wat
