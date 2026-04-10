@@ -25,3 +25,4 @@ pub mod log_entry;
 pub mod post;
 pub mod treasury;
 pub mod enterprise;
+pub mod encoder_service;
