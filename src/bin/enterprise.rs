@@ -720,10 +720,11 @@ fn main() {
     let mut last_close: f64 = 0.0;
     let t_start = Instant::now();
     let mut candle_num: usize = 0;
-    let mut log_step: usize = 0;
-    let mut pending_logs: Vec<LogEntry> = Vec::new();
 
-    // One writer. No contention. Just write.
+    // Log service — the DB writer as a pipe.
+    // One handle for the main thread. The log service owns the SQLite connection.
+    let (log_service, mut log_handles) = enterprise::log_service::LogService::spawn(1, ledger);
+    let log_handle = log_handles.pop().unwrap();
 
     eprintln!("\n  Walk-forward: up to {} candles...", end_idx);
 
@@ -747,7 +748,7 @@ fn main() {
     let grid_handles: Vec<_> = encoder_handles.drain(n..).collect();
     let mut obs_encoder_handles: Vec<_> = encoder_handles.drain(..).collect();
 
-    type ObsInput = (enterprise::candle::Candle, Vec<enterprise::candle::Candle>, usize);
+    type ObsInput = (enterprise::candle::Candle, Arc<Vec<enterprise::candle::Candle>>, usize);
     type ObsOutput = (holon::kernel::vector::Vector, holon::memory::Prediction, f64,
                       Vec<(enterprise::thought_encoder::ThoughtAST, holon::kernel::vector::Vector)>);
     type ObsLearn = (holon::kernel::vector::Vector, enterprise::enums::Direction, f64);
@@ -805,7 +806,7 @@ fn main() {
                     while let Ok((thought, direction, weight)) = learn_rx.try_recv() {
                         obs.resolve(&thought, direction, weight, recalib);
                     }
-                    let facts = enterprise::post::market_lens_facts_pub(&lens, &candle, &window);
+                    let facts = enterprise::post::market_lens_facts_pub(&lens, &candle, &*window);
                     let bundle_ast = enterprise::thought_encoder::ThoughtAST::Bundle(facts);
 
                     // Cache pipe: get from encoder service
@@ -926,7 +927,7 @@ fn main() {
                 );
             }
             let (settlements, settle_logs) = ent.treasury.settle_triggered(&current_prices);
-            pending_logs.extend(settle_logs);
+            for entry in settle_logs { log_handle.log(entry); }
 
             for stl in &settlements {
                 let slot = stl.trade.broker_slot_idx;
@@ -973,12 +974,12 @@ fn main() {
         }
         post.encode_count += 1;
 
-        let window: Vec<enterprise::candle::Candle> = post.candle_window.iter().cloned().collect();
+        let window: Arc<Vec<enterprise::candle::Candle>> = Arc::new(post.candle_window.iter().cloned().collect());
         let encode_count = post.encode_count;
 
         // Fan-out: send enriched candle to all observers (product — each gets a clone)
         for tx in &pipes.obs_txs {
-            let _ = tx.send((enriched.clone(), window.clone(), encode_count));
+            let _ = tx.send((enriched.clone(), Arc::clone(&window), encode_count));
         }
 
         // Collect thoughts from all observers (bounded(1) — they block until we read)
@@ -1062,7 +1063,7 @@ fn main() {
             let (prop, resolutions) = rx.recv().unwrap();
             ent.treasury.submit_proposal(prop);
             for res in &resolutions {
-                pending_logs.push(LogEntry::PaperResolved {
+                log_handle.log(LogEntry::PaperResolved {
                     broker_slot_idx: res.broker_slot_idx,
                     outcome: res.outcome,
                     optimal_distances: res.optimal_distances,
@@ -1144,15 +1145,11 @@ fn main() {
 
         // Step 4: Fund proposals
         let fund_logs = ent.treasury.fund_proposals();
-        pending_logs.extend(fund_logs);
+        for entry in fund_logs { log_handle.log(entry); }
 
         candle_num += 1;
 
-        if pending_logs.len() >= BATCH_SIZE {
-            flush_logs(&pending_logs, &ledger);
-            log_step += pending_logs.len();
-            pending_logs.clear();
-        }
+        // Logs flow through the pipe. No batching. The log service writes.
 
         if candle_num % progress_every == 0 {
             let elapsed_ms = t_start.elapsed().as_secs_f64() * 1000.0;
@@ -1199,12 +1196,10 @@ fn main() {
     drop(step3c_handle);
     encoder_service.shutdown();
 
-    // Flush remaining logs
-    flush_logs(&pending_logs, &ledger);
-    log_step += pending_logs.len();
-    pending_logs.clear();
-
-    // No transaction to commit. Each flush_logs writes directly.
+    // Shutdown log service — drop handle, cascade closes pipe, writer drains and exits
+    let log_rows = log_service.rows();
+    drop(log_handle);
+    log_service.shutdown();
 
     // ─ Summary ─
     let elapsed_ms = t_start.elapsed().as_secs_f64() * 1000.0;
@@ -1216,7 +1211,7 @@ fn main() {
         last_close,
         args.swap_fee,
         args.slippage,
-        log_step,
+        log_rows,
         &ledger_path,
     );
 }
