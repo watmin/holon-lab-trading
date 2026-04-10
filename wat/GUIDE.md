@@ -713,8 +713,8 @@ on what. That section shows what each thing IS.
   [source-asset : Asset]       ; what was deployed
   [target-asset : Asset]       ; what was acquired
   [side : Side]                ; copied from the funding Proposal at treasury funding time
-  [entry-rate : f64]
-  [source-amount : f64]        ; how much was deployed
+  [entry-price : f64]           ; price when the trade was funded
+  [amount : f64]               ; how much was deployed
   [stop-levels : Levels]       ; current trailing stop, safety stop
                                ; absolute price levels, updated by step 3c
   [candles-held : usize]       ; how long open
@@ -2174,7 +2174,7 @@ The treasury NEVER deploys more than available capital. The loss on any trade is
   Step 1 only checks: did a stop-level fire? One entry. One exit.
   Each settled trade produces a TreasurySettlement. The enterprise computes
   direction and optimal-distances directly (derives direction from
-  exit-price vs entry-rate, replays trade's price-history for
+  exit-price vs entry-price, replays trade's price-history for
   optimal-distances) and passes them to post-propagate.
 - `(available-capital treasury asset) → f64`
   how much is free to deploy?

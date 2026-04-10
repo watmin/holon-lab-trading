@@ -23,7 +23,6 @@ from the guide.
 ```
 ;; ── Leaves — depend on nothing ──────────────────────────────
 raw-candle.wat              ; Asset, RawCandle
-indicator-bank.wat          ; IndicatorBank (streaming primitives inside)
 window-sampler.wat          ; WindowSampler
 enums.wat                   ; Side, Direction, Outcome, TradePhase,
                             ; reckoner-config, prediction, ScalarEncoding
@@ -33,6 +32,9 @@ engram-gate.wat             ; check-engram-gate (requires Outcome from enums, Re
 
 ;; ── Distances and Levels — depend on nothing ────────────────
 distances.wat               ; Distances, Levels
+
+;; ── IndicatorBank — depends on: raw-candle ─────────────────
+indicator-bank.wat          ; IndicatorBank (streaming primitives inside, tick takes RawCandle)
 
 ;; ── Candle — depends on: indicator-bank ─────────────────────
 candle.wat                  ; Candle struct (the output of tick)

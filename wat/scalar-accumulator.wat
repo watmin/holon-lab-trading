@@ -33,7 +33,7 @@
                    (:log          (encode-log value))
                    ((Linear s)   (encode-linear value s))
                    ((Circular p) (encode-circular value p))))
-        (scaled (amplify encoded encoded weight)))
+        (scaled (amplify encoded weight)))
     (match outcome
       (:grace    (update acc :grace-acc
                    (bundle (:grace-acc acc) scaled)

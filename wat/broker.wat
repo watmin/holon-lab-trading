@@ -139,8 +139,8 @@
                      ;; Buy side: price rose then retraced → direction :up
                      (buy-excursion (/ (- (:buy-extreme ticked) entry) entry))
                      (sell-excursion (/ (- entry (:sell-extreme ticked)) entry))
-                     ;; Derive optimal distances from tracked extremes
-                     (optimal (compute-optimal-distances
+                     ;; Derive optimal distances from tracked extremes (paper approximation)
+                     (optimal (approximate-optimal-distances
                                 entry
                                 (:buy-extreme ticked)
                                 (:sell-extreme ticked)))

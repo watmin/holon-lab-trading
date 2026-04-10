@@ -44,12 +44,12 @@
   ;; own the ThoughtEncoder — ctx does, so evaluation is deferred to the
   ;; call site which has ctx in scope.
   (match (:lens exit-obs)
-    :volatility (exit-volatility-facts candle)
-    :structure  (exit-structure-facts candle)
-    :timing     (exit-timing-facts candle)
-    :generalist (append (exit-volatility-facts candle)
-                        (exit-structure-facts candle)
-                        (exit-timing-facts candle))))
+    :volatility (encode-exit-volatility-facts candle)
+    :structure  (encode-exit-structure-facts candle)
+    :timing     (encode-exit-timing-facts candle)
+    :generalist (append (encode-exit-volatility-facts candle)
+                        (encode-exit-structure-facts candle)
+                        (encode-exit-timing-facts candle))))
 
 (define (evaluate-and-compose [exit-obs : ExitObserver]
                               [market-thought : Vector]
