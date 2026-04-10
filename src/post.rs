@@ -7,6 +7,7 @@
 /// which vocab functions to call. This is NOT identical across observers.
 
 use std::collections::VecDeque;
+use rayon::prelude::*;
 
 use holon::kernel::primitives::Primitives;
 use holon::kernel::vector::Vector;
@@ -125,65 +126,79 @@ impl Post {
 
         // Collect lens-specific facts BEFORE mutably borrowing observers
         let window: Vec<Candle> = self.candle_window.iter().cloned().collect();
-        let market_fact_bundles: Vec<Vec<ThoughtAST>> = self
+        // pmap: each observer does everything — facts, encode, observe.
+        // Each observer is independent. ctx is shared immutable.
+        let market_results: Vec<_> = self
             .market_observers
-            .iter()
-            .map(|obs| market_lens_facts(&obs.lens, &enriched, &window))
+            .par_iter_mut()
+            .map(|obs| {
+                let facts = market_lens_facts(&obs.lens, &enriched, &window);
+                let bundle_ast = ThoughtAST::Bundle(facts);
+                let (thought, misses) = ctx.thought_encoder.encode(&bundle_ast);
+                let result = obs.observe(thought, Vec::new());
+                (result.thought.clone(), result.prediction, result.edge, misses)
+            })
             .collect();
 
-        for (i, obs) in self.market_observers.iter_mut().enumerate() {
-            let bundle_ast = ThoughtAST::Bundle(market_fact_bundles[i].clone());
-
-            // Encode the bundle through the ThoughtEncoder
-            let (thought, misses) = ctx.thought_encoder.encode(&bundle_ast);
+        for (thought, prediction, edge, misses) in market_results {
+            market_thoughts.push(thought);
+            market_predictions.push(prediction);
+            market_edges.push(edge);
             all_misses.extend(misses);
-
-            // Observer processes the encoded thought
-            let result = obs.observe(thought, Vec::new());
-            market_thoughts.push(result.thought.clone());
-            market_predictions.push(result.prediction);
-            market_edges.push(result.edge);
         }
 
         // N market x M exit -> N*M proposals
-        let mut proposals = Vec::with_capacity(n * m);
+        // Parallel phase: compute values. Sequential phase: apply mutations.
         let price = self.current_price();
+        let source = &self.source_asset;
+        let target = &self.target_asset;
+        let post_idx = self.post_idx;
+        let exit_observers = &self.exit_observers;
+        let registry = &self.registry;
 
-        for slot_idx in 0..(n * m) {
-            let mi = slot_idx / m;
-            let ei = slot_idx % m;
-            let market_thought = &market_thoughts[mi];
+        // pmap: each slot computes independently. Pure reads only.
+        let grid_values: Vec<_> = (0..(n * m))
+            .into_par_iter()
+            .map(|slot_idx| {
+                let mi = slot_idx / m;
+                let ei = slot_idx % m;
+                let market_thought = &market_thoughts[mi];
 
-            // Exit: encode facts via lens
-            let exit_lens = self.exit_observers[ei].lens;
-            let exit_fact_asts = exit_lens_facts(&exit_lens, &enriched);
+                // Exit: encode facts via lens
+                let exit_lens = exit_observers[ei].lens;
+                let exit_fact_asts = exit_lens_facts(&exit_lens, &enriched);
 
-            // Bundle exit facts and encode
-            let exit_bundle = ThoughtAST::Bundle(exit_fact_asts);
-            let (exit_vec, exit_misses) = ctx.thought_encoder.encode(&exit_bundle);
+                // Bundle exit facts and encode
+                let exit_bundle = ThoughtAST::Bundle(exit_fact_asts);
+                let (exit_vec, exit_misses) = ctx.thought_encoder.encode(&exit_bundle);
+
+                // Compose market thought with exit facts
+                let composed = Primitives::bundle(&[market_thought, &exit_vec]);
+
+                // Exit: recommend distances
+                let (dists, _exit_exp) = exit_observers[ei].recommended_distances(
+                    &composed,
+                    &registry[slot_idx].scalar_accums,
+                    ctx.thought_encoder.scalar_encoder(),
+                );
+
+                // Derive side + edge (reads only)
+                let side_val = derive_side_from_prediction(&market_predictions[mi]);
+                let edge_val = registry[slot_idx].edge();
+                let enterprise_pred = holon_prediction_to_enterprise(&market_predictions[mi]);
+
+                // Return values — no mutation
+                (slot_idx, composed, dists, side_val, edge_val, enterprise_pred, exit_misses)
+            })
+            .collect();
+
+        // Sequential phase: apply mutations, build proposals
+        let mut proposals = Vec::with_capacity(n * m);
+        for (slot_idx, composed, dists, side_val, edge_val, enterprise_pred, exit_misses) in grid_values {
             all_misses.extend(exit_misses);
 
-            // Compose market thought with exit facts
-            let composed = Primitives::bundle(&[market_thought, &exit_vec]);
-
-            // Exit: recommend distances using broker's scalar accums
-            let (dists, _exit_exp) = self.exit_observers[ei].recommended_distances(
-                &composed,
-                &self.registry[slot_idx].scalar_accums,
-                ctx.thought_encoder.scalar_encoder(),
-            );
-
-            // Broker: propose Grace/Violence
+            // Broker: propose (mutates reckoner)
             let _broker_pred = self.registry[slot_idx].propose(&composed);
-
-            // Derive side from market prediction
-            let side_val = derive_side_from_prediction(&market_predictions[mi]);
-
-            // Broker edge
-            let edge_val = self.registry[slot_idx].edge();
-
-            // Convert holon-rs prediction to enterprise Prediction for the proposal
-            let enterprise_pred = holon_prediction_to_enterprise(&market_predictions[mi]);
 
             // Assemble proposal
             let prop = Proposal::new(
@@ -191,14 +206,14 @@ impl Post {
                 dists,
                 edge_val,
                 side_val,
-                self.source_asset.clone(),
-                self.target_asset.clone(),
+                source.clone(),
+                target.clone(),
                 enterprise_pred,
-                self.post_idx,
+                post_idx,
                 slot_idx,
             );
 
-            // Register paper
+            // Register paper (mutates broker papers)
             self.registry[slot_idx].register_paper(composed, price, dists);
 
             proposals.push(prop);
@@ -405,7 +420,7 @@ fn holon_prediction_to_enterprise(pred: &holon::memory::Prediction) -> Predictio
 
 /// Placeholder: creates a ScalarEncoder for broker propagation.
 /// In the full system, this would come from ctx.
-fn ctx_scalar_encoder_placeholder() -> &'static holon::kernel::scalar::ScalarEncoder {
+pub fn ctx_scalar_encoder_placeholder() -> &'static holon::kernel::scalar::ScalarEncoder {
     use std::sync::OnceLock;
     static SE: OnceLock<holon::kernel::scalar::ScalarEncoder> = OnceLock::new();
     SE.get_or_init(|| holon::kernel::scalar::ScalarEncoder::new(4096))

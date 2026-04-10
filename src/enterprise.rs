@@ -6,13 +6,15 @@
 
 use std::collections::HashMap;
 
+use rayon::prelude::*;
 use holon::kernel::vector::Vector;
 
 use crate::broker::Resolution;
 use crate::ctx::Ctx;
-use crate::enums::Direction;
+use crate::distances::Distances;
+use crate::enums::{Direction, Outcome};
 use crate::log_entry::LogEntry;
-use crate::post::Post;
+use crate::post::{Post, ctx_scalar_encoder_placeholder};
 use crate::raw_candle::RawCandle;
 use crate::simulation::compute_optimal_distances;
 use crate::thought_encoder::ThoughtAST;
@@ -149,14 +151,21 @@ impl Enterprise {
     }
 
     /// Step 3a: TICK — parallel tick of all brokers' papers.
+    /// pmap: each broker touches ONLY its own papers. Disjoint. Lock-free.
     fn step_tick(&mut self, post_idx: usize) -> (Vec<Resolution>, Vec<LogEntry>) {
         let price = self.posts[post_idx].current_price();
+
+        // par_iter_mut: each broker is disjoint. collect() is the synchronization.
+        let results: Vec<Vec<Resolution>> = self.posts[post_idx]
+            .registry
+            .par_iter_mut()
+            .map(|broker| broker.tick_papers(price))
+            .collect();
+
+        // Sequential: flatten and produce logs
         let mut all_resolutions = Vec::new();
         let mut all_logs = Vec::new();
-
-        for broker in &mut self.posts[post_idx].registry {
-            let resolutions = broker.tick_papers(price);
-            // Generate PaperResolved logs from resolutions
+        for resolutions in results {
             for res in &resolutions {
                 all_logs.push(LogEntry::PaperResolved {
                     broker_slot_idx: res.broker_slot_idx,
@@ -170,29 +179,108 @@ impl Enterprise {
         (all_resolutions, all_logs)
     }
 
-    /// Step 3b: PROPAGATE (paper resolutions). Sequential.
+    /// Step 3b: PROPAGATE (paper resolutions).
+    /// Three phases: compute update messages (parallel), group by recipient, apply (parallel per scope).
     fn step_propagate(
         &mut self,
         post_idx: usize,
         resolutions: Vec<Resolution>,
     ) -> Vec<LogEntry> {
-        let mut all_logs = Vec::new();
         let recalib = 500; // default
+        let post = &mut self.posts[post_idx];
+        let m = post.exit_observers.len();
 
-        for res in resolutions {
-            let logs = self.posts[post_idx].propagate(
-                res.broker_slot_idx,
-                &res.composed_thought,
-                res.outcome,
-                res.amount,
-                res.direction,
-                &res.optimal_distances,
-                recalib,
-            );
-            all_logs.extend(logs);
+        // Phase 1: parallel — compute update messages as values.
+        // Each broker produces PropagationFacts. No observer mutation.
+        let facts_list: Vec<_> = resolutions
+            .par_iter()
+            .map(|res| {
+                let broker = &post.registry[res.broker_slot_idx];
+                // Compute what the broker WOULD produce — but don't mutate yet.
+                // We need the indices and the data for routing.
+                let mi = res.broker_slot_idx / m;
+                let ei = res.broker_slot_idx % m;
+                (
+                    res.broker_slot_idx,
+                    mi,
+                    ei,
+                    res.composed_thought.clone(),
+                    res.outcome,
+                    res.amount,
+                    res.direction,
+                    res.optimal_distances,
+                )
+            })
+            .collect();
+
+        // Phase 2: group by recipient.
+        // broker_updates[slot_idx] = Vec of (thought, outcome, weight, direction, optimal)
+        // market_updates[mi] = Vec of (thought, direction, weight)
+        // exit_updates[ei] = Vec of (composed, optimal, weight)
+        let n_brokers = post.registry.len();
+        let n_market = post.market_observers.len();
+        let n_exit = post.exit_observers.len();
+
+        let mut broker_updates: Vec<Vec<(&Vector, Outcome, f64, Direction, &Distances)>> =
+            vec![Vec::new(); n_brokers];
+        let mut market_updates: Vec<Vec<(&Vector, Direction, f64)>> =
+            vec![Vec::new(); n_market];
+        let mut exit_updates: Vec<Vec<(&Vector, Distances, f64)>> =
+            vec![Vec::new(); n_exit];
+
+        // Collect references grouped by recipient
+        for (slot, mi, ei, ref thought, outcome, weight, direction, ref optimal) in &facts_list {
+            broker_updates[*slot].push((thought, *outcome, *weight, *direction, optimal));
+            market_updates[*mi].push((thought, *direction, *weight));
+            exit_updates[*ei].push((thought, *optimal, *weight));
         }
 
-        all_logs
+        // Phase 3a: parallel — apply broker updates (each broker is its own scope)
+        post.registry
+            .par_iter_mut()
+            .enumerate()
+            .for_each(|(slot_idx, broker)| {
+                for &(thought, outcome, weight, direction, optimal) in &broker_updates[slot_idx] {
+                    broker.propagate(
+                        thought,
+                        outcome,
+                        weight,
+                        direction,
+                        optimal,
+                        recalib,
+                        ctx_scalar_encoder_placeholder(),
+                    );
+                }
+            });
+
+        // Phase 3b: parallel — apply market observer updates
+        post.market_observers
+            .par_iter_mut()
+            .enumerate()
+            .for_each(|(mi, obs)| {
+                for &(thought, direction, weight) in &market_updates[mi] {
+                    obs.resolve(thought, direction, weight, recalib);
+                }
+            });
+
+        // Phase 3c: parallel — apply exit observer updates
+        post.exit_observers
+            .par_iter_mut()
+            .enumerate()
+            .for_each(|(ei, obs)| {
+                for &(thought, ref optimal, weight) in &exit_updates[ei] {
+                    obs.observe_distances(thought, optimal, weight);
+                }
+            });
+
+        // Logs
+        facts_list
+            .iter()
+            .map(|(slot, _, _, _, _, _, _, _)| LogEntry::Propagated {
+                broker_slot_idx: *slot,
+                observers_updated: 2,
+            })
+            .collect()
     }
 
     /// Step 3c: UPDATE TRIGGERS.
