@@ -122,6 +122,42 @@ This pass is MECHANICAL — check every line, not just what confused you.
 **Third pass — report.** Combine understanding issues from the read
 with type issues from the audit.
 
+## The full path
+
+The ignorant walks the full path. Each layer is validated against the
+one above. The order:
+
+```
+guide    ← the ignorant reads this FIRST and ALONE
+circuit  ← the ignorant checks this AGAINST the guide
+order    ← the ignorant checks this AGAINST the guide
+wat      ← the ignorant checks this AGAINST the guide
+rust     ← the ignorant checks this AGAINST the wat
+```
+
+**The Rust layer.** When the ignorant is asked to walk the Rust, it
+reads each `.rs` file and checks it AGAINST the corresponding `.wat`
+file. The wat is the specification. The Rust is the compilation.
+
+What to check on the Rust:
+- **Inventions** — does the Rust contain functions, structs, statics,
+  or constants that the wat does not declare? If so, flag them. A
+  `static OnceLock` that the wat never specified is an invention.
+  A helper function the wat didn't ask for is an invention.
+- **Dropped annotations** — does the wat say `pmap` (parallel) and
+  the Rust uses `.iter()` (sequential)? That is a dropped annotation.
+  `pmap` → `par_iter`. `map` → `iter`. Different things. Flag mismatches.
+- **Field mismatches** — does the Rust struct have different fields
+  than the wat struct? Different types? Different names?
+- **Interface divergence** — does the Rust function signature differ
+  from the wat's interface? Different parameters? Different return type?
+- **Parameter invention** — does the Rust pass values that don't flow
+  from the specification? A "placeholder" that the wat never mentioned
+  is a parameter invention.
+
+The Rust is the organism. The organism must be judged. The ignorant
+that stops at the wat is blind to what the compiler invented.
+
 When done, clean up:
 
 ```bash
