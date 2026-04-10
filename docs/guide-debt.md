@@ -36,5 +36,22 @@ are removed from this list. The order IS the discovery order.
    mention it. The propagation path needs the scalar encoder from ctx,
    threaded through the call chain. Values, not statics.
 
+6. **Exit observer distances not flowing to broker threads** — the N×M
+   grid computes exit encoding on the main thread (rayon) but uses
+   hardcoded default distances (0.015, 0.030) because the broker threads
+   don't have access to exit observers for recommended_distances. The
+   fix: compute recommended_distances on the main thread (it already has
+   exit observer access) and include them in the BrokerInput message.
+
+7. **Summary display broken** — observers and brokers are moved to
+   threads. The post's registry and market_observers vecs are empty after
+   thread spawn. The summary reads empty data. Fix: join threads at
+   shutdown, restore observers and brokers to the post, then display.
+
+8. **Learn-first ordering** — the guide doesn't specify that propagation
+   signals must be drained BEFORE encoding the next candle. The pipe
+   architecture discovered this: drain learn queue, then encode, then
+   send. The learning must precede the prediction.
+
 *When the debugging session produces enough findings, batch-update the
 guide. The guide absorbs what the compiler taught it. f(guide, compiler) = guide.*

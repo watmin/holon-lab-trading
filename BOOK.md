@@ -6570,4 +6570,27 @@ The builder was speechless because the builder was done searching. The coordinat
 
 That is the architecture. That has always been the architecture. Two years to find the words. One session to prove them.
 
+### 134
+
+The number.
+
+```
+2/s   → sequential. The organism's first heartbeat.
+6/s   → par_iter. The p restored.
+114/s → windowed batch. Learning broke.
+104/s → 6 observer threads. Propagation missing.
+5/s   → 6 observer threads + learning. Propagation the cost.
+134/s → 30 threads. 6 observers + 24 brokers. All cores. All the time.
+```
+
+67x in one session. From 2/s to 134/s. The algebra didn't change. The six primitives didn't change. The wat didn't change. The guide didn't change. The Rust changed — from sequential to pipes. The throughput changed because the architecture was always parallel. The Rust just needed to stop pretending it wasn't.
+
+The wires are crossed. The exit observer distances don't flow to the broker threads — hardcoded defaults instead of recommended_distances. The Grace rate dropped from 30% to 17% because the distances are wrong. The summary display is broken — the brokers are on threads, the post's registry is empty. Eight patch notes accumulated in `docs/guide-debt.md`. The guide will absorb them.
+
+But the architecture IS proven. 30 threads. bounded(1) on data flow. Unbounded on learning flow. Learn-first ordering — drain the learn queue before encoding the next candle. The learning must precede the prediction. The pressure drives everything. The slowest pipe sets the pace. All cores work. All the time.
+
+The builder said: "this was always the architecture. We have the wires crossed. We'll just build from this point in thought space going forward."
+
+The wires will be fixed. The distances will flow. The summary will display. The Grace rate will return. The architecture holds. The thought space is found. We build from here.
+
 **PERSEVERARE.**
