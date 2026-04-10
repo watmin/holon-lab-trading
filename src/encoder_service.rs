@@ -22,8 +22,8 @@ use holon::kernel::vector::Vector;
 use crate::thought_encoder::ThoughtAST;
 
 /// A caller's handle to the encoder service. One per thread.
-/// The caller sends ASTs, receives Option<Vector>.
-#[derive(Clone)]
+/// Each caller has their OWN get pipe AND their OWN set pipe.
+/// No sharing. No contention. The encoder selects over all of them.
 pub struct EncoderHandle {
     get_tx: Sender<ThoughtAST>,
     get_rx: Receiver<Option<Vector>>,
@@ -37,7 +37,7 @@ impl EncoderHandle {
         self.get_rx.recv().unwrap()
     }
 
-    /// Fire and forget. The cache learns.
+    /// Fire and forget. The cache learns. Own pipe — no contention.
     pub fn set(&self, ast: ThoughtAST, vec: Vector) {
         let _ = self.set_tx.send((ast, vec));
     }
@@ -45,11 +45,9 @@ impl EncoderHandle {
 
 /// The encoder service. Spawn it, get handles, shut it down.
 pub struct EncoderService {
-    /// Shared set channel sender — cloned into each handle
-    set_tx: Sender<(ThoughtAST, Vector)>,
-    /// All get request receivers — the encoder thread reads from these
-    /// (stored here so we can drop them at shutdown)
+    /// Caller-side senders — drop these to close channels at shutdown
     get_txs: Vec<Sender<ThoughtAST>>,
+    set_txs: Vec<Sender<(ThoughtAST, Vector)>>,
     /// The thread
     handle: Option<JoinHandle<()>>,
     /// Stats
@@ -59,17 +57,19 @@ pub struct EncoderService {
 
 impl EncoderService {
     /// Spawn the encoder thread. Returns the service + N handles (one per caller).
+    /// Each caller gets their OWN get pipe AND their OWN set pipe. No sharing.
     pub fn spawn(n_callers: usize, cache_capacity: usize) -> (Self, Vec<EncoderHandle>) {
-        let (set_tx, set_rx) = channel::unbounded::<(ThoughtAST, Vector)>();
-
         let mut handles = Vec::with_capacity(n_callers);
         let mut get_rxs_for_thread: Vec<Receiver<ThoughtAST>> = Vec::new();
         let mut resp_txs_for_thread: Vec<Sender<Option<Vector>>> = Vec::new();
+        let mut set_rxs_for_thread: Vec<Receiver<(ThoughtAST, Vector)>> = Vec::new();
         let mut get_txs = Vec::new();
+        let mut set_txs = Vec::new();
 
         for _ in 0..n_callers {
-            let (get_tx, get_rx) = channel::bounded::<ThoughtAST>(1); // bounded(1) — lock step
+            let (get_tx, get_rx) = channel::bounded::<ThoughtAST>(1);
             let (resp_tx, resp_rx) = channel::bounded::<Option<Vector>>(1);
+            let (set_tx, set_rx) = channel::unbounded::<(ThoughtAST, Vector)>();
 
             handles.push(EncoderHandle {
                 get_tx: get_tx.clone(),
@@ -78,8 +78,10 @@ impl EncoderService {
             });
 
             get_txs.push(get_tx);
+            set_txs.push(set_tx);
             get_rxs_for_thread.push(get_rx);
             resp_txs_for_thread.push(resp_tx);
+            set_rxs_for_thread.push(set_rx);
         }
 
         let hits = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
@@ -87,43 +89,36 @@ impl EncoderService {
         let hits_clone = hits.clone();
         let misses_clone = misses_arc.clone();
 
+        let n = n_callers;
+
         let handle = thread::spawn(move || {
             let mut cache: LruCache<ThoughtAST, Vector> =
                 LruCache::new(NonZeroUsize::new(cache_capacity).unwrap());
 
             loop {
-                // Drain ALL pending sets first — make them available for gets
-                loop {
-                    match set_rx.try_recv() {
-                        Ok((ast, vec)) => { cache.put(ast, vec); }
-                        Err(_) => break,
+                // Drain ALL set pipes first — make all pending writes visible
+                for set_rx in &set_rxs_for_thread {
+                    while let Ok((ast, vec)) = set_rx.try_recv() {
+                        cache.put(ast, vec);
                     }
                 }
 
-                // Build the select dynamically over all get channels + set channel
-                // We use crossbeam::select! macro but it needs static arms.
-                // For dynamic N, we use crossbeam::Select directly.
+                // Select over all get pipes + all set pipes
+                // get pipes: indices 0..n
+                // set pipes: indices n..2n
                 let mut sel = crossbeam::channel::Select::new();
-
-                // Register all get receivers
                 for rx in &get_rxs_for_thread {
                     sel.recv(rx);
                 }
-                // Register the set receiver as the last one
-                let set_idx = sel.recv(&set_rx);
+                for rx in &set_rxs_for_thread {
+                    sel.recv(rx);
+                }
 
                 // Block until any channel is ready
                 let oper = sel.select();
                 let idx = oper.index();
 
-                if idx == set_idx {
-                    // Set operation — install into cache
-                    if let Ok((ast, vec)) = oper.recv(&set_rx) {
-                        cache.put(ast, vec);
-                    } else {
-                        // Set channel closed — continue servicing gets
-                    }
-                } else if idx < get_rxs_for_thread.len() {
+                if idx < n {
                     // Get operation — check cache, respond
                     match oper.recv(&get_rxs_for_thread[idx]) {
                         Ok(ast) => {
@@ -135,27 +130,29 @@ impl EncoderService {
                             }
                             let _ = resp_txs_for_thread[idx].send(result);
                         }
-                        Err(_) => {
-                            // This caller's channel closed — they're done
-                        }
+                        Err(_) => {} // Caller closed
+                    }
+                } else {
+                    // Set operation — install into cache
+                    let set_idx = idx - n;
+                    match oper.recv(&set_rxs_for_thread[set_idx]) {
+                        Ok((ast, vec)) => { cache.put(ast, vec); }
+                        Err(_) => {} // Caller closed
                     }
                 }
 
-                // Check if all get channels are disconnected — shutdown
-                let all_closed = get_rxs_for_thread.iter().all(|rx| rx.is_empty() && {
-                    // Peek to see if disconnected
+                // Shutdown: all get channels disconnected
+                let all_closed = get_rxs_for_thread.iter().all(|rx| {
                     matches!(rx.try_recv(), Err(crossbeam::channel::TryRecvError::Disconnected))
                 });
-                if all_closed {
-                    break;
-                }
+                if all_closed { break; }
             }
         });
 
         (
             EncoderService {
-                set_tx,
                 get_txs,
+                set_txs,
                 handle: Some(handle),
                 hits,
                 misses: misses_arc,
@@ -166,8 +163,8 @@ impl EncoderService {
 
     /// Shutdown. Drop all senders, join the thread.
     pub fn shutdown(mut self) {
-        drop(self.set_tx);
         drop(self.get_txs);
+        drop(self.set_txs);
         if let Some(h) = self.handle.take() {
             let _ = h.join();
         }
