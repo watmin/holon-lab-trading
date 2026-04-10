@@ -941,12 +941,15 @@ fn main() {
                 let composed = holon::kernel::primitives::Primitives::bundle(
                     &[&market_thoughts[mi], &exit_vec]);
 
-                // Distances: exit observer recommends (needs scalar_accums from broker — not available here)
-                // Use default distances for now. The broker thread will refine.
-                let dists = enterprise::distances::Distances::new(0.015, 0.030);
+                // Distances from exit observer — reckoner prediction or default.
+                // Scalar accumulators are on broker threads (not accessible here).
+                // Pass empty accums — cascade: reckoner → default (no accumulator fallback).
+                let empty_accums: Vec<enterprise::scalar_accumulator::ScalarAccumulator> = Vec::new();
+                let (dists, _) = exit_observers[ei].recommended_distances(
+                    &composed, &empty_accums, ctx_ref.thought_encoder.scalar_encoder());
 
                 let side = enterprise::post::derive_side_pub(&market_predictions[mi]);
-                let edge = 0.0_f64; // Broker computes this on its thread
+                let edge = 0.0_f64; // Broker computes edge on its thread
                 let pred = enterprise::post::prediction_convert_pub(&market_predictions[mi]);
 
                 (slot_idx, composed, dists, side, edge, pred, exit_misses)
@@ -1029,18 +1032,25 @@ fn main() {
         }
     }
 
-    // ── Shutdown: close channels, join threads, restore observers ──
-    drop(obs_txs); // Close channels — observer threads will exit their loops
+    // ── Shutdown: close channels, join threads, restore observers + brokers ──
+    drop(obs_txs); // Close observer input channels
+    drop(broker_in_txs); // Close broker input channels
+
+    // Join observer threads — restore observers to the post
+    let mut restored_observers = Vec::new();
     for handle in observer_handles {
         let obs = handle.join().unwrap();
-        // Observers return from their threads — restore into post
-        // (state is preserved from the pipe's fold)
+        restored_observers.push(obs);
     }
+    ent.posts[0].market_observers = restored_observers;
 
-    // Insert accumulated cache misses
-    if let Some(ctx_mut) = Arc::get_mut(&mut ctx_arc) {
-        // Can insert misses here after all threads are joined
+    // Join broker threads — restore brokers to the post
+    let mut restored_brokers = Vec::new();
+    for handle in broker_handles {
+        let broker = handle.join().unwrap();
+        restored_brokers.push(broker);
     }
+    ent.posts[0].registry = restored_brokers;
 
     // Flush remaining logs
     flush_logs(&pending_logs, &ledger);
