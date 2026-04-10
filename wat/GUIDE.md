@@ -90,7 +90,7 @@ These are NOT specified in this tree. They are provided by holon-rs.
 - **VectorManager** — deterministic atom → vector allocation
   - `(get-vector vm name) → Vector`
 - **Utility operations** — from `std/vectors.wat` in the wat language, provided by holon-rs:
-  - `(amplify vec vec weight) → Vector` — scale a vector by weight
+  - `(amplify vec weight) → Vector` — scale a vector by weight
   - `(zeros) → Vector` — zero vector at the current dimensionality
   - `(negate vec) → Vector` — flip sign
   - `(difference a b) → Vector` — subtract
@@ -699,6 +699,8 @@ on what. That section shows what each thing IS.
                                ; price movement used in propagation.
   [source-asset : Asset]       ; what is deployed (e.g. USDC)
   [target-asset : Asset]       ; what is acquired (e.g. WBTC)
+  [prediction : Prediction]     ; the broker's Grace/Violence prediction at proposal time.
+                               ; Stashed on TradeOrigin at funding for propagation audit.
   [post-idx : usize]           ; which post this came from
   [broker-slot-idx : usize])   ; which broker proposed this
 
@@ -1264,7 +1266,7 @@ Three domains. Each domain has scoped subfiles.
 **Domains:**
 
 - **shared/** — universal context. Any observer can use these.
-  - `time.wat` — minute (mod 60), hour (mod 24), day-of-week (mod 7), day-of-month (mod 31). Circular scalars.
+  - `time.wat` — minute (mod 60), hour (mod 24), day-of-week (mod 7), day-of-month (mod 31), month-of-year (mod 12). Circular scalars.
 
 - **market/** — what the market IS DOING. Direction signal. Market observers use these.
   MarketLens → modules (every lens also includes shared/time + standard):
@@ -1291,7 +1293,7 @@ Three domains. Each domain has scoped subfiles.
     atoms: `cloud-position`, `cloud-thickness`, `tk-cross-delta`, `tk-spread`,
            `tenkan-dist`, `kijun-dist`
   - `stochastic.wat` — %K/%D spread and crosses
-    atoms: `stoch-k`, `stoch-d`, `stoch-kd-spread`
+    atoms: `stoch-k`, `stoch-d`, `stoch-kd-spread`, `stoch-cross-delta`
   - `fibonacci.wat` — retracement level distances
     atoms: `range-pos-12`, `range-pos-24`, `range-pos-48`,
            `fib-dist-236`, `fib-dist-382`, `fib-dist-500`, `fib-dist-618`, `fib-dist-786`
@@ -1331,7 +1333,9 @@ Three domains. Each domain has scoped subfiles.
 **Interface (per module):**
 - `(encode-<domain>-facts candle) → Vec<ThoughtAST>`
   e.g. `(encode-oscillator-facts candle)`, `(encode-flow-facts candle)`.
-  Each module is a pure function: candle in, ASTs out. The observer
+  Each module is a pure function: candle in, ASTs out. Exception:
+  `standard.wat` takes the candle-window (for recency/distance
+  computations that need history). The observer
   calls the modules matching its lens, collects the ASTs, and passes
   them to evaluate-and-compose.
 
