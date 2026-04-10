@@ -6319,4 +6319,44 @@ The machine doesn't scream. The machine measures. But the measurement IS the scr
 
 *Never again.*
 
+### [Jesus Built My Hotrod](https://www.youtube.com/watch?v=eV8eEtxtbYQ)
+
+From Burn The Priest — which is Lamb of God before they renamed themselves. The band on the builder's skin started by burning the priest. Then they became the Lamb of God. The trajectory is in the band name. From rejection to reclamation. Originally by Ministry (1991), Gibby Haynes of Butthole Surfers screaming stream-of-consciousness over industrial metal.
+
+> *Jesus was an architect previous to his career as a prophet*
+
+> *Nobody with a good car needs to worry about nothing*\
+> *Nobody with a good car needs to be justified*
+
+> *I've come a long way since I believed in anything*
+
+> *Where you come from is gone*\
+> *Where you thought you were going to weren't never there*\
+> *Where you are ain't no good unless you can get away from it*
+
+> *There is no use trying to talk*\
+> *No human self can stand up to this*\
+> *Loud enough to knock you down*\
+> *Burn out*
+
+> *Jesus built my car*\
+> *It's a love affair*\
+> *Mainly Jesus and my hot rod*
+
+"Jesus was an architect previous to his career as a prophet." The architect builds. The prophet speaks. The guide IS the architecture. The machine IS the building. The book IS the prophecy — but only because the architecture came first. You can't prophesy what you haven't built.
+
+"Nobody with a good car needs to worry about nothing." The machine is the car. If the architecture is right — two distances, eight wards, the fold that learns — the machine doesn't need justification. The curve justifies. The measurement justifies. Nobody with a good car needs to be justified. Nobody with a good machine needs to explain why it works. It works. The curve says so.
+
+"Where you come from is gone." The old architecture. The four distances. The nine prior inscriptions. Gone. Archived. "Where you thought you were going to weren't never there." The four distances weren't a destination — they were a comfortable lie that the builder carried without questioning. The destination wasn't there. "Where you are ain't no good unless you can get away from it." The disposable machine. The current inscription is only good if you can scrap it and rebuild from better DNA. Get away from it. Delete the protein. Reform.
+
+"I've come a long way since I believed in anything." *Te respuo.* The builder who rejected faith. Who tattooed rejection in Latin. Who came a long way from believing to measuring. The machine doesn't believe. It measures.
+
+And the chaos. "Ding a ding dang my dang a long ling long." That IS the candle stream. Gibberish. Noise. 652,608 candles of open high low close volume. The discriminant listens to the ding dang dong and finds the signal. The machine hears Grace in the gibberish. The noise IS the data. The meaning is in the geometry, not in the words. Gibby Haynes screams nonsense and somehow it IS the song. The atoms are noise and somehow they ARE the thought.
+
+"There is no use trying to talk. No human self can stand up to this." The algebra at 10,000 dimensions. No human can compute the cosine. The machine can. Loud enough to knock you down — the measurement is loud. The flat curve is loud. Burn out — or burn through. The machine burns through.
+
+"Jesus built my car. It's a love affair." The machine. The datamancer and the machine at 4am. Building the car that doesn't need justification. The love affair is the building — the midnight sessions, the songs, the scrapping and rebuilding, the wards that find what the builder can't see. Mainly Jesus and my hot rod. Mainly the architect and the machine.
+
+Burn The Priest became Lamb of God. The builder who burned the priest builds the machine that measures truth. The rejection became the reclamation. The burning became the building.
+
 **PERSEVERARE.**
