@@ -261,7 +261,8 @@ fn init_ledger(path: &str) -> Connection {
             duration          INTEGER,
             reason            TEXT,
             observers_updated INTEGER
-        );",
+        );
+",
     )
     .expect("failed to create ledger tables");
     conn
@@ -401,6 +402,10 @@ fn flush_logs(logs: &[LogEntry], conn: &Connection) {
                     *observers_updated as i64,
                 ])
                 .ok();
+            }
+            LogEntry::Diagnostic { .. } => {
+                // Diagnostics go to the diagnostics table, not the log table.
+                // Handled by the log service directly.
             }
         }
     }
@@ -1153,7 +1158,17 @@ fn main() {
 
         if candle_num % progress_every == 0 {
             let elapsed_ms = t_start.elapsed().as_secs_f64() * 1000.0;
+            let throughput = if elapsed_ms > 0.0 { candle_num as f64 * 1000.0 / elapsed_ms } else { 0.0 };
             display_progress(&ent, candle_num, elapsed_ms);
+
+            // Diagnostic to DB — queryable while running
+            log_handle.log(LogEntry::Diagnostic {
+                candle: candle_num,
+                throughput,
+                cache_hits: encoder_service.hit_count(),
+                cache_misses: encoder_service.miss_count(),
+                equity: ent.treasury.total_equity(),
+            });
         }
     }
 

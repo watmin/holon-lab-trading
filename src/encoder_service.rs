@@ -86,19 +86,16 @@ impl EncoderService {
             let mut closed = vec![false; n];
 
             loop {
-                let mut did_work = false;
-
                 // Pass 1: drain ALL set pipes. Install into cache.
                 for set_rx in &set_rxs {
                     while let Ok((ast, vec)) = set_rx.try_recv() {
                         cache.put(ast, vec);
-                        did_work = true;
                     }
                 }
 
-                // Pass 2: service ALL get pipes. One message per pipe per iteration.
+                // Pass 2: service ALL pending get pipes.
                 for i in 0..n {
-                    if closed[i] { continue; } // Already closed — skip
+                    if closed[i] { continue; }
                     match get_rxs[i].try_recv() {
                         Ok(ast) => {
                             let result = cache.get(&ast).cloned();
@@ -108,7 +105,6 @@ impl EncoderService {
                                 misses_clone.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                             }
                             let _ = resp_txs[i].send(result);
-                            did_work = true;
                         }
                         Err(TryRecvError::Empty) => {}
                         Err(TryRecvError::Disconnected) => {
@@ -122,10 +118,19 @@ impl EncoderService {
                     break;
                 }
 
-                // Yield if no work — prevent busy-spin
-                if !did_work {
-                    std::thread::sleep(std::time::Duration::from_micros(100));
+                // Block until ANY channel has data. Zero CPU when idle.
+                // Instant wake when a request arrives. No sleep. No poll.
+                let mut sel = crossbeam::channel::Select::new();
+                for i in 0..n {
+                    if !closed[i] { sel.recv(&get_rxs[i]); }
                 }
+                for set_rx in &set_rxs {
+                    sel.recv(set_rx);
+                }
+                // Block. Wakes when any channel has data.
+                // We don't consume the message here — the next iteration's
+                // try_recv passes will pick it up.
+                let _ = sel.ready();
             }
         });
 

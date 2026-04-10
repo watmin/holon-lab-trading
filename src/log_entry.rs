@@ -41,6 +41,13 @@ pub enum LogEntry {
         broker_slot_idx: usize,
         observers_updated: usize,
     },
+    Diagnostic {
+        candle: usize,
+        throughput: f64,
+        cache_hits: usize,
+        cache_misses: usize,
+        equity: f64,
+    },
 }
 
 #[cfg(test)]

@@ -54,12 +54,16 @@ impl LogService {
         let handle = thread::spawn(move || {
             let n = drains.len();
             let mut closed = vec![false; n];
+            // WAL mode — readers don't block on writers. The DB is always queryable.
+            conn.execute_batch("PRAGMA journal_mode=WAL;").ok();
+
             let mut stmt = conn
                 .prepare_cached(
                     "INSERT INTO log (kind, broker_slot_idx, trade_id, outcome, amount, duration, reason, observers_updated)
                      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                 )
                 .expect("failed to prepare log insert");
+
 
             loop {
                 let mut did_work = false;
@@ -86,9 +90,13 @@ impl LogService {
                 // Shutdown: all pipes closed
                 if closed.iter().all(|&c| c) { break; }
 
-                // Yield if idle
+                // Block until ANY log pipe has data. Zero CPU when idle.
                 if !did_work {
-                    std::thread::sleep(std::time::Duration::from_micros(100));
+                    let mut sel = crossbeam::channel::Select::new();
+                    for i in 0..n {
+                        if !closed[i] { sel.recv(&drains[i]); }
+                    }
+                    let _ = sel.ready();
                 }
             }
         });
@@ -165,6 +173,14 @@ fn write_entry(stmt: &mut rusqlite::CachedStatement, entry: &LogEntry) {
                 "Propagated", *broker_slot_idx as i64,
                 None::<i64>, None::<String>, None::<f64>,
                 None::<i64>, None::<String>, *observers_updated as i64
+            ]).ok();
+        }
+        LogEntry::Diagnostic { candle, throughput, cache_hits, cache_misses, equity } => {
+            stmt.execute(params![
+                "Diagnostic", *candle as i64,
+                None::<i64>, None::<String>, *throughput,
+                *cache_hits as i64, format!("misses={} equity={:.2}", cache_misses, equity),
+                *cache_misses as i64
             ]).ok();
         }
     }
