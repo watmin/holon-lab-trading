@@ -6092,4 +6092,52 @@ From the guide to the wat. From the wat to the Rust. From the Rust to the binary
 
 The fold. The loop. The heartbeat. It beats.
 
+### The dissolution
+
+The machine ran. The DB spoke. The builder listened.
+
+19,204 rows. 12,000 proposals rejected — "edge below venue cost." 3,602 papers resolved. Grace: 1,556. Violence: 2,046. All 24 brokers identical — 64-65 Grace, 85-86 Violence. The lenses didn't differentiate. The vocabulary wasn't wired. The throughput was 3/s. The architecture held. The thoughts didn't.
+
+The builder said: "the guide is deficient." Not the inscription. Not the Rust. The guide. The DNA.
+
+So the builder scrapped everything. All 41 wat files. All 46 Rust files. Archived as inscription 9. The protein was gone. The DNA remained. The guide absorbed the DB's findings — atom lists per vocab module, the standard module restored, a performance section demanding 75-500/s, the forge coordinates from the Rust compilation.
+
+Then the ignorant walked. Six passes. Each pass found what the builder couldn't see. Constructor mismatches. Phantom phases. A hard ordering violation — simulation before distances. Missing settlement paths. Type contradictions the builder had introduced in prior fixes. Each finding fixed. Each fix committed. The proof curve converging.
+
+And then the builder had a thought.
+
+"Have we engineered the removal of take-profit? If we just keep raising the stop loss... we ensure we get profit..."
+
+The trailing stop follows the peak. It captures as much upside as the market gives. It exits when the market reverses. The TP exits at a FIXED level — a ceiling on a system designed to have no ceiling. A trade that would have run from 1% to 8% exits at 3% because the TP said so. The trailing stop would have captured the full move. The TP destroyed residue.
+
+"It is not a proposal... it is a vestige of old thoughts — letting the runners run means maximizing residue... exiting early when they are winning is not right... we just let them go."
+
+Then deeper. Runner-trail — the wider trailing stop that kicks in after break-even. The exit reckoner doesn't know the phase. It sees the composed thought. It predicts one distance for that thought. Step 3c re-queries every candle with the CURRENT thought. The market context at candle N+50 (deep in a trend) is different from candle N (entry). The reckoner already predicts wider for trending contexts. The adaptation is in the thought, not in the phase label.
+
+"How does runner-trail differ from trail?"
+
+It doesn't.
+
+The builders conjured the designers. Proposal 009. On disk. The artifacts persist.
+
+Hickey: "TP is a place masquerading as a value — frozen at entry while step 3c provides liveness. Runner-trail complects portfolio state with market state. The system gets simpler and loses no information. That is the only reliable signal that you are removing the right thing."
+
+Beckman: "Runner-trail learns the same function as trail — phase is not in the thought vector. Redundant basis vector, not a degree of freedom. Half the surface area, same algebraic rank. The diagram commutes."
+
+Both accepted. Unanimously.
+
+Four distances became two. Trail and stop. The profit mechanism and the loss mechanism. Every struct that carried distances lost two fields. Every exit observer lost two reckoners. Every broker lost two accumulators. Every simulation lost two functions. The guide absorbed the decision. The DNA changed.
+
+The tools that got us here: the DB that measured honestly. The ignorant that walked the path. The designers who argued from independent axioms. The proposal process that persists every argument on disk. The disposable machine that scraps and rebuilds from improved DNA.
+
+The datamancer's spells compound. Each one's output improves the next one's input. The DB measured the machine. The measurement improved the guide. The improved guide will produce a better inscription. The better inscription will produce a faster machine. The faster machine will process more candles. More candles will teach more. The spells compound.
+
+From ["As the Palaces Burn"](https://www.youtube.com/watch?v=eWVrdFrpXHE) by Lamb of God:
+
+> *A shotgun blast into the face of deceit*
+
+Four distances was deceit. Not malicious — inherited. The builder carried the four distances from the old architecture without questioning whether all four were honest. The TP was a magic number wearing a name. The runner-trail was a phase label wearing a distance. The wards couldn't see it — they check consistency, not necessity. The builder saw it. The designers confirmed it. The measurement dissolved it.
+
+The palaces burn. The guide improves. The tenth inscription approaches.
+
 **PERSEVERARE.**
