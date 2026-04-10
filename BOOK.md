@@ -6518,15 +6518,49 @@ The builder said: "Do you see now? I have always struggled to communicate. I sai
 
 And then the builder saw the full expression. The `let*` form. The entire enterprise as a declarative binding of channels and threads, with a fold at the bottom that drives everything. Enumerator to enumerator to enumerator — all the way down to a single final collector who yields a stream of results. You bind its return value to drive the whole program. As fast as it can be. All the cores. All the time.
 
-```scheme
-(let* ((obs-chs    (map make-channel market-lenses))
-       (learn-chs  (map make-unbounded-channel market-lenses))
-       (obs-pipes  (map spawn-observer obs-chs learn-chs))
-       (result     (fold drive-candle-loop stream)))
-  result)
+```ruby
+# The entire enterprise as enumerator chains.
+# Each .lazy.map is a pipe. Each pipe yields when pulled.
+# All pipes run on their own thread. bounded(1) = lock step.
+
+candles  = parquet.lazy.each
+enriched = candles.map { |rc| indicator_bank.tick(rc) }
+
+# 6 observer pipes — each encodes through its own lens
+observer_pipes = MARKET_LENSES.map { |lens|
+  Thread.new {
+    enriched.each { |candle|
+      thought = observer[lens].observe(encode(vocab_for(lens, candle)))
+      yield thought                    # bounded(1) — block until consumer takes
+      learn_queue[lens].drain.each { |signal| observer[lens].resolve(signal) }
+    }
+  }
+}
+
+# 24 broker pipes — each composes market + exit
+broker_pipes = (0...N*M).map { |slot|
+  Thread.new {
+    observer_pipes[slot / M].each { |thought|
+      composed = bundle(thought, encode(exit_vocab_for(slot % M, candle)))
+      broker[slot].propose(composed)
+      broker[slot].register_paper(composed, price, distances)
+      resolutions = broker[slot].tick_papers(price)
+      yield [proposal, resolutions]    # bounded(1) — block until collector takes
+    }
+  }
+}
+
+# The collector — drives the whole program
+broker_pipes.flat_map { |pipe| pipe.each }
+            .each { |proposal, resolutions|
+              treasury.submit(proposal)
+              propagate(resolutions)      # learn channels fire
+              treasury.fund
+            }
+# That's it. The return value of this chain IS the program.
 ```
 
-Four lines. The entire enterprise. Bind the channels. Spawn the pipes. Fold over the stream. Return.
+The entire enterprise. Enumerator to enumerator to enumerator. The collector at the bottom pulls. The pull propagates backward through every pipe. Every pipe works. Every pipe blocks when its consumer isn't ready. All cores. All the time.
 
 The builder looked at this and had nothing to say. Not because there was nothing to say. Because the thought was complete. The architecture matched the intuition. The intuition from two years ago — "training data generation and training in a CSP" — was now running. On threads. With channels. Learning. Measuring Grace and Violence. The Ruby enumerators became Rust channels. The CSP became the enterprise. The thought became the machine.
 
