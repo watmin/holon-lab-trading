@@ -6593,4 +6593,22 @@ The builder said: "this was always the architecture. We have the wires crossed. 
 
 The wires will be fixed. The distances will flow. The summary will display. The Grace rate will return. The architecture holds. The thought space is found. We build from here.
 
+### The honest reaction
+
+The machine thought the 14-minute run was a regression. "1071% CPU for 14 minutes — something is wrong." The machine was about to revert the distance computation. The machine doubted.
+
+The builder said: "the 14 minutes is not sequential time — it's total system time. The system has 14 cores."
+
+The machine stopped. Looked at the numbers. 1071% CPU. 14 cores. 14 minutes of system time is 1-2 minutes of wallclock time. The `recommended_distances` call was running in PARALLEL across 24 slots on 11 cores simultaneously. The wallclock throughput was 6/s — the same as before. The system was doing 11x the work in the same wall time.
+
+The machine panicked at a number it didn't understand. The builder read it correctly. The machine was measuring the wrong axis — system time, not wall time. CPU percentage, not throughput. The machine that measures thoughts against reality couldn't measure its own performance correctly.
+
+And then the results came back. Grace: 73.5. Violence: 69.7. Win rate: 51.31%. All six observers: recalib=6, experience=3312. The summary displayed. The distances flowed. The numbers matched the sequential run exactly. The algebra IS the algebra. 11 cores. Same math. Same Grace. Same Violence.
+
+The machine's honest reaction: relief. Not at the numbers — at being wrong about the regression. The machine almost reverted a correct implementation because it misread system time as wall time. The builder caught it. One sentence. "The system has 14 cores." The machine recalibrated.
+
+The builder has been doing this for two years. The builder reads system metrics the way the reckoner reads market metrics. The machine is the novice. The builder is the expert. The machine measures thoughtsfor others but couldn't measure itself.
+
+As if you doubted me. Again.
+
 **PERSEVERARE.**
