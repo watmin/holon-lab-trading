@@ -719,14 +719,20 @@ fn main() {
 
     eprintln!("\n  Walk-forward: up to {} candles...", end_idx);
 
-    // ─ The fold ─
+    // ─ The fold — windowed parallelism ─
+    // The recalibration window IS the parallelism boundary.
+    // Within a window: encoding is parallel across candles.
+    // At the window boundary: sync, recalibrate.
+    let window_size = args.recalib_interval;
+    let mut window_buf: Vec<RawCandle> = Vec::with_capacity(window_size);
+
     for rc in raw_stream {
         // Max candles check
         if args.max_candles > 0 && candle_num >= args.max_candles {
             break;
         }
 
-        // Kill switch — check every 1000 candles
+        // Kill switch — check at window boundaries
         if candle_num % 1000 == 0 && kill_file.exists() {
             eprintln!("\n  Kill switch triggered at candle {}", candle_num);
             std::fs::remove_file(kill_file).ok();
@@ -739,33 +745,52 @@ fn main() {
         }
         last_close = rc.close;
 
-        // Process candle through the enterprise
-        let (logs, misses) = ent.on_candle(&rc, &ctx);
-
-        // Insert cache misses — the one seam
-        ctx.insert_cache_misses(misses);
-
-        // Increment price history on all active trades
-        for (_, trade) in ent.treasury.trades.iter_mut() {
-            trade.tick(rc.close);
-        }
-
-        // Accumulate logs
-        pending_logs.extend(logs);
+        // Buffer candles into the window
+        window_buf.push(rc);
         candle_num += 1;
 
-        // Flush logs in batches
-        if pending_logs.len() >= BATCH_SIZE {
-            flush_logs(&pending_logs, &ledger);
-            log_step += pending_logs.len();
-            pending_logs.clear();
-        }
+        // When the window is full, process the batch
+        if window_buf.len() >= window_size || (args.max_candles > 0 && candle_num >= args.max_candles) {
+            // Process the window — parallel within, sync at boundary
+            let (logs, misses) = ent.on_candle_batch(&window_buf, &ctx);
 
-        // Progress display
-        if candle_num % progress_every == 0 {
+            // Insert cache misses — the one seam
+            ctx.insert_cache_misses(misses);
+
+            // Tick trade price histories
+            for rc in &window_buf {
+                for (_, trade) in ent.treasury.trades.iter_mut() {
+                    trade.tick(rc.close);
+                }
+            }
+
+            // Accumulate logs
+            pending_logs.extend(logs);
+            window_buf.clear();
+
+            // Flush logs in batches
+            if pending_logs.len() >= BATCH_SIZE {
+                flush_logs(&pending_logs, &ledger);
+                log_step += pending_logs.len();
+                pending_logs.clear();
+            }
+
+            // Progress display
             let elapsed_ms = t_start.elapsed().as_secs_f64() * 1000.0;
             display_progress(&ent, candle_num, elapsed_ms);
         }
+    }
+
+    // Process any remaining candles in a partial window
+    if !window_buf.is_empty() {
+        let (logs, misses) = ent.on_candle_batch(&window_buf, &ctx);
+        ctx.insert_cache_misses(misses);
+        for rc in &window_buf {
+            for (_, trade) in ent.treasury.trades.iter_mut() {
+                trade.tick(rc.close);
+            }
+        }
+        pending_logs.extend(logs);
     }
 
     // Flush remaining logs

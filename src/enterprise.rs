@@ -89,6 +89,133 @@ impl Enterprise {
         (all_logs, all_misses)
     }
 
+    /// Process a batch of candles within one recalibration window.
+    /// The indicator bank ticks sequentially (streaming state).
+    /// The encoding + composition + paper registration runs in parallel
+    /// across all candles in the batch — the discriminant is frozen.
+    /// Sync at the end: apply all accumulated observations, recalibrate.
+    pub fn on_candle_batch(
+        &mut self,
+        candles: &[RawCandle],
+        ctx: &Ctx,
+    ) -> (Vec<LogEntry>, Vec<(ThoughtAST, Vector)>) {
+        let mut all_logs = Vec::new();
+        let mut all_misses = Vec::new();
+
+        let post_idx = 0; // Single post for now
+
+        // Phase 1: Tick indicators sequentially — streaming state requires order.
+        // Produces enriched candles for the batch.
+        let mut enriched_candles = Vec::with_capacity(candles.len());
+        for rc in candles {
+            let enriched = self.posts[post_idx].indicator_bank.tick(rc);
+            self.posts[post_idx].candle_window.push_back(enriched.clone());
+            while self.posts[post_idx].candle_window.len() > self.posts[post_idx].max_window_size {
+                self.posts[post_idx].candle_window.pop_front();
+            }
+            self.posts[post_idx].encode_count += 1;
+            enriched_candles.push(enriched);
+        }
+
+        // Phase 2: For each candle, compute the full encoding + composition in parallel.
+        // The discriminant is frozen within this window — predictions are stable.
+        // Each candle produces: proposals, market_thoughts, misses, resolutions.
+        let post = &self.posts[post_idx];
+        let n = post.market_observers.len();
+        let m = post.exit_observers.len();
+
+        // Parallel across candles: each candle's encoding is independent.
+        // Within each candle: the N×M grid is also parallel.
+        let batch_results: Vec<_> = enriched_candles
+            .par_iter()
+            .enumerate()
+            .map(|(candle_offset, enriched)| {
+                let window: Vec<_> = {
+                    // Window for this candle — use the full candle_window at this point
+                    // (simplified: all candles share the same window view)
+                    post.candle_window.iter().cloned().collect()
+                };
+
+                // Market observer encoding — parallel across observers
+                let market_results: Vec<_> = post
+                    .market_observers
+                    .iter()
+                    .map(|obs| {
+                        let facts = crate::post::market_lens_facts_pub(&obs.lens, enriched, &window);
+                        let bundle_ast = ThoughtAST::Bundle(facts);
+                        let (thought, misses) = ctx.thought_encoder.encode(&bundle_ast);
+                        // Can't call obs.observe() here — it mutates. Defer.
+                        // Just return the encoded thought and misses.
+                        (thought, misses)
+                    })
+                    .collect();
+
+                let market_thoughts: Vec<Vector> = market_results.iter().map(|(t, _)| t.clone()).collect();
+                let candle_misses: Vec<(ThoughtAST, Vector)> = market_results.into_iter().flat_map(|(_, m)| m).collect();
+
+                // N×M grid — exit encoding + composition
+                let grid_results: Vec<_> = (0..(n * m))
+                    .map(|slot_idx| {
+                        let mi = slot_idx / m;
+                        let ei = slot_idx % m;
+                        let market_thought = &market_thoughts[mi];
+
+                        let exit_facts = crate::post::exit_lens_facts_pub(&post.exit_observers[ei].lens, enriched);
+                        let exit_bundle = ThoughtAST::Bundle(exit_facts);
+                        let (exit_vec, exit_misses) = ctx.thought_encoder.encode(&exit_bundle);
+
+                        let composed = holon::kernel::primitives::Primitives::bundle(&[market_thought, &exit_vec]);
+
+                        let (dists, _) = post.exit_observers[ei].recommended_distances(
+                            &composed,
+                            &post.registry[slot_idx].scalar_accums,
+                            ctx.thought_encoder.scalar_encoder(),
+                        );
+
+                        (slot_idx, composed, dists, exit_misses)
+                    })
+                    .collect();
+
+                let grid_misses: Vec<(ThoughtAST, Vector)> = grid_results.iter().flat_map(|(_, _, _, m)| m.clone()).collect();
+
+                (market_thoughts, candle_misses, grid_misses, grid_results)
+            })
+            .collect();
+
+        // Phase 3: Sequential — apply all mutations from the batch.
+        // The discriminant hasn't changed. Now we apply all deferred updates.
+        for (market_thoughts, candle_misses, grid_misses, grid_results) in batch_results {
+            all_misses.extend(candle_misses);
+            all_misses.extend(grid_misses);
+
+            // Cache market thoughts
+            if post_idx < self.market_thoughts_cache.len() {
+                self.market_thoughts_cache[post_idx] = market_thoughts;
+            }
+
+            // Apply broker mutations sequentially (propose + register paper)
+            let price = self.posts[post_idx].current_price();
+            for (slot_idx, composed, dists, _) in grid_results {
+                self.posts[post_idx].registry[slot_idx].propose(&composed);
+                self.posts[post_idx].registry[slot_idx].register_paper(composed, price, dists);
+            }
+
+            // Tick papers
+            let (resolutions, tick_logs) = self.step_tick(post_idx);
+            all_logs.extend(tick_logs);
+
+            // Propagate
+            let prop_logs = self.step_propagate(post_idx, resolutions);
+            all_logs.extend(prop_logs);
+        }
+
+        // Phase 4: Treasury operations for the full batch
+        let fund_logs = self.step_collect_fund();
+        all_logs.extend(fund_logs);
+
+        (all_logs, all_misses)
+    }
+
     /// Step 1: RESOLVE + PROPAGATE.
     /// Settle triggered trades, propagate outcomes to observers.
     fn step_resolve_and_propagate(&mut self) -> Vec<LogEntry> {

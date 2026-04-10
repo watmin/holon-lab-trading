@@ -333,6 +333,10 @@ impl Post {
 /// Collect market vocab facts for a specific lens.
 /// Each MarketLens selects different modules. All include shared/time + standard.
 /// This is the CRITICAL wiring -- different lenses see different market data.
+pub fn market_lens_facts_pub(lens: &MarketLens, candle: &Candle, window: &[Candle]) -> Vec<ThoughtAST> {
+    market_lens_facts(lens, candle, window)
+}
+
 fn market_lens_facts(lens: &MarketLens, candle: &Candle, window: &[Candle]) -> Vec<ThoughtAST> {
     // Shared: time facts (all lenses get these)
     let mut facts = encode_time_facts(candle);
@@ -385,6 +389,10 @@ fn market_lens_facts(lens: &MarketLens, candle: &Candle, window: &[Candle]) -> V
 }
 
 /// Collect exit vocab facts for a specific lens.
+pub fn exit_lens_facts_pub(lens: &ExitLens, candle: &Candle) -> Vec<ThoughtAST> {
+    exit_lens_facts(lens, candle)
+}
+
 fn exit_lens_facts(lens: &ExitLens, candle: &Candle) -> Vec<ThoughtAST> {
     match lens {
         ExitLens::Volatility => encode_exit_volatility_facts(candle),
