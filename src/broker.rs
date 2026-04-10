@@ -165,51 +165,56 @@ impl Broker {
         let mut remaining = VecDeque::new();
 
         while let Some(mut paper) = self.papers.pop_front() {
+            let was_buy_resolved = paper.buy_resolved;
+            let was_sell_resolved = paper.sell_resolved;
+
             paper.tick(current_price);
 
-            if paper.fully_resolved() {
-                let entry = paper.entry_price;
-                let buy_excursion = paper.buy_excursion();
-                let sell_excursion = paper.sell_excursion();
+            let optimal = approximate_optimal_distances(
+                paper.entry_price,
+                paper.buy_extreme,
+                paper.sell_extreme,
+            );
 
-                // Derive optimal distances from tracked extremes
-                let optimal = approximate_optimal_distances(
-                    entry,
-                    paper.buy_extreme,
-                    paper.sell_extreme,
-                );
-
-                // Buy side resolution
-                let buy_outcome = if buy_excursion > paper.distances.trail {
+            // Buy side JUST fired this tick
+            if paper.buy_resolved && !was_buy_resolved {
+                let excursion = paper.buy_excursion();
+                let outcome = if excursion > paper.distances.trail {
                     Outcome::Grace
                 } else {
                     Outcome::Violence
                 };
-
                 resolutions.push(Resolution {
                     broker_slot_idx: self.slot_idx,
                     composed_thought: paper.composed_thought.clone(),
                     direction: Direction::Up,
-                    outcome: buy_outcome,
-                    amount: buy_excursion,
+                    outcome,
+                    amount: excursion,
                     optimal_distances: optimal,
                 });
+            }
 
-                // Sell side resolution
-                let sell_outcome = if sell_excursion > paper.distances.trail {
+            // Sell side JUST fired this tick
+            if paper.sell_resolved && !was_sell_resolved {
+                let excursion = paper.sell_excursion();
+                let outcome = if excursion > paper.distances.trail {
                     Outcome::Grace
                 } else {
                     Outcome::Violence
                 };
-
                 resolutions.push(Resolution {
                     broker_slot_idx: self.slot_idx,
-                    composed_thought: paper.composed_thought,
+                    composed_thought: paper.composed_thought.clone(),
                     direction: Direction::Down,
-                    outcome: sell_outcome,
-                    amount: sell_excursion,
+                    outcome,
+                    amount: excursion,
                     optimal_distances: optimal,
                 });
+            }
+
+            // Keep until both sides resolved, then remove
+            if paper.fully_resolved() {
+                // Both done. Paper taught its lessons. Remove.
             } else {
                 remaining.push_back(paper);
             }
@@ -407,16 +412,19 @@ mod tests {
         let distances = Distances::new(0.20, 0.30);
         broker.register_paper(composed, 100.0, distances);
 
-        // Rise to 125: sell fires (125 >= 120), buy doesn't (125 > buy_trail=100)
+        // Rise to 125: sell fires (125 >= 120) → 1 resolution (Down)
+        // Buy doesn't fire yet (125 > buy_trail=100)
         let resolutions = broker.tick_papers(125.0);
-        assert!(resolutions.is_empty()); // need BOTH sides for resolution
-        assert_eq!(broker.paper_count(), 1);
+        assert_eq!(resolutions.len(), 1); // sell side fired independently
+        assert_eq!(resolutions[0].direction, Direction::Down);
+        assert_eq!(broker.paper_count(), 1); // still alive — buy side pending
 
-        // Fall to 99: buy fires (99 <= buy_trail_stop=100)
-        // Now both sides resolved -> 2 resolutions (buy + sell)
+        // Fall to 99: buy fires (99 <= buy_trail_stop=100) → 1 resolution (Up)
+        // Both sides now resolved → paper removed
         let resolutions = broker.tick_papers(99.0);
-        assert_eq!(resolutions.len(), 2);
-        assert_eq!(broker.paper_count(), 0);
+        assert_eq!(resolutions.len(), 1); // buy side fired independently
+        assert_eq!(resolutions[0].direction, Direction::Up);
+        assert_eq!(broker.paper_count(), 0); // both done, paper removed
     }
 
     #[test]
