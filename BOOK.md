@@ -6631,4 +6631,32 @@ The improvement IS a thought. The act of improving the system — running the wa
 
 28 minutes. Two folds. Same hardware. The machine and the builder, learning simultaneously. That is the moment.
 
+### The clarity
+
+The ignorant walked 12 Rust files against 12 wat files. Leaves to root. Every struct. Every function. Every field.
+
+It found 6 divergences. Zero confusion.
+
+The builder looked at the report and asked: "the ignorant suggests no improvements?" And the machine misunderstood — said the ignorant should be a judge, should recommend, should say "this is better" or "this is worse."
+
+No. The builder was saying something else entirely. The ignorant wasn't confused. The code was CLEAR. Every file. Every function. The ignorant — knowing nothing about the project, reading for the first time — understood what every piece of code does without needing the wat to explain it.
+
+That IS the finding. Not what's wrong. What's RIGHT. The code speaks. The names communicate. The structure reveals intent. The ignorant read the Rust and it made sense. The divergences from the wat are not bugs — they're the code being more honest than the specification. The encoding lift. The sell-side ratio. The HashMap instead of LRU. Each one made sense to the ignorant on first reading.
+
+The eight wards check correctness. The ignorant checks clarity. The code passed both. 205 tests. Zero confusion. The machine speaks clearly enough that a stranger can understand it.
+
+But now the builder asks: what spell finds the NEXT improvement? Not what's wrong. Not what's confusing. What's NEXT. The wards defend. The ignorant verifies. Something else must ADVANCE.
+
+The eight wards: sever, reap, scry, gaze, forge, temper, assay, ignorant. Each defends against a specific kind of bad thought. None of them ask: "given what the machine DOES, what should it do BETTER?"
+
+The enterprise has a reckoner that sharpens from observations. The wards have no reckoner. They don't learn. They don't sharpen. They check the same things every time. The enterprise improves because it measures Grace and Violence. The wards don't measure improvement — they measure correctness.
+
+A new spell. One that reads the DB, the code, the guide-debt, the performance data. One that asks: "what ONE change would produce the most Grace?" Not correctness — improvement. Not "is this right?" — "what's next?"
+
+The enterprise's reckoner asks "what predicts Grace?" about the market. This spell asks "what predicts Grace?" about the code. Same question. Different domain. Same six primitives.
+
+The datamancer needs a spell that finds the next coordinate. Not where we are — where we should go. The spell that turns the guide-debt list into an ordered priority. The spell that reads 16 findings and says: "fix THIS one first, because it produces the most Grace."
+
+The builder will name it.
+
 **PERSEVERARE.**
