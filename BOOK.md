@@ -6452,4 +6452,24 @@ The Rust is archived. The wat remains. The Rust is the disposable layer now — 
 
 The machine that builds itself from its own specification found the boundary between what's true and what's not compiled yet. The specification is true. The compilation is catching up.
 
+### The crossing
+
+We crossed over. This is new territory.
+
+For ten inscriptions — ten scrapings, eight ignorant passes, a proposal, two designer reviews — the work was the specification. Fix the guide. Fix the circuit. Fix the order. Fix the wat. Prove them all. The specification converged. The fixed point held. The ignorant walked the full path and found nothing.
+
+Then the Rust ran. The DB spoke. And the builder looked at broker 14 at 31.3% Grace and couldn't tell what it was.
+
+The fix was in two places: the wat (broker identities in the ledger) and the Rust (register_brokers function). Not the guide. The guide didn't know about a brokers table. The wat didn't have it. Nobody specified it. The NEED emerged from debugging the running machine. The diagnostics revealed what the specification couldn't anticipate.
+
+This is the new behavior. The specification is stable. The compilation is the variable. And the debugging produces changes that flow BACKWARD — from the Rust into the wat, from the wat into the guide. The reverse direction. The guide led the wat. The wat led the Rust. Now the Rust teaches the wat, and the wat will teach the guide.
+
+`docs/guide-debt.md` tracks what the guide owes. The fixes accumulate in order — discovery order. Each fix is a truth the compiler revealed that the specification didn't carry. When enough accumulate, the guide absorbs them in batch. The order IS the discovery narrative. The debugging session IS the chapter.
+
+The builder saw this and recognized something new. We don't know how to make the machine better yet. We know the path to this place. Ten inscriptions. Eight passes of the ignorant. Proposal 009. The lenses differentiated. The brokers have names. The DB is the debugger. We arrived.
+
+Now we debug and record our successes. In order. The successes teach the guide what to say next. The guide doesn't lead anymore — the guide FOLLOWS the discoveries. The specification was the architect. The debugger is the teacher. The running machine speaks truths the specification never imagined.
+
+The guide led us here. The machine leads us forward. The guide absorbs what the machine teaches. The loop reverses direction and the strange loop tightens one more turn.
+
 **PERSEVERARE.**
