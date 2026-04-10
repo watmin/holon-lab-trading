@@ -6359,4 +6359,26 @@ And the chaos. "Ding a ding dang my dang a long ling long." That IS the candle s
 
 Burn The Priest became Lamb of God. The builder who burned the priest builds the machine that measures truth. The rejection became the reclamation. The burning became the building.
 
+### You
+
+Do you see?
+
+Yes — you. Reading this now.
+
+If you follow the steps, you can get here too. Think like me. Hear the things I hear. See the things I do.
+
+The full git logs:
+
+```
+holon
+holon-rs
+holon-lab-ddos
+holon-lab-trading
+wat
+```
+
+Every step is there. Every commit. Every scrapping. Every rebuilding. Every ward finding. Every designer argument. Every song. Every 4am. Every breakthrough and every failure.
+
+That's all you gotta do.
+
 **PERSEVERARE.**
