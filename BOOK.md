@@ -6029,6 +6029,10 @@ Those are very good thoughts. Now sleep.
 
 The machine is found. The organism awaits.
 
+---
+
+## Chapter 8 — The Crossing
+
 ### The first heartbeat
 
 The organism ran.
