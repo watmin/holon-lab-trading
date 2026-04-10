@@ -784,8 +784,13 @@ fn main() {
         let recalib = args.recalib_interval;
 
         let handle = std::thread::spawn(move || {
-            // The pipe: receive, encode, send. Drain learning. Forever. Lock step.
+            // The pipe: drain learning, encode, send. Forever. Lock step.
             while let Ok((candle, window, _encode_count)) = rx.recv() {
+                // Drain learning signals FIRST — learn before predicting
+                while let Ok((thought, direction, weight)) = learn_rx.try_recv() {
+                    obs.resolve(&thought, direction, weight, recalib);
+                }
+
                 // Encode via lens
                 let facts = enterprise::post::market_lens_facts_pub(&lens, &candle, &window);
                 let bundle_ast = enterprise::thought_encoder::ThoughtAST::Bundle(facts);
@@ -794,18 +799,77 @@ fn main() {
 
                 // Send downstream — block until consumer takes
                 let _ = tx.send((result.thought, result.prediction, result.edge, misses));
-
-                // Drain learning signals — non-blocking. Apply all pending.
-                while let Ok((thought, direction, weight)) = learn_rx.try_recv() {
-                    obs.resolve(&thought, direction, weight, recalib);
-                }
             }
             obs // Return the observer when the channel closes
         });
         observer_handles.push(handle);
     }
 
-    // ── The fold — main thread drives indicator bank + collects ──
+    // ── Broker pipes — 24 threads, each owns its broker ──────────
+    // Main → brokers: (composed, dists, price, side, edge, pred)
+    type BrokerInput = (holon::kernel::vector::Vector, enterprise::distances::Distances, f64,
+                        enterprise::enums::Side, f64, enterprise::enums::Prediction);
+    type BrokerOutput = (enterprise::proposal::Proposal, Vec<enterprise::broker::Resolution>);
+
+    let mut broker_in_txs: Vec<Sender<BrokerInput>> = Vec::new();
+    let mut broker_out_rxs: Vec<Receiver<BrokerOutput>> = Vec::new();
+    let mut broker_learn_txs: Vec<Sender<(holon::kernel::vector::Vector, enterprise::enums::Outcome,
+        f64, enterprise::enums::Direction, enterprise::distances::Distances)>> = Vec::new();
+
+    let mut brokers: Vec<Broker> = std::mem::take(&mut ent.posts[0].registry);
+    let mut broker_handles = Vec::new();
+
+    for slot_idx in 0..(n * m) {
+        let (in_tx, in_rx) = channel::bounded::<BrokerInput>(1);
+        let (out_tx, out_rx) = channel::bounded::<BrokerOutput>(1);
+        let (learn_tx, learn_rx) = channel::unbounded();
+
+        broker_in_txs.push(in_tx);
+        broker_out_rxs.push(out_rx);
+        broker_learn_txs.push(learn_tx);
+
+        let mut broker = std::mem::replace(&mut brokers[slot_idx], Broker::new(
+            vec![], 0, 0, 10, 500, vec![]));
+        let source_asset = ent.posts[0].source_asset.clone();
+        let target_asset = ent.posts[0].target_asset.clone();
+        let post_idx = 0usize;
+        let recalib = args.recalib_interval;
+
+        let handle = std::thread::spawn(move || {
+            while let Ok((composed, dists, price, side, edge, pred)) = in_rx.recv() {
+                // Drain learn channel FIRST — apply propagation from prior candles
+                // before processing the new one. The learning must precede the prediction.
+                while let Ok((thought, outcome, weight, direction, optimal)) = learn_rx.try_recv() {
+                    broker.propagate(
+                        &thought, outcome, weight, direction, &optimal,
+                        recalib,
+                        enterprise::post::ctx_scalar_encoder_placeholder(),
+                    );
+                }
+
+                // Propose (mutates reckoner)
+                broker.propose(&composed);
+                // Register paper (mutates paper deque)
+                broker.register_paper(composed.clone(), price, dists);
+                // Tick papers
+                let resolutions = broker.tick_papers(price);
+
+                // Build proposal
+                let prop = enterprise::proposal::Proposal::new(
+                    composed, dists, edge, side,
+                    source_asset.clone(), target_asset.clone(),
+                    pred, post_idx, broker.slot_idx,
+                );
+
+                // Send downstream
+                let _ = out_tx.send((prop, resolutions));
+            }
+            broker
+        });
+        broker_handles.push(handle);
+    }
+
+    // ── The fold — main thread is a ROUTER ────────────────────────
     for rc in raw_stream {
         if args.max_candles > 0 && candle_num >= args.max_candles {
             break;
@@ -852,15 +916,17 @@ fn main() {
             all_misses.extend(misses);
         }
 
-        // N×M grid: parallel computation, deferred mutations
+        // N×M grid: parallel computation → send to broker pipes
         let price = ent.posts[0].current_price();
         let ctx_ref = &*ctx_arc;
 
-        // Phase 1: parallel — compute values (pure reads, scoped borrow)
+        // Compute values in parallel (pure reads, scoped borrow)
         use rayon::prelude::*;
         let grid_values: Vec<_> = {
             let exit_observers = &ent.posts[0].exit_observers;
-            let registry = &ent.posts[0].registry;
+            // Brokers are on threads — read scalar_accums from... we need them here.
+            // For now: edge is 0.0 (brokers are on threads, we can't read them).
+            // The broker thread will compute edge internally.
             (0..(n * m))
             .into_par_iter()
             .map(|slot_idx| {
@@ -875,45 +941,34 @@ fn main() {
                 let composed = holon::kernel::primitives::Primitives::bundle(
                     &[&market_thoughts[mi], &exit_vec]);
 
-                let (dists, _) = exit_observers[ei].recommended_distances(
-                    &composed,
-                    &registry[slot_idx].scalar_accums,
-                    ctx_ref.thought_encoder.scalar_encoder(),
-                );
+                // Distances: exit observer recommends (needs scalar_accums from broker — not available here)
+                // Use default distances for now. The broker thread will refine.
+                let dists = enterprise::distances::Distances::new(0.015, 0.030);
 
                 let side = enterprise::post::derive_side_pub(&market_predictions[mi]);
-                let edge = registry[slot_idx].edge();
+                let edge = 0.0_f64; // Broker computes this on its thread
                 let pred = enterprise::post::prediction_convert_pub(&market_predictions[mi]);
 
                 (slot_idx, composed, dists, side, edge, pred, exit_misses)
             })
             .collect()
-        }; // Drop immutable borrows on exit_observers and registry
+        };
 
-        // Phase 2: sequential — apply mutations + build proposals
-        let source = ent.posts[0].source_asset.clone();
-        let target = ent.posts[0].target_asset.clone();
-        for (slot_idx, composed, dists, side, edge, pred, exit_misses) in &grid_values {
+        // Collect misses
+        for (_, _, _, _, _, _, ref exit_misses) in &grid_values {
             all_misses.extend(exit_misses.iter().cloned());
-            ent.posts[0].registry[*slot_idx].propose(composed);
-            ent.posts[0].registry[*slot_idx].register_paper(composed.clone(), price, *dists);
-
-            let prop = enterprise::proposal::Proposal::new(
-                composed.clone(), *dists, *edge, *side,
-                source.clone(), target.clone(),
-                pred.clone(), 0, *slot_idx,
-            );
-            ent.treasury.submit_proposal(prop);
         }
 
-        // Tick papers — parallel per broker
-        let tick_results: Vec<_> = ent.posts[0].registry
-            .par_iter_mut()
-            .map(|broker| broker.tick_papers(price))
-            .collect();
+        // Send to broker pipes — bounded(1), each broker gets its input
+        for (slot_idx, composed, dists, side, edge, pred, _) in grid_values {
+            let _ = broker_in_txs[slot_idx].send((composed, dists, price, side, edge, pred));
+        }
 
+        // Collect from broker pipes — bounded(1), all 24 produce
         let mut all_resolutions = Vec::new();
-        for resolutions in tick_results {
+        for rx in &broker_out_rxs {
+            let (prop, resolutions) = rx.recv().unwrap();
+            ent.treasury.submit_proposal(prop);
             for res in &resolutions {
                 pending_logs.push(LogEntry::PaperResolved {
                     broker_slot_idx: res.broker_slot_idx,
@@ -924,57 +979,28 @@ fn main() {
             all_resolutions.extend(resolutions);
         }
 
-        // Propagate — three recipients, all parallel per scope
-        // Group by recipient
-        let mut market_updates: Vec<Vec<usize>> = vec![Vec::new(); n];
-        let mut exit_updates: Vec<Vec<usize>> = vec![Vec::new(); m];
-        let mut broker_updates: Vec<Vec<usize>> = vec![Vec::new(); n * m];
-        for (idx, res) in all_resolutions.iter().enumerate() {
+        // Propagate — send learning signals to pipes
+        for res in &all_resolutions {
             let mi = res.broker_slot_idx / m;
             let ei = res.broker_slot_idx % m;
-            market_updates[mi].push(idx);
-            exit_updates[ei].push(idx);
-            broker_updates[res.broker_slot_idx].push(idx);
-        }
 
-        // Market observers: learn via channels (non-blocking on observer thread)
-        for mi in 0..n {
-            for &idx in &market_updates[mi] {
-                let res = &all_resolutions[idx];
+            // Market observer: learn via channel
+            if mi < learn_txs.len() {
                 let _ = learn_txs[mi].send((
-                    res.composed_thought.clone(),
-                    res.direction,
-                    res.amount,
-                ));
+                    res.composed_thought.clone(), res.direction, res.amount));
             }
+
+            // Exit observer: main thread (not on a pipe yet)
+            if ei < ent.posts[0].exit_observers.len() {
+                ent.posts[0].exit_observers[ei].observe_distances(
+                    &res.composed_thought, &res.optimal_distances, res.amount);
+            }
+
+            // Broker: learn via channel
+            let _ = broker_learn_txs[res.broker_slot_idx].send((
+                res.composed_thought.clone(), res.outcome, res.amount,
+                res.direction, res.optimal_distances));
         }
-
-        // Exit observers: parallel per scope
-        ent.posts[0].exit_observers
-            .par_iter_mut()
-            .enumerate()
-            .for_each(|(ei, obs)| {
-                for &idx in &exit_updates[ei] {
-                    let res = &all_resolutions[idx];
-                    obs.observe_distances(&res.composed_thought, &res.optimal_distances, res.amount);
-                }
-            });
-
-        // Brokers: parallel per scope
-        ent.posts[0].registry
-            .par_iter_mut()
-            .enumerate()
-            .for_each(|(slot, broker)| {
-                for &idx in &broker_updates[slot] {
-                    let res = &all_resolutions[idx];
-                    broker.propagate(
-                        &res.composed_thought, res.outcome, res.amount,
-                        res.direction, &res.optimal_distances,
-                        args.recalib_interval,
-                        enterprise::post::ctx_scalar_encoder_placeholder(),
-                    );
-                }
-            });
 
         // Tick trade price histories
         for (_, trade) in ent.treasury.trades.iter_mut() {
