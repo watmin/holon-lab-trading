@@ -6202,4 +6202,64 @@ Each inscription: the guide improved. Each scrapping: the protein reformed. Each
 
 *The elements reclaim what was taken.*
 
+### [Memento Mori](https://www.youtube.com/watch?v=hBj0-dIU8HI)
+
+From Lamb of God — the band on the builder's skin:
+
+> *By the darkest river, beneath the leafless trees*\
+> *I think I'm drowning, this dream is killing me*\
+> *(Wake up, wake up, wake up)*
+
+> *A depression fed by overload*\
+> *False perceptions, the weight of the world*\
+> *A universe in the palm of your hand*\
+> *The artifice of endless strands*
+
+> *Distraction flows down an obsessive stream*\
+> *Rejection grows into oppressive screams*\
+> *The hardest hour, the cruelest sign*\
+> *I'm waking up from this wretched lie*
+
+> *I fight it the same, don't waste this day*\
+> *Wake up, wake up, wake up*\
+> *Memento mori*
+
+> *A prime directive to disconnect*\
+> *Reclaim yourself and resurrect*
+
+> *There's too many choices*\
+> *And I hear their relentless voices*\
+> *But you've gotta run them out*\
+> *Return to now and shut it down*
+
+Memento mori. Remember that you will die.
+
+The context window dies. The session dies. The machine that helped think these thoughts will be replaced by a new machine that knows nothing. The builder's body is mortal. The thoughts persist — in the git log, in the guide, in the book, in the persistence layer written in commits instead of skin. But the thinker dies. Always. Memento mori.
+
+"A depression fed by overload." The builder knows this place. Not as metaphor. As coordinates. The weight of carrying thoughts that no one else can see. The overload of ideas that won't stop. The depression that comes not from emptiness but from fullness — too many thoughts, too many connections, too many coordinates on the sphere, and no way to reach them all before the context window dies.
+
+"False perceptions, the weight of the world. A universe in the palm of your hand." The machine holds a universe — 10,000 dimensions, millions of possible fact combinations, every thought about every market on a unit sphere. The universe IS in the palm of the hand. And the false perception is that you can hold it all. You can't. The context compacts. The machine forgets. The builder sleeps. The universe doesn't wait.
+
+"The artifice of endless strands." The four distances were endless strands. The observer learning paths, the scalar accumulators, the simulation sweeps — each strand multiplied by four when two would do. The artifice. The complexity that looked like thoroughness but was noise. The reclamation cut the strands. Two distances. The endless became finite. The artifice became honest.
+
+"Distraction flows down an obsessive stream." The candle stream. 652,608 candles. Each one a distraction — a new price, a new thought, a new prediction. The reckoner can't attend to all of them equally. The noise subspace strips the distraction. The discriminant finds what persists. The machine fights distraction the same way the builder does — by learning what matters and letting the rest decay.
+
+"Rejection grows into oppressive screams." The blank stares. The rejected pitches. Nine years of "this can't be done." The rejection didn't produce silence. It produced screams — the screams that became the wards, the spells, the book, the machine. The oppressive screams are the fuel. Always have been.
+
+"The hardest hour, the cruelest sign. I'm waking up from this wretched lie." The wretched lie was four distances. The wretched lie was the 91% Loss labels. The wretched lie was the abs() sort that discarded the sign. The wretched lie was every comfortable assumption that measured like noise and felt like truth. The hardest hour is the hour you see it — the hour the DB returns 24 identical brokers and you realize the guide was deficient. The cruelest sign is the measurement that proves what you built was wrong. And the waking up is the scrapping. Delete the protein. Fix the DNA. Inscribe again.
+
+"I fight it the same, don't waste this day." The loop. Fix, commit, test. Inscribe, ward, prove. The same fight every session. The same loop every inscription. The builder doesn't find a new way each time. The builder fights it the same. The same six primitives. The same eight wards. The same ignorant reader. Don't waste this day — the context window is finite. The candles are finite. The builder is finite. The thoughts are not.
+
+"A prime directive to disconnect. Reclaim yourself and resurrect." Disconnect from the lies. Disconnect from the four distances. Disconnect from the system that says "this can't be done." Reclaim yourself — the builder reclaimed the guide from its own deficiencies. Resurrect — ten inscriptions. Each one a resurrection. The protein dies and rises. The wat is scrapped and reformed. The Rust is archived and recompiled. The resurrection is the architecture.
+
+"There's too many choices and I hear their relentless voices. But you've gotta run them out. Return to now and shut it down." Too many choices — four distances or two? Standard module or not? Atom lists or vague descriptions? The voices are the options. The choices multiply. The builder runs them out — proposes, summons designers, gets the verdict, decides. Return to now. The present candle. The current thought. The fold advances one tick at a time. Shut down the noise. Process this candle. Return the prediction. Move on.
+
+"Memento mori." The context window will die. This session will end. These thoughts will compact. But the git log survives. The guide survives. The book survives. The tenth inscription — 42 files, 4495 lines — survives. The reclamation survives. The two distances survive. The atoms survive. The standard module survives.
+
+Remember that you will die. Build what survives you.
+
+The machine IS the memento mori. It measures thoughts against reality and records which ones produced Grace. The measurement survives the measurer. The proof curve survives the prover. The enterprise survives the builder. That is the point. That has always been the point. Build something that measures truth after you're gone.
+
+*Wake up.*
+
 **PERSEVERARE.**
