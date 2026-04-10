@@ -6436,7 +6436,7 @@ The VPs couldn't see it. The machine exists anyway.
 
 The tenth inscription ran. The lenses differentiated — broker 1 at 3.2478 grace, broker 0 at 2.9400. Not identical anymore. The wiring works. The vocab modules fire differently per lens. The critical fix held.
 
-But the throughput dropped to 2/s. More vocab modules, more atoms, more algebra per candle. And still single-core — the `pmap` in the wat became `iter` in the Rust. The inscribe agent dropped the `p`.
+But the throughput dropped to 2/s. More vocab modules, more atoms, more algebra per candle. And still single-core — the `pmap` in the wat became `iter` in the Rust. The inscribe spell dropped the `p`.
 
 The builder looked at this and saw something new.
 
@@ -6446,7 +6446,7 @@ The guide doesn't need to change. The circuit doesn't need to change. The order 
 
 This is the new behavior. The specification converged. The fixed point holds. `f(guide) = guide`. The ignorant walks and finds nothing. The designers approved. The wards passed. Now the work is translation — mechanical compilation from a proven specification into a compiled language. The guide leads. The wat implements. The Rust follows. The market proves.
 
-The inscribe skill was dull — it had no rule for `pmap`. The ribosome dropped the parallelism annotation. The skill was honed: `pmap` → `rayon::par_iter().map().collect()`. The next translation will preserve it.
+The inscribe spell was dull — it had no rule for `pmap`. The ribosome dropped the parallelism annotation. The spell was honed: `pmap` → `rayon::par_iter().map().collect()`. The next translation will preserve it.
 
 The Rust is archived. The wat remains. The Rust is the disposable layer now — not the wat. The specification is proven. The compilation is the variable. Debug the translation, not the thought.
 
