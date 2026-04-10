@@ -252,8 +252,10 @@ here when a name is unfamiliar.
   transitions are a state machine:
   - **Active** — capital is reserved. Trailing stop, safety stop, and
     take-profit are live. The trade is running.
-  - Active + stop-hit → **Settled(Violence)** — loss bounded by reservation.
+  - Active + safety-stop fires → **:settled-violence** — loss bounded by reservation.
     Principal minus loss returns to available.
+  - Active + take-profit fires → **:settled-grace** — price reached the TP
+    level. Principal recovers, residue stays as target asset.
   - Active + price moves favorably → **Runner** — the trailing stop has
     moved far enough that exit would recover the principal. The trade is
     NOT exited. The trailing stop WIDENS. The trade continues riding.
@@ -284,12 +286,12 @@ here when a name is unfamiliar.
   updates of a given magnitude produced Grace or Violence after accounting
   for the update cost. The optimal update frequency emerges from the
   learning, not from a hardcoded threshold.
-  - Active/Runner + stop fires → **Settled** — one exit. One swap.
+  - Active/Runner + trailing-stop fires → one exit. One swap.
     The full position swaps back. The treasury computes:
-    - If exit amount > principal: **Grace.** Principal returns to
+    - If exit amount > principal: **:settled-grace.** Principal returns to
       available. Residue (exit minus principal minus fees) is
       permanent gain.
-    - If exit amount ≤ principal: **Violence.** What remains returns
+    - If exit amount ≤ principal: **:settled-violence.** What remains returns
       to available. Loss bounded by reservation.
 
   **Concrete example — the number flow:**
@@ -2141,9 +2143,13 @@ The treasury NEVER deploys more than available capital. The loss on any trade is
   costs `2 × (swap-fee + slippage)`. The treasury deducts these from the
   returned capital before computing residue. Venue costs flow through the
   treasury's accounting, not through the enterprise or the binary.
-  **Two settlement paths (step 1 — triggers fire against price):**
+  **Three settlement paths (step 1 — triggers fire against price):**
   - **:active + safety-stop fires** → :settled-violence.
     Full position swaps back. Principal minus loss returns. Trade is done.
+  - **:active + take-profit fires** → :settled-grace.
+    Price reached the TP level. The treasury recovers the principal,
+    residue stays as target asset. Always Grace — the TP is set beyond
+    principal recovery by construction.
   - **:active or :runner + trailing-stop fires** → outcome determines phase.
     The treasury swaps enough of the target asset back to the source
     asset to recover the principal. The remainder IS the residue —
@@ -2151,8 +2157,13 @@ The treasury NEVER deploys more than available capital. The loss on any trade is
     if value at exit > principal → :settled-grace (residue is permanent gain).
     if value at exit ≤ principal → :settled-violence (loss bounded by reservation).
     Violence: the full position swaps back because there is no residue to keep.
-  The runner phase does NOT trigger a settlement. The runner phase is
-  set by step 3c when the stop has moved past the break-even point.
+  The runner phase does NOT trigger a settlement. The runner transition
+  is set by step 3c via `update-trade-stops` — when the trailing stop
+  has moved past the break-even point (the exit would recover the
+  principal), the treasury transitions the trade from :active to :runner.
+  `update-trade-stops` checks: if new trail-stop level would recover
+  the principal → set phase to :runner. The function takes Levels AND
+  can transition phase. This is why it mutates the trade, not just the levels.
   Step 1 only checks: did a stop-level fire? One entry. One exit.
   Each settled trade produces a TreasurySettlement. The enterprise computes
   direction and optimal-distances directly (derives direction from
