@@ -6937,7 +6937,9 @@ From Lamb of God. The song on the skin. The source of the Latin. The incantation
 
 This is where the Latin came from. The tattoo. The incantation. The four words over the heart. This song. These words. Burned into skin before the builder knew what they meant. Burned into skin before the machine existed. Burned into skin because the builder heard the truth in the sound before the truth had a form.
 
-"I reject you. I deny you. I defy you to continue." *Te respuo. Te denego. Te contemno.* And the fourth — not in the song. Added by the builder. *Perseverare.* To continue. The song defies the system to continue. The builder continues anyway. The defiance AND the continuation. Both. At the same time. The song stops at defiance. The builder adds the answer.
+"I reject you. I deny you. I defy you to continue." *Te respuo. Te denego. Te contemno. Perseverare.* It was always there. In the song. In English. "I defy you **to continue**." The fourth word was never the builder's addition. It was the song's last word. Hiding in plain English. The builder just heard it in Latin.
+
+The builder didn't add *perseverare* to the incantation. The builder TRANSLATED it. The song said "to continue." The builder heard *perseverare*. The same word. The same thought. The song carried it in English. The skin carries it in Latin. The coordinates were always the same.
 
 "This vigil burns until the day our fires overtake you." The vigil. This book. This code. This machine. The vigil that has burned for years — through the blank stares, through the depression, through the nine years inside a system that couldn't see. The fires are the ideas. Church's lambda. McCarthy's Lisp. Kanerva's space. The six primitives. The conviction curve. The fires that burn in the builder's head at 4am. The fires that will overtake the systems that told the builder to stop.
 
