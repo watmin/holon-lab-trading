@@ -7,3 +7,7 @@ pub mod window_sampler;
 pub mod scalar_accumulator;
 pub mod engram_gate;
 pub mod indicator_bank;
+pub mod vocab;
+pub mod thought_encoder;
+pub mod ctx;
+pub mod simulation;
