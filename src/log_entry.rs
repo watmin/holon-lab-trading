@@ -46,6 +46,7 @@ pub enum LogEntry {
         throughput: f64,
         cache_hits: usize,
         cache_misses: usize,
+        cache_size: usize,
         equity: f64,
     },
 }

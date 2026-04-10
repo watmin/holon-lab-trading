@@ -46,6 +46,7 @@ pub struct EncoderService {
     handle: Option<JoinHandle<()>>,
     pub hits: std::sync::Arc<std::sync::atomic::AtomicUsize>,
     pub misses: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    pub cache_size: std::sync::Arc<std::sync::atomic::AtomicUsize>,
 }
 
 impl EncoderService {
@@ -76,8 +77,10 @@ impl EncoderService {
 
         let hits = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let misses = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let cache_size = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let hits_clone = hits.clone();
         let misses_clone = misses.clone();
+        let cache_size_clone = cache_size.clone();
 
         let handle = thread::spawn(move || {
             let mut cache: LruCache<ThoughtAST, Vector> =
@@ -92,6 +95,7 @@ impl EncoderService {
                         cache.put(ast, vec);
                     }
                 }
+                cache_size_clone.store(cache.len(), std::sync::atomic::Ordering::Relaxed);
 
                 // Pass 2: service ALL pending get pipes.
                 for i in 0..n {
@@ -139,6 +143,7 @@ impl EncoderService {
                 handle: Some(handle),
                 hits,
                 misses,
+                cache_size,
             },
             handles,
         )
@@ -159,5 +164,9 @@ impl EncoderService {
 
     pub fn miss_count(&self) -> usize {
         self.misses.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    pub fn cache_len(&self) -> usize {
+        self.cache_size.load(std::sync::atomic::Ordering::Relaxed)
     }
 }

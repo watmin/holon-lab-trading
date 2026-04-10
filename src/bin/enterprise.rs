@@ -268,6 +268,7 @@ fn init_ledger(path: &str) -> Connection {
             cache_hits    INTEGER,
             cache_misses  INTEGER,
             cache_hit_pct REAL,
+            cache_size    INTEGER,
             equity        REAL
         );",
     )
@@ -1172,6 +1173,7 @@ fn main() {
                 throughput,
                 cache_hits: encoder_service.hit_count(),
                 cache_misses: encoder_service.miss_count(),
+                cache_size: encoder_service.cache_len(),
                 equity: ent.treasury.total_equity(),
             });
         }

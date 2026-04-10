@@ -66,8 +66,8 @@ impl LogService {
 
             let mut diag_stmt = conn
                 .prepare_cached(
-                    "INSERT OR REPLACE INTO diagnostics (candle, throughput, cache_hits, cache_misses, cache_hit_pct, equity)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                    "INSERT OR REPLACE INTO diagnostics (candle, throughput, cache_hits, cache_misses, cache_hit_pct, cache_size, equity)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
                 )
                 .expect("failed to prepare diagnostics insert");
 
@@ -186,13 +186,13 @@ fn write_entry(
                 None::<i64>, None::<String>, *observers_updated as i64
             ]).ok();
         }
-        LogEntry::Diagnostic { candle, throughput, cache_hits, cache_misses, equity } => {
+        LogEntry::Diagnostic { candle, throughput, cache_hits, cache_misses, cache_size, equity } => {
             let hit_pct = if *cache_hits + *cache_misses > 0 {
                 100.0 * *cache_hits as f64 / (*cache_hits + *cache_misses) as f64
             } else { 0.0 };
             diag_stmt.execute(params![
                 *candle as i64, throughput, *cache_hits as i64,
-                *cache_misses as i64, hit_pct, equity
+                *cache_misses as i64, hit_pct, *cache_size as i64, equity
             ]).ok();
         }
     }
