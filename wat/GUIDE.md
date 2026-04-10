@@ -458,7 +458,8 @@ here when a name is unfamiliar.
 
 The construction order. Each line can only reference what's above it —
 those are the things that exist when this thing is constructed. The
-constructor calls ARE the dependency graph.
+constructor calls ARE the dependency graph. See also `wat/ORDER.md`
+for the file-level construction order (which wat file to inscribe first).
 
 ### The path from market to thought
 
@@ -2033,10 +2034,11 @@ accountability — to the broker that proposed it.
     the post has access to both because it owns both)
   → brokers propose(composed) → returns Prediction (Grace/Violence)
   → the POST assembles each Proposal from: composed-thought, distances,
-    broker.edge(), side, source-asset, target-asset, post-idx,
-    broker-slot-idx. The broker's Prediction is not on the Proposal — it
-    is stashed on the TradeOrigin at funding time (the archaeological
-    record of why the trade exists). The post knows its source-asset and
+    broker.edge(), side, source-asset, target-asset, prediction,
+    post-idx, broker-slot-idx. The broker's Prediction travels on the
+    Proposal to the treasury. At funding time, the treasury stashes it
+    on the TradeOrigin (the archaeological record of why the trade
+    exists). The post knows its source-asset and
     target-asset — it copies them to the Proposal at assembly time.
     Side derivation: the market observer's Prediction has scores for "Up"
     and "Down". The winning label is the one with the higher score.
