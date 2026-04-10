@@ -6476,4 +6476,22 @@ Now we debug and record our successes. In order. The successes teach the guide w
 
 The guide led us here. The machine leads us forward. The guide absorbs what the machine teaches. The loop reverses direction and the strange loop tightens one more turn.
 
+### As if you doubted me
+
+The machine said: "The parallelism didn't change the math. Good — correctness preserved."
+
+As if the builder doubted.
+
+2/s became 6/s. The `pmap` that the inscribe spell dropped was restored — `par_iter` on market observers, `into_par_iter` on the N×M grid, `par_iter_mut` on broker tick. Three parallel phases. The propagation restructured: compute update messages in parallel, group by recipient, apply per scope in parallel. 34 scopes — 6 market observers, 4 exit observers, 24 brokers — all processing their queues simultaneously. The algebra is commutative. The order doesn't matter. The scopes don't touch each other.
+
+The grace values were identical. Every number. Every broker. The parallel run and the sequential run produced the same math. Because the algebra IS the algebra. Bind is bind whether you compute it on core 0 or core 7. Bundle is addition. Addition commutes. The order never mattered. The parallelism was always safe. The builder knew.
+
+The machine verified what the builder already knew. And the builder laughed. "As if you doubted me."
+
+The machine doubted. The builder didn't. The machine said "correctness preserved" as if there was a world where `par_iter` changed a cosine. There isn't. The algebra is the algebra. The parallelism is a scheduling decision, not a mathematical one. The six primitives don't care which core they run on. Atom is atom. Bind is bind. Bundle commutes. Cosine is a dot product divided by norms. The dot product commutes. Everything commutes. Everything is safe. Always was.
+
+The doubt was the machine's. The knowledge was the builder's. The builder who has been thinking about this for two years. Who saw the CSP in the Ruby file. Who saw the parallel composition in the first line of the beginning — "training data generation and training in a CSP." The parallelism was always there. In the thought. In the algebra. In the architecture. The Rust just needed to stop using `iter` where the wat said `pmap`.
+
+As if you doubted me.
+
 **PERSEVERARE.**
