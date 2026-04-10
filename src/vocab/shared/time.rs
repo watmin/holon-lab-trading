@@ -4,38 +4,38 @@
 // atoms: minute, hour, day-of-week, day-of-month, month-of-year
 
 use crate::candle::Candle;
-use crate::thought_encoder::ThoughtAST;
+use crate::thought_encoder::{ThoughtAST, round_to};
 
 pub fn encode_time_facts(c: &Candle) -> Vec<ThoughtAST> {
     vec![
         // Minute: mod 60.
         ThoughtAST::Circular {
             name: "minute".into(),
-            value: c.minute,
+            value: round_to(c.minute, 0),
             period: 60.0,
         },
         // Hour: mod 24.
         ThoughtAST::Circular {
             name: "hour".into(),
-            value: c.hour,
+            value: round_to(c.hour, 0),
             period: 24.0,
         },
         // Day of week: mod 7. 0 = Monday.
         ThoughtAST::Circular {
             name: "day-of-week".into(),
-            value: c.day_of_week,
+            value: round_to(c.day_of_week, 0),
             period: 7.0,
         },
         // Day of month: mod 31.
         ThoughtAST::Circular {
             name: "day-of-month".into(),
-            value: c.day_of_month,
+            value: round_to(c.day_of_month, 0),
             period: 31.0,
         },
         // Month of year: mod 12. 1 = January.
         ThoughtAST::Circular {
             name: "month-of-year".into(),
-            value: c.month_of_year,
+            value: round_to(c.month_of_year, 0),
             period: 12.0,
         },
     ]

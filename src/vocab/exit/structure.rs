@@ -6,38 +6,38 @@
 //        adx, exit-kama-er
 
 use crate::candle::Candle;
-use crate::thought_encoder::ThoughtAST;
+use crate::thought_encoder::{ThoughtAST, round_to};
 
 pub fn encode_exit_structure_facts(c: &Candle) -> Vec<ThoughtAST> {
     vec![
         // Trend consistency (6 period): [-1, 1].
         ThoughtAST::Linear {
             name: "trend-consistency-6".into(),
-            value: c.trend_consistency_6,
+            value: round_to(c.trend_consistency_6, 2),
             scale: 1.0,
         },
         // Trend consistency (12 period): [-1, 1].
         ThoughtAST::Linear {
             name: "trend-consistency-12".into(),
-            value: c.trend_consistency_12,
+            value: round_to(c.trend_consistency_12, 2),
             scale: 1.0,
         },
         // Trend consistency (24 period): [-1, 1].
         ThoughtAST::Linear {
             name: "trend-consistency-24".into(),
-            value: c.trend_consistency_24,
+            value: round_to(c.trend_consistency_24, 2),
             scale: 1.0,
         },
         // ADX: [0, 100]. Normalize to [0, 1].
         ThoughtAST::Linear {
             name: "adx".into(),
-            value: c.adx / 100.0,
+            value: round_to(c.adx / 100.0, 2),
             scale: 1.0,
         },
         // KAMA efficiency ratio for exit context: [0, 1].
         ThoughtAST::Linear {
             name: "exit-kama-er".into(),
-            value: c.kama_er,
+            value: round_to(c.kama_er, 2),
             scale: 1.0,
         },
     ]

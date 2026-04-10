@@ -5,55 +5,55 @@
 //        entropy-rate, aroon-up, aroon-down, fractal-dim
 
 use crate::candle::Candle;
-use crate::thought_encoder::ThoughtAST;
+use crate::thought_encoder::{ThoughtAST, round_to};
 
 pub fn encode_regime_facts(c: &Candle) -> Vec<ThoughtAST> {
     vec![
         // KAMA efficiency ratio: [0, 1].
         ThoughtAST::Linear {
             name: "kama-er".into(),
-            value: c.kama_er,
+            value: round_to(c.kama_er, 2),
             scale: 1.0,
         },
         // Choppiness index: [0, 100]. Normalize to [0, 1].
         ThoughtAST::Linear {
             name: "choppiness".into(),
-            value: c.choppiness / 100.0,
+            value: round_to(c.choppiness / 100.0, 2),
             scale: 1.0,
         },
         // DFA alpha: [0, 2]. Normalize.
         ThoughtAST::Linear {
             name: "dfa-alpha".into(),
-            value: c.dfa_alpha / 2.0,
+            value: round_to(c.dfa_alpha / 2.0, 2),
             scale: 1.0,
         },
         // Variance ratio: unbounded positive. Log-encoded.
         ThoughtAST::Log {
             name: "variance-ratio".into(),
-            value: c.variance_ratio.max(0.001),
+            value: round_to(c.variance_ratio.max(0.001), 2),
         },
         // Entropy rate: [0, 1].
         ThoughtAST::Linear {
             name: "entropy-rate".into(),
-            value: c.entropy_rate,
+            value: round_to(c.entropy_rate, 2),
             scale: 1.0,
         },
         // Aroon up: [0, 100]. Normalize.
         ThoughtAST::Linear {
             name: "aroon-up".into(),
-            value: c.aroon_up / 100.0,
+            value: round_to(c.aroon_up / 100.0, 2),
             scale: 1.0,
         },
         // Aroon down: [0, 100]. Normalize.
         ThoughtAST::Linear {
             name: "aroon-down".into(),
-            value: c.aroon_down / 100.0,
+            value: round_to(c.aroon_down / 100.0, 2),
             scale: 1.0,
         },
         // Fractal dimension: [1, 2]. Map to [0, 1].
         ThoughtAST::Linear {
             name: "fractal-dim".into(),
-            value: c.fractal_dim - 1.0,
+            value: round_to(c.fractal_dim - 1.0, 2),
             scale: 1.0,
         },
     ]

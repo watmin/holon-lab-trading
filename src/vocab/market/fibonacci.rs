@@ -5,7 +5,7 @@
 //        fib-dist-236, fib-dist-382, fib-dist-500, fib-dist-618, fib-dist-786
 
 use crate::candle::Candle;
-use crate::thought_encoder::ThoughtAST;
+use crate::thought_encoder::{ThoughtAST, round_to};
 
 pub fn encode_fibonacci_facts(c: &Candle) -> Vec<ThoughtAST> {
     let pos48 = c.range_pos_48;
@@ -14,43 +14,43 @@ pub fn encode_fibonacci_facts(c: &Candle) -> Vec<ThoughtAST> {
         // Range position at each timeframe — Linear [0, 1]
         ThoughtAST::Linear {
             name: "range-pos-12".into(),
-            value: c.range_pos_12,
+            value: round_to(c.range_pos_12, 2),
             scale: 1.0,
         },
         ThoughtAST::Linear {
             name: "range-pos-24".into(),
-            value: c.range_pos_24,
+            value: round_to(c.range_pos_24, 2),
             scale: 1.0,
         },
         ThoughtAST::Linear {
             name: "range-pos-48".into(),
-            value: pos48,
+            value: round_to(pos48, 2),
             scale: 1.0,
         },
         // Distance from key Fibonacci levels (using 48-period range)
         ThoughtAST::Linear {
             name: "fib-dist-236".into(),
-            value: pos48 - 0.236,
+            value: round_to(pos48 - 0.236, 2),
             scale: 1.0,
         },
         ThoughtAST::Linear {
             name: "fib-dist-382".into(),
-            value: pos48 - 0.382,
+            value: round_to(pos48 - 0.382, 2),
             scale: 1.0,
         },
         ThoughtAST::Linear {
             name: "fib-dist-500".into(),
-            value: pos48 - 0.500,
+            value: round_to(pos48 - 0.500, 2),
             scale: 1.0,
         },
         ThoughtAST::Linear {
             name: "fib-dist-618".into(),
-            value: pos48 - 0.618,
+            value: round_to(pos48 - 0.618, 2),
             scale: 1.0,
         },
         ThoughtAST::Linear {
             name: "fib-dist-786".into(),
-            value: pos48 - 0.786,
+            value: round_to(pos48 - 0.786, 2),
             scale: 1.0,
         },
     ]

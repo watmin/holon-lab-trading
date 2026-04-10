@@ -6,7 +6,7 @@
 //        tf-agreement, tf-5m-1h-align
 
 use crate::candle::Candle;
-use crate::thought_encoder::ThoughtAST;
+use crate::thought_encoder::{ThoughtAST, round_to};
 
 pub fn encode_timeframe_facts(c: &Candle) -> Vec<ThoughtAST> {
     // 5m-1h alignment: sign of 1h body * 5m return direction
@@ -23,37 +23,37 @@ pub fn encode_timeframe_facts(c: &Candle) -> Vec<ThoughtAST> {
         // 1h trend: body / range of the 1h candle. Signed. [-1, 1].
         ThoughtAST::Linear {
             name: "tf-1h-trend".into(),
-            value: c.tf_1h_body,
+            value: round_to(c.tf_1h_body, 2),
             scale: 1.0,
         },
         // 1h return: signed percentage return over 1h.
         ThoughtAST::Linear {
             name: "tf-1h-ret".into(),
-            value: c.tf_1h_ret,
+            value: round_to(c.tf_1h_ret, 4),
             scale: 0.1,
         },
         // 4h trend: body / range of the 4h candle. Signed. [-1, 1].
         ThoughtAST::Linear {
             name: "tf-4h-trend".into(),
-            value: c.tf_4h_body,
+            value: round_to(c.tf_4h_body, 2),
             scale: 1.0,
         },
         // 4h return: signed percentage return over 4h.
         ThoughtAST::Linear {
             name: "tf-4h-ret".into(),
-            value: c.tf_4h_ret,
+            value: round_to(c.tf_4h_ret, 4),
             scale: 0.1,
         },
         // Timeframe agreement: [0, 1].
         ThoughtAST::Linear {
             name: "tf-agreement".into(),
-            value: c.tf_agreement,
+            value: round_to(c.tf_agreement, 2),
             scale: 1.0,
         },
         // 5m-1h alignment: signed agreement between 5m direction and 1h trend.
         ThoughtAST::Linear {
             name: "tf-5m-1h-align".into(),
-            value: signum_1h * five_m_ret,
+            value: round_to(signum_1h * five_m_ret, 4),
             scale: 0.1,
         },
     ]

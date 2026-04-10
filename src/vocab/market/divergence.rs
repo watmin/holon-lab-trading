@@ -5,7 +5,7 @@
 // atoms: rsi-divergence-bull, rsi-divergence-bear, divergence-spread
 
 use crate::candle::Candle;
-use crate::thought_encoder::ThoughtAST;
+use crate::thought_encoder::{ThoughtAST, round_to};
 
 pub fn encode_divergence_facts(c: &Candle) -> Vec<ThoughtAST> {
     let bull = c.rsi_divergence_bull;
@@ -16,7 +16,7 @@ pub fn encode_divergence_facts(c: &Candle) -> Vec<ThoughtAST> {
     if bull > 0.0 {
         facts.push(ThoughtAST::Linear {
             name: "rsi-divergence-bull".into(),
-            value: bull,
+            value: round_to(bull, 2),
             scale: 1.0,
         });
     }
@@ -25,7 +25,7 @@ pub fn encode_divergence_facts(c: &Candle) -> Vec<ThoughtAST> {
     if bear > 0.0 {
         facts.push(ThoughtAST::Linear {
             name: "rsi-divergence-bear".into(),
-            value: bear,
+            value: round_to(bear, 2),
             scale: 1.0,
         });
     }
@@ -34,7 +34,7 @@ pub fn encode_divergence_facts(c: &Candle) -> Vec<ThoughtAST> {
     if bull > 0.0 || bear > 0.0 {
         facts.push(ThoughtAST::Linear {
             name: "divergence-spread".into(),
-            value: bull - bear,
+            value: round_to(bull - bear, 2),
             scale: 1.0,
         });
     }

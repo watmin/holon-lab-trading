@@ -7,7 +7,7 @@
 //        dist-from-sma200, session-depth
 
 use crate::candle::Candle;
-use crate::thought_encoder::ThoughtAST;
+use crate::thought_encoder::{ThoughtAST, round_to};
 
 pub fn encode_standard_facts(candle_window: &[Candle]) -> Vec<ThoughtAST> {
     if candle_window.is_empty() {
@@ -62,46 +62,46 @@ pub fn encode_standard_facts(candle_window: &[Candle]) -> Vec<ThoughtAST> {
         // Since RSI extreme: Log-encoded recency.
         ThoughtAST::Log {
             name: "since-rsi-extreme".into(),
-            value: since_rsi_extreme.max(1.0),
+            value: round_to(since_rsi_extreme.max(1.0), 2),
         },
         // Since volume spike: Log-encoded recency.
         ThoughtAST::Log {
             name: "since-vol-spike".into(),
-            value: since_vol_spike.max(1.0),
+            value: round_to(since_vol_spike.max(1.0), 2),
         },
         // Since large move: Log-encoded recency.
         ThoughtAST::Log {
             name: "since-large-move".into(),
-            value: since_large_move.max(1.0),
+            value: round_to(since_large_move.max(1.0), 2),
         },
         // Distance from window high: signed percentage. Always <= 0.
         ThoughtAST::Linear {
             name: "dist-from-high".into(),
-            value: (price - window_high) / price,
+            value: round_to((price - window_high) / price, 4),
             scale: 0.1,
         },
         // Distance from window low: signed percentage. Always >= 0.
         ThoughtAST::Linear {
             name: "dist-from-low".into(),
-            value: (price - window_low) / price,
+            value: round_to((price - window_low) / price, 4),
             scale: 0.1,
         },
         // Distance from midpoint: signed percentage.
         ThoughtAST::Linear {
             name: "dist-from-midpoint".into(),
-            value: (price - window_mid) / price,
+            value: round_to((price - window_mid) / price, 4),
             scale: 0.1,
         },
         // Distance from SMA200: signed percentage.
         ThoughtAST::Linear {
             name: "dist-from-sma200".into(),
-            value: (price - current.sma200) / price,
+            value: round_to((price - current.sma200) / price, 4),
             scale: 0.1,
         },
         // Session depth: how deep into the window. Log-encoded.
         ThoughtAST::Log {
             name: "session-depth".into(),
-            value: (1.0 + n as f64).max(1.0),
+            value: round_to((1.0 + n as f64).max(1.0), 2),
         },
     ]
 }

@@ -5,38 +5,38 @@
 // atoms: rsi, stoch-k, stoch-kd-spread, macd-hist, cci
 
 use crate::candle::Candle;
-use crate::thought_encoder::ThoughtAST;
+use crate::thought_encoder::{ThoughtAST, round_to};
 
 pub fn encode_exit_timing_facts(c: &Candle) -> Vec<ThoughtAST> {
     vec![
         // RSI: [0, 1] — Wilder's formula. Naturally bounded.
         ThoughtAST::Linear {
             name: "rsi".into(),
-            value: c.rsi,
+            value: round_to(c.rsi, 2),
             scale: 1.0,
         },
         // Stochastic %K: [0, 1].
         ThoughtAST::Linear {
             name: "stoch-k".into(),
-            value: c.stoch_k / 100.0,
+            value: round_to(c.stoch_k / 100.0, 2),
             scale: 1.0,
         },
         // Stochastic %K - %D spread: signed. [-1, 1].
         ThoughtAST::Linear {
             name: "stoch-kd-spread".into(),
-            value: (c.stoch_k - c.stoch_d) / 100.0,
+            value: round_to((c.stoch_k - c.stoch_d) / 100.0, 2),
             scale: 1.0,
         },
         // MACD histogram: signed. Normalize by close.
         ThoughtAST::Linear {
             name: "macd-hist".into(),
-            value: c.macd_hist / c.close,
+            value: round_to(c.macd_hist / c.close, 4),
             scale: 0.01,
         },
         // CCI: unbounded. Normalize by 300.
         ThoughtAST::Linear {
             name: "cci".into(),
-            value: c.cci / 300.0,
+            value: round_to(c.cci / 300.0, 2),
             scale: 1.0,
         },
     ]

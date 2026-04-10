@@ -4,26 +4,26 @@
 // atoms: hurst, autocorrelation, adx
 
 use crate::candle::Candle;
-use crate::thought_encoder::ThoughtAST;
+use crate::thought_encoder::{ThoughtAST, round_to};
 
 pub fn encode_persistence_facts(c: &Candle) -> Vec<ThoughtAST> {
     vec![
         // Hurst exponent: [0, 1]. 0.5 = random walk.
         ThoughtAST::Linear {
             name: "hurst".into(),
-            value: c.hurst,
+            value: round_to(c.hurst, 2),
             scale: 1.0,
         },
         // Autocorrelation: [-1, 1]. Signed.
         ThoughtAST::Linear {
             name: "autocorrelation".into(),
-            value: c.autocorrelation,
+            value: round_to(c.autocorrelation, 2),
             scale: 1.0,
         },
         // ADX: [0, 100]. Normalize to [0, 1].
         ThoughtAST::Linear {
             name: "adx".into(),
-            value: c.adx / 100.0,
+            value: round_to(c.adx / 100.0, 2),
             scale: 1.0,
         },
     ]

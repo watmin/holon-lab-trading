@@ -5,7 +5,7 @@
 //        tenkan-dist, kijun-dist
 
 use crate::candle::Candle;
-use crate::thought_encoder::ThoughtAST;
+use crate::thought_encoder::{ThoughtAST, round_to};
 
 fn clamp(v: f64, lo: f64, hi: f64) -> f64 {
     v.max(lo).min(hi)
@@ -24,7 +24,7 @@ pub fn encode_ichimoku_facts(c: &Candle) -> Vec<ThoughtAST> {
         // Cloud position: where price is relative to the cloud.
         ThoughtAST::Linear {
             name: "cloud-position".into(),
-            value: if cloud_width > 0.0 {
+            value: round_to(if cloud_width > 0.0 {
                 clamp(
                     (close - cloud_mid) / cloud_width.max(close * 0.001),
                     -1.0,
@@ -32,36 +32,36 @@ pub fn encode_ichimoku_facts(c: &Candle) -> Vec<ThoughtAST> {
                 )
             } else {
                 clamp((close - cloud_mid) / (close * 0.01), -1.0, 1.0)
-            },
+            }, 2),
             scale: 1.0,
         },
         // Cloud thickness: width as percentage of price. Log-encoded.
         ThoughtAST::Log {
             name: "cloud-thickness".into(),
-            value: (cloud_width / close).max(0.0001),
+            value: round_to((cloud_width / close).max(0.0001), 2),
         },
         // TK cross delta: pre-computed. Signed. [-1, 1].
         ThoughtAST::Linear {
             name: "tk-cross-delta".into(),
-            value: clamp(c.tk_cross_delta, -1.0, 1.0),
+            value: round_to(clamp(c.tk_cross_delta, -1.0, 1.0), 2),
             scale: 1.0,
         },
         // TK spread: (tenkan - kijun) / price. Signed.
         ThoughtAST::Linear {
             name: "tk-spread".into(),
-            value: clamp((tenkan - kijun) / (close * 0.01), -1.0, 1.0),
+            value: round_to(clamp((tenkan - kijun) / (close * 0.01), -1.0, 1.0), 2),
             scale: 1.0,
         },
         // Tenkan distance: (close - tenkan) / price. Signed percentage.
         ThoughtAST::Linear {
             name: "tenkan-dist".into(),
-            value: clamp((close - tenkan) / (close * 0.01), -1.0, 1.0),
+            value: round_to(clamp((close - tenkan) / (close * 0.01), -1.0, 1.0), 2),
             scale: 1.0,
         },
         // Kijun distance: (close - kijun) / price. Signed percentage.
         ThoughtAST::Linear {
             name: "kijun-dist".into(),
-            value: clamp((close - kijun) / (close * 0.01), -1.0, 1.0),
+            value: round_to(clamp((close - kijun) / (close * 0.01), -1.0, 1.0), 2),
             scale: 1.0,
         },
     ]

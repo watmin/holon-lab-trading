@@ -73,6 +73,14 @@ impl std::hash::Hash for ThoughtAST {
     }
 }
 
+/// Round a value to N decimal places. Used by vocabulary modules
+/// at emission time — the ThoughtAST carries the rounded value.
+/// The cache key IS the exact AST. The rounding happens at emission.
+pub fn round_to(v: f64, digits: u32) -> f64 {
+    let factor = 10f64.powi(digits as i32);
+    (v * factor).round() / factor
+}
+
 /// The evaluator. Walks ThoughtAST bottom-up, checking cache at every node.
 pub struct ThoughtEncoder {
     /// Finite, pre-computed atom vectors. Never evicted.

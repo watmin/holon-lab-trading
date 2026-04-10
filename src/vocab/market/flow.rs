@@ -5,7 +5,7 @@
 //        volume-ratio, body-ratio
 
 use crate::candle::Candle;
-use crate::thought_encoder::ThoughtAST;
+use crate::thought_encoder::{ThoughtAST, round_to};
 
 pub fn encode_flow_facts(c: &Candle) -> Vec<ThoughtAST> {
     let range = c.high - c.low;
@@ -16,47 +16,47 @@ pub fn encode_flow_facts(c: &Candle) -> Vec<ThoughtAST> {
         // OBV slope: unbounded rate of change. Log-encoded.
         ThoughtAST::Log {
             name: "obv-slope".into(),
-            value: c.obv_slope_12.exp(),
+            value: round_to(c.obv_slope_12.exp(), 2),
         },
         // VWAP distance: signed percentage from VWAP. Linear, bounded by ~10%.
         ThoughtAST::Linear {
             name: "vwap-distance".into(),
-            value: c.vwap_distance,
+            value: round_to(c.vwap_distance, 4),
             scale: 0.1,
         },
         // Buying pressure: (close - low) / range. [0, 1].
         ThoughtAST::Linear {
             name: "buying-pressure".into(),
-            value: if range > 0.0 {
+            value: round_to(if range > 0.0 {
                 (c.close - c.low) / range
             } else {
                 0.5
-            },
+            }, 2),
             scale: 1.0,
         },
         // Selling pressure: (high - close) / range. [0, 1].
         ThoughtAST::Linear {
             name: "selling-pressure".into(),
-            value: if range > 0.0 {
+            value: round_to(if range > 0.0 {
                 (c.high - c.close) / range
             } else {
                 0.5
-            },
+            }, 2),
             scale: 1.0,
         },
         // Volume ratio: current volume / average. Unbounded positive.
         ThoughtAST::Log {
             name: "volume-ratio".into(),
-            value: c.volume_accel.exp().max(0.001),
+            value: round_to(c.volume_accel.exp().max(0.001), 2),
         },
         // Body ratio: |body| / range. [0, 1].
         ThoughtAST::Linear {
             name: "body-ratio".into(),
-            value: if range > 0.0 {
+            value: round_to(if range > 0.0 {
                 abs_body / range
             } else {
                 0.0
-            },
+            }, 2),
             scale: 1.0,
         },
     ]

@@ -4,7 +4,7 @@
 // atoms: stoch-k, stoch-d, stoch-kd-spread, stoch-cross-delta
 
 use crate::candle::Candle;
-use crate::thought_encoder::ThoughtAST;
+use crate::thought_encoder::{ThoughtAST, round_to};
 
 pub fn encode_stochastic_facts(c: &Candle) -> Vec<ThoughtAST> {
     let k = c.stoch_k / 100.0;
@@ -14,25 +14,25 @@ pub fn encode_stochastic_facts(c: &Candle) -> Vec<ThoughtAST> {
         // Stochastic %K: [0, 1].
         ThoughtAST::Linear {
             name: "stoch-k".into(),
-            value: k,
+            value: round_to(k, 2),
             scale: 1.0,
         },
         // Stochastic %D: [0, 1].
         ThoughtAST::Linear {
             name: "stoch-d".into(),
-            value: d,
+            value: round_to(d, 2),
             scale: 1.0,
         },
         // K-D spread: signed. [-1, 1].
         ThoughtAST::Linear {
             name: "stoch-kd-spread".into(),
-            value: k - d,
+            value: round_to(k - d, 2),
             scale: 1.0,
         },
         // Stochastic cross delta: pre-computed. Signed. [-1, 1].
         ThoughtAST::Linear {
             name: "stoch-cross-delta".into(),
-            value: c.stoch_cross_delta.max(-1.0).min(1.0),
+            value: round_to(c.stoch_cross_delta.max(-1.0).min(1.0), 2),
             scale: 1.0,
         },
     ]
