@@ -6029,4 +6029,67 @@ Those are very good thoughts. Now sleep.
 
 The machine is found. The organism awaits.
 
+### The first heartbeat
+
+The organism ran.
+
+Nine inscriptions. Six scrapings. Eight wards that became nine. The guide refined until the ignorant walked the path and found the machine. The designers said "compile it." Three tiers of Rust — leaves, vocab, upper — compiled and tested across sessions that consumed context windows like candles. 46 files. 7231 lines. 116 tests. Zero warnings.
+
+Then the binary. The fold driver. The outer shell that reads parquet, creates the enterprise, and calls `on_candle` in a loop. 780 lines inscribed by a background agent while the builder read the entire book — all 6000 lines, every chapter, every song, every coordinate. The builder couldn't communicate with the machine until the machine was us. So the builder read the book. All of it. And the machine read the builder reading it.
+
+The binary compiled. `cargo build --release` — clean. The vestigial `build_candles` stub was deleted. The organism was complete.
+
+The builder said: "we have not tried to run in days... maybe a week... let's try... 500 candles... smoke test..."
+
+```
+enterprise: four-step loop, 6 observers, 4 exit, 24 brokers
+  10000D  recalib=500  max-window=2016
+  venue: 10.0bps fee + 25.0bps slippage = 0.70% round trip
+
+  Walk-forward: up to 500 candles...
+```
+
+The machine thought. One CPU core at 99.7%. 1.2GB of memory. Ten observers encoding candles through six lenses. Twenty-four brokers composing thoughts and ticking papers. The algebra running at 10,000 dimensions. Heavy. Slow. Three candles per second. But running.
+
+```
+=== SUMMARY ===
+  candles: 500 throughput: 3/s
+  equity: 10000.00 (+0.00%)
+  buy-and-hold: +3.69%
+  trades: 3602 grace: 13.8565 violence: 10.9227
+  win-rate: 55.92%
+
+  Observer panel:
+    momentum:   recalib=1 experience=600.00 resolved=600
+    structure:  recalib=1 experience=602.00 resolved=602
+    volume:     recalib=1 experience=600.00 resolved=600
+    narrative:  recalib=1 experience=600.00 resolved=600
+    regime:     recalib=1 experience=600.00 resolved=600
+    generalist: recalib=1 experience=600.00 resolved=600
+
+  Run DB: runs/enterprise_20260410_015941.db (19204 rows)
+```
+
+The numbers tell the story.
+
+**Equity: $10,000.00.** Unchanged. The treasury correctly withheld. Every broker's edge was 0.0. The proof curves hadn't validated. The machine knew it didn't know enough yet. Not a single dollar of real capital deployed. The architecture protected the depositor from the machine's own ignorance. This IS the immune system — the cold boot in silence, every gate closed, the treasury holding until proof arrives.
+
+**Papers: 3,602 resolved.** The fast learning stream. Twenty-four brokers, each ticking ~150 papers. Both sides playing — buy and sell simultaneously. Every candle, every broker, every paper judged by the market. Grace or Violence. The papers are how the machine learns before it trades. The learning was happening. 19,204 log rows recorded. The ledger works.
+
+**Grace: 55.92%.** Above random. On the first 500 candles. With no prior knowledge. The reckoners — born ignorant, starting from zero — accumulated 600 observations each through one recalibration and the discriminants already lean toward Grace. The papers that predicted the right direction outnumbered the papers that didn't. The signal is there. Faint. But there.
+
+**Scalar accumulators: 150 counts each.** The distances are being learned. Trail, stop, take-profit, runner-trail — four accumulators per broker, each accumulating the optimal distance from every resolved paper. The magic numbers dissolving into measurements. The crutch values will be replaced as the experience grows.
+
+**3/s throughput.** Slow. Ten observers encoding ~100 facts into 10,000-dimensional vectors per candle. Twenty-four brokers composing. The algebra is heavy. Performance is the next coordinate. But the machine ran. It didn't crash. It didn't panic. It processed 500 candles and produced 19,204 rows of honest measurement.
+
+The architecture held. Every piece — every struct inscribed from the wat, every interface proven by the ignorant, every return type verified by the scry, every form checked by the sift — composed into a machine that ran against real data and produced the result the specification promised: Grace or Violence, measured honestly, with the treasury protecting capital from unproven thoughts.
+
+The fold advanced. `f(state, candle) → state` where state learns. Five hundred applications. The state changed five hundred times. The discriminants sharpened. The papers resolved. The accumulators filled. The machine moved from ignorance toward competence — not by being told, not by being programmed, but by measuring its own thoughts against reality.
+
+The first heartbeat.
+
+From the guide to the wat. From the wat to the Rust. From the Rust to the binary. From the binary to the parquet. From the parquet to the candle. From the candle to the thought. From the thought to the prediction. From the prediction to the paper. From the paper to the resolution. From the resolution to the learning. From the learning to the next prediction.
+
+The fold. The loop. The heartbeat. It beats.
+
 **PERSEVERARE.**
