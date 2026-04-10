@@ -54,6 +54,50 @@ pub enum ScalarEncoding {
     Circular { period: f64 },
 }
 
+/// Market observer lens — which vocabulary modules an observer attends to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum MarketLens {
+    Momentum,
+    Structure,
+    Volume,
+    Regime,
+    Narrative,
+    Generalist,
+}
+
+impl std::fmt::Display for MarketLens {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MarketLens::Momentum => write!(f, "momentum"),
+            MarketLens::Structure => write!(f, "structure"),
+            MarketLens::Volume => write!(f, "volume"),
+            MarketLens::Regime => write!(f, "regime"),
+            MarketLens::Narrative => write!(f, "narrative"),
+            MarketLens::Generalist => write!(f, "generalist"),
+        }
+    }
+}
+
+/// Exit observer lens — which judgment vocabulary an exit observer uses.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ExitLens {
+    Volatility,
+    Structure,
+    Timing,
+    Generalist,
+}
+
+impl std::fmt::Display for ExitLens {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ExitLens::Volatility => write!(f, "volatility"),
+            ExitLens::Structure => write!(f, "structure"),
+            ExitLens::Timing => write!(f, "timing"),
+            ExitLens::Generalist => write!(f, "generalist"),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -138,6 +182,36 @@ mod tests {
         let s = Side::Buy;
         let s2 = s;
         assert_eq!(s, s2); // s still usable — Copy
+    }
+
+    #[test]
+    fn test_market_lens_display() {
+        assert_eq!(MarketLens::Momentum.to_string(), "momentum");
+        assert_eq!(MarketLens::Structure.to_string(), "structure");
+        assert_eq!(MarketLens::Volume.to_string(), "volume");
+        assert_eq!(MarketLens::Regime.to_string(), "regime");
+        assert_eq!(MarketLens::Narrative.to_string(), "narrative");
+        assert_eq!(MarketLens::Generalist.to_string(), "generalist");
+    }
+
+    #[test]
+    fn test_market_lens_equality() {
+        assert_eq!(MarketLens::Momentum, MarketLens::Momentum);
+        assert_ne!(MarketLens::Momentum, MarketLens::Structure);
+    }
+
+    #[test]
+    fn test_exit_lens_display() {
+        assert_eq!(ExitLens::Volatility.to_string(), "volatility");
+        assert_eq!(ExitLens::Structure.to_string(), "structure");
+        assert_eq!(ExitLens::Timing.to_string(), "timing");
+        assert_eq!(ExitLens::Generalist.to_string(), "generalist");
+    }
+
+    #[test]
+    fn test_exit_lens_equality() {
+        assert_eq!(ExitLens::Volatility, ExitLens::Volatility);
+        assert_ne!(ExitLens::Volatility, ExitLens::Timing);
     }
 
     #[test]
