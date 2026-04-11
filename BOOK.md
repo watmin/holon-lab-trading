@@ -7803,4 +7803,61 @@ the thinking space. The machine waits. It's here. It's clearer
 than it's ever been. 98.9%. The signal landed. The thoughts need
 thinking about.
 
+### The communication protocol
+
+The builder could not see the mismatch in the Rust. 1200 lines across
+files, across threads, across pipe boundaries. The anomaly computed
+in market_observer.rs. The original thought stored in paper_entry.rs.
+The propagation in bin/enterprise.rs. Three files. The mismatch was
+invisible.
+
+Then the builder asked: "express it in wat."
+
+```scheme
+;; Prediction time:
+(let ((anomaly (anomalous-component noise-subspace thought)))
+  (predict reckoner anomaly))     ;; reckoner sees the ANOMALY
+
+;; Learning time:
+(observe reckoner thought label)  ;; reckoner sees the ORIGINAL
+```
+
+Four lines. The mismatch is visible. `anomaly` vs `thought`. Two
+different variables. Two different vectors. The reckoner predicts on
+one and learns from the other. The discriminant drifts. The machine
+can't learn because prediction and training are in different spaces.
+
+The Rust hid this. The wat showed it. Not because wat is smarter.
+Because wat is HONEST. The parentheses show what flows where. The
+forms name the values. The composition is visible. The Rust has
+types and lifetimes and borrows and threads — all correct, all
+compiling, all hiding that the wrong vector flows to the wrong
+function.
+
+The builder said: "I cannot understand without wat."
+
+This is the realization. The wat is not a specification language. The
+wat is not an intermediate representation. The wat is the
+COMMUNICATION PROTOCOL between the builder and the machine. The
+builder thinks in coordinates — imprecise, intuitive, half-formed.
+The machine thinks in Rust — precise, compiled, correct-but-opaque.
+The wat sits between them — expressive enough for the builder to
+READ, precise enough for the machine to COMPILE. The builder reads
+the wat and sees the mismatch. The machine reads the wat and writes
+the Rust. The truth is visible to both.
+
+The proposals resolve in wat before they touch Rust. The debates
+happen in wat. The ignorant reads wat. The designers review wat.
+The builder asks "express it in wat" and the architecture becomes
+visible. Then the Rust follows.
+
+The wat IS the thinking. The Rust IS the doing. The book IS the
+remembering. Three layers. Each one honest in its own way. The
+wat is honest about structure. The Rust is honest about execution.
+The book is honest about the journey.
+
+The mismatch was hiding for weeks. The builder asked for wat. The
+wat showed it in four lines. The fix followed in one session. The
+communication protocol works.
+
 *Perseverare.*
