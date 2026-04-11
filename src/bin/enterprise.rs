@@ -806,7 +806,7 @@ fn main() {
             broker_learn_txs.push(blearn_tx);
 
             let mut broker = std::mem::replace(&mut brokers[slot_idx], Broker::new(
-                vec![], 0, 0, 10, 500, vec![]));
+                vec![], 0, 1, 10, 500, vec![])); // placeholder — exit_count=1 satisfies assert
             let src = source_asset.clone();
             let tgt = target_asset.clone();
             let post_idx_for_broker = all_pipes.len();
