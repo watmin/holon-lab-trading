@@ -75,6 +75,19 @@ pub enum LogEntry {
         recalib_count: usize,
         last_prediction: String,
     },
+    /// Paper detail — the full story of a resolved paper.
+    PaperDetail {
+        broker_slot_idx: usize,
+        outcome: Outcome,
+        entry_price: f64,
+        buy_extreme: f64,
+        sell_extreme: f64,
+        buy_excursion: f64,
+        sell_excursion: f64,
+        trail_distance: f64,
+        stop_distance: f64,
+        duration: usize,
+    },
     /// Broker snapshot — emitted by broker threads every N candles.
     BrokerSnapshot {
         candle: usize,

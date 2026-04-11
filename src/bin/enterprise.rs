@@ -310,6 +310,18 @@ fn init_ledger(path: &str) -> Connection {
             trail_experience  REAL,
             stop_experience   REAL,
             PRIMARY KEY (candle, broker_slot_idx)
+        CREATE TABLE IF NOT EXISTS paper_details (
+            rowid             INTEGER PRIMARY KEY AUTOINCREMENT,
+            broker_slot_idx   INTEGER,
+            outcome           TEXT,
+            entry_price       REAL,
+            buy_extreme       REAL,
+            sell_extreme       REAL,
+            buy_excursion     REAL,
+            sell_excursion    REAL,
+            trail_distance    REAL,
+            stop_distance     REAL,
+            duration          INTEGER
         );",
     )
     .expect("failed to create ledger tables");
@@ -1067,6 +1079,18 @@ fn main() {
                     broker_slot_idx: res.broker_slot_idx,
                     outcome: res.outcome,
                     optimal_distances: res.optimal_distances,
+                });
+                log_handle.log(LogEntry::PaperDetail {
+                    broker_slot_idx: res.broker_slot_idx,
+                    outcome: res.outcome,
+                    entry_price: res.entry_price,
+                    buy_extreme: res.buy_extreme,
+                    sell_extreme: res.sell_extreme,
+                    buy_excursion: res.buy_excursion,
+                    sell_excursion: res.sell_excursion,
+                    trail_distance: res.trail_distance,
+                    stop_distance: res.stop_distance,
+                    duration: res.duration,
                 });
             }
             all_resolutions.extend(resolutions);

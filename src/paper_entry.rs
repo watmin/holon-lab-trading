@@ -30,6 +30,8 @@ pub struct PaperEntry {
     pub buy_resolved: bool,
     /// Sell side's stop has fired.
     pub sell_resolved: bool,
+    /// How many candles this paper has lived.
+    pub age: usize,
 }
 
 impl PaperEntry {
@@ -48,12 +50,14 @@ impl PaperEntry {
             sell_trail_stop: p + trail_dist,
             buy_resolved: false,
             sell_resolved: false,
+            age: 0,
         }
     }
 
     /// Tick the paper against the current price. Update extremes,
     /// check trailing stops, mark sides as resolved when stops fire.
     pub fn tick(&mut self, current_price: f64) {
+        self.age += 1;
         // Buy side: track highest price, trail stop follows up
         if !self.buy_resolved {
             if current_price > self.buy_extreme {

@@ -87,6 +87,13 @@ impl LogService {
                 )
                 .expect("failed to prepare broker snapshot insert");
 
+            let mut paper_stmt = conn
+                .prepare_cached(
+                    "INSERT INTO paper_details (broker_slot_idx, outcome, entry_price, buy_extreme, sell_extreme, buy_excursion, sell_excursion, trail_distance, stop_distance, duration)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                )
+                .expect("failed to prepare paper detail insert");
+
             loop {
                 let mut did_work = false;
                 let mut batch_count = 0;
@@ -100,7 +107,7 @@ impl LogService {
                     loop {
                         match drains[i].try_recv() {
                             Ok(entry) => {
-                                write_entry(&mut log_stmt, &mut diag_stmt, &mut obs_stmt, &mut brk_stmt, &entry);
+                                write_entry(&mut log_stmt, &mut diag_stmt, &mut obs_stmt, &mut brk_stmt, &mut paper_stmt, &entry);
                                 rows_clone.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                                 did_work = true;
                                 batch_count += 1;
@@ -127,7 +134,7 @@ impl LogService {
                     let mut final_count = 0;
                     for drain in &drains {
                         while let Ok(entry) = drain.try_recv() {
-                            write_entry(&mut log_stmt, &mut diag_stmt, &mut obs_stmt, &mut brk_stmt, &entry);
+                            write_entry(&mut log_stmt, &mut diag_stmt, &mut obs_stmt, &mut brk_stmt, &mut paper_stmt, &entry);
                             rows_clone.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                             final_count += 1;
                             if final_count % BATCH_SIZE == 0 {
@@ -177,6 +184,7 @@ fn write_entry(
     diag_stmt: &mut rusqlite::CachedStatement,
     obs_stmt: &mut rusqlite::CachedStatement,
     brk_stmt: &mut rusqlite::CachedStatement,
+    paper_stmt: &mut rusqlite::CachedStatement,
     entry: &LogEntry,
 ) {
     match entry {
@@ -262,6 +270,20 @@ fn write_entry(
                 *candle as i64, *broker_slot_idx as i64, edge,
                 *grace_count as i64, *violence_count as i64, *paper_count as i64,
                 trail_experience, stop_experience
+            ]).ok();
+        }
+        LogEntry::PaperDetail { broker_slot_idx, outcome, entry_price,
+                                buy_extreme, sell_extreme, buy_excursion,
+                                sell_excursion, trail_distance, stop_distance,
+                                duration } => {
+            let outcome_str = match outcome {
+                Outcome::Grace => "Grace",
+                Outcome::Violence => "Violence",
+            };
+            paper_stmt.execute(params![
+                *broker_slot_idx as i64, outcome_str, entry_price,
+                buy_extreme, sell_extreme, buy_excursion, sell_excursion,
+                trail_distance, stop_distance, *duration as i64
             ]).ok();
         }
     }

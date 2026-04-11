@@ -34,6 +34,15 @@ pub struct Resolution {
     pub amount: f64,
     /// Hindsight optimal distances.
     pub optimal_distances: Distances,
+    /// Paper details for diagnostics.
+    pub entry_price: f64,
+    pub buy_extreme: f64,
+    pub sell_extreme: f64,
+    pub buy_excursion: f64,
+    pub sell_excursion: f64,
+    pub trail_distance: f64,
+    pub stop_distance: f64,
+    pub duration: usize,
 }
 
 /// What the broker returns for observer learning.
@@ -230,6 +239,14 @@ impl Broker {
                     outcome,
                     amount: excursion,
                     optimal_distances: optimal,
+                    entry_price: paper.entry_price.0,
+                    buy_extreme: paper.buy_extreme,
+                    sell_extreme: paper.sell_extreme,
+                    buy_excursion: paper.buy_excursion(),
+                    sell_excursion: paper.sell_excursion(),
+                    trail_distance: paper.distances.trail,
+                    stop_distance: paper.distances.stop,
+                    duration: paper.age,
                 });
             }
 
@@ -248,6 +265,14 @@ impl Broker {
                     outcome,
                     amount: excursion,
                     optimal_distances: optimal,
+                    entry_price: paper.entry_price.0,
+                    buy_extreme: paper.buy_extreme,
+                    sell_extreme: paper.sell_extreme,
+                    buy_excursion: paper.buy_excursion(),
+                    sell_excursion: paper.sell_excursion(),
+                    trail_distance: paper.distances.trail,
+                    stop_distance: paper.distances.stop,
+                    duration: paper.age,
                 });
             }
 
