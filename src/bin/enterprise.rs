@@ -964,6 +964,10 @@ fn main() {
         }
         post.encode_count += 1;
 
+        // Clone is necessary: candle_window is a VecDeque (mutated each candle via
+        // push_back/pop_front). Observer threads need a contiguous Vec snapshot at this
+        // candle. The Arc shares the single clone across all N observer threads.
+        // VecDeque cannot provide a contiguous &[Candle] across both halves without copying.
         let window: Arc<Vec<enterprise::candle::Candle>> = Arc::new(post.candle_window.iter().cloned().collect());
         let encode_count = post.encode_count;
 
@@ -992,8 +996,29 @@ fn main() {
         let price = post.last_close();
         let ctx_ref = &*ctx_arc;
 
-        // Compute values in parallel (pure reads, scoped borrow)
+        // Pre-compute M exit vecs — one per exit lens, shared across all N market observers.
+        // Also reused by step 3c trigger updates (no recomputation).
         use rayon::prelude::*;
+        let exit_vecs: Vec<holon::kernel::vector::Vector> = (0..m)
+            .map(|ei| {
+                let exit_facts = enterprise::post::exit_lens_facts_pub(
+                    &post.exit_observers[ei].lens, &enriched);
+                let exit_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(exit_facts);
+                // Use grid_handles[ei] for the cache lookup (any handle works, pick deterministic one)
+                match grid_handles[ei].get(&exit_bundle) {
+                    Some(cached) => cached,
+                    None => {
+                        let (vec, misses) = ctx_ref.thought_encoder.encode(&exit_bundle);
+                        for (ast, v) in misses {
+                            grid_handles[ei].set(ast, v);
+                        }
+                        vec
+                    }
+                }
+            })
+            .collect();
+
+        // Compute values in parallel (pure reads, scoped borrow)
         let grid_values: Vec<_> = {
             let exit_observers = &post.exit_observers;
             // Brokers are on threads — read scalar_accums from... we need them here.
@@ -1005,24 +1030,8 @@ fn main() {
                 let mi = slot_idx / m;
                 let ei = slot_idx % m;
 
-                let exit_facts = enterprise::post::exit_lens_facts_pub(
-                    &exit_observers[ei].lens, &enriched);
-                let exit_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(exit_facts);
-
-                // Cache pipe: check encoder service
-                let exit_vec = match grid_handles[slot_idx].get(&exit_bundle) {
-                    Some(cached) => cached,
-                    None => {
-                        let (vec, misses) = ctx_ref.thought_encoder.encode(&exit_bundle);
-                        for (ast, v) in misses {
-                            grid_handles[slot_idx].set(ast, v);
-                        }
-                        vec
-                    }
-                };
-
                 let composed = holon::kernel::primitives::Primitives::bundle(
-                    &[&market_thoughts[mi], &exit_vec]);
+                    &[&market_thoughts[mi], &exit_vecs[ei]]);
 
                 // Distances from exit observer — reckoner prediction or default.
                 // TODO: broker scalar accumulators not accessible from main thread — cascade skips accumulator tier
@@ -1120,25 +1129,7 @@ fn main() {
 
             let ctx_ref = &*ctx_arc;
 
-            // Pre-encode exit vecs per exit observer (M, not per-trade).
-            // Each exit lens produces the same facts for the same candle.
-            let exit_vecs: Vec<_> = (0..pipes.m)
-                .map(|ei| {
-                    let exit_facts = enterprise::post::exit_lens_facts_pub(
-                        &post.exit_observers[ei].lens, &enriched);
-                    let exit_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(exit_facts);
-                    match step3c_handle.get(&exit_bundle) {
-                        Some(cached) => cached,
-                        None => {
-                            let (vec, misses) = ctx_ref.thought_encoder.encode(&exit_bundle);
-                            for (ast, v) in misses {
-                                step3c_handle.set(ast, v);
-                            }
-                            vec
-                        }
-                    }
-                })
-                .collect();
+            // exit_vecs already computed before the grid — reuse them here.
 
             // Parallel: compose + distance query per trade. Independent.
             let level_updates: Vec<_> = trade_info

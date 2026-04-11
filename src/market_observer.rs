@@ -9,12 +9,8 @@ use holon::memory::{OnlineSubspace, ReckConfig, Reckoner};
 use crate::engram_gate::{check_engram_gate, EngramGateState};
 use crate::enums::{Direction, MarketLens};
 use crate::thought_encoder::{IncrementalBundle, ThoughtAST};
+use crate::to_f64;
 use crate::window_sampler::WindowSampler;
-
-/// Convert Vector (i8) to Vec<f64> for OnlineSubspace operations.
-fn to_f64(v: &Vector) -> Vec<f64> {
-    v.data().iter().map(|&x| x as f64).collect()
-}
 
 /// Predicts direction (Up/Down) from candle data through a specific lens.
 pub struct MarketObserver {
@@ -93,12 +89,11 @@ impl MarketObserver {
         thought: Vector,
         misses: Vec<(ThoughtAST, Vector)>,
     ) -> ObserveResult {
-        // Update noise subspace
+        // Update noise subspace and strip noise in one pass (shared f64 conversion)
         let thought_f64 = to_f64(&thought);
         self.noise_subspace.update(&thought_f64);
-
-        // Strip noise -- anomalous component is the signal
-        let clean = self.strip_noise(&thought);
+        let anomalous = self.noise_subspace.anomalous_component(&thought_f64);
+        let clean = Vector::from_f64(&anomalous);
 
         // Predict direction
         let pred = self.reckoner.predict(&clean);

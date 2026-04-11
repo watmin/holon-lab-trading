@@ -15,11 +15,7 @@ use crate::engram_gate::{check_engram_gate, EngramGateState};
 use crate::enums::{Direction, Outcome};
 use crate::paper_entry::PaperEntry;
 use crate::scalar_accumulator::ScalarAccumulator;
-
-/// Convert Vector (i8) to Vec<f64> for OnlineSubspace operations.
-fn to_f64(v: &Vector) -> Vec<f64> {
-    v.data().iter().map(|&x| x as f64).collect()
-}
+use crate::to_f64;
 
 /// What a broker produces when a paper resolves.
 /// Facts, not mutations. Collected from parallel tick, applied sequentially.
@@ -86,6 +82,9 @@ pub struct Broker {
     pub recalib_total: usize,
     /// Recalib count at last engram check.
     pub last_recalib_count: usize,
+    /// Cached edge value — updated in propagate() when the reckoner learns.
+    /// Avoids constructing a zero vector and calling predict() on every edge() call.
+    pub cached_edge: f64,
 }
 
 impl Broker {
@@ -120,6 +119,7 @@ impl Broker {
             recalib_wins: 0,
             recalib_total: 0,
             last_recalib_count: 0,
+            cached_edge: 0.0,
         }
     }
 
@@ -142,11 +142,10 @@ impl Broker {
         self.reckoner.predict(&clean)
     }
 
-    /// How much edge? Reads from the reckoner's internal curve.
+    /// How much edge? Returns the cached value, updated in propagate().
     /// 0.0 = no edge. The treasury funds proportionally.
     pub fn edge(&self) -> f64 {
-        let pred = self.reckoner.predict(&Vector::zeros(self.reckoner.dims()));
-        self.reckoner.accuracy_at(pred.conviction).unwrap_or(0.0)
+        self.cached_edge
     }
 
     /// Create a paper entry -- every candle, every broker.
@@ -263,7 +262,13 @@ impl Broker {
             self.scalar_accums[1].observe(optimal.stop, outcome, weight, scalar_encoder);
         }
 
-        // 5. Engram gate
+        // 5. Update cached edge — reckoner just learned, curve may have changed
+        {
+            let edge_pred = self.reckoner.predict(&Vector::zeros(self.reckoner.dims()));
+            self.cached_edge = self.reckoner.accuracy_at(edge_pred.conviction).unwrap_or(0.0);
+        }
+
+        // 6. Engram gate
         if correct {
             self.recalib_wins += 1;
         }
