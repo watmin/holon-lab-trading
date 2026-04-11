@@ -84,6 +84,10 @@ settlement.wat              ; TreasurySettlement (no Settlement struct — enter
 log-entry.wat               ; LogEntry enum
 trade-origin.wat            ; TradeOrigin struct
 
+;; ── Services — depends on: thought-encoder, log-entry ───────
+encoder-service.wat         ; LRU cache thread, N client pipes, select loop
+log-service.wat             ; SQLite writer thread, batch commits, WAL, drain-on-shutdown
+
 ;; ── Post — depends on: everything above ─────────────────────
 post.wat                    ; Post struct + interface
 
@@ -94,7 +98,7 @@ treasury.wat                ; Treasury struct + interface
 enterprise.wat              ; Enterprise struct + interface + four-step loop
 
 ;; ── Binary — depends on: everything ─────────────────────────
-bin/enterprise.wat          ; the outer shell — drives the fold, writes the ledger
+bin/enterprise.wat          ; the outer shell — pipes, threads, the fold, the ledger
 ```
 
 ## The rule
