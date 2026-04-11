@@ -12,6 +12,8 @@ use crate::newtypes::Price;
 
 /// A hypothetical paper trade tracking one predicted direction.
 pub struct PaperEntry {
+    /// Unique identifier assigned by the broker.
+    pub paper_id: usize,
     /// The composed thought at entry (market + exit).
     pub composed_thought: Vector,
     /// The raw market thought (for market observer learning).
@@ -42,6 +44,7 @@ impl PaperEntry {
     ///         stop_level = entry - entry * stop_distance.
     /// For Down: inverse.
     pub fn new(
+        paper_id: usize,
         composed_thought: Vector,
         market_thought: Vector,
         prediction: Direction,
@@ -54,6 +57,7 @@ impl PaperEntry {
             Direction::Down => (p + p * distances.stop, p),
         };
         Self {
+            paper_id,
             composed_thought,
             market_thought,
             prediction,
@@ -176,7 +180,7 @@ mod tests {
         let thought = make_thought();
         let mt = make_market_thought();
         let distances = Distances::new(0.05, 0.10);
-        let paper = PaperEntry::new(thought, mt, Direction::Up, Price(100.0), distances);
+        let paper = PaperEntry::new(0, thought, mt, Direction::Up, Price(100.0), distances);
 
         assert!((paper.entry_price.0 - 100.0).abs() < 1e-10);
         assert!((paper.extreme - 100.0).abs() < 1e-10);
@@ -194,7 +198,7 @@ mod tests {
         let thought = make_thought();
         let mt = make_market_thought();
         let distances = Distances::new(0.05, 0.10);
-        let paper = PaperEntry::new(thought, mt, Direction::Down, Price(100.0), distances);
+        let paper = PaperEntry::new(0, thought, mt, Direction::Down, Price(100.0), distances);
 
         // Stop above entry for Down prediction
         assert!((paper.stop_level - 110.0).abs() < 1e-10);
@@ -208,7 +212,7 @@ mod tests {
         let thought = make_thought();
         let mt = make_market_thought();
         let distances = Distances::new(0.05, 0.10);
-        let mut paper = PaperEntry::new(thought, mt, Direction::Up, Price(100.0), distances);
+        let mut paper = PaperEntry::new(0, thought, mt, Direction::Up, Price(100.0), distances);
 
         // Price rises above entry + entry * trail_distance = 105
         paper.tick(106.0);
@@ -223,7 +227,7 @@ mod tests {
         let thought = make_thought();
         let mt = make_market_thought();
         let distances = Distances::new(0.05, 0.10);
-        let mut paper = PaperEntry::new(thought, mt, Direction::Up, Price(100.0), distances);
+        let mut paper = PaperEntry::new(0, thought, mt, Direction::Up, Price(100.0), distances);
 
         // Price drops to stop_level (90)
         paper.tick(89.0);
@@ -237,7 +241,7 @@ mod tests {
         let thought = make_thought();
         let mt = make_market_thought();
         let distances = Distances::new(0.05, 0.10);
-        let mut paper = PaperEntry::new(thought, mt, Direction::Up, Price(100.0), distances);
+        let mut paper = PaperEntry::new(0, thought, mt, Direction::Up, Price(100.0), distances);
 
         // Price rises to 110 → extreme=110, trail_level = 110 - 110*0.05 = 104.5
         paper.tick(110.0);
@@ -257,7 +261,7 @@ mod tests {
         let thought = make_thought();
         let mt = make_market_thought();
         let distances = Distances::new(0.05, 0.10);
-        let mut paper = PaperEntry::new(thought, mt, Direction::Down, Price(100.0), distances);
+        let mut paper = PaperEntry::new(0, thought, mt, Direction::Down, Price(100.0), distances);
 
         // Price drops below entry - entry * trail_distance = 95
         paper.tick(94.0);
@@ -271,7 +275,7 @@ mod tests {
         let thought = make_thought();
         let mt = make_market_thought();
         let distances = Distances::new(0.05, 0.10);
-        let mut paper = PaperEntry::new(thought, mt, Direction::Down, Price(100.0), distances);
+        let mut paper = PaperEntry::new(0, thought, mt, Direction::Down, Price(100.0), distances);
 
         // Price rises to stop_level (110)
         paper.tick(111.0);
@@ -285,7 +289,7 @@ mod tests {
         let thought = make_thought();
         let mt = make_market_thought();
         let distances = Distances::new(0.05, 0.10);
-        let mut paper = PaperEntry::new(thought, mt, Direction::Down, Price(100.0), distances);
+        let mut paper = PaperEntry::new(0, thought, mt, Direction::Down, Price(100.0), distances);
 
         // Price drops to 90 → extreme=90, trail_level = 90 + 90*0.05 = 94.5
         paper.tick(90.0);
@@ -303,7 +307,7 @@ mod tests {
         let thought = make_thought();
         let mt = make_market_thought();
         let distances = Distances::new(0.20, 0.30);
-        let mut paper = PaperEntry::new(thought, mt, Direction::Up, Price(100.0), distances);
+        let mut paper = PaperEntry::new(0, thought, mt, Direction::Up, Price(100.0), distances);
 
         paper.tick(110.0);
         assert!((paper.excursion() - 0.10).abs() < 1e-10);
@@ -314,7 +318,7 @@ mod tests {
         let thought = make_thought();
         let mt = make_market_thought();
         let distances = Distances::new(0.20, 0.30);
-        let mut paper = PaperEntry::new(thought, mt, Direction::Down, Price(100.0), distances);
+        let mut paper = PaperEntry::new(0, thought, mt, Direction::Down, Price(100.0), distances);
 
         paper.tick(90.0);
         assert!((paper.excursion() - 0.10).abs() < 1e-10);
@@ -325,7 +329,7 @@ mod tests {
         let thought = make_thought();
         let mt = make_market_thought();
         let distances = Distances::new(0.05, 0.10);
-        let mut paper = PaperEntry::new(thought, mt, Direction::Up, Price(100.0), distances);
+        let mut paper = PaperEntry::new(0, thought, mt, Direction::Up, Price(100.0), distances);
 
         // Violence
         paper.tick(89.0);
@@ -342,7 +346,7 @@ mod tests {
         let thought = make_thought();
         let mt = make_market_thought();
         let distances = Distances::new(0.05, 0.10);
-        let paper = PaperEntry::new(thought, mt, Direction::Up, Price(100.0), distances);
+        let paper = PaperEntry::new(0, thought, mt, Direction::Up, Price(100.0), distances);
         assert!((paper.excursion() - 0.0).abs() < 1e-10);
     }
 }

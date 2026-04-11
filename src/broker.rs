@@ -4,7 +4,7 @@
 /// The broker IS the accountability unit. It owns paper trades, scalar
 /// accumulators, and a Grace/Violence reckoner. Values up, not effects down.
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 
 use holon::kernel::scalar::ScalarEncoder;
 use holon::kernel::vector::Vector;
@@ -17,6 +17,15 @@ use crate::newtypes::Price;
 use crate::paper_entry::PaperEntry;
 use crate::scalar_accumulator::ScalarAccumulator;
 use crate::to_f64;
+
+/// Accumulated history for a runner paper. Created when a paper signals Grace.
+/// Stores per-candle data for deferred batch training of the exit observer.
+#[derive(Clone)]
+pub struct RunnerHistory {
+    pub thoughts: Vec<Vector>,
+    pub distances: Vec<Distances>,
+    pub prices: Vec<f64>,
+}
 
 /// What a broker produces when a paper resolves or signals.
 /// Facts, not mutations. Collected from parallel tick, applied sequentially.
@@ -45,6 +54,10 @@ pub struct Resolution {
     pub duration: usize,
     /// Did the trail cross before resolution?
     pub was_runner: bool,
+    /// Deferred batch training data for the exit observer.
+    /// Each entry: (thought_at_candle, optimal_distances_at_candle, weight).
+    /// Empty for non-runner resolutions.
+    pub exit_batch: Vec<(Vector, Distances, f64)>,
 }
 
 /// What the broker returns for observer learning.
@@ -108,6 +121,10 @@ pub struct Broker {
     pub last_stop: f64,
     /// Count of resolved sides (for running average computation).
     pub resolution_count: usize,
+    /// Monotonic counter for paper IDs.
+    pub next_paper_id: usize,
+    /// Per-runner accumulated history for deferred batch training.
+    pub runner_histories: HashMap<usize, RunnerHistory>,
 }
 
 impl Broker {
@@ -150,6 +167,8 @@ impl Broker {
             last_trail: 0.0,
             last_stop: 0.0,
             resolution_count: 0,
+            next_paper_id: 0,
+            runner_histories: HashMap::new(),
         }
     }
 
@@ -216,7 +235,10 @@ impl Broker {
         entry_price: Price,
         distances: Distances,
     ) {
+        let paper_id = self.next_paper_id;
+        self.next_paper_id += 1;
         self.papers.push_back(PaperEntry::new(
+            paper_id,
             composed,
             market_thought,
             prediction,
@@ -262,7 +284,23 @@ impl Broker {
                     stop_distance: paper.distances.stop,
                     duration: paper.age,
                     was_runner: true,
+                    exit_batch: Vec::new(),
                 });
+                // Create runner history — accumulation starts now
+                self.runner_histories.insert(paper.paper_id, RunnerHistory {
+                    thoughts: Vec::new(),
+                    distances: Vec::new(),
+                    prices: Vec::new(),
+                });
+            }
+
+            // Accumulate history for active runners
+            if paper.signaled && !paper.resolved {
+                if let Some(history) = self.runner_histories.get_mut(&paper.paper_id) {
+                    history.thoughts.push(paper.composed_thought.clone());
+                    history.distances.push(paper.distances);
+                    history.prices.push(cp);
+                }
             }
 
             // Paper resolved this tick
@@ -290,8 +328,16 @@ impl Broker {
                         stop_distance: paper.distances.stop,
                         duration: paper.age,
                         was_runner: false,
+                        exit_batch: Vec::new(),
                     });
                 } else {
+                    // Runner finished — compute exit batch from accumulated history
+                    let exit_batch = if let Some(history) = self.runner_histories.remove(&paper.paper_id) {
+                        compute_exit_batch(&history, paper.prediction)
+                    } else {
+                        Vec::new()
+                    };
+
                     // Runner finished — trail fired after signal
                     runner_resolutions.push(Resolution {
                         broker_slot_idx: self.slot_idx,
@@ -308,6 +354,7 @@ impl Broker {
                         stop_distance: paper.distances.stop,
                         duration: paper.age,
                         was_runner: true,
+                        exit_batch,
                     });
                 }
 
@@ -424,6 +471,54 @@ fn approximate_optimal_distances(
     let trail = (excursion * 0.5).max(0.001).min(0.10);
     let stop = trail * 2.0;
     Distances::new(trail, stop)
+}
+
+/// Compute deferred batch training data for the exit observer from a runner's history.
+/// Uses a suffix-max (or suffix-min for Down) pass to find the optimal trail distance
+/// at each candle in O(n).
+fn compute_exit_batch(
+    history: &RunnerHistory,
+    prediction: Direction,
+) -> Vec<(Vector, Distances, f64)> {
+    let n = history.prices.len();
+    if n == 0 {
+        return Vec::new();
+    }
+
+    // Suffix extremum pass — O(n)
+    let mut suffix_ext = vec![0.0f64; n];
+    suffix_ext[n - 1] = history.prices[n - 1];
+    for i in (0..n - 1).rev() {
+        suffix_ext[i] = match prediction {
+            Direction::Up => history.prices[i].max(suffix_ext[i + 1]),
+            Direction::Down => history.prices[i].min(suffix_ext[i + 1]),
+        };
+    }
+
+    let mut batch = Vec::with_capacity(n);
+    for k in 0..n {
+        let price_k = history.prices[k];
+        if price_k == 0.0 {
+            continue;
+        }
+
+        // Optimal trail: how far price moved in the predicted direction from candle k
+        let optimal_trail = match prediction {
+            Direction::Up => ((suffix_ext[k] - price_k) / price_k).max(0.001).min(0.10),
+            Direction::Down => ((price_k - suffix_ext[k]) / price_k).max(0.001).min(0.10),
+        };
+        let optimal_stop = (optimal_trail * 2.0).min(0.10);
+        let optimal = Distances::new(optimal_trail, optimal_stop);
+
+        // Weight: how close the predicted distances were to optimal
+        let predicted = &history.distances[k];
+        let trail_error = (predicted.trail - optimal_trail).abs();
+        let weight = (1.0 - trail_error / optimal_trail.max(0.001)).max(0.0);
+
+        batch.push((history.thoughts[k].clone(), optimal, weight));
+    }
+
+    batch
 }
 
 #[cfg(test)]

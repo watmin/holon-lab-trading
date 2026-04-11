@@ -1190,14 +1190,24 @@ fn main() {
             }
 
             // Runner resolutions → broker learn channels + exit observer learning
+            // Also: second market teaching — runner closure reinforces market observer
             let mut exit_work: Vec<Vec<(usize, usize)>> = vec![Vec::new(); m];
             for (ri, res) in all_runner_resolutions.iter().enumerate() {
                 let ei = res.broker_slot_idx % m;
+                let mi = res.broker_slot_idx / m;
 
                 // Broker: learn via channel (cheap — just a send)
                 let _ = pipes.broker_learn_txs[res.broker_slot_idx].send((
                     res.composed_thought.clone(), res.outcome, res.amount,
                     res.prediction, res.optimal_distances));
+
+                // Second market teaching: runner closure reinforces market observer.
+                // Weight = excess = excursion - trail_distance (how much beyond "barely right").
+                let excess = (res.excursion - res.trail_distance).max(0.0);
+                if excess > 0.0 && mi < pipes.learn_txs.len() {
+                    let _ = pipes.learn_txs[mi].send((
+                        res.market_thought.clone(), res.prediction, excess));
+                }
 
                 // Collect exit work — apply in parallel below
                 if ei < m {
@@ -1206,18 +1216,30 @@ fn main() {
             }
 
             // Exit observer learning — parallel across M exit observers, sequential within.
-            // Each exit observer is independent. MAX_DRAIN per observer.
+            // Deferred batch training: each runner resolution carries an exit_batch with
+            // per-candle (thought, optimal, weight) observations. These are the primary
+            // training signal. The single-point resolution observation is also sent.
             post.exit_observers
                 .par_iter_mut()
                 .zip(exit_work.par_iter())
                 .for_each(|(eobs, work)| {
                     let mut drained = 0;
                     for &(_ei, ri) in work {
-                        if drained >= MAX_DRAIN { break; }
                         let res = &all_runner_resolutions[ri];
-                        eobs.observe_distances(
-                            &res.composed_thought, &res.optimal_distances, res.amount);
-                        drained += 1;
+
+                        // Batch training: per-candle observations from the runner's life
+                        for (thought, optimal, weight) in &res.exit_batch {
+                            if drained >= MAX_DRAIN { break; }
+                            eobs.observe_distances(thought, optimal, *weight);
+                            drained += 1;
+                        }
+
+                        // Single-point resolution observation (always sent)
+                        if drained < MAX_DRAIN {
+                            eobs.observe_distances(
+                                &res.composed_thought, &res.optimal_distances, res.amount);
+                            drained += 1;
+                        }
                     }
                 });
         }
