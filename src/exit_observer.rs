@@ -9,6 +9,7 @@ use holon::memory::{ReckConfig, Reckoner};
 
 use crate::distances::Distances;
 use crate::enums::ExitLens;
+#[cfg(test)]
 use crate::scalar_accumulator::ScalarAccumulator;
 use crate::thought_encoder::IncrementalBundle;
 
@@ -60,13 +61,25 @@ impl ExitObserver {
         }
     }
 
-    /// Recommended distances: cascade from reckoner -> accumulator -> default.
-    /// Returns (Distances, experience).
-    ///
-    /// The cascade, per distance:
-    ///   experienced? reckoner -> predict (contextual for THIS thought)
-    ///   has-data? broker-accum -> extract-scalar (global per-pair)
-    ///   default-distance (crutch)
+    /// Tier 1 only: query both reckoners. Returns Some(Distances) if both
+    /// reckoners are experienced, None otherwise. The broker owns the full
+    /// cascade (reckoner → accumulator → default).
+    pub fn reckoner_distances(&self, composed: &Vector) -> Option<Distances> {
+        let trail_exp = self.trail_reckoner.experience();
+        let stop_exp = self.stop_reckoner.experience();
+
+        if trail_exp > 0.0 && stop_exp > 0.0 {
+            let trail = self.trail_reckoner.query(composed);
+            let stop = self.stop_reckoner.query(composed);
+            Some(Distances::new(trail, stop))
+        } else {
+            None
+        }
+    }
+
+    /// Full cascade: reckoner -> accumulator -> default.
+    /// Kept for tests only — the broker owns the cascade in production.
+    #[cfg(test)]
     pub fn recommended_distances(
         &self,
         composed: &Vector,

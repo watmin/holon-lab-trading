@@ -187,12 +187,9 @@ impl Post {
                 // Compose market thought with exit facts
                 let composed = Primitives::bundle(&[market_thought, exit_vec]);
 
-                // Exit: recommend distances
-                let (dists, _exit_exp) = exit_observers[ei].recommended_distances(
-                    &composed,
-                    &registry[slot_idx].scalar_accums,
-                    ctx.thought_encoder.scalar_encoder(),
-                );
+                // Exit: tier 1 only — reckoner distances.
+                // The broker owns the full cascade (reckoner → accumulator → default).
+                let reckoner_dists = exit_observers[ei].reckoner_distances(&composed);
 
                 // Derive side + edge (reads only)
                 let side_val = derive_side(&market_predictions[mi]);
@@ -200,37 +197,33 @@ impl Post {
                 let enterprise_pred = prediction_convert(&market_predictions[mi]);
 
                 // Return values — no mutation
-                (slot_idx, composed, dists, side_val, edge_val, enterprise_pred)
+                (slot_idx, composed, reckoner_dists, side_val, edge_val, enterprise_pred)
             })
             .collect();
 
-        // Build proposals (pure — struct construction, no mutation)
-        let proposals: Vec<_> = grid_values
-            .iter()
-            .map(|(slot_idx, composed, dists, side_val, edge_val, enterprise_pred)| {
+        // Build proposals + apply mutations per-broker in parallel.
+        // The broker owns the distance cascade (reckoner → accumulator → default).
+        // grid_values is indexed by position (0..n*m), which IS the slot_idx.
+        let proposals: Vec<_> = self.registry
+            .par_iter_mut()
+            .zip(grid_values.into_par_iter())
+            .map(|(broker, (slot_idx, composed, reckoner_dists, side_val, edge_val, enterprise_pred))| {
+                let dists = broker.cascade_distances(reckoner_dists);
+                broker.propose(&composed);
+                broker.register_paper(composed.clone(), price, dists);
                 Proposal::new(
-                    composed.clone(),
-                    *dists,
-                    *edge_val,
-                    *side_val,
+                    composed,
+                    dists,
+                    edge_val,
+                    side_val,
                     source.clone(),
                     target.clone(),
-                    enterprise_pred.clone(),
+                    enterprise_pred,
                     post_idx,
-                    *slot_idx,
+                    slot_idx,
                 )
             })
             .collect();
-
-        // Apply mutations per-broker in parallel (same trick — each broker is its own scope)
-        // grid_values is indexed by position (0..n*m), which IS the slot_idx.
-        self.registry
-            .par_iter_mut()
-            .zip(grid_values.into_par_iter())
-            .for_each(|(broker, (_, composed, dists, _, _, _))| {
-                broker.propose(&composed);
-                broker.register_paper(composed, price, dists);
-            });
 
         (proposals, market_thoughts, all_misses)
     }
@@ -269,12 +262,9 @@ impl Post {
 
                 let composed = Primitives::bundle(&[market_thought, &exit_vec]);
 
-                // Get fresh distances
-                let (dists, _) = self.exit_observers[ei].recommended_distances(
-                    &composed,
-                    &self.registry[slot].scalar_accums,
-                    ctx.thought_encoder.scalar_encoder(),
-                );
+                // Get fresh distances — broker owns the cascade
+                let reckoner_dists = self.exit_observers[ei].reckoner_distances(&composed);
+                let dists = self.registry[slot].cascade_distances(reckoner_dists);
 
                 // Convert to levels
                 let price = self.last_close();
@@ -498,6 +488,7 @@ mod tests {
                     256,
                 ),
             ],
+            Distances::new(0.015, 0.030),
         )];
         let post = Post::new(
             0,

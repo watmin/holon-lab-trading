@@ -383,6 +383,7 @@ fn build_enterprise(args: &Args) -> (Enterprise, Ctx) {
                     ScalarAccumulator::new("trail-distance", ScalarEncoding::Log, dims),
                     ScalarAccumulator::new("stop-distance", ScalarEncoding::Log, dims),
                 ],
+                enterprise::distances::Distances::new(0.015, 0.030),
             )
         })
         .collect();
@@ -671,7 +672,7 @@ fn main() {
     type ObsOutput = (holon::kernel::vector::Vector, holon::memory::Prediction, f64,
                       Vec<(enterprise::thought_encoder::ThoughtAST, holon::kernel::vector::Vector)>);
     type ObsLearn = (holon::kernel::vector::Vector, enterprise::enums::Direction, f64);
-    type BrokerInput = (holon::kernel::vector::Vector, enterprise::distances::Distances, f64,
+    type BrokerInput = (holon::kernel::vector::Vector, Option<enterprise::distances::Distances>, f64,
                         enterprise::enums::Side, f64, enterprise::enums::Prediction);
     type BrokerOutput = (enterprise::proposal::Proposal, Vec<enterprise::broker::Resolution>);
     type BrokerLearn = (holon::kernel::vector::Vector, enterprise::enums::Outcome,
@@ -810,7 +811,7 @@ fn main() {
 
             let handle = std::thread::spawn(move || {
                 let mut candle_count = 0usize;
-                while let Ok((composed, dists, price, side, edge, pred)) = in_rx.recv() {
+                while let Ok((composed, reckoner_dists, price, side, edge, pred)) = in_rx.recv() {
                     candle_count += 1;
                     // Drain at most MAX_DRAIN learn signals per candle.
                     // The reckoner is a CRDT. Deferral is safe. The queue drains
@@ -828,6 +829,8 @@ fn main() {
                             }
                         }
                     }
+                    // Broker owns the distance cascade: reckoner → accumulator → default
+                    let dists = broker.cascade_distances(reckoner_dists);
                     broker.propose(&composed);
                     broker.register_paper(composed.clone(), price, dists);
                     let resolutions = broker.tick_papers(price);
@@ -1033,17 +1036,14 @@ fn main() {
                 let composed = holon::kernel::primitives::Primitives::bundle(
                     &[&market_thoughts[mi], &exit_vecs[ei]]);
 
-                // Distances from exit observer — reckoner prediction or default.
-                // TODO: broker scalar accumulators not accessible from main thread — cascade skips accumulator tier
-                let empty_accums: Vec<enterprise::scalar_accumulator::ScalarAccumulator> = Vec::new();
-                let (dists, _) = exit_observers[ei].recommended_distances(
-                    &composed, &empty_accums, ctx_ref.thought_encoder.scalar_encoder());
+                // Tier 1 only — reckoner distances. The broker owns the full cascade.
+                let reckoner_dists = exit_observers[ei].reckoner_distances(&composed);
 
                 let side = enterprise::post::derive_side(&market_predictions[mi]);
                 let edge = 0.0_f64; // Broker computes edge on its thread
                 let pred = enterprise::post::prediction_convert(&market_predictions[mi]);
 
-                (slot_idx, composed, dists, side, edge, pred)
+                (slot_idx, composed, reckoner_dists, side, edge, pred)
             })
             .collect()
         };
@@ -1127,8 +1127,6 @@ fn main() {
                 .map(|(id, t)| (*id, t.broker_slot_idx, t.side))
                 .collect();
 
-            let ctx_ref = &*ctx_arc;
-
             // exit_vecs already computed before the grid — reuse them here.
 
             // Parallel: compose + distance query per trade. Independent.
@@ -1140,10 +1138,11 @@ fn main() {
                     if mi < market_thoughts.len() && ei < post.exit_observers.len() {
                         let composed = holon::kernel::primitives::Primitives::bundle(
                             &[&market_thoughts[mi], &exit_vecs[ei]]);
-                        // TODO: broker scalar accumulators not accessible from main thread — cascade skips accumulator tier
-                        let empty_accums: Vec<enterprise::scalar_accumulator::ScalarAccumulator> = Vec::new();
-                        let (dists, _) = post.exit_observers[ei].recommended_distances(
-                            &composed, &empty_accums, ctx_ref.thought_encoder.scalar_encoder());
+                        // Tier 1 only — the broker thread owns accumulators.
+                        // For trigger updates we use reckoner + default fallback directly,
+                        // since the broker thread cannot be queried from here.
+                        let reckoner_dists = post.exit_observers[ei].reckoner_distances(&composed);
+                        let dists = reckoner_dists.unwrap_or(post.exit_observers[ei].default_distances);
                         let new_levels = dists.to_levels(price, side);
                         Some((tid, new_levels))
                     } else {

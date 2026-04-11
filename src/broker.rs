@@ -85,6 +85,8 @@ pub struct Broker {
     /// Cached edge value — updated in propagate() when the reckoner learns.
     /// Avoids constructing a zero vector and calling predict() on every edge() call.
     pub cached_edge: f64,
+    /// Default trail/stop distances — the tier 3 fallback.
+    pub default_distances: Distances,
 }
 
 impl Broker {
@@ -97,6 +99,7 @@ impl Broker {
         dims: usize,
         recalib_interval: usize,
         scalar_accums: Vec<ScalarAccumulator>,
+        default_distances: Distances,
     ) -> Self {
         assert!(exit_count > 0, "broker exit_count must be > 0 (divide-by-zero guard)");
         Self {
@@ -120,6 +123,7 @@ impl Broker {
             recalib_total: 0,
             last_recalib_count: 0,
             cached_edge: 0.0,
+            default_distances,
         }
     }
 
@@ -146,6 +150,34 @@ impl Broker {
     /// 0.0 = no edge. The treasury funds proportionally.
     pub fn edge(&self) -> f64 {
         self.cached_edge
+    }
+
+    /// Distance cascade: reckoner answer → own accumulators → default.
+    /// The broker owns the full cascade because it owns the scalar accumulators.
+    ///
+    /// TODO: eliminate ctx_scalar_encoder_placeholder by passing &ScalarEncoder
+    /// through the broker propagation path.
+    pub fn cascade_distances(&self, reckoner_answer: Option<Distances>) -> Distances {
+        if let Some(dists) = reckoner_answer {
+            return dists;
+        }
+
+        let se = crate::post::ctx_scalar_encoder_placeholder();
+
+        // Tier 2: scalar accumulators (global per-pair)
+        let trail = if self.scalar_accums.len() > 0 && self.scalar_accums[0].count > 0 {
+            self.scalar_accums[0].extract(100, (0.001, 0.10), se)
+        } else {
+            self.default_distances.trail
+        };
+
+        let stop = if self.scalar_accums.len() > 1 && self.scalar_accums[1].count > 0 {
+            self.scalar_accums[1].extract(100, (0.001, 0.10), se)
+        } else {
+            self.default_distances.stop
+        };
+
+        Distances::new(trail, stop)
     }
 
     /// Create a paper entry -- every candle, every broker.
@@ -356,6 +388,7 @@ mod tests {
             DIMS,
             RECALIB,
             make_scalar_accums(),
+            Distances::new(0.015, 0.030),
         )
     }
 
@@ -382,6 +415,7 @@ mod tests {
             vec!["a".into(), "b".into()],
             5, 3, DIMS, RECALIB,
             make_scalar_accums(),
+            Distances::new(0.015, 0.030),
         );
         assert_eq!(broker.market_idx(), 1);
         assert_eq!(broker.exit_idx(), 2);
