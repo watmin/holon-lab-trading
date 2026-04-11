@@ -676,11 +676,13 @@ fn main() {
 
     // Encoder service — the cache as a pipe.
     // 6 observer handles + 24 grid handles + 1 step-3c handle = 31
-    let n_encoder_callers = n + (n * m) + 1;
+    // Encoder handles: observers + grid + brokers + step3c
+    let n_encoder_callers = n + (n * m) + (n * m) + 1;
     let (encoder_service, mut encoder_handles) =
         enterprise::encoder_service::EncoderService::spawn(n_encoder_callers, 65536);
-    // Split handles: observers get [0..n], grid gets [n..n+n*m], step3c gets the last
+    // Split handles: observers [0..n], grid [n..n+nm], brokers [n+nm..n+2nm], step3c last
     let step3c_handle = encoder_handles.pop().unwrap();
+    let mut broker_encoder_handles: Vec<_> = encoder_handles.drain(n + n * m..).collect();
     let grid_handles: Vec<_> = encoder_handles.drain(n..).collect();
     let mut obs_encoder_handles: Vec<_> = encoder_handles.drain(..).collect();
 
@@ -823,6 +825,8 @@ fn main() {
             let post_idx_for_broker = all_pipes.len();
             let recalib = args.recalib_interval;
             let brk_log = log_handles.pop().unwrap();
+            let brk_enc = broker_encoder_handles.pop().unwrap();
+            let brk_ctx = Arc::clone(&ctx_arc);
             let brk_slot = slot_idx;
 
             let handle = std::thread::spawn(move || {
@@ -847,7 +851,38 @@ fn main() {
                     }
                     // Broker owns the distance cascade: reckoner → accumulator → default
                     let dists = broker.cascade_distances(reckoner_dists);
-                    broker.propose(&composed);
+
+                    // Encode self-assessment facts and bundle with composed thought
+                    let grace_rate = if broker.trade_count > 0 {
+                        broker.cumulative_grace / (broker.cumulative_grace + broker.cumulative_violence).max(1e-10)
+                    } else { 0.0 };
+                    let self_facts = enterprise::vocab::broker::self_assessment::encode_broker_self_facts(
+                        grace_rate,
+                        broker.avg_paper_duration,
+                        broker.papers.len(),
+                        broker.last_trail,
+                        broker.last_stop,
+                        broker.resolution_count.saturating_sub(broker.reckoner.recalib_count() * recalib),
+                        broker.avg_excursion,
+                    );
+                    let enriched = if self_facts.is_empty() {
+                        composed.clone()
+                    } else {
+                        let self_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(self_facts);
+                        let self_vec = match brk_enc.get(&self_bundle) {
+                            Some(cached) => cached,
+                            None => {
+                                let (vec, misses) = brk_ctx.thought_encoder.encode(&self_bundle);
+                                for (ast, v) in misses {
+                                    brk_enc.set(ast, v);
+                                }
+                                vec
+                            }
+                        };
+                        holon::kernel::primitives::Primitives::bundle(&[&composed, &self_vec])
+                    };
+
+                    broker.propose(&enriched);
                     broker.register_paper(composed.clone(), Price(price), dists);
                     let resolutions = broker.tick_papers(Price(price));
 

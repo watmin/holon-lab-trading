@@ -92,11 +92,20 @@ pub struct Broker {
     pub recalib_total: usize,
     /// Recalib count at last engram check.
     pub last_recalib_count: usize,
-    /// Cached edge value — updated in propagate() when the reckoner learns.
-    /// Avoids constructing a zero vector and calling predict() on every edge() call.
+    /// Cached edge value — updated in propose() from the curve at THIS conviction.
     pub cached_edge: f64,
     /// Default trail/stop distances — the tier 3 fallback.
     pub default_distances: Distances,
+    /// Running average paper duration (candles). Self-assessment vocab.
+    pub avg_paper_duration: f64,
+    /// Running average excursion. Self-assessment vocab.
+    pub avg_excursion: f64,
+    /// Last trail distance used. Self-assessment vocab.
+    pub last_trail: f64,
+    /// Last stop distance used. Self-assessment vocab.
+    pub last_stop: f64,
+    /// Count of resolved sides (for running average computation).
+    pub resolution_count: usize,
 }
 
 impl Broker {
@@ -134,6 +143,11 @@ impl Broker {
             last_recalib_count: 0,
             cached_edge: 0.0,
             default_distances,
+            avg_paper_duration: 0.0,
+            avg_excursion: 0.0,
+            last_trail: 0.0,
+            last_stop: 0.0,
+            resolution_count: 0,
         }
     }
 
@@ -147,10 +161,17 @@ impl Broker {
         self.slot_idx % self.exit_count
     }
 
-    /// Predict Grace/Violence on the FULL composed thought — no noise stripping.
+    /// Predict Grace/Violence on the composed thought.
     /// The reckoner's own discriminant IS the noise filter.
     /// Noise subspace still updates (diagnostic) but doesn't gate prediction.
     /// Updates cached_edge from the curve at THIS conviction.
+    ///
+    /// TODO: bundle self-assessment facts (grace-rate, paper-duration-avg, etc.)
+    /// into the thought. The broker thread needs an encoder handle to convert
+    /// the AST facts into vectors. For now, the self-assessment data accumulates
+    /// (avg_paper_duration, avg_excursion, etc.) but isn't composed into the
+    /// prediction yet. The vocab is defined (vocab/broker/self_assessment.rs),
+    /// the wiring needs an encoder pipe to the broker thread.
     pub fn propose(&mut self, composed: &Vector) -> holon::memory::Prediction {
         let composed_f64 = to_f64(composed);
         self.noise_subspace.update(&composed_f64);
@@ -274,6 +295,22 @@ impl Broker {
                     stop_distance: paper.distances.stop,
                     duration: paper.age,
                 });
+            }
+
+            // Update self-assessment running averages on any resolution
+            if (paper.buy_resolved && !was_buy_resolved) || (paper.sell_resolved && !was_sell_resolved) {
+                self.resolution_count += 1;
+                let n = self.resolution_count as f64;
+                let excursion = if paper.buy_resolved && !was_buy_resolved {
+                    paper.buy_excursion()
+                } else {
+                    paper.sell_excursion()
+                };
+                // Running average: avg = avg + (new - avg) / n
+                self.avg_paper_duration += (paper.age as f64 - self.avg_paper_duration) / n;
+                self.avg_excursion += (excursion - self.avg_excursion) / n;
+                self.last_trail = paper.distances.trail;
+                self.last_stop = paper.distances.stop;
             }
 
             // Keep until both sides resolved, then remove
