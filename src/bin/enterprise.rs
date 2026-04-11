@@ -703,9 +703,9 @@ fn main() {
         let mut learn_txs = Vec::new();
         let mut observer_handles = Vec::new();
 
-        // Observer channels + threads
-        let mut observers: Vec<MarketObserver> = std::mem::take(&mut post.market_observers);
-        for i in 0..n {
+        // Observer channels + threads — consume the vec, no placeholders
+        let observers: Vec<MarketObserver> = std::mem::take(&mut post.market_observers);
+        for (obs_idx, mut obs) in observers.into_iter().enumerate() {
             let (obs_tx, obs_rx) = channel::bounded::<ObsInput>(1);
             let (thought_tx, thought_rx) = channel::bounded::<ObsOutput>(1);
             let (learn_tx, learn_rx) = channel::unbounded::<ObsLearn>();
@@ -714,13 +714,10 @@ fn main() {
             thought_rxs.push(thought_rx);
             learn_txs.push(learn_tx);
 
-            let mut obs = std::mem::replace(&mut observers[i], MarketObserver::new(
-                MarketLens::Momentum, 10, 500, WindowSampler::new(0, 12, 2016)));
             let ctx_ref = Arc::clone(&ctx_arc);
             let enc_handle = obs_encoder_handles.pop().unwrap();
             let obs_log = log_handles.pop().unwrap();
             let lens = obs.lens;
-            let obs_idx = i;
             let recalib = args.recalib_interval;
 
             let handle = std::thread::spawn(move || {
@@ -792,11 +789,12 @@ fn main() {
         let mut broker_out_rxs = Vec::new();
         let mut broker_learn_txs = Vec::new();
         let mut broker_handles = Vec::new();
-        let mut brokers: Vec<Broker> = std::mem::take(&mut post.registry);
+        let brokers: Vec<Broker> = std::mem::take(&mut post.registry);
         let source_asset = post.source_asset.clone();
         let target_asset = post.target_asset.clone();
 
-        for slot_idx in 0..(n * m) {
+        // Consume the vec — no placeholders, no poison
+        for (slot_idx, mut broker) in brokers.into_iter().enumerate() {
             let (in_tx, in_rx) = channel::bounded::<BrokerInput>(1);
             let (out_tx, out_rx) = channel::bounded::<BrokerOutput>(1);
             let (blearn_tx, blearn_rx) = channel::unbounded::<BrokerLearn>();
@@ -805,8 +803,6 @@ fn main() {
             broker_out_rxs.push(out_rx);
             broker_learn_txs.push(blearn_tx);
 
-            let mut broker = std::mem::replace(&mut brokers[slot_idx], Broker::new(
-                vec![], 0, 1, 10, 500, vec![])); // placeholder — exit_count=1 satisfies assert
             let src = source_asset.clone();
             let tgt = target_asset.clone();
             let post_idx_for_broker = all_pipes.len();
