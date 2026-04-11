@@ -749,10 +749,11 @@ fn main() {
                     let thought = match enc_handle.get(&bundle_ast) {
                         Some(cached) => cached,
                         None => {
-                            // Miss — compute locally using ctx
-                            let (vec, _misses) = ctx_ref.thought_encoder.encode(&bundle_ast);
-                            // Fire and forget — cache learns
-                            enc_handle.set(bundle_ast, vec.clone());
+                            // Miss — compute locally, install all sub-tree misses
+                            let (vec, misses) = ctx_ref.thought_encoder.encode(&bundle_ast);
+                            for (ast, v) in misses {
+                                enc_handle.set(ast, v);
+                            }
                             vec
                         }
                     };
@@ -873,7 +874,9 @@ fn main() {
 
     // ── The fold — main thread is a ROUTER ────────────────────────
     // Each candle routes to the right post's pipes by asset pair.
-    let mut accumulated_misses: Vec<(enterprise::thought_encoder::ThoughtAST, holon::kernel::vector::Vector)> = Vec::new();
+    // Cache misses flow to the encoder service via .set() at each call site.
+    // The ctx's own HashMap is the pre-pipe cache — redundant now.
+    // The encoder service IS the cache. No accumulated_misses needed.
 
     for rc in raw_stream {
         if args.max_candles > 0 && candle_num >= args.max_candles {
@@ -974,14 +977,12 @@ fn main() {
         let mut market_thoughts = Vec::with_capacity(n);
         let mut market_predictions: Vec<holon::memory::Prediction> = Vec::with_capacity(n);
         let mut market_edges = Vec::with_capacity(n);
-        let mut all_misses = Vec::new();
 
         for rx in &pipes.thought_rxs {
-            let (thought, pred, edge, misses) = rx.recv().unwrap();
+            let (thought, pred, edge, _) = rx.recv().unwrap();
             market_thoughts.push(thought);
             market_predictions.push(pred);
             market_edges.push(edge);
-            all_misses.extend(misses);
         }
 
         let t_observers = t_candle.elapsed();
@@ -1011,12 +1012,13 @@ fn main() {
                 let exit_vec = match grid_handles[slot_idx].get(&exit_bundle) {
                     Some(cached) => cached,
                     None => {
-                        let (vec, _) = ctx_ref.thought_encoder.encode(&exit_bundle);
-                        grid_handles[slot_idx].set(exit_bundle, vec.clone());
+                        let (vec, misses) = ctx_ref.thought_encoder.encode(&exit_bundle);
+                        for (ast, v) in misses {
+                            grid_handles[slot_idx].set(ast, v);
+                        }
                         vec
                     }
                 };
-                let exit_misses: Vec<(enterprise::thought_encoder::ThoughtAST, holon::kernel::vector::Vector)> = vec![];
 
                 let composed = holon::kernel::primitives::Primitives::bundle(
                     &[&market_thoughts[mi], &exit_vec]);
@@ -1030,20 +1032,15 @@ fn main() {
                 let edge = 0.0_f64; // Broker computes edge on its thread
                 let pred = enterprise::post::prediction_convert_pub(&market_predictions[mi]);
 
-                (slot_idx, composed, dists, side, edge, pred, exit_misses)
+                (slot_idx, composed, dists, side, edge, pred)
             })
             .collect()
         };
 
-        // Collect misses
-        for (_, _, _, _, _, _, ref exit_misses) in &grid_values {
-            all_misses.extend(exit_misses.iter().cloned());
-        }
-
         let t_grid = t_candle.elapsed();
 
         // Send to broker pipes — bounded(1), each broker gets its input
-        for (slot_idx, composed, dists, side, edge, pred, _) in grid_values {
+        for (slot_idx, composed, dists, side, edge, pred) in grid_values {
             let _ = pipes.broker_in_txs[slot_idx].send((composed, dists, price, side, edge, pred));
         }
 
@@ -1131,8 +1128,10 @@ fn main() {
                     match step3c_handle.get(&exit_bundle) {
                         Some(cached) => cached,
                         None => {
-                            let (vec, _) = ctx_ref.thought_encoder.encode(&exit_bundle);
-                            step3c_handle.set(exit_bundle, vec.clone());
+                            let (vec, misses) = ctx_ref.thought_encoder.encode(&exit_bundle);
+                            for (ast, v) in misses {
+                                step3c_handle.set(ast, v);
+                            }
                             vec
                         }
                     }
@@ -1170,9 +1169,6 @@ fn main() {
         for (_, trade) in ent.treasury.trades.iter_mut() {
             trade.tick(rc.close);
         }
-
-        // Collect cache misses for insertion after shutdown
-        accumulated_misses.extend(all_misses);
 
         let t_misc = t_candle.elapsed();
 
