@@ -742,7 +742,12 @@ fn main() {
                             }
                         }
                     }
-                    let facts = enterprise::post::market_lens_facts_pub(&lens, &candle, &*window);
+                    // Each observer samples its own window size
+                    let ws = obs.window_sampler.sample(candle_count);
+                    let full_len = window.len();
+                    let start = if full_len > ws { full_len - ws } else { 0 };
+                    let sliced: Vec<enterprise::candle::Candle> = window[start..].to_vec();
+                    let facts = enterprise::post::market_lens_facts_pub(&lens, &candle, &sliced);
                     let bundle_ast = enterprise::thought_encoder::ThoughtAST::Bundle(facts);
 
                     // Cache pipe: get from encoder service
