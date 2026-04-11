@@ -81,19 +81,19 @@ pub fn simulate_stop(prices: &[f64], distance: f64) -> f64 {
 /// the distance that produces the maximum residue.
 /// Candidates: 0.5% to 10% in 0.5% increments (20 candidates).
 pub fn best_distance(prices: &[f64], simulate_fn: fn(&[f64], f64) -> f64) -> f64 {
-    let mut best_d = 0.005;
-    let mut best_residue = f64::NEG_INFINITY;
-
-    for i in 0..20 {
-        let d = (i + 1) as f64 * 0.005;
-        let residue = simulate_fn(prices, d);
-        if residue > best_residue {
-            best_residue = residue;
-            best_d = d;
-        }
-    }
-
-    best_d
+    use rayon::prelude::*;
+    (0..20)
+        .into_par_iter()
+        .map(|i| {
+            let d = (i + 1) as f64 * 0.005;
+            let residue = simulate_fn(prices, d);
+            (d, residue)
+        })
+        .reduce(
+            || (0.005, f64::NEG_INFINITY),
+            |(d1, r1), (d2, r2)| if r2 > r1 { (d2, r2) } else { (d1, r1) },
+        )
+        .0
 }
 
 /// Compute optimal trail and stop distances for a price history.
