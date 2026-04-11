@@ -90,41 +90,21 @@ impl MarketObserver {
     /// Observe a new candle. Self-grade the PREVIOUS prediction, then predict.
     /// The observer is its own teacher. The market is the judge.
     ///
-    /// current_close: the close price of THIS candle (for grading the previous prediction)
+    /// current_close: the close price of THIS candle (stored for diagnostics)
     pub fn observe(
         &mut self,
         thought: Vector,
         misses: Vec<(ThoughtAST, Vector)>,
         current_close: f64,
     ) -> ObserveResult {
-        // Self-grading: did the PREVIOUS prediction match what the market did?
-        // The reward is the price movement weighted by magnitude.
-        if let (Some(prev_thought), Some(prev_close)) = (&self.prev_thought, self.prev_close) {
-            let price_change = (current_close - prev_close) / prev_close;
-            let actual_direction = if price_change >= 0.0 { Direction::Up } else { Direction::Down };
-            let label = match actual_direction {
-                Direction::Up => holon::memory::Label::from_index(0),
-                Direction::Down => holon::memory::Label::from_index(1),
-            };
-            // Weight = magnitude of the move. Big moves teach hard. Tiny moves barely register.
-            let weight = price_change.abs();
-            if weight > 1e-10 {
-                self.reckoner.observe(prev_thought, label, weight);
-                // Track accuracy for the engram gate
-                let correct = self.last_prediction == actual_direction;
-                let pred_check = self.reckoner.predict(prev_thought);
-                self.reckoner.resolve(pred_check.conviction, correct);
-                self.resolved += 1;
-                if correct { self.recalib_wins += 1; }
-                self.recalib_total += 1;
-            }
-        }
-
-        // Noise subspace updates (diagnostic) but doesn't gate prediction
+        // No self-grading. The market observer learns from the reward cascade:
+        // paper signals routed through the broker (resolve() called externally).
+        // No noise stripping. The reckoner's discriminant IS the noise filter.
+        // The noise subspace still updates (diagnostic only).
         let thought_f64 = to_f64(&thought);
         self.noise_subspace.update(&thought_f64);
 
-        // Predict direction on the FULL thought
+        // Predict direction on the FULL thought — no stripping
         let pred = self.reckoner.predict(&thought);
         let conviction = pred.conviction;
 
