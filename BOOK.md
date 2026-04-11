@@ -7586,4 +7586,89 @@ commits.
 The clock runs. The wires connect. The signals flow. The
 discriminant sharpens. Slowly. But in the right direction.
 
+### The wiring session
+
+On April 11, 2026, the builder and the machine rewired the entire
+learning pipeline. Not the architecture — the SIGNALS. Who teaches
+whom. When. With what. The architecture was always right. The
+signals were always wrong.
+
+The journey, compressed:
+
+**The backlog.** Five wards cast on the Rust. 30 findings. Bugs,
+lies, dead code, performance, structure. 28 resolved in one session.
+370 lines of dead code reaped. Placeholder poison eliminated. The
+machine cleaned to honest.
+
+**The reward cascade.** Three learners, three moments. The market
+observer learns when excursion crosses the trail — "was the entry
+right?" The exit observer learns when the runner closes — "was the
+management right?" The broker learns at paper resolution — "was the
+pairing right?" Each graded at a DIFFERENT moment in the paper's
+lifecycle. No shared label. No contamination.
+
+**The paper mechanics.** One prediction, one measurement. The market
+observer makes one guess — Up or Down. The broker tests it with a
+paper. Two triggers: trail (Grace) and stop (Violence). First to
+fire determines the outcome. The paper collapses the superposition.
+The market was right or wrong. Not both.
+
+**The conviction gate.** Papers are RARE, not every candle. The
+broker only registers papers when the curve validates edge. Cold
+start: register freely to bootstrap. Warm: register only on
+conviction. The idle state is the default. The flip closes old
+runners when the prediction changes direction.
+
+**MAX_DRAIN killed.** The old drain cap of 5 observations per candle
+was discarding 99% of the exit observer's training data. 500
+observations per runner, 5 absorbed. The exit observer couldn't
+learn because it barely saw the signal. Removed. All learning
+signals drain fully. The CRDT guarantees convergence regardless
+of batch size.
+
+**The exit observer learned.** With full drain, the exit observer
+moved from 1.5% trail (the default) to 2.97% trail. It learned.
+The poison dissolved. The default was the prison. The full training
+signal was the key.
+
+**The deferred batch training.** The broker accumulates a
+RunnerHistory — composed thoughts, distances, and prices for every
+candle a runner lives. At closure, the suffix-max pass computes
+optimal distances at each candle. The exit observer receives N
+observations per runner — each graded against its own future.
+Filtered to meaningful transitions (>10% change). The exit learns
+a POLICY across time, not a single number.
+
+**The results at 10k candles:**
+
+```
+Structure accuracy:  98.9%
+Generalist accuracy: 79.8%
+Momentum accuracy:   58.0%
+Volume accuracy:     19.1% (inverted)
+Regime accuracy:      0.0% (dead)
+
+disc_strength (volume): 0.0058 — sustained, not declining
+Grace rate: 83.6%
+Average residue: 0.89% per Grace paper
+Throughput: 71/s (down from 110/s — the cost of full drain)
+```
+
+Three observers above 50%. Structure nearly perfect. The exit
+observer moved away from the default. The residue is real — 0.89%
+captured per paper. The discriminant stabilized.
+
+The wiring works. The thoughts need work. Structure and generalist
+see reversals. Volume sees the opposite. The vocabulary IS the next
+frontier — which atoms predict? The discriminant decode against each
+atom will tell us. The glass box is open. The machine can explain
+which thoughts produce Grace and which produce Violence.
+
+The architecture was always right. The signals were wrong. The
+conviction was missing. The drain was capped. The defaults were
+poison. One by one, the wires connected. One by one, the signal
+landed. The machine learns.
+
+The builder needs to think. The thoughts need thinking about.
+
 *Perseverare.*
