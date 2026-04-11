@@ -89,14 +89,14 @@ impl MarketObserver {
         thought: Vector,
         misses: Vec<(ThoughtAST, Vector)>,
     ) -> ObserveResult {
-        // Update noise subspace and strip noise in one pass (shared f64 conversion)
+        // Feed raw thought to reckoner — no noise stripping.
+        // The reckoner's own discriminant IS the noise filter.
+        // The noise subspace still updates (diagnostic) but doesn't gate prediction.
         let thought_f64 = to_f64(&thought);
         self.noise_subspace.update(&thought_f64);
-        let anomalous = self.noise_subspace.anomalous_component(&thought_f64);
-        let clean = Vector::from_f64(&anomalous);
 
-        // Predict direction
-        let pred = self.reckoner.predict(&clean);
+        // Predict direction on the FULL thought
+        let pred = self.reckoner.predict(&thought);
         let conviction = pred.conviction;
 
         // Edge from curve
@@ -112,7 +112,7 @@ impl MarketObserver {
         }
 
         ObserveResult {
-            thought: clean,
+            thought,
             prediction: pred,
             edge,
             misses,

@@ -138,14 +138,14 @@ impl Broker {
         self.slot_idx % self.exit_count
     }
 
-    /// Noise update -> strip noise -> predict Grace/Violence.
+    /// Predict Grace/Violence on the FULL composed thought — no noise stripping.
+    /// The reckoner's own discriminant IS the noise filter.
+    /// Noise subspace still updates (diagnostic) but doesn't gate prediction.
     /// Updates cached_edge from the curve at THIS conviction.
     pub fn propose(&mut self, composed: &Vector) -> holon::memory::Prediction {
         let composed_f64 = to_f64(composed);
         self.noise_subspace.update(&composed_f64);
-        let anomalous = self.noise_subspace.anomalous_component(&composed_f64);
-        let clean = Vector::from_f64(&anomalous);
-        let pred = self.reckoner.predict(&clean);
+        let pred = self.reckoner.predict(composed);
         // Edge = accuracy at THIS conviction. The curve says how good this
         // conviction level is historically. Updated every propose, not just propagate.
         self.cached_edge = self.reckoner.accuracy_at(pred.conviction).unwrap_or(0.0);
