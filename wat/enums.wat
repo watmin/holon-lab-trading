@@ -31,7 +31,8 @@
   (Discrete
     labels)            ; Vec<String> — ("Up" "Down")
   (Continuous
-    default-value))    ; f64 — the crutch, returned when ignorant
+    default-value      ; f64 — the crutch, returned when ignorant
+    buckets))          ; usize — number of bins (K). Compute budget, not resolution.
 
 ;; ── Prediction — what a reckoner returns ───────────────────────────
 ;; Data. The consumer decides what "best" means.
@@ -52,3 +53,21 @@
   :log                           ; no params — log compresses naturally
   (Linear [scale : f64])         ; encode-linear scale
   (Circular [period : f64]))     ; encode-circular period
+
+;; ── Observer lenses ────────────────────────────────────────────────
+;; Which vocabulary modules an observer attends to. Lenses select
+;; the subset of thoughts each observer reasons about.
+
+(enum market-lens
+  :momentum
+  :structure
+  :volume
+  :regime
+  :narrative
+  :generalist)
+
+(enum exit-lens
+  :volatility
+  :structure
+  :timing
+  :generalist)

@@ -5,13 +5,13 @@
 ;; real trades. The market observer does NOT label itself. Reality labels it.
 ;; The generalist is just another lens. No special treatment.
 ;; Depends on: Reckoner :discrete, OnlineSubspace, WindowSampler,
-;;             MarketLens (enums), Ctx, ThoughtEncoder.
+;;             MarketLens (enums), ThoughtEncoder (IncrementalBundle).
 
 (require primitives)
 (require enums)
 (require window-sampler)
 (require engram-gate)
-(require ctx)
+(require thought-encoder)
 
 ;; ── Struct ──────────────────────────────────────────────────────────
 
@@ -30,7 +30,8 @@
   [recalib-wins : usize]               ; wins since last recalibration
   [recalib-total : usize]              ; total since last recalibration
   [last-recalib-count : usize]         ; recalib-count at last engram check
-  [last-prediction : Direction])       ; set by observe-candle, read by resolve
+  [last-prediction : Direction]         ; set by observe, read by resolve
+  [incremental : IncrementalBundle])   ; optimization cache, not cognition
 
 ;; ── Interface ───────────────────────────────────────────────────────
 
@@ -52,20 +53,17 @@
     0                                  ; recalib-wins
     0                                  ; recalib-total
     0                                  ; last-recalib-count
-    :down))                            ; last-prediction — arbitrary initial
+    :down                              ; last-prediction — arbitrary initial
+    (incremental-bundle dims)))        ; incremental — optimization cache
 
-(define (observe-candle [observer : MarketObserver]
-                        [candle-window : Vec<Candle>]
-                        [ctx : Ctx])
-  : (Vector Prediction f64 Vec<(ThoughtAST Vector)>)
-  ;; Encode the candle window into a thought. Update noise subspace.
+(define (observe [observer : MarketObserver]
+                 [thought : Vector]
+                 [misses : Vec<(ThoughtAST Vector)>])
+  : ObserveResult
+  ;; Thought arrives pre-encoded. Update noise subspace.
   ;; Strip noise. Predict direction. Store last-prediction for resolve.
-  ;; Returns: thought Vector, Prediction (Up/Down), edge (f64),
-  ;; and cache misses.
-  ;; The post calls (sample (:window-sampler observer) encode-count) to
-  ;; get the window size, slices, and passes the slice.
-  (let* ((thought misses (encode-thought ctx candle-window (:lens observer)))
-         (_              (update (:noise-subspace observer) thought))
+  ;; Returns ObserveResult: cleaned thought, prediction, edge, misses.
+  (let* ((_              (update (:noise-subspace observer) thought))
          (clean          (strip-noise observer thought))
          (pred           (predict (:reckoner observer) clean))
          (conviction     (match pred
@@ -76,7 +74,7 @@
             ((Discrete scores _)
               (if (> (second (first scores)) (second (second scores)))
                   :up :down))))
-    (list clean pred edge misses)))
+    (observe-result clean pred edge misses)))
 
 (define (resolve [observer : MarketObserver]
                  [thought : Vector]

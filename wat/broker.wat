@@ -123,8 +123,9 @@
 (define (tick-papers [broker : Broker]
                      [current-price : f64])
   : (Vec<Resolution> Vec<LogEntry>)
-  ;; Tick all papers, resolve completed. Returns resolution facts and
-  ;; PaperResolved log entries.
+  ;; Tick all papers. Each side resolves independently — a Resolution is
+  ;; produced the tick a side fires, not when both are done. The paper is
+  ;; removed only after both sides have resolved.
   ;; Paper optimal-distances: papers derive optimal distances from their
   ;; tracked extremes (MFE/MAE) — a simpler approximation than full replay.
   (let ((resolutions (list))
@@ -132,42 +133,39 @@
         (remaining (deque)))
     (for-each
       (lambda (paper)
-        (let ((ticked (tick-paper paper current-price)))
-          (if (and (:buy-resolved ticked) (:sell-resolved ticked))
-              ;; Both sides resolved — produce resolutions
-              (let* ((entry (:entry-price ticked))
-                     ;; Buy side: price rose then retraced → direction :up
-                     (buy-excursion (/ (- (:buy-extreme ticked) entry) entry))
-                     (sell-excursion (/ (- entry (:sell-extreme ticked)) entry))
-                     ;; Derive optimal distances from tracked extremes (paper approximation)
-                     (optimal (approximate-optimal-distances
-                                entry
-                                (:buy-extreme ticked)
-                                (:sell-extreme ticked)))
-                     ;; Buy side resolution
-                     (buy-amount buy-excursion)
-                     (buy-outcome (if (> buy-excursion
-                                         (:trail (:distances ticked)))
-                                      :grace :violence))
-                     ;; Sell side resolution
-                     (sell-amount sell-excursion)
-                     (sell-outcome (if (> sell-excursion
-                                          (:trail (:distances ticked)))
-                                       :grace :violence)))
-                (push! resolutions
-                       (make-resolution (:slot-idx broker)
-                                        (:composed-thought ticked)
-                                        :up buy-outcome buy-amount optimal))
-                (push! resolutions
-                       (make-resolution (:slot-idx broker)
-                                        (:composed-thought ticked)
-                                        :down sell-outcome sell-amount optimal))
-                (push! logs (PaperResolved (:slot-idx broker)
-                                           buy-outcome optimal))
-                (push! logs (PaperResolved (:slot-idx broker)
-                                           sell-outcome optimal)))
-              ;; Not fully resolved — keep it
-              (push-back remaining ticked))))
+        (let* ((was-buy-resolved  (:buy-resolved paper))
+               (was-sell-resolved (:sell-resolved paper))
+               (ticked (tick-paper paper current-price))
+               (entry (:entry-price ticked))
+               (optimal (approximate-optimal-distances
+                          entry
+                          (:buy-extreme ticked)
+                          (:sell-extreme ticked))))
+          ;; Buy side JUST fired this tick
+          (when (and (:buy-resolved ticked) (not was-buy-resolved))
+            (let* ((excursion (buy-excursion ticked))
+                   (outcome (if (> excursion (:trail (:distances ticked)))
+                                :grace :violence)))
+              (push! resolutions
+                     (make-resolution (:slot-idx broker)
+                                      (:composed-thought ticked)
+                                      :up outcome excursion optimal))
+              (push! logs (PaperResolved (:slot-idx broker)
+                                         outcome optimal))))
+          ;; Sell side JUST fired this tick
+          (when (and (:sell-resolved ticked) (not was-sell-resolved))
+            (let* ((excursion (sell-excursion ticked))
+                   (outcome (if (> excursion (:trail (:distances ticked)))
+                                :grace :violence)))
+              (push! resolutions
+                     (make-resolution (:slot-idx broker)
+                                      (:composed-thought ticked)
+                                      :down outcome excursion optimal))
+              (push! logs (PaperResolved (:slot-idx broker)
+                                         outcome optimal))))
+          ;; Keep until both sides resolved, then remove
+          (unless (fully-resolved? ticked)
+            (push-back remaining ticked))))
       (:papers broker))
     (set! broker :papers remaining)
     (list resolutions logs)))

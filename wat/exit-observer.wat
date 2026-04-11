@@ -5,13 +5,12 @@
 ;; intentionally simpler than MarketObserver. The exit observer's quality
 ;; is measured through the BROKER's curve, not its own.
 ;; Depends on: Reckoner :continuous, Distances, ExitLens (enums),
-;;             ScalarAccumulator, Ctx, ThoughtEncoder.
+;;             ScalarAccumulator, IncrementalBundle.
 
 (require primitives)
 (require enums)
 (require distances)
 (require scalar-accumulator)
-(require ctx)
 (require thought-encoder)
 
 ;; ── Struct ──────────────────────────────────────────────────────────
@@ -20,7 +19,8 @@
   [lens : ExitLens]                    ; which judgment vocabulary
   [trail-reckoner : Reckoner]          ; :continuous — trailing stop distance
   [stop-reckoner : Reckoner]           ; :continuous — safety stop distance
-  [default-distances : Distances])     ; the crutches (both), returned when empty
+  [default-distances : Distances]      ; the crutches (both), returned when empty
+  [incremental : IncrementalBundle])   ; optimization cache for exit facts, not cognition
 
 ;; ── Interface ───────────────────────────────────────────────────────
 
@@ -34,45 +34,13 @@
     lens
     (reckoner "trail" dims recalib-interval (Continuous default-trail))
     (reckoner "stop"  dims recalib-interval (Continuous default-stop))
-    (make-distances default-trail default-stop)))
-
-(define (encode-exit-facts [exit-obs : ExitObserver]
-                           [candle : Candle])
-  : Vec<ThoughtAST>
-  ;; Pure: candle → judgment fact ASTs for this lens.
-  ;; The observer returns ASTs rather than vectors because it does not
-  ;; own the ThoughtEncoder — ctx does, so evaluation is deferred to the
-  ;; call site which has ctx in scope.
-  (match (:lens exit-obs)
-    :volatility (encode-exit-volatility-facts candle)
-    :structure  (encode-exit-structure-facts candle)
-    :timing     (encode-exit-timing-facts candle)
-    :generalist (append (encode-exit-volatility-facts candle)
-                        (encode-exit-structure-facts candle)
-                        (encode-exit-timing-facts candle))))
-
-(define (evaluate-and-compose [exit-obs : ExitObserver]
-                              [market-thought : Vector]
-                              [exit-fact-asts : Vec<ThoughtAST>]
-                              [ctx : Ctx])
-  : (Vector Vec<(ThoughtAST Vector)>)
-  ;; Two operations, honestly named:
-  ;; 1. EVALUATE: encode exit-fact-asts into Vectors via ctx's ThoughtEncoder
-  ;; 2. COMPOSE: bundle the evaluated exit vectors with the market thought
-  ;; ASTs in, one composed Vector out. Returns the composed vector AND any
-  ;; cache misses from encoding.
-  (let* ((results  (map (lambda (ast)
-                          (encode (:thought-encoder ctx) ast))
-                        exit-fact-asts))
-         (vectors  (map first results))
-         (misses   (filter-map second results))
-         (all-misses (flatten misses))
-         (composed (apply bundle (cons market-thought vectors))))
-    (list composed all-misses)))
+    (make-distances default-trail default-stop)
+    (make-incremental-bundle dims)))
 
 (define (recommended-distances [exit-obs : ExitObserver]
                                [composed : Vector]
-                               [broker-accums : Vec<ScalarAccumulator>])
+                               [broker-accums : Vec<ScalarAccumulator>]
+                               [scalar-encoder : ScalarEncoder])
   : (Distances f64)
   ;; Returns: Distances + experience (f64 — how much the exit observer knows).
   ;; The cascade, per distance:
@@ -85,17 +53,15 @@
         (stop-accum  (nth broker-accums 1))
         ;; Trail distance cascade
         (trail (if (> trail-exp 0.0)
-                   (match (predict (:trail-reckoner exit-obs) composed)
-                     ((Continuous v _) v))
+                   (query (:trail-reckoner exit-obs) composed)
                    (if (> (:count trail-accum) 0)
-                       (extract-scalar trail-accum 100 '(0.001 0.10))
+                       (extract trail-accum 100 '(0.001 0.10) scalar-encoder)
                        (:trail (:default-distances exit-obs)))))
         ;; Stop distance cascade
         (stop  (if (> stop-exp 0.0)
-                   (match (predict (:stop-reckoner exit-obs) composed)
-                     ((Continuous v _) v))
+                   (query (:stop-reckoner exit-obs) composed)
                    (if (> (:count stop-accum) 0)
-                       (extract-scalar stop-accum 100 '(0.001 0.10))
+                       (extract stop-accum 100 '(0.001 0.10) scalar-encoder)
                        (:stop (:default-distances exit-obs)))))
         (total-exp (min trail-exp stop-exp)))
     (list (make-distances trail stop) total-exp)))
@@ -106,8 +72,7 @@
                            [weight : f64])
   ;; composed: the COMPOSED thought (market + exit facts), not the raw
   ;; market thought. The exit observer learns from the same vector it
-  ;; produced via evaluate-and-compose(). This is what makes the learning
-  ;; contextual.
+  ;; produced via composition. This is what makes the learning contextual.
   ;; optimal: the hindsight-optimal distances from resolution.
   ;; Both reckoners learn from one resolution.
   (observe (:trail-reckoner exit-obs) composed (:trail optimal) weight)
