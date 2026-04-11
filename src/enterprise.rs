@@ -129,7 +129,7 @@ impl Enterprise {
         let batch_results: Vec<_> = enriched_candles
             .par_iter()
             .enumerate()
-            .map(|(candle_offset, enriched)| {
+            .map(|(_candle_offset, enriched)| {
                 let window: Vec<_> = {
                     // Window for this candle — use the full candle_window at this point
                     // (simplified: all candles share the same window view)
@@ -322,7 +322,7 @@ impl Enterprise {
         let facts_list: Vec<_> = resolutions
             .par_iter()
             .map(|res| {
-                let broker = &post.registry[res.broker_slot_idx];
+                let _broker = &post.registry[res.broker_slot_idx];
                 // Compute what the broker WOULD produce — but don't mutate yet.
                 // We need the indices and the data for routing.
                 let mi = res.broker_slot_idx / m;

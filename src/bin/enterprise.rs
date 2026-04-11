@@ -16,7 +16,7 @@ use rusqlite::{params, Connection};
 
 use enterprise::broker::Broker;
 use enterprise::ctx::Ctx;
-use enterprise::enums::{ExitLens, MarketLens, Outcome, ScalarEncoding};
+use enterprise::enums::{ExitLens, MarketLens, ScalarEncoding};
 use enterprise::exit_observer::ExitObserver;
 use enterprise::indicator_bank::IndicatorBank;
 use enterprise::log_entry::LogEntry;
@@ -30,7 +30,6 @@ use enterprise::window_sampler::WindowSampler;
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const BATCH_SIZE: usize = 50;
 /// Max learn signals to drain per candle per thread.
 /// The reckoner is a CRDT — deferral is safe. The queue drains over
 /// subsequent candles. Production rate ~1/candle. Drain rate 5/candle.
@@ -307,135 +306,6 @@ fn register_brokers(conn: &Connection, post: &enterprise::post::Post) {
     }
 }
 
-fn flush_logs(logs: &[LogEntry], conn: &Connection) {
-    if logs.is_empty() {
-        return;
-    }
-    let mut stmt = conn
-        .prepare_cached(
-            "INSERT INTO log (kind, broker_slot_idx, trade_id, outcome, amount, duration, reason, observers_updated)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-        )
-        .expect("failed to prepare log insert");
-
-    for entry in logs {
-        match entry {
-            LogEntry::ProposalSubmitted {
-                broker_slot_idx, ..
-            } => {
-                stmt.execute(params![
-                    "ProposalSubmitted",
-                    *broker_slot_idx as i64,
-                    None::<i64>,
-                    None::<String>,
-                    None::<f64>,
-                    None::<i64>,
-                    None::<String>,
-                    None::<i64>,
-                ])
-                .ok();
-            }
-            LogEntry::ProposalFunded {
-                trade_id,
-                broker_slot_idx,
-                amount_reserved,
-            } => {
-                stmt.execute(params![
-                    "ProposalFunded",
-                    *broker_slot_idx as i64,
-                    trade_id.0 as i64,
-                    None::<String>,
-                    *amount_reserved,
-                    None::<i64>,
-                    None::<String>,
-                    None::<i64>,
-                ])
-                .ok();
-            }
-            LogEntry::ProposalRejected {
-                broker_slot_idx,
-                reason,
-            } => {
-                stmt.execute(params![
-                    "ProposalRejected",
-                    *broker_slot_idx as i64,
-                    None::<i64>,
-                    None::<String>,
-                    None::<f64>,
-                    None::<i64>,
-                    reason,
-                    None::<i64>,
-                ])
-                .ok();
-            }
-            LogEntry::TradeSettled {
-                trade_id,
-                outcome,
-                amount,
-                duration,
-                ..
-            } => {
-                let outcome_str = match outcome {
-                    Outcome::Grace => "Grace",
-                    Outcome::Violence => "Violence",
-                };
-                stmt.execute(params![
-                    "TradeSettled",
-                    None::<i64>,
-                    trade_id.0 as i64,
-                    outcome_str,
-                    *amount,
-                    *duration as i64,
-                    None::<String>,
-                    None::<i64>,
-                ])
-                .ok();
-            }
-            LogEntry::PaperResolved {
-                broker_slot_idx,
-                outcome,
-                ..
-            } => {
-                let outcome_str = match outcome {
-                    Outcome::Grace => "Grace",
-                    Outcome::Violence => "Violence",
-                };
-                stmt.execute(params![
-                    "PaperResolved",
-                    *broker_slot_idx as i64,
-                    None::<i64>,
-                    outcome_str,
-                    None::<f64>,
-                    None::<i64>,
-                    None::<String>,
-                    None::<i64>,
-                ])
-                .ok();
-            }
-            LogEntry::Propagated {
-                broker_slot_idx,
-                observers_updated,
-            } => {
-                stmt.execute(params![
-                    "Propagated",
-                    *broker_slot_idx as i64,
-                    None::<i64>,
-                    None::<String>,
-                    None::<f64>,
-                    None::<i64>,
-                    None::<String>,
-                    *observers_updated as i64,
-                ])
-                .ok();
-            }
-            LogEntry::Diagnostic { .. } => {
-                // Diagnostics go to the diagnostics table, not the log table.
-                // Handled by the log service directly.
-            }
-        }
-    }
-}
-
 // ─── Construction ────────────────────────────────────────────────────────────
 
 fn build_enterprise(args: &Args) -> (Enterprise, Ctx) {
@@ -684,7 +554,7 @@ fn main() {
     let raw_stream = ParquetRawStream::open(&args.parquet, &args.source_asset, &args.target_asset);
 
     // ─ Construction ─
-    let (mut ent, mut ctx) = build_enterprise(&args);
+    let (mut ent, ctx) = build_enterprise(&args);
 
     // ─ Ledger ─
     let ledger_path = match &args.ledger {
@@ -794,7 +664,6 @@ fn main() {
         broker_learn_txs: Vec<Sender<BrokerLearn>>,
         observer_handles: Vec<std::thread::JoinHandle<MarketObserver>>,
         broker_handles: Vec<std::thread::JoinHandle<Broker>>,
-        n: usize,
         m: usize,
     }
 
@@ -932,7 +801,6 @@ fn main() {
             broker_learn_txs,
             observer_handles,
             broker_handles,
-            n,
             m,
         });
     }
