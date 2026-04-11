@@ -18,31 +18,33 @@ use crate::paper_entry::PaperEntry;
 use crate::scalar_accumulator::ScalarAccumulator;
 use crate::to_f64;
 
-/// What a broker produces when a paper resolves.
+/// What a broker produces when a paper resolves or signals.
 /// Facts, not mutations. Collected from parallel tick, applied sequentially.
 #[derive(Clone)]
 pub struct Resolution {
     /// Which broker produced this.
     pub broker_slot_idx: usize,
-    /// The thought that was tested.
+    /// The composed thought (market + exit) that was tested.
     pub composed_thought: Vector,
-    /// Up or Down -- matches the side tested.
-    pub direction: Direction,
+    /// The raw market thought (for market observer learning).
+    pub market_thought: Vector,
+    /// What the market observer predicted.
+    pub prediction: Direction,
     /// Grace or Violence.
     pub outcome: Outcome,
-    /// How much value.
+    /// How much value (excursion or stop distance).
     pub amount: f64,
     /// Hindsight optimal distances.
     pub optimal_distances: Distances,
     /// Paper details for diagnostics.
     pub entry_price: f64,
-    pub buy_extreme: f64,
-    pub sell_extreme: f64,
-    pub buy_excursion: f64,
-    pub sell_excursion: f64,
+    pub extreme: f64,
+    pub excursion: f64,
     pub trail_distance: f64,
     pub stop_distance: f64,
     pub duration: usize,
+    /// Did the trail cross before resolution?
+    pub was_runner: bool,
 }
 
 /// What the broker returns for observer learning.
@@ -165,19 +167,10 @@ impl Broker {
     /// The reckoner's own discriminant IS the noise filter.
     /// Noise subspace still updates (diagnostic) but doesn't gate prediction.
     /// Updates cached_edge from the curve at THIS conviction.
-    ///
-    /// TODO: bundle self-assessment facts (grace-rate, paper-duration-avg, etc.)
-    /// into the thought. The broker thread needs an encoder handle to convert
-    /// the AST facts into vectors. For now, the self-assessment data accumulates
-    /// (avg_paper_duration, avg_excursion, etc.) but isn't composed into the
-    /// prediction yet. The vocab is defined (vocab/broker/self_assessment.rs),
-    /// the wiring needs an encoder pipe to the broker thread.
     pub fn propose(&mut self, composed: &Vector) -> holon::memory::Prediction {
         let composed_f64 = to_f64(composed);
         self.noise_subspace.update(&composed_f64);
         let pred = self.reckoner.predict(composed);
-        // Edge = accuracy at THIS conviction. The curve says how good this
-        // conviction level is historically. Updated every propose, not just propagate.
         self.cached_edge = self.reckoner.accuracy_at(pred.conviction).unwrap_or(0.0);
         pred
     }
@@ -188,11 +181,8 @@ impl Broker {
         self.cached_edge
     }
 
-    /// Distance cascade: reckoner answer → own accumulators → default.
+    /// Distance cascade: reckoner answer -> own accumulators -> default.
     /// The broker owns the full cascade because it owns the scalar accumulators.
-    ///
-    /// TODO: eliminate ctx_scalar_encoder_placeholder by passing &ScalarEncoder
-    /// through the broker propagation path.
     pub fn cascade_distances(&self, reckoner_answer: Option<Distances>) -> Distances {
         if let Some(dists) = reckoner_answer {
             return dists;
@@ -216,113 +206,131 @@ impl Broker {
         Distances::new(trail, stop)
     }
 
-    /// Create a paper entry -- every candle, every broker.
+    /// Create a paper entry — every candle, every broker.
+    /// Takes the market observer's prediction and raw market thought.
     pub fn register_paper(
         &mut self,
         composed: Vector,
+        market_thought: Vector,
+        prediction: Direction,
         entry_price: Price,
         distances: Distances,
     ) {
-        self.papers.push_back(PaperEntry::new(composed, entry_price, distances));
+        self.papers.push_back(PaperEntry::new(
+            composed,
+            market_thought,
+            prediction,
+            entry_price,
+            distances,
+        ));
     }
 
-    /// Tick all papers, resolve completed. Returns resolution facts.
-    /// Papers derive optimal distances from their tracked extremes.
-    pub fn tick_papers(&mut self, current_price: Price) -> Vec<Resolution> {
-        let mut resolutions = Vec::new();
+    /// Tick all papers, resolve completed. Returns two vecs:
+    /// - market_signals: for market observer learning (Grace or Violence)
+    /// - runner_resolutions: for exit observer + broker learning (runner finished)
+    pub fn tick_papers(&mut self, current_price: Price) -> (Vec<Resolution>, Vec<Resolution>) {
+        let mut market_signals = Vec::new();
+        let mut runner_resolutions = Vec::new();
         let mut remaining = VecDeque::new();
         let cp = current_price.0;
 
         while let Some(mut paper) = self.papers.pop_front() {
-            let was_buy_resolved = paper.buy_resolved;
-            let was_sell_resolved = paper.sell_resolved;
+            let was_signaled = paper.signaled;
+            let was_resolved = paper.resolved;
 
             paper.tick(cp);
 
-            let optimal = approximate_optimal_distances(
-                paper.entry_price.0,
-                paper.buy_extreme,
-                paper.sell_extreme,
-            );
-
-            // Buy side JUST fired this tick
-            if paper.buy_resolved && !was_buy_resolved {
-                let excursion = paper.buy_excursion();
-                let outcome = if excursion > paper.distances.trail {
-                    Outcome::Grace
-                } else {
-                    Outcome::Violence
-                };
-                resolutions.push(Resolution {
+            // Paper just signaled this tick (Grace — trail crossed for first time)
+            if paper.signaled && !was_signaled {
+                let optimal = approximate_optimal_distances(
+                    paper.entry_price.0,
+                    paper.extreme,
+                    paper.prediction,
+                );
+                market_signals.push(Resolution {
                     broker_slot_idx: self.slot_idx,
                     composed_thought: paper.composed_thought.clone(),
-                    direction: Direction::Up,
-                    outcome,
-                    amount: excursion,
+                    market_thought: paper.market_thought.clone(),
+                    prediction: paper.prediction,
+                    outcome: Outcome::Grace,
+                    amount: paper.excursion(),
                     optimal_distances: optimal,
                     entry_price: paper.entry_price.0,
-                    buy_extreme: paper.buy_extreme,
-                    sell_extreme: paper.sell_extreme,
-                    buy_excursion: paper.buy_excursion(),
-                    sell_excursion: paper.sell_excursion(),
+                    extreme: paper.extreme,
+                    excursion: paper.excursion(),
                     trail_distance: paper.distances.trail,
                     stop_distance: paper.distances.stop,
                     duration: paper.age,
+                    was_runner: true,
                 });
             }
 
-            // Sell side JUST fired this tick
-            if paper.sell_resolved && !was_sell_resolved {
-                let excursion = paper.sell_excursion();
-                let outcome = if excursion > paper.distances.trail {
-                    Outcome::Grace
+            // Paper resolved this tick
+            if paper.resolved && !was_resolved {
+                let optimal = approximate_optimal_distances(
+                    paper.entry_price.0,
+                    paper.extreme,
+                    paper.prediction,
+                );
+
+                if !paper.signaled {
+                    // Violence — stop fired before trail crossed
+                    market_signals.push(Resolution {
+                        broker_slot_idx: self.slot_idx,
+                        composed_thought: paper.composed_thought.clone(),
+                        market_thought: paper.market_thought.clone(),
+                        prediction: paper.prediction,
+                        outcome: Outcome::Violence,
+                        amount: paper.distances.stop,
+                        optimal_distances: optimal,
+                        entry_price: paper.entry_price.0,
+                        extreme: paper.extreme,
+                        excursion: paper.excursion(),
+                        trail_distance: paper.distances.trail,
+                        stop_distance: paper.distances.stop,
+                        duration: paper.age,
+                        was_runner: false,
+                    });
                 } else {
-                    Outcome::Violence
-                };
-                resolutions.push(Resolution {
-                    broker_slot_idx: self.slot_idx,
-                    composed_thought: paper.composed_thought.clone(),
-                    direction: Direction::Down,
-                    outcome,
-                    amount: excursion,
-                    optimal_distances: optimal,
-                    entry_price: paper.entry_price.0,
-                    buy_extreme: paper.buy_extreme,
-                    sell_extreme: paper.sell_extreme,
-                    buy_excursion: paper.buy_excursion(),
-                    sell_excursion: paper.sell_excursion(),
-                    trail_distance: paper.distances.trail,
-                    stop_distance: paper.distances.stop,
-                    duration: paper.age,
-                });
-            }
+                    // Runner finished — trail fired after signal
+                    runner_resolutions.push(Resolution {
+                        broker_slot_idx: self.slot_idx,
+                        composed_thought: paper.composed_thought.clone(),
+                        market_thought: paper.market_thought.clone(),
+                        prediction: paper.prediction,
+                        outcome: Outcome::Grace,
+                        amount: paper.excursion(),
+                        optimal_distances: optimal,
+                        entry_price: paper.entry_price.0,
+                        extreme: paper.extreme,
+                        excursion: paper.excursion(),
+                        trail_distance: paper.distances.trail,
+                        stop_distance: paper.distances.stop,
+                        duration: paper.age,
+                        was_runner: true,
+                    });
+                }
 
-            // Update self-assessment running averages on any resolution
-            if (paper.buy_resolved && !was_buy_resolved) || (paper.sell_resolved && !was_sell_resolved) {
+                // Update self-assessment running averages
                 self.resolution_count += 1;
                 let n = self.resolution_count as f64;
-                let excursion = if paper.buy_resolved && !was_buy_resolved {
-                    paper.buy_excursion()
-                } else {
-                    paper.sell_excursion()
-                };
-                // Running average: avg = avg + (new - avg) / n
+                let excursion = paper.excursion();
                 self.avg_paper_duration += (paper.age as f64 - self.avg_paper_duration) / n;
                 self.avg_excursion += (excursion - self.avg_excursion) / n;
                 self.last_trail = paper.distances.trail;
                 self.last_stop = paper.distances.stop;
             }
 
-            // Keep until both sides resolved, then remove
-            if paper.fully_resolved() {
-                // Both done. Paper taught its lessons. Remove.
+            // Keep until resolved, then remove
+            if paper.resolved {
+                // Paper done. Remove.
             } else {
                 remaining.push_back(paper);
             }
         }
 
         self.papers = remaining;
-        resolutions
+        (market_signals, runner_resolutions)
     }
 
     /// The broker learns its OWN lessons and RETURNS what the observers need.
@@ -363,10 +371,7 @@ impl Broker {
             self.scalar_accums[1].observe(optimal.stop, outcome, weight, scalar_encoder);
         }
 
-        // 5. Edge updated in propose(), not here. The curve may have changed
-        // from this propagation, but the next propose() will pick it up.
-
-        // 6. Engram gate
+        // 5. Engram gate
         if correct {
             self.recalib_wins += 1;
         }
@@ -405,26 +410,18 @@ impl Broker {
     }
 }
 
-/// Approximate optimal distances from tracked extremes (paper approximation).
-/// Uses the excursions as a proxy for what distance would have been ideal.
-///
-/// WHY the 0.5 factor: half the observed excursion is a starting point for the
-/// paper's "optimal distance" — tight enough to have captured most of the move,
-/// loose enough to not have triggered prematurely. The exit observers learn to
-/// refine this heuristic over time; this is just the seed.
-///
-/// WHY the .max(0.001).min(0.10) clamps: the scalar encoder's log-scale range
-/// spans [0.001, 0.10]. Values outside this band produce degenerate encodings
-/// (saturated or zero). The clamps keep optimal distances within the learnable
-/// scalar range.
+/// Approximate optimal distances from tracked extreme (single-direction paper).
+/// Uses the excursion as a proxy for what distance would have been ideal.
 fn approximate_optimal_distances(
     entry: f64,
-    buy_extreme: f64,
-    sell_extreme: f64,
+    extreme: f64,
+    prediction: Direction,
 ) -> Distances {
-    let buy_excursion = ((buy_extreme - entry) / entry).max(0.001);
-    let sell_excursion = ((entry - sell_extreme) / entry).max(0.001);
-    let trail = ((buy_excursion + sell_excursion) / 2.0 * 0.5).max(0.001).min(0.10);
+    let excursion = match prediction {
+        Direction::Up => ((extreme - entry) / entry).max(0.001),
+        Direction::Down => ((entry - extreme) / entry).max(0.001),
+    };
+    let trail = (excursion * 0.5).max(0.001).min(0.10);
     let stop = trail * 2.0;
     Distances::new(trail, stop)
 }
@@ -476,7 +473,6 @@ mod tests {
 
     #[test]
     fn test_market_exit_idx() {
-        // slot_idx=5, exit_count=3: market_idx=1, exit_idx=2
         let broker = Broker::new(
             vec!["a".into(), "b".into()],
             5, 3, DIMS, RECALIB,
@@ -492,7 +488,6 @@ mod tests {
         let mut broker = make_broker();
         let composed = random_vector("composed");
         let pred = broker.propose(&composed);
-        // Should return a prediction (possibly default with no training)
         assert!(pred.conviction >= 0.0);
     }
 
@@ -500,8 +495,9 @@ mod tests {
     fn test_register_paper() {
         let mut broker = make_broker();
         let composed = random_vector("thought");
+        let market_thought = random_vector("market");
         let distances = Distances::new(0.02, 0.05);
-        broker.register_paper(composed, Price(50000.0), distances);
+        broker.register_paper(composed, market_thought, Direction::Up, Price(50000.0), distances);
         assert_eq!(broker.paper_count(), 1);
     }
 
@@ -509,36 +505,58 @@ mod tests {
     fn test_tick_papers_no_resolution() {
         let mut broker = make_broker();
         let composed = random_vector("thought");
+        let market_thought = random_vector("market");
         let distances = Distances::new(0.05, 0.10);
-        broker.register_paper(composed, Price(100.0), distances);
+        broker.register_paper(composed, market_thought, Direction::Up, Price(100.0), distances);
 
         // Price barely moves -- no resolution
-        let resolutions = broker.tick_papers(Price(100.5));
-        assert!(resolutions.is_empty());
+        let (market_signals, runner_resolutions) = broker.tick_papers(Price(100.5));
+        assert!(market_signals.is_empty());
+        assert!(runner_resolutions.is_empty());
         assert_eq!(broker.paper_count(), 1);
     }
 
     #[test]
-    fn test_tick_papers_full_resolution() {
+    fn test_tick_papers_violence() {
         let mut broker = make_broker();
         let composed = random_vector("thought");
-        // Trail=0.20: buy_trail_stop=80, sell_trail_stop=120
-        let distances = Distances::new(0.20, 0.30);
-        broker.register_paper(composed, Price(100.0), distances);
+        let market_thought = random_vector("market");
+        // Trail=0.05, Stop=0.10: stop_level=90
+        let distances = Distances::new(0.05, 0.10);
+        broker.register_paper(composed, market_thought, Direction::Up, Price(100.0), distances);
 
-        // Rise to 125: sell fires (125 >= 120) → 1 resolution (Down)
-        // Buy doesn't fire yet (125 > buy_trail=100)
-        let resolutions = broker.tick_papers(Price(125.0));
-        assert_eq!(resolutions.len(), 1); // sell side fired independently
-        assert_eq!(resolutions[0].direction, Direction::Down);
-        assert_eq!(broker.paper_count(), 1); // still alive — buy side pending
+        // Price drops below stop → Violence
+        let (market_signals, runner_resolutions) = broker.tick_papers(Price(89.0));
+        assert_eq!(market_signals.len(), 1);
+        assert_eq!(market_signals[0].outcome, Outcome::Violence);
+        assert_eq!(market_signals[0].prediction, Direction::Up);
+        assert!(runner_resolutions.is_empty());
+        assert_eq!(broker.paper_count(), 0); // removed
+    }
 
-        // Fall to 99: buy fires (99 <= buy_trail_stop=100) → 1 resolution (Up)
-        // Both sides now resolved → paper removed
-        let resolutions = broker.tick_papers(Price(99.0));
-        assert_eq!(resolutions.len(), 1); // buy side fired independently
-        assert_eq!(resolutions[0].direction, Direction::Up);
-        assert_eq!(broker.paper_count(), 0); // both done, paper removed
+    #[test]
+    fn test_tick_papers_grace_then_runner_resolution() {
+        let mut broker = make_broker();
+        let composed = random_vector("thought");
+        let market_thought = random_vector("market");
+        // Trail=0.05, Stop=0.10
+        let distances = Distances::new(0.05, 0.10);
+        broker.register_paper(composed, market_thought, Direction::Up, Price(100.0), distances);
+
+        // Price rises above entry + entry*trail = 105 → Grace signal
+        let (market_signals, runner_resolutions) = broker.tick_papers(Price(110.0));
+        assert_eq!(market_signals.len(), 1); // Grace signal
+        assert_eq!(market_signals[0].outcome, Outcome::Grace);
+        assert!(runner_resolutions.is_empty());
+        assert_eq!(broker.paper_count(), 1); // still alive as runner
+
+        // Price drops below trail_level: 110 - 110*0.05 = 104.5 → runner resolves
+        let (market_signals, runner_resolutions) = broker.tick_papers(Price(104.0));
+        assert!(market_signals.is_empty()); // already signaled
+        assert_eq!(runner_resolutions.len(), 1);
+        assert_eq!(runner_resolutions[0].outcome, Outcome::Grace);
+        assert!(runner_resolutions[0].was_runner);
+        assert_eq!(broker.paper_count(), 0); // removed
     }
 
     #[test]
@@ -590,7 +608,6 @@ mod tests {
     #[test]
     fn test_edge_starts_at_zero() {
         let broker = make_broker();
-        // No training -> no edge
         let e = broker.edge();
         assert!(e >= 0.0);
     }
@@ -604,19 +621,24 @@ mod tests {
     }
 
     #[test]
-    fn test_approximate_optimal_distances() {
-        let d = approximate_optimal_distances(100.0, 110.0, 90.0);
-        // buy_excursion = 0.10, sell_excursion = 0.10
-        // trail = (0.10 + 0.10) / 2 * 0.5 = 0.05
-        // stop = 0.10
+    fn test_approximate_optimal_distances_up() {
+        let d = approximate_optimal_distances(100.0, 110.0, Direction::Up);
+        // excursion = 0.10, trail = 0.05, stop = 0.10
+        assert!((d.trail - 0.05).abs() < 1e-10);
+        assert!((d.stop - 0.10).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_approximate_optimal_distances_down() {
+        let d = approximate_optimal_distances(100.0, 90.0, Direction::Down);
+        // excursion = 0.10, trail = 0.05, stop = 0.10
         assert!((d.trail - 0.05).abs() < 1e-10);
         assert!((d.stop - 0.10).abs() < 1e-10);
     }
 
     #[test]
     fn test_approximate_optimal_distances_clamped() {
-        // Very small excursion -> clamped to 0.001
-        let d = approximate_optimal_distances(100.0, 100.0, 100.0);
+        let d = approximate_optimal_distances(100.0, 100.0, Direction::Up);
         assert!(d.trail >= 0.001);
         assert!(d.stop >= 0.001);
     }

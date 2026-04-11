@@ -319,13 +319,12 @@ fn init_ledger(path: &str) -> Connection {
             broker_slot_idx   INTEGER,
             outcome           TEXT,
             entry_price       REAL,
-            buy_extreme       REAL,
-            sell_extreme       REAL,
-            buy_excursion     REAL,
-            sell_excursion    REAL,
+            extreme           REAL,
+            excursion         REAL,
             trail_distance    REAL,
             stop_distance     REAL,
-            duration          INTEGER
+            duration          INTEGER,
+            was_runner        INTEGER
         );",
     )
     .expect("failed to create ledger tables");
@@ -692,9 +691,10 @@ fn main() {
     type ObsOutput = (holon::kernel::vector::Vector, holon::memory::Prediction, f64,
                       Vec<(enterprise::thought_encoder::ThoughtAST, holon::kernel::vector::Vector)>);
     type ObsLearn = (holon::kernel::vector::Vector, enterprise::enums::Direction, f64);
-    type BrokerInput = (holon::kernel::vector::Vector, Option<enterprise::distances::Distances>, f64,
+    type BrokerInput = (holon::kernel::vector::Vector, holon::kernel::vector::Vector, enterprise::enums::Direction,
+                        Option<enterprise::distances::Distances>, f64,
                         enterprise::enums::Side, f64, enterprise::enums::Prediction);
-    type BrokerOutput = (enterprise::proposal::Proposal, Vec<enterprise::broker::Resolution>);
+    type BrokerOutput = (enterprise::proposal::Proposal, Vec<enterprise::broker::Resolution>, Vec<enterprise::broker::Resolution>);
     type BrokerLearn = (holon::kernel::vector::Vector, enterprise::enums::Outcome,
                         f64, enterprise::enums::Direction, enterprise::distances::Distances);
 
@@ -835,7 +835,7 @@ fn main() {
 
             let handle = std::thread::spawn(move || {
                 let mut candle_count = 0usize;
-                while let Ok((composed, reckoner_dists, price, side, edge, pred)) = in_rx.recv() {
+                while let Ok((composed, market_thought, prediction, reckoner_dists, price, side, edge, pred)) = in_rx.recv() {
                     candle_count += 1;
                     // Drain at most MAX_DRAIN learn signals per candle.
                     // The reckoner is a CRDT. Deferral is safe. The queue drains
@@ -887,8 +887,8 @@ fn main() {
                     };
 
                     broker.propose(&enriched);
-                    broker.register_paper(composed.clone(), Price(price), dists);
-                    let resolutions = broker.tick_papers(Price(price));
+                    broker.register_paper(composed.clone(), market_thought, prediction, Price(price), dists);
+                    let (market_signals, runner_resolutions) = broker.tick_papers(Price(price));
 
                     // Snapshot every 100 candles — into the DB
                     if candle_count % 100 == 0 {
@@ -907,7 +907,7 @@ fn main() {
                     let prop = enterprise::proposal::Proposal::new(
                         composed, dists, edge, side, src.clone(), tgt.clone(),
                         pred, post_idx_for_broker, broker.slot_idx);
-                    let _ = out_tx.send((prop, resolutions));
+                    let _ = out_tx.send((prop, market_signals, runner_resolutions));
                 }
                 broker
             });
@@ -1095,7 +1095,14 @@ fn main() {
                 let edge = 0.0_f64; // Broker computes edge on its thread
                 let pred = enterprise::post::prediction_convert(&market_predictions[mi]);
 
-                (slot_idx, composed, reckoner_dists, side, edge, pred)
+                // Derive direction from prediction for paper registration
+                let direction = if market_predictions[mi].direction.map_or(true, |d| d.index() == 0) {
+                    enterprise::enums::Direction::Up
+                } else {
+                    enterprise::enums::Direction::Down
+                };
+
+                (slot_idx, mi, composed, reckoner_dists, side, edge, pred, direction)
             })
             .collect()
         };
@@ -1103,16 +1110,19 @@ fn main() {
         let t_grid = t_candle.elapsed();
 
         // Send to broker pipes — bounded(1), each broker gets its input
-        for (slot_idx, composed, dists, side, edge, pred) in grid_values {
-            let _ = pipes.broker_in_txs[slot_idx].send((composed, dists, price, side, edge, pred));
+        for (slot_idx, mi, composed, dists, side, edge, pred, direction) in grid_values {
+            let _ = pipes.broker_in_txs[slot_idx].send((
+                composed, market_thoughts[mi].clone(), direction,
+                dists, price, side, edge, pred));
         }
 
         // Collect from broker pipes — bounded(1), all 24 produce
-        let mut all_resolutions = Vec::new();
+        let mut all_market_signals = Vec::new();
+        let mut all_runner_resolutions = Vec::new();
         for rx in &pipes.broker_out_rxs {
-            let (prop, resolutions) = rx.recv().unwrap();
+            let (prop, market_signals, runner_resolutions) = rx.recv().unwrap();
             ent.treasury.submit_proposal(prop);
-            for res in &resolutions {
+            for res in &market_signals {
                 log_handle.log(LogEntry::PaperResolved {
                     broker_slot_idx: res.broker_slot_idx,
                     outcome: res.outcome,
@@ -1122,16 +1132,34 @@ fn main() {
                     broker_slot_idx: res.broker_slot_idx,
                     outcome: res.outcome,
                     entry_price: res.entry_price,
-                    buy_extreme: res.buy_extreme,
-                    sell_extreme: res.sell_extreme,
-                    buy_excursion: res.buy_excursion,
-                    sell_excursion: res.sell_excursion,
+                    extreme: res.extreme,
+                    excursion: res.excursion,
                     trail_distance: res.trail_distance,
                     stop_distance: res.stop_distance,
                     duration: res.duration,
+                    was_runner: res.was_runner,
                 });
             }
-            all_resolutions.extend(resolutions);
+            for res in &runner_resolutions {
+                log_handle.log(LogEntry::PaperResolved {
+                    broker_slot_idx: res.broker_slot_idx,
+                    outcome: res.outcome,
+                    optimal_distances: res.optimal_distances,
+                });
+                log_handle.log(LogEntry::PaperDetail {
+                    broker_slot_idx: res.broker_slot_idx,
+                    outcome: res.outcome,
+                    entry_price: res.entry_price,
+                    extreme: res.extreme,
+                    excursion: res.excursion,
+                    trail_distance: res.trail_distance,
+                    stop_distance: res.stop_distance,
+                    duration: res.duration,
+                    was_runner: res.was_runner,
+                });
+            }
+            all_market_signals.extend(market_signals);
+            all_runner_resolutions.extend(runner_resolutions);
         }
 
         let t_brokers = t_candle.elapsed();
@@ -1139,18 +1167,37 @@ fn main() {
         // Propagate — send learning signals to pipes + parallel exit observer learning.
         // Channel sends: cheap, sequential. Exit observer vec ops: parallel by observer.
         {
-            // Collect exit learning work grouped by exit observer index
-            let mut exit_work: Vec<Vec<(usize, usize)>> = vec![Vec::new(); m];
-            for (ri, res) in all_resolutions.iter().enumerate() {
-                let _mi = res.broker_slot_idx / m;
-                let ei = res.broker_slot_idx % m;
+            // Market signals → market observer learn channels
+            // The market observer learns from the paper's Grace/Violence verdict.
+            for res in &all_market_signals {
+                let mi = res.broker_slot_idx / m;
+                if mi < pipes.learn_txs.len() {
+                    // Grace: learn predicted direction with excursion weight
+                    // Violence: learn opposite direction with stop_distance weight
+                    let (direction, weight) = match res.outcome {
+                        enterprise::enums::Outcome::Grace => (res.prediction, res.amount),
+                        enterprise::enums::Outcome::Violence => {
+                            let opposite = match res.prediction {
+                                enterprise::enums::Direction::Up => enterprise::enums::Direction::Down,
+                                enterprise::enums::Direction::Down => enterprise::enums::Direction::Up,
+                            };
+                            (opposite, res.amount)
+                        }
+                    };
+                    let _ = pipes.learn_txs[mi].send((
+                        res.market_thought.clone(), direction, weight));
+                }
+            }
 
-                // Market observer self-grades every candle — no broker propagation.
+            // Runner resolutions → broker learn channels + exit observer learning
+            let mut exit_work: Vec<Vec<(usize, usize)>> = vec![Vec::new(); m];
+            for (ri, res) in all_runner_resolutions.iter().enumerate() {
+                let ei = res.broker_slot_idx % m;
 
                 // Broker: learn via channel (cheap — just a send)
                 let _ = pipes.broker_learn_txs[res.broker_slot_idx].send((
                     res.composed_thought.clone(), res.outcome, res.amount,
-                    res.direction, res.optimal_distances));
+                    res.prediction, res.optimal_distances));
 
                 // Collect exit work — apply in parallel below
                 if ei < m {
@@ -1167,7 +1214,7 @@ fn main() {
                     let mut drained = 0;
                     for &(_ei, ri) in work {
                         if drained >= MAX_DRAIN { break; }
-                        let res = &all_resolutions[ri];
+                        let res = &all_runner_resolutions[ri];
                         eobs.observe_distances(
                             &res.composed_thought, &res.optimal_distances, res.amount);
                         drained += 1;
@@ -1261,7 +1308,7 @@ fn main() {
                 us_fund: (t_fund - t_misc).as_micros() as u64,
                 us_total: t_total.as_micros() as u64,
                 num_settlements: 0, // TODO: count from step 1
-                num_resolutions: all_resolutions.len(),
+                num_resolutions: all_market_signals.len() + all_runner_resolutions.len(),
                 num_active_trades: num_active,
             });
         }

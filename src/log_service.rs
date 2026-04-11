@@ -89,8 +89,8 @@ impl LogService {
 
             let mut paper_stmt = conn
                 .prepare_cached(
-                    "INSERT INTO paper_details (broker_slot_idx, outcome, entry_price, buy_extreme, sell_extreme, buy_excursion, sell_excursion, trail_distance, stop_distance, duration)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                    "INSERT INTO paper_details (broker_slot_idx, outcome, entry_price, extreme, excursion, trail_distance, stop_distance, duration, was_runner)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                 )
                 .expect("failed to prepare paper detail insert");
 
@@ -274,17 +274,16 @@ fn write_entry(
             ]).ok();
         }
         LogEntry::PaperDetail { broker_slot_idx, outcome, entry_price,
-                                buy_extreme, sell_extreme, buy_excursion,
-                                sell_excursion, trail_distance, stop_distance,
-                                duration } => {
+                                extreme, excursion, trail_distance, stop_distance,
+                                duration, was_runner } => {
             let outcome_str = match outcome {
                 Outcome::Grace => "Grace",
                 Outcome::Violence => "Violence",
             };
             paper_stmt.execute(params![
                 *broker_slot_idx as i64, outcome_str, entry_price,
-                buy_extreme, sell_extreme, buy_excursion, sell_excursion,
-                trail_distance, stop_distance, *duration as i64
+                extreme, excursion, trail_distance, stop_distance,
+                *duration as i64, *was_runner as i64
             ]).ok();
         }
     }

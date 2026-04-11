@@ -198,8 +198,15 @@ impl Post {
                 let edge_val = registry[slot_idx].edge();
                 let enterprise_pred = prediction_convert(&market_predictions[mi]);
 
+                // Derive direction for paper registration
+                let direction = if market_predictions[mi].direction.map_or(true, |d| d.index() == 0) {
+                    Direction::Up
+                } else {
+                    Direction::Down
+                };
+
                 // Return values — no mutation
-                (slot_idx, composed, reckoner_dists, side_val, edge_val, enterprise_pred)
+                (slot_idx, mi, composed, reckoner_dists, side_val, edge_val, enterprise_pred, direction)
             })
             .collect();
 
@@ -209,10 +216,10 @@ impl Post {
         let proposals: Vec<_> = self.registry
             .par_iter_mut()
             .zip(grid_values.into_par_iter())
-            .map(|(broker, (slot_idx, composed, reckoner_dists, side_val, edge_val, enterprise_pred))| {
+            .map(|(broker, (slot_idx, mi, composed, reckoner_dists, side_val, edge_val, enterprise_pred, direction))| {
                 let dists = broker.cascade_distances(reckoner_dists);
                 broker.propose(&composed);
-                broker.register_paper(composed.clone(), price, dists);
+                broker.register_paper(composed.clone(), market_thoughts[mi].clone(), direction, price, dists);
                 Proposal::new(
                     composed,
                     dists,

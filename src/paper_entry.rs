@@ -1,105 +1,156 @@
 /// paper_entry.rs — Hypothetical trade inside a broker. A "what if."
 /// Compiled from wat/paper-entry.wat.
 ///
-/// Both sides (buy and sell) are tracked simultaneously. When both sides
-/// resolve (their trailing stops fire), the paper teaches the system:
-/// what distance would have been optimal?
+/// One prediction (Up or Down). Two triggers: trail (Grace) and stop (Violence).
+/// The paper measures whether the market observer's prediction was correct.
 
 use holon::kernel::vector::Vector;
 
 use crate::distances::Distances;
+use crate::enums::Direction;
 use crate::newtypes::Price;
 
-/// A hypothetical paper trade tracking both buy and sell sides.
+/// A hypothetical paper trade tracking one predicted direction.
 pub struct PaperEntry {
-    /// The thought at entry.
+    /// The composed thought at entry (market + exit).
     pub composed_thought: Vector,
+    /// The raw market thought (for market observer learning).
+    pub market_thought: Vector,
+    /// What the market observer predicted.
+    pub prediction: Direction,
     /// Price when the paper was created.
     pub entry_price: Price,
     /// Distances from the exit observer at entry.
     pub distances: Distances,
-    /// Best price in buy direction so far.
-    pub buy_extreme: f64,
-    /// Trailing stop level for buy side (from distances.trail).
-    pub buy_trail_stop: f64,
-    /// Best price in sell direction so far.
-    pub sell_extreme: f64,
-    /// Trailing stop level for sell side (from distances.trail).
-    pub sell_trail_stop: f64,
-    /// Buy side's stop has fired.
-    pub buy_resolved: bool,
-    /// Sell side's stop has fired.
-    pub sell_resolved: bool,
+    /// Best price in predicted direction so far.
+    pub extreme: f64,
+    /// Trailing stop level (follows extreme with trail_distance gap).
+    pub trail_level: f64,
+    /// Fixed stop loss (capital protection).
+    pub stop_level: f64,
+    /// Has the trail crossed (Grace signal sent)?
+    pub signaled: bool,
+    /// Has a trigger fired (paper done)?
+    pub resolved: bool,
     /// How many candles this paper has lived.
     pub age: usize,
 }
 
 impl PaperEntry {
-    /// Create a new paper entry. Both sides start unresolved.
-    /// Buy trail stop is below price, sell trail stop is above.
-    pub fn new(composed_thought: Vector, entry_price: Price, distances: Distances) -> Self {
+    /// Create a new paper entry. Entry price is close.
+    /// For Up: trail_level starts at entry, extreme starts at entry,
+    ///         stop_level = entry - entry * stop_distance.
+    /// For Down: inverse.
+    pub fn new(
+        composed_thought: Vector,
+        market_thought: Vector,
+        prediction: Direction,
+        entry_price: Price,
+        distances: Distances,
+    ) -> Self {
         let p = entry_price.0;
-        let trail_dist = p * distances.trail;
+        let (stop_level, trail_level) = match prediction {
+            Direction::Up => (p - p * distances.stop, p),
+            Direction::Down => (p + p * distances.stop, p),
+        };
         Self {
             composed_thought,
+            market_thought,
+            prediction,
             entry_price,
             distances,
-            buy_extreme: p,
-            buy_trail_stop: p - trail_dist,
-            sell_extreme: p,
-            sell_trail_stop: p + trail_dist,
-            buy_resolved: false,
-            sell_resolved: false,
+            extreme: p,
+            trail_level,
+            stop_level,
+            signaled: false,
+            resolved: false,
             age: 0,
         }
     }
 
-    /// Tick the paper against the current price. Update extremes,
-    /// check trailing stops, mark sides as resolved when stops fire.
+    /// Tick the paper against the current price.
+    /// Updates extreme, trail_level, checks triggers.
     pub fn tick(&mut self, current_price: f64) {
+        if self.resolved {
+            return;
+        }
         self.age += 1;
-        // Buy side: track highest price, trail stop follows up
-        if !self.buy_resolved {
-            if current_price > self.buy_extreme {
-                self.buy_extreme = current_price;
+        let p = self.entry_price.0;
+
+        match self.prediction {
+            Direction::Up => {
+                // Track best price in predicted (up) direction
+                if current_price > self.extreme {
+                    self.extreme = current_price;
+                }
+                // Trail follows extreme with trail_distance gap
+                let new_trail = self.extreme - self.extreme * self.distances.trail;
+                if new_trail > self.trail_level {
+                    self.trail_level = new_trail;
+                }
+                // Check stop (Violence): price fell below stop_level
+                if current_price <= self.stop_level {
+                    self.resolved = true;
+                    return;
+                }
+                // Check Grace: extreme crossed entry + entry * trail_distance
+                if self.extreme >= p + p * self.distances.trail {
+                    self.signaled = true;
+                }
+                // If signaled: check trail fire (runner finished)
+                if self.signaled && current_price <= self.trail_level {
+                    self.resolved = true;
+                }
             }
-            let new_trail = self.buy_extreme - self.buy_extreme * self.distances.trail;
-            if new_trail > self.buy_trail_stop {
-                self.buy_trail_stop = new_trail;
-            }
-            if current_price <= self.buy_trail_stop {
-                self.buy_resolved = true;
+            Direction::Down => {
+                // Track best price in predicted (down) direction
+                if current_price < self.extreme {
+                    self.extreme = current_price;
+                }
+                // Trail follows extreme with trail_distance gap (upward)
+                let new_trail = self.extreme + self.extreme * self.distances.trail;
+                if new_trail < self.trail_level {
+                    self.trail_level = new_trail;
+                }
+                // Check stop (Violence): price rose above stop_level
+                if current_price >= self.stop_level {
+                    self.resolved = true;
+                    return;
+                }
+                // Check Grace: extreme crossed entry - entry * trail_distance
+                if self.extreme <= p - p * self.distances.trail {
+                    self.signaled = true;
+                }
+                // If signaled: check trail fire (runner finished)
+                if self.signaled && current_price >= self.trail_level {
+                    self.resolved = true;
+                }
             }
         }
+    }
 
-        // Sell side: track lowest price, trail stop follows down
-        if !self.sell_resolved {
-            if current_price < self.sell_extreme {
-                self.sell_extreme = current_price;
-            }
-            let new_trail = self.sell_extreme + self.sell_extreme * self.distances.trail;
-            if new_trail < self.sell_trail_stop {
-                self.sell_trail_stop = new_trail;
-            }
-            if current_price >= self.sell_trail_stop {
-                self.sell_resolved = true;
-            }
+    /// Grace: the market confirmed the prediction (trail crossed before resolution).
+    pub fn is_grace(&self) -> bool {
+        self.signaled
+    }
+
+    /// Violence: resolved without ever being signaled (stop fired before trail crossed).
+    pub fn is_violence(&self) -> bool {
+        self.resolved && !self.signaled
+    }
+
+    /// Runner: trail crossed, still running (not yet resolved).
+    pub fn is_runner(&self) -> bool {
+        self.signaled && !self.resolved
+    }
+
+    /// How far price moved in predicted direction as fraction of entry.
+    pub fn excursion(&self) -> f64 {
+        let p = self.entry_price.0;
+        match self.prediction {
+            Direction::Up => (self.extreme - p) / p,
+            Direction::Down => (p - self.extreme) / p,
         }
-    }
-
-    /// True if both sides have resolved (both trailing stops fired).
-    pub fn fully_resolved(&self) -> bool {
-        self.buy_resolved && self.sell_resolved
-    }
-
-    /// Buy side excursion as fraction of entry price.
-    pub fn buy_excursion(&self) -> f64 {
-        (self.buy_extreme - self.entry_price.0) / self.entry_price.0
-    }
-
-    /// Sell side excursion as fraction of entry price.
-    pub fn sell_excursion(&self) -> f64 {
-        (self.entry_price.0 - self.sell_extreme) / self.entry_price.0
     }
 }
 
@@ -115,123 +166,183 @@ mod tests {
         vm.get_vector("test_thought")
     }
 
+    fn make_market_thought() -> Vector {
+        let vm = VectorManager::new(DIMS);
+        vm.get_vector("market_thought")
+    }
+
     #[test]
-    fn test_paper_entry_new() {
+    fn test_paper_entry_new_up() {
         let thought = make_thought();
+        let mt = make_market_thought();
         let distances = Distances::new(0.05, 0.10);
-        let paper = PaperEntry::new(thought, Price(100.0), distances);
+        let paper = PaperEntry::new(thought, mt, Direction::Up, Price(100.0), distances);
 
         assert!((paper.entry_price.0 - 100.0).abs() < 1e-10);
-        assert!((paper.buy_extreme - 100.0).abs() < 1e-10);
-        assert!((paper.sell_extreme - 100.0).abs() < 1e-10);
-        // Buy trail stop below price
-        assert!((paper.buy_trail_stop - 95.0).abs() < 1e-10);
-        // Sell trail stop above price
-        assert!((paper.sell_trail_stop - 105.0).abs() < 1e-10);
-        assert!(!paper.buy_resolved);
-        assert!(!paper.sell_resolved);
+        assert!((paper.extreme - 100.0).abs() < 1e-10);
+        // Stop below entry for Up prediction
+        assert!((paper.stop_level - 90.0).abs() < 1e-10);
+        // Trail starts at entry
+        assert!((paper.trail_level - 100.0).abs() < 1e-10);
+        assert!(!paper.signaled);
+        assert!(!paper.resolved);
+        assert_eq!(paper.prediction, Direction::Up);
     }
 
     #[test]
-    fn test_tick_rising_prices_updates_buy_extreme() {
+    fn test_paper_entry_new_down() {
         let thought = make_thought();
+        let mt = make_market_thought();
         let distances = Distances::new(0.05, 0.10);
-        let mut paper = PaperEntry::new(thought, Price(100.0), distances);
+        let paper = PaperEntry::new(thought, mt, Direction::Down, Price(100.0), distances);
 
-        paper.tick(110.0);
-        assert!((paper.buy_extreme - 110.0).abs() < 1e-10);
-        // Trail stop should ratchet up: 110 - 110*0.05 = 104.5
-        assert!((paper.buy_trail_stop - 104.5).abs() < 1e-10);
-        assert!(!paper.buy_resolved);
+        // Stop above entry for Down prediction
+        assert!((paper.stop_level - 110.0).abs() < 1e-10);
+        // Trail starts at entry
+        assert!((paper.trail_level - 100.0).abs() < 1e-10);
+        assert_eq!(paper.prediction, Direction::Down);
     }
 
     #[test]
-    fn test_tick_buy_stop_fires() {
+    fn test_tick_up_grace_signal() {
         let thought = make_thought();
+        let mt = make_market_thought();
         let distances = Distances::new(0.05, 0.10);
-        let mut paper = PaperEntry::new(thought, Price(100.0), distances);
+        let mut paper = PaperEntry::new(thought, mt, Direction::Up, Price(100.0), distances);
 
-        // Price rises to 110, trail stop at 104.5
+        // Price rises above entry + entry * trail_distance = 105
+        paper.tick(106.0);
+        assert!(paper.signaled); // Grace: market confirmed
+        assert!(!paper.resolved); // Still running
+        assert!(paper.is_runner());
+        assert!((paper.extreme - 106.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_tick_up_violence() {
+        let thought = make_thought();
+        let mt = make_market_thought();
+        let distances = Distances::new(0.05, 0.10);
+        let mut paper = PaperEntry::new(thought, mt, Direction::Up, Price(100.0), distances);
+
+        // Price drops to stop_level (90)
+        paper.tick(89.0);
+        assert!(paper.resolved);
+        assert!(!paper.signaled);
+        assert!(paper.is_violence());
+    }
+
+    #[test]
+    fn test_tick_up_runner_then_resolved() {
+        let thought = make_thought();
+        let mt = make_market_thought();
+        let distances = Distances::new(0.05, 0.10);
+        let mut paper = PaperEntry::new(thought, mt, Direction::Up, Price(100.0), distances);
+
+        // Price rises to 110 → extreme=110, trail_level = 110 - 110*0.05 = 104.5
         paper.tick(110.0);
-        // Price drops to 104 -- below 104.5
+        assert!(paper.signaled); // 110 >= 105 (entry + entry*trail)
+        assert!(!paper.resolved);
+
+        // Price drops to 104 → below trail_level 104.5
         paper.tick(104.0);
-        assert!(paper.buy_resolved);
+        assert!(paper.resolved);
+        assert!(paper.signaled);
+        // Not violence — was signaled before resolution
+        assert!(!paper.is_violence());
     }
 
     #[test]
-    fn test_tick_sell_stop_fires() {
+    fn test_tick_down_grace_signal() {
         let thought = make_thought();
+        let mt = make_market_thought();
         let distances = Distances::new(0.05, 0.10);
-        let mut paper = PaperEntry::new(thought, Price(100.0), distances);
+        let mut paper = PaperEntry::new(thought, mt, Direction::Down, Price(100.0), distances);
 
-        // Price drops to 90, sell trail stop ratchets: 90 + 90*0.05 = 94.5
+        // Price drops below entry - entry * trail_distance = 95
+        paper.tick(94.0);
+        assert!(paper.signaled);
+        assert!(!paper.resolved);
+        assert!(paper.is_runner());
+    }
+
+    #[test]
+    fn test_tick_down_violence() {
+        let thought = make_thought();
+        let mt = make_market_thought();
+        let distances = Distances::new(0.05, 0.10);
+        let mut paper = PaperEntry::new(thought, mt, Direction::Down, Price(100.0), distances);
+
+        // Price rises to stop_level (110)
+        paper.tick(111.0);
+        assert!(paper.resolved);
+        assert!(!paper.signaled);
+        assert!(paper.is_violence());
+    }
+
+    #[test]
+    fn test_tick_down_runner_then_resolved() {
+        let thought = make_thought();
+        let mt = make_market_thought();
+        let distances = Distances::new(0.05, 0.10);
+        let mut paper = PaperEntry::new(thought, mt, Direction::Down, Price(100.0), distances);
+
+        // Price drops to 90 → extreme=90, trail_level = 90 + 90*0.05 = 94.5
         paper.tick(90.0);
-        assert!((paper.sell_extreme - 90.0).abs() < 1e-10);
-        // Price rises to 95 -- above 94.5
+        assert!(paper.signaled); // 90 <= 95 (entry - entry*trail)
+        assert!(!paper.resolved);
+
+        // Price rises to 95 → above trail_level 94.5
         paper.tick(95.0);
-        assert!(paper.sell_resolved);
+        assert!(paper.resolved);
+        assert!(paper.signaled);
     }
 
     #[test]
-    fn test_fully_resolved() {
+    fn test_excursion_up() {
         let thought = make_thought();
-        // Trail=0.20: buy_trail_stop=80, sell_trail_stop=120
+        let mt = make_market_thought();
         let distances = Distances::new(0.20, 0.30);
-        let mut paper = PaperEntry::new(thought, Price(100.0), distances);
+        let mut paper = PaperEntry::new(thought, mt, Direction::Up, Price(100.0), distances);
 
-        assert!(!paper.fully_resolved());
-
-        // Step 1: Trigger sell side first by rising above sell_trail_stop=120
-        paper.tick(125.0);
-        // buy_extreme=125, buy_trail_stop=max(80, 125-25)=100
-        // sell fires because 125 >= 120
-        assert!(paper.sell_resolved);
-        assert!(!paper.buy_resolved);
-        assert!(!paper.fully_resolved());
-
-        // Step 2: Trigger buy side by falling below buy_trail_stop=100
-        paper.tick(99.0);
-        assert!(paper.buy_resolved);
-        assert!(paper.fully_resolved());
-    }
-
-    #[test]
-    fn test_excursions() {
-        let thought = make_thought();
-        // Use large trail so tick doesn't resolve sides immediately
-        let distances = Distances::new(0.20, 0.30);
-        let mut paper = PaperEntry::new(thought, Price(100.0), distances);
-
-        paper.tick(110.0); // buy extreme = 110, sell trail at 100+20=120 > 110, no fire
-        paper.tick(90.0);  // sell extreme = 90, buy trail at max(80, 110-22)=88 < 90, no fire
-
-        assert!((paper.buy_excursion() - 0.10).abs() < 1e-10);
-        assert!((paper.sell_excursion() - 0.10).abs() < 1e-10);
-    }
-
-    #[test]
-    fn test_resolved_side_stops_tracking() {
-        let thought = make_thought();
-        let distances = Distances::new(0.05, 0.10);
-        let mut paper = PaperEntry::new(thought, Price(100.0), distances);
-
-        // Trigger buy side
         paper.tick(110.0);
-        paper.tick(104.0);
-        assert!(paper.buy_resolved);
-
-        let buy_extreme_after = paper.buy_extreme;
-        // Further price movement should not update buy extreme
-        paper.tick(120.0);
-        assert!((paper.buy_extreme - buy_extreme_after).abs() < 1e-10);
+        assert!((paper.excursion() - 0.10).abs() < 1e-10);
     }
 
     #[test]
-    fn test_initial_excursions_zero() {
+    fn test_excursion_down() {
         let thought = make_thought();
+        let mt = make_market_thought();
+        let distances = Distances::new(0.20, 0.30);
+        let mut paper = PaperEntry::new(thought, mt, Direction::Down, Price(100.0), distances);
+
+        paper.tick(90.0);
+        assert!((paper.excursion() - 0.10).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_resolved_stops_tracking() {
+        let thought = make_thought();
+        let mt = make_market_thought();
         let distances = Distances::new(0.05, 0.10);
-        let paper = PaperEntry::new(thought, Price(100.0), distances);
-        assert!((paper.buy_excursion() - 0.0).abs() < 1e-10);
-        assert!((paper.sell_excursion() - 0.0).abs() < 1e-10);
+        let mut paper = PaperEntry::new(thought, mt, Direction::Up, Price(100.0), distances);
+
+        // Violence
+        paper.tick(89.0);
+        assert!(paper.resolved);
+
+        let extreme_after = paper.extreme;
+        // Further ticks should not update
+        paper.tick(120.0);
+        assert!((paper.extreme - extreme_after).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_initial_excursion_zero() {
+        let thought = make_thought();
+        let mt = make_market_thought();
+        let distances = Distances::new(0.05, 0.10);
+        let paper = PaperEntry::new(thought, mt, Direction::Up, Price(100.0), distances);
+        assert!((paper.excursion() - 0.0).abs() < 1e-10);
     }
 }
