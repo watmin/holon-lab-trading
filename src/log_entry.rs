@@ -73,6 +73,8 @@ pub enum LogEntry {
         experience: f64,
         resolved: usize,
         recalib_count: usize,
+        recalib_wins: usize,
+        recalib_total: usize,
         last_prediction: String,
     },
     /// Paper detail — the full story of a resolved paper.

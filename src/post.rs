@@ -138,7 +138,7 @@ impl Post {
             .map(|obs| {
                 let facts = market_lens_facts(&obs.lens, &enriched, &window);
                 let (thought, misses) = obs.incremental.encode(&facts, &ctx.thought_encoder);
-                let result = obs.observe(thought, Vec::new());
+                let result = obs.observe(thought, Vec::new(), enriched.close);
                 (result.thought.clone(), result.prediction, result.edge, misses)
             })
             .collect();

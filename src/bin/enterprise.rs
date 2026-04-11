@@ -296,6 +296,8 @@ fn init_ledger(path: &str) -> Connection {
             experience      REAL,
             resolved        INTEGER,
             recalib_count   INTEGER,
+            recalib_wins    INTEGER,
+            recalib_total   INTEGER,
             last_prediction TEXT,
             PRIMARY KEY (candle, observer_idx)
         );
@@ -777,7 +779,7 @@ fn main() {
                         }
                     };
 
-                    let result = obs.observe(thought, Vec::new());
+                    let result = obs.observe(thought, Vec::new(), candle.close);
 
                     // Snapshot every 100 candles — into the DB
                     if candle_count % 100 == 0 {
@@ -790,6 +792,8 @@ fn main() {
                             experience: obs.experience(),
                             resolved: obs.resolved,
                             recalib_count: obs.reckoner.recalib_count(),
+                            recalib_wins: obs.recalib_wins,
+                            recalib_total: obs.recalib_total,
                             last_prediction: format!("{:?}", obs.last_prediction),
                         });
                     }

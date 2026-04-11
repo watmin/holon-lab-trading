@@ -32,8 +32,12 @@ pub struct MarketObserver {
     pub recalib_total: usize,
     /// Recalib count at last engram check.
     pub last_recalib_count: usize,
-    /// Set by observe_candle, read by resolve.
+    /// Set by observe_candle, read by resolve and self-grading.
     pub last_prediction: Direction,
+    /// The thought from the PREVIOUS candle — for self-grading.
+    pub prev_thought: Option<Vector>,
+    /// The previous candle's close — for computing direction.
+    pub prev_close: Option<f64>,
     /// Incremental bundling — optimization cache, not cognition.
     /// Maintains sums across candles to avoid re-summing unchanged facts.
     pub incremental: IncrementalBundle,
@@ -77,21 +81,46 @@ impl MarketObserver {
             recalib_total: 0,
             last_recalib_count: 0,
             last_prediction: Direction::Down, // arbitrary initial
+            prev_thought: None,
+            prev_close: None,
             incremental: IncrementalBundle::new(dims),
         }
     }
 
-    /// Encode, update noise, strip noise, predict direction.
-    /// The `thought` parameter is the already-encoded thought vector.
-    /// Returns ObserveResult with cleaned thought, prediction, edge, and misses.
+    /// Observe a new candle. Self-grade the PREVIOUS prediction, then predict.
+    /// The observer is its own teacher. The market is the judge.
+    ///
+    /// current_close: the close price of THIS candle (for grading the previous prediction)
     pub fn observe(
         &mut self,
         thought: Vector,
         misses: Vec<(ThoughtAST, Vector)>,
+        current_close: f64,
     ) -> ObserveResult {
-        // Feed raw thought to reckoner — no noise stripping.
-        // The reckoner's own discriminant IS the noise filter.
-        // The noise subspace still updates (diagnostic) but doesn't gate prediction.
+        // Self-grading: did the PREVIOUS prediction match what the market did?
+        // The reward is the price movement weighted by magnitude.
+        if let (Some(prev_thought), Some(prev_close)) = (&self.prev_thought, self.prev_close) {
+            let price_change = (current_close - prev_close) / prev_close;
+            let actual_direction = if price_change >= 0.0 { Direction::Up } else { Direction::Down };
+            let label = match actual_direction {
+                Direction::Up => holon::memory::Label::from_index(0),
+                Direction::Down => holon::memory::Label::from_index(1),
+            };
+            // Weight = magnitude of the move. Big moves teach hard. Tiny moves barely register.
+            let weight = price_change.abs();
+            if weight > 1e-10 {
+                self.reckoner.observe(prev_thought, label, weight);
+                // Track accuracy for the engram gate
+                let correct = self.last_prediction == actual_direction;
+                let pred_check = self.reckoner.predict(prev_thought);
+                self.reckoner.resolve(pred_check.conviction, correct);
+                self.resolved += 1;
+                if correct { self.recalib_wins += 1; }
+                self.recalib_total += 1;
+            }
+        }
+
+        // Noise subspace updates (diagnostic) but doesn't gate prediction
         let thought_f64 = to_f64(&thought);
         self.noise_subspace.update(&thought_f64);
 
@@ -110,6 +139,10 @@ impl MarketObserver {
                 Direction::Down
             };
         }
+
+        // Save thought + close for next candle's self-grading
+        self.prev_thought = Some(thought.clone());
+        self.prev_close = Some(current_close);
 
         ObserveResult {
             thought,
@@ -212,7 +245,7 @@ mod tests {
     fn test_observe_returns_result() {
         let mut obs = make_observer();
         let thought = random_vector("test_thought");
-        let result = obs.observe(thought, Vec::new());
+        let result = obs.observe(thought, Vec::new(), 100.0);
         assert_eq!(result.thought.dimensions(), DIMS);
         assert!(result.misses.is_empty());
     }
@@ -244,7 +277,7 @@ mod tests {
     fn test_observe_sets_last_prediction() {
         let mut obs = make_observer();
         let thought = random_vector("pred_thought");
-        let _ = obs.observe(thought, Vec::new());
+        let _ = obs.observe(thought, Vec::new(), 100.0);
         // last_prediction should have been set (to Up or Down based on reckoner)
         assert!(obs.last_prediction == Direction::Up || obs.last_prediction == Direction::Down);
     }

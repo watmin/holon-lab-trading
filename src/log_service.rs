@@ -75,8 +75,8 @@ impl LogService {
 
             let mut obs_stmt = conn
                 .prepare_cached(
-                    "INSERT OR REPLACE INTO observer_snapshots (candle, observer_idx, lens, disc_strength, conviction, experience, resolved, recalib_count, last_prediction)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                    "INSERT OR REPLACE INTO observer_snapshots (candle, observer_idx, lens, disc_strength, conviction, experience, resolved, recalib_count, recalib_wins, recalib_total, last_prediction)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
                 )
                 .expect("failed to prepare observer snapshot insert");
 
@@ -256,11 +256,12 @@ fn write_entry(
         }
         LogEntry::ObserverSnapshot { candle, observer_idx, lens, disc_strength,
                                      conviction, experience, resolved, recalib_count,
-                                     last_prediction } => {
+                                     recalib_wins, recalib_total, last_prediction } => {
             obs_stmt.execute(params![
                 *candle as i64, *observer_idx as i64, lens,
                 disc_strength, conviction, experience,
-                *resolved as i64, *recalib_count as i64, last_prediction
+                *resolved as i64, *recalib_count as i64,
+                *recalib_wins as i64, *recalib_total as i64, last_prediction
             ]).ok();
         }
         LogEntry::BrokerSnapshot { candle, broker_slot_idx, edge, grace_count,
