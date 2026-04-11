@@ -107,6 +107,8 @@ impl ThoughtEncoder {
     }
 
     /// Pre-allocate an atom vector. Idempotent.
+    /// (Test-only — production uses get_atom's lazy fallback.)
+    #[cfg(test)]
     pub fn register_atom(&mut self, name: &str) {
         if !self.atoms.contains_key(name) {
             let v = self.vm.get_vector(name);

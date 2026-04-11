@@ -37,6 +37,8 @@ pub struct Levels {
 }
 
 impl Levels {
+    /// Named constructor. (Test-only — production uses Distances::to_levels.)
+    #[cfg(test)]
     pub fn new(trail_stop: f64, safety_stop: f64) -> Self {
         Self {
             trail_stop,

@@ -55,7 +55,8 @@ impl Treasury {
         *self.available.get(asset).unwrap_or(&0.0)
     }
 
-    /// Deposit: add to available.
+    /// Deposit: add to available. (Test-only — production uses fund_proposals.)
+    #[cfg(test)]
     pub fn deposit(&mut self, asset: &str, amount: f64) {
         let current = self.available_capital(asset);
         self.available.insert(asset.to_string(), current + amount);

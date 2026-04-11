@@ -7,6 +7,8 @@
 pub struct TradeId(pub usize);
 
 impl TradeId {
+    /// Named constructor. (Test-only — production uses TradeId(n) directly.)
+    #[cfg(test)]
     pub fn new(id: usize) -> Self {
         Self(id)
     }
