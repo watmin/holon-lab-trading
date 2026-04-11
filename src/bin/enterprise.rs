@@ -913,10 +913,12 @@ fn main() {
         {
             let mut current_prices = std::collections::HashMap::new();
             for p in &ent.posts {
-                current_prices.insert(
-                    (p.source_asset.name.clone(), p.target_asset.name.clone()),
-                    p.last_close(),
-                );
+                if let Some(c) = p.candle_window.back() {
+                    current_prices.insert(
+                        (p.source_asset.name.clone(), p.target_asset.name.clone()),
+                        c.close,
+                    );
+                }
             }
             let (settlements, settle_logs) = ent.treasury.settle_triggered(&current_prices);
             for entry in settle_logs { log_handle.log(entry); }
