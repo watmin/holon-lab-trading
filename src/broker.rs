@@ -139,16 +139,21 @@ impl Broker {
     }
 
     /// Noise update -> strip noise -> predict Grace/Violence.
+    /// Updates cached_edge from the curve at THIS conviction.
     pub fn propose(&mut self, composed: &Vector) -> holon::memory::Prediction {
         let composed_f64 = to_f64(composed);
         self.noise_subspace.update(&composed_f64);
         let anomalous = self.noise_subspace.anomalous_component(&composed_f64);
         let clean = Vector::from_f64(&anomalous);
-        self.reckoner.predict(&clean)
+        let pred = self.reckoner.predict(&clean);
+        // Edge = accuracy at THIS conviction. The curve says how good this
+        // conviction level is historically. Updated every propose, not just propagate.
+        self.cached_edge = self.reckoner.accuracy_at(pred.conviction).unwrap_or(0.0);
+        pred
     }
 
-    /// How much edge? Returns the cached value, updated in propagate().
-    /// 0.0 = no edge. The treasury funds proportionally.
+    /// How much edge? Accuracy at the conviction of the last proposal.
+    /// 0.0 = curve not valid or no conviction. The treasury funds proportionally.
     pub fn edge(&self) -> f64 {
         self.cached_edge
     }
@@ -296,11 +301,8 @@ impl Broker {
             self.scalar_accums[1].observe(optimal.stop, outcome, weight, scalar_encoder);
         }
 
-        // 5. Update cached edge — reckoner just learned, curve may have changed
-        {
-            let edge_pred = self.reckoner.predict(&Vector::zeros(self.reckoner.dims()));
-            self.cached_edge = self.reckoner.accuracy_at(edge_pred.conviction).unwrap_or(0.0);
-        }
+        // 5. Edge updated in propose(), not here. The curve may have changed
+        // from this propagation, but the next propose() will pick it up.
 
         // 6. Engram gate
         if correct {
