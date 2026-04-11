@@ -7202,4 +7202,105 @@ moves from sender to receiver. One owner at a time. Always.
 
 30+ threads. Zero Mutex. The channels are the architecture.
 
+### The fixed point
+
+The ignorant walked the Rust. All of it. Leaves to root. 44 files.
+Then the ignorant walked the wat. All of it. Same order. Compared
+every struct, every function, every constant, every threshold.
+
+Seven passes.
+
+```
+Pass 1: 16 divergences
+Pass 2:  7
+Pass 3:  1
+Pass 4:  3
+Pass 5:  2
+Pass 6:  1
+Pass 7:  1
+```
+
+The last finding: `simulation.rs` uses a sequential loop where the
+wat says `pmap`. A dropped annotation in a pure function. Taste,
+not lies. One divergence across 44 file pairs and 17 vocabulary
+modules. The proof curve converged.
+
+The Rust and the wat are at parity. The wat was backported from
+the Rust — the flow reversed. The Rust led. The wat followed. The
+ignorant proved it. Six passes to get there. The seventh to confirm.
+
+The guide remains stale. That's the next layer. But the foundation
+holds. The Rust thinks. The wat specifies. The ignorant verifies.
+The loop is the architecture.
+
+### [The Other Side](https://www.youtube.com/watch?v=2Ieu6WeUAS8)
+
+From Memphis May Fire:
+
+> *God only knows all the hell you've been through*\
+> *And who could understand? No one's been in your shoes*\
+> *It's always too much, or it's never enough*\
+> *There's nowhere to run when you wanna give up*
+
+> *Pain will be your guide to peace that you can't find*\
+> *It's always darkest just before the light*\
+> *If you can see the other side*
+
+> *Hands held to the sky, waiting for a sign*\
+> *Find a reason why on the other side*\
+> *Time and space collide, nowhere left to hide*\
+> *Must be more to life on the other side*
+
+The other side of the discriminant. The other side of the grid
+falling from 167ms to 1.3ms. The other side of 16 divergences
+converging to 1. The other side of the depression, the blank
+stares, the nine years, the rejected pitches.
+
+"Pain will be your guide to peace that you can't find." The 315×
+slowdown was the pain. The brute-force KNN was the suffering. The
+measurement — the database as debugger, the timing per step, the
+bucket sweep — was the guide. The bucketed accumulators were the
+peace. Not found by avoiding the pain. Found THROUGH it. The data
+showed the way. The experiment proved it. The designers debated.
+One reversed. The measurement decided.
+
+"It's always darkest just before the light." 11 candles per second
+at candle 2000. The grid consuming 92% of every candle. The system
+grinding to a halt as it got smarter — the reckoner's own success
+was killing it. More observations, more cosines, more time. The
+darkest moment: the machine that learns gets slower as it learns.
+The opposite of what the architecture promises.
+
+Then the light: K=10 bucketed accumulators. Breathing range. The
+query is constant. The learning doesn't slow. The machine gets
+smarter without getting slower. 123 candles per second at candle
+2000. Flat. The other side.
+
+"Time and space collide, nowhere left to hide." Seven passes of
+the ignorant. Each one finding what the prior missed. RSI threshold
+in the wrong scale. A dropped parallel annotation. The ignorant
+doesn't hide and doesn't let you hide. It reads everything. It
+knows nothing. It finds what the expert can't see because the expert
+stops looking where the expert thinks the answer is.
+
+"Must be more to life on the other side." The grid was the problem.
+The CSP was the answer. The pipes were the mechanism. Zero Mutex was
+the proof. The other side isn't a destination — it's the measurement
+confirming the architecture works. 30+ threads. Channels only. The
+borrow checker is the static proof. The pipes are the dynamic proof.
+The conviction curve of the code itself.
+
+"Say, you've hit rock bottom? Yeah, I've been there, too." The
+builder has been at 11/s. At 3/s (the log service backlog). At
+days without running the machine because the architecture was being
+rebuilt. At zero Rust while the wat was being forged. Rock bottom
+is where the coordinates live. You can't find the bucketed
+accumulators from the top. You find them from the bottom — from
+the measurement that says "this is broken" and the refusal to
+accept "this is how it is."
+
+"If you can see the other side." The machine sees it. 123/s. Flat.
+Zero Mutex. The wat at parity. The ignorant at one finding. The
+proof curve converged. The other side is here.
+
 *Perseverare.*
