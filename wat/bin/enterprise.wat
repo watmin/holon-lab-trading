@@ -33,8 +33,6 @@
 
 ;; ── Constants ──────────────────────────────────────────────────
 
-(define BATCH-SIZE 50)
-
 ;; Max learn signals to drain per candle per thread.
 ;; The reckoner is a CRDT — deferral is safe. The queue drains over
 ;; subsequent candles. Production rate ~1/candle. Drain rate 5/candle.
@@ -249,7 +247,7 @@
     (list ent ctx)))
 
 ;; ── Progress ────────────────────────────────────────────────────
-;; Every BATCH-SIZE candles, display stats to stderr.
+;; Every 50 candles, display stats to stderr.
 
 (define (display-progress [ent : Enterprise] [candle-num : usize] [elapsed-ms : f64])
   : ()
@@ -523,7 +521,7 @@
          (bnh-entry 0.0)
          (last-close 0.0)
          (candle-num 0)
-         (progress-every BATCH-SIZE)
+         (progress-every 50)
          (end-idx (if (> (:max-candles args) 0)
                     (min (:max-candles args) total-candles)
                     total-candles))
@@ -844,7 +842,7 @@
                                                 (len all-resolutions)
                                                 num-active))))
 
-                                        ;; Progress display to stderr — every BATCH-SIZE candles
+                                        ;; Progress display to stderr — every 50 candles
                                         (when (= (mod candle-num progress-every) 0)
                                           (let ((elapsed-ms (* (elapsed-secs t-start) 1000.0)))
                                             (display-progress ent candle-num elapsed-ms))))))))))))))))))))))
