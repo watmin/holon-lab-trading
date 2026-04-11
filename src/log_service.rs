@@ -73,6 +73,20 @@ impl LogService {
                 )
                 .expect("failed to prepare diagnostics insert");
 
+            let mut obs_stmt = conn
+                .prepare_cached(
+                    "INSERT OR REPLACE INTO observer_snapshots (candle, observer_idx, lens, disc_strength, conviction, experience, resolved, recalib_count, last_prediction)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                )
+                .expect("failed to prepare observer snapshot insert");
+
+            let mut brk_stmt = conn
+                .prepare_cached(
+                    "INSERT OR REPLACE INTO broker_snapshots (candle, broker_slot_idx, edge, grace_count, violence_count, paper_count, trail_experience, stop_experience)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                )
+                .expect("failed to prepare broker snapshot insert");
+
             loop {
                 let mut did_work = false;
                 let mut batch_count = 0;
@@ -86,7 +100,7 @@ impl LogService {
                     loop {
                         match drains[i].try_recv() {
                             Ok(entry) => {
-                                write_entry(&mut log_stmt, &mut diag_stmt, &entry);
+                                write_entry(&mut log_stmt, &mut diag_stmt, &mut obs_stmt, &mut brk_stmt, &entry);
                                 rows_clone.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                                 did_work = true;
                                 batch_count += 1;
@@ -113,7 +127,7 @@ impl LogService {
                     let mut final_count = 0;
                     for drain in &drains {
                         while let Ok(entry) = drain.try_recv() {
-                            write_entry(&mut log_stmt, &mut diag_stmt, &entry);
+                            write_entry(&mut log_stmt, &mut diag_stmt, &mut obs_stmt, &mut brk_stmt, &entry);
                             rows_clone.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                             final_count += 1;
                             if final_count % BATCH_SIZE == 0 {
@@ -161,6 +175,8 @@ impl LogService {
 fn write_entry(
     log_stmt: &mut rusqlite::CachedStatement,
     diag_stmt: &mut rusqlite::CachedStatement,
+    obs_stmt: &mut rusqlite::CachedStatement,
+    brk_stmt: &mut rusqlite::CachedStatement,
     entry: &LogEntry,
 ) {
     match entry {
@@ -228,6 +244,24 @@ fn write_entry(
                 *us_grid as i64, *us_brokers as i64, *us_propagate as i64,
                 *us_triggers as i64, *us_fund as i64, *us_total as i64,
                 *num_settlements as i64, *num_resolutions as i64, *num_active_trades as i64
+            ]).ok();
+        }
+        LogEntry::ObserverSnapshot { candle, observer_idx, lens, disc_strength,
+                                     conviction, experience, resolved, recalib_count,
+                                     last_prediction } => {
+            obs_stmt.execute(params![
+                *candle as i64, *observer_idx as i64, lens,
+                disc_strength, conviction, experience,
+                *resolved as i64, *recalib_count as i64, last_prediction
+            ]).ok();
+        }
+        LogEntry::BrokerSnapshot { candle, broker_slot_idx, edge, grace_count,
+                                   violence_count, paper_count, trail_experience,
+                                   stop_experience } => {
+            brk_stmt.execute(params![
+                *candle as i64, *broker_slot_idx as i64, edge,
+                *grace_count as i64, *violence_count as i64, *paper_count as i64,
+                trail_experience, stop_experience
             ]).ok();
         }
     }

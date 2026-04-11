@@ -63,6 +63,29 @@ pub enum LogEntry {
         num_resolutions: usize,
         num_active_trades: usize,
     },
+    /// Observer snapshot — emitted by observer threads every N candles.
+    ObserverSnapshot {
+        candle: usize,
+        observer_idx: usize,
+        lens: String,
+        disc_strength: f64,
+        conviction: f64,
+        experience: f64,
+        resolved: usize,
+        recalib_count: usize,
+        last_prediction: String,
+    },
+    /// Broker snapshot — emitted by broker threads every N candles.
+    BrokerSnapshot {
+        candle: usize,
+        broker_slot_idx: usize,
+        edge: f64,
+        grace_count: usize,
+        violence_count: usize,
+        paper_count: usize,
+        trail_experience: f64,
+        stop_experience: f64,
+    },
 }
 
 #[cfg(test)]

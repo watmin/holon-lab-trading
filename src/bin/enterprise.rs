@@ -286,6 +286,31 @@ fn init_ledger(path: &str) -> Connection {
             num_settlements  INTEGER,
             num_resolutions  INTEGER,
             num_active_trades INTEGER
+        );
+
+        CREATE TABLE IF NOT EXISTS observer_snapshots (
+            candle          INTEGER,
+            observer_idx    INTEGER,
+            lens            TEXT,
+            disc_strength   REAL,
+            conviction      REAL,
+            experience      REAL,
+            resolved        INTEGER,
+            recalib_count   INTEGER,
+            last_prediction TEXT,
+            PRIMARY KEY (candle, observer_idx)
+        );
+
+        CREATE TABLE IF NOT EXISTS broker_snapshots (
+            candle            INTEGER,
+            broker_slot_idx   INTEGER,
+            edge              REAL,
+            grace_count       INTEGER,
+            violence_count    INTEGER,
+            paper_count       INTEGER,
+            trail_experience  REAL,
+            stop_experience   REAL,
+            PRIMARY KEY (candle, broker_slot_idx)
         );",
     )
     .expect("failed to create ledger tables");
@@ -617,7 +642,9 @@ fn main() {
 
     // Log service — the DB writer as a pipe.
     // One handle for the main thread. The log service owns the SQLite connection.
-    let (log_service, mut log_handles) = enterprise::log_service::LogService::spawn(1, ledger);
+    // 1 main + N observers + N*M brokers = 1 + 6 + 24 = 31 handles
+    let n_log_handles = 1 + MARKET_LENSES.len() + MARKET_LENSES.len() * EXIT_LENSES.len();
+    let (log_service, mut log_handles) = enterprise::log_service::LogService::spawn(n_log_handles, ledger);
     let log_handle = log_handles.pop().unwrap();
 
     eprintln!("\n  Walk-forward: up to {} candles...", end_idx);
@@ -690,12 +717,16 @@ fn main() {
             let mut obs = std::mem::replace(&mut observers[i], MarketObserver::new(
                 MarketLens::Momentum, 10, 500, WindowSampler::new(0, 12, 2016)));
             let ctx_ref = Arc::clone(&ctx_arc);
-            let enc_handle = obs_encoder_handles.pop().unwrap(); // each observer gets their own
+            let enc_handle = obs_encoder_handles.pop().unwrap();
+            let obs_log = log_handles.pop().unwrap();
             let lens = obs.lens;
+            let obs_idx = i;
             let recalib = args.recalib_interval;
 
             let handle = std::thread::spawn(move || {
+                let mut candle_count = 0usize;
                 while let Ok((candle, window, _encode_count)) = obs_rx.recv() {
+                    candle_count += 1;
                     // Drain at most MAX_DRAIN learn signals per candle.
                     // The learning is eventually consistent — the CRDT converges.
                     // The queue drains over subsequent candles.
@@ -727,6 +758,22 @@ fn main() {
                     };
 
                     let result = obs.observe(thought, Vec::new());
+
+                    // Snapshot every 100 candles — into the DB
+                    if candle_count % 100 == 0 {
+                        obs_log.log(LogEntry::ObserverSnapshot {
+                            candle: candle_count,
+                            observer_idx: obs_idx,
+                            lens: format!("{}", lens),
+                            disc_strength: obs.reckoner.last_disc_strength(),
+                            conviction: result.prediction.conviction,
+                            experience: obs.experience(),
+                            resolved: obs.resolved,
+                            recalib_count: obs.reckoner.recalib_count(),
+                            last_prediction: format!("{:?}", obs.last_prediction),
+                        });
+                    }
+
                     let _ = thought_tx.send((result.thought, result.prediction, result.edge, vec![]));
                 }
                 obs
@@ -756,11 +803,15 @@ fn main() {
                 vec![], 0, 0, 10, 500, vec![]));
             let src = source_asset.clone();
             let tgt = target_asset.clone();
-            let post_idx_for_broker = all_pipes.len(); // current post index
+            let post_idx_for_broker = all_pipes.len();
             let recalib = args.recalib_interval;
+            let brk_log = log_handles.pop().unwrap();
+            let brk_slot = slot_idx;
 
             let handle = std::thread::spawn(move || {
+                let mut candle_count = 0usize;
                 while let Ok((composed, dists, price, side, edge, pred)) = in_rx.recv() {
+                    candle_count += 1;
                     // Drain at most MAX_DRAIN learn signals per candle.
                     // The reckoner is a CRDT. Deferral is safe. The queue drains
                     // over subsequent candles. Constant time per candle.
@@ -780,6 +831,21 @@ fn main() {
                     broker.propose(&composed);
                     broker.register_paper(composed.clone(), price, dists);
                     let resolutions = broker.tick_papers(price);
+
+                    // Snapshot every 100 candles — into the DB
+                    if candle_count % 100 == 0 {
+                        brk_log.log(LogEntry::BrokerSnapshot {
+                            candle: candle_count,
+                            broker_slot_idx: brk_slot,
+                            edge: broker.edge(),
+                            grace_count: broker.trade_count,
+                            violence_count: broker.trade_count - (broker.cumulative_grace > broker.cumulative_violence) as usize,
+                            paper_count: broker.papers.len(),
+                            trail_experience: broker.scalar_accums.get(0).map_or(0.0, |a| a.count as f64),
+                            stop_experience: broker.scalar_accums.get(1).map_or(0.0, |a| a.count as f64),
+                        });
+                    }
+
                     let prop = enterprise::proposal::Proposal::new(
                         composed, dists, edge, side, src.clone(), tgt.clone(),
                         pred, post_idx_for_broker, broker.slot_idx);
