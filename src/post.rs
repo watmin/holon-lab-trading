@@ -126,15 +126,16 @@ impl Post {
 
         // Collect lens-specific facts BEFORE mutably borrowing observers
         let window: Vec<Candle> = self.candle_window.iter().cloned().collect();
-        // pmap: each observer does everything — facts, encode, observe.
+        // pmap: each observer does everything — facts, incremental encode, observe.
         // Each observer is independent. ctx is shared immutable.
+        // Incremental bundling: each observer maintains sums across candles.
+        // Only changed facts get encoded + patched into sums. Bit-identical to full bundle.
         let market_results: Vec<_> = self
             .market_observers
             .par_iter_mut()
             .map(|obs| {
                 let facts = market_lens_facts(&obs.lens, &enriched, &window);
-                let bundle_ast = ThoughtAST::Bundle(facts);
-                let (thought, misses) = ctx.thought_encoder.encode(&bundle_ast);
+                let (thought, misses) = obs.incremental.encode(&facts, &ctx.thought_encoder);
                 let result = obs.observe(thought, Vec::new());
                 (result.thought.clone(), result.prediction, result.edge, misses)
             })
@@ -145,6 +146,22 @@ impl Post {
             market_predictions.push(prediction);
             market_edges.push(edge);
             all_misses.extend(misses);
+        }
+
+        // Pre-encode exit facts per exit observer (M, not N×M).
+        // Each exit observer's incremental bundle maintains sums across candles.
+        // The exit_vecs are then shared across all N market observers.
+        let exit_results: Vec<_> = self
+            .exit_observers
+            .par_iter_mut()
+            .map(|eobs| {
+                let exit_fact_asts = exit_lens_facts(&eobs.lens, &enriched);
+                eobs.incremental.encode(&exit_fact_asts, &ctx.thought_encoder)
+            })
+            .collect();
+        let exit_vecs: Vec<Vector> = exit_results.iter().map(|(v, _)| v.clone()).collect();
+        for (_, exit_misses) in &exit_results {
+            all_misses.extend(exit_misses.iter().cloned());
         }
 
         // N market x M exit -> N*M proposals
@@ -164,16 +181,11 @@ impl Post {
                 let ei = slot_idx % m;
                 let market_thought = &market_thoughts[mi];
 
-                // Exit: encode facts via lens
-                let exit_lens = exit_observers[ei].lens;
-                let exit_fact_asts = exit_lens_facts(&exit_lens, &enriched);
-
-                // Bundle exit facts and encode
-                let exit_bundle = ThoughtAST::Bundle(exit_fact_asts);
-                let (exit_vec, exit_misses) = ctx.thought_encoder.encode(&exit_bundle);
+                // Exit vec already encoded above (incremental per exit observer)
+                let exit_vec = &exit_vecs[ei];
 
                 // Compose market thought with exit facts
-                let composed = Primitives::bundle(&[market_thought, &exit_vec]);
+                let composed = Primitives::bundle(&[market_thought, exit_vec]);
 
                 // Exit: recommend distances
                 let (dists, _exit_exp) = exit_observers[ei].recommended_distances(
@@ -188,19 +200,14 @@ impl Post {
                 let enterprise_pred = holon_prediction_to_enterprise(&market_predictions[mi]);
 
                 // Return values — no mutation
-                (slot_idx, composed, dists, side_val, edge_val, enterprise_pred, exit_misses)
+                (slot_idx, composed, dists, side_val, edge_val, enterprise_pred)
             })
             .collect();
-
-        // Collect misses (sequential — cheap, just extending a vec)
-        for &(_, _, _, _, _, _, ref exit_misses) in &grid_values {
-            all_misses.extend(exit_misses.iter().cloned());
-        }
 
         // Build proposals (pure — struct construction, no mutation)
         let proposals: Vec<_> = grid_values
             .iter()
-            .map(|(slot_idx, composed, dists, side_val, edge_val, enterprise_pred, _)| {
+            .map(|(slot_idx, composed, dists, side_val, edge_val, enterprise_pred)| {
                 Proposal::new(
                     composed.clone(),
                     *dists,
@@ -220,7 +227,7 @@ impl Post {
         self.registry
             .par_iter_mut()
             .zip(grid_values.into_par_iter())
-            .for_each(|(broker, (_, composed, dists, _, _, _, _))| {
+            .for_each(|(broker, (_, composed, dists, _, _, _))| {
                 broker.propose(&composed);
                 broker.register_paper(composed, price, dists);
             });

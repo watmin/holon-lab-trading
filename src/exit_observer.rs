@@ -10,6 +10,7 @@ use holon::memory::{ReckConfig, Reckoner};
 use crate::distances::Distances;
 use crate::enums::ExitLens;
 use crate::scalar_accumulator::ScalarAccumulator;
+use crate::thought_encoder::IncrementalBundle;
 
 /// Estimates exit distances through a specific judgment lens.
 pub struct ExitObserver {
@@ -21,6 +22,8 @@ pub struct ExitObserver {
     pub stop_reckoner: Reckoner,
     /// The crutches (both), returned when empty.
     pub default_distances: Distances,
+    /// Incremental bundling for exit facts — optimization cache, not cognition.
+    pub incremental: IncrementalBundle,
 }
 
 impl ExitObserver {
@@ -47,6 +50,7 @@ impl ExitObserver {
                 ReckConfig::Continuous(default_stop),
             ),
             default_distances: Distances::new(default_trail, default_stop),
+            incremental: IncrementalBundle::new(dims),
         }
     }
 

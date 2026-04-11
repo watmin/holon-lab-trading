@@ -54,6 +54,8 @@ impl LogService {
         let handle = thread::spawn(move || {
             let n = drains.len();
             let mut closed = vec![false; n];
+            const BATCH_SIZE: usize = 100;
+
             // WAL mode — readers don't block on writers. The DB is always queryable.
             conn.execute_batch("PRAGMA journal_mode=WAL;").ok();
 
@@ -66,16 +68,19 @@ impl LogService {
 
             let mut diag_stmt = conn
                 .prepare_cached(
-                    "INSERT OR REPLACE INTO diagnostics (candle, throughput, cache_hits, cache_misses, cache_hit_pct, cache_size, equity)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                    "INSERT OR REPLACE INTO diagnostics (candle, throughput, cache_hits, cache_misses, cache_hit_pct, cache_size, equity, us_settle, us_tick, us_observers, us_grid, us_brokers, us_propagate, us_triggers, us_fund, us_total, num_settlements, num_resolutions, num_active_trades)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
                 )
                 .expect("failed to prepare diagnostics insert");
 
-
             loop {
                 let mut did_work = false;
+                let mut batch_count = 0;
 
-                // Drain all pipes. Write what we find. One pass.
+                // BEGIN a batch transaction. One sync per batch, not per row.
+                conn.execute_batch("BEGIN").ok();
+
+                // Drain all pipes. Write what we find. Commit every BATCH_SIZE rows.
                 for i in 0..n {
                     if closed[i] { continue; }
                     loop {
@@ -84,6 +89,11 @@ impl LogService {
                                 write_entry(&mut log_stmt, &mut diag_stmt, &entry);
                                 rows_clone.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                                 did_work = true;
+                                batch_count += 1;
+                                if batch_count >= BATCH_SIZE {
+                                    conn.execute_batch("COMMIT; BEGIN").ok();
+                                    batch_count = 0;
+                                }
                             }
                             Err(TryRecvError::Empty) => break,
                             Err(TryRecvError::Disconnected) => {
@@ -94,8 +104,26 @@ impl LogService {
                     }
                 }
 
-                // Shutdown: all pipes closed
-                if closed.iter().all(|&c| c) { break; }
+                // Commit whatever remains in the batch
+                conn.execute_batch("COMMIT").ok();
+
+                // Shutdown: all pipes closed — drain remaining buffered entries
+                if closed.iter().all(|&c| c) {
+                    conn.execute_batch("BEGIN").ok();
+                    let mut final_count = 0;
+                    for drain in &drains {
+                        while let Ok(entry) = drain.try_recv() {
+                            write_entry(&mut log_stmt, &mut diag_stmt, &entry);
+                            rows_clone.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                            final_count += 1;
+                            if final_count % BATCH_SIZE == 0 {
+                                conn.execute_batch("COMMIT; BEGIN").ok();
+                            }
+                        }
+                    }
+                    conn.execute_batch("COMMIT").ok();
+                    break;
+                }
 
                 // Block until ANY log pipe has data. Zero CPU when idle.
                 if !did_work {
@@ -186,13 +214,20 @@ fn write_entry(
                 None::<i64>, None::<String>, *observers_updated as i64
             ]).ok();
         }
-        LogEntry::Diagnostic { candle, throughput, cache_hits, cache_misses, cache_size, equity } => {
+        LogEntry::Diagnostic { candle, throughput, cache_hits, cache_misses, cache_size, equity,
+                              us_settle, us_tick, us_observers, us_grid, us_brokers,
+                              us_propagate, us_triggers, us_fund, us_total,
+                              num_settlements, num_resolutions, num_active_trades } => {
             let hit_pct = if *cache_hits + *cache_misses > 0 {
                 100.0 * *cache_hits as f64 / (*cache_hits + *cache_misses) as f64
             } else { 0.0 };
             diag_stmt.execute(params![
                 *candle as i64, throughput, *cache_hits as i64,
-                *cache_misses as i64, hit_pct, *cache_size as i64, equity
+                *cache_misses as i64, hit_pct, *cache_size as i64, equity,
+                *us_settle as i64, *us_tick as i64, *us_observers as i64,
+                *us_grid as i64, *us_brokers as i64, *us_propagate as i64,
+                *us_triggers as i64, *us_fund as i64, *us_total as i64,
+                *num_settlements as i64, *num_resolutions as i64, *num_active_trades as i64
             ]).ok();
         }
     }

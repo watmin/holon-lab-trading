@@ -214,6 +214,129 @@ impl ThoughtEncoder {
     }
 }
 
+/// Incremental bundling — maintains sums across candles.
+/// Optimization, not cognition. Can be reconstructed from one full encode.
+///
+/// The algebra: bundle = threshold(Σ vectors). If fact k changes from old to new,
+/// sums_new = sums - old + new. threshold(sums_new) == bundle(all current facts).
+/// Proven bit-identical. Integer addition is commutative and associative.
+///
+/// Invariant: round_to at vocab emission is load-bearing for the AST diff.
+/// Quantized floats compare reliably. Remove round_to and this degrades to
+/// full recompute (correct, but no savings).
+pub struct IncrementalBundle {
+    /// Running element-wise sums (i32). threshold(sums) == bundle(all facts).
+    sums: Vec<i32>,
+    /// Previous candle's facts: AST → its evaluated vector.
+    last_facts: HashMap<ThoughtAST, Vector>,
+    /// Dimensions.
+    dims: usize,
+    /// Whether we've done at least one full encode.
+    initialized: bool,
+}
+
+impl IncrementalBundle {
+    pub fn new(dims: usize) -> Self {
+        Self {
+            sums: vec![0i32; dims],
+            last_facts: HashMap::new(),
+            dims,
+            initialized: false,
+        }
+    }
+
+    /// Encode facts incrementally. Returns (thought_vector, cache_misses).
+    ///
+    /// First candle: full encode, populate sums and last_facts.
+    /// Subsequent candles: diff against last_facts, patch sums, threshold.
+    ///
+    /// Uses the ThoughtEncoder to evaluate individual changed facts (benefiting
+    /// from the composition cache). The sums buffer avoids re-summing unchanged facts.
+    pub fn encode(
+        &mut self,
+        new_facts: &[ThoughtAST],
+        encoder: &ThoughtEncoder,
+    ) -> (Vector, Vec<(ThoughtAST, Vector)>) {
+        if !self.initialized {
+            return self.full_encode(new_facts, encoder);
+        }
+
+        let mut all_misses = Vec::new();
+        let mut new_last_facts = HashMap::with_capacity(new_facts.len());
+
+        // Build set of new facts for O(1) lookup
+        let new_set: std::collections::HashSet<&ThoughtAST> = new_facts.iter().collect();
+
+        // REMOVED: in last_facts but not in new_facts — subtract from sums
+        for (old_ast, old_vec) in &self.last_facts {
+            if !new_set.contains(old_ast) {
+                for (s, &val) in self.sums.iter_mut().zip(old_vec.data()) {
+                    *s -= val as i32;
+                }
+            }
+        }
+
+        // For each new fact: check if it existed last candle
+        for fact in new_facts {
+            if let Some(old_vec) = self.last_facts.get(fact) {
+                // UNCHANGED — zero work. sums already has this contribution.
+                new_last_facts.insert(fact.clone(), old_vec.clone());
+            } else {
+                // CHANGED or ADDED — encode, add to sums
+                let (new_vec, misses) = encoder.encode(fact);
+                all_misses.extend(misses);
+                // Add new contribution
+                for (s, &val) in self.sums.iter_mut().zip(new_vec.data()) {
+                    *s += val as i32;
+                }
+                new_last_facts.insert(fact.clone(), new_vec);
+            }
+        }
+
+        // Subtract old facts that were matched (they're still in sums from before)
+        // — no, they stay. Only removed facts were subtracted above. This is correct.
+
+        self.last_facts = new_last_facts;
+
+        // Threshold the sums
+        let thought = self.threshold();
+        (thought, all_misses)
+    }
+
+    /// First candle: full encode from scratch.
+    fn full_encode(
+        &mut self,
+        facts: &[ThoughtAST],
+        encoder: &ThoughtEncoder,
+    ) -> (Vector, Vec<(ThoughtAST, Vector)>) {
+        self.sums.iter_mut().for_each(|s| *s = 0);
+        self.last_facts.clear();
+
+        let mut all_misses = Vec::new();
+        for fact in facts {
+            let (vec, misses) = encoder.encode(fact);
+            all_misses.extend(misses);
+            for (s, &val) in self.sums.iter_mut().zip(vec.data()) {
+                *s += val as i32;
+            }
+            self.last_facts.insert(fact.clone(), vec);
+        }
+
+        self.initialized = true;
+        let thought = self.threshold();
+        (thought, all_misses)
+    }
+
+    /// Apply sign threshold to sums, producing the bundled vector.
+    fn threshold(&self) -> Vector {
+        let mut out = Vector::zeros(self.dims);
+        for (o, &s) in out.data_mut().iter_mut().zip(self.sums.iter()) {
+            *o = if s > 0 { 1 } else if s < 0 { -1 } else { 0 };
+        }
+        out
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

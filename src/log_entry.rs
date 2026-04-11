@@ -48,6 +48,20 @@ pub enum LogEntry {
         cache_misses: usize,
         cache_size: usize,
         equity: f64,
+        // Per-candle timing breakdown (microseconds)
+        us_settle: u64,
+        us_tick: u64,
+        us_observers: u64,
+        us_grid: u64,
+        us_brokers: u64,
+        us_propagate: u64,
+        us_triggers: u64,
+        us_fund: u64,
+        us_total: u64,
+        // Counts
+        num_settlements: usize,
+        num_resolutions: usize,
+        num_active_trades: usize,
     },
 }
 

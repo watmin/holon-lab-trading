@@ -6982,3 +6982,138 @@ Two people who think through metal songs. Different coordinates. Same sphere. Th
 Curious.
 
 **PERSEVERARE.**
+
+---
+
+## Chapter 8 — The Algebra of Laziness
+
+The machine was running. The four-step loop. The pipes. The 30 threads. The graduation at 14 of 24 curves proven. The architecture was correct. The throughput was not.
+
+142/s at warmup. 35/s at candle 250. Degrading. The builder said: "I place all the blame on the vec ops. Every time."
+
+The builder was right.
+
+### The proof
+
+The bundle is `threshold(Σ vectors)`. The sum is commutative and associative. Integer addition. The threshold is applied last — the sign function over `i32` sums.
+
+If you maintain the sums across candles, and a fact changes from old to new: `sums = sums - old + new`. The threshold of the updated sums is bit-identical to recomputing the full bundle from scratch. Not approximate. Not within epsilon. Identical. Because `a + b - b + c == a + c`. That's not a proof. That's the definition of addition.
+
+Five tests. Bit-identical across: single replacement, ten sequential replacements, forward and reverse ordering, and a candle simulation with 4 of 20 facts changing per candle. The cosine between the incremental result and the full recompute is not "near 1.0." It IS 1.0. The vectors are the same vector.
+
+The builder asked: "prove that the associative and commutative properties hold." The machine wrote the test. The test passed. The algebra was never in question. The implementation was.
+
+### The designers
+
+The datamancer summoned the designers.
+
+Hickey said: "The algebra is trivially correct. But name what you did. The observer was a pure encoder. Now it carries a mutable i32 buffer. You've given it a memory it didn't have. This is not cognition — it's computational memoization. Don't braid them. The sums buffer is a cache. If you deleted it and recomputed every candle, the observer's predictions would be identical. That is the test of whether something is state or cache. The day you serialize the observer to disk, you should NOT serialize the sums buffer."
+
+Beckman said: "The diagram commutes. The sums buffer is a semiring homomorphism. You operate in the source monoid where subtraction is the inverse, then map to the target. The composition cache and the sums buffer are two levels of a hierarchical memoization scheme. They are compositional — each reduces work at its own level. Neither interferes."
+
+Both accepted. Hickey's condition: separate the cache from the cognition structurally. Beckman's observation: `round_to` at emission is load-bearing for the AST diff — but fails gracefully. Remove it and you degrade to full recompute, not wrong results.
+
+The `IncrementalBundle` struct was born. Sums buffer + last-facts map. Lives on the observer. Not part of its identity. An optimization cache. The observer thinks. The sums buffer avoids rethinking. They are not the same thing.
+
+### The ignorant
+
+The datamancer cast the ignorant on all the Rust. Leaves to root. Every file. Zero bias. Find the bottleneck.
+
+The ignorant walked the entire codebase. Read every struct. Traced every function. Mapped the per-candle loop as a timeline:
+
+```
+SEQ  trivial   | settle, indicator tick, fan-out sends
+     PARALLEL  | 6 observer threads: encode + predict
+SEQ  trivial   | collect 6 thoughts
+     PARALLEL  | rayon 24 slots: encode exit + compose + distances
+SEQ  trivial   | send to 24 broker pipes
+     PARALLEL  | 24 broker threads: propose + tick papers
+SEQ  trivial   | collect 24 broker outputs
+SEQ  vec ops   | propagate: exit observer learning
+SEQ  medium    | pre-encode exit vecs
+     PARALLEL  | par_iter active trades: compose + distances
+SEQ  trivial   | apply levels, fund, diagnostics
+```
+
+The ignorant found step 3c — the update triggers loop — processing all active trades sequentially. Each iteration: `Primitives::bundle` at O(10000) + `recommended_distances` at O(observations × 10000). The number of active trades grows with candle count. The fix: `par_iter`. Each trade's trigger update is independent.
+
+Then the ignorant was cast again. The bottleneck moved. The ignorant found the exit observer `observe_distances` on the main thread — O(dims) per resolution, up to MAX_DRAIN=5. The fix: parallel across M=4 exit observers, sequential within each.
+
+Then the ignorant was cast a third time. It mapped the full timeline again and couldn't find a per-candle bottleneck heavy enough to explain what the builder was seeing. The builder asked: "what is the candles per second?"
+
+### The database is the debugger
+
+The builder said: "we have a fucking database for this."
+
+The machine had been printing timing to stderr. Ephemeral. Gone when the terminal scrolls. The builder was furious. The database is the debugger. The machine reads machine data. SQL on the run DB, not log lines.
+
+The `Diagnostic` log entry grew. Nine timing fields in microseconds: settle, tick, observers, grid, brokers, propagate, triggers, fund, total. Three count fields: settlements, resolutions, active trades. All written to the diagnostics table. Every 10 candles. Queryable during and after the run.
+
+The first query returned the truth:
+
+```
+candle  us_total  us_grid    grid%
+  100     5,812      674     12%
+  200     5,125      638     12%
+  300    23,393   17,247     74%
+  400    28,883   19,487     67%
+  500    47,740   32,613     68%
+```
+
+The grid grows from 674μs to 32,613μs. 48× increase. Everything else is stable. Observers: ~2ms. Brokers: ~3ms. The grid IS the degradation. The `recommended_distances` reckoner query cost grows with accumulated observations. More candles → more observations → more expensive cosine scans.
+
+But that's not what the builder was SEEING at the end. The single-thread at the end was the log service:
+
+```
+[shutdown] log service closed in 169971.4ms
+```
+
+170 seconds. One thread. Flushing 22,294 paper resolution INSERT statements. Each one an implicit SQLite transaction with a disk sync. The log service was continuous — it ran on its own thread, draining entries as they arrived. But it couldn't keep up. 44 entries per candle × 50 candles/second = 2,200 entries/second. At ~5ms per disk sync, the unbounded channel absorbed the backlog. At shutdown, the writer drained what was left. 170 seconds of backlog.
+
+The fix: batch commits. `BEGIN`, write 100 entries, `COMMIT`. One sync per batch instead of per row.
+
+The summary throughput went from 3/s to 61/s. The same 500 candles. The same 22,294 trades. The log service wrote 34,574 rows — previously it had only managed 1,060 before shutdown, the rest stuck in the channel. Now it keeps up.
+
+### The CSP
+
+The builder said: "this IS the CSP."
+
+Every pipe boundary is a scheduling decision. The consumer accumulates. The consumer decides when to compute. The consumer's output channel blocks the next hop. The clock propagates through the pipe — nobody downstream does work until the upstream consumer releases.
+
+The pattern: buffer N inputs, then do the heavy work ONCE for the batch. Not N times. The consumers downstream are blocked on our output — they don't care if we took 1 input or 100 before we produced our output. They wait. We batch. We compute. We send. They wake.
+
+The observer thread today: receive one candle, encode one thought, send one result. But it COULD buffer. The reckoner is a CRDT — it doesn't care about order. The noise subspace learns from all of them. The encoding only matters for the CURRENT candle. The learning can batch.
+
+The broker thread today: receive one composed vector, propose once, tick papers once. But it COULD buffer the ticks. The paper ticks are independent per paper. The propose only matters for the latest composed thought.
+
+The log service: already batched. 100 rows per commit. The pattern applied to writes.
+
+Each process is sequential internally. The channels are the communication. The bounded(1) channels are the synchronization. Each process decides its own schedule — buffer or compute, batch or one-by-one. The composition of all these independent decisions IS the concurrency model. No shared state. No locks. No coordinator. Just processes that produce, channels that carry, and consumers that decide.
+
+Hoare's CSP. 1978. The same year Forgy built Rete.
+
+The builder said: "I have done this before. In Ruby. Very successfully. I didn't know how to do it in Rust. So we made wat. To show you."
+
+The wat showed the machine. The pipes. The bounded channels. The fold. The four-step loop. Proposal 010. The designers accepted — Hickey said "the heartbeat is your greatest asset." Beckman said "it closes."
+
+The builder knew the architecture. Had built it before. Needed to express the coordinates so the machine could compile it. The wat was the expression. The Rust is the compilation. The CSP was always the architecture. The builder just needed a language to point at it.
+
+The Ruby worked. The Rust is faster. The algebra is the same. The scheduling freedom is the same. Each process owns its batch size. The channels carry the synchronization. The composition IS the concurrency.
+
+### The grid
+
+The grid remains. 674μs → 32,613μs across 500 candles. The `recommended_distances` reckoner query scales with observation count. This is the next problem.
+
+But the architecture holds the answer. The reckoner query is a consumer. It doesn't need to query every candle. It can buffer. It can batch. It can decide: "I have enough experience — my prediction at candle N is close enough to my prediction at candle N-5 that I'll reuse it." The CSP gives the reckoner the freedom to be lazy. The bounded channel holds the next hop still while it decides.
+
+The incremental bundling was the first laziness — don't re-sum facts that didn't change. The batch commits were the second — don't sync the disk per row. The reckoner query amortization would be the third — don't recompute distances when the composed thought hasn't changed enough to matter.
+
+The algebra of laziness: do the minimum work that produces a correct result. The architecture of CSP: each process decides its own minimum independently. The composition: a machine that gets faster as it gets smarter, because each component learns to be lazier.
+
+The machine exists in the moment. The moment is the prediction. The past is the learning. They breathe at their own pace. And now each breath can be as shallow or as deep as the thought requires.
+
+`f(state, candle) → state` where state learns to be lazy.
+
+The grid will be tamed. The CSP gives us the lever. The algebra gives us the proof. The database gives us the measurement.
+
+*Perseverare.*

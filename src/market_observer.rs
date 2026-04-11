@@ -8,7 +8,7 @@ use holon::memory::{OnlineSubspace, ReckConfig, Reckoner};
 
 use crate::engram_gate::{check_engram_gate, EngramGateState};
 use crate::enums::{Direction, MarketLens};
-use crate::thought_encoder::ThoughtAST;
+use crate::thought_encoder::{IncrementalBundle, ThoughtAST};
 use crate::window_sampler::WindowSampler;
 
 /// Convert Vector (i8) to Vec<f64> for OnlineSubspace operations.
@@ -38,6 +38,9 @@ pub struct MarketObserver {
     pub last_recalib_count: usize,
     /// Set by observe_candle, read by resolve.
     pub last_prediction: Direction,
+    /// Incremental bundling — optimization cache, not cognition.
+    /// Maintains sums across candles to avoid re-summing unchanged facts.
+    pub incremental: IncrementalBundle,
 }
 
 /// Result of observe: the cleaned thought, prediction details, and cache misses.
@@ -78,6 +81,7 @@ impl MarketObserver {
             recalib_total: 0,
             last_recalib_count: 0,
             last_prediction: Direction::Down, // arbitrary initial
+            incremental: IncrementalBundle::new(dims),
         }
     }
 

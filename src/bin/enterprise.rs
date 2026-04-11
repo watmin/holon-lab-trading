@@ -268,13 +268,25 @@ fn init_ledger(path: &str) -> Connection {
             observers_updated INTEGER
         );
         CREATE TABLE IF NOT EXISTS diagnostics (
-            candle        INTEGER PRIMARY KEY,
-            throughput    REAL,
-            cache_hits    INTEGER,
-            cache_misses  INTEGER,
-            cache_hit_pct REAL,
-            cache_size    INTEGER,
-            equity        REAL
+            candle           INTEGER PRIMARY KEY,
+            throughput       REAL,
+            cache_hits       INTEGER,
+            cache_misses     INTEGER,
+            cache_hit_pct    REAL,
+            cache_size       INTEGER,
+            equity           REAL,
+            us_settle        INTEGER,
+            us_tick          INTEGER,
+            us_observers     INTEGER,
+            us_grid          INTEGER,
+            us_brokers       INTEGER,
+            us_propagate     INTEGER,
+            us_triggers      INTEGER,
+            us_fund          INTEGER,
+            us_total         INTEGER,
+            num_settlements  INTEGER,
+            num_resolutions  INTEGER,
+            num_active_trades INTEGER
         );",
     )
     .expect("failed to create ledger tables");
@@ -959,6 +971,8 @@ fn main() {
             Some((idx, p)) => (idx, p),
             None => continue, // No post for this candle's pair — skip
         };
+        let t_candle = std::time::Instant::now();
+
         // Step 1: SETTLE TRIGGERED TRADES
         {
             let mut current_prices = std::collections::HashMap::new();
@@ -1006,6 +1020,8 @@ fn main() {
             }
         }
 
+        let t_step1 = t_candle.elapsed();
+
         let post = &mut ent.posts[post_idx];
 
         // Step 2: Tick indicator bank (sequential — streaming state)
@@ -1018,6 +1034,8 @@ fn main() {
 
         let window: Arc<Vec<enterprise::candle::Candle>> = Arc::new(post.candle_window.iter().cloned().collect());
         let encode_count = post.encode_count;
+
+        let t_tick = t_candle.elapsed();
 
         // Fan-out: send enriched candle to all observers (product — each gets a clone)
         for tx in &pipes.obs_txs {
@@ -1037,6 +1055,8 @@ fn main() {
             market_edges.push(edge);
             all_misses.extend(misses);
         }
+
+        let t_observers = t_candle.elapsed();
 
         // N×M grid: parallel computation → send to broker pipes
         let price = post.current_price();
@@ -1094,6 +1114,8 @@ fn main() {
             all_misses.extend(exit_misses.iter().cloned());
         }
 
+        let t_grid = t_candle.elapsed();
+
         // Send to broker pipes — bounded(1), each broker gets its input
         for (slot_idx, composed, dists, side, edge, pred, _) in grid_values {
             let _ = pipes.broker_in_txs[slot_idx].send((composed, dists, price, side, edge, pred));
@@ -1114,30 +1136,55 @@ fn main() {
             all_resolutions.extend(resolutions);
         }
 
-        // Propagate — send learning signals to pipes
-        for res in &all_resolutions {
-            let mi = res.broker_slot_idx / m;
-            let ei = res.broker_slot_idx % m;
+        let t_brokers = t_candle.elapsed();
 
-            // Market observer: learn via channel
-            if mi < pipes.learn_txs.len() {
-                let _ = pipes.learn_txs[mi].send((
-                    res.composed_thought.clone(), res.direction, res.amount));
+        // Propagate — send learning signals to pipes + parallel exit observer learning.
+        // Channel sends: cheap, sequential. Exit observer vec ops: parallel by observer.
+        {
+            // Collect exit learning work grouped by exit observer index
+            let mut exit_work: Vec<Vec<(usize, usize)>> = vec![Vec::new(); m];
+            for (ri, res) in all_resolutions.iter().enumerate() {
+                let mi = res.broker_slot_idx / m;
+                let ei = res.broker_slot_idx % m;
+
+                // Market observer: learn via channel (cheap — just a send)
+                if mi < pipes.learn_txs.len() {
+                    let _ = pipes.learn_txs[mi].send((
+                        res.composed_thought.clone(), res.direction, res.amount));
+                }
+
+                // Broker: learn via channel (cheap — just a send)
+                let _ = pipes.broker_learn_txs[res.broker_slot_idx].send((
+                    res.composed_thought.clone(), res.outcome, res.amount,
+                    res.direction, res.optimal_distances));
+
+                // Collect exit work — apply in parallel below
+                if ei < m {
+                    exit_work[ei].push((ei, ri));
+                }
             }
 
-            // Exit observer: main thread (not on a pipe yet)
-            if ei < post.exit_observers.len() {
-                post.exit_observers[ei].observe_distances(
-                    &res.composed_thought, &res.optimal_distances, res.amount);
-            }
-
-            // Broker: learn via channel
-            let _ = pipes.broker_learn_txs[res.broker_slot_idx].send((
-                res.composed_thought.clone(), res.outcome, res.amount,
-                res.direction, res.optimal_distances));
+            // Exit observer learning — parallel across M exit observers, sequential within.
+            // Each exit observer is independent. MAX_DRAIN per observer.
+            post.exit_observers
+                .par_iter_mut()
+                .zip(exit_work.par_iter())
+                .for_each(|(eobs, work)| {
+                    let mut drained = 0;
+                    for &(_ei, ri) in work {
+                        if drained >= MAX_DRAIN { break; }
+                        let res = &all_resolutions[ri];
+                        eobs.observe_distances(
+                            &res.composed_thought, &res.optimal_distances, res.amount);
+                        drained += 1;
+                    }
+                });
         }
 
+        let t_propagate = t_candle.elapsed();
+
         // Step 3c: UPDATE TRIGGERS — refresh stop distances on active trades
+        // Parallel: each trade's trigger update is independent.
         {
             let trade_info: Vec<_> = ent.treasury.trades.iter()
                 .filter(|(_, t)| t.post_idx == post_idx &&
@@ -1147,35 +1194,51 @@ fn main() {
                 .collect();
 
             let ctx_ref = &*ctx_arc;
-            let mut level_updates = Vec::new();
-            for (tid, slot, side) in trade_info {
-                let mi = slot / pipes.m;
-                let ei = slot % pipes.m;
-                if mi < market_thoughts.len() && ei < post.exit_observers.len() {
+
+            // Pre-encode exit vecs per exit observer (M, not per-trade).
+            // Each exit lens produces the same facts for the same candle.
+            let exit_vecs: Vec<_> = (0..pipes.m)
+                .map(|ei| {
                     let exit_facts = enterprise::post::exit_lens_facts_pub(
                         &post.exit_observers[ei].lens, &enriched);
                     let exit_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(exit_facts);
-                    let exit_vec = match step3c_handle.get(&exit_bundle) {
+                    match step3c_handle.get(&exit_bundle) {
                         Some(cached) => cached,
                         None => {
                             let (vec, _) = ctx_ref.thought_encoder.encode(&exit_bundle);
                             step3c_handle.set(exit_bundle, vec.clone());
                             vec
                         }
-                    };
-                    let composed = holon::kernel::primitives::Primitives::bundle(
-                        &[&market_thoughts[mi], &exit_vec]);
-                    let empty_accums: Vec<enterprise::scalar_accumulator::ScalarAccumulator> = Vec::new();
-                    let (dists, _) = post.exit_observers[ei].recommended_distances(
-                        &composed, &empty_accums, ctx_ref.thought_encoder.scalar_encoder());
-                    let new_levels = dists.to_levels(price, side);
-                    level_updates.push((tid, new_levels));
-                }
-            }
+                    }
+                })
+                .collect();
+
+            // Parallel: compose + distance query per trade. Independent.
+            let level_updates: Vec<_> = trade_info
+                .par_iter()
+                .filter_map(|&(tid, slot, side)| {
+                    let mi = slot / pipes.m;
+                    let ei = slot % pipes.m;
+                    if mi < market_thoughts.len() && ei < post.exit_observers.len() {
+                        let composed = holon::kernel::primitives::Primitives::bundle(
+                            &[&market_thoughts[mi], &exit_vecs[ei]]);
+                        let empty_accums: Vec<enterprise::scalar_accumulator::ScalarAccumulator> = Vec::new();
+                        let (dists, _) = post.exit_observers[ei].recommended_distances(
+                            &composed, &empty_accums, ctx_ref.thought_encoder.scalar_encoder());
+                        let new_levels = dists.to_levels(price, side);
+                        Some((tid, new_levels))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
             for (tid, levels) in level_updates {
                 ent.treasury.update_trade_stops(tid, levels);
             }
         }
+
+        let t_triggers = t_candle.elapsed();
 
         // Tick trade price histories
         for (_, trade) in ent.treasury.trades.iter_mut() {
@@ -1185,18 +1248,27 @@ fn main() {
         // Collect cache misses for insertion after shutdown
         accumulated_misses.extend(all_misses);
 
+        let t_misc = t_candle.elapsed();
+
         // Step 4: Fund proposals
         let fund_logs = ent.treasury.fund_proposals();
         for entry in fund_logs { log_handle.log(entry); }
+
+        let t_fund = t_candle.elapsed();
 
         candle_num += 1;
 
         // Logs flow through the pipe. No batching. The log service writes.
 
-        // Diagnostics every 10 candles — always queryable
+        // Diagnostics every 10 candles — timing + counts + cache, all in the DB
         if candle_num % 10 == 0 && candle_num > 0 {
+            let t_total = t_candle.elapsed();
             let elapsed_ms = t_start.elapsed().as_secs_f64() * 1000.0;
             let throughput = if elapsed_ms > 0.0 { candle_num as f64 * 1000.0 / elapsed_ms } else { 0.0 };
+            let num_active = ent.treasury.trades.iter()
+                .filter(|(_, t)| t.phase == enterprise::enums::TradePhase::Active
+                              || t.phase == enterprise::enums::TradePhase::Runner)
+                .count();
             log_handle.log(LogEntry::Diagnostic {
                 candle: candle_num,
                 throughput,
@@ -1204,6 +1276,18 @@ fn main() {
                 cache_misses: encoder_service.miss_count(),
                 cache_size: encoder_service.cache_len(),
                 equity: ent.treasury.total_equity(),
+                us_settle: t_step1.as_micros() as u64,
+                us_tick: (t_tick - t_step1).as_micros() as u64,
+                us_observers: (t_observers - t_tick).as_micros() as u64,
+                us_grid: (t_grid - t_observers).as_micros() as u64,
+                us_brokers: (t_brokers - t_grid).as_micros() as u64,
+                us_propagate: (t_propagate - t_brokers).as_micros() as u64,
+                us_triggers: (t_triggers - t_propagate).as_micros() as u64,
+                us_fund: (t_fund - t_misc).as_micros() as u64,
+                us_total: t_total.as_micros() as u64,
+                num_settlements: 0, // TODO: count from step 1
+                num_resolutions: all_resolutions.len(),
+                num_active_trades: num_active,
             });
         }
 
