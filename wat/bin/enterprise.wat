@@ -33,13 +33,21 @@
   [dims : usize]                       ; vector dimensionality (default 10000)
   [recalib-interval : usize]           ; observations between recalibrations (default 500)
   [denomination : String]              ; what "value" means (e.g. "USD")
-  [assets : Vec<(String, f64)>]        ; pool of (name, initial-balance) pairs
-  [data-sources : Vec<String>]         ; one data source per asset pair (parquet or websocket)
+  [source-asset : String]              ; source asset name (e.g. "USDC")
+  [target-asset : String]              ; target asset name (e.g. "WBTC")
+  [source-balance : f64]               ; initial balance for the source asset (default 10000.0)
+  [target-balance : f64]               ; initial balance for the target asset (default 0.0)
+  [parquet : String]                   ; raw OHLCV parquet file path
+  [ledger : String]                    ; path to output SQLite database (optional, auto-generated)
   [max-candles : usize]                ; stop after N candles (0 = run all)
-  [swap-fee : f64]                     ; per-swap venue cost as fraction
-  [slippage : f64]                     ; per-swap slippage estimate as fraction
-  [max-window-size : usize]            ; maximum candle history (default 2016)
-  [ledger : String])                   ; path to output SQLite database
+  [swap-fee : f64]                     ; per-swap venue cost as fraction (default 0.0010)
+  [slippage : f64]                     ; per-swap slippage estimate as fraction (default 0.0025)
+  [max-window-size : usize])           ; maximum candle history (default 2016)
+
+;; Future work: multi-asset pool. The enterprise architecture supports N assets
+;; with one post per unique pair. Today the binary takes a single source/target
+;; pair. When multi-asset is implemented, cli-args will take a pool of
+;; (name, initial-balance) pairs and a data source per pair.
 
 ;; ── Construction ────────────────────────────────────────────────
 ;; Build the world, then the machine.
@@ -52,70 +60,51 @@
          ;; Build ctx — the immutable world
          (ctx (make-ctx dims recalib-interval))
 
-         ;; Build assets
-         (asset-list (map (lambda (pair) (make-asset (first pair))) (:assets args)))
+         ;; Single asset pair
+         (source (make-asset (:source-asset args)))
+         (target (make-asset (:target-asset args)))
          (initial-balances
-           (fold-left (lambda (m pair)
-                        (assoc m (make-asset (first pair)) (second pair)))
-                      (map-of)
-                      (:assets args)))
+           (assoc (assoc (map-of) source (:source-balance args))
+                  target (:target-balance args)))
 
-         ;; One post per asset pair — enumerate pairs from the asset pool
-         (pairs (fold-left
-                  (lambda (acc i)
-                    (append acc
-                      (map (lambda (j) (list i j))
-                           (filter (lambda (j) (!= j i))
-                                   (range (len asset-list))))))
-                  (list)
-                  (range (len asset-list))))
+         ;; One post for the single pair
+         (bank (make-indicator-bank))
 
-         (posts
-           (map (lambda (pair-with-idx)
-                  (let* (((idx pair) pair-with-idx)
-                         ((i j) pair)
-                         (source (nth asset-list i))
-                         (target (nth asset-list j))
+         ;; Market observers — one per MarketLens variant
+         (market-lenses (list :momentum :structure :volume
+                              :narrative :regime :generalist))
+         (market-observers
+           (map (lambda (lens)
+                  (make-market-observer lens dims recalib-interval
+                    (make-window-sampler 7919 12 (:max-window-size args))))
+                market-lenses))
 
-                         ;; Indicator bank
-                         (bank (make-indicator-bank))
+         ;; Exit observers — one per ExitLens variant
+         (exit-lenses (list :volatility :structure :timing :generalist))
+         (exit-observers
+           (map (lambda (lens)
+                  (make-exit-observer lens dims recalib-interval
+                    0.015 0.030))
+                exit-lenses))
 
-                         ;; Market observers — one per MarketLens variant
-                         (market-lenses (list :momentum :structure :volume
-                                              :narrative :regime :generalist))
-                         (market-observers
-                           (map (lambda (lens)
-                                  (make-market-observer lens dims recalib-interval
-                                    (make-window-sampler (+ idx 7919) 12 (:max-window-size args))))
-                                market-lenses))
+         ;; Brokers — N x M grid
+         (n (len market-lenses))
+         (m (len exit-lenses))
+         (registry
+           (map (lambda (slot-idx)
+                  (let ((market-idx (/ slot-idx m))
+                        (exit-idx (mod slot-idx m)))
+                    (make-broker
+                      (list (nth market-lenses market-idx)
+                            (nth exit-lenses exit-idx))
+                      slot-idx m dims recalib-interval
+                      (list (make-scalar-accumulator "trail-distance" :log dims)
+                            (make-scalar-accumulator "stop-distance" :log dims)))))
+                (range (* n m))))
 
-                         ;; Exit observers — one per ExitLens variant
-                         (exit-lenses (list :volatility :structure :timing :generalist))
-                         (exit-observers
-                           (map (lambda (lens)
-                                  (make-exit-observer lens dims recalib-interval
-                                    0.015 0.030))
-                                exit-lenses))
-
-                         ;; Brokers — N x M grid
-                         (n (len market-lenses))
-                         (m (len exit-lenses))
-                         (registry
-                           (map (lambda (slot-idx)
-                                  (let ((market-idx (/ slot-idx m))
-                                        (exit-idx (mod slot-idx m)))
-                                    (make-broker
-                                      (list (nth market-lenses market-idx)
-                                            (nth exit-lenses exit-idx))
-                                      slot-idx m dims recalib-interval
-                                      (list (make-scalar-accumulator "trail-distance" :log)
-                                            (make-scalar-accumulator "stop-distance" :log)))))
-                                (range (* n m)))))
-
-                    (make-post idx source target dims recalib-interval
-                      (:max-window-size args) bank
-                      market-observers exit-observers registry)))
-                (map (lambda (i) (list i (nth pairs i))) (range (len pairs)))))
+         (post (make-post 0 source target dims recalib-interval
+                 (:max-window-size args) bank
+                 market-observers exit-observers registry))
 
          ;; Treasury
          (treasury (make-treasury
@@ -125,7 +114,7 @@
                      (:slippage args)))
 
          ;; Enterprise
-         (ent (make-enterprise posts treasury)))
+         (ent (make-enterprise (list post) treasury)))
 
     (list ent ctx)))
 
@@ -161,7 +150,7 @@
   : ()
   (let* (((ent ctx) (construct args))
          (ledger (init-ledger (:ledger args) args))
-         (stream (open-parquet-stream (:data-sources args)))
+         (stream (open-parquet-stream (:parquet args)))
          (progress-interval 1000)
          (kill-file "trader-stop"))
 

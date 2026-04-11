@@ -19,9 +19,10 @@
 ;; ── Interface ───────────────────────────────────────────────────────
 
 (define (make-scalar-accumulator [name : String]
-                                 [encoding : ScalarEncoding])
+                                 [encoding : ScalarEncoding]
+                                 [dims : usize])
   : ScalarAccumulator
-  (scalar-accumulator name encoding (zeros) (zeros) 0))
+  (scalar-accumulator name encoding (zeros dims) (zeros dims) 0))
 
 (define (observe-scalar [acc : ScalarAccumulator]
                         [value : f64]
