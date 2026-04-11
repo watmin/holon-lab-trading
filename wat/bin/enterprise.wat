@@ -26,6 +26,21 @@
 (require treasury)
 (require enterprise)
 
+;; ── Constants ──────────────────────────────────────────────────
+
+(define BATCH-SIZE 50)
+
+;; Max learn signals to drain per candle per thread.
+;; The reckoner is a CRDT — deferral is safe. The queue drains over
+;; subsequent candles. Production rate ~1/candle. Drain rate 5/candle.
+;; The queue converges to empty.
+(define MAX-DRAIN 5)
+
+(define MARKET-LENSES (list :momentum :structure :volume
+                            :narrative :regime :generalist))
+
+(define EXIT-LENSES (list :volatility :structure :timing :generalist))
+
 ;; ── CLI arguments ───────────────────────────────────────────────
 ;; The configuration that the enterprise receives as constants.
 
@@ -43,11 +58,6 @@
   [swap-fee : f64]                     ; per-swap venue cost as fraction (default 0.0010)
   [slippage : f64]                     ; per-swap slippage estimate as fraction (default 0.0025)
   [max-window-size : usize])           ; maximum candle history (default 2016)
-
-;; Future work: multi-asset pool. The enterprise architecture supports N assets
-;; with one post per unique pair. Today the binary takes a single source/target
-;; pair. When multi-asset is implemented, cli-args will take a pool of
-;; (name, initial-balance) pairs and a data source per pair.
 
 ;; ── Construction ────────────────────────────────────────────────
 ;; Build the world, then the machine.
@@ -71,32 +81,29 @@
          (bank (make-indicator-bank))
 
          ;; Market observers — one per MarketLens variant
-         (market-lenses (list :momentum :structure :volume
-                              :narrative :regime :generalist))
          (market-observers
            (map (lambda (lens)
                   (make-market-observer lens dims recalib-interval
                     (make-window-sampler 7919 12 (:max-window-size args))))
-                market-lenses))
+                MARKET-LENSES))
 
          ;; Exit observers — one per ExitLens variant
-         (exit-lenses (list :volatility :structure :timing :generalist))
          (exit-observers
            (map (lambda (lens)
                   (make-exit-observer lens dims recalib-interval
                     0.015 0.030))
-                exit-lenses))
+                EXIT-LENSES))
 
          ;; Brokers — N x M grid
-         (n (len market-lenses))
-         (m (len exit-lenses))
+         (n (len MARKET-LENSES))
+         (m (len EXIT-LENSES))
          (registry
            (map (lambda (slot-idx)
                   (let ((market-idx (/ slot-idx m))
                         (exit-idx (mod slot-idx m)))
                     (make-broker
-                      (list (nth market-lenses market-idx)
-                            (nth exit-lenses exit-idx))
+                      (list (nth MARKET-LENSES market-idx)
+                            (nth EXIT-LENSES exit-idx))
                       slot-idx m dims recalib-interval
                       (list (make-scalar-accumulator "trail-distance" :log dims)
                             (make-scalar-accumulator "stop-distance" :log dims)))))
@@ -123,25 +130,17 @@
 
 (define (init-ledger [path : String] [args : CliArgs] [posts : Vec<Post>])
   : Ledger
-  ;; Create meta table — run parameters
-  ;; Create brokers table — maps slot-idx to lens names
-  ;;   (slot-idx, market-lens, exit-lens). The DB is self-describing.
-  ;;   Every query can join on brokers to know WHAT each slot-idx means.
-  ;; Create log table — receives LogEntry values from on-candle
-  ;; The ledger is the glass box. The DB is the debugger.
-  ;;
-  ;; Register broker identities:
-  ;; (for-each (lambda (post)
-  ;;   (for-each (lambda (broker)
-  ;;     (let ((mi (/ (:slot-idx broker) (length (:exit-observers post))))
-  ;;           (ei (mod (:slot-idx broker) (length (:exit-observers post)))))
-  ;;       (insert! ledger :brokers
-  ;;         (:slot-idx broker)
-  ;;         (format (:lens (nth (:market-observers post) mi)))
-  ;;         (format (:lens (nth (:exit-observers post) ei))))))
-  ;;   (:registry post)))
-  ;; posts)
   (make-ledger path args posts))
+
+;; ── Pipe types ─────────────────────────────────────────────────
+;; Named for clarity. These are the values that cross pipe boundaries.
+
+;; ObsInput:    (Candle, Arc<Vec<Candle>>, usize)
+;; ObsOutput:   (Vector, Prediction, f64, Vec<(ThoughtAST, Vector)>)
+;; ObsLearn:    (Vector, Direction, f64)
+;; BrokerInput: (Vector, Distances, f64, Side, f64, Prediction)
+;; BrokerOutput:(Proposal, Vec<Resolution>)
+;; BrokerLearn: (Vector, Outcome, f64, Direction, Distances)
 
 ;; ── The fold ────────────────────────────────────────────────────
 ;; The main loop. The driver of the enterprise.
@@ -151,63 +150,267 @@
   (let* (((ent ctx) (construct args))
          (ledger (init-ledger (:ledger args) args))
          (stream (open-parquet-stream (:parquet args)))
-         (progress-interval 1000)
-         (kill-file "trader-stop"))
+         (kill-file "trader-stop")
+         (n (len MARKET-LENSES))
+         (m (len EXIT-LENSES))
+         (ctx-arc (arc ctx))
 
-    ;; The fold — one raw candle at a time
-    (fold-left
-      (lambda (count raw-candle)
-        ;; Kill switch — check every 1000 candles
-        (when (and (> count 0) (= (mod count progress-interval) 0))
-          (when (file-exists? kill-file)
-            (begin (display "Kill switch activated. Aborting.")
-                   (summary ent ledger count)
-                   (abort))))
+         ;; ── Encoder service — the cache as a pipe ──
+         ;; N observer handles + N*M grid handles + 1 step-3c handle
+         (n-encoder-callers (+ n (* n m) 1))
+         ((encoder-service encoder-handles)
+           (encoder-service-spawn n-encoder-callers 65536))
+         ;; Split handles: observers get [0..n], grid gets [n..n+n*m], step3c gets the last
+         (step3c-handle (pop! encoder-handles))
+         (grid-handles (drain! encoder-handles n))
+         (obs-encoder-handles encoder-handles)
 
-        ;; Max candles — stop if reached
-        (when (and (> (:max-candles args) 0) (>= count (:max-candles args)))
-          (begin (summary ent ledger count)
-                 (abort)))
+         ;; ── Log service — the DB writer as a pipe ──
+         ((log-service log-handles)
+           (log-service-spawn 1 ledger))
+         (log-handle (first log-handles))
 
-        ;; The heartbeat — one candle through the enterprise
-        (let* (((log-entries cache-misses) (on-candle ent raw-candle ctx))
+         ;; ── Per-post pipe wiring ──
+         ;; One set of pipes per asset pair. No magic index.
+         (all-pipes
+           (map (lambda (post)
+                  (let ((obs-txs '())
+                        (thought-rxs '())
+                        (learn-txs '())
+                        (observer-handles '())
+                        (broker-in-txs '())
+                        (broker-out-rxs '())
+                        (broker-learn-txs '())
+                        (broker-handles '()))
 
-               ;; The one seam — insert cache misses between candles
-               (_ (insert-misses ctx cache-misses))
+                    ;; Observer pipes + threads
+                    (for-each (range n)
+                      (lambda (i)
+                        (let (((obs-tx obs-rx)       (make-pipe :capacity 1 :carries ObsInput))
+                              ((thought-tx thought-rx) (make-pipe :capacity 1 :carries ObsOutput))
+                              ((learn-tx learn-rx)     (make-pipe :capacity :unbounded :carries ObsLearn)))
+                          (push! obs-txs obs-tx)
+                          (push! thought-rxs thought-rx)
+                          (push! learn-txs learn-tx)
 
-               ;; Flush log entries to ledger (in batches)
-               (_ (flush-logs ledger log-entries count))
+                          (let ((obs (take! (:market-observers post) i))
+                                (enc-handle (pop! obs-encoder-handles))
+                                (lens (:lens obs))
+                                (recalib (:recalib-interval args)))
+                            (push! observer-handles
+                              (spawn
+                                (lambda ()
+                                  (loop
+                                    (match (recv obs-rx)
+                                      ((Some (candle window encode-count))
+                                        ;; Drain at most MAX-DRAIN learn signals per candle.
+                                        ;; The reckoner is a CRDT — deferral is safe.
+                                        (let ((drained 0))
+                                          (loop
+                                            (when (>= drained MAX-DRAIN) (break))
+                                            (match (try-recv learn-rx)
+                                              ((Some (thought direction weight))
+                                                (resolve obs thought direction weight recalib)
+                                                (set! drained (+ drained 1)))
+                                              (None (break)))))
 
-               ;; Increment price history on all active trades
-               (_ (for-each
-                    (lambda (entry)
-                      (let (((trade-id trade) entry))
-                        (begin
-                          (push! (:price-history trade) (:close raw-candle))
-                          (inc! (:candles-held trade)))))
-                    (:trades (:treasury ent)))))
+                                        ;; Encode candle facts via cache pipe
+                                        (let* ((facts (market-lens-facts lens candle window))
+                                               (bundle-ast (ThoughtAST/Bundle facts))
+                                               (thought (match (encoder-get enc-handle bundle-ast)
+                                                          ((Some cached) cached)
+                                                          (None
+                                                            (let (((vec _) (encode (:thought-encoder ctx-arc) bundle-ast)))
+                                                              (encoder-set enc-handle bundle-ast vec)
+                                                              vec))))
+                                               (result (observe obs thought '())))
+                                          (send thought-tx
+                                            (list (:thought result) (:prediction result)
+                                                  (:edge result) '()))))
+                                      (None (break))))
+                                  obs)))))))
 
-          ;; Progress display
-          (when (= (mod (+ count 1) progress-interval) 0)
-            (progress ent count))
+                    ;; Broker pipes + threads
+                    (for-each (range (* n m))
+                      (lambda (slot-idx)
+                        (let (((in-tx in-rx)       (make-pipe :capacity 1 :carries BrokerInput))
+                              ((out-tx out-rx)     (make-pipe :capacity 1 :carries BrokerOutput))
+                              ((blearn-tx blearn-rx) (make-pipe :capacity :unbounded :carries BrokerLearn)))
+                          (push! broker-in-txs in-tx)
+                          (push! broker-out-rxs out-rx)
+                          (push! broker-learn-txs blearn-tx)
 
-          (+ count 1)))
-      0
-      stream)
+                          (let ((broker (take! (:registry post) slot-idx))
+                                (src (:source-asset post))
+                                (tgt (:target-asset post))
+                                (recalib (:recalib-interval args)))
+                            (push! broker-handles
+                              (spawn
+                                (lambda ()
+                                  (loop
+                                    (match (recv in-rx)
+                                      ((Some (composed dists price side edge pred))
+                                        ;; Drain at most MAX-DRAIN learn signals per candle.
+                                        (let ((drained 0))
+                                          (loop
+                                            (when (>= drained MAX-DRAIN) (break))
+                                            (match (try-recv blearn-rx)
+                                              ((Some (thought outcome weight direction optimal))
+                                                (propagate broker thought outcome weight
+                                                  direction optimal recalib
+                                                  (scalar-encoder-placeholder))
+                                                (set! drained (+ drained 1)))
+                                              (None (break)))))
 
-    ;; Summary — after the loop completes
-    (summary ent ledger (len stream))))
+                                        (propose broker composed)
+                                        (register-paper broker (clone composed) price dists)
+                                        (let ((resolutions (tick-papers broker price))
+                                              (prop (make-proposal composed dists edge side
+                                                      src tgt pred
+                                                      (current-post-idx) slot-idx)))
+                                          (send out-tx (list prop resolutions))))
+                                      (None (break))))
+                                  broker)))))))
+
+                    (list obs-txs thought-rxs learn-txs observer-handles
+                          broker-in-txs broker-out-rxs broker-learn-txs broker-handles
+                          n m)))
+                (:posts ent)))
+
+         ;; Loop state
+         (bnh-entry 0.0)
+         (last-close 0.0)
+         (candle-num 0)
+         (progress-every BATCH-SIZE)
+         (end-idx (if (> (:max-candles args) 0)
+                    (min (:max-candles args) (len stream))
+                    (len stream))))
+
+    ;; ── The fold — main thread is a ROUTER ──
+    (for-each stream
+      (lambda (rc)
+        (when (and (> (:max-candles args) 0) (>= candle-num (:max-candles args)))
+          (break))
+
+        (when (and (= (mod candle-num 1000) 0) (file-exists? kill-file))
+          (display "Kill switch triggered.")
+          (delete-file kill-file)
+          (break))
+
+        (when (= candle-num 0)
+          (set! bnh-entry (:close rc)))
+        (set! last-close (:close rc))
+
+        ;; Route candle to the right post by asset pair
+        (let ((pipes (find all-pipes
+                       (lambda (p) (and (= (:source-asset p) (:source-asset rc))
+                                        (= (:target-asset p) (:target-asset rc)))))))
+          (when pipes
+            ;; Step 1: SETTLE TRIGGERED TRADES
+            (let (((settlements settle-logs) (settle-triggered (:treasury ent))))
+              (for-each settle-logs (lambda (entry) (log log-handle entry)))
+              (for-each settlements
+                (lambda (stl)
+                  (let ((slot (:broker-slot-idx (:trade stl)))
+                        (mi (/ slot m))
+                        (ei (mod slot m))
+                        (direction (if (> (:exit-price stl) (:entry-price (:trade stl)))
+                                     :up :down))
+                        (optimal (compute-optimal-distances
+                                   (:price-history (:trade stl)) direction)))
+                    ;; Market observer learns via pipe
+                    (send (nth (:learn-txs pipes) mi)
+                      (list (:composed-thought stl) direction (:amount stl)))
+                    ;; Broker learns via pipe
+                    (send (nth (:broker-learn-txs pipes) slot)
+                      (list (:composed-thought stl) (:outcome stl) (:amount stl)
+                            direction optimal))))))
+
+            ;; Step 2: Tick indicator bank, fan-out to observer pipes
+            (let* ((post (nth (:posts ent) (post-idx-of pipes)))
+                   (enriched (tick (:indicator-bank post) rc))
+                   (window (arc (to-vec (:candle-window post)))))
+
+              ;; Fan-out: send enriched candle to all observers
+              (for-each (:obs-txs pipes)
+                (lambda (tx)
+                  (send tx (list enriched (clone window) (:encode-count post)))))
+
+              ;; Collect thoughts from all observers (bounded(1) — they block until we read)
+              (let ((market-thoughts '())
+                    (market-predictions '())
+                    (market-edges '()))
+                (for-each (:thought-rxs pipes)
+                  (lambda (rx)
+                    (let (((thought pred edge _misses) (recv rx)))
+                      (push! market-thoughts thought)
+                      (push! market-predictions pred)
+                      (push! market-edges edge))))
+
+                ;; N x M grid: compute and send to broker pipes
+                (let ((price (current-price post)))
+                  (for-each (range (* n m))
+                    (lambda (slot-idx)
+                      (let* ((mi (/ slot-idx m))
+                             (ei (mod slot-idx m))
+                             (exit-facts (exit-lens-facts
+                                           (:lens (nth (:exit-observers post) ei)) enriched))
+                             (exit-bundle (ThoughtAST/Bundle exit-facts))
+                             (exit-vec (match (encoder-get (nth grid-handles slot-idx) exit-bundle)
+                                         ((Some cached) cached)
+                                         (None
+                                           (let (((vec _) (encode (:thought-encoder ctx-arc) exit-bundle)))
+                                             (encoder-set (nth grid-handles slot-idx) exit-bundle vec)
+                                             vec))))
+                             (composed (bundle (nth market-thoughts mi) exit-vec))
+                             ((dists _) (recommended-distances
+                                          (nth (:exit-observers post) ei)
+                                          composed '()
+                                          (scalar-encoder (:thought-encoder ctx-arc))))
+                             (side (derive-side (nth market-predictions mi)))
+                             (edge 0.0)  ; broker computes edge on its thread
+                             (pred (prediction-convert (nth market-predictions mi))))
+                        (send (nth (:broker-in-txs pipes) slot-idx)
+                          (list composed dists price side edge pred)))))
+
+                  ;; Collect from broker pipes
+                  (let ((all-resolutions '()))
+                    (for-each (:broker-out-rxs pipes)
+                      (lambda (rx)
+                        (let (((prop resolutions) (recv rx)))
+                          (submit-proposal (:treasury ent) prop)
+                          (for-each resolutions
+                            (lambda (res)
+                              (log log-handle (make-paper-resolved
+                                (:broker-slot-idx res) (:outcome res)
+                                (:optimal-distances res)))))
+                          (extend! all-resolutions resolutions))))
+
+                    ;; Propagate — send learning signals to pipes
+                    (for-each all-resolutions
+                      (lambda (res)
+                        (let ((mi (/ (:broker-slot-idx res) m))
+                              (ei (mod (:broker-slot-idx res) m)))
+                          ;; Market observer learns via pipe
+                          (send (nth (:learn-txs pipes) mi)
+                            (list (:composed-thought res) (:direction res) (:amount res)))
+                          ;; Broker learns via pipe
+                          (send (nth (:broker-learn-txs pipes) (:broker-slot-idx res))
+                            (list (:composed-thought res) (:outcome res) (:amount res)
+                                  (:direction res) (:optimal-distances res))))))))))))
+
+        (set! candle-num (+ candle-num 1))))
+
+    ;; ── Shutdown — cascade ──
+    ;; Drop all sender ends. The threads drain and exit.
+    ;; Join all thread handles. Then join the services.
+    (summary ent ledger candle-num)))
 
 ;; ── Progress ────────────────────────────────────────────────────
 ;; Every N candles, display diagnostics.
 
 (define (progress [ent : Enterprise] [count : usize])
   : ()
-  ;; encode-count, throughput (candles/second)
-  ;; treasury equity, return vs buy-and-hold
-  ;; per-observer stats (recalib count, discriminant strength)
-  ;; broker stats (paper count, Grace/Violence ratio, curves proven)
-  ;; accumulation (residue earned per side)
   (let* ((equity (total-equity (:treasury ent))))
     (display (format "candle {} | equity {:.2}" count equity))))
 
@@ -216,11 +419,6 @@
 
 (define (summary [ent : Enterprise] [ledger : Ledger] [count : usize])
   : ()
-  ;; Final equity, return percentage, buy-and-hold comparison
-  ;; Trade count, win rate, accumulation totals
-  ;; Venue costs paid
-  ;; Observer panel summary
-  ;; Ledger path and row count
   (let* ((equity (total-equity (:treasury ent)))
          (treasury (:treasury ent)))
     (begin

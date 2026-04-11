@@ -36,24 +36,26 @@
 ;; ── Spawn — create the service + N handles ──────────────────────
 ;; The SQLite connection is MOVED into the thread. One owner. No sharing.
 
-(define (spawn [n-producers : usize] [conn : Connection])
+(define (log-service-spawn [n-producers : usize] [conn : Connection])
   : (LogService, Vec<LogHandle>)
 
   ;; Create N unbounded pipes. One per producer.
   (let ((handles '())
         (drains '()))
     (for-each (range n-producers)
-      (let (((emit-tx drain-rx) (unbounded-channel))) ; LogEntry
-        (push! handles (make-log-handle emit-tx))
-        (push! drains drain-rx)))
+      (lambda (_)
+        (let (((emit-tx drain-rx) (make-pipe :capacity :unbounded :carries LogEntry)))
+          (push! handles (make-log-handle emit-tx))
+          (push! drains drain-rx))))
 
     (let ((rows (arc (atomic 0))))
 
       ;; Spawn the writer thread
       (let ((handle
-              (thread-spawn
+              (spawn
                 (lambda ()
-                  (let ((closed (vec-of false n-producers))
+                  (let ((n (len drains))
+                        (closed (vec-of false n))
                         (BATCH-SIZE 100))
 
                     ;; WAL mode — readers don't block on writers.
@@ -79,12 +81,12 @@
 
                           ;; Drain all pipes. Write what we find.
                           ;; Commit every BATCH-SIZE rows.
-                          (for-each (range n-producers)
+                          (for-each (range n)
                             (lambda (i)
-                              (when (not (get closed i))
+                              (when (not (nth closed i))
                                 (loop
-                                  (match (try-recv (get drains i))
-                                    ((Ok entry)
+                                  (match (try-recv (nth drains i))
+                                    ((Some entry)
                                       (write-entry log-stmt diag-stmt entry)
                                       (fetch-add! rows 1)
                                       (set! did-work true)
@@ -92,8 +94,8 @@
                                       (when (>= batch-count BATCH-SIZE)
                                         (execute-batch conn "COMMIT; BEGIN")
                                         (set! batch-count 0)))
-                                    ((Err Empty) (break))
-                                    ((Err Disconnected)
+                                    (None (break))
+                                    (:disconnected
                                       (set! closed i true)
                                       (break)))))))
 
@@ -106,19 +108,23 @@
                             (let ((final-count 0))
                               (for-each drains
                                 (lambda (drain)
-                                  (while-let ((Ok entry) (try-recv drain))
-                                    (write-entry log-stmt diag-stmt entry)
-                                    (fetch-add! rows 1)
-                                    (set! final-count (+ final-count 1))
-                                    (when (= 0 (mod final-count BATCH-SIZE))
-                                      (execute-batch conn "COMMIT; BEGIN"))))))
+                                  (loop
+                                    (match (try-recv drain)
+                                      ((Some entry)
+                                        (write-entry log-stmt diag-stmt entry)
+                                        (fetch-add! rows 1)
+                                        (set! final-count (+ final-count 1))
+                                        (when (= 0 (mod final-count BATCH-SIZE))
+                                          (execute-batch conn "COMMIT; BEGIN")))
+                                      (None (break)))))))
                             (execute-batch conn "COMMIT")
                             (break))
 
                           ;; Block until ANY log pipe has data. Zero CPU when idle.
                           (when (not did-work)
-                            (select-ready
-                              (filter-indexed drains (not closed))))))))))))
+                            (let ((open-drains (filter-indexed drains
+                                                 (lambda (i) (not (nth closed i))))))
+                              (select open-drains)))))))))))
 
         (list (make-log-service handle rows)
               handles)))))
@@ -171,7 +177,7 @@
 ;; All LogHandles must be dropped first (cascade).
 ;; The writer drains remaining buffered entries, then exits.
 
-(define (shutdown [svc : LogService])
+(define (log-service-shutdown [svc : LogService])
   : ()
   (join (:handle svc)))
 
