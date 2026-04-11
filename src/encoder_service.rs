@@ -6,7 +6,7 @@
 /// Protocol:
 ///   Caller: write AST to get-request pipe → block on get-response pipe → receive Some/None
 ///   Caller: if None, compute, write to set pipe (fire and forget)
-///   Encoder: one pass per iteration — drain sets, service gets, sleep, repeat.
+///   Encoder: one pass per iteration — drain sets, service gets, Select::ready() block, repeat.
 
 use std::num::NonZeroUsize;
 use std::thread::{self, JoinHandle};

@@ -336,6 +336,7 @@ impl Treasury {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use holon::kernel::vector::Vector;
 
     fn make_test_treasury() -> Treasury {
         let mut balances = HashMap::new();

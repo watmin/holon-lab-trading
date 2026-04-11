@@ -312,6 +312,7 @@ impl Post {
         // Apply propagation facts to observers
         let mi = facts.market_idx;
         let ei = facts.exit_idx;
+        let mut observers_updated: usize = 0;
 
         if mi < self.market_observers.len() {
             self.market_observers[mi].resolve(
@@ -320,6 +321,7 @@ impl Post {
                 facts.weight,
                 recalib_interval,
             );
+            observers_updated += 1;
         }
 
         if ei < self.exit_observers.len() {
@@ -328,11 +330,12 @@ impl Post {
                 &facts.optimal,
                 facts.weight,
             );
+            observers_updated += 1;
         }
 
         vec![LogEntry::Propagated {
             broker_slot_idx: slot_idx,
-            observers_updated: 2,
+            observers_updated,
         }]
     }
 }

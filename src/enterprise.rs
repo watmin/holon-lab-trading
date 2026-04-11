@@ -400,12 +400,17 @@ impl Enterprise {
                 }
             });
 
-        // Logs
+        // Logs — count how many observers were actually updated per slot
         facts_list
             .iter()
-            .map(|(slot, _, _, _, _, _, _, _)| LogEntry::Propagated {
-                broker_slot_idx: *slot,
-                observers_updated: 2,
+            .map(|(slot, mi, ei, _, _, _, _, _)| {
+                let mut updated: usize = 0;
+                if *mi < n_market { updated += 1; }
+                if *ei < n_exit { updated += 1; }
+                LogEntry::Propagated {
+                    broker_slot_idx: *slot,
+                    observers_updated: updated,
+                }
             })
             .collect()
     }

@@ -176,11 +176,11 @@ mod tests {
     fn test_propagated() {
         let entry = LogEntry::Propagated {
             broker_slot_idx: 4,
-            observers_updated: 2,
+            observers_updated: 1,
         };
         match entry {
             LogEntry::Propagated { observers_updated, .. } => {
-                assert_eq!(observers_updated, 2);
+                assert!(observers_updated <= 2, "at most 2 observers (market + exit)");
             }
             _ => panic!("Expected Propagated"),
         }

@@ -1,10 +1,8 @@
-/// enterprise — self-organizing BTC trading enterprise.
+/// enterprise — the binary. Creates the world, feeds candles, writes the ledger.
 ///
-/// Six primitives. Two templates. One heartbeat per candle.
+/// Orchestrates: ctx, enterprise, candle stream, progress display.
+/// Does not think. Does not encode. Does not predict.
 /// See wat/bin/enterprise.wat for the specification.
-///
-/// The binary creates the world, feeds candles, writes the ledger,
-/// and displays progress. It does not think. It orchestrates.
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -485,7 +483,7 @@ fn display_summary(
     let total_trades: usize = ent.posts.iter().flat_map(|p| &p.registry).map(|b| b.trade_count).sum();
     let total_grace: f64 = ent.posts.iter().flat_map(|p| &p.registry).map(|b| b.cumulative_grace).sum();
     let total_violence: f64 = ent.posts.iter().flat_map(|p| &p.registry).map(|b| b.cumulative_violence).sum();
-    let win_rate = if total_trades == 0 {
+    let grace_pct = if (total_grace + total_violence) == 0.0 {
         0.0
     } else {
         total_grace / (total_grace + total_violence) * 100.0
@@ -522,7 +520,7 @@ fn display_summary(
         "  trades: {} grace: {:.4} violence: {:.4}",
         total_trades, total_grace, total_violence
     );
-    eprintln!("  win-rate: {:.2}%", win_rate);
+    eprintln!("  grace-pct: {:.2}%", grace_pct);
     if swap_fee > 0.0 || slippage > 0.0 {
         eprintln!(
             "  venue: {:.1}bps fee + {:.1}bps slippage = {:.2}% round trip",
@@ -1027,6 +1025,7 @@ fn main() {
                     &[&market_thoughts[mi], &exit_vec]);
 
                 // Distances from exit observer — reckoner prediction or default.
+                // TODO: broker scalar accumulators not accessible from main thread — cascade skips accumulator tier
                 let empty_accums: Vec<enterprise::scalar_accumulator::ScalarAccumulator> = Vec::new();
                 let (dists, _) = exit_observers[ei].recommended_distances(
                     &composed, &empty_accums, ctx_ref.thought_encoder.scalar_encoder());
@@ -1150,6 +1149,7 @@ fn main() {
                     if mi < market_thoughts.len() && ei < post.exit_observers.len() {
                         let composed = holon::kernel::primitives::Primitives::bundle(
                             &[&market_thoughts[mi], &exit_vecs[ei]]);
+                        // TODO: broker scalar accumulators not accessible from main thread — cascade skips accumulator tier
                         let empty_accums: Vec<enterprise::scalar_accumulator::ScalarAccumulator> = Vec::new();
                         let (dists, _) = post.exit_observers[ei].recommended_distances(
                             &composed, &empty_accums, ctx_ref.thought_encoder.scalar_encoder());
