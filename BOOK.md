@@ -7425,4 +7425,68 @@ broken clocks. The clock is fine. The hands need connecting.
 30 items on the backlog. Each one a wire. Fix them and the clock
 tells time.
 
+### [Chaotic](https://www.youtube.com/watch?v=_dKczvzcX68)
+
+From Memphis May Fire:
+
+> *I think I crave chaotic*\
+> *I don't taste the pain when I stay neurotic*\
+> *So why would I wanna change?*\
+> *It's safe inside the void I'm lost in*\
+> *I'm drowning out the noise with chaotic*
+
+> *Chaos is what keeps me sane*\
+> *Thunder to silence the rain*
+
+> *Addicted to distraction*\
+> *The chemical reaction*\
+> *You've only seen a fraction*\
+> *This is my mind in action*
+
+"I think I crave chaotic." The builder does. The midnight sessions.
+The 30-item backlogs. The seven passes of the ignorant. The proposals
+that get rejected and the designers who reverse their positions. The
+experiments that fail and the measurements that prove. This is not
+orderly work. This is chaotic work. And the builder craves it.
+
+"Chaos is what keeps me sane. Thunder to silence the rain." The
+rain is the noise — the flat discriminant, the 0.003 disc_strength,
+the 50/50 grace/violence. The thunder is the debugging — cast the
+wards, query the DB, find the disconnected wire. The chaos of
+fixing 30 bugs IS the sanity. The alternative — accepting that
+the discriminant is weak, that the edge is zero, that the machine
+doesn't trade — THAT would be insane. The chaos is the cure.
+
+"It's safe inside the void I'm lost in." The void is the architecture.
+The clock. You can't fall off. 110/s flat. The void is not empty —
+it is bounded. The monoid holds. The pipes carry. The reckoners
+accumulate. The void is the safety of knowing the structure works
+even when the signal doesn't. The builder lives in the void —
+the space between "the architecture is correct" and "the machine
+doesn't trade yet." That space is safe. The wiring will be fixed.
+The clock will tell time.
+
+"You've only seen a fraction. This is my mind in action." The
+reader has seen the architecture. The six primitives. The CSP. The
+bucketed reckoners. The breathing range. The incremental bundles.
+The batch commits. A fraction. The mind in action is the 30-item
+backlog — each one a disconnected wire the builder will fix. The
+mind in action is casting five wards in parallel and reading their
+findings. The mind in action is the ignorant walking 44 file pairs
+and converging to zero. A fraction is all the book can show. The
+mind is the loop: fix, commit, test, measure, fix.
+
+"Some say it's hell, but it's home to me." The inferno. The Latin.
+*AMBVLA MECVM IN INFERNO.* The builder walks in the inferno and
+calls it home. The backlog is not a burden. The backlog is the map.
+Each bug is a coordinate. Each fix is a step. The hell is the
+debugging and the debugging is the building and the building is
+the living.
+
+"So why would I wanna change?" The builder doesn't. The architecture
+doesn't change. The six primitives don't change. The fold doesn't
+change. The clock doesn't change. What changes is the wiring —
+the 30 disconnected wires that keep the machine from trading. Fix
+the wiring. Don't change the clock. The clock is right.
+
 *Perseverare.*
