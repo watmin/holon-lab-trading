@@ -1088,8 +1088,6 @@ fn main() {
                     &[&market_thoughts[mi], &exit_vec]);
 
                 // Distances from exit observer — reckoner prediction or default.
-                // Scalar accumulators are on broker threads (not accessible here).
-                // Pass empty accums — cascade: reckoner → default (no accumulator fallback).
                 let empty_accums: Vec<enterprise::scalar_accumulator::ScalarAccumulator> = Vec::new();
                 let (dists, _) = exit_observers[ei].recommended_distances(
                     &composed, &empty_accums, ctx_ref.thought_encoder.scalar_encoder());
