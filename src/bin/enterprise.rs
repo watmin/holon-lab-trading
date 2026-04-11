@@ -29,11 +29,8 @@ use enterprise::window_sampler::WindowSampler;
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-/// Max learn signals to drain per candle per thread.
-/// The reckoner is a CRDT — deferral is safe. The queue drains over
-/// subsequent candles. Production rate ~1/candle. Drain rate 5/candle.
-/// The queue converges to empty.
-const MAX_DRAIN: usize = 5;
+// No MAX_DRAIN. All learning signals drain fully. The reckoner is a CRDT —
+// order doesn't matter, batching doesn't matter. Drain everything.
 const MARKET_LENSES: &[MarketLens] = &[
     MarketLens::Momentum,
     MarketLens::Structure,
@@ -746,19 +743,9 @@ fn main() {
                 while let Ok((candle, window, _encode_count)) = obs_rx.recv() {
                     candle_count += 1;
                     // Drain at most MAX_DRAIN learn signals per candle.
-                    // The learning is eventually consistent — the CRDT converges.
-                    // The queue drains over subsequent candles.
-                    {
-                        let mut drained = 0;
-                        while drained < MAX_DRAIN {
-                            match learn_rx.try_recv() {
-                                Ok((thought, direction, weight)) => {
-                                    obs.resolve(&thought, direction, weight, recalib);
-                                    drained += 1;
-                                }
-                                Err(_) => break,
-                            }
-                        }
+                    // Drain all learn signals. No cap.
+                    while let Ok((thought, direction, weight)) = learn_rx.try_recv() {
+                        obs.resolve(&thought, direction, weight, recalib);
                     }
                     // Each observer samples its own window size
                     let ws = obs.window_sampler.sample(candle_count);
@@ -839,21 +826,10 @@ fn main() {
                 let mut candle_count = 0usize;
                 while let Ok((composed, market_thought, prediction, reckoner_dists, price, side, edge, pred)) = in_rx.recv() {
                     candle_count += 1;
-                    // Drain at most MAX_DRAIN learn signals per candle.
-                    // The reckoner is a CRDT. Deferral is safe. The queue drains
-                    // over subsequent candles. Constant time per candle.
-                    {
-                        let mut drained = 0;
-                        while drained < MAX_DRAIN {
-                            match blearn_rx.try_recv() {
-                                Ok((thought, outcome, weight, direction, optimal)) => {
-                                    broker.propagate(&thought, outcome, weight, direction, &optimal,
-                                        recalib, enterprise::post::ctx_scalar_encoder_placeholder());
-                                    drained += 1;
-                                }
-                                Err(_) => break,
-                            }
-                        }
+                    // Drain all learn signals. No cap.
+                    while let Ok((thought, outcome, weight, direction, optimal)) = blearn_rx.try_recv() {
+                        broker.propagate(&thought, outcome, weight, direction, &optimal,
+                            recalib, enterprise::post::ctx_scalar_encoder_placeholder());
                     }
                     // Broker owns the distance cascade: reckoner → accumulator → default
                     let dists = broker.cascade_distances(reckoner_dists);
@@ -1247,23 +1223,17 @@ fn main() {
                 .par_iter_mut()
                 .zip(exit_work.par_iter())
                 .for_each(|(eobs, work)| {
-                    let mut drained = 0;
                     for &(_ei, ri) in work {
                         let res = &all_runner_resolutions[ri];
 
-                        // Batch training: per-candle observations from the runner's life
+                        // Batch training: ALL per-candle observations from the runner's life
                         for (thought, optimal, weight) in &res.exit_batch {
-                            if drained >= MAX_DRAIN { break; }
                             eobs.observe_distances(thought, optimal, *weight);
-                            drained += 1;
                         }
 
-                        // Single-point resolution observation (always sent)
-                        if drained < MAX_DRAIN {
-                            eobs.observe_distances(
-                                &res.composed_thought, &res.optimal_distances, res.amount);
-                            drained += 1;
-                        }
+                        // Single-point resolution observation
+                        eobs.observe_distances(
+                            &res.composed_thought, &res.optimal_distances, res.amount);
                     }
                 });
         }

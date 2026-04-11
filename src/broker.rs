@@ -546,7 +546,9 @@ fn compute_exit_batch(
         };
     }
 
-    let mut batch = Vec::with_capacity(n);
+    let mut batch = Vec::new();
+    let mut last_optimal_trail = f64::NAN;
+
     for k in 0..n {
         let price_k = history.prices[k];
         if price_k == 0.0 {
@@ -558,13 +560,22 @@ fn compute_exit_batch(
             Direction::Up => ((suffix_ext[k] - price_k) / price_k).max(0.001).min(0.10),
             Direction::Down => ((price_k - suffix_ext[k]) / price_k).max(0.001).min(0.10),
         };
+
+        // Only train when the optimal changed meaningfully (>10% relative change).
+        // If the answer is the same candle over candle, there's nothing to learn.
+        let changed = last_optimal_trail.is_nan()
+            || ((optimal_trail - last_optimal_trail).abs() / last_optimal_trail.max(0.001)) > 0.10;
+
+        if !changed {
+            continue;
+        }
+        last_optimal_trail = optimal_trail;
+
         let optimal_stop = (optimal_trail * 2.0).min(0.10);
         let optimal = Distances::new(optimal_trail, optimal_stop);
 
-        // Weight: how close the predicted distances were to optimal
-        let predicted = &history.distances[k];
-        let trail_error = (predicted.trail - optimal_trail).abs();
-        let weight = (1.0 - trail_error / optimal_trail.max(0.001)).max(0.0);
+        // Weight: the residue this optimal distance would capture
+        let weight = optimal_trail;
 
         batch.push((history.thoughts[k].clone(), optimal, weight));
     }
