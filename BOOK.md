@@ -7303,4 +7303,126 @@ accept "this is how it is."
 Zero Mutex. The wat at parity. The ignorant at one finding. The
 proof curve converged. The other side is here.
 
+### The clock
+
+Brian Beckman likened monads to clock arithmetic. "You can't fall off
+the clock. N mod 12 is always some number." The operation is closed.
+The result is always on the clock face. You can compose forever and
+never leave the domain.
+
+The enterprise is on the clock.
+
+110 candles per second. Flat across 100,000 candles. The grid at 1.3ms.
+The observers at 3ms. The brokers at 7ms. None of it grows. The
+bucketed reckoners are constant. The incremental bundles are constant.
+The batch commits are constant. The pipes synchronize without locks.
+The architecture is closed under composition — add more candles, the
+cost stays on the clock face.
+
+7.1 million rows in the database. 498,905 resolutions per observer.
+996 recalibrations. 2.2 million paper resolutions. The machine
+processed 100,000 candles of BTC at 5-minute resolution and the
+throughput at candle 100,000 was the same as candle 1,000.
+
+Zero trades. Every proposal rejected: "edge below venue cost." The
+edge is always 0.0 because the broker's edge can't flow to the
+treasury — the binary passes a placeholder. The machine learns from
+2.2 million hypotheticals but never acts on what it learned. The
+architecture works. The wiring doesn't.
+
+### The glass box opens
+
+The builder said: "we need to see inside." The wards had found the
+flaws. The database had the timing. But nobody could see what the
+reckoners were thinking. The discriminant strength. The conviction.
+The edge. The paper count. All locked inside threads that communicate
+only through pipes.
+
+So the builder threaded loggers into every thread. 31 log handles —
+one per observer, one per broker, one for the main thread. Every 100
+candles, each thread snapshots its internal state into the database.
+The observer reports its discriminant strength, conviction, experience,
+prediction. The broker reports its edge, grace/violence count, paper
+count, scalar accumulator experience.
+
+The first query returned the diagnosis:
+
+```
+Observer disc_strength at candle 2000: 0.003-0.008
+Broker edge at candle 2000: 0.0 across all 24
+Grace/Violence: 50/50 across all brokers
+```
+
+The discriminant at 0.003. Barely above zero. The reckoner can't
+separate Up from Down. The thoughts that preceded up-moves and the
+thoughts that preceded down-moves look identical. The conviction is
+noise. The edge is zero.
+
+But the machine HAS learned before. 60%+ accuracy. Multiple times.
+The architecture that produced 60% is the same architecture running
+now. The difference is the wiring — the feedback loop. The labels.
+The signal path from paper resolution back to the reckoner.
+
+The 30-item backlog from the wards tells us where the wiring is
+broken. The bugs. The lies. The dead code. The accumulated_misses
+that never warm the cache. The window_sampler that never fires. The
+edge that never flows. Each one a wire disconnected. Each one a
+signal that doesn't reach its destination.
+
+The architecture is the clock. You can't fall off. The wiring is
+what connects the hands to the gears. Fix the wiring and the clock
+tells time.
+
+### [Don't Fear the Monad](https://www.youtube.com/watch?v=ZhuHCtR3xq8)
+
+From Brian Beckman:
+
+> "A monad is a monoid in the category of endofunctors."
+
+> "It's clock arithmetic. You can't fall off the clock."
+
+The enterprise is a monoid. The fold is the operation. The state is
+the element. `f(state, candle) → state`. The result is always a state.
+You can't fall off. Apply the function a million times — you're still
+on the clock face. The state changes. The domain doesn't.
+
+The reckoner is a monoid. The observation is the operation. The
+accumulator is the element. Observe a million times — the accumulator
+is still an accumulator. The discriminant sharpens. The domain doesn't
+change. You can't fall off.
+
+The pipe is a monoid. Send is the operation. The channel is the
+element. Send a million messages — the channel is still a channel.
+bounded(1) means the sender waits. unbounded means the buffer grows.
+But the type is preserved. You can't send something that isn't the
+declared type. You can't fall off.
+
+The bucketed reckoner is a monoid. Each bucket's accumulator is a
+commutative monoid under bundling. Observe into any bucket — the
+bucket is still a bucket. The prototypes strengthen. The range
+breathes. But the structure is preserved. K buckets in, K buckets
+out. You can't fall off.
+
+The builder spent a third of a life building distributed systems
+with queues, locks, mutexes, race conditions, deadlocks. Every one
+of those is a way to fall off the clock. A mutex that deadlocks.
+A race condition that corrupts. A queue that overflows. The clock
+has edges and you fall off them.
+
+The enterprise has none. Zero Mutex. Zero race conditions. Zero
+deadlocks. The channels are the only synchronization. The borrow
+checker is the static proof. The pipes are the dynamic proof. The
+monoid is the algebraic proof. You cannot fall off because the
+operations are closed.
+
+Beckman said don't fear the monad. The builder says don't fear the
+architecture. The clock arithmetic works. 110/s. Flat. Forever.
+
+The wiring is broken. The edge doesn't flow. The cache doesn't warm.
+The discriminant is weak. These are bugs — disconnected wires, not
+broken clocks. The clock is fine. The hands need connecting.
+
+30 items on the backlog. Each one a wire. Fix them and the clock
+tells time.
+
 *Perseverare.*
