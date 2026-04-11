@@ -122,14 +122,13 @@
 
 (define (tick-papers [broker : Broker]
                      [current-price : f64])
-  : (Vec<Resolution> Vec<LogEntry>)
+  : Vec<Resolution>
   ;; Tick all papers. Each side resolves independently — a Resolution is
   ;; produced the tick a side fires, not when both are done. The paper is
   ;; removed only after both sides have resolved.
   ;; Paper optimal-distances: papers derive optimal distances from their
   ;; tracked extremes (MFE/MAE) — a simpler approximation than full replay.
   (let ((resolutions (list))
-        (logs (list))
         (remaining (deque)))
     (for-each
       (lambda (paper)
@@ -149,9 +148,7 @@
               (push! resolutions
                      (make-resolution (:slot-idx broker)
                                       (:composed-thought ticked)
-                                      :up outcome excursion optimal))
-              (push! logs (PaperResolved (:slot-idx broker)
-                                         outcome optimal))))
+                                      :up outcome excursion optimal))))
           ;; Sell side JUST fired this tick
           (when (and (:sell-resolved ticked) (not was-sell-resolved))
             (let* ((excursion (sell-excursion ticked))
@@ -160,29 +157,28 @@
               (push! resolutions
                      (make-resolution (:slot-idx broker)
                                       (:composed-thought ticked)
-                                      :down outcome excursion optimal))
-              (push! logs (PaperResolved (:slot-idx broker)
-                                         outcome optimal))))
+                                      :down outcome excursion optimal))))
           ;; Keep until both sides resolved, then remove
           (unless (fully-resolved? ticked)
             (push-back remaining ticked))))
       (:papers broker))
     (set! broker :papers remaining)
-    (list resolutions logs)))
+    resolutions))
 
 (define (propagate [broker : Broker]
                    [thought : Vector]
                    [outcome : Outcome]
                    [weight : f64]
                    [direction : Direction]
-                   [optimal : Distances])
-  : (Vec<LogEntry> PropagationFacts)
+                   [optimal : Distances]
+                   [recalib-interval : usize]
+                   [scalar-encoder : ScalarEncoder])
+  : PropagationFacts
   ;; The broker learns its OWN lessons (reckoner + its internal curve,
   ;; engram, track record, scalars). It RETURNS what the observers need —
   ;; the post applies the facts to its own observers. Values up, not
   ;; effects down.
-  (let ((logs (list))
-        ;; Derive observer indices from slot-idx
+  (let (;; Derive observer indices from slot-idx
         (market-idx (/ (:slot-idx broker) (:exit-count broker)))
         (exit-idx   (mod (:slot-idx broker) (:exit-count broker))))
     ;; 1. Reckoner learns Grace/Violence
@@ -203,9 +199,9 @@
     (inc! broker :trade-count)
     ;; 4. Scalar accumulators learn — trail and stop distances
     (observe-scalar (nth (:scalar-accums broker) 0)
-                    (:trail optimal) outcome weight)
+                    (:trail optimal) outcome weight scalar-encoder)
     (observe-scalar (nth (:scalar-accums broker) 1)
-                    (:stop optimal) outcome weight)
+                    (:stop optimal) outcome weight scalar-encoder)
     ;; 5. Engram gate
     (let ((gate-state (check-engram-gate
                         (:reckoner broker)
@@ -214,16 +210,14 @@
                           (:recalib-wins broker)
                           (:recalib-total broker)
                           (:last-recalib-count broker))
-                        500   ; recalib-interval — from ctx
+                        recalib-interval
                         0.55)))
       (set! broker :recalib-wins (:recalib-wins gate-state))
       (set! broker :recalib-total (:recalib-total gate-state))
       (set! broker :last-recalib-count (:last-recalib-count gate-state)))
-    ;; Return: log entries + propagation facts for the post
-    (push! logs (Propagated (:slot-idx broker) 2))
-    (list logs
-          (make-propagation-facts market-idx exit-idx direction
-                                  thought optimal weight))))
+    ;; Return propagation facts for the post
+    (make-propagation-facts market-idx exit-idx direction
+                            thought optimal weight)))
 
 (define (paper-count [broker : Broker])
   : usize

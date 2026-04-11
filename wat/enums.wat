@@ -1,9 +1,9 @@
 ;; ── enums.wat ───────────────────────────────────────────────────────
 ;;
 ;; Sum types for the enterprise. Side, Direction, and Outcome are the
-;; three labels. TradePhase is the position lifecycle. ReckConfig and
-;; Prediction are the reckoner's configuration and output. ScalarEncoding
-;; determines how continuous values are encoded.
+;; three labels. TradePhase is the position lifecycle. Prediction is the
+;; reckoner's output. ScalarEncoding determines how continuous values
+;; are encoded. ReckConfig lives in holon-rs, not here.
 ;; Depends on: nothing.
 
 ;; ── Trading labels ─────────────────────────────────────────────────
@@ -22,17 +22,6 @@
   :runner              ; residue riding, principal already returned
   :settled-violence    ; stop-loss fired — bounded loss
   :settled-grace)      ; trailing stop fired — residue is permanent gain
-
-;; ── Reckoner configuration ─────────────────────────────────────────
-;; One constructor. Config specifies the readout mode only.
-;; dims and recalib-interval are separate parameters to the constructor.
-
-(enum reckoner-config
-  (Discrete
-    labels)            ; Vec<String> — ("Up" "Down")
-  (Continuous
-    default-value      ; f64 — the crutch, returned when ignorant
-    buckets))          ; usize — number of bins (K). Compute budget, not resolution.
 
 ;; ── Prediction — what a reckoner returns ───────────────────────────
 ;; Data. The consumer decides what "best" means.

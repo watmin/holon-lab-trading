@@ -32,8 +32,8 @@
   : ExitObserver
   (exit-observer
     lens
-    (reckoner "trail" dims recalib-interval (Continuous default-trail))
-    (reckoner "stop"  dims recalib-interval (Continuous default-stop))
+    (reckoner (format "trail-~a" lens) dims recalib-interval (Continuous default-trail 10))
+    (reckoner (format "stop-~a" lens)  dims recalib-interval (Continuous default-stop 10))
     (make-distances default-trail default-stop)
     (make-incremental-bundle dims)))
 

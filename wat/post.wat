@@ -47,10 +47,8 @@
 (define (make-post [post-idx : usize]
                    [source : Asset]
                    [target : Asset]
-                   [dims : usize]
-                   [recalib-interval : usize]
-                   [max-window-size : usize]
                    [indicator-bank : IndicatorBank]
+                   [max-window-size : usize]
                    [market-observers : Vec<MarketObserver>]
                    [exit-observers : Vec<ExitObserver>]
                    [registry : Vec<Broker>])
@@ -60,14 +58,73 @@
     market-observers exit-observers registry
     0))
 
+;; ── Free functions: vocab wiring ────────────────────────────────
+;; These select which vocab modules each lens calls. NOT methods on
+;; observers. The CRITICAL wiring — different lenses see different
+;; market data.
+
+(define (market-lens-facts [lens : MarketLens]
+                           [candle : Candle]
+                           [window : Vec<Candle>])
+  : Vec<ThoughtAST>
+  (let* ((facts (encode-time-facts candle))
+         (_ (extend! facts (encode-standard-facts window))))
+    (match lens
+      (Momentum
+        (extend! facts (encode-oscillator-facts candle))
+        (extend! facts (encode-momentum-facts candle))
+        (extend! facts (encode-stochastic-facts candle)))
+      (Structure
+        (extend! facts (encode-keltner-facts candle))
+        (extend! facts (encode-fibonacci-facts candle))
+        (extend! facts (encode-ichimoku-facts candle))
+        (extend! facts (encode-price-action-facts candle)))
+      (Volume
+        (extend! facts (encode-flow-facts candle)))
+      (Narrative
+        (extend! facts (encode-timeframe-facts candle))
+        (extend! facts (encode-divergence-facts candle)))
+      (Regime
+        (extend! facts (encode-regime-facts candle))
+        (extend! facts (encode-persistence-facts candle)))
+      (Generalist
+        ;; ALL modules
+        (extend! facts (encode-oscillator-facts candle))
+        (extend! facts (encode-momentum-facts candle))
+        (extend! facts (encode-stochastic-facts candle))
+        (extend! facts (encode-keltner-facts candle))
+        (extend! facts (encode-fibonacci-facts candle))
+        (extend! facts (encode-ichimoku-facts candle))
+        (extend! facts (encode-price-action-facts candle))
+        (extend! facts (encode-flow-facts candle))
+        (extend! facts (encode-timeframe-facts candle))
+        (extend! facts (encode-divergence-facts candle))
+        (extend! facts (encode-regime-facts candle))
+        (extend! facts (encode-persistence-facts candle))))
+    facts))
+
+(define (exit-lens-facts [lens : ExitLens]
+                         [candle : Candle])
+  : Vec<ThoughtAST>
+  (match lens
+    (Volatility (encode-exit-volatility-facts candle))
+    (Structure (encode-exit-structure-facts candle))
+    (Timing (encode-exit-timing-facts candle))
+    (Generalist
+      (let ((facts (encode-exit-volatility-facts candle)))
+        (extend! facts (encode-exit-structure-facts candle))
+        (extend! facts (encode-exit-timing-facts candle))
+        facts))))
+
 ;; ── post-on-candle ──────────────────────────────────────────────
 ;; The N x M grid. Tick indicators, push window, market observers
-;; observe, exit observers compose, brokers propose, register papers.
-;; Returns proposals + market-thoughts + cache misses.
+;; encode via incremental bundles, exit observers pre-encode, then
+;; the grid composes and proposes. Returns proposals + market-thoughts
+;; + cache misses.
 
 (define (post-on-candle [post : Post] [raw-candle : RawCandle] [ctx : Ctx])
   : (Vec<Proposal>, Vec<Vector>, Vec<(ThoughtAST, Vector)>)
-  (let* (;; Tick indicators → enriched candle
+  (let* (;; Tick indicators -> enriched candle
          (candle (tick (:indicator-bank post) raw-candle))
          ;; Push onto window, trim to capacity
          (_ (begin (push-back (:candle-window post) candle)
@@ -76,86 +133,107 @@
          ;; Increment encode-count
          (_ (inc! (:encode-count post)))
 
-         ;; Market observers observe-candle (parallel)
-         ;; Each returns (thought, prediction, edge, misses)
-         (market-results
-           (pmap (lambda (obs)
-                   (let ((window-size (sample (:window-sampler obs) (:encode-count post)))
-                         (window (last-n (:candle-window post) window-size)))
-                     (observe-candle obs window ctx)))
-                 (:market-observers post)))
+         ;; Snapshot window for parallel access
+         (window (vec (:candle-window post)))
 
-         ;; Extract market-thoughts and collect misses
+         ;; Market observers: par_iter_mut. Each computes its own lens
+         ;; facts, encodes via incremental bundle, then observes.
+         ;; Returns (thought, prediction, edge, misses).
+         (market-results
+           (par-iter-mut
+             (lambda (obs)
+               (let* ((facts (market-lens-facts (:lens obs) candle window))
+                      ((thought misses)
+                        (incremental-encode (:incremental obs) facts
+                                            (:thought-encoder ctx)))
+                      (result (observe obs thought (vec))))
+                 (list (:thought result)
+                       (:prediction result)
+                       (:edge result)
+                       misses)))
+             (:market-observers post)))
+
+         ;; Extract columns from market results
          (market-thoughts (map first market-results))
          (market-predictions (map second market-results))
          (market-edges (map (lambda (r) (nth r 2)) market-results))
          (all-misses (apply append (map (lambda (r) (nth r 3)) market-results)))
 
-         ;; N x M composition: for each market observer x exit observer pair
+         ;; Pre-encode exit facts per exit observer (M, not N x M).
+         ;; Each exit observer's incremental bundle maintains sums
+         ;; across candles. The exit-vecs are shared across all N
+         ;; market observers.
+         (exit-results
+           (par-iter-mut
+             (lambda (eobs)
+               (let ((exit-fact-asts (exit-lens-facts (:lens eobs) candle)))
+                 (incremental-encode (:incremental eobs) exit-fact-asts
+                                     (:thought-encoder ctx))))
+             (:exit-observers post)))
+         (exit-vecs (map first exit-results))
+         (_ (for-each (lambda (r)
+              (extend! all-misses (second r)))
+            exit-results))
+
+         ;; N market x M exit -> N*M proposals
+         ;; Parallel phase: compute values. Sequential phase: apply mutations.
          (n (len (:market-observers post)))
          (m (len (:exit-observers post)))
-         (grid-results
-           (map (lambda (slot-idx)
-                  (let* ((market-idx (/ slot-idx m))
-                         (exit-idx (mod slot-idx m))
-                         (market-thought (nth market-thoughts market-idx))
-                         (market-pred (nth market-predictions market-idx))
-                         (exit-obs (nth (:exit-observers post) exit-idx))
-                         (broker (nth (:registry post) slot-idx))
+         (price (current-price post))
 
-                         ;; Exit observer: encode facts, compose with market thought
-                         (exit-fact-asts (encode-exit-facts exit-obs candle))
-                         ((composed compose-misses)
-                           (evaluate-and-compose exit-obs market-thought exit-fact-asts ctx))
+         ;; pmap: each slot computes independently. Pure reads only.
+         (grid-values
+           (par-iter
+             (lambda (slot-idx)
+               (let* ((mi (/ slot-idx m))
+                      (ei (mod slot-idx m))
+                      (market-thought (nth market-thoughts mi))
+                      (exit-vec (nth exit-vecs ei))
 
-                         ;; Exit observer: recommended distances using broker's accums
-                         ((distances experience)
-                           (recommended-distances exit-obs composed (:scalar-accums broker)))
+                      ;; Compose market thought with exit facts
+                      (composed (bundle (list market-thought exit-vec)))
 
-                         ;; Broker: propose (Grace/Violence prediction)
-                         (prediction (propose broker composed))
+                      ;; Exit: recommend distances
+                      ((dists _exit-exp)
+                        (recommended-distances (nth (:exit-observers post) ei)
+                          composed
+                          (:scalar-accums (nth (:registry post) slot-idx))
+                          (scalar-encoder (:thought-encoder ctx))))
 
-                         ;; Derive side from market prediction
-                         (side (match market-pred
-                                 ((Discrete scores _)
-                                   (let ((up-score (second (first (filter (lambda (s) (= (first s) "Up")) scores))))
-                                         (down-score (second (first (filter (lambda (s) (= (first s) "Down")) scores)))))
-                                     (if (>= up-score down-score) :buy :sell)))))
+                      ;; Derive side + edge (reads only)
+                      (side-val (derive-side-from-prediction
+                                  (nth market-predictions mi)))
+                      (edge-val (edge (nth (:registry post) slot-idx)))
+                      (enterprise-pred (holon-prediction-to-enterprise
+                                         (nth market-predictions mi))))
 
-                    ;; Register paper on broker
-                    (register-paper broker composed (current-price post) distances)
+                 (list slot-idx composed dists side-val edge-val enterprise-pred)))
+             (range (* n m))))
 
-                    ;; Assemble proposal
-                    (list (make-proposal composed distances
-                            (edge broker) side
-                            (:source-asset post) (:target-asset post)
-                            prediction (:post-idx post) slot-idx)
-                          compose-misses)))
-                (range (* n m))))
+         ;; Build proposals (pure — struct construction, no mutation)
+         (proposals
+           (map (lambda (gv)
+                  (let (((slot-idx composed dists side-val edge-val enterprise-pred) gv))
+                    (make-proposal composed dists edge-val side-val
+                      (:source-asset post) (:target-asset post)
+                      enterprise-pred (:post-idx post) slot-idx)))
+                grid-values))
 
-         ;; Unzip proposals and misses from grid
-         (proposals (map first grid-results))
-         (grid-misses (apply append (map second grid-results)))
-         (total-misses (append all-misses grid-misses)))
+         ;; Apply mutations per-broker in parallel
+         (_ (par-iter-mut-zip
+              (lambda (broker gv)
+                (let (((_ composed dists _ _ _) gv))
+                  (propose broker composed)
+                  (register-paper broker composed price dists)))
+              (:registry post)
+              grid-values)))
 
-    (list proposals market-thoughts total-misses)))
-
-;; ── post-tick ───────────────────────────────────────────────────
-;; Parallel tick all brokers' papers. Returns resolutions + log entries.
-
-(define (post-tick [post : Post])
-  : (Vec<Resolution>, Vec<LogEntry>)
-  (let* ((price (current-price post))
-         (results (pmap (lambda (broker)
-                          (tick-papers broker price))
-                        (:registry post)))
-         (resolutions (apply append (map first results)))
-         (logs (apply append (map second results))))
-    (list resolutions logs)))
+    (list proposals market-thoughts all-misses)))
 
 ;; ── post-propagate ──────────────────────────────────────────────
 ;; Route a resolved outcome to the broker, then apply propagation
 ;; facts to observers. Values up, not effects down.
+;; Takes recalib-interval as a parameter (not from constructor).
 
 (define (post-propagate [post : Post]
                         [slot-idx : usize]
@@ -163,27 +241,37 @@
                         [outcome : Outcome]
                         [weight : f64]
                         [direction : Direction]
-                        [optimal : Distances])
+                        [optimal : Distances]
+                        [recalib-interval : usize])
   : Vec<LogEntry>
   (let* ((broker (nth (:registry post) slot-idx))
-         ((logs prop-facts)
-           (propagate broker thought outcome weight direction optimal))
+         (prop-facts
+           (propagate broker thought outcome weight direction optimal
+                      recalib-interval (ctx-scalar-encoder-placeholder)))
          ;; Apply propagation facts to observers
-         (market-obs (nth (:market-observers post) (:market-idx prop-facts)))
-         (_ (resolve market-obs
-              (:composed-thought prop-facts)
-              (:direction prop-facts)
-              (:weight prop-facts)))
-         (exit-obs (nth (:exit-observers post) (:exit-idx prop-facts)))
-         (_ (observe-distances exit-obs
-              (:composed-thought prop-facts)
-              (:optimal prop-facts)
-              (:weight prop-facts))))
-    logs))
+         (mi (:market-idx prop-facts))
+         (ei (:exit-idx prop-facts))
+
+         (_ (when (< mi (len (:market-observers post)))
+              (resolve (nth (:market-observers post) mi)
+                (:composed-thought prop-facts)
+                (:direction prop-facts)
+                (:weight prop-facts)
+                recalib-interval)))
+
+         (_ (when (< ei (len (:exit-observers post)))
+              (observe-distances (nth (:exit-observers post) ei)
+                (:composed-thought prop-facts)
+                (:optimal prop-facts)
+                (:weight prop-facts)))))
+
+    (list (log-entry-propagated slot-idx 2))))
 
 ;; ── post-update-triggers ────────────────────────────────────────
-;; Step 3c: re-query exit observers for fresh distances on active
-;; trades. Returns level updates and cache misses as values.
+;; Re-query exit observers for fresh distances on active trades.
+;; Encodes exit facts directly via lens and composes with market
+;; thought. Uses par_iter for active trades.
+;; Returns level updates and cache misses as values.
 
 (define (post-update-triggers [post : Post]
                               [trades : Vec<(TradeId, Trade)>]
@@ -191,34 +279,51 @@
                               [ctx : Ctx])
   : (Vec<(TradeId, Levels)>, Vec<(ThoughtAST, Vector)>)
   (let* ((m (len (:exit-observers post)))
-         (results
-           (map (lambda (trade-pair)
-                  (let* (((trade-id trade) trade-pair)
-                         (slot-idx (:broker-slot-idx trade))
-                         (market-idx (/ slot-idx m))
-                         (exit-idx (mod slot-idx m))
-                         (market-thought (nth market-thoughts market-idx))
-                         (exit-obs (nth (:exit-observers post) exit-idx))
-                         (broker (nth (:registry post) slot-idx))
+         (candle (last (:candle-window post))))
 
-                         ;; Compose fresh thought with exit facts
-                         (exit-fact-asts (encode-exit-facts exit-obs
-                                          (last (:candle-window post))))
-                         ((composed misses)
-                           (evaluate-and-compose exit-obs market-thought exit-fact-asts ctx))
+    (if (nil? candle)
+      (list (vec) (vec))
+      (let* ((results
+               (par-iter
+                 (lambda (trade-pair)
+                   (let* (((trade-id trade) trade-pair)
+                          (slot-idx (:broker-slot-idx trade))
+                          (mi (/ slot-idx m))
+                          (ei (mod slot-idx m)))
 
-                         ;; Get fresh distances
-                         ((distances _)
-                           (recommended-distances exit-obs composed (:scalar-accums broker)))
+                     (if (>= mi (len market-thoughts))
+                       nil
+                       (let* ((market-thought (nth market-thoughts mi))
 
-                         ;; Convert to levels
-                         (new-levels (distances-to-levels distances
-                                       (current-price post) (:side trade))))
-                    (list (list trade-id new-levels) misses)))
-                trades))
-         (level-updates (map first results))
-         (all-misses (apply append (map second results))))
-    (list level-updates all-misses)))
+                              ;; Exit: encode facts via lens, compose with market thought
+                              (exit-lens (:lens (nth (:exit-observers post) ei)))
+                              (exit-fact-asts (exit-lens-facts exit-lens candle))
+                              (exit-bundle (thought-ast-bundle exit-fact-asts))
+                              ((exit-vec misses)
+                                (encode (:thought-encoder ctx) exit-bundle))
+
+                              (composed (bundle (list market-thought exit-vec)))
+
+                              ;; Get fresh distances
+                              ((dists _)
+                                (recommended-distances (nth (:exit-observers post) ei)
+                                  composed
+                                  (:scalar-accums (nth (:registry post) slot-idx))
+                                  (scalar-encoder (:thought-encoder ctx))))
+
+                              ;; Convert to levels
+                              (new-levels (distances-to-levels dists
+                                            (current-price post) (:side trade))))
+
+                         (list (list trade-id new-levels) misses)))))
+                 trades))
+
+             ;; Filter nils, collect
+             (valid (filter (lambda (r) (not (nil? r))) results))
+             (level-updates (map first valid))
+             (all-misses (apply append (map second valid))))
+
+        (list level-updates all-misses)))))
 
 ;; ── current-price ───────────────────────────────────────────────
 ;; The close of the last candle in the post's candle-window.

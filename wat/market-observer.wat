@@ -45,7 +45,7 @@
   ;; gating (fewer — the good-state manifold is simpler).
   (market-observer
     lens
-    (reckoner "direction" dims recalib-interval (Discrete '("Up" "Down")))
+    (reckoner (format "direction-~a" lens) dims recalib-interval (Discrete '("Up" "Down")))
     (online-subspace dims 8)
     window-sampler
     0                                  ; resolved
@@ -79,7 +79,8 @@
 (define (resolve [observer : MarketObserver]
                  [thought : Vector]
                  [direction : Direction]
-                 [weight : f64])
+                 [weight : f64]
+                 [recalib-interval : usize])
   ;; Called by broker propagation — reckoner learns from reality.
   ;; Compares last-prediction against the actual direction.
   ;; Match → correct. Mismatch → incorrect. Feeds the reckoner's
@@ -103,7 +104,7 @@
                           (:recalib-wins observer)
                           (:recalib-total observer)
                           (:last-recalib-count observer))
-                        (:recalib-interval (ctx))
+                        recalib-interval
                         0.55)))
       (set! observer :recalib-wins (:recalib-wins gate-state))
       (set! observer :recalib-total (:recalib-total gate-state))
