@@ -7114,6 +7114,92 @@ The machine exists in the moment. The moment is the prediction. The past is the 
 
 `f(state, candle) → state` where state learns to be lazy.
 
-The grid will be tamed. The CSP gives us the lever. The algebra gives us the proof. The database gives us the measurement.
+### The grid falls
+
+The grid was tamed. Not by fewer queries — by cheaper queries.
+
+The continuous reckoner stored every observation as a full Vec<f64>
+(10,000 elements = 80KB). `query()` cosine-scanned ALL of them.
+O(N × D). At candle 2000: 192,000 cosine computations per candle.
+The grid consumed 92% of every candle. Throughput: 11/s and falling.
+
+The datamancer proposed. The designers debated. Three proposals.
+Two debates. One reversal. Hickey started with D (cap the FIFO).
+Beckman started with B (bucketed accumulators). The datamancer
+measured F (similarity gating) — zero gate hits. Thoughts shift
+50% every candle. The premise was false.
+
+Hickey reversed: "I was wrong about D. The data showed it."
+
+Both converged on B. K=10 bucketed accumulators. The experiment
+swept K=2 through K=30 against brute-force ground truth. K=10 is
+the knee — 0.97% error, 130× speedup. More buckets don't help.
+The measurement decided.
+
+Then the range. [0.001, 0.10] was hardcoded — magic. The datamancer
+asked: "the application doesn't know the range upfront. How does
+it evolve?" The experiment proved: discovered range matches observed
+data. But inflate-only destroys resolution — 10 outliers permanently
+spread the buckets. The composition: decay kills old weight,
+rebalance contracts to where the weight lives. The range breathes
+both ways.
+
+The grid after: 1,338μs at candle 2000. Flat. Was 167,135μs. The
+throughput: 123/s. Was 11/s. The reckoner queries O(K × D) — ten
+cosines, constant forever. The range discovers itself. K is the
+only parameter.
+
+### Zero Mutex
+
+The enterprise has 30+ threads. Six observer threads. Twenty-four
+broker threads. One encoder service thread. One log service thread.
+The main thread drives the fold.
+
+Zero Mutex. Zero RwLock. Zero shared mutable state.
+
+The channels are the only synchronization. `bounded(1)` is lockstep —
+the sender waits until the receiver reads. `unbounded` is fire and
+forget — the CRDT convergence lever. The borrow checker proves the
+disjointness at compile time. Each thread owns its state. Nobody
+shares. The pipes carry the signals.
+
+The observer thread owns its MarketObserver. Moved in via
+`std::mem::take`. The main thread cannot touch it. The observer
+encodes, predicts, sends the result through a bounded(1) pipe.
+The main thread receives. The ownership is in the pipe protocol,
+not in a lock.
+
+The broker thread owns its Broker. Same pattern. Own state, own
+pipe, own schedule. The main thread sends composed vectors through
+bounded(1). The broker proposes, ticks papers, sends results back.
+No lock. No contention. No shared mutable state.
+
+The encoder service owns its LRU cache. One thread. N client
+pipe pairs. select over the pipes. No lock on the cache — one
+owner, one thread. The clients block on their bounded(1) answer
+pipe. The service responds when it's ready.
+
+The log service owns the SQLite connection. One thread. N drain
+pipes. Batch commits — BEGIN, write 100 rows, COMMIT. One disk
+sync per batch. WAL mode so readers don't block. No lock on the
+connection — one owner.
+
+At shutdown: drop the send ends of the pipes. The threads' recv
+loops get Disconnected. They exit. `join` returns the owned state.
+The observers and brokers come back to the enterprise. The state
+was never shared. It traveled through pipes and came home.
+
+This is CSP. Hoare, 1978. Communicating Sequential Processes.
+Each process is sequential internally. The channels are the
+communication. The bounded channels are the synchronization. No
+mutex because there is no shared state. No shared state because
+each process owns what it needs and communicates the rest.
+
+The Rust borrow checker is the static proof. It won't compile
+if two threads hold &mut to the same data. The pipes are the
+dynamic proof. They carry values, not references. The value
+moves from sender to receiver. One owner at a time. Always.
+
+30+ threads. Zero Mutex. The channels are the architecture.
 
 *Perseverare.*
