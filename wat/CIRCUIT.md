@@ -386,7 +386,7 @@ Then async. The prediction uses whatever the reckoner has learned so far.
 CSP — communicating sequential processes. The concurrency architecture.
 
 ```mermaid
-graph LR
+graph TD
     subgraph MAIN [Main thread — the heartbeat]
         FOLD[fold loop]
     end
