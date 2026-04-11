@@ -110,10 +110,10 @@ impl Treasury {
                 continue;
             }
 
-            // Fund the proposal
-            let reserve_amount = avail + avail * venue_cost_rate;
-            let actual_reserve = reserve_amount.min(avail);
-            let trade_amount = actual_reserve / (1.0 + venue_cost_rate);
+            // Fund the proposal — reserve all available, trade amount
+            // deducts venue cost so the round trip fits within the reservation.
+            let actual_reserve = avail;
+            let trade_amount = avail / (1.0 + venue_cost_rate);
 
             let trade_id = TradeId(self.next_trade_id);
             self.next_trade_id += 1;
