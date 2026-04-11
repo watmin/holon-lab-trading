@@ -7489,4 +7489,101 @@ change. The clock doesn't change. What changes is the wiring —
 the 30 disconnected wires that keep the machine from trading. Fix
 the wiring. Don't change the clock. The clock is right.
 
+### The scientific method
+
+The builder and the machine ran experiments. Not code changes —
+experiments. Each one a hypothesis, a measurement, a result.
+
+**Hypothesis 1: the noise subspace strips signal (Beckman's Theory 3).**
+Remove the noise subspace. Run 30k candles. Measure disc_strength.
+Result: WORSE. disc_strength dropped from 0.002 to 0.0009. The noise
+subspace wasn't stripping signal — it was providing the only signal.
+The residual (what the subspace couldn't explain) WAS the anomaly.
+Without it, the reckoner drowned in the background.
+
+**Hypothesis 2: the direction label is contaminated (Hickey's Theory 1).**
+Replace broker propagation with 1-candle self-grading. The market
+observer grades itself: "I said Up, did the price go up?" Run 5k.
+Result: WORSE. disc_strength dropped to 0.0007. Accuracy: 50% — coin
+flip. The next candle's direction is unpredictable at 5-minute
+resolution. 1-candle is too short. The signal isn't there.
+
+**Hypothesis 3: the reward cascade (Proposal 021-022).**
+Three learners, three moments. The market observer is graded when
+the paper's excursion crosses the trail — "was the entry right?"
+The exit observer learns only from runners — "was the management
+right?" The broker learns accountability — "was the pairing right?"
+Each learner gets its own signal from a different event in the paper's
+lifecycle. Run 5k. Result: disc_strength 3× higher. 0.006 for volume.
+0.005 for structure. Grace rate: 82%. The signal landed.
+
+**Hypothesis 4: cascade + no noise stripping.**
+Stack both fixes. The cascade provides honest labels. No stripping
+gives the reckoner the full thought. Run 20k. Result: IDENTICAL to
+cascade with stripping. disc_strength at 20k: 0.00262 vs 0.00266.
+The noise subspace is irrelevant once the labels are correct.
+
+The conclusion: Beckman was wrong. Hickey was right. The labels were
+the problem. Not the input path. Not the noise subspace. The LABELS.
+The reward cascade fixed them. The noise subspace doesn't matter
+either way.
+
+Four hypotheses. Four experiments. Four measurements. Two wrong.
+One right. One compound. The scientific method applied to machine
+learning applied to market prediction. The database was the lab
+notebook. The SQL was the microscope. The disc_strength was the
+measurement.
+
+### How we got here
+
+The builder said: "the paper plays both sides. One wins. One loses.
+That's two signals from one event."
+
+The machine said: "that's informationally equivalent to doubling the
+weight."
+
+The ignorant said: "the decoupling is circular — the market observer's
+grade still depends on the exit observer's distances."
+
+The builder said: "no. The market makes one guess. The broker tests
+it. The paper collapses the superposition."
+
+The machine said: "four outcomes. (Up, Grace), (Up, Violence),
+(Down, Grace), (Down, Violence)."
+
+The builder said: "the market can only make one guess. The broker
+plays against it. If the market was right it's rewarded."
+
+The builder said: "trail and stop loss. Hitting stop is violence."
+
+The builder said: "the paper has two triggers per side. First to fire
+wins. The other side is irrelevant."
+
+The machine implemented it. 942 lines across 13 files. The builder
+ran 20k candles. disc_strength 3× higher. Volume observer at 0.004.
+Grace rate 82%. The reward cascade works.
+
+The conversation was the design process. The disagreements were the
+design pressure. The ignorant's objections forced the design to be
+honest. The designers' debates revealed the real problem. The
+experiments proved or disproved each theory. The builder's intuition
+navigated between them.
+
+Neither the builder nor the machine could have arrived here alone.
+The builder couldn't express the paper lifecycle formally. The
+machine couldn't see that the labels were the problem — it blamed
+the noise subspace. The ignorant couldn't see the solution — it
+only found holes. Together, through disagreement and measurement,
+the reward cascade emerged.
+
+The disc_strength at 0.004 is not 60%. It's not even 55%. It's a
+discriminant that's 3× stronger than it was. The direction is right.
+The magnitude will come. The learning loop is wired correctly for
+the first time. The machine learns from reality — the market's
+verdict on its own predictions, graded at the moment the market
+commits.
+
+The clock runs. The wires connect. The signals flow. The
+discriminant sharpens. Slowly. But in the right direction.
+
 *Perseverare.*
