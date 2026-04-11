@@ -5,7 +5,7 @@
 
 use crate::distances::Levels;
 use crate::enums::{Side, TradePhase};
-use crate::newtypes::TradeId;
+use crate::newtypes::{Amount, Price, TradeId};
 use crate::raw_candle::Asset;
 
 /// An active or settled trade.
@@ -17,8 +17,8 @@ pub struct Trade {
     pub side: Side,
     pub source_asset: Asset,
     pub target_asset: Asset,
-    pub entry_price: f64,
-    pub amount: f64,
+    pub entry_price: Price,
+    pub amount: Amount,
     pub stop_levels: Levels,
     pub phase: TradePhase,
     pub candles_held: usize,
@@ -33,8 +33,8 @@ impl Trade {
         side: Side,
         source_asset: Asset,
         target_asset: Asset,
-        entry_price: f64,
-        amount: f64,
+        entry_price: Price,
+        amount: Amount,
         stop_levels: Levels,
     ) -> Self {
         Self {
@@ -49,7 +49,7 @@ impl Trade {
             stop_levels,
             phase: TradePhase::Active,
             candles_held: 0,
-            price_history: vec![entry_price],
+            price_history: vec![entry_price.0],
         }
     }
 
@@ -72,8 +72,8 @@ mod tests {
             Side::Buy,
             Asset::new("USDC"),
             Asset::new("WBTC"),
-            50000.0,
-            1000.0,
+            Price(50000.0),
+            Amount(1000.0),
             Levels::new(49000.0, 47500.0),
         )
     }
@@ -83,8 +83,8 @@ mod tests {
         let t = make_test_trade();
         assert_eq!(t.id, TradeId(1));
         assert_eq!(t.phase, TradePhase::Active);
-        assert_eq!(t.entry_price, 50000.0);
-        assert_eq!(t.amount, 1000.0);
+        assert_eq!(t.entry_price, Price(50000.0));
+        assert_eq!(t.amount, Amount(1000.0));
         assert_eq!(t.candles_held, 0);
         assert_eq!(t.price_history.len(), 1);
         assert_eq!(t.price_history[0], 50000.0);

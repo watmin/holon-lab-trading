@@ -8,13 +8,14 @@
 use holon::kernel::vector::Vector;
 
 use crate::distances::Distances;
+use crate::newtypes::Price;
 
 /// A hypothetical paper trade tracking both buy and sell sides.
 pub struct PaperEntry {
     /// The thought at entry.
     pub composed_thought: Vector,
     /// Price when the paper was created.
-    pub entry_price: f64,
+    pub entry_price: Price,
     /// Distances from the exit observer at entry.
     pub distances: Distances,
     /// Best price in buy direction so far.
@@ -34,16 +35,17 @@ pub struct PaperEntry {
 impl PaperEntry {
     /// Create a new paper entry. Both sides start unresolved.
     /// Buy trail stop is below price, sell trail stop is above.
-    pub fn new(composed_thought: Vector, entry_price: f64, distances: Distances) -> Self {
-        let trail_dist = entry_price * distances.trail;
+    pub fn new(composed_thought: Vector, entry_price: Price, distances: Distances) -> Self {
+        let p = entry_price.0;
+        let trail_dist = p * distances.trail;
         Self {
             composed_thought,
             entry_price,
             distances,
-            buy_extreme: entry_price,
-            buy_trail_stop: entry_price - trail_dist,
-            sell_extreme: entry_price,
-            sell_trail_stop: entry_price + trail_dist,
+            buy_extreme: p,
+            buy_trail_stop: p - trail_dist,
+            sell_extreme: p,
+            sell_trail_stop: p + trail_dist,
             buy_resolved: false,
             sell_resolved: false,
         }
@@ -88,12 +90,12 @@ impl PaperEntry {
 
     /// Buy side excursion as fraction of entry price.
     pub fn buy_excursion(&self) -> f64 {
-        (self.buy_extreme - self.entry_price) / self.entry_price
+        (self.buy_extreme - self.entry_price.0) / self.entry_price.0
     }
 
     /// Sell side excursion as fraction of entry price.
     pub fn sell_excursion(&self) -> f64 {
-        (self.entry_price - self.sell_extreme) / self.entry_price
+        (self.entry_price.0 - self.sell_extreme) / self.entry_price.0
     }
 }
 
@@ -113,9 +115,9 @@ mod tests {
     fn test_paper_entry_new() {
         let thought = make_thought();
         let distances = Distances::new(0.05, 0.10);
-        let paper = PaperEntry::new(thought, 100.0, distances);
+        let paper = PaperEntry::new(thought, Price(100.0), distances);
 
-        assert!((paper.entry_price - 100.0).abs() < 1e-10);
+        assert!((paper.entry_price.0 - 100.0).abs() < 1e-10);
         assert!((paper.buy_extreme - 100.0).abs() < 1e-10);
         assert!((paper.sell_extreme - 100.0).abs() < 1e-10);
         // Buy trail stop below price
@@ -130,7 +132,7 @@ mod tests {
     fn test_tick_rising_prices_updates_buy_extreme() {
         let thought = make_thought();
         let distances = Distances::new(0.05, 0.10);
-        let mut paper = PaperEntry::new(thought, 100.0, distances);
+        let mut paper = PaperEntry::new(thought, Price(100.0), distances);
 
         paper.tick(110.0);
         assert!((paper.buy_extreme - 110.0).abs() < 1e-10);
@@ -143,7 +145,7 @@ mod tests {
     fn test_tick_buy_stop_fires() {
         let thought = make_thought();
         let distances = Distances::new(0.05, 0.10);
-        let mut paper = PaperEntry::new(thought, 100.0, distances);
+        let mut paper = PaperEntry::new(thought, Price(100.0), distances);
 
         // Price rises to 110, trail stop at 104.5
         paper.tick(110.0);
@@ -156,7 +158,7 @@ mod tests {
     fn test_tick_sell_stop_fires() {
         let thought = make_thought();
         let distances = Distances::new(0.05, 0.10);
-        let mut paper = PaperEntry::new(thought, 100.0, distances);
+        let mut paper = PaperEntry::new(thought, Price(100.0), distances);
 
         // Price drops to 90, sell trail stop ratchets: 90 + 90*0.05 = 94.5
         paper.tick(90.0);
@@ -171,7 +173,7 @@ mod tests {
         let thought = make_thought();
         // Trail=0.20: buy_trail_stop=80, sell_trail_stop=120
         let distances = Distances::new(0.20, 0.30);
-        let mut paper = PaperEntry::new(thought, 100.0, distances);
+        let mut paper = PaperEntry::new(thought, Price(100.0), distances);
 
         assert!(!paper.fully_resolved());
 
@@ -194,7 +196,7 @@ mod tests {
         let thought = make_thought();
         // Use large trail so tick doesn't resolve sides immediately
         let distances = Distances::new(0.20, 0.30);
-        let mut paper = PaperEntry::new(thought, 100.0, distances);
+        let mut paper = PaperEntry::new(thought, Price(100.0), distances);
 
         paper.tick(110.0); // buy extreme = 110, sell trail at 100+20=120 > 110, no fire
         paper.tick(90.0);  // sell extreme = 90, buy trail at max(80, 110-22)=88 < 90, no fire
@@ -207,7 +209,7 @@ mod tests {
     fn test_resolved_side_stops_tracking() {
         let thought = make_thought();
         let distances = Distances::new(0.05, 0.10);
-        let mut paper = PaperEntry::new(thought, 100.0, distances);
+        let mut paper = PaperEntry::new(thought, Price(100.0), distances);
 
         // Trigger buy side
         paper.tick(110.0);
@@ -224,7 +226,7 @@ mod tests {
     fn test_initial_excursions_zero() {
         let thought = make_thought();
         let distances = Distances::new(0.05, 0.10);
-        let paper = PaperEntry::new(thought, 100.0, distances);
+        let paper = PaperEntry::new(thought, Price(100.0), distances);
         assert!((paper.buy_excursion() - 0.0).abs() < 1e-10);
         assert!((paper.sell_excursion() - 0.0).abs() < 1e-10);
     }

@@ -21,7 +21,7 @@ use crate::exit_observer::ExitObserver;
 use crate::indicator_bank::IndicatorBank;
 use crate::log_entry::LogEntry;
 use crate::market_observer::MarketObserver;
-use crate::newtypes::TradeId;
+use crate::newtypes::{Price, TradeId};
 use crate::proposal::Proposal;
 use crate::raw_candle::{Asset, RawCandle};
 use crate::thought_encoder::ThoughtAST;
@@ -90,11 +90,13 @@ impl Post {
     }
 
     /// Last close price. Panics if called before the first tick.
-    pub fn last_close(&self) -> f64 {
-        self.candle_window
-            .back()
-            .expect("last_close called before first candle tick")
-            .close
+    pub fn last_close(&self) -> Price {
+        Price(
+            self.candle_window
+                .back()
+                .expect("last_close called before first candle tick")
+                .close,
+        )
     }
 
     // Lens facts methods removed -- see free functions below.

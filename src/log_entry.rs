@@ -4,7 +4,7 @@
 
 use crate::distances::Distances;
 use crate::enums::{Outcome, Prediction};
-use crate::newtypes::TradeId;
+use crate::newtypes::{Amount, TradeId};
 
 use holon::kernel::vector::Vector;
 
@@ -19,7 +19,7 @@ pub enum LogEntry {
     ProposalFunded {
         trade_id: TradeId,
         broker_slot_idx: usize,
-        amount_reserved: f64,
+        amount_reserved: Amount,
     },
     ProposalRejected {
         broker_slot_idx: usize,
@@ -28,7 +28,7 @@ pub enum LogEntry {
     TradeSettled {
         trade_id: TradeId,
         outcome: Outcome,
-        amount: f64,
+        amount: Amount,
         duration: usize,
         prediction: Prediction,
     },
@@ -112,7 +112,7 @@ mod tests {
         let entry = LogEntry::ProposalFunded {
             trade_id: TradeId(1),
             broker_slot_idx: 2,
-            amount_reserved: 100.0,
+            amount_reserved: Amount(100.0),
         };
         match entry {
             LogEntry::ProposalFunded { trade_id, .. } => {
@@ -141,7 +141,7 @@ mod tests {
         let entry = LogEntry::TradeSettled {
             trade_id: TradeId(5),
             outcome: Outcome::Grace,
-            amount: 50.0,
+            amount: Amount(50.0),
             duration: 10,
             prediction: Prediction::Discrete {
                 scores: vec![("Grace".into(), 0.7), ("Violence".into(), 0.3)],

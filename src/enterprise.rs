@@ -16,6 +16,8 @@ use crate::enums::Direction;
 #[cfg(test)]
 use crate::log_entry::LogEntry;
 #[cfg(test)]
+use crate::newtypes::Price;
+#[cfg(test)]
 use crate::simulation::compute_optimal_distances;
 
 /// The enterprise — coordination plane.
@@ -41,7 +43,7 @@ impl Enterprise {
     #[cfg(test)]
     fn step_resolve_and_propagate(&mut self) -> Vec<LogEntry> {
         // Collect current prices from each post
-        let mut current_prices: HashMap<(String, String), f64> = HashMap::new();
+        let mut current_prices: HashMap<(String, String), Price> = HashMap::new();
         for p in &self.posts {
             current_prices.insert(
                 (p.source_asset.name.clone(), p.target_asset.name.clone()),
@@ -59,7 +61,7 @@ impl Enterprise {
             let slot = t.broker_slot_idx;
 
             // Derive direction from price movement
-            let direction = if stl.exit_price > t.entry_price {
+            let direction = if stl.exit_price.0 > t.entry_price.0 {
                 Direction::Up
             } else {
                 Direction::Down
@@ -75,7 +77,7 @@ impl Enterprise {
                     slot,
                     &stl.composed_thought,
                     stl.outcome,
-                    stl.amount,
+                    stl.amount.0,
                     direction,
                     &optimal,
                     recalib,
@@ -103,7 +105,7 @@ mod tests {
     #[test]
     fn test_enterprise_construct() {
         let mut balances = std::collections::HashMap::new();
-        balances.insert("USDC".into(), 10000.0);
+        balances.insert("USDC".into(), crate::newtypes::Amount(10000.0));
         let treasury = Treasury::new(Asset::new("USD"), balances, 0.001, 0.0025);
         let ent = Enterprise::new(Vec::new(), treasury);
         assert_eq!(ent.posts.len(), 0);
@@ -114,7 +116,7 @@ mod tests {
     #[test]
     fn test_enterprise_cache_per_post() {
         let mut balances = std::collections::HashMap::new();
-        balances.insert("USDC".into(), 10000.0);
+        balances.insert("USDC".into(), crate::newtypes::Amount(10000.0));
         let treasury = Treasury::new(Asset::new("USD"), balances, 0.001, 0.0025);
 
         // Create two empty posts
@@ -148,7 +150,7 @@ mod tests {
     #[test]
     fn test_step_resolve_no_trades() {
         let mut balances = std::collections::HashMap::new();
-        balances.insert("USDC".into(), 10000.0);
+        balances.insert("USDC".into(), crate::newtypes::Amount(10000.0));
         let treasury = Treasury::new(Asset::new("USD"), balances, 0.001, 0.0025);
         let mut ent = Enterprise::new(Vec::new(), treasury);
 
@@ -160,7 +162,7 @@ mod tests {
     #[test]
     fn test_step_collect_fund_no_proposals() {
         let mut balances = std::collections::HashMap::new();
-        balances.insert("USDC".into(), 10000.0);
+        balances.insert("USDC".into(), crate::newtypes::Amount(10000.0));
         let treasury = Treasury::new(Asset::new("USD"), balances, 0.001, 0.0025);
         let mut ent = Enterprise::new(Vec::new(), treasury);
 

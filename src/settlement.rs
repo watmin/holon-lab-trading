@@ -7,15 +7,16 @@
 use holon::kernel::vector::Vector;
 
 use crate::enums::{Outcome, Prediction};
+use crate::newtypes::{Amount, Price};
 use crate::trade::Trade;
 
 /// Settlement carrying all data needed for propagation.
 #[derive(Clone, Debug)]
 pub struct TreasurySettlement {
     pub trade: Trade,
-    pub exit_price: f64,
+    pub exit_price: Price,
     pub outcome: Outcome,
-    pub amount: f64,
+    pub amount: Amount,
     pub composed_thought: Vector,
     pub prediction: Prediction,
 }
@@ -23,9 +24,9 @@ pub struct TreasurySettlement {
 impl TreasurySettlement {
     pub fn new(
         trade: Trade,
-        exit_price: f64,
+        exit_price: Price,
         outcome: Outcome,
-        amount: f64,
+        amount: Amount,
         composed_thought: Vector,
         prediction: Prediction,
     ) -> Self {
@@ -45,7 +46,7 @@ mod tests {
     use super::*;
     use crate::distances::Levels;
     use crate::enums::Side;
-    use crate::newtypes::TradeId;
+    use crate::newtypes::{Amount, Price, TradeId};
     use crate::raw_candle::Asset;
 
     #[test]
@@ -57,24 +58,24 @@ mod tests {
             Side::Buy,
             Asset::new("USDC"),
             Asset::new("WBTC"),
-            50000.0,
-            1000.0,
+            Price(50000.0),
+            Amount(1000.0),
             Levels::new(49000.0, 47500.0),
         );
         let stl = TreasurySettlement::new(
             trade,
-            51000.0,
+            Price(51000.0),
             Outcome::Grace,
-            50.0,
+            Amount(50.0),
             Vector::zeros(4096),
             Prediction::Discrete {
                 scores: vec![("Grace".into(), 0.7), ("Violence".into(), 0.3)],
                 conviction: 0.7,
             },
         );
-        assert_eq!(stl.exit_price, 51000.0);
+        assert_eq!(stl.exit_price, Price(51000.0));
         assert_eq!(stl.outcome, Outcome::Grace);
-        assert_eq!(stl.amount, 50.0);
+        assert_eq!(stl.amount, Amount(50.0));
     }
 
     #[test]
@@ -86,15 +87,15 @@ mod tests {
             Side::Sell,
             Asset::new("USDC"),
             Asset::new("WBTC"),
-            48000.0,
-            500.0,
+            Price(48000.0),
+            Amount(500.0),
             Levels::new(49000.0, 50000.0),
         );
         let stl = TreasurySettlement::new(
             trade,
-            49500.0,
+            Price(49500.0),
             Outcome::Violence,
-            100.0,
+            Amount(100.0),
             Vector::zeros(256),
             Prediction::Discrete {
                 scores: vec![],

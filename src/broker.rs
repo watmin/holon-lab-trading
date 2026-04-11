@@ -13,6 +13,7 @@ use holon::memory::{OnlineSubspace, ReckConfig, Reckoner};
 use crate::distances::Distances;
 use crate::engram_gate::{check_engram_gate, EngramGateState};
 use crate::enums::{Direction, Outcome};
+use crate::newtypes::Price;
 use crate::paper_entry::PaperEntry;
 use crate::scalar_accumulator::ScalarAccumulator;
 use crate::to_f64;
@@ -184,7 +185,7 @@ impl Broker {
     pub fn register_paper(
         &mut self,
         composed: Vector,
-        entry_price: f64,
+        entry_price: Price,
         distances: Distances,
     ) {
         self.papers.push_back(PaperEntry::new(composed, entry_price, distances));
@@ -192,18 +193,19 @@ impl Broker {
 
     /// Tick all papers, resolve completed. Returns resolution facts.
     /// Papers derive optimal distances from their tracked extremes.
-    pub fn tick_papers(&mut self, current_price: f64) -> Vec<Resolution> {
+    pub fn tick_papers(&mut self, current_price: Price) -> Vec<Resolution> {
         let mut resolutions = Vec::new();
         let mut remaining = VecDeque::new();
+        let cp = current_price.0;
 
         while let Some(mut paper) = self.papers.pop_front() {
             let was_buy_resolved = paper.buy_resolved;
             let was_sell_resolved = paper.sell_resolved;
 
-            paper.tick(current_price);
+            paper.tick(cp);
 
             let optimal = approximate_optimal_distances(
-                paper.entry_price,
+                paper.entry_price.0,
                 paper.buy_extreme,
                 paper.sell_extreme,
             );
@@ -435,7 +437,7 @@ mod tests {
         let mut broker = make_broker();
         let composed = random_vector("thought");
         let distances = Distances::new(0.02, 0.05);
-        broker.register_paper(composed, 50000.0, distances);
+        broker.register_paper(composed, Price(50000.0), distances);
         assert_eq!(broker.paper_count(), 1);
     }
 
@@ -444,10 +446,10 @@ mod tests {
         let mut broker = make_broker();
         let composed = random_vector("thought");
         let distances = Distances::new(0.05, 0.10);
-        broker.register_paper(composed, 100.0, distances);
+        broker.register_paper(composed, Price(100.0), distances);
 
         // Price barely moves -- no resolution
-        let resolutions = broker.tick_papers(100.5);
+        let resolutions = broker.tick_papers(Price(100.5));
         assert!(resolutions.is_empty());
         assert_eq!(broker.paper_count(), 1);
     }
@@ -458,18 +460,18 @@ mod tests {
         let composed = random_vector("thought");
         // Trail=0.20: buy_trail_stop=80, sell_trail_stop=120
         let distances = Distances::new(0.20, 0.30);
-        broker.register_paper(composed, 100.0, distances);
+        broker.register_paper(composed, Price(100.0), distances);
 
         // Rise to 125: sell fires (125 >= 120) → 1 resolution (Down)
         // Buy doesn't fire yet (125 > buy_trail=100)
-        let resolutions = broker.tick_papers(125.0);
+        let resolutions = broker.tick_papers(Price(125.0));
         assert_eq!(resolutions.len(), 1); // sell side fired independently
         assert_eq!(resolutions[0].direction, Direction::Down);
         assert_eq!(broker.paper_count(), 1); // still alive — buy side pending
 
         // Fall to 99: buy fires (99 <= buy_trail_stop=100) → 1 resolution (Up)
         // Both sides now resolved → paper removed
-        let resolutions = broker.tick_papers(99.0);
+        let resolutions = broker.tick_papers(Price(99.0));
         assert_eq!(resolutions.len(), 1); // buy side fired independently
         assert_eq!(resolutions[0].direction, Direction::Up);
         assert_eq!(broker.paper_count(), 0); // both done, paper removed

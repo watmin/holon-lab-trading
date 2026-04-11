@@ -22,6 +22,7 @@ use enterprise::market_observer::MarketObserver;
 use enterprise::post::Post;
 use enterprise::raw_candle::{Asset, RawCandle};
 use enterprise::scalar_accumulator::ScalarAccumulator;
+use enterprise::newtypes::{Amount, Price};
 use enterprise::treasury::Treasury;
 use enterprise::enterprise::Enterprise;
 use enterprise::window_sampler::WindowSampler;
@@ -402,8 +403,8 @@ fn build_enterprise(args: &Args) -> (Enterprise, Ctx) {
 
     // Build treasury
     let mut initial_balances = HashMap::new();
-    initial_balances.insert(args.source_asset.clone(), args.source_balance);
-    initial_balances.insert(args.target_asset.clone(), args.target_balance);
+    initial_balances.insert(args.source_asset.clone(), Amount(args.source_balance));
+    initial_balances.insert(args.target_asset.clone(), Amount(args.target_balance));
     let the_treasury = Treasury::new(
         Asset::new(&args.denomination),
         initial_balances,
@@ -490,12 +491,13 @@ fn display_summary(
         total_grace / (total_grace + total_violence) * 100.0
     };
 
-    let initial_equity = ent
+    let initial_equity: f64 = ent
         .treasury
         .available
         .values()
         .chain(ent.treasury.reserved.values())
-        .sum::<f64>();
+        .map(|a| a.0)
+        .sum();
     let ret = if initial_equity == 0.0 {
         0.0
     } else {
@@ -832,8 +834,8 @@ fn main() {
                     // Broker owns the distance cascade: reckoner → accumulator → default
                     let dists = broker.cascade_distances(reckoner_dists);
                     broker.propose(&composed);
-                    broker.register_paper(composed.clone(), price, dists);
-                    let resolutions = broker.tick_papers(price);
+                    broker.register_paper(composed.clone(), Price(price), dists);
+                    let resolutions = broker.tick_papers(Price(price));
 
                     // Snapshot every 100 candles — into the DB
                     if candle_count % 100 == 0 {
@@ -913,7 +915,7 @@ fn main() {
                 if let Some(c) = p.candle_window.back() {
                     current_prices.insert(
                         (p.source_asset.name.clone(), p.target_asset.name.clone()),
-                        c.close,
+                        Price(c.close),
                     );
                 }
             }
@@ -926,7 +928,7 @@ fn main() {
                 let mi = slot / pipes.m;
                 let ei = slot % pipes.m;
 
-                let direction = if stl.exit_price > stl.trade.entry_price {
+                let direction = if stl.exit_price.0 > stl.trade.entry_price.0 {
                     enterprise::enums::Direction::Up
                 } else {
                     enterprise::enums::Direction::Down
@@ -938,19 +940,19 @@ fn main() {
                 if let Some(stl_pipes) = all_pipes.get(stl_post_idx) {
                     if mi < stl_pipes.learn_txs.len() {
                         let _ = stl_pipes.learn_txs[mi].send((
-                            stl.composed_thought.clone(), direction, stl.amount));
+                            stl.composed_thought.clone(), direction, stl.amount.0));
                     }
                     // Broker learns via channel
                     if slot < stl_pipes.broker_learn_txs.len() {
                         let _ = stl_pipes.broker_learn_txs[slot].send((
-                            stl.composed_thought.clone(), stl.outcome, stl.amount,
+                            stl.composed_thought.clone(), stl.outcome, stl.amount.0,
                             direction, optimal));
                     }
                 }
                 // Exit observer learns on main thread
                 if stl_post_idx < ent.posts.len() && ei < ent.posts[stl_post_idx].exit_observers.len() {
                     ent.posts[stl_post_idx].exit_observers[ei].observe_distances(
-                        &stl.composed_thought, &optimal, stl.amount);
+                        &stl.composed_thought, &optimal, stl.amount.0);
                 }
             }
         }
@@ -996,7 +998,7 @@ fn main() {
         let t_observers = t_candle.elapsed();
 
         // N×M grid: parallel computation → send to broker pipes
-        let price = post.last_close();
+        let price = post.last_close().0;
         let ctx_ref = &*ctx_arc;
 
         // Pre-compute M exit vecs — one per exit lens, shared across all N market observers.
@@ -1143,7 +1145,7 @@ fn main() {
                         // since the broker thread cannot be queried from here.
                         let reckoner_dists = post.exit_observers[ei].reckoner_distances(&composed);
                         let dists = reckoner_dists.unwrap_or(post.exit_observers[ei].default_distances);
-                        let new_levels = dists.to_levels(price, side);
+                        let new_levels = dists.to_levels(Price(price), side);
                         Some((tid, new_levels))
                     } else {
                         None

@@ -1,6 +1,7 @@
 /// Two representations of exit thresholds. Compiled from wat/distances.wat.
 
 use crate::enums::Side;
+use crate::newtypes::Price;
 
 /// Distances: percentage of price. Scale-free.
 #[derive(Clone, Copy, Debug)]
@@ -15,15 +16,16 @@ impl Distances {
     }
 
     /// Convert percentage distances to absolute price levels.
-    pub fn to_levels(&self, price: f64, side: Side) -> Levels {
+    pub fn to_levels(&self, price: Price, side: Side) -> Levels {
+        let p = price.0;
         match side {
             Side::Buy => Levels {
-                trail_stop: price - price * self.trail,
-                safety_stop: price - price * self.stop,
+                trail_stop: p - p * self.trail,
+                safety_stop: p - p * self.stop,
             },
             Side::Sell => Levels {
-                trail_stop: price + price * self.trail,
-                safety_stop: price + price * self.stop,
+                trail_stop: p + p * self.trail,
+                safety_stop: p + p * self.stop,
             },
         }
     }
@@ -68,7 +70,7 @@ mod tests {
     #[test]
     fn test_distances_to_levels_buy() {
         let d = Distances::new(0.05, 0.10);
-        let levels = d.to_levels(100.0, Side::Buy);
+        let levels = d.to_levels(Price(100.0), Side::Buy);
         assert!((levels.trail_stop - 95.0).abs() < 1e-10);
         assert!((levels.safety_stop - 90.0).abs() < 1e-10);
         // Both below price for buys
@@ -81,7 +83,7 @@ mod tests {
     #[test]
     fn test_distances_to_levels_sell() {
         let d = Distances::new(0.05, 0.10);
-        let levels = d.to_levels(100.0, Side::Sell);
+        let levels = d.to_levels(Price(100.0), Side::Sell);
         assert!((levels.trail_stop - 105.0).abs() < 1e-10);
         assert!((levels.safety_stop - 110.0).abs() < 1e-10);
         // Both above price for sells
@@ -94,12 +96,12 @@ mod tests {
     #[test]
     fn test_distances_to_levels_symmetry() {
         let d = Distances::new(0.03, 0.06);
-        let price = 40000.0;
+        let price = Price(40000.0);
         let buy = d.to_levels(price, Side::Buy);
         let sell = d.to_levels(price, Side::Sell);
         // Symmetric around price
-        assert!(((buy.trail_stop + sell.trail_stop) / 2.0 - price).abs() < 1e-10);
-        assert!(((buy.safety_stop + sell.safety_stop) / 2.0 - price).abs() < 1e-10);
+        assert!(((buy.trail_stop + sell.trail_stop) / 2.0 - price.0).abs() < 1e-10);
+        assert!(((buy.safety_stop + sell.safety_stop) / 2.0 - price.0).abs() < 1e-10);
     }
 
     #[test]

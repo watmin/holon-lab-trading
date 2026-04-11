@@ -190,7 +190,7 @@ fn write_entry(
         LogEntry::ProposalFunded { trade_id, broker_slot_idx, amount_reserved } => {
             log_stmt.execute(params![
                 "ProposalFunded", *broker_slot_idx as i64,
-                trade_id.0 as i64, None::<String>, *amount_reserved,
+                trade_id.0 as i64, None::<String>, amount_reserved.0,
                 None::<i64>, None::<String>, None::<i64>
             ]).ok();
         }
@@ -208,7 +208,7 @@ fn write_entry(
             };
             log_stmt.execute(params![
                 "TradeSettled", None::<i64>, trade_id.0 as i64,
-                outcome_str, *amount, *duration as i64,
+                outcome_str, amount.0, *duration as i64,
                 None::<String>, None::<i64>
             ]).ok();
         }
