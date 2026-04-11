@@ -95,6 +95,8 @@ pub struct Broker {
     pub cumulative_violence: f64,
     /// Total trade count.
     pub trade_count: usize,
+    /// Current active direction — the broker's stance. None = cold start.
+    pub active_direction: Option<Direction>,
     /// Capped paper trade queue.
     pub papers: VecDeque<PaperEntry>,
     /// Two scalar accumulators: trail-distance, stop-distance.
@@ -154,6 +156,7 @@ impl Broker {
             cumulative_grace: 0.0,
             cumulative_violence: 0.0,
             trade_count: 0,
+            active_direction: None,
             papers: VecDeque::new(),
             scalar_accums,
             good_state_subspace: OnlineSubspace::new(dims, 4),
@@ -245,6 +248,54 @@ impl Broker {
             entry_price,
             distances,
         ));
+    }
+
+    /// Close all runners — direction flipped. Force-resolve all signaled papers.
+    /// Returns runner resolutions for exit batch training + market second teaching.
+    pub fn close_all_runners(&mut self, current_price: Price) -> Vec<Resolution> {
+        let mut resolutions = Vec::new();
+        let mut remaining = VecDeque::new();
+        let _cp = current_price.0;
+
+        while let Some(mut paper) = self.papers.pop_front() {
+            if paper.signaled && !paper.resolved {
+                // Force-resolve the runner at current price
+                paper.resolved = true;
+                let optimal = approximate_optimal_distances(
+                    paper.entry_price.0, paper.extreme, paper.prediction,
+                );
+                let exit_batch = if let Some(history) = self.runner_histories.remove(&paper.paper_id) {
+                    compute_exit_batch(&history, paper.prediction)
+                } else {
+                    Vec::new()
+                };
+
+                resolutions.push(Resolution {
+                    broker_slot_idx: self.slot_idx,
+                    composed_thought: paper.composed_thought.clone(),
+                    market_thought: paper.market_thought.clone(),
+                    prediction: paper.prediction,
+                    outcome: Outcome::Grace,
+                    amount: paper.excursion(),
+                    optimal_distances: optimal,
+                    entry_price: paper.entry_price.0,
+                    extreme: paper.extreme,
+                    excursion: paper.excursion(),
+                    trail_distance: paper.distances.trail,
+                    stop_distance: paper.distances.stop,
+                    duration: paper.age,
+                    was_runner: true,
+                    exit_batch,
+                });
+            } else if !paper.resolved {
+                // Non-runner papers survive the flip (they'll hit stop naturally)
+                remaining.push_back(paper);
+            }
+            // Resolved papers (stop-fired) are already removed normally
+        }
+
+        self.papers = remaining;
+        resolutions
     }
 
     /// Tick all papers, resolve completed. Returns two vecs:

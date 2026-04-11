@@ -887,8 +887,26 @@ fn main() {
                     };
 
                     broker.propose(&enriched);
-                    broker.register_paper(composed.clone(), market_thought, prediction, Price(price), dists);
-                    let (market_signals, runner_resolutions) = broker.tick_papers(Price(price));
+
+                    // The gate: only register papers when the broker has conviction.
+                    // Cold-start: curve not valid → edge=0.0 → register freely (learn).
+                    // Warm: curve valid → edge > 0.0 → register only when edge exists.
+                    // The flip: if prediction changed direction, close old runners first.
+                    let should_register = broker.cached_edge > 0.0 || !broker.reckoner.curve_valid();
+                    let mut flip_resolutions = Vec::new();
+                    if should_register {
+                        // Check for direction flip — close old runners in opposite direction
+                        if let Some(active_dir) = broker.active_direction {
+                            if prediction != active_dir {
+                                // FLIP — close all runners in old direction
+                                flip_resolutions = broker.close_all_runners(Price(price));
+                            }
+                        }
+                        broker.active_direction = Some(prediction);
+                        broker.register_paper(composed.clone(), market_thought, prediction, Price(price), dists);
+                    }
+                    let (market_signals, mut runner_resolutions) = broker.tick_papers(Price(price));
+                    runner_resolutions.extend(flip_resolutions);
 
                     // Snapshot every 100 candles — into the DB
                     if candle_count % 100 == 0 {
