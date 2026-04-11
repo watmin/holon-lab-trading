@@ -86,6 +86,8 @@ pub enum LogEntry {
         excursion: f64,
         trail_distance: f64,
         stop_distance: f64,
+        optimal_trail: f64,
+        optimal_stop: f64,
         duration: usize,
         was_runner: bool,
     },

@@ -323,6 +323,8 @@ fn init_ledger(path: &str) -> Connection {
             excursion         REAL,
             trail_distance    REAL,
             stop_distance     REAL,
+            optimal_trail     REAL,
+            optimal_stop      REAL,
             duration          INTEGER,
             was_runner        INTEGER
         );",
@@ -1154,6 +1156,8 @@ fn main() {
                     excursion: res.excursion,
                     trail_distance: res.trail_distance,
                     stop_distance: res.stop_distance,
+                    optimal_trail: res.optimal_distances.trail,
+                    optimal_stop: res.optimal_distances.stop,
                     duration: res.duration,
                     was_runner: res.was_runner,
                 });
@@ -1172,6 +1176,8 @@ fn main() {
                     excursion: res.excursion,
                     trail_distance: res.trail_distance,
                     stop_distance: res.stop_distance,
+                    optimal_trail: res.optimal_distances.trail,
+                    optimal_stop: res.optimal_distances.stop,
                     duration: res.duration,
                     was_runner: res.was_runner,
                 });
