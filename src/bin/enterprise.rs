@@ -737,13 +737,7 @@ fn main() {
     } else {
         total_candles
     };
-    let progress_every = if end_idx <= 5_000 {
-        500
-    } else if end_idx <= 50_000 {
-        2_000
-    } else {
-        10_000
-    };
+    let progress_every = 50;
 
     let kill_file = Path::new("trader-stop");
     let mut bnh_entry: f64 = 0.0;
