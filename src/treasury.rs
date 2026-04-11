@@ -6,7 +6,6 @@
 
 use std::collections::HashMap;
 
-use holon::kernel::vector::Vector;
 
 use crate::distances::Levels;
 use crate::enums::{Outcome, Side, TradePhase};
@@ -112,7 +111,6 @@ impl Treasury {
 
             // Fund the proposal — reserve all available, trade amount
             // deducts venue cost so the round trip fits within the reservation.
-            let actual_reserve = avail;
             let trade_amount = avail / (1.0 + venue_cost_rate);
 
             let trade_id = TradeId(self.next_trade_id);
@@ -205,11 +203,8 @@ impl Treasury {
                 let exit_value = trade.amount * (1.0 - venue_cost_per_swap);
                 let loss = trade.amount - exit_value;
 
-                let origin = self.trade_origins.remove(&tid).unwrap_or_else(|| {
-                    TradeOrigin::new(0, 0, Vector::zeros(1), crate::enums::Prediction::Discrete {
-                        scores: vec![], conviction: 0.0,
-                    })
-                });
+                let origin = self.trade_origins.remove(&tid)
+                    .expect("trade origin missing — invariant violation");
 
                 let mut settled_trade = trade.clone();
                 settled_trade.phase = TradePhase::SettledViolence;
@@ -263,11 +258,8 @@ impl Treasury {
                 };
                 let residue = (exit_value - trade.amount).abs();
 
-                let origin = self.trade_origins.remove(&tid).unwrap_or_else(|| {
-                    TradeOrigin::new(0, 0, Vector::zeros(1), crate::enums::Prediction::Discrete {
-                        scores: vec![], conviction: 0.0,
-                    })
-                });
+                let origin = self.trade_origins.remove(&tid)
+                    .expect("trade origin missing — invariant violation");
 
                 let mut settled_trade = trade.clone();
                 settled_trade.phase = if is_grace {
