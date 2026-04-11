@@ -978,7 +978,7 @@ fn main() {
             for stl in &settlements {
                 let slot = stl.trade.broker_slot_idx;
                 let stl_post_idx = stl.trade.post_idx;
-                let mi = slot / pipes.m;
+                let _mi = slot / pipes.m;
                 let ei = slot % pipes.m;
 
                 let direction = if stl.exit_price.0 > stl.trade.entry_price.0 {
@@ -989,12 +989,9 @@ fn main() {
                 let optimal = enterprise::simulation::compute_optimal_distances(
                     &stl.trade.price_history, direction);
 
-                // Market observer learns via channel
+                // Market observer self-grades every candle — no broker propagation.
+                // The observer is its own teacher. The market is the judge.
                 if let Some(stl_pipes) = all_pipes.get(stl_post_idx) {
-                    if mi < stl_pipes.learn_txs.len() {
-                        let _ = stl_pipes.learn_txs[mi].send((
-                            stl.composed_thought.clone(), direction, stl.amount.0));
-                    }
                     // Broker learns via channel
                     if slot < stl_pipes.broker_learn_txs.len() {
                         let _ = stl_pipes.broker_learn_txs[slot].send((
@@ -1145,14 +1142,10 @@ fn main() {
             // Collect exit learning work grouped by exit observer index
             let mut exit_work: Vec<Vec<(usize, usize)>> = vec![Vec::new(); m];
             for (ri, res) in all_resolutions.iter().enumerate() {
-                let mi = res.broker_slot_idx / m;
+                let _mi = res.broker_slot_idx / m;
                 let ei = res.broker_slot_idx % m;
 
-                // Market observer: learn via channel (cheap — just a send)
-                if mi < pipes.learn_txs.len() {
-                    let _ = pipes.learn_txs[mi].send((
-                        res.composed_thought.clone(), res.direction, res.amount));
-                }
+                // Market observer self-grades every candle — no broker propagation.
 
                 // Broker: learn via channel (cheap — just a send)
                 let _ = pipes.broker_learn_txs[res.broker_slot_idx].send((
