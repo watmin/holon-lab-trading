@@ -261,7 +261,9 @@ fn adaptive_buckets_experiment() {
         .collect();
 
     // Brute-force ground truth
-    let mut brute = Reckoner::new("brute", DIMS, 500, ReckConfig::Continuous(0.02));
+    let mut brute = Reckoner::new("brute", DIMS, 500, ReckConfig::Continuous {
+        default_value: 0.02, buckets: 100,
+    });
     for (thought, value) in &observations {
         let v = Vector::from_f64(thought);
         brute.observe_scalar(&v, *value, 1.0);

@@ -41,13 +41,19 @@ impl ExitObserver {
                 &format!("trail-{}", lens),
                 dims,
                 recalib_interval,
-                ReckConfig::Continuous(default_trail),
+                ReckConfig::Continuous {
+                    default_value: default_trail,
+                    buckets: 10,
+                },
             ),
             stop_reckoner: Reckoner::new(
                 &format!("stop-{}", lens),
                 dims,
                 recalib_interval,
-                ReckConfig::Continuous(default_stop),
+                ReckConfig::Continuous {
+                    default_value: default_stop,
+                    buckets: 10,
+                },
             ),
             default_distances: Distances::new(default_trail, default_stop),
             incremental: IncrementalBundle::new(dims),
