@@ -99,6 +99,7 @@ impl Broker {
         recalib_interval: usize,
         scalar_accums: Vec<ScalarAccumulator>,
     ) -> Self {
+        assert!(exit_count > 0, "broker exit_count must be > 0 (divide-by-zero guard)");
         Self {
             observer_names,
             slot_idx,
