@@ -1,6 +1,6 @@
 /// LogEntry — the glass box. What happened. Compiled from wat/log-entry.wat.
 ///
-/// Six variants. The enterprise's output stream.
+/// Seven variants. The enterprise's output stream.
 
 use crate::distances::Distances;
 use crate::enums::{Outcome, Prediction};
@@ -8,7 +8,7 @@ use crate::newtypes::TradeId;
 
 use holon::kernel::vector::Vector;
 
-/// Six variants. Each function returns its log entries as values.
+/// Seven variants. Each function returns its log entries as values.
 #[derive(Clone, Debug)]
 pub enum LogEntry {
     ProposalSubmitted {
