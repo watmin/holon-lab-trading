@@ -7827,6 +7827,73 @@ different variables. Two different vectors. The reckoner predicts on
 one and learns from the other. The discriminant drifts. The machine
 can't learn because prediction and training are in different spaces.
 
+The fix, in wat — every step:
+
+The market observer:
+```scheme
+;; TODAY (broken — predicts on anomaly, learns from original)
+(define (observe observer thought close)
+  ;; noise subspace updates but doesn't strip
+  (update (:noise-subspace observer) thought)
+  ;; reckoner sees the FULL thought
+  (let ((prediction (predict (:reckoner observer) thought)))
+    ;; paper stores the FULL thought
+    ;; later, reckoner learns from the FULL thought
+    ;; but if stripping was on, reckoner would predict on anomaly
+    ;; and learn from original — mismatch
+    prediction))
+
+;; AFTER (aligned — predicts on anomaly, learns from anomaly)
+(define (observe observer thought close)
+  ;; noise subspace updates — learns the background
+  (update (:noise-subspace observer) thought)
+  ;; strip — what remains is the anomaly
+  (let ((anomaly (anomalous-component (:noise-subspace observer) thought)))
+    ;; reckoner sees the ANOMALY
+    (let ((prediction (predict (:reckoner observer) anomaly)))
+      ;; return BOTH: the anomaly (for paper storage) and the prediction
+      (list anomaly prediction))))
+```
+
+The paper registration:
+```scheme
+;; TODAY
+(register-paper broker composed market-thought direction price dists)
+;; market-thought is the FULL thought
+
+;; AFTER
+(register-paper broker composed anomaly direction price dists)
+;; anomaly is what the reckoner ACTUALLY predicted on
+```
+
+The broker's propose:
+```scheme
+;; TODAY (no stripping)
+(define (propose broker composed)
+  (update (:noise-subspace broker) composed)
+  (predict (:reckoner broker) composed))
+
+;; AFTER (aligned stripping)
+(define (propose broker composed)
+  (update (:noise-subspace broker) composed)
+  (let ((anomaly (anomalous-component (:noise-subspace broker) composed)))
+    (predict (:reckoner broker) anomaly)))
+```
+
+The propagation:
+```scheme
+;; TODAY
+(observe (:reckoner market-observer) original-thought label weight)
+
+;; AFTER
+(observe (:reckoner market-observer) (:prediction-thought paper) label weight)
+;; prediction-thought IS the anomaly from prediction time
+```
+
+Seven changes. Each small. The flow: strip → predict → store anomaly
+→ paper lives → paper resolves → propagate anomaly → reckoner learns
+from what it saw.
+
 The Rust hid this. The wat showed it. Not because wat is smarter.
 Because wat is HONEST. The parentheses show what flows where. The
 forms name the values. The composition is visible. The Rust has
