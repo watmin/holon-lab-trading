@@ -310,6 +310,8 @@ fn init_ledger(path: &str) -> Connection {
             trail_experience  REAL,
             stop_experience   REAL,
             PRIMARY KEY (candle, broker_slot_idx)
+        );
+
         CREATE TABLE IF NOT EXISTS paper_details (
             rowid             INTEGER PRIMARY KEY AUTOINCREMENT,
             broker_slot_idx   INTEGER,
