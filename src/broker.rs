@@ -309,6 +309,16 @@ impl Broker {
 
 /// Approximate optimal distances from tracked extremes (paper approximation).
 /// Uses the excursions as a proxy for what distance would have been ideal.
+///
+/// WHY the 0.5 factor: half the observed excursion is a starting point for the
+/// paper's "optimal distance" — tight enough to have captured most of the move,
+/// loose enough to not have triggered prematurely. The exit observers learn to
+/// refine this heuristic over time; this is just the seed.
+///
+/// WHY the .max(0.001).min(0.10) clamps: the scalar encoder's log-scale range
+/// spans [0.001, 0.10]. Values outside this band produce degenerate encodings
+/// (saturated or zero). The clamps keep optimal distances within the learnable
+/// scalar range.
 fn approximate_optimal_distances(
     entry: f64,
     buy_extreme: f64,
@@ -316,8 +326,6 @@ fn approximate_optimal_distances(
 ) -> Distances {
     let buy_excursion = ((buy_extreme - entry) / entry).max(0.001);
     let sell_excursion = ((entry - sell_extreme) / entry).max(0.001);
-    // The optimal trail is a fraction of the excursion -- tight enough to capture,
-    // loose enough to not trigger prematurely. Use half the excursion as a heuristic.
     let trail = ((buy_excursion + sell_excursion) / 2.0 * 0.5).max(0.001).min(0.10);
     let stop = trail * 2.0;
     Distances::new(trail, stop)

@@ -742,7 +742,7 @@ fn main() {
                     let full_len = window.len();
                     let start = if full_len > ws { full_len - ws } else { 0 };
                     let sliced: Vec<enterprise::candle::Candle> = window[start..].to_vec();
-                    let facts = enterprise::post::market_lens_facts_pub(&lens, &candle, &sliced);
+                    let facts = enterprise::post::market_lens_facts(&lens, &candle, &sliced);
                     let bundle_ast = enterprise::thought_encoder::ThoughtAST::Bundle(facts);
 
                     // Cache pipe: get from encoder service
@@ -1001,7 +1001,7 @@ fn main() {
         use rayon::prelude::*;
         let exit_vecs: Vec<holon::kernel::vector::Vector> = (0..m)
             .map(|ei| {
-                let exit_facts = enterprise::post::exit_lens_facts_pub(
+                let exit_facts = enterprise::post::exit_lens_facts(
                     &post.exit_observers[ei].lens, &enriched);
                 let exit_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(exit_facts);
                 // Use grid_handles[ei] for the cache lookup (any handle works, pick deterministic one)
@@ -1039,9 +1039,9 @@ fn main() {
                 let (dists, _) = exit_observers[ei].recommended_distances(
                     &composed, &empty_accums, ctx_ref.thought_encoder.scalar_encoder());
 
-                let side = enterprise::post::derive_side_pub(&market_predictions[mi]);
+                let side = enterprise::post::derive_side(&market_predictions[mi]);
                 let edge = 0.0_f64; // Broker computes edge on its thread
-                let pred = enterprise::post::prediction_convert_pub(&market_predictions[mi]);
+                let pred = enterprise::post::prediction_convert(&market_predictions[mi]);
 
                 (slot_idx, composed, dists, side, edge, pred)
             })

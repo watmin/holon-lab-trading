@@ -195,9 +195,9 @@ impl Post {
                 );
 
                 // Derive side + edge (reads only)
-                let side_val = derive_side_from_prediction(&market_predictions[mi]);
+                let side_val = derive_side(&market_predictions[mi]);
                 let edge_val = registry[slot_idx].edge();
-                let enterprise_pred = holon_prediction_to_enterprise(&market_predictions[mi]);
+                let enterprise_pred = prediction_convert(&market_predictions[mi]);
 
                 // Return values — no mutation
                 (slot_idx, composed, dists, side_val, edge_val, enterprise_pred)
@@ -343,11 +343,7 @@ impl Post {
 /// Collect market vocab facts for a specific lens.
 /// Each MarketLens selects different modules. All include shared/time + standard.
 /// This is the CRITICAL wiring -- different lenses see different market data.
-pub fn market_lens_facts_pub(lens: &MarketLens, candle: &Candle, window: &[Candle]) -> Vec<ThoughtAST> {
-    market_lens_facts(lens, candle, window)
-}
-
-fn market_lens_facts(lens: &MarketLens, candle: &Candle, window: &[Candle]) -> Vec<ThoughtAST> {
+pub fn market_lens_facts(lens: &MarketLens, candle: &Candle, window: &[Candle]) -> Vec<ThoughtAST> {
     // Shared: time facts (all lenses get these)
     let mut facts = encode_time_facts(candle);
 
@@ -399,11 +395,7 @@ fn market_lens_facts(lens: &MarketLens, candle: &Candle, window: &[Candle]) -> V
 }
 
 /// Collect exit vocab facts for a specific lens.
-pub fn exit_lens_facts_pub(lens: &ExitLens, candle: &Candle) -> Vec<ThoughtAST> {
-    exit_lens_facts(lens, candle)
-}
-
-fn exit_lens_facts(lens: &ExitLens, candle: &Candle) -> Vec<ThoughtAST> {
+pub fn exit_lens_facts(lens: &ExitLens, candle: &Candle) -> Vec<ThoughtAST> {
     match lens {
         ExitLens::Volatility => encode_exit_volatility_facts(candle),
         ExitLens::Structure => encode_exit_structure_facts(candle),
@@ -418,15 +410,7 @@ fn exit_lens_facts(lens: &ExitLens, candle: &Candle) -> Vec<ThoughtAST> {
 }
 
 /// Derive Side from a holon-rs Prediction. Up -> Buy, Down -> Sell.
-pub fn derive_side_pub(pred: &holon::memory::Prediction) -> Side {
-    derive_side_from_prediction(pred)
-}
-
-pub fn prediction_convert_pub(pred: &holon::memory::Prediction) -> Prediction {
-    holon_prediction_to_enterprise(pred)
-}
-
-fn derive_side_from_prediction(pred: &holon::memory::Prediction) -> Side {
+pub fn derive_side(pred: &holon::memory::Prediction) -> Side {
     if let Some(dir) = pred.direction {
         if dir.index() == 0 {
             Side::Buy // "Up" is label 0
@@ -439,7 +423,7 @@ fn derive_side_from_prediction(pred: &holon::memory::Prediction) -> Side {
 }
 
 /// Convert holon-rs Prediction to enterprise Prediction.
-fn holon_prediction_to_enterprise(pred: &holon::memory::Prediction) -> Prediction {
+pub fn prediction_convert(pred: &holon::memory::Prediction) -> Prediction {
     Prediction::Discrete {
         scores: pred
             .scores
@@ -450,8 +434,24 @@ fn holon_prediction_to_enterprise(pred: &holon::memory::Prediction) -> Predictio
     }
 }
 
-/// Placeholder: creates a ScalarEncoder for broker propagation.
-/// In the full system, this would come from ctx.
+/// Static ScalarEncoder shared across the process.
+///
+/// WHY this exists: broker.propagate() needs a &ScalarEncoder to encode optimal
+/// distances into the scalar accumulators. The proper owner is Ctx (via
+/// ThoughtEncoder), but propagate() is called from both the Post (which has ctx)
+/// and the binary's broker threads (which don't). Threading &ctx through the
+/// broker channel would require either an Arc or restructuring the channel
+/// protocol — a larger refactor than justified right now.
+///
+/// WHY OnceLock: the ScalarEncoder is deterministic for a given dimension, so a
+/// single static instance at 4096 dims is bit-identical to what ctx holds. There
+/// is no divergence risk as long as dims don't change at runtime (they don't).
+///
+/// TODO: eliminate this by passing &ScalarEncoder (or &Ctx) through the broker
+/// propagation path. Options: (a) bundle it into the channel message, (b) wrap
+/// ctx in Arc and share with broker threads, or (c) move propagation back to
+/// the main thread where ctx is available. Option (c) is cleanest but requires
+/// rethinking the broker-thread drain loop.
 pub fn ctx_scalar_encoder_placeholder() -> &'static holon::kernel::scalar::ScalarEncoder {
     use std::sync::OnceLock;
     static SE: OnceLock<holon::kernel::scalar::ScalarEncoder> = OnceLock::new();
