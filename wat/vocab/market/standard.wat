@@ -22,14 +22,14 @@
         (price   (:close current))
         (n       (length candle-window)))
     (list
-      ;; Since RSI extreme: candles since RSI was above 0.8 or below 0.2.
-      ;; Log-encoded — recency decays logarithmically.
+      ;; Since RSI extreme: candles since RSI was above 80 or below 20.
+      ;; RSI is raw [0, 100] scale. Log-encoded — recency decays logarithmically.
       '(Log "since-rsi-extreme"
             (max 1.0
                  (let ((idx (fold-left
                               (lambda (best i)
                                 (let ((rsi (:rsi (nth candle-window i))))
-                                  (if (or (> rsi 0.8) (< rsi 0.2))
+                                  (if (or (> rsi 80.0) (< rsi 20.0))
                                       i
                                       best)))
                               0
