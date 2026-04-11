@@ -915,7 +915,7 @@ fn main() {
             for p in &ent.posts {
                 current_prices.insert(
                     (p.source_asset.name.clone(), p.target_asset.name.clone()),
-                    p.current_price(),
+                    p.last_close(),
                 );
             }
             let (settlements, settle_logs) = ent.treasury.settle_triggered(&current_prices);
@@ -993,7 +993,7 @@ fn main() {
         let t_observers = t_candle.elapsed();
 
         // N×M grid: parallel computation → send to broker pipes
-        let price = post.current_price();
+        let price = post.last_close();
         let ctx_ref = &*ctx_arc;
 
         // Compute values in parallel (pure reads, scoped borrow)

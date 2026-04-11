@@ -194,7 +194,7 @@ impl Enterprise {
             }
 
             // Apply broker mutations sequentially (propose + register paper)
-            let price = self.posts[post_idx].current_price();
+            let price = self.posts[post_idx].last_close();
             for (slot_idx, composed, dists, _) in grid_results {
                 self.posts[post_idx].registry[slot_idx].propose(&composed);
                 self.posts[post_idx].registry[slot_idx].register_paper(composed, price, dists);
@@ -224,7 +224,7 @@ impl Enterprise {
         for p in &self.posts {
             current_prices.insert(
                 (p.source_asset.name.clone(), p.target_asset.name.clone()),
-                p.current_price(),
+                p.last_close(),
             );
         }
 
@@ -280,7 +280,7 @@ impl Enterprise {
     /// Step 3a: TICK — parallel tick of all brokers' papers.
     /// pmap: each broker touches ONLY its own papers. Disjoint. Lock-free.
     fn step_tick(&mut self, post_idx: usize) -> (Vec<Resolution>, Vec<LogEntry>) {
-        let price = self.posts[post_idx].current_price();
+        let price = self.posts[post_idx].last_close();
 
         // par_iter_mut: each broker is disjoint. collect() is the synchronization.
         let results: Vec<Vec<Resolution>> = self.posts[post_idx]

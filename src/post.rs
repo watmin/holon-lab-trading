@@ -89,12 +89,12 @@ impl Post {
         }
     }
 
-    /// Current price: close of the last candle.
-    pub fn current_price(&self) -> f64 {
+    /// Last close price. Panics if called before the first tick.
+    pub fn last_close(&self) -> f64 {
         self.candle_window
             .back()
-            .map(|c| c.close)
-            .unwrap_or(0.0)
+            .expect("last_close called before first candle tick")
+            .close
     }
 
     // Lens facts methods removed -- see free functions below.
@@ -166,7 +166,7 @@ impl Post {
 
         // N market x M exit -> N*M proposals
         // Parallel phase: compute values. Sequential phase: apply mutations.
-        let price = self.current_price();
+        let price = self.last_close();
         let source = &self.source_asset;
         let target = &self.target_asset;
         let post_idx = self.post_idx;
@@ -277,7 +277,7 @@ impl Post {
                 );
 
                 // Convert to levels
-                let price = self.current_price();
+                let price = self.last_close();
                 let lvls = dists.to_levels(price, trade.side);
 
                 level_updates.push((*tid, lvls));
@@ -509,7 +509,7 @@ mod tests {
         assert_eq!(post.post_idx, 0);
         assert_eq!(post.source_asset.name, "USDC");
         assert_eq!(post.encode_count, 0);
-        assert_eq!(post.current_price(), 0.0);
+        // last_close() panics on empty window — correct, it's a programming error
     }
 
     #[test]
