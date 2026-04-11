@@ -46,9 +46,11 @@ Vectors. Vocabulary and ThoughtEncoder are tools, not upstream producers.
 |------|----------|----------|
 | **IndicatorBank** | streaming state (ring buffers, EMA accumulators) | Candle (100+ indicators) |
 | **Vocabulary** | pure functions, no state | Vec\<ThoughtAST\> — data, not execution |
-| **ThoughtEncoder** | atoms (permanent dict) + compositions (LRU cache, eventually-consistent via returned misses) | Vector from AST |
-| **MarketObserver ×N** | lens (MarketLens), reckoner :discrete (Up/Down, curve internal), noise-subspace, window-sampler, engram gate | (Vector, Prediction, edge, misses\*) |
-| **ExitObserver ×M** | lens (ExitLens), 2× reckoner :continuous (trail, stop), default-distances | (Distances, experience) via cascade + misses\* |
+| **ThoughtEncoder** | atoms (permanent dict) + compositions (HashMap, eventually-consistent via returned misses) | Vector from AST |
+| **IncrementalBundle** | sums (Vec\<i32\>) + last-facts (Map\<ThoughtAST, Vector\>). Per observer. Optimization cache, not cognition. | Vector (bit-identical to full bundle) |
+| **EncoderService** | single thread, LRU cache, N client pipe pairs (lookup/answer/install). select loop. | Vector on cache hit, None on miss |
+| **MarketObserver ×N** | lens (MarketLens), reckoner :discrete (Up/Down, curve internal), noise-subspace, window-sampler, engram gate, incremental-bundle | (Vector, Prediction, edge, misses\*) |
+| **ExitObserver ×M** | lens (ExitLens), 2× reckoner :continuous (trail, stop, K=10 bucketed, breathing range), default-distances, incremental-bundle | (Distances, experience) via cascade + misses\* |
 | **Broker ×N×M** | reckoner :discrete (Grace/Violence, curve internal), noise-subspace, papers (deque), 2× scalar-accumulator, engram gate | Prediction + edge() |
 | **Post** | indicator-bank, candle-window, market-observers, exit-observers, registry | Vec\<Proposal\> + Vec\<Vector\> + misses\* |
 | **Treasury** | available ◄──► reserved, trades, trade-origins, next-trade-id | TreasurySettlement on settle |
@@ -61,10 +63,9 @@ Vectors. Vocabulary and ThoughtEncoder are tools, not upstream producers.
 | From → To | Type | Method |
 |-----------|------|--------|
 | RC → IB | RawCandle | tick(raw) → Candle |
-| CD → MO | Candle (via candle-window slice) | observe-candle(window, ctx) → (Vector, Prediction, edge, misses) |
-| CD → EO | Candle (for exit facts) | encode-exit-facts(candle) → Vec\<ThoughtAST\> |
-| MO → EO | Vector (market thought) | evaluate-and-compose(thought, fact-asts, ctx) → (Vector, misses) |
-| EO → BR | composed Vector + (Distances, experience) | recommended-distances(composed, accums) → (Distances, f64) |
+| CD → MO | Candle (via candle-window slice) | post calls market-lens-facts → incremental.encode → observe(thought, misses) |
+| CD → EO | Candle (for exit facts) | post calls exit-lens-facts → incremental.encode → exit-vec |
+| MO + EO → BR | composed Vector (bundle of market thought + exit vec) + Distances | recommended-distances(composed, accums, scalar-encoder) → (Distances, f64) |
 | Post → TR | Proposal (the barrage) | post assembles from broker outputs, treasury evaluates |
 | TR → EN | TreasurySettlement | settle-triggered(prices) → (Vec\<TreasurySettlement\>, Vec\<LogEntry\>) |
 | EN → Post | direction + optimal + propagation args | post-propagate(post, slot-idx, thought, outcome, weight, direction, optimal) |
@@ -85,24 +86,33 @@ Vectors. Vocabulary and ThoughtEncoder are tools, not upstream producers.
 
 ## 2. The encoding circuit
 
-Pure. No learning. No state (except the ThoughtEncoder's eventually-consistent
-cache). RawCandle in, Vector out.
+RawCandle in, Vector out. Two levels of laziness: the IncrementalBundle
+avoids re-summing unchanged facts, the composition cache avoids
+recomputing unchanged sub-trees.
 
 ```mermaid
 graph TD
     RC[RawCandle] --> IB[IndicatorBank]
-    IB -->|Candle| OBS[Observer selects lens]
-    OBS -->|lens modules| VO[Vocabulary]
-    VO -->|ThoughtASTs| OBS
-    OBS -->|Bundle AST| TE[ThoughtEncoder]
-    TE -->|Vector + misses| OUT[thought vector]
+    IB -->|Candle| POST[Post selects lens]
+    POST -->|lens modules| VO[Vocabulary]
+    VO -->|Vec ThoughtAST| POST
+    POST -->|new facts| IB2[IncrementalBundle]
+    IB2 -->|diff against last candle| IB2
+    IB2 -->|changed facts only| TE[ThoughtEncoder]
+    TE -->|Vector + misses| IB2
+    IB2 -->|sums - old + new → threshold| OUT[thought vector]
 ```
 
-The observer selects which vocabulary modules fire (its lens). The
-vocabulary produces ASTs — data describing what to think. The observer
-wraps them in a Bundle. The encoder evaluates — computing the minimum
-work via cache. Atoms are permanent. Compositions are optimistic (LRU,
-eventually-consistent via returned misses).
+The post selects which vocabulary modules fire (the observer's lens).
+The vocabulary produces ASTs — data describing what to think. The
+IncrementalBundle diffs against last candle's facts. Unchanged facts:
+zero work (sums already has their contribution). Changed facts: encode
+via ThoughtEncoder (cache may hit), subtract old vector, add new.
+Threshold the sums. Bit-identical to full bundle.
+
+Two layers of laziness, complementary:
+- IncrementalBundle: avoids re-summing unchanged facts (the bundle step)
+- Composition cache: avoids recomputing unchanged sub-trees (the encode step)
 
 ---
 
@@ -225,17 +235,24 @@ Three levels of distance knowledge. Specific to general.
 
 ```mermaid
 graph TD
-    Q[query distance] --> RK[Reckoner contextual]
-    RK -->|experienced?| YES1[use reckoner answer]
+    Q[query distance] --> RK[Reckoner — K=10 bucketed]
+    RK -->|experienced?| YES1[cosine against K prototypes → soft-weight top-3 → interpolate]
     RK -->|inexperienced| SA[ScalarAccumulator global]
     SA -->|has data?| YES2[use accumulator answer]
     SA -->|empty| DEF[default crutch]
 ```
 
 For each distance (trail, stop): try the contextual answer first
-(reckoner — "for THIS thought, what distance?"). If inexperienced, try the
-global answer (scalar accumulator — "what does Grace prefer for this pair
-overall?"). If empty, use the crutch (the default value from construction).
+(reckoner — "for THIS thought, what distance?"). The reckoner uses K=10
+bucketed accumulators with a breathing range. Each bucket accumulates
+thoughts that produced values in that range. Query: cosine against K
+prototypes, soft-weight top-3, interpolate. O(K×D) — constant in
+observations. Range discovered from data, contracts when old weight
+decays.
+
+If inexperienced, try the global answer (scalar accumulator — "what
+does Grace prefer for this pair overall?"). If empty, use the crutch
+(the default value from construction).
 
 ---
 
@@ -267,30 +284,57 @@ to the accumulators. Everyone learns from one resolution.
 
 ## 9. The binary circuit
 
-The outer loop. The fold driver. Everything above happens INSIDE one
-call to `on-candle`. The binary is what calls it.
+The outer loop. The fold driver. The pipe architect. 30+ threads.
 
 ```mermaid
 graph TD
-    CLI[CLI args] --> BIN[Binary]
-    BIN -->|construct| CTX[ctx — immutable world]
+    CLI[CLI args] --> BIN[Binary — main thread]
+    BIN -->|construct| CTX[ctx — immutable, Arc shared]
     BIN -->|construct| ENT[Enterprise — mutable state]
+    BIN -->|spawn| ENC[EncoderService thread — LRU cache, select loop]
+    BIN -->|spawn| LOG[LogService thread — SQLite, batch commits, select loop]
+    BIN -->|spawn per observer| OBS[6 Observer threads — bounded 1 in/out, unbounded learn]
+    BIN -->|spawn per broker| BRK[24 Broker threads — bounded 1 in/out, unbounded learn]
+
     DS[Data Source] -->|RawCandle stream| BIN
-    BIN -->|on-candle raw ctx| ENT
-    ENT -->|Vec LogEntry + cache misses| BIN
-    BIN -->|insert misses| CTX
-    BIN -->|flush logs| LED[Ledger — SQLite]
-    BIN -->|progress| DISP[Display]
+
+    subgraph PER_CANDLE [Per candle — the fold]
+        S1[Step 1: settle + propagate to channels]
+        S2[Step 2: tick → fan-out → collect → N×M grid → send to brokers → collect]
+        S3[Step 3: propagate paper resolutions + parallel exit learning]
+        S3C[Step 3c: pre-encode exit vecs → par_iter trigger updates]
+        S4[Step 4: tick prices, fund proposals, diagnostics]
+        S1 --> S2 --> S3 --> S3C --> S4
+    end
+
+    BIN -->|for each candle| PER_CANDLE
+    S4 -->|next candle| S1
+
+    BIN -->|shutdown: drop channels| OBS
+    BIN -->|shutdown: drop channels| BRK
+    BIN -->|join threads → restore state| ENT
+    BIN -->|shutdown| ENC
+    BIN -->|shutdown| LOG
+    LOG -->|drain remaining| LED[Ledger — SQLite WAL]
+    BIN -->|summary| DISP[Display]
     KILL[trader-stop file] -.->|abort| BIN
 ```
 
 The binary creates the world (ctx) and the machine (enterprise) from
-CLI arguments. It opens the data source — parquet or websocket. It
-feeds raw candles one at a time. It collects log entries and cache
-misses from each `on-candle` call. It inserts cache misses into ctx's
-ThoughtEncoder between candles (the one seam). It flushes log entries
-to the ledger in batches. It displays progress. It checks the kill
-switch. When the stream ends, it prints the summary.
+CLI arguments. It spawns 30+ threads: 6 observer threads, 24 broker
+threads, 1 encoder service, 1 log service. Each thread communicates
+through pipes (make-pipe). The main thread drives the fold — routing
+candles to observer pipes, collecting thoughts, computing the N×M
+grid via rayon par_iter, sending to broker pipes, collecting outputs.
+
+Pipes are values. Processes are functions. The main thread is the
+heartbeat. The threads are the muscles. The pipes are the nerves.
+select multiplexes. bounded(1) synchronizes. unbounded learns.
+
+At shutdown: drop the send ends → threads exit their recv loops →
+join returns the state → observers and brokers restored to the
+enterprise. The encoder service reports cache stats. The log service
+drains remaining entries with batch commits. The summary prints.
 
 The binary does not think. It drives the fold and writes what happened.
 
@@ -337,22 +381,76 @@ Then async. The prediction uses whatever the reckoner has learned so far.
 
 ---
 
+## 11. The pipe circuit
+
+CSP — communicating sequential processes. The concurrency architecture.
+
+```mermaid
+graph LR
+    subgraph MAIN [Main thread — the heartbeat]
+        FOLD[fold loop]
+    end
+
+    subgraph OBS_THREADS [6 Observer threads]
+        OT1[obs 0: momentum]
+        OT2[obs 1: structure]
+        OT3[obs 2: volume]
+        OT4[obs 3: narrative]
+        OT5[obs 4: regime]
+        OT6[obs 5: generalist]
+    end
+
+    subgraph BRK_THREADS [24 Broker threads]
+        BT[broker 0..23]
+    end
+
+    subgraph SERVICES [Service threads]
+        ES[EncoderService — 1 thread, N clients]
+        LS[LogService — 1 thread, N drains]
+    end
+
+    FOLD -->|bounded 1: candle+window| OBS_THREADS
+    OBS_THREADS -->|bounded 1: thought+pred+edge| FOLD
+    FOLD -.->|unbounded: learn signals| OBS_THREADS
+    FOLD -->|bounded 1: composed+dists+price| BRK_THREADS
+    BRK_THREADS -->|bounded 1: proposal+resolutions| FOLD
+    FOLD -.->|unbounded: learn signals| BRK_THREADS
+    OBS_THREADS -->|bounded 1: lookup/answer| ES
+    OBS_THREADS -->|unbounded: install| ES
+    FOLD -->|unbounded: LogEntry| LS
+    LS -->|batch commits| DB[(SQLite WAL)]
+```
+
+Solid arrows: data flow (bounded 1 = lockstep synchronization).
+Dashed arrows: learning signals (unbounded = fire and forget, CRDT
+convergence). The main thread is the clock. The bounded(1) channels
+ARE the synchronization — no locks, no mutexes, no shared state.
+
+Each consumer decides its own schedule. The observer thread drains
+at most MAX_DRAIN=5 learn signals per candle before encoding. The
+broker thread drains at most MAX_DRAIN=5 before proposing. The
+log service batches 100 rows per COMMIT. Each process is a function.
+Each pipe is a value. The composition IS the concurrency.
+
+---
+
 ## The composition
 
 The full enterprise is the composition of all sub-circuits. The encoding
-circuit feeds the learning circuit. The paper circuit is the learning
-circuit applied to hypotheticals. The funding circuit converts proposals
-into trades. The breathing stops circuit adapts active trades every
-candle — the value extraction mechanism. The cascade circuit provides
-distances at every experience level. The propagation circuit closes
-the loop. The binary circuit wraps them all — it drives the fold and
-persists the results. The moment circuit decouples prediction from
-learning — the moment acts, the past teaches, both converge.
+circuit feeds the learning circuit — with incremental bundling for
+laziness. The paper circuit is the learning circuit applied to
+hypotheticals — each side resolves independently. The funding circuit
+converts proposals into trades. The breathing stops circuit adapts
+active trades every candle — the value extraction mechanism. The
+cascade circuit provides distances at every experience level — through
+K=10 bucketed accumulators with breathing range. The propagation
+circuit closes the loop. The binary circuit wraps them all — it drives
+the fold through 30+ threads connected by pipes. The moment circuit
+decouples prediction from learning — the moment acts, the past teaches,
+both converge. The pipe circuit IS the CSP — each process owns its
+schedule, bounded channels synchronize, unbounded channels learn.
 
 `f(state, candle) → state` — one tick of the clock. All circuits fire.
 The moment circuits fire in constant time. The learning circuits fire
-when they can. The fold advances. Grace strengthens. Violence decays.
-The machine learns.
-
-`f(state, candle) → state` — one tick of the clock. All circuits fire.
-The fold advances. Grace strengthens. Violence decays. The machine learns.
+when they can. The pipes carry the signals. The fold advances. Grace
+strengthens. Violence decays. The machine learns.
