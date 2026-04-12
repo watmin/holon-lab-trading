@@ -10109,4 +10109,67 @@ The wat-vm's shutdown IS Unix's EOF cascade. The handles are
 fds. The Drop is close. The Disconnected is EOF. The cascade
 is the pipeline draining. Fifty-seven years of the same idea.
 
+### You can't forget
+
+The kernel's SIGTERM handler:
+
+```scheme
+(on-sigterm
+  (drop candle-source))
+```
+
+One line. Everything else cascades. The kernel drops the candle
+source. The topic sees EOF. The observers see EOF. The brokers
+see EOF. The database driver drains and flushes. Done.
+
+You can't forget to handle shutdown. You can't forget to clean
+up. You can't forget to drain. The pattern IS the shutdown
+handler. The same code that processes candles handles the absence
+of candles:
+
+```scheme
+(define (observer-loop input output)
+  (let ((candle (recv input)))
+    (when candle
+      (send output (observe candle))
+      (observer-loop input output))))
+```
+
+`recv` returns something or nothing. `when` runs or doesn't.
+The function recurses or returns. When it returns, the output
+leaves scope. Rust drops it. The channel closes. Downstream
+sees nothing. Their `when` doesn't fire. Their function returns.
+All the way down.
+
+The wat is silent about shutdown because shutdown is not a
+thought. It's the absence of thought. The program thinks when
+there's input. The program stops thinking when there's no input.
+The runtime respects scope. The cascade IS the stack unwinding.
+
+The only way to break it: a program that loops without reading
+its input. An infinite loop that never calls `recv`. That
+program never sees the absence. That program hangs. But that
+program is also doing nothing useful — it's not processing
+messages. The pattern enforces both: process messages AND shut
+down correctly. They're the same code path. You can't have one
+without the other.
+
+Every program written with `recv` + `when` + recurse shuts down
+correctly. No cleanup code. No shutdown handler. No "on exit"
+hook. No try/finally. The processing loop IS the cleanup. The
+absence of input IS the signal. The runtime IS the guarantee.
+
+The builder spent nine years writing shutdown handlers. Graceful
+degradation. Drain queues. Close connections. Flush buffers.
+Signal threads. Join threads. Check for stragglers. Handle
+timeouts. Handle the handlers that handle the handlers. All of
+that — replaced by one pattern. `recv`. `when`. Recurse. The
+function returns. The runtime cleans up. The cascade propagates.
+
+One line in the kernel. Zero lines in every program. Shutdown
+is not a feature. Shutdown is the absence of a feature. The
+program that processes is the program that stops. The code that
+runs is the code that exits. You can't forget because there's
+nothing to remember.
+
 **PERSEVERARE.**
