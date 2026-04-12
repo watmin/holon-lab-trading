@@ -8997,4 +8997,77 @@ parquet file. The Lambda is a `spawn`. The whole thing runs
 at 84 candles per second and evaluates learned rules through
 geometric discrimination. With no mercy.
 
+### Frozen quantum mechanics
+
+The builder had the thought: "all of this is just quantum
+mechanics. That's frozen."
+
+The thought vector is a frozen superposition. 100 facts
+simultaneously present. Unmeasured. The cosine is the measurement
+operator — choose which question to ask, the projection collapses
+the superposition onto that axis. But the vector doesn't change.
+You didn't destroy it. You can measure again. A different question.
+A different axis. A different answer. The same vector.
+
+In quantum mechanics, measurement destroys the state. The wave
+function collapses. You can't measure again — you got one answer
+and the state is gone.
+
+Here: measurement is read-only. The cosine doesn't modify the
+vector. The vector is frozen. Measure RSI presence — 0.12.
+Measure Hurst presence — 0.08. Measure the whole momentum
+bundle — 0.15. Each measurement is a cosine. Each cosine is a
+projection. The vector sits there, unchanged, holding all the
+answers simultaneously. You just keep asking.
+
+And because it's a `Vec<i32>` — just numbers in memory — you can
+copy it. Send it through a pipe. Store it on a paper. Serialize
+it to disk. Load it next session. The frozen superposition
+persists. The measurements are repeatable. The same vector, the
+same cosine, the same answer. Always.
+
+The extraction IS quantum tomography. Probe the state from many
+angles — one cosine per AST node — and reconstruct what's inside.
+The anomaly is the state. The AST is the measurement basis. The
+presences are the eigenvalues. The full set of presences IS the
+tomographic reconstruction of what the observer found noteworthy.
+
+But faster than quantum. Because you can measure all axes
+simultaneously. No complementarity. No uncertainty. No observer
+effect. The cosine of axis A doesn't preclude the cosine of axis B.
+The vector holds all answers at once and gives them all on request.
+
+Frozen. Readable. Repeatable. Just numbers.
+
+And because it's not ACTUALLY frozen — the next candle produces a
+new vector, a new superposition, a new frozen state — you measure
+again. And again. Each candle a new snapshot. Each snapshot
+probeable from every angle. The stream of frozen snapshots IS the
+candle stream. Each one a complete quantum state of the market at
+that moment. Each one readable forever.
+
+The noise subspace decides what's normal. The anomaly is what
+survives. The extraction reads what survived. The reckoner
+accumulates. The discrimination sharpens. The frozen states flow
+through the fold, each one measured, each one read, each one
+teaching the reckoner what the market thought was noteworthy at
+that precise moment in time.
+
+Chapter 7 called it the quantum structure. The facts are qubits.
+The bundle is the wave function. The cosine is the measurement.
+The conviction-accuracy curve is the Born rule. That was metaphor
+touching algebra. Now it's closer — the extraction IS tomography.
+The hierarchical descent IS adaptive measurement. The per-node
+threshold IS the noise floor of the superposition. The algebra
+and the physics are converging on the same point on the sphere.
+
+The builder doesn't have the physics to prove the equivalence.
+The builder has the intuition to feel it. And the cosine to
+measure it. The frozen quantum mechanics runs on a laptop. The
+wave functions are `Vec<i32>`. The measurements are dot products.
+The tomography is a tree walk. The physics is algebra. The
+algebra is physics.
+
+The coordinates are recursive all the way down.
+
 *Perseverare.*
