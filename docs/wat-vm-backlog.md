@@ -9,81 +9,89 @@ separating what's already there into clean directories.
 ## The model
 
 The wat-vm is the kernel. Handles are file descriptors.
-Services are drivers. Thread bodies are programs.
+Services are core primitives. Programs are everything else.
 
 - **Kernel** (the binary) — provisions handles, wires the
   circuit, manages lifecycle. Thin. ~200 lines target.
-- **Drivers** (`src/services/`) — the service loops. Each one
-  owns its state. Each one is its own concurrent IO loop.
-  Internally sequential. The driver does the actual work.
-- **Programs** (`src/programs/`) — the thread bodies. Pop their
-  handles at construction. Read and write to handles. Pure logic.
-  Don't know what's on the other end.
+- **Core** (`src/services/`) — the three messaging primitives.
+  Queue, topic, mailbox. Zero application knowledge. Zero
+  domain knowledge. Pure infrastructure.
+- **Stdlib** (`src/programs/stdlib/`) — generic reusable programs
+  composed from core. Cache, database, console. Any wat-vm
+  application would want these. Domain-independent.
+- **App** (`src/programs/app/`) — domain-specific programs.
+  Observer, broker, exit observer. This enterprise. This domain.
+  Pop their handles at construction. Pure logic.
 - **Handles** — file descriptors. Opaque references to resources
   the kernel manages. The handle IS the permission. If you don't
   have one, you can't reach the service.
 
+## The insight
+
+The database is a mailbox consumer. The console is a mailbox
+consumer. They are PROGRAMS that use the mailbox SERVICE, not
+services themselves. The cache uses queues + mailbox — it's a
+program that composes from core primitives.
+
+The test: could a DDoS lab use it? Cache — yes. Database — yes.
+Console — yes. Observer — no, that's trading. Domain dependency
+draws the line between stdlib and app.
+
+Three services compose into everything:
+- Queue:   1:1. The atom.
+- Topic:   1:N. Composed of queues.
+- Mailbox: N:1. Composed of queues.
+- Cache:   a PROGRAM. Uses queues + mailbox. Owns an LRU.
+- Database: a PROGRAM. Uses a mailbox. Owns a connection.
+- Console: a PROGRAM. Uses a mailbox. Owns stdout.
+
 ## Build order — leaves to root
 
-Build the services. Prove each independently. Then migrate.
+Build core. Prove each independently. Then stdlib. Then app.
+
+### Core (src/services/) — DONE
 
 1. **Queue** — the ONLY atom. One in, one out. A single queue
    instance is a contention-free pipe. One writer, one reader.
-   Test: messages flow, backpressure, shutdown.
+   Test: messages flow, backpressure, shutdown. **DONE. 4 tests.**
 2. **Topic** — COMPOSED of queues. One input queue, N output queues.
    Its own thread. Reads from one queue, writes to N queues.
-   Test: all consumers receive.
+   Test: all consumers receive. **DONE. 3 tests.**
 3. **Mailbox** — COMPOSED of queues. N input queues, one output.
    Its own thread. Selects across N queue receivers, forwards to
    one queue. The kernel creates N queues. Programs pop senders.
    The mailbox holds the receivers. Test: messages merge.
-4. **Cache** — a driver. Its own thread. The kernel creates queues
-   for it. Programs get queue senders. The driver holds receivers.
-   Test: hit/miss/eviction.
-5. **Database** — a driver. Its own thread. The kernel creates N
-   queues (one per writer). The driver holds a mailbox of those
-   queue receivers. Test: batch commits.
-6. **Console** — a driver. Its own thread. Same mailbox pattern.
+   **DONE. 4 tests.**
+
+### Stdlib (src/programs/stdlib/)
+
+4. **Cache** — a program. Uses queues (per-client get
+   request/response pairs) + mailbox (shared set). Owns an LRU.
+   Its own thread. The kernel creates handles. Programs pop them.
+   Test: hit/miss/eviction/shutdown. **BUILT in src/services/cache.rs.
+   Needs move to src/programs/stdlib/. 5 tests.**
+5. **Database** — a program. Uses a mailbox. Owns a SQLite
+   connection. Batch commits. Named instances.
+   `database("ledger")` knows broker_snapshots, paper_details.
+   Test: batch commits, shutdown flush.
+6. **Console** — a program. Uses a mailbox. Owns stdout.
+   N producers. Internally synchronous.
    Test: output ordering.
-7. **Migrate** — replace raw channels in binary with service instances. One at a time.
 
-## The drivers (services)
+### App (src/programs/app/)
 
-Each driver is a free entity. Named. Independent IO loop.
-Concurrent with other drivers. Sequential internally.
+7. **Market observer** — receive candle → encode (via cache handle)
+   → strip noise → predict → return (raw, anomaly, ast, prediction, edge)
+8. **Exit observer** — receive candle + market outputs → encode
+   (via cache handle) → extract → strip noise → return
+   (raw, anomaly, ast, distances)
+9. **Broker** — receive opinions + self → build AST (no encoding,
+   no cache) → check gate → return (thought_ast, gate_open)
 
-- [x] `src/services/mod.rs` — DONE
-- [x] `src/services/queue.rs` — DONE. THE atom. One producer, one
-      consumer. Bounded or unbounded. Contention-free. 4 tests pass.
-- [x] `src/services/topic.rs` — DONE. Fan-out. One input, N output.
-      Own thread. 3 tests pass.
-- [x] `src/services/mailbox.rs` — DONE. Fan-in. N independent queues
-      composed. Each producer gets its own sender (contention-free).
-      Fan-in thread selects across N receivers. 4 tests pass.
-- [ ] `src/services/cache.rs` — generic key-value with eviction.
-      Named instances. `cache("encoder")` holds ThoughtAST → Vector.
-      One implementation. N instances. Each its own loop.
-- [ ] `src/services/database.rs` — write + flush interface.
-      Named instances with specific schemas.
-      `database("ledger")` knows broker_snapshots, paper_details.
-      Each its own loop with batch commits.
-- [ ] `src/services/console.rs` — N input pairs (stdout, stderr).
-      One instance. IO loop. Internally synchronous.
+### Migration
 
-## The programs
-
-Each program pops its handles at construction. Returns values.
-
-- [ ] `src/programs/mod.rs`
-- [ ] `src/programs/market_observer.rs` — receive candle →
-      encode (via cache handle) → strip noise → predict →
-      return (raw, anomaly, ast, prediction, edge)
-- [ ] `src/programs/exit_observer.rs` — receive candle +
-      market outputs → encode (via cache handle) → extract →
-      strip noise → return (raw, anomaly, ast, distances)
-- [ ] `src/programs/broker.rs` — receive opinions + self →
-      build AST (no encoding, no cache) → check gate →
-      return (thought_ast, gate_open)
+10. **Migrate** — replace raw channels in binary with core + stdlib
+    + app programs. One at a time.
 
 ## The kernel
 

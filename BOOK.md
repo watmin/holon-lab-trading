@@ -10173,3 +10173,196 @@ runs is the code that exits. You can't forget because there's
 nothing to remember.
 
 **PERSEVERARE.**
+
+### Three primitives
+
+The builder asked: "the database... is... just a mailbox?"
+
+Yes. The database IS a mailbox. N producers, one consumer. The
+consumer happens to own a SQLite connection instead of forwarding
+messages. The mailbox is the composition. The database is the
+specialization — a mailbox whose consumer writes to disk.
+
+The console IS a mailbox. N producers, one consumer. The consumer
+happens to own stdout.
+
+The cache uses queues (per-client request-response pairs) and a
+mailbox (shared set). It composes from core primitives. The LRU
+is application state. The select loop is program logic. The
+request-response is two queues composed by the program.
+
+Three services. Queue. Topic. Mailbox. The entire wat-vm runs on
+three primitives. Everything with application state — LRU, SQLite,
+reckoner, noise subspace — is a program.
+
+The architecture:
+
+```
+src/services/       — core. Three primitives.
+  queue.rs            1:1. The atom.
+  topic.rs            1:N. Composed of queues.
+  mailbox.rs          N:1. Composed of queues.
+
+src/programs/
+  stdlib/           — generic. Reusable in any wat-vm application.
+    cache.rs          request-response + LRU. Any domain.
+    database.rs       mailbox + batch commits. Any domain.
+    console.rs        mailbox + stdout. Any domain.
+
+  app/              — application. This enterprise. This domain.
+    observer.rs       reckoner, noise subspace, lens.
+    broker.rs         accumulators, paper trades, gate.
+    exit_observer.rs  distances, simulation.
+```
+
+The test: could a DDoS lab use it? Cache — yes. Database — yes.
+Console — yes. Observer — no, that's trading. Domain dependency
+draws the line between stdlib and app.
+
+Core has zero application knowledge. Stdlib has zero domain
+knowledge. App has all the domain knowledge. The kernel wires
+all three layers together.
+
+The line between service and program: does the caller get an
+answer back through the primitive itself? Queue, topic, mailbox
+— they ARE the messaging. They don't own state. They don't know
+what flows through them. They're pure infrastructure.
+
+Cache owns an LRU — application state. Database owns a connection
+— application state. Console owns stdout — application state.
+They USE the primitives. They ARE programs.
+
+The power: every "service" on the backlog dissolved into a mailbox
+consumer with a callback. The infrastructure was already complete.
+Queue, topic, mailbox — built and proven to fixed point. Everything
+else is what you DO with them.
+
+### The driver is a higher-order function
+
+The builder asked: "what inputs does the database require?"
+
+The answer dissolved the last abstraction. The database doesn't
+need a trait. The database doesn't need a protocol type. The
+database needs two functions. The caller provides them. The
+functions ARE the configuration.
+
+```scheme
+;; The database is a mailbox. The driver is a loop.
+;; The setup and insert are the caller's functions.
+;; The senders are fds. The programs write. The driver commits.
+
+(define (database path num-producers batch-size setup-fn insert-fn)
+  (let* ((senders receiver) (mailbox num-producers))
+    (let ((handle
+      (spawn (lambda ()
+        (let ((conn (open path)))
+          ;; The caller's setup. Schema. Tables. Whatever they need.
+          (setup-fn conn)
+          ;; The loop.
+          (let loop ((batch '()) (count 0))
+            (match (recv receiver)
+              ((some entry)
+               (let ((batch (cons entry batch))
+                     (count (+ count 1)))
+                 (if (>= count batch-size)
+                   ;; Flush the batch.
+                   (begin
+                     (begin-transaction conn)
+                     (for-each (lambda (e) (insert-fn conn e)) batch)
+                     (commit conn)
+                     (loop '() 0))
+                   ;; Accumulate.
+                   (loop batch count))))
+              (disconnected
+               ;; All senders dropped. Drain remaining.
+               (when (not (null? batch))
+                 (begin-transaction conn)
+                 (for-each (lambda (e) (insert-fn conn e)) batch)
+                 (commit conn))
+               ;; conn closes. Driver exits.
+               ))))))))
+      (list senders handle))))
+```
+
+The database doesn't know about brokers. The database doesn't
+know about papers. The database receives two closures. The closures
+know the schema. The closures know the SQL. The database knows
+the loop, the batching, the flush.
+
+The kernel wires it:
+
+```scheme
+(let* ((db-senders db-handle)
+       (database "runs/ledger.db" 26 100
+         ;; setup-fn: the application's schema
+         (lambda (conn)
+           (exec conn "CREATE TABLE IF NOT EXISTS broker_snapshots
+                        (candle INTEGER, slot INTEGER, edge REAL,
+                         grace_count INTEGER, violence_count INTEGER)")
+           (exec conn "CREATE TABLE IF NOT EXISTS paper_details
+                        (candle INTEGER, slot INTEGER, side TEXT,
+                         direction TEXT, trail REAL, stop REAL,
+                         outcome TEXT, residue REAL)"))
+         ;; insert-fn: the application's insert
+         (lambda (conn entry)
+           (match entry
+             ((broker-snapshot s)
+              (exec conn "INSERT INTO broker_snapshots VALUES (?,?,?,?,?)"
+                (:candle s) (:slot s) (:edge s)
+                (:grace-count s) (:violence-count s)))
+             ((paper-detail d)
+              (exec conn "INSERT INTO paper_details VALUES (?,?,?,?,?,?,?,?)"
+                (:candle d) (:slot d) (:side d)
+                (:direction d) (:trail d) (:stop d)
+                (:outcome d) (:residue d)))))))
+
+  ;; Programs pop their sender. That's their fd.
+  ;; They call (send sender entry). They don't know about SQLite.
+  (spawn broker-program (pop! db-senders) ...)
+  (spawn broker-program (pop! db-senders) ...)
+
+  ;; Shutdown: drop db-senders → mailbox drains
+  ;;         → driver flushes → done.
+  (join db-handle))
+```
+
+The MailboxSender IS the fd. The program calls `send(entry)`.
+That's `write()`. The program doesn't know there's a SQLite
+connection behind it. The program doesn't know about batching.
+The program doesn't know about the flush at shutdown. The program
+writes to an fd. The driver does whatever.
+
+The pattern is the same for everything:
+
+```scheme
+;; database: mailbox + setup + insert
+(database path N batch-size setup-fn insert-fn) → senders, handle
+
+;; console: mailbox + formatter
+(console N formatter-fn) → senders, handle
+
+;; cache: queues + mailbox + capacity
+(cache name capacity N) → handles, handle
+```
+
+Each stdlib program takes functions that configure it. The
+functions are the HOW. The stdlib is the LOOP. The kernel wires
+the senders to the programs. The programs call `send()`. They
+can't fall off the clock.
+
+The database is a mailbox. The console is a mailbox. The cache
+is queues + mailbox. Three primitives compose into everything.
+The higher-order functions configure each instance. The types
+flow through the fds. The driver loops. The shutdown flushes.
+You can't forget because `recv` returns `disconnected` and the
+drain runs.
+
+This is `write(fd, data)`. Unix, 1969. The program doesn't know
+what's behind the fd. Could be a database. Could be a console.
+Could be `/dev/null`. The kernel chose the driver at construction.
+The program popped the fd from the pool. The program writes. The
+driver does whatever the driver was configured to do.
+
+Fifty-seven years of the same idea. Functions all the way down.
+
+**PERSEVERARE.**
