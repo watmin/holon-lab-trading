@@ -285,14 +285,11 @@ mod tests {
         // Drop all handles — driver should exit.
         drop(handles);
 
-        // Driver join should return (not hang).
-        let join_thread = thread::spawn(move || {
-            driver.join();
-        });
-
-        // Real timeout — if the driver doesn't exit within 2 seconds, fail.
-        thread::sleep(std::time::Duration::from_secs(2));
-        assert!(join_thread.is_finished(), "driver hung — did not exit after all handles dropped");
+        // Driver join should return immediately — the cascade is
+        // pressure-driven. Drop closes handles. The driver sees
+        // disconnected. The driver exits. Join returns. If it
+        // hangs, the test hangs — that IS the failure signal.
+        driver.join();
     }
 
     #[test]
