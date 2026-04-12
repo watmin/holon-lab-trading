@@ -1,17 +1,18 @@
 //! Topic — fan-out. One producer, N consumers.
-//! COMPOSED of queues. One input queue, N output queues.
-//! The producer writes to the input queue. The fan-out thread
-//! reads from it and sends a clone to each output queue.
+//! A proxy that writes to N queues. The queues already exist.
+//! The kernel creates the queues. The kernel gives the read ends
+//! to the programs. The kernel gives the write ends to the topic.
+//! The topic is plumbing. The programs see queues. Only queues.
 
 use std::thread;
 
-use crate::services::queue::{self, QueueSender, QueueReceiver};
+use crate::services::queue::{self, QueueSender};
 
-/// The producer's handle — a queue sender.
-pub struct TopicSender<T>(QueueSender<T>);
-
-/// A consumer's handle — a queue receiver.
-pub struct TopicReceiver<T>(QueueReceiver<T>);
+/// The producer's proxy — write here, the topic clones to N queues.
+/// .send() — same interface as a queue.
+pub struct TopicSender<T> {
+    tx: QueueSender<T>,
+}
 
 /// Handle to the fan-out thread. The thread exits when the
 /// producer drops its sender (the input queue disconnects).
@@ -22,64 +23,43 @@ pub struct TopicHandle {
 impl<T: Send + Clone + 'static> TopicSender<T> {
     /// Send a value to all subscribers.
     pub fn send(&self, value: T) -> Result<(), queue::SendError<T>> {
-        self.0.send(value)
+        self.tx.send(value)
     }
 }
 
-impl<T> TopicReceiver<T> {
-    /// Blocking receive.
-    pub fn recv(&self) -> Result<T, queue::RecvError> {
-        self.0.recv()
-    }
-
-    /// Non-blocking receive. Returns crossbeam TryRecvError directly —
-    /// see queue.rs for rationale.
-    pub fn try_recv(&self) -> Result<T, crossbeam::channel::TryRecvError> {
-        self.0.try_recv()
-    }
-}
-
-/// Create a bounded topic with a fixed number of subscribers.
-/// Composed of queues: one input queue (bounded), N output queues (bounded).
-/// Spawns a fan-out thread that reads from the input and clones to all outputs.
+/// Create a topic from existing queue senders.
+/// The kernel already created the queues. The kernel already gave
+/// the receivers to the programs. The topic takes the write ends
+/// and fans out to all of them.
 ///
-/// Returns (sender, receivers, handle).
-/// Dropping the sender causes all receivers to eventually get Disconnected.
-pub fn topic_bounded<T: Send + Clone + 'static>(
+/// Returns (sender, handle).
+/// The sender is the proxy — .send() writes to all queues.
+/// Dropping the sender causes all downstream queues to eventually
+/// get Disconnected (the fan-out thread exits, dropping the queue senders).
+pub fn topic<T: Send + Clone + 'static>(
     capacity: usize,
-    num_subscribers: usize,
-) -> (TopicSender<T>, Vec<TopicReceiver<T>>, TopicHandle) {
-    // Input queue — the producer writes here
+    outputs: Vec<QueueSender<T>>,
+) -> (TopicSender<T>, TopicHandle) {
+    // Input queue — the producer writes here, the fan-out thread reads
     let (in_tx, in_rx) = queue::queue_bounded::<T>(capacity);
-
-    // Output queues — one per subscriber
-    let mut out_txs = Vec::with_capacity(num_subscribers);
-    let mut receivers = Vec::with_capacity(num_subscribers);
-    for _ in 0..num_subscribers {
-        let (tx, rx) = queue::queue_bounded(capacity);
-        out_txs.push(tx);
-        receivers.push(TopicReceiver(rx));
-    }
 
     // Fan-out thread: read from input, clone to all outputs
     let handle = thread::spawn(move || {
         while let Ok(msg) = in_rx.recv() {
-            for tx in &out_txs {
+            for tx in &outputs {
                 // Bounded send: blocks if this subscriber's queue is full.
                 // One slow subscriber stalls all others — intentional
-                // backpressure propagation. The producer slows to match
-                // the slowest consumer. If a subscriber disconnected,
+                // backpressure propagation. If a subscriber disconnected,
                 // the error is ignored (skipped).
                 let _ = tx.send(msg.clone());
             }
         }
         // Input disconnected (producer dropped sender).
-        // out_txs drop here → all subscriber queues close → cascade.
+        // outputs drop here → all subscriber queues close → cascade.
     });
 
     (
-        TopicSender(in_tx),
-        receivers,
+        TopicSender { tx: in_tx },
         TopicHandle { _thread: handle },
     )
 }
@@ -87,20 +67,37 @@ pub fn topic_bounded<T: Send + Clone + 'static>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::services::queue;
 
     #[test]
     fn one_message_reaches_all_subscribers() {
-        let (tx, receivers, _handle) = topic_bounded(16, 3);
+        // Kernel creates the queues
+        let (out_tx_0, out_rx_0) = queue::queue_bounded(16);
+        let (out_tx_1, out_rx_1) = queue::queue_bounded(16);
+        let (out_tx_2, out_rx_2) = queue::queue_bounded(16);
+
+        // Topic takes the write ends
+        let (tx, _handle) = topic(16, vec![out_tx_0, out_tx_1, out_tx_2]);
+
         tx.send(99).unwrap();
 
-        for rx in &receivers {
-            assert_eq!(rx.recv().unwrap(), 99);
-        }
+        // Programs hold the read ends — just queues
+        assert_eq!(out_rx_0.recv().unwrap(), 99);
+        assert_eq!(out_rx_1.recv().unwrap(), 99);
+        assert_eq!(out_rx_2.recv().unwrap(), 99);
     }
 
     #[test]
     fn n_messages_in_order_for_each_subscriber() {
-        let (tx, receivers, _handle) = topic_bounded(64, 4);
+        let mut out_txs = Vec::new();
+        let mut out_rxs = Vec::new();
+        for _ in 0..4 {
+            let (tx, rx) = queue::queue_bounded(64);
+            out_txs.push(tx);
+            out_rxs.push(rx);
+        }
+
+        let (tx, _handle) = topic(64, out_txs);
 
         let count = 50;
         let send_handle = std::thread::spawn(move || {
@@ -109,7 +106,7 @@ mod tests {
             }
         });
 
-        for rx in &receivers {
+        for rx in &out_rxs {
             for i in 0..count {
                 assert_eq!(rx.recv().unwrap(), i);
             }
@@ -120,11 +117,13 @@ mod tests {
 
     #[test]
     fn shutdown_sender_dropped() {
-        let (tx, receivers, _handle) = topic_bounded::<i32>(16, 2);
+        let (out_tx_0, out_rx_0) = queue::queue_bounded::<i32>(16);
+        let (out_tx_1, out_rx_1) = queue::queue_bounded::<i32>(16);
+
+        let (tx, _handle) = topic(16, vec![out_tx_0, out_tx_1]);
         drop(tx);
 
-        for rx in &receivers {
-            assert!(rx.recv().is_err());
-        }
+        assert!(out_rx_0.recv().is_err());
+        assert!(out_rx_1.recv().is_err());
     }
 }

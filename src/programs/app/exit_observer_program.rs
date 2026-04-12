@@ -22,6 +22,7 @@ use crate::programs::stdlib::console::ConsoleHandle;
 use crate::scale_tracker::ScaleTracker;
 use crate::services::mailbox::{MailboxReceiver, MailboxSender};
 use crate::services::queue::{QueueReceiver, QueueSender};
+
 use crate::thought_encoder::{collect_facts, extract, ThoughtAST, ThoughtEncoder};
 use crate::to_f64;
 
@@ -35,6 +36,10 @@ pub struct ExitLearn {
 }
 
 /// One slot: a (receiver, sender) pair connecting one market observer to one broker.
+/// input_rx is a QueueReceiver — the queue was created by the kernel.
+/// The topic that fans out from the market observer writes to the queue's sender.
+/// The program doesn't know about the topic. It sees a queue.
+/// output_tx is a QueueSender — point-to-point to exactly one broker.
 pub struct ExitSlot {
     pub input_rx: QueueReceiver<MarketChain>,
     pub output_tx: QueueSender<FullChain>,
