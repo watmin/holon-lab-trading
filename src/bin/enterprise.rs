@@ -942,28 +942,11 @@ fn main() {
                         &mut broker_scales,
                     );
 
-                    // Broker's full thought: opinions + bound whole vectors + self + derived.
-                    // Each foreign thought is bound as ONE component — the entire vector
-                    // rotated into its own region by bind(atom(source), vec).
-                    // No extraction. No decomposition. No capacity pressure.
-                    // The vector carries the meaning. The bind separates the namespaces.
-                    let market_anomaly_atom = brk_enc.encode(
-                        &enterprise::thought_encoder::ThoughtAST::Atom("market-anomaly".into()),
-                        &brk_ctx.thought_encoder);
-                    let market_raw_atom = brk_enc.encode(
-                        &enterprise::thought_encoder::ThoughtAST::Atom("market-raw".into()),
-                        &brk_ctx.thought_encoder);
-                    let exit_anomaly_atom = brk_enc.encode(
-                        &enterprise::thought_encoder::ThoughtAST::Atom("exit-anomaly".into()),
-                        &brk_ctx.thought_encoder);
-                    let exit_raw_atom = brk_enc.encode(
-                        &enterprise::thought_encoder::ThoughtAST::Atom("exit-raw".into()),
-                        &brk_ctx.thought_encoder);
-
-                    let bound_market_anomaly = holon::kernel::primitives::Primitives::bind(&market_anomaly_atom, &market_thought);
-                    let bound_market_raw = holon::kernel::primitives::Primitives::bind(&market_raw_atom, &market_raw_thought);
-                    let bound_exit_anomaly = holon::kernel::primitives::Primitives::bind(&exit_anomaly_atom, &exit_thought);
-                    let bound_exit_raw = holon::kernel::primitives::Primitives::bind(&exit_raw_atom, &exit_raw_thought);
+                    // Proposal 034: broker thinks only about 25 scalar atoms.
+                    // No bound whole vectors. No extraction. The protocol carries
+                    // raw/anomaly/ast but the broker ignores them for its thought.
+                    let _market_raw_thought = market_raw_thought;
+                    let _exit_raw_thought = exit_raw_thought;
 
                     let mut all_facts = market_opinions;
                     all_facts.extend(exit_opinions);
@@ -971,17 +954,8 @@ fn main() {
                     all_facts.extend(derived_facts);
                     // Encode the scalar facts (opinions + self + derived) as one AST bundle
                     let broker_scalar_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(all_facts.clone());
-                    let broker_fact_count = all_facts.len() + 4; // scalar facts + 4 bound whole vectors
-                    let scalar_vec = brk_enc.encode(&broker_scalar_bundle, &brk_ctx.thought_encoder);
-
-                    // Bundle: scalar facts + 4 bound whole foreign vectors
-                    let broker_thought = holon::kernel::primitives::Primitives::bundle(&[
-                        &scalar_vec,
-                        &bound_market_anomaly,
-                        &bound_market_raw,
-                        &bound_exit_anomaly,
-                        &bound_exit_raw,
-                    ]);
+                    let broker_fact_count = all_facts.len(); // 25 scalar atoms only
+                    let broker_thought = brk_enc.encode(&broker_scalar_bundle, &brk_ctx.thought_encoder);
 
                     broker.propose(&broker_thought);
 
