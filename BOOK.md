@@ -10879,6 +10879,96 @@ crossing. The chain carries everything the broker needs. The
 data flows forward. The lessons flow backward. Nothing crosses
 a boundary it shouldn't.
 
+### The broker program
+
+```scheme
+(define (broker-program chain-rx
+                         market-learn-tx   ;; wired at birth
+                         exit-learn-tx     ;; wired at birth
+                         console db-tx
+                         broker exit-obs-ref
+                         scalar-encoder swap-fee)
+  (let ((candle-count 0))
+
+    (let loop ()
+      (match (recv chain-rx)
+        ((some chain)
+         (let* ((price (Price (:close (:candle chain))))
+
+                ;; Compose the two anomalies
+                (composed (bundle (:market-anomaly chain)
+                                  (:exit-anomaly chain)))
+
+                ;; Distances from the chain
+                (distances (:exit-distances chain))
+
+                ;; Register paper
+                (_ (register-paper broker
+                     composed
+                     (:market-anomaly chain)
+                     (:exit-anomaly chain)
+                     (:direction (:market-prediction chain))
+                     price distances))
+
+                ;; Tick papers against price
+                ((market-signals runner-resolutions)
+                 (tick-papers broker price))
+
+                ;; Propagate — broker learns its own lessons
+                ;; AND sends facts to its observers
+                (_ (for-each (lambda (res)
+                     (propagate broker res scalar-encoder)
+
+                     ;; Teach the market observer
+                     (send market-learn-tx
+                       (make-obs-learn
+                         (:market-thought res)
+                         (:prediction res)
+                         (:amount res)))
+
+                     ;; Teach the exit observer
+                     (send exit-learn-tx
+                       (make-exit-learn
+                         (:exit-thought res)
+                         (:optimal-distances res)
+                         (:amount res)
+                         (= (:outcome res) Grace)
+                         (:amount res))))
+                   (append market-signals
+                           runner-resolutions))))
+
+           (set! candle-count (+ candle-count 1))
+           (when (= 0 (mod candle-count 100))
+             (send db-tx
+               (make-broker-snapshot broker candle-count)))
+           (when (= 0 (mod candle-count 1000))
+             (out console
+               (format "broker[~a]: ev=~a gr=~a/~a papers=~a"
+                 (:slot-idx broker)
+                 (:expected-value broker)
+                 (:grace-count broker)
+                 (:violence-count broker)
+                 (paper-count broker))))
+
+           (loop)))
+
+        (disconnected
+         broker)))))
+```
+
+The broker receives the FullChain — the complete pipeline. It
+composes the two anomalies. It reads the distances from the
+chain. It registers papers. It ticks them. It resolves them.
+It teaches both observers through its wired learn handles.
+On disconnect, it returns itself — the accumulated accounting,
+the scalar accumulators, the P&L history. The experience comes
+home.
+
+No drain-learn. The broker doesn't receive learn signals from
+anyone. It IS the source. It teaches. It learns from its own
+paper resolutions through `propagate`. The terminal node of
+the forward path. The origin of the backward path.
+
 **PERSEVERARE.**
 
 ### [Disco Otsego](https://www.youtube.com/watch?v=Qv10GzVLHyA)
