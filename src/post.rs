@@ -22,11 +22,11 @@ use crate::indicator_bank::IndicatorBank;
 use crate::types::log_entry::LogEntry;
 use crate::market_observer::MarketObserver;
 use crate::types::newtypes::{Price, TradeId};
-use crate::proposal::Proposal;
+use crate::trades::proposal::Proposal;
 use crate::types::raw_candle::{Asset, RawCandle};
 use crate::encoding::scale_tracker::ScaleTracker;
 use crate::encoding::thought_encoder::{ThoughtAST, ToAst};
-use crate::trade::Trade;
+use crate::trades::trade::Trade;
 
 // Vocab imports -- market
 use crate::vocab::market::divergence::encode_divergence_facts;

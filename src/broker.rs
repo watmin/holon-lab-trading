@@ -13,7 +13,7 @@ use crate::types::distances::Distances;
 use crate::types::enums::{Direction, Outcome};
 use crate::simulation;
 use crate::types::newtypes::Price;
-use crate::paper_entry::PaperEntry;
+use crate::trades::paper_entry::PaperEntry;
 use crate::learning::scalar_accumulator::ScalarAccumulator;
 
 /// Accumulated history for a runner paper. Created when a paper signals Grace.

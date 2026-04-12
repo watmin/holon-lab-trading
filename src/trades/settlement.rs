@@ -8,7 +8,7 @@ use holon::kernel::vector::Vector;
 
 use crate::types::enums::{Outcome, Prediction};
 use crate::types::newtypes::{Amount, Price};
-use crate::trade::Trade;
+use crate::trades::trade::Trade;
 
 /// Settlement carrying all data needed for propagation.
 #[derive(Clone, Debug)]

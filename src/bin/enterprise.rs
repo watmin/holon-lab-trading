@@ -770,7 +770,7 @@ fn main() {
                         f64, f64, f64, f64,
                         holon::kernel::vector::Vector, holon::kernel::vector::Vector,
                         enterprise::encoding::thought_encoder::ThoughtAST, enterprise::encoding::thought_encoder::ThoughtAST);
-    type BrokerOutput = (enterprise::proposal::Proposal, Vec<enterprise::broker::Resolution>, Vec<enterprise::broker::Resolution>);
+    type BrokerOutput = (enterprise::trades::proposal::Proposal, Vec<enterprise::broker::Resolution>, Vec<enterprise::broker::Resolution>);
     type BrokerLearn = (holon::kernel::vector::Vector, holon::kernel::vector::Vector,
                         holon::kernel::vector::Vector,
                         enterprise::types::enums::Outcome,
@@ -1003,7 +1003,7 @@ fn main() {
                         });
                     }
 
-                    let prop = enterprise::proposal::Proposal::new(
+                    let prop = enterprise::trades::proposal::Proposal::new(
                         composed, market_thought, exit_thought, dists, edge, side, src.clone(), tgt.clone(),
                         pred, post_idx_for_broker, broker.slot_idx);
                     let _ = out_tx.send((prop, market_signals, runner_resolutions));

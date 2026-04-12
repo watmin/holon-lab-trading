@@ -11,11 +11,11 @@ use crate::types::distances::Levels;
 use crate::types::enums::{Outcome, Side, TradePhase};
 use crate::types::log_entry::LogEntry;
 use crate::types::newtypes::{Amount, Price, TradeId};
-use crate::proposal::Proposal;
+use crate::trades::proposal::Proposal;
 use crate::types::raw_candle::Asset;
-use crate::settlement::TreasurySettlement;
-use crate::trade::Trade;
-use crate::trade_origin::TradeOrigin;
+use crate::trades::settlement::TreasurySettlement;
+use crate::trades::trade::Trade;
+use crate::trades::trade_origin::TradeOrigin;
 
 /// The treasury — manages capital, funds proposals, settles trades.
 pub struct Treasury {
