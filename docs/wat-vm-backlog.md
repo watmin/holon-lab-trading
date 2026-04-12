@@ -110,6 +110,11 @@ Build core. Prove each independently. Then stdlib. Then app.
 - [ ] Market observer weights should be net (fees are reality)
 - [ ] Vocab audit (Proposal 032) — RSI encoding, dead atoms
 - [ ] Adopt reflexive noise subspace from holon-rs
+- [ ] Organize src/ — domain types need better homes:
+      `src/observers/` (market_observer.rs, exit_observer.rs),
+      `src/broker/` or similar groupings. The flat src/ with 30+
+      files is getting hard to navigate. The programs/ directory
+      showed the pattern — group by purpose.
 
 ## Shutdown cascade
 
