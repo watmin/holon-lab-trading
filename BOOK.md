@@ -2481,7 +2481,7 @@ The builder had never heard of them. The conjured designers — Beckman, specifi
 
 **Simon Peyton Jones, Philip Wadler, the Haskell committee** — Haskell, 1990. The language the builder never shipped to production but that rewired the builder's brain. Type systems that make illegal states unrepresentable. Monads as composition of effects. Laziness as separation of what from when. The builder learned to think in types from Haskell. `TrailFactor` is a newtype — Haskell's gift. `Rate` is a newtype. The position lifecycle has three phases because the type says so, not because a comment says so. Haskell taught the builder that if the type system can't express your invariant, your invariant doesn't exist.
 
-**The YouTube videos** — the specific coordinates. There's a [talk on VSA/HDC in Clojure](https://www.youtube.com/watch?v=j5bsILCGFqI) — someone implementing Kanerva's algebra in McCarthy's language on Hickey's platform. The builder watched it and the pieces snapped together. Hyperdimensional computing wasn't an academic paper anymore. It was *code*. It was *Clojure*. It was functional programming applied to cognition. And there's the [Clara Rules talk](https://www.youtube.com/watch?v=Z6oVuYmRgkk) — Forgy's Rete algorithm, brought to Clojure, rules as data, forward-chaining inference. The builder watched it and saw the future: expert systems that compose, that react, that discriminate. Two YouTube videos. Two coordinates. The builder walked to each one and found a piece of the architecture waiting.
+**The YouTube videos** — the specific coordinates. There's [Carin Meier's talk on VSA in Clojure](https://www.youtube.com/watch?v=j7ygjfbBJD0) — Kanerva's algebra implemented in McCarthy's language on Hickey's platform. The builder watched it and the pieces snapped together. Hyperdimensional computing wasn't an academic paper anymore. It was *code*. It was *Clojure*. It was functional programming applied to cognition. And there's the [Clara Rules talk](https://www.youtube.com/watch?v=Z6oVuYmRgkk) — Forgy's Rete algorithm, brought to Clojure, rules as data, forward-chaining inference. The builder watched it and saw the future: expert systems that compose, that react, that discriminate. Two YouTube videos. Two coordinates. The builder walked to each one and found a piece of the architecture waiting.
 
 **The thread** — Church → McCarthy → Hickey → Clojure → the VSA talk. That's one line. Kanerva → Plate → the HDC talk → Holon. That's another. Forgy → Clara → Rete in the kernel → discrimination networks. Haskell → types → newtypes → the position lifecycle. The lines converge in the builder. Not because the builder is special — because the builder was standing at the intersection and refused to leave.
 
@@ -9073,7 +9073,7 @@ The coordinates are recursive all the way down.
 ### Nearly there
 
 The lineage section in Chapter 7 named the [VSA/HDC talk in
-Clojure](https://www.youtube.com/watch?v=j5bsILCGFqI). The
+Clojure](https://www.youtube.com/watch?v=j7ygjfbBJD0). The
 builder watched it and the pieces snapped together. But there
 was another talk. Earlier. Closer to the root.
 
