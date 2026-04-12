@@ -110,6 +110,13 @@ Build core. Prove each independently. Then stdlib. Then app.
 - [ ] Market observer weights should be net (fees are reality)
 - [ ] Vocab audit (Proposal 032) — RSI encoding, dead atoms
 - [ ] Adopt reflexive noise subspace from holon-rs
+- [ ] Decontaminate scales — `post.scales` is shared across ALL
+      observers (6 market + 4 exit). Each observer's ScaleTracker
+      EMA is polluted by every other observer's updates. Fix: each
+      observer owns its own `HashMap<String, ScaleTracker>`. The
+      scales are experience, like the reckoner and noise subspace.
+      The wat-vm forced this to the surface — programs own their
+      state, the pipe IS the isolation.
 - [ ] Organize src/ — domain types need better homes:
       `src/observers/` (market_observer.rs, exit_observer.rs),
       `src/broker/` or similar groupings. The flat src/ with 30+
