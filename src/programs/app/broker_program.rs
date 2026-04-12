@@ -12,7 +12,7 @@ use std::sync::Arc;
 use holon::kernel::primitives::Primitives;
 use holon::kernel::scalar::ScalarEncoder;
 
-use crate::broker::Broker;
+use crate::domain::broker::Broker;
 use crate::types::enums::{Direction, Outcome};
 use crate::types::log_entry::LogEntry;
 use crate::types::newtypes::Price;

@@ -12,15 +12,15 @@ use rayon::prelude::*;
 use holon::kernel::primitives::Primitives;
 use holon::kernel::vector::Vector;
 
-use crate::broker::Broker;
+use crate::domain::broker::Broker;
 use crate::types::candle::Candle;
 use crate::encoding::ctx::Ctx;
 use crate::types::distances::{Distances, Levels};
 use crate::types::enums::{Direction, ExitLens, MarketLens, Outcome, Prediction, Side};
-use crate::exit_observer::ExitObserver;
+use crate::domain::exit_observer::ExitObserver;
 use crate::indicator_bank::IndicatorBank;
 use crate::types::log_entry::LogEntry;
-use crate::market_observer::MarketObserver;
+use crate::domain::market_observer::MarketObserver;
 use crate::types::newtypes::{Price, TradeId};
 use crate::trades::proposal::Proposal;
 use crate::types::raw_candle::{Asset, RawCandle};

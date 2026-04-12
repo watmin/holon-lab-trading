@@ -12,13 +12,13 @@ use clap::Parser;
 use crossbeam::channel::{self, Receiver, Sender};
 use rusqlite::{params, Connection};
 
-use enterprise::broker::Broker;
+use enterprise::domain::broker::Broker;
 use enterprise::encoding::ctx::Ctx;
 use enterprise::types::enums::{ExitLens, MarketLens, ScalarEncoding};
-use enterprise::exit_observer::ExitObserver;
+use enterprise::domain::exit_observer::ExitObserver;
 use enterprise::indicator_bank::IndicatorBank;
 use enterprise::types::log_entry::LogEntry;
-use enterprise::market_observer::MarketObserver;
+use enterprise::domain::market_observer::MarketObserver;
 use enterprise::post::Post;
 use enterprise::types::raw_candle::{Asset, RawCandle};
 use enterprise::learning::scalar_accumulator::ScalarAccumulator;
@@ -770,7 +770,7 @@ fn main() {
                         f64, f64, f64, f64,
                         holon::kernel::vector::Vector, holon::kernel::vector::Vector,
                         enterprise::encoding::thought_encoder::ThoughtAST, enterprise::encoding::thought_encoder::ThoughtAST);
-    type BrokerOutput = (enterprise::trades::proposal::Proposal, Vec<enterprise::broker::Resolution>, Vec<enterprise::broker::Resolution>);
+    type BrokerOutput = (enterprise::trades::proposal::Proposal, Vec<enterprise::domain::broker::Resolution>, Vec<enterprise::domain::broker::Resolution>);
     type BrokerLearn = (holon::kernel::vector::Vector, holon::kernel::vector::Vector,
                         holon::kernel::vector::Vector,
                         enterprise::types::enums::Outcome,
@@ -1194,7 +1194,7 @@ fn main() {
         let exit_results: Vec<Vec<(holon::kernel::vector::Vector, holon::kernel::vector::Vector, enterprise::encoding::thought_encoder::ThoughtAST)>> =
             std::thread::scope(|s| {
                 // Split exit_observers into individual mutable refs
-                let eobs_slices: Vec<&mut enterprise::exit_observer::ExitObserver> =
+                let eobs_slices: Vec<&mut enterprise::domain::exit_observer::ExitObserver> =
                     post.exit_observers.iter_mut().collect();
 
                 let mut join_handles = Vec::with_capacity(m);
