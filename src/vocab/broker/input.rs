@@ -7,7 +7,7 @@
 
 use holon::kernel::vector::Vector;
 
-use crate::thought_encoder::{collect_facts, extract, ThoughtAST, ThoughtEncoder};
+use crate::thought_encoder::{collect_facts, extract, ThoughtAST};
 
 /// Market-stage input: the AST and anomaly from a market observer.
 pub struct BrokerMarketInput {
@@ -23,37 +23,42 @@ pub struct BrokerExitInput {
 
 impl BrokerMarketInput {
     /// Extract the facts present in the market anomaly above the noise floor.
-    /// Returns (present_facts, cache_misses) — caller must propagate misses to cache.
-    pub fn extract_facts(&self, encoder: &ThoughtEncoder, noise_floor: f64) -> (Vec<ThoughtAST>, Vec<(ThoughtAST, holon::kernel::vector::Vector)>) {
+    /// The encode_fn handles caching internally — no misses to propagate.
+    pub fn extract_facts<F>(&self, encode_fn: F, noise_floor: f64) -> Vec<ThoughtAST>
+    where
+        F: Fn(&ThoughtAST) -> Vector,
+    {
         let facts = collect_facts(&self.ast);
-        let (extracted, misses) = extract(&self.anomaly, &facts, encoder);
-        let present = extracted
+        let extracted = extract(&self.anomaly, &facts, encode_fn);
+        extracted
             .into_iter()
             .filter(|(_, cos)| cos.abs() > noise_floor)
             .map(|(ast, _)| ast)
-            .collect();
-        (present, misses)
+            .collect()
     }
 }
 
 impl BrokerExitInput {
     /// Extract the facts present in the exit anomaly above the noise floor.
-    /// Returns (present_facts, cache_misses) — caller must propagate misses to cache.
-    pub fn extract_facts(&self, encoder: &ThoughtEncoder, noise_floor: f64) -> (Vec<ThoughtAST>, Vec<(ThoughtAST, holon::kernel::vector::Vector)>) {
+    /// The encode_fn handles caching internally — no misses to propagate.
+    pub fn extract_facts<F>(&self, encode_fn: F, noise_floor: f64) -> Vec<ThoughtAST>
+    where
+        F: Fn(&ThoughtAST) -> Vector,
+    {
         let facts = collect_facts(&self.ast);
-        let (extracted, misses) = extract(&self.anomaly, &facts, encoder);
-        let present = extracted
+        let extracted = extract(&self.anomaly, &facts, encode_fn);
+        extracted
             .into_iter()
             .filter(|(_, cos)| cos.abs() > noise_floor)
             .map(|(ast, _)| ast)
-            .collect();
-        (present, misses)
+            .collect()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::thought_encoder::ThoughtEncoder;
     use holon::kernel::vector_manager::VectorManager;
 
     const DIMS: usize = 4096;
@@ -83,7 +88,7 @@ mod tests {
             anomaly,
         };
 
-        let (extracted, _misses) = input.extract_facts(&encoder, 0.0);
+        let extracted = input.extract_facts(|a| encoder.encode(a).0, 0.0);
         // All three facts should be present (self-cosine is high)
         assert_eq!(extracted.len(), 3);
     }
@@ -105,7 +110,7 @@ mod tests {
         };
 
         // With a very high noise floor, nothing should pass
-        let (extracted, _misses) = input.extract_facts(&encoder, 0.99);
+        let extracted = input.extract_facts(|a| encoder.encode(a).0, 0.99);
         assert!(extracted.is_empty());
     }
 
@@ -125,7 +130,7 @@ mod tests {
             anomaly,
         };
 
-        let (extracted, _misses) = input.extract_facts(&encoder, 0.0);
+        let extracted = input.extract_facts(|a| encoder.encode(a).0, 0.0);
         assert_eq!(extracted.len(), 2);
     }
 }

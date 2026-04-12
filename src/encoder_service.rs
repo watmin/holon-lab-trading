@@ -36,6 +36,23 @@ impl EncoderHandle {
     pub fn set(&self, ast: ThoughtAST, vec: Vector) {
         let _ = self.install.send((ast, vec));
     }
+
+    /// Encode with cache protocol: check → compute → notify.
+    /// The handle enforces the discipline — callers never touch
+    /// ThoughtEncoder directly on hot paths.
+    pub fn encode(&self, ast: &ThoughtAST, encoder: &crate::thought_encoder::ThoughtEncoder) -> Vector {
+        // 1. Check cache
+        if let Some(cached) = self.get(ast) {
+            return cached;
+        }
+        // 2. Compute locally (pure math)
+        let (vec, misses) = encoder.encode(ast);
+        // 3. Notify cache service of all sub-tree misses
+        for (miss_ast, miss_vec) in misses {
+            self.set(miss_ast, miss_vec);
+        }
+        vec
+    }
 }
 
 /// The service. Owns the thread. Reports stats.

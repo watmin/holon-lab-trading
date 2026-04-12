@@ -797,18 +797,8 @@ fn main() {
                     let facts = enterprise::post::market_lens_facts(&lens, &candle, &sliced);
                     let bundle_ast = enterprise::thought_encoder::ThoughtAST::Bundle(facts);
 
-                    // Cache pipe: get from encoder service
-                    let thought = match enc_handle.get(&bundle_ast) {
-                        Some(cached) => cached,
-                        None => {
-                            // Miss — compute locally, install all sub-tree misses
-                            let (vec, misses) = ctx_ref.thought_encoder.encode(&bundle_ast);
-                            for (ast, v) in misses {
-                                enc_handle.set(ast, v);
-                            }
-                            vec
-                        }
-                    };
+                    // Cache pipe: check → compute → notify (all in one call)
+                    let thought = enc_handle.encode(&bundle_ast, &ctx_ref.thought_encoder);
 
                     let result = obs.observe(thought, Vec::new());
 
@@ -883,12 +873,12 @@ fn main() {
                     let noise_floor = 5.0 / (dims as f64).sqrt();
 
                     // Extract market facts from the market anomaly (typed)
-                    let (market_present, market_misses) = market_input.extract_facts(&brk_ctx.thought_encoder, noise_floor);
-                    for (ast, v) in market_misses { brk_enc.set(ast, v); }
+                    let market_present = market_input.extract_facts(
+                        |ast| brk_enc.encode(ast, &brk_ctx.thought_encoder), noise_floor);
 
                     // Extract exit facts from the exit anomaly (typed)
-                    let (exit_present, exit_misses) = exit_input.extract_facts(&brk_ctx.thought_encoder, noise_floor);
-                    for (ast, v) in exit_misses { brk_enc.set(ast, v); }
+                    let exit_present = exit_input.extract_facts(
+                        |ast| brk_enc.encode(ast, &brk_ctx.thought_encoder), noise_floor);
 
                     // Proposal 030: Encode leaf observer opinions as scalar facts.
                     // Market: signed conviction (direction × magnitude), conviction, edge.
@@ -928,16 +918,7 @@ fn main() {
                     all_facts.extend(exit_present);
                     all_facts.extend(self_facts);
                     let broker_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(all_facts);
-                    let broker_thought = match brk_enc.get(&broker_bundle) {
-                        Some(cached) => cached,
-                        None => {
-                            let (vec, misses) = brk_ctx.thought_encoder.encode(&broker_bundle);
-                            for (ast, v) in misses {
-                                brk_enc.set(ast, v);
-                            }
-                            vec
-                        }
-                    };
+                    let broker_thought = brk_enc.encode(&broker_bundle, &brk_ctx.thought_encoder);
 
                     broker.propose(&broker_thought);
 
@@ -1156,11 +1137,9 @@ fn main() {
 
             // Proposal 029: extract from ONE market observer's anomaly
             let facts = enterprise::thought_encoder::collect_facts(&market_asts[mi]);
-            let (extracted, extract_misses) = enterprise::thought_encoder::extract(
-                &market_thoughts[mi], &facts, &ctx_ref.thought_encoder);
-            for (ast, v) in extract_misses {
-                grid_handles[ei].set(ast, v);
-            }
+            let extracted = enterprise::thought_encoder::extract(
+                &market_thoughts[mi], &facts,
+                |ast| grid_handles[slot_idx].encode(ast, &ctx_ref.thought_encoder));
             // Filter above noise floor, keep original ThoughtASTs
             let market_facts: Vec<enterprise::thought_encoder::ThoughtAST> = extracted
                 .into_iter()
@@ -1172,16 +1151,7 @@ fn main() {
             // Encode the combined bundle
             let exit_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(exit_facts);
             exit_asts.push(exit_bundle.clone());
-            let exit_raw = match grid_handles[slot_idx].get(&exit_bundle) {
-                Some(cached) => cached,
-                None => {
-                    let (vec, misses) = ctx_ref.thought_encoder.encode(&exit_bundle);
-                    for (ast, v) in misses {
-                        grid_handles[slot_idx].set(ast, v);
-                    }
-                    vec
-                }
-            };
+            let exit_raw = grid_handles[slot_idx].encode(&exit_bundle, &ctx_ref.thought_encoder);
 
             // Update noise subspace, strip noise → exit anomaly
             let exit_f64 = enterprise::to_f64(&exit_raw);

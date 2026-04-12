@@ -370,18 +370,18 @@ impl IncrementalBundle {
 /// Flat extraction — query each form's presence in a thought vector.
 /// No hierarchy. No threshold. The consumer filters.
 ///
-/// Returns (results, misses) — results are (form, cosine) pairs,
-/// misses are (ast, vector) pairs that should be sent to the cache.
-pub fn extract(thought_vec: &Vector, forms: &[ThoughtAST], encoder: &ThoughtEncoder) -> (Vec<(ThoughtAST, f64)>, Vec<(ThoughtAST, Vector)>) {
-    let mut results = Vec::with_capacity(forms.len());
-    let mut all_misses = Vec::new();
-    for form in forms {
-        let (form_vec, misses) = encoder.encode(form);
+/// Accepts a closure that encodes a ThoughtAST into a Vector.
+/// On hot paths, pass the EncoderHandle's encode (which checks the cache).
+/// At startup or in tests, pass ThoughtEncoder::encode directly.
+pub fn extract<F>(thought_vec: &Vector, forms: &[ThoughtAST], encode_fn: F) -> Vec<(ThoughtAST, f64)>
+where
+    F: Fn(&ThoughtAST) -> Vector,
+{
+    forms.iter().map(|form| {
+        let form_vec = encode_fn(form);
         let presence = Similarity::cosine(&form_vec, thought_vec);
-        results.push((form.clone(), presence));
-        all_misses.extend(misses);
-    }
-    (results, all_misses)
+        (form.clone(), presence)
+    }).collect()
 }
 
 /// Recursively collect all non-Bundle leaf nodes from an AST tree.
@@ -551,7 +551,7 @@ mod tests {
         let leaf = ThoughtAST::linear("rsi", 0.7, 1.0);
         // Encode the leaf to get a vector, use it as the thought
         let (leaf_vec, _) = enc.encode(&leaf);
-        let (results, _) = extract(&leaf_vec, &[leaf.clone()], &enc);
+        let results = extract(&leaf_vec, &[leaf.clone()], |ast| enc.encode(ast).0);
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].0, leaf);
         // Self-cosine should be high (close to 1.0)
@@ -569,7 +569,7 @@ mod tests {
         // Bundle all forms, then extract — each form should have non-trivial presence
         let bundle = ThoughtAST::Bundle(forms.clone());
         let (thought_vec, _) = enc.encode(&bundle);
-        let (results, _) = extract(&thought_vec, &forms, &enc);
+        let results = extract(&thought_vec, &forms, |ast| enc.encode(ast).0);
         assert_eq!(results.len(), 3);
         // Each bundled form should have positive cosine with the bundle
         for (_ast, cos) in &results {
@@ -586,7 +586,7 @@ mod tests {
         // Use an unrelated vector
         let unrelated = ThoughtAST::linear("hour", 12.0, 24.0);
         let (unrelated_vec, _) = enc.encode(&unrelated);
-        let (results, _) = extract(&unrelated_vec, &forms, &enc);
+        let results = extract(&unrelated_vec, &forms, |ast| enc.encode(ast).0);
         assert_eq!(results.len(), 1);
         // Cosine between unrelated vectors should be near zero
         assert!(results[0].1.abs() < 0.2, "unrelated cosine should be near zero, got {}", results[0].1);
@@ -602,7 +602,7 @@ mod tests {
         ];
         let unrelated = ThoughtAST::linear("hour", 12.0, 24.0);
         let (unrelated_vec, _) = enc.encode(&unrelated);
-        let (results, _) = extract(&unrelated_vec, &forms, &enc);
+        let results = extract(&unrelated_vec, &forms, |ast| enc.encode(ast).0);
         // Both forms returned regardless of cosine value
         assert_eq!(results.len(), 2);
     }
@@ -615,7 +615,7 @@ mod tests {
             Box::new(ThoughtAST::Atom("vol".into())),
         );
         let (bind_vec, _) = enc.encode(&bind);
-        let (results, _) = extract(&bind_vec, &[bind.clone()], &enc);
+        let results = extract(&bind_vec, &[bind.clone()], |ast| enc.encode(ast).0);
         assert_eq!(results.len(), 1);
         assert!(matches!(results[0].0, ThoughtAST::Bind(_, _)));
         assert!(results[0].1 > 0.9);
