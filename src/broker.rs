@@ -99,12 +99,16 @@ pub struct Broker {
     pub reckoner: Reckoner,
     /// Background noise model.
     pub noise_subspace: OnlineSubspace,
-    /// Cumulative grace value.
+    /// Cumulative grace value (weighted).
     pub cumulative_grace: f64,
-    /// Cumulative violence value.
+    /// Cumulative violence value (weighted).
     pub cumulative_violence: f64,
     /// Total trade count.
     pub trade_count: usize,
+    /// Count of Grace outcomes.
+    pub grace_count: usize,
+    /// Count of Violence outcomes.
+    pub violence_count: usize,
     /// Current active direction — the broker's stance. None = cold start.
     pub active_direction: Option<Direction>,
     /// Capped paper trade queue.
@@ -169,6 +173,8 @@ impl Broker {
             cumulative_grace: 0.0,
             cumulative_violence: 0.0,
             trade_count: 0,
+            grace_count: 0,
+            violence_count: 0,
             active_direction: None,
             papers: VecDeque::new(),
             scalar_accums,
@@ -507,8 +513,14 @@ impl Broker {
 
         // 3. Track record
         match outcome {
-            Outcome::Grace => self.cumulative_grace += weight,
-            Outcome::Violence => self.cumulative_violence += weight,
+            Outcome::Grace => {
+                self.cumulative_grace += weight;
+                self.grace_count += 1;
+            }
+            Outcome::Violence => {
+                self.cumulative_violence += weight;
+                self.violence_count += 1;
+            }
         }
         self.trade_count += 1;
 
