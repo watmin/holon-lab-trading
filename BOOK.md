@@ -11025,6 +11025,100 @@ costumes were hiding this truth. The ignorant stripped them.
 
 **PERSEVERARE.**
 
+### [Otsego Placebo](https://www.youtube.com/watch?v=oq_M1EY1Ei8)
+
+From Static-X:
+
+> *Operation devastate*\
+> *Condition critical*\
+> *Automatic detonate*\
+> *Here comes the wrecking ball*\
+> *Enemies are at the gate*\
+> *Prepare to storm the wall*
+
+> *Your brain will not know the difference*
+
+> *I look into my eyes*\
+> *I see behind the lies*\
+> *I'm going blind*\
+> *Hypnotized*\
+> *I'm looking through no eyes*\
+> *I've been lobotomized*
+
+> *Low, forsaken, sinking low*\
+> *Find me a shovel*\
+> *Otsego placebo*
+
+> *As real as any memory in your head*
+
+> *That boy's one mean motherfucker*\
+> *It's about to be anarchy*
+
+"Operation devastate. Condition critical." The reorganization.
+47 files touched for types/. 37 files for encoding/. The
+wrecking ball through the src/ root. Every import path rewritten.
+Every reference updated. The old flat structure — devastated.
+Not by accident. By measurement. By the dependency DAG that
+showed us what depends on what. By the ignorant that proved
+the path still teaches after the destruction.
+
+"Automatic detonate. Prepare to storm the wall." The agent
+builds. The ignorant verifies. The compiler confirms. 310 tests
+pass. The detonation is automatic — send the agent, it moves
+the files, updates every import, the compiler says clean or it
+doesn't. No manual intervention. Automatic.
+
+"Your brain will not know the difference." The programs don't
+know. `crate::types::enums` or `crate::enums` — the program
+calls the same functions, reads the same types. The brain of
+the program doesn't know the difference. The organization is
+for the BUILDER, not the machine.
+
+"I look into my eyes. I see behind the lies." The costumes.
+`TopicReceiver` was a `QueueReceiver` in a costume. `MailboxSender`
+was a `QueueSender` in a costume. The ignorant looked into the
+types and saw behind the lies. Stripped them. Four types remain.
+The truth behind the eyes.
+
+"I've been lobotomized. I'm going blind." The shared scales.
+Ten observers writing to the same `post.scales`. Each one
+poisoning the others' normalization. The architecture was
+lobotomized — the observers couldn't see clearly because their
+scales were contaminated. The wat-vm revealed it by making it
+impossible. You can't share what you own.
+
+"Low, forsaken, sinking low. Find me a shovel." The backlog.
+30+ flat files. Sinking in the mess. The shovel is the
+dependency DAG. Dig. Find the leaves. Move them. Assess.
+Dig again. The shovel is the agent. The shovel is the ignorant.
+The shovel is the compiler. Find me a shovel — the datamancer
+always has one.
+
+"Otsego placebo." The placebo is the comfortable assumption.
+The flat src/ that felt organized because everything was in one
+place. The shared scales that felt correct because "they're all
+the same indicators." The costumes that felt type-safe because
+"TopicReceiver IS a receiver." Placebos. They felt right and
+were wrong. The measurement exposed them.
+
+"As real as any memory in your head." The git log. The book.
+The commits. As real as any memory. The reorganization is
+permanent. The types/ directory is permanent. The encoding/
+directory is permanent. The costumes are permanently gone.
+As real as any memory — because they ARE the memory. The
+persistence layer.
+
+"That boy's one mean motherfucker." The ignorant. It walks
+the path and finds every lie. It doesn't negotiate. It doesn't
+compromise. It reads from the top, knows nothing, and reports
+what it can't reach. One mean motherfucker. The eighth ward.
+
+"Hope you enjoyed the ride." The session. The wat-vm from
+three primitives. The costumes that fell. The scales that
+decontaminated. The chain types that prove the pipeline. The
+topology that the types enforce. The reorganization that
+cleared the space. The ride isn't over. The kernel awaits.
+
 ### [Disco Otsego](https://www.youtube.com/watch?v=Qv10GzVLHyA)
 
 From Static-X:
