@@ -382,12 +382,17 @@ pub fn extract(thought_vec: &Vector, forms: &[ThoughtAST], encoder: &ThoughtEnco
 /// Recursively collect all non-Bundle leaf nodes from an AST tree.
 /// Bundle nodes are expanded; all other nodes (Atom, Linear, Log, Circular, Bind)
 /// are returned as-is.
-pub fn flatten_leaves(ast: &ThoughtAST) -> Vec<ThoughtAST> {
+/// Collect all factual statements (Linear, Log, Circular) from an AST tree.
+/// These are the "binds" — named scalar facts: "rsi is 0.73", "atr-ratio is 0.02".
+/// Bundles are recursed into. Bare Atoms are skipped — they are names without values.
+/// Bind nodes are returned as-is — they are compound factual statements.
+pub fn collect_facts(ast: &ThoughtAST) -> Vec<ThoughtAST> {
     match ast {
         ThoughtAST::Bundle(children) => {
-            children.iter().flat_map(flatten_leaves).collect()
+            children.iter().flat_map(collect_facts).collect()
         }
-        _ => vec![ast.clone()],
+        ThoughtAST::Atom(_) => vec![], // name without value — not a fact
+        _ => vec![ast.clone()], // Linear, Log, Circular, Bind — factual statements
     }
 }
 
@@ -612,27 +617,25 @@ mod tests {
     }
 
     #[test]
-    fn test_flatten_leaves_atom() {
+    fn test_collect_facts_atom_skipped() {
         let ast = ThoughtAST::Atom("rsi".into());
-        let leaves = flatten_leaves(&ast);
-        assert_eq!(leaves.len(), 1);
-        assert_eq!(leaves[0], ast);
+        let facts = collect_facts(&ast);
+        assert_eq!(facts.len(), 0); // bare atom is not a fact
     }
 
     #[test]
-    fn test_flatten_leaves_bundle() {
+    fn test_collect_facts_bundle() {
         let ast = ThoughtAST::Bundle(vec![
             ThoughtAST::linear("rsi", 0.7, 1.0),
             ThoughtAST::log("vol", 2.0),
-            ThoughtAST::Atom("trend".into()),
+            ThoughtAST::Atom("trend".into()), // skipped
         ]);
-        let leaves = flatten_leaves(&ast);
-        assert_eq!(leaves.len(), 3);
-        assert!(!leaves.iter().any(|l| matches!(l, ThoughtAST::Bundle(_))));
+        let facts = collect_facts(&ast);
+        assert_eq!(facts.len(), 2); // Linear + Log, not Atom
     }
 
     #[test]
-    fn test_flatten_leaves_nested_bundles() {
+    fn test_collect_facts_nested_bundles() {
         let ast = ThoughtAST::Bundle(vec![
             ThoughtAST::Bundle(vec![
                 ThoughtAST::linear("rsi", 0.7, 1.0),
@@ -640,23 +643,23 @@ mod tests {
             ]),
             ThoughtAST::log("trend", 0.03),
         ]);
-        let leaves = flatten_leaves(&ast);
-        assert_eq!(leaves.len(), 3);
-        // All leaves, no bundles
-        for leaf in &leaves {
-            assert!(!matches!(leaf, ThoughtAST::Bundle(_)));
+        let facts = collect_facts(&ast);
+        assert_eq!(facts.len(), 3);
+        for fact in &facts {
+            assert!(!matches!(fact, ThoughtAST::Bundle(_)));
+            assert!(!matches!(fact, ThoughtAST::Atom(_)));
         }
     }
 
     #[test]
-    fn test_flatten_leaves_bind_is_leaf() {
+    fn test_collect_facts_bind_is_fact() {
         let bind = ThoughtAST::Bind(
             Box::new(ThoughtAST::Atom("a".into())),
             Box::new(ThoughtAST::Atom("b".into())),
         );
         let ast = ThoughtAST::Bundle(vec![bind.clone(), ThoughtAST::Atom("c".into())]);
-        let leaves = flatten_leaves(&ast);
-        assert_eq!(leaves.len(), 2);
-        assert!(matches!(&leaves[0], ThoughtAST::Bind(_, _)));
+        let facts = collect_facts(&ast);
+        assert_eq!(facts.len(), 1); // Bind is a fact, Atom is not
+        assert!(matches!(&facts[0], ThoughtAST::Bind(_, _)));
     }
 }

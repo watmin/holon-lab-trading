@@ -1104,9 +1104,9 @@ fn main() {
             exit_facts.extend(self_facts);
 
             // Proposal 029: extract from ONE market observer's anomaly
-            let leaf_forms = enterprise::thought_encoder::flatten_leaves(&market_asts[mi]);
+            let facts = enterprise::thought_encoder::collect_facts(&market_asts[mi]);
             let extracted = enterprise::thought_encoder::extract(
-                &market_thoughts[mi], &leaf_forms, &ctx_ref.thought_encoder);
+                &market_thoughts[mi], &facts, &ctx_ref.thought_encoder);
             // Filter above noise floor, keep original ThoughtASTs
             let market_facts: Vec<enterprise::thought_encoder::ThoughtAST> = extracted
                 .into_iter()
