@@ -46,6 +46,21 @@ const EXIT_LENSES: &[ExitLens] = &[
     ExitLens::Generalist,
 ];
 
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+/// Compute net residue after round-trip fees for exit self-assessment.
+/// Gross residue is the excursion (Grace) or loss magnitude (Violence).
+/// Net residue accounts for entry and exit swap fees.
+fn net_residue(gross: f64, is_grace: bool, swap_fee: f64) -> f64 {
+    if is_grace {
+        // Grace: excursion minus entry fee minus exit fee on the grown amount
+        gross - swap_fee - (1.0 + gross) * swap_fee
+    } else {
+        // Violence: loss plus fees (both directions negative)
+        -(gross + swap_fee + (1.0 - gross) * swap_fee)
+    }
+}
+
 // ─── CLI ─────────────────────────────────────────────────────────────────────
 
 #[derive(Parser)]
@@ -1089,8 +1104,10 @@ fn main() {
                 // Proposal 026: exit learns from exit_thought, not composed
                 let is_grace = stl.outcome == enterprise::enums::Outcome::Grace;
                 if stl_post_idx < ent.posts.len() && ei < ent.posts[stl_post_idx].exit_observers.len() {
+                    let net_weight = net_residue(stl.amount.0, is_grace, args.swap_fee).abs();
                     ent.posts[stl_post_idx].exit_observers[ei].observe_distances(
-                        &stl.exit_thought, &optimal, stl.amount.0, is_grace, optimal.trail);
+                        &stl.exit_thought, &optimal, net_weight, is_grace,
+                        net_residue(optimal.trail, is_grace, args.swap_fee));
                 }
             }
         }
@@ -1414,9 +1431,10 @@ fn main() {
                 let ei = res.broker_slot_idx % m;
                 let is_grace = res.outcome == enterprise::enums::Outcome::Grace;
                 if ei < post.exit_observers.len() {
+                    let net_weight = net_residue(res.amount, is_grace, args.swap_fee).abs();
                     post.exit_observers[ei].observe_distances(
-                        &res.exit_thought, &res.optimal_distances, res.amount,
-                        is_grace, res.optimal_distances.trail);
+                        &res.exit_thought, &res.optimal_distances, net_weight,
+                        is_grace, net_residue(res.optimal_distances.trail, is_grace, args.swap_fee));
                 }
             }
 
@@ -1454,6 +1472,7 @@ fn main() {
             // per-candle (thought, optimal, weight) observations. These are the primary
             // training signal. The single-point resolution observation is also sent.
             // Proposal 026: exit learns from exit_thought, not composed.
+            let sf = args.swap_fee;
             post.exit_observers
                 .par_iter_mut()
                 .zip(exit_work.par_iter())
@@ -1468,13 +1487,16 @@ fn main() {
                         // stored per-candle for full alignment. For now, use the paper's exit_thought
                         // for the single-point observation, and pass batch as-is.
                         for (thought, optimal, weight) in &res.exit_batch {
-                            eobs.observe_distances(thought, optimal, *weight, is_grace, optimal.trail);
+                            let nw = net_residue(*weight, is_grace, sf).abs();
+                            eobs.observe_distances(thought, optimal, nw, is_grace,
+                                net_residue(optimal.trail, is_grace, sf));
                         }
 
                         // Single-point resolution observation — uses exit_thought
+                        let nw = net_residue(res.amount, is_grace, sf).abs();
                         eobs.observe_distances(
-                            &res.exit_thought, &res.optimal_distances, res.amount,
-                            is_grace, res.optimal_distances.trail);
+                            &res.exit_thought, &res.optimal_distances, nw,
+                            is_grace, net_residue(res.optimal_distances.trail, is_grace, sf));
                     }
                 });
         }
