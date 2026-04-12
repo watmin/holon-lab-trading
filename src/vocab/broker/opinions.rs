@@ -7,7 +7,9 @@
 /// These compose with the extracted context and self-assessment to give the
 /// broker ~142 atoms. The noise subspace strips what doesn't matter.
 
+use std::collections::HashMap;
 use crate::thought_encoder::{round_to, ThoughtAST, ToAst};
+use crate::scale_tracker::{ScaleTracker, scaled_linear};
 
 /// Market observer's decisions as scalar facts.
 ///
@@ -54,8 +56,13 @@ pub fn encode_market_opinions(
     signed_conviction: f64,
     conviction: f64,
     edge: f64,
+    scales: &mut HashMap<String, ScaleTracker>,
 ) -> Vec<ThoughtAST> {
-    MarketOpinionThought::new(signed_conviction, conviction, edge).forms()
+    vec![
+        scaled_linear("market-direction", round_to(signed_conviction, 3), scales),
+        scaled_linear("market-conviction", round_to(conviction, 3), scales),
+        scaled_linear("market-edge", round_to(edge, 3), scales),
+    ]
 }
 
 /// Exit observer's decisions as scalar facts.
@@ -104,8 +111,14 @@ pub fn encode_exit_opinions(
     stop: f64,
     grace_rate: f64,
     avg_residue: f64,
+    scales: &mut HashMap<String, ScaleTracker>,
 ) -> Vec<ThoughtAST> {
-    ExitOpinionThought::new(trail, stop, grace_rate, avg_residue).forms()
+    vec![
+        ThoughtAST::log("exit-trail", round_to(trail.max(0.001), 4)),
+        ThoughtAST::log("exit-stop", round_to(stop.max(0.001), 4)),
+        scaled_linear("exit-grace-rate", round_to(grace_rate, 2), scales),
+        ThoughtAST::log("exit-avg-residue", round_to(avg_residue.max(0.001), 4)),
+    ]
 }
 
 #[cfg(test)]
@@ -114,27 +127,30 @@ mod tests {
 
     #[test]
     fn test_encode_market_opinions_count() {
-        let facts = encode_market_opinions(0.15, 0.15, 0.62);
+        let mut scales = HashMap::new();
+        let facts = encode_market_opinions(0.15, 0.15, 0.62, &mut scales);
         assert_eq!(facts.len(), 3);
     }
 
     #[test]
     fn test_encode_market_opinions_names() {
-        let facts = encode_market_opinions(-0.08, 0.08, 0.55);
+        let mut scales = HashMap::new();
+        let facts = encode_market_opinions(-0.08, 0.08, 0.55, &mut scales);
         let names: Vec<String> = facts.iter().map(|f| f.name()).collect();
         assert_eq!(names, vec!["market-direction", "market-conviction", "market-edge"]);
     }
 
     #[test]
     fn test_encode_market_opinions_signed_conviction() {
+        let mut scales = HashMap::new();
         // Up at 0.15 → +0.15
-        let facts = encode_market_opinions(0.15, 0.15, 0.62);
+        let facts = encode_market_opinions(0.15, 0.15, 0.62, &mut scales);
         match &facts[0] {
             ThoughtAST::Linear { value, .. } => assert!(*value > 0.0),
             _ => panic!("expected Linear"),
         }
         // Down at 0.08 → -0.08
-        let facts = encode_market_opinions(-0.08, 0.08, 0.55);
+        let facts = encode_market_opinions(-0.08, 0.08, 0.55, &mut scales);
         match &facts[0] {
             ThoughtAST::Linear { value, .. } => assert!(*value < 0.0),
             _ => panic!("expected Linear"),
@@ -143,30 +159,33 @@ mod tests {
 
     #[test]
     fn test_encode_market_opinions_rounding() {
-        let facts = encode_market_opinions(0.12345, 0.6789, 0.4321);
+        let mut scales = HashMap::new();
+        let facts = encode_market_opinions(0.12345, 0.6789, 0.4321, &mut scales);
         match &facts[0] {
-            ThoughtAST::Linear { value, .. } => assert_eq!(*value, 0.123),
+            ThoughtAST::Linear { value, .. } => assert_eq!(*value, 0.12),
             _ => panic!("expected Linear"),
         }
         match &facts[1] {
-            ThoughtAST::Linear { value, .. } => assert_eq!(*value, 0.679),
+            ThoughtAST::Linear { value, .. } => assert_eq!(*value, 0.68),
             _ => panic!("expected Linear"),
         }
         match &facts[2] {
-            ThoughtAST::Linear { value, .. } => assert_eq!(*value, 0.432),
+            ThoughtAST::Linear { value, .. } => assert_eq!(*value, 0.43),
             _ => panic!("expected Linear"),
         }
     }
 
     #[test]
     fn test_encode_exit_opinions_count() {
-        let facts = encode_exit_opinions(0.015, 0.030, 0.55, 0.005);
+        let mut scales = HashMap::new();
+        let facts = encode_exit_opinions(0.015, 0.030, 0.55, 0.005, &mut scales);
         assert_eq!(facts.len(), 4);
     }
 
     #[test]
     fn test_encode_exit_opinions_names() {
-        let facts = encode_exit_opinions(0.015, 0.030, 0.55, 0.005);
+        let mut scales = HashMap::new();
+        let facts = encode_exit_opinions(0.015, 0.030, 0.55, 0.005, &mut scales);
         let names: Vec<String> = facts.iter().map(|f| f.name()).collect();
         assert_eq!(
             names,
@@ -176,7 +195,8 @@ mod tests {
 
     #[test]
     fn test_encode_exit_opinions_log_encoding() {
-        let facts = encode_exit_opinions(0.015, 0.030, 0.55, 0.005);
+        let mut scales = HashMap::new();
+        let facts = encode_exit_opinions(0.015, 0.030, 0.55, 0.005, &mut scales);
         assert!(matches!(&facts[0], ThoughtAST::Log { .. }));
         assert!(matches!(&facts[1], ThoughtAST::Log { .. }));
         assert!(matches!(&facts[2], ThoughtAST::Linear { .. }));
@@ -185,8 +205,9 @@ mod tests {
 
     #[test]
     fn test_encode_exit_opinions_clamps_small_values() {
+        let mut scales = HashMap::new();
         // Values below 0.001 should be clamped
-        let facts = encode_exit_opinions(0.0001, 0.0, 0.55, 0.0);
+        let facts = encode_exit_opinions(0.0001, 0.0, 0.55, 0.0, &mut scales);
         match &facts[0] {
             ThoughtAST::Log { value, .. } => assert!(*value >= 0.001),
             _ => panic!("expected Log"),
@@ -199,22 +220,6 @@ mod tests {
             ThoughtAST::Log { value, .. } => assert!(*value >= 0.001),
             _ => panic!("expected Log"),
         }
-    }
-
-    #[test]
-    fn test_market_struct_forms_matches_function() {
-        let thought = MarketOpinionThought::new(0.15, 0.15, 0.62);
-        let struct_forms = thought.forms();
-        let fn_forms = encode_market_opinions(0.15, 0.15, 0.62);
-        assert_eq!(struct_forms, fn_forms);
-    }
-
-    #[test]
-    fn test_exit_struct_forms_matches_function() {
-        let thought = ExitOpinionThought::new(0.015, 0.030, 0.55, 0.005);
-        let struct_forms = thought.forms();
-        let fn_forms = encode_exit_opinions(0.015, 0.030, 0.55, 0.005);
-        assert_eq!(struct_forms, fn_forms);
     }
 
     #[test]
@@ -239,8 +244,9 @@ mod tests {
 
     #[test]
     fn test_total_opinion_atoms() {
-        let market = encode_market_opinions(0.15, 0.15, 0.62);
-        let exit = encode_exit_opinions(0.015, 0.030, 0.55, 0.005);
+        let mut scales = HashMap::new();
+        let market = encode_market_opinions(0.15, 0.15, 0.62, &mut scales);
+        let exit = encode_exit_opinions(0.015, 0.030, 0.55, 0.005, &mut scales);
         assert_eq!(market.len() + exit.len(), 7);
     }
 }

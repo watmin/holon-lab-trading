@@ -3,8 +3,10 @@
 // Memory in the series. Pure function: candle in, ASTs out.
 // atoms: hurst, autocorrelation, adx
 
+use std::collections::HashMap;
 use crate::candle::Candle;
 use crate::thought_encoder::{ThoughtAST, ToAst, round_to};
+use crate::scale_tracker::{ScaleTracker, scaled_linear};
 
 pub struct PersistenceThought {
     pub hurst: f64,
@@ -36,8 +38,13 @@ impl ToAst for PersistenceThought {
     }
 }
 
-pub fn encode_persistence_facts(c: &Candle) -> Vec<ThoughtAST> {
-    PersistenceThought::from_candle(c).forms()
+pub fn encode_persistence_facts(c: &Candle, scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
+    let t = PersistenceThought::from_candle(c);
+    vec![
+        scaled_linear("hurst", t.hurst, scales),
+        scaled_linear("autocorrelation", t.autocorrelation, scales),
+        scaled_linear("adx", t.adx, scales),
+    ]
 }
 
 #[cfg(test)]
@@ -47,14 +54,16 @@ mod tests {
     #[test]
     fn test_encode_persistence_facts_nonempty() {
         let c = Candle::default();
-        let facts = encode_persistence_facts(&c);
+        let mut scales = HashMap::new();
+        let facts = encode_persistence_facts(&c, &mut scales);
         assert_eq!(facts.len(), 3);
     }
 
     #[test]
     fn test_hurst_value() {
         let c = Candle::default();
-        let facts = encode_persistence_facts(&c);
+        let mut scales = HashMap::new();
+        let facts = encode_persistence_facts(&c, &mut scales);
         match &facts[0] {
             ThoughtAST::Linear { name, value, .. } => {
                 assert_eq!(name, "hurst");

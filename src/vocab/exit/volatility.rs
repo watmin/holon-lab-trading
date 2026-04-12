@@ -4,8 +4,10 @@
 // to estimate optimal distances. Pure function: candle in, ASTs out.
 // atoms: atr-ratio, atr-r, atr-roc-6, atr-roc-12, squeeze, bb-width
 
+use std::collections::HashMap;
 use crate::candle::Candle;
 use crate::thought_encoder::{ThoughtAST, ToAst, round_to};
+use crate::scale_tracker::{ScaleTracker, scaled_linear};
 
 pub struct ExitVolatilityThought {
     pub atr_ratio: f64,
@@ -46,8 +48,16 @@ impl ToAst for ExitVolatilityThought {
     }
 }
 
-pub fn encode_exit_volatility_facts(c: &Candle) -> Vec<ThoughtAST> {
-    ExitVolatilityThought::from_candle(c).forms()
+pub fn encode_exit_volatility_facts(c: &Candle, scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
+    let t = ExitVolatilityThought::from_candle(c);
+    vec![
+        ThoughtAST::Log { name: "atr-ratio".into(), value: t.atr_ratio },
+        ThoughtAST::Log { name: "atr-r".into(), value: t.atr_r },
+        scaled_linear("atr-roc-6", t.atr_roc_6, scales),
+        scaled_linear("atr-roc-12", t.atr_roc_12, scales),
+        scaled_linear("squeeze", t.squeeze, scales),
+        ThoughtAST::Log { name: "bb-width".into(), value: t.bb_width },
+    ]
 }
 
 #[cfg(test)]
@@ -57,14 +67,16 @@ mod tests {
     #[test]
     fn test_encode_exit_volatility_facts_nonempty() {
         let c = Candle::default();
-        let facts = encode_exit_volatility_facts(&c);
+        let mut scales = HashMap::new();
+        let facts = encode_exit_volatility_facts(&c, &mut scales);
         assert_eq!(facts.len(), 6);
     }
 
     #[test]
     fn test_atr_ratio_log() {
         let c = Candle::default();
-        let facts = encode_exit_volatility_facts(&c);
+        let mut scales = HashMap::new();
+        let facts = encode_exit_volatility_facts(&c, &mut scales);
         match &facts[0] {
             ThoughtAST::Log { name, value } => {
                 assert_eq!(name, "atr-ratio");

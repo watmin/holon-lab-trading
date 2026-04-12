@@ -3,8 +3,10 @@
 // Trend-relative, MACD, DI. Pure function: candle in, ASTs out.
 // atoms: close-sma20, close-sma50, close-sma200, macd-hist, di-spread, atr-ratio
 
+use std::collections::HashMap;
 use crate::candle::Candle;
 use crate::thought_encoder::{ThoughtAST, ToAst, round_to};
+use crate::scale_tracker::{ScaleTracker, scaled_linear};
 
 pub struct MomentumThought {
     pub close_sma20: f64,
@@ -45,8 +47,16 @@ impl ToAst for MomentumThought {
     }
 }
 
-pub fn encode_momentum_facts(c: &Candle) -> Vec<ThoughtAST> {
-    MomentumThought::from_candle(c).forms()
+pub fn encode_momentum_facts(c: &Candle, scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
+    let t = MomentumThought::from_candle(c);
+    vec![
+        scaled_linear("close-sma20", t.close_sma20, scales),
+        scaled_linear("close-sma50", t.close_sma50, scales),
+        scaled_linear("close-sma200", t.close_sma200, scales),
+        scaled_linear("macd-hist", t.macd_hist, scales),
+        scaled_linear("di-spread", t.di_spread, scales),
+        ThoughtAST::Log { name: "atr-ratio".into(), value: t.atr_ratio },
+    ]
 }
 
 #[cfg(test)]
@@ -56,14 +66,16 @@ mod tests {
     #[test]
     fn test_encode_momentum_facts_nonempty() {
         let c = Candle::default();
-        let facts = encode_momentum_facts(&c);
+        let mut scales = HashMap::new();
+        let facts = encode_momentum_facts(&c, &mut scales);
         assert_eq!(facts.len(), 6);
     }
 
     #[test]
     fn test_di_spread() {
         let c = Candle::default();
-        let facts = encode_momentum_facts(&c);
+        let mut scales = HashMap::new();
+        let facts = encode_momentum_facts(&c, &mut scales);
         match &facts[4] {
             ThoughtAST::Linear { name, value, .. } => {
                 assert_eq!(name, "di-spread");

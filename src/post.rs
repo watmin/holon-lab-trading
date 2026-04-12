@@ -6,7 +6,7 @@
 /// CRITICAL: on_candle wires vocab modules to lenses. Each MarketLens selects
 /// which vocab functions to call. This is NOT identical across observers.
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use rayon::prelude::*;
 
 use holon::kernel::primitives::Primitives;
@@ -24,7 +24,8 @@ use crate::market_observer::MarketObserver;
 use crate::newtypes::{Price, TradeId};
 use crate::proposal::Proposal;
 use crate::raw_candle::{Asset, RawCandle};
-use crate::thought_encoder::ThoughtAST;
+use crate::scale_tracker::ScaleTracker;
+use crate::thought_encoder::{ThoughtAST, ToAst};
 use crate::trade::Trade;
 
 // Vocab imports -- market
@@ -65,6 +66,7 @@ pub struct Post {
     pub exit_observers: Vec<ExitObserver>,
     pub registry: Vec<Broker>,
     pub encode_count: usize,
+    pub scales: HashMap<String, ScaleTracker>,
 }
 
 impl Post {
@@ -89,6 +91,7 @@ impl Post {
             exit_observers,
             registry,
             encode_count: 0,
+            scales: HashMap::new(),
         }
     }
 
@@ -131,15 +134,19 @@ impl Post {
 
         // Collect lens-specific facts BEFORE mutably borrowing observers
         let window: Vec<Candle> = self.candle_window.iter().cloned().collect();
-        // pmap: each observer does everything — facts, incremental encode, observe.
-        // Each observer is independent. ctx is shared immutable.
-        // Incremental bundling: each observer maintains sums across candles.
-        // Only changed facts get encoded + patched into sums. Bit-identical to full bundle.
+        // Collect facts sequentially — scales are mutable state on the post.
+        // Then encode and observe in parallel.
+        let all_facts: Vec<Vec<ThoughtAST>> = self
+            .market_observers
+            .iter()
+            .map(|obs| market_lens_facts(&obs.lens, &enriched, &window, &mut self.scales))
+            .collect();
+        // pmap: each observer encodes and observes with pre-collected facts.
         let market_results: Vec<_> = self
             .market_observers
             .par_iter_mut()
-            .map(|obs| {
-                let facts = market_lens_facts(&obs.lens, &enriched, &window);
+            .zip(all_facts.into_par_iter())
+            .map(|(obs, facts)| {
                 let (thought, misses) = obs.incremental.encode(&facts, &ctx.thought_encoder);
                 let result = obs.observe(thought, Vec::new());
                 (result.thought.clone(), result.prediction, result.edge, misses)
@@ -157,14 +164,23 @@ impl Post {
         // Each exit observer's incremental bundle maintains sums across candles.
         // The exit_vecs are then shared across all N market observers.
         // Proposal 026: includes regime, time, and self-assessment (generalist only).
+        // Collect facts sequentially — scales are mutable state on the post.
+        let all_exit_facts: Vec<Vec<ThoughtAST>> = self
+            .exit_observers
+            .iter()
+            .map(|eobs| {
+                let mut exit_fact_asts = exit_lens_facts(&eobs.lens, &enriched, &mut self.scales);
+                let self_facts = exit_self_assessment_facts(
+                    eobs.grace_rate, eobs.avg_residue, &mut self.scales);
+                exit_fact_asts.extend(self_facts);
+                exit_fact_asts
+            })
+            .collect();
         let exit_results: Vec<_> = self
             .exit_observers
             .par_iter_mut()
-            .map(|eobs| {
-                let mut exit_fact_asts = exit_lens_facts(&eobs.lens, &enriched);
-                let self_facts = exit_self_assessment_facts(
-                    eobs.grace_rate, eobs.avg_residue);
-                exit_fact_asts.extend(self_facts);
+            .zip(all_exit_facts.into_par_iter())
+            .map(|(eobs, exit_fact_asts)| {
                 eobs.incremental.encode(&exit_fact_asts, &ctx.thought_encoder)
             })
             .collect();
@@ -274,12 +290,27 @@ impl Post {
                 let _market_thought = &market_thoughts[mi];
 
                 // Exit: encode facts via lens
+                // Note: update_triggers uses &self (immutable), so scales cannot be updated.
+                // Use the struct's forms() path (hardcoded scales) — correct for trigger queries
+                // where exact scale doesn't matter for distance estimation.
                 let exit_lens = self.exit_observers[ei].lens;
-                let mut exit_fact_asts = exit_lens_facts(&exit_lens, candle);
-                let self_facts = exit_self_assessment_facts(
+                let mut exit_fact_asts = match exit_lens {
+                    ExitLens::Volatility => crate::vocab::exit::volatility::ExitVolatilityThought::from_candle(candle).forms(),
+                    ExitLens::Structure => crate::vocab::exit::structure::ExitStructureThought::from_candle(candle).forms(),
+                    ExitLens::Timing => crate::vocab::exit::timing::ExitTimingThought::from_candle(candle).forms(),
+                    ExitLens::Generalist => {
+                        let mut f = crate::vocab::exit::volatility::ExitVolatilityThought::from_candle(candle).forms();
+                        f.extend(crate::vocab::exit::structure::ExitStructureThought::from_candle(candle).forms());
+                        f.extend(crate::vocab::exit::timing::ExitTimingThought::from_candle(candle).forms());
+                        f
+                    }
+                };
+                exit_fact_asts.extend(crate::vocab::exit::regime::ExitRegimeThought::from_candle(candle).forms());
+                exit_fact_asts.extend(encode_exit_time_facts(candle));
+                let self_facts = crate::vocab::exit::self_assessment::ExitSelfAssessmentThought::new(
                     self.exit_observers[ei].grace_rate,
                     self.exit_observers[ei].avg_residue,
-                );
+                ).forms();
                 exit_fact_asts.extend(self_facts);
                 let exit_bundle = ThoughtAST::Bundle(exit_fact_asts);
                 let (exit_vec, misses) = ctx.thought_encoder.encode(&exit_bundle);
@@ -368,51 +399,51 @@ impl Post {
 /// Collect market vocab facts for a specific lens.
 /// Each MarketLens selects different modules. All include shared/time + standard.
 /// This is the CRITICAL wiring -- different lenses see different market data.
-pub fn market_lens_facts(lens: &MarketLens, candle: &Candle, window: &[Candle]) -> Vec<ThoughtAST> {
+pub fn market_lens_facts(lens: &MarketLens, candle: &Candle, window: &[Candle], scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
     // Shared: time facts (all lenses get these)
     let mut facts = encode_time_facts(candle);
 
     // Standard: window-based facts (all lenses get these)
-    facts.extend(encode_standard_facts(window));
+    facts.extend(encode_standard_facts(window, scales));
 
     // Lens-specific modules
     match lens {
         MarketLens::Momentum => {
-            facts.extend(encode_oscillator_facts(candle));
-            facts.extend(encode_momentum_facts(candle));
-            facts.extend(encode_stochastic_facts(candle));
+            facts.extend(encode_oscillator_facts(candle, scales));
+            facts.extend(encode_momentum_facts(candle, scales));
+            facts.extend(encode_stochastic_facts(candle, scales));
         }
         MarketLens::Structure => {
-            facts.extend(encode_keltner_facts(candle));
-            facts.extend(encode_fibonacci_facts(candle));
-            facts.extend(encode_ichimoku_facts(candle));
-            facts.extend(encode_price_action_facts(candle));
+            facts.extend(encode_keltner_facts(candle, scales));
+            facts.extend(encode_fibonacci_facts(candle, scales));
+            facts.extend(encode_ichimoku_facts(candle, scales));
+            facts.extend(encode_price_action_facts(candle, scales));
         }
         MarketLens::Volume => {
-            facts.extend(encode_flow_facts(candle));
+            facts.extend(encode_flow_facts(candle, scales));
         }
         MarketLens::Narrative => {
-            facts.extend(encode_timeframe_facts(candle));
-            facts.extend(encode_divergence_facts(candle));
+            facts.extend(encode_timeframe_facts(candle, scales));
+            facts.extend(encode_divergence_facts(candle, scales));
         }
         MarketLens::Regime => {
-            facts.extend(encode_regime_facts(candle));
-            facts.extend(encode_persistence_facts(candle));
+            facts.extend(encode_regime_facts(candle, scales));
+            facts.extend(encode_persistence_facts(candle, scales));
         }
         MarketLens::Generalist => {
             // ALL modules
-            facts.extend(encode_oscillator_facts(candle));
-            facts.extend(encode_momentum_facts(candle));
-            facts.extend(encode_stochastic_facts(candle));
-            facts.extend(encode_keltner_facts(candle));
-            facts.extend(encode_fibonacci_facts(candle));
-            facts.extend(encode_ichimoku_facts(candle));
-            facts.extend(encode_price_action_facts(candle));
-            facts.extend(encode_flow_facts(candle));
-            facts.extend(encode_timeframe_facts(candle));
-            facts.extend(encode_divergence_facts(candle));
-            facts.extend(encode_regime_facts(candle));
-            facts.extend(encode_persistence_facts(candle));
+            facts.extend(encode_oscillator_facts(candle, scales));
+            facts.extend(encode_momentum_facts(candle, scales));
+            facts.extend(encode_stochastic_facts(candle, scales));
+            facts.extend(encode_keltner_facts(candle, scales));
+            facts.extend(encode_fibonacci_facts(candle, scales));
+            facts.extend(encode_ichimoku_facts(candle, scales));
+            facts.extend(encode_price_action_facts(candle, scales));
+            facts.extend(encode_flow_facts(candle, scales));
+            facts.extend(encode_timeframe_facts(candle, scales));
+            facts.extend(encode_divergence_facts(candle, scales));
+            facts.extend(encode_regime_facts(candle, scales));
+            facts.extend(encode_persistence_facts(candle, scales));
         }
     }
 
@@ -422,30 +453,30 @@ pub fn market_lens_facts(lens: &MarketLens, candle: &Candle, window: &[Candle]) 
 /// Collect exit vocab facts for a specific lens.
 /// Proposal 026: all lenses gain regime and time atoms (universal context).
 /// Generalist additionally gains self-assessment atoms.
-pub fn exit_lens_facts(lens: &ExitLens, candle: &Candle) -> Vec<ThoughtAST> {
+pub fn exit_lens_facts(lens: &ExitLens, candle: &Candle, scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
     let mut facts = match lens {
-        ExitLens::Volatility => encode_exit_volatility_facts(candle),
-        ExitLens::Structure => encode_exit_structure_facts(candle),
-        ExitLens::Timing => encode_exit_timing_facts(candle),
+        ExitLens::Volatility => encode_exit_volatility_facts(candle, scales),
+        ExitLens::Structure => encode_exit_structure_facts(candle, scales),
+        ExitLens::Timing => encode_exit_timing_facts(candle, scales),
         ExitLens::Generalist => {
-            let mut f = encode_exit_volatility_facts(candle);
-            f.extend(encode_exit_structure_facts(candle));
-            f.extend(encode_exit_timing_facts(candle));
+            let mut f = encode_exit_volatility_facts(candle, scales);
+            f.extend(encode_exit_structure_facts(candle, scales));
+            f.extend(encode_exit_timing_facts(candle, scales));
             f
         }
     };
     // Universal context: regime + time for all lenses
-    facts.extend(encode_exit_regime_facts(candle));
+    facts.extend(encode_exit_regime_facts(candle, scales));
     facts.extend(encode_exit_time_facts(candle));
     facts
 }
 
 /// Collect exit self-assessment facts from the exit observer's rolling window.
 /// Generalist-only for now. Returns empty for non-generalist lenses.
-pub fn exit_self_assessment_facts(grace_rate: f64, avg_residue: f64) -> Vec<ThoughtAST> {
+pub fn exit_self_assessment_facts(grace_rate: f64, avg_residue: f64, scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
     // Self-assessment is on ALL lenses — it's an internal property
     // every exit observer has, not a generalist-only feature.
-    encode_exit_self_assessment_facts(grace_rate, avg_residue)
+    encode_exit_self_assessment_facts(grace_rate, avg_residue, scales)
 }
 
 /// Derive Side from a holon-rs Prediction. Up -> Buy, Down -> Sell.
@@ -559,10 +590,11 @@ mod tests {
     fn test_market_lens_facts_differ_by_lens() {
         let candle = Candle::default();
         let window = vec![candle.clone()];
+        let mut scales = std::collections::HashMap::new();
 
-        let momentum_facts = market_lens_facts(&MarketLens::Momentum, &candle, &window);
-        let volume_facts = market_lens_facts(&MarketLens::Volume, &candle, &window);
-        let regime_facts = market_lens_facts(&MarketLens::Regime, &candle, &window);
+        let momentum_facts = market_lens_facts(&MarketLens::Momentum, &candle, &window, &mut scales);
+        let volume_facts = market_lens_facts(&MarketLens::Volume, &candle, &window, &mut scales);
+        let regime_facts = market_lens_facts(&MarketLens::Regime, &candle, &window, &mut scales);
 
         // Different lenses produce different numbers of facts
         // (all share time + standard, but lens-specific modules differ)
@@ -574,13 +606,14 @@ mod tests {
     fn test_generalist_includes_all_modules() {
         let candle = Candle::default();
         let window = vec![candle.clone()];
+        let mut scales = std::collections::HashMap::new();
 
-        let gen_facts = market_lens_facts(&MarketLens::Generalist, &candle, &window);
+        let gen_facts = market_lens_facts(&MarketLens::Generalist, &candle, &window, &mut scales);
 
         // Generalist should have more facts than any single specialist
         for lens in &[MarketLens::Momentum, MarketLens::Structure, MarketLens::Volume,
                       MarketLens::Narrative, MarketLens::Regime] {
-            let specialist_facts = market_lens_facts(lens, &candle, &window);
+            let specialist_facts = market_lens_facts(lens, &candle, &window, &mut scales);
             assert!(
                 gen_facts.len() >= specialist_facts.len(),
                 "Generalist ({}) should have >= facts than {:?} ({})",
@@ -594,11 +627,12 @@ mod tests {
     #[test]
     fn test_exit_lens_facts_variants() {
         let candle = Candle::default();
+        let mut scales = std::collections::HashMap::new();
 
-        let vol_facts = exit_lens_facts(&ExitLens::Volatility, &candle);
-        let struct_facts = exit_lens_facts(&ExitLens::Structure, &candle);
-        let timing_facts = exit_lens_facts(&ExitLens::Timing, &candle);
-        let gen_facts = exit_lens_facts(&ExitLens::Generalist, &candle);
+        let vol_facts = exit_lens_facts(&ExitLens::Volatility, &candle, &mut scales);
+        let struct_facts = exit_lens_facts(&ExitLens::Structure, &candle, &mut scales);
+        let timing_facts = exit_lens_facts(&ExitLens::Timing, &candle, &mut scales);
+        let gen_facts = exit_lens_facts(&ExitLens::Generalist, &candle, &mut scales);
 
         // Proposal 026: all lenses get regime(8) + time(2) = +10 universal context
         assert!(!vol_facts.is_empty());
@@ -613,7 +647,8 @@ mod tests {
 
     #[test]
     fn test_exit_self_assessment_generalist_only() {
-        let facts = exit_self_assessment_facts(0.6, 0.005);
+        let mut scales = std::collections::HashMap::new();
+        let facts = exit_self_assessment_facts(0.6, 0.005, &mut scales);
         assert_eq!(facts.len(), 2);
     }
 }

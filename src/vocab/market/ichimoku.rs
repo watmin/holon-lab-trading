@@ -4,8 +4,10 @@
 // atoms: cloud-position, cloud-thickness, tk-cross-delta, tk-spread,
 //        tenkan-dist, kijun-dist
 
+use std::collections::HashMap;
 use crate::candle::Candle;
 use crate::thought_encoder::{ThoughtAST, ToAst, round_to};
+use crate::scale_tracker::{ScaleTracker, scaled_linear};
 
 fn clamp(v: f64, lo: f64, hi: f64) -> f64 {
     v.max(lo).min(hi)
@@ -62,8 +64,16 @@ impl ToAst for IchimokuThought {
     }
 }
 
-pub fn encode_ichimoku_facts(c: &Candle) -> Vec<ThoughtAST> {
-    IchimokuThought::from_candle(c).forms()
+pub fn encode_ichimoku_facts(c: &Candle, scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
+    let t = IchimokuThought::from_candle(c);
+    vec![
+        scaled_linear("cloud-position", t.cloud_position, scales),
+        ThoughtAST::Log { name: "cloud-thickness".into(), value: t.cloud_thickness },
+        scaled_linear("tk-cross-delta", t.tk_cross_delta, scales),
+        scaled_linear("tk-spread", t.tk_spread, scales),
+        scaled_linear("tenkan-dist", t.tenkan_dist, scales),
+        scaled_linear("kijun-dist", t.kijun_dist, scales),
+    ]
 }
 
 #[cfg(test)]
@@ -73,14 +83,16 @@ mod tests {
     #[test]
     fn test_encode_ichimoku_facts_nonempty() {
         let c = Candle::default();
-        let facts = encode_ichimoku_facts(&c);
+        let mut scales = HashMap::new();
+        let facts = encode_ichimoku_facts(&c, &mut scales);
         assert_eq!(facts.len(), 6);
     }
 
     #[test]
     fn test_cloud_position_above() {
         let c = Candle::default();
-        let facts = encode_ichimoku_facts(&c);
+        let mut scales = HashMap::new();
+        let facts = encode_ichimoku_facts(&c, &mut scales);
         match &facts[0] {
             ThoughtAST::Linear { name, value, .. } => {
                 assert_eq!(name, "cloud-position");

@@ -5,8 +5,10 @@
 // atoms: trend-consistency-6, trend-consistency-12, trend-consistency-24,
 //        adx, exit-kama-er
 
+use std::collections::HashMap;
 use crate::candle::Candle;
 use crate::thought_encoder::{ThoughtAST, ToAst, round_to};
+use crate::scale_tracker::{ScaleTracker, scaled_linear};
 
 pub struct ExitStructureThought {
     pub trend_consistency_6: f64,
@@ -44,8 +46,15 @@ impl ToAst for ExitStructureThought {
     }
 }
 
-pub fn encode_exit_structure_facts(c: &Candle) -> Vec<ThoughtAST> {
-    ExitStructureThought::from_candle(c).forms()
+pub fn encode_exit_structure_facts(c: &Candle, scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
+    let t = ExitStructureThought::from_candle(c);
+    vec![
+        scaled_linear("trend-consistency-6", t.trend_consistency_6, scales),
+        scaled_linear("trend-consistency-12", t.trend_consistency_12, scales),
+        scaled_linear("trend-consistency-24", t.trend_consistency_24, scales),
+        scaled_linear("adx", t.adx, scales),
+        scaled_linear("exit-kama-er", t.exit_kama_er, scales),
+    ]
 }
 
 #[cfg(test)]
@@ -55,14 +64,16 @@ mod tests {
     #[test]
     fn test_encode_exit_structure_facts_nonempty() {
         let c = Candle::default();
-        let facts = encode_exit_structure_facts(&c);
+        let mut scales = HashMap::new();
+        let facts = encode_exit_structure_facts(&c, &mut scales);
         assert_eq!(facts.len(), 5);
     }
 
     #[test]
     fn test_exit_kama_er() {
         let c = Candle::default();
-        let facts = encode_exit_structure_facts(&c);
+        let mut scales = HashMap::new();
+        let facts = encode_exit_structure_facts(&c, &mut scales);
         match &facts[4] {
             ThoughtAST::Linear { name, value, .. } => {
                 assert_eq!(name, "exit-kama-er");

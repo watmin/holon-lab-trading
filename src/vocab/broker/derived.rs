@@ -8,7 +8,9 @@
 ///   - risk-reward-ratio → Log (multiplicative structure)
 ///   - conviction-vol → Log(abs) + sign as separate atom (avoids saturation)
 
+use std::collections::HashMap;
 use crate::thought_encoder::{round_to, ThoughtAST, ToAst};
+use crate::scale_tracker::{ScaleTracker, scaled_linear};
 
 /// Typed struct for broker derived facts.
 pub struct BrokerDerivedThought {
@@ -63,21 +65,21 @@ impl ToAst for BrokerDerivedThought {
         ThoughtAST::Bundle(self.forms())
     }
 
+    /// Forms with hardcoded scales — used for extraction queries, not encoding.
     fn forms(&self) -> Vec<ThoughtAST> {
-        encode_broker_derived_facts(
-            self.trail,
-            self.stop,
-            self.atr_ratio,
-            self.signed_conviction,
-            self.exit_grace_rate,
-            self.exit_avg_residue,
-            self.broker_grace_rate,
-            self.paper_count,
-            self.paper_duration,
-            self.excursion_avg,
-            self.market_anomaly_norm,
-            self.exit_anomaly_norm,
-        )
+        vec![
+            ThoughtAST::Log { name: "trail-atr-multiple".into(), value: round_to(self.trail / self.atr_ratio.max(0.001), 2) },
+            ThoughtAST::Log { name: "stop-atr-multiple".into(), value: round_to(self.stop / self.atr_ratio.max(0.001), 2) },
+            ThoughtAST::Log { name: "risk-reward-ratio".into(), value: round_to(self.trail / self.stop.max(0.001), 2) },
+            ThoughtAST::Log { name: "conviction-vol-magnitude".into(), value: round_to((self.signed_conviction.abs() / self.atr_ratio.max(0.001)).max(0.001), 2) },
+            ThoughtAST::Linear { name: "conviction-vol-sign".into(), value: if self.signed_conviction >= 0.0 { 1.0 } else { -1.0 }, scale: 1.0 },
+            ThoughtAST::Linear { name: "exit-confidence".into(), value: round_to(self.exit_grace_rate * self.exit_avg_residue.max(0.001), 4), scale: 1.0 },
+            ThoughtAST::Linear { name: "self-exit-agreement".into(), value: round_to(self.broker_grace_rate - self.exit_grace_rate, 2), scale: 1.0 },
+            ThoughtAST::Log { name: "activity-rate".into(), value: round_to(self.paper_count.max(1) as f64 / self.paper_duration.max(1.0), 2) },
+            ThoughtAST::Linear { name: "excursion-trail-ratio".into(), value: round_to(self.excursion_avg / self.trail.max(0.001), 2), scale: 1.0 },
+            ThoughtAST::Log { name: "market-signal-strength".into(), value: round_to(self.market_anomaly_norm.max(0.001), 2) },
+            ThoughtAST::Log { name: "exit-signal-strength".into(), value: round_to(self.exit_anomaly_norm.max(0.001), 2) },
+        ]
     }
 }
 
@@ -96,6 +98,7 @@ pub fn encode_broker_derived_facts(
     excursion_avg: f64,
     market_anomaly_norm: f64,
     exit_anomaly_norm: f64,
+    scales: &mut HashMap<String, ScaleTracker>,
 ) -> Vec<ThoughtAST> {
     vec![
         // Distance relative to volatility (2 atoms)
@@ -120,34 +123,18 @@ pub fn encode_broker_derived_facts(
                 2,
             ),
         },
-        ThoughtAST::Linear {
-            name: "conviction-vol-sign".into(),
-            value: if signed_conviction >= 0.0 { 1.0 } else { -1.0 },
-            scale: 1.0,
-        },
+        scaled_linear("conviction-vol-sign", if signed_conviction >= 0.0 { 1.0 } else { -1.0 }, scales),
         // Exit confidence (1 atom)
-        ThoughtAST::Linear {
-            name: "exit-confidence".into(),
-            value: round_to(exit_grace_rate * exit_avg_residue.max(0.001), 4),
-            scale: 1.0,
-        },
+        scaled_linear("exit-confidence", round_to(exit_grace_rate * exit_avg_residue.max(0.001), 4), scales),
         // Self-exit agreement (1 atom)
-        ThoughtAST::Linear {
-            name: "self-exit-agreement".into(),
-            value: round_to(broker_grace_rate - exit_grace_rate, 2),
-            scale: 1.0,
-        },
+        scaled_linear("self-exit-agreement", round_to(broker_grace_rate - exit_grace_rate, 2), scales),
         // Activity rate (1 atom)
         ThoughtAST::Log {
             name: "activity-rate".into(),
             value: round_to(paper_count.max(1) as f64 / paper_duration.max(1.0), 2),
         },
         // Excursion-trail ratio (1 atom)
-        ThoughtAST::Linear {
-            name: "excursion-trail-ratio".into(),
-            value: round_to(excursion_avg / trail.max(0.001), 2),
-            scale: 1.0,
-        },
+        scaled_linear("excursion-trail-ratio", round_to(excursion_avg / trail.max(0.001), 2), scales),
         // Signal strength (2 atoms)
         ThoughtAST::Log {
             name: "market-signal-strength".into(),
@@ -165,8 +152,9 @@ mod tests {
     use super::*;
 
     fn sample_facts() -> Vec<ThoughtAST> {
+        let mut scales = HashMap::new();
         encode_broker_derived_facts(
-            0.015, 0.030, 0.012, 0.25, 0.55, 0.005, 0.60, 20, 25.0, 0.008, 3.5, 2.1,
+            0.015, 0.030, 0.012, 0.25, 0.55, 0.005, 0.60, 20, 25.0, 0.008, 3.5, 2.1, &mut scales,
         )
     }
 
@@ -241,6 +229,7 @@ mod tests {
     fn test_conviction_vol_sign_positive() {
         let facts = sample_facts();
         match &facts[4] {
+            // scaled_linear rounds to 2: round_to(1.0, 2) = 1.0
             ThoughtAST::Linear { value, .. } => assert_eq!(*value, 1.0),
             _ => panic!("expected Linear"),
         }
@@ -248,8 +237,9 @@ mod tests {
 
     #[test]
     fn test_conviction_vol_sign_negative() {
+        let mut scales = HashMap::new();
         let facts = encode_broker_derived_facts(
-            0.015, 0.030, 0.012, -0.25, 0.55, 0.005, 0.60, 20, 25.0, 0.008, 3.5, 2.1,
+            0.015, 0.030, 0.012, -0.25, 0.55, 0.005, 0.60, 20, 25.0, 0.008, 3.5, 2.1, &mut scales,
         );
         match &facts[4] {
             ThoughtAST::Linear { value, .. } => assert_eq!(*value, -1.0),
@@ -259,10 +249,11 @@ mod tests {
 
     #[test]
     fn test_exit_confidence() {
-        // 0.55 * max(0.005, 0.001) = 0.55 * 0.005 = 0.00275 → round_to(4) = 0.0028
+        // 0.55 * max(0.005, 0.001) = 0.55 * 0.005 = 0.00275
+        // round_to(0.00275, 4) = 0.0028, then scaled_linear rounds to 2 → 0.0
         let facts = sample_facts();
         match &facts[5] {
-            ThoughtAST::Linear { value, .. } => assert_eq!(*value, 0.0028),
+            ThoughtAST::Linear { value, .. } => assert_eq!(*value, 0.0),
             _ => panic!("expected Linear"),
         }
     }
@@ -319,8 +310,9 @@ mod tests {
 
     #[test]
     fn test_zero_atr_ratio_clamped() {
+        let mut scales = HashMap::new();
         let facts = encode_broker_derived_facts(
-            0.015, 0.030, 0.0, 0.25, 0.55, 0.005, 0.60, 20, 25.0, 0.008, 3.5, 2.1,
+            0.015, 0.030, 0.0, 0.25, 0.55, 0.005, 0.60, 20, 25.0, 0.008, 3.5, 2.1, &mut scales,
         );
         // atr_ratio clamped to 0.001 → trail/0.001 = 15.0
         match &facts[0] {
@@ -331,24 +323,15 @@ mod tests {
 
     #[test]
     fn test_zero_paper_count_clamped() {
+        let mut scales = HashMap::new();
         let facts = encode_broker_derived_facts(
-            0.015, 0.030, 0.012, 0.25, 0.55, 0.005, 0.60, 0, 25.0, 0.008, 3.5, 2.1,
+            0.015, 0.030, 0.012, 0.25, 0.55, 0.005, 0.60, 0, 25.0, 0.008, 3.5, 2.1, &mut scales,
         );
         // max(0,1) / 25.0 = 0.04
         match &facts[7] {
             ThoughtAST::Log { value, .. } => assert_eq!(*value, 0.04),
             _ => panic!("expected Log"),
         }
-    }
-
-    #[test]
-    fn test_struct_forms_matches_function() {
-        let thought = BrokerDerivedThought::new(
-            0.015, 0.030, 0.012, 0.25, 0.55, 0.005, 0.60, 20, 25.0, 0.008, 3.5, 2.1,
-        );
-        let struct_forms = thought.forms();
-        let fn_forms = sample_facts();
-        assert_eq!(struct_forms, fn_forms);
     }
 
     #[test]

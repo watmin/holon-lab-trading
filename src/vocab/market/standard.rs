@@ -6,8 +6,10 @@
 //        dist-from-high, dist-from-low, dist-from-midpoint,
 //        dist-from-sma200, session-depth
 
+use std::collections::HashMap;
 use crate::candle::Candle;
 use crate::thought_encoder::{ThoughtAST, ToAst, round_to};
+use crate::scale_tracker::{ScaleTracker, scaled_linear};
 
 pub struct StandardThought {
     pub since_rsi_extreme: f64,
@@ -98,9 +100,18 @@ impl ToAst for StandardThought {
     }
 }
 
-pub fn encode_standard_facts(candle_window: &[Candle]) -> Vec<ThoughtAST> {
+pub fn encode_standard_facts(candle_window: &[Candle], scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
     match StandardThought::from_window(candle_window) {
-        Some(thought) => thought.forms(),
+        Some(t) => vec![
+            ThoughtAST::Log { name: "since-rsi-extreme".into(), value: t.since_rsi_extreme },
+            ThoughtAST::Log { name: "since-vol-spike".into(), value: t.since_vol_spike },
+            ThoughtAST::Log { name: "since-large-move".into(), value: t.since_large_move },
+            scaled_linear("dist-from-high", t.dist_from_high, scales),
+            scaled_linear("dist-from-low", t.dist_from_low, scales),
+            scaled_linear("dist-from-midpoint", t.dist_from_midpoint, scales),
+            scaled_linear("dist-from-sma200", t.dist_from_sma200, scales),
+            ThoughtAST::Log { name: "session-depth".into(), value: t.session_depth },
+        ],
         None => Vec::new(),
     }
 }
@@ -112,20 +123,23 @@ mod tests {
     #[test]
     fn test_encode_standard_facts_nonempty() {
         let window = vec![Candle::default()];
-        let facts = encode_standard_facts(&window);
+        let mut scales = HashMap::new();
+        let facts = encode_standard_facts(&window, &mut scales);
         assert_eq!(facts.len(), 8);
     }
 
     #[test]
     fn test_encode_standard_facts_empty_window() {
-        let facts = encode_standard_facts(&[]);
+        let mut scales = HashMap::new();
+        let facts = encode_standard_facts(&[], &mut scales);
         assert!(facts.is_empty());
     }
 
     #[test]
     fn test_dist_from_high() {
         let window = vec![Candle::default()];
-        let facts = encode_standard_facts(&window);
+        let mut scales = HashMap::new();
+        let facts = encode_standard_facts(&window, &mut scales);
         match &facts[3] {
             ThoughtAST::Linear { name, value, .. } => {
                 assert_eq!(name, "dist-from-high");
@@ -144,7 +158,8 @@ mod tests {
         c1.rsi = 85.0; // RSI extreme
         let c2 = Candle::default();
         let window = vec![c1, c2];
-        let facts = encode_standard_facts(&window);
+        let mut scales = HashMap::new();
+        let facts = encode_standard_facts(&window, &mut scales);
         assert_eq!(facts.len(), 8);
 
         // since-rsi-extreme should be 1.0 (last candle at idx 0, n=2, 2-0=2, but max(1.0, 2.0)=2.0)

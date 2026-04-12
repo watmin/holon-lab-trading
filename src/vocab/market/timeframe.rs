@@ -5,8 +5,10 @@
 // atoms: tf-1h-trend, tf-1h-ret, tf-4h-trend, tf-4h-ret,
 //        tf-agreement, tf-5m-1h-align
 
+use std::collections::HashMap;
 use crate::candle::Candle;
 use crate::thought_encoder::{ThoughtAST, ToAst, round_to};
+use crate::scale_tracker::{ScaleTracker, scaled_linear};
 
 pub struct TimeframeThought {
     pub tf_1h_trend: f64,
@@ -55,8 +57,16 @@ impl ToAst for TimeframeThought {
     }
 }
 
-pub fn encode_timeframe_facts(c: &Candle) -> Vec<ThoughtAST> {
-    TimeframeThought::from_candle(c).forms()
+pub fn encode_timeframe_facts(c: &Candle, scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
+    let t = TimeframeThought::from_candle(c);
+    vec![
+        scaled_linear("tf-1h-trend", t.tf_1h_trend, scales),
+        scaled_linear("tf-1h-ret", t.tf_1h_ret, scales),
+        scaled_linear("tf-4h-trend", t.tf_4h_trend, scales),
+        scaled_linear("tf-4h-ret", t.tf_4h_ret, scales),
+        scaled_linear("tf-agreement", t.tf_agreement, scales),
+        scaled_linear("tf-5m-1h-align", t.tf_5m_1h_align, scales),
+    ]
 }
 
 #[cfg(test)]
@@ -66,14 +76,16 @@ mod tests {
     #[test]
     fn test_encode_timeframe_facts_nonempty() {
         let c = Candle::default();
-        let facts = encode_timeframe_facts(&c);
+        let mut scales = HashMap::new();
+        let facts = encode_timeframe_facts(&c, &mut scales);
         assert_eq!(facts.len(), 6);
     }
 
     #[test]
     fn test_tf_agreement() {
         let c = Candle::default();
-        let facts = encode_timeframe_facts(&c);
+        let mut scales = HashMap::new();
+        let facts = encode_timeframe_facts(&c, &mut scales);
         match &facts[4] {
             ThoughtAST::Linear { name, value, .. } => {
                 assert_eq!(name, "tf-agreement");

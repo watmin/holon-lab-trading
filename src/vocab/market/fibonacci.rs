@@ -4,8 +4,10 @@
 // atoms: range-pos-12, range-pos-24, range-pos-48,
 //        fib-dist-236, fib-dist-382, fib-dist-500, fib-dist-618, fib-dist-786
 
+use std::collections::HashMap;
 use crate::candle::Candle;
 use crate::thought_encoder::{ThoughtAST, ToAst, round_to};
+use crate::scale_tracker::{ScaleTracker, scaled_linear};
 
 pub struct FibonacciThought {
     pub range_pos_12: f64,
@@ -53,8 +55,18 @@ impl ToAst for FibonacciThought {
     }
 }
 
-pub fn encode_fibonacci_facts(c: &Candle) -> Vec<ThoughtAST> {
-    FibonacciThought::from_candle(c).forms()
+pub fn encode_fibonacci_facts(c: &Candle, scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
+    let t = FibonacciThought::from_candle(c);
+    vec![
+        scaled_linear("range-pos-12", t.range_pos_12, scales),
+        scaled_linear("range-pos-24", t.range_pos_24, scales),
+        scaled_linear("range-pos-48", t.range_pos_48, scales),
+        scaled_linear("fib-dist-236", t.fib_dist_236, scales),
+        scaled_linear("fib-dist-382", t.fib_dist_382, scales),
+        scaled_linear("fib-dist-500", t.fib_dist_500, scales),
+        scaled_linear("fib-dist-618", t.fib_dist_618, scales),
+        scaled_linear("fib-dist-786", t.fib_dist_786, scales),
+    ]
 }
 
 #[cfg(test)]
@@ -64,14 +76,16 @@ mod tests {
     #[test]
     fn test_encode_fibonacci_facts_nonempty() {
         let c = Candle::default();
-        let facts = encode_fibonacci_facts(&c);
+        let mut scales = HashMap::new();
+        let facts = encode_fibonacci_facts(&c, &mut scales);
         assert_eq!(facts.len(), 8);
     }
 
     #[test]
     fn test_fib_dist_500() {
         let c = Candle::default();
-        let facts = encode_fibonacci_facts(&c);
+        let mut scales = HashMap::new();
+        let facts = encode_fibonacci_facts(&c, &mut scales);
         match &facts[5] {
             ThoughtAST::Linear { name, value, .. } => {
                 assert_eq!(name, "fib-dist-500");

@@ -437,8 +437,9 @@ fn build_enterprise(args: &Args) -> (Enterprise, Ctx) {
         let default_candle = enterprise::candle::Candle::default();
         let window = vec![default_candle.clone()];
         let mut registration_misses = Vec::new();
+        let mut reg_scales = HashMap::new();
         for lens in MARKET_LENSES {
-            let facts = enterprise::post::market_lens_facts(lens, &default_candle, &window);
+            let facts = enterprise::post::market_lens_facts(lens, &default_candle, &window, &mut reg_scales);
             for fact in &facts {
                 let prefixed = enterprise::thought_encoder::ThoughtAST::Linear {
                     name: format!("m:{}", fact.name()),
@@ -455,8 +456,9 @@ fn build_enterprise(args: &Args) -> (Enterprise, Ctx) {
     // Proposal 030: Pre-register opinion atoms (7 total).
     // Encode once with dummy values so the VectorManager knows them.
     {
-        let opinion_facts = enterprise::vocab::broker::opinions::encode_market_opinions(0.0, 0.0, 0.0);
-        let exit_opinion_facts = enterprise::vocab::broker::opinions::encode_exit_opinions(0.001, 0.001, 0.0, 0.001);
+        let mut reg_scales = HashMap::new();
+        let opinion_facts = enterprise::vocab::broker::opinions::encode_market_opinions(0.0, 0.0, 0.0, &mut reg_scales);
+        let exit_opinion_facts = enterprise::vocab::broker::opinions::encode_exit_opinions(0.001, 0.001, 0.0, 0.001, &mut reg_scales);
         let mut opinion_misses = Vec::new();
         for fact in opinion_facts.iter().chain(exit_opinion_facts.iter()) {
             let (_, misses) = ctx.thought_encoder.encode(fact);
@@ -468,8 +470,9 @@ fn build_enterprise(args: &Args) -> (Enterprise, Ctx) {
     // Proposal 031: Pre-register derived atoms (11 total).
     // Encode once with dummy values so the VectorManager knows them.
     {
+        let mut reg_scales = HashMap::new();
         let derived_facts = enterprise::vocab::broker::derived::encode_broker_derived_facts(
-            0.001, 0.001, 0.001, 0.0, 0.0, 0.001, 0.0, 1, 1.0, 0.001, 0.001, 0.001,
+            0.001, 0.001, 0.001, 0.0, 0.0, 0.001, 0.0, 1, 1.0, 0.001, 0.001, 0.001, &mut reg_scales,
         );
         let mut derived_misses = Vec::new();
         for fact in &derived_facts {
@@ -796,6 +799,7 @@ fn main() {
 
             let handle = std::thread::spawn(move || {
                 let mut candle_count = 0usize;
+                let mut obs_scales = std::collections::HashMap::new();
                 while let Ok((candle, window, _encode_count)) = obs_rx.recv() {
                     candle_count += 1;
                     // Drain at most MAX_DRAIN learn signals per candle.
@@ -808,7 +812,7 @@ fn main() {
                     let full_len = window.len();
                     let start = if full_len > ws { full_len - ws } else { 0 };
                     let sliced: Vec<enterprise::candle::Candle> = window[start..].to_vec();
-                    let facts = enterprise::post::market_lens_facts(&lens, &candle, &sliced);
+                    let facts = enterprise::post::market_lens_facts(&lens, &candle, &sliced, &mut obs_scales);
                     let bundle_ast = enterprise::thought_encoder::ThoughtAST::Bundle(facts);
 
                     // Cache pipe: check → compute → notify (all in one call)
@@ -870,6 +874,7 @@ fn main() {
 
             let handle = std::thread::spawn(move || {
                 let mut candle_count = 0usize;
+                let mut broker_scales = std::collections::HashMap::new();
                 while let Ok((composed, market_thought, exit_thought, prediction, reckoner_dists, price, side, edge, pred, market_input, exit_input, exit_grace_rate, exit_avg_residue, market_edge, atr_ratio)) = in_rx.recv() {
                     candle_count += 1;
                     // Drain all learn signals. No cap.
@@ -907,9 +912,9 @@ fn main() {
                         -market_conviction
                     };
                     let market_opinions = enterprise::vocab::broker::opinions::encode_market_opinions(
-                        signed_conviction, market_conviction, market_edge);
+                        signed_conviction, market_conviction, market_edge, &mut broker_scales);
                     let exit_opinions = enterprise::vocab::broker::opinions::encode_exit_opinions(
-                        dists.trail, dists.stop, exit_grace_rate, exit_avg_residue);
+                        dists.trail, dists.stop, exit_grace_rate, exit_avg_residue, &mut broker_scales);
 
                     // Broker's own self-assessment facts
                     let grace_rate = if broker.trade_count > 0 {
@@ -923,6 +928,7 @@ fn main() {
                         broker.last_stop,
                         broker.resolution_count.saturating_sub(broker.reckoner.recalib_count() * recalib),
                         broker.avg_excursion,
+                        &mut broker_scales,
                     );
 
                     // Proposal 031: Derived thoughts — cross-cutting ratios
@@ -933,6 +939,7 @@ fn main() {
                         exit_grace_rate, exit_avg_residue, grace_rate,
                         broker.papers.len(), broker.avg_paper_duration,
                         broker.avg_excursion, market_norm, exit_norm,
+                        &mut broker_scales,
                     );
 
                     // Broker's full thought: opinions + extracted market + extracted exit + self-assessment + derived
@@ -1153,10 +1160,11 @@ fn main() {
 
             // Exit lens facts + self-assessment
             let mut exit_facts = enterprise::post::exit_lens_facts(
-                &post.exit_observers[ei].lens, &enriched);
+                &post.exit_observers[ei].lens, &enriched, &mut post.scales);
             let self_facts = enterprise::post::exit_self_assessment_facts(
                 post.exit_observers[ei].grace_rate,
                 post.exit_observers[ei].avg_residue,
+                &mut post.scales,
             );
             exit_facts.extend(self_facts);
 

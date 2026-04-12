@@ -19,6 +19,7 @@ pub mod scalar_accumulator;
 pub mod engram_gate;
 pub mod simulation;
 pub mod thought_encoder;
+pub mod scale_tracker;
 pub mod vocab;
 pub mod ctx;
 pub mod market_observer;

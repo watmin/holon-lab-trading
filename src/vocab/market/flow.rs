@@ -4,8 +4,10 @@
 // atoms: obv-slope, vwap-distance, buying-pressure, selling-pressure,
 //        volume-ratio, body-ratio
 
+use std::collections::HashMap;
 use crate::candle::Candle;
 use crate::thought_encoder::{ThoughtAST, ToAst, round_to};
+use crate::scale_tracker::{ScaleTracker, scaled_linear};
 
 pub struct FlowThought {
     pub obv_slope: f64,
@@ -49,8 +51,16 @@ impl ToAst for FlowThought {
     }
 }
 
-pub fn encode_flow_facts(c: &Candle) -> Vec<ThoughtAST> {
-    FlowThought::from_candle(c).forms()
+pub fn encode_flow_facts(c: &Candle, scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
+    let t = FlowThought::from_candle(c);
+    vec![
+        ThoughtAST::Log { name: "obv-slope".into(), value: t.obv_slope },
+        scaled_linear("vwap-distance", t.vwap_distance, scales),
+        scaled_linear("buying-pressure", t.buying_pressure, scales),
+        scaled_linear("selling-pressure", t.selling_pressure, scales),
+        ThoughtAST::Log { name: "volume-ratio".into(), value: t.volume_ratio },
+        scaled_linear("body-ratio", t.body_ratio, scales),
+    ]
 }
 
 #[cfg(test)]
@@ -60,14 +70,16 @@ mod tests {
     #[test]
     fn test_encode_flow_facts_nonempty() {
         let c = Candle::default();
-        let facts = encode_flow_facts(&c);
+        let mut scales = HashMap::new();
+        let facts = encode_flow_facts(&c, &mut scales);
         assert_eq!(facts.len(), 6);
     }
 
     #[test]
     fn test_buying_pressure_default() {
         let c = Candle::default();
-        let facts = encode_flow_facts(&c);
+        let mut scales = HashMap::new();
+        let facts = encode_flow_facts(&c, &mut scales);
         match &facts[2] {
             ThoughtAST::Linear { name, value, .. } => {
                 assert_eq!(name, "buying-pressure");

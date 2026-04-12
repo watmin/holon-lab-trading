@@ -3,8 +3,10 @@
 // Channel positions and squeeze. Pure function: candle in, ASTs out.
 // atoms: bb-pos, bb-width, kelt-pos, squeeze, kelt-upper-dist, kelt-lower-dist
 
+use std::collections::HashMap;
 use crate::candle::Candle;
 use crate::thought_encoder::{ThoughtAST, ToAst, round_to};
+use crate::scale_tracker::{ScaleTracker, scaled_linear};
 
 pub struct KeltnerThought {
     pub bb_pos: f64,
@@ -45,8 +47,16 @@ impl ToAst for KeltnerThought {
     }
 }
 
-pub fn encode_keltner_facts(c: &Candle) -> Vec<ThoughtAST> {
-    KeltnerThought::from_candle(c).forms()
+pub fn encode_keltner_facts(c: &Candle, scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
+    let t = KeltnerThought::from_candle(c);
+    vec![
+        scaled_linear("bb-pos", t.bb_pos, scales),
+        ThoughtAST::Log { name: "bb-width".into(), value: t.bb_width },
+        scaled_linear("kelt-pos", t.kelt_pos, scales),
+        scaled_linear("squeeze", t.squeeze, scales),
+        scaled_linear("kelt-upper-dist", t.kelt_upper_dist, scales),
+        scaled_linear("kelt-lower-dist", t.kelt_lower_dist, scales),
+    ]
 }
 
 #[cfg(test)]
@@ -56,14 +66,16 @@ mod tests {
     #[test]
     fn test_encode_keltner_facts_nonempty() {
         let c = Candle::default();
-        let facts = encode_keltner_facts(&c);
+        let mut scales = HashMap::new();
+        let facts = encode_keltner_facts(&c, &mut scales);
         assert_eq!(facts.len(), 6);
     }
 
     #[test]
     fn test_squeeze_value() {
         let c = Candle::default();
-        let facts = encode_keltner_facts(&c);
+        let mut scales = HashMap::new();
+        let facts = encode_keltner_facts(&c, &mut scales);
         match &facts[3] {
             ThoughtAST::Linear { name, value, .. } => {
                 assert_eq!(name, "squeeze");

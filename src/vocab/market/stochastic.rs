@@ -3,8 +3,10 @@
 // %K/%D spread and crosses. Pure function: candle in, ASTs out.
 // atoms: stoch-k, stoch-d, stoch-kd-spread, stoch-cross-delta
 
+use std::collections::HashMap;
 use crate::candle::Candle;
 use crate::thought_encoder::{ThoughtAST, ToAst, round_to};
+use crate::scale_tracker::{ScaleTracker, scaled_linear};
 
 pub struct StochasticThought {
     pub stoch_k: f64,
@@ -41,8 +43,14 @@ impl ToAst for StochasticThought {
     }
 }
 
-pub fn encode_stochastic_facts(c: &Candle) -> Vec<ThoughtAST> {
-    StochasticThought::from_candle(c).forms()
+pub fn encode_stochastic_facts(c: &Candle, scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
+    let t = StochasticThought::from_candle(c);
+    vec![
+        scaled_linear("stoch-k", t.stoch_k, scales),
+        scaled_linear("stoch-d", t.stoch_d, scales),
+        scaled_linear("stoch-kd-spread", t.stoch_kd_spread, scales),
+        scaled_linear("stoch-cross-delta", t.stoch_cross_delta, scales),
+    ]
 }
 
 #[cfg(test)]
@@ -52,14 +60,16 @@ mod tests {
     #[test]
     fn test_encode_stochastic_facts_nonempty() {
         let c = Candle::default();
-        let facts = encode_stochastic_facts(&c);
+        let mut scales = HashMap::new();
+        let facts = encode_stochastic_facts(&c, &mut scales);
         assert_eq!(facts.len(), 4);
     }
 
     #[test]
     fn test_stoch_k_normalized() {
         let c = Candle::default();
-        let facts = encode_stochastic_facts(&c);
+        let mut scales = HashMap::new();
+        let facts = encode_stochastic_facts(&c, &mut scales);
         match &facts[0] {
             ThoughtAST::Linear { name, value, .. } => {
                 assert_eq!(name, "stoch-k");

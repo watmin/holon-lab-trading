@@ -3,7 +3,9 @@
 // The exit observer's own recent performance. Two atoms.
 // atoms: exit-grace-rate, exit-avg-residue
 
+use std::collections::HashMap;
 use crate::thought_encoder::{ThoughtAST, ToAst, round_to};
+use crate::scale_tracker::{ScaleTracker, scaled_linear};
 
 pub struct ExitSelfAssessmentThought {
     pub exit_grace_rate: f64,
@@ -32,8 +34,12 @@ impl ToAst for ExitSelfAssessmentThought {
     }
 }
 
-pub fn encode_exit_self_assessment_facts(grace_rate: f64, avg_residue: f64) -> Vec<ThoughtAST> {
-    ExitSelfAssessmentThought::new(grace_rate, avg_residue).forms()
+pub fn encode_exit_self_assessment_facts(grace_rate: f64, avg_residue: f64, scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
+    let t = ExitSelfAssessmentThought::new(grace_rate, avg_residue);
+    vec![
+        scaled_linear("exit-grace-rate", t.exit_grace_rate, scales),
+        ThoughtAST::Log { name: "exit-avg-residue".into(), value: t.exit_avg_residue },
+    ]
 }
 
 #[cfg(test)]
@@ -42,13 +48,15 @@ mod tests {
 
     #[test]
     fn test_encode_exit_self_assessment_facts_nonempty() {
-        let facts = encode_exit_self_assessment_facts(0.6, 0.0005);
+        let mut scales = HashMap::new();
+        let facts = encode_exit_self_assessment_facts(0.6, 0.0005, &mut scales);
         assert_eq!(facts.len(), 2);
     }
 
     #[test]
     fn test_grace_rate_linear() {
-        let facts = encode_exit_self_assessment_facts(0.75, 0.0005);
+        let mut scales = HashMap::new();
+        let facts = encode_exit_self_assessment_facts(0.75, 0.0005, &mut scales);
         match &facts[0] {
             ThoughtAST::Linear { name, value, .. } => {
                 assert_eq!(name, "exit-grace-rate");
@@ -60,7 +68,8 @@ mod tests {
 
     #[test]
     fn test_avg_residue_log() {
-        let facts = encode_exit_self_assessment_facts(0.5, 0.0005);
+        let mut scales = HashMap::new();
+        let facts = encode_exit_self_assessment_facts(0.5, 0.0005, &mut scales);
         match &facts[1] {
             ThoughtAST::Log { name, value } => {
                 assert_eq!(name, "exit-avg-residue");
@@ -72,7 +81,8 @@ mod tests {
 
     #[test]
     fn test_grace_rate_clamped() {
-        let facts = encode_exit_self_assessment_facts(1.5, 0.01);
+        let mut scales = HashMap::new();
+        let facts = encode_exit_self_assessment_facts(1.5, 0.01, &mut scales);
         match &facts[0] {
             ThoughtAST::Linear { name, value, .. } => {
                 assert_eq!(name, "exit-grace-rate");

@@ -3,8 +3,10 @@
 // Oscillator positions as scalars. Pure function: candle in, ASTs out.
 // atoms: rsi, cci, mfi, williams-r, roc-1, roc-3, roc-6, roc-12
 
+use std::collections::HashMap;
 use crate::candle::Candle;
 use crate::thought_encoder::{ThoughtAST, ToAst, round_to};
+use crate::scale_tracker::{ScaleTracker, scaled_linear};
 
 pub struct OscillatorsThought {
     pub rsi: f64,
@@ -51,8 +53,18 @@ impl ToAst for OscillatorsThought {
     }
 }
 
-pub fn encode_oscillator_facts(c: &Candle) -> Vec<ThoughtAST> {
-    OscillatorsThought::from_candle(c).forms()
+pub fn encode_oscillator_facts(c: &Candle, scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
+    let t = OscillatorsThought::from_candle(c);
+    vec![
+        scaled_linear("rsi", t.rsi, scales),
+        scaled_linear("cci", t.cci, scales),
+        scaled_linear("mfi", t.mfi, scales),
+        scaled_linear("williams-r", t.williams_r, scales),
+        ThoughtAST::Log { name: "roc-1".into(), value: t.roc_1 },
+        ThoughtAST::Log { name: "roc-3".into(), value: t.roc_3 },
+        ThoughtAST::Log { name: "roc-6".into(), value: t.roc_6 },
+        ThoughtAST::Log { name: "roc-12".into(), value: t.roc_12 },
+    ]
 }
 
 #[cfg(test)]
@@ -62,14 +74,16 @@ mod tests {
     #[test]
     fn test_encode_oscillator_facts_nonempty() {
         let c = Candle::default();
-        let facts = encode_oscillator_facts(&c);
+        let mut scales = HashMap::new();
+        let facts = encode_oscillator_facts(&c, &mut scales);
         assert_eq!(facts.len(), 8);
     }
 
     #[test]
     fn test_rsi_value() {
         let c = Candle::default();
-        let facts = encode_oscillator_facts(&c);
+        let mut scales = HashMap::new();
+        let facts = encode_oscillator_facts(&c, &mut scales);
         match &facts[0] {
             ThoughtAST::Linear { name, value, .. } => {
                 assert_eq!(name, "rsi");

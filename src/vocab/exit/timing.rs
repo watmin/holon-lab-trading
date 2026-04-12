@@ -4,8 +4,10 @@
 // to time entries and exits. Pure function: candle in, ASTs out.
 // atoms: rsi, stoch-k, stoch-kd-spread, macd-hist, cci
 
+use std::collections::HashMap;
 use crate::candle::Candle;
 use crate::thought_encoder::{ThoughtAST, ToAst, round_to};
+use crate::scale_tracker::{ScaleTracker, scaled_linear};
 
 pub struct ExitTimingThought {
     pub rsi: f64,
@@ -43,8 +45,15 @@ impl ToAst for ExitTimingThought {
     }
 }
 
-pub fn encode_exit_timing_facts(c: &Candle) -> Vec<ThoughtAST> {
-    ExitTimingThought::from_candle(c).forms()
+pub fn encode_exit_timing_facts(c: &Candle, scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
+    let t = ExitTimingThought::from_candle(c);
+    vec![
+        scaled_linear("rsi", t.rsi, scales),
+        scaled_linear("stoch-k", t.stoch_k, scales),
+        scaled_linear("stoch-kd-spread", t.stoch_kd_spread, scales),
+        scaled_linear("macd-hist", t.macd_hist, scales),
+        scaled_linear("cci", t.cci, scales),
+    ]
 }
 
 #[cfg(test)]
@@ -54,14 +63,16 @@ mod tests {
     #[test]
     fn test_encode_exit_timing_facts_nonempty() {
         let c = Candle::default();
-        let facts = encode_exit_timing_facts(&c);
+        let mut scales = HashMap::new();
+        let facts = encode_exit_timing_facts(&c, &mut scales);
         assert_eq!(facts.len(), 5);
     }
 
     #[test]
     fn test_stoch_kd_spread() {
         let c = Candle::default();
-        let facts = encode_exit_timing_facts(&c);
+        let mut scales = HashMap::new();
+        let facts = encode_exit_timing_facts(&c, &mut scales);
         match &facts[2] {
             ThoughtAST::Linear { name, value, .. } => {
                 assert_eq!(name, "stoch-kd-spread");

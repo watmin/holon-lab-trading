@@ -5,8 +5,10 @@
 // atoms: kama-er, choppiness, dfa-alpha, variance-ratio,
 //        entropy-rate, aroon-up, aroon-down, fractal-dim
 
+use std::collections::HashMap;
 use crate::candle::Candle;
 use crate::thought_encoder::{ThoughtAST, ToAst, round_to};
+use crate::scale_tracker::{ScaleTracker, scaled_linear};
 
 pub struct ExitRegimeThought {
     pub kama_er: f64,
@@ -53,8 +55,18 @@ impl ToAst for ExitRegimeThought {
     }
 }
 
-pub fn encode_exit_regime_facts(c: &Candle) -> Vec<ThoughtAST> {
-    ExitRegimeThought::from_candle(c).forms()
+pub fn encode_exit_regime_facts(c: &Candle, scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
+    let t = ExitRegimeThought::from_candle(c);
+    vec![
+        scaled_linear("kama-er", t.kama_er, scales),
+        scaled_linear("choppiness", t.choppiness, scales),
+        scaled_linear("dfa-alpha", t.dfa_alpha, scales),
+        ThoughtAST::Log { name: "variance-ratio".into(), value: t.variance_ratio },
+        scaled_linear("entropy-rate", t.entropy_rate, scales),
+        scaled_linear("aroon-up", t.aroon_up, scales),
+        scaled_linear("aroon-down", t.aroon_down, scales),
+        scaled_linear("fractal-dim", t.fractal_dim, scales),
+    ]
 }
 
 #[cfg(test)]
@@ -64,14 +76,16 @@ mod tests {
     #[test]
     fn test_encode_exit_regime_facts_nonempty() {
         let c = Candle::default();
-        let facts = encode_exit_regime_facts(&c);
+        let mut scales = HashMap::new();
+        let facts = encode_exit_regime_facts(&c, &mut scales);
         assert_eq!(facts.len(), 8);
     }
 
     #[test]
     fn test_variance_ratio_log() {
         let c = Candle::default();
-        let facts = encode_exit_regime_facts(&c);
+        let mut scales = HashMap::new();
+        let facts = encode_exit_regime_facts(&c, &mut scales);
         match &facts[3] {
             ThoughtAST::Log { name, value } => {
                 assert_eq!(name, "variance-ratio");

@@ -4,8 +4,10 @@
 // atoms: range-ratio, gap, consecutive-up, consecutive-down,
 //        body-ratio-pa, upper-wick, lower-wick
 
+use std::collections::HashMap;
 use crate::candle::Candle;
 use crate::thought_encoder::{ThoughtAST, ToAst, round_to};
+use crate::scale_tracker::{ScaleTracker, scaled_linear};
 
 pub struct PriceActionThought {
     pub range_ratio: f64,
@@ -53,8 +55,17 @@ impl ToAst for PriceActionThought {
     }
 }
 
-pub fn encode_price_action_facts(c: &Candle) -> Vec<ThoughtAST> {
-    PriceActionThought::from_candle(c).forms()
+pub fn encode_price_action_facts(c: &Candle, scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
+    let t = PriceActionThought::from_candle(c);
+    vec![
+        ThoughtAST::Log { name: "range-ratio".into(), value: t.range_ratio },
+        scaled_linear("gap", t.gap, scales),
+        ThoughtAST::Log { name: "consecutive-up".into(), value: t.consecutive_up },
+        ThoughtAST::Log { name: "consecutive-down".into(), value: t.consecutive_down },
+        scaled_linear("body-ratio-pa", t.body_ratio_pa, scales),
+        scaled_linear("upper-wick", t.upper_wick, scales),
+        scaled_linear("lower-wick", t.lower_wick, scales),
+    ]
 }
 
 #[cfg(test)]
@@ -64,14 +75,16 @@ mod tests {
     #[test]
     fn test_encode_price_action_facts_nonempty() {
         let c = Candle::default();
-        let facts = encode_price_action_facts(&c);
+        let mut scales = HashMap::new();
+        let facts = encode_price_action_facts(&c, &mut scales);
         assert_eq!(facts.len(), 7);
     }
 
     #[test]
     fn test_body_ratio_pa() {
         let c = Candle::default();
-        let facts = encode_price_action_facts(&c);
+        let mut scales = HashMap::new();
+        let facts = encode_price_action_facts(&c, &mut scales);
         match &facts[4] {
             ThoughtAST::Linear { name, value, .. } => {
                 assert_eq!(name, "body-ratio-pa");

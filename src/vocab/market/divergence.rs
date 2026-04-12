@@ -4,8 +4,10 @@
 // Conditional emission: divergence facts only fire when non-zero.
 // atoms: rsi-divergence-bull, rsi-divergence-bear, divergence-spread
 
+use std::collections::HashMap;
 use crate::candle::Candle;
 use crate::thought_encoder::{ThoughtAST, ToAst, round_to};
+use crate::scale_tracker::{ScaleTracker, scaled_linear};
 
 /// Divergence thought — conditional emission. Fields are Option because
 /// divergence facts only fire when non-zero.
@@ -51,8 +53,19 @@ impl ToAst for DivergenceThought {
     }
 }
 
-pub fn encode_divergence_facts(c: &Candle) -> Vec<ThoughtAST> {
-    DivergenceThought::from_candle(c).forms()
+pub fn encode_divergence_facts(c: &Candle, scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
+    let t = DivergenceThought::from_candle(c);
+    let mut facts = Vec::new();
+    if let Some(v) = t.rsi_divergence_bull {
+        facts.push(scaled_linear("rsi-divergence-bull", v, scales));
+    }
+    if let Some(v) = t.rsi_divergence_bear {
+        facts.push(scaled_linear("rsi-divergence-bear", v, scales));
+    }
+    if let Some(v) = t.divergence_spread {
+        facts.push(scaled_linear("divergence-spread", v, scales));
+    }
+    facts
 }
 
 #[cfg(test)]
@@ -62,7 +75,8 @@ mod tests {
     #[test]
     fn test_encode_divergence_facts_empty_when_no_divergence() {
         let c = Candle::default(); // both divergence fields are 0.0
-        let facts = encode_divergence_facts(&c);
+        let mut scales = HashMap::new();
+        let facts = encode_divergence_facts(&c, &mut scales);
         assert!(facts.is_empty());
     }
 
@@ -70,7 +84,8 @@ mod tests {
     fn test_encode_divergence_facts_with_bull() {
         let mut c = Candle::default();
         c.rsi_divergence_bull = 0.5;
-        let facts = encode_divergence_facts(&c);
+        let mut scales = HashMap::new();
+        let facts = encode_divergence_facts(&c, &mut scales);
         assert_eq!(facts.len(), 2); // bull + spread
     }
 
@@ -79,7 +94,8 @@ mod tests {
         let mut c = Candle::default();
         c.rsi_divergence_bull = 0.5;
         c.rsi_divergence_bear = 0.3;
-        let facts = encode_divergence_facts(&c);
+        let mut scales = HashMap::new();
+        let facts = encode_divergence_facts(&c, &mut scales);
         assert_eq!(facts.len(), 3); // bull + bear + spread
     }
 }
