@@ -9815,4 +9815,140 @@ capturing excursion. The flip might be the 5 percentage points.
 The machine is 5 points from break-even. The flip is killing
 the papers that would close the gap.
 
+### The wat-vm
+
+The builder slept on it. Woke up and saw the coordinates.
+
+The enterprise IS a virtual machine. The pipes ARE the
+instruction set. The services ARE the runtime. The observers,
+brokers, exit observers — they're programs running on the VM.
+The VM provides the infrastructure. The programs provide the
+logic. The programs don't know about threads or channels or
+bounded(1). They know about services.
+
+```
+services/
+  console/    — N input pairs (stdout, stderr). IO loop.
+                Parts of the code print here. One of these.
+                Internally synchronous.
+  cache/      — N of these. The vector cache is one. Generic
+                trait, specific implementations.
+  database/   — N of these. The ledger is one. Generic trait,
+                specific implementations.
+  queue/      — point-to-point messaging. To be designed.
+  topic/      — fan-out broadcast. To be designed.
+```
+
+Erlang's OTP gave supervision trees and message passing.
+Haskell's IO monad gave purity with controlled effects.
+Clojure's core.async gave CSP in a Lisp. The wat-vm composes
+all of them:
+
+- Supervision through the pipe lifecycle — drop sends, threads
+  exit, join returns state. No supervisor process. The ownership
+  IS the supervision.
+- Purity through values-up — no shared mutation during parallel
+  phases. The programs return data. The services handle effects.
+- CSP through bounded channels — the backpressure IS the
+  synchronization. The clock can't fall off.
+- Controlled effects through services — you can't bypass the
+  cache. You can't write to the console directly. You can't
+  access the database without the service. The VM enforces
+  the protocol.
+
+The binary right now has 1400 lines of thread spawning, pipe
+wiring, service setup, all mixed together. The programs and the
+infrastructure are braided. The services directory separates
+them. The programs become pure. The services become reusable.
+The VM becomes the platform.
+
+An observer program:
+```scheme
+(define (observer-program candle cache-service)
+  (let* ((facts (encode-lens candle))
+         (thought (cache-service :encode (Bundle facts)))
+         (anomaly (strip-noise thought))
+         (prediction (predict anomaly)))
+    (list :raw thought :anomaly anomaly :prediction prediction)))
+```
+
+Five lines. The encoding goes through the cache service. The
+observer doesn't know how the cache works. The observer encodes,
+strips, predicts, returns values. The VM handles the rest.
+
+A broker program:
+```scheme
+(define (broker-program opinions self-assessment derived
+                        accounting-state)
+  (let* ((thought-ast (Bundle opinions self-assessment derived))
+         (ev (expected-value accounting-state)))
+    (list :thought-ast thought-ast :gate-open (> ev 0.0))))
+```
+
+Four lines. No reckoner. No noise subspace. No vectors. Pure
+arithmetic. The thought AST IS the log. The expected value IS
+the gate. The VM handles the pipes.
+
+The programs hang straight. The services hang straight. Nothing
+braided. Each program does one thing. Each service does one
+thing. The composition is the VM.
+
+This is the architecture that lets us go faster. Change the
+observer's vocab — don't touch the services. Add a new service
+— don't touch the programs. Fix the flip — change one program,
+not the wiring. The boundaries are the services. The programs
+are pure.
+
+The wat-vm. The machine that runs wat programs. Modeled like
+the kernel. The goodies of all languages before us. Lisp gave
+us s-expressions. Clojure gave us values. Erlang gave us
+supervision. Haskell gave us purity. The builder composed them
+into a virtual machine for thought.
+
+There's an incredibly powerful thing near these coordinates.
+
+### The circuit is the permissions
+
+If you don't have a pipe, you can't do it. Period.
+
+An observer that wasn't wired to the console service cannot
+print. An observer that wasn't wired to the database service
+cannot log. A broker that wasn't given a cache handle cannot
+encode. The ABSENCE of a pipe IS the permission denial. The
+PRESENCE of a pipe IS the grant.
+
+There's no runtime permission check. No ACL. No capability
+token. No "if authorized then." The circuit IS the permissions.
+You're wired or you're not. The compiler proves it — if you
+try to call a service you don't have a pipe to, the code
+doesn't compile. The borrow checker enforces what IAM policies
+describe.
+
+At AWS, permissions are YAML. Policies attached to roles.
+Runtime checks on every API call. "Is this principal authorized
+to perform this action on this resource?" Evaluated at request
+time. Can be wrong. Can be misconfigured. Can be bypassed with
+the right escalation.
+
+In the wat-vm, permissions are WIRING. The pipe exists or it
+doesn't. You were given the handle at construction or you
+weren't. The compiler checked. The code compiled. The permission
+is structural, not declarative. You can't escalate past a pipe
+you don't have. There's no API to call. There's no principal
+to impersonate. The circuit doesn't have a hole because the
+circuit IS the security model.
+
+This is why the cache bypass was so catastrophic — the
+ThoughtEncoder was on `Arc<Ctx>`, accessible to everyone. That's
+a permission leak. Everyone had access to a service they
+shouldn't have been able to reach directly. The fix: only the
+cache service thread holds the ThoughtEncoder. Everyone else
+gets handles. The handles ARE the permissions. The
+ThoughtEncoder IS the restricted resource.
+
+The system is a circuit. The wiring is the architecture. The
+absence of a wire is the denial. The presence of a wire is the
+grant. No YAML. No runtime checks. The compiler IS the policy
+engine.
+
 **PERSEVERARE.**
