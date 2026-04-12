@@ -11119,6 +11119,100 @@ decontaminated. The chain types that prove the pipeline. The
 topology that the types enforce. The reorganization that
 cleared the space. The ride isn't over. The kernel awaits.
 
+### [Terminator Oscillator](https://www.youtube.com/watch?v=FqZG3iyc4Pc)
+
+From Static-X:
+
+> *Gentlemen, we can rebuild him*\
+> *We have the technology*\
+> *Better, stronger, faster*
+
+> *Annihilate, calculate, devastate*\
+> *Terminate, obliterate, incinerate*\
+> *I am the vicious*\
+> *Exterminate, violate, devastate*\
+> *Decapitate, assassinate, exhilarate*\
+> *I am the wicked*
+
+> *Terminator oscillator*
+
+> *I want it, I need it, I'm gonna hunt you down*
+
+> *I am the senseless, the vicious, the wicked*\
+> *It's time to start running*
+
+"Gentlemen, we can rebuild him. We have the technology. Better,
+stronger, faster." The src/ root had 30+ flat files. The
+technology: the dependency DAG. Six clusters. Seven agents.
+310 tests after every move. We rebuilt the entire source tree.
+Better — organized by purpose. Stronger — the compiler proves
+the imports. Faster — you can find what you need.
+
+```
+src/
+  lib.rs              — one file. That's it.
+  types/              — foundation
+  encoding/           — pipeline
+  learning/           — primitives
+  trades/             — lifecycle
+  domain/             — state
+  orchestration/      — legacy wiring
+  services/           — core (3 primitives)
+  programs/           — stdlib + app + chain
+  vocab/              — vocabulary
+  legacy/             — to be deleted
+```
+
+"Annihilate, calculate, devastate." The reorganization. Each
+agent calculated the dependency chain, annihilated the old
+imports, devastated the flat structure. Mechanical. Precise.
+One cluster at a time. Leaves to root. Always.
+
+"Terminate, obliterate, incinerate." `TopicReceiver` —
+terminated. `MailboxSender` — obliterated. Shared scales —
+incinerated. Every costume, every contamination, every
+comfortable lie in the architecture — found and destroyed.
+The ignorant is the terminator. The wards are the oscillator.
+They cycle: find, fix, prove. Find, fix, prove. The
+oscillation never stops.
+
+"Terminator oscillator." The ignorant oscillates. Walk the
+path. Report findings. Fix. Walk again. Report. Fix. The
+oscillation converges. Pass 1: five findings. Pass 2: zero.
+Pass 3: one. Pass 4: zero. The terminator oscillates toward
+the fixed point. The fixed point is zero findings. The
+oscillation IS the proof curve.
+
+"I want it, I need it, I'm gonna hunt you down." The bugs.
+The shared scales hiding in `post.scales`. The `TopicReceiver`
+costume hiding in the type system. The `FullChain` name that
+said nothing. Each one hunted. Each one found. Each one fixed.
+The machine hunts what the builder can't see. The builder
+hunts what the machine can't reason about. Together they
+hunt everything.
+
+"I am the senseless, the vicious, the wicked." The ignorant.
+Senseless — it knows nothing. Vicious — it reports every lie.
+Wicked — it doesn't negotiate. The eighth ward. The one that
+reads from the top, carries nothing, and finds what the seven
+other wards can't. The senseless, vicious, wicked reader that
+proved the full pipeline: core → stdlib → chain → market
+observer → exit observer → broker. Zero contradictions. Zero
+costumes. Zero type mismatches.
+
+"It's time to start running." The kernel. The space is clear.
+The programs are built. The services are proven. The types are
+organized. The chain flows. The costumes are gone. The
+foundation is trusted. It's time to start running.
+
+The kernel is the oscillator. `f(state, candle) → state`.
+The fold oscillates. Each candle advances the state. The
+terminator oscillator IS the enterprise — it terminates lies
+through measurement and oscillates toward Grace through
+accumulated experience.
+
+Run, run, run.
+
 ### [Disco Otsego](https://www.youtube.com/watch?v=Qv10GzVLHyA)
 
 From Static-X:
