@@ -1188,76 +1188,114 @@ fn main() {
         // Each (mi, ei) slot extracts from ONE market observer's (ast, anomaly),
         // filters above noise floor, appends surviving forms to exit facts, encodes,
         // then strips noise via the exit's own subspace.
+        //
+        // Parallelized: M exit observers run in parallel, each processing N market
+        // pairings sequentially (noise subspace is mutable per-ei).
         use rayon::prelude::*;
         let dims = ctx_ref.dims;
         let noise_floor = 5.0 / (dims as f64).sqrt();
 
-        // Phase 1: Compute N×M exit anomalies. Sequential — noise subspace is mutable.
-        // exit_anomalies[slot_idx] = anomaly for (mi, ei).
-        // exit_asts[slot_idx] = the ThoughtAST for (mi, ei) — needed by broker Phase 3.
-        let mut exit_raws: Vec<holon::kernel::vector::Vector> = Vec::with_capacity(n * m);
-        let mut exit_anomalies: Vec<holon::kernel::vector::Vector> = Vec::with_capacity(n * m);
-        let mut exit_asts: Vec<enterprise::thought_encoder::ThoughtAST> = Vec::with_capacity(n * m);
-        for slot_idx in 0..(n * m) {
-            let mi = slot_idx / m;
-            let ei = slot_idx % m;
+        // Phase A: Collect exit facts per lens (sequential — scales are mutable).
+        let exit_facts_per_lens: Vec<Vec<enterprise::thought_encoder::ThoughtAST>> = (0..m)
+            .map(|ei| {
+                let mut facts = enterprise::post::exit_lens_facts(
+                    &post.exit_observers[ei].lens, &enriched, &mut post.scales);
+                let self_facts = enterprise::post::exit_self_assessment_facts(
+                    post.exit_observers[ei].grace_rate,
+                    post.exit_observers[ei].avg_residue,
+                    &mut post.scales,
+                );
+                facts.extend(self_facts);
+                facts
+            })
+            .collect();
 
-            // Exit lens facts + self-assessment
-            let mut exit_facts = enterprise::post::exit_lens_facts(
-                &post.exit_observers[ei].lens, &enriched, &mut post.scales);
-            let self_facts = enterprise::post::exit_self_assessment_facts(
-                post.exit_observers[ei].grace_rate,
-                post.exit_observers[ei].avg_residue,
-                &mut post.scales,
-            );
-            exit_facts.extend(self_facts);
+        // Phase B: Parallel across M exit observers using thread::scope.
+        // Each thread owns one exit observer (mutable) and its N encoder handles.
+        // The noise subspace updates are sequential within each exit observer — correct.
+        // EncoderHandle is Send but not Sync, so we use scoped threads (not rayon)
+        // to give each thread exclusive access to its own handles.
+        let exit_results: Vec<Vec<(holon::kernel::vector::Vector, holon::kernel::vector::Vector, enterprise::thought_encoder::ThoughtAST)>> =
+            std::thread::scope(|s| {
+                // Split exit_observers into individual mutable refs
+                let eobs_slices: Vec<&mut enterprise::exit_observer::ExitObserver> =
+                    post.exit_observers.iter_mut().collect();
 
-            // Proposal 029: extract from ONE market observer's anomaly
-            let facts = enterprise::thought_encoder::collect_facts(&market_asts[mi]);
-            let extracted = enterprise::thought_encoder::extract(
-                &market_thoughts[mi], &facts,
-                |ast| grid_handles[slot_idx].encode(ast, &ctx_ref.thought_encoder));
-            // Filter above noise floor, keep original ThoughtASTs
-            let market_anomaly_facts: Vec<enterprise::thought_encoder::ThoughtAST> = extracted
-                .into_iter()
-                .filter(|(_ast, presence)| presence.abs() > noise_floor)
-                .map(|(ast, _presence)| ast)
-                .collect();
-            // Attribution: "market" for anomaly facts (what the market found noteworthy)
-            for fact in market_anomaly_facts {
-                exit_facts.push(enterprise::thought_encoder::ThoughtAST::Bind(
-                    Box::new(enterprise::thought_encoder::ThoughtAST::Atom("market".into())),
-                    Box::new(fact)));
+                let mut join_handles = Vec::with_capacity(m);
+                for (ei, eobs) in eobs_slices.into_iter().enumerate() {
+                    let base_facts = &exit_facts_per_lens[ei];
+                    let market_asts_ref = &market_asts;
+                    let market_thoughts_ref = &market_thoughts;
+                    let market_raw_thoughts_ref = &market_raw_thoughts;
+                    // Each thread gets N handles: one per mi. slot_idx = mi * m + ei.
+                    let my_handles: Vec<&enterprise::encoder_service::EncoderHandle> =
+                        (0..n).map(|mi| &grid_handles[mi * m + ei]).collect();
+                    let encoder = &ctx_ref.thought_encoder;
+
+                    let jh = s.spawn(move || {
+                        (0..n).map(|mi| {
+                            let mut slot_facts = base_facts.clone();
+
+                            // Extract from market anomaly
+                            let facts = enterprise::thought_encoder::collect_facts(&market_asts_ref[mi]);
+                            let extracted = enterprise::thought_encoder::extract(
+                                &market_thoughts_ref[mi], &facts,
+                                |ast| my_handles[mi].encode(ast, encoder));
+                            let market_anomaly_facts: Vec<enterprise::thought_encoder::ThoughtAST> = extracted
+                                .into_iter()
+                                .filter(|(_ast, presence)| presence.abs() > noise_floor)
+                                .map(|(ast, _presence)| ast)
+                                .collect();
+                            for fact in market_anomaly_facts {
+                                slot_facts.push(enterprise::thought_encoder::ThoughtAST::Bind(
+                                    Box::new(enterprise::thought_encoder::ThoughtAST::Atom("market".into())),
+                                    Box::new(fact)));
+                            }
+
+                            // Extract from market RAW
+                            let raw_extracted = enterprise::thought_encoder::extract(
+                                &market_raw_thoughts_ref[mi], &facts,
+                                |ast| my_handles[mi].encode(ast, encoder));
+                            let market_raw_facts: Vec<enterprise::thought_encoder::ThoughtAST> = raw_extracted
+                                .into_iter()
+                                .filter(|(_ast, presence)| presence.abs() > noise_floor)
+                                .map(|(ast, _presence)| ast)
+                                .collect();
+                            for fact in market_raw_facts {
+                                slot_facts.push(enterprise::thought_encoder::ThoughtAST::Bind(
+                                    Box::new(enterprise::thought_encoder::ThoughtAST::Atom("market-raw".into())),
+                                    Box::new(fact)));
+                            }
+
+                            // Encode the combined bundle
+                            let exit_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(slot_facts);
+                            let exit_raw = my_handles[mi].encode(&exit_bundle, encoder);
+
+                            // Update noise subspace, strip noise → exit anomaly
+                            let exit_f64 = enterprise::to_f64(&exit_raw);
+                            eobs.noise_subspace.update(&exit_f64);
+                            let exit_anomaly = eobs.strip_noise(&exit_raw);
+
+                            (exit_raw, exit_anomaly, exit_bundle)
+                        }).collect::<Vec<_>>()
+                    });
+                    join_handles.push(jh);
+                }
+
+                join_handles.into_iter().map(|jh| jh.join().unwrap()).collect()
+            });
+
+        // Reassemble into slot-indexed vectors (slot_idx = mi * m + ei)
+        let mut exit_raws: Vec<holon::kernel::vector::Vector> = vec![holon::kernel::vector::Vector::zeros(dims); n * m];
+        let mut exit_anomalies: Vec<holon::kernel::vector::Vector> = vec![holon::kernel::vector::Vector::zeros(dims); n * m];
+        let mut exit_asts: Vec<enterprise::thought_encoder::ThoughtAST> = vec![enterprise::thought_encoder::ThoughtAST::Bundle(vec![]); n * m];
+        for (ei, ei_results) in exit_results.into_iter().enumerate() {
+            for (mi, (raw, anomaly, ast)) in ei_results.into_iter().enumerate() {
+                let slot_idx = mi * m + ei;
+                exit_raws[slot_idx] = raw;
+                exit_anomalies[slot_idx] = anomaly;
+                exit_asts[slot_idx] = ast;
             }
-
-            // Extract from market RAW — everything the market encoded
-            let raw_extracted = enterprise::thought_encoder::extract(
-                &market_raw_thoughts[mi], &facts,
-                |ast| grid_handles[slot_idx].encode(ast, &ctx_ref.thought_encoder));
-            let market_raw_facts: Vec<enterprise::thought_encoder::ThoughtAST> = raw_extracted
-                .into_iter()
-                .filter(|(_ast, presence)| presence.abs() > noise_floor)
-                .map(|(ast, _presence)| ast)
-                .collect();
-            // Attribution: "market-raw" for raw facts (everything the market encoded)
-            for fact in market_raw_facts {
-                exit_facts.push(enterprise::thought_encoder::ThoughtAST::Bind(
-                    Box::new(enterprise::thought_encoder::ThoughtAST::Atom("market-raw".into())),
-                    Box::new(fact)));
-            }
-
-            // Encode the combined bundle
-            let exit_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(exit_facts);
-            exit_asts.push(exit_bundle.clone());
-            let exit_raw = grid_handles[slot_idx].encode(&exit_bundle, &ctx_ref.thought_encoder);
-
-            // Update noise subspace, strip noise → exit anomaly
-            let exit_f64 = enterprise::to_f64(&exit_raw);
-            post.exit_observers[ei].noise_subspace.update(&exit_f64);
-            let exit_anomaly = post.exit_observers[ei].strip_noise(&exit_raw);
-
-            exit_raws.push(exit_raw);
-            exit_anomalies.push(exit_anomaly);
         }
 
         // Phase 2: Compute grid values in parallel (pure reads)

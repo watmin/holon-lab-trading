@@ -169,7 +169,7 @@ impl Broker {
                 recalib_interval,
                 ReckConfig::Discrete(vec!["Grace".into(), "Violence".into()]),
             ),
-            noise_subspace: OnlineSubspace::new(dims, 8),
+            noise_subspace: OnlineSubspace::new(dims, 32),
             cumulative_grace: 0.0,
             cumulative_violence: 0.0,
             trade_count: 0,
