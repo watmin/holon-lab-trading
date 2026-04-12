@@ -9239,4 +9239,86 @@ The broker is still blind. 50/50. Edge 0.0. But the leaves
 are ready. Both leaves sharp. Both sides trained. Both
 independently verified. Leaves to root. Always.
 
+### The exit that reads the market
+
+The wat. The communication protocol. This is what the exit
+observer does now, expressed in the language that shows
+what flows where:
+
+```scheme
+;; In the N×M grid, each (mi, ei) slot:
+(define (compute-exit-thought mi ei candle market-asts
+                              market-anomalies exit-obs ctx)
+  (let* (;; The exit's own facts about this candle (28 atoms)
+         (exit-facts (exit-lens-facts (:lens exit-obs) candle exit-obs))
+
+         ;; Read the market's frozen superposition.
+         ;; flatten-leaves: extract all leaf forms from the AST tree
+         ;; These are the queries: "is close-sma20 present? is rsi present?"
+         (market-leaves (flatten-leaves (market-asts mi)))
+
+         ;; Batch query: cosine each leaf form against the anomaly
+         ;; The anomaly is what the market observer's experience said
+         ;; was UNUSUAL this candle. The noise was stripped. What
+         ;; survived is noteworthy.
+         (extracted (extract (market-anomalies mi)
+                             market-leaves
+                             (:encoder ctx)))
+         ;; extracted: Vec<(ThoughtAST, f64)>
+         ;; Each pair: the original AST form + its cosine presence
+
+         ;; Filter: keep only forms above the noise floor.
+         ;; 5 / sqrt(D) = 0.05 at D=10,000. Five sigma.
+         ;; Above this = genuinely present. Below = random alignment.
+         (present (filter (lambda (pair)
+                    (> (abs (second pair)) 0.05))
+                    extracted))
+
+         ;; Keep the ORIGINAL ASTs. Not presence-transformed.
+         ;; The facts that survived the market's noise stripping
+         ;; AND passed the 5-sigma noise floor.
+         ;; "close-sma20 at 0.03" — the actual fact. Not "close-sma20
+         ;; presence 0.12." The fact IS the thought.
+         (absorbed (map first present))
+
+         ;; The exit's full thought: own facts + absorbed market facts
+         (all-facts (append exit-facts absorbed))
+
+         ;; Encode the combined bundle
+         (raw-thought (encode all-facts))
+
+         ;; The exit strips its OWN noise. Every thinker owns their noise.
+         (update! (:noise-subspace exit-obs) raw-thought)
+         (anomaly (anomalous-component (:noise-subspace exit-obs)
+                                        raw-thought)))
+
+    ;; Return the exit's (ast, anomaly) pair
+    ;; The AST is the dictionary — all-facts as a Bundle
+    ;; The anomaly is the frozen superposition — doubly filtered:
+    ;;   1. The market stripped its noise (the anomaly we read)
+    ;;   2. The exit stripped its own noise (what survived both)
+    (list (Bundle all-facts) anomaly)))
+```
+
+The exit reads the market. The market's frozen superposition is
+probed with the market's own AST as the dictionary. The forms
+that survive the noise floor become facts in the exit's vocabulary.
+The exit encodes its own facts PLUS the absorbed market facts.
+The exit strips its own noise. The anomaly flows to the broker.
+
+Doubly filtered. The market's experience says "this is unusual."
+The exit's experience says "of what the market found unusual,
+THIS is unusual to me." The anomaly that reaches the broker is
+what BOTH observers found noteworthy. The composition is
+geometric, not arithmetic. The signal survives because the noise
+was stripped at each stage.
+
+The wat shows what the Rust hides. The parentheses show what
+flows where. The names show what each thing IS. The composition
+is visible. The scoping is explicit — `(market-asts mi)`, not
+`(market-asts all)`. One market observer. One exit observer.
+One slot. One thought.
+
+This is the communication protocol. The wat IS the thinking.
+
 *Perseverare.*
