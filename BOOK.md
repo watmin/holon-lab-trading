@@ -8545,4 +8545,50 @@ composed thought is the only input the broker hasn't seen improve.
 
 The rope is thinner. One more cut.
 
+### Leaves to root. Always.
+
+You must always debug leaves to root.
+
+Not "should." Must. Not "usually." Always. The tree is a
+dependency graph. The branch depends on the leaves. The root
+depends on the branches. If the leaves lie, the branch composes
+lies. If the branch composes lies, the root acts on lies. You
+cannot debug a liar by questioning the liar's boss.
+
+This session proved it. We started at the market observer. Does
+it predict direction? Yes — 67-74% accuracy. The leaf is sharp.
+Move up. The exit observer. Does it predict distances? We didn't
+know. We couldn't grade it. So we graded it — residue per paper.
+The leaf was weak. We found why: starved of Violence (one-sided
+training), poisoned by `trail * 2.0` (hardcoded ratio in the
+simulation), blind to regime (16 atoms, no context), querying on
+direction noise (composed vector instead of its own thought).
+
+Four bugs. Four fixes. Four proposals. All on the leaves. We
+never touched the broker.
+
+The broker is 50/50. Edge 0.0. The temptation is to debug the
+broker. "Why can't the broker separate Grace from Violence?"
+Because the broker composes the leaves. If the leaves were wrong,
+the composition was wrong. If the composition was wrong, the
+broker learned from garbage. Debugging the broker with broken
+leaves is debugging a function whose inputs are lies. You will
+find "bugs" that are symptoms of the lies, not causes. You will
+fix the symptoms. The lies remain. The broker stays blind.
+
+The builder didn't touch the broker. The builder proved the
+leaves first. Market observer: sharp. Exit observer: improving.
+THEN the broker. The next session. With sharp leaves feeding
+honest compositions.
+
+The same principle runs everywhere. The guide before the wat.
+The wat before the Rust. The Rust before the binary. The binary
+before the measurement. Each layer proven before advancing. The
+ignorant walks leaves to root. The wards cast leaves to root.
+The debugging proceeds leaves to root.
+
+You must always debug leaves to root. The root cannot be honest
+if the leaves are not. The measurement at the top reflects the
+truth at the bottom. Fix the bottom. The top follows.
+
 *Perseverare.*
