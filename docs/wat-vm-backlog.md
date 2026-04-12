@@ -52,18 +52,14 @@ Build the services. Prove each independently. Then migrate.
 Each driver is a free entity. Named. Independent IO loop.
 Concurrent with other drivers. Sequential internally.
 
-- [ ] `src/services/mod.rs`
-- [ ] `src/services/queue.rs` — THE atom. One producer, one consumer.
-      Bounded or unbounded. Contention-free. Generic over message type.
-      Every pipe in the system IS a queue instance.
-- [ ] `src/services/topic.rs` — COMPOSED of queues. One input queue
-      receiver, N output queue senders. Its own thread reads input,
-      clones to all outputs. The candle broadcast IS a topic.
-- [ ] `src/services/mailbox.rs` — COMPOSED of queues. N input queue
-      receivers, forwarded to one output. Its own thread selects
-      across inputs. The kernel creates N queues, gives senders to
-      programs (one each, contention-free), gives receivers to the
-      mailbox. The learn channels ARE mailboxes.
+- [x] `src/services/mod.rs` — DONE
+- [x] `src/services/queue.rs` — DONE. THE atom. One producer, one
+      consumer. Bounded or unbounded. Contention-free. 4 tests pass.
+- [x] `src/services/topic.rs` — DONE. Fan-out. One input, N output.
+      Own thread. 3 tests pass.
+- [x] `src/services/mailbox.rs` — DONE (v1). Fan-in. Uses cloned
+      senders (contention). NEEDS REFACTOR: should be N independent
+      queues, mailbox thread selects across receivers. 3 tests pass.
 - [ ] `src/services/cache.rs` — generic key-value with eviction.
       Named instances. `cache("encoder")` holds ThoughtAST → Vector.
       One implementation. N instances. Each its own loop.
@@ -133,12 +129,12 @@ The locals drop. No new form needed.
 
 ```scheme
 (define (observer-loop input output)
-  (match (recv input)
-    ((some candle)
-     (send output (observe candle))
-     (observer-loop input output))
-    (disconnected)))
-;; Function returns. Output drops. Cascade continues.
+  (let ((candle (recv input)))
+    (when candle
+      (send output (observe candle))
+      (observer-loop input output))))
+;; recv returns nothing → when skips → function returns
+;; output leaves scope → Drop → downstream sees nothing
 ```
 
 ## Key insight
