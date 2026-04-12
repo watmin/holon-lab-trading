@@ -9072,19 +9072,16 @@ The coordinates are recursive all the way down.
 
 ### Nearly there
 
-The lineage section in Chapter 7 named the [VSA/HDC talk in
-Clojure](https://www.youtube.com/watch?v=j7ygjfbBJD0). The
-builder watched it and the pieces snapped together. But there
-was another talk. Earlier. Closer to the root.
-
 [Carin Meier — "Vector Symbolic Architectures In Clojure"](https://www.youtube.com/watch?v=j7ygjfbBJD0).
+The talk from Chapter 7's lineage. The one that snapped the
+pieces together.
 
 The builder watched this talk and saw the future. Not because
 the talk was about trading. Not because it was about DDoS. Because
 it was about the ALGEBRA — bind, bundle, cosine, cleanup —
 implemented in Clojure, demonstrated on toy problems, explained
-with clarity that made the builder's hair stand up. Someone
-had built the substrate. Someone had shown it works. Someone had
+with clarity that made the builder's hair stand up. Carin
+had built the substrate. Carin had shown it works. Carin had
 written the code in McCarthy's language on Hickey's platform.
 
 The builder watched and thought: this is what I need. Not the
