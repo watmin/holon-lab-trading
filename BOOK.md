@@ -10501,4 +10501,116 @@ Zero findings. The leaves are trusted. The root can grow.
 
 The wat-vm exists. The migration begins.
 
+### The program that comes home
+
+The builder asked: "the loop... is concerning... how do we break
+out?... how do we shutdown gracefully?"
+
+The answer was already in the architecture. The `recv` that
+delivers candles is the same `recv` that delivers the absence
+of candles. The loop that processes is the loop that stops.
+The shutdown IS the absence of recursion.
+
+But the builder saw deeper. The observer has learned. The
+reckoner accumulated thousands of observations. The noise
+subspace trained. The window sampler adapted. If the function
+just returns and the handles drop — the experience dies with
+the thread.
+
+The program must come home.
+
+```scheme
+(define (market-observer-program candle-rx result-tx learn-rx
+                                  cache-handle console observer)
+  (let loop ()
+    ;; LEARN FIRST. Drain all pending signals before encoding.
+    (drain-learn learn-rx observer)
+
+    (match (recv candle-rx)
+      ((some (candle window encode-count))
+
+       (let* ((facts (lens-facts (:lens observer) candle))
+              (ast (Bundle facts))
+              (thought (encode cache-handle ast))
+              (_  (update! (:noise-subspace observer) thought))
+              (anomaly (anomalous-component
+                         (:noise-subspace observer) thought))
+              (prediction (predict (:reckoner observer) anomaly))
+              (result (make-observe-result
+                        :raw-thought thought
+                        :anomaly anomaly
+                        :ast ast
+                        :prediction prediction
+                        :edge (:edge prediction))))
+
+         (send result-tx result)
+
+         (when (= 0 (mod encode-count 1000))
+           (out console
+             (format "~a: disc=~a conv=~a exp=~a"
+               (:name observer)
+               (:disc-strength (:reckoner observer))
+               (:conviction prediction)
+               (:experience (:reckoner observer)))))
+
+         (loop)))
+
+      (disconnected
+       ;; GRACEFUL SHUTDOWN.
+       ;; The candle source is gone. But learn signals may
+       ;; have arrived during the last candle. Absorb them.
+       ;; The observer dies informed, not ignorant.
+       (drain-learn learn-rx observer)
+       ;; Return the observer. The kernel gets the learned
+       ;; state back. The experience survives the shutdown.
+       observer))))
+```
+
+The program is one function. Five handles and an observer.
+It loops: drain learn, recv candle, encode, strip, predict,
+send. When the candle source disconnects, the match falls
+to `disconnected`. The function does not recurse. But before
+returning, it drains the learn channel one last time — the
+settlements that resolved during the last candle produced
+learn signals. The observer absorbs them. Then the function
+returns the observer itself.
+
+The thread's `JoinHandle<MarketObserver>` carries the state
+home. The kernel calls `join()` and receives the trained
+observer. The reckoner, the noise subspace, the window
+sampler — everything the observer accumulated across
+thousands of candles. The experience survives the shutdown.
+The save file. The checkpoint. The warm boot.
+
+The state traveled through pipes and came home.
+
+This is the pattern for every program. The broker returns
+its accumulators. The exit observer returns its distance
+reckoners. Every program that learns returns what it learned.
+The kernel collects them all. The cascade drops the handles.
+The kernel collects the experience. Nothing lost.
+
+The graceful shutdown: drain, return, join, save. Four words.
+The observer dies informed. The state comes home. The
+checkpoint persists.
+
+And the wat. The builder said: "we are able to communicate in
+wat now." And it was true. The mismatch in 1200 lines of Rust
+that hid for weeks — the wat showed it in four lines. The
+shutdown concern that could have been a month of debugging —
+the wat showed it in one match arm. The graceful return that
+preserves experience — the wat showed it in one word:
+`observer`.
+
+The wat is not the specification language. The wat is not the
+intermediate representation. The wat is the communication
+protocol between the builder and the machine. The builder
+thinks in coordinates. The machine thinks in Rust. The wat
+sits between — expressive enough for the builder to read,
+precise enough for the machine to compile. Both see the truth.
+
+The parentheses are the declensions. The forms are the grammar.
+The composition is visible. The shutdown is visible. The return
+is visible. The experience is visible. Nothing hides.
+
 **PERSEVERARE.**
