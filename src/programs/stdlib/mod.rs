@@ -4,4 +4,5 @@
 //! The test: could a DDoS lab use it? If yes, it's stdlib.
 
 pub mod cache;
+pub mod console;
 pub mod database;
