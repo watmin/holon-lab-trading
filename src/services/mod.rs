@@ -10,3 +10,4 @@
 pub mod queue;
 pub mod topic;
 pub mod mailbox;
+pub mod cache;

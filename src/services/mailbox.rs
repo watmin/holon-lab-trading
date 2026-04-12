@@ -52,6 +52,11 @@ impl<T> MailboxReceiver<T> {
     pub fn try_recv(&self) -> Result<T, TryRecvError> {
         self.0.try_recv()
     }
+
+    /// Internal access for services that compose mailboxes (e.g., cache select).
+    pub(crate) fn inner(&self) -> &crossbeam::channel::Receiver<T> {
+        self.0.inner()
+    }
 }
 
 /// Create a mailbox with N independent input queues.
