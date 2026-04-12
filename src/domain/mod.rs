@@ -5,5 +5,7 @@
 pub mod market_observer;
 pub mod exit_observer;
 pub mod broker;
+#[cfg(feature = "parquet")]
+pub mod candle_stream;
 pub mod indicator_bank;
 pub mod simulation;

@@ -12,6 +12,8 @@ use clap::Parser;
 use crossbeam::channel::{self, Receiver, Sender};
 use rusqlite::{params, Connection};
 
+#[cfg(feature = "parquet")]
+use enterprise::domain::candle_stream::CandleStream;
 use enterprise::domain::broker::Broker;
 use enterprise::encoding::ctx::Ctx;
 use enterprise::types::enums::{ExitLens, MarketLens, ScalarEncoding};
@@ -20,7 +22,7 @@ use enterprise::domain::indicator_bank::IndicatorBank;
 use enterprise::types::log_entry::LogEntry;
 use enterprise::domain::market_observer::MarketObserver;
 use enterprise::orchestration::post::Post;
-use enterprise::types::raw_candle::{Asset, RawCandle};
+use enterprise::types::raw_candle::Asset;
 use enterprise::learning::scalar_accumulator::ScalarAccumulator;
 use enterprise::types::newtypes::{Amount, Price};
 use enterprise::orchestration::treasury::Treasury;
@@ -119,138 +121,6 @@ struct Args {
     max_window_size: usize,
 }
 
-// ─── Parquet stream ──────────────────────────────────────────────────────────
-
-#[cfg(feature = "parquet")]
-struct ParquetRawStream {
-    buffer: Vec<RawCandle>,
-    buf_idx: usize,
-    reader: parquet::arrow::arrow_reader::ParquetRecordBatchReader,
-    source_asset: String,
-    target_asset: String,
-}
-
-#[cfg(feature = "parquet")]
-impl ParquetRawStream {
-    fn open(path: &Path, source_asset: &str, target_asset: &str) -> Self {
-        use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
-        let file = std::fs::File::open(path).expect("failed to open parquet");
-        let builder =
-            ParquetRecordBatchReaderBuilder::try_new(file).expect("failed to read parquet");
-        let reader = builder.build().expect("failed to build reader");
-        Self {
-            buffer: Vec::new(),
-            buf_idx: 0,
-            reader,
-            source_asset: source_asset.to_string(),
-            target_asset: target_asset.to_string(),
-        }
-    }
-
-    fn total_candles(path: &Path) -> usize {
-        use parquet::file::reader::{FileReader, SerializedFileReader};
-        let file = std::fs::File::open(path).expect("failed to open parquet for metadata");
-        let reader =
-            SerializedFileReader::new(file).expect("failed to read parquet metadata");
-        reader.metadata().file_metadata().num_rows() as usize
-    }
-
-    fn fill_buffer(&mut self) -> bool {
-        use arrow::array::{Array, Float64Array, StringArray, TimestampMicrosecondArray};
-
-        loop {
-            match self.reader.next() {
-                Some(Ok(batch)) => {
-                    if batch.num_rows() == 0 {
-                        continue;
-                    }
-                    let ts_col = batch.column_by_name("ts").expect("missing ts");
-                    let open_col = batch.column_by_name("open").expect("missing open");
-                    let high_col = batch.column_by_name("high").expect("missing high");
-                    let low_col = batch.column_by_name("low").expect("missing low");
-                    let close_col = batch.column_by_name("close").expect("missing close");
-                    let vol_col = batch.column_by_name("volume").expect("missing volume");
-
-                    let ts_strings: Vec<String> =
-                        if let Some(arr) = ts_col.as_any().downcast_ref::<StringArray>() {
-                            (0..arr.len()).map(|i| arr.value(i).to_string()).collect()
-                        } else if let Some(arr) = ts_col
-                            .as_any()
-                            .downcast_ref::<TimestampMicrosecondArray>()
-                        {
-                            (0..arr.len())
-                                .map(|i| {
-                                    let micros = arr.value(i);
-                                    let secs = micros / 1_000_000;
-                                    let nsecs = ((micros % 1_000_000) * 1000) as u32;
-                                    chrono::DateTime::from_timestamp(secs, nsecs)
-                                        .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
-                                        .unwrap_or_default()
-                                })
-                                .collect()
-                        } else {
-                            panic!("unsupported timestamp column type");
-                        };
-
-                    let opens = open_col
-                        .as_any()
-                        .downcast_ref::<Float64Array>()
-                        .expect("open not f64");
-                    let highs = high_col
-                        .as_any()
-                        .downcast_ref::<Float64Array>()
-                        .expect("high not f64");
-                    let lows = low_col
-                        .as_any()
-                        .downcast_ref::<Float64Array>()
-                        .expect("low not f64");
-                    let closes = close_col
-                        .as_any()
-                        .downcast_ref::<Float64Array>()
-                        .expect("close not f64");
-                    let volumes = vol_col
-                        .as_any()
-                        .downcast_ref::<Float64Array>()
-                        .expect("volume not f64");
-
-                    self.buffer.clear();
-                    self.buf_idx = 0;
-                    for i in 0..batch.num_rows() {
-                        self.buffer.push(RawCandle::new(
-                            Asset::new(&self.source_asset),
-                            Asset::new(&self.target_asset),
-                            ts_strings[i].clone(),
-                            opens.value(i),
-                            highs.value(i),
-                            lows.value(i),
-                            closes.value(i),
-                            volumes.value(i),
-                        ));
-                    }
-                    return true;
-                }
-                Some(Err(e)) => panic!("parquet read error: {}", e),
-                None => return false,
-            }
-        }
-    }
-}
-
-#[cfg(feature = "parquet")]
-impl Iterator for ParquetRawStream {
-    type Item = RawCandle;
-
-    fn next(&mut self) -> Option<RawCandle> {
-        if self.buf_idx >= self.buffer.len() {
-            if !self.fill_buffer() {
-                return None;
-            }
-        }
-        let raw = self.buffer[self.buf_idx].clone();
-        self.buf_idx += 1;
-        Some(raw)
-    }
-}
 
 // ─── Ledger ──────────────────────────────────────────────────────────────────
 
@@ -660,9 +530,9 @@ fn main() {
     }
 
     // ─ Parquet stream ─
-    let total_candles = ParquetRawStream::total_candles(&args.parquet);
+    let total_candles = CandleStream::total_candles(&args.parquet);
     eprintln!("  Parquet: {:?} ({} candles)", args.parquet, total_candles);
-    let raw_stream = ParquetRawStream::open(&args.parquet, &args.source_asset, &args.target_asset);
+    let raw_stream = CandleStream::open(&args.parquet, &args.source_asset, &args.target_asset);
 
     // ─ Construction ─
     let (mut ent, ctx) = build_enterprise(&args);
