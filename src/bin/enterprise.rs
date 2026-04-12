@@ -302,17 +302,14 @@ fn init_ledger(path: &str) -> Connection {
         CREATE TABLE IF NOT EXISTS broker_snapshots (
             candle            INTEGER,
             broker_slot_idx   INTEGER,
-            edge              REAL,
             grace_count       INTEGER,
             violence_count    INTEGER,
             paper_count       INTEGER,
             trail_experience  REAL,
             stop_experience   REAL,
-            disc_strength     REAL,
-            last_conviction   REAL,
-            curve_valid       INTEGER,
-            resolved_count    INTEGER,
-            proto_cos         REAL,
+            expected_value    REAL,
+            avg_grace_net     REAL,
+            avg_violence_net  REAL,
             fact_count        INTEGER,
             thought_ast       TEXT,
             PRIMARY KEY (candle, broker_slot_idx)
@@ -400,13 +397,12 @@ fn build_enterprise(args: &Args) -> (Enterprise, Ctx) {
                 vec![market_name, exit_name],
                 slot_idx,
                 m,
-                dims,
-                recalib_interval,
                 vec![
                     ScalarAccumulator::new("trail-distance", ScalarEncoding::Log, dims),
                     ScalarAccumulator::new("stop-distance", ScalarEncoding::Log, dims),
                 ],
                 enterprise::distances::Distances::new(0.0001, 0.0001),
+                args.swap_fee,
             )
         })
         .collect();
@@ -524,13 +520,13 @@ fn display_progress(ent: &Enterprise, candle_num: usize, elapsed_ms: f64) {
     // Per-broker stats
     for b in &post.registry {
         eprintln!(
-            "    broker-{}: papers={} grace={:.4} violence={:.4} trades={} edge={:.4}",
+            "    broker-{}: papers={} grace={:.4} violence={:.4} trades={} ev={:.2}",
             b.slot_idx,
             b.paper_count(),
             b.cumulative_grace,
             b.cumulative_violence,
             b.trade_count,
-            b.edge(),
+            b.expected_value,
         );
     }
 
@@ -875,10 +871,9 @@ fn main() {
             let src = source_asset.clone();
             let tgt = target_asset.clone();
             let post_idx_for_broker = all_pipes.len();
-            let recalib = args.recalib_interval;
             let brk_log = log_handles.pop().unwrap();
-            let brk_enc = broker_encoder_handles.pop().unwrap();
-            let brk_ctx = Arc::clone(&ctx_arc);
+            let _brk_enc = broker_encoder_handles.pop().unwrap(); // Proposal 035: encoder no longer used by broker
+            let _brk_ctx = Arc::clone(&ctx_arc);
             let brk_slot = slot_idx;
 
             let handle = std::thread::spawn(move || {
@@ -889,7 +884,7 @@ fn main() {
                     // Drain all learn signals. No cap.
                     while let Ok((thought, market_thought, exit_thought_learn, outcome, weight, direction, optimal)) = blearn_rx.try_recv() {
                         broker.propagate(&thought, &market_thought, &exit_thought_learn, outcome, weight, direction, &optimal,
-                            recalib, enterprise::post::ctx_scalar_encoder_placeholder());
+                            enterprise::post::ctx_scalar_encoder_placeholder());
                     }
                     // Broker owns the distance cascade: reckoner → accumulator → default
                     let dists = broker.cascade_distances(reckoner_dists);
@@ -926,7 +921,7 @@ fn main() {
                         broker.papers.len(),
                         broker.last_trail,
                         broker.last_stop,
-                        broker.resolution_count.saturating_sub(broker.reckoner.recalib_count() * recalib),
+                        broker.resolution_count,
                         broker.avg_excursion,
                         &mut broker_scales,
                     );
@@ -952,18 +947,12 @@ fn main() {
                     all_facts.extend(exit_opinions);
                     all_facts.extend(self_facts);
                     all_facts.extend(derived_facts);
-                    // Encode the scalar facts (opinions + self + derived) as one AST bundle
+                    // Build the AST but do NOT encode to a vector (Proposal 035)
                     let broker_scalar_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(all_facts.clone());
                     let broker_fact_count = all_facts.len(); // 25 scalar atoms only
-                    let broker_thought = brk_enc.encode(&broker_scalar_bundle, &brk_ctx.thought_encoder);
 
-                    broker.propose(&broker_thought);
-
-                    // The gate: only register papers when the broker has conviction.
-                    // Cold-start: curve not valid → edge=0.0 → register freely (learn).
-                    // Warm: curve valid → edge > 0.0 → register only when edge exists.
-                    // The flip: if prediction changed direction, close old runners first.
-                    let should_register = broker.cached_edge > 0.0 || !broker.reckoner.curve_valid();
+                    // Proposal 035: arithmetic gate replaces reckoner gate
+                    let should_register = broker.gate_open();
                     let mut flip_resolutions = Vec::new();
                     if should_register {
                         // Check for direction flip — close old runners in opposite direction
@@ -974,36 +963,26 @@ fn main() {
                             }
                         }
                         broker.active_direction = Some(prediction);
-                        // Store the ANOMALY (noise-stripped thought from propose()) on the paper.
-                        // The broker learns from the paper's thought at resolution.
-                        // predict and learn must use the same vector (Proposal 024).
-                        let registration_thought = broker.last_composed_anomaly
-                            .as_ref()
-                            .unwrap_or(&broker_thought)
-                            .clone();
-                        broker.register_paper(registration_thought, market_thought.clone(), exit_thought.clone(), prediction, Price(price), dists);
+                        // Proposal 035: register with market_thought — the most meaningful
+                        // vector the broker has access to. No broker vector to compose.
+                        broker.register_paper(market_thought.clone(), market_thought.clone(), exit_thought.clone(), prediction, Price(price), dists);
                     }
                     let (market_signals, mut runner_resolutions) = broker.tick_papers(Price(price));
                     runner_resolutions.extend(flip_resolutions);
 
                     // Snapshot every 100 candles — into the DB
                     if candle_count % 100 == 0 {
-                        let proto_cos = broker.reckoner.prototype_health()
-                            .map_or(0.0, |(_, _, cos)| cos);
                         brk_log.log(LogEntry::BrokerSnapshot {
                             candle: candle_count,
                             broker_slot_idx: brk_slot,
-                            edge: broker.edge(),
                             grace_count: broker.grace_count,
                             violence_count: broker.violence_count,
                             paper_count: broker.papers.len(),
                             trail_experience: broker.scalar_accums.get(0).map_or(0.0, |a| a.count as f64),
                             stop_experience: broker.scalar_accums.get(1).map_or(0.0, |a| a.count as f64),
-                            disc_strength: broker.reckoner.last_disc_strength(),
-                            last_conviction: broker.reckoner.last_cos_raw(),
-                            curve_valid: broker.reckoner.curve_valid(),
-                            resolved_count: broker.reckoner.resolved_count(),
-                            proto_cos,
+                            expected_value: broker.expected_value,
+                            avg_grace_net: broker.avg_grace_net,
+                            avg_violence_net: broker.avg_violence_net,
                             fact_count: broker_fact_count,
                             thought_ast: broker_scalar_bundle.to_edn(),
                         });

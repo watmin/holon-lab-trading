@@ -196,7 +196,6 @@ impl Post {
         let target = &self.target_asset;
         let post_idx = self.post_idx;
         let exit_observers = &self.exit_observers;
-        let registry = &self.registry;
 
         // pmap: each slot computes independently. Pure reads only.
         let grid_values: Vec<_> = (0..(n * m))
@@ -217,9 +216,9 @@ impl Post {
                 // Proposal 026: exit reckoner queries on exit_vec only, not composed.
                 let reckoner_dists = exit_observers[ei].reckoner_distances(exit_vec);
 
-                // Derive side + edge (reads only)
+                // Derive side (reads only). Edge is zero — broker has no reckoner.
                 let side_val = derive_side(&market_predictions[mi]);
-                let edge_val = registry[slot_idx].edge();
+                let edge_val = 0.0_f64;
                 let enterprise_pred = prediction_convert(&market_predictions[mi]);
 
                 // Derive direction for paper registration
@@ -240,10 +239,9 @@ impl Post {
         let proposals: Vec<_> = self.registry
             .par_iter_mut()
             .zip(grid_values.into_par_iter())
-            .map(|(broker, (slot_idx, mi, ei, composed, reckoner_dists, side_val, edge_val, enterprise_pred, direction))| {
+            .map(|(broker, (slot_idx, mi, ei, composed, reckoner_dists, side_val, edge_val, enterprise_pred, direction)): (&mut Broker, (usize, usize, usize, Vector, Option<Distances>, Side, f64, crate::enums::Prediction, Direction))| {
                 let dists = broker.cascade_distances(reckoner_dists);
-                broker.propose(&composed);
-                // Proposal 026: store exit_thought on paper for aligned exit learning.
+                // Proposal 035: no propose(). Register paper with market_thought as composed.
                 broker.register_paper(composed.clone(), market_thoughts[mi].clone(), exit_vecs[ei].clone(), direction, price, dists);
                 Proposal::new(
                     composed,
@@ -355,7 +353,6 @@ impl Post {
             weight,
             direction,
             optimal,
-            recalib_interval,
             ctx_scalar_encoder_placeholder(),
         );
 
@@ -554,8 +551,6 @@ mod tests {
             vec!["momentum".into(), "volatility".into()],
             0,
             1,
-            256,
-            500,
             vec![
                 crate::scalar_accumulator::ScalarAccumulator::new(
                     "trail",
@@ -569,6 +564,7 @@ mod tests {
                 ),
             ],
             Distances::new(0.015, 0.030),
+            0.0010, // swap_fee
         )];
         let post = Post::new(
             0,

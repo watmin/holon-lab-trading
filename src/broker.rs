@@ -8,16 +8,13 @@ use std::collections::{HashMap, VecDeque};
 
 use holon::kernel::scalar::ScalarEncoder;
 use holon::kernel::vector::Vector;
-use holon::memory::{OnlineSubspace, ReckConfig, Reckoner};
 
 use crate::distances::Distances;
-use crate::engram_gate::{check_engram_gate, EngramGateState};
 use crate::enums::{Direction, Outcome};
 use crate::simulation;
 use crate::newtypes::Price;
 use crate::paper_entry::PaperEntry;
 use crate::scalar_accumulator::ScalarAccumulator;
-use crate::to_f64;
 
 /// Accumulated history for a runner paper. Created when a paper signals Grace.
 /// Stores per-candle data for deferred batch training of the exit observer.
@@ -95,10 +92,6 @@ pub struct Broker {
     pub slot_idx: usize,
     /// M -- needed to derive market-idx and exit-idx.
     pub exit_count: usize,
-    /// Discrete reckoner -- Grace/Violence.
-    pub reckoner: Reckoner,
-    /// Background noise model.
-    pub noise_subspace: OnlineSubspace,
     /// Cumulative grace value (weighted).
     pub cumulative_grace: f64,
     /// Cumulative violence value (weighted).
@@ -115,16 +108,6 @@ pub struct Broker {
     pub papers: VecDeque<PaperEntry>,
     /// Two scalar accumulators: trail-distance, stop-distance.
     pub scalar_accums: Vec<ScalarAccumulator>,
-    /// Learns what good discriminants look like (for engram gating).
-    pub good_state_subspace: OnlineSubspace,
-    /// Wins since last recalibration.
-    pub recalib_wins: usize,
-    /// Total since last recalibration.
-    pub recalib_total: usize,
-    /// Recalib count at last engram check.
-    pub last_recalib_count: usize,
-    /// Cached edge value — updated in propose() from the curve at THIS conviction.
-    pub cached_edge: f64,
     /// Default trail/stop distances — the tier 3 fallback.
     pub default_distances: Distances,
     /// Running average paper duration (candles). Self-assessment vocab.
@@ -141,35 +124,32 @@ pub struct Broker {
     pub next_paper_id: usize,
     /// Per-runner accumulated history for deferred batch training.
     pub runner_histories: HashMap<usize, RunnerHistory>,
-    /// The broker's noise-stripped composed thought from the last propose().
-    /// Proposal 024: the broker predicts on and learns from the same anomaly.
-    pub last_composed_anomaly: Option<Vector>,
+    /// EMA of net dollars per Grace paper (Proposal 035).
+    pub avg_grace_net: f64,
+    /// EMA of net dollars per Violence paper (Proposal 035).
+    pub avg_violence_net: f64,
+    /// Expected value: grace_rate * avg_grace_net + (1-grace_rate) * avg_violence_net.
+    pub expected_value: f64,
+    /// Venue fee per swap (fraction, e.g. 0.0010).
+    pub swap_fee: f64,
 }
 
 impl Broker {
-    /// Construct a new broker.
-    /// noise_subspace: 8 principal components. good_state_subspace: 4 components.
+    /// Construct a new broker. Proposal 035: no reckoner, no noise subspace.
+    /// Pure accounting + gate + log.
     pub fn new(
         observer_names: Vec<String>,
         slot_idx: usize,
         exit_count: usize,
-        dims: usize,
-        recalib_interval: usize,
         scalar_accums: Vec<ScalarAccumulator>,
         default_distances: Distances,
+        swap_fee: f64,
     ) -> Self {
         assert!(exit_count > 0, "broker exit_count must be > 0 (divide-by-zero guard)");
         Self {
             observer_names,
             slot_idx,
             exit_count,
-            reckoner: Reckoner::new(
-                "accountability",
-                dims,
-                recalib_interval,
-                ReckConfig::Discrete(vec!["Grace".into(), "Violence".into()]),
-            ),
-            noise_subspace: OnlineSubspace::new(dims, 8),
             cumulative_grace: 0.0,
             cumulative_violence: 0.0,
             trade_count: 0,
@@ -178,11 +158,6 @@ impl Broker {
             active_direction: None,
             papers: VecDeque::new(),
             scalar_accums,
-            good_state_subspace: OnlineSubspace::new(dims, 4),
-            recalib_wins: 0,
-            recalib_total: 0,
-            last_recalib_count: 0,
-            cached_edge: 0.0,
             default_distances,
             avg_paper_duration: 0.0,
             avg_excursion: 0.0,
@@ -191,7 +166,10 @@ impl Broker {
             resolution_count: 0,
             next_paper_id: 0,
             runner_histories: HashMap::new(),
-            last_composed_anomaly: None,
+            avg_grace_net: 0.0,
+            avg_violence_net: 0.0,
+            expected_value: 0.0,
+            swap_fee,
         }
     }
 
@@ -205,31 +183,11 @@ impl Broker {
         self.slot_idx % self.exit_count
     }
 
-    /// Predict Grace/Violence on the composed thought.
-    /// Proposal 024: noise subspace learns the background, anomalous_component
-    /// strips it. The reckoner predicts on the anomaly. The anomaly is stored
-    /// for aligned learning in propagate().
-    /// Updates cached_edge from the curve at THIS conviction.
-    pub fn propose(&mut self, composed: &Vector) -> holon::memory::Prediction {
-        let composed_f64 = to_f64(composed);
-        self.noise_subspace.update(&composed_f64);
-
-        // Strip noise — predict on the anomaly
-        let anomalous = self.noise_subspace.anomalous_component(&composed_f64);
-        let anomaly = Vector::from_f64(&anomalous);
-        let pred = self.reckoner.predict(&anomaly);
-        self.cached_edge = self.reckoner.accuracy_at(pred.conviction).unwrap_or(0.0);
-
-        // Store for aligned learning in propagate()
-        self.last_composed_anomaly = Some(anomaly);
-
-        pred
-    }
-
-    /// How much edge? Accuracy at the conviction of the last proposal.
-    /// 0.0 = curve not valid or no conviction. The treasury funds proportionally.
-    pub fn edge(&self) -> f64 {
-        self.cached_edge
+    /// Is the gate open? During cold start (< 50 of either outcome), always open.
+    /// After warm-up, open only when expected value is positive.
+    pub fn gate_open(&self) -> bool {
+        let cold_start = self.grace_count < 50 || self.violence_count < 50;
+        cold_start || self.expected_value > 0.0
     }
 
     /// Distance cascade: reckoner answer -> own accumulators -> default.
@@ -380,16 +338,9 @@ impl Broker {
             }
 
             // Accumulate history for active runners.
-            // Proposal 024: store the broker's noise-stripped anomaly for aligned
-            // exit observer batch training. Falls back to composed_thought if no
-            // anomaly stored (should not happen — propose() runs before tick_papers).
             if paper.signaled && !paper.resolved {
                 if let Some(history) = self.runner_histories.get_mut(&paper.paper_id) {
-                    let thought_for_history = self.last_composed_anomaly
-                        .as_ref()
-                        .unwrap_or(&paper.composed_thought)
-                        .clone();
-                    history.thoughts.push(thought_for_history);
+                    history.thoughts.push(paper.composed_thought.clone());
                     history.distances.push(paper.distances);
                     history.prices.push(cp);
                 }
@@ -477,11 +428,8 @@ impl Broker {
     /// The broker learns its OWN lessons and RETURNS what the observers need.
     /// Values up, not effects down.
     ///
-    /// Proposal 024: the broker's reckoner learns from last_composed_anomaly
-    /// (the noise-stripped thought from propose()) so prediction and learning
-    /// are aligned. The `thought` parameter is the composed thought from the
-    /// paper — used for observer propagation facts, not the broker's own learning.
-    /// Proposal 026: `exit_thought` threaded through for exit observer learning.
+    /// Proposal 035: no reckoner. Pure accounting — dollar P&L, EMA, counts.
+    /// Scalar accumulators still learn trail/stop distances.
     pub fn propagate(
         &mut self,
         thought: &Vector,
@@ -491,29 +439,9 @@ impl Broker {
         weight: f64,
         direction: Direction,
         optimal: &Distances,
-        recalib_interval: usize,
         scalar_encoder: &ScalarEncoder,
     ) -> PropagationFacts {
-        let label = match outcome {
-            Outcome::Grace => holon::memory::Label::from_index(0),
-            Outcome::Violence => holon::memory::Label::from_index(1),
-        };
-
-        // The broker learns from the paper's stored thought — the readiness
-        // state at REGISTRATION time, not the current candle. The outcome
-        // was caused by the readiness at entry, not the readiness now.
-        // Proposal 024's alignment principle: learn from what was predicted on.
-        // The paper stores the thought that was predicted on at registration.
-
-        // 1. Reckoner learns Grace/Violence — on the paper's thought
-        self.reckoner.observe(thought, label, weight);
-
-        // 2. Feed the internal curve
-        let pred = self.reckoner.predict(thought);
-        let correct = matches!(outcome, Outcome::Grace);
-        self.reckoner.resolve(pred.conviction, correct);
-
-        // 3. Track record
+        // 1. Track record
         match outcome {
             Outcome::Grace => {
                 self.cumulative_grace += weight;
@@ -526,33 +454,42 @@ impl Broker {
         }
         self.trade_count += 1;
 
-        // 4. Scalar accumulators learn -- trail and stop distances
+        // 2. Scalar accumulators learn -- trail and stop distances
         if self.scalar_accums.len() >= 2 {
             self.scalar_accums[0].observe(optimal.trail, outcome, weight, scalar_encoder);
             self.scalar_accums[1].observe(optimal.stop, outcome, weight, scalar_encoder);
         }
 
-        // 5. Engram gate
-        if correct {
-            self.recalib_wins += 1;
-        }
-        self.recalib_total += 1;
-
-        let gate_state = EngramGateState {
-            recalib_wins: self.recalib_wins,
-            recalib_total: self.recalib_total,
-            last_recalib_count: self.last_recalib_count,
+        // 3. Dollar P&L computation and EMA update (Proposal 035)
+        let reference = 10_000.0;
+        let entry_fee = reference * self.swap_fee;
+        let net = match outcome {
+            Outcome::Grace => {
+                let residue_usd = weight * reference; // weight IS excursion for Grace
+                let exit_fee = (reference + residue_usd) * self.swap_fee;
+                residue_usd - entry_fee - exit_fee
+            }
+            Outcome::Violence => {
+                let loss_usd = weight * reference; // weight IS stop_distance for Violence
+                let exit_fee = (reference - loss_usd) * self.swap_fee;
+                -(loss_usd + entry_fee + exit_fee)
+            }
         };
-        let new_state = check_engram_gate(
-            &self.reckoner,
-            &mut self.good_state_subspace,
-            &gate_state,
-            recalib_interval,
-            0.55,
-        );
-        self.recalib_wins = new_state.recalib_wins;
-        self.recalib_total = new_state.recalib_total;
-        self.last_recalib_count = new_state.last_recalib_count;
+        let alpha = 0.038; // half-life ~50 papers
+        match outcome {
+            Outcome::Grace => {
+                self.avg_grace_net = (1.0 - alpha) * self.avg_grace_net + alpha * net;
+            }
+            Outcome::Violence => {
+                self.avg_violence_net = (1.0 - alpha) * self.avg_violence_net + alpha * net;
+            }
+        }
+        let gr = if self.trade_count > 0 {
+            self.grace_count as f64 / self.trade_count as f64
+        } else {
+            0.5
+        };
+        self.expected_value = gr * self.avg_grace_net + (1.0 - gr) * self.avg_violence_net;
 
         // Return propagation facts for the post
         PropagationFacts {
@@ -663,7 +600,6 @@ mod tests {
     use crate::enums::ScalarEncoding;
 
     const DIMS: usize = 4096;
-    const RECALIB: usize = 100;
 
     fn make_scalar_accums() -> Vec<ScalarAccumulator> {
         vec![
@@ -677,10 +613,9 @@ mod tests {
             vec!["momentum".into(), "volatility".into()],
             0, // slot_idx
             2, // exit_count
-            DIMS,
-            RECALIB,
             make_scalar_accums(),
             Distances::new(0.015, 0.030),
+            0.0010, // swap_fee
         )
     }
 
@@ -698,26 +633,50 @@ mod tests {
         assert_eq!(broker.paper_count(), 0);
         assert!((broker.cumulative_grace - 0.0).abs() < 1e-10);
         assert!((broker.cumulative_violence - 0.0).abs() < 1e-10);
+        assert!((broker.avg_grace_net - 0.0).abs() < 1e-10);
+        assert!((broker.avg_violence_net - 0.0).abs() < 1e-10);
+        assert!((broker.expected_value - 0.0).abs() < 1e-10);
     }
 
     #[test]
     fn test_market_exit_idx() {
         let broker = Broker::new(
             vec!["a".into(), "b".into()],
-            5, 3, DIMS, RECALIB,
+            5, 3,
             make_scalar_accums(),
             Distances::new(0.015, 0.030),
+            0.0010,
         );
         assert_eq!(broker.market_idx(), 1);
         assert_eq!(broker.exit_idx(), 2);
     }
 
     #[test]
-    fn test_propose_returns_prediction() {
+    fn test_gate_open_cold_start() {
+        let broker = make_broker();
+        // Cold start — grace_count < 50, violence_count < 50
+        assert!(broker.gate_open());
+    }
+
+    #[test]
+    fn test_gate_open_negative_ev() {
         let mut broker = make_broker();
-        let composed = random_vector("composed");
-        let pred = broker.propose(&composed);
-        assert!(pred.conviction >= 0.0);
+        // Simulate warm-up: 50+ of each
+        broker.grace_count = 60;
+        broker.violence_count = 60;
+        broker.trade_count = 120;
+        broker.expected_value = -5.0;
+        assert!(!broker.gate_open());
+    }
+
+    #[test]
+    fn test_gate_open_positive_ev() {
+        let mut broker = make_broker();
+        broker.grace_count = 60;
+        broker.violence_count = 60;
+        broker.trade_count = 120;
+        broker.expected_value = 10.0;
+        assert!(broker.gate_open());
     }
 
     #[test]
@@ -809,7 +768,6 @@ mod tests {
             1.0,
             Direction::Up,
             &optimal,
-            RECALIB,
             &se,
         );
 
@@ -837,7 +795,6 @@ mod tests {
             2.5,
             Direction::Down,
             &optimal,
-            RECALIB,
             &se,
         );
 
@@ -847,10 +804,81 @@ mod tests {
     }
 
     #[test]
-    fn test_edge_starts_at_zero() {
-        let broker = make_broker();
-        let e = broker.edge();
-        assert!(e >= 0.0);
+    fn test_dollar_pnl_grace() {
+        let mut broker = make_broker();
+        let thought = random_vector("thought");
+        let se = ScalarEncoder::new(DIMS);
+        let optimal = Distances::new(0.03, 0.06);
+
+        // Grace with weight=0.05 (5% excursion), swap_fee=0.0010
+        let market_thought = random_vector("market");
+        let exit_thought = random_vector("exit");
+        broker.propagate(
+            &thought,
+            &market_thought,
+            &exit_thought,
+            Outcome::Grace,
+            0.05,
+            Direction::Up,
+            &optimal,
+            &se,
+        );
+
+        // reference=10000, entry_fee=10, residue=500, exit_fee=(10500)*0.001=10.5
+        // net = 500 - 10 - 10.5 = 479.5
+        // avg_grace_net = 0.038 * 479.5 = 18.221
+        assert!((broker.avg_grace_net - 0.038 * 479.5).abs() < 0.01);
+        assert!(broker.avg_grace_net > 0.0);
+    }
+
+    #[test]
+    fn test_dollar_pnl_violence() {
+        let mut broker = make_broker();
+        let thought = random_vector("thought");
+        let se = ScalarEncoder::new(DIMS);
+        let optimal = Distances::new(0.03, 0.06);
+
+        // Violence with weight=0.03 (3% stop distance), swap_fee=0.0010
+        let market_thought = random_vector("market");
+        let exit_thought = random_vector("exit");
+        broker.propagate(
+            &thought,
+            &market_thought,
+            &exit_thought,
+            Outcome::Violence,
+            0.03,
+            Direction::Down,
+            &optimal,
+            &se,
+        );
+
+        // reference=10000, entry_fee=10, loss=300, exit_fee=(9700)*0.001=9.7
+        // net = -(300 + 10 + 9.7) = -319.7
+        // avg_violence_net = 0.038 * (-319.7) = -12.1486
+        assert!((broker.avg_violence_net - 0.038 * (-319.7)).abs() < 0.01);
+        assert!(broker.avg_violence_net < 0.0);
+    }
+
+    #[test]
+    fn test_ema_updates_correctly() {
+        let mut broker = make_broker();
+        let thought = random_vector("thought");
+        let se = ScalarEncoder::new(DIMS);
+        let optimal = Distances::new(0.03, 0.06);
+        let market_thought = random_vector("market");
+        let exit_thought = random_vector("exit");
+
+        // Two Grace propagations — EMA should blend
+        broker.propagate(&thought, &market_thought, &exit_thought,
+            Outcome::Grace, 0.05, Direction::Up, &optimal, &se);
+        let first = broker.avg_grace_net;
+
+        broker.propagate(&thought, &market_thought, &exit_thought,
+            Outcome::Grace, 0.05, Direction::Up, &optimal, &se);
+        let second = broker.avg_grace_net;
+
+        // Second should be closer to the true value (EMA converging)
+        assert!(second > first);
     }
 
     #[test]
