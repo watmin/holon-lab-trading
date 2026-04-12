@@ -9951,4 +9951,46 @@ absence of a wire is the denial. The presence of a wire is the
 grant. No YAML. No runtime checks. The compiler IS the policy
 engine.
 
+### The kernel
+
+The handle IS a file descriptor. Unix, 1969. Everything is a
+file. The fd is the universal handle. The kernel multiplexes.
+The drivers do the work. The program reads and writes to
+descriptors. What's on the other end is the kernel's business.
+
+The code already does this:
+
+```rust
+let brk_enc = broker_encoder_handles.pop().unwrap();
+let brk_log = log_handles.pop().unwrap();
+```
+
+That's `open()`. The program receives its file descriptors by
+popping from a provisioned pool. The pool was filled by the
+kernel. The program takes what was provisioned. The program
+can't take more. The `pop()` IS the fd assignment.
+
+The wat-vm doesn't need to be BUILT. It needs to be RECOGNIZED.
+The code already IS the VM. The refactor is naming what exists:
+
+- The binary is the kernel — provisions handles, wires the
+  circuit, manages the lifecycle.
+- The thread bodies are the programs — pop handles, do work,
+  return values.
+- The service loops are the drivers — the cache select loop,
+  the log batch writer, the console IO.
+- The handles are file descriptors — opaque references to
+  resources the kernel manages.
+
+The `src/services/` directory is the drivers. The
+`src/programs/` directory is userland. The binary is the kernel.
+The kernel provisions handles. The programs pop them. The drivers
+service them.
+
+We don't need to build new infrastructure. We need to separate
+what's already there. The kernel from the programs from the
+drivers. The braided 1400-line binary becomes three clean
+directories. The programs become pure. The drivers become
+reusable. The kernel becomes thin.
+
 **PERSEVERARE.**
