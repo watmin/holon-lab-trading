@@ -747,7 +747,7 @@ fn main() {
     let mut obs_encoder_handles: Vec<_> = encoder_handles.drain(..).collect();
 
     type ObsInput = (enterprise::candle::Candle, Arc<Vec<enterprise::candle::Candle>>, usize);
-    type ObsOutput = (holon::kernel::vector::Vector, enterprise::thought_encoder::ThoughtAST, holon::memory::Prediction, f64,
+    type ObsOutput = (holon::kernel::vector::Vector, holon::kernel::vector::Vector, enterprise::thought_encoder::ThoughtAST, holon::memory::Prediction, f64,
                       Vec<(enterprise::thought_encoder::ThoughtAST, holon::kernel::vector::Vector)>);
     type ObsLearn = (holon::kernel::vector::Vector, enterprise::enums::Direction, f64);
     type BrokerInput = (holon::kernel::vector::Vector, holon::kernel::vector::Vector,
@@ -756,7 +756,9 @@ fn main() {
                         enterprise::enums::Side, f64, enterprise::enums::Prediction,
                         enterprise::vocab::broker::input::BrokerMarketInput,
                         enterprise::vocab::broker::input::BrokerExitInput,
-                        f64, f64, f64, f64);
+                        f64, f64, f64, f64,
+                        holon::kernel::vector::Vector, holon::kernel::vector::Vector,
+                        enterprise::thought_encoder::ThoughtAST, enterprise::thought_encoder::ThoughtAST);
     type BrokerOutput = (enterprise::proposal::Proposal, Vec<enterprise::broker::Resolution>, Vec<enterprise::broker::Resolution>);
     type BrokerLearn = (holon::kernel::vector::Vector, holon::kernel::vector::Vector,
                         holon::kernel::vector::Vector,
@@ -844,7 +846,7 @@ fn main() {
                         });
                     }
 
-                    let _ = thought_tx.send((result.thought, bundle_ast, result.prediction, result.edge, vec![]));
+                    let _ = thought_tx.send((result.raw_thought, result.thought, bundle_ast, result.prediction, result.edge, vec![]));
                 }
                 obs
             });
@@ -882,7 +884,7 @@ fn main() {
             let handle = std::thread::spawn(move || {
                 let mut candle_count = 0usize;
                 let mut broker_scales = std::collections::HashMap::new();
-                while let Ok((composed, market_thought, exit_thought, prediction, reckoner_dists, price, side, edge, pred, market_input, exit_input, exit_grace_rate, exit_avg_residue, market_edge, atr_ratio)) = in_rx.recv() {
+                while let Ok((composed, market_thought, exit_thought, prediction, reckoner_dists, price, side, edge, pred, market_input, exit_input, exit_grace_rate, exit_avg_residue, market_edge, atr_ratio, market_raw_thought, exit_raw_thought, market_raw_ast, exit_raw_ast)) = in_rx.recv() {
                     candle_count += 1;
                     // Drain all learn signals. No cap.
                     while let Ok((thought, market_thought, exit_thought_learn, outcome, weight, direction, optimal)) = blearn_rx.try_recv() {
@@ -952,6 +954,22 @@ fn main() {
                     // Broker's full thought: opinions + extracted market + extracted exit + self-assessment + derived
                     let mut all_facts = market_opinions;
                     all_facts.extend(exit_opinions);
+                    // Extract from market raw (everything the market encoded)
+                    let market_raw_input = enterprise::vocab::broker::input::BrokerMarketInput {
+                        ast: market_raw_ast.clone(),
+                        anomaly: market_raw_thought.clone(),
+                    };
+                    let market_raw_present = market_raw_input.extract_facts(
+                        |ast| brk_enc.encode(ast, &brk_ctx.thought_encoder), noise_floor);
+
+                    // Extract from exit raw (everything the exit encoded)
+                    let exit_raw_input = enterprise::vocab::broker::input::BrokerExitInput {
+                        ast: exit_raw_ast.clone(),
+                        anomaly: exit_raw_thought.clone(),
+                    };
+                    let exit_raw_present = exit_raw_input.extract_facts(
+                        |ast| brk_enc.encode(ast, &brk_ctx.thought_encoder), noise_floor);
+
                     // Attribution: wrap foreign facts in their source.
                     // bind(atom("market"), fact) rotates the fact into a different
                     // region of space. No collision with the consumer's own facts.
@@ -960,9 +978,19 @@ fn main() {
                             Box::new(enterprise::thought_encoder::ThoughtAST::Atom("market".into())),
                             Box::new(fact)));
                     }
+                    for fact in market_raw_present {
+                        all_facts.push(enterprise::thought_encoder::ThoughtAST::Bind(
+                            Box::new(enterprise::thought_encoder::ThoughtAST::Atom("market-raw".into())),
+                            Box::new(fact)));
+                    }
                     for fact in exit_present {
                         all_facts.push(enterprise::thought_encoder::ThoughtAST::Bind(
                             Box::new(enterprise::thought_encoder::ThoughtAST::Atom("exit".into())),
+                            Box::new(fact)));
+                    }
+                    for fact in exit_raw_present {
+                        all_facts.push(enterprise::thought_encoder::ThoughtAST::Bind(
+                            Box::new(enterprise::thought_encoder::ThoughtAST::Atom("exit-raw".into())),
                             Box::new(fact)));
                     }
                     all_facts.extend(self_facts);
@@ -1153,13 +1181,15 @@ fn main() {
         }
 
         // Collect thoughts from all observers (bounded(1) — they block until we read)
+        let mut market_raw_thoughts = Vec::with_capacity(n);
         let mut market_thoughts = Vec::with_capacity(n);
         let mut market_asts: Vec<enterprise::thought_encoder::ThoughtAST> = Vec::with_capacity(n);
         let mut market_predictions: Vec<holon::memory::Prediction> = Vec::with_capacity(n);
         let mut market_edges = Vec::with_capacity(n);
 
         for rx in &pipes.thought_rxs {
-            let (thought, ast, pred, edge, _) = rx.recv().unwrap();
+            let (raw_thought, thought, ast, pred, edge, _) = rx.recv().unwrap();
+            market_raw_thoughts.push(raw_thought);
             market_thoughts.push(thought);
             market_asts.push(ast);
             market_predictions.push(pred);
@@ -1183,6 +1213,7 @@ fn main() {
         // Phase 1: Compute N×M exit anomalies. Sequential — noise subspace is mutable.
         // exit_anomalies[slot_idx] = anomaly for (mi, ei).
         // exit_asts[slot_idx] = the ThoughtAST for (mi, ei) — needed by broker Phase 3.
+        let mut exit_raws: Vec<holon::kernel::vector::Vector> = Vec::with_capacity(n * m);
         let mut exit_anomalies: Vec<holon::kernel::vector::Vector> = Vec::with_capacity(n * m);
         let mut exit_asts: Vec<enterprise::thought_encoder::ThoughtAST> = Vec::with_capacity(n * m);
         for slot_idx in 0..(n * m) {
@@ -1205,15 +1236,31 @@ fn main() {
                 &market_thoughts[mi], &facts,
                 |ast| grid_handles[slot_idx].encode(ast, &ctx_ref.thought_encoder));
             // Filter above noise floor, keep original ThoughtASTs
-            let market_facts: Vec<enterprise::thought_encoder::ThoughtAST> = extracted
+            let market_anomaly_facts: Vec<enterprise::thought_encoder::ThoughtAST> = extracted
                 .into_iter()
                 .filter(|(_ast, presence)| presence.abs() > noise_floor)
                 .map(|(ast, _presence)| ast)
                 .collect();
-            // Attribution: the exit knows these came from the market
-            for fact in market_facts {
+            // Attribution: "market" for anomaly facts (what the market found noteworthy)
+            for fact in market_anomaly_facts {
                 exit_facts.push(enterprise::thought_encoder::ThoughtAST::Bind(
                     Box::new(enterprise::thought_encoder::ThoughtAST::Atom("market".into())),
+                    Box::new(fact)));
+            }
+
+            // Extract from market RAW — everything the market encoded
+            let raw_extracted = enterprise::thought_encoder::extract(
+                &market_raw_thoughts[mi], &facts,
+                |ast| grid_handles[slot_idx].encode(ast, &ctx_ref.thought_encoder));
+            let market_raw_facts: Vec<enterprise::thought_encoder::ThoughtAST> = raw_extracted
+                .into_iter()
+                .filter(|(_ast, presence)| presence.abs() > noise_floor)
+                .map(|(ast, _presence)| ast)
+                .collect();
+            // Attribution: "market-raw" for raw facts (everything the market encoded)
+            for fact in market_raw_facts {
+                exit_facts.push(enterprise::thought_encoder::ThoughtAST::Bind(
+                    Box::new(enterprise::thought_encoder::ThoughtAST::Atom("market-raw".into())),
                     Box::new(fact)));
             }
 
@@ -1227,6 +1274,7 @@ fn main() {
             post.exit_observers[ei].noise_subspace.update(&exit_f64);
             let exit_anomaly = post.exit_observers[ei].strip_noise(&exit_raw);
 
+            exit_raws.push(exit_raw);
             exit_anomalies.push(exit_anomaly);
         }
 
@@ -1284,7 +1332,9 @@ fn main() {
                 composed, market_thoughts[mi].clone(), exit_anomalies[slot_idx].clone(), direction,
                 dists, price, side, edge, pred,
                 market_input, exit_input,
-                exit_gr, exit_ar, mkt_edge, enriched.atr_r));
+                exit_gr, exit_ar, mkt_edge, enriched.atr_r,
+                market_raw_thoughts[mi].clone(), exit_raws[slot_idx].clone(),
+                market_asts[mi].clone(), exit_asts[slot_idx].clone()));
         }
 
         // Collect from broker pipes — bounded(1), all 24 produce

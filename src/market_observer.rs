@@ -39,9 +39,11 @@ pub struct MarketObserver {
     pub incremental: IncrementalBundle,
 }
 
-/// Result of observe: the cleaned thought, prediction details, and cache misses.
+/// Result of observe: raw thought, cleaned thought, prediction details, and cache misses.
 pub struct ObserveResult {
-    /// The noise-stripped thought vector.
+    /// The raw thought vector — before noise stripping.
+    pub raw_thought: Vector,
+    /// The noise-stripped thought vector (anomaly).
     pub thought: Vector,
     /// Holon-rs prediction (scores + conviction).
     pub prediction: holon::memory::Prediction,
@@ -89,6 +91,9 @@ impl MarketObserver {
         thought: Vector,
         misses: Vec<(ThoughtAST, Vector)>,
     ) -> ObserveResult {
+        // Clone the raw thought BEFORE noise stripping — consumers need both.
+        let raw = thought.clone();
+
         // Noise subspace learns the background distribution.
         let thought_f64 = to_f64(&thought);
         self.noise_subspace.update(&thought_f64);
@@ -115,6 +120,7 @@ impl MarketObserver {
         }
 
         ObserveResult {
+            raw_thought: raw,
             thought: anomaly,
             prediction: pred,
             edge,
