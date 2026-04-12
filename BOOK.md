@@ -10733,9 +10733,9 @@ slots sequentially per candle round.
                      :exit-raw exit-raw
                      :exit-anomaly exit-anomaly
                      :exit-ast exit-bundle))
-                 #t))
+                 true))
 
-              (disconnected #f))))))
+              (disconnected false))))))
 
         (when alive
           (set! candle-count (+ candle-count 1))
