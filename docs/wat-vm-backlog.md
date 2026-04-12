@@ -57,9 +57,9 @@ Concurrent with other drivers. Sequential internally.
       consumer. Bounded or unbounded. Contention-free. 4 tests pass.
 - [x] `src/services/topic.rs` — DONE. Fan-out. One input, N output.
       Own thread. 3 tests pass.
-- [x] `src/services/mailbox.rs` — DONE (v1). Fan-in. Uses cloned
-      senders (contention). NEEDS REFACTOR: should be N independent
-      queues, mailbox thread selects across receivers. 3 tests pass.
+- [x] `src/services/mailbox.rs` — DONE. Fan-in. N independent queues
+      composed. Each producer gets its own sender (contention-free).
+      Fan-in thread selects across N receivers. 4 tests pass.
 - [ ] `src/services/cache.rs` — generic key-value with eviction.
       Named instances. `cache("encoder")` holds ThoughtAST → Vector.
       One implementation. N instances. Each its own loop.

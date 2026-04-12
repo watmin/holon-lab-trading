@@ -48,6 +48,11 @@ impl<T> QueueReceiver<T> {
     pub fn try_recv(&self) -> Result<T, TryRecvError> {
         self.0.try_recv()
     }
+
+    /// Internal access for services that compose queues (e.g., mailbox select).
+    pub(crate) fn inner(&self) -> &Receiver<T> {
+        &self.0
+    }
 }
 
 /// Create a bounded queue. Sender blocks when capacity is reached.
