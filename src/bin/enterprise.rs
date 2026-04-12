@@ -452,6 +452,19 @@ fn build_enterprise(args: &Args) -> (Enterprise, Ctx) {
         ctx.insert_cache_misses(registration_misses);
     }
 
+    // Proposal 030: Pre-register opinion atoms (7 total).
+    // Encode once with dummy values so the VectorManager knows them.
+    {
+        let opinion_facts = enterprise::vocab::broker::opinions::encode_market_opinions(0.0, 0.0, 0.0);
+        let exit_opinion_facts = enterprise::vocab::broker::opinions::encode_exit_opinions(0.001, 0.001, 0.0, 0.001);
+        let mut opinion_misses = Vec::new();
+        for fact in opinion_facts.iter().chain(exit_opinion_facts.iter()) {
+            let (_, misses) = ctx.thought_encoder.encode(fact);
+            opinion_misses.extend(misses);
+        }
+        ctx.insert_cache_misses(opinion_misses);
+    }
+
     (ent, ctx)
 }
 
@@ -718,7 +731,8 @@ fn main() {
                         Option<enterprise::distances::Distances>, f64,
                         enterprise::enums::Side, f64, enterprise::enums::Prediction,
                         enterprise::vocab::broker::input::BrokerMarketInput,
-                        enterprise::vocab::broker::input::BrokerExitInput);
+                        enterprise::vocab::broker::input::BrokerExitInput,
+                        f64, f64, f64);
     type BrokerOutput = (enterprise::proposal::Proposal, Vec<enterprise::broker::Resolution>, Vec<enterprise::broker::Resolution>);
     type BrokerLearn = (holon::kernel::vector::Vector, holon::kernel::vector::Vector,
                         holon::kernel::vector::Vector,
@@ -852,7 +866,7 @@ fn main() {
 
             let handle = std::thread::spawn(move || {
                 let mut candle_count = 0usize;
-                while let Ok((composed, market_thought, exit_thought, prediction, reckoner_dists, price, side, edge, pred, market_input, exit_input)) = in_rx.recv() {
+                while let Ok((composed, market_thought, exit_thought, prediction, reckoner_dists, price, side, edge, pred, market_input, exit_input, exit_grace_rate, exit_avg_residue, market_edge)) = in_rx.recv() {
                     candle_count += 1;
                     // Drain all learn signals. No cap.
                     while let Ok((thought, market_thought, exit_thought_learn, outcome, weight, direction, optimal)) = blearn_rx.try_recv() {
@@ -874,6 +888,23 @@ fn main() {
                     // Extract exit facts from the exit anomaly (typed)
                     let exit_present = exit_input.extract_facts(&brk_ctx.thought_encoder, noise_floor);
 
+                    // Proposal 030: Encode leaf observer opinions as scalar facts.
+                    // Market: signed conviction (direction × magnitude), conviction, edge.
+                    // Exit: trail, stop, grace-rate, avg-residue.
+                    let market_conviction = match &pred {
+                        enterprise::enums::Prediction::Discrete { conviction, .. } => *conviction,
+                        enterprise::enums::Prediction::Continuous { .. } => 0.0,
+                    };
+                    let signed_conviction = if prediction == enterprise::enums::Direction::Up {
+                        market_conviction
+                    } else {
+                        -market_conviction
+                    };
+                    let market_opinions = enterprise::vocab::broker::opinions::encode_market_opinions(
+                        signed_conviction, market_conviction, market_edge);
+                    let exit_opinions = enterprise::vocab::broker::opinions::encode_exit_opinions(
+                        dists.trail, dists.stop, exit_grace_rate, exit_avg_residue);
+
                     // Broker's own self-assessment facts
                     let grace_rate = if broker.trade_count > 0 {
                         broker.cumulative_grace / (broker.cumulative_grace + broker.cumulative_violence).max(1e-10)
@@ -888,8 +919,10 @@ fn main() {
                         broker.avg_excursion,
                     );
 
-                    // Broker's full thought: extracted market + extracted exit + self-assessment
-                    let mut all_facts = market_present;
+                    // Broker's full thought: opinions + extracted market + extracted exit + self-assessment
+                    let mut all_facts = market_opinions;
+                    all_facts.extend(exit_opinions);
+                    all_facts.extend(market_present);
                     all_facts.extend(exit_present);
                     all_facts.extend(self_facts);
                     let broker_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(all_facts);
@@ -921,7 +954,7 @@ fn main() {
                             }
                         }
                         broker.active_direction = Some(prediction);
-                        broker.register_paper(composed.clone(), market_thought.clone(), exit_thought.clone(), prediction, Price(price), dists);
+                        broker.register_paper(broker_thought.clone(), market_thought.clone(), exit_thought.clone(), prediction, Price(price), dists);
                     }
                     let (market_signals, mut runner_resolutions) = broker.tick_papers(Price(price));
                     runner_resolutions.extend(flip_resolutions);
@@ -1179,7 +1212,12 @@ fn main() {
                     enterprise::enums::Direction::Down
                 };
 
-                (slot_idx, mi, ei, composed, reckoner_dists, side, edge, pred, direction)
+                // Proposal 030: exit observer performance for opinion encoding
+                let exit_gr = exit_observers[ei].grace_rate;
+                let exit_ar = exit_observers[ei].avg_residue;
+                let mkt_edge = market_edges[mi];
+
+                (slot_idx, mi, ei, composed, reckoner_dists, side, edge, pred, direction, exit_gr, exit_ar, mkt_edge)
             })
             .collect()
         };
@@ -1189,7 +1227,7 @@ fn main() {
         // Send to broker pipes — bounded(1), each broker gets its input
         // Proposal 029 Phase 1 Change 4: pass exit ANOMALY (not raw exit vec)
         // Proposal 029 Phase 3: pass market_ast and exit_ast for extraction
-        for (slot_idx, mi, _ei, composed, dists, side, edge, pred, direction) in grid_values {
+        for (slot_idx, mi, _ei, composed, dists, side, edge, pred, direction, exit_gr, exit_ar, mkt_edge) in grid_values {
             let market_input = enterprise::vocab::broker::input::BrokerMarketInput {
                 ast: market_asts[mi].clone(),
                 anomaly: market_thoughts[mi].clone(),
@@ -1201,7 +1239,8 @@ fn main() {
             let _ = pipes.broker_in_txs[slot_idx].send((
                 composed, market_thoughts[mi].clone(), exit_anomalies[slot_idx].clone(), direction,
                 dists, price, side, edge, pred,
-                market_input, exit_input));
+                market_input, exit_input,
+                exit_gr, exit_ar, mkt_edge));
         }
 
         // Collect from broker pipes — bounded(1), all 24 produce
