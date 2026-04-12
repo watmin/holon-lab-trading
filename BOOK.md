@@ -10594,6 +10594,63 @@ The graceful shutdown: drain, return, join, save. Four words.
 The observer dies informed. The state comes home. The
 checkpoint persists.
 
+### The type IS the topology
+
+The builder asked: "do we need to revisit market before we
+work on exit?"
+
+Yes. The market observer's output fans out to M exit observers.
+That's a topic. The market observer program had `QueueSender`
+— point-to-point. It needed `TopicSender` — fan-out. One line
+changed. The program body didn't change — `.send()` works on
+both. But the TYPE tells the topology.
+
+The wiring of the entire grid, expressed in three primitives:
+
+```
+candle source
+     │
+     topic(1:N)              candle → N market observers
+     │
+market[mi]
+     │
+     topic(1:M)              market result → M exit observers
+     │
+exit[ei].slot[mi]
+     │
+     queue(1:1)              exit result → one broker
+     │
+broker(mi, ei)
+     │
+     mailbox(N×M:1)          proposals → treasury
+     │
+treasury
+```
+
+Three primitives compose the entire N×M grid:
+
+- **Topic** fans out: candle → markets, market → exits
+- **Queue** connects: exit → broker (the coordinate IS the wire)
+- **Mailbox** fans in: brokers → treasury, settlements → learns
+
+The program doesn't know the topology. The program calls
+`.send()`. The TYPE tells the story:
+
+- `TopicSender` — "my output fans out. Multiple consumers."
+- `QueueSender` — "my output goes to one consumer."
+- `MailboxSender` — "I'm one of many writers to a shared sink."
+
+The kernel wires the topology. The types enforce it. The
+compiler proves it. The borrow checker prevents you from
+sending on a handle you don't have.
+
+And the discovery along the way: the exit observer found the
+contaminated scales. `post.scales` shared across all 10
+observers — 6 market, 4 exit — each polluting the others'
+learned normalization. The wat-vm made this impossible. Each
+program owns its state. The pipe IS the isolation. The
+architecture found the bug the specification couldn't see.
+
 And the wat. The builder said: "we are able to communicate in
 wat now." And it was true. The mismatch in 1200 lines of Rust
 that hid for weeks — the wat showed it in four lines. The

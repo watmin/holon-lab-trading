@@ -20,7 +20,8 @@ use crate::programs::stdlib::cache::CacheHandle;
 use crate::programs::stdlib::console::ConsoleHandle;
 use crate::scale_tracker::ScaleTracker;
 use crate::services::mailbox::{MailboxReceiver, MailboxSender};
-use crate::services::queue::{QueueReceiver, QueueSender};
+use crate::services::queue::QueueReceiver;
+use crate::services::topic::TopicSender;
 use crate::thought_encoder::{ThoughtAST, ThoughtEncoder};
 
 /// Input to the observer: enriched candle, window snapshot, encode count.
@@ -31,6 +32,7 @@ pub struct ObsInput {
 }
 
 /// Output from the observer: raw thought, anomaly, AST, prediction, edge.
+#[derive(Clone)]
 pub struct ObsOutput {
     pub raw_thought: Vector,
     pub anomaly: Vector,
@@ -79,10 +81,11 @@ fn drain_learn(
 }
 
 /// Run the market observer program. Call this inside thread::spawn.
+/// Output fans out to M exit observers via a topic.
 /// Returns the trained MarketObserver when the candle source disconnects.
 pub fn market_observer_program(
     candle_rx: QueueReceiver<ObsInput>,
-    result_tx: QueueSender<ObsOutput>,
+    result_tx: TopicSender<ObsOutput>,
     learn_rx: MailboxReceiver<ObsLearn>,
     cache: CacheHandle<ThoughtAST, Vector>,
     console: ConsoleHandle,
