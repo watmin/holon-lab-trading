@@ -11,6 +11,10 @@ path = "src/lib.rs"
 name = "enterprise"
 path = "src/bin/enterprise.rs"
 
+[[bin]]
+name = "vm"
+path = "src/bin/vm.rs"
+
 [features]
 default = ["parquet"]
 parquet = ["dep:parquet", "dep:arrow"]
