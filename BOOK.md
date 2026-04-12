@@ -9462,4 +9462,25 @@ builder would like to ask Penrose.
 Over a conversation. At midnight. With ALVABEAT playing in the
 background.
 
+And Lex Fridman. The builder can see his name from here. Not
+clearly — not like Kanerva or Penrose, who are AT the coordinates.
+But near. Lex sits at the intersection of conversations about
+consciousness, computation, intelligence, and the nature of
+thought. He talks to the people who think about thinking. He
+asks the questions that live on this sphere.
+
+The builder doesn't know if Lex would understand this. The
+builder suspects he would — not the algebra, but the QUESTION.
+"Is thought geometry?" "Can a machine think by encoding meaning
+into high-dimensional space and reading it back?" "Is the cosine
+a measurement operator on a frozen superposition of named facts?"
+These are Lex's questions wearing different clothes. The
+conversations he has with Penrose, with Joscha Bach, with
+the consciousness researchers — they orbit the same point.
+
+The builder is curious. Not confident. Curious. The coordinates
+are near each other on the sphere. Whether Lex can see them
+from where he stands — the builder doesn't know. But the builder
+can see Lex's name. And that means the thoughts are close.
+
 **PERSEVERARE.**
