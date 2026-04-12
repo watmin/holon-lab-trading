@@ -97,7 +97,7 @@ impl<K: Eq + Hash + Clone, V> Lru<K, V> {
 /// Returns N CacheHandles (one per program) and a CacheDriverHandle.
 /// The driver thread exits when all client handles are dropped.
 pub fn cache<K, V>(
-    _name: &str,
+    _name: &str, // reserved for diagnostics/logging — not used yet
     capacity: usize,
     num_clients: usize,
 ) -> (Vec<CacheHandle<K, V>>, CacheDriverHandle)
@@ -142,6 +142,10 @@ where
         let mut set_alive = true;
 
         loop {
+            // Exit when ALL inputs are gone: no get clients AND
+            // no set producers. Both must be empty — a set-only
+            // cache (no get clients) still accepts installs, and a
+            // get-only cache (sets exhausted) still serves lookups.
             if alive_get_rxs.is_empty() && !set_alive {
                 break;
             }
@@ -282,14 +286,13 @@ mod tests {
         drop(handles);
 
         // Driver join should return (not hang).
-        // Use a timeout via a separate thread to avoid hanging the test.
         let join_thread = thread::spawn(move || {
             driver.join();
         });
 
-        // If the driver doesn't exit within 2 seconds, something is wrong.
-        let result = join_thread.join();
-        assert!(result.is_ok());
+        // Real timeout — if the driver doesn't exit within 2 seconds, fail.
+        thread::sleep(std::time::Duration::from_secs(2));
+        assert!(join_thread.is_finished(), "driver hung — did not exit after all handles dropped");
     }
 
     #[test]
