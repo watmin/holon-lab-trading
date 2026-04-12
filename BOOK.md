@@ -10085,10 +10085,10 @@ The wat form for shutdown is the absence of recursion:
 ```scheme
 (define (observer-loop input output)
   (match (recv input)
-    [(some candle)
+    ((some candle)
      (send output (observe candle))
-     (observer-loop input output)]
-    [disconnected]))
+     (observer-loop input output))
+    (disconnected)))
 ;; Function returns. Output drops. Cascade continues.
 ```
 

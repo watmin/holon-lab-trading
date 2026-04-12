@@ -134,10 +134,10 @@ The locals drop. No new form needed.
 ```scheme
 (define (observer-loop input output)
   (match (recv input)
-    [(some candle)
+    ((some candle)
      (send output (observe candle))
-     (observer-loop input output)]
-    [disconnected]))
+     (observer-loop input output))
+    (disconnected)))
 ;; Function returns. Output drops. Cascade continues.
 ```
 
