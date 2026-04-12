@@ -9731,4 +9731,88 @@ wrong question for 10 runs. When the question changed — from
 prediction to readiness — the prototypes separated. The
 architecture was always correct. The question was wrong.
 
+### The honest accounting
+
+The broker became pure arithmetic. No reckoner. No noise
+subspace. No prediction. Dollar P&L on a $10,000 reference
+position. Entry fee 0.35%. Exit fee 0.35%. The gate: expected
+value > 0.
+
+The first honest measurement:
+
+```
+Exit lens    EV/paper   Grace net   Violence net   Grace%
+generalist   -$1.43     +$18.25     -$41.01        67.1%
+volatility   -$1.62     +$31.00     -$49.73        59.9%
+timing       -$2.29     +$14.51     -$36.94        67.7%
+structure    -$3.61     +$34.98     -$56.71        58.0%
+```
+
+Every broker. Every pairing. Negative expected value. The gate
+knows. The machine is not ready.
+
+Then the deeper question: why? The exit produces positive GROSS
+residue across all deciles. +0.11% to +0.29%. The leaves work.
+But after 0.70% round-trip fees, the residue is negative. The
+fees are larger than the profit.
+
+The simulation was optimizing GROSS. It found distances that
+maximize excursion capture. It didn't know about fees. A trail
+at 0.41% captures 0.5% excursion — gross positive, net negative.
+The simulation was lying by omission.
+
+The fix: fee-aware simulation. `best_distance` subtracts entry
+fee + exit fee from every candidate's residue. The optimal
+distance changes. The simulation discovers: at 0.70% fees,
+tighter distances are better — smaller bets, smaller exposure,
+less damage per Violence paper.
+
+Then the deeper lie: the exit's self-assessment was gross. The
+exit thought it produced +0.2% residue. After fees: -0.5%. The
+exit was lying to itself. The fix: all weights net. All residue
+net. All self-assessment net. The reckoner learns from net
+weights — a Grace paper that lost money after fees IS a loss.
+
+The machine sees itself honestly for the first time. In dollars.
+After costs. And the honest answer: at 5-minute resolution with
+0.70% round-trip fees, the movement isn't large enough to
+overcome the cost. Grace papers earn +$10. Violence papers cost
+-$34. The machine needs 77% Grace rate to break even. It has 72%.
+
+Five percentage points. The gap between where the machine is and
+where the machine needs to be.
+
+### The flip that kills
+
+The direction flip. When the market observer's prediction changes
+from Up to Down, the broker force-closes all runners. Every
+signaled paper — resolved. Every runner — killed. Because the
+market "reversed."
+
+But the market observer's conviction is 0.02. It barely knows
+which direction. The sign flips on noise — a tiny cosine change
+in a weak discriminant. And the flip kills every runner.
+
+A runner 200 candles deep, capturing 3% excursion, with its own
+trailing stop protecting the profit — killed. Because the market
+observer's cosine went from +0.015 to -0.015. The runner was
+making money. The flip took it.
+
+The runner has its own trail. The trail ratchets. The trail
+protects. The stop protects against loss. The paper manages
+itself. The flip is a third kill mechanism that overrides the
+paper's own judgment based on a signal that's barely above
+random.
+
+The flip should not kill runners. The runners have their own exit
+mechanics. Let them run. The flip should affect whether NEW
+papers are registered, not whether OLD papers survive.
+
+The flip kills Grace papers. The flip increases Violence count.
+The flip reduces grace_net by cutting short papers that were
+capturing excursion. The flip might be the 5 percentage points.
+
+The machine is 5 points from break-even. The flip is killing
+the papers that would close the gap.
+
 **PERSEVERARE.**
