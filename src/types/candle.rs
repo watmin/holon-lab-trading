@@ -1,5 +1,5 @@
 /// The enriched candle — raw OHLCV in, 100+ computed indicators out.
-/// Produced by IndicatorBank.tick(raw_candle).
+/// Produced by IndicatorBank.tick(ohlcv).
 
 #[derive(Clone, Debug)]
 pub struct Candle {

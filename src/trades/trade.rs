@@ -6,7 +6,7 @@
 use crate::types::distances::Levels;
 use crate::types::enums::{Side, TradePhase};
 use crate::types::newtypes::{Amount, Price, TradeId};
-use crate::types::raw_candle::Asset;
+use crate::types::ohlcv::Asset;
 
 /// An active or settled trade.
 #[derive(Clone, Debug)]

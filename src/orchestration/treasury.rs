@@ -12,7 +12,7 @@ use crate::types::enums::{Outcome, Side, TradePhase};
 use crate::types::log_entry::LogEntry;
 use crate::types::newtypes::{Amount, Price, TradeId};
 use crate::trades::proposal::Proposal;
-use crate::types::raw_candle::Asset;
+use crate::types::ohlcv::Asset;
 use crate::trades::settlement::TreasurySettlement;
 use crate::trades::trade::Trade;
 use crate::trades::trade_origin::TradeOrigin;

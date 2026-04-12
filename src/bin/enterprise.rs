@@ -22,7 +22,7 @@ use enterprise::domain::indicator_bank::IndicatorBank;
 use enterprise::types::log_entry::LogEntry;
 use enterprise::domain::market_observer::MarketObserver;
 use enterprise::orchestration::post::Post;
-use enterprise::types::raw_candle::Asset;
+use enterprise::types::ohlcv::Asset;
 use enterprise::learning::scalar_accumulator::ScalarAccumulator;
 use enterprise::types::newtypes::{Amount, Price};
 use enterprise::orchestration::treasury::Treasury;

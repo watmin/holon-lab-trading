@@ -6,11 +6,11 @@ use arrow::array::{Array, Float64Array, StringArray, TimestampMicrosecondArray};
 use parquet::arrow::arrow_reader::{ParquetRecordBatchReader, ParquetRecordBatchReaderBuilder};
 use parquet::file::reader::{FileReader, SerializedFileReader};
 
-use crate::types::raw_candle::{Asset, RawCandle};
+use crate::types::ohlcv::{Asset, Ohlcv};
 
 #[cfg(feature = "parquet")]
 pub struct CandleStream {
-    buffer: Vec<RawCandle>,
+    buffer: Vec<Ohlcv>,
     buf_idx: usize,
     reader: ParquetRecordBatchReader,
     source_asset: String,
@@ -99,7 +99,7 @@ impl CandleStream {
                     self.buffer.clear();
                     self.buf_idx = 0;
                     for i in 0..batch.num_rows() {
-                        self.buffer.push(RawCandle::new(
+                        self.buffer.push(Ohlcv::new(
                             Asset::new(&self.source_asset),
                             Asset::new(&self.target_asset),
                             ts_strings[i].clone(),
@@ -121,9 +121,9 @@ impl CandleStream {
 
 #[cfg(feature = "parquet")]
 impl Iterator for CandleStream {
-    type Item = RawCandle;
+    type Item = Ohlcv;
 
-    fn next(&mut self) -> Option<RawCandle> {
+    fn next(&mut self) -> Option<Ohlcv> {
         if self.buf_idx >= self.buffer.len() {
             if !self.fill_buffer() {
                 return None;

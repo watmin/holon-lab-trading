@@ -1,4 +1,4 @@
-/// Raw input types. Asset identifies a token. RawCandle is the enterprise's
+/// Raw input types. Asset identifies a token. Ohlcv is the enterprise's
 /// only input — everything else is derived.
 
 /// A named token (e.g. "USDC", "WBTC").
@@ -16,7 +16,7 @@ impl Asset {
 /// One period of market data. Eight fields.
 /// From the parquet. From the websocket. The enterprise doesn't care which.
 #[derive(Clone, Debug)]
-pub struct RawCandle {
+pub struct Ohlcv {
     pub source_asset: Asset,
     pub target_asset: Asset,
     pub ts: String,
@@ -27,7 +27,7 @@ pub struct RawCandle {
     pub volume: f64,
 }
 
-impl RawCandle {
+impl Ohlcv {
     pub fn new(
         source_asset: Asset,
         target_asset: Asset,
@@ -78,8 +78,8 @@ mod tests {
     }
 
     #[test]
-    fn test_raw_candle_new() {
-        let candle = RawCandle::new(
+    fn test_ohlcv_new() {
+        let candle = Ohlcv::new(
             Asset::new("USDC"),
             Asset::new("WBTC"),
             "2025-01-01T00:00:00Z",
@@ -100,8 +100,8 @@ mod tests {
     }
 
     #[test]
-    fn test_raw_candle_clone() {
-        let candle = RawCandle::new(
+    fn test_ohlcv_clone() {
+        let candle = Ohlcv::new(
             Asset::new("USDC"),
             Asset::new("WBTC"),
             "2025-01-01T00:00:00Z",

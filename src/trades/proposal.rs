@@ -5,7 +5,7 @@ use holon::kernel::vector::Vector;
 
 use crate::types::distances::Distances;
 use crate::types::enums::{Prediction, Side};
-use crate::types::raw_candle::Asset;
+use crate::types::ohlcv::Asset;
 
 /// A proposal for the treasury to evaluate.
 #[derive(Clone, Debug)]

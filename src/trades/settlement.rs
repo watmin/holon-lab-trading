@@ -54,7 +54,7 @@ mod tests {
     use crate::types::distances::Levels;
     use crate::types::enums::Side;
     use crate::types::newtypes::{Amount, Price, TradeId};
-    use crate::types::raw_candle::Asset;
+    use crate::types::ohlcv::Asset;
 
     #[test]
     fn test_treasury_settlement_construct() {

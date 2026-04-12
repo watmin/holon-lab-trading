@@ -102,7 +102,7 @@ impl Enterprise {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::raw_candle::Asset;
+    use crate::types::ohlcv::Asset;
 
     #[test]
     fn test_enterprise_construct() {

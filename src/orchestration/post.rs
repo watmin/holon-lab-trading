@@ -23,7 +23,7 @@ use crate::types::log_entry::LogEntry;
 use crate::domain::market_observer::MarketObserver;
 use crate::types::newtypes::{Price, TradeId};
 use crate::trades::proposal::Proposal;
-use crate::types::raw_candle::{Asset, RawCandle};
+use crate::types::ohlcv::{Asset, Ohlcv};
 use crate::encoding::scale_tracker::ScaleTracker;
 use crate::encoding::thought_encoder::{ThoughtAST, ToAst};
 use crate::trades::trade::Trade;
@@ -111,7 +111,7 @@ impl Post {
     /// Returns (proposals, market_thoughts, misses).
     pub fn on_candle(
         &mut self,
-        rc: &RawCandle,
+        rc: &Ohlcv,
         ctx: &Ctx,
     ) -> (Vec<Proposal>, Vec<Vector>, Vec<(ThoughtAST, Vector)>) {
         // Step: tick indicators -> enriched candle

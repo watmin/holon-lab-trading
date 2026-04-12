@@ -5,7 +5,7 @@
 /// Compiled from wat/indicator-bank.wat — the tick contract.
 
 use crate::types::candle::Candle;
-use crate::types::raw_candle::RawCandle;
+use crate::types::ohlcv::Ohlcv;
 
 // ════════════════════════════════════════════════════════════════════
 // STREAMING PRIMITIVES — the building blocks of indicator state
@@ -1638,7 +1638,7 @@ impl IndicatorBank {
     // ════════════════════════════════════════════════════════════════
 
     /// One raw candle in, one enriched Candle out.
-    pub fn tick(&mut self, raw: &RawCandle) -> Candle {
+    pub fn tick(&mut self, raw: &Ohlcv) -> Candle {
         let o = raw.open;
         let h = raw.high;
         let l = raw.low;
@@ -1971,7 +1971,7 @@ impl IndicatorBank {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::raw_candle::Asset;
+    use crate::types::ohlcv::Asset;
 
     fn make_raw_candle(
         ts: &str,
@@ -1980,8 +1980,8 @@ mod tests {
         low: f64,
         close: f64,
         volume: f64,
-    ) -> RawCandle {
-        RawCandle::new(Asset::new("BTC"), Asset::new("USD"), ts, open, high, low, close, volume)
+    ) -> Ohlcv {
+        Ohlcv::new(Asset::new("BTC"), Asset::new("USD"), ts, open, high, low, close, volume)
     }
 
     // ── RingBuffer tests ──

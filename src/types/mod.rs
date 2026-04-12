@@ -4,6 +4,6 @@
 pub mod enums;
 pub mod newtypes;
 pub mod distances;
-pub mod raw_candle;
+pub mod ohlcv;
 pub mod candle;
 pub mod log_entry;
