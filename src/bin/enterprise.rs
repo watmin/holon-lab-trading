@@ -21,11 +21,11 @@ use enterprise::types::log_entry::LogEntry;
 use enterprise::market_observer::MarketObserver;
 use enterprise::post::Post;
 use enterprise::types::raw_candle::{Asset, RawCandle};
-use enterprise::scalar_accumulator::ScalarAccumulator;
+use enterprise::learning::scalar_accumulator::ScalarAccumulator;
 use enterprise::types::newtypes::{Amount, Price};
 use enterprise::treasury::Treasury;
 use enterprise::enterprise::Enterprise;
-use enterprise::window_sampler::WindowSampler;
+use enterprise::learning::window_sampler::WindowSampler;
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 

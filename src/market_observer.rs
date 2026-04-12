@@ -6,11 +6,11 @@
 use holon::kernel::vector::Vector;
 use holon::memory::{OnlineSubspace, ReckConfig, Reckoner};
 
-use crate::engram_gate::{check_engram_gate, EngramGateState};
+use crate::learning::engram_gate::{check_engram_gate, EngramGateState};
 use crate::types::enums::{Direction, MarketLens};
 use crate::encoding::thought_encoder::{IncrementalBundle, ThoughtAST};
 use crate::to_f64;
-use crate::window_sampler::WindowSampler;
+use crate::learning::window_sampler::WindowSampler;
 
 /// Predicts direction (Up/Down) from candle data through a specific lens.
 pub struct MarketObserver {

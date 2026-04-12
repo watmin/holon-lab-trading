@@ -529,7 +529,7 @@ pub fn ctx_scalar_encoder_placeholder() -> &'static holon::kernel::scalar::Scala
 mod tests {
     use super::*;
     use crate::types::enums::MarketLens;
-    use crate::window_sampler::WindowSampler;
+    use crate::learning::window_sampler::WindowSampler;
 
     #[test]
     fn test_post_construct() {
@@ -552,12 +552,12 @@ mod tests {
             0,
             1,
             vec![
-                crate::scalar_accumulator::ScalarAccumulator::new(
+                crate::learning::scalar_accumulator::ScalarAccumulator::new(
                     "trail",
                     crate::types::enums::ScalarEncoding::Log,
                     256,
                 ),
-                crate::scalar_accumulator::ScalarAccumulator::new(
+                crate::learning::scalar_accumulator::ScalarAccumulator::new(
                     "stop",
                     crate::types::enums::ScalarEncoding::Log,
                     256,

@@ -10,7 +10,7 @@ use holon::memory::{OnlineSubspace, ReckConfig, Reckoner};
 use crate::types::distances::Distances;
 use crate::types::enums::ExitLens;
 #[cfg(test)]
-use crate::scalar_accumulator::ScalarAccumulator;
+use crate::learning::scalar_accumulator::ScalarAccumulator;
 use crate::encoding::thought_encoder::IncrementalBundle;
 
 /// Rolling window capacity for self-assessment.

@@ -10,9 +10,7 @@ pub fn to_f64(v: &Vector) -> Vec<f64> {
 
 pub mod types;
 pub mod indicator_bank;
-pub mod window_sampler;
-pub mod scalar_accumulator;
-pub mod engram_gate;
+pub mod learning;
 pub mod simulation;
 pub mod encoding;
 pub mod vocab;

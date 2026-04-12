@@ -14,7 +14,7 @@ use crate::types::enums::{Direction, Outcome};
 use crate::simulation;
 use crate::types::newtypes::Price;
 use crate::paper_entry::PaperEntry;
-use crate::scalar_accumulator::ScalarAccumulator;
+use crate::learning::scalar_accumulator::ScalarAccumulator;
 
 /// Accumulated history for a runner paper. Created when a paper signals Grace.
 /// Stores per-candle data for deferred batch training of the exit observer.
