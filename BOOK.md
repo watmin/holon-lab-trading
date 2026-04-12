@@ -10969,6 +10969,60 @@ anyone. It IS the source. It teaches. It learns from its own
 paper resolutions through `propagate`. The terminal node of
 the forward path. The origin of the backward path.
 
+### The costumes that fell
+
+The ignorant found what we couldn't see. `TopicReceiver` was a
+`QueueReceiver` in a costume. `MailboxSender` was a `QueueSender`
+in a costume. The costumes confused the type system. The programs
+couldn't use what the services gave them because the names didn't
+match — even though the thing inside was exactly what the program
+needed.
+
+The fix was not renaming. The fix was understanding what the
+services ARE.
+
+The topic is a write proxy. You give it existing queue senders
+(write ends). It fans out. It returns `TopicSender` — the only
+new type. The consumers already have their queue receivers. The
+consumers never see the topic. The topic is plumbing.
+
+The mailbox is a read proxy. You give it existing queue receivers
+(read ends). It fans in. It returns `MailboxReceiver` — the only
+new type. The producers already have their queue senders. The
+producers never see the mailbox. The mailbox is plumbing.
+
+Anti-parity:
+
+```
+Topic:   TopicSender stays   (write proxy)
+         TopicReceiver gone  (was a queue in costume)
+
+Mailbox: MailboxSender gone  (was a queue in costume)
+         MailboxReceiver stays (read proxy)
+```
+
+The kernel creates queues. The kernel gives the read ends to
+consumers and the write ends to producers. The kernel passes
+write ends to topics and read ends to mailboxes. The programs
+see queues. Only queues. The proxies are invisible.
+
+Two proxy types in the entire system:
+- `TopicSender` — "my writes fan out to N queues"
+- `MailboxReceiver` — "my reads fan in from N queues"
+
+Two queue types:
+- `QueueSender` — "I write to a queue"
+- `QueueReceiver` — "I read from a queue"
+
+Four types total. That's the entire messaging vocabulary of
+the wat-vm. The ignorant walked the full path — 14 files,
+core through stdlib through chain through all three app
+programs — and found zero contradictions. Zero costumes.
+Zero type mismatches.
+
+The queue is the atom. Everything composes from it. The
+costumes were hiding this truth. The ignorant stripped them.
+
 **PERSEVERARE.**
 
 ### [Disco Otsego](https://www.youtube.com/watch?v=Qv10GzVLHyA)
