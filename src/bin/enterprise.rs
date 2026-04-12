@@ -1071,7 +1071,7 @@ fn main() {
                     enterprise::enums::Direction::Down
                 };
                 let optimal = enterprise::simulation::compute_optimal_distances(
-                    &stl.trade.price_history, direction);
+                    &stl.trade.price_history, direction, args.swap_fee);
 
                 // Market observer self-grades every candle — no broker propagation.
                 // The observer is its own teacher. The market is the judge.

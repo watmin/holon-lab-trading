@@ -68,7 +68,7 @@ impl Enterprise {
             };
 
             // Compute optimal distances from trade's price history
-            let optimal = compute_optimal_distances(&t.price_history, direction);
+            let optimal = compute_optimal_distances(&t.price_history, direction, 0.0035);
 
             // Propagate to the post
             if post_idx < self.posts.len() {

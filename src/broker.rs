@@ -252,10 +252,10 @@ impl Broker {
                 // Force-resolve the runner at current price
                 paper.resolved = true;
                 let optimal = simulation::compute_optimal_distances(
-                    &paper.price_history, paper.prediction,
+                    &paper.price_history, paper.prediction, self.swap_fee,
                 );
                 let exit_batch = if let Some(history) = self.runner_histories.remove(&paper.paper_id) {
-                    compute_exit_batch(&history, paper.prediction)
+                    compute_exit_batch(&history, paper.prediction, self.swap_fee)
                 } else {
                     Vec::new()
                 };
@@ -377,7 +377,7 @@ impl Broker {
                 } else {
                     // Runner finished — compute exit batch from accumulated history
                     let exit_batch = if let Some(history) = self.runner_histories.remove(&paper.paper_id) {
-                        compute_exit_batch(&history, paper.prediction)
+                        compute_exit_batch(&history, paper.prediction, self.swap_fee)
                     } else {
                         Vec::new()
                     };
@@ -535,6 +535,7 @@ fn approximate_optimal_distances(
 fn compute_exit_batch(
     history: &RunnerHistory,
     prediction: Direction,
+    swap_fee: f64,
 ) -> Vec<(Vector, Distances, f64)> {
     let n = history.prices.len();
     if n == 0 {
@@ -543,7 +544,7 @@ fn compute_exit_batch(
 
     // Compute the optimal stop for the whole runner — one simulation call.
     // The stop is a property of the full trade, not per-candle.
-    let runner_optimal = simulation::compute_optimal_distances(&history.prices, prediction);
+    let runner_optimal = simulation::compute_optimal_distances(&history.prices, prediction, swap_fee);
     let optimal_stop = runner_optimal.stop;
 
     // Suffix extremum pass — O(n)

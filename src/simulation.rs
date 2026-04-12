@@ -78,16 +78,22 @@ pub fn simulate_stop(prices: &[f64], distance: f64) -> f64 {
 }
 
 /// Sweep candidate distances, evaluate each via simulate_fn, return
-/// the distance that produces the maximum residue.
+/// the distance that produces the maximum NET residue (after fees).
 /// Candidates: 0.5% to 10% in 0.5% increments (20 candidates).
-pub fn best_distance(prices: &[f64], simulate_fn: fn(&[f64], f64) -> f64) -> f64 {
+/// swap_fee: per-swap fee as a fraction (e.g. 0.0035 = 35bps).
+/// Net residue = gross_residue - entry_fee - exit_fee.
+pub fn best_distance(prices: &[f64], simulate_fn: fn(&[f64], f64) -> f64, swap_fee: f64) -> f64 {
     use rayon::prelude::*;
     (0..20)
         .into_par_iter()
         .map(|i| {
             let d = (i + 1) as f64 * 0.005;
-            let residue = simulate_fn(prices, d);
-            (d, residue)
+            let gross = simulate_fn(prices, d);
+            // Net: subtract entry fee + exit fee (as fractions of entry)
+            let entry_fee = swap_fee;
+            let exit_fee = (1.0 + gross) * swap_fee;
+            let net = gross - entry_fee - exit_fee;
+            (d, net)
         })
         .reduce(
             || (0.005, f64::NEG_INFINITY),
@@ -97,17 +103,18 @@ pub fn best_distance(prices: &[f64], simulate_fn: fn(&[f64], f64) -> f64) -> f64
 }
 
 /// Compute optimal trail and stop distances for a price history.
+/// Fee-aware: optimizes for NET residue after entry + exit swap fees.
 ///
 /// For Direction::Down, the price history is inverted (1/price) so the same
 /// trailing-stop logic applies symmetrically.
-pub fn compute_optimal_distances(price_history: &[f64], direction: Direction) -> Distances {
+pub fn compute_optimal_distances(price_history: &[f64], direction: Direction, swap_fee: f64) -> Distances {
     let oriented: Vec<f64> = match direction {
         Direction::Up => price_history.to_vec(),
         Direction::Down => price_history.iter().map(|&p| 1.0 / p).collect(),
     };
 
-    let trail = best_distance(&oriented, simulate_trail);
-    let stop = best_distance(&oriented, simulate_stop);
+    let trail = best_distance(&oriented, simulate_trail, swap_fee);
+    let stop = best_distance(&oriented, simulate_stop, swap_fee);
 
     Distances::new(trail, stop)
 }
@@ -172,7 +179,7 @@ mod tests {
         // Steady rise -- larger distance means trail never fires, all distances
         // produce the same residue (last price). best_distance returns a valid candidate.
         let prices: Vec<f64> = (0..50).map(|i| 100.0 + i as f64 * 0.5).collect();
-        let d = best_distance(&prices, simulate_trail);
+        let d = best_distance(&prices, simulate_trail, 0.0);
         // Should be a valid candidate in [0.005, 0.100]
         assert!(d >= 0.005 && d <= 0.100, "got {}", d);
     }
@@ -181,7 +188,7 @@ mod tests {
     fn test_compute_optimal_distances_up() {
         // Rising prices
         let prices: Vec<f64> = (0..100).map(|i| 100.0 + i as f64 * 0.3).collect();
-        let dist = compute_optimal_distances(&prices, Direction::Up);
+        let dist = compute_optimal_distances(&prices, Direction::Up, 0.0035);
         assert!(dist.trail > 0.0 && dist.trail <= 0.10);
         assert!(dist.stop > 0.0 && dist.stop <= 0.10);
     }
@@ -190,7 +197,7 @@ mod tests {
     fn test_compute_optimal_distances_down_inverts() {
         // Falling prices -- Down inverts them
         let prices: Vec<f64> = (0..100).map(|i| 100.0 - i as f64 * 0.3).collect();
-        let dist = compute_optimal_distances(&prices, Direction::Down);
+        let dist = compute_optimal_distances(&prices, Direction::Down, 0.0035);
         // After inversion, it looks like rising prices
         assert!(dist.trail > 0.0 && dist.trail <= 0.10);
         assert!(dist.stop > 0.0 && dist.stop <= 0.10);
