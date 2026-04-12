@@ -717,7 +717,8 @@ fn main() {
                         holon::kernel::vector::Vector, enterprise::enums::Direction,
                         Option<enterprise::distances::Distances>, f64,
                         enterprise::enums::Side, f64, enterprise::enums::Prediction,
-                        enterprise::thought_encoder::ThoughtAST, enterprise::thought_encoder::ThoughtAST);
+                        enterprise::vocab::broker::input::BrokerMarketInput,
+                        enterprise::vocab::broker::input::BrokerExitInput);
     type BrokerOutput = (enterprise::proposal::Proposal, Vec<enterprise::broker::Resolution>, Vec<enterprise::broker::Resolution>);
     type BrokerLearn = (holon::kernel::vector::Vector, holon::kernel::vector::Vector,
                         holon::kernel::vector::Vector,
@@ -851,7 +852,7 @@ fn main() {
 
             let handle = std::thread::spawn(move || {
                 let mut candle_count = 0usize;
-                while let Ok((composed, market_thought, exit_thought, prediction, reckoner_dists, price, side, edge, pred, market_ast, exit_ast)) = in_rx.recv() {
+                while let Ok((composed, market_thought, exit_thought, prediction, reckoner_dists, price, side, edge, pred, market_input, exit_input)) = in_rx.recv() {
                     candle_count += 1;
                     // Drain all learn signals. No cap.
                     while let Ok((thought, market_thought, exit_thought_learn, outcome, weight, direction, optimal)) = blearn_rx.try_recv() {
@@ -863,28 +864,15 @@ fn main() {
 
                     // Proposal 029 Phase 3: Broker extracts from both stages' anomalies
                     // instead of bundling raw 10,000D vectors.
+                    // Typed inputs enforce correct AST-anomaly pairing at compile time.
                     let dims = brk_ctx.dims;
                     let noise_floor = 5.0 / (dims as f64).sqrt();
 
-                    // Extract market facts from the market anomaly
-                    let market_facts = enterprise::thought_encoder::collect_facts(&market_ast);
-                    let market_extracted = enterprise::thought_encoder::extract(
-                        &market_thought, &market_facts, &brk_ctx.thought_encoder);
-                    let market_present: Vec<enterprise::thought_encoder::ThoughtAST> = market_extracted
-                        .into_iter()
-                        .filter(|(_, cos)| cos.abs() > noise_floor)
-                        .map(|(ast, _)| ast)
-                        .collect();
+                    // Extract market facts from the market anomaly (typed)
+                    let market_present = market_input.extract_facts(&brk_ctx.thought_encoder, noise_floor);
 
-                    // Extract exit facts from the exit anomaly
-                    let exit_facts = enterprise::thought_encoder::collect_facts(&exit_ast);
-                    let exit_extracted = enterprise::thought_encoder::extract(
-                        &exit_thought, &exit_facts, &brk_ctx.thought_encoder);
-                    let exit_present: Vec<enterprise::thought_encoder::ThoughtAST> = exit_extracted
-                        .into_iter()
-                        .filter(|(_, cos)| cos.abs() > noise_floor)
-                        .map(|(ast, _)| ast)
-                        .collect();
+                    // Extract exit facts from the exit anomaly (typed)
+                    let exit_present = exit_input.extract_facts(&brk_ctx.thought_encoder, noise_floor);
 
                     // Broker's own self-assessment facts
                     let grace_rate = if broker.trade_count > 0 {
@@ -1202,10 +1190,18 @@ fn main() {
         // Proposal 029 Phase 1 Change 4: pass exit ANOMALY (not raw exit vec)
         // Proposal 029 Phase 3: pass market_ast and exit_ast for extraction
         for (slot_idx, mi, _ei, composed, dists, side, edge, pred, direction) in grid_values {
+            let market_input = enterprise::vocab::broker::input::BrokerMarketInput {
+                ast: market_asts[mi].clone(),
+                anomaly: market_thoughts[mi].clone(),
+            };
+            let exit_input = enterprise::vocab::broker::input::BrokerExitInput {
+                ast: exit_asts[slot_idx].clone(),
+                anomaly: exit_anomalies[slot_idx].clone(),
+            };
             let _ = pipes.broker_in_txs[slot_idx].send((
                 composed, market_thoughts[mi].clone(), exit_anomalies[slot_idx].clone(), direction,
                 dists, price, side, edge, pred,
-                market_asts[mi].clone(), exit_asts[slot_idx].clone()));
+                market_input, exit_input));
         }
 
         // Collect from broker pipes — bounded(1), all 24 produce
