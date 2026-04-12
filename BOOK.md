@@ -11230,40 +11230,32 @@ another `--stream`. No code changes.
 
 ```scheme
 (define (vm streams max-candles)
-  (let* ((console-handles console-driver) (console (length streams))
-         (pipelines
-           (map (lambda (stream ch)
-             (list
-               :source (first stream)
-               :target (second stream)
-               :stream (open-candle-stream (third stream)
-                         (first stream) (second stream))
-               :bank (new-indicator-bank)
-               :console ch
-               :count 0))
-             streams console-handles)))
+  (let* ((console-handles console-driver) (console (length streams)))
 
-    (let loop ()
-      (let ((any-alive false))
-        (for-each (lambda (p)
-          (match (next (:stream p))
-            ((some ohlcv)
-             (set! any-alive true)
-             (let ((candle (tick (:bank p) ohlcv)))
-               (set! (:count p) (+ (:count p) 1))
-               (when (= 0 (mod (:count p) 500))
-                 (out (:console p)
-                   (format "~a/~a candle ~a: close=~a"
-                     (:source p) (:target p)
-                     (:count p) (:close candle))))))
-            (none)))
-          pipelines)
+    ;; Each pipeline is independent. Own stream. Own bank.
+    ;; Own count. Own limit. No coordination between streams.
+    (for-each (lambda (stream ch)
+      (let ((source (first stream))
+            (target (second stream))
+            (path   (third stream))
+            (bank   (new-indicator-bank))
+            (stream (open-candle-stream path source target)))
 
-        (let ((total (sum (map :count pipelines))))
-          (if (and any-alive (< total max-candles))
-            (loop)
-            total))))
+        ;; The fold. count is a value, not a place.
+        (let loop ((count 0))
+          (if (>= count max-candles)
+            count                         ;; break — limit reached
+            (match (next stream)
+              ((some ohlcv)
+               (let ((candle (tick bank ohlcv)))
+                 (when (= 0 (mod count 500))
+                   (out ch (format "~a/~a candle ~a: close=~a"
+                             source target count (:close candle))))
+                 (loop (+ count 1))))     ;; continue — count flows
+              (none count))))))           ;; break — stream exhausted
+      streams console-handles)
 
+    ;; Shutdown
     (drop console-handles)
     (join console-driver)))
 ```
@@ -11272,7 +11264,10 @@ The vm reads candles and discards them. No observers. No brokers.
 No cache. No database. Just the fold, the indicator bank, and
 the console. The first heartbeat. The architecture starts honest
 from the first line — no `println!`, only console handles. No
-hardcoded assets, only `--stream` flags.
+hardcoded assets, only `--stream` flags. `--max-candles` is
+per-stream — each pipeline owns its limit. No coordination.
+The count is a value passed through the recursion, not a place.
+The break is returning the count instead of recursing.
 
 The Ohlcv carries the asset pair. The stream is attributed —
 the user declares what they feed the machine. The indicator
