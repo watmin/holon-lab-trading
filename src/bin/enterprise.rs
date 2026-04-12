@@ -884,7 +884,7 @@ fn main() {
             let handle = std::thread::spawn(move || {
                 let mut candle_count = 0usize;
                 let mut broker_scales = std::collections::HashMap::new();
-                while let Ok((composed, market_thought, exit_thought, prediction, reckoner_dists, price, side, edge, pred, market_input, exit_input, exit_grace_rate, exit_avg_residue, market_edge, atr_ratio, market_raw_thought, exit_raw_thought, market_raw_ast, exit_raw_ast)) = in_rx.recv() {
+                while let Ok((composed, market_thought, exit_thought, prediction, reckoner_dists, price, side, edge, pred, market_input, exit_input, exit_grace_rate, exit_avg_residue, market_edge, atr_ratio, market_raw_thought, exit_raw_thought, _market_raw_ast, _exit_raw_ast)) = in_rx.recv() {
                     candle_count += 1;
                     // Drain all learn signals. No cap.
                     while let Ok((thought, market_thought, exit_thought_learn, outcome, weight, direction, optimal)) = blearn_rx.try_recv() {
@@ -894,19 +894,10 @@ fn main() {
                     // Broker owns the distance cascade: reckoner → accumulator → default
                     let dists = broker.cascade_distances(reckoner_dists);
 
-                    // Proposal 029 Phase 3: Broker extracts from both stages' anomalies
-                    // instead of bundling raw 10,000D vectors.
-                    // Typed inputs enforce correct AST-anomaly pairing at compile time.
-                    let dims = brk_ctx.dims;
-                    let noise_floor = 5.0 / (dims as f64).sqrt();
-
-                    // Extract market facts from the market anomaly (typed)
-                    let market_present = market_input.extract_facts(
-                        |ast| brk_enc.encode(ast, &brk_ctx.thought_encoder), noise_floor);
-
-                    // Extract exit facts from the exit anomaly (typed)
-                    let exit_present = exit_input.extract_facts(
-                        |ast| brk_enc.encode(ast, &brk_ctx.thought_encoder), noise_floor);
+                    // The broker binds whole foreign vectors — no extraction needed.
+                    // The ASTs are on the pipe for logging/diagnostics if needed.
+                    let _market_input = market_input;  // retained for protocol — AST available
+                    let _exit_input = exit_input;       // retained for protocol — AST available
 
                     // Proposal 030: Encode leaf observer opinions as scalar facts.
                     // Market: signed conviction (direction × magnitude), conviction, edge.
@@ -951,56 +942,46 @@ fn main() {
                         &mut broker_scales,
                     );
 
-                    // Broker's full thought: opinions + extracted market + extracted exit + self-assessment + derived
+                    // Broker's full thought: opinions + bound whole vectors + self + derived.
+                    // Each foreign thought is bound as ONE component — the entire vector
+                    // rotated into its own region by bind(atom(source), vec).
+                    // No extraction. No decomposition. No capacity pressure.
+                    // The vector carries the meaning. The bind separates the namespaces.
+                    let market_anomaly_atom = brk_enc.encode(
+                        &enterprise::thought_encoder::ThoughtAST::Atom("market-anomaly".into()),
+                        &brk_ctx.thought_encoder);
+                    let market_raw_atom = brk_enc.encode(
+                        &enterprise::thought_encoder::ThoughtAST::Atom("market-raw".into()),
+                        &brk_ctx.thought_encoder);
+                    let exit_anomaly_atom = brk_enc.encode(
+                        &enterprise::thought_encoder::ThoughtAST::Atom("exit-anomaly".into()),
+                        &brk_ctx.thought_encoder);
+                    let exit_raw_atom = brk_enc.encode(
+                        &enterprise::thought_encoder::ThoughtAST::Atom("exit-raw".into()),
+                        &brk_ctx.thought_encoder);
+
+                    let bound_market_anomaly = holon::kernel::primitives::Primitives::bind(&market_anomaly_atom, &market_thought);
+                    let bound_market_raw = holon::kernel::primitives::Primitives::bind(&market_raw_atom, &market_raw_thought);
+                    let bound_exit_anomaly = holon::kernel::primitives::Primitives::bind(&exit_anomaly_atom, &exit_thought);
+                    let bound_exit_raw = holon::kernel::primitives::Primitives::bind(&exit_raw_atom, &exit_raw_thought);
+
                     let mut all_facts = market_opinions;
                     all_facts.extend(exit_opinions);
-                    // Extract from market raw (everything the market encoded)
-                    let market_raw_input = enterprise::vocab::broker::input::BrokerMarketInput {
-                        ast: market_raw_ast.clone(),
-                        anomaly: market_raw_thought.clone(),
-                    };
-                    let market_raw_present = market_raw_input.extract_facts(
-                        |ast| brk_enc.encode(ast, &brk_ctx.thought_encoder), noise_floor);
-
-                    // Extract from exit raw (everything the exit encoded)
-                    let exit_raw_input = enterprise::vocab::broker::input::BrokerExitInput {
-                        ast: exit_raw_ast.clone(),
-                        anomaly: exit_raw_thought.clone(),
-                    };
-                    let exit_raw_present = exit_raw_input.extract_facts(
-                        |ast| brk_enc.encode(ast, &brk_ctx.thought_encoder), noise_floor);
-
-                    // Attribution: wrap foreign facts in their source.
-                    // bind(atom("market"), fact) rotates the fact into a different
-                    // region of space. No collision with the consumer's own facts.
-                    for fact in market_present {
-                        all_facts.push(enterprise::thought_encoder::ThoughtAST::Bind(
-                            Box::new(enterprise::thought_encoder::ThoughtAST::Atom("market".into())),
-                            Box::new(fact)));
-                    }
-                    for fact in market_raw_present {
-                        all_facts.push(enterprise::thought_encoder::ThoughtAST::Bind(
-                            Box::new(enterprise::thought_encoder::ThoughtAST::Atom("market-raw".into())),
-                            Box::new(fact)));
-                    }
-                    for fact in exit_present {
-                        all_facts.push(enterprise::thought_encoder::ThoughtAST::Bind(
-                            Box::new(enterprise::thought_encoder::ThoughtAST::Atom("exit".into())),
-                            Box::new(fact)));
-                    }
-                    for fact in exit_raw_present {
-                        all_facts.push(enterprise::thought_encoder::ThoughtAST::Bind(
-                            Box::new(enterprise::thought_encoder::ThoughtAST::Atom("exit-raw".into())),
-                            Box::new(fact)));
-                    }
                     all_facts.extend(self_facts);
                     all_facts.extend(derived_facts);
-                    let broker_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(all_facts);
-                    let broker_fact_count = match &broker_bundle {
-                        enterprise::thought_encoder::ThoughtAST::Bundle(v) => v.len(),
-                        _ => 1,
-                    };
-                    let broker_thought = brk_enc.encode(&broker_bundle, &brk_ctx.thought_encoder);
+                    // Encode the scalar facts (opinions + self + derived) as one AST bundle
+                    let broker_scalar_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(all_facts.clone());
+                    let broker_fact_count = all_facts.len() + 4; // scalar facts + 4 bound whole vectors
+                    let scalar_vec = brk_enc.encode(&broker_scalar_bundle, &brk_ctx.thought_encoder);
+
+                    // Bundle: scalar facts + 4 bound whole foreign vectors
+                    let broker_thought = holon::kernel::primitives::Primitives::bundle(&[
+                        &scalar_vec,
+                        &bound_market_anomaly,
+                        &bound_market_raw,
+                        &bound_exit_anomaly,
+                        &bound_exit_raw,
+                    ]);
 
                     broker.propose(&broker_thought);
 
@@ -1043,7 +1024,8 @@ fn main() {
                             resolved_count: broker.reckoner.resolved_count(),
                             proto_cos,
                             fact_count: broker_fact_count,
-                            thought_ast: broker_bundle.to_edn(),
+                            thought_ast: format!("{}\n;; + bind(market-anomaly, vec)\n;; + bind(market-raw, vec)\n;; + bind(exit-anomaly, vec)\n;; + bind(exit-raw, vec)",
+                                broker_scalar_bundle.to_edn()),
                         });
                     }
 
