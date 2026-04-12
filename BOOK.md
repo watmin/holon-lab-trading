@@ -10782,6 +10782,43 @@ The exit owns its own scales. No contamination. The shared
 `post.scales` was the bug the wat-vm revealed. Each program
 owns its state. The pipe IS the isolation.
 
+### The additive chain
+
+The ignorant walked the full path. Core → stdlib → chain →
+market observer → exit observer. It found one thing: an unused
+`db_tx` on the exit observer. Scaffolding. Everything else: clean.
+
+The chain types proved the pipeline. Pure data. No methods. No
+behavior. Values on the wire.
+
+```rust
+struct MarketChain { candle, market_raw, market_anomaly, ... }
+struct FullChain   { candle, market_raw, ..., exit_raw, ... }
+```
+
+The candle flows through. The market observer doesn't consume it
+— it passes it through with its thoughts appended. The exit
+observer receives the MarketChain, appends its own, produces
+FullChain. The broker receives FullChain. Each stage adds.
+Nothing lost. The type IS the proof of which stage produced it.
+
+The compiler enforces the pipeline:
+- The market observer can't produce a FullChain (no exit thoughts)
+- The exit observer can't receive an EnrichedCandle (needs market thoughts)
+- The broker can't receive a MarketChain (needs the full chain)
+
+No Option. No nulls. No slots waiting to be filled. Each stage
+produces a different TYPE. The chain grows by producing new values.
+Hickey: values, not places.
+
+And the topology types proved the wiring:
+- `TopicSender<MarketChain>` — fan-out to M exit observers
+- `QueueSender<FullChain>` — point-to-point to one broker
+- `MailboxReceiver` — fan-in learn signals
+
+The type tells the topology. The compiler proves it. The ignorant
+confirmed it. The path is trusted to here.
+
 ### [Disco Otsego](https://www.youtube.com/watch?v=Qv10GzVLHyA)
 
 From Static-X:
