@@ -197,7 +197,7 @@ impl Broker {
             return dists;
         }
 
-        let se = crate::post::ctx_scalar_encoder_placeholder();
+        let se = crate::orchestration::post::ctx_scalar_encoder_placeholder();
 
         // Tier 2: scalar accumulators (global per-pair)
         let trail = if self.scalar_accums.len() > 0 && self.scalar_accums[0].count > 0 {

@@ -6,8 +6,8 @@
 
 use holon::kernel::vector::Vector;
 
-use crate::post::Post;
-use crate::treasury::Treasury;
+use crate::orchestration::post::Post;
+use crate::orchestration::treasury::Treasury;
 
 #[cfg(test)]
 use std::collections::HashMap;

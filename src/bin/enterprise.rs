@@ -19,12 +19,12 @@ use enterprise::domain::exit_observer::ExitObserver;
 use enterprise::indicator_bank::IndicatorBank;
 use enterprise::types::log_entry::LogEntry;
 use enterprise::domain::market_observer::MarketObserver;
-use enterprise::post::Post;
+use enterprise::orchestration::post::Post;
 use enterprise::types::raw_candle::{Asset, RawCandle};
 use enterprise::learning::scalar_accumulator::ScalarAccumulator;
 use enterprise::types::newtypes::{Amount, Price};
-use enterprise::treasury::Treasury;
-use enterprise::enterprise::Enterprise;
+use enterprise::orchestration::treasury::Treasury;
+use enterprise::orchestration::enterprise::Enterprise;
 use enterprise::learning::window_sampler::WindowSampler;
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -349,7 +349,7 @@ fn init_ledger(path: &str) -> Connection {
     conn
 }
 
-fn register_brokers(conn: &Connection, post: &enterprise::post::Post) {
+fn register_brokers(conn: &Connection, post: &enterprise::orchestration::post::Post) {
     let mut stmt = conn
         .prepare("INSERT INTO brokers (slot_idx, market_lens, exit_lens) VALUES (?1, ?2, ?3)")
         .expect("failed to prepare broker insert");
@@ -457,7 +457,7 @@ fn build_enterprise(args: &Args) -> (Enterprise, Ctx) {
         let mut registration_misses = Vec::new();
         let mut reg_scales = HashMap::new();
         for lens in MARKET_LENSES {
-            let facts = enterprise::post::market_lens_facts(lens, &default_candle, &window, &mut reg_scales);
+            let facts = enterprise::orchestration::post::market_lens_facts(lens, &default_candle, &window, &mut reg_scales);
             for fact in &facts {
                 let prefixed = enterprise::encoding::thought_encoder::ThoughtAST::Linear {
                     name: format!("m:{}", fact.name()),
@@ -832,7 +832,7 @@ fn main() {
                     let full_len = window.len();
                     let start = if full_len > ws { full_len - ws } else { 0 };
                     let sliced: Vec<enterprise::types::candle::Candle> = window[start..].to_vec();
-                    let facts = enterprise::post::market_lens_facts(&lens, &candle, &sliced, &mut obs_scales);
+                    let facts = enterprise::orchestration::post::market_lens_facts(&lens, &candle, &sliced, &mut obs_scales);
                     let bundle_ast = enterprise::encoding::thought_encoder::ThoughtAST::Bundle(facts);
 
                     // Cache pipe: check → compute → notify (all in one call)
@@ -899,7 +899,7 @@ fn main() {
                     // Drain all learn signals. No cap.
                     while let Ok((thought, market_thought, exit_thought_learn, outcome, weight, direction, optimal)) = blearn_rx.try_recv() {
                         broker.propagate(&thought, &market_thought, &exit_thought_learn, outcome, weight, direction, &optimal,
-                            enterprise::post::ctx_scalar_encoder_placeholder());
+                            enterprise::orchestration::post::ctx_scalar_encoder_placeholder());
                     }
                     // Broker owns the distance cascade: reckoner → accumulator → default
                     let dists = broker.cascade_distances(reckoner_dists);
@@ -1174,9 +1174,9 @@ fn main() {
         // Phase A: Collect exit facts per lens (sequential — scales are mutable).
         let exit_facts_per_lens: Vec<Vec<enterprise::encoding::thought_encoder::ThoughtAST>> = (0..m)
             .map(|ei| {
-                let mut facts = enterprise::post::exit_lens_facts(
+                let mut facts = enterprise::orchestration::post::exit_lens_facts(
                     &post.exit_observers[ei].lens, &enriched, &mut post.scales);
-                let self_facts = enterprise::post::exit_self_assessment_facts(
+                let self_facts = enterprise::orchestration::post::exit_self_assessment_facts(
                     post.exit_observers[ei].grace_rate,
                     post.exit_observers[ei].avg_residue,
                     &mut post.scales,
@@ -1289,9 +1289,9 @@ fn main() {
                 // Tier 1 only — reckoner distances on exit ANOMALY.
                 let reckoner_dists = exit_observers[ei].reckoner_distances(&exit_anomalies[slot_idx]);
 
-                let side = enterprise::post::derive_side(&market_predictions[mi]);
+                let side = enterprise::orchestration::post::derive_side(&market_predictions[mi]);
                 let edge = 0.0_f64; // Broker computes edge on its thread
-                let pred = enterprise::post::prediction_convert(&market_predictions[mi]);
+                let pred = enterprise::orchestration::post::prediction_convert(&market_predictions[mi]);
 
                 // Derive direction from prediction for paper registration
                 let direction = if market_predictions[mi].direction.map_or(true, |d| d.index() == 0) {

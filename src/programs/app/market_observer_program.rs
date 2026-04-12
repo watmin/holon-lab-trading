@@ -15,7 +15,7 @@ use crate::types::candle::Candle;
 use crate::types::enums::Direction;
 use crate::types::log_entry::LogEntry;
 use crate::domain::market_observer::MarketObserver;
-use crate::post::market_lens_facts;
+use crate::orchestration::post::market_lens_facts;
 use crate::programs::chain::MarketChain;
 use crate::programs::stdlib::cache::CacheHandle;
 use crate::programs::stdlib::console::ConsoleHandle;
