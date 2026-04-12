@@ -883,10 +883,12 @@ fn main() {
                     let noise_floor = 5.0 / (dims as f64).sqrt();
 
                     // Extract market facts from the market anomaly (typed)
-                    let market_present = market_input.extract_facts(&brk_ctx.thought_encoder, noise_floor);
+                    let (market_present, market_misses) = market_input.extract_facts(&brk_ctx.thought_encoder, noise_floor);
+                    for (ast, v) in market_misses { brk_enc.set(ast, v); }
 
                     // Extract exit facts from the exit anomaly (typed)
-                    let exit_present = exit_input.extract_facts(&brk_ctx.thought_encoder, noise_floor);
+                    let (exit_present, exit_misses) = exit_input.extract_facts(&brk_ctx.thought_encoder, noise_floor);
+                    for (ast, v) in exit_misses { brk_enc.set(ast, v); }
 
                     // Proposal 030: Encode leaf observer opinions as scalar facts.
                     // Market: signed conviction (direction × magnitude), conviction, edge.
@@ -1154,8 +1156,11 @@ fn main() {
 
             // Proposal 029: extract from ONE market observer's anomaly
             let facts = enterprise::thought_encoder::collect_facts(&market_asts[mi]);
-            let extracted = enterprise::thought_encoder::extract(
+            let (extracted, extract_misses) = enterprise::thought_encoder::extract(
                 &market_thoughts[mi], &facts, &ctx_ref.thought_encoder);
+            for (ast, v) in extract_misses {
+                grid_handles[ei].set(ast, v);
+            }
             // Filter above noise floor, keep original ThoughtASTs
             let market_facts: Vec<enterprise::thought_encoder::ThoughtAST> = extracted
                 .into_iter()

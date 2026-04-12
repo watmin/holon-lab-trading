@@ -23,27 +23,31 @@ pub struct BrokerExitInput {
 
 impl BrokerMarketInput {
     /// Extract the facts present in the market anomaly above the noise floor.
-    pub fn extract_facts(&self, encoder: &ThoughtEncoder, noise_floor: f64) -> Vec<ThoughtAST> {
+    /// Returns (present_facts, cache_misses) — caller must propagate misses to cache.
+    pub fn extract_facts(&self, encoder: &ThoughtEncoder, noise_floor: f64) -> (Vec<ThoughtAST>, Vec<(ThoughtAST, holon::kernel::vector::Vector)>) {
         let facts = collect_facts(&self.ast);
-        let extracted = extract(&self.anomaly, &facts, encoder);
-        extracted
+        let (extracted, misses) = extract(&self.anomaly, &facts, encoder);
+        let present = extracted
             .into_iter()
             .filter(|(_, cos)| cos.abs() > noise_floor)
             .map(|(ast, _)| ast)
-            .collect()
+            .collect();
+        (present, misses)
     }
 }
 
 impl BrokerExitInput {
     /// Extract the facts present in the exit anomaly above the noise floor.
-    pub fn extract_facts(&self, encoder: &ThoughtEncoder, noise_floor: f64) -> Vec<ThoughtAST> {
+    /// Returns (present_facts, cache_misses) — caller must propagate misses to cache.
+    pub fn extract_facts(&self, encoder: &ThoughtEncoder, noise_floor: f64) -> (Vec<ThoughtAST>, Vec<(ThoughtAST, holon::kernel::vector::Vector)>) {
         let facts = collect_facts(&self.ast);
-        let extracted = extract(&self.anomaly, &facts, encoder);
-        extracted
+        let (extracted, misses) = extract(&self.anomaly, &facts, encoder);
+        let present = extracted
             .into_iter()
             .filter(|(_, cos)| cos.abs() > noise_floor)
             .map(|(ast, _)| ast)
-            .collect()
+            .collect();
+        (present, misses)
     }
 }
 
@@ -79,7 +83,7 @@ mod tests {
             anomaly,
         };
 
-        let extracted = input.extract_facts(&encoder, 0.0);
+        let (extracted, _misses) = input.extract_facts(&encoder, 0.0);
         // All three facts should be present (self-cosine is high)
         assert_eq!(extracted.len(), 3);
     }
@@ -101,7 +105,7 @@ mod tests {
         };
 
         // With a very high noise floor, nothing should pass
-        let extracted = input.extract_facts(&encoder, 0.99);
+        let (extracted, _misses) = input.extract_facts(&encoder, 0.99);
         assert!(extracted.is_empty());
     }
 
@@ -121,7 +125,7 @@ mod tests {
             anomaly,
         };
 
-        let extracted = input.extract_facts(&encoder, 0.0);
+        let (extracted, _misses) = input.extract_facts(&encoder, 0.0);
         assert_eq!(extracted.len(), 2);
     }
 }
