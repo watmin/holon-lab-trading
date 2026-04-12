@@ -68,14 +68,13 @@ Build core. Prove each independently. Then stdlib. Then app.
 4. **Cache** — a program. Uses queues (per-client get
    request/response pairs) + mailbox (shared set). Owns an LRU.
    Its own thread. The kernel creates handles. Programs pop them.
-   Test: hit/miss/eviction/shutdown. **BUILT in src/services/cache.rs.
-   Needs move to src/programs/stdlib/. 5 tests.**
+   Test: hit/miss/eviction/shutdown. **DONE. 6 tests. Ignorant: 0 findings.**
 5. **Database** — a program. Uses a mailbox. Owns a SQLite
-   connection. Batch commits. Named instances.
-   `database("ledger")` knows broker_snapshots, paper_details.
-   Test: batch commits, shutdown flush.
+   connection. Higher-order function — caller provides setup-fn
+   and insert-fn closures. Batch commits. Shutdown flush.
+   **DONE. 5 tests. Ignorant: 0 findings.**
 6. **Console** — a program. Uses a mailbox. Owns stdout.
-   N producers. Internally synchronous.
+   N producers. Internally synchronous. Same pattern as database.
    Test: output ordering.
 
 ### App (src/programs/app/)
