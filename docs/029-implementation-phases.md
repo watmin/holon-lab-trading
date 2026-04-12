@@ -44,14 +44,14 @@ Observers: regime 73.9%, momentum 69.6%, generalist 63.2%
 - [x] 22 integration tests proving struct `forms()` matches original function output
 - [x] `cargo build --release` clean — 267 tests pass
 
-## Phase 3: Broker extraction (FUTURE)
+## Phase 3: Broker extraction (COMPLETE)
 
-- [ ] Broker receives `(exit-ast, exit-anomaly)` pair alongside market pair
-- [ ] Broker extracts from BOTH stages independently
-- [ ] Broker's full thought: `broker-self + extract(market) + extract(exit)`
+- [x] Broker receives `(exit-ast, exit-anomaly)` pair alongside market pair
+- [x] Broker extracts from BOTH stages independently
+- [x] Broker's full thought: `broker-self + extract(market) + extract(exit)`
 - [ ] Broker typed struct declares which forms it reads from each stage
 - [ ] Compiler enforces the contract — broker can't read forms it didn't declare
-- [ ] The broker stops bundling raw 10,000D vectors — reads scalar presences instead
+- [x] The broker stops bundling raw 10,000D vectors — reads scalar presences instead
 - [ ] 10k benchmark — measure: broker Grace/Violence ratio, edge, disc_strength
 
 ## The pipeline (target state)

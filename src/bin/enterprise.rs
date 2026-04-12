@@ -716,7 +716,8 @@ fn main() {
     type BrokerInput = (holon::kernel::vector::Vector, holon::kernel::vector::Vector,
                         holon::kernel::vector::Vector, enterprise::enums::Direction,
                         Option<enterprise::distances::Distances>, f64,
-                        enterprise::enums::Side, f64, enterprise::enums::Prediction);
+                        enterprise::enums::Side, f64, enterprise::enums::Prediction,
+                        enterprise::thought_encoder::ThoughtAST, enterprise::thought_encoder::ThoughtAST);
     type BrokerOutput = (enterprise::proposal::Proposal, Vec<enterprise::broker::Resolution>, Vec<enterprise::broker::Resolution>);
     type BrokerLearn = (holon::kernel::vector::Vector, holon::kernel::vector::Vector,
                         holon::kernel::vector::Vector,
@@ -850,7 +851,7 @@ fn main() {
 
             let handle = std::thread::spawn(move || {
                 let mut candle_count = 0usize;
-                while let Ok((composed, market_thought, exit_thought, prediction, reckoner_dists, price, side, edge, pred)) = in_rx.recv() {
+                while let Ok((composed, market_thought, exit_thought, prediction, reckoner_dists, price, side, edge, pred, market_ast, exit_ast)) = in_rx.recv() {
                     candle_count += 1;
                     // Drain all learn signals. No cap.
                     while let Ok((thought, market_thought, exit_thought_learn, outcome, weight, direction, optimal)) = blearn_rx.try_recv() {
@@ -860,7 +861,32 @@ fn main() {
                     // Broker owns the distance cascade: reckoner → accumulator → default
                     let dists = broker.cascade_distances(reckoner_dists);
 
-                    // Encode self-assessment facts and bundle with composed thought
+                    // Proposal 029 Phase 3: Broker extracts from both stages' anomalies
+                    // instead of bundling raw 10,000D vectors.
+                    let dims = brk_ctx.dims;
+                    let noise_floor = 5.0 / (dims as f64).sqrt();
+
+                    // Extract market facts from the market anomaly
+                    let market_facts = enterprise::thought_encoder::collect_facts(&market_ast);
+                    let market_extracted = enterprise::thought_encoder::extract(
+                        &market_thought, &market_facts, &brk_ctx.thought_encoder);
+                    let market_present: Vec<enterprise::thought_encoder::ThoughtAST> = market_extracted
+                        .into_iter()
+                        .filter(|(_, cos)| cos.abs() > noise_floor)
+                        .map(|(ast, _)| ast)
+                        .collect();
+
+                    // Extract exit facts from the exit anomaly
+                    let exit_facts = enterprise::thought_encoder::collect_facts(&exit_ast);
+                    let exit_extracted = enterprise::thought_encoder::extract(
+                        &exit_thought, &exit_facts, &brk_ctx.thought_encoder);
+                    let exit_present: Vec<enterprise::thought_encoder::ThoughtAST> = exit_extracted
+                        .into_iter()
+                        .filter(|(_, cos)| cos.abs() > noise_floor)
+                        .map(|(ast, _)| ast)
+                        .collect();
+
+                    // Broker's own self-assessment facts
                     let grace_rate = if broker.trade_count > 0 {
                         broker.cumulative_grace / (broker.cumulative_grace + broker.cumulative_violence).max(1e-10)
                     } else { 0.0 };
@@ -873,24 +899,24 @@ fn main() {
                         broker.resolution_count.saturating_sub(broker.reckoner.recalib_count() * recalib),
                         broker.avg_excursion,
                     );
-                    let enriched = if self_facts.is_empty() {
-                        composed.clone()
-                    } else {
-                        let self_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(self_facts);
-                        let self_vec = match brk_enc.get(&self_bundle) {
-                            Some(cached) => cached,
-                            None => {
-                                let (vec, misses) = brk_ctx.thought_encoder.encode(&self_bundle);
-                                for (ast, v) in misses {
-                                    brk_enc.set(ast, v);
-                                }
-                                vec
+
+                    // Broker's full thought: extracted market + extracted exit + self-assessment
+                    let mut all_facts = market_present;
+                    all_facts.extend(exit_present);
+                    all_facts.extend(self_facts);
+                    let broker_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(all_facts);
+                    let broker_thought = match brk_enc.get(&broker_bundle) {
+                        Some(cached) => cached,
+                        None => {
+                            let (vec, misses) = brk_ctx.thought_encoder.encode(&broker_bundle);
+                            for (ast, v) in misses {
+                                brk_enc.set(ast, v);
                             }
-                        };
-                        holon::kernel::primitives::Primitives::bundle(&[&composed, &self_vec])
+                            vec
+                        }
                     };
 
-                    broker.propose(&enriched);
+                    broker.propose(&broker_thought);
 
                     // The gate: only register papers when the broker has conviction.
                     // Cold-start: curve not valid → edge=0.0 → register freely (learn).
@@ -1089,7 +1115,9 @@ fn main() {
 
         // Phase 1: Compute N×M exit anomalies. Sequential — noise subspace is mutable.
         // exit_anomalies[slot_idx] = anomaly for (mi, ei).
+        // exit_asts[slot_idx] = the ThoughtAST for (mi, ei) — needed by broker Phase 3.
         let mut exit_anomalies: Vec<holon::kernel::vector::Vector> = Vec::with_capacity(n * m);
+        let mut exit_asts: Vec<enterprise::thought_encoder::ThoughtAST> = Vec::with_capacity(n * m);
         for slot_idx in 0..(n * m) {
             let mi = slot_idx / m;
             let ei = slot_idx % m;
@@ -1117,6 +1145,7 @@ fn main() {
 
             // Encode the combined bundle
             let exit_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(exit_facts);
+            exit_asts.push(exit_bundle.clone());
             let exit_raw = match grid_handles[slot_idx].get(&exit_bundle) {
                 Some(cached) => cached,
                 None => {
@@ -1171,10 +1200,12 @@ fn main() {
 
         // Send to broker pipes — bounded(1), each broker gets its input
         // Proposal 029 Phase 1 Change 4: pass exit ANOMALY (not raw exit vec)
+        // Proposal 029 Phase 3: pass market_ast and exit_ast for extraction
         for (slot_idx, mi, _ei, composed, dists, side, edge, pred, direction) in grid_values {
             let _ = pipes.broker_in_txs[slot_idx].send((
                 composed, market_thoughts[mi].clone(), exit_anomalies[slot_idx].clone(), direction,
-                dists, price, side, edge, pred));
+                dists, price, side, edge, pred,
+                market_asts[mi].clone(), exit_asts[slot_idx].clone()));
         }
 
         // Collect from broker pipes — bounded(1), all 24 produce
