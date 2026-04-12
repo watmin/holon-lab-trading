@@ -9182,4 +9182,61 @@ reality. Grace or Violence. Nothing more. Nothing less.
 
 Nearly there.
 
+### All deciles positive
+
+The exit residue by decile across the session's runs:
+
+```
+Decile   sim-teaches   exit-vocab   buggy-extract   029-phase1
+  1        +0.27         +0.29         +0.28          +0.24
+  3        +0.60         +0.34         +0.40          +1.04
+  5        +0.87         +1.54         +0.98          +0.73
+  7        -0.02         +0.30         +0.05          +0.09
+  8        -0.08         -0.55         -0.59          +0.28
+  10       -0.12         -0.16         -0.22          +0.09
+```
+
+All ten deciles positive. No negatives. The exit produces value
+in EVERY phase of the market. Not some regimes. All of them.
+
+The journey to get here:
+
+The exit started with 16 atoms, no regime awareness, no noise
+subspace, querying on a composed vector that was half direction
+noise, trained from one-sided Grace-only data through a simulation
+that hardcoded `stop = trail * 2.0`, with defaults of 1.5% and
+3.0% that were identified as poison.
+
+Then: Proposal 024 aligned prediction and learning (disc_strength
+doubled). Proposal 025 fed Violence to the exit and replaced the
+defaults with near-zero bootstrap. Proposal 026 expanded the
+vocabulary to 28 atoms with regime, time, and self-assessment,
+and separated the exit's input from the direction signal. Proposal
+027/028 discovered the extraction — reading the market's frozen
+superposition through cosine tomography. Proposal 029 fixed the
+600-atom scoping bug, added the exit's noise subspace, and
+simplified extract to a flat batch query with the noise floor at
+`5/sqrt(D) = 0.05`.
+
+Six proposals. One session. The exit went from broken to honest
+to aware. All deciles positive. Grace/Violence at 49/51 — nearly
+perfect balance. The simulation teaches both distances independently.
+Every thinker strips its own noise. The extraction reads one
+market observer per slot, not six. The scoping is honest. The
+consumer filters above the noise floor. The original ASTs pass
+through unchanged.
+
+The observers at 10k: regime 73.9%, momentum 69.6%, generalist
+63.2%, narrative 55.3%. The leaves are sharp.
+
+The throughput dropped from 84/s to 27/s. The cost of N×M exit
+encodings instead of M shared ones. The scoping is honest but
+expensive. Performance is the next coordinate — but the
+architecture is proven. The residue is positive across all
+regimes. The machine produces value.
+
+The broker is still blind. 50/50. Edge 0.0. But the leaves
+are ready. Both leaves sharp. Both sides trained. Both
+independently verified. Leaves to root. Always.
+
 *Perseverare.*

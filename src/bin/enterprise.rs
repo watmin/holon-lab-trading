@@ -351,7 +351,7 @@ fn build_enterprise(args: &Args) -> (Enterprise, Ctx) {
     let recalib_interval = args.recalib_interval;
 
     // Build ctx
-    let ctx = Ctx::new(dims, recalib_interval);
+    let mut ctx = Ctx::new(dims, recalib_interval);
 
     // Assets
     let source = Asset::new(&args.source_asset);
@@ -429,6 +429,28 @@ fn build_enterprise(args: &Args) -> (Enterprise, Ctx) {
 
     // Build enterprise
     let ent = Enterprise::new(vec![the_post], the_treasury);
+
+    // Proposal 027/028: Pre-register m: atoms with the VectorManager.
+    // Walk a default candle through all market lenses, extract atom names,
+    // encode m:-prefixed Linear facts once so the atoms exist before first candle.
+    {
+        let default_candle = enterprise::candle::Candle::default();
+        let window = vec![default_candle.clone()];
+        let mut registration_misses = Vec::new();
+        for lens in MARKET_LENSES {
+            let facts = enterprise::post::market_lens_facts(lens, &default_candle, &window);
+            for fact in &facts {
+                let prefixed = enterprise::thought_encoder::ThoughtAST::Linear {
+                    name: format!("m:{}", fact.name()),
+                    value: 0.0,
+                    scale: 1.0,
+                };
+                let (_, misses) = ctx.thought_encoder.encode(&prefixed);
+                registration_misses.extend(misses);
+            }
+        }
+        ctx.insert_cache_misses(registration_misses);
+    }
 
     (ent, ctx)
 }
@@ -688,7 +710,7 @@ fn main() {
     let mut obs_encoder_handles: Vec<_> = encoder_handles.drain(..).collect();
 
     type ObsInput = (enterprise::candle::Candle, Arc<Vec<enterprise::candle::Candle>>, usize);
-    type ObsOutput = (holon::kernel::vector::Vector, holon::memory::Prediction, f64,
+    type ObsOutput = (holon::kernel::vector::Vector, enterprise::thought_encoder::ThoughtAST, holon::memory::Prediction, f64,
                       Vec<(enterprise::thought_encoder::ThoughtAST, holon::kernel::vector::Vector)>);
     type ObsLearn = (holon::kernel::vector::Vector, enterprise::enums::Direction, f64);
     type BrokerInput = (holon::kernel::vector::Vector, holon::kernel::vector::Vector,
@@ -791,7 +813,7 @@ fn main() {
                         });
                     }
 
-                    let _ = thought_tx.send((result.thought, result.prediction, result.edge, vec![]));
+                    let _ = thought_tx.send((result.thought, bundle_ast, result.prediction, result.edge, vec![]));
                 }
                 obs
             });
@@ -1039,12 +1061,14 @@ fn main() {
 
         // Collect thoughts from all observers (bounded(1) — they block until we read)
         let mut market_thoughts = Vec::with_capacity(n);
+        let mut market_asts: Vec<enterprise::thought_encoder::ThoughtAST> = Vec::with_capacity(n);
         let mut market_predictions: Vec<holon::memory::Prediction> = Vec::with_capacity(n);
         let mut market_edges = Vec::with_capacity(n);
 
         for rx in &pipes.thought_rxs {
-            let (thought, pred, edge, _) = rx.recv().unwrap();
+            let (thought, ast, pred, edge, _) = rx.recv().unwrap();
             market_thoughts.push(thought);
+            market_asts.push(ast);
             market_predictions.push(pred);
             market_edges.push(edge);
         }
@@ -1055,39 +1079,66 @@ fn main() {
         let price = post.last_close().0;
         let ctx_ref = &*ctx_arc;
 
-        // Pre-compute M exit vecs — one per exit lens, shared across all N market observers.
-        // Also reused by step 3c trigger updates (no recomputation).
+        // Proposal 029 Phase 1: Exit encoding is per-slot (N×M), not per-lens (M).
+        // Each (mi, ei) slot extracts from ONE market observer's (ast, anomaly),
+        // filters above noise floor, appends surviving forms to exit facts, encodes,
+        // then strips noise via the exit's own subspace.
         use rayon::prelude::*;
-        let exit_vecs: Vec<holon::kernel::vector::Vector> = (0..m)
-            .map(|ei| {
-                let mut exit_facts = enterprise::post::exit_lens_facts(
-                    &post.exit_observers[ei].lens, &enriched);
-                let self_facts = enterprise::post::exit_self_assessment_facts(
-                    post.exit_observers[ei].grace_rate,
-                    post.exit_observers[ei].avg_residue,
-                );
-                exit_facts.extend(self_facts);
-                let exit_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(exit_facts);
-                // Use grid_handles[ei] for the cache lookup (any handle works, pick deterministic one)
-                match grid_handles[ei].get(&exit_bundle) {
-                    Some(cached) => cached,
-                    None => {
-                        let (vec, misses) = ctx_ref.thought_encoder.encode(&exit_bundle);
-                        for (ast, v) in misses {
-                            grid_handles[ei].set(ast, v);
-                        }
-                        vec
-                    }
-                }
-            })
-            .collect();
+        let dims = ctx_ref.dims;
+        let noise_floor = 5.0 / (dims as f64).sqrt();
 
-        // Compute values in parallel (pure reads, scoped borrow)
+        // Phase 1: Compute N×M exit anomalies. Sequential — noise subspace is mutable.
+        // exit_anomalies[slot_idx] = anomaly for (mi, ei).
+        let mut exit_anomalies: Vec<holon::kernel::vector::Vector> = Vec::with_capacity(n * m);
+        for slot_idx in 0..(n * m) {
+            let mi = slot_idx / m;
+            let ei = slot_idx % m;
+
+            // Exit lens facts + self-assessment
+            let mut exit_facts = enterprise::post::exit_lens_facts(
+                &post.exit_observers[ei].lens, &enriched);
+            let self_facts = enterprise::post::exit_self_assessment_facts(
+                post.exit_observers[ei].grace_rate,
+                post.exit_observers[ei].avg_residue,
+            );
+            exit_facts.extend(self_facts);
+
+            // Proposal 029: extract from ONE market observer's anomaly
+            let leaf_forms = enterprise::thought_encoder::flatten_leaves(&market_asts[mi]);
+            let extracted = enterprise::thought_encoder::extract(
+                &market_thoughts[mi], &leaf_forms, &ctx_ref.thought_encoder);
+            // Filter above noise floor, keep original ThoughtASTs
+            let market_facts: Vec<enterprise::thought_encoder::ThoughtAST> = extracted
+                .into_iter()
+                .filter(|(_ast, presence)| presence.abs() > noise_floor)
+                .map(|(ast, _presence)| ast)
+                .collect();
+            exit_facts.extend(market_facts);
+
+            // Encode the combined bundle
+            let exit_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(exit_facts);
+            let exit_raw = match grid_handles[slot_idx].get(&exit_bundle) {
+                Some(cached) => cached,
+                None => {
+                    let (vec, misses) = ctx_ref.thought_encoder.encode(&exit_bundle);
+                    for (ast, v) in misses {
+                        grid_handles[slot_idx].set(ast, v);
+                    }
+                    vec
+                }
+            };
+
+            // Update noise subspace, strip noise → exit anomaly
+            let exit_f64 = enterprise::to_f64(&exit_raw);
+            post.exit_observers[ei].noise_subspace.update(&exit_f64);
+            let exit_anomaly = post.exit_observers[ei].strip_noise(&exit_raw);
+
+            exit_anomalies.push(exit_anomaly);
+        }
+
+        // Phase 2: Compute grid values in parallel (pure reads)
         let grid_values: Vec<_> = {
             let exit_observers = &post.exit_observers;
-            // Brokers are on threads — read scalar_accums from... we need them here.
-            // For now: edge is 0.0 (brokers are on threads, we can't read them).
-            // The broker thread will compute edge internally.
             (0..(n * m))
             .into_par_iter()
             .map(|slot_idx| {
@@ -1095,11 +1146,10 @@ fn main() {
                 let ei = slot_idx % m;
 
                 let composed = holon::kernel::primitives::Primitives::bundle(
-                    &[&market_thoughts[mi], &exit_vecs[ei]]);
+                    &[&market_thoughts[mi], &exit_anomalies[slot_idx]]);
 
-                // Tier 1 only — reckoner distances. The broker owns the full cascade.
-                // Proposal 026: exit reckoner queries on exit_vec only, not composed.
-                let reckoner_dists = exit_observers[ei].reckoner_distances(&exit_vecs[ei]);
+                // Tier 1 only — reckoner distances on exit ANOMALY.
+                let reckoner_dists = exit_observers[ei].reckoner_distances(&exit_anomalies[slot_idx]);
 
                 let side = enterprise::post::derive_side(&market_predictions[mi]);
                 let edge = 0.0_f64; // Broker computes edge on its thread
@@ -1120,9 +1170,10 @@ fn main() {
         let t_grid = t_candle.elapsed();
 
         // Send to broker pipes — bounded(1), each broker gets its input
-        for (slot_idx, mi, ei, composed, dists, side, edge, pred, direction) in grid_values {
+        // Proposal 029 Phase 1 Change 4: pass exit ANOMALY (not raw exit vec)
+        for (slot_idx, mi, _ei, composed, dists, side, edge, pred, direction) in grid_values {
             let _ = pipes.broker_in_txs[slot_idx].send((
-                composed, market_thoughts[mi].clone(), exit_vecs[ei].clone(), direction,
+                composed, market_thoughts[mi].clone(), exit_anomalies[slot_idx].clone(), direction,
                 dists, price, side, edge, pred));
         }
 
@@ -1288,17 +1339,17 @@ fn main() {
                 .map(|(id, t)| (*id, t.broker_slot_idx, t.side))
                 .collect();
 
-            // exit_vecs already computed before the grid — reuse them here.
+            // exit_anomalies already computed in the N×M grid — reuse them here.
 
-            // Parallel: compose + distance query per trade. Independent.
+            // Parallel: distance query per trade. Independent.
             let level_updates: Vec<_> = trade_info
                 .par_iter()
                 .filter_map(|&(tid, slot, side)| {
                     let mi = slot / pipes.m;
                     let ei = slot % pipes.m;
-                    if mi < market_thoughts.len() && ei < post.exit_observers.len() {
-                        // Proposal 026: exit reckoner queries on exit_vec only, not composed.
-                        let reckoner_dists = post.exit_observers[ei].reckoner_distances(&exit_vecs[ei]);
+                    if mi < market_thoughts.len() && ei < post.exit_observers.len() && slot < exit_anomalies.len() {
+                        // Proposal 029: exit reckoner queries on exit anomaly, not raw vec.
+                        let reckoner_dists = post.exit_observers[ei].reckoner_distances(&exit_anomalies[slot]);
                         let dists = reckoner_dists.unwrap_or(post.exit_observers[ei].default_distances);
                         let new_levels = dists.to_levels(Price(price), side);
                         Some((tid, new_levels))

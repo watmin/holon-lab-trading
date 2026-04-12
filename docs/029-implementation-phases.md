@@ -3,22 +3,37 @@
 Backlog for the typed thought pipeline. Each phase proves itself
 before the next begins.
 
-## Phase 1: Flat extract + scoping + exit noise subspace (IN PROGRESS)
+## Phase 1: Flat extract + scoping + exit noise subspace (COMPLETE)
 
 - [x] Flat `extract(vec, forms, encoder) → Vec<(ThoughtAST, f64)>` — no hierarchy, no threshold in primitive
 - [x] `flatten_leaves(ast) → Vec<ThoughtAST>` helper — collect leaf forms from an AST tree
-- [ ] Scoping fix: extraction moves INTO N×M grid, each slot extracts from ONE market observer
-- [ ] Remove pre-computed shared exit vecs — each (mi, ei) slot encodes its own
-- [ ] Consumer-side noise floor filter: `5.0 / (dims as f64).sqrt()` = 0.05 at D=10,000
-- [ ] Pass ORIGINAL ThoughtASTs through the filter, not presence-transformed
-- [ ] Exit observer gains `noise_subspace: OnlineSubspace::new(dims, 8)`
-- [ ] Exit observer gains `strip_noise()` method
-- [ ] Exit encoding: update noise subspace, strip, query reckoner on anomaly
-- [ ] Exit's anomaly (not raw vec) flows to broker thread as exit_thought
-- [ ] `cargo build --release` clean
-- [ ] `cargo test` all pass
-- [ ] Smoke test 500 candles
-- [ ] 10k benchmark — measure: exit residue by decile, throughput, cache hit rate
+- [x] Scoping fix: extraction moves INTO N×M grid, each slot extracts from ONE market observer
+- [x] Remove pre-computed shared exit vecs — each (mi, ei) slot encodes its own
+- [x] Consumer-side noise floor filter: `5.0 / (dims as f64).sqrt()` = 0.05 at D=10,000
+- [x] Pass ORIGINAL ThoughtASTs through the filter, not presence-transformed
+- [x] Exit observer gains `noise_subspace: OnlineSubspace::new(dims, 8)`
+- [x] Exit observer gains `strip_noise()` method
+- [x] Exit encoding: update noise subspace, strip, query reckoner on anomaly
+- [x] Exit's anomaly (not raw vec) flows to broker thread as exit_thought
+- [x] `cargo build --release` clean — 245 tests pass
+- [x] Smoke test 500 candles — no panics
+- [x] 10k benchmark — ALL DECILES POSITIVE. Grace/Violence 49/51. 27/s throughput.
+
+Results at 10k:
+```
+Decile  residue%  grace%
+  1      +0.24    65.3
+  2      +0.29    60.5
+  3      +1.04    44.4
+  4      +0.63    39.7
+  5      +0.73    48.5
+  6      +0.69    52.5
+  7      +0.09    36.7
+  8      +0.28    43.5
+  9      +0.26    44.9
+  10     +0.09    43.4
+```
+Observers: regime 73.9%, momentum 69.6%, generalist 63.2%
 
 ## Phase 2: Typed vocabulary structs (NEXT SESSION)
 

@@ -12,6 +12,7 @@ use std::collections::HashMap;
 
 use holon::kernel::primitives::Primitives;
 use holon::kernel::scalar::{ScalarEncoder, ScalarMode};
+use holon::kernel::similarity::Similarity;
 use holon::kernel::vector::Vector;
 use holon::kernel::vector_manager::VectorManager;
 
@@ -37,6 +38,21 @@ impl ThoughtAST {
 
     pub fn circular(name: impl Into<String>, value: f64, period: f64) -> Self {
         ThoughtAST::Circular { name: name.into(), value, period }
+    }
+
+    /// Extract the human-readable name of this AST node.
+    /// Atoms, Linear, Log, Circular have explicit names.
+    /// Bind returns "bind(<left>:<right>)".
+    /// Bundle returns "bundle(<n>)" where n is the child count.
+    pub fn name(&self) -> String {
+        match self {
+            ThoughtAST::Atom(name) => name.clone(),
+            ThoughtAST::Linear { name, .. } => name.clone(),
+            ThoughtAST::Log { name, .. } => name.clone(),
+            ThoughtAST::Circular { name, .. } => name.clone(),
+            ThoughtAST::Bind(left, right) => format!("bind({}:{})", left.name(), right.name()),
+            ThoughtAST::Bundle(children) => format!("bundle({})", children.len()),
+        }
     }
 }
 
@@ -339,6 +355,30 @@ impl IncrementalBundle {
     }
 }
 
+/// Flat extraction — query each form's presence in a thought vector.
+/// No hierarchy. No threshold. The consumer filters.
+///
+/// Returns Vec<(ThoughtAST, f64)> — each form and its cosine presence.
+pub fn extract(thought_vec: &Vector, forms: &[ThoughtAST], encoder: &ThoughtEncoder) -> Vec<(ThoughtAST, f64)> {
+    forms.iter().map(|form| {
+        let (form_vec, _) = encoder.encode(form);
+        let presence = Similarity::cosine(&form_vec, thought_vec);
+        (form.clone(), presence)
+    }).collect()
+}
+
+/// Recursively collect all non-Bundle leaf nodes from an AST tree.
+/// Bundle nodes are expanded; all other nodes (Atom, Linear, Log, Circular, Bind)
+/// are returned as-is.
+pub fn flatten_leaves(ast: &ThoughtAST) -> Vec<ThoughtAST> {
+    match ast {
+        ThoughtAST::Bundle(children) => {
+            children.iter().flat_map(flatten_leaves).collect()
+        }
+        _ => vec![ast.clone()],
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -463,5 +503,148 @@ mod tests {
         // Should still work
         let (v, _) = enc.encode(&ThoughtAST::Atom("rsi".into()));
         assert!(v.nnz() > 0);
+    }
+
+    #[test]
+    fn test_thought_ast_name() {
+        assert_eq!(ThoughtAST::Atom("rsi".into()).name(), "rsi");
+        assert_eq!(ThoughtAST::linear("vol", 1.0, 1.0).name(), "vol");
+        assert_eq!(ThoughtAST::log("atr", 2.0).name(), "atr");
+        assert_eq!(ThoughtAST::circular("hour", 14.0, 24.0).name(), "hour");
+        let bind = ThoughtAST::Bind(
+            Box::new(ThoughtAST::Atom("a".into())),
+            Box::new(ThoughtAST::Atom("b".into())),
+        );
+        assert_eq!(bind.name(), "bind(a:b)");
+        let bundle = ThoughtAST::Bundle(vec![
+            ThoughtAST::Atom("x".into()),
+            ThoughtAST::Atom("y".into()),
+        ]);
+        assert_eq!(bundle.name(), "bundle(2)");
+    }
+
+    #[test]
+    fn test_extract_flat_self_cosine() {
+        let enc = make_encoder();
+        let leaf = ThoughtAST::linear("rsi", 0.7, 1.0);
+        // Encode the leaf to get a vector, use it as the thought
+        let (leaf_vec, _) = enc.encode(&leaf);
+        let results = extract(&leaf_vec, &[leaf.clone()], &enc);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].0, leaf);
+        // Self-cosine should be high (close to 1.0)
+        assert!(results[0].1 > 0.9, "self-cosine should be high, got {}", results[0].1);
+    }
+
+    #[test]
+    fn test_extract_flat_multiple_forms() {
+        let enc = make_encoder();
+        let forms = vec![
+            ThoughtAST::linear("rsi", 0.7, 1.0),
+            ThoughtAST::linear("vol", 1.5, 1.0),
+            ThoughtAST::linear("trend", 0.3, 1.0),
+        ];
+        // Bundle all forms, then extract — each form should have non-trivial presence
+        let bundle = ThoughtAST::Bundle(forms.clone());
+        let (thought_vec, _) = enc.encode(&bundle);
+        let results = extract(&thought_vec, &forms, &enc);
+        assert_eq!(results.len(), 3);
+        // Each bundled form should have positive cosine with the bundle
+        for (_ast, cos) in &results {
+            assert!(*cos > 0.0, "bundled form should have positive cosine, got {}", cos);
+        }
+    }
+
+    #[test]
+    fn test_extract_flat_unrelated_low_cosine() {
+        let enc = make_encoder();
+        let forms = vec![
+            ThoughtAST::linear("rsi", 0.7, 1.0),
+        ];
+        // Use an unrelated vector
+        let unrelated = ThoughtAST::linear("hour", 12.0, 24.0);
+        let (unrelated_vec, _) = enc.encode(&unrelated);
+        let results = extract(&unrelated_vec, &forms, &enc);
+        assert_eq!(results.len(), 1);
+        // Cosine between unrelated vectors should be near zero
+        assert!(results[0].1.abs() < 0.2, "unrelated cosine should be near zero, got {}", results[0].1);
+    }
+
+    #[test]
+    fn test_extract_flat_no_threshold() {
+        let enc = make_encoder();
+        // Extract always returns ALL forms, no filtering
+        let forms = vec![
+            ThoughtAST::linear("rsi", 0.7, 1.0),
+            ThoughtAST::linear("vol", 1.5, 1.0),
+        ];
+        let unrelated = ThoughtAST::linear("hour", 12.0, 24.0);
+        let (unrelated_vec, _) = enc.encode(&unrelated);
+        let results = extract(&unrelated_vec, &forms, &enc);
+        // Both forms returned regardless of cosine value
+        assert_eq!(results.len(), 2);
+    }
+
+    #[test]
+    fn test_extract_flat_bind_form() {
+        let enc = make_encoder();
+        let bind = ThoughtAST::Bind(
+            Box::new(ThoughtAST::Atom("rsi".into())),
+            Box::new(ThoughtAST::Atom("vol".into())),
+        );
+        let (bind_vec, _) = enc.encode(&bind);
+        let results = extract(&bind_vec, &[bind.clone()], &enc);
+        assert_eq!(results.len(), 1);
+        assert!(matches!(results[0].0, ThoughtAST::Bind(_, _)));
+        assert!(results[0].1 > 0.9);
+    }
+
+    #[test]
+    fn test_flatten_leaves_atom() {
+        let ast = ThoughtAST::Atom("rsi".into());
+        let leaves = flatten_leaves(&ast);
+        assert_eq!(leaves.len(), 1);
+        assert_eq!(leaves[0], ast);
+    }
+
+    #[test]
+    fn test_flatten_leaves_bundle() {
+        let ast = ThoughtAST::Bundle(vec![
+            ThoughtAST::linear("rsi", 0.7, 1.0),
+            ThoughtAST::log("vol", 2.0),
+            ThoughtAST::Atom("trend".into()),
+        ]);
+        let leaves = flatten_leaves(&ast);
+        assert_eq!(leaves.len(), 3);
+        assert!(!leaves.iter().any(|l| matches!(l, ThoughtAST::Bundle(_))));
+    }
+
+    #[test]
+    fn test_flatten_leaves_nested_bundles() {
+        let ast = ThoughtAST::Bundle(vec![
+            ThoughtAST::Bundle(vec![
+                ThoughtAST::linear("rsi", 0.7, 1.0),
+                ThoughtAST::linear("vol", 1.5, 1.0),
+            ]),
+            ThoughtAST::log("trend", 0.03),
+        ]);
+        let leaves = flatten_leaves(&ast);
+        assert_eq!(leaves.len(), 3);
+        // All leaves, no bundles
+        for leaf in &leaves {
+            assert!(!matches!(leaf, ThoughtAST::Bundle(_)));
+        }
+    }
+
+    #[test]
+    fn test_flatten_leaves_bind_is_leaf() {
+        let bind = ThoughtAST::Bind(
+            Box::new(ThoughtAST::Atom("a".into())),
+            Box::new(ThoughtAST::Atom("b".into())),
+        );
+        let ast = ThoughtAST::Bundle(vec![bind.clone(), ThoughtAST::Atom("c".into())]);
+        let leaves = flatten_leaves(&ast);
+        assert_eq!(leaves.len(), 2);
+        assert!(matches!(&leaves[0], ThoughtAST::Bind(_, _)));
     }
 }

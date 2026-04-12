@@ -5,7 +5,7 @@
 /// no engram gating. Quality is measured through the BROKER's curve.
 
 use holon::kernel::vector::Vector;
-use holon::memory::{ReckConfig, Reckoner};
+use holon::memory::{OnlineSubspace, ReckConfig, Reckoner};
 
 use crate::distances::Distances;
 use crate::enums::ExitLens;
@@ -26,6 +26,9 @@ pub struct ExitObserver {
     pub stop_reckoner: Reckoner,
     /// The crutches (both), returned when empty.
     pub default_distances: Distances,
+    /// Noise subspace — learns the background distribution for this exit lens.
+    /// 8 principal components. The anomaly is what the subspace cannot explain.
+    pub noise_subspace: OnlineSubspace,
     /// Incremental bundling for exit facts — optimization cache, not cognition.
     pub incremental: IncrementalBundle,
     /// Rolling window of outcomes: true=Grace, false=Violence.
@@ -68,6 +71,7 @@ impl ExitObserver {
                 },
             ),
             default_distances: Distances::new(default_trail, default_stop),
+            noise_subspace: OnlineSubspace::new(dims, 8),
             incremental: IncrementalBundle::new(dims),
             outcome_window: Vec::with_capacity(SELF_ASSESSMENT_WINDOW),
             residue_window: Vec::with_capacity(SELF_ASSESSMENT_WINDOW),
@@ -162,6 +166,14 @@ impl ExitObserver {
         if !self.residue_window.is_empty() {
             self.avg_residue = self.residue_window.iter().sum::<f64>() / self.residue_window.len() as f64;
         }
+    }
+
+    /// Return the anomalous component — what the noise subspace CANNOT explain.
+    /// Same pattern as market_observer.rs.
+    pub fn strip_noise(&self, thought: &Vector) -> Vector {
+        let thought_f64 = crate::to_f64(thought);
+        let anomalous = self.noise_subspace.anomalous_component(&thought_f64);
+        Vector::from_f64(&anomalous)
     }
 
     /// True if both reckoners have accumulated enough observations to
@@ -284,5 +296,22 @@ mod tests {
         assert!(obs.stop_reckoner.is_continuous());
         // They are separate reckoners with different names
         assert_ne!(obs.trail_reckoner.name(), obs.stop_reckoner.name());
+    }
+
+    #[test]
+    fn test_strip_noise_returns_vector() {
+        let obs = make_observer();
+        let thought = random_vector("exit_thought");
+        let stripped = obs.strip_noise(&thought);
+        assert_eq!(stripped.dimensions(), DIMS);
+    }
+
+    #[test]
+    fn test_noise_subspace_initialized() {
+        let obs = make_observer();
+        // Noise subspace exists and can process vectors
+        let thought = random_vector("test");
+        let thought_f64 = crate::to_f64(&thought);
+        let _residual = obs.noise_subspace.anomalous_component(&thought_f64);
     }
 }
