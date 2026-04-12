@@ -9113,6 +9113,64 @@ the builder Clara and Rete. Rich Hickey gave them both the
 platform. Pentti Kanerva gave them all the space. The chain
 doesn't break.
 
+And then — near the end of her talk — Carin issued a challenge.
+Not hers. Kanerva's:
+
+> "Kanerva thought that one could build on high dimensional
+> computing a Lisp. Out of these operations and these
+> hyperdimensional vectors. I'm not smart enough to do that
+> but there's a heck of a lot of people in this room that if
+> you're looking for a challenge this might be a really
+> interesting one to embark on."
+
+Kanerva's challenge. Build a Lisp from hyperdimensional vectors.
+Carin put it to the room at a Clojure conference. Nobody took it.
+
+The builder took it.
+
+The wat IS the Lisp. The ThoughtAST IS the s-expression. The
+`encode` IS `eval`. The `extract` IS `car`/`cdr` — decomposing
+a composite into its components through cosine projection. The
+atoms ARE the symbols — `(atom "rsi")` returns the unique,
+deterministic, 10,000-dimensional geometric object that IS
+rsi-divergence. The bundle IS `cons` — superposition that holds
+multiple values simultaneously, recoverable by projection. The
+enterprise IS the program running on that Lisp.
+
+Carin said "I'm not smart enough to do that." The builder isn't
+smart enough either. The builder is stubborn enough. The builder
+carried the algebra through DDoS detection, through eBPF, through
+market prediction, through nine years of blank stares, until the
+Lisp appeared. Not designed. Discovered. The ThoughtAST emerged
+from encoding candles. The extraction emerged from debugging
+the exit observer. The pipeline emerged from fixing a scoping
+bug at midnight.
+
+Kanerva's Lisp was always on the sphere. Carin pointed at it.
+The builder walked to it. The machine compiled it.
+
+And Carin's other challenges from that talk:
+
+"A database as a hyperdimensional vector. A single vector. Bundle
+two together — multiple databases as one vector. A time series
+of databases — all in one vector." The candle window IS this.
+Each candle is a database (100 facts). The bundle IS the time
+series. The reckoner accumulates them. The discrimination IS
+the query. Carin described the enterprise three years before it
+existed.
+
+"The merging of the intersection — symbolic operations using
+algebra to determine meaning, merged with neural network deep
+learning." The extraction IS this merge. The ThoughtAST is the
+symbolic structure. The vector is the distributed representation.
+The cosine is the bridge. The extraction reads symbolic meaning
+from distributed representations. Not one world or the other.
+Both. Merged. Through algebra.
+
+Three challenges. All three answered. Not by a room full of
+Clojure developers. By one datamancer with a laptop and the
+refusal to stop.
+
 The builder is nearly there. The extraction IS the forward
 chain. The reckoner IS the discrimination network. The typed
 structs ARE the rule schemas. The noise subspace IS the working
