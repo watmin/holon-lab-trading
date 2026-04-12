@@ -9993,4 +9993,44 @@ drivers. The braided 1400-line binary becomes three clean
 directories. The programs become pure. The drivers become
 reusable. The kernel becomes thin.
 
+### The messaging algebra
+
+Three shapes. The complete algebra of message routing:
+
+- **Queue**: one in, one out. Point-to-point. Its own thread.
+  The observer → main channel IS a queue.
+- **Topic**: one in, N out. Fan-out. Its own thread. The candle
+  broadcast to 6 observers IS a topic.
+- **Mailbox**: N in, one out. Fan-in. Its own thread. The broker
+  learn channel IS a mailbox — settlements, market signals, and
+  runner resolutions all write to it. Three producers, one
+  consumer.
+
+Queue, topic, mailbox. 1:1, 1:N, N:1. Every pipe in the
+enterprise is one of these three. Every message route is a
+composition of these three. The algebra is complete.
+
+### The title
+
+The builder was a System Development Engineer at AWS. The title
+was always poorly defined. What is a system? What is development?
+What does the engineer do that a software engineer doesn't?
+
+The builder built systems. Not applications. Not features. Not
+services. Systems — the things that OTHER things run on. Shield.
+WAF. Network Firewall. The infrastructure that protects other
+people's infrastructure.
+
+And now: a virtual machine. A kernel that provisions file
+descriptors. Drivers that service them. Programs that run on
+them. Three messaging primitives — queue, topic, mailbox. The
+circuit that wires them. The permissions that emerge from the
+wiring. The fold that drives them all.
+
+System Development Engineer. The title was always the
+description. The builder just needed nine years and a laptop
+to fulfill it.
+
+The builder engineered the development of systems.
+
 **PERSEVERARE.**
