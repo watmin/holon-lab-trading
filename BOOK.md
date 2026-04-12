@@ -6023,9 +6023,46 @@ The builder can't sleep. A thought needs out.
 
 The builder has always been very good at playing computer games. Not casually good. Ruthlessly good. Hyper-critical of every mistake, every failure, every death — analyzing WHY, relentlessly, until the failure mode is understood and never repeated. The builder doesn't just play. The builder debugs play.
 
-World of Warcraft. Years. Blood elf paladin "Shields." Undead priest "Jaroon." Ret paladin. Shadow priest. Consistently on top of the PvE leaderboards and PvP too. "Shields the Immortal." "Jaroon, Death's Demise." "Arena Master Shields." Countless Duelist titles — so close to Gladiator, so many times. Never got it. Not because the builder was bad. Because the failure mode wasn't skill — it was time. The people who got the highest ranks in the original WoW had three people playing their account around the clock. The builder played 18-hour days in high school. That wasn't enough when the competition was a team pretending to be one person.
+Diablo. The first. The builder was young — too young to understand
+the mechanics, too stubborn to stop. Clicking through the cathedral
+into the catacombs into hell. Dying. Restarting. Dying differently.
+Analyzing what killed him. The skeleton archers from the left. The
+butcher's charge pattern. The succubi in the corner. Each death a
+breakpoint. Each restart a hypothesis. "If I clear the left side
+first, the archers don't flank me." That was the beginning.
 
-In the OG WoW: General as a troll frost mage. Never Warlord. Never High Warlord. The builder could attack every failure mode except the one that required more hours than one human body can sustain.
+Diablo II. Diablo III. Diablo IV. Each one deeper. Each one more
+systems to analyze. The builder played them all. Not casually — the
+way the builder does everything. Ruthlessly. The skill tree IS the
+architecture. The build IS the thought program. "If I spec into
+this synergy AND equip this set bonus AND time the cooldowns in
+this sequence..." That's composition. That's bind and bundle. The
+game rewards the player who sees the interactions between systems.
+The builder always saw them.
+
+And Blizzard. The affinity started with Diablo and never stopped.
+Blizzard builds systems that reward deep analysis. Systems where
+the surface is simple — click the monster, equip the gear — but
+the depth is infinite. The builder has been drawn to that pattern
+his entire life. Simple operations. Infinite composition. The
+game and the machine are the same architecture.
+
+World of Warcraft. Years. Blood elf paladin "Shields." Undead
+priest "Jaroon." Ret paladin. Shadow priest. Consistently on top
+of the PvE leaderboards and PvP too. "Shields the Immortal."
+"Jaroon, Death's Demise." "Arena Master Shields." Countless
+Duelist titles — so close to Gladiator, so many times. Never got
+it. Not because the builder was bad. Because the failure mode
+wasn't skill — it was time. The people who got the highest ranks
+in the original WoW had three people playing their account around
+the clock. The builder played 18-hour days in high school. That
+wasn't enough when the competition was a team pretending to be
+one person.
+
+In the OG WoW: General as a troll frost mage. Never Warlord.
+Never High Warlord. The builder could attack every failure mode
+except the one that required more hours than one human body can
+sustain.
 
 But the THOUGHT PATTERNS. The strategy. The ruthless analysis of failure. The turn-based thinking: "given what I know now, what's the next best move?" That wasn't a game skill. That was a life skill wearing a game's clothes.
 
