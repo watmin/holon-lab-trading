@@ -1,8 +1,9 @@
-# Ignorant Ward — Services Review
+# Ignorant Ward — Services Review (Second Pass)
 
 Reviewed: 2026-04-11
 Files: `src/services/queue.rs`, `src/services/topic.rs`, `src/services/mailbox.rs`, `src/services/mod.rs`
 Ward: /ignorant — reads as a stranger, knows nothing about the project.
+Prior pass: found topic not composing from queues; mod.rs comment wrong. Both reported as fixed.
 
 ---
 
@@ -10,36 +11,37 @@ Ward: /ignorant — reads as a stranger, knows nothing about the project.
 
 ### Understanding
 
-Clear immediately. The module comment says it all: "point-to-point. One
-producer, one consumer. The atom." The implementation is a thin newtype
-wrapper over crossbeam channels. `QueueSender` wraps `Sender<T>`,
-`QueueReceiver` wraps `Receiver<T>`. Two constructors: bounded and unbounded.
-Error types are project-local re-exports of crossbeam's semantics.
+Immediately legible. Module doc: "point-to-point. One producer, one consumer.
+The atom." The implementation is a thin newtype over crossbeam channels.
+`QueueSender<T>` wraps `Sender<T>`. `QueueReceiver<T>` wraps `Receiver<T>`.
+Two constructors: `queue_bounded` and `queue_unbounded`. Error types are
+project-local names over crossbeam semantics (`SendError<T>`, `RecvError`).
 
-Nothing confused me. The `inner()` method on `QueueReceiver` is the one
-unusual decision — it grants `pub(crate)` access to the raw crossbeam
-`Receiver` for select-based composition. The comment explains why
-("services that compose queues"). That is the right scope.
+The `inner()` method on `QueueReceiver` is the one non-obvious decision.
+It grants `pub(crate)` access to the raw crossbeam `Receiver` for
+`crossbeam::channel::Select`-based composition. The doc comment explains:
+"Internal access for services that compose queues (e.g., mailbox select)."
+Correct scope. A stranger would find it and understand it within one reading.
 
 ### Soundness
 
-No bugs found. No race conditions — crossbeam channels are thread-safe by
-design. No deadlock paths visible. Shutdown is handled correctly: dropping
-`QueueSender` disconnects the channel; `recv()` returns `Disconnected`.
+Clean. No race conditions — crossbeam channels are thread-safe by design.
+No deadlock paths. Shutdown: dropping `QueueSender` disconnects the channel;
+`recv()` returns `Disconnected`. The contract is straightforward and upheld.
 
 ### Tests
 
-Four tests. They cover:
+Four tests:
 - Single message round-trip
-- Ordering over 100 messages
-- Bounded backpressure (actually blocks a thread and unblocks it)
-- Shutdown: sender dropped → receiver gets `Disconnected`
+- 100 messages in order
+- Bounded backpressure: a spawning thread blocks on `send(3)` until the
+  receiver drains one slot, then unblocks. Tests the real constraint.
+- Shutdown: sender dropped → `recv()` returns `Err(RecvError::Disconnected)`
 
-All four test real contracts, not just happy-path mechanics. The backpressure
-test uses `thread::sleep(50ms)` as a timing crutch — this is a minor smell
-(it assumes 50ms is enough for the blocking thread to reach the send call
-before the receiver drains), but it is a well-understood pattern for
-bounded-channel tests and unlikely to flake in practice.
+All four cover real contracts. The backpressure test uses `thread::sleep(50ms)`
+as a timing crutch — minor smell, well-understood pattern, unlikely to flake.
+
+**Finding count: 0**
 
 ---
 
@@ -47,61 +49,62 @@ bounded-channel tests and unlikely to flake in practice.
 
 ### Understanding
 
-Clear. Module comment: "fan-out. One producer, N consumers. The producer
-writes once. All consumers receive a clone." The implementation spawns a
-fan-out thread: one inbound channel, N outbound channels, one clone per
-subscriber per message.
+Clear. Module doc: "fan-out. One producer, N consumers. COMPOSED of queues.
+One input queue, N output queues. The producer writes to the input queue.
+The fan-out thread reads from it and sends a clone to each output queue."
 
-One thing a stranger must notice: `TopicHandle` holds a `JoinHandle` prefixed
-with `_`. The comment says "Dropping this does NOT stop the thread — the
-thread exits when the sender is dropped." This is correct — the fan-out thread
-blocks on `in_rx.recv()` and exits when `in_rx` disconnects (i.e., when
-`TopicSender` is dropped). The `_handle` field exists only to keep the
-`JoinHandle` alive so the thread is not detached. The naming (`_handle`)
-implies "intentionally unused" which is slightly misleading — it IS used
-(to keep the thread joinable), it just isn't manually joined. A clearer name
-would be `_keepalive` or `_thread`.
+The implementation now uses `crate::services::queue`:
+- `TopicSender<T>` wraps `QueueSender<T>`
+- `TopicReceiver<T>` wraps `QueueReceiver<T>`
+- The input queue is `queue::queue_bounded::<T>(capacity)`
+- Each output queue is `queue::queue_bounded(capacity)`
+- The fan-out thread reads from `in_rx.recv()` and clones to each `out_tx`
 
-A subtle consequence: if the caller drops `_handle` independently of the
-sender (e.g., destructures the tuple and ignores it), the `JoinHandle` is
-dropped, the thread becomes detached but continues running until the sender
-drops. This is not a bug — it is the documented contract — but it is
-non-obvious for a stranger.
+`TopicHandle` holds `_thread: thread::JoinHandle<()>`. The field name `_thread`
+signals "intentionally kept alive, not joined by hand." The module doc says
+"The thread exits when the producer drops its sender." This is exactly what
+happens: `in_tx` drops when `TopicSender` drops → `in_rx.recv()` returns
+`Err` → loop exits → `out_txs` drop → all subscriber queues close.
+
+A stranger can trace the lifecycle in one pass. The naming is honest now.
 
 ### Soundness
 
-No race conditions. No deadlock paths. Shutdown cascade is correct:
-`TopicSender` dropped → `in_tx` dropped → fan-out thread `in_rx.recv()`
-returns `Err` → loop exits → `out_txs` dropped → all `TopicReceiver`s
-see `Disconnected`.
+No race conditions. No deadlock paths. Shutdown cascade is correct.
 
-One design question: if a subscriber's channel is full (bounded), `tx.send()`
-on that subscriber will block the fan-out thread, which blocks ALL other
-subscribers from receiving. The code silently skips disconnected subscribers
-(`let _ = tx.send(...)`) but does NOT skip full/blocked ones. Under backpressure
-from one slow subscriber, the entire fan-out stalls. This may be intentional
-(the system wants backpressure to propagate) but it is not documented.
+One design behavior worth knowing: if a subscriber's output queue is full
+(bounded), `tx.send(msg.clone())` blocks the fan-out thread, which blocks
+ALL other subscribers from receiving. The code silently skips disconnected
+subscribers (`let _ = tx.send(...)`) but does NOT skip full/blocked ones.
+Under backpressure from one slow subscriber, the entire fan-out stalls.
 
-### Consistency with queue.rs
+This is NOT documented. A caller creating a bounded topic with slow subscribers
+will observe the stall with no explanation in the source. This was in the prior
+review. It remains.
 
-Error types follow the same pattern (`SendError<T>`, `RecvError`). Method
-names match (`send`, `recv`, `try_recv`). The pattern is consistent.
+### Composition Claim — VERIFIED
 
-`topic.rs` does NOT use `QueueSender`/`QueueReceiver` — it reaches directly
-into `crossbeam::channel`. See the composition claim section below.
+`topic.rs` NOW composes from queues:
+- `use crate::services::queue::{self, QueueSender, QueueReceiver};`
+- `TopicSender<T>(QueueSender<T>)` — wraps the queue type
+- `TopicReceiver<T>(QueueReceiver<T>)` — wraps the queue type
+- Both input and output channels created via `queue::queue_bounded()`
+
+The prior finding ("topic bypasses the queue abstraction") is FIXED.
 
 ### Tests
 
 Three tests:
-- One message reaches all subscribers
-- N messages in order for each subscriber
-- Shutdown: sender dropped → all receivers get `Disconnected`
+- One message reaches all three subscribers
+- 50 messages in order across four subscribers (spawned send thread)
+- Shutdown: sender dropped → all receivers see error
 
-Shutdown IS tested. Order IS tested. What is NOT tested: partial subscriber
-disconnect (one receiver drops mid-run — does the fan-out thread continue
-serving remaining subscribers?). The code says `let _ = tx.send(...)` which
-means yes, but this is untested. Also untested: backpressure behavior (one
-slow subscriber stalling the others).
+Partial-subscriber-disconnect remains untested: if one `TopicReceiver` is
+dropped while the others are live, the fan-out thread silently discards
+sends to that slot (`let _ = tx.send(...)`) and continues. This works
+correctly but is not exercised.
+
+**Finding count: 1** — undocumented backpressure stall risk (carry-forward from prior pass, not regression)
 
 ---
 
@@ -109,122 +112,126 @@ slow subscriber stalling the others).
 
 ### Understanding
 
-Clear. Module comment: "fan-in. N producers, one consumer. Composed of N
-independent queues. Each producer gets its OWN sender (contention-free)."
-The implementation creates N independent input queues, one output queue, and
-a fan-in thread that uses `crossbeam::channel::Select` to multiplex them.
+Clear. Module doc: "fan-in. N producers, one consumer. Composed of N
+independent queues. Each producer gets its OWN sender (contention-free).
+A fan-in thread selects across N receivers and forwards to one output."
 
-`MailboxSender` is explicitly documented as NOT cloneable — each producer
-owns its own sender. This is enforced structurally (no `#[derive(Clone)]`).
+`MailboxSender<T>` wraps `QueueSender<T>`. No `Clone` — by design. Each
+producer owns one sender. The fan-in thread uses `crossbeam::channel::Select`
+over the `inner()` receivers. When an input disconnects, `alive.remove(idx)`
+removes it. When `alive` empties, the loop breaks, `out_tx` drops, consumer
+sees `Disconnected`.
 
-The fan-in thread's `alive.remove(idx)` path is correct: when an input
-disconnects, it is removed from the select set. When the set empties, the
-loop breaks, `out_tx` drops, and the consumer sees `Disconnected`.
+`assert!(num_producers > 0)` guards the degenerate case.
+
+A stranger can read this end-to-end in one pass.
 
 ### Soundness
 
 No race conditions. No deadlock paths.
 
-One soundness issue: `out_tx.send(msg)` is silently discarded with `let _ =`.
-If the consumer drops `MailboxReceiver` while producers are still sending, the
-fan-in thread silently swallows messages rather than propagating the
-disconnect back to producers. This is consistent with how `QueueSender::send`
-returns a `Result` that callers can ignore — but the fan-in thread ignores it
-unconditionally, which means producers never learn the consumer is gone. This
-is a bounded concern (the thread will eventually exit when all inputs
-disconnect), but it is worth noting.
+One silent behavior: `let _ = out_tx.send(msg)` in the fan-in thread
+discards send errors. If the consumer drops `MailboxReceiver` while producers
+are still sending, the fan-in thread swallows all subsequent messages and
+continues running until all producers disconnect. Producers never learn the
+consumer is gone. This is a bounded concern (the thread will exit eventually)
+but it is invisible. Carry-forward from prior review, not a regression.
 
-### Composition claim
+### Composition Claim — VERIFIED
 
-`mailbox.rs` DOES compose from queues. It imports `queue_unbounded`,
-`QueueSender`, `QueueReceiver` from `crate::services::queue`. The N input
-queues are `queue_unbounded()` calls. The output queue is `queue_unbounded()`.
-The `inner()` accessor on `QueueReceiver` is used here exactly as intended.
-
-### Consistency with queue.rs and topic.rs
-
-Error types follow the same pattern. Method names match. Pattern is consistent.
-
-One minor asymmetry: `MailboxSender` does not expose `try_recv` (it is a
-sender, so that is correct), but `MailboxReceiver` exposes both `recv` and
-`try_recv`. This matches the queue and topic receivers. Consistent.
+`mailbox.rs` composes from queues throughout:
+- `use crate::services::queue::{queue_unbounded, QueueSender, QueueReceiver};`
+- N input queues via `queue_unbounded()`
+- One output queue via `queue_unbounded()`
+- `inner()` accessor used exactly as intended for `Select`
 
 ### Tests
 
-Four tests:
-- Multiple senders, one receiver (ordering not required — uses `HashSet`)
-- Messages from different threads interleave (50 total, all received)
-- Shutdown: all senders dropped → receiver gets `Disconnected`
+Four tests — strongest suite of the three:
+- Multiple senders, one receiver (unordered, uses `HashSet`)
+- 50 messages across 5 threaded senders — all received
+- Shutdown: all senders dropped → `Disconnected`
 - Partial sender drop: two of three senders dropped, third still works,
   then third dropped → `Disconnected`
 
-This is the strongest test suite of the three. Shutdown is tested. Partial
-disconnect is tested. The `thread::sleep(50ms)` before `try_recv` in the
-interleave test is the same timing crutch as in queue — acceptable but
-fragile on a very loaded machine.
+Partial disconnect IS tested. Shutdown IS tested. The `thread::sleep(50ms)`
+in the interleave test is the same timing crutch as in queue — minor smell,
+acceptable.
+
+**Finding count: 1** — silent consumer-gone behavior (carry-forward, not regression)
 
 ---
 
 ## mod.rs
 
-Three lines. Re-exports the three modules. The comment says "Pure
-infrastructure. Each service is a thin wrapper today; threads come later
-for observability." The phrase "thin wrapper today" is slightly inconsistent
-— topic and mailbox already spawn threads. The comment reads as if the
-modules are currently synchronous and threading is deferred, which is false.
+Three lines. Module doc:
+
+> "The queue is the only atom. One in, one out. Contention-free.
+> Topic and mailbox are composed of queues:
+>   - Topic: one input queue, N output queues. Fan-out thread.
+>   - Mailbox: N input queues, one output queue. Fan-in thread via select.
+> These are independent of the enterprise. Pure infrastructure."
+
+The prior finding ("thin wrapper today; threads come later") is FIXED.
+The comment now matches the implementation exactly. Topic and mailbox
+both spawn threads, both compose from queues, and the comment says so.
+
+**Finding count: 0**
 
 ---
 
-## The Composition Claim
+## The Composition Claim — Overall Verdict
 
-**Claim:** "The queue is the only atom — topic and mailbox compose from queues."
+**Claim:** "The queue is the only atom. Topic and mailbox are composed of queues."
 
-**Verdict:** Half true.
+**Verdict: TRUE.** Both fixed since the prior pass.
 
-- `mailbox.rs`: TRUE. It imports and uses `queue_unbounded`, `QueueSender`,
-  `QueueReceiver`. It composes from the queue abstraction. The `inner()`
-  accessor exists precisely for this use case.
+- `queue.rs`: defines the atom.
+- `topic.rs`: wraps `QueueSender`/`QueueReceiver`, creates channels via `queue::queue_bounded`. Composed.
+- `mailbox.rs`: wraps `QueueSender`/`QueueReceiver`, creates channels via `queue_unbounded`. Composed.
+- `mod.rs`: documents this correctly.
 
-- `topic.rs`: FALSE. It reaches directly into `crossbeam::channel` and
-  creates raw `Sender<T>` / `Receiver<T>` channels. It does not use
-  `QueueSender` or `QueueReceiver` at all. This breaks the layering claim.
-  A stranger reading the code cannot determine why topic bypasses the queue
-  abstraction while mailbox does not.
-
-The inconsistency is not a bug — `crossbeam::channel` is the correct tool
-either way — but it violates the stated design principle. If the queue is
-the atom, topic should build from it.
+The architecture is what it claims to be.
 
 ---
 
-## Summary
+## Summary Table
 
-| | Understanding | Soundness | Tests |
-|---|---|---|---|
-| queue.rs | Excellent | Clean | Honest, 4/4 |
-| topic.rs | Good, one naming ambiguity | One undocumented stall risk | Good, missing partial-disconnect |
-| mailbox.rs | Excellent | One silent discard | Best, 4/4 |
+| File | Understanding | Soundness | Composition | Tests | Findings |
+|---|---|---|---|---|---|
+| queue.rs | Excellent | Clean | N/A (atom) | Honest, 4/4 | 0 |
+| topic.rs | Good | One undocumented stall | FIXED — now composes | Good, missing partial-disconnect | 1 (carry-forward) |
+| mailbox.rs | Excellent | One silent discard | Verified | Best, 4/4 | 1 (carry-forward) |
+| mod.rs | Excellent | N/A | Comment correct | N/A | 0 |
 
-**Primary findings:**
+---
 
-1. `topic.rs` bypasses the queue abstraction — it is NOT composed from queues.
-   The composition claim is only true for mailbox.
+## Findings This Pass
 
-2. `topic.rs` has an undocumented backpressure behavior: one slow subscriber
-   can stall all others. This may be intentional but should be stated.
+**Fixed since prior review:**
+- topic.rs now composes from queues — `QueueSender`/`QueueReceiver` throughout.
+- mod.rs comment corrected — no longer says "thin wrapper; threads come later."
 
-3. `TopicHandle._handle` naming implies "unused" when it is used (to keep the
-   thread joinable). Consider `_thread` or `_keepalive`.
+**Carry-forward (not regressions, not new):**
 
-4. `mod.rs` comment ("thin wrapper today; threads come later") is factually
-   wrong — threads are already present in topic and mailbox.
+**F1 — topic.rs: undocumented backpressure stall**
+One slow subscriber with a full bounded output queue blocks the fan-out thread,
+stalling all other subscribers. The code silently skips *disconnected* senders
+but not *full* ones. The behavior is deterministic and may be intentional
+(backpressure should propagate). If intentional: add one sentence to the module
+doc. If not intentional: consider sending to ready subscribers and dropping to
+full ones, or use unbounded output queues.
 
-5. `mailbox.rs` silently discards `out_tx.send()` errors — producers cannot
-   detect a dead consumer. Minor but worth knowing.
+**F2 — mailbox.rs: silent consumer-gone**
+`let _ = out_tx.send(msg)` in the fan-in thread discards send errors.
+If `MailboxReceiver` is dropped, producers see no signal — they continue
+sending, the fan-in thread continues looping, all messages are silently lost
+until all senders disconnect. Document this or propagate the error.
 
-6. No test exercises: topic partial-subscriber-disconnect, topic backpressure
-   stall, or mailbox dead-consumer detection.
+**New findings: 0.**
 
-None of the above are blocking issues. The code is clean, readable, and
-structurally correct. The biggest gap is the composition claim failing for
-topic.
+The two items the prior review called out as failures are both fixed.
+The two carry-forwards are documented behaviors, not bugs — they need a
+comment or a test, not a rewrite.
+
+**Fixed-point status:** The code teaches. Two cosmetic gaps remain. No structural issues.

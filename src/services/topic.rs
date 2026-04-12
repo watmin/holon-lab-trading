@@ -64,7 +64,11 @@ pub fn topic_bounded<T: Send + Clone + 'static>(
     let handle = thread::spawn(move || {
         while let Ok(msg) = in_rx.recv() {
             for tx in &out_txs {
-                // If a subscriber disconnected, skip it.
+                // Bounded send: blocks if this subscriber's queue is full.
+                // One slow subscriber stalls all others — intentional
+                // backpressure propagation. The producer slows to match
+                // the slowest consumer. If a subscriber disconnected,
+                // the error is ignored (skipped).
                 let _ = tx.send(msg.clone());
             }
         }

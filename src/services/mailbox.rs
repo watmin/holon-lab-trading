@@ -90,6 +90,13 @@ pub fn mailbox<T: Send + 'static>(
             let idx = oper.index();
             match oper.recv(alive[idx].inner()) {
                 Ok(msg) => {
+                    // If the consumer (MailboxReceiver) dropped, the send
+                    // fails silently. Messages are discarded. Producers
+                    // receive no signal — they keep sending until they
+                    // themselves drop. This is intentional: the fan-in
+                    // thread's lifecycle is governed by its INPUTS, not
+                    // its output. When all inputs disconnect, the thread
+                    // exits and the output drops.
                     let _ = out_tx.send(msg);
                 }
                 Err(_) => {
