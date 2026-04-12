@@ -16,7 +16,7 @@ use crate::distances::Distances;
 use crate::exit_observer::ExitObserver;
 use crate::log_entry::LogEntry;
 use crate::post::{exit_lens_facts, exit_self_assessment_facts};
-use crate::programs::chain::{FullChain, MarketChain};
+use crate::programs::chain::{MarketExitChain, MarketChain};
 use crate::programs::stdlib::cache::CacheHandle;
 use crate::programs::stdlib::console::ConsoleHandle;
 use crate::scale_tracker::ScaleTracker;
@@ -42,7 +42,7 @@ pub struct ExitLearn {
 /// output_tx is a QueueSender — point-to-point to exactly one broker.
 pub struct ExitSlot {
     pub input_rx: QueueReceiver<MarketChain>,
-    pub output_tx: QueueSender<FullChain>,
+    pub output_tx: QueueSender<MarketExitChain>,
 }
 
 /// Encode with cache protocol: check -> compute -> install.
@@ -156,8 +156,8 @@ pub fn exit_observer_program(
             exit_obs.noise_subspace.update(&to_f64(&exit_raw));
             let exit_anomaly = exit_obs.strip_noise(&exit_raw);
 
-            // Send FullChain downstream.
-            let full = FullChain {
+            // Send MarketExitChain downstream.
+            let full = MarketExitChain {
                 candle: chain.candle,
                 window: chain.window,
                 encode_count: chain.encode_count,

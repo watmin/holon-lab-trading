@@ -23,7 +23,7 @@ pub struct MarketChain {
 }
 
 /// What the exit observer produces. What the broker receives.
-pub struct FullChain {
+pub struct MarketExitChain {
     pub candle: Candle,
     pub window: Arc<Vec<Candle>>,
     pub encode_count: usize,

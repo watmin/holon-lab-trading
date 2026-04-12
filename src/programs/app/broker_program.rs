@@ -1,7 +1,7 @@
 /// broker_program.rs — the broker thread body.
 /// Compiled from wat/broker-program.wat.
 ///
-/// Receives FullChains through a queue (one per exit observer slot).
+/// Receives MarketExitChains through a queue (one per exit observer slot).
 /// Registers paper trades, ticks them against price, resolves them,
 /// and teaches both its market observer and exit observer through
 /// learn handles wired at construction.
@@ -18,7 +18,7 @@ use crate::log_entry::LogEntry;
 use crate::newtypes::Price;
 use crate::programs::app::exit_observer_program::ExitLearn;
 use crate::programs::app::market_observer_program::ObsLearn;
-use crate::programs::chain::FullChain;
+use crate::programs::chain::MarketExitChain;
 use crate::programs::stdlib::console::ConsoleHandle;
 use crate::services::mailbox::MailboxSender;
 use crate::services::queue::QueueReceiver;
@@ -36,7 +36,7 @@ fn direction_from_prediction(pred: &holon::memory::Prediction) -> Direction {
 /// Run the broker program. Call this inside thread::spawn.
 /// Returns the trained Broker when the chain source disconnects.
 pub fn broker_program(
-    chain_rx: QueueReceiver<FullChain>,
+    chain_rx: QueueReceiver<MarketExitChain>,
     market_learn_tx: MailboxSender<ObsLearn>,
     exit_learn_tx: MailboxSender<ExitLearn>,
     console: ConsoleHandle,
@@ -57,7 +57,7 @@ pub fn broker_program(
         // 2. Direction from market prediction
         let direction = direction_from_prediction(&chain.market_prediction);
 
-        // 3. Distances — TODO: FullChain should carry exit_distances from the
+        // 3. Distances — TODO: MarketExitChain should carry exit_distances from the
         //    exit observer's reckoner. For now, fall back to the broker's own
         //    cascade (accumulator → default).
         let distances = broker.cascade_distances(None);
