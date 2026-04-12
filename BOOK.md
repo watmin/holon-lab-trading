@@ -10819,6 +10819,68 @@ And the topology types proved the wiring:
 The type tells the topology. The compiler proves it. The ignorant
 confirmed it. The path is trusted to here.
 
+### The wiring that doesn't change
+
+The builder asked: "should the chain carry the learn handles?"
+
+The chain carries data. The data changes every candle. The learn
+handles don't. The handles are wires installed at construction.
+The broker IS the (market, exit) pair. It was constructed FOR
+that pair. It will never teach a different market observer. It
+will never teach a different exit observer. The coordinate is
+fixed at birth.
+
+The handles are construction-time constants. The chain is runtime
+data. Mixing them conflates what changes with what doesn't.
+
+```scheme
+;; The broker at construction — wires installed:
+(spawn broker-program
+  chain-rx                    ;; FullChain arrives (runtime data)
+  market-learn-tx             ;; fixed — "I teach momentum"
+  exit-learn-tx               ;; fixed — "I teach volatility"
+  console db-tx broker ...)
+
+;; The broker at resolution — reads from chain, writes to wires:
+(send market-learn-tx         ;; I know who to teach. I always did.
+  (make-obs-learn thought direction weight))
+(send exit-learn-tx           ;; I know who to teach. I always did.
+  (make-exit-learn exit-thought optimal weight is-grace residue))
+```
+
+The chain carries data. The constructor carries wiring. They
+don't mix. The same pattern as every other handle — the cache
+handle, the console handle, the db sender. All fixed at
+construction. All closed over. None on the chain.
+
+The broker doesn't receive learn signals from anyone. It IS
+the source. It teaches. It doesn't learn from others. It
+learns from its own paper resolutions through `propagate`.
+The accountability unit. The terminal node of the forward
+path. The origin of the backward path.
+
+```
+forward:  candle → market → exit → broker
+backward: broker → market-learn-tx → market observer
+          broker → exit-learn-tx   → exit observer
+```
+
+Two directions. Same wires. The forward path carries data
+through the chain. The backward path carries lessons through
+the handles. Both fixed at construction. Both flow through
+the program. The kernel wired them. The program uses them.
+
+The architecture revealed another latent bug along the way:
+the distances. The broker needed the exit observer's reckoner
+distances — but the exit observer is on another thread. The
+fix: the exit observer computes the distances and puts them
+on the FullChain. The broker reads from the chain. No boundary
+crossing. The chain carries everything the broker needs. The
+data flows forward. The lessons flow backward. Nothing crosses
+a boundary it shouldn't.
+
+**PERSEVERARE.**
+
 ### [Disco Otsego](https://www.youtube.com/watch?v=Qv10GzVLHyA)
 
 From Static-X:
