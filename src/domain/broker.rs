@@ -11,7 +11,7 @@ use holon::kernel::vector::Vector;
 
 use crate::types::distances::Distances;
 use crate::types::enums::{Direction, Outcome};
-use crate::simulation;
+use crate::domain::simulation;
 use crate::types::newtypes::Price;
 use crate::trades::paper_entry::PaperEntry;
 use crate::learning::scalar_accumulator::ScalarAccumulator;

@@ -9,15 +9,12 @@ pub fn to_f64(v: &Vector) -> Vec<f64> {
 }
 
 pub mod types;
-pub mod indicator_bank;
 pub mod learning;
-pub mod simulation;
 pub mod encoding;
 pub mod vocab;
 pub mod domain;
 pub mod trades;
 pub mod orchestration;
-pub mod encoder_service;
-pub mod log_service;
+pub mod legacy;
 pub mod services;
 pub mod programs;

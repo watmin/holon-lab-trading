@@ -16,7 +16,7 @@ use enterprise::domain::broker::Broker;
 use enterprise::encoding::ctx::Ctx;
 use enterprise::types::enums::{ExitLens, MarketLens, ScalarEncoding};
 use enterprise::domain::exit_observer::ExitObserver;
-use enterprise::indicator_bank::IndicatorBank;
+use enterprise::domain::indicator_bank::IndicatorBank;
 use enterprise::types::log_entry::LogEntry;
 use enterprise::domain::market_observer::MarketObserver;
 use enterprise::orchestration::post::Post;
@@ -730,7 +730,7 @@ fn main() {
     // One handle for the main thread. The log service owns the SQLite connection.
     // 1 main + N observers + N*M brokers = 1 + 6 + 24 = 31 handles
     let n_log_handles = 1 + MARKET_LENSES.len() + MARKET_LENSES.len() * EXIT_LENSES.len();
-    let (log_service, mut log_handles) = enterprise::log_service::LogService::spawn(n_log_handles, ledger);
+    let (log_service, mut log_handles) = enterprise::legacy::log_service::LogService::spawn(n_log_handles, ledger);
     let log_handle = log_handles.pop().unwrap();
 
     eprintln!("\n  Walk-forward: up to {} candles...", end_idx);
@@ -750,7 +750,7 @@ fn main() {
     // Encoder handles: observers + grid + brokers + step3c
     let n_encoder_callers = n + (n * m) + (n * m) + 1;
     let (encoder_service, mut encoder_handles) =
-        enterprise::encoder_service::EncoderService::spawn(n_encoder_callers, 65536);
+        enterprise::legacy::encoder_service::EncoderService::spawn(n_encoder_callers, 65536);
     // Split handles: observers [0..n], grid [n..n+nm], brokers [n+nm..n+2nm], step3c last
     let step3c_handle = encoder_handles.pop().unwrap();
     let mut broker_encoder_handles: Vec<_> = encoder_handles.drain(n + n * m..).collect();
@@ -1085,7 +1085,7 @@ fn main() {
                 } else {
                     enterprise::types::enums::Direction::Down
                 };
-                let optimal = enterprise::simulation::compute_optimal_distances(
+                let optimal = enterprise::domain::simulation::compute_optimal_distances(
                     &stl.trade.price_history, direction, args.swap_fee);
 
                 // Market observer self-grades every candle — no broker propagation.
@@ -1204,7 +1204,7 @@ fn main() {
                     let market_thoughts_ref = &market_thoughts;
                     let market_raw_thoughts_ref = &market_raw_thoughts;
                     // Each thread gets N handles: one per mi. slot_idx = mi * m + ei.
-                    let my_handles: Vec<&enterprise::encoder_service::EncoderHandle> =
+                    let my_handles: Vec<&enterprise::legacy::encoder_service::EncoderHandle> =
                         (0..n).map(|mi| &grid_handles[mi * m + ei]).collect();
                     let encoder = &ctx_ref.thought_encoder;
 

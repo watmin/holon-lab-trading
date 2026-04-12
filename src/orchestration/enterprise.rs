@@ -18,7 +18,7 @@ use crate::types::log_entry::LogEntry;
 #[cfg(test)]
 use crate::types::newtypes::Price;
 #[cfg(test)]
-use crate::simulation::compute_optimal_distances;
+use crate::domain::simulation::compute_optimal_distances;
 
 /// The enterprise — coordination plane.
 pub struct Enterprise {
@@ -127,7 +127,7 @@ mod tests {
                 0,
                 Asset::new("USDC"),
                 Asset::new("WBTC"),
-                crate::indicator_bank::IndicatorBank::new(),
+                crate::domain::indicator_bank::IndicatorBank::new(),
                 200,
                 vec![],
                 vec![],
@@ -137,7 +137,7 @@ mod tests {
                 1,
                 Asset::new("USDC"),
                 Asset::new("WETH"),
-                crate::indicator_bank::IndicatorBank::new(),
+                crate::domain::indicator_bank::IndicatorBank::new(),
                 200,
                 vec![],
                 vec![],

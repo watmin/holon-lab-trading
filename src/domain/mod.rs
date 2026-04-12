@@ -5,3 +5,5 @@
 pub mod market_observer;
 pub mod exit_observer;
 pub mod broker;
+pub mod indicator_bank;
+pub mod simulation;

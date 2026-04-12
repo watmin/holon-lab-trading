@@ -18,7 +18,7 @@ use crate::encoding::ctx::Ctx;
 use crate::types::distances::{Distances, Levels};
 use crate::types::enums::{Direction, ExitLens, MarketLens, Outcome, Prediction, Side};
 use crate::domain::exit_observer::ExitObserver;
-use crate::indicator_bank::IndicatorBank;
+use crate::domain::indicator_bank::IndicatorBank;
 use crate::types::log_entry::LogEntry;
 use crate::domain::market_observer::MarketObserver;
 use crate::types::newtypes::{Price, TradeId};
