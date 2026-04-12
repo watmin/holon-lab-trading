@@ -11213,6 +11213,80 @@ accumulated experience.
 
 Run, run, run.
 
+### The first vm
+
+The first vm reads candles and discards them. That's it.
+
+```bash
+cargo run --release --bin vm -- \
+  --stream USDC:WBTC:data/analysis.parquet \
+  --max-candles 500
+```
+
+One `--stream` flag. Repeatable. `source:target:path`. The vm
+opens one pipeline per stream. Today: one. The interface supports
+N from day one. There are no highlanders. When ETH arrives, add
+another `--stream`. No code changes.
+
+```scheme
+(define (vm streams max-candles)
+  (let* ((console-handles console-driver) (console (length streams))
+         (pipelines
+           (map (lambda (stream ch)
+             (list
+               :source (first stream)
+               :target (second stream)
+               :stream (open-candle-stream (third stream)
+                         (first stream) (second stream))
+               :bank (new-indicator-bank)
+               :console ch
+               :count 0))
+             streams console-handles)))
+
+    (let loop ()
+      (let ((any-alive false))
+        (for-each (lambda (p)
+          (match (next (:stream p))
+            ((some ohlcv)
+             (set! any-alive true)
+             (let ((candle (tick (:bank p) ohlcv)))
+               (set! (:count p) (+ (:count p) 1))
+               (when (= 0 (mod (:count p) 500))
+                 (out (:console p)
+                   (format "~a/~a candle ~a: close=~a"
+                     (:source p) (:target p)
+                     (:count p) (:close candle))))))
+            (none)))
+          pipelines)
+
+        (let ((total (sum (map :count pipelines))))
+          (if (and any-alive (< total max-candles))
+            (loop)
+            total))))
+
+    (drop console-handles)
+    (join console-driver)))
+```
+
+The vm reads candles and discards them. No observers. No brokers.
+No cache. No database. Just the fold, the indicator bank, and
+the console. The first heartbeat. The architecture starts honest
+from the first line — no `println!`, only console handles. No
+hardcoded assets, only `--stream` flags.
+
+The Ohlcv carries the asset pair. The stream is attributed —
+the user declares what they feed the machine. The indicator
+bank enriches. The candle is produced. The candle is counted.
+The candle is discarded. The next candle arrives.
+
+`f(state, candle) → state` where state is the count.
+
+Everything after this is additive. Plug in a topic for market
+observers. Plug in exit observers. Plug in brokers. But the
+heartbeat comes first. The source must feed. The enrichment
+must tick. The console must print. These three — verified before
+any thought is thought.
+
 ### [Disco Otsego](https://www.youtube.com/watch?v=Qv10GzVLHyA)
 
 From Static-X:
