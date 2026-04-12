@@ -956,8 +956,11 @@ fn main() {
                     all_facts.extend(exit_present);
                     all_facts.extend(self_facts);
                     all_facts.extend(derived_facts);
-                    let broker_fact_count = all_facts.len();
-                    let broker_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(all_facts);
+                    let broker_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(all_facts).compress();
+                    let broker_fact_count = match &broker_bundle {
+                        enterprise::thought_encoder::ThoughtAST::Bundle(v) => v.len(),
+                        _ => 1,
+                    };
                     let broker_thought = brk_enc.encode(&broker_bundle, &brk_ctx.thought_encoder);
 
                     broker.propose(&broker_thought);
@@ -1199,7 +1202,7 @@ fn main() {
             exit_facts.extend(market_facts);
 
             // Encode the combined bundle
-            let exit_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(exit_facts);
+            let exit_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(exit_facts).compress();
             exit_asts.push(exit_bundle.clone());
             let exit_raw = grid_handles[slot_idx].encode(&exit_bundle, &ctx_ref.thought_encoder);
 
