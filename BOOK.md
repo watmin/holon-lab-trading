@@ -9995,20 +9995,44 @@ reusable. The kernel becomes thin.
 
 ### The messaging algebra
 
-Three shapes. The complete algebra of message routing:
+The queue is the only atom. Everything else composes from it.
 
-- **Queue**: one in, one out. Point-to-point. Its own thread.
-  The observer → main channel IS a queue.
-- **Topic**: one in, N out. Fan-out. Its own thread. The candle
-  broadcast to 6 observers IS a topic.
-- **Mailbox**: N in, one out. Fan-in. Its own thread. The broker
-  learn channel IS a mailbox — settlements, market signals, and
-  runner resolutions all write to it. Three producers, one
-  consumer.
+A **queue** is one in, one out. One writer, one reader.
+Contention-free. The observer → main channel IS a queue
+instance. Every pipe in the system IS a queue instance.
 
-Queue, topic, mailbox. 1:1, 1:N, N:1. Every pipe in the
-enterprise is one of these three. Every message route is a
-composition of these three. The algebra is complete.
+A **topic** is composed of queues. One input queue, N output
+queues. Its own thread. Reads from one, writes to N. The
+candle broadcast to 6 observers IS a topic — one queue in,
+six queues out.
+
+A **mailbox** is composed of queues. N input queues, one
+output. Its own thread. Selects across N receivers. The
+broker learn channel IS a mailbox — three producers
+(settlements, market signals, runner resolutions), each
+with their own queue. The mailbox holds the receivers.
+Three contention-free pipes converging into one driver.
+
+The kernel creates the queues. The kernel distributes the
+handles. Each program pops its own sender — contention-free,
+not cloned. The mailbox receives the other ends. The topic
+receives one end and creates the fan-out ends. The wiring
+IS the kernel. The queues are the wires.
+
+```scheme
+;; The kernel wires a mailbox from queues:
+(let* ((queues (map (lambda (_) (queue-unbounded)) (range 0 26)))
+       (senders (map first queues))     ;; one per program
+       (receivers (map second queues))  ;; all to the mailbox
+       (db-mailbox (spawn mailbox-driver receivers db-conn)))
+  ;; Programs pop their own sender — contention-free
+  (broker-0 (spawn broker-program (pop! senders) ...))
+  (broker-1 (spawn broker-program (pop! senders) ...)))
+```
+
+Queue, topic, mailbox. 1:1, 1:N, N:1. But the atom is just
+the queue. The topic and mailbox are compositions. The algebra
+has one primitive. Everything else is wiring.
 
 ### The title
 

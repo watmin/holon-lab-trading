@@ -36,3 +36,4 @@ pub mod treasury;
 pub mod enterprise;
 pub mod encoder_service;
 pub mod log_service;
+pub mod services;

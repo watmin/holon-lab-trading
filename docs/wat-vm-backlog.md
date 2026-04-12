@@ -27,12 +27,24 @@ Services are drivers. Thread bodies are programs.
 
 Build the services. Prove each independently. Then migrate.
 
-1. **Queue** — the atom. One in, one out. Own thread. Test: messages flow.
-2. **Topic** — one in, N out. Composes from queue primitives. Test: all consumers receive.
-3. **Mailbox** — N in, one out. Select across inputs. Test: messages merge.
-4. **Cache** — key-value. Own thread. Uses queue handles. Test: hit/miss/eviction.
-5. **Database** — write + flush. Own thread. Uses mailbox (many writers). Test: batch commits.
-6. **Console** — IO. Uses mailbox (many writers). Test: output ordering.
+1. **Queue** — the ONLY atom. One in, one out. A single queue
+   instance is a contention-free pipe. One writer, one reader.
+   Test: messages flow, backpressure, shutdown.
+2. **Topic** — COMPOSED of queues. One input queue, N output queues.
+   Its own thread. Reads from one queue, writes to N queues.
+   Test: all consumers receive.
+3. **Mailbox** — COMPOSED of queues. N input queues, one output.
+   Its own thread. Selects across N queue receivers, forwards to
+   one queue. The kernel creates N queues. Programs pop senders.
+   The mailbox holds the receivers. Test: messages merge.
+4. **Cache** — a driver. Its own thread. The kernel creates queues
+   for it. Programs get queue senders. The driver holds receivers.
+   Test: hit/miss/eviction.
+5. **Database** — a driver. Its own thread. The kernel creates N
+   queues (one per writer). The driver holds a mailbox of those
+   queue receivers. Test: batch commits.
+6. **Console** — a driver. Its own thread. Same mailbox pattern.
+   Test: output ordering.
 7. **Migrate** — replace raw channels in binary with service instances. One at a time.
 
 ## The drivers (services)
@@ -41,17 +53,17 @@ Each driver is a free entity. Named. Independent IO loop.
 Concurrent with other drivers. Sequential internally.
 
 - [ ] `src/services/mod.rs`
-- [ ] `src/services/queue.rs` — point-to-point. One producer,
-      one consumer. Bounded or unbounded. Its own thread, own
-      IO loop. Generic over message type. The atom.
-- [ ] `src/services/topic.rs` — fan-out. One producer, N consumers.
-      Its own thread. Receives one message, copies to all outputs.
-      The candle broadcast IS a topic.
-- [ ] `src/services/mailbox.rs` — fan-in. N producers, one consumer.
-      Its own thread. Selects across all inputs, forwards to one
-      output. The learn channels ARE mailboxes — settlements,
-      market signals, and runner resolutions all write to the same
-      broker. Multiple writers, one reader.
+- [ ] `src/services/queue.rs` — THE atom. One producer, one consumer.
+      Bounded or unbounded. Contention-free. Generic over message type.
+      Every pipe in the system IS a queue instance.
+- [ ] `src/services/topic.rs` — COMPOSED of queues. One input queue
+      receiver, N output queue senders. Its own thread reads input,
+      clones to all outputs. The candle broadcast IS a topic.
+- [ ] `src/services/mailbox.rs` — COMPOSED of queues. N input queue
+      receivers, forwarded to one output. Its own thread selects
+      across inputs. The kernel creates N queues, gives senders to
+      programs (one each, contention-free), gives receivers to the
+      mailbox. The learn channels ARE mailboxes.
 - [ ] `src/services/cache.rs` — generic key-value with eviction.
       Named instances. `cache("encoder")` holds ThoughtAST → Vector.
       One implementation. N instances. Each its own loop.
