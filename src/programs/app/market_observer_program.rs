@@ -20,8 +20,8 @@ use crate::programs::chain::MarketChain;
 use crate::programs::stdlib::cache::CacheHandle;
 use crate::programs::stdlib::console::ConsoleHandle;
 use crate::scale_tracker::ScaleTracker;
-use crate::services::mailbox::{MailboxReceiver, MailboxSender};
-use crate::services::queue::QueueReceiver;
+use crate::services::mailbox::MailboxReceiver;
+use crate::services::queue::{QueueReceiver, QueueSender};
 use crate::services::topic::TopicSender;
 use crate::thought_encoder::{ThoughtAST, ThoughtEncoder};
 
@@ -80,7 +80,7 @@ pub fn market_observer_program(
     learn_rx: MailboxReceiver<ObsLearn>,
     cache: CacheHandle<ThoughtAST, Vector>,
     console: ConsoleHandle,
-    db_tx: MailboxSender<LogEntry>,
+    db_tx: QueueSender<LogEntry>,
     mut observer: MarketObserver,
     encoder: Arc<ThoughtEncoder>,
     observer_idx: usize,

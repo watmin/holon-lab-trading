@@ -20,8 +20,7 @@ use crate::programs::app::exit_observer_program::ExitLearn;
 use crate::programs::app::market_observer_program::ObsLearn;
 use crate::programs::chain::MarketExitChain;
 use crate::programs::stdlib::console::ConsoleHandle;
-use crate::services::mailbox::MailboxSender;
-use crate::services::queue::QueueReceiver;
+use crate::services::queue::{QueueReceiver, QueueSender};
 
 /// Extract Direction from a holon Prediction.
 /// Label index 0 is Up, index 1 is Down. Default to Up when no direction.
@@ -37,10 +36,10 @@ fn direction_from_prediction(pred: &holon::memory::Prediction) -> Direction {
 /// Returns the trained Broker when the chain source disconnects.
 pub fn broker_program(
     chain_rx: QueueReceiver<MarketExitChain>,
-    market_learn_tx: MailboxSender<ObsLearn>,
-    exit_learn_tx: MailboxSender<ExitLearn>,
+    market_learn_tx: QueueSender<ObsLearn>,
+    exit_learn_tx: QueueSender<ExitLearn>,
     console: ConsoleHandle,
-    db_tx: MailboxSender<LogEntry>,
+    db_tx: QueueSender<LogEntry>,
     mut broker: Broker,
     scalar_encoder: Arc<ScalarEncoder>,
     _swap_fee: f64,

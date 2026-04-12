@@ -11,7 +11,8 @@ use std::thread;
 
 use rusqlite::Connection;
 
-use crate::services::mailbox::{self, MailboxSender, RecvError};
+use crate::services::mailbox::{self, RecvError};
+use crate::services::queue::QueueSender;
 
 /// Handle to the database driver thread for lifecycle management.
 ///
@@ -50,10 +51,19 @@ pub fn database<T: Send + 'static>(
     batch_size: usize,
     setup: impl FnOnce(&Connection) + Send + 'static,
     insert: impl Fn(&Connection, &T) + Send + 'static,
-) -> (Vec<MailboxSender<T>>, DatabaseDriverHandle) {
+) -> (Vec<QueueSender<T>>, DatabaseDriverHandle) {
     assert!(batch_size > 0, "database requires non-zero batch_size");
+    assert!(num_producers > 0, "database requires at least one producer");
 
-    let (senders, rx) = mailbox::mailbox::<T>(num_producers);
+    // Create the queues. Programs get the senders. Mailbox gets the receivers.
+    let mut senders = Vec::with_capacity(num_producers);
+    let mut receivers = Vec::with_capacity(num_producers);
+    for _ in 0..num_producers {
+        let (tx, rx) = crate::services::queue::queue_unbounded();
+        senders.push(tx);
+        receivers.push(rx);
+    }
+    let rx = mailbox::mailbox(receivers);
     let path = path.to_string();
 
     let thread = thread::spawn(move || {

@@ -20,7 +20,7 @@ use crate::programs::chain::{MarketExitChain, MarketChain};
 use crate::programs::stdlib::cache::CacheHandle;
 use crate::programs::stdlib::console::ConsoleHandle;
 use crate::scale_tracker::ScaleTracker;
-use crate::services::mailbox::{MailboxReceiver, MailboxSender};
+use crate::services::mailbox::MailboxReceiver;
 use crate::services::queue::{QueueReceiver, QueueSender};
 
 use crate::thought_encoder::{collect_facts, extract, ThoughtAST, ThoughtEncoder};
@@ -86,7 +86,7 @@ pub fn exit_observer_program(
     learn_rx: MailboxReceiver<ExitLearn>,
     cache: CacheHandle<ThoughtAST, Vector>,
     console: ConsoleHandle,
-    db_tx: MailboxSender<LogEntry>,
+    db_tx: QueueSender<LogEntry>,
     mut exit_obs: ExitObserver,
     encoder: Arc<ThoughtEncoder>,
     noise_floor: f64,

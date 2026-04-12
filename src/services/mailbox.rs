@@ -1,21 +1,12 @@
 //! Mailbox — fan-in. N producers, one consumer.
-//! Composed of N independent queues. Each producer gets its OWN sender
-//! (contention-free). A fan-in thread selects across N receivers and
-//! forwards to one output.
+//! A proxy that reads from N queues. The queues already exist.
+//! The kernel creates the queues. The kernel gives the write ends
+//! to the programs. The kernel gives the read ends to the mailbox.
+//! The mailbox is plumbing. The programs see queues. Only queues.
 
-use crate::services::queue::{queue_unbounded, QueueReceiver, QueueSender};
+use crate::services::queue::QueueReceiver;
 use crossbeam::channel::TryRecvError;
 use std::fmt;
-
-/// Error returned when sending to a mailbox fails (receiver dropped).
-#[derive(Debug, PartialEq, Eq)]
-pub struct SendError<T>(pub T);
-
-impl<T> fmt::Display for SendError<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "sending on a disconnected mailbox")
-    }
-}
 
 /// Error returned when receiving from a mailbox fails.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -29,21 +20,12 @@ impl fmt::Display for RecvError {
     }
 }
 
-/// A producer's handle. NOT cloneable — each producer gets its OWN.
-pub struct MailboxSender<T>(QueueSender<T>);
-
-/// The single consumer's handle.
+/// The single consumer's read proxy. Fans in from N queues.
+/// .recv() — same interface as a queue receiver.
 pub struct MailboxReceiver<T>(QueueReceiver<T>);
 
-impl<T> MailboxSender<T> {
-    /// Send a value to the mailbox.
-    pub fn send(&self, value: T) -> Result<(), SendError<T>> {
-        self.0.send(value).map_err(|e| SendError(e.0))
-    }
-}
-
 impl<T> MailboxReceiver<T> {
-    /// Blocking receive. Returns Disconnected when all senders are dropped.
+    /// Blocking receive. Returns Disconnected when all producers are dropped.
     pub fn recv(&self) -> Result<T, RecvError> {
         self.0.recv().map_err(|_| RecvError::Disconnected)
     }
@@ -62,30 +44,25 @@ impl<T> MailboxReceiver<T> {
     }
 }
 
-/// Create a mailbox with N independent input queues.
-/// Returns N senders (one per producer, contention-free) and one receiver.
-/// Spawns a thread that selects across N queue receivers and forwards
-/// to the output.
+/// Create a mailbox from existing queue receivers.
+/// The kernel already created the queues. The kernel already gave
+/// the senders to the programs. The mailbox takes the read ends
+/// and fans them into one receiver.
+///
+/// Returns a MailboxReceiver — the read proxy.
+/// Spawns a fan-in thread that selects across N queue receivers.
+/// The thread exits when all input queues disconnect.
 pub fn mailbox<T: Send + 'static>(
-    num_producers: usize,
-) -> (Vec<MailboxSender<T>>, MailboxReceiver<T>) {
-    assert!(num_producers > 0, "mailbox requires at least one producer");
+    inputs: Vec<QueueReceiver<T>>,
+) -> MailboxReceiver<T> {
+    assert!(!inputs.is_empty(), "mailbox requires at least one input");
 
-    // Create N input queues — one per producer.
-    let mut senders = Vec::with_capacity(num_producers);
-    let mut input_rxs = Vec::with_capacity(num_producers);
-    for _ in 0..num_producers {
-        let (tx, rx) = queue_unbounded();
-        senders.push(MailboxSender(tx));
-        input_rxs.push(rx);
-    }
-
-    // Create one output queue — the consumer reads from this.
-    let (out_tx, out_rx) = queue_unbounded();
+    // One output queue — the consumer reads from this.
+    let (out_tx, out_rx) = crate::services::queue::queue_unbounded();
 
     // Spawn the fan-in thread — selects across N input receivers.
     std::thread::spawn(move || {
-        let mut alive: Vec<QueueReceiver<T>> = input_rxs;
+        let mut alive: Vec<QueueReceiver<T>> = inputs;
         loop {
             if alive.is_empty() {
                 break;
@@ -98,49 +75,45 @@ pub fn mailbox<T: Send + 'static>(
             let idx = oper.index();
             match oper.recv(alive[idx].inner()) {
                 Ok(msg) => {
-                    // If the consumer (MailboxReceiver) dropped, the send
-                    // fails silently. Messages are discarded. Producers
-                    // receive no signal — they keep sending until they
-                    // themselves drop. This is intentional: the fan-in
-                    // thread's lifecycle is governed by its INPUTS, not
-                    // its output. When all inputs disconnect, the thread
-                    // exits and the output drops.
                     let _ = out_tx.send(msg);
                 }
                 Err(_) => {
-                    alive.remove(idx); // this input disconnected
+                    alive.remove(idx);
                 }
             }
         }
         // All inputs disconnected. out_tx drops. Consumer sees Disconnected.
     });
 
-    (senders, MailboxReceiver(out_rx))
+    MailboxReceiver(out_rx)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::services::queue::queue_unbounded;
     use std::collections::HashSet;
     use std::thread;
     use std::time::Duration;
 
     #[test]
     fn multiple_senders_one_receiver() {
-        let (senders, rx) = mailbox(3);
-        let mut senders = senders;
+        // Kernel creates the queues
+        let (tx0, rx0) = queue_unbounded();
+        let (tx1, rx1) = queue_unbounded();
+        let (tx2, rx2) = queue_unbounded();
 
-        let s0 = senders.pop().unwrap();
-        let s1 = senders.pop().unwrap();
-        let s2 = senders.pop().unwrap();
+        // Mailbox takes the read ends
+        let mailbox_rx = mailbox(vec![rx0, rx1, rx2]);
 
-        s0.send(1).unwrap();
-        s1.send(2).unwrap();
-        s2.send(3).unwrap();
+        // Programs hold queue senders — just queues
+        tx0.send(1).unwrap();
+        tx1.send(2).unwrap();
+        tx2.send(3).unwrap();
 
         let mut received = HashSet::new();
         for _ in 0..3 {
-            received.insert(rx.recv().unwrap());
+            received.insert(mailbox_rx.recv().unwrap());
         }
 
         assert_eq!(received, HashSet::from([1, 2, 3]));
@@ -148,9 +121,17 @@ mod tests {
 
     #[test]
     fn messages_from_different_threads_interleave() {
-        let (senders, rx) = mailbox(5);
+        let mut txs = Vec::new();
+        let mut rxs = Vec::new();
+        for _ in 0..5 {
+            let (tx, rx) = queue_unbounded();
+            txs.push(tx);
+            rxs.push(rx);
+        }
 
-        let handles: Vec<_> = senders
+        let mailbox_rx = mailbox(rxs);
+
+        let handles: Vec<_> = txs
             .into_iter()
             .enumerate()
             .map(|(i, sender)| {
@@ -167,15 +148,13 @@ mod tests {
         }
 
         // Collect all 50 messages.
-        // Give the fan-in thread a moment to forward everything.
         thread::sleep(Duration::from_millis(50));
         let mut received = Vec::new();
-        while let Ok(msg) = rx.try_recv() {
+        while let Ok(msg) = mailbox_rx.try_recv() {
             received.push(msg);
         }
         assert_eq!(received.len(), 50);
 
-        // All expected values present.
         let set: HashSet<_> = received.into_iter().collect();
         for i in 0..5 {
             for j in 0..10 {
@@ -186,28 +165,36 @@ mod tests {
 
     #[test]
     fn shutdown_all_senders_dropped() {
-        let (senders, rx) = mailbox::<i32>(3);
-        drop(senders);
-        assert_eq!(rx.recv(), Err(RecvError::Disconnected));
+        let (tx0, rx0) = queue_unbounded::<i32>();
+        let (tx1, rx1) = queue_unbounded::<i32>();
+        let (tx2, rx2) = queue_unbounded::<i32>();
+
+        let mailbox_rx = mailbox(vec![rx0, rx1, rx2]);
+
+        drop(tx0);
+        drop(tx1);
+        drop(tx2);
+
+        assert_eq!(mailbox_rx.recv(), Err(RecvError::Disconnected));
     }
 
     #[test]
     fn partial_sender_drop_still_works() {
-        let (mut senders, rx) = mailbox(3);
+        let (tx0, rx0) = queue_unbounded();
+        let (tx1, rx1) = queue_unbounded();
+        let (tx2, rx2) = queue_unbounded();
 
-        let s0 = senders.pop().unwrap();
-        let s1 = senders.pop().unwrap();
-        let s2 = senders.pop().unwrap();
+        let mailbox_rx = mailbox(vec![rx0, rx1, rx2]);
 
         // Drop two senders, the third should still work.
-        drop(s0);
-        drop(s1);
+        drop(tx0);
+        drop(tx1);
 
-        s2.send(42).unwrap();
-        assert_eq!(rx.recv().unwrap(), 42);
+        tx2.send(42).unwrap();
+        assert_eq!(mailbox_rx.recv().unwrap(), 42);
 
         // Now drop the last sender — receiver should see Disconnected.
-        drop(s2);
-        assert_eq!(rx.recv(), Err(RecvError::Disconnected));
+        drop(tx2);
+        assert_eq!(mailbox_rx.recv(), Err(RecvError::Disconnected));
     }
 }

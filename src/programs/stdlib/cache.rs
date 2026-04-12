@@ -8,7 +8,7 @@ use std::collections::{HashMap, VecDeque};
 use std::hash::Hash;
 use std::thread;
 
-use crate::services::mailbox::{self, MailboxSender};
+use crate::services::mailbox;
 use crate::services::queue::{self, QueueReceiver, QueueSender};
 
 /// A program's handle to the cache. Each program gets its own.
@@ -16,7 +16,7 @@ use crate::services::queue::{self, QueueReceiver, QueueSender};
 pub struct CacheHandle<K, V> {
     get_tx: QueueSender<K>,
     get_rx: QueueReceiver<Option<V>>,
-    set_tx: MailboxSender<(K, V)>,
+    set_tx: QueueSender<(K, V)>,
 }
 
 impl<K: Clone + Send, V: Send> CacheHandle<K, V> {
@@ -126,8 +126,15 @@ where
     let mut get_rxs = Vec::with_capacity(num_clients);
     let mut get_resp_txs = Vec::with_capacity(num_clients);
 
-    // Mailbox for sets: N senders (one per client), one receiver.
-    let (set_senders, set_rx) = mailbox::mailbox::<(K, V)>(num_clients);
+    // Create set queues: one per client. Mailbox gets the receivers.
+    let mut set_senders = Vec::with_capacity(num_clients);
+    let mut set_rxs = Vec::with_capacity(num_clients);
+    for _ in 0..num_clients {
+        let (tx, rx) = queue::queue_unbounded::<(K, V)>();
+        set_senders.push(tx);
+        set_rxs.push(rx);
+    }
+    let set_rx = mailbox::mailbox(set_rxs);
     let mut set_senders: VecDeque<_> = set_senders.into();
 
     for _ in 0..num_clients {

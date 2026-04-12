@@ -10,7 +10,8 @@ use std::collections::VecDeque;
 use std::io::{self, Write};
 use std::thread;
 
-use crate::services::mailbox::{self, MailboxSender};
+use crate::services::mailbox;
+use crate::services::queue::{self, QueueSender};
 
 /// Tagged message — Out goes to stdout, Err goes to stderr.
 /// Internal protocol. Not public — only ConsoleHandle is the interface.
@@ -22,8 +23,8 @@ enum ConsoleMsg {
 /// A program's handle to the console. Each program gets its own pair.
 /// Not cloneable — one per program.
 pub struct ConsoleHandle {
-    out_tx: MailboxSender<ConsoleMsg>,
-    err_tx: MailboxSender<ConsoleMsg>,
+    out_tx: QueueSender<ConsoleMsg>,
+    err_tx: QueueSender<ConsoleMsg>,
 }
 
 impl ConsoleHandle {
@@ -68,9 +69,17 @@ impl ConsoleDriverHandle {
 pub fn console(num_producers: usize) -> (Vec<ConsoleHandle>, ConsoleDriverHandle) {
     assert!(num_producers > 0, "console requires at least one producer");
 
-    // Two senders per producer: one for stdout, one for stderr.
-    let (senders, rx) = mailbox::mailbox::<ConsoleMsg>(num_producers * 2);
-    let mut senders: VecDeque<_> = senders.into();
+    // Create queues: two per producer (stdout + stderr).
+    // Mailbox gets the receivers. Programs get the senders.
+    let total = num_producers * 2;
+    let mut senders = VecDeque::with_capacity(total);
+    let mut receivers = Vec::with_capacity(total);
+    for _ in 0..total {
+        let (tx, rx) = queue::queue_unbounded::<ConsoleMsg>();
+        senders.push_back(tx);
+        receivers.push(rx);
+    }
+    let rx = mailbox::mailbox(receivers);
 
     let mut handles = Vec::with_capacity(num_producers);
     for _ in 0..num_producers {
