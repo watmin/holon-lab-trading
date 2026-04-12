@@ -46,6 +46,13 @@ LEVEL 4 — the root:
 6. **orchestration/** — post, treasury, enterprise
    The wiring layer (legacy — replaced by the kernel).
 
+## Pending renames
+
+- [ ] `RawCandle` → `Ohlcv` — it IS ohlcv data. Asset pair + timestamp +
+      open/high/low/close/volume. The name should say what it IS.
+      `raw_candle.rs` → `ohlcv.rs`. Large blast radius — touch later.
+- [ ] `Candle` stays — the enriched form. Ohlcv + 100 indicators.
+
 ## Uncertain
 
 - `indicator_bank.rs` — enrichment pipeline. encoding/? its own?
