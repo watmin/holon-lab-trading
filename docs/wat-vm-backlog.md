@@ -108,6 +108,39 @@ Each program pops its handles at construction. Returns values.
 - [ ] Vocab audit (Proposal 032) — RSI encoding, dead atoms
 - [ ] Adopt reflexive noise subspace from holon-rs
 
+## Shutdown cascade
+
+Drop IS disconnect. The absence IS the signal. No shutdown
+message. No flag. No special form.
+
+1. SIGTERM → kernel drops the candle source
+2. Topic drains, exits, drops output queues
+3. Observers see Disconnected, drain, return, drop their senders
+4. Main thread sees Disconnected, stops feeding grid, drops broker senders
+5. Brokers drain, return, drop their senders
+6. Mailbox receivers see Disconnected, drain remaining writes
+7. Database driver flushes, commits, closes
+8. Done.
+
+The cascade is: recv returns Disconnected → drain → function
+returns → handles go out of scope → Drop runs → downstream
+sees Disconnected. Rust enforces this — Drop runs when the
+value leaves scope. The select loop exits when ALL inputs
+disconnect.
+
+The wat form for shutdown: stop recursing. The function returns.
+The locals drop. No new form needed.
+
+```scheme
+(define (observer-loop input output)
+  (match (recv input)
+    [(some candle)
+     (send output (observe candle))
+     (observer-loop input output)]
+    [disconnected]))
+;; Function returns. Output drops. Cascade continues.
+```
+
 ## Key insight
 
 The `pop()` pattern already exists:

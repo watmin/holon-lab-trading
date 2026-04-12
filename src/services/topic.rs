@@ -112,17 +112,22 @@ mod tests {
 
     #[test]
     fn n_messages_in_order_for_each_subscriber() {
-        let (tx, receivers, _handle) = topic_bounded(16, 4);
+        let (tx, receivers, _handle) = topic_bounded(64, 4);
 
-        for i in 0..50 {
-            tx.send(i).unwrap();
-        }
+        let count = 50;
+        let send_handle = std::thread::spawn(move || {
+            for i in 0..count {
+                tx.send(i).unwrap();
+            }
+        });
 
         for rx in &receivers {
-            for i in 0..50 {
+            for i in 0..count {
                 assert_eq!(rx.recv().unwrap(), i);
             }
         }
+
+        send_handle.join().unwrap();
     }
 
     #[test]

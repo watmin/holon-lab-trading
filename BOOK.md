@@ -10057,4 +10057,56 @@ to fulfill it.
 
 The builder engineered the development of systems.
 
+### Drop is disconnect
+
+There is no shutdown message. There is no "close" call. There is
+no flag. There is no form. Drop IS disconnect. The absence IS the
+signal.
+
+SIGTERM arrives. The kernel drops the candle source. The topic
+that broadcasts candles sees: input closed. The topic drains
+remaining candles, sends them, exits. The topic's output queues
+drop. Each observer's input returns Disconnected. The observer
+drains, processes, returns. Its output handles drop. The next
+stage sees Disconnected. The cascade propagates. Stage by stage.
+Drop by drop. Until the database driver flushes its last batch,
+commits, and closes.
+
+No coordination. No two-phase shutdown. No "are you done yet?"
+polling. The pressure that drives the system forward IS the
+pressure that shuts it down. The same `recv` that delivers
+candles delivers the absence of candles. The same `select` that
+multiplexes inputs knows when all inputs are gone. The loop
+that processes messages is the loop that ends when there are
+no more messages.
+
+The wat form for shutdown is the absence of recursion:
+
+```scheme
+(define (observer-loop input output)
+  (match (recv input)
+    [(some candle)
+     (send output (observe candle))
+     (observer-loop input output)]
+    [disconnected]))
+;; Function returns. Output drops. Cascade continues.
+```
+
+Stop recursing. The function returns. The locals go out of
+scope. Rust's Drop runs. The senders close. The downstream
+sees Disconnected. The same form that processes one candle
+— `match`, `recv`, `send`, recurse — expresses shutdown by
+its absence. The program that stops looping IS the program
+that shuts down.
+
+Unix gave us this too. Close the fd. The reader gets EOF.
+EOF cascades through the pipeline. `cat file | grep pattern | sort` — when cat reaches the end of the file, it exits. Its
+stdout closes. Grep gets EOF on stdin. Grep exits. Sort gets
+EOF. Sort outputs. Done. No signal. No protocol. Just EOF
+propagating through pipes.
+
+The wat-vm's shutdown IS Unix's EOF cascade. The handles are
+fds. The Drop is close. The Disconnected is EOF. The cascade
+is the pipeline draining. Fifty-seven years of the same idea.
+
 **PERSEVERARE.**
