@@ -54,6 +54,36 @@ impl ThoughtAST {
             ThoughtAST::Bundle(children) => format!("bundle({})", children.len()),
         }
     }
+
+    /// Render as EDN (extensible data notation) — the thought AS lisp.
+    /// Depth-aware indentation. Readable.
+    pub fn to_edn(&self) -> String {
+        self.to_edn_depth(0)
+    }
+
+    fn to_edn_depth(&self, depth: usize) -> String {
+        let child_indent = "  ".repeat(depth + 1);
+        match self {
+            ThoughtAST::Atom(name) =>
+                format!("(atom \"{}\")", name),
+            ThoughtAST::Linear { name, value, scale } =>
+                format!("(linear \"{}\" {} {})", name, value, scale),
+            ThoughtAST::Log { name, value } =>
+                format!("(log \"{}\" {})", name, value),
+            ThoughtAST::Circular { name, value, period } =>
+                format!("(circular \"{}\" {} {})", name, value, period),
+            ThoughtAST::Bind(left, right) =>
+                format!("(bind\n{}{}\n{}{})",
+                    child_indent, left.to_edn_depth(depth + 1),
+                    child_indent, right.to_edn_depth(depth + 1)),
+            ThoughtAST::Bundle(children) => {
+                let inner: Vec<String> = children.iter()
+                    .map(|c| format!("{}{}", child_indent, c.to_edn_depth(depth + 1)))
+                    .collect();
+                format!("(bundle\n{})", inner.join("\n"))
+            }
+        }
+    }
 }
 
 // Eq/Hash via f64::to_bits() so ThoughtAST can be a HashMap key.

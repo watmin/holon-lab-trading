@@ -314,6 +314,7 @@ fn init_ledger(path: &str) -> Connection {
             resolved_count    INTEGER,
             proto_cos         REAL,
             fact_count        INTEGER,
+            thought_ast       TEXT,
             PRIMARY KEY (candle, broker_slot_idx)
         );
 
@@ -1000,6 +1001,7 @@ fn main() {
                             resolved_count: broker.reckoner.resolved_count(),
                             proto_cos,
                             fact_count: broker_fact_count,
+                            thought_ast: broker_bundle.to_edn(),
                         });
                     }
 

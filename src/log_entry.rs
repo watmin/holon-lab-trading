@@ -107,6 +107,7 @@ pub enum LogEntry {
         resolved_count: usize,
         proto_cos: f64,
         fact_count: usize,
+        thought_ast: String,
     },
 }
 
