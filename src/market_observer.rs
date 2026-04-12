@@ -84,12 +84,10 @@ impl MarketObserver {
     /// Observe a new candle. Self-grade the PREVIOUS prediction, then predict.
     /// The observer is its own teacher. The market is the judge.
     ///
-    /// current_close: the close price of THIS candle (stored for diagnostics)
     pub fn observe(
         &mut self,
         thought: Vector,
         misses: Vec<(ThoughtAST, Vector)>,
-        current_close: f64,
     ) -> ObserveResult {
         // Noise subspace learns the background distribution.
         let thought_f64 = to_f64(&thought);
@@ -217,7 +215,7 @@ mod tests {
     fn test_observe_returns_result() {
         let mut obs = make_observer();
         let thought = random_vector("test_thought");
-        let result = obs.observe(thought, Vec::new(), 100.0);
+        let result = obs.observe(thought, Vec::new());
         assert_eq!(result.thought.dimensions(), DIMS);
         assert!(result.misses.is_empty());
     }
@@ -249,7 +247,7 @@ mod tests {
     fn test_observe_sets_last_prediction() {
         let mut obs = make_observer();
         let thought = random_vector("pred_thought");
-        let _ = obs.observe(thought, Vec::new(), 100.0);
+        let _ = obs.observe(thought, Vec::new());
         // last_prediction should have been set (to Up or Down based on reckoner)
         assert!(obs.last_prediction == Direction::Up || obs.last_prediction == Direction::Down);
     }

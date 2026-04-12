@@ -810,7 +810,7 @@ fn main() {
                         }
                     };
 
-                    let result = obs.observe(thought, Vec::new(), candle.close);
+                    let result = obs.observe(thought, Vec::new());
 
                     // Snapshot every 100 candles — into the DB
                     if candle_count % 100 == 0 {
