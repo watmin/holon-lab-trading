@@ -34,7 +34,14 @@ impl<K: Clone + Send, V: Send> CacheHandle<K, V> {
 }
 
 /// Handle to the cache driver thread for lifecycle management.
+///
+/// No Drop impl — drop order is unspecified, so joining in Drop
+/// would deadlock if senders are still alive. The cascade IS the
+/// shutdown guarantee: senders drop → driver drains → driver exits.
+/// Call join() explicitly when you need to wait for the driver.
 pub struct CacheDriverHandle {
+    #[allow(dead_code)]
+    name: String,
     thread: Option<thread::JoinHandle<()>>,
 }
 
@@ -93,12 +100,17 @@ impl<K: Eq + Hash + Clone, V> Lru<K, V> {
     }
 }
 
-/// Create a cache with the given name, capacity, and number of client programs.
+/// Create a cache with the given capacity and number of client programs.
 ///
 /// Returns N CacheHandles (one per program) and a CacheDriverHandle.
 /// The driver thread exits when all client handles are dropped.
+///
+/// No Drop impl on the handle — drop order is unspecified, so joining
+/// in Drop would deadlock if senders are still alive. The cascade IS
+/// the shutdown guarantee: senders drop → driver drains → driver exits.
+/// Call join() explicitly when you need to wait for the driver to finish.
 pub fn cache<K, V>(
-    _name: &str, // reserved for diagnostics/logging — not used yet
+    name: &str, // the cache's identity — used for diagnostics and logging
     capacity: usize,
     num_clients: usize,
 ) -> (Vec<CacheHandle<K, V>>, CacheDriverHandle)
@@ -201,6 +213,7 @@ where
     (
         handles,
         CacheDriverHandle {
+            name: name.to_string(),
             thread: Some(thread),
         },
     )

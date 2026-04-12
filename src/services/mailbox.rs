@@ -48,12 +48,15 @@ impl<T> MailboxReceiver<T> {
         self.0.recv().map_err(|_| RecvError::Disconnected)
     }
 
-    /// Non-blocking receive.
+    /// Non-blocking receive. Returns crossbeam TryRecvError directly —
+    /// see queue.rs for rationale.
     pub fn try_recv(&self) -> Result<T, TryRecvError> {
         self.0.try_recv()
     }
 
-    /// Internal access for services that compose mailboxes (e.g., cache select).
+    /// Access the underlying crossbeam receiver. Used by composing programs
+    /// (cache) that need crossbeam::Select across mailbox + queue receivers.
+    /// pub(crate) — only visible within this crate.
     pub(crate) fn inner(&self) -> &crossbeam::channel::Receiver<T> {
         self.0.inner()
     }

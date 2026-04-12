@@ -14,6 +14,11 @@ use rusqlite::Connection;
 use crate::services::mailbox::{self, MailboxSender, RecvError};
 
 /// Handle to the database driver thread for lifecycle management.
+///
+/// No Drop impl — drop order is unspecified, so joining in Drop
+/// would deadlock if senders are still alive. The cascade IS the
+/// shutdown guarantee: senders drop → driver drains → driver exits.
+/// Call join() explicitly when you need to wait for the final flush.
 pub struct DatabaseDriverHandle {
     thread: Option<thread::JoinHandle<()>>,
 }

@@ -32,7 +32,8 @@ impl<T> TopicReceiver<T> {
         self.0.recv()
     }
 
-    /// Non-blocking receive.
+    /// Non-blocking receive. Returns crossbeam TryRecvError directly —
+    /// see queue.rs for rationale.
     pub fn try_recv(&self) -> Result<T, crossbeam::channel::TryRecvError> {
         self.0.try_recv()
     }
