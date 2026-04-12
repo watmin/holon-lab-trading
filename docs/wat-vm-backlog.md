@@ -39,11 +39,17 @@ Concurrent with other drivers. Sequential internally.
       Each its own loop with batch commits.
 - [ ] `src/services/console.rs` — N input pairs (stdout, stderr).
       One instance. IO loop. Internally synchronous.
-- [ ] `src/services/queue.rs` — point-to-point. bounded or
-      unbounded. One producer, one consumer. Created by the
-      circuit. Generic over the message type.
+- [ ] `src/services/queue.rs` — point-to-point. One producer,
+      one consumer. Bounded or unbounded. Its own thread, own
+      IO loop. Generic over message type.
 - [ ] `src/services/topic.rs` — fan-out. One producer, N consumers.
-      The candle broadcast. Created by the circuit.
+      Its own thread. Receives one message, copies to all outputs.
+      The candle broadcast IS a topic.
+- [ ] `src/services/mailbox.rs` — fan-in. N producers, one consumer.
+      Its own thread. Selects across all inputs, forwards to one
+      output. The learn channels ARE mailboxes — settlements,
+      market signals, and runner resolutions all write to the same
+      broker. Multiple writers, one reader.
 
 ## The programs
 
