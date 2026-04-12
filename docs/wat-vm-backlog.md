@@ -23,25 +23,27 @@ Services are drivers. Thread bodies are programs.
   the kernel manages. The handle IS the permission. If you don't
   have one, you can't reach the service.
 
+## Build order — leaves to root
+
+Build the services. Prove each independently. Then migrate.
+
+1. **Queue** — the atom. One in, one out. Own thread. Test: messages flow.
+2. **Topic** — one in, N out. Composes from queue primitives. Test: all consumers receive.
+3. **Mailbox** — N in, one out. Select across inputs. Test: messages merge.
+4. **Cache** — key-value. Own thread. Uses queue handles. Test: hit/miss/eviction.
+5. **Database** — write + flush. Own thread. Uses mailbox (many writers). Test: batch commits.
+6. **Console** — IO. Uses mailbox (many writers). Test: output ordering.
+7. **Migrate** — replace raw channels in binary with service instances. One at a time.
+
 ## The drivers (services)
 
 Each driver is a free entity. Named. Independent IO loop.
 Concurrent with other drivers. Sequential internally.
 
 - [ ] `src/services/mod.rs`
-- [ ] `src/services/cache.rs` — generic key-value with eviction.
-      Named instances. `cache("encoder")` holds ThoughtAST → Vector.
-      Could have `cache("engram")`, `cache("scales")` etc.
-      One implementation. N instances. Each its own loop.
-- [ ] `src/services/database.rs` — write + flush interface.
-      Named instances with specific schemas.
-      `database("ledger")` knows broker_snapshots, paper_details.
-      Each its own loop with batch commits.
-- [ ] `src/services/console.rs` — N input pairs (stdout, stderr).
-      One instance. IO loop. Internally synchronous.
 - [ ] `src/services/queue.rs` — point-to-point. One producer,
       one consumer. Bounded or unbounded. Its own thread, own
-      IO loop. Generic over message type.
+      IO loop. Generic over message type. The atom.
 - [ ] `src/services/topic.rs` — fan-out. One producer, N consumers.
       Its own thread. Receives one message, copies to all outputs.
       The candle broadcast IS a topic.
@@ -50,6 +52,15 @@ Concurrent with other drivers. Sequential internally.
       output. The learn channels ARE mailboxes — settlements,
       market signals, and runner resolutions all write to the same
       broker. Multiple writers, one reader.
+- [ ] `src/services/cache.rs` — generic key-value with eviction.
+      Named instances. `cache("encoder")` holds ThoughtAST → Vector.
+      One implementation. N instances. Each its own loop.
+- [ ] `src/services/database.rs` — write + flush interface.
+      Named instances with specific schemas.
+      `database("ledger")` knows broker_snapshots, paper_details.
+      Each its own loop with batch commits.
+- [ ] `src/services/console.rs` — N input pairs (stdout, stderr).
+      One instance. IO loop. Internally synchronous.
 
 ## The programs
 
