@@ -952,11 +952,22 @@ fn main() {
                     // Broker's full thought: opinions + extracted market + extracted exit + self-assessment + derived
                     let mut all_facts = market_opinions;
                     all_facts.extend(exit_opinions);
-                    all_facts.extend(market_present);
-                    all_facts.extend(exit_present);
+                    // Attribution: wrap foreign facts in their source.
+                    // bind(atom("market"), fact) rotates the fact into a different
+                    // region of space. No collision with the consumer's own facts.
+                    for fact in market_present {
+                        all_facts.push(enterprise::thought_encoder::ThoughtAST::Bind(
+                            Box::new(enterprise::thought_encoder::ThoughtAST::Atom("market".into())),
+                            Box::new(fact)));
+                    }
+                    for fact in exit_present {
+                        all_facts.push(enterprise::thought_encoder::ThoughtAST::Bind(
+                            Box::new(enterprise::thought_encoder::ThoughtAST::Atom("exit".into())),
+                            Box::new(fact)));
+                    }
                     all_facts.extend(self_facts);
                     all_facts.extend(derived_facts);
-                    let broker_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(all_facts).compress();
+                    let broker_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(all_facts);
                     let broker_fact_count = match &broker_bundle {
                         enterprise::thought_encoder::ThoughtAST::Bundle(v) => v.len(),
                         _ => 1,
@@ -1199,10 +1210,15 @@ fn main() {
                 .filter(|(_ast, presence)| presence.abs() > noise_floor)
                 .map(|(ast, _presence)| ast)
                 .collect();
-            exit_facts.extend(market_facts);
+            // Attribution: the exit knows these came from the market
+            for fact in market_facts {
+                exit_facts.push(enterprise::thought_encoder::ThoughtAST::Bind(
+                    Box::new(enterprise::thought_encoder::ThoughtAST::Atom("market".into())),
+                    Box::new(fact)));
+            }
 
             // Encode the combined bundle
-            let exit_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(exit_facts).compress();
+            let exit_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(exit_facts);
             exit_asts.push(exit_bundle.clone());
             let exit_raw = grid_handles[slot_idx].encode(&exit_bundle, &ctx_ref.thought_encoder);
 
