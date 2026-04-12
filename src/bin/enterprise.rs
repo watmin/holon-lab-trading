@@ -1320,6 +1320,19 @@ fn main() {
                 }
             }
 
+            // Market signals also teach the BROKER — same principle as Proposal 025.
+            // The broker needs both sides (Grace AND Violence) to build its discriminant.
+            // Without this, the broker only learns from runners (Grace).
+            for res in &all_market_signals {
+                if res.broker_slot_idx < pipes.broker_learn_txs.len() {
+                    let _ = pipes.broker_learn_txs[res.broker_slot_idx].send((
+                        res.composed_thought.clone(), res.market_thought.clone(),
+                        res.exit_thought.clone(),
+                        res.outcome, res.amount,
+                        res.prediction, res.optimal_distances));
+                }
+            }
+
             // Market signals also teach the exit observer — Violence papers carry
             // optimal distances from hindsight simulation. Without this, the exit
             // only learns from Grace (runners) and the distance feedback loop is one-sided.
