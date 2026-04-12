@@ -5,41 +5,54 @@
 // atoms: rsi-divergence-bull, rsi-divergence-bear, divergence-spread
 
 use crate::candle::Candle;
-use crate::thought_encoder::{ThoughtAST, round_to};
+use crate::thought_encoder::{ThoughtAST, ToAst, round_to};
+
+/// Divergence thought — conditional emission. Fields are Option because
+/// divergence facts only fire when non-zero.
+pub struct DivergenceThought {
+    pub rsi_divergence_bull: Option<f64>,
+    pub rsi_divergence_bear: Option<f64>,
+    pub divergence_spread: Option<f64>,
+}
+
+impl DivergenceThought {
+    pub fn from_candle(c: &Candle) -> Self {
+        let bull = c.rsi_divergence_bull;
+        let bear = c.rsi_divergence_bear;
+        Self {
+            rsi_divergence_bull: if bull > 0.0 { Some(round_to(bull, 2)) } else { None },
+            rsi_divergence_bear: if bear > 0.0 { Some(round_to(bear, 2)) } else { None },
+            divergence_spread: if bull > 0.0 || bear > 0.0 {
+                Some(round_to(bull - bear, 2))
+            } else {
+                None
+            },
+        }
+    }
+}
+
+impl ToAst for DivergenceThought {
+    fn to_ast(&self) -> ThoughtAST {
+        ThoughtAST::Bundle(self.forms())
+    }
+
+    fn forms(&self) -> Vec<ThoughtAST> {
+        let mut facts = Vec::new();
+        if let Some(v) = self.rsi_divergence_bull {
+            facts.push(ThoughtAST::Linear { name: "rsi-divergence-bull".into(), value: v, scale: 1.0 });
+        }
+        if let Some(v) = self.rsi_divergence_bear {
+            facts.push(ThoughtAST::Linear { name: "rsi-divergence-bear".into(), value: v, scale: 1.0 });
+        }
+        if let Some(v) = self.divergence_spread {
+            facts.push(ThoughtAST::Linear { name: "divergence-spread".into(), value: v, scale: 1.0 });
+        }
+        facts
+    }
+}
 
 pub fn encode_divergence_facts(c: &Candle) -> Vec<ThoughtAST> {
-    let bull = c.rsi_divergence_bull;
-    let bear = c.rsi_divergence_bear;
-    let mut facts = Vec::new();
-
-    // Bullish divergence: only emitted when active.
-    if bull > 0.0 {
-        facts.push(ThoughtAST::Linear {
-            name: "rsi-divergence-bull".into(),
-            value: round_to(bull, 2),
-            scale: 1.0,
-        });
-    }
-
-    // Bearish divergence: only emitted when active.
-    if bear > 0.0 {
-        facts.push(ThoughtAST::Linear {
-            name: "rsi-divergence-bear".into(),
-            value: round_to(bear, 2),
-            scale: 1.0,
-        });
-    }
-
-    // Divergence spread: bull - bear. Only when either is active.
-    if bull > 0.0 || bear > 0.0 {
-        facts.push(ThoughtAST::Linear {
-            name: "divergence-spread".into(),
-            value: round_to(bull - bear, 2),
-            scale: 1.0,
-        });
-    }
-
-    facts
+    DivergenceThought::from_candle(c).forms()
 }
 
 #[cfg(test)]

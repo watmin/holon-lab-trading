@@ -5,44 +5,49 @@
 // atoms: atr-ratio, atr-r, atr-roc-6, atr-roc-12, squeeze, bb-width
 
 use crate::candle::Candle;
-use crate::thought_encoder::{ThoughtAST, round_to};
+use crate::thought_encoder::{ThoughtAST, ToAst, round_to};
+
+pub struct ExitVolatilityThought {
+    pub atr_ratio: f64,
+    pub atr_r: f64,
+    pub atr_roc_6: f64,
+    pub atr_roc_12: f64,
+    pub squeeze: f64,
+    pub bb_width: f64,
+}
+
+impl ExitVolatilityThought {
+    pub fn from_candle(c: &Candle) -> Self {
+        Self {
+            atr_ratio: round_to(c.atr_r.max(0.001), 2),
+            atr_r: round_to(c.atr.max(0.001), 2),
+            atr_roc_6: round_to(c.atr_roc_6, 2),
+            atr_roc_12: round_to(c.atr_roc_12, 2),
+            squeeze: round_to(c.squeeze, 2),
+            bb_width: round_to(c.bb_width.max(0.001), 2),
+        }
+    }
+}
+
+impl ToAst for ExitVolatilityThought {
+    fn to_ast(&self) -> ThoughtAST {
+        ThoughtAST::Bundle(self.forms())
+    }
+
+    fn forms(&self) -> Vec<ThoughtAST> {
+        vec![
+            ThoughtAST::Log { name: "atr-ratio".into(), value: self.atr_ratio },
+            ThoughtAST::Log { name: "atr-r".into(), value: self.atr_r },
+            ThoughtAST::Linear { name: "atr-roc-6".into(), value: self.atr_roc_6, scale: 1.0 },
+            ThoughtAST::Linear { name: "atr-roc-12".into(), value: self.atr_roc_12, scale: 1.0 },
+            ThoughtAST::Linear { name: "squeeze".into(), value: self.squeeze, scale: 1.0 },
+            ThoughtAST::Log { name: "bb-width".into(), value: self.bb_width },
+        ]
+    }
+}
 
 pub fn encode_exit_volatility_facts(c: &Candle) -> Vec<ThoughtAST> {
-    vec![
-        // ATR ratio: ATR / close. Unbounded positive. Log-encoded.
-        ThoughtAST::Log {
-            name: "atr-ratio".into(),
-            value: round_to(c.atr_r.max(0.001), 2),
-        },
-        // ATR raw: absolute average true range. Log-encoded.
-        ThoughtAST::Log {
-            name: "atr-r".into(),
-            value: round_to(c.atr.max(0.001), 2),
-        },
-        // ATR rate of change (6 period): signed.
-        ThoughtAST::Linear {
-            name: "atr-roc-6".into(),
-            value: round_to(c.atr_roc_6, 2),
-            scale: 1.0,
-        },
-        // ATR rate of change (12 period): signed.
-        ThoughtAST::Linear {
-            name: "atr-roc-12".into(),
-            value: round_to(c.atr_roc_12, 2),
-            scale: 1.0,
-        },
-        // Squeeze: [0, 1].
-        ThoughtAST::Linear {
-            name: "squeeze".into(),
-            value: round_to(c.squeeze, 2),
-            scale: 1.0,
-        },
-        // Bollinger width: unbounded positive. Log-encoded.
-        ThoughtAST::Log {
-            name: "bb-width".into(),
-            value: round_to(c.bb_width.max(0.001), 2),
-        },
-    ]
+    ExitVolatilityThought::from_candle(c).forms()
 }
 
 #[cfg(test)]

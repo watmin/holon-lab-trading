@@ -89,6 +89,18 @@ impl std::hash::Hash for ThoughtAST {
     }
 }
 
+/// Trait for typed vocabulary structs. Each vocabulary defines a struct
+/// whose fields ARE the facts. The struct knows how to produce its AST
+/// and its list of queryable forms.
+pub trait ToAst {
+    /// Produce the ThoughtAST for encoding this vocabulary's facts.
+    fn to_ast(&self) -> ThoughtAST;
+
+    /// Produce the list of leaf forms this vocabulary can generate.
+    /// Used by extract() — the consumer queries these forms against an anomaly.
+    fn forms(&self) -> Vec<ThoughtAST>;
+}
+
 /// Round a value to N decimal places. Used by vocabulary modules
 /// at emission time — the ThoughtAST carries the rounded value.
 /// The cache key IS the exact AST. The rounding happens at emission.

@@ -5,61 +5,52 @@
 //        volume-ratio, body-ratio
 
 use crate::candle::Candle;
-use crate::thought_encoder::{ThoughtAST, round_to};
+use crate::thought_encoder::{ThoughtAST, ToAst, round_to};
+
+pub struct FlowThought {
+    pub obv_slope: f64,
+    pub vwap_distance: f64,
+    pub buying_pressure: f64,
+    pub selling_pressure: f64,
+    pub volume_ratio: f64,
+    pub body_ratio: f64,
+}
+
+impl FlowThought {
+    pub fn from_candle(c: &Candle) -> Self {
+        let range = c.high - c.low;
+        let body = c.close - c.open;
+        let abs_body = body.abs();
+        Self {
+            obv_slope: round_to(c.obv_slope_12.exp(), 2),
+            vwap_distance: round_to(c.vwap_distance, 4),
+            buying_pressure: round_to(if range > 0.0 { (c.close - c.low) / range } else { 0.5 }, 2),
+            selling_pressure: round_to(if range > 0.0 { (c.high - c.close) / range } else { 0.5 }, 2),
+            volume_ratio: round_to(c.volume_accel.exp().max(0.001), 2),
+            body_ratio: round_to(if range > 0.0 { abs_body / range } else { 0.0 }, 2),
+        }
+    }
+}
+
+impl ToAst for FlowThought {
+    fn to_ast(&self) -> ThoughtAST {
+        ThoughtAST::Bundle(self.forms())
+    }
+
+    fn forms(&self) -> Vec<ThoughtAST> {
+        vec![
+            ThoughtAST::Log { name: "obv-slope".into(), value: self.obv_slope },
+            ThoughtAST::Linear { name: "vwap-distance".into(), value: self.vwap_distance, scale: 0.1 },
+            ThoughtAST::Linear { name: "buying-pressure".into(), value: self.buying_pressure, scale: 1.0 },
+            ThoughtAST::Linear { name: "selling-pressure".into(), value: self.selling_pressure, scale: 1.0 },
+            ThoughtAST::Log { name: "volume-ratio".into(), value: self.volume_ratio },
+            ThoughtAST::Linear { name: "body-ratio".into(), value: self.body_ratio, scale: 1.0 },
+        ]
+    }
+}
 
 pub fn encode_flow_facts(c: &Candle) -> Vec<ThoughtAST> {
-    let range = c.high - c.low;
-    let body = c.close - c.open;
-    let abs_body = body.abs();
-
-    vec![
-        // OBV slope: unbounded rate of change. Log-encoded.
-        ThoughtAST::Log {
-            name: "obv-slope".into(),
-            value: round_to(c.obv_slope_12.exp(), 2),
-        },
-        // VWAP distance: signed percentage from VWAP. Linear, bounded by ~10%.
-        ThoughtAST::Linear {
-            name: "vwap-distance".into(),
-            value: round_to(c.vwap_distance, 4),
-            scale: 0.1,
-        },
-        // Buying pressure: (close - low) / range. [0, 1].
-        ThoughtAST::Linear {
-            name: "buying-pressure".into(),
-            value: round_to(if range > 0.0 {
-                (c.close - c.low) / range
-            } else {
-                0.5
-            }, 2),
-            scale: 1.0,
-        },
-        // Selling pressure: (high - close) / range. [0, 1].
-        ThoughtAST::Linear {
-            name: "selling-pressure".into(),
-            value: round_to(if range > 0.0 {
-                (c.high - c.close) / range
-            } else {
-                0.5
-            }, 2),
-            scale: 1.0,
-        },
-        // Volume ratio: current volume / average. Unbounded positive.
-        ThoughtAST::Log {
-            name: "volume-ratio".into(),
-            value: round_to(c.volume_accel.exp().max(0.001), 2),
-        },
-        // Body ratio: |body| / range. [0, 1].
-        ThoughtAST::Linear {
-            name: "body-ratio".into(),
-            value: round_to(if range > 0.0 {
-                abs_body / range
-            } else {
-                0.0
-            }, 2),
-            scale: 1.0,
-        },
-    ]
+    FlowThought::from_candle(c).forms()
 }
 
 #[cfg(test)]

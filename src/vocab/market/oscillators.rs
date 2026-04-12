@@ -4,52 +4,55 @@
 // atoms: rsi, cci, mfi, williams-r, roc-1, roc-3, roc-6, roc-12
 
 use crate::candle::Candle;
-use crate::thought_encoder::{ThoughtAST, round_to};
+use crate::thought_encoder::{ThoughtAST, ToAst, round_to};
+
+pub struct OscillatorsThought {
+    pub rsi: f64,
+    pub cci: f64,
+    pub mfi: f64,
+    pub williams_r: f64,
+    pub roc_1: f64,
+    pub roc_3: f64,
+    pub roc_6: f64,
+    pub roc_12: f64,
+}
+
+impl OscillatorsThought {
+    pub fn from_candle(c: &Candle) -> Self {
+        Self {
+            rsi: round_to(c.rsi, 2),
+            cci: round_to(c.cci / 300.0, 2),
+            mfi: round_to(c.mfi / 100.0, 2),
+            williams_r: round_to((c.williams_r + 100.0) / 100.0, 2),
+            roc_1: round_to(1.0 + c.roc_1, 2),
+            roc_3: round_to(1.0 + c.roc_3, 2),
+            roc_6: round_to(1.0 + c.roc_6, 2),
+            roc_12: round_to(1.0 + c.roc_12, 2),
+        }
+    }
+}
+
+impl ToAst for OscillatorsThought {
+    fn to_ast(&self) -> ThoughtAST {
+        ThoughtAST::Bundle(self.forms())
+    }
+
+    fn forms(&self) -> Vec<ThoughtAST> {
+        vec![
+            ThoughtAST::Linear { name: "rsi".into(), value: self.rsi, scale: 1.0 },
+            ThoughtAST::Linear { name: "cci".into(), value: self.cci, scale: 1.0 },
+            ThoughtAST::Linear { name: "mfi".into(), value: self.mfi, scale: 1.0 },
+            ThoughtAST::Linear { name: "williams-r".into(), value: self.williams_r, scale: 1.0 },
+            ThoughtAST::Log { name: "roc-1".into(), value: self.roc_1 },
+            ThoughtAST::Log { name: "roc-3".into(), value: self.roc_3 },
+            ThoughtAST::Log { name: "roc-6".into(), value: self.roc_6 },
+            ThoughtAST::Log { name: "roc-12".into(), value: self.roc_12 },
+        ]
+    }
+}
 
 pub fn encode_oscillator_facts(c: &Candle) -> Vec<ThoughtAST> {
-    vec![
-        // RSI: [0, 1] — Wilder's formula. Naturally bounded.
-        ThoughtAST::Linear {
-            name: "rsi".into(),
-            value: round_to(c.rsi, 2),
-            scale: 1.0,
-        },
-        // CCI: unbounded but typically [-300, 300]. Normalize to [-1, 1].
-        ThoughtAST::Linear {
-            name: "cci".into(),
-            value: round_to(c.cci / 300.0, 2),
-            scale: 1.0,
-        },
-        // MFI: [0, 1] — money flow index. Same range as RSI.
-        ThoughtAST::Linear {
-            name: "mfi".into(),
-            value: round_to(c.mfi / 100.0, 2),
-            scale: 1.0,
-        },
-        // Williams %R: [-100, 0] raw. Normalize to [0, 1].
-        ThoughtAST::Linear {
-            name: "williams-r".into(),
-            value: round_to((c.williams_r + 100.0) / 100.0, 2),
-            scale: 1.0,
-        },
-        // Rate of change: unbounded ratio. Log-encoded.
-        ThoughtAST::Log {
-            name: "roc-1".into(),
-            value: round_to(1.0 + c.roc_1, 2),
-        },
-        ThoughtAST::Log {
-            name: "roc-3".into(),
-            value: round_to(1.0 + c.roc_3, 2),
-        },
-        ThoughtAST::Log {
-            name: "roc-6".into(),
-            value: round_to(1.0 + c.roc_6, 2),
-        },
-        ThoughtAST::Log {
-            name: "roc-12".into(),
-            value: round_to(1.0 + c.roc_12, 2),
-        },
-    ]
+    OscillatorsThought::from_candle(c).forms()
 }
 
 #[cfg(test)]

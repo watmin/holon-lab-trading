@@ -6,41 +6,46 @@
 //        adx, exit-kama-er
 
 use crate::candle::Candle;
-use crate::thought_encoder::{ThoughtAST, round_to};
+use crate::thought_encoder::{ThoughtAST, ToAst, round_to};
+
+pub struct ExitStructureThought {
+    pub trend_consistency_6: f64,
+    pub trend_consistency_12: f64,
+    pub trend_consistency_24: f64,
+    pub adx: f64,
+    pub exit_kama_er: f64,
+}
+
+impl ExitStructureThought {
+    pub fn from_candle(c: &Candle) -> Self {
+        Self {
+            trend_consistency_6: round_to(c.trend_consistency_6, 2),
+            trend_consistency_12: round_to(c.trend_consistency_12, 2),
+            trend_consistency_24: round_to(c.trend_consistency_24, 2),
+            adx: round_to(c.adx / 100.0, 2),
+            exit_kama_er: round_to(c.kama_er, 2),
+        }
+    }
+}
+
+impl ToAst for ExitStructureThought {
+    fn to_ast(&self) -> ThoughtAST {
+        ThoughtAST::Bundle(self.forms())
+    }
+
+    fn forms(&self) -> Vec<ThoughtAST> {
+        vec![
+            ThoughtAST::Linear { name: "trend-consistency-6".into(), value: self.trend_consistency_6, scale: 1.0 },
+            ThoughtAST::Linear { name: "trend-consistency-12".into(), value: self.trend_consistency_12, scale: 1.0 },
+            ThoughtAST::Linear { name: "trend-consistency-24".into(), value: self.trend_consistency_24, scale: 1.0 },
+            ThoughtAST::Linear { name: "adx".into(), value: self.adx, scale: 1.0 },
+            ThoughtAST::Linear { name: "exit-kama-er".into(), value: self.exit_kama_er, scale: 1.0 },
+        ]
+    }
+}
 
 pub fn encode_exit_structure_facts(c: &Candle) -> Vec<ThoughtAST> {
-    vec![
-        // Trend consistency (6 period): [-1, 1].
-        ThoughtAST::Linear {
-            name: "trend-consistency-6".into(),
-            value: round_to(c.trend_consistency_6, 2),
-            scale: 1.0,
-        },
-        // Trend consistency (12 period): [-1, 1].
-        ThoughtAST::Linear {
-            name: "trend-consistency-12".into(),
-            value: round_to(c.trend_consistency_12, 2),
-            scale: 1.0,
-        },
-        // Trend consistency (24 period): [-1, 1].
-        ThoughtAST::Linear {
-            name: "trend-consistency-24".into(),
-            value: round_to(c.trend_consistency_24, 2),
-            scale: 1.0,
-        },
-        // ADX: [0, 100]. Normalize to [0, 1].
-        ThoughtAST::Linear {
-            name: "adx".into(),
-            value: round_to(c.adx / 100.0, 2),
-            scale: 1.0,
-        },
-        // KAMA efficiency ratio for exit context: [0, 1].
-        ThoughtAST::Linear {
-            name: "exit-kama-er".into(),
-            value: round_to(c.kama_er, 2),
-            scale: 1.0,
-        },
-    ]
+    ExitStructureThought::from_candle(c).forms()
 }
 
 #[cfg(test)]

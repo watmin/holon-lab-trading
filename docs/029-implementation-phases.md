@@ -35,16 +35,14 @@ Decile  residue%  grace%
 ```
 Observers: regime 73.9%, momentum 69.6%, generalist 63.2%
 
-## Phase 2: Typed vocabulary structs (NEXT SESSION)
+## Phase 2: Typed vocabulary structs (COMPLETE)
 
-- [ ] Each vocabulary module defines a struct (fields ARE the facts)
-- [ ] `ToAst` trait: `fn to_ast(&self) -> ThoughtAST` + `fn forms(&self) -> Vec<ThoughtAST>`
-- [ ] Market vocabulary structs: MomentumThought, StructureThought, VolumeThought, RegimeThought, NarrativeThought, GeneralistThought
-- [ ] Exit vocabulary structs: ExitVolatilityThought, ExitStructureThought, ExitTimingThought, ExitGeneralistThought
-- [ ] Pipeline communication type: `(T: ToAst, Vector)` — compiler prevents wrong piping
-- [ ] Update all vocabulary functions to construct structs instead of raw `Vec<ThoughtAST>`
-- [ ] `cargo build --release` clean — the compiler enforces vocabulary boundaries
-- [ ] `cargo test` all pass
+- [x] `ToAst` trait in `thought_encoder.rs`: `to_ast()` + `forms()`
+- [x] 13 market vocabulary structs: MomentumThought, RegimeThought, OscillatorsThought, FlowThought, PersistenceThought, PriceActionThought, IchimokuThought, KeltnerThought, StochasticThought, FibonacciThought, DivergenceThought, TimeframeThought, StandardThought
+- [x] 6 exit vocabulary structs: ExitVolatilityThought, ExitStructureThought, ExitTimingThought, ExitRegimeThought, ExitTimeThought, ExitSelfAssessmentThought
+- [x] Existing `encode_*_facts()` functions delegate to structs — all callers unchanged
+- [x] 22 integration tests proving struct `forms()` matches original function output
+- [x] `cargo build --release` clean — 267 tests pass
 
 ## Phase 3: Broker extraction (FUTURE)
 

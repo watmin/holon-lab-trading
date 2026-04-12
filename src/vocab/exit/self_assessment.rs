@@ -3,22 +3,37 @@
 // The exit observer's own recent performance. Two atoms.
 // atoms: exit-grace-rate, exit-avg-residue
 
-use crate::thought_encoder::{ThoughtAST, round_to};
+use crate::thought_encoder::{ThoughtAST, ToAst, round_to};
+
+pub struct ExitSelfAssessmentThought {
+    pub exit_grace_rate: f64,
+    pub exit_avg_residue: f64,
+}
+
+impl ExitSelfAssessmentThought {
+    pub fn new(grace_rate: f64, avg_residue: f64) -> Self {
+        Self {
+            exit_grace_rate: round_to(grace_rate.clamp(0.0, 1.0), 3),
+            exit_avg_residue: round_to(avg_residue.max(0.001), 4),
+        }
+    }
+}
+
+impl ToAst for ExitSelfAssessmentThought {
+    fn to_ast(&self) -> ThoughtAST {
+        ThoughtAST::Bundle(self.forms())
+    }
+
+    fn forms(&self) -> Vec<ThoughtAST> {
+        vec![
+            ThoughtAST::Linear { name: "exit-grace-rate".into(), value: self.exit_grace_rate, scale: 1.0 },
+            ThoughtAST::Log { name: "exit-avg-residue".into(), value: self.exit_avg_residue },
+        ]
+    }
+}
 
 pub fn encode_exit_self_assessment_facts(grace_rate: f64, avg_residue: f64) -> Vec<ThoughtAST> {
-    vec![
-        // Grace rate: fraction of recent outcomes that were Grace. [0, 1].
-        ThoughtAST::Linear {
-            name: "exit-grace-rate".into(),
-            value: round_to(grace_rate.clamp(0.0, 1.0), 3),
-            scale: 1.0,
-        },
-        // Average residue per resolution. Small positive. Log-encoded.
-        ThoughtAST::Log {
-            name: "exit-avg-residue".into(),
-            value: round_to(avg_residue.max(0.001), 4),
-        },
-    ]
+    ExitSelfAssessmentThought::new(grace_rate, avg_residue).forms()
 }
 
 #[cfg(test)]

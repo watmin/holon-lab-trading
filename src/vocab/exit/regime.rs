@@ -6,58 +6,55 @@
 //        entropy-rate, aroon-up, aroon-down, fractal-dim
 
 use crate::candle::Candle;
-use crate::thought_encoder::{ThoughtAST, round_to};
+use crate::thought_encoder::{ThoughtAST, ToAst, round_to};
+
+pub struct ExitRegimeThought {
+    pub kama_er: f64,
+    pub choppiness: f64,
+    pub dfa_alpha: f64,
+    pub variance_ratio: f64,
+    pub entropy_rate: f64,
+    pub aroon_up: f64,
+    pub aroon_down: f64,
+    pub fractal_dim: f64,
+}
+
+impl ExitRegimeThought {
+    pub fn from_candle(c: &Candle) -> Self {
+        Self {
+            kama_er: round_to(c.kama_er, 2),
+            choppiness: round_to(c.choppiness / 100.0, 2),
+            dfa_alpha: round_to(c.dfa_alpha / 2.0, 2),
+            variance_ratio: round_to(c.variance_ratio.max(0.001), 2),
+            entropy_rate: round_to(c.entropy_rate, 2),
+            aroon_up: round_to(c.aroon_up / 100.0, 2),
+            aroon_down: round_to(c.aroon_down / 100.0, 2),
+            fractal_dim: round_to(c.fractal_dim - 1.0, 2),
+        }
+    }
+}
+
+impl ToAst for ExitRegimeThought {
+    fn to_ast(&self) -> ThoughtAST {
+        ThoughtAST::Bundle(self.forms())
+    }
+
+    fn forms(&self) -> Vec<ThoughtAST> {
+        vec![
+            ThoughtAST::Linear { name: "kama-er".into(), value: self.kama_er, scale: 1.0 },
+            ThoughtAST::Linear { name: "choppiness".into(), value: self.choppiness, scale: 1.0 },
+            ThoughtAST::Linear { name: "dfa-alpha".into(), value: self.dfa_alpha, scale: 1.0 },
+            ThoughtAST::Log { name: "variance-ratio".into(), value: self.variance_ratio },
+            ThoughtAST::Linear { name: "entropy-rate".into(), value: self.entropy_rate, scale: 1.0 },
+            ThoughtAST::Linear { name: "aroon-up".into(), value: self.aroon_up, scale: 1.0 },
+            ThoughtAST::Linear { name: "aroon-down".into(), value: self.aroon_down, scale: 1.0 },
+            ThoughtAST::Linear { name: "fractal-dim".into(), value: self.fractal_dim, scale: 1.0 },
+        ]
+    }
+}
 
 pub fn encode_exit_regime_facts(c: &Candle) -> Vec<ThoughtAST> {
-    vec![
-        // KAMA efficiency ratio: [0, 1].
-        ThoughtAST::Linear {
-            name: "kama-er".into(),
-            value: round_to(c.kama_er, 2),
-            scale: 1.0,
-        },
-        // Choppiness index: [0, 100]. Normalize to [0, 1].
-        ThoughtAST::Linear {
-            name: "choppiness".into(),
-            value: round_to(c.choppiness / 100.0, 2),
-            scale: 1.0,
-        },
-        // DFA alpha: [0, 2]. Normalize.
-        ThoughtAST::Linear {
-            name: "dfa-alpha".into(),
-            value: round_to(c.dfa_alpha / 2.0, 2),
-            scale: 1.0,
-        },
-        // Variance ratio: unbounded positive. Log-encoded.
-        ThoughtAST::Log {
-            name: "variance-ratio".into(),
-            value: round_to(c.variance_ratio.max(0.001), 2),
-        },
-        // Entropy rate: [0, 1].
-        ThoughtAST::Linear {
-            name: "entropy-rate".into(),
-            value: round_to(c.entropy_rate, 2),
-            scale: 1.0,
-        },
-        // Aroon up: [0, 100]. Normalize.
-        ThoughtAST::Linear {
-            name: "aroon-up".into(),
-            value: round_to(c.aroon_up / 100.0, 2),
-            scale: 1.0,
-        },
-        // Aroon down: [0, 100]. Normalize.
-        ThoughtAST::Linear {
-            name: "aroon-down".into(),
-            value: round_to(c.aroon_down / 100.0, 2),
-            scale: 1.0,
-        },
-        // Fractal dimension: [1, 2]. Map to [0, 1].
-        ThoughtAST::Linear {
-            name: "fractal-dim".into(),
-            value: round_to(c.fractal_dim - 1.0, 2),
-            scale: 1.0,
-        },
-    ]
+    ExitRegimeThought::from_candle(c).forms()
 }
 
 #[cfg(test)]

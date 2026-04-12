@@ -4,38 +4,45 @@
 // atoms: stoch-k, stoch-d, stoch-kd-spread, stoch-cross-delta
 
 use crate::candle::Candle;
-use crate::thought_encoder::{ThoughtAST, round_to};
+use crate::thought_encoder::{ThoughtAST, ToAst, round_to};
+
+pub struct StochasticThought {
+    pub stoch_k: f64,
+    pub stoch_d: f64,
+    pub stoch_kd_spread: f64,
+    pub stoch_cross_delta: f64,
+}
+
+impl StochasticThought {
+    pub fn from_candle(c: &Candle) -> Self {
+        let k = c.stoch_k / 100.0;
+        let d = c.stoch_d / 100.0;
+        Self {
+            stoch_k: round_to(k, 2),
+            stoch_d: round_to(d, 2),
+            stoch_kd_spread: round_to(k - d, 2),
+            stoch_cross_delta: round_to(c.stoch_cross_delta.max(-1.0).min(1.0), 2),
+        }
+    }
+}
+
+impl ToAst for StochasticThought {
+    fn to_ast(&self) -> ThoughtAST {
+        ThoughtAST::Bundle(self.forms())
+    }
+
+    fn forms(&self) -> Vec<ThoughtAST> {
+        vec![
+            ThoughtAST::Linear { name: "stoch-k".into(), value: self.stoch_k, scale: 1.0 },
+            ThoughtAST::Linear { name: "stoch-d".into(), value: self.stoch_d, scale: 1.0 },
+            ThoughtAST::Linear { name: "stoch-kd-spread".into(), value: self.stoch_kd_spread, scale: 1.0 },
+            ThoughtAST::Linear { name: "stoch-cross-delta".into(), value: self.stoch_cross_delta, scale: 1.0 },
+        ]
+    }
+}
 
 pub fn encode_stochastic_facts(c: &Candle) -> Vec<ThoughtAST> {
-    let k = c.stoch_k / 100.0;
-    let d = c.stoch_d / 100.0;
-
-    vec![
-        // Stochastic %K: [0, 1].
-        ThoughtAST::Linear {
-            name: "stoch-k".into(),
-            value: round_to(k, 2),
-            scale: 1.0,
-        },
-        // Stochastic %D: [0, 1].
-        ThoughtAST::Linear {
-            name: "stoch-d".into(),
-            value: round_to(d, 2),
-            scale: 1.0,
-        },
-        // K-D spread: signed. [-1, 1].
-        ThoughtAST::Linear {
-            name: "stoch-kd-spread".into(),
-            value: round_to(k - d, 2),
-            scale: 1.0,
-        },
-        // Stochastic cross delta: pre-computed. Signed. [-1, 1].
-        ThoughtAST::Linear {
-            name: "stoch-cross-delta".into(),
-            value: round_to(c.stoch_cross_delta.max(-1.0).min(1.0), 2),
-            scale: 1.0,
-        },
-    ]
+    StochasticThought::from_candle(c).forms()
 }
 
 #[cfg(test)]

@@ -4,46 +4,49 @@
 // atoms: close-sma20, close-sma50, close-sma200, macd-hist, di-spread, atr-ratio
 
 use crate::candle::Candle;
-use crate::thought_encoder::{ThoughtAST, round_to};
+use crate::thought_encoder::{ThoughtAST, ToAst, round_to};
+
+pub struct MomentumThought {
+    pub close_sma20: f64,
+    pub close_sma50: f64,
+    pub close_sma200: f64,
+    pub macd_hist: f64,
+    pub di_spread: f64,
+    pub atr_ratio: f64,
+}
+
+impl MomentumThought {
+    pub fn from_candle(c: &Candle) -> Self {
+        Self {
+            close_sma20: round_to((c.close - c.sma20) / c.close, 4),
+            close_sma50: round_to((c.close - c.sma50) / c.close, 4),
+            close_sma200: round_to((c.close - c.sma200) / c.close, 4),
+            macd_hist: round_to(c.macd_hist / c.close, 4),
+            di_spread: round_to((c.plus_di - c.minus_di) / 100.0, 2),
+            atr_ratio: round_to(c.atr_r.max(0.001), 2),
+        }
+    }
+}
+
+impl ToAst for MomentumThought {
+    fn to_ast(&self) -> ThoughtAST {
+        ThoughtAST::Bundle(self.forms())
+    }
+
+    fn forms(&self) -> Vec<ThoughtAST> {
+        vec![
+            ThoughtAST::Linear { name: "close-sma20".into(), value: self.close_sma20, scale: 0.1 },
+            ThoughtAST::Linear { name: "close-sma50".into(), value: self.close_sma50, scale: 0.1 },
+            ThoughtAST::Linear { name: "close-sma200".into(), value: self.close_sma200, scale: 0.1 },
+            ThoughtAST::Linear { name: "macd-hist".into(), value: self.macd_hist, scale: 0.01 },
+            ThoughtAST::Linear { name: "di-spread".into(), value: self.di_spread, scale: 1.0 },
+            ThoughtAST::Log { name: "atr-ratio".into(), value: self.atr_ratio },
+        ]
+    }
+}
 
 pub fn encode_momentum_facts(c: &Candle) -> Vec<ThoughtAST> {
-    vec![
-        // Close relative to SMA20: signed percentage distance.
-        ThoughtAST::Linear {
-            name: "close-sma20".into(),
-            value: round_to((c.close - c.sma20) / c.close, 4),
-            scale: 0.1,
-        },
-        // Close relative to SMA50: signed percentage distance.
-        ThoughtAST::Linear {
-            name: "close-sma50".into(),
-            value: round_to((c.close - c.sma50) / c.close, 4),
-            scale: 0.1,
-        },
-        // Close relative to SMA200: signed percentage distance.
-        ThoughtAST::Linear {
-            name: "close-sma200".into(),
-            value: round_to((c.close - c.sma200) / c.close, 4),
-            scale: 0.1,
-        },
-        // MACD histogram: signed, normalize by close.
-        ThoughtAST::Linear {
-            name: "macd-hist".into(),
-            value: round_to(c.macd_hist / c.close, 4),
-            scale: 0.01,
-        },
-        // DI spread: plus-DI minus minus-DI. Normalize to [-1, 1].
-        ThoughtAST::Linear {
-            name: "di-spread".into(),
-            value: round_to((c.plus_di - c.minus_di) / 100.0, 2),
-            scale: 1.0,
-        },
-        // ATR ratio: ATR / close. Log-encoded.
-        ThoughtAST::Log {
-            name: "atr-ratio".into(),
-            value: round_to(c.atr_r.max(0.001), 2),
-        },
-    ]
+    MomentumThought::from_candle(c).forms()
 }
 
 #[cfg(test)]

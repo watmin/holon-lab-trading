@@ -5,55 +5,56 @@
 //        fib-dist-236, fib-dist-382, fib-dist-500, fib-dist-618, fib-dist-786
 
 use crate::candle::Candle;
-use crate::thought_encoder::{ThoughtAST, round_to};
+use crate::thought_encoder::{ThoughtAST, ToAst, round_to};
+
+pub struct FibonacciThought {
+    pub range_pos_12: f64,
+    pub range_pos_24: f64,
+    pub range_pos_48: f64,
+    pub fib_dist_236: f64,
+    pub fib_dist_382: f64,
+    pub fib_dist_500: f64,
+    pub fib_dist_618: f64,
+    pub fib_dist_786: f64,
+}
+
+impl FibonacciThought {
+    pub fn from_candle(c: &Candle) -> Self {
+        let pos48 = c.range_pos_48;
+        Self {
+            range_pos_12: round_to(c.range_pos_12, 2),
+            range_pos_24: round_to(c.range_pos_24, 2),
+            range_pos_48: round_to(pos48, 2),
+            fib_dist_236: round_to(pos48 - 0.236, 2),
+            fib_dist_382: round_to(pos48 - 0.382, 2),
+            fib_dist_500: round_to(pos48 - 0.500, 2),
+            fib_dist_618: round_to(pos48 - 0.618, 2),
+            fib_dist_786: round_to(pos48 - 0.786, 2),
+        }
+    }
+}
+
+impl ToAst for FibonacciThought {
+    fn to_ast(&self) -> ThoughtAST {
+        ThoughtAST::Bundle(self.forms())
+    }
+
+    fn forms(&self) -> Vec<ThoughtAST> {
+        vec![
+            ThoughtAST::Linear { name: "range-pos-12".into(), value: self.range_pos_12, scale: 1.0 },
+            ThoughtAST::Linear { name: "range-pos-24".into(), value: self.range_pos_24, scale: 1.0 },
+            ThoughtAST::Linear { name: "range-pos-48".into(), value: self.range_pos_48, scale: 1.0 },
+            ThoughtAST::Linear { name: "fib-dist-236".into(), value: self.fib_dist_236, scale: 1.0 },
+            ThoughtAST::Linear { name: "fib-dist-382".into(), value: self.fib_dist_382, scale: 1.0 },
+            ThoughtAST::Linear { name: "fib-dist-500".into(), value: self.fib_dist_500, scale: 1.0 },
+            ThoughtAST::Linear { name: "fib-dist-618".into(), value: self.fib_dist_618, scale: 1.0 },
+            ThoughtAST::Linear { name: "fib-dist-786".into(), value: self.fib_dist_786, scale: 1.0 },
+        ]
+    }
+}
 
 pub fn encode_fibonacci_facts(c: &Candle) -> Vec<ThoughtAST> {
-    let pos48 = c.range_pos_48;
-
-    vec![
-        // Range position at each timeframe — Linear [0, 1]
-        ThoughtAST::Linear {
-            name: "range-pos-12".into(),
-            value: round_to(c.range_pos_12, 2),
-            scale: 1.0,
-        },
-        ThoughtAST::Linear {
-            name: "range-pos-24".into(),
-            value: round_to(c.range_pos_24, 2),
-            scale: 1.0,
-        },
-        ThoughtAST::Linear {
-            name: "range-pos-48".into(),
-            value: round_to(pos48, 2),
-            scale: 1.0,
-        },
-        // Distance from key Fibonacci levels (using 48-period range)
-        ThoughtAST::Linear {
-            name: "fib-dist-236".into(),
-            value: round_to(pos48 - 0.236, 2),
-            scale: 1.0,
-        },
-        ThoughtAST::Linear {
-            name: "fib-dist-382".into(),
-            value: round_to(pos48 - 0.382, 2),
-            scale: 1.0,
-        },
-        ThoughtAST::Linear {
-            name: "fib-dist-500".into(),
-            value: round_to(pos48 - 0.500, 2),
-            scale: 1.0,
-        },
-        ThoughtAST::Linear {
-            name: "fib-dist-618".into(),
-            value: round_to(pos48 - 0.618, 2),
-            scale: 1.0,
-        },
-        ThoughtAST::Linear {
-            name: "fib-dist-786".into(),
-            value: round_to(pos48 - 0.786, 2),
-            scale: 1.0,
-        },
-    ]
+    FibonacciThought::from_candle(c).forms()
 }
 
 #[cfg(test)]

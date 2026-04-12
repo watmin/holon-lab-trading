@@ -6,57 +6,57 @@
 //        tf-agreement, tf-5m-1h-align
 
 use crate::candle::Candle;
-use crate::thought_encoder::{ThoughtAST, round_to};
+use crate::thought_encoder::{ThoughtAST, ToAst, round_to};
+
+pub struct TimeframeThought {
+    pub tf_1h_trend: f64,
+    pub tf_1h_ret: f64,
+    pub tf_4h_trend: f64,
+    pub tf_4h_ret: f64,
+    pub tf_agreement: f64,
+    pub tf_5m_1h_align: f64,
+}
+
+impl TimeframeThought {
+    pub fn from_candle(c: &Candle) -> Self {
+        let signum_1h = if c.tf_1h_body > 0.0 {
+            1.0
+        } else if c.tf_1h_body < 0.0 {
+            -1.0
+        } else {
+            0.0
+        };
+        let five_m_ret = (c.close - c.open) / c.close;
+        Self {
+            tf_1h_trend: round_to(c.tf_1h_body, 2),
+            tf_1h_ret: round_to(c.tf_1h_ret, 4),
+            tf_4h_trend: round_to(c.tf_4h_body, 2),
+            tf_4h_ret: round_to(c.tf_4h_ret, 4),
+            tf_agreement: round_to(c.tf_agreement, 2),
+            tf_5m_1h_align: round_to(signum_1h * five_m_ret, 4),
+        }
+    }
+}
+
+impl ToAst for TimeframeThought {
+    fn to_ast(&self) -> ThoughtAST {
+        ThoughtAST::Bundle(self.forms())
+    }
+
+    fn forms(&self) -> Vec<ThoughtAST> {
+        vec![
+            ThoughtAST::Linear { name: "tf-1h-trend".into(), value: self.tf_1h_trend, scale: 1.0 },
+            ThoughtAST::Linear { name: "tf-1h-ret".into(), value: self.tf_1h_ret, scale: 0.1 },
+            ThoughtAST::Linear { name: "tf-4h-trend".into(), value: self.tf_4h_trend, scale: 1.0 },
+            ThoughtAST::Linear { name: "tf-4h-ret".into(), value: self.tf_4h_ret, scale: 0.1 },
+            ThoughtAST::Linear { name: "tf-agreement".into(), value: self.tf_agreement, scale: 1.0 },
+            ThoughtAST::Linear { name: "tf-5m-1h-align".into(), value: self.tf_5m_1h_align, scale: 0.1 },
+        ]
+    }
+}
 
 pub fn encode_timeframe_facts(c: &Candle) -> Vec<ThoughtAST> {
-    // 5m-1h alignment: sign of 1h body * 5m return direction
-    let signum_1h = if c.tf_1h_body > 0.0 {
-        1.0
-    } else if c.tf_1h_body < 0.0 {
-        -1.0
-    } else {
-        0.0
-    };
-    let five_m_ret = (c.close - c.open) / c.close;
-
-    vec![
-        // 1h trend: body / range of the 1h candle. Signed. [-1, 1].
-        ThoughtAST::Linear {
-            name: "tf-1h-trend".into(),
-            value: round_to(c.tf_1h_body, 2),
-            scale: 1.0,
-        },
-        // 1h return: signed percentage return over 1h.
-        ThoughtAST::Linear {
-            name: "tf-1h-ret".into(),
-            value: round_to(c.tf_1h_ret, 4),
-            scale: 0.1,
-        },
-        // 4h trend: body / range of the 4h candle. Signed. [-1, 1].
-        ThoughtAST::Linear {
-            name: "tf-4h-trend".into(),
-            value: round_to(c.tf_4h_body, 2),
-            scale: 1.0,
-        },
-        // 4h return: signed percentage return over 4h.
-        ThoughtAST::Linear {
-            name: "tf-4h-ret".into(),
-            value: round_to(c.tf_4h_ret, 4),
-            scale: 0.1,
-        },
-        // Timeframe agreement: [0, 1].
-        ThoughtAST::Linear {
-            name: "tf-agreement".into(),
-            value: round_to(c.tf_agreement, 2),
-            scale: 1.0,
-        },
-        // 5m-1h alignment: signed agreement between 5m direction and 1h trend.
-        ThoughtAST::Linear {
-            name: "tf-5m-1h-align".into(),
-            value: round_to(signum_1h * five_m_ret, 4),
-            scale: 0.1,
-        },
-    ]
+    TimeframeThought::from_candle(c).forms()
 }
 
 #[cfg(test)]

@@ -7,103 +7,102 @@
 //        dist-from-sma200, session-depth
 
 use crate::candle::Candle;
-use crate::thought_encoder::{ThoughtAST, round_to};
+use crate::thought_encoder::{ThoughtAST, ToAst, round_to};
+
+pub struct StandardThought {
+    pub since_rsi_extreme: f64,
+    pub since_vol_spike: f64,
+    pub since_large_move: f64,
+    pub dist_from_high: f64,
+    pub dist_from_low: f64,
+    pub dist_from_midpoint: f64,
+    pub dist_from_sma200: f64,
+    pub session_depth: f64,
+}
+
+impl StandardThought {
+    pub fn from_window(candle_window: &[Candle]) -> Option<Self> {
+        if candle_window.is_empty() {
+            return None;
+        }
+
+        let current = candle_window.last().unwrap();
+        let n = candle_window.len();
+        let price = current.close;
+
+        let mut window_high = f64::NEG_INFINITY;
+        let mut window_low = f64::INFINITY;
+        for c in candle_window {
+            if c.high > window_high {
+                window_high = c.high;
+            }
+            if c.low < window_low {
+                window_low = c.low;
+            }
+        }
+        let window_mid = (window_high + window_low) / 2.0;
+
+        let mut last_rsi_extreme_idx = 0;
+        for (i, c) in candle_window.iter().enumerate() {
+            if c.rsi > 80.0 || c.rsi < 20.0 {
+                last_rsi_extreme_idx = i;
+            }
+        }
+        let since_rsi_extreme = (n - last_rsi_extreme_idx) as f64;
+
+        let mut last_vol_spike_idx = 0;
+        for (i, c) in candle_window.iter().enumerate() {
+            if c.volume_accel > 2.0 {
+                last_vol_spike_idx = i;
+            }
+        }
+        let since_vol_spike = (n - last_vol_spike_idx) as f64;
+
+        let mut last_large_move_idx = 0;
+        for (i, c) in candle_window.iter().enumerate() {
+            if c.roc_1.abs() > 0.02 {
+                last_large_move_idx = i;
+            }
+        }
+        let since_large_move = (n - last_large_move_idx) as f64;
+
+        Some(Self {
+            since_rsi_extreme: round_to(since_rsi_extreme.max(1.0), 2),
+            since_vol_spike: round_to(since_vol_spike.max(1.0), 2),
+            since_large_move: round_to(since_large_move.max(1.0), 2),
+            dist_from_high: round_to((price - window_high) / price, 4),
+            dist_from_low: round_to((price - window_low) / price, 4),
+            dist_from_midpoint: round_to((price - window_mid) / price, 4),
+            dist_from_sma200: round_to((price - current.sma200) / price, 4),
+            session_depth: round_to((1.0 + n as f64).max(1.0), 2),
+        })
+    }
+}
+
+impl ToAst for StandardThought {
+    fn to_ast(&self) -> ThoughtAST {
+        ThoughtAST::Bundle(self.forms())
+    }
+
+    fn forms(&self) -> Vec<ThoughtAST> {
+        vec![
+            ThoughtAST::Log { name: "since-rsi-extreme".into(), value: self.since_rsi_extreme },
+            ThoughtAST::Log { name: "since-vol-spike".into(), value: self.since_vol_spike },
+            ThoughtAST::Log { name: "since-large-move".into(), value: self.since_large_move },
+            ThoughtAST::Linear { name: "dist-from-high".into(), value: self.dist_from_high, scale: 0.1 },
+            ThoughtAST::Linear { name: "dist-from-low".into(), value: self.dist_from_low, scale: 0.1 },
+            ThoughtAST::Linear { name: "dist-from-midpoint".into(), value: self.dist_from_midpoint, scale: 0.1 },
+            ThoughtAST::Linear { name: "dist-from-sma200".into(), value: self.dist_from_sma200, scale: 0.1 },
+            ThoughtAST::Log { name: "session-depth".into(), value: self.session_depth },
+        ]
+    }
+}
 
 pub fn encode_standard_facts(candle_window: &[Candle]) -> Vec<ThoughtAST> {
-    if candle_window.is_empty() {
-        return Vec::new();
+    match StandardThought::from_window(candle_window) {
+        Some(thought) => thought.forms(),
+        None => Vec::new(),
     }
-
-    let current = candle_window.last().unwrap();
-    let n = candle_window.len();
-    let price = current.close;
-
-    let mut window_high = f64::NEG_INFINITY;
-    let mut window_low = f64::INFINITY;
-    for c in candle_window {
-        if c.high > window_high {
-            window_high = c.high;
-        }
-        if c.low < window_low {
-            window_low = c.low;
-        }
-    }
-    let window_mid = (window_high + window_low) / 2.0;
-
-    // Since RSI extreme: candles since RSI was above 80 or below 20.
-    // (Note: RSI on candle is raw [0, 100] scale based on default values)
-    let mut last_rsi_extreme_idx = 0;
-    for (i, c) in candle_window.iter().enumerate() {
-        if c.rsi > 80.0 || c.rsi < 20.0 {
-            last_rsi_extreme_idx = i;
-        }
-    }
-    let since_rsi_extreme = (n - last_rsi_extreme_idx) as f64;
-
-    // Since volume spike: candles since volume_accel exceeded 2.0.
-    let mut last_vol_spike_idx = 0;
-    for (i, c) in candle_window.iter().enumerate() {
-        if c.volume_accel > 2.0 {
-            last_vol_spike_idx = i;
-        }
-    }
-    let since_vol_spike = (n - last_vol_spike_idx) as f64;
-
-    // Since large move: candles since |roc_1| exceeded 0.02.
-    let mut last_large_move_idx = 0;
-    for (i, c) in candle_window.iter().enumerate() {
-        if c.roc_1.abs() > 0.02 {
-            last_large_move_idx = i;
-        }
-    }
-    let since_large_move = (n - last_large_move_idx) as f64;
-
-    vec![
-        // Since RSI extreme: Log-encoded recency.
-        ThoughtAST::Log {
-            name: "since-rsi-extreme".into(),
-            value: round_to(since_rsi_extreme.max(1.0), 2),
-        },
-        // Since volume spike: Log-encoded recency.
-        ThoughtAST::Log {
-            name: "since-vol-spike".into(),
-            value: round_to(since_vol_spike.max(1.0), 2),
-        },
-        // Since large move: Log-encoded recency.
-        ThoughtAST::Log {
-            name: "since-large-move".into(),
-            value: round_to(since_large_move.max(1.0), 2),
-        },
-        // Distance from window high: signed percentage. Always <= 0.
-        ThoughtAST::Linear {
-            name: "dist-from-high".into(),
-            value: round_to((price - window_high) / price, 4),
-            scale: 0.1,
-        },
-        // Distance from window low: signed percentage. Always >= 0.
-        ThoughtAST::Linear {
-            name: "dist-from-low".into(),
-            value: round_to((price - window_low) / price, 4),
-            scale: 0.1,
-        },
-        // Distance from midpoint: signed percentage.
-        ThoughtAST::Linear {
-            name: "dist-from-midpoint".into(),
-            value: round_to((price - window_mid) / price, 4),
-            scale: 0.1,
-        },
-        // Distance from SMA200: signed percentage.
-        ThoughtAST::Linear {
-            name: "dist-from-sma200".into(),
-            value: round_to((price - current.sma200) / price, 4),
-            scale: 0.1,
-        },
-        // Session depth: how deep into the window. Log-encoded.
-        ThoughtAST::Log {
-            name: "session-depth".into(),
-            value: round_to((1.0 + n as f64).max(1.0), 2),
-        },
-    ]
 }
 
 #[cfg(test)]

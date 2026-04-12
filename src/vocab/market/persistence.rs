@@ -4,29 +4,40 @@
 // atoms: hurst, autocorrelation, adx
 
 use crate::candle::Candle;
-use crate::thought_encoder::{ThoughtAST, round_to};
+use crate::thought_encoder::{ThoughtAST, ToAst, round_to};
+
+pub struct PersistenceThought {
+    pub hurst: f64,
+    pub autocorrelation: f64,
+    pub adx: f64,
+}
+
+impl PersistenceThought {
+    pub fn from_candle(c: &Candle) -> Self {
+        Self {
+            hurst: round_to(c.hurst, 2),
+            autocorrelation: round_to(c.autocorrelation, 2),
+            adx: round_to(c.adx / 100.0, 2),
+        }
+    }
+}
+
+impl ToAst for PersistenceThought {
+    fn to_ast(&self) -> ThoughtAST {
+        ThoughtAST::Bundle(self.forms())
+    }
+
+    fn forms(&self) -> Vec<ThoughtAST> {
+        vec![
+            ThoughtAST::Linear { name: "hurst".into(), value: self.hurst, scale: 1.0 },
+            ThoughtAST::Linear { name: "autocorrelation".into(), value: self.autocorrelation, scale: 1.0 },
+            ThoughtAST::Linear { name: "adx".into(), value: self.adx, scale: 1.0 },
+        ]
+    }
+}
 
 pub fn encode_persistence_facts(c: &Candle) -> Vec<ThoughtAST> {
-    vec![
-        // Hurst exponent: [0, 1]. 0.5 = random walk.
-        ThoughtAST::Linear {
-            name: "hurst".into(),
-            value: round_to(c.hurst, 2),
-            scale: 1.0,
-        },
-        // Autocorrelation: [-1, 1]. Signed.
-        ThoughtAST::Linear {
-            name: "autocorrelation".into(),
-            value: round_to(c.autocorrelation, 2),
-            scale: 1.0,
-        },
-        // ADX: [0, 100]. Normalize to [0, 1].
-        ThoughtAST::Linear {
-            name: "adx".into(),
-            value: round_to(c.adx / 100.0, 2),
-            scale: 1.0,
-        },
-    ]
+    PersistenceThought::from_candle(c).forms()
 }
 
 #[cfg(test)]

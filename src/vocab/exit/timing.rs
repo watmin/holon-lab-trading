@@ -5,41 +5,46 @@
 // atoms: rsi, stoch-k, stoch-kd-spread, macd-hist, cci
 
 use crate::candle::Candle;
-use crate::thought_encoder::{ThoughtAST, round_to};
+use crate::thought_encoder::{ThoughtAST, ToAst, round_to};
+
+pub struct ExitTimingThought {
+    pub rsi: f64,
+    pub stoch_k: f64,
+    pub stoch_kd_spread: f64,
+    pub macd_hist: f64,
+    pub cci: f64,
+}
+
+impl ExitTimingThought {
+    pub fn from_candle(c: &Candle) -> Self {
+        Self {
+            rsi: round_to(c.rsi, 2),
+            stoch_k: round_to(c.stoch_k / 100.0, 2),
+            stoch_kd_spread: round_to((c.stoch_k - c.stoch_d) / 100.0, 2),
+            macd_hist: round_to(c.macd_hist / c.close, 4),
+            cci: round_to(c.cci / 300.0, 2),
+        }
+    }
+}
+
+impl ToAst for ExitTimingThought {
+    fn to_ast(&self) -> ThoughtAST {
+        ThoughtAST::Bundle(self.forms())
+    }
+
+    fn forms(&self) -> Vec<ThoughtAST> {
+        vec![
+            ThoughtAST::Linear { name: "rsi".into(), value: self.rsi, scale: 1.0 },
+            ThoughtAST::Linear { name: "stoch-k".into(), value: self.stoch_k, scale: 1.0 },
+            ThoughtAST::Linear { name: "stoch-kd-spread".into(), value: self.stoch_kd_spread, scale: 1.0 },
+            ThoughtAST::Linear { name: "macd-hist".into(), value: self.macd_hist, scale: 0.01 },
+            ThoughtAST::Linear { name: "cci".into(), value: self.cci, scale: 1.0 },
+        ]
+    }
+}
 
 pub fn encode_exit_timing_facts(c: &Candle) -> Vec<ThoughtAST> {
-    vec![
-        // RSI: [0, 1] — Wilder's formula. Naturally bounded.
-        ThoughtAST::Linear {
-            name: "rsi".into(),
-            value: round_to(c.rsi, 2),
-            scale: 1.0,
-        },
-        // Stochastic %K: [0, 1].
-        ThoughtAST::Linear {
-            name: "stoch-k".into(),
-            value: round_to(c.stoch_k / 100.0, 2),
-            scale: 1.0,
-        },
-        // Stochastic %K - %D spread: signed. [-1, 1].
-        ThoughtAST::Linear {
-            name: "stoch-kd-spread".into(),
-            value: round_to((c.stoch_k - c.stoch_d) / 100.0, 2),
-            scale: 1.0,
-        },
-        // MACD histogram: signed. Normalize by close.
-        ThoughtAST::Linear {
-            name: "macd-hist".into(),
-            value: round_to(c.macd_hist / c.close, 4),
-            scale: 0.01,
-        },
-        // CCI: unbounded. Normalize by 300.
-        ThoughtAST::Linear {
-            name: "cci".into(),
-            value: round_to(c.cci / 300.0, 2),
-            scale: 1.0,
-        },
-    ]
+    ExitTimingThought::from_candle(c).forms()
 }
 
 #[cfg(test)]
