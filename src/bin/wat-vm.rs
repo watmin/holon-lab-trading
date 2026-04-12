@@ -3,34 +3,28 @@
 /// No thinking. No encoding. No prediction. Just the stream and the bank.
 /// The simplest proof that the pipeline breathes.
 
+use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use clap::Parser;
 
-#[cfg(feature = "parquet")]
-use std::path::Path;
-#[cfg(feature = "parquet")]
-use std::sync::atomic::{AtomicBool, Ordering};
-#[cfg(feature = "parquet")]
 use enterprise::domain::candle_stream::CandleStream;
-#[cfg(feature = "parquet")]
 use enterprise::domain::indicator_bank::IndicatorBank;
-#[cfg(feature = "parquet")]
 use enterprise::programs::stdlib::console::console;
 
 // ─── Signal handling ────────────────────────────────────────────────────────
 
 /// One static bool. The handler writes. The loop reads. Nothing else.
-#[cfg(feature = "parquet")]
 static STOP: AtomicBool = AtomicBool::new(false);
 
-#[cfg(feature = "parquet")]
 extern "C" fn signal_handler(_sig: libc::c_int) {
     STOP.store(true, Ordering::SeqCst);
 }
 
-// ─── CLI ─────────────────────────────────────────────────────────────────────
+// ─── CLI ────────────────────────────────────────────────────────────────────
 
 #[derive(Parser)]
-#[command(name = "wat-vm", about = "The simplest heartbeat — candles in, count out")]
+#[command(name = "wat-vm", about = "The simplest heartbeat -- candles in, count out")]
 struct Args {
     /// Candle streams. Format: SOURCE:TARGET:PATH. Repeatable.
     #[arg(long = "stream", required = true)]
@@ -41,9 +35,8 @@ struct Args {
     max_candles: usize,
 }
 
-// ─── Pipeline ────────────────────────────────────────────────────────────────
+// ─── Pipeline ───────────────────────────────────────────────────────────────
 
-#[cfg(feature = "parquet")]
 struct Pipeline {
     source: String,
     target: String,
@@ -54,7 +47,6 @@ struct Pipeline {
 
 // ─── Main ───────────────────────────────────────────────────────────────────
 
-#[cfg(feature = "parquet")]
 fn main() {
     let args = Args::parse();
 
@@ -104,9 +96,9 @@ fn main() {
 
     // Per-stream loop. Each pipeline owns its limit.
     // Three exit conditions:
-    //   1. count >= max_candles — the limit
-    //   2. STOP flag set — SIGTERM/SIGINT
-    //   3. stream exhausted �� no more data
+    //   1. count >= max_candles -- the limit
+    //   2. STOP flag set -- SIGTERM/SIGINT
+    //   3. stream exhausted -- no more data
     let max = args.max_candles;
     for (i, pipeline) in pipelines.iter_mut().enumerate() {
         while pipeline.count < max && !STOP.load(Ordering::SeqCst) {
@@ -141,13 +133,7 @@ fn main() {
         ));
     }
 
-    // Shutdown: drop handles → console drains → join
+    // Shutdown: drop handles, console drains, join
     drop(handles);
     driver.join();
-}
-
-#[cfg(not(feature = "parquet"))]
-fn main() {
-    eprintln!("wat-vm requires the 'parquet' feature");
-    std::process::exit(1);
 }
