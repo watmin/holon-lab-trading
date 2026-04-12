@@ -2,8 +2,8 @@
 ///
 /// Vec<f64> in, f64 out. No state. No side effects.
 
-use crate::distances::Distances;
-use crate::enums::Direction;
+use crate::types::distances::Distances;
+use crate::types::enums::Direction;
 
 /// Simulate a trailing stop at the given distance. Returns residue.
 ///

@@ -7,7 +7,7 @@
 //        dist-from-sma200, session-depth
 
 use std::collections::HashMap;
-use crate::candle::Candle;
+use crate::types::candle::Candle;
 use crate::thought_encoder::{ThoughtAST, ToAst, round_to};
 use crate::scale_tracker::{ScaleTracker, scaled_linear};
 

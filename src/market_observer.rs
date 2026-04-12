@@ -7,7 +7,7 @@ use holon::kernel::vector::Vector;
 use holon::memory::{OnlineSubspace, ReckConfig, Reckoner};
 
 use crate::engram_gate::{check_engram_gate, EngramGateState};
-use crate::enums::{Direction, MarketLens};
+use crate::types::enums::{Direction, MarketLens};
 use crate::thought_encoder::{IncrementalBundle, ThoughtAST};
 use crate::to_f64;
 use crate::window_sampler::WindowSampler;
@@ -43,8 +43,8 @@ pub struct MarketObserver {
 pub struct ObserveResult {
     /// The raw thought vector — before noise stripping.
     pub raw_thought: Vector,
-    /// The noise-stripped thought vector (anomaly).
-    pub thought: Vector,
+    /// The noise-stripped thought vector — the anomaly after noise subspace removal.
+    pub anomaly: Vector,
     /// Holon-rs prediction (scores + conviction).
     pub prediction: holon::memory::Prediction,
     /// Edge: accuracy_at(conviction) or 0.0 if curve not valid.
@@ -121,7 +121,7 @@ impl MarketObserver {
 
         ObserveResult {
             raw_thought: raw,
-            thought: anomaly,
+            anomaly,
             prediction: pred,
             edge,
             misses,
@@ -222,7 +222,7 @@ mod tests {
         let mut obs = make_observer();
         let thought = random_vector("test_thought");
         let result = obs.observe(thought, Vec::new());
-        assert_eq!(result.thought.dimensions(), DIMS);
+        assert_eq!(result.anomaly.dimensions(), DIMS);
         assert!(result.misses.is_empty());
     }
 

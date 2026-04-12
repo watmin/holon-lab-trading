@@ -6,9 +6,9 @@
 
 use holon::kernel::vector::Vector;
 
-use crate::distances::Distances;
-use crate::enums::Direction;
-use crate::newtypes::Price;
+use crate::types::distances::Distances;
+use crate::types::enums::Direction;
+use crate::types::newtypes::Price;
 
 /// A hypothetical paper trade tracking one predicted direction.
 pub struct PaperEntry {

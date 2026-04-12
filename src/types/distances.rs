@@ -1,7 +1,7 @@
 /// Two representations of exit thresholds. Compiled from wat/distances.wat.
 
-use crate::enums::Side;
-use crate::newtypes::Price;
+use crate::types::enums::Side;
+use crate::types::newtypes::Price;
 
 /// Distances: percentage of price. Scale-free.
 #[derive(Clone, Copy, Debug)]

@@ -12,8 +12,8 @@ use std::thread::{self, JoinHandle};
 use crossbeam::channel::{self, Receiver, Sender, TryRecvError};
 use rusqlite::{params, Connection};
 
-use crate::enums::Outcome;
-use crate::log_entry::LogEntry;
+use crate::types::enums::Outcome;
+use crate::types::log_entry::LogEntry;
 
 /// A producer's log handle. Moved into the thread at construction.
 /// Fire and forget. The producer writes and continues.

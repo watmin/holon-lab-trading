@@ -6,7 +6,7 @@
 
 use holon::kernel::vector::Vector;
 
-use crate::enums::Prediction;
+use crate::types::enums::Prediction;
 
 /// Where a trade came from. Stashed by treasury at funding time.
 #[derive(Clone, Debug)]

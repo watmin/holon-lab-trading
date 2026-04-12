@@ -9,10 +9,10 @@ use std::collections::{HashMap, VecDeque};
 use holon::kernel::scalar::ScalarEncoder;
 use holon::kernel::vector::Vector;
 
-use crate::distances::Distances;
-use crate::enums::{Direction, Outcome};
+use crate::types::distances::Distances;
+use crate::types::enums::{Direction, Outcome};
 use crate::simulation;
-use crate::newtypes::Price;
+use crate::types::newtypes::Price;
 use crate::paper_entry::PaperEntry;
 use crate::scalar_accumulator::ScalarAccumulator;
 
@@ -598,7 +598,7 @@ mod tests {
     use super::*;
     use holon::kernel::scalar::ScalarEncoder;
     use holon::kernel::vector_manager::VectorManager;
-    use crate::enums::ScalarEncoding;
+    use crate::types::enums::ScalarEncoding;
 
     const DIMS: usize = 4096;
 

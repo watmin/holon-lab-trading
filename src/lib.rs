@@ -8,12 +8,8 @@ pub fn to_f64(v: &Vector) -> Vec<f64> {
     v.data().iter().map(|&x| x as f64).collect()
 }
 
-pub mod raw_candle;
-pub mod candle;
+pub mod types;
 pub mod indicator_bank;
-pub mod enums;
-pub mod newtypes;
-pub mod distances;
 pub mod window_sampler;
 pub mod scalar_accumulator;
 pub mod engram_gate;
@@ -30,7 +26,6 @@ pub mod proposal;
 pub mod trade;
 pub mod trade_origin;
 pub mod settlement;
-pub mod log_entry;
 pub mod post;
 pub mod treasury;
 pub mod enterprise;

@@ -3,7 +3,7 @@
 // Temporal context. All circular scalars — the value wraps.
 // atoms: minute, hour, day-of-week, day-of-month, month-of-year
 
-use crate::candle::Candle;
+use crate::types::candle::Candle;
 use crate::thought_encoder::{ThoughtAST, round_to};
 
 pub fn encode_time_facts(c: &Candle) -> Vec<ThoughtAST> {

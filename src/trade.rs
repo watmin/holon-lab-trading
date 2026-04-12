@@ -3,10 +3,10 @@
 /// Created when a proposal is funded. Phase transitions: Active -> Runner -> Settled*.
 /// Levels has TWO fields: trail_stop and safety_stop.
 
-use crate::distances::Levels;
-use crate::enums::{Side, TradePhase};
-use crate::newtypes::{Amount, Price, TradeId};
-use crate::raw_candle::Asset;
+use crate::types::distances::Levels;
+use crate::types::enums::{Side, TradePhase};
+use crate::types::newtypes::{Amount, Price, TradeId};
+use crate::types::raw_candle::Asset;
 
 /// An active or settled trade.
 #[derive(Clone, Debug)]

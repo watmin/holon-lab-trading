@@ -12,11 +12,11 @@ use crate::treasury::Treasury;
 #[cfg(test)]
 use std::collections::HashMap;
 #[cfg(test)]
-use crate::enums::Direction;
+use crate::types::enums::Direction;
 #[cfg(test)]
-use crate::log_entry::LogEntry;
+use crate::types::log_entry::LogEntry;
 #[cfg(test)]
-use crate::newtypes::Price;
+use crate::types::newtypes::Price;
 #[cfg(test)]
 use crate::simulation::compute_optimal_distances;
 
@@ -102,12 +102,12 @@ impl Enterprise {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::raw_candle::Asset;
+    use crate::types::raw_candle::Asset;
 
     #[test]
     fn test_enterprise_construct() {
         let mut balances = std::collections::HashMap::new();
-        balances.insert("USDC".into(), crate::newtypes::Amount(10000.0));
+        balances.insert("USDC".into(), crate::types::newtypes::Amount(10000.0));
         let treasury = Treasury::new(Asset::new("USD"), balances, 0.001, 0.0025);
         let ent = Enterprise::new(Vec::new(), treasury);
         assert_eq!(ent.posts.len(), 0);
@@ -118,7 +118,7 @@ mod tests {
     #[test]
     fn test_enterprise_cache_per_post() {
         let mut balances = std::collections::HashMap::new();
-        balances.insert("USDC".into(), crate::newtypes::Amount(10000.0));
+        balances.insert("USDC".into(), crate::types::newtypes::Amount(10000.0));
         let treasury = Treasury::new(Asset::new("USD"), balances, 0.001, 0.0025);
 
         // Create two empty posts
@@ -152,7 +152,7 @@ mod tests {
     #[test]
     fn test_step_resolve_no_trades() {
         let mut balances = std::collections::HashMap::new();
-        balances.insert("USDC".into(), crate::newtypes::Amount(10000.0));
+        balances.insert("USDC".into(), crate::types::newtypes::Amount(10000.0));
         let treasury = Treasury::new(Asset::new("USD"), balances, 0.001, 0.0025);
         let mut ent = Enterprise::new(Vec::new(), treasury);
 
@@ -164,7 +164,7 @@ mod tests {
     #[test]
     fn test_step_collect_fund_no_proposals() {
         let mut balances = std::collections::HashMap::new();
-        balances.insert("USDC".into(), crate::newtypes::Amount(10000.0));
+        balances.insert("USDC".into(), crate::types::newtypes::Amount(10000.0));
         let treasury = Treasury::new(Asset::new("USD"), balances, 0.001, 0.0025);
         let mut ent = Enterprise::new(Vec::new(), treasury);
 

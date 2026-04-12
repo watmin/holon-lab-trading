@@ -12,9 +12,9 @@ use std::sync::Arc;
 
 use holon::kernel::vector::Vector;
 
-use crate::distances::Distances;
+use crate::types::distances::Distances;
 use crate::exit_observer::ExitObserver;
-use crate::log_entry::LogEntry;
+use crate::types::log_entry::LogEntry;
 use crate::post::{exit_lens_facts, exit_self_assessment_facts};
 use crate::programs::chain::{MarketExitChain, MarketChain};
 use crate::programs::stdlib::cache::CacheHandle;

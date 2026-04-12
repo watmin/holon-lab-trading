@@ -11,9 +11,9 @@ use std::sync::Arc;
 
 use holon::kernel::vector::Vector;
 
-use crate::candle::Candle;
-use crate::enums::Direction;
-use crate::log_entry::LogEntry;
+use crate::types::candle::Candle;
+use crate::types::enums::Direction;
+use crate::types::log_entry::LogEntry;
 use crate::market_observer::MarketObserver;
 use crate::post::market_lens_facts;
 use crate::programs::chain::MarketChain;

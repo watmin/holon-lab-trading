@@ -7,8 +7,8 @@
 use holon::kernel::vector::Vector;
 use holon::memory::{OnlineSubspace, ReckConfig, Reckoner};
 
-use crate::distances::Distances;
-use crate::enums::ExitLens;
+use crate::types::distances::Distances;
+use crate::types::enums::ExitLens;
 #[cfg(test)]
 use crate::scalar_accumulator::ScalarAccumulator;
 use crate::thought_encoder::IncrementalBundle;
@@ -189,7 +189,7 @@ mod tests {
     use super::*;
     use holon::kernel::scalar::ScalarEncoder;
     use holon::kernel::vector_manager::VectorManager;
-    use crate::enums::ScalarEncoding;
+    use crate::types::enums::ScalarEncoding;
 
     const DIMS: usize = 4096;
     const RECALIB: usize = 100;

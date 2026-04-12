@@ -8,7 +8,7 @@ use holon::kernel::scalar::{ScalarEncoder, ScalarMode};
 use holon::kernel::similarity::Similarity;
 use holon::kernel::vector::Vector;
 
-use crate::enums::{Outcome, ScalarEncoding};
+use crate::types::enums::{Outcome, ScalarEncoding};
 
 /// Accumulated scalar observations separated by outcome.
 pub struct ScalarAccumulator {

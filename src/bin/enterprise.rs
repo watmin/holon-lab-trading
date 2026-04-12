@@ -14,15 +14,15 @@ use rusqlite::{params, Connection};
 
 use enterprise::broker::Broker;
 use enterprise::ctx::Ctx;
-use enterprise::enums::{ExitLens, MarketLens, ScalarEncoding};
+use enterprise::types::enums::{ExitLens, MarketLens, ScalarEncoding};
 use enterprise::exit_observer::ExitObserver;
 use enterprise::indicator_bank::IndicatorBank;
-use enterprise::log_entry::LogEntry;
+use enterprise::types::log_entry::LogEntry;
 use enterprise::market_observer::MarketObserver;
 use enterprise::post::Post;
-use enterprise::raw_candle::{Asset, RawCandle};
+use enterprise::types::raw_candle::{Asset, RawCandle};
 use enterprise::scalar_accumulator::ScalarAccumulator;
-use enterprise::newtypes::{Amount, Price};
+use enterprise::types::newtypes::{Amount, Price};
 use enterprise::treasury::Treasury;
 use enterprise::enterprise::Enterprise;
 use enterprise::window_sampler::WindowSampler;
@@ -416,7 +416,7 @@ fn build_enterprise(args: &Args) -> (Enterprise, Ctx) {
                     ScalarAccumulator::new("trail-distance", ScalarEncoding::Log, dims),
                     ScalarAccumulator::new("stop-distance", ScalarEncoding::Log, dims),
                 ],
-                enterprise::distances::Distances::new(0.0001, 0.0001),
+                enterprise::types::distances::Distances::new(0.0001, 0.0001),
                 args.swap_fee,
             )
         })
@@ -452,7 +452,7 @@ fn build_enterprise(args: &Args) -> (Enterprise, Ctx) {
     // Walk a default candle through all market lenses, extract atom names,
     // encode m:-prefixed Linear facts once so the atoms exist before first candle.
     {
-        let default_candle = enterprise::candle::Candle::default();
+        let default_candle = enterprise::types::candle::Candle::default();
         let window = vec![default_candle.clone()];
         let mut registration_misses = Vec::new();
         let mut reg_scales = HashMap::new();
@@ -757,14 +757,14 @@ fn main() {
     let grid_handles: Vec<_> = encoder_handles.drain(n..).collect();
     let mut obs_encoder_handles: Vec<_> = encoder_handles.drain(..).collect();
 
-    type ObsInput = (enterprise::candle::Candle, Arc<Vec<enterprise::candle::Candle>>, usize);
+    type ObsInput = (enterprise::types::candle::Candle, Arc<Vec<enterprise::types::candle::Candle>>, usize);
     type ObsOutput = (holon::kernel::vector::Vector, holon::kernel::vector::Vector, enterprise::thought_encoder::ThoughtAST, holon::memory::Prediction, f64,
                       Vec<(enterprise::thought_encoder::ThoughtAST, holon::kernel::vector::Vector)>);
-    type ObsLearn = (holon::kernel::vector::Vector, enterprise::enums::Direction, f64);
+    type ObsLearn = (holon::kernel::vector::Vector, enterprise::types::enums::Direction, f64);
     type BrokerInput = (holon::kernel::vector::Vector, holon::kernel::vector::Vector,
-                        holon::kernel::vector::Vector, enterprise::enums::Direction,
-                        Option<enterprise::distances::Distances>, f64,
-                        enterprise::enums::Side, f64, enterprise::enums::Prediction,
+                        holon::kernel::vector::Vector, enterprise::types::enums::Direction,
+                        Option<enterprise::types::distances::Distances>, f64,
+                        enterprise::types::enums::Side, f64, enterprise::types::enums::Prediction,
                         enterprise::vocab::broker::input::BrokerMarketInput,
                         enterprise::vocab::broker::input::BrokerExitInput,
                         f64, f64, f64, f64,
@@ -773,8 +773,8 @@ fn main() {
     type BrokerOutput = (enterprise::proposal::Proposal, Vec<enterprise::broker::Resolution>, Vec<enterprise::broker::Resolution>);
     type BrokerLearn = (holon::kernel::vector::Vector, holon::kernel::vector::Vector,
                         holon::kernel::vector::Vector,
-                        enterprise::enums::Outcome,
-                        f64, enterprise::enums::Direction, enterprise::distances::Distances);
+                        enterprise::types::enums::Outcome,
+                        f64, enterprise::types::enums::Direction, enterprise::types::distances::Distances);
 
     /// Per-post pipe wiring. One per asset pair. No magic index.
     struct PostPipes {
@@ -831,7 +831,7 @@ fn main() {
                     let ws = obs.window_sampler.sample(candle_count);
                     let full_len = window.len();
                     let start = if full_len > ws { full_len - ws } else { 0 };
-                    let sliced: Vec<enterprise::candle::Candle> = window[start..].to_vec();
+                    let sliced: Vec<enterprise::types::candle::Candle> = window[start..].to_vec();
                     let facts = enterprise::post::market_lens_facts(&lens, &candle, &sliced, &mut obs_scales);
                     let bundle_ast = enterprise::thought_encoder::ThoughtAST::Bundle(facts);
 
@@ -857,7 +857,7 @@ fn main() {
                         });
                     }
 
-                    let _ = thought_tx.send((result.raw_thought, result.thought, bundle_ast, result.prediction, result.edge, vec![]));
+                    let _ = thought_tx.send((result.raw_thought, result.anomaly, bundle_ast, result.prediction, result.edge, vec![]));
                 }
                 obs
             });
@@ -913,10 +913,10 @@ fn main() {
                     // Market: signed conviction (direction × magnitude), conviction, edge.
                     // Exit: trail, stop, grace-rate, avg-residue.
                     let market_conviction = match &pred {
-                        enterprise::enums::Prediction::Discrete { conviction, .. } => *conviction,
-                        enterprise::enums::Prediction::Continuous { .. } => 0.0,
+                        enterprise::types::enums::Prediction::Discrete { conviction, .. } => *conviction,
+                        enterprise::types::enums::Prediction::Continuous { .. } => 0.0,
                     };
-                    let signed_conviction = if prediction == enterprise::enums::Direction::Up {
+                    let signed_conviction = if prediction == enterprise::types::enums::Direction::Up {
                         market_conviction
                     } else {
                         -market_conviction
@@ -1081,9 +1081,9 @@ fn main() {
                 let ei = slot % pipes.m;
 
                 let direction = if stl.exit_price.0 > stl.trade.entry_price.0 {
-                    enterprise::enums::Direction::Up
+                    enterprise::types::enums::Direction::Up
                 } else {
-                    enterprise::enums::Direction::Down
+                    enterprise::types::enums::Direction::Down
                 };
                 let optimal = enterprise::simulation::compute_optimal_distances(
                     &stl.trade.price_history, direction, args.swap_fee);
@@ -1102,7 +1102,7 @@ fn main() {
                 }
                 // Exit observer learns on main thread
                 // Proposal 026: exit learns from exit_thought, not composed
-                let is_grace = stl.outcome == enterprise::enums::Outcome::Grace;
+                let is_grace = stl.outcome == enterprise::types::enums::Outcome::Grace;
                 if stl_post_idx < ent.posts.len() && ei < ent.posts[stl_post_idx].exit_observers.len() {
                     let net_weight = net_residue(stl.amount.0, is_grace, args.swap_fee).abs();
                     ent.posts[stl_post_idx].exit_observers[ei].observe_distances(
@@ -1128,7 +1128,7 @@ fn main() {
         // push_back/pop_front). Observer threads need a contiguous Vec snapshot at this
         // candle. The Arc shares the single clone across all N observer threads.
         // VecDeque cannot provide a contiguous &[Candle] across both halves without copying.
-        let window: Arc<Vec<enterprise::candle::Candle>> = Arc::new(post.candle_window.iter().cloned().collect());
+        let window: Arc<Vec<enterprise::types::candle::Candle>> = Arc::new(post.candle_window.iter().cloned().collect());
         let encode_count = post.encode_count;
 
         let t_tick = t_candle.elapsed();
@@ -1295,9 +1295,9 @@ fn main() {
 
                 // Derive direction from prediction for paper registration
                 let direction = if market_predictions[mi].direction.map_or(true, |d| d.index() == 0) {
-                    enterprise::enums::Direction::Up
+                    enterprise::types::enums::Direction::Up
                 } else {
-                    enterprise::enums::Direction::Down
+                    enterprise::types::enums::Direction::Down
                 };
 
                 // Proposal 030: exit observer performance for opinion encoding
@@ -1396,11 +1396,11 @@ fn main() {
                     // Grace: learn predicted direction with excursion weight
                     // Violence: learn opposite direction with stop_distance weight
                     let (direction, weight) = match res.outcome {
-                        enterprise::enums::Outcome::Grace => (res.prediction, res.amount),
-                        enterprise::enums::Outcome::Violence => {
+                        enterprise::types::enums::Outcome::Grace => (res.prediction, res.amount),
+                        enterprise::types::enums::Outcome::Violence => {
                             let opposite = match res.prediction {
-                                enterprise::enums::Direction::Up => enterprise::enums::Direction::Down,
-                                enterprise::enums::Direction::Down => enterprise::enums::Direction::Up,
+                                enterprise::types::enums::Direction::Up => enterprise::types::enums::Direction::Down,
+                                enterprise::types::enums::Direction::Down => enterprise::types::enums::Direction::Up,
                             };
                             (opposite, res.amount)
                         }
@@ -1429,7 +1429,7 @@ fn main() {
             // Proposal 026: exit learns from exit_thought, not composed.
             for res in &all_market_signals {
                 let ei = res.broker_slot_idx % m;
-                let is_grace = res.outcome == enterprise::enums::Outcome::Grace;
+                let is_grace = res.outcome == enterprise::types::enums::Outcome::Grace;
                 if ei < post.exit_observers.len() {
                     let net_weight = net_residue(res.amount, is_grace, args.swap_fee).abs();
                     post.exit_observers[ei].observe_distances(
@@ -1479,7 +1479,7 @@ fn main() {
                 .for_each(|(eobs, work)| {
                     for &(_ei, ri) in work {
                         let res = &all_runner_resolutions[ri];
-                        let is_grace = res.outcome == enterprise::enums::Outcome::Grace;
+                        let is_grace = res.outcome == enterprise::types::enums::Outcome::Grace;
 
                         // Batch training: ALL per-candle observations from the runner's life
                         // Note: batch thoughts are composed (from runner history), not exit-only.
@@ -1508,8 +1508,8 @@ fn main() {
         {
             let trade_info: Vec<_> = ent.treasury.trades.iter()
                 .filter(|(_, t)| t.post_idx == post_idx &&
-                    (t.phase == enterprise::enums::TradePhase::Active
-                  || t.phase == enterprise::enums::TradePhase::Runner))
+                    (t.phase == enterprise::types::enums::TradePhase::Active
+                  || t.phase == enterprise::types::enums::TradePhase::Runner))
                 .map(|(id, t)| (*id, t.broker_slot_idx, t.side))
                 .collect();
 
@@ -1563,8 +1563,8 @@ fn main() {
             let elapsed_ms = t_start.elapsed().as_secs_f64() * 1000.0;
             let throughput = if elapsed_ms > 0.0 { candle_num as f64 * 1000.0 / elapsed_ms } else { 0.0 };
             let num_active = ent.treasury.trades.iter()
-                .filter(|(_, t)| t.phase == enterprise::enums::TradePhase::Active
-                              || t.phase == enterprise::enums::TradePhase::Runner)
+                .filter(|(_, t)| t.phase == enterprise::types::enums::TradePhase::Active
+                              || t.phase == enterprise::types::enums::TradePhase::Runner)
                 .count();
             log_handle.log(LogEntry::Diagnostic {
                 candle: candle_num,

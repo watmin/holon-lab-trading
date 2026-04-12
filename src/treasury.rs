@@ -7,12 +7,12 @@
 use std::collections::HashMap;
 
 
-use crate::distances::Levels;
-use crate::enums::{Outcome, Side, TradePhase};
-use crate::log_entry::LogEntry;
-use crate::newtypes::{Amount, Price, TradeId};
+use crate::types::distances::Levels;
+use crate::types::enums::{Outcome, Side, TradePhase};
+use crate::types::log_entry::LogEntry;
+use crate::types::newtypes::{Amount, Price, TradeId};
 use crate::proposal::Proposal;
-use crate::raw_candle::Asset;
+use crate::types::raw_candle::Asset;
 use crate::settlement::TreasurySettlement;
 use crate::trade::Trade;
 use crate::trade_origin::TradeOrigin;
@@ -382,12 +382,12 @@ mod tests {
             Vector::zeros(256),
             Vector::zeros(256),
             Vector::zeros(256),
-            crate::distances::Distances::new(0.02, 0.05),
+            crate::types::distances::Distances::new(0.02, 0.05),
             0.1,
             Side::Buy,
             Asset::new("USDC"),
             Asset::new("WBTC"),
-            crate::enums::Prediction::Discrete {
+            crate::types::enums::Prediction::Discrete {
                 scores: vec![],
                 conviction: 0.0,
             },
@@ -405,12 +405,12 @@ mod tests {
             Vector::zeros(256),
             Vector::zeros(256),
             Vector::zeros(256),
-            crate::distances::Distances::new(0.02, 0.05),
+            crate::types::distances::Distances::new(0.02, 0.05),
             0.001, // edge below venue cost
             Side::Buy,
             Asset::new("USDC"),
             Asset::new("WBTC"),
-            crate::enums::Prediction::Discrete {
+            crate::types::enums::Prediction::Discrete {
                 scores: vec![],
                 conviction: 0.0,
             },

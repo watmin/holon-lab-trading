@@ -4,7 +4,7 @@
 // hour and day-of-week only. Circular encoding.
 // atoms: hour, day-of-week
 
-use crate::candle::Candle;
+use crate::types::candle::Candle;
 use crate::thought_encoder::{ThoughtAST, ToAst, round_to};
 
 pub struct ExitTimeThought {

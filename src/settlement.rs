@@ -6,8 +6,8 @@
 
 use holon::kernel::vector::Vector;
 
-use crate::enums::{Outcome, Prediction};
-use crate::newtypes::{Amount, Price};
+use crate::types::enums::{Outcome, Prediction};
+use crate::types::newtypes::{Amount, Price};
 use crate::trade::Trade;
 
 /// Settlement carrying all data needed for propagation.
@@ -51,10 +51,10 @@ impl TreasurySettlement {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::distances::Levels;
-    use crate::enums::Side;
-    use crate::newtypes::{Amount, Price, TradeId};
-    use crate::raw_candle::Asset;
+    use crate::types::distances::Levels;
+    use crate::types::enums::Side;
+    use crate::types::newtypes::{Amount, Price, TradeId};
+    use crate::types::raw_candle::Asset;
 
     #[test]
     fn test_treasury_settlement_construct() {

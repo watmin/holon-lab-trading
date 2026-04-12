@@ -13,17 +13,17 @@ use holon::kernel::primitives::Primitives;
 use holon::kernel::vector::Vector;
 
 use crate::broker::Broker;
-use crate::candle::Candle;
+use crate::types::candle::Candle;
 use crate::ctx::Ctx;
-use crate::distances::{Distances, Levels};
-use crate::enums::{Direction, ExitLens, MarketLens, Outcome, Prediction, Side};
+use crate::types::distances::{Distances, Levels};
+use crate::types::enums::{Direction, ExitLens, MarketLens, Outcome, Prediction, Side};
 use crate::exit_observer::ExitObserver;
 use crate::indicator_bank::IndicatorBank;
-use crate::log_entry::LogEntry;
+use crate::types::log_entry::LogEntry;
 use crate::market_observer::MarketObserver;
-use crate::newtypes::{Price, TradeId};
+use crate::types::newtypes::{Price, TradeId};
 use crate::proposal::Proposal;
-use crate::raw_candle::{Asset, RawCandle};
+use crate::types::raw_candle::{Asset, RawCandle};
 use crate::scale_tracker::ScaleTracker;
 use crate::thought_encoder::{ThoughtAST, ToAst};
 use crate::trade::Trade;
@@ -149,7 +149,7 @@ impl Post {
             .map(|(obs, facts)| {
                 let (thought, misses) = obs.incremental.encode(&facts, &ctx.thought_encoder);
                 let result = obs.observe(thought, Vec::new());
-                (result.thought.clone(), result.prediction, result.edge, misses)
+                (result.anomaly.clone(), result.prediction, result.edge, misses)
             })
             .collect();
 
@@ -239,7 +239,7 @@ impl Post {
         let proposals: Vec<_> = self.registry
             .par_iter_mut()
             .zip(grid_values.into_par_iter())
-            .map(|(broker, (slot_idx, mi, ei, composed, reckoner_dists, side_val, edge_val, enterprise_pred, direction)): (&mut Broker, (usize, usize, usize, Vector, Option<Distances>, Side, f64, crate::enums::Prediction, Direction))| {
+            .map(|(broker, (slot_idx, mi, ei, composed, reckoner_dists, side_val, edge_val, enterprise_pred, direction)): (&mut Broker, (usize, usize, usize, Vector, Option<Distances>, Side, f64, crate::types::enums::Prediction, Direction))| {
                 let dists = broker.cascade_distances(reckoner_dists);
                 // Proposal 035: no propose(). Register paper with market_thought as composed.
                 broker.register_paper(composed.clone(), market_thoughts[mi].clone(), exit_vecs[ei].clone(), direction, price, dists);
@@ -528,7 +528,7 @@ pub fn ctx_scalar_encoder_placeholder() -> &'static holon::kernel::scalar::Scala
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::enums::MarketLens;
+    use crate::types::enums::MarketLens;
     use crate::window_sampler::WindowSampler;
 
     #[test]
@@ -554,12 +554,12 @@ mod tests {
             vec![
                 crate::scalar_accumulator::ScalarAccumulator::new(
                     "trail",
-                    crate::enums::ScalarEncoding::Log,
+                    crate::types::enums::ScalarEncoding::Log,
                     256,
                 ),
                 crate::scalar_accumulator::ScalarAccumulator::new(
                     "stop",
-                    crate::enums::ScalarEncoding::Log,
+                    crate::types::enums::ScalarEncoding::Log,
                     256,
                 ),
             ],

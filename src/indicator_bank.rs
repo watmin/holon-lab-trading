@@ -4,8 +4,8 @@
 ///
 /// Compiled from wat/indicator-bank.wat — the tick contract.
 
-use crate::candle::Candle;
-use crate::raw_candle::RawCandle;
+use crate::types::candle::Candle;
+use crate::types::raw_candle::RawCandle;
 
 // ════════════════════════════════════════════════════════════════════
 // STREAMING PRIMITIVES — the building blocks of indicator state
@@ -1971,7 +1971,7 @@ impl IndicatorBank {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::raw_candle::Asset;
+    use crate::types::raw_candle::Asset;
 
     fn make_raw_candle(
         ts: &str,

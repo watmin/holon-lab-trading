@@ -5,7 +5,7 @@
 // atoms: atr-ratio, atr-r, atr-roc-6, atr-roc-12, squeeze, bb-width
 
 use std::collections::HashMap;
-use crate::candle::Candle;
+use crate::types::candle::Candle;
 use crate::thought_encoder::{ThoughtAST, ToAst, round_to};
 use crate::scale_tracker::{ScaleTracker, scaled_linear};
 

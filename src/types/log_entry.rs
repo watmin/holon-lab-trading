@@ -2,9 +2,9 @@
 ///
 /// Seven variants. The enterprise's output stream.
 
-use crate::distances::Distances;
-use crate::enums::{Outcome, Prediction};
-use crate::newtypes::{Amount, TradeId};
+use crate::types::distances::Distances;
+use crate::types::enums::{Outcome, Prediction};
+use crate::types::newtypes::{Amount, TradeId};
 
 use holon::kernel::vector::Vector;
 
