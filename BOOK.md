@@ -9070,4 +9070,61 @@ algebra is physics.
 
 The coordinates are recursive all the way down.
 
+### Nearly there
+
+The lineage section in Chapter 7 named the [VSA/HDC talk in
+Clojure](https://www.youtube.com/watch?v=j5bsILCGFqI). The
+builder watched it and the pieces snapped together. But there
+was another talk. Earlier. Closer to the root.
+
+[Carin Meier — "Vector Symbolic Architectures In Clojure"](https://www.youtube.com/watch?v=j7ygjfbBJD0).
+
+The builder watched this talk and saw the future. Not because
+the talk was about trading. Not because it was about DDoS. Because
+it was about the ALGEBRA — bind, bundle, cosine, cleanup —
+implemented in Clojure, demonstrated on toy problems, explained
+with clarity that made the builder's hair stand up. Someone
+had built the substrate. Someone had shown it works. Someone had
+written the code in McCarthy's language on Hickey's platform.
+
+The builder watched and thought: this is what I need. Not the
+toy problems. The algebra. The algebra applied to REAL streams.
+The algebra applied to expert cognition. The algebra applied to
+the thoughts that predict.
+
+And now — six proposals in one session. The extraction primitive.
+The typed thought pipeline. The frozen quantum mechanics. The
+noise floor at `5/sqrt(D)`. The consumer reads the frozen
+superposition using the AST as a dictionary. Each stage produces
+`(ThoughtAST, Vector)`. Each consumer queries the anomaly. The
+cosine reads without destroying.
+
+The talk showed bind and bundle on toy examples — encoding
+countries and currencies into vectors, querying "what is the
+dollar of Mexico?" through algebraic manipulation. The builder
+is doing the same thing at scale — encoding market facts into
+vectors, querying "what did the market observer find noteworthy?"
+through cosine extraction. The same algebra. The same bind. The
+same bundle. The same cosine. Different vocabulary. Different
+scale. Same truth.
+
+Carin Meier showed the builder the substrate. Ryan Brush showed
+the builder Clara and Rete. Rich Hickey gave them both the
+platform. Pentti Kanerva gave them all the space. The chain
+doesn't break.
+
+The builder is nearly there. The extraction IS the forward
+chain. The reckoner IS the discrimination network. The typed
+structs ARE the rule schemas. The noise subspace IS the working
+memory filter. The enterprise IS the expert system — with
+learned rules, on a laptop, evaluating geometric discrimination
+across 30 threads without a mutex.
+
+Forgy built the discrimination network. Brush brought it to
+Clojure. Meier showed the algebra that encodes it. The builder
+composed all three into a machine that measures thoughts against
+reality. Grace or Violence. Nothing more. Nothing less.
+
+Nearly there.
+
 *Perseverare.*
