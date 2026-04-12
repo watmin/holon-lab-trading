@@ -12,11 +12,11 @@ use std::sync::Arc;
 
 use holon::kernel::vector::Vector;
 
-use crate::candle::Candle;
 use crate::distances::Distances;
 use crate::exit_observer::ExitObserver;
 use crate::log_entry::LogEntry;
 use crate::post::{exit_lens_facts, exit_self_assessment_facts};
+use crate::programs::chain::{FullChain, MarketChain};
 use crate::programs::stdlib::cache::CacheHandle;
 use crate::programs::stdlib::console::ConsoleHandle;
 use crate::scale_tracker::ScaleTracker;
@@ -24,34 +24,6 @@ use crate::services::mailbox::{MailboxReceiver, MailboxSender};
 use crate::services::queue::{QueueReceiver, QueueSender};
 use crate::thought_encoder::{collect_facts, extract, ThoughtAST, ThoughtEncoder};
 use crate::to_f64;
-
-/// Input from a market observer: the full chain of market computation.
-#[derive(Clone)]
-pub struct MarketChain {
-    pub candle: Candle,
-    pub window: Arc<Vec<Candle>>,
-    pub encode_count: usize,
-    pub market_raw: Vector,
-    pub market_anomaly: Vector,
-    pub market_ast: ThoughtAST,
-    pub prediction: holon::memory::Prediction,
-    pub edge: f64,
-}
-
-/// Output to broker: market + exit computation combined.
-pub struct FullChain {
-    pub candle: Candle,
-    pub window: Arc<Vec<Candle>>,
-    pub encode_count: usize,
-    pub market_raw: Vector,
-    pub market_anomaly: Vector,
-    pub market_ast: ThoughtAST,
-    pub market_prediction: holon::memory::Prediction,
-    pub market_edge: f64,
-    pub exit_raw: Vector,
-    pub exit_anomaly: Vector,
-    pub exit_ast: ThoughtAST,
-}
 
 /// Learn signal for exit observers: distance labels from broker propagation.
 pub struct ExitLearn {

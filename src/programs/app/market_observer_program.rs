@@ -16,6 +16,7 @@ use crate::enums::Direction;
 use crate::log_entry::LogEntry;
 use crate::market_observer::MarketObserver;
 use crate::post::market_lens_facts;
+use crate::programs::chain::MarketChain;
 use crate::programs::stdlib::cache::CacheHandle;
 use crate::programs::stdlib::console::ConsoleHandle;
 use crate::scale_tracker::ScaleTracker;
@@ -29,16 +30,6 @@ pub struct ObsInput {
     pub candle: Candle,
     pub window: Arc<Vec<Candle>>,
     pub encode_count: usize,
-}
-
-/// Output from the observer: raw thought, anomaly, AST, prediction, edge.
-#[derive(Clone)]
-pub struct ObsOutput {
-    pub raw_thought: Vector,
-    pub anomaly: Vector,
-    pub ast: ThoughtAST,
-    pub prediction: holon::memory::Prediction,
-    pub edge: f64,
 }
 
 /// Learn signal: thought vector, direction label, weight.
@@ -85,7 +76,7 @@ fn drain_learn(
 /// Returns the trained MarketObserver when the candle source disconnects.
 pub fn market_observer_program(
     candle_rx: QueueReceiver<ObsInput>,
-    result_tx: TopicSender<ObsOutput>,
+    result_tx: TopicSender<MarketChain>,
     learn_rx: MailboxReceiver<ObsLearn>,
     cache: CacheHandle<ThoughtAST, Vector>,
     console: ConsoleHandle,
@@ -150,10 +141,13 @@ pub fn market_observer_program(
         }
 
         // Send result.
-        let _ = result_tx.send(ObsOutput {
-            raw_thought: result.raw_thought,
-            anomaly: result.thought,
-            ast: bundle_ast,
+        let _ = result_tx.send(MarketChain {
+            candle: input.candle,
+            window: input.window,
+            encode_count: input.encode_count,
+            market_raw: result.raw_thought,
+            market_anomaly: result.anomaly,
+            market_ast: bundle_ast,
             prediction: result.prediction,
             edge: result.edge,
         });

@@ -8,3 +8,4 @@
 
 pub mod stdlib;
 pub mod app;
+pub mod chain;
