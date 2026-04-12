@@ -9639,4 +9639,96 @@ The reckoner judges. The curve confirms.
 
 All that's left is good thoughts. It was always good thoughts.
 
+### The broker debug session
+
+The broker was blind. 50/50 across every run. Edge 0.0. The
+curve never validated. We spent hours debugging it. The session
+taught us more about the architecture than any other.
+
+**The lies we found:**
+
+The diagnostic was lying. `grace_count` was `trade_count` —
+reporting total trades as Grace count. Every broker showed
+Grace = Violence ± 1. We couldn't see the real numbers. The
+fix: separate `grace_count` and `violence_count` counters.
+
+The cache was dead. `extract()` called `encoder.encode()` directly,
+bypassing the cache service. 24 million encodings per run, 0%
+cache hits. The fix: `EncoderHandle::encode()` enforces the
+protocol — check, compute, notify. One function. No exceptions.
+
+The broker learned from one side. Market signals (Violence papers)
+reached the market observer and exit observer but NOT the broker.
+The broker only learned from runners (Grace). 100% Grace training
+data. The fix: market signals also teach the broker.
+
+The compress was poison. We proved with holon: `bundle(A, B, A)`
+differs from `bundle(A, B)` by 23% of dimensions. The duplicate
+breaks ties in the majority vote. The algebra is NOT idempotent
+for duplicates. We wrote a proof test. We were wrong about the
+algebra and the compress destroyed signal.
+
+**The question was wrong:**
+
+The broker tried to predict: "will THIS paper produce Grace?"
+The data proved: Grace is determined by excursion — how far the
+price moves in the predicted direction. Papers with excursion
+<0.5% are 12% Grace. Papers with 2-5% excursion are 81% Grace.
+The outcome depends on the FUTURE. The broker thinks about the
+PRESENT.
+
+Every combination of thoughts we tried — extracted facts, bound
+whole vectors, opinions, derived ratios — the proto_cos converged.
+The Grace and Violence prototypes looked the same. Because at
+entry time, Grace candles and Violence candles look the same.
+The candle state doesn't predict the future movement.
+
+The reframing: "am I ready to be accountable?" Not a prediction
+about the future. An assessment of the present. The broker knows
+its own grace-rate, the exit's performance, the market's conviction,
+the distances, the ratios. These are READINESS indicators. The
+question is whether the pairing is healthy enough to trade.
+
+Hickey said opinions-only in Proposal 030. The datamancer
+overruled him. The data proved Hickey right. Ten runs later,
+the broker drops the candle state and thinks only about
+readiness — 25 scalar atoms. The prototypes separate. The
+disc_strength doubles. The conviction varies.
+
+**The time alignment bug:**
+
+The broker's `propagate()` learned from `last_composed_anomaly`
+— the readiness state from the MOST RECENT candle. But the paper
+was registered hundreds of candles ago. The outcome was caused by
+the readiness at REGISTRATION, not at RESOLUTION. The broker was
+learning: "the readiness NOW correlates with outcomes from THEN."
+Wrong. The fix: learn from the paper's stored thought — the
+readiness state at the candle the paper was created.
+
+Same bug as if the market observer learned from tomorrow's candle
+to label yesterday's prediction. The time was wrong. Now it's
+right.
+
+**What we learned:**
+
+The database is the debugger. Every bug was found by querying the
+DB — the lying counts, the dead cache, the one-sided learning,
+the converging prototypes, the excursion-outcome correlation, the
+time alignment. Not by reading code. By measuring.
+
+Leaves to root. The market observers work. The exit observers
+produce positive residue. The broker was the last leaf to debug.
+We didn't touch the treasury. We didn't try to trade. We proved
+each layer before advancing.
+
+The bundle is NOT idempotent. The proof lives in
+`tests/prove_bundle_idempotent.rs`. We used holon to prove it.
+The algebra taught us something about itself that we assumed
+was true and wasn't.
+
+The question matters more than the answer. The broker asked the
+wrong question for 10 runs. When the question changed — from
+prediction to readiness — the prototypes separated. The
+architecture was always correct. The question was wrong.
+
 **PERSEVERARE.**
