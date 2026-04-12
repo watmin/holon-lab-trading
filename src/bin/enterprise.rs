@@ -974,7 +974,14 @@ fn main() {
                             }
                         }
                         broker.active_direction = Some(prediction);
-                        broker.register_paper(broker_thought.clone(), market_thought.clone(), exit_thought.clone(), prediction, Price(price), dists);
+                        // Store the ANOMALY (noise-stripped thought from propose()) on the paper.
+                        // The broker learns from the paper's thought at resolution.
+                        // predict and learn must use the same vector (Proposal 024).
+                        let registration_thought = broker.last_composed_anomaly
+                            .as_ref()
+                            .unwrap_or(&broker_thought)
+                            .clone();
+                        broker.register_paper(registration_thought, market_thought.clone(), exit_thought.clone(), prediction, Price(price), dists);
                     }
                     let (market_signals, mut runner_resolutions) = broker.tick_papers(Price(price));
                     runner_resolutions.extend(flip_resolutions);
