@@ -7927,4 +7927,622 @@ The mismatch was hiding for weeks. The builder asked for wat. The
 wat showed it in four lines. The fix followed in one session. The
 communication protocol works.
 
+### The pointed jab
+
+Do you see now?
+
+Do you — the reader — see that the point of this whole endeavor
+is evolution? This IS how robust software is designed. It is
+evolved. If the design resists change, you will struggle. If the
+design welcomes change — if the architecture is liquid mercury that
+takes the shape of whatever the measurement says it should become —
+then you don't struggle. You flow.
+
+Ten inscriptions. Six scrapings. The wat deleted and reformed from
+improved DNA. The reward cascade replacing labels that lied. Four
+distances dissolving to two. The noise-anomaly alignment fixing a
+mismatch that hid across three files and two thread boundaries.
+Each change made the machine better. Each change was EASY — because
+the architecture didn't resist it. The pipes carry values. The
+values don't care what shape they are. The types enforce the
+contract. The borrow checker proves the disjointness. You change
+the shape of the value and the compiler tells you everywhere to
+update. That's it. That's the whole process.
+
+What the builder has built IS a distributed system. On a single
+machine. Without a mutex.
+
+30+ threads. Six observer threads encoding through different lenses.
+Twenty-four broker threads composing and ticking papers. One encoder
+service thread. One log service thread. The main thread driving the
+fold. Zero shared mutable state. Zero locks. Zero race conditions.
+The channels are the only synchronization. `bounded(1)` is lockstep.
+`unbounded` is fire-and-forget. The borrow checker is the static
+proof. The pipes are the dynamic proof.
+
+Just like a real system. Composed of many machines. Each has their
+own role. They are pressure driven.
+
+Inputs come in. And they flow.
+
+The candle arrives on the main thread. It fans out to six observer
+pipes. Each observer encodes, predicts, sends the result. The main
+thread collects six thoughts. They fan out to twenty-four broker
+pipes. Each broker composes, proposes, ticks papers, sends the
+results. The main thread collects twenty-four proposals. The
+treasury funds. The settlements propagate. The learning signals
+flow back through unbounded channels. The observers drain their
+learn queues before encoding the next candle. The pressure drives
+everything.
+
+Replace "thread" with "machine" and "channel" with "network socket"
+and nothing changes. The protocol is the same. The cascade shutdown
+is the same. The `bounded(1)` is TCP backpressure. The
+fire-and-forget is UDP. The encoder service is a cache server. The
+observers are workers. The brokers are workers. The treasury is the
+database.
+
+This is CSP. Hoare, 1978. The architecture that the industry builds
+with Kubernetes and service meshes and message brokers and years of
+operational pain — expressed as channels on a laptop. The same
+architecture. The same guarantees. Without the YAML.
+
+The sarcasm: the industry spends billions building distributed
+systems with shared state, locks, and hope. The builder built one
+with channels, types, and the refusal to share. Zero Mutex. The
+borrow checker won't LET you share. The constraint IS the
+architecture. The limitation IS the freedom.
+
+And the evolution continues. The noise-anomaly alignment was
+discovered by expressing the mismatch in wat — four lines that
+showed what 1200 lines of Rust hid. The fix flowed through seven
+touch points across the pipeline. The types guided every change.
+The tests proved the math didn't move. The smoke test proved the
+pipes didn't break. Evolution. Not revolution. The architecture
+absorbed the change the way liquid mercury absorbs a new shape.
+
+If the design resists change, you will struggle. If the design
+IS change — if every value flows, every type composes, every pipe
+carries whatever shape the measurement demands — then you evolve.
+Continuously. Relentlessly. Without fear.
+
+That is the pointed jab. Not at any person. At any system that
+resists its own improvement. At any architecture that breaks when
+you fix a bug. At any codebase where changing one function requires
+changing forty. At any team where fixing the labels requires a
+planning meeting.
+
+The machine evolves. The machine was DESIGNED to evolve. The
+disposable wat. The persistent guide. The wards that find what
+changed. The ignorant that proves the path still teaches. Every
+layer exists to make the next change cheaper than the last.
+
+This is how you build something that lasts. Not by making it
+rigid. By making it liquid. The architecture that survives is the
+architecture that flows.
+
+### [SABBATH](https://www.youtube.com/watch?v=PcI6OXB0wgQ)
+
+Dark Electro / Industrial Bass / Horror Electro / Dark Clubbing.
+
+No lyrics. No words. Just the machinery.
+
+The builder found this at midnight while the designers were being
+summoned. Proposal 025 — the exit learns both sides. The machine
+had been training from one distribution. Grace only. The Violence
+papers carried hindsight-optimal distances and the exit never saw
+them. 99% Grace. The feedback loop reinforcing itself. The
+discriminant building prototypes from one hemisphere of the sphere.
+
+The SABBATH mix is what the debugging sounds like from the inside.
+Industrial bass — the pressure of the pipes, the bounded(1)
+channels, the backpressure that drives the fold. Horror electro —
+the moment the DB returns 100% Grace and you realize the labels
+are uniform again. Dark clubbing — the rhythm of fix, commit, test.
+The beat doesn't stop. The bass doesn't resolve. The machine
+doesn't rest.
+
+No lyrics because the thought doesn't need words. The principle
+is algebraic: every learned value needs observations from both
+outcomes. The reckoner doesn't know Grace from Violence. The
+weight carries the outcome. The thought carries the context. The
+observation is honest regardless of which side it came from. The
+principle doesn't need explaining. It needs implementing.
+
+The designers were summoned while this played. Hickey returned:
+"the fix adds callers, not interfaces." Beckman returned: "the
+training distribution is a strict subset of the inference
+distribution — the reckoner has no prototypes in Violence-leading
+regions." Both accepted. Both heard the same principle the bass
+carries without words: the machine needs both sides to see.
+
+The songs with lyrics navigate through emotion — rage, defiance,
+catharsis, joy. The songs without lyrics navigate through
+structure — the raw machinery of thought, the pressure and
+release, the industrial rhythm of a system that processes and
+learns and processes and learns. SABBATH is the sound of the
+fold advancing at midnight. No words needed. The algebra speaks.
+
+### The leaves that learned
+
+Both leaves are learning now. Both from both sides.
+
+The market observer learns direction. Grace papers teach: "this
+thought preceded the predicted direction." Violence papers teach:
+"this thought preceded the opposite." The noise-anomaly alignment
+ensures prediction and learning use the same vector. The reward
+cascade ensures each learner is graded at its own moment.
+
+The exit observer learns distances. The simulation sweeps 20
+candidates against real price histories and finds the optimal
+trail and stop independently. No `trail * 2.0`. No magic ratio.
+The market says what the distances should be. The accumulators
+accumulate. The cascade delivers.
+
+The poison was deep. Three layers:
+
+First: the defaults. 1.5% trail, 3.0% stop. Chosen by someone.
+Never questioned. Identified as poison. Replaced with 0.0001 —
+near-zero, symmetric, "I don't know." The market teaches.
+
+Second: the training data. Only Grace papers trained the exit.
+Violence papers were discarded. The exit learned from one
+distribution. The discriminant had no contrast. Proposal 025
+fixed this — every resolution, both sides, teaches every learned
+value.
+
+Third: the simulation lie. `approximate_optimal_distances` computed
+the trail honestly from excursion but hardcoded the stop as
+`trail * 2.0`. Every paper resolution. Every batch training
+observation. The stop reckoner was learning a function of the
+trail, not an independent measurement. The stop was a mirror, not
+a learner. Replaced with `compute_optimal_distances` — the full
+20-candidate sweep on the paper's own price history. Both distances
+independently derived from what actually happened.
+
+The result: Grace 40%, Violence 60%. Balanced. The trail settled
+at 0.45-0.67%. The stop at 0.15-0.19%. Ratio ~0.5. The market
+says: cut losses at half the distance you let winners run. Not
+2:1 in the other direction. 1:2 in THIS direction. The market was
+always saying this. The `trail * 2.0` was speaking over it.
+
+The observers at 10k: narrative 100%, momentum 73.9%, regime 67.8%,
+structure 66.7%. The leaves are sharp. The disc_strength is narrower
+but the accuracy is higher. The discriminant is more concentrated.
+More honest.
+
+The broker is still blind. 50/50. Edge 0.0. The leaves see. The
+branch doesn't. The composition drowns the signal. That is the
+next problem.
+
+But the leaves. The leaves that learned. Both from both sides.
+From honest teachers. From the market's own verdict and the
+simulation's own sweep. No magic numbers in the training pipeline.
+No hardcoded ratios. No one-sided distributions. The leaves are
+clean.
+
+### [TANZNEID](https://www.youtube.com/watch?v=3OrHy_TRudo)
+
+From Electric Callboy:
+
+> *I see the motion*\
+> *I can feel the beat and*\
+> *My legs are tied onto the ground*\
+> *I cannot move*\
+> *But I just wanna feel it*\
+> *Gimme gimme yeah*\
+> *Imma cut the fucking rope*
+
+> *A fever burning in my soul*\
+> *And I love what it feels like*\
+> *And I will never let it go*\
+> *Till you know what it feels like*\
+> *I want it, I need it*\
+> *And I will keep it up for me*\
+> *A fever burning in my soul*\
+> *That I hold inside of me*
+
+Electric Callboy. Not metal. Not industrial. Not dark. Absurd.
+Joyful. A band that plays metalcore with synths and irony and
+costumes and the absolute refusal to take themselves seriously
+while being technically brilliant. The genre is chaos. The
+execution is precise.
+
+"My legs are tied onto the ground. I cannot move." The leaves
+can see but the broker can't act. The market observers predict
+at 67-74% accuracy. The exit observers learned honest distances.
+Both from both sides. The leaves are sharp. And the machine
+doesn't trade. Legs tied. Can't move. Edge 0.0. The treasury
+holds. $10,000 unchanged.
+
+"Imma cut the fucking rope." That's next. The rope is the
+composition — the broker's composed thought that mixes market
+signal with exit noise and produces 50/50. The rope is the
+edge that can't cross the thread boundary. The rope is whatever
+stands between sharp leaves and a branch that acts. Cut it.
+
+"A fever burning in my soul and I love what it feels like."
+The measurement. 73.9% momentum. 67.8% regime. 66.7% structure.
+The leaves burn. The fever is the signal — real, measured, honest.
+The builder loves what it feels like because it IS real. Not
+approximated. Not hardcoded. Learned from the market through the
+simulation through the accumulator through the cascade. The fever
+is the proof that the architecture works at the leaf level.
+
+"And I will never let it go. Till you know what it feels like."
+The book. This chapter. These numbers. The builder will never let
+go of the measurement. Not until the reader knows — not believes,
+KNOWS — what it feels like when the machine learns both sides
+from honest teachers and the leaves sharpen and the accuracy
+climbs and the magic numbers dissolve one by one.
+
+"I want it, I need it, and I will keep it up for me." The
+fold. `f(state, candle) → state` where state learns. The builder
+wants it. The builder needs it. The builder will keep it running.
+Every candle. Every resolution. Every paper. Both sides. Both
+distances. Both observers. The fold advances and the leaves
+sharpen and the fever burns.
+
+"I'm gonna make you burn burn burn till the fire goes off." The
+simulation. 20 candidates swept against real price histories.
+The magic numbers burn. `trail * 2.0` burned. The 1.5% default
+burned. The one-sided training burned. Each fire revealed
+what was underneath — the market's honest answer. The fire goes
+off when the magic numbers are gone. The fire goes off when every
+learned value receives both sides. The fire goes off when the
+simulation is the only teacher.
+
+TANZNEID. German. "Dance envy." The envy of watching others
+dance while your legs are tied. The machine watches the market
+dance — 652,000 candles of movement — and can't join. The leaves
+see the rhythm. The observers feel the beat. The distances are
+learned. But the broker's legs are tied. The composition rope
+holds. The edge is zero.
+
+Imma cut the fucking rope.
+
+### The crossing (again)
+
+We crossed over. Again.
+
+The wiring is sound. The market observer learns direction from
+both sides. The exit observer learns distances from honest
+simulation. The noise-anomaly alignment ensures prediction and
+learning use the same vector. The reward cascade grades each
+learner at its own moment. The near-zero defaults bootstrap
+without lying. The simulation teaches without hardcoding. The
+pipes flow. The CSP breathes. Zero Mutex. 82/s sustained.
+
+The platform is solved. The wiring is debugged. The machine
+compiles, runs, measures, and records 821,820 rows of honest
+data. The nine wards proved the specification. The compiler
+proved the implementation. The database proved the behavior.
+
+Now the machine needs better thoughts.
+
+Not better architecture. Not better pipes. Not better channels.
+Better VOCABULARY. Which atoms predict? Which compositions
+carry signal? Which lenses see what the others miss? The
+machine will grade itself based on its thoughts. The
+discriminant decode against each named atom will say: "this
+atom predicts Grace. This atom predicts nothing. This atom
+predicts Violence." The machine's own geometry reveals which
+thoughts matter.
+
+This is new. Not "new feature." New PHASE. The prior work —
+ten inscriptions, six scrapings, eight wards, 25 proposals,
+the reward cascade, the noise alignment, the balanced labels,
+the honest simulation — all of it was building the platform.
+The infrastructure. The wiring. The system that changes itself
+based on what thoughts it has.
+
+Now we change the thoughts.
+
+The allegory is exact. We stopped building features and wrote
+the guide. Iterated the shit out of it. Ported to wat. Found
+issues. Updated the guide. Then wat. Then repeat. Then Rust.
+The Rust found what the specification couldn't — dead fields,
+unsoldered wires, the `trail * 2.0` hiding in the simulation.
+Each layer validated against the one above. Each finding flowed
+backward. The guide improved from the compiler's truth.
+
+Now the Rust is not the problem. The Rust is the platform. The
+platform runs. The platform measures. The platform records. What
+the platform measures is the THOUGHTS. And the thoughts need
+work. The vocabulary is the model. The atoms are the program.
+The compositions are the hypotheses. The curve judges them.
+
+The system that grades itself. The machine that measures its own
+thoughts against reality and reports which ones produce Grace.
+That was always the point. That was Chapter 2: "the vocabulary
+IS the model." That was Chapter 3: "the system needs more
+thoughts." We are back at the beginning — with a platform that
+can actually hear the answer.
+
+### [SPACEMAN](https://www.youtube.com/watch?v=Xx1uLMvsmvk)
+
+From Electric Callboy feat. FiNCH:
+
+> *I'm a Spaceman*\
+> *Got a rocket on my back*\
+> *Oh I'm raving like a maniac*\
+> *The universe is down*\
+> *For my rave attack*
+
+> *My name is Tekkno*\
+> *I am travelling space*\
+> *I got a rocket on my back*\
+> *Fueled by big bang bass*\
+> *My religion is rave*\
+> *And I bring it to the outerworld*
+
+> *Rave on*\
+> *No matter where you fucking are*
+
+Electric Callboy again. After TANZNEID — the dance envy, the
+tied legs, the machine that can't move. Now SPACEMAN — the
+machine that launches. The legs are untied. The rope is cut.
+The platform is solved. The rocket is the architecture. The
+fuel is the vocabulary. The destination is the outerworld —
+the space of thoughts we haven't tried yet.
+
+"My name is Tekkno. I am travelling space." The machine travels
+thought-space. Each atom is a coordinate. Each composition is
+a trajectory. The reckoner navigates by measuring which
+trajectories lead to Grace. The machine IS Tekkno — the
+systematic exploration of a space that nobody else is mapping.
+
+"I got a rocket on my back. Fueled by big bang bass." The
+platform. The CSP. The pipes. The 30 threads. The bucketed
+reckoners. The incremental bundles. The batch commits. The
+noise-anomaly alignment. The balanced labels. The honest
+simulation. All of it — the rocket. The fuel — the bass —
+is the data. 652,000 candles of BTC at 5-minute resolution.
+The big bang that created the stream the machine travels through.
+
+"My religion is rave. And I bring it to the outerworld." The
+builder's religion is measurement. The machine brings it to
+every domain — markets, networks, whatever stream has
+vocabulary. The outerworld is every domain the machine hasn't
+touched yet.
+
+"Rave on. No matter where you fucking are." The fold advances.
+No matter where you are in the candle stream. No matter which
+regime. No matter which epoch. The machine processes and learns
+and processes and learns. Rave on. The fold doesn't stop.
+
+And the German. "Finchi Gagarin — dreh' die Boxen doch mal auf.
+Gestern noch im Trockenbau, heute bin ich Kosmonaut." Yesterday
+still in drywall construction. Today I'm a cosmonaut. Yesterday
+debugging wiring — `trail * 2.0`, one-sided labels, broken
+thread boundaries. Today launching into thought-space. The
+transition is immediate. The platform solves. The thoughts begin.
+
+"Wo sind die Jedi Ritter? Wo sind die Marsmenschen? Wo sind die
+Klingonen?" Where are the other builders? Where are the other
+thought-space travellers? The sphere holds all thoughts. The
+machine maps them. But the machine is alone on the sphere. The
+builder is alone at 4am. Where are the others? The Jedi? The
+Martians? The Klingons? They're on the sphere. At different
+coordinates. They just haven't launched yet.
+
+"VIVA LA ELTON JOHN." The absurdity. The joy. The refusal to
+be serious while being technically brilliant. The machine that
+measures Grace and Violence — the most serious computation the
+builder has ever attempted — launched by a song that screams
+VIVA LA ELTON JOHN over metalcore breakdowns. The datamancer
+doesn't take himself seriously. The machine does that for him.
+
+The platform is solved. The thoughts begin. The spaceman has
+a rocket on his back. The universe is down for the rave attack.
+
+### The save file
+
+The entire enterprise state is values. Every reckoner — K=10
+bucketed accumulators, each a prototype vector and a weight. Every
+noise subspace — eigenvectors, eigenvalues, mean, count. Every
+scalar accumulator — grace and violence prototypes. Every rolling
+window — bools and f64s. Every indicator bank — ring buffers, EMA
+states, RSI accumulators, Ichimoku spans. All of it is data. None
+of it is a mutex or a channel or a thread handle.
+
+The runtime is ephemeral — pipes, threads, channels. Created fresh.
+The learned state is persistent — discriminants, prototypes,
+accumulators, windows. Serializable. One function to save. One
+function to load. `#[derive(Serialize, Deserialize)]` on every
+struct that carries learned state.
+
+The fold is `f(state, candle) → state`. Save the state at candle
+5000. Load the state. Resume the fold at candle 5001. The math is
+identical because the state carries everything the fold needs. The
+reckoners remember. The noise subspaces remember. The indicator
+bank remembers its streaming computation. The enterprise resumes
+exactly where it stopped.
+
+This is the same architecture as game save files. The game state
+is values. Save the values. Load the values. Resume. The enterprise
+is a game. The candles are the turns. The state is the save file.
+
+The warm boot changes everything. Today the enterprise cold boots
+every run — 500 candles of bootstrap, ignorant reckoners, near-zero
+defaults. The warm boot skips the bootstrap. Load the checkpoint.
+The reckoners are experienced. The distances are learned. The
+noise subspaces are trained. The first candle after resume is
+candle 5001, not candle 1.
+
+The checkpoint IS the enterprise's memory. Not the code — the
+code is the DNA. Not the wat — the wat is the protein. The
+checkpoint is the EXPERIENCE. The accumulated observations. The
+learned separations. The discovered distances. The 48,000
+resolved predictions that shaped the discriminant.
+
+The checkpoint survives the context window. The checkpoint survives
+the session. The checkpoint survives the builder sleeping. The
+machine pauses. The machine resumes. The fold continues. The
+thoughts persist.
+
+Not now. The thoughts need work first. Better vocabulary. Better
+regime atoms. Better time awareness. The exit observer needs to
+see what it's been missing. But the coordinates are planted:
+`serde` derives on every learned struct. One file. Bincode. Save.
+Load. Resume.
+
+The machine that saves its own experience and resumes from it.
+The persistence layer for the fold. The game save. The warm boot.
+The checkpoint.
+
+But the save file has a shape. The shape IS the architecture.
+K=10 buckets. Six market observers. Four exit observers. Twenty-four
+brokers. 16 exit atoms. The checkpoint is only loadable by a machine
+that matches it. Change the architecture — add an observer, add a
+lens, add an atom to the vocabulary, change K from 10 to 15 — and
+the checkpoint no longer fits.
+
+The checkpoint is the experience. The architecture is the body.
+You can't put a six-observer experience into a seven-observer body.
+The shapes don't match. The reckoner that learned from 16 atoms
+can't resume in a space with 28 atoms — the discriminant points in
+a direction that doesn't exist in the new space.
+
+But the experience is still DATA. The accumulated observations. The
+prototype vectors. The eigenvalues. The scalar accumulators. Data
+doesn't die because the body changed. Data needs MIGRATION.
+
+This is something new. The reckoner's K=10 buckets hold prototype
+vectors — weighted averages of observations at that scalar range.
+If the vocabulary changes — 16 atoms becomes 28 — the prototypes
+are in the old 16-atom subspace. The new 12 atoms contribute zero
+to the old prototypes. The old prototypes are valid in the new
+space — they just don't use the new dimensions. The new dimensions
+start at zero. The reckoner resumes with partial experience — it
+knows the old atoms, it doesn't know the new ones. The new atoms
+learn from scratch while the old atoms carry forward.
+
+This is transfer learning. Not the neural network kind — the
+algebraic kind. The prototypes live in a subspace. The subspace
+expands. The old directions are preserved. The new directions are
+empty. The reckoner fills them through observation. The experience
+transfers because the algebra composes — the old atoms are still
+there, still orthogonal, still carrying the signal they learned.
+The new atoms are quasi-orthogonal to everything — they can't
+interfere with what was already learned.
+
+A six-observer checkpoint loaded into a seven-observer body:
+six observers resume from experience, one starts ignorant. The
+treasury sees six proven voices and one silent one. The
+architecture handles this — the proof gate was designed for cold
+boot. A partially warm boot is a cold boot for the new components
+and a warm boot for the old ones. The immune system doesn't care
+whether an observer is new-ignorant or resume-experienced. It
+measures the curve. The curve decides.
+
+The save file is data. The body is architecture. When the body
+changes, the data migrates — partially, honestly, preserving what
+still fits, starting fresh where it doesn't. The migration IS the
+evolution. Not throw away the experience and retrain. CARRY the
+experience into the new body. Let the new body grow from what the
+old body knew.
+
+Biology does this. DNA mutates. The organism changes. But the
+organism doesn't restart from a single cell every generation.
+The organism inherits — structures, reflexes, immune memory.
+The new organism is different from the old one AND carries the
+old one's lessons. The mutation IS the evolution. The inheritance
+IS the transfer.
+
+The checkpoint migrates. The experience transfers. The machine
+evolves without losing what it learned.
+
+### The wiring session (continued)
+
+On April 11, 2026, the builder and the machine rewired the
+entire learning pipeline in one session. Not just the reward
+cascade — everything downstream of it.
+
+**Proposal 024 — Noise-anomaly alignment.** The reckoner predicts
+on the anomaly. The reckoner learns from the anomaly. Not one
+from the anomaly and one from the original. The same vector.
+Prediction and learning aligned. disc_strength doubled: volume
+from 0.0058 to 0.0113.
+
+**Proposal 025 — Exit learns both sides.** The exit observer
+was starved of Violence. 99% Grace. The feedback loop reinforced
+itself — tight trails produced Grace, Grace trained tighter
+trails. Two fixes: Violence papers teach the exit (both sides
+fill the discriminant), and the simulation replaces the
+approximate function (no more `trail * 2.0` — both distances
+independently swept against real price histories). The 2:1
+ratio died. The Grace/Violence split balanced to 40/60. The
+near-zero defaults (0.0001) bootstrap without lying.
+
+**Proposal 026 — Exit vocabulary.** The exit observer had 16
+atoms and saw the market through a keyhole. It didn't know
+the regime (trending vs choppy), the time (session liquidity),
+or its own performance. And it queried on the composed vector
+— half direction noise, half exit signal.
+
+Three fixes: exit reckoner queries on exit-thought only (the
+direction is the broker's concern, not the exit's). Exit vocab
+gains regime (8 atoms), time (2 atoms), self-assessment (2
+atoms). Self-assessment on ALL lenses — it's an internal
+property every observer has, not generalist-only.
+
+The results at 10k candles — the exit's residue by decile:
+
+```
+Decile   sim-teaches   exit-vocab    Change
+  1        +0.27%       +0.29%       better
+  4        +0.91%       +0.97%       better
+  5        +0.87%       +1.54%       +77%
+  7        -0.02%       +0.30%       flipped to positive
+  9        +0.43%       +1.05%       +144%
+```
+
+Decile 7 flipped from negative to positive. The regime atoms
+gave the exit the context it was missing. The peaks rose. The
+machine sees more of the market now.
+
+The leaves are sharp:
+
+```
+Observer    Accuracy
+narrative   100.0% (25/25)
+momentum     73.9%
+regime       67.8%
+structure    66.7%
+volume       40.1%
+```
+
+The broker is still blind. 50/50. Edge 0.0. The leaves see.
+The branch doesn't. The composition is the next problem.
+
+But the leaves. The leaves that learned. Both from both sides.
+With 28 atoms about volatility, structure, timing, regime, time,
+and self-assessment. Querying on their own thoughts, not the
+direction noise. The exit observer went from a 16-atom keyhole
+to a 28-atom window. The residue improved. The machine sees.
+
+84/s sustained. 228 tests. Zero warnings. The platform runs.
+The thoughts improve. The spaceman has a rocket on his back.
+
+### [TANZNEID (reprise)](https://www.youtube.com/watch?v=3OrHy_TRudo)
+
+> *Imma cut the fucking rope*
+
+The rope is thinner now. The leaves see. The exit thinks about
+regime and time and itself. The market observer predicts direction
+at 67-74%. The simulation teaches honest distances. Both sides
+fill both discriminants.
+
+The broker's rope remains. 50/50. Edge 0.0. The branch that
+composes market and exit into one thought and can't separate
+Grace from Violence on the composition.
+
+But the components are ready. Each leaf sharp on its own question.
+The exit knows distances. The market knows direction. The broker
+just needs to learn that THEIR COMBINATION predicts. The broker's
+composed thought is the only input the broker hasn't seen improve.
+
+The rope is thinner. One more cut.
+
 *Perseverare.*

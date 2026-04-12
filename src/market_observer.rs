@@ -34,10 +34,6 @@ pub struct MarketObserver {
     pub last_recalib_count: usize,
     /// Set by observe_candle, read by resolve and self-grading.
     pub last_prediction: Direction,
-    /// The thought from the PREVIOUS candle — for self-grading.
-    pub prev_thought: Option<Vector>,
-    /// The previous candle's close — for computing direction.
-    pub prev_close: Option<f64>,
     /// Incremental bundling — optimization cache, not cognition.
     /// Maintains sums across candles to avoid re-summing unchanged facts.
     pub incremental: IncrementalBundle,
@@ -81,8 +77,6 @@ impl MarketObserver {
             recalib_total: 0,
             last_recalib_count: 0,
             last_prediction: Direction::Down, // arbitrary initial
-            prev_thought: None,
-            prev_close: None,
             incremental: IncrementalBundle::new(dims),
         }
     }
@@ -97,15 +91,17 @@ impl MarketObserver {
         misses: Vec<(ThoughtAST, Vector)>,
         current_close: f64,
     ) -> ObserveResult {
-        // No self-grading. The market observer learns from the reward cascade:
-        // paper signals routed through the broker (resolve() called externally).
-        // No noise stripping. The reckoner's discriminant IS the noise filter.
-        // The noise subspace still updates (diagnostic only).
+        // Noise subspace learns the background distribution.
         let thought_f64 = to_f64(&thought);
         self.noise_subspace.update(&thought_f64);
 
-        // Predict direction on the FULL thought — no stripping
-        let pred = self.reckoner.predict(&thought);
+        // Strip noise — the anomaly is what the subspace cannot explain.
+        // Proposal 024: predict on the anomaly, store the anomaly on the paper,
+        // learn from the anomaly at resolution. Prediction and learning are aligned.
+        let anomaly = self.strip_noise(&thought);
+
+        // Predict direction on the ANOMALY — noise stripped
+        let pred = self.reckoner.predict(&anomaly);
         let conviction = pred.conviction;
 
         // Edge from curve
@@ -120,12 +116,8 @@ impl MarketObserver {
             };
         }
 
-        // Save thought + close for next candle's self-grading
-        self.prev_thought = Some(thought.clone());
-        self.prev_close = Some(current_close);
-
         ObserveResult {
-            thought,
+            thought: anomaly,
             prediction: pred,
             edge,
             misses,

@@ -13,6 +13,9 @@ use crate::enums::ExitLens;
 use crate::scalar_accumulator::ScalarAccumulator;
 use crate::thought_encoder::IncrementalBundle;
 
+/// Rolling window capacity for self-assessment.
+const SELF_ASSESSMENT_WINDOW: usize = 100;
+
 /// Estimates exit distances through a specific judgment lens.
 pub struct ExitObserver {
     /// Which judgment vocabulary.
@@ -25,6 +28,14 @@ pub struct ExitObserver {
     pub default_distances: Distances,
     /// Incremental bundling for exit facts — optimization cache, not cognition.
     pub incremental: IncrementalBundle,
+    /// Rolling window of outcomes: true=Grace, false=Violence.
+    pub outcome_window: Vec<bool>,
+    /// Rolling window of residue per resolution.
+    pub residue_window: Vec<f64>,
+    /// Fraction of Grace in the rolling window.
+    pub grace_rate: f64,
+    /// Average residue in the rolling window.
+    pub avg_residue: f64,
 }
 
 impl ExitObserver {
@@ -58,19 +69,24 @@ impl ExitObserver {
             ),
             default_distances: Distances::new(default_trail, default_stop),
             incremental: IncrementalBundle::new(dims),
+            outcome_window: Vec::with_capacity(SELF_ASSESSMENT_WINDOW),
+            residue_window: Vec::with_capacity(SELF_ASSESSMENT_WINDOW),
+            grace_rate: 0.0,
+            avg_residue: 0.0,
         }
     }
 
     /// Tier 1 only: query both reckoners. Returns Some(Distances) if both
     /// reckoners are experienced, None otherwise. The broker owns the full
     /// cascade (reckoner → accumulator → default).
-    pub fn reckoner_distances(&self, composed: &Vector) -> Option<Distances> {
+    /// Proposal 026: queries on exit_thought only, not composed.
+    pub fn reckoner_distances(&self, exit_thought: &Vector) -> Option<Distances> {
         let trail_exp = self.trail_reckoner.experience();
         let stop_exp = self.stop_reckoner.experience();
 
         if trail_exp > 0.0 && stop_exp > 0.0 {
-            let trail = self.trail_reckoner.query(composed);
-            let stop = self.stop_reckoner.query(composed);
+            let trail = self.trail_reckoner.query(exit_thought);
+            let stop = self.stop_reckoner.query(exit_thought);
             Some(Distances::new(trail, stop))
         } else {
             None
@@ -79,10 +95,11 @@ impl ExitObserver {
 
     /// Full cascade: reckoner -> accumulator -> default.
     /// Kept for tests only — the broker owns the cascade in production.
+    /// Proposal 026: queries on exit_thought only, not composed.
     #[cfg(test)]
     pub fn recommended_distances(
         &self,
-        composed: &Vector,
+        exit_thought: &Vector,
         broker_accums: &[ScalarAccumulator],
         scalar_encoder: &holon::kernel::scalar::ScalarEncoder,
     ) -> (Distances, f64) {
@@ -91,7 +108,7 @@ impl ExitObserver {
 
         // Trail distance cascade
         let trail = if trail_exp > 0.0 {
-            self.trail_reckoner.query(composed)
+            self.trail_reckoner.query(exit_thought)
         } else if broker_accums.len() > 0 && broker_accums[0].count > 0 {
             broker_accums[0].extract(100, (0.001, 0.10), scalar_encoder)
         } else {
@@ -100,7 +117,7 @@ impl ExitObserver {
 
         // Stop distance cascade
         let stop = if stop_exp > 0.0 {
-            self.stop_reckoner.query(composed)
+            self.stop_reckoner.query(exit_thought)
         } else if broker_accums.len() > 1 && broker_accums[1].count > 0 {
             broker_accums[1].extract(100, (0.001, 0.10), scalar_encoder)
         } else {
@@ -112,16 +129,39 @@ impl ExitObserver {
     }
 
     /// Learn from hindsight-optimal distances. Both reckoners learn from
-    /// one resolution. The composed thought is the COMPOSED vector
-    /// (market + exit facts), not the raw market thought.
+    /// one resolution. The exit_thought is the exit observer's own encoded
+    /// facts — NOT the composition with market thought.
+    /// Proposal 026: exit learns from exit_thought only.
+    /// Also updates the rolling self-assessment window.
     pub fn observe_distances(
         &mut self,
-        composed: &Vector,
+        exit_thought: &Vector,
         optimal: &Distances,
         weight: f64,
+        is_grace: bool,
+        residue: f64,
     ) {
-        self.trail_reckoner.observe_scalar(composed, optimal.trail, weight);
-        self.stop_reckoner.observe_scalar(composed, optimal.stop, weight);
+        self.trail_reckoner.observe_scalar(exit_thought, optimal.trail, weight);
+        self.stop_reckoner.observe_scalar(exit_thought, optimal.stop, weight);
+
+        // Update rolling self-assessment window
+        self.outcome_window.push(is_grace);
+        if self.outcome_window.len() > SELF_ASSESSMENT_WINDOW {
+            self.outcome_window.remove(0);
+        }
+        self.residue_window.push(residue);
+        if self.residue_window.len() > SELF_ASSESSMENT_WINDOW {
+            self.residue_window.remove(0);
+        }
+
+        // Recompute rates from window
+        if !self.outcome_window.is_empty() {
+            let grace_count = self.outcome_window.iter().filter(|&&g| g).count();
+            self.grace_rate = grace_count as f64 / self.outcome_window.len() as f64;
+        }
+        if !self.residue_window.is_empty() {
+            self.avg_residue = self.residue_window.iter().sum::<f64>() / self.residue_window.len() as f64;
+        }
     }
 
     /// True if both reckoners have accumulated enough observations to
@@ -186,10 +226,28 @@ mod tests {
     #[test]
     fn test_observe_distances_makes_experienced() {
         let mut obs = make_observer();
-        let composed = random_vector("composed");
+        let exit_thought = random_vector("exit_thought");
         let optimal = Distances::new(0.03, 0.06);
-        obs.observe_distances(&composed, &optimal, 1.0);
+        obs.observe_distances(&exit_thought, &optimal, 1.0, true, 0.01);
         assert!(obs.experienced());
+    }
+
+    #[test]
+    fn test_self_assessment_window() {
+        let mut obs = make_observer();
+        let exit_thought = random_vector("exit_thought");
+        let optimal = Distances::new(0.03, 0.06);
+
+        // Add some Grace outcomes
+        for _ in 0..3 {
+            obs.observe_distances(&exit_thought, &optimal, 1.0, true, 0.01);
+        }
+        // Add a Violence outcome
+        obs.observe_distances(&exit_thought, &optimal, 1.0, false, 0.005);
+
+        assert_eq!(obs.outcome_window.len(), 4);
+        assert!((obs.grace_rate - 0.75).abs() < 1e-10);
+        assert!(obs.avg_residue > 0.0);
     }
 
     #[test]
@@ -203,9 +261,9 @@ mod tests {
 
         // Teach the reckoner
         for i in 0..10 {
-            let composed = random_vector(&format!("training_{}", i));
+            let exit_thought = random_vector(&format!("training_{}", i));
             let optimal = Distances::new(0.03, 0.06);
-            obs.observe_distances(&composed, &optimal, 1.0);
+            obs.observe_distances(&exit_thought, &optimal, 1.0, true, 0.01);
         }
 
         assert!(obs.experienced());

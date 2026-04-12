@@ -14,6 +14,9 @@ pub struct TradeOrigin {
     pub post_idx: usize,
     pub broker_slot_idx: usize,
     pub composed_thought: Vector,
+    pub market_thought: Vector,
+    /// The exit observer's own encoded facts. Proposal 026.
+    pub exit_thought: Vector,
     pub prediction: Prediction,
 }
 
@@ -22,12 +25,16 @@ impl TradeOrigin {
         post_idx: usize,
         broker_slot_idx: usize,
         composed_thought: Vector,
+        market_thought: Vector,
+        exit_thought: Vector,
         prediction: Prediction,
     ) -> Self {
         Self {
             post_idx,
             broker_slot_idx,
             composed_thought,
+            market_thought,
+            exit_thought,
             prediction,
         }
     }
@@ -44,7 +51,7 @@ mod tests {
             scores: vec![("Grace".into(), 0.6), ("Violence".into(), 0.4)],
             conviction: 0.6,
         };
-        let origin = TradeOrigin::new(0, 3, thought.clone(), pred);
+        let origin = TradeOrigin::new(0, 3, thought.clone(), Vector::zeros(4096), Vector::zeros(4096), pred);
         assert_eq!(origin.post_idx, 0);
         assert_eq!(origin.broker_slot_idx, 3);
         assert_eq!(origin.composed_thought.dimensions(), 4096);
@@ -55,6 +62,8 @@ mod tests {
         let origin = TradeOrigin::new(
             1,
             5,
+            Vector::zeros(256),
+            Vector::zeros(256),
             Vector::zeros(256),
             Prediction::Discrete {
                 scores: vec![],

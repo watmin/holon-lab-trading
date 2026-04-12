@@ -7,10 +7,13 @@ use crate::distances::Distances;
 use crate::enums::{Prediction, Side};
 use crate::raw_candle::Asset;
 
-/// A proposal for the treasury to evaluate. Nine fields.
+/// A proposal for the treasury to evaluate.
 #[derive(Clone, Debug)]
 pub struct Proposal {
     pub composed_thought: Vector,
+    pub market_thought: Vector,
+    /// The exit observer's own encoded facts. Proposal 026.
+    pub exit_thought: Vector,
     pub distances: Distances,
     pub edge: f64,
     pub side: Side,
@@ -24,6 +27,8 @@ pub struct Proposal {
 impl Proposal {
     pub fn new(
         composed_thought: Vector,
+        market_thought: Vector,
+        exit_thought: Vector,
         distances: Distances,
         edge: f64,
         side: Side,
@@ -35,6 +40,8 @@ impl Proposal {
     ) -> Self {
         Self {
             composed_thought,
+            market_thought,
+            exit_thought,
             distances,
             edge,
             side,
@@ -58,6 +65,8 @@ mod tests {
             conviction: 0.7,
         };
         let prop = Proposal::new(
+            Vector::zeros(4096),
+            Vector::zeros(4096),
             Vector::zeros(4096),
             Distances::new(0.02, 0.05),
             0.05,
@@ -87,6 +96,8 @@ mod tests {
         };
         let prop = Proposal::new(
             Vector::zeros(256),
+            Vector::zeros(256),
+            Vector::zeros(256),
             Distances::new(0.01, 0.03),
             0.1,
             Side::Sell,
@@ -109,6 +120,8 @@ mod tests {
             conviction: 0.8,
         };
         let prop = Proposal::new(
+            Vector::zeros(256),
+            Vector::zeros(256),
             Vector::zeros(256),
             Distances::new(0.02, 0.05),
             0.1,

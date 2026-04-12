@@ -378,10 +378,11 @@ fn build_enterprise(args: &Args) -> (Enterprise, Ctx) {
     // Build exit observers -- one per ExitLens variant
     let exit_observers: Vec<ExitObserver> = EXIT_LENSES
         .iter()
-        .map(|lens| ExitObserver::new(*lens, dims, recalib_interval, 0.015, 0.030))
+        .map(|lens| ExitObserver::new(*lens, dims, recalib_interval, 0.0001, 0.0001))
         .collect();
 
     // Build brokers -- N x M grid
+    // Defaults near zero — the market teaches the real distances.
     let registry: Vec<Broker> = (0..(n * m))
         .map(|slot_idx| {
             let mi = slot_idx / m;
@@ -398,7 +399,7 @@ fn build_enterprise(args: &Args) -> (Enterprise, Ctx) {
                     ScalarAccumulator::new("trail-distance", ScalarEncoding::Log, dims),
                     ScalarAccumulator::new("stop-distance", ScalarEncoding::Log, dims),
                 ],
-                enterprise::distances::Distances::new(0.015, 0.030),
+                enterprise::distances::Distances::new(0.0001, 0.0001),
             )
         })
         .collect();
@@ -690,11 +691,14 @@ fn main() {
     type ObsOutput = (holon::kernel::vector::Vector, holon::memory::Prediction, f64,
                       Vec<(enterprise::thought_encoder::ThoughtAST, holon::kernel::vector::Vector)>);
     type ObsLearn = (holon::kernel::vector::Vector, enterprise::enums::Direction, f64);
-    type BrokerInput = (holon::kernel::vector::Vector, holon::kernel::vector::Vector, enterprise::enums::Direction,
+    type BrokerInput = (holon::kernel::vector::Vector, holon::kernel::vector::Vector,
+                        holon::kernel::vector::Vector, enterprise::enums::Direction,
                         Option<enterprise::distances::Distances>, f64,
                         enterprise::enums::Side, f64, enterprise::enums::Prediction);
     type BrokerOutput = (enterprise::proposal::Proposal, Vec<enterprise::broker::Resolution>, Vec<enterprise::broker::Resolution>);
-    type BrokerLearn = (holon::kernel::vector::Vector, enterprise::enums::Outcome,
+    type BrokerLearn = (holon::kernel::vector::Vector, holon::kernel::vector::Vector,
+                        holon::kernel::vector::Vector,
+                        enterprise::enums::Outcome,
                         f64, enterprise::enums::Direction, enterprise::distances::Distances);
 
     /// Per-post pipe wiring. One per asset pair. No magic index.
@@ -824,11 +828,11 @@ fn main() {
 
             let handle = std::thread::spawn(move || {
                 let mut candle_count = 0usize;
-                while let Ok((composed, market_thought, prediction, reckoner_dists, price, side, edge, pred)) = in_rx.recv() {
+                while let Ok((composed, market_thought, exit_thought, prediction, reckoner_dists, price, side, edge, pred)) = in_rx.recv() {
                     candle_count += 1;
                     // Drain all learn signals. No cap.
-                    while let Ok((thought, outcome, weight, direction, optimal)) = blearn_rx.try_recv() {
-                        broker.propagate(&thought, outcome, weight, direction, &optimal,
+                    while let Ok((thought, market_thought, exit_thought_learn, outcome, weight, direction, optimal)) = blearn_rx.try_recv() {
+                        broker.propagate(&thought, &market_thought, &exit_thought_learn, outcome, weight, direction, &optimal,
                             recalib, enterprise::post::ctx_scalar_encoder_placeholder());
                     }
                     // Broker owns the distance cascade: reckoner → accumulator → default
@@ -881,7 +885,7 @@ fn main() {
                             }
                         }
                         broker.active_direction = Some(prediction);
-                        broker.register_paper(composed.clone(), market_thought, prediction, Price(price), dists);
+                        broker.register_paper(composed.clone(), market_thought.clone(), exit_thought.clone(), prediction, Price(price), dists);
                     }
                     let (market_signals, mut runner_resolutions) = broker.tick_papers(Price(price));
                     runner_resolutions.extend(flip_resolutions);
@@ -901,7 +905,7 @@ fn main() {
                     }
 
                     let prop = enterprise::proposal::Proposal::new(
-                        composed, dists, edge, side, src.clone(), tgt.clone(),
+                        composed, market_thought, exit_thought, dists, edge, side, src.clone(), tgt.clone(),
                         pred, post_idx_for_broker, broker.slot_idx);
                     let _ = out_tx.send((prop, market_signals, runner_resolutions));
                 }
@@ -988,17 +992,21 @@ fn main() {
                 // Market observer self-grades every candle — no broker propagation.
                 // The observer is its own teacher. The market is the judge.
                 if let Some(stl_pipes) = all_pipes.get(stl_post_idx) {
-                    // Broker learns via channel
+                    // Broker learns via channel — Proposal 026: include exit_thought
                     if slot < stl_pipes.broker_learn_txs.len() {
                         let _ = stl_pipes.broker_learn_txs[slot].send((
-                            stl.composed_thought.clone(), stl.outcome, stl.amount.0,
+                            stl.composed_thought.clone(), stl.market_thought.clone(),
+                            stl.exit_thought.clone(),
+                            stl.outcome, stl.amount.0,
                             direction, optimal));
                     }
                 }
                 // Exit observer learns on main thread
+                // Proposal 026: exit learns from exit_thought, not composed
+                let is_grace = stl.outcome == enterprise::enums::Outcome::Grace;
                 if stl_post_idx < ent.posts.len() && ei < ent.posts[stl_post_idx].exit_observers.len() {
                     ent.posts[stl_post_idx].exit_observers[ei].observe_distances(
-                        &stl.composed_thought, &optimal, stl.amount.0);
+                        &stl.exit_thought, &optimal, stl.amount.0, is_grace, optimal.trail);
                 }
             }
         }
@@ -1052,8 +1060,13 @@ fn main() {
         use rayon::prelude::*;
         let exit_vecs: Vec<holon::kernel::vector::Vector> = (0..m)
             .map(|ei| {
-                let exit_facts = enterprise::post::exit_lens_facts(
+                let mut exit_facts = enterprise::post::exit_lens_facts(
                     &post.exit_observers[ei].lens, &enriched);
+                let self_facts = enterprise::post::exit_self_assessment_facts(
+                    post.exit_observers[ei].grace_rate,
+                    post.exit_observers[ei].avg_residue,
+                );
+                exit_facts.extend(self_facts);
                 let exit_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(exit_facts);
                 // Use grid_handles[ei] for the cache lookup (any handle works, pick deterministic one)
                 match grid_handles[ei].get(&exit_bundle) {
@@ -1085,7 +1098,8 @@ fn main() {
                     &[&market_thoughts[mi], &exit_vecs[ei]]);
 
                 // Tier 1 only — reckoner distances. The broker owns the full cascade.
-                let reckoner_dists = exit_observers[ei].reckoner_distances(&composed);
+                // Proposal 026: exit reckoner queries on exit_vec only, not composed.
+                let reckoner_dists = exit_observers[ei].reckoner_distances(&exit_vecs[ei]);
 
                 let side = enterprise::post::derive_side(&market_predictions[mi]);
                 let edge = 0.0_f64; // Broker computes edge on its thread
@@ -1098,7 +1112,7 @@ fn main() {
                     enterprise::enums::Direction::Down
                 };
 
-                (slot_idx, mi, composed, reckoner_dists, side, edge, pred, direction)
+                (slot_idx, mi, ei, composed, reckoner_dists, side, edge, pred, direction)
             })
             .collect()
         };
@@ -1106,9 +1120,9 @@ fn main() {
         let t_grid = t_candle.elapsed();
 
         // Send to broker pipes — bounded(1), each broker gets its input
-        for (slot_idx, mi, composed, dists, side, edge, pred, direction) in grid_values {
+        for (slot_idx, mi, ei, composed, dists, side, edge, pred, direction) in grid_values {
             let _ = pipes.broker_in_txs[slot_idx].send((
-                composed, market_thoughts[mi].clone(), direction,
+                composed, market_thoughts[mi].clone(), exit_vecs[ei].clone(), direction,
                 dists, price, side, edge, pred));
         }
 
@@ -1189,6 +1203,20 @@ fn main() {
                 }
             }
 
+            // Market signals also teach the exit observer — Violence papers carry
+            // optimal distances from hindsight simulation. Without this, the exit
+            // only learns from Grace (runners) and the distance feedback loop is one-sided.
+            // Proposal 026: exit learns from exit_thought, not composed.
+            for res in &all_market_signals {
+                let ei = res.broker_slot_idx % m;
+                let is_grace = res.outcome == enterprise::enums::Outcome::Grace;
+                if ei < post.exit_observers.len() {
+                    post.exit_observers[ei].observe_distances(
+                        &res.exit_thought, &res.optimal_distances, res.amount,
+                        is_grace, res.optimal_distances.trail);
+                }
+            }
+
             // Runner resolutions → broker learn channels + exit observer learning
             // Also: second market teaching — runner closure reinforces market observer
             let mut exit_work: Vec<Vec<(usize, usize)>> = vec![Vec::new(); m];
@@ -1197,8 +1225,11 @@ fn main() {
                 let mi = res.broker_slot_idx / m;
 
                 // Broker: learn via channel (cheap — just a send)
+                // Proposal 026: include exit_thought
                 let _ = pipes.broker_learn_txs[res.broker_slot_idx].send((
-                    res.composed_thought.clone(), res.outcome, res.amount,
+                    res.composed_thought.clone(), res.market_thought.clone(),
+                    res.exit_thought.clone(),
+                    res.outcome, res.amount,
                     res.prediction, res.optimal_distances));
 
                 // Second market teaching: runner closure reinforces market observer.
@@ -1219,21 +1250,28 @@ fn main() {
             // Deferred batch training: each runner resolution carries an exit_batch with
             // per-candle (thought, optimal, weight) observations. These are the primary
             // training signal. The single-point resolution observation is also sent.
+            // Proposal 026: exit learns from exit_thought, not composed.
             post.exit_observers
                 .par_iter_mut()
                 .zip(exit_work.par_iter())
                 .for_each(|(eobs, work)| {
                     for &(_ei, ri) in work {
                         let res = &all_runner_resolutions[ri];
+                        let is_grace = res.outcome == enterprise::enums::Outcome::Grace;
 
                         // Batch training: ALL per-candle observations from the runner's life
+                        // Note: batch thoughts are composed (from runner history), not exit-only.
+                        // This is a known limitation — runner histories would need exit_thought
+                        // stored per-candle for full alignment. For now, use the paper's exit_thought
+                        // for the single-point observation, and pass batch as-is.
                         for (thought, optimal, weight) in &res.exit_batch {
-                            eobs.observe_distances(thought, optimal, *weight);
+                            eobs.observe_distances(thought, optimal, *weight, is_grace, optimal.trail);
                         }
 
-                        // Single-point resolution observation
+                        // Single-point resolution observation — uses exit_thought
                         eobs.observe_distances(
-                            &res.composed_thought, &res.optimal_distances, res.amount);
+                            &res.exit_thought, &res.optimal_distances, res.amount,
+                            is_grace, res.optimal_distances.trail);
                     }
                 });
         }
@@ -1259,12 +1297,8 @@ fn main() {
                     let mi = slot / pipes.m;
                     let ei = slot % pipes.m;
                     if mi < market_thoughts.len() && ei < post.exit_observers.len() {
-                        let composed = holon::kernel::primitives::Primitives::bundle(
-                            &[&market_thoughts[mi], &exit_vecs[ei]]);
-                        // Tier 1 only — the broker thread owns accumulators.
-                        // For trigger updates we use reckoner + default fallback directly,
-                        // since the broker thread cannot be queried from here.
-                        let reckoner_dists = post.exit_observers[ei].reckoner_distances(&composed);
+                        // Proposal 026: exit reckoner queries on exit_vec only, not composed.
+                        let reckoner_dists = post.exit_observers[ei].reckoner_distances(&exit_vecs[ei]);
                         let dists = reckoner_dists.unwrap_or(post.exit_observers[ei].default_distances);
                         let new_levels = dists.to_levels(Price(price), side);
                         Some((tid, new_levels))

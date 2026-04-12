@@ -46,6 +46,9 @@ use crate::vocab::market::timeframe::encode_timeframe_facts;
 use crate::vocab::exit::structure::encode_exit_structure_facts;
 use crate::vocab::exit::timing::encode_exit_timing_facts;
 use crate::vocab::exit::volatility::encode_exit_volatility_facts;
+use crate::vocab::exit::regime::encode_exit_regime_facts;
+use crate::vocab::exit::time::encode_exit_time_facts;
+use crate::vocab::exit::self_assessment::encode_exit_self_assessment_facts;
 
 // Vocab imports -- shared
 use crate::vocab::shared::time::encode_time_facts;
@@ -153,11 +156,15 @@ impl Post {
         // Pre-encode exit facts per exit observer (M, not N×M).
         // Each exit observer's incremental bundle maintains sums across candles.
         // The exit_vecs are then shared across all N market observers.
+        // Proposal 026: includes regime, time, and self-assessment (generalist only).
         let exit_results: Vec<_> = self
             .exit_observers
             .par_iter_mut()
             .map(|eobs| {
-                let exit_fact_asts = exit_lens_facts(&eobs.lens, &enriched);
+                let mut exit_fact_asts = exit_lens_facts(&eobs.lens, &enriched);
+                let self_facts = exit_self_assessment_facts(
+                    eobs.grace_rate, eobs.avg_residue);
+                exit_fact_asts.extend(self_facts);
                 eobs.incremental.encode(&exit_fact_asts, &ctx.thought_encoder)
             })
             .collect();
@@ -191,7 +198,8 @@ impl Post {
 
                 // Exit: tier 1 only — reckoner distances.
                 // The broker owns the full cascade (reckoner → accumulator → default).
-                let reckoner_dists = exit_observers[ei].reckoner_distances(&composed);
+                // Proposal 026: exit reckoner queries on exit_vec only, not composed.
+                let reckoner_dists = exit_observers[ei].reckoner_distances(exit_vec);
 
                 // Derive side + edge (reads only)
                 let side_val = derive_side(&market_predictions[mi]);
@@ -206,7 +214,7 @@ impl Post {
                 };
 
                 // Return values — no mutation
-                (slot_idx, mi, composed, reckoner_dists, side_val, edge_val, enterprise_pred, direction)
+                (slot_idx, mi, ei, composed, reckoner_dists, side_val, edge_val, enterprise_pred, direction)
             })
             .collect();
 
@@ -216,12 +224,15 @@ impl Post {
         let proposals: Vec<_> = self.registry
             .par_iter_mut()
             .zip(grid_values.into_par_iter())
-            .map(|(broker, (slot_idx, mi, composed, reckoner_dists, side_val, edge_val, enterprise_pred, direction))| {
+            .map(|(broker, (slot_idx, mi, ei, composed, reckoner_dists, side_val, edge_val, enterprise_pred, direction))| {
                 let dists = broker.cascade_distances(reckoner_dists);
                 broker.propose(&composed);
-                broker.register_paper(composed.clone(), market_thoughts[mi].clone(), direction, price, dists);
+                // Proposal 026: store exit_thought on paper for aligned exit learning.
+                broker.register_paper(composed.clone(), market_thoughts[mi].clone(), exit_vecs[ei].clone(), direction, price, dists);
                 Proposal::new(
                     composed,
+                    market_thoughts[mi].clone(),
+                    exit_vecs[ei].clone(),
                     dists,
                     edge_val,
                     side_val,
@@ -260,19 +271,23 @@ impl Post {
                     continue;
                 }
 
-                let market_thought = &market_thoughts[mi];
+                let _market_thought = &market_thoughts[mi];
 
-                // Exit: encode facts via lens and compose with market thought
+                // Exit: encode facts via lens
                 let exit_lens = self.exit_observers[ei].lens;
-                let exit_fact_asts = exit_lens_facts(&exit_lens, candle);
+                let mut exit_fact_asts = exit_lens_facts(&exit_lens, candle);
+                let self_facts = exit_self_assessment_facts(
+                    self.exit_observers[ei].grace_rate,
+                    self.exit_observers[ei].avg_residue,
+                );
+                exit_fact_asts.extend(self_facts);
                 let exit_bundle = ThoughtAST::Bundle(exit_fact_asts);
                 let (exit_vec, misses) = ctx.thought_encoder.encode(&exit_bundle);
                 all_misses.extend(misses);
 
-                let composed = Primitives::bundle(&[market_thought, &exit_vec]);
-
                 // Get fresh distances — broker owns the cascade
-                let reckoner_dists = self.exit_observers[ei].reckoner_distances(&composed);
+                // Proposal 026: exit reckoner queries on exit_vec only, not composed.
+                let reckoner_dists = self.exit_observers[ei].reckoner_distances(&exit_vec);
                 let dists = self.registry[slot].cascade_distances(reckoner_dists);
 
                 // Convert to levels
@@ -287,10 +302,13 @@ impl Post {
     }
 
     /// Propagate a resolved outcome to the right observers.
+    /// Proposal 026: exit observer learns from exit_thought only, not composed.
     pub fn propagate(
         &mut self,
         slot_idx: usize,
         thought: &Vector,
+        market_thought: &Vector,
+        exit_thought: &Vector,
         outcome: Outcome,
         weight: f64,
         direction: Direction,
@@ -300,6 +318,8 @@ impl Post {
         // Broker propagate -- returns facts for observers
         let facts = self.registry[slot_idx].propagate(
             thought,
+            market_thought,
+            exit_thought,
             outcome,
             weight,
             direction,
@@ -313,9 +333,11 @@ impl Post {
         let ei = facts.exit_idx;
         let mut observers_updated: usize = 0;
 
+        // Proposal 024: market observer learns from market_thought (the anomaly),
+        // not composed_thought.
         if mi < self.market_observers.len() {
             self.market_observers[mi].resolve(
-                &facts.composed_thought,
+                &facts.market_thought,
                 facts.direction,
                 facts.weight,
                 recalib_interval,
@@ -323,11 +345,15 @@ impl Post {
             observers_updated += 1;
         }
 
+        // Proposal 026: exit observer learns from exit_thought only.
+        let is_grace = outcome == Outcome::Grace;
         if ei < self.exit_observers.len() {
             self.exit_observers[ei].observe_distances(
-                &facts.composed_thought,
+                &facts.exit_thought,
                 &facts.optimal,
                 facts.weight,
+                is_grace,
+                facts.optimal.trail, // residue proxy: optimal trail distance
             );
             observers_updated += 1;
         }
@@ -394,18 +420,32 @@ pub fn market_lens_facts(lens: &MarketLens, candle: &Candle, window: &[Candle]) 
 }
 
 /// Collect exit vocab facts for a specific lens.
+/// Proposal 026: all lenses gain regime and time atoms (universal context).
+/// Generalist additionally gains self-assessment atoms.
 pub fn exit_lens_facts(lens: &ExitLens, candle: &Candle) -> Vec<ThoughtAST> {
-    match lens {
+    let mut facts = match lens {
         ExitLens::Volatility => encode_exit_volatility_facts(candle),
         ExitLens::Structure => encode_exit_structure_facts(candle),
         ExitLens::Timing => encode_exit_timing_facts(candle),
         ExitLens::Generalist => {
-            let mut facts = encode_exit_volatility_facts(candle);
-            facts.extend(encode_exit_structure_facts(candle));
-            facts.extend(encode_exit_timing_facts(candle));
-            facts
+            let mut f = encode_exit_volatility_facts(candle);
+            f.extend(encode_exit_structure_facts(candle));
+            f.extend(encode_exit_timing_facts(candle));
+            f
         }
-    }
+    };
+    // Universal context: regime + time for all lenses
+    facts.extend(encode_exit_regime_facts(candle));
+    facts.extend(encode_exit_time_facts(candle));
+    facts
+}
+
+/// Collect exit self-assessment facts from the exit observer's rolling window.
+/// Generalist-only for now. Returns empty for non-generalist lenses.
+pub fn exit_self_assessment_facts(grace_rate: f64, avg_residue: f64) -> Vec<ThoughtAST> {
+    // Self-assessment is on ALL lenses — it's an internal property
+    // every exit observer has, not a generalist-only feature.
+    encode_exit_self_assessment_facts(grace_rate, avg_residue)
 }
 
 /// Derive Side from a holon-rs Prediction. Up -> Buy, Down -> Sell.
@@ -557,13 +597,23 @@ mod tests {
 
         let vol_facts = exit_lens_facts(&ExitLens::Volatility, &candle);
         let struct_facts = exit_lens_facts(&ExitLens::Structure, &candle);
+        let timing_facts = exit_lens_facts(&ExitLens::Timing, &candle);
         let gen_facts = exit_lens_facts(&ExitLens::Generalist, &candle);
 
+        // Proposal 026: all lenses get regime(8) + time(2) = +10 universal context
         assert!(!vol_facts.is_empty());
         assert!(!struct_facts.is_empty());
-        // Generalist includes all three
-        assert_eq!(gen_facts.len(), vol_facts.len() + struct_facts.len() + {
-            exit_lens_facts(&ExitLens::Timing, &candle).len()
-        });
+        // All specialists have their specific atoms + 10 universal
+        assert_eq!(vol_facts.len(), 6 + 10);  // volatility(6) + regime(8) + time(2)
+        assert_eq!(struct_facts.len(), 5 + 10); // structure(5) + regime(8) + time(2)
+        assert_eq!(timing_facts.len(), 5 + 10); // timing(5) + regime(8) + time(2)
+        // Generalist has all three specialists' specific atoms + one set of universal
+        assert_eq!(gen_facts.len(), 6 + 5 + 5 + 10); // vol+struct+timing + regime+time
+    }
+
+    #[test]
+    fn test_exit_self_assessment_generalist_only() {
+        let facts = exit_self_assessment_facts(0.6, 0.005);
+        assert_eq!(facts.len(), 2);
     }
 }

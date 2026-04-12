@@ -13,6 +13,7 @@ use holon::memory::{OnlineSubspace, ReckConfig, Reckoner};
 use crate::distances::Distances;
 use crate::engram_gate::{check_engram_gate, EngramGateState};
 use crate::enums::{Direction, Outcome};
+use crate::simulation;
 use crate::newtypes::Price;
 use crate::paper_entry::PaperEntry;
 use crate::scalar_accumulator::ScalarAccumulator;
@@ -37,6 +38,9 @@ pub struct Resolution {
     pub composed_thought: Vector,
     /// The raw market thought (for market observer learning).
     pub market_thought: Vector,
+    /// The exit observer's own encoded facts (for exit observer learning).
+    /// Proposal 026: exit learns from exit_thought, not composed.
+    pub exit_thought: Vector,
     /// What the market observer predicted.
     pub prediction: Direction,
     /// Grace or Violence.
@@ -71,6 +75,12 @@ pub struct PropagationFacts {
     pub direction: Direction,
     /// For both observers.
     pub composed_thought: Vector,
+    /// For the market observer — the anomaly it predicted on.
+    /// Proposal 024: market observer learns from the anomaly, not composed thought.
+    pub market_thought: Vector,
+    /// For the exit observer — its own encoded facts, NOT the composition.
+    /// Proposal 026: exit observer learns from exit_thought only.
+    pub exit_thought: Vector,
     /// For the exit observer.
     pub optimal: Distances,
     /// For both observers.
@@ -127,6 +137,9 @@ pub struct Broker {
     pub next_paper_id: usize,
     /// Per-runner accumulated history for deferred batch training.
     pub runner_histories: HashMap<usize, RunnerHistory>,
+    /// The broker's noise-stripped composed thought from the last propose().
+    /// Proposal 024: the broker predicts on and learns from the same anomaly.
+    pub last_composed_anomaly: Option<Vector>,
 }
 
 impl Broker {
@@ -172,6 +185,7 @@ impl Broker {
             resolution_count: 0,
             next_paper_id: 0,
             runner_histories: HashMap::new(),
+            last_composed_anomaly: None,
         }
     }
 
@@ -186,14 +200,23 @@ impl Broker {
     }
 
     /// Predict Grace/Violence on the composed thought.
-    /// The reckoner's own discriminant IS the noise filter.
-    /// Noise subspace still updates (diagnostic) but doesn't gate prediction.
+    /// Proposal 024: noise subspace learns the background, anomalous_component
+    /// strips it. The reckoner predicts on the anomaly. The anomaly is stored
+    /// for aligned learning in propagate().
     /// Updates cached_edge from the curve at THIS conviction.
     pub fn propose(&mut self, composed: &Vector) -> holon::memory::Prediction {
         let composed_f64 = to_f64(composed);
         self.noise_subspace.update(&composed_f64);
-        let pred = self.reckoner.predict(composed);
+
+        // Strip noise — predict on the anomaly
+        let anomalous = self.noise_subspace.anomalous_component(&composed_f64);
+        let anomaly = Vector::from_f64(&anomalous);
+        let pred = self.reckoner.predict(&anomaly);
         self.cached_edge = self.reckoner.accuracy_at(pred.conviction).unwrap_or(0.0);
+
+        // Store for aligned learning in propagate()
+        self.last_composed_anomaly = Some(anomaly);
+
         pred
     }
 
@@ -229,11 +252,13 @@ impl Broker {
     }
 
     /// Create a paper entry — every candle, every broker.
-    /// Takes the market observer's prediction and raw market thought.
+    /// Takes the market observer's prediction, raw market thought, and exit thought.
+    /// Proposal 026: exit_thought stored on paper for aligned exit observer learning.
     pub fn register_paper(
         &mut self,
         composed: Vector,
         market_thought: Vector,
+        exit_thought: Vector,
         prediction: Direction,
         entry_price: Price,
         distances: Distances,
@@ -244,6 +269,7 @@ impl Broker {
             paper_id,
             composed,
             market_thought,
+            exit_thought,
             prediction,
             entry_price,
             distances,
@@ -261,8 +287,8 @@ impl Broker {
             if paper.signaled && !paper.resolved {
                 // Force-resolve the runner at current price
                 paper.resolved = true;
-                let optimal = approximate_optimal_distances(
-                    paper.entry_price.0, paper.extreme, paper.prediction,
+                let optimal = simulation::compute_optimal_distances(
+                    &paper.price_history, paper.prediction,
                 );
                 let exit_batch = if let Some(history) = self.runner_histories.remove(&paper.paper_id) {
                     compute_exit_batch(&history, paper.prediction)
@@ -274,6 +300,7 @@ impl Broker {
                     broker_slot_idx: self.slot_idx,
                     composed_thought: paper.composed_thought.clone(),
                     market_thought: paper.market_thought.clone(),
+                    exit_thought: paper.exit_thought.clone(),
                     prediction: paper.prediction,
                     outcome: Outcome::Grace,
                     amount: paper.excursion(),
@@ -324,6 +351,7 @@ impl Broker {
                     broker_slot_idx: self.slot_idx,
                     composed_thought: paper.composed_thought.clone(),
                     market_thought: paper.market_thought.clone(),
+                    exit_thought: paper.exit_thought.clone(),
                     prediction: paper.prediction,
                     outcome: Outcome::Grace,
                     amount: paper.excursion(),
@@ -345,10 +373,17 @@ impl Broker {
                 });
             }
 
-            // Accumulate history for active runners
+            // Accumulate history for active runners.
+            // Proposal 024: store the broker's noise-stripped anomaly for aligned
+            // exit observer batch training. Falls back to composed_thought if no
+            // anomaly stored (should not happen — propose() runs before tick_papers).
             if paper.signaled && !paper.resolved {
                 if let Some(history) = self.runner_histories.get_mut(&paper.paper_id) {
-                    history.thoughts.push(paper.composed_thought.clone());
+                    let thought_for_history = self.last_composed_anomaly
+                        .as_ref()
+                        .unwrap_or(&paper.composed_thought)
+                        .clone();
+                    history.thoughts.push(thought_for_history);
                     history.distances.push(paper.distances);
                     history.prices.push(cp);
                 }
@@ -368,6 +403,7 @@ impl Broker {
                         broker_slot_idx: self.slot_idx,
                         composed_thought: paper.composed_thought.clone(),
                         market_thought: paper.market_thought.clone(),
+                        exit_thought: paper.exit_thought.clone(),
                         prediction: paper.prediction,
                         outcome: Outcome::Violence,
                         amount: paper.distances.stop,
@@ -394,6 +430,7 @@ impl Broker {
                         broker_slot_idx: self.slot_idx,
                         composed_thought: paper.composed_thought.clone(),
                         market_thought: paper.market_thought.clone(),
+                        exit_thought: paper.exit_thought.clone(),
                         prediction: paper.prediction,
                         outcome: Outcome::Grace,
                         amount: paper.excursion(),
@@ -433,9 +470,17 @@ impl Broker {
 
     /// The broker learns its OWN lessons and RETURNS what the observers need.
     /// Values up, not effects down.
+    ///
+    /// Proposal 024: the broker's reckoner learns from last_composed_anomaly
+    /// (the noise-stripped thought from propose()) so prediction and learning
+    /// are aligned. The `thought` parameter is the composed thought from the
+    /// paper — used for observer propagation facts, not the broker's own learning.
+    /// Proposal 026: `exit_thought` threaded through for exit observer learning.
     pub fn propagate(
         &mut self,
         thought: &Vector,
+        market_thought: &Vector,
+        exit_thought: &Vector,
         outcome: Outcome,
         weight: f64,
         direction: Direction,
@@ -448,11 +493,15 @@ impl Broker {
             Outcome::Violence => holon::memory::Label::from_index(1),
         };
 
-        // 1. Reckoner learns Grace/Violence
-        self.reckoner.observe(thought, label, weight);
+        // Proposal 024: broker learns from its own anomaly (what it predicted on).
+        // Falls back to the raw thought if no anomaly stored (cold start).
+        let learn_thought = self.last_composed_anomaly.as_ref().unwrap_or(thought);
+
+        // 1. Reckoner learns Grace/Violence — on the anomaly
+        self.reckoner.observe(learn_thought, label, weight);
 
         // 2. Feed the internal curve
-        let pred = self.reckoner.predict(thought);
+        let pred = self.reckoner.predict(learn_thought);
         let correct = matches!(outcome, Outcome::Grace);
         self.reckoner.resolve(pred.conviction, correct);
 
@@ -497,6 +546,8 @@ impl Broker {
             exit_idx: self.exit_idx(),
             direction,
             composed_thought: thought.clone(),
+            market_thought: market_thought.clone(),
+            exit_thought: exit_thought.clone(),
             optimal: *optimal,
             weight,
         }
@@ -520,7 +571,10 @@ fn approximate_optimal_distances(
         Direction::Down => ((entry - extreme) / entry).max(0.001),
     };
     let trail = (excursion * 0.5).max(0.001).min(0.10);
-    let stop = trail * 2.0;
+    // Stop is learned independently — near-zero bootstrap.
+    // The simulation (compute_optimal_distances) teaches the real value.
+    // This approximation doesn't have enough information to derive stop.
+    let stop = 0.001;
     Distances::new(trail, stop)
 }
 
@@ -535,6 +589,11 @@ fn compute_exit_batch(
     if n == 0 {
         return Vec::new();
     }
+
+    // Compute the optimal stop for the whole runner — one simulation call.
+    // The stop is a property of the full trade, not per-candle.
+    let runner_optimal = simulation::compute_optimal_distances(&history.prices, prediction);
+    let optimal_stop = runner_optimal.stop;
 
     // Suffix extremum pass — O(n)
     let mut suffix_ext = vec![0.0f64; n];
@@ -571,7 +630,6 @@ fn compute_exit_batch(
         }
         last_optimal_trail = optimal_trail;
 
-        let optimal_stop = (optimal_trail * 2.0).min(0.10);
         let optimal = Distances::new(optimal_trail, optimal_stop);
 
         // Weight: the residue this optimal distance would capture
@@ -653,8 +711,9 @@ mod tests {
         let mut broker = make_broker();
         let composed = random_vector("thought");
         let market_thought = random_vector("market");
+        let exit_thought = random_vector("exit");
         let distances = Distances::new(0.02, 0.05);
-        broker.register_paper(composed, market_thought, Direction::Up, Price(50000.0), distances);
+        broker.register_paper(composed, market_thought, exit_thought, Direction::Up, Price(50000.0), distances);
         assert_eq!(broker.paper_count(), 1);
     }
 
@@ -663,8 +722,9 @@ mod tests {
         let mut broker = make_broker();
         let composed = random_vector("thought");
         let market_thought = random_vector("market");
+        let exit_thought = random_vector("exit");
         let distances = Distances::new(0.05, 0.10);
-        broker.register_paper(composed, market_thought, Direction::Up, Price(100.0), distances);
+        broker.register_paper(composed, market_thought, exit_thought, Direction::Up, Price(100.0), distances);
 
         // Price barely moves -- no resolution
         let (market_signals, runner_resolutions) = broker.tick_papers(Price(100.5));
@@ -678,9 +738,10 @@ mod tests {
         let mut broker = make_broker();
         let composed = random_vector("thought");
         let market_thought = random_vector("market");
+        let exit_thought = random_vector("exit");
         // Trail=0.05, Stop=0.10: stop_level=90
         let distances = Distances::new(0.05, 0.10);
-        broker.register_paper(composed, market_thought, Direction::Up, Price(100.0), distances);
+        broker.register_paper(composed, market_thought, exit_thought, Direction::Up, Price(100.0), distances);
 
         // Price drops below stop → Violence
         let (market_signals, runner_resolutions) = broker.tick_papers(Price(89.0));
@@ -696,9 +757,10 @@ mod tests {
         let mut broker = make_broker();
         let composed = random_vector("thought");
         let market_thought = random_vector("market");
+        let exit_thought = random_vector("exit");
         // Trail=0.05, Stop=0.10
         let distances = Distances::new(0.05, 0.10);
-        broker.register_paper(composed, market_thought, Direction::Up, Price(100.0), distances);
+        broker.register_paper(composed, market_thought, exit_thought, Direction::Up, Price(100.0), distances);
 
         // Price rises above entry + entry*trail = 105 → Grace signal
         let (market_signals, runner_resolutions) = broker.tick_papers(Price(110.0));
@@ -723,8 +785,12 @@ mod tests {
         let se = ScalarEncoder::new(DIMS);
         let optimal = Distances::new(0.03, 0.06);
 
+        let market_thought = random_vector("market");
+        let exit_thought = random_vector("exit");
         let facts = broker.propagate(
             &thought,
+            &market_thought,
+            &exit_thought,
             Outcome::Grace,
             1.0,
             Direction::Up,
@@ -747,8 +813,12 @@ mod tests {
         let se = ScalarEncoder::new(DIMS);
         let optimal = Distances::new(0.03, 0.06);
 
+        let market_thought = random_vector("market");
+        let exit_thought = random_vector("exit");
         broker.propagate(
             &thought,
+            &market_thought,
+            &exit_thought,
             Outcome::Violence,
             2.5,
             Direction::Down,
@@ -780,17 +850,17 @@ mod tests {
     #[test]
     fn test_approximate_optimal_distances_up() {
         let d = approximate_optimal_distances(100.0, 110.0, Direction::Up);
-        // excursion = 0.10, trail = 0.05, stop = 0.10
+        // excursion = 0.10, trail = 0.05, stop = 0.001 (bootstrap)
         assert!((d.trail - 0.05).abs() < 1e-10);
-        assert!((d.stop - 0.10).abs() < 1e-10);
+        assert!((d.stop - 0.001).abs() < 1e-10);
     }
 
     #[test]
     fn test_approximate_optimal_distances_down() {
         let d = approximate_optimal_distances(100.0, 90.0, Direction::Down);
-        // excursion = 0.10, trail = 0.05, stop = 0.10
+        // excursion = 0.10, trail = 0.05, stop = 0.001 (bootstrap)
         assert!((d.trail - 0.05).abs() < 1e-10);
-        assert!((d.stop - 0.10).abs() < 1e-10);
+        assert!((d.stop - 0.001).abs() < 1e-10);
     }
 
     #[test]

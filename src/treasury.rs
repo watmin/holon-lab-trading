@@ -137,6 +137,8 @@ impl Treasury {
                 prop.post_idx,
                 prop.broker_slot_idx,
                 prop.composed_thought.clone(),
+                prop.market_thought.clone(),
+                prop.exit_thought.clone(),
                 prop.prediction.clone(),
             );
 
@@ -217,6 +219,8 @@ impl Treasury {
                     Outcome::Violence,
                     loss,
                     origin.composed_thought.clone(),
+                    origin.market_thought.clone(),
+                    origin.exit_thought.clone(),
                     origin.prediction.clone(),
                 );
 
@@ -276,6 +280,8 @@ impl Treasury {
                     outcome_val,
                     residue,
                     origin.composed_thought.clone(),
+                    origin.market_thought.clone(),
+                    origin.exit_thought.clone(),
                     origin.prediction.clone(),
                 );
 
@@ -374,6 +380,8 @@ mod tests {
         let mut t = make_test_treasury();
         let prop = Proposal::new(
             Vector::zeros(256),
+            Vector::zeros(256),
+            Vector::zeros(256),
             crate::distances::Distances::new(0.02, 0.05),
             0.1,
             Side::Buy,
@@ -394,6 +402,8 @@ mod tests {
     fn test_fund_proposals_rejects_low_edge() {
         let mut t = make_test_treasury();
         let prop = Proposal::new(
+            Vector::zeros(256),
+            Vector::zeros(256),
             Vector::zeros(256),
             crate::distances::Distances::new(0.02, 0.05),
             0.001, // edge below venue cost

@@ -76,6 +76,8 @@ impl Enterprise {
                 let prop_logs = self.posts[post_idx].propagate(
                     slot,
                     &stl.composed_thought,
+                    &stl.market_thought,
+                    &stl.exit_thought,
                     stl.outcome,
                     stl.amount.0,
                     direction,

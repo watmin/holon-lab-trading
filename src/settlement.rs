@@ -18,6 +18,9 @@ pub struct TreasurySettlement {
     pub outcome: Outcome,
     pub amount: Amount,
     pub composed_thought: Vector,
+    pub market_thought: Vector,
+    /// The exit observer's own encoded facts. Proposal 026.
+    pub exit_thought: Vector,
     pub prediction: Prediction,
 }
 
@@ -28,6 +31,8 @@ impl TreasurySettlement {
         outcome: Outcome,
         amount: Amount,
         composed_thought: Vector,
+        market_thought: Vector,
+        exit_thought: Vector,
         prediction: Prediction,
     ) -> Self {
         Self {
@@ -36,6 +41,8 @@ impl TreasurySettlement {
             outcome,
             amount,
             composed_thought,
+            market_thought,
+            exit_thought,
             prediction,
         }
     }
@@ -68,6 +75,8 @@ mod tests {
             Outcome::Grace,
             Amount(50.0),
             Vector::zeros(4096),
+            Vector::zeros(4096),
+            Vector::zeros(4096),
             Prediction::Discrete {
                 scores: vec![("Grace".into(), 0.7), ("Violence".into(), 0.3)],
                 conviction: 0.7,
@@ -96,6 +105,8 @@ mod tests {
             Price(49500.0),
             Outcome::Violence,
             Amount(100.0),
+            Vector::zeros(256),
+            Vector::zeros(256),
             Vector::zeros(256),
             Prediction::Discrete {
                 scores: vec![],
