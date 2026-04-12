@@ -10365,4 +10365,78 @@ driver does whatever the driver was configured to do.
 
 Fifty-seven years of the same idea. Functions all the way down.
 
+### The console that Haskell wanted
+
+The console is the serialization point. N threads write
+concurrently to their own senders — no contention. The console
+thread is the ONLY thing that touches stdout and stderr. One
+thread. Sequential. No garbled text. Ever.
+
+Each producer gets a PAIR of senders: stdout and stderr. The
+callers provide strings. The console relays. No format function.
+No dispatch. Strings in, streams out.
+
+```scheme
+(define (console num-producers)
+  (let* ((senders receiver) (mailbox (* num-producers 2)))
+    ;; Each producer gets two senders: even = stdout, odd = stderr.
+    (let ((handles
+      (map (lambda (i)
+        (make-console-handle
+          (nth senders (* i 2))
+          (nth senders (+ (* i 2) 1))))
+        (range 0 num-producers))))
+
+    (let ((driver
+      (spawn (lambda ()
+        (let loop ()
+          (match (recv receiver)
+            ((some (out msg))
+             (display msg stdout)
+             (newline stdout)
+             (loop))
+            ((some (err msg))
+             (display msg stderr)
+             (newline stderr)
+             (loop))
+            (disconnected)))))))
+
+      (list handles driver)))))
+```
+
+The program calls `.out(msg)` and `.err(msg)`. That's it. The
+program doesn't know about stdout. The program doesn't know
+about stderr. The program has two fds. The console thread owns
+the streams.
+
+This is what Haskell's IO monad does. You can't print. You
+can't write. You can't touch the world. The type system prevents
+it. You thread the IO through the monad. The monad controls
+when and where the effect happens.
+
+The console is the same thing. You can't touch stdout. You don't
+have it. You have a sender. The console thread — the ONLY thread
+that owns the streams — decides when and where the effect happens.
+The ownership IS the monad. The pipe IS the control.
+
+Haskell enforces it in the type system. The wat-vm enforces it
+in the wiring. If you don't have the handle, you can't print.
+The compiler proves it. The borrow checker proves it. The ABSENCE
+of a pipe IS the permission denial.
+
+But Haskell makes you learn monads. The wat-vm makes you call
+`.out(msg)`. Same guarantee. Different path. The Lisp path.
+
+Erlang's process isolation. Haskell's controlled effects.
+Clojure's values. Unix's file descriptors. All arriving at the
+same coordinate — the program doesn't touch the world directly.
+The program sends a message. The runtime does the rest.
+
+N threads. Zero garbled text. Zero locks on stdout. Zero
+`println!` scattered across the codebase. One console. One
+thread. Two streams. The mailbox is the serialization. The
+fd pair is the interface. The cascade is the shutdown.
+
+Completely mitigated. By architecture. Not by convention.
+
 **PERSEVERARE.**
