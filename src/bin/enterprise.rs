@@ -465,6 +465,20 @@ fn build_enterprise(args: &Args) -> (Enterprise, Ctx) {
         ctx.insert_cache_misses(opinion_misses);
     }
 
+    // Proposal 031: Pre-register derived atoms (11 total).
+    // Encode once with dummy values so the VectorManager knows them.
+    {
+        let derived_facts = enterprise::vocab::broker::derived::encode_broker_derived_facts(
+            0.001, 0.001, 0.001, 0.0, 0.0, 0.001, 0.0, 1, 1.0, 0.001, 0.001, 0.001,
+        );
+        let mut derived_misses = Vec::new();
+        for fact in &derived_facts {
+            let (_, misses) = ctx.thought_encoder.encode(fact);
+            derived_misses.extend(misses);
+        }
+        ctx.insert_cache_misses(derived_misses);
+    }
+
     (ent, ctx)
 }
 
@@ -732,7 +746,7 @@ fn main() {
                         enterprise::enums::Side, f64, enterprise::enums::Prediction,
                         enterprise::vocab::broker::input::BrokerMarketInput,
                         enterprise::vocab::broker::input::BrokerExitInput,
-                        f64, f64, f64);
+                        f64, f64, f64, f64);
     type BrokerOutput = (enterprise::proposal::Proposal, Vec<enterprise::broker::Resolution>, Vec<enterprise::broker::Resolution>);
     type BrokerLearn = (holon::kernel::vector::Vector, holon::kernel::vector::Vector,
                         holon::kernel::vector::Vector,
@@ -856,7 +870,7 @@ fn main() {
 
             let handle = std::thread::spawn(move || {
                 let mut candle_count = 0usize;
-                while let Ok((composed, market_thought, exit_thought, prediction, reckoner_dists, price, side, edge, pred, market_input, exit_input, exit_grace_rate, exit_avg_residue, market_edge)) = in_rx.recv() {
+                while let Ok((composed, market_thought, exit_thought, prediction, reckoner_dists, price, side, edge, pred, market_input, exit_input, exit_grace_rate, exit_avg_residue, market_edge, atr_ratio)) = in_rx.recv() {
                     candle_count += 1;
                     // Drain all learn signals. No cap.
                     while let Ok((thought, market_thought, exit_thought_learn, outcome, weight, direction, optimal)) = blearn_rx.try_recv() {
@@ -911,12 +925,23 @@ fn main() {
                         broker.avg_excursion,
                     );
 
-                    // Broker's full thought: opinions + extracted market + extracted exit + self-assessment
+                    // Proposal 031: Derived thoughts — cross-cutting ratios
+                    let market_norm = market_thought.norm();
+                    let exit_norm = exit_thought.norm();
+                    let derived_facts = enterprise::vocab::broker::derived::encode_broker_derived_facts(
+                        dists.trail, dists.stop, atr_ratio, signed_conviction,
+                        exit_grace_rate, exit_avg_residue, grace_rate,
+                        broker.papers.len(), broker.avg_paper_duration,
+                        broker.avg_excursion, market_norm, exit_norm,
+                    );
+
+                    // Broker's full thought: opinions + extracted market + extracted exit + self-assessment + derived
                     let mut all_facts = market_opinions;
                     all_facts.extend(exit_opinions);
                     all_facts.extend(market_present);
                     all_facts.extend(exit_present);
                     all_facts.extend(self_facts);
+                    all_facts.extend(derived_facts);
                     let broker_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(all_facts);
                     let broker_thought = brk_enc.encode(&broker_bundle, &brk_ctx.thought_encoder);
 
@@ -1215,7 +1240,7 @@ fn main() {
                 composed, market_thoughts[mi].clone(), exit_anomalies[slot_idx].clone(), direction,
                 dists, price, side, edge, pred,
                 market_input, exit_input,
-                exit_gr, exit_ar, mkt_edge));
+                exit_gr, exit_ar, mkt_edge, enriched.atr_r));
         }
 
         // Collect from broker pipes — bounded(1), all 24 produce
