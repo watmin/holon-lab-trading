@@ -16,7 +16,7 @@ use lru::LruCache;
 
 use holon::kernel::vector::Vector;
 
-use crate::thought_encoder::ThoughtAST;
+use crate::encoding::thought_encoder::ThoughtAST;
 
 /// A caller's pipe set. One per thread. Moved into the thread.
 pub struct EncoderHandle {
@@ -40,7 +40,7 @@ impl EncoderHandle {
     /// Encode with cache protocol: check → compute → notify.
     /// The handle enforces the discipline — callers never touch
     /// ThoughtEncoder directly on hot paths.
-    pub fn encode(&self, ast: &ThoughtAST, encoder: &crate::thought_encoder::ThoughtEncoder) -> Vector {
+    pub fn encode(&self, ast: &ThoughtAST, encoder: &crate::encoding::thought_encoder::ThoughtEncoder) -> Vector {
         // 1. Check cache
         if let Some(cached) = self.get(ast) {
             return cached;

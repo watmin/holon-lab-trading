@@ -13,7 +13,7 @@ use crossbeam::channel::{self, Receiver, Sender};
 use rusqlite::{params, Connection};
 
 use enterprise::broker::Broker;
-use enterprise::ctx::Ctx;
+use enterprise::encoding::ctx::Ctx;
 use enterprise::types::enums::{ExitLens, MarketLens, ScalarEncoding};
 use enterprise::exit_observer::ExitObserver;
 use enterprise::indicator_bank::IndicatorBank;
@@ -459,7 +459,7 @@ fn build_enterprise(args: &Args) -> (Enterprise, Ctx) {
         for lens in MARKET_LENSES {
             let facts = enterprise::post::market_lens_facts(lens, &default_candle, &window, &mut reg_scales);
             for fact in &facts {
-                let prefixed = enterprise::thought_encoder::ThoughtAST::Linear {
+                let prefixed = enterprise::encoding::thought_encoder::ThoughtAST::Linear {
                     name: format!("m:{}", fact.name()),
                     value: 0.0,
                     scale: 1.0,
@@ -758,8 +758,8 @@ fn main() {
     let mut obs_encoder_handles: Vec<_> = encoder_handles.drain(..).collect();
 
     type ObsInput = (enterprise::types::candle::Candle, Arc<Vec<enterprise::types::candle::Candle>>, usize);
-    type ObsOutput = (holon::kernel::vector::Vector, holon::kernel::vector::Vector, enterprise::thought_encoder::ThoughtAST, holon::memory::Prediction, f64,
-                      Vec<(enterprise::thought_encoder::ThoughtAST, holon::kernel::vector::Vector)>);
+    type ObsOutput = (holon::kernel::vector::Vector, holon::kernel::vector::Vector, enterprise::encoding::thought_encoder::ThoughtAST, holon::memory::Prediction, f64,
+                      Vec<(enterprise::encoding::thought_encoder::ThoughtAST, holon::kernel::vector::Vector)>);
     type ObsLearn = (holon::kernel::vector::Vector, enterprise::types::enums::Direction, f64);
     type BrokerInput = (holon::kernel::vector::Vector, holon::kernel::vector::Vector,
                         holon::kernel::vector::Vector, enterprise::types::enums::Direction,
@@ -769,7 +769,7 @@ fn main() {
                         enterprise::vocab::broker::input::BrokerExitInput,
                         f64, f64, f64, f64,
                         holon::kernel::vector::Vector, holon::kernel::vector::Vector,
-                        enterprise::thought_encoder::ThoughtAST, enterprise::thought_encoder::ThoughtAST);
+                        enterprise::encoding::thought_encoder::ThoughtAST, enterprise::encoding::thought_encoder::ThoughtAST);
     type BrokerOutput = (enterprise::proposal::Proposal, Vec<enterprise::broker::Resolution>, Vec<enterprise::broker::Resolution>);
     type BrokerLearn = (holon::kernel::vector::Vector, holon::kernel::vector::Vector,
                         holon::kernel::vector::Vector,
@@ -833,7 +833,7 @@ fn main() {
                     let start = if full_len > ws { full_len - ws } else { 0 };
                     let sliced: Vec<enterprise::types::candle::Candle> = window[start..].to_vec();
                     let facts = enterprise::post::market_lens_facts(&lens, &candle, &sliced, &mut obs_scales);
-                    let bundle_ast = enterprise::thought_encoder::ThoughtAST::Bundle(facts);
+                    let bundle_ast = enterprise::encoding::thought_encoder::ThoughtAST::Bundle(facts);
 
                     // Cache pipe: check → compute → notify (all in one call)
                     let thought = enc_handle.encode(&bundle_ast, &ctx_ref.thought_encoder);
@@ -963,7 +963,7 @@ fn main() {
                     all_facts.extend(self_facts);
                     all_facts.extend(derived_facts);
                     // Build the AST but do NOT encode to a vector (Proposal 035)
-                    let broker_scalar_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(all_facts.clone());
+                    let broker_scalar_bundle = enterprise::encoding::thought_encoder::ThoughtAST::Bundle(all_facts.clone());
                     let broker_fact_count = all_facts.len(); // 25 scalar atoms only
 
                     // Proposal 035: arithmetic gate replaces reckoner gate
@@ -1141,7 +1141,7 @@ fn main() {
         // Collect thoughts from all observers (bounded(1) — they block until we read)
         let mut market_raw_thoughts = Vec::with_capacity(n);
         let mut market_thoughts = Vec::with_capacity(n);
-        let mut market_asts: Vec<enterprise::thought_encoder::ThoughtAST> = Vec::with_capacity(n);
+        let mut market_asts: Vec<enterprise::encoding::thought_encoder::ThoughtAST> = Vec::with_capacity(n);
         let mut market_predictions: Vec<holon::memory::Prediction> = Vec::with_capacity(n);
         let mut market_edges = Vec::with_capacity(n);
 
@@ -1172,7 +1172,7 @@ fn main() {
         let noise_floor = 5.0 / (dims as f64).sqrt();
 
         // Phase A: Collect exit facts per lens (sequential — scales are mutable).
-        let exit_facts_per_lens: Vec<Vec<enterprise::thought_encoder::ThoughtAST>> = (0..m)
+        let exit_facts_per_lens: Vec<Vec<enterprise::encoding::thought_encoder::ThoughtAST>> = (0..m)
             .map(|ei| {
                 let mut facts = enterprise::post::exit_lens_facts(
                     &post.exit_observers[ei].lens, &enriched, &mut post.scales);
@@ -1191,7 +1191,7 @@ fn main() {
         // The noise subspace updates are sequential within each exit observer — correct.
         // EncoderHandle is Send but not Sync, so we use scoped threads (not rayon)
         // to give each thread exclusive access to its own handles.
-        let exit_results: Vec<Vec<(holon::kernel::vector::Vector, holon::kernel::vector::Vector, enterprise::thought_encoder::ThoughtAST)>> =
+        let exit_results: Vec<Vec<(holon::kernel::vector::Vector, holon::kernel::vector::Vector, enterprise::encoding::thought_encoder::ThoughtAST)>> =
             std::thread::scope(|s| {
                 // Split exit_observers into individual mutable refs
                 let eobs_slices: Vec<&mut enterprise::exit_observer::ExitObserver> =
@@ -1213,38 +1213,38 @@ fn main() {
                             let mut slot_facts = base_facts.clone();
 
                             // Extract from market anomaly
-                            let facts = enterprise::thought_encoder::collect_facts(&market_asts_ref[mi]);
-                            let extracted = enterprise::thought_encoder::extract(
+                            let facts = enterprise::encoding::thought_encoder::collect_facts(&market_asts_ref[mi]);
+                            let extracted = enterprise::encoding::thought_encoder::extract(
                                 &market_thoughts_ref[mi], &facts,
                                 |ast| my_handles[mi].encode(ast, encoder));
-                            let market_anomaly_facts: Vec<enterprise::thought_encoder::ThoughtAST> = extracted
+                            let market_anomaly_facts: Vec<enterprise::encoding::thought_encoder::ThoughtAST> = extracted
                                 .into_iter()
                                 .filter(|(_ast, presence)| presence.abs() > noise_floor)
                                 .map(|(ast, _presence)| ast)
                                 .collect();
                             for fact in market_anomaly_facts {
-                                slot_facts.push(enterprise::thought_encoder::ThoughtAST::Bind(
-                                    Box::new(enterprise::thought_encoder::ThoughtAST::Atom("market".into())),
+                                slot_facts.push(enterprise::encoding::thought_encoder::ThoughtAST::Bind(
+                                    Box::new(enterprise::encoding::thought_encoder::ThoughtAST::Atom("market".into())),
                                     Box::new(fact)));
                             }
 
                             // Extract from market RAW
-                            let raw_extracted = enterprise::thought_encoder::extract(
+                            let raw_extracted = enterprise::encoding::thought_encoder::extract(
                                 &market_raw_thoughts_ref[mi], &facts,
                                 |ast| my_handles[mi].encode(ast, encoder));
-                            let market_raw_facts: Vec<enterprise::thought_encoder::ThoughtAST> = raw_extracted
+                            let market_raw_facts: Vec<enterprise::encoding::thought_encoder::ThoughtAST> = raw_extracted
                                 .into_iter()
                                 .filter(|(_ast, presence)| presence.abs() > noise_floor)
                                 .map(|(ast, _presence)| ast)
                                 .collect();
                             for fact in market_raw_facts {
-                                slot_facts.push(enterprise::thought_encoder::ThoughtAST::Bind(
-                                    Box::new(enterprise::thought_encoder::ThoughtAST::Atom("market-raw".into())),
+                                slot_facts.push(enterprise::encoding::thought_encoder::ThoughtAST::Bind(
+                                    Box::new(enterprise::encoding::thought_encoder::ThoughtAST::Atom("market-raw".into())),
                                     Box::new(fact)));
                             }
 
                             // Encode the combined bundle
-                            let exit_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(slot_facts);
+                            let exit_bundle = enterprise::encoding::thought_encoder::ThoughtAST::Bundle(slot_facts);
                             let exit_raw = my_handles[mi].encode(&exit_bundle, encoder);
 
                             // Update noise subspace, strip noise → exit anomaly
@@ -1264,7 +1264,7 @@ fn main() {
         // Reassemble into slot-indexed vectors (slot_idx = mi * m + ei)
         let mut exit_raws: Vec<holon::kernel::vector::Vector> = vec![holon::kernel::vector::Vector::zeros(dims); n * m];
         let mut exit_anomalies: Vec<holon::kernel::vector::Vector> = vec![holon::kernel::vector::Vector::zeros(dims); n * m];
-        let mut exit_asts: Vec<enterprise::thought_encoder::ThoughtAST> = vec![enterprise::thought_encoder::ThoughtAST::Bundle(vec![]); n * m];
+        let mut exit_asts: Vec<enterprise::encoding::thought_encoder::ThoughtAST> = vec![enterprise::encoding::thought_encoder::ThoughtAST::Bundle(vec![]); n * m];
         for (ei, ei_results) in exit_results.into_iter().enumerate() {
             for (mi, (raw, anomaly, ast)) in ei_results.into_iter().enumerate() {
                 let slot_idx = mi * m + ei;

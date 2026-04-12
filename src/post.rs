@@ -14,7 +14,7 @@ use holon::kernel::vector::Vector;
 
 use crate::broker::Broker;
 use crate::types::candle::Candle;
-use crate::ctx::Ctx;
+use crate::encoding::ctx::Ctx;
 use crate::types::distances::{Distances, Levels};
 use crate::types::enums::{Direction, ExitLens, MarketLens, Outcome, Prediction, Side};
 use crate::exit_observer::ExitObserver;
@@ -24,8 +24,8 @@ use crate::market_observer::MarketObserver;
 use crate::types::newtypes::{Price, TradeId};
 use crate::proposal::Proposal;
 use crate::types::raw_candle::{Asset, RawCandle};
-use crate::scale_tracker::ScaleTracker;
-use crate::thought_encoder::{ThoughtAST, ToAst};
+use crate::encoding::scale_tracker::ScaleTracker;
+use crate::encoding::thought_encoder::{ThoughtAST, ToAst};
 use crate::trade::Trade;
 
 // Vocab imports -- market

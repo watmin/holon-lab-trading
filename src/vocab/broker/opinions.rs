@@ -8,8 +8,8 @@
 /// broker ~142 atoms. The noise subspace strips what doesn't matter.
 
 use std::collections::HashMap;
-use crate::thought_encoder::{round_to, ThoughtAST, ToAst};
-use crate::scale_tracker::{ScaleTracker, scaled_linear};
+use crate::encoding::thought_encoder::{round_to, ThoughtAST, ToAst};
+use crate::encoding::scale_tracker::{ScaleTracker, scaled_linear};
 
 /// Market observer's decisions as scalar facts.
 ///

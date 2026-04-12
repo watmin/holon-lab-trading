@@ -7,7 +7,7 @@ use std::sync::Arc;
 use holon::kernel::vector::Vector;
 
 use crate::types::candle::Candle;
-use crate::thought_encoder::ThoughtAST;
+use crate::encoding::thought_encoder::ThoughtAST;
 
 /// What the market observer produces. What the exit observer receives.
 #[derive(Clone)]

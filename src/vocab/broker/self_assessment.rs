@@ -5,8 +5,8 @@
 /// the full picture: market context + exit context + self-assessment.
 
 use std::collections::HashMap;
-use crate::thought_encoder::{round_to, ThoughtAST, ToAst};
-use crate::scale_tracker::{ScaleTracker, scaled_linear};
+use crate::encoding::thought_encoder::{round_to, ThoughtAST, ToAst};
+use crate::encoding::scale_tracker::{ScaleTracker, scaled_linear};
 
 /// Typed struct for broker self-assessment facts.
 ///

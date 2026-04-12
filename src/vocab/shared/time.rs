@@ -4,7 +4,7 @@
 // atoms: minute, hour, day-of-week, day-of-month, month-of-year
 
 use crate::types::candle::Candle;
-use crate::thought_encoder::{ThoughtAST, round_to};
+use crate::encoding::thought_encoder::{ThoughtAST, round_to};
 
 pub fn encode_time_facts(c: &Candle) -> Vec<ThoughtAST> {
     vec![

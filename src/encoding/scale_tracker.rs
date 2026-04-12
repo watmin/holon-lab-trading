@@ -8,7 +8,7 @@
 /// Proposal 033. The machine starts ignorant and learns. Always.
 
 use std::collections::HashMap;
-use crate::thought_encoder::{round_to, ThoughtAST};
+use crate::encoding::thought_encoder::{round_to, ThoughtAST};
 
 /// Named constant — the coverage multiplier. 2.0 ≈ 89% coverage
 /// for a roughly Gaussian distribution. Documented as approximate.

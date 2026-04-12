@@ -19,11 +19,11 @@ use crate::post::{exit_lens_facts, exit_self_assessment_facts};
 use crate::programs::chain::{MarketExitChain, MarketChain};
 use crate::programs::stdlib::cache::CacheHandle;
 use crate::programs::stdlib::console::ConsoleHandle;
-use crate::scale_tracker::ScaleTracker;
+use crate::encoding::scale_tracker::ScaleTracker;
 use crate::services::mailbox::MailboxReceiver;
 use crate::services::queue::{QueueReceiver, QueueSender};
 
-use crate::thought_encoder::{collect_facts, extract, ThoughtAST, ThoughtEncoder};
+use crate::encoding::thought_encoder::{collect_facts, extract, ThoughtAST, ThoughtEncoder};
 use crate::to_f64;
 
 /// Learn signal for exit observers: distance labels from broker propagation.

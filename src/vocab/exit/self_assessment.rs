@@ -4,8 +4,8 @@
 // atoms: exit-grace-rate, exit-avg-residue
 
 use std::collections::HashMap;
-use crate::thought_encoder::{ThoughtAST, ToAst, round_to};
-use crate::scale_tracker::{ScaleTracker, scaled_linear};
+use crate::encoding::thought_encoder::{ThoughtAST, ToAst, round_to};
+use crate::encoding::scale_tracker::{ScaleTracker, scaled_linear};
 
 pub struct ExitSelfAssessmentThought {
     pub exit_grace_rate: f64,

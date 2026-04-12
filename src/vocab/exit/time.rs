@@ -5,7 +5,7 @@
 // atoms: hour, day-of-week
 
 use crate::types::candle::Candle;
-use crate::thought_encoder::{ThoughtAST, ToAst, round_to};
+use crate::encoding::thought_encoder::{ThoughtAST, ToAst, round_to};
 
 pub struct ExitTimeThought {
     pub hour: f64,

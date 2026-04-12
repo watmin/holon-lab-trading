@@ -8,7 +8,7 @@ use holon::memory::{OnlineSubspace, ReckConfig, Reckoner};
 
 use crate::engram_gate::{check_engram_gate, EngramGateState};
 use crate::types::enums::{Direction, MarketLens};
-use crate::thought_encoder::{IncrementalBundle, ThoughtAST};
+use crate::encoding::thought_encoder::{IncrementalBundle, ThoughtAST};
 use crate::to_f64;
 use crate::window_sampler::WindowSampler;
 

@@ -9,8 +9,8 @@
 ///   - conviction-vol → Log(abs) + sign as separate atom (avoids saturation)
 
 use std::collections::HashMap;
-use crate::thought_encoder::{round_to, ThoughtAST, ToAst};
-use crate::scale_tracker::{ScaleTracker, scaled_linear};
+use crate::encoding::thought_encoder::{round_to, ThoughtAST, ToAst};
+use crate::encoding::scale_tracker::{ScaleTracker, scaled_linear};
 
 /// Typed struct for broker derived facts.
 pub struct BrokerDerivedThought {

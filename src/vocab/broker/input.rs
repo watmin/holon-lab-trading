@@ -7,7 +7,7 @@
 
 use holon::kernel::vector::Vector;
 
-use crate::thought_encoder::{collect_facts, extract, ThoughtAST};
+use crate::encoding::thought_encoder::{collect_facts, extract, ThoughtAST};
 
 /// Market-stage input: the AST and anomaly from a market observer.
 pub struct BrokerMarketInput {
@@ -58,7 +58,7 @@ impl BrokerExitInput {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::thought_encoder::ThoughtEncoder;
+    use crate::encoding::thought_encoder::ThoughtEncoder;
     use holon::kernel::vector_manager::VectorManager;
 
     const DIMS: usize = 4096;

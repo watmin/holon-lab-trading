@@ -6,8 +6,8 @@
 
 use std::collections::HashMap;
 use crate::types::candle::Candle;
-use crate::thought_encoder::{ThoughtAST, ToAst, round_to};
-use crate::scale_tracker::{ScaleTracker, scaled_linear};
+use crate::encoding::thought_encoder::{ThoughtAST, ToAst, round_to};
+use crate::encoding::scale_tracker::{ScaleTracker, scaled_linear};
 
 /// Divergence thought — conditional emission. Fields are Option because
 /// divergence facts only fire when non-zero.

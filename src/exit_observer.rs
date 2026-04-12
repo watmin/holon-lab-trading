@@ -11,7 +11,7 @@ use crate::types::distances::Distances;
 use crate::types::enums::ExitLens;
 #[cfg(test)]
 use crate::scalar_accumulator::ScalarAccumulator;
-use crate::thought_encoder::IncrementalBundle;
+use crate::encoding::thought_encoder::IncrementalBundle;
 
 /// Rolling window capacity for self-assessment.
 const SELF_ASSESSMENT_WINDOW: usize = 100;

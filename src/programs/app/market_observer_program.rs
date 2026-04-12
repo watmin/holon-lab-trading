@@ -19,11 +19,11 @@ use crate::post::market_lens_facts;
 use crate::programs::chain::MarketChain;
 use crate::programs::stdlib::cache::CacheHandle;
 use crate::programs::stdlib::console::ConsoleHandle;
-use crate::scale_tracker::ScaleTracker;
+use crate::encoding::scale_tracker::ScaleTracker;
 use crate::services::mailbox::MailboxReceiver;
 use crate::services::queue::{QueueReceiver, QueueSender};
 use crate::services::topic::TopicSender;
-use crate::thought_encoder::{ThoughtAST, ThoughtEncoder};
+use crate::encoding::thought_encoder::{ThoughtAST, ThoughtEncoder};
 
 /// Input to the observer: enriched candle, window snapshot, encode count.
 pub struct ObsInput {

@@ -6,8 +6,8 @@
 
 use std::collections::HashMap;
 use crate::types::candle::Candle;
-use crate::thought_encoder::{ThoughtAST, ToAst, round_to};
-use crate::scale_tracker::{ScaleTracker, scaled_linear};
+use crate::encoding::thought_encoder::{ThoughtAST, ToAst, round_to};
+use crate::encoding::scale_tracker::{ScaleTracker, scaled_linear};
 
 fn clamp(v: f64, lo: f64, hi: f64) -> f64 {
     v.max(lo).min(hi)

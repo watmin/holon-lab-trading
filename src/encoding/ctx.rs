@@ -7,7 +7,7 @@
 use holon::kernel::vector::Vector;
 use holon::kernel::vector_manager::VectorManager;
 
-use crate::thought_encoder::{ThoughtAST, ThoughtEncoder};
+use crate::encoding::thought_encoder::{ThoughtAST, ThoughtEncoder};
 
 /// The immutable world context. Three fields, nothing else.
 pub struct Ctx {
