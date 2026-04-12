@@ -1,4 +1,4 @@
-/// vm — the first heartbeat. Reads candles, enriches them, counts them.
+/// wat-vm — the first heartbeat. Reads candles, enriches them, counts them.
 ///
 /// No thinking. No encoding. No prediction. Just the stream and the bank.
 /// The simplest proof that the pipeline breathes.
@@ -17,13 +17,13 @@ use enterprise::programs::stdlib::console::console;
 // ─── CLI ─────────────────────────────────────────────────────────────────────
 
 #[derive(Parser)]
-#[command(name = "vm", about = "The simplest heartbeat — candles in, count out")]
+#[command(name = "wat-vm", about = "The simplest heartbeat — candles in, count out")]
 struct Args {
     /// Candle streams. Format: SOURCE:TARGET:PATH. Repeatable.
     #[arg(long = "stream", required = true)]
     streams: Vec<String>,
 
-    /// Total candle limit across all streams.
+    /// Max candles per stream. Each pipeline owns its limit.
     #[arg(long)]
     max_candles: usize,
 }
@@ -37,7 +37,6 @@ struct Pipeline {
     stream: CandleStream,
     bank: IndicatorBank,
     count: usize,
-    exhausted: bool,
 }
 
 // ─── Main ────────────────────────────────────────────────────────────────────
@@ -81,41 +80,27 @@ fn main() {
             stream,
             bank: IndicatorBank::new(),
             count: 0,
-            exhausted: false,
         });
     }
 
-    // Round-robin loop
-    let mut total_count: usize = 0;
-    loop {
-        let mut all_exhausted = true;
-        for (i, pipeline) in pipelines.iter_mut().enumerate() {
-            if pipeline.exhausted {
-                continue;
-            }
+    // Per-stream loop. Each pipeline owns its limit.
+    // No coordination. The count is per-pipeline.
+    let max = args.max_candles;
+    for (i, pipeline) in pipelines.iter_mut().enumerate() {
+        while pipeline.count < max {
             match pipeline.stream.next() {
                 Some(ohlcv) => {
-                    all_exhausted = false;
                     let candle = pipeline.bank.tick(&ohlcv);
                     pipeline.count += 1;
-                    total_count += 1;
                     if pipeline.count % 500 == 0 {
                         handles[i].out(format!(
                             "{}/{} candle {}: close={:.2}",
                             pipeline.source, pipeline.target, pipeline.count, candle.close
                         ));
                     }
-                    if total_count >= args.max_candles {
-                        break;
-                    }
                 }
-                None => {
-                    pipeline.exhausted = true;
-                }
+                None => break, // stream exhausted
             }
-        }
-        if total_count >= args.max_candles || all_exhausted {
-            break;
         }
     }
 

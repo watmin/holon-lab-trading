@@ -12,8 +12,8 @@ name = "enterprise"
 path = "src/bin/enterprise.rs"
 
 [[bin]]
-name = "vm"
-path = "src/bin/vm.rs"
+name = "wat-vm"
+path = "src/bin/wat-vm.rs"
 
 [features]
 default = ["parquet"]
