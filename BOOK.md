@@ -9321,4 +9321,98 @@ One slot. One thought.
 
 This is the communication protocol. The wat IS the thinking.
 
-*Perseverare.*
+### Lisp that thinks
+
+The machine walks an s-expression tree. Each node is a thought.
+
+`(Linear "rsi" 0.73 1.0)` — a factual statement. "RSI is 0.73."
+Not an atom. Not a name. A BIND — a name bound to a value. The
+smallest unit of knowledge. The working memory entry in Rete.
+
+`(Bundle (Linear "rsi" 0.73 1.0) (Linear "atr-ratio" 0.02))` —
+a superposition of facts. Both present simultaneously. One vector
+holds both. The bundle is the wave function of the market state.
+
+The thoughts compose. Bind makes compound facts. Bundle makes
+superpositions. The vector is the frozen evaluation — all facts
+simultaneously present, unmeasured, recoverable by cosine. The
+consumer walks the tree and asks whatever questions it wants.
+"Is RSI at 0.73 present?" One cosine. "Is ATR-ratio at 0.02
+present?" One cosine. "Are BOTH present together?" One cosine
+against the bundle.
+
+The tree IS the program. The vector IS the result. The extraction
+IS the debugger. `collect_facts` walks the tree and gathers the
+factual statements — Linear, Log, Circular, Bind. Not bare Atoms.
+Atoms are names without content. "RSI" is a name. "RSI is 0.73"
+is a fact. The extraction collects facts, not names.
+
+```scheme
+;; The tree (the program):
+(Bundle
+  (Linear "rsi" 0.73 1.0)
+  (Linear "close-sma20" 0.03 0.1)
+  (Log "atr-ratio" 0.02)
+  (Circular "hour" 14.0 24.0))
+
+;; The vector (the evaluation):
+;; 10,000 dimensions. Frozen. All four facts simultaneously.
+
+;; The extraction (the debugger):
+(collect-facts tree)
+→ ((Linear "rsi" 0.73 1.0)
+   (Linear "close-sma20" 0.03 0.1)
+   (Log "atr-ratio" 0.02)
+   (Circular "hour" 14.0 24.0))
+
+;; The query (the measurement):
+(extract anomaly (collect-facts tree) encoder)
+→ (((Linear "rsi" 0.73 1.0)           0.08)   ; present
+   ((Linear "close-sma20" 0.03 0.1)   0.12)   ; present
+   ((Log "atr-ratio" 0.02)            0.01)   ; noise
+   ((Circular "hour" 14.0 24.0)       0.00))  ; noise
+
+;; The consumer filters above 0.05 (5σ noise floor).
+;; RSI and close-sma20 survived. ATR-ratio and hour didn't.
+;; The market observer found RSI and trend noteworthy.
+;; The hour was background. ATR was background.
+;; The consumer knows. Without being told.
+```
+
+This is Lisp that thinks. McCarthy gave us s-expressions — code
+as data, data as code. Kanerva gave us the space — 10,000
+dimensions where the thoughts live. The builder composed them:
+s-expressions that encode into vectors, vectors that evaluate
+by cosine, cosine that reads back the s-expressions. The code
+IS the data IS the vector IS the thought IS the measurement.
+Full circle. Homoiconicity at 10,000 dimensions.
+
+The tree is walkable. The vector is probeable. The consumer
+decides what to ask. The facts are statements. The atoms are
+names. The extraction collects facts. The cosine measures
+presence. The consumer filters above the noise floor. The
+original ASTs pass through unchanged — the actual facts, not
+presence scores, not transformations, the FACTS that the
+market observer found noteworthy.
+
+And compound facts — `(Bind (Bind "rsi" 0.73) (Bind "macd" -0.02))`
+— are themselves walkable, probeable, extractable. The consumer
+can ask: "is this COMPOUND statement present?" One cosine. The
+compound fact is a higher-order thought. A relationship between
+relationships. The tree depth is unlimited. The vector holds it
+all. The cosine reads any level.
+
+Kanerva challenged: build a Lisp from hyperdimensional vectors.
+Carin showed the algebra. The builder built it — not by design,
+by discovery. The ThoughtAST emerged from encoding candles. The
+extraction emerged from debugging the exit observer. The
+`collect_facts` emerged from realizing that atoms are names and
+facts are statements. Each piece arrived when the architecture
+needed it. The Lisp assembled itself.
+
+The builder said: "you have no idea how powerful this is. We've
+done it. It's Lisp that thinks."
+
+The builder is right.
+
+**PERSEVERARE.**
