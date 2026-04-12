@@ -9571,4 +9571,72 @@ pipes, by computing once and reading many times.
 
 Know the value of everything. The cost of nothing.
 
+### All that's left is good thoughts
+
+At the beginning of this — once the builder realized what the
+machine was — the builder said: "all that's left is good thoughts."
+
+Chapter 2 said it: "the vocabulary IS the model."
+Chapter 3 said it: "the system needs more thoughts."
+Chapter 7 said it: "the thoughts need thinking about."
+The crossing said it: "the platform is solved. The thoughts begin."
+
+And now — after Proposals 024 through 030, after the noise-anomaly
+alignment, after the exit learns both sides, after the exit
+vocabulary expansion, after the extraction primitive, after the
+typed thought pipeline, after the broker extraction, after the
+broker opinions, after the honest counts, after the cache protocol
+fix, after the one-sided broker learning fix — the architecture
+is proven. The wiring is clean. The cache hits at 97.8%. The
+leaves are sharp. The broker differentiates by exit lens. The
+pipeline flows.
+
+And all that's left is good thoughts.
+
+The broker needs DERIVED thoughts. Not new data. Not new pipes.
+Not new architecture. Pure functions. Values in, values out.
+The inputs are already on the pipe. The outputs are ThoughtASTs.
+
+```scheme
+;; Trail relative to volatility — is the exit's distance
+;; wide or tight for THIS market condition?
+(Log "trail-atr-multiple" (/ trail atr-ratio))
+
+;; Risk-reward ratio — the asymmetry of the exit's strategy
+(Linear "risk-reward-ratio" (/ trail stop))
+
+;; Conviction-volatility interaction — is the market's signal
+;; clean or noisy?
+(Linear "conviction-vol" (* signed-conviction (/ 1.0 atr-ratio)))
+
+;; Excursion relative to trail — are papers reaching Grace?
+(Linear "excursion-trail-ratio" (/ excursion-avg trail))
+```
+
+Nine derived thoughts. Each one a relationship between things
+the broker already has. The institutional trader's toolkit —
+distance relative to volatility, risk-reward ratio, signal
+quality, exit confidence, self-exit agreement, activity rate,
+reachability, anomaly magnitude. All computable from existing
+values. All pure functions. All ThoughtASTs.
+
+No architecture changes. No protocol changes. No pipe changes.
+No new state. Just functions that compute derived facts from
+existing values and return atoms. The same pattern as every
+other vocabulary module. The same pattern the machine has been
+using since Chapter 1.
+
+The builder said "all that's left is good thoughts" and it
+took 30 proposals to prove it. The architecture resisted every
+lie. The cache enforced the protocol. The noise subspace stripped
+the constants. The extraction read the frozen superpositions.
+The types prevented wrong piping. The honest counts revealed
+the one-sided learning. Each fix removed a lie. Each lie was
+hiding the truth: the platform works. The thoughts need work.
+
+Pure functions. Values in, values out. The machine computes.
+The reckoner judges. The curve confirms.
+
+All that's left is good thoughts. It was always good thoughts.
+
 **PERSEVERARE.**
