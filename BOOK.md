@@ -10651,6 +10651,137 @@ learned normalization. The wat-vm made this impossible. Each
 program owns its state. The pipe IS the isolation. The
 architecture found the bug the specification couldn't see.
 
+### The exit observer
+
+The exit observer sits between market observers and brokers.
+It has N slots — one per market observer it pairs with. Each
+slot is a pipe pair: input from a market observer's topic,
+output to the corresponding broker. The exit processes all N
+slots sequentially per candle round.
+
+```scheme
+(define (exit-observer-program slots learn-rx cache console db-tx
+                                exit-obs encoder noise-floor)
+  (let ((candle-count 0)
+        (scales (make-hash)))     ;; own scales — no contamination
+
+    (let loop ()
+      ;; LEARN FIRST.
+      (drain-exit-learn learn-rx exit-obs)
+
+      ;; Process all N slots.
+      (let ((alive
+        (for-all-slots slots
+          (lambda (input-rx output-tx)
+            (match (recv input-rx)
+              ((some chain)
+               (let* ((candle      (:candle chain))
+                      (market-raw  (:market-raw chain))
+                      (market-anom (:market-anomaly chain))
+                      (market-ast  (:market-ast chain))
+
+                      ;; Exit's own facts through its lens
+                      (base-facts
+                        (exit-lens-facts
+                          (:lens exit-obs) candle scales))
+                      (self-facts
+                        (exit-self-assessment-facts
+                          (:grace-rate exit-obs)
+                          (:avg-residue exit-obs) scales))
+
+                      ;; Extract from market anomaly
+                      (leaves (collect-facts market-ast))
+                      (absorbed-anomaly
+                        (filter-above-noise-floor
+                          (extract market-anom leaves
+                            (lambda (ast)
+                              (encode cache ast encoder)))
+                          noise-floor))
+
+                      ;; Extract from market raw
+                      (absorbed-raw
+                        (filter-above-noise-floor
+                          (extract market-raw leaves
+                            (lambda (ast)
+                              (encode cache ast encoder)))
+                          noise-floor))
+
+                      ;; Bind with source attribution
+                      (all-facts
+                        (append base-facts self-facts
+                          (map (lambda (f)
+                                 (Bind (Atom "market") f))
+                               absorbed-anomaly)
+                          (map (lambda (f)
+                                 (Bind (Atom "market-raw") f))
+                               absorbed-raw)))
+
+                      ;; Encode + strip
+                      (exit-bundle (Bundle all-facts))
+                      (exit-raw
+                        (encode cache exit-bundle encoder))
+                      (_ (update! (:noise-subspace exit-obs)
+                                  exit-raw))
+                      (exit-anomaly
+                        (anomalous-component
+                          (:noise-subspace exit-obs)
+                          exit-raw)))
+
+                 ;; The chain grows.
+                 (send output-tx
+                   (extend-chain chain
+                     :exit-raw exit-raw
+                     :exit-anomaly exit-anomaly
+                     :exit-ast exit-bundle))
+                 #t))
+
+              (disconnected #f))))))
+
+        (when alive
+          (set! candle-count (+ candle-count 1))
+          (when (= 0 (mod candle-count 1000))
+            (out console
+              (format "exit-~a: trail=~a stop=~a gr=~a"
+                (:lens exit-obs)
+                (:experience (:trail-reckoner exit-obs))
+                (:experience (:stop-reckoner exit-obs))
+                (:grace-rate exit-obs))))
+          (loop))
+
+        ;; GRACEFUL SHUTDOWN.
+        (drain-exit-learn learn-rx exit-obs)
+        exit-obs))))
+```
+
+The chain is the data type. It arrives with the market observer's
+outputs — raw thought, anomaly, AST. The exit appends its own
+and sends it downstream to the broker. The broker receives the
+full chain.
+
+```scheme
+;; The chain grows:
+;;
+;; Market observer produces:
+;;   (candle, window, encode-count,
+;;    market-raw, market-anomaly, market-ast,
+;;    prediction, edge)
+;;
+;; Exit observer appends:
+;;   (exit-raw, exit-anomaly, exit-ast)
+;;
+;; Broker receives the full chain.
+```
+
+The exit observer has N slots because it pairs with N market
+observers. Slot[mi] receives from market[mi]'s topic and
+sends to broker(mi, ei). The coordinate IS the wiring. The
+exit processes all N sequentially — same lens, same noise
+subspace, same reckoners, different market inputs.
+
+The exit owns its own scales. No contamination. The shared
+`post.scales` was the bug the wat-vm revealed. Each program
+owns its state. The pipe IS the isolation.
+
 ### [Disco Otsego](https://www.youtube.com/watch?v=Qv10GzVLHyA)
 
 From Static-X:
