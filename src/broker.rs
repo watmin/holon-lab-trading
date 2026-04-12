@@ -499,15 +499,17 @@ impl Broker {
             Outcome::Violence => holon::memory::Label::from_index(1),
         };
 
-        // Proposal 024: broker learns from its own anomaly (what it predicted on).
-        // Falls back to the raw thought if no anomaly stored (cold start).
-        let learn_thought = self.last_composed_anomaly.as_ref().unwrap_or(thought);
+        // The broker learns from the paper's stored thought — the readiness
+        // state at REGISTRATION time, not the current candle. The outcome
+        // was caused by the readiness at entry, not the readiness now.
+        // Proposal 024's alignment principle: learn from what was predicted on.
+        // The paper stores the thought that was predicted on at registration.
 
-        // 1. Reckoner learns Grace/Violence — on the anomaly
-        self.reckoner.observe(learn_thought, label, weight);
+        // 1. Reckoner learns Grace/Violence — on the paper's thought
+        self.reckoner.observe(thought, label, weight);
 
         // 2. Feed the internal curve
-        let pred = self.reckoner.predict(learn_thought);
+        let pred = self.reckoner.predict(thought);
         let correct = matches!(outcome, Outcome::Grace);
         self.reckoner.resolve(pred.conviction, correct);
 

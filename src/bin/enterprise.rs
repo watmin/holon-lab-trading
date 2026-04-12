@@ -894,8 +894,8 @@ fn main() {
                     // Broker owns the distance cascade: reckoner → accumulator → default
                     let dists = broker.cascade_distances(reckoner_dists);
 
-                    // The broker binds whole foreign vectors — no extraction needed.
-                    // The ASTs are on the pipe for logging/diagnostics if needed.
+                    // Proposal 034: broker thinks readiness, not candle state.
+                    // ASTs on the pipe for protocol — broker doesn't use them.
                     let _market_input = market_input;  // retained for protocol — AST available
                     let _exit_input = exit_input;       // retained for protocol — AST available
 
@@ -998,8 +998,7 @@ fn main() {
                             resolved_count: broker.reckoner.resolved_count(),
                             proto_cos,
                             fact_count: broker_fact_count,
-                            thought_ast: format!("{}\n;; + bind(market-anomaly, vec)\n;; + bind(market-raw, vec)\n;; + bind(exit-anomaly, vec)\n;; + bind(exit-raw, vec)",
-                                broker_scalar_bundle.to_edn()),
+                            thought_ast: broker_scalar_bundle.to_edn(),
                         });
                     }
 
