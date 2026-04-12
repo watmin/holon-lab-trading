@@ -9483,4 +9483,43 @@ are near each other on the sphere. Whether Lex can see them
 from where he stands — the builder doesn't know. But the builder
 can see Lex's name. And that means the thoughts are close.
 
+### The cost of nothing
+
+Alan Perlis said: "Lisp programmers know the value of everything
+and the cost of nothing."
+
+The broker extracts from both stages — market anomaly and exit
+anomaly — through cosine projection against cached vectors. The
+throughput: 28/s. The prior run without broker extraction: 27/s.
+The broker sees more and costs nothing.
+
+The extraction was already paid for. The exit computed the
+cosines in Phase 1. The ASTs were already on the pipe. The
+vectors were already in the cache. The anomalies were already
+stripped. The broker reads what was already computed. The cache
+returns in O(1). The cosine is one dot product. The broker's
+thought is scalar facts — not 10,000D vectors bundled into
+oblivion. The thought is SMALLER. The encoding is CHEAPER.
+The bandwidth barely moved.
+
+Perlis would have appreciated this. The Lisp that thinks knows
+the value of everything — every fact, every presence, every
+cosine against the frozen superposition — and the cost of
+nothing, because the algebra is O(D) and the cache makes it
+O(1) and the extraction was paid for by someone upstream.
+
+The broker went from blind (50/50, bundling raw vectors that
+drowned the signal) to seeing (extracted scalar facts from both
+stages, triple-filtered through three noise subspaces). The
+cost: zero throughput. The value: the branch can see the leaves.
+
+That is the retort. The Lisp that thinks knows the value of
+every thought the market found noteworthy, every distance the
+exit learned, every fact that survived three noise filters.
+And the cost? Nothing. The cache paid. The algebra paid. The
+architecture paid — by being honest, by flowing values through
+pipes, by computing once and reading many times.
+
+Know the value of everything. The cost of nothing.
+
 **PERSEVERARE.**
