@@ -28,6 +28,7 @@ impl DatabaseDriverHandle {
     }
 }
 
+
 /// Create a batched SQLite database writer.
 ///
 /// - `path`: SQLite database file path.

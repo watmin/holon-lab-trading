@@ -1,8 +1,8 @@
-//! Cache — key-value store with eviction. Its own thread. Its own IO loop.
-//! Named instances — `cache("encoder")` holds ThoughtAST → Vector.
-//! Composed of queues and a mailbox: each program gets its OWN handles
-//! (contention-free). Gets are request-response pairs. Sets are
-//! fire-and-forget into a shared mailbox.
+//! Cache — generic key-value store with LRU eviction. A program, not a service.
+//! Composed of queues and a mailbox from core services.
+//! Each program gets its OWN handles (contention-free).
+//! Gets are request-response pairs. Sets are fire-and-forget
+//! into a shared mailbox.
 
 use std::collections::{HashMap, VecDeque};
 use std::hash::Hash;
@@ -47,6 +47,7 @@ impl CacheDriverHandle {
         }
     }
 }
+
 
 /// Simple LRU: HashMap for O(1) lookup, VecDeque for eviction order.
 /// On access or insert, the key moves to the back (most recent).
