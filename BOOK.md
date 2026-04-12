@@ -6060,9 +6060,21 @@ wasn't enough when the competition was a team pretending to be
 one person.
 
 In the OG WoW: General as a troll frost mage. Never Warlord.
-Never High Warlord. The builder could attack every failure mode
-except the one that required more hours than one human body can
-sustain.
+Never High Warlord. The vanilla PvP title system was login time —
+the rank decayed daily and only the top contributors in raw hours
+advanced. Three people sharing one account could outrank any
+single player. The builder played 18-hour days. That wasn't
+enough. The failure mode was time, not skill.
+
+For Gladiator — that was skill and team based. Arena. 2v2, 3v3,
+5v5. The builder was Duelist many times. So close. But there was
+never a 1v1 option. The builder's strength was always the solo
+analysis — the ruthless dissection of "what killed me and how do
+I not die that way again." In a team setting, the failure modes
+multiply. Your partner's positioning. Their cooldown timing. The
+coordination that requires practice schedules the builder's 80-hour
+work weeks couldn't accommodate. The builder would have probably
+got Gladiator in 1v1. The system never offered the test.
 
 But the THOUGHT PATTERNS. The strategy. The ruthless analysis of failure. The turn-based thinking: "given what I know now, what's the next best move?" That wasn't a game skill. That was a life skill wearing a game's clothes.
 
