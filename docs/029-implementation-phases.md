@@ -49,8 +49,8 @@ Observers: regime 73.9%, momentum 69.6%, generalist 63.2%
 - [x] Broker receives `(exit-ast, exit-anomaly)` pair alongside market pair
 - [x] Broker extracts from BOTH stages independently
 - [x] Broker's full thought: `broker-self + extract(market) + extract(exit)`
-- [ ] Broker typed struct declares which forms it reads from each stage
-- [ ] Compiler enforces the contract — broker can't read forms it didn't declare
+- [x] Broker typed struct (BrokerSelfAssessmentThought — already implemented in Phase 2)
+- [ ] Compiler enforces the contract — broker can't read forms it didn't declare (deferred — plumbing, not signal)
 - [x] The broker stops bundling raw 10,000D vectors — reads scalar presences instead
 - [ ] 10k benchmark — measure: broker Grace/Violence ratio, edge, disc_strength
 
