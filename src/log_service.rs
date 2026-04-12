@@ -82,8 +82,8 @@ impl LogService {
 
             let mut brk_stmt = conn
                 .prepare_cached(
-                    "INSERT OR REPLACE INTO broker_snapshots (candle, broker_slot_idx, edge, grace_count, violence_count, paper_count, trail_experience, stop_experience)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                    "INSERT OR REPLACE INTO broker_snapshots (candle, broker_slot_idx, edge, grace_count, violence_count, paper_count, trail_experience, stop_experience, disc_strength, last_conviction, curve_valid, resolved_count, proto_cos, fact_count)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
                 )
                 .expect("failed to prepare broker snapshot insert");
 
@@ -266,11 +266,14 @@ fn write_entry(
         }
         LogEntry::BrokerSnapshot { candle, broker_slot_idx, edge, grace_count,
                                    violence_count, paper_count, trail_experience,
-                                   stop_experience } => {
+                                   stop_experience, disc_strength, last_conviction,
+                                   curve_valid, resolved_count, proto_cos, fact_count } => {
             brk_stmt.execute(params![
                 *candle as i64, *broker_slot_idx as i64, edge,
                 *grace_count as i64, *violence_count as i64, *paper_count as i64,
-                trail_experience, stop_experience
+                trail_experience, stop_experience,
+                disc_strength, last_conviction, *curve_valid as i64,
+                *resolved_count as i64, proto_cos, *fact_count as i64
             ]).ok();
         }
         LogEntry::PaperDetail { broker_slot_idx, outcome, entry_price,

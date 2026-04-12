@@ -101,6 +101,12 @@ pub enum LogEntry {
         paper_count: usize,
         trail_experience: f64,
         stop_experience: f64,
+        disc_strength: f64,
+        last_conviction: f64,
+        curve_valid: bool,
+        resolved_count: usize,
+        proto_cos: f64,
+        fact_count: usize,
     },
 }
 

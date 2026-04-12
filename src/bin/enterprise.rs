@@ -308,6 +308,12 @@ fn init_ledger(path: &str) -> Connection {
             paper_count       INTEGER,
             trail_experience  REAL,
             stop_experience   REAL,
+            disc_strength     REAL,
+            last_conviction   REAL,
+            curve_valid       INTEGER,
+            resolved_count    INTEGER,
+            proto_cos         REAL,
+            fact_count        INTEGER,
             PRIMARY KEY (candle, broker_slot_idx)
         );
 
@@ -949,6 +955,7 @@ fn main() {
                     all_facts.extend(exit_present);
                     all_facts.extend(self_facts);
                     all_facts.extend(derived_facts);
+                    let broker_fact_count = all_facts.len();
                     let broker_bundle = enterprise::thought_encoder::ThoughtAST::Bundle(all_facts);
                     let broker_thought = brk_enc.encode(&broker_bundle, &brk_ctx.thought_encoder);
 
@@ -976,6 +983,8 @@ fn main() {
 
                     // Snapshot every 100 candles — into the DB
                     if candle_count % 100 == 0 {
+                        let proto_cos = broker.reckoner.prototype_health()
+                            .map_or(0.0, |(_, _, cos)| cos);
                         brk_log.log(LogEntry::BrokerSnapshot {
                             candle: candle_count,
                             broker_slot_idx: brk_slot,
@@ -985,6 +994,12 @@ fn main() {
                             paper_count: broker.papers.len(),
                             trail_experience: broker.scalar_accums.get(0).map_or(0.0, |a| a.count as f64),
                             stop_experience: broker.scalar_accums.get(1).map_or(0.0, |a| a.count as f64),
+                            disc_strength: broker.reckoner.last_disc_strength(),
+                            last_conviction: broker.reckoner.last_cos_raw(),
+                            curve_valid: broker.reckoner.curve_valid(),
+                            resolved_count: broker.reckoner.resolved_count(),
+                            proto_cos,
+                            fact_count: broker_fact_count,
                         });
                     }
 
