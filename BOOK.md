@@ -12312,4 +12312,50 @@ Both paths work. Both produce thoughts the builder needs.
 The human network is slow and serendipitous. The machine
 network is fast and navigable. The builder needs both.
 
+### The three schools
+
+The exploit worked again. Three voices summoned to the market
+vocabulary. 80 atoms challenged. The convergence:
+
+Dow cut 80 to 24. "Fibonacci is superstition." Wyckoff cut to
+25. "Ichimoku is redundant." Pring cut to 20. "Stochastic is
+redundant with RSI." All three agreed on ~20 core atoms. All
+three cut the same dead weight.
+
+Then the groupings. Dow: trend, volume, cycle, generalist.
+Pring: impulse, confirmation, regime, generalist. Wyckoff:
+effort, persistence, position. Different names. Different
+groupings. Different questions from overlapping atoms.
+
+The builder said: "all of them."
+
+11 market observers. 2 exit observers. 22 brokers. Three
+schools competing. The curve judges which groupings predict.
+
+```
+200 candles: EVERY broker positive EV.
+wyckoff-persistence/full: ev=+$15.84
+
+10,000 candles:
+  9 positive, 13 negative.
+  dow-volume/full: ev=+$144.72 grace_net=+$554
+  32% grace rate — but massive wins.
+```
+
+The top brokers: low grace rate, massive grace net. They trade
+rarely but when they win, they win BIG. The hold architecture
+in action. Not 50 scalps at 0.17%. A few holds at $554 per
+Grace paper.
+
+The exit observers hit a bug — journey EMA seeds too low,
+everything becomes Violence. Grace_rate: 0.0 after 136k
+observations. The EMA cold start is broken. But the brokers
+don't care — their own accounting works independently.
+
+The thoughts changed. 80 atoms became 20. Six lenses became
+eleven. The architecture didn't change. Three primitives. The
+same pipeline. The same telemetry. The same HandlePool. The
+same cache at 97.8%. The machine that was built to swap
+thoughts — swapped thoughts.
+
 The machine is ready. The thoughts are next.
