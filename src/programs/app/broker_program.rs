@@ -68,24 +68,23 @@ pub fn broker_program(
 
         // 4. Direction flip — close runners in old direction
         let mut flip_resolutions = Vec::new();
-        if broker.gate_open() {
-            if let Some(active_dir) = broker.active_direction {
-                if direction != active_dir {
-                    flip_resolutions = broker.close_all_runners(Price(price));
-                }
+        if let Some(active_dir) = broker.active_direction {
+            if direction != active_dir {
+                flip_resolutions = broker.close_all_runners(Price(price));
             }
-            broker.active_direction = Some(direction);
-
-            // Register paper
-            broker.register_paper(
-                composed.clone(),
-                chain.market_anomaly.clone(),
-                chain.exit_anomaly.clone(),
-                direction,
-                Price(price),
-                distances,
-            );
         }
+        broker.active_direction = Some(direction);
+
+        // Register paper — every candle, regardless of EV (Proposal 043).
+        // Papers are free. The learning loop never dies.
+        broker.register_paper(
+            composed.clone(),
+            chain.market_anomaly.clone(),
+            chain.exit_anomaly.clone(),
+            direction,
+            Price(price),
+            distances,
+        );
 
         // 5. Tick papers
         let (market_signals, mut runner_resolutions) = broker.tick_papers(Price(price));
@@ -104,10 +103,14 @@ pub fn broker_program(
                 &scalar_encoder,
             );
 
-            // Teach market observer.
-            // Grace: teach the predicted direction (the prediction was right).
-            // Violence: teach the OPPOSITE direction (the prediction was wrong).
-            let learn_direction = if resolution.outcome == Outcome::Grace {
+            // Teach market observer — directional accuracy, not trade outcome (Proposal 043).
+            // Did the predicted direction match the actual price movement?
+            // Correct: learn the predicted direction. Incorrect: learn the opposite.
+            let direction_correct = match facts.direction {
+                Direction::Up => price > resolution.entry_price,
+                Direction::Down => price < resolution.entry_price,
+            };
+            let learn_direction = if direction_correct {
                 facts.direction
             } else {
                 match facts.direction {
@@ -140,7 +143,7 @@ pub fn broker_program(
             });
 
             // Deferred batch training for exit observer (runner histories)
-            // Proposal 036+037: journey grading with EMA threshold.
+            // Proposal 043: per-broker rolling percentile replaces EMA.
             for (thought, optimal, actual, excursion) in &resolution.exit_batch {
                 // Error ratio: geometry, not consequence
                 let trail_err = (actual.trail - optimal.trail).abs()
@@ -149,19 +152,21 @@ pub fn broker_program(
                     / optimal.stop.max(0.0001);
                 let error = (trail_err + stop_err) / 2.0;
 
-                // EMA: seed at 0.5 (neutral), converge from there.
-                // Beckman said seed from first observation — but the first
-                // observation is degenerate (near-zero error). Hickey said
-                // 0.5 decays to irrelevance after ~200 observations. Hickey
-                // was right.
-                if broker.journey_count == 0 {
-                    broker.journey_ema = 0.5;
+                // Push into rolling window, pop front if at capacity.
+                if broker.journey_errors.len() >= crate::domain::broker::JOURNEY_WINDOW {
+                    broker.journey_errors.pop_front();
                 }
-                broker.journey_ema = (1.0 - 0.01) * broker.journey_ema + 0.01 * error;
-                broker.journey_count += 1;
+                broker.journey_errors.push_back(error);
 
-                // Projection: sign(error - ema). Not a judgment — a label for the rolling window.
-                let is_grace = error < broker.journey_ema;
+                // Median of the window: copy, sort, take middle.
+                // Runs once per batch training observation — not hot path.
+                let median = {
+                    let mut sorted: Vec<f64> = broker.journey_errors.iter().copied().collect();
+                    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                    sorted[sorted.len() / 2]
+                };
+
+                let is_grace = error < median;
 
                 let _ = exit_learn_tx.send(ExitLearn {
                     exit_thought: thought.clone(),
