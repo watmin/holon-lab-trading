@@ -6,6 +6,8 @@
 
 use std::hash::Hash;
 use std::num::NonZeroUsize;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::thread;
 
 use lru::LruCache;
@@ -45,6 +47,10 @@ pub struct CacheDriverHandle {
     #[allow(dead_code)]
     name: String,
     thread: Option<thread::JoinHandle<()>>,
+    /// Total cache hits since startup. Read at shutdown for telemetry.
+    pub hits: Arc<AtomicUsize>,
+    /// Total cache misses since startup. Read at shutdown for telemetry.
+    pub misses: Arc<AtomicUsize>,
 }
 
 impl CacheDriverHandle {
@@ -63,6 +69,11 @@ impl CacheDriverHandle {
 /// Returns N CacheHandles (one per program) and a CacheDriverHandle.
 /// The driver thread exits when all client handles are dropped.
 ///
+/// Telemetry uses the gate pattern: the driver accumulates hit/miss
+/// counters and checks `can_emit` after each get. When the gate opens,
+/// it calls `emit(hits, misses, cache_size)` and resets. On disconnect,
+/// emits remainder unconditionally.
+///
 /// No Drop impl on the handle — drop order is unspecified, so joining
 /// in Drop would deadlock if senders are still alive. The cascade IS
 /// the shutdown guarantee: senders drop → driver drains → driver exits.
@@ -71,6 +82,8 @@ pub fn cache<K, V>(
     name: &str, // the cache's identity — used for diagnostics and logging
     capacity: usize,
     num_clients: usize,
+    can_emit: Box<dyn Fn() -> bool + Send>,
+    emit: Box<dyn Fn(usize, usize, usize) + Send>,
 ) -> (Vec<CacheHandle<K, V>>, CacheDriverHandle)
 where
     K: Send + Clone + Hash + Eq + 'static,
@@ -111,6 +124,13 @@ where
         });
     }
 
+    let hits = Arc::new(AtomicUsize::new(0));
+    let misses = Arc::new(AtomicUsize::new(0));
+    let hits_inner = Arc::clone(&hits);
+    let misses_inner = Arc::clone(&misses);
+
+    // Telemetry: gate + emit. Both mandatory.
+
     // The driver thread: owns the LRU. Drain sets FIRST, then service gets.
     // This ordering is critical: market observers install via set (async),
     // exit observers query via get (sync). If gets are serviced before sets
@@ -122,6 +142,10 @@ where
         let alive_resp_txs: Vec<QueueSender<Option<V>>> = get_resp_txs;
         let mut set_alive = true;
         let mut closed = vec![false; alive_get_rxs.len()];
+
+        // Telemetry accumulators — reset after each emission.
+        let mut period_hits: usize = 0;
+        let mut period_misses: usize = 0;
 
         loop {
             // Phase 1: drain ALL pending sets.
@@ -146,6 +170,13 @@ where
                 match alive_get_rxs[i].try_recv() {
                     Ok(key) => {
                         let result = cache.get(&key).cloned();
+                        if result.is_some() {
+                            hits_inner.fetch_add(1, Ordering::Relaxed);
+                            period_hits += 1;
+                        } else {
+                            misses_inner.fetch_add(1, Ordering::Relaxed);
+                            period_misses += 1;
+                        }
                         let _ = alive_resp_txs[i].send(result);
                     }
                     Err(crossbeam::channel::TryRecvError::Empty) => {}
@@ -155,15 +186,35 @@ where
                 }
             }
 
+            // Gate check after servicing gets.
+            if can_emit() {
+                let cache_size = cache.len();
+                emit(period_hits, period_misses, cache_size);
+                period_hits = 0;
+                period_misses = 0;
+            }
+
             // Exit when all get clients disconnected AND sets are done.
             if all_closed && !set_alive {
+                // Emit remainder unconditionally — no gate check.
+                if period_hits > 0 || period_misses > 0 {
+                    let cache_size = cache.len();
+                    emit(period_hits, period_misses, cache_size);
+                }
                 break;
             }
             if all_closed {
                 // No get clients left but sets still alive — just drain sets.
                 match set_rx.recv() {
                     Ok((key, value)) => { cache.put(key, value); }
-                    Err(_) => break,
+                    Err(_) => {
+                        // Emit remainder on this exit path too.
+                        if period_hits > 0 || period_misses > 0 {
+                            let cache_size = cache.len();
+                            emit(period_hits, period_misses, cache_size);
+                        }
+                        break;
+                    }
                 }
                 continue;
             }
@@ -183,6 +234,11 @@ where
                 has_ops = true;
             }
             if !has_ops {
+                // Emit remainder on this exit path too.
+                if period_hits > 0 || period_misses > 0 {
+                    let cache_size = cache.len();
+                    emit(period_hits, period_misses, cache_size);
+                }
                 break; // all channels gone between phases
             }
             let _ = sel.ready();
@@ -194,6 +250,8 @@ where
         CacheDriverHandle {
             name: name.to_string(),
             thread: Some(thread),
+            hits,
+            misses,
         },
     )
 }
@@ -206,14 +264,14 @@ mod tests {
 
     #[test]
     fn get_returns_none_on_miss() {
-        let (handles, _driver) = cache::<String, String>("test", 16, 1);
+        let (handles, _driver) = cache::<String, String>("test", 16, 1, Box::new(|| true), Box::new(|_, _, _| {}));
         let h = &handles[0];
         assert_eq!(h.get(&"missing".to_string()), None);
     }
 
     #[test]
     fn set_then_get_returns_some() {
-        let (handles, _driver) = cache::<String, i32>("test", 16, 1);
+        let (handles, _driver) = cache::<String, i32>("test", 16, 1, Box::new(|| true), Box::new(|_, _, _| {}));
         let h = &handles[0];
         h.set("key".to_string(), 42);
         // Give the set a moment to propagate through the mailbox.
@@ -223,7 +281,7 @@ mod tests {
 
     #[test]
     fn multiple_clients_independent() {
-        let (handles, _driver) = cache::<String, i32>("test", 64, 3);
+        let (handles, _driver) = cache::<String, i32>("test", 64, 3, Box::new(|| true), Box::new(|_, _, _| {}));
 
         // Each client sets and gets its own key.
         let threads: Vec<_> = handles
@@ -247,7 +305,7 @@ mod tests {
 
     #[test]
     fn eviction_at_capacity() {
-        let (handles, _driver) = cache::<i32, i32>("test", 2, 1);
+        let (handles, _driver) = cache::<i32, i32>("test", 2, 1, Box::new(|| true), Box::new(|_, _, _| {}));
         let h = &handles[0];
 
         h.set(1, 10);
@@ -273,7 +331,7 @@ mod tests {
 
     #[test]
     fn shutdown_all_handles_dropped_driver_exits() {
-        let (handles, driver) = cache::<i32, i32>("test", 16, 2);
+        let (handles, driver) = cache::<i32, i32>("test", 16, 2, Box::new(|| true), Box::new(|_, _, _| {}));
 
         // Drop all handles — driver should exit.
         drop(handles);
@@ -288,7 +346,7 @@ mod tests {
     #[test]
     fn shared_state_across_clients() {
         // One client sets, another client can read.
-        let (handles, _driver) = cache::<String, i32>("test", 16, 2);
+        let (handles, _driver) = cache::<String, i32>("test", 16, 2, Box::new(|| true), Box::new(|_, _, _| {}));
         let mut iter = handles.into_iter();
         let writer = iter.next().unwrap();
         let reader = iter.next().unwrap();

@@ -404,15 +404,62 @@ fn main() {
         "runs/wat-vm_{}.db",
         chrono::Local::now().format("%Y%m%d_%H%M%S")
     );
-    let (db_senders, db_driver) = database::<LogEntry>(
+
+    // All wires before any work. The kernel creates all queues, builds the
+    // mailbox, then spawns the database. +1 self-telemetry, +1 cache telemetry.
+    let num_db_producers = num_market + num_exit + num_brokers;
+    let num_db_total = num_db_producers + 2; // +1 self-telemetry, +1 cache telemetry
+    let mut db_txs = Vec::with_capacity(num_db_total);
+    let mut db_rxs = Vec::with_capacity(num_db_total);
+    for _ in 0..num_db_total {
+        let (tx, rx) = queue_unbounded::<LogEntry>();
+        db_txs.push(tx);
+        db_rxs.push(rx);
+    }
+    let db_mailbox_rx = mailbox(db_rxs);
+
+    // Cache telemetry sender — the cache driver emits metrics through this
+    let cache_telemetry_tx = db_txs.pop().unwrap();
+
+    // Self-telemetry sender — the database emits metrics about itself
+    let db_self_tx = db_txs.pop().unwrap();
+
+    // Database gate: emit accumulated telemetry every 5 seconds.
+    let db_gate = enterprise::programs::telemetry::make_rate_gate(
+        std::time::Duration::from_secs(5),
+    );
+    let db_emit = {
+        let tx = db_self_tx;
+        let seq = std::sync::atomic::AtomicUsize::new(0);
+        move |flush_count: usize, total_rows: usize, flush_ns: u64| {
+            let s = seq.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let id = format!("db:emit:{}", s);
+            let ts = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos() as u64;
+            enterprise::programs::telemetry::emit_metric(
+                &tx, "database", &id, "{}", ts, "flush_count", flush_count as f64, "Count",
+            );
+            enterprise::programs::telemetry::emit_metric(
+                &tx, "database", &id, "{}", ts, "total_rows", total_rows as f64, "Count",
+            );
+            enterprise::programs::telemetry::emit_metric(
+                &tx, "database", &id, "{}", ts, "total_flush_ns", flush_ns as f64, "Nanoseconds",
+            );
+        }
+    };
+    let db_driver = database::<LogEntry>(
         &db_path,
-        num_market + num_exit + num_brokers,
+        db_mailbox_rx,
         100,
         ledger::ledger_setup,
         ledger::ledger_insert,
+        Box::new(db_gate),
+        Box::new(db_emit),
     );
 
-    let mut db_pool = HandlePool::new("db", db_senders);
+    let mut db_pool = HandlePool::new("db", db_txs);
 
     main_handle.out(format!("db: {}", db_path));
 
@@ -420,8 +467,46 @@ fn main() {
     let vm = VectorManager::new(dims);
     let encoder = Arc::new(ThoughtEncoder::new(vm));
 
-    let (cache_handles, cache_driver) =
-        cache::<ThoughtAST, Vector>("encoder", 65536, num_market + num_exit);
+    let cache_gate = enterprise::programs::telemetry::make_rate_gate(
+        std::time::Duration::from_secs(5),
+    );
+    let cache_emit = {
+        let tx = cache_telemetry_tx;
+        let seq = std::sync::atomic::AtomicUsize::new(0);
+        move |hits: usize, misses: usize, size: usize| {
+            let s = seq.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let id = format!("cache:emit:{}", s);
+            let ts = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos() as u64;
+            let dims = "{\"name\":\"encoder\"}";
+            enterprise::programs::telemetry::emit_metric(
+                &tx, "cache", &id, dims, ts, "hits", hits as f64, "Count",
+            );
+            enterprise::programs::telemetry::emit_metric(
+                &tx, "cache", &id, dims, ts, "misses", misses as f64, "Count",
+            );
+            enterprise::programs::telemetry::emit_metric(
+                &tx, "cache", &id, dims, ts, "cache_size", size as f64, "Count",
+            );
+            let hit_rate = if hits + misses > 0 {
+                hits as f64 / (hits + misses) as f64
+            } else {
+                0.0
+            };
+            enterprise::programs::telemetry::emit_metric(
+                &tx, "cache", &id, dims, ts, "hit_rate", hit_rate, "Count",
+            );
+        }
+    };
+    let (cache_handles, cache_driver) = cache::<ThoughtAST, Vector>(
+        "encoder",
+        65536,
+        num_market + num_exit,
+        Box::new(cache_gate),
+        Box::new(cache_emit),
+    );
     let mut cache_pool = HandlePool::new("cache", cache_handles);
 
     // ─── Reserve handles for exit observers and brokers ──────────────────
@@ -678,10 +763,30 @@ fn main() {
 
     main_handle.out(format!("results: {}", db_path));
 
-    // Drop all handles, join drivers
+    // ─── Cache summary ──────────────────────────────────────────────────────
+    // The cache driver emits periodic telemetry through the gate pattern.
+    // The atomic counters on CacheDriverHandle are for the console summary.
+    {
+        let cache_hits = cache_driver.hits.load(Ordering::Relaxed);
+        let cache_misses = cache_driver.misses.load(Ordering::Relaxed);
+        main_handle.out(format!(
+            "cache: hits={} misses={} rate={:.1}%",
+            cache_hits,
+            cache_misses,
+            if cache_hits + cache_misses > 0 {
+                100.0 * cache_hits as f64 / (cache_hits + cache_misses) as f64
+            } else {
+                0.0
+            },
+        ));
+    }
+
+    // Drop all handles, join drivers.
+    // Cache driver must join before db driver — its emit closure holds a db_tx.
+    // When cache driver exits, the closure drops, releasing the db sender.
     drop(stream_handles);
+    cache_driver.join();
     db_driver.join();
     drop(main_handle);
-    cache_driver.join();
     console_driver.join();
 }

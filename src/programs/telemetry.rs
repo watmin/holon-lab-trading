@@ -1,5 +1,8 @@
 /// Telemetry helpers. Shared by all programs that emit metrics.
 
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
+
 use crate::types::log_entry::LogEntry;
 use crate::services::queue::QueueSender;
 
@@ -23,4 +26,19 @@ pub fn emit_metric(
         metric_value,
         metric_unit: metric_unit.to_string(),
     });
+}
+
+/// Create a rate gate that opens every `interval`.
+/// An opaque `Fn() -> bool`. The driver asks "can I emit?" The gate answers.
+pub fn make_rate_gate(interval: Duration) -> impl Fn() -> bool + Send + 'static {
+    let last = Mutex::new(Instant::now());
+    move || {
+        let mut last = last.lock().unwrap();
+        if last.elapsed() >= interval {
+            *last = Instant::now();
+            true
+        } else {
+            false
+        }
+    }
 }
