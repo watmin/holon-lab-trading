@@ -408,7 +408,7 @@ fn main() {
     // All wires before any work. The kernel creates all queues, builds the
     // mailbox, then spawns the database. +1 self-telemetry, +1 cache telemetry.
     let num_db_producers = num_market + num_exit + num_brokers;
-    let num_db_total = num_db_producers + 2; // +1 self-telemetry, +1 cache telemetry
+    let num_db_total = num_db_producers + 1; // +1 cache telemetry (db writes own telemetry directly)
     let mut db_txs = Vec::with_capacity(num_db_total);
     let mut db_rxs = Vec::with_capacity(num_db_total);
     for _ in 0..num_db_total {
@@ -421,32 +421,32 @@ fn main() {
     // Cache telemetry sender — the cache driver emits metrics through this
     let cache_telemetry_tx = db_txs.pop().unwrap();
 
-    // Self-telemetry sender — the database emits metrics about itself
-    let db_self_tx = db_txs.pop().unwrap();
-
     // Database gate: emit accumulated telemetry every 5 seconds.
+    // The database writes its own telemetry directly — no pipe to itself.
+    // A self-pipe through the mailbox creates a circular dependency (deadlock).
     let db_gate = enterprise::programs::telemetry::make_rate_gate(
         std::time::Duration::from_secs(5),
     );
     let db_emit = {
-        let tx = db_self_tx;
         let seq = std::sync::atomic::AtomicUsize::new(0);
-        move |flush_count: usize, total_rows: usize, flush_ns: u64| {
+        move |conn: &rusqlite::Connection, flush_count: usize, total_rows: usize, flush_ns: u64| {
             let s = seq.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            let id = format!("db:emit:{}", s);
             let ts = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_nanos() as u64;
-            enterprise::programs::telemetry::emit_metric(
-                &tx, "database", &id, "{}", ts, "flush_count", flush_count as f64, "Count",
-            );
-            enterprise::programs::telemetry::emit_metric(
-                &tx, "database", &id, "{}", ts, "total_rows", total_rows as f64, "Count",
-            );
-            enterprise::programs::telemetry::emit_metric(
-                &tx, "database", &id, "{}", ts, "total_flush_ns", flush_ns as f64, "Nanoseconds",
-            );
+            let id = format!("db:emit:{}", s);
+            let dims = "{}";
+            for (name, value, unit) in [
+                ("flush_count", flush_count as f64, "Count"),
+                ("total_rows", total_rows as f64, "Count"),
+                ("total_flush_ns", flush_ns as f64, "Nanoseconds"),
+            ] {
+                conn.execute(
+                    "INSERT INTO telemetry VALUES (?,?,?,?,?,?,?)",
+                    rusqlite::params!["database", &id, dims, ts, name, value, unit],
+                ).ok();
+            }
         }
     };
     let db_driver = database::<LogEntry>(

@@ -65,7 +65,7 @@ pub fn database<T: Send + 'static>(
     setup: impl FnOnce(&Connection) + Send + 'static,
     insert: impl Fn(&Connection, &T) + Send + 'static,
     can_emit: Box<dyn Fn() -> bool + Send>,
-    emit: Box<dyn Fn(usize, usize, u64) + Send>,
+    emit: Box<dyn Fn(&Connection, usize, usize, u64) + Send>,
 ) -> DatabaseDriverHandle {
     assert!(batch_size > 0, "database requires non-zero batch_size");
 
@@ -103,7 +103,7 @@ pub fn database<T: Send + 'static>(
 
                         // Gate check
                         if can_emit() {
-                            emit(flush_count, total_rows, total_flush_ns);
+                            emit(&conn, flush_count, total_rows, total_flush_ns);
                             flush_count = 0;
                             total_rows = 0;
                             total_flush_ns = 0;
@@ -125,7 +125,7 @@ pub fn database<T: Send + 'static>(
 
                     // Emit remainder unconditionally — no gate check.
                     if flush_count > 0 || total_rows > 0 {
-                        emit(flush_count, total_rows, total_flush_ns);
+                        emit(&conn, flush_count, total_rows, total_flush_ns);
                     }
                     break;
                 }
@@ -205,7 +205,7 @@ mod tests {
                 .unwrap();
             },
             |_conn, _entry| {},
-            Box::new(|| true), Box::new(|_, _, _| {}),
+            Box::new(|| true), Box::new(|_, _, _, _| {}),
         );
 
         // Drop senders to trigger shutdown, then join.
@@ -242,7 +242,7 @@ mod tests {
                 conn.execute("INSERT INTO entries (value) VALUES (?1)", [entry])
                     .unwrap();
             },
-            Box::new(|| true), Box::new(|_, _, _| {}),
+            Box::new(|| true), Box::new(|_, _, _, _| {}),
         );
 
         senders[0].send("alpha".to_string()).unwrap();
@@ -281,7 +281,7 @@ mod tests {
                 conn.execute("INSERT INTO nums (n) VALUES (?1)", [entry])
                     .unwrap();
             },
-            Box::new(|| true), Box::new(|_, _, _| {}),
+            Box::new(|| true), Box::new(|_, _, _, _| {}),
         );
 
         for i in 0..total {
@@ -326,7 +326,7 @@ mod tests {
                 conn.execute("INSERT INTO items (n) VALUES (?1)", [entry])
                     .unwrap();
             },
-            Box::new(|| true), Box::new(|_, _, _| {}),
+            Box::new(|| true), Box::new(|_, _, _, _| {}),
         );
 
         for i in 0..7 {
@@ -371,7 +371,7 @@ mod tests {
                 )
                 .unwrap();
             },
-            Box::new(|| true), Box::new(|_, _, _| {}),
+            Box::new(|| true), Box::new(|_, _, _, _| {}),
         );
 
         // Each producer sends from its own thread.
@@ -442,7 +442,7 @@ mod tests {
             },
             // Gate always open — emit on every flush
             Box::new(|| true),
-            Box::new(move |flush_count, total_rows, total_flush_ns| {
+            Box::new(move |_conn, flush_count, total_rows, total_flush_ns| {
                 assert!(flush_count > 0);
                 assert!(total_rows > 0);
                 assert!(total_flush_ns > 0);
@@ -491,7 +491,7 @@ mod tests {
             },
             // Gate never opens — accumulates everything, emits only on shutdown
             Box::new(|| false),
-            Box::new(move |flush_count, total_rows, _flush_ns| {
+            Box::new(move |_conn, flush_count, total_rows, _flush_ns| {
                 emit_count_clone.fetch_add(1, Ordering::SeqCst);
                 total_rows_clone.fetch_add(total_rows, Ordering::SeqCst);
                 // All 3 flushes accumulated into one emission
