@@ -2,9 +2,10 @@
 /// Which observers exist. How to build them. The kernel refs these.
 /// The lenses, seeds, and parameters live here, not in the binary.
 
+use crate::domain::exit_observer::ExitObserver;
 use crate::domain::market_observer::MarketObserver;
 use crate::learning::window_sampler::WindowSampler;
-use crate::types::enums::MarketLens;
+use crate::types::enums::{ExitLens, MarketLens};
 
 /// The six market lenses. One observer per lens.
 pub const MARKET_LENSES: &[MarketLens] = &[
@@ -29,6 +30,30 @@ pub fn create_market_observers(dims: usize, recalib_interval: usize) -> Vec<Mark
                 dims,
                 recalib_interval,
                 WindowSampler::new(seed, 12, 2016),
+            )
+        })
+        .collect()
+}
+
+/// The four exit lenses. One exit observer per lens.
+pub const EXIT_LENSES: &[ExitLens] = &[
+    ExitLens::Volatility,
+    ExitLens::Timing,
+    ExitLens::Structure,
+    ExitLens::Generalist,
+];
+
+/// Create all exit observers with their configured lenses.
+pub fn create_exit_observers(dims: usize, recalib_interval: usize) -> Vec<ExitObserver> {
+    EXIT_LENSES
+        .iter()
+        .map(|lens| {
+            ExitObserver::new(
+                *lens,
+                dims,
+                recalib_interval,
+                0.0001, // near-zero default trail — the market teaches
+                0.0001, // near-zero default stop — the market teaches
             )
         })
         .collect()
@@ -67,6 +92,29 @@ mod tests {
         for (i, obs) in observers.iter().enumerate() {
             let expected_seed = 7919 + i * 1000;
             assert_eq!(obs.window_sampler.seed, expected_seed);
+        }
+    }
+
+    #[test]
+    fn test_exit_lenses_count() {
+        assert_eq!(EXIT_LENSES.len(), 4);
+    }
+
+    #[test]
+    fn test_create_exit_observers() {
+        let observers = create_exit_observers(4096, 500);
+        assert_eq!(observers.len(), 4);
+        assert_eq!(observers[0].lens, ExitLens::Volatility);
+        assert_eq!(observers[1].lens, ExitLens::Timing);
+        assert_eq!(observers[2].lens, ExitLens::Structure);
+        assert_eq!(observers[3].lens, ExitLens::Generalist);
+    }
+
+    #[test]
+    fn test_exit_observers_start_inexperienced() {
+        let observers = create_exit_observers(4096, 500);
+        for obs in &observers {
+            assert!(!obs.experienced());
         }
     }
 }

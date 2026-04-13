@@ -18,6 +18,7 @@ use enterprise::domain::indicator_bank::IndicatorBank;
 use enterprise::domain::ledger;
 use enterprise::domain::config;
 use enterprise::domain::market_observer::MarketObserver;
+use enterprise::kernel::handle_pool::HandlePool;
 use enterprise::encoding::thought_encoder::{ThoughtAST, ThoughtEncoder};
 use enterprise::programs::app::market_observer_program::{ObsInput, ObsLearn};
 use enterprise::programs::app::market_observer_program::market_observer_program;
@@ -103,16 +104,17 @@ fn main() {
 
     // Console: one handle per stream + one per observer + one for main
     let num_console = parsed.len() + num_observers + 1;
-    let (mut handles, console_driver) = console(num_console);
+    let (handles, console_driver) = console(num_console);
+    let mut console_pool = HandlePool::new("console", handles);
 
-    // Peel off the main handle (last one)
-    let main_handle = handles.pop().unwrap();
+    // Main handle — first claim
+    let main_handle = console_pool.pop();
 
-    // Peel off observer handles (next num_observers from the end)
-    let observer_handles: Vec<_> = handles.split_off(handles.len() - num_observers);
-
-    // Remaining handles are for stream pipelines
-    let stream_handles = handles;
+    // Stream handles — one per pipeline
+    let mut stream_handles = Vec::with_capacity(parsed.len());
+    for _ in 0..parsed.len() {
+        stream_handles.push(console_pool.pop());
+    }
 
     // ─── Database ───────────────────────────────────────────────────────────
     std::fs::create_dir_all("runs").ok();
@@ -120,13 +122,15 @@ fn main() {
         "runs/wat-vm_{}.db",
         chrono::Local::now().format("%Y%m%d_%H%M%S")
     );
-    let (mut db_senders, db_driver) = database::<LogEntry>(
+    let (db_senders, db_driver) = database::<LogEntry>(
         &db_path,
         num_observers,
         100,
         ledger::ledger_setup,
         ledger::ledger_insert,
     );
+
+    let mut db_pool = HandlePool::new("db", db_senders);
 
     main_handle.out(format!("db: {}", db_path));
 
@@ -136,7 +140,7 @@ fn main() {
 
     let (cache_handles, cache_driver) =
         cache::<ThoughtAST, Vector>("encoder", 65536, num_observers);
-    let mut cache_handles: std::collections::VecDeque<_> = cache_handles.into();
+    let mut cache_pool = HandlePool::new("cache", cache_handles);
 
     // ─── Market observers ──────────────────────────────────────────────────
     let mut obs_input_txs: Vec<QueueSender<ObsInput>> = Vec::with_capacity(num_observers);
@@ -146,7 +150,6 @@ fn main() {
     let mut _topic_handles = Vec::with_capacity(num_observers);
 
     let observers = config::create_market_observers(dims, recalib_interval);
-    let mut observer_handles_iter = observer_handles.into_iter();
     for (i, observer) in observers.into_iter().enumerate() {
         // Candle input queue
         let (candle_tx, candle_rx) = queue_bounded::<ObsInput>(1);
@@ -162,13 +165,13 @@ fn main() {
         let learn_rx = mailbox(vec![learn_dummy_rx]);
 
         // Cache handle for this observer
-        let obs_cache = cache_handles.pop_front().unwrap();
+        let obs_cache = cache_pool.pop();
 
-        // Console handle for this observer — moved, not cloned
-        let obs_console = observer_handles_iter.next().unwrap();
+        // Console handle for this observer
+        let obs_console = console_pool.pop();
 
         // DB sender — real database
-        let db_tx = db_senders.pop().unwrap();
+        let db_tx = db_pool.pop();
 
         let enc = Arc::clone(&encoder);
         let jh = std::thread::spawn(move || {
@@ -187,6 +190,11 @@ fn main() {
         });
         obs_join_handles.push(jh);
     }
+
+    // Assert all pooled handles were claimed — orphans cause deadlocks.
+    console_pool.finish();
+    cache_pool.finish();
+    db_pool.finish();
 
     // ─── Build pipelines ───────────────────────────────────────────────────
     let mut pipelines: Vec<Pipeline> = Vec::new();
@@ -287,7 +295,6 @@ fn main() {
     // Drop all handles, join drivers
     drop(stream_handles);
     drop(_topic_handles);
-    drop(db_senders);
     db_driver.join();
     drop(main_handle);
     cache_driver.join();
