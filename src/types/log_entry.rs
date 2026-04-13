@@ -63,6 +63,16 @@ pub enum LogEntry {
         num_resolutions: usize,
         num_active_trades: usize,
     },
+    /// Telemetry — CloudWatch-style metrics. One row per metric per candle.
+    Telemetry {
+        namespace: String,
+        id: String,
+        dimensions: String,
+        timestamp_ns: u64,
+        metric_name: String,
+        metric_value: f64,
+        metric_unit: String,
+    },
     /// Exit observer snapshot — emitted by exit observer threads every N candles.
     ExitObserverSnapshot {
         candle: usize,
@@ -72,6 +82,7 @@ pub enum LogEntry {
         stop_experience: f64,
         grace_rate: f64,
         avg_residue: f64,
+        us_elapsed: u64,
     },
     /// Observer snapshot — emitted by observer threads every N candles.
     ObserverSnapshot {
@@ -86,6 +97,7 @@ pub enum LogEntry {
         recalib_wins: usize,
         recalib_total: usize,
         last_prediction: String,
+        us_elapsed: u64,
     },
     /// Paper detail — the full story of a resolved paper.
     PaperDetail {

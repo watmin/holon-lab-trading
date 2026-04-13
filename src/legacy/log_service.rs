@@ -256,7 +256,7 @@ fn write_entry(
         }
         LogEntry::ObserverSnapshot { candle, observer_idx, lens, disc_strength,
                                      conviction, experience, resolved, recalib_count,
-                                     recalib_wins, recalib_total, last_prediction } => {
+                                     recalib_wins, recalib_total, last_prediction, .. } => {
             obs_stmt.execute(params![
                 *candle as i64, *observer_idx as i64, lens,
                 disc_strength, conviction, experience,
@@ -293,6 +293,9 @@ fn write_entry(
             ]).ok();
         }
         LogEntry::ExitObserverSnapshot { .. } => {
+            // Handled by wat-vm database, not legacy log service.
+        }
+        LogEntry::Telemetry { .. } => {
             // Handled by wat-vm database, not legacy log service.
         }
     }

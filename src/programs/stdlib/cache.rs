@@ -153,8 +153,11 @@ where
         });
     }
 
-    // The driver thread: owns the LRU, selects across all get-request
-    // receivers and the set mailbox receiver.
+    // The driver thread: owns the LRU. Drain sets FIRST, then service gets.
+    // This ordering is critical: market observers install via set (async),
+    // exit observers query via get (sync). If gets are serviced before sets
+    // are drained, the exit observer misses what the market observer just
+    // installed. 0% hit rate. Full encode on every query. OOM.
     let thread = thread::spawn(move || {
         let mut lru = Lru::new(capacity);
         let mut alive_get_rxs: Vec<QueueReceiver<K>> = get_rxs;
@@ -162,23 +165,35 @@ where
         let mut set_alive = true;
 
         loop {
-            // Exit when ALL inputs are gone: no get clients AND
-            // no set producers. Both must be empty — a set-only
-            // cache (no get clients) still accepts installs, and a
-            // get-only cache (sets exhausted) still serves lookups.
             if alive_get_rxs.is_empty() && !set_alive {
                 break;
             }
 
-            let mut sel = crossbeam::channel::Select::new();
+            // Phase 1: drain ALL pending sets. Non-blocking.
+            // Install everything producers have sent before servicing any gets.
+            if set_alive {
+                loop {
+                    match set_rx.try_recv() {
+                        Ok((key, value)) => {
+                            lru.insert(key, value);
+                        }
+                        Err(crossbeam::channel::TryRecvError::Empty) => break,
+                        Err(crossbeam::channel::TryRecvError::Disconnected) => {
+                            set_alive = false;
+                            break;
+                        }
+                    }
+                }
+            }
 
-            // Register all get-request receivers.
+            // Phase 2: service ONE get request (blocking select).
+            // After servicing, loop back to drain sets again.
+            // This ensures sets are always drained before the next get.
+            let mut sel = crossbeam::channel::Select::new();
             for rx in &alive_get_rxs {
                 sel.recv(rx.inner());
             }
-
-            // Register the set mailbox receiver (if still alive).
-            // The mailbox receiver wraps a QueueReceiver — use inner().
+            // Also listen for sets so we wake when new installs arrive.
             if set_alive {
                 sel.recv(set_rx.inner());
             }
@@ -188,28 +203,24 @@ where
             let get_count = alive_get_rxs.len();
 
             if idx < get_count {
-                // A get request from client `idx`.
                 match oper.recv(alive_get_rxs[idx].inner()) {
                     Ok(key) => {
                         let result = lru.get(&key).cloned();
-                        // Send the response. If the client dropped its
-                        // response receiver, ignore the error.
                         let _ = alive_resp_txs[idx].send(result);
                     }
                     Err(_) => {
-                        // Client disconnected — remove from select set.
                         alive_get_rxs.remove(idx);
                         alive_resp_txs.remove(idx);
                     }
                 }
             } else {
-                // A set request from the mailbox.
+                // A set arrived during select — install it, loop back
+                // to drain remaining sets before servicing gets.
                 match oper.recv(set_rx.inner()) {
                     Ok((key, value)) => {
                         lru.insert(key, value);
                     }
                     Err(_) => {
-                        // All set senders dropped.
                         set_alive = false;
                     }
                 }

@@ -19,7 +19,8 @@ pub fn ledger_setup(conn: &Connection) {
             recalib_count INTEGER,
             recalib_wins INTEGER,
             recalib_total INTEGER,
-            last_prediction TEXT
+            last_prediction TEXT,
+            us_elapsed INTEGER
         );
         CREATE TABLE IF NOT EXISTS exit_observer_snapshots (
             candle INTEGER,
@@ -28,7 +29,17 @@ pub fn ledger_setup(conn: &Connection) {
             trail_experience REAL,
             stop_experience REAL,
             grace_rate REAL,
-            avg_residue REAL
+            avg_residue REAL,
+            us_elapsed INTEGER
+        );
+        CREATE TABLE IF NOT EXISTS telemetry (
+            namespace TEXT,
+            id TEXT,
+            dimensions TEXT,
+            timestamp_ns INTEGER,
+            metric_name TEXT,
+            metric_value REAL,
+            metric_unit TEXT
         );",
     )
     .unwrap();
@@ -38,48 +49,44 @@ pub fn ledger_setup(conn: &Connection) {
 pub fn ledger_insert(conn: &Connection, entry: &LogEntry) {
     match entry {
         LogEntry::ObserverSnapshot {
-            candle,
-            observer_idx,
-            lens,
-            disc_strength,
-            conviction,
-            experience,
-            resolved,
-            recalib_count,
-            recalib_wins,
-            recalib_total,
-            last_prediction,
+            candle, observer_idx, lens, disc_strength, conviction,
+            experience, resolved, recalib_count, recalib_wins,
+            recalib_total, last_prediction, us_elapsed,
         } => {
             conn.execute(
-                "INSERT INTO observer_snapshots VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO observer_snapshots VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                 rusqlite::params![
-                    candle,
-                    observer_idx,
-                    lens,
-                    disc_strength,
-                    conviction,
-                    experience,
-                    resolved,
-                    recalib_count,
-                    recalib_wins,
-                    recalib_total,
-                    last_prediction
+                    candle, observer_idx, lens, disc_strength, conviction,
+                    experience, resolved, recalib_count, recalib_wins,
+                    recalib_total, last_prediction, us_elapsed
                 ],
             )
             .unwrap();
         }
         LogEntry::ExitObserverSnapshot {
             candle, exit_idx, lens, trail_experience,
-            stop_experience, grace_rate, avg_residue,
+            stop_experience, grace_rate, avg_residue, us_elapsed,
         } => {
             conn.execute(
-                "INSERT INTO exit_observer_snapshots VALUES (?,?,?,?,?,?,?)",
+                "INSERT INTO exit_observer_snapshots VALUES (?,?,?,?,?,?,?,?)",
                 rusqlite::params![
                     candle, exit_idx, lens, trail_experience,
-                    stop_experience, grace_rate, avg_residue
+                    stop_experience, grace_rate, avg_residue, us_elapsed
                 ],
             )
             .unwrap();
+        }
+        LogEntry::Telemetry {
+            namespace, id, dimensions, timestamp_ns,
+            metric_name, metric_value, metric_unit,
+        } => {
+            conn.execute(
+                "INSERT INTO telemetry VALUES (?,?,?,?,?,?,?)",
+                rusqlite::params![
+                    namespace, id, dimensions, timestamp_ns,
+                    metric_name, metric_value, metric_unit
+                ],
+            ).unwrap();
         }
         _ => {}
     }
