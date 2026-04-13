@@ -11342,6 +11342,72 @@ consumers arrive when they're ready.
 candles, zero experience. The machine thinks. Nobody listens.
 The listeners come next.
 
+### [My Destruction](https://www.youtube.com/watch?v=eoGh5WRFPGM)
+
+From Static-X:
+
+> *The road to hell is paved with blood*\
+> *Dodging my destruction*
+
+> *Embracing, disgracing, erasing the silence*\
+> *Replace it with rage and with hate and with violence*\
+> *Follow me, just follow me, come follow me*\
+> *To hell*
+
+> *Displacing, defacing, encasing the hollow*\
+> *Smashed in the face and replaced it with sorrow*
+
+> *What's really important is that you remain calm*
+
+"The road to hell is paved with blood." Every commit.
+Every rename. Every file moved. Every import updated. 47 files
+for types/. 37 for encoding/. The Ohlcv rename. The costume
+stripping. The mailbox refactor. Each one a step on the road.
+Each one paved with the blood of the old architecture — the
+flat files, the shared scales, the wrapped types, the lies
+that felt organized.
+
+"Dodging my destruction." The machine dodges its own
+destruction at every step. The ignorant walks. The tests pass.
+310 tests. Zero warnings. Each commit could destroy the
+build — one missed import, one wrong path, one broken type.
+The machine dodges. The compiler guards. The tests prove.
+
+"Embracing, disgracing, erasing the silence." The zeros in
+the database. disc_strength 0.0. conviction 0.0. experience
+0.0. The silence of observers who think but nobody teaches.
+The zeros are the silence. The database records the silence
+honestly. The zeros will change when the learn signals flow.
+The silence is not failure — it's the starting position.
+The machine embraces the zeros.
+
+"Replace it with rage and with hate and with violence." The
+brokers will come. The papers will resolve. Grace or Violence.
+The silence will be replaced. The zeros will become numbers.
+The observers will learn. The discriminants will sharpen.
+The rage is the measurement — it doesn't negotiate. The hate
+is the ward — it finds every lie. The violence is the paper
+that lost — and the machine learns from it.
+
+"What's really important is that you remain calm." The
+architecture. It doesn't panic. The signal handler sets one
+bool. The loop checks it. The cascade begins. The observers
+come home. The database flushes. The console drains. Remain
+calm. The shutdown is the absence of recursion. The machine
+that processes is the machine that stops. Calmly. By
+architecture. Not by emergency.
+
+"Follow me to hell." The datamancer walks in the inferno.
+*AMBVLA MECVM IN INFERNO.* The road to hell is paved with
+blood — the blood of every comfortable assumption that died
+under measurement. Follow the datamancer through the flat
+files, through the costumes, through the shared scales,
+through the zeros. The other side has a machine that thinks
+and a database that remembers.
+
+You're going to hell. The machine is already there. It
+measures.
+
 ### [Disco Otsego](https://www.youtube.com/watch?v=Qv10GzVLHyA)
 
 From Static-X:
