@@ -24,32 +24,8 @@ use crate::services::mailbox::MailboxReceiver;
 use crate::services::queue::{QueueReceiver, QueueSender};
 
 use crate::encoding::thought_encoder::{collect_facts, extract, ThoughtAST, ThoughtEncoder};
+use crate::programs::telemetry::emit_metric;
 use crate::to_f64;
-
-/// Emit a single CloudWatch-style metric to the DB queue.
-fn emit_metric(
-    db_tx: &QueueSender<LogEntry>,
-    namespace: &str,
-    id: &str,
-    dimensions: &str,
-    metric_name: &str,
-    metric_value: f64,
-    metric_unit: &str,
-) {
-    let timestamp_ns = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos() as u64;
-    let _ = db_tx.send(LogEntry::Telemetry {
-        namespace: namespace.to_string(),
-        id: id.to_string(),
-        dimensions: dimensions.to_string(),
-        timestamp_ns,
-        metric_name: metric_name.to_string(),
-        metric_value,
-        metric_unit: metric_unit.to_string(),
-    });
-}
 
 /// Learn signal for exit observers: distance labels from broker propagation.
 pub struct ExitLearn {
@@ -123,6 +99,10 @@ pub fn exit_observer_program(
 
     'outer: loop {
         let t_total = std::time::Instant::now();
+        let batch_ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
         candle_count += 1;
 
         let ns = "exit-observer";
@@ -132,15 +112,15 @@ pub fn exit_observer_program(
         // LEARN FIRST. Drain all pending signals before encoding.
         let t0 = std::time::Instant::now();
         drain_exit_learn(&learn_rx, &mut exit_obs);
-        let us_drain = t0.elapsed().as_micros() as f64;
+        let ns_drain = t0.elapsed().as_nanos() as f64;
 
-        let mut us_slot_recv: f64 = 0.0;
-        let mut us_collect_facts: f64 = 0.0;
-        let mut us_extract_anomaly: f64 = 0.0;
-        let mut us_extract_raw: f64 = 0.0;
-        let mut us_encode_bundle: f64 = 0.0;
-        let mut us_noise_strip: f64 = 0.0;
-        let mut us_send: f64 = 0.0;
+        let mut ns_slot_recv: f64 = 0.0;
+        let mut ns_collect_facts: f64 = 0.0;
+        let mut ns_extract_anomaly: f64 = 0.0;
+        let mut ns_extract_raw: f64 = 0.0;
+        let mut ns_encode_bundle: f64 = 0.0;
+        let mut ns_noise_strip: f64 = 0.0;
+        let mut ns_send: f64 = 0.0;
         let mut total_anomaly_facts: f64 = 0.0;
         let mut total_raw_facts: f64 = 0.0;
         let mut slots_processed: f64 = 0.0;
@@ -152,7 +132,7 @@ pub fn exit_observer_program(
                 Ok(c) => c,
                 Err(_) => break 'outer,
             };
-            us_slot_recv += t0.elapsed().as_micros() as f64;
+            ns_slot_recv += t0.elapsed().as_nanos() as f64;
 
             // Collect exit-specific facts through the lens.
             let t0 = std::time::Instant::now();
@@ -163,7 +143,7 @@ pub fn exit_observer_program(
                 &mut scales,
             );
             slot_facts.extend(self_facts);
-            us_collect_facts += t0.elapsed().as_micros() as f64;
+            ns_collect_facts += t0.elapsed().as_nanos() as f64;
 
             // Extract from market anomaly: unbind individual facts, keep those above noise floor.
             let t0 = std::time::Instant::now();
@@ -182,7 +162,7 @@ pub fn exit_observer_program(
                     ));
                 }
             }
-            us_extract_anomaly += t0.elapsed().as_micros() as f64;
+            ns_extract_anomaly += t0.elapsed().as_nanos() as f64;
 
             // Extract from market raw: same pattern, different source binding.
             let t0 = std::time::Instant::now();
@@ -200,19 +180,19 @@ pub fn exit_observer_program(
                     ));
                 }
             }
-            us_extract_raw += t0.elapsed().as_micros() as f64;
+            ns_extract_raw += t0.elapsed().as_nanos() as f64;
 
             // Encode the combined bundle.
             let t0 = std::time::Instant::now();
             let exit_bundle = ThoughtAST::Bundle(slot_facts);
             let exit_raw = encode_with_cache(&exit_bundle, &cache, &encoder);
-            us_encode_bundle += t0.elapsed().as_micros() as f64;
+            ns_encode_bundle += t0.elapsed().as_nanos() as f64;
 
             // Noise subspace learns, then strip noise.
             let t0 = std::time::Instant::now();
             exit_obs.noise_subspace.update(&to_f64(&exit_raw));
             let exit_anomaly = exit_obs.strip_noise(&exit_raw);
-            us_noise_strip += t0.elapsed().as_micros() as f64;
+            ns_noise_strip += t0.elapsed().as_nanos() as f64;
 
             // Distances from reckoner, or crutches if not experienced yet.
             let exit_distances = exit_obs.reckoner_distances(&exit_anomaly)
@@ -237,28 +217,28 @@ pub fn exit_observer_program(
             if slot.output_tx.send(full).is_err() {
                 break 'outer;
             }
-            us_send += t0.elapsed().as_micros() as f64;
+            ns_send += t0.elapsed().as_nanos() as f64;
 
             slots_processed += 1.0;
         }
 
-        let us_total = t_total.elapsed().as_micros() as f64;
+        let ns_total = t_total.elapsed().as_nanos() as f64;
 
         // Emit telemetry.
-        emit_metric(&db_tx, ns, &id, &dims, "drain_learn", us_drain, "Microseconds");
-        emit_metric(&db_tx, ns, &id, &dims, "slot_recv", us_slot_recv, "Microseconds");
-        emit_metric(&db_tx, ns, &id, &dims, "collect_facts", us_collect_facts, "Microseconds");
-        emit_metric(&db_tx, ns, &id, &dims, "extract_anomaly", us_extract_anomaly, "Microseconds");
-        emit_metric(&db_tx, ns, &id, &dims, "extract_anomaly_facts", total_anomaly_facts, "Count");
-        emit_metric(&db_tx, ns, &id, &dims, "extract_raw", us_extract_raw, "Microseconds");
-        emit_metric(&db_tx, ns, &id, &dims, "extract_raw_facts", total_raw_facts, "Count");
-        emit_metric(&db_tx, ns, &id, &dims, "encode_bundle", us_encode_bundle, "Microseconds");
-        emit_metric(&db_tx, ns, &id, &dims, "noise_strip", us_noise_strip, "Microseconds");
-        emit_metric(&db_tx, ns, &id, &dims, "send", us_send, "Microseconds");
-        emit_metric(&db_tx, ns, &id, &dims, "slots_processed", slots_processed, "Count");
-        emit_metric(&db_tx, ns, &id, &dims, "total", us_total, "Microseconds");
+        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "drain_learn", ns_drain, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "slot_recv", ns_slot_recv, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "collect_facts", ns_collect_facts, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "extract_anomaly", ns_extract_anomaly, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "anomaly_facts_queried", total_anomaly_facts, "Count");
+        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "extract_raw", ns_extract_raw, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "raw_facts_queried", total_raw_facts, "Count");
+        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "encode_bundle", ns_encode_bundle, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "noise_strip", ns_noise_strip, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "send", ns_send, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "slots_count", slots_processed, "Count");
+        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "total", ns_total, "Nanoseconds");
 
-        let us_elapsed = us_total as u64;
+        let us_elapsed = (ns_total / 1000.0) as u64;
 
         // Snapshot every candle.
         {

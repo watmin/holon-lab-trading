@@ -24,31 +24,7 @@ use crate::services::mailbox::MailboxReceiver;
 use crate::services::queue::{QueueReceiver, QueueSender};
 use crate::services::topic::TopicSender;
 use crate::encoding::thought_encoder::{ThoughtAST, ThoughtEncoder};
-
-/// Emit a single CloudWatch-style metric to the DB queue.
-fn emit_metric(
-    db_tx: &QueueSender<LogEntry>,
-    namespace: &str,
-    id: &str,
-    dimensions: &str,
-    metric_name: &str,
-    metric_value: f64,
-    metric_unit: &str,
-) {
-    let timestamp_ns = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos() as u64;
-    let _ = db_tx.send(LogEntry::Telemetry {
-        namespace: namespace.to_string(),
-        id: id.to_string(),
-        dimensions: dimensions.to_string(),
-        timestamp_ns,
-        metric_name: metric_name.to_string(),
-        metric_value,
-        metric_unit: metric_unit.to_string(),
-    });
-}
+use crate::programs::telemetry::emit_metric;
 
 /// Input to the observer: enriched candle, window snapshot, encode count.
 pub struct ObsInput {
@@ -117,6 +93,10 @@ pub fn market_observer_program(
 
     while let Ok(input) = candle_rx.recv() {
         let t_total = std::time::Instant::now();
+        let batch_ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
         candle_count += 1;
 
         let ns = "market-observer";
@@ -126,7 +106,7 @@ pub fn market_observer_program(
         // LEARN FIRST. Drain all pending signals before encoding.
         let t0 = std::time::Instant::now();
         drain_learn(&learn_rx, &mut observer, recalib_interval);
-        let us_drain = t0.elapsed().as_micros() as f64;
+        let ns_drain = t0.elapsed().as_nanos() as f64;
 
         // Sample window size from observer's own time scale.
         let ws = observer.window_sampler.sample(candle_count);
@@ -139,17 +119,17 @@ pub fn market_observer_program(
         let facts = market_lens_facts(&lens, &input.candle, &sliced, &mut scales);
         let fact_count = facts.len() as f64;
         let bundle_ast = ThoughtAST::Bundle(facts);
-        let us_collect = t0.elapsed().as_micros() as f64;
+        let ns_collect = t0.elapsed().as_nanos() as f64;
 
         // Encode via cache: check → compute → install.
         let t0 = std::time::Instant::now();
         let thought = encode_with_cache(&bundle_ast, &cache, &encoder);
-        let us_encode = t0.elapsed().as_micros() as f64;
+        let ns_encode = t0.elapsed().as_nanos() as f64;
 
         // Observe: noise subspace learns, anomaly extracted, reckoner predicts.
         let t0 = std::time::Instant::now();
         let result = observer.observe(thought, Vec::new());
-        let us_observe = t0.elapsed().as_micros() as f64;
+        let ns_observe = t0.elapsed().as_nanos() as f64;
 
         // Capture conviction before prediction is moved.
         let conviction = result.prediction.conviction;
@@ -166,20 +146,20 @@ pub fn market_observer_program(
             prediction: result.prediction,
             edge: result.edge,
         });
-        let us_send = t0.elapsed().as_micros() as f64;
+        let ns_send = t0.elapsed().as_nanos() as f64;
 
-        let us_total = t_total.elapsed().as_micros() as f64;
+        let ns_total = t_total.elapsed().as_nanos() as f64;
 
         // Emit telemetry.
-        emit_metric(&db_tx, ns, &id, &dims, "drain_learn", us_drain, "Microseconds");
-        emit_metric(&db_tx, ns, &id, &dims, "collect_facts", us_collect, "Microseconds");
-        emit_metric(&db_tx, ns, &id, &dims, "collect_facts_count", fact_count, "Count");
-        emit_metric(&db_tx, ns, &id, &dims, "encode", us_encode, "Microseconds");
-        emit_metric(&db_tx, ns, &id, &dims, "observe", us_observe, "Microseconds");
-        emit_metric(&db_tx, ns, &id, &dims, "send", us_send, "Microseconds");
-        emit_metric(&db_tx, ns, &id, &dims, "total", us_total, "Microseconds");
+        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "drain_learn", ns_drain, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "collect_facts", ns_collect, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "facts_count", fact_count, "Count");
+        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "encode", ns_encode, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "observe", ns_observe, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "send", ns_send, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "total", ns_total, "Nanoseconds");
 
-        let us_elapsed = us_total as u64;
+        let us_elapsed = (ns_total / 1000.0) as u64;
 
         // Snapshot every candle.
         {
