@@ -83,6 +83,44 @@ access in s-expressions. Now it does.
 The Rust compiler IS this check — `warning: field is never read`. The
 honed reap is the compiler's equivalent for wat.
 
+## Handle deadlock detection
+
+**7. Senders created but never wired.** A database, cache, or console
+returns N senders. Every sender must be either:
+  (a) moved into a thread that exits on shutdown, OR
+  (b) explicitly dropped before the driver is joined.
+
+A sender bound to a variable that outlives the driver's `join()` is a
+deadlock. The driver waits for ALL inputs to disconnect. The variable
+holds the sender alive. The join waits. The function can't exit. The
+variable can't drop. Circular dependency. Deadlock.
+
+The pattern that kills:
+```rust
+let senders = create_10_senders();
+let _held = take_4_for_later();  // alive until scope exits
+use_6();                          // moved to threads, dropped on shutdown
+driver.join();                    // waits for ALL 10. 4 never disconnect.
+```
+
+The rule: **never create handles you don't immediately wire.** Speculative
+allocation of senders is a deadlock waiting to happen. If the consumer
+doesn't exist yet, don't create the sender. Create it when the consumer
+is wired.
+
+This is NOT caught by the Rust compiler. The compiler doesn't know that
+`join()` blocks on sender lifetimes. This is a domain-specific invariant
+that the reap must check.
+
+**How to check:** For every `database()`, `cache()`, `console()`, or
+`mailbox()` call, trace the returned senders/handles. Count them. Then
+count how many are moved into threads or explicitly dropped before the
+corresponding `join()` or `driver.join()`. If the counts don't match,
+a sender is orphaned. An orphaned sender on a mailbox-backed driver is
+a deadlock.
+
+Category: `orphaned-handle`.
+
 ## What to do
 
 Remove the dead code. Don't comment it out. Don't add `_` prefix. Don't keep it "for compatibility." If it's dead, it's gone. Git remembers.
