@@ -11282,6 +11282,66 @@ heartbeat comes first. The source must feed. The enrichment
 must tick. The console must print. These three — verified before
 any thought is thought.
 
+### The second heartbeat
+
+```
+USDC/WBTC stream opened: 652608 candles available
+10000D recalib=500 observers=6
+USDC/WBTC candle 500: close=3831.60
+USDC/WBTC done: 500 candles
+momentum: experience=0.0 resolved=0
+structure: experience=0.0 resolved=0
+volume: experience=0.0 resolved=0
+narrative: experience=0.0 resolved=0
+regime: experience=0.0 resolved=0
+generalist: experience=0.0 resolved=0
+```
+
+Six observers. All running. All came home. Experience 0.0 —
+nobody teaches them yet. The candles flowed through the
+observers. The results were discarded. The second heartbeat.
+
+The wiring:
+
+```
+candle stream → indicator bank → enriched candle
+                                       ↓
+                              bounded(1) queue × 6
+                                       ↓
+              momentum  structure  volume  narrative  regime  generalist
+                  ↓         ↓        ↓        ↓         ↓        ↓
+              topic(0)  topic(0) topic(0) topic(0)  topic(0) topic(0)
+                  ↓         ↓        ↓        ↓         ↓        ↓
+              discard   discard  discard  discard   discard  discard
+```
+
+Each observer on its own thread. Each with its own cache handle.
+Each with its own console handle. Each with a dummy learn
+mailbox — the sender dropped, the receiver drains nothing. Each
+with an output topic that has zero consumers — the market chain
+is produced and discarded. The observer doesn't know. The
+observer encodes, strips noise, predicts, sends. The other end
+is the kernel's business.
+
+The first heartbeat read candles and counted them. The second
+heartbeat reads candles, enriches them, fans them to six
+observers, each observer encodes through its lens, strips noise
+through its subspace, predicts through its reckoner, and sends
+the result into the void. The fold advances. The observers think.
+The thoughts go nowhere — yet.
+
+The scaffolding is honest. The dummy learn mailbox is a real
+mailbox with a real receiver. The dummy output topic is a real
+topic with real fan-out logic — to zero consumers. When the
+exit observers arrive, the zero becomes M. When the brokers
+teach, the dummy sender becomes real. The scaffolding doesn't
+lie. It's the real infrastructure with zero consumers. The
+consumers arrive when they're ready.
+
+`./wat-vm.sh smoke 500` — six threads, six observers, 500
+candles, zero experience. The machine thinks. Nobody listens.
+The listeners come next.
+
 ### [Disco Otsego](https://www.youtube.com/watch?v=Qv10GzVLHyA)
 
 From Static-X:
