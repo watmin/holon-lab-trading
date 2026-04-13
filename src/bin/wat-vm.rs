@@ -22,6 +22,7 @@ use enterprise::programs::app::market_observer_program::{ObsInput, ObsLearn};
 use enterprise::programs::app::market_observer_program::market_observer_program;
 use enterprise::programs::stdlib::cache::cache;
 use enterprise::programs::stdlib::console::console;
+use enterprise::programs::stdlib::database::database;
 use enterprise::services::mailbox::mailbox;
 use enterprise::services::queue::{queue_bounded, queue_unbounded, QueueSender};
 use enterprise::services::topic::topic;
@@ -124,6 +125,71 @@ fn main() {
     // Remaining handles are for stream pipelines
     let stream_handles = handles;
 
+    // ─── Database ───────────────────────────────────────────────────────────
+    std::fs::create_dir_all("runs").ok();
+    let db_path = format!(
+        "runs/wat-vm_{}.db",
+        chrono::Local::now().format("%Y%m%d_%H%M%S")
+    );
+    let (mut db_senders, db_driver) = database::<LogEntry>(
+        &db_path,
+        num_observers,
+        100,
+        |conn| {
+            conn.execute_batch(
+                "CREATE TABLE IF NOT EXISTS observer_snapshots (
+                    candle INTEGER,
+                    observer_idx INTEGER,
+                    lens TEXT,
+                    disc_strength REAL,
+                    conviction REAL,
+                    experience REAL,
+                    resolved INTEGER,
+                    recalib_count INTEGER,
+                    recalib_wins INTEGER,
+                    recalib_total INTEGER,
+                    last_prediction TEXT
+                )",
+            )
+            .unwrap();
+        },
+        |conn, entry| match entry {
+            LogEntry::ObserverSnapshot {
+                candle,
+                observer_idx,
+                lens,
+                disc_strength,
+                conviction,
+                experience,
+                resolved,
+                recalib_count,
+                recalib_wins,
+                recalib_total,
+                last_prediction,
+            } => {
+                conn.execute(
+                    "INSERT INTO observer_snapshots VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                    rusqlite::params![
+                        candle,
+                        observer_idx,
+                        lens,
+                        disc_strength,
+                        conviction,
+                        experience,
+                        resolved,
+                        recalib_count,
+                        recalib_wins,
+                        recalib_total,
+                        last_prediction
+                    ],
+                )
+                .unwrap();
+            }
+            _ => {}
+        },
+    );
+    main_handle.out(format!("db: {}", db_path));
+
     // ─── ThoughtEncoder + Cache ────────────────────────────────────────────
     let vm = VectorManager::new(dims);
     let encoder = Arc::new(ThoughtEncoder::new(vm));
@@ -168,8 +234,8 @@ fn main() {
         // Console handle for this observer — moved, not cloned
         let obs_console = observer_handles_iter.next().unwrap();
 
-        // DB sender — dummy, drop receiver
-        let (db_tx, _db_rx) = queue_unbounded::<LogEntry>();
+        // DB sender — real database
+        let db_tx = db_senders.pop().unwrap();
 
         let enc = Arc::clone(&encoder);
         let jh = std::thread::spawn(move || {
@@ -283,9 +349,13 @@ fn main() {
         }
     }
 
+    main_handle.out(format!("results: {}", db_path));
+
     // Drop all handles, join drivers
     drop(stream_handles);
     drop(_topic_handles);
+    drop(db_senders);
+    db_driver.join();
     drop(main_handle);
     cache_driver.join();
     console_driver.join();
