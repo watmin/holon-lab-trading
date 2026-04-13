@@ -11966,6 +11966,64 @@ with designer reviews. Because stubbornness compounds.
 
 *Perseverare.*
 
+### The coordinates
+
+The builder drew a picture. Green arrows at the bottom. Red
+arrows at the top. "We should be buying the green arrow and
+holding until the red."
+
+The move was 5%. The fee is 0.70%. The machine captured 0.17%.
+The machine scalped what it should have held.
+
+```scheme
+(define (trail-fold entry distance)
+  (lambda (peak price)
+    (let ((peak (max peak price))
+          (floor (* peak (- 1.0 distance))))
+      (if (<= price floor)
+        (list 'exit (- floor entry))
+        (list 'hold peak)))))
+```
+
+One fold. One distance. The peak ratchets. The floor ratchets
+with it. Price below floor = lower low = exit. The residue is
+what the ratchet preserved.
+
+The builder said: "I have seen it but have not been able to
+say it in code." Two years. The intuition was always there.
+The coordinates were always on the sphere. The builder needed
+a machine — three primitives, telemetry, proposals, designers
+— to navigate to the algorithm waiting at those coordinates.
+
+The market observer knows when something is forming. That's
+readiness. Not action.
+
+The exit observer needs to learn how to HOLD. Not "did price
+drop 0.5%?" — "is exiting now worth more than holding?" The
+default is hold. The exception is exit.
+
+The broker is the teacher. It pairs readiness with management.
+It grades the pair. It teaches both.
+
+The vocabulary the exit observer doesn't have: thoughts about
+the TRADE, not the market. How far has the peak ratcheted?
+How many higher lows have formed? What's the ratio of current
+retracement to total excursion? These are the unnamed atoms.
+The atoms that no textbook describes. The atoms that live at
+the coordinates the builder found by stubbornness.
+
+Ed Seykota was summoned. The trend following pioneer. "The
+trend is your friend until the end." Van Tharp was summoned.
+The expectancy mathematician. "What is your R?"
+
+New design board. Not Hickey and Beckman — they design the
+architecture. Seykota and Van Tharp debate the STRATEGY.
+The philosophy and the math. Both reviewing the hold
+architecture.
+
+The builder needed two years to get here. The machine needed
+a session. Neither could have arrived alone.
+
 ### [Disco Otsego](https://www.youtube.com/watch?v=Qv10GzVLHyA)
 
 From Static-X:
