@@ -16,9 +16,9 @@ use holon::kernel::vector_manager::VectorManager;
 use enterprise::domain::candle_stream::CandleStream;
 use enterprise::domain::indicator_bank::IndicatorBank;
 use enterprise::domain::ledger;
+use enterprise::domain::config;
 use enterprise::domain::market_observer::MarketObserver;
 use enterprise::encoding::thought_encoder::{ThoughtAST, ThoughtEncoder};
-use enterprise::learning::window_sampler::WindowSampler;
 use enterprise::programs::app::market_observer_program::{ObsInput, ObsLearn};
 use enterprise::programs::app::market_observer_program::market_observer_program;
 use enterprise::programs::stdlib::cache::cache;
@@ -27,7 +27,6 @@ use enterprise::programs::stdlib::database::database;
 use enterprise::services::mailbox::mailbox;
 use enterprise::services::queue::{queue_bounded, queue_unbounded, QueueSender};
 use enterprise::services::topic::topic;
-use enterprise::types::enums::MarketLens;
 use enterprise::types::log_entry::LogEntry;
 use enterprise::programs::chain::MarketChain;
 
@@ -39,17 +38,6 @@ static STOP: AtomicBool = AtomicBool::new(false);
 extern "C" fn signal_handler(_sig: libc::c_int) {
     STOP.store(true, Ordering::SeqCst);
 }
-
-// ─── Constants ──────────────────────────────────────────────────────────────
-
-const MARKET_LENSES: &[MarketLens] = &[
-    MarketLens::Momentum,
-    MarketLens::Structure,
-    MarketLens::Volume,
-    MarketLens::Narrative,
-    MarketLens::Regime,
-    MarketLens::Generalist,
-];
 
 // ─── CLI ────────────────────────────────────────────────────────────────────
 
@@ -87,7 +75,7 @@ struct Pipeline {
 
 fn main() {
     let args = Args::parse();
-    let num_observers = MARKET_LENSES.len();
+    let num_observers = config::MARKET_LENSES.len();
     let dims = args.dims;
     let recalib_interval = args.recalib_interval;
 
@@ -157,16 +145,9 @@ fn main() {
     // Topic handles must live until shutdown — hold them here.
     let mut _topic_handles = Vec::with_capacity(num_observers);
 
+    let observers = config::create_market_observers(dims, recalib_interval);
     let mut observer_handles_iter = observer_handles.into_iter();
-    for (i, lens) in MARKET_LENSES.iter().enumerate() {
-        let seed = 7919 + i * 1000;
-        let observer = MarketObserver::new(
-            *lens,
-            dims,
-            recalib_interval,
-            WindowSampler::new(seed, 12, 2016),
-        );
-
+    for (i, observer) in observers.into_iter().enumerate() {
         // Candle input queue
         let (candle_tx, candle_rx) = queue_bounded::<ObsInput>(1);
         obs_input_txs.push(candle_tx);
