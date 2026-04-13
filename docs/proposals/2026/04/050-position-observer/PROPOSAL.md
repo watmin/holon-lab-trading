@@ -91,9 +91,32 @@ observer is about to gain phase-awareness and entry/hold/exit
 vocabulary. Renaming after that work would touch more files.
 Rename now. Build on the honest name.
 
+## Designer review
+
+Three designers reviewed.
+
+- **Seykota:** REJECTED. Proposed "distance observer" — names
+  what the reckoners predict today.
+- **Hickey:** CONDITIONAL. Also proposed "distance observer."
+  "Names for future things are lies told early."
+- **Beckman:** CONDITIONAL. Accepted "position observer" as
+  forward declaration — must ship with the phase labeler.
+
+The tension: "distance observer" is honest now. "Position
+observer" is honest after 049 lands.
+
 ## Resolution
 
-This proposal does not need designer review. The gaze found a
-Level 1 lie. The fix is a rename. The name is **position observer**.
+**Position observer.** Shipped with 049's phase labeler in
+the same commit. The name and the capability arrive together.
+No window where the name lies. Beckman's condition is met —
+the forward declaration is honored in the same development
+cycle.
+
+"Distance observer" names today's interface but not tomorrow's.
+The component is about to gain phase awareness, entry/hold/exit
+vocabulary, and position lifecycle management. Naming it for
+what it predicts TODAY would require a second rename when 049
+lands. Name it once. Name it right. Ship both together.
 
 **APPROVED by the datamancer.**
