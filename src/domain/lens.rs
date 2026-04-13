@@ -26,9 +26,6 @@ use crate::vocab::market::stochastic::encode_stochastic_facts;
 use crate::vocab::market::timeframe::encode_timeframe_facts;
 
 // Vocab imports -- exit
-use crate::vocab::exit::structure::encode_exit_structure_facts;
-use crate::vocab::exit::timing::encode_exit_timing_facts;
-use crate::vocab::exit::volatility::encode_exit_volatility_facts;
 use crate::vocab::exit::regime::encode_exit_regime_facts;
 use crate::vocab::exit::time::encode_exit_time_facts;
 use crate::vocab::exit::self_assessment::encode_exit_self_assessment_facts;
@@ -91,22 +88,13 @@ pub fn market_lens_facts(lens: &MarketLens, candle: &Candle, window: &[Candle], 
 }
 
 /// Collect exit vocab facts for a specific lens.
-/// Proposal 026: all lenses gain regime and time atoms (universal context).
-/// Generalist additionally gains self-assessment atoms.
+/// Proposal 040: trade atoms come through the trade pipe, not the candle.
+/// Exit lenses keep regime + time facts as market context alongside trade atoms.
 pub fn exit_lens_facts(lens: &ExitLens, candle: &Candle, scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
-    let mut facts = match lens {
-        ExitLens::Volatility => encode_exit_volatility_facts(candle, scales),
-        ExitLens::Structure => encode_exit_structure_facts(candle, scales),
-        ExitLens::Timing => encode_exit_timing_facts(candle, scales),
-        ExitLens::Generalist => {
-            let mut f = encode_exit_volatility_facts(candle, scales);
-            f.extend(encode_exit_structure_facts(candle, scales));
-            f.extend(encode_exit_timing_facts(candle, scales));
-            f
-        }
-    };
-    // Universal context: regime + time for all lenses
-    facts.extend(encode_exit_regime_facts(candle, scales));
+    // Both Core and Full get regime + time as market context.
+    // The trade-specific atoms arrive through the trade pipe.
+    let _ = lens; // both lenses get the same market context
+    let mut facts = encode_exit_regime_facts(candle, scales);
     facts.extend(encode_exit_time_facts(candle));
     facts
 }
@@ -191,20 +179,13 @@ mod tests {
         let candle = Candle::default();
         let mut scales = std::collections::HashMap::new();
 
-        let vol_facts = exit_lens_facts(&ExitLens::Volatility, &candle, &mut scales);
-        let struct_facts = exit_lens_facts(&ExitLens::Structure, &candle, &mut scales);
-        let timing_facts = exit_lens_facts(&ExitLens::Timing, &candle, &mut scales);
-        let gen_facts = exit_lens_facts(&ExitLens::Generalist, &candle, &mut scales);
+        let core_facts = exit_lens_facts(&ExitLens::Core, &candle, &mut scales);
+        let full_facts = exit_lens_facts(&ExitLens::Full, &candle, &mut scales);
 
-        // Proposal 026: all lenses get regime(8) + time(2) = +10 universal context
-        assert!(!vol_facts.is_empty());
-        assert!(!struct_facts.is_empty());
-        // All specialists have their specific atoms + 10 universal
-        assert_eq!(vol_facts.len(), 6 + 10);  // volatility(6) + regime(8) + time(2)
-        assert_eq!(struct_facts.len(), 5 + 10); // structure(5) + regime(8) + time(2)
-        assert_eq!(timing_facts.len(), 5 + 10); // timing(5) + regime(8) + time(2)
-        // Generalist has all three specialists' specific atoms + one set of universal
-        assert_eq!(gen_facts.len(), 6 + 5 + 5 + 10); // vol+struct+timing + regime+time
+        // Proposal 040: both lenses get regime(8) + time(2) = 10 market context atoms.
+        // Trade atoms arrive through the trade pipe, not here.
+        assert_eq!(core_facts.len(), 10); // regime(8) + time(2)
+        assert_eq!(full_facts.len(), 10); // regime(8) + time(2)
     }
 
     #[test]

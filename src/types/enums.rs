@@ -78,22 +78,21 @@ impl std::fmt::Display for MarketLens {
     }
 }
 
-/// Exit observer lens — which judgment vocabulary an exit observer uses.
+/// Exit observer lens — which trade-state vocabulary an exit observer uses.
+/// Proposal 040: two lenses based on trade atoms, not market data.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ExitLens {
-    Volatility,
-    Structure,
-    Timing,
-    Generalist,
+    /// 5 trade atoms — the consensus (excursion, retracement, age, peak-age, signaled).
+    Core,
+    /// 10 trade atoms — all three voices (core + trail/stop distance, r-multiple, heat, trail-cushion).
+    Full,
 }
 
 impl std::fmt::Display for ExitLens {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ExitLens::Volatility => write!(f, "volatility"),
-            ExitLens::Structure => write!(f, "structure"),
-            ExitLens::Timing => write!(f, "timing"),
-            ExitLens::Generalist => write!(f, "generalist"),
+            ExitLens::Core => write!(f, "core"),
+            ExitLens::Full => write!(f, "full"),
         }
     }
 }
@@ -202,16 +201,14 @@ mod tests {
 
     #[test]
     fn test_exit_lens_display() {
-        assert_eq!(ExitLens::Volatility.to_string(), "volatility");
-        assert_eq!(ExitLens::Structure.to_string(), "structure");
-        assert_eq!(ExitLens::Timing.to_string(), "timing");
-        assert_eq!(ExitLens::Generalist.to_string(), "generalist");
+        assert_eq!(ExitLens::Core.to_string(), "core");
+        assert_eq!(ExitLens::Full.to_string(), "full");
     }
 
     #[test]
     fn test_exit_lens_equality() {
-        assert_eq!(ExitLens::Volatility, ExitLens::Volatility);
-        assert_ne!(ExitLens::Volatility, ExitLens::Timing);
+        assert_eq!(ExitLens::Core, ExitLens::Core);
+        assert_ne!(ExitLens::Core, ExitLens::Full);
     }
 
     #[test]

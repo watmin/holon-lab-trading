@@ -197,7 +197,7 @@ mod tests {
     const DEFAULT_STOP: f64 = 0.05;
 
     fn make_observer() -> ExitObserver {
-        ExitObserver::new(ExitLens::Volatility, DIMS, RECALIB, DEFAULT_TRAIL, DEFAULT_STOP)
+        ExitObserver::new(ExitLens::Core, DIMS, RECALIB, DEFAULT_TRAIL, DEFAULT_STOP)
     }
 
     fn random_vector(name: &str) -> Vector {
@@ -208,7 +208,7 @@ mod tests {
     #[test]
     fn test_exit_observer_new() {
         let obs = make_observer();
-        assert_eq!(obs.lens, ExitLens::Volatility);
+        assert_eq!(obs.lens, ExitLens::Core);
         assert!((obs.default_distances.trail - DEFAULT_TRAIL).abs() < 1e-10);
         assert!((obs.default_distances.stop - DEFAULT_STOP).abs() < 1e-10);
     }

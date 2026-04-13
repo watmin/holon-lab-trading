@@ -13,6 +13,7 @@ use std::sync::Arc;
 use holon::kernel::vector::Vector;
 
 use crate::types::distances::Distances;
+use crate::types::enums::ExitLens;
 use crate::domain::exit_observer::ExitObserver;
 use crate::types::log_entry::LogEntry;
 use crate::domain::lens::{exit_lens_facts, exit_self_assessment_facts};
@@ -22,10 +23,17 @@ use crate::programs::stdlib::console::ConsoleHandle;
 use crate::encoding::scale_tracker::ScaleTracker;
 use crate::services::mailbox::MailboxReceiver;
 use crate::services::queue::{QueueReceiver, QueueSender};
+use crate::trades::paper_entry::PaperEntry;
 
 use crate::encoding::thought_encoder::{collect_facts, extract, ThoughtAST, ThoughtEncoder};
 use crate::programs::telemetry::emit_metric;
 use crate::to_f64;
+
+/// Trade-state update from a broker. Contains the 10 trade atoms
+/// computed from the broker's active paper. Proposal 040.
+pub struct TradeUpdate {
+    pub atoms: Vec<ThoughtAST>,
+}
 
 /// Learn signal for exit observers: distance labels from broker propagation.
 pub struct ExitLearn {
@@ -44,6 +52,116 @@ pub struct ExitLearn {
 pub struct ExitSlot {
     pub input_rx: QueueReceiver<MarketChain>,
     pub output_tx: QueueSender<MarketExitChain>,
+}
+
+/// Compute trade atoms from a paper's state. Proposal 040.
+///
+/// Returns the full 10-atom vocabulary. The caller selects the subset
+/// based on ExitLens (Core = first 5, Full = all 10).
+pub fn compute_trade_atoms(paper: &PaperEntry, current_price: f64) -> Vec<ThoughtAST> {
+    let entry = paper.entry_price.0;
+    let extreme = paper.extreme;
+    let excursion = ((extreme - entry) / entry).abs();
+    let retracement = if excursion > 0.0001 {
+        ((extreme - current_price) / (extreme - entry)).abs().min(1.0)
+    } else {
+        0.0
+    };
+    let age = paper.age as f64;
+
+    // peak_age: candles since the extreme was last set.
+    // Scan backward through price_history to find when the extreme was reached.
+    let peak_age = {
+        let mut pa = 0.0;
+        for (i, &p) in paper.price_history.iter().enumerate().rev() {
+            if (p - extreme).abs() < 1e-10 {
+                pa = (paper.price_history.len() - 1 - i) as f64;
+                break;
+            }
+        }
+        pa
+    };
+
+    let signaled = if paper.signaled { 1.0 } else { 0.0 };
+    let trail_distance = paper.distances.trail;
+    let stop_distance = paper.distances.stop;
+    let initial_risk = paper.distances.stop;
+    let r_multiple = if initial_risk > 0.0001 {
+        excursion / initial_risk
+    } else {
+        0.0
+    };
+    let remaining_profit = (excursion - retracement * excursion).max(0.0);
+    let heat = if remaining_profit > 0.0001 {
+        trail_distance / remaining_profit
+    } else {
+        1.0
+    };
+    let trail_cushion = if excursion > 0.0001 {
+        ((current_price - paper.trail_level).abs() / (extreme - entry).abs()).min(1.0)
+    } else {
+        0.0
+    };
+
+    vec![
+        // Core 5 (all three agreed)
+        ThoughtAST::Log {
+            name: "exit-excursion".into(),
+            value: excursion.max(0.0001),
+        },
+        ThoughtAST::Linear {
+            name: "exit-retracement".into(),
+            value: retracement,
+            scale: 1.0,
+        },
+        ThoughtAST::Log {
+            name: "exit-age".into(),
+            value: age.max(1.0),
+        },
+        ThoughtAST::Log {
+            name: "exit-peak-age".into(),
+            value: peak_age.max(1.0),
+        },
+        ThoughtAST::Linear {
+            name: "exit-signaled".into(),
+            value: signaled,
+            scale: 1.0,
+        },
+        // Seykota additions
+        ThoughtAST::Log {
+            name: "exit-trail-distance".into(),
+            value: trail_distance.max(0.0001),
+        },
+        ThoughtAST::Log {
+            name: "exit-stop-distance".into(),
+            value: stop_distance.max(0.0001),
+        },
+        // Van Tharp additions
+        ThoughtAST::Log {
+            name: "exit-r-multiple".into(),
+            value: r_multiple.max(0.0001),
+        },
+        ThoughtAST::Linear {
+            name: "exit-heat".into(),
+            value: heat.min(1.0),
+            scale: 1.0,
+        },
+        // Wyckoff addition
+        ThoughtAST::Linear {
+            name: "exit-trail-cushion".into(),
+            value: trail_cushion,
+            scale: 1.0,
+        },
+    ]
+}
+
+/// Select trade atoms for a given exit lens.
+/// Core = first 5 (the consensus). Full = all 10 (all three voices).
+pub fn select_trade_atoms(lens: &ExitLens, all_atoms: Vec<ThoughtAST>) -> Vec<ThoughtAST> {
+    match lens {
+        ExitLens::Core => all_atoms.into_iter().take(5).collect(),
+        ExitLens::Full => all_atoms,
+    }
 }
 
 /// Encode with cache protocol: check -> compute -> install.
@@ -85,6 +203,7 @@ fn drain_exit_learn(
 pub fn exit_observer_program(
     slots: Vec<ExitSlot>,
     learn_rx: MailboxReceiver<ExitLearn>,
+    trade_rx: MailboxReceiver<TradeUpdate>,
     cache: CacheHandle<ThoughtAST, Vector>,
     console: ConsoleHandle,
     db_tx: QueueSender<LogEntry>,
@@ -113,6 +232,13 @@ pub fn exit_observer_program(
         let t0 = std::time::Instant::now();
         drain_exit_learn(&learn_rx, &mut exit_obs);
         let ns_drain = t0.elapsed().as_nanos() as f64;
+
+        // Drain trade state updates — absorb current trade atoms.
+        // Latest wins: the most recent TradeUpdate replaces any prior.
+        let mut current_trade_atoms: Vec<ThoughtAST> = Vec::new();
+        while let Ok(update) = trade_rx.try_recv() {
+            current_trade_atoms = select_trade_atoms(&lens, update.atoms);
+        }
 
         let mut ns_slot_recv: f64 = 0.0;
         let mut ns_collect_facts: f64 = 0.0;
@@ -143,6 +269,8 @@ pub fn exit_observer_program(
                 &mut scales,
             );
             slot_facts.extend(self_facts);
+            // Add trade atoms from broker pipe (Proposal 040).
+            slot_facts.extend(current_trade_atoms.clone());
             ns_collect_facts += t0.elapsed().as_nanos() as f64;
 
             // Extract from market anomaly: unbind individual facts, keep those above noise floor.

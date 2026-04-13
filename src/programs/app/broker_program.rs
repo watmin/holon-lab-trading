@@ -16,7 +16,7 @@ use crate::domain::broker::Broker;
 use crate::types::enums::{Direction, Outcome};
 use crate::types::log_entry::LogEntry;
 use crate::types::newtypes::Price;
-use crate::programs::app::exit_observer_program::ExitLearn;
+use crate::programs::app::exit_observer_program::{ExitLearn, TradeUpdate, compute_trade_atoms};
 use crate::programs::app::market_observer_program::ObsLearn;
 use crate::programs::chain::MarketExitChain;
 use crate::programs::stdlib::console::ConsoleHandle;
@@ -39,6 +39,7 @@ pub fn broker_program(
     chain_rx: QueueReceiver<MarketExitChain>,
     market_learn_tx: QueueSender<ObsLearn>,
     exit_learn_tx: QueueSender<ExitLearn>,
+    trade_tx: QueueSender<TradeUpdate>,
     console: ConsoleHandle,
     db_tx: QueueSender<LogEntry>,
     mut broker: Broker,
@@ -166,6 +167,15 @@ pub fn broker_program(
                     is_grace,
                     residue: *excursion,
                 });
+            }
+        }
+
+        // 6b. Send trade updates for ACTIVE papers (Proposal 040).
+        // The exit observer needs trade-state atoms to compose with market facts.
+        for paper in &broker.papers {
+            if !paper.resolved {
+                let atoms = compute_trade_atoms(paper, price);
+                let _ = trade_tx.send(TradeUpdate { atoms });
             }
         }
 

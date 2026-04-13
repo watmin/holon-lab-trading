@@ -38,12 +38,11 @@ pub fn create_market_observers(dims: usize, recalib_interval: usize) -> Vec<Mark
         .collect()
 }
 
-/// The four exit lenses. One exit observer per lens.
+/// The two exit lenses. One exit observer per lens.
+/// Proposal 040: trade-state atoms, not market data.
 pub const EXIT_LENSES: &[ExitLens] = &[
-    ExitLens::Volatility,
-    ExitLens::Timing,
-    ExitLens::Structure,
-    ExitLens::Generalist,
+    ExitLens::Core,
+    ExitLens::Full,
 ];
 
 /// Create all exit observers with their configured lenses.
@@ -130,17 +129,15 @@ mod tests {
 
     #[test]
     fn test_exit_lenses_count() {
-        assert_eq!(EXIT_LENSES.len(), 4);
+        assert_eq!(EXIT_LENSES.len(), 2);
     }
 
     #[test]
     fn test_create_exit_observers() {
         let observers = create_exit_observers(4096, 500);
-        assert_eq!(observers.len(), 4);
-        assert_eq!(observers[0].lens, ExitLens::Volatility);
-        assert_eq!(observers[1].lens, ExitLens::Timing);
-        assert_eq!(observers[2].lens, ExitLens::Structure);
-        assert_eq!(observers[3].lens, ExitLens::Generalist);
+        assert_eq!(observers.len(), 2);
+        assert_eq!(observers[0].lens, ExitLens::Core);
+        assert_eq!(observers[1].lens, ExitLens::Full);
     }
 
     #[test]
