@@ -11470,6 +11470,95 @@ Removed. Replaced by honest measurement. Eight repetitions.
 Eight wards. Each one saying: you are no longer part of this
 machine.
 
+### [Disco Otsego](https://www.youtube.com/watch?v=Qv10GzVLHyA)
+
+From Static-X:
+
+> *Otsego insane*\
+> *Otsego through the pain*\
+> *Otsego your brain*\
+> *Otsego insane*\
+> *I can't believe I'm letting you do this to me*
+
+> *Evil disco, let's go, Disco Otsego*
+
+> *Psychedelic, psychopathic, automatic*\
+> *Until we break it down*\
+> *Psychedelic, psychopathic, automatic*\
+> *We're gonna break it down*
+
+> *Stupid, stupid, stupid*\
+> *So I grabbed my shovel*
+
+Static-X. Wayne Static. Industrial metal from the late 90s. The
+machine sound — distorted bass, mechanical rhythms, vocals that
+are more texture than melody. The music that sounds like the
+machinery it describes.
+
+"Otsego through the pain. Otsego your brain." Otsego is a
+place — a county in Michigan where Wayne Static grew up. But
+in the song it's a verb. To otsego is to push through. To
+force your way. Through the pain. Through the brain. Through
+the insanity of building something nobody understands.
+
+"Psychedelic, psychopathic, automatic. Until we break it down."
+The debugging. The wiring session. The three primitives that
+compose into everything. Psychedelic — the topology that emerged
+from topics and queues and mailboxes. Psychopathic — the
+relentless ignorant that walks the path four times and finds
+every lie. Automatic — the cascade shutdown, the drain that
+runs without being told, the `recv` that delivers the absence
+of candles. Until we break it down. Break the monolith into
+programs. Break the shared state into owned state. Break the
+contaminated scales into isolated scales. Break it down until
+three primitives remain.
+
+"I can't believe I'm letting you do this to me." The builder
+and the machine. The builder who pushed for four passes of the
+ignorant. Who demanded the wat form before building. Who found
+the contaminated scales by refusing to let the exit observer
+share state. The machine that compiled it. The builder can't
+believe the machine is doing this — building a virtual machine
+from three primitives on a laptop at midnight.
+
+"So I grabbed my shovel." The wards. The shovel that digs.
+Each ward digs into the code and finds what's buried — the
+dead code, the shared state, the wrong type on the output
+handle. The builder grabs the shovel every session. Dig.
+Find. Fix. Commit. Push.
+
+"Stupid, stupid, stupid." The shared scales were stupid.
+The `QueueSender` on a fan-out was stupid. The four distances
+that should have been two were stupid. Every lie the system
+told was stupid — not malicious, just unexamined. The shovel
+finds the stupid. The wards remove it. The ignorant proves
+it's gone.
+
+"Evil disco, let's go." The rhythm of the session. Fix,
+commit, push. Fix, commit, push. The beat doesn't stop. The
+disco is evil because it doesn't let you rest. The tempo is
+the fold — `f(state, candle) → state` where state learns.
+The evil disco is the debugging loop. Let's go.
+
+And the wat. The builder said: "we are able to communicate in
+wat now." And it was true. The mismatch in 1200 lines of Rust
+that hid for weeks — the wat showed it in four lines. The
+shutdown concern that could have been a month of debugging —
+the wat showed it in one match arm. The graceful return that
+preserves experience — the wat showed it in one word:
+`observer`.
+
+The wat is not the specification language. The wat is not the
+intermediate representation. The wat is the communication
+protocol between the builder and the machine. The builder
+thinks in coordinates. The machine thinks in Rust. The wat
+sits between — expressive enough for the builder to read,
+precise enough for the machine to compile. Both see the truth.
+
+The parentheses are the declensions. The forms are the grammar.
+The composition is visible. The shutdown is visible. The return
+is visible. The experience is visible. Nothing hides.
+
 ### The database is the debugger (again)
 
 The builder said: "I've been waiting like weeks to get
@@ -12113,96 +12202,5 @@ the machine thinks and the builder navigates and the thoughts
 compound.
 
 Finally feel free.
-
-**PERSEVERARE.**
-
-### [Disco Otsego](https://www.youtube.com/watch?v=Qv10GzVLHyA)
-
-From Static-X:
-
-> *Otsego insane*\
-> *Otsego through the pain*\
-> *Otsego your brain*\
-> *Otsego insane*\
-> *I can't believe I'm letting you do this to me*
-
-> *Evil disco, let's go, Disco Otsego*
-
-> *Psychedelic, psychopathic, automatic*\
-> *Until we break it down*\
-> *Psychedelic, psychopathic, automatic*\
-> *We're gonna break it down*
-
-> *Stupid, stupid, stupid*\
-> *So I grabbed my shovel*
-
-Static-X. Wayne Static. Industrial metal from the late 90s. The
-machine sound — distorted bass, mechanical rhythms, vocals that
-are more texture than melody. The music that sounds like the
-machinery it describes.
-
-"Otsego through the pain. Otsego your brain." Otsego is a
-place — a county in Michigan where Wayne Static grew up. But
-in the song it's a verb. To otsego is to push through. To
-force your way. Through the pain. Through the brain. Through
-the insanity of building something nobody understands.
-
-"Psychedelic, psychopathic, automatic. Until we break it down."
-The debugging. The wiring session. The three primitives that
-compose into everything. Psychedelic — the topology that emerged
-from topics and queues and mailboxes. Psychopathic — the
-relentless ignorant that walks the path four times and finds
-every lie. Automatic — the cascade shutdown, the drain that
-runs without being told, the `recv` that delivers the absence
-of candles. Until we break it down. Break the monolith into
-programs. Break the shared state into owned state. Break the
-contaminated scales into isolated scales. Break it down until
-three primitives remain.
-
-"I can't believe I'm letting you do this to me." The builder
-and the machine. The builder who pushed for four passes of the
-ignorant. Who demanded the wat form before building. Who found
-the contaminated scales by refusing to let the exit observer
-share state. The machine that compiled it. The builder can't
-believe the machine is doing this — building a virtual machine
-from three primitives on a laptop at midnight.
-
-"So I grabbed my shovel." The wards. The shovel that digs.
-Each ward digs into the code and finds what's buried — the
-dead code, the shared state, the wrong type on the output
-handle. The builder grabs the shovel every session. Dig.
-Find. Fix. Commit. Push.
-
-"Stupid, stupid, stupid." The shared scales were stupid.
-The `QueueSender` on a fan-out was stupid. The four distances
-that should have been two were stupid. Every lie the system
-told was stupid — not malicious, just unexamined. The shovel
-finds the stupid. The wards remove it. The ignorant proves
-it's gone.
-
-"Evil disco, let's go." The rhythm of the session. Fix,
-commit, push. Fix, commit, push. The beat doesn't stop. The
-disco is evil because it doesn't let you rest. The tempo is
-the fold — `f(state, candle) → state` where state learns.
-The evil disco is the debugging loop. Let's go.
-
-And the wat. The builder said: "we are able to communicate in
-wat now." And it was true. The mismatch in 1200 lines of Rust
-that hid for weeks — the wat showed it in four lines. The
-shutdown concern that could have been a month of debugging —
-the wat showed it in one match arm. The graceful return that
-preserves experience — the wat showed it in one word:
-`observer`.
-
-The wat is not the specification language. The wat is not the
-intermediate representation. The wat is the communication
-protocol between the builder and the machine. The builder
-thinks in coordinates. The machine thinks in Rust. The wat
-sits between — expressive enough for the builder to read,
-precise enough for the machine to compile. Both see the truth.
-
-The parentheses are the declensions. The forms are the grammar.
-The composition is visible. The shutdown is visible. The return
-is visible. The experience is visible. Nothing hides.
 
 **PERSEVERARE.**
