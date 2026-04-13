@@ -20,6 +20,7 @@ use crate::programs::app::exit_observer_program::ExitLearn;
 use crate::programs::app::market_observer_program::ObsLearn;
 use crate::programs::chain::MarketExitChain;
 use crate::programs::stdlib::console::ConsoleHandle;
+use crate::programs::telemetry::emit_metric;
 use crate::services::queue::{QueueReceiver, QueueSender};
 
 /// Extract Direction from a holon Prediction.
@@ -47,8 +48,13 @@ pub fn broker_program(
     let mut candle_count = 0usize;
 
     while let Ok(chain) = chain_rx.recv() {
+        let t_total = std::time::Instant::now();
         candle_count += 1;
         let price = chain.candle.close;
+        let mut learn_up: f64 = 0.0;
+        let mut learn_down: f64 = 0.0;
+        let mut learn_grace: f64 = 0.0;
+        let mut learn_violence: f64 = 0.0;
 
         // 1. Compose: market anomaly + exit anomaly
         let composed = Primitives::bundle(&[&chain.market_anomaly, &chain.exit_anomaly]);
@@ -97,10 +103,28 @@ pub fn broker_program(
                 &scalar_encoder,
             );
 
-            // Teach market observer
+            // Teach market observer.
+            // Grace: teach the predicted direction (the prediction was right).
+            // Violence: teach the OPPOSITE direction (the prediction was wrong).
+            let learn_direction = if resolution.outcome == Outcome::Grace {
+                facts.direction
+            } else {
+                match facts.direction {
+                    Direction::Up => Direction::Down,
+                    Direction::Down => Direction::Up,
+                }
+            };
+            match learn_direction {
+                Direction::Up => learn_up += 1.0,
+                Direction::Down => learn_down += 1.0,
+            }
+            match resolution.outcome {
+                Outcome::Grace => learn_grace += 1.0,
+                Outcome::Violence => learn_violence += 1.0,
+            }
             let _ = market_learn_tx.send(ObsLearn {
                 thought: facts.market_thought,
-                direction: facts.direction,
+                direction: learn_direction,
                 weight: facts.weight,
             });
 
@@ -143,6 +167,21 @@ pub fn broker_program(
                 thought_ast: String::new(),
             });
         }
+
+        // Telemetry
+        let ns_total = t_total.elapsed().as_nanos() as f64;
+        let batch_ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
+        let ns = "broker";
+        let id = format!("broker:{}:{}", broker.slot_idx, candle_count);
+        let dims = format!("{{\"slot\":{}}}", broker.slot_idx);
+        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "total", ns_total, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "learn_up_count", learn_up, "Count");
+        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "learn_down_count", learn_down, "Count");
+        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "learn_grace_count", learn_grace, "Count");
+        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "learn_violence_count", learn_violence, "Count");
 
         // 8. Console diagnostic every 1000 candles
         if candle_count % 1000 == 0 {
