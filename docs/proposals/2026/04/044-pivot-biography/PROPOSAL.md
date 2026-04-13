@@ -322,21 +322,103 @@ No absolute prices. No magic levels. The relationship between
 consecutive pivots IS the thought. The sequence of
 relationships IS the biography of the move.
 
+## The sequence encoding
+
+holon-rs has `encode_sequence` with four modes. The one that
+matters: **Positional**. Each item is permuted by its position
+index. `permute(thought, i)`. Position 0 is geometrically
+distinct from position 1. ABC ≠ CBA. The order IS the geometry.
+
+The pivot series is not 8 individual atoms. The pivot series is
+a SINGLE positional-encoded vector of the last N pivot thoughts
+AND the gaps between them.
+
+The gaps are part of the sequence. The market alternates between
+active periods (pivots) and silent periods (gaps). Both are
+thoughts. Both have atoms. Both occupy positions in the sequence.
+
+```scheme
+;; The sequence as the market shows it:
+;;
+;; up-1:  12 candles, conviction 0.08, close-avg $71,200, vol-ratio 1.3
+;; gap-1:  3 candles, no conviction, price drifted +$150, vol-ratio 0.4
+;; down-1: 8 candles, conviction 0.06, close-avg $72,850, vol-ratio 1.1
+;; gap-2:  5 candles, no conviction, price drifted -$250, vol-ratio 0.3
+;; up-2:   6 candles, conviction 0.11, close-avg $72,100, vol-ratio 1.8
+;; gap-3: 47 candles, no conviction, price drifted +$1300, vol-ratio 0.6
+;;         ^ long gap. slow grind up. or exhaustion before reversal.
+;; down-2: 4 candles, conviction 0.04, close-avg $73,100, vol-ratio 0.7
+;;         ^ weak conviction. low volume. the highs are dying.
+
+;; Each pivot is a thought:
+(define (pivot-thought pivot)
+  (bundle
+    (bind (atom "pivot-direction") (encode-direction (:direction pivot)))
+    (Linear "pivot-conviction" (:conviction pivot) 1.0)
+    (Log "pivot-duration" (:duration pivot))
+    (Linear "pivot-close-avg" (:close-avg-relative pivot) 1.0)
+    (Linear "pivot-volume-ratio" (:volume-ratio pivot) 1.0)
+    (Linear "pivot-effort-result" (:effort-result pivot) 1.0)))
+
+;; Each gap is a thought:
+(define (gap-thought gap)
+  (bundle
+    (bind (atom "gap") (atom "pause"))
+    (Log "gap-duration" (:duration gap))
+    (Linear "gap-drift" (:price-drift-pct gap) 1.0)
+    (Linear "gap-volume" (:avg-volume-ratio gap) 1.0)))
+
+;; The SEQUENCE is one vector:
+;; permute(up-1-thought,    0)
+;; permute(gap-1-thought,   1)
+;; permute(down-1-thought,  2)
+;; permute(gap-2-thought,   3)
+;; permute(up-2-thought,    4)
+;; permute(gap-3-thought,   5)    ← position 5 = deep in the series
+;; permute(down-2-thought,  6)
+;; bundle all → one vector. The reckoner sees the whole story.
+```
+
+The positional encoding preserves the rhythm: active, silent,
+active, silent. The reckoner sees:
+
+- **Short gaps between pivots** = urgency. The market is moving.
+- **Long gaps** = exhaustion or accumulation. Context determines which.
+- **Weakening conviction at successive pivots** = the move is dying.
+- **Strengthening conviction** = the move is building.
+- **Gap drift in the direction of the trend** = slow grind. Healthy.
+- **Gap drift against the trend** = pressure building. Reversal forming.
+
+All of this is IMPLICIT in the geometry. The reckoner discovers
+which positional patterns predict. We don't hand-code "lower low
+= get out." We encode the sequence. The reckoner learns that the
+geometric signature of "lower low after compressed range after
+long gap" predicts Violence.
+
+The individual scalar atoms from the pivot series section above
+(low-trend, high-trend, range-trend, spacing-trend) are EXPLICIT
+summaries of what the positional encoding holds IMPLICITLY. Both
+can coexist — the scalars for the exit observer's per-trade view,
+the positional sequence for the broker's full-series view.
+
 ## The algebraic question
 
 All atoms are Linear, Log, Circular — the same encodings.
-They bundle with existing atoms. No new forms. No new
-primitives. The reckoner sees biography the same way it sees
-RSI. The exit observer sees trade biography the same way it
-sees excursion. The vocabulary grows. The machinery doesn't.
+The positional encoding uses `permute` — an existing primitive
+in holon-rs (`Primitives::permute`). The sequence is bundled
+with `bundle` — an existing primitive. No new forms. No new
+primitives. The reckoner sees the sequence vector the same way
+it sees any bundled thought. The vocabulary grows. The machinery
+doesn't.
 
 ## The simplicity question
 
 The trade biography adds 3 atoms per trade. The portfolio
 biography adds ~10 atoms per broker. The pivot memory adds a
-bounded VecDeque of 10 records per broker. The pivot detection
-reuses conviction. No new mechanisms. The complexity is in the
-VOCABULARY, not the machinery.
+bounded VecDeque of ~20 entries (10 pivots + 10 gaps) per broker.
+The pivot detection reuses conviction. The sequence encoding
+reuses `permute` and `bundle`. No new mechanisms. The complexity
+is in the VOCABULARY, not the machinery.
 
 ## Questions for designers
 
