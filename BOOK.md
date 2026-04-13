@@ -11470,6 +11470,81 @@ Removed. Replaced by honest measurement. Eight repetitions.
 Eight wards. Each one saying: you are no longer part of this
 machine.
 
+### The database is the debugger (again)
+
+The builder said: "I've been waiting like weeks to get
+CloudWatch style queries."
+
+Nine years at AWS building CloudWatch dashboards. The builder
+knows what observability looks like. Namespace. Dimensions.
+Metrics. Timestamps. One table. Unlimited measurements.
+
+```sql
+CREATE TABLE telemetry (
+    namespace TEXT,
+    id TEXT,
+    dimensions TEXT,
+    timestamp_ns INTEGER,
+    metric_name TEXT,
+    metric_value REAL,
+    metric_unit TEXT
+);
+```
+
+One query. The bottleneck revealed:
+
+```
+Market observer:
+  encode:    1.7ms    fast
+  observe:   0.4ms    fast
+  send:     21.0ms    BLOCKED — waiting for exit consumers
+
+Exit observer:
+  extract_anomaly: 21.0ms  THE BOTTLENECK
+  extract_raw:      9.0ms
+  encode_bundle:    7.0ms
+  noise_strip:      2.5ms
+  slot_recv:        1.3ms
+```
+
+The market observer is fast. It blocks on send — backpressure
+from exit observers that haven't consumed yet. The exit
+observer spends 21ms per candle on anomaly extraction — 200
+cosine queries through the cache per slot × 6 slots. The
+cache round-trip is the bottleneck, not the algebra.
+
+900 telemetry rows for 10 candles. Every operation timed.
+Every observer attributed. The builder queried the DB and
+saw the answer in one second. Not speculation. Not log
+lines. Not "I think the cache might be slow." Measurement.
+
+```sql
+SELECT namespace, metric_name,
+       ROUND(AVG(metric_value),1) as avg,
+       ROUND(MAX(metric_value),1) as max
+FROM telemetry
+WHERE metric_unit = 'Microseconds'
+GROUP BY namespace, metric_name
+ORDER BY namespace, avg DESC;
+```
+
+The same query the builder ran a thousand times at AWS.
+Against CloudWatch. Against RDS Performance Insights.
+Against custom metric namespaces on Lambda and Step
+Functions. The same query. Now against the wat-vm. On
+a laptop. Against a SQLite file. The tools the builder
+needed — here, in thought space, modeled as a single
+table with seven columns.
+
+The cache fix that preceded this: drain ALL pending sets
+before servicing gets. The race between market observer
+sets (async) and exit observer gets (sync) caused 0% cache
+hit rate. 34GB. OOM. The fix restored the ordering the
+legacy binary had — sets before gets. 705MB. The telemetry
+confirmed: the bottleneck moved from "everything is broken"
+to "extraction is the cost." The measurement guided the fix.
+The fix changed the measurement. The loop tightens.
+
 ### [Disco Otsego](https://www.youtube.com/watch?v=Qv10GzVLHyA)
 
 From Static-X:
