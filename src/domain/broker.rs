@@ -174,7 +174,7 @@ impl Broker {
             avg_violence_net: 0.0,
             expected_value: 0.0,
             swap_fee,
-            journey_ema: 0.0,
+            journey_ema: 0.5, // neutral seed — converges from here
             journey_count: 0,
         }
     }

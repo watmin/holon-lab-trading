@@ -149,12 +149,15 @@ pub fn broker_program(
                     / optimal.stop.max(0.0001);
                 let error = (trail_err + stop_err) / 2.0;
 
-                // EMA: seed from first observation, then fold
+                // EMA: seed at 0.5 (neutral), converge from there.
+                // Beckman said seed from first observation — but the first
+                // observation is degenerate (near-zero error). Hickey said
+                // 0.5 decays to irrelevance after ~200 observations. Hickey
+                // was right.
                 if broker.journey_count == 0 {
-                    broker.journey_ema = error;
-                } else {
-                    broker.journey_ema = (1.0 - 0.01) * broker.journey_ema + 0.01 * error;
+                    broker.journey_ema = 0.5;
                 }
+                broker.journey_ema = (1.0 - 0.01) * broker.journey_ema + 0.01 * error;
                 broker.journey_count += 1;
 
                 // Projection: sign(error - ema). Not a judgment — a label for the rolling window.
