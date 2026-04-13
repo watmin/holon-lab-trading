@@ -24,6 +24,9 @@ pub enum ThoughtAST {
     Circular { name: String, value: f64, period: f64 },
     Bind(Box<ThoughtAST>, Box<ThoughtAST>),
     Bundle(Vec<ThoughtAST>),
+    /// Ordered sequence — each item is permuted by its index before bundling.
+    /// Position-sensitive: [A, B] != [B, A]. Used for pivot biography.
+    Sequential(Vec<ThoughtAST>),
 }
 
 impl ThoughtAST {
@@ -52,6 +55,7 @@ impl ThoughtAST {
             ThoughtAST::Circular { name, .. } => name.clone(),
             ThoughtAST::Bind(left, right) => format!("bind({}:{})", left.name(), right.name()),
             ThoughtAST::Bundle(children) => format!("bundle({})", children.len()),
+            ThoughtAST::Sequential(items) => format!("sequential({})", items.len()),
         }
     }
 
@@ -78,6 +82,13 @@ impl ThoughtAST {
                     })
                     .collect();
                 ThoughtAST::Bundle(unique)
+            }
+            ThoughtAST::Sequential(items) => {
+                let compressed: Vec<ThoughtAST> = items
+                    .into_iter()
+                    .map(|c| c.compress())
+                    .collect();
+                ThoughtAST::Sequential(compressed)
             }
             other => other,
         }
@@ -109,6 +120,12 @@ impl ThoughtAST {
                     .map(|c| format!("{}{}", child_indent, c.to_edn_depth(depth + 1)))
                     .collect();
                 format!("(bundle\n{})", inner.join("\n"))
+            }
+            ThoughtAST::Sequential(items) => {
+                let inner: Vec<String> = items.iter()
+                    .map(|c| format!("{}{}", child_indent, c.to_edn_depth(depth + 1)))
+                    .collect();
+                format!("(sequential\n{})", inner.join("\n"))
             }
         }
     }
@@ -142,6 +159,9 @@ impl std::hash::Hash for ThoughtAST {
             }
             ThoughtAST::Bundle(children) => {
                 children.hash(state);
+            }
+            ThoughtAST::Sequential(items) => {
+                items.hash(state);
             }
         }
     }
@@ -263,6 +283,21 @@ impl ThoughtEncoder {
                 for child in children {
                     let (v, m) = self.encode(child);
                     all_vecs.push(v);
+                    all_misses.extend(m);
+                }
+                let refs: Vec<&Vector> = all_vecs.iter().collect();
+                if refs.is_empty() {
+                    (Vector::zeros(self.vm.dimensions()), all_misses)
+                } else {
+                    (Primitives::bundle(&refs), all_misses)
+                }
+            }
+            ThoughtAST::Sequential(items) => {
+                let mut all_vecs = Vec::with_capacity(items.len());
+                let mut all_misses = Vec::new();
+                for (i, item) in items.iter().enumerate() {
+                    let (v, m) = self.encode(item);
+                    all_vecs.push(Primitives::permute(&v, i as i32));
                     all_misses.extend(m);
                 }
                 let refs: Vec<&Vector> = all_vecs.iter().collect();
@@ -453,6 +488,9 @@ pub fn collect_facts(ast: &ThoughtAST) -> Vec<ThoughtAST> {
     match ast {
         ThoughtAST::Bundle(children) => {
             children.iter().flat_map(collect_facts).collect()
+        }
+        ThoughtAST::Sequential(items) => {
+            items.iter().flat_map(collect_facts).collect()
         }
         ThoughtAST::Atom(_) => vec![], // name without value — not a fact
         _ => vec![ast.clone()], // Linear, Log, Circular, Bind — factual statements

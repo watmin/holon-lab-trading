@@ -34,6 +34,8 @@ use enterprise::programs::chain::MarketExitChain;
 use enterprise::programs::stdlib::cache::cache;
 use enterprise::programs::stdlib::console::console;
 use enterprise::programs::stdlib::database::database;
+use enterprise::programs::stdlib::pivot_tracker::pivot_tracker;
+use enterprise::types::pivot::PivotObservation;
 use enterprise::services::mailbox::mailbox;
 use enterprise::services::queue::{queue_bounded, queue_unbounded, QueueReceiver, QueueSender};
 use enterprise::services::topic::topic;
@@ -102,6 +104,7 @@ fn wire_market_observers(
     observers: Vec<MarketObserver>,
     num_exit_observers: usize,
     learn_mailboxes: Vec<enterprise::services::mailbox::MailboxReceiver<ObsLearn>>,
+    pivot_txs: Vec<QueueSender<PivotObservation>>,
     mut cache_pool: HandlePool<enterprise::programs::stdlib::cache::CacheHandle<ThoughtAST, Vector>>,
     mut console_pool: HandlePool<enterprise::programs::stdlib::console::ConsoleHandle>,
     mut db_pool: HandlePool<enterprise::services::queue::QueueSender<LogEntry>>,
@@ -116,6 +119,7 @@ fn wire_market_observers(
     let mut exit_queue_rxs: Vec<Vec<enterprise::services::queue::QueueReceiver<MarketChain>>> =
         Vec::with_capacity(num_observers);
 
+    let mut pivot_txs = pivot_txs.into_iter();
     for (i, (observer, learn_rx)) in observers.into_iter().zip(learn_mailboxes).enumerate() {
         // Candle input queue
         let (candle_tx, candle_rx) = queue_bounded::<ObsInput>(1);
@@ -144,6 +148,9 @@ fn wire_market_observers(
         // DB sender — real database
         let db_tx = db_pool.pop();
 
+        // Pivot observation sender — fire and forget to pivot tracker
+        let obs_pivot_tx = pivot_txs.next().expect("one pivot_tx per market observer");
+
         let enc = Arc::clone(&encoder);
         let jh = std::thread::spawn(move || {
             market_observer_program(
@@ -153,6 +160,7 @@ fn wire_market_observers(
                 obs_cache,
                 obs_console,
                 db_tx,
+                obs_pivot_tx,
                 observer,
                 enc,
                 i,
@@ -414,7 +422,7 @@ fn main() {
     // All wires before any work. The kernel creates all queues, builds the
     // mailbox, then spawns the database. +1 self-telemetry, +1 cache telemetry.
     let num_db_producers = num_market + num_exit + num_brokers;
-    let num_db_total = num_db_producers + 1; // +1 cache telemetry (db writes own telemetry directly)
+    let num_db_total = num_db_producers + 1 + 1; // +1 cache telemetry, +1 pivot tracker telemetry
     let mut db_txs = Vec::with_capacity(num_db_total);
     let mut db_rxs = Vec::with_capacity(num_db_total);
     for _ in 0..num_db_total {
@@ -423,6 +431,9 @@ fn main() {
         db_rxs.push(rx);
     }
     let db_mailbox_rx = mailbox(db_rxs);
+
+    // Pivot tracker telemetry sender
+    let pivot_tracker_db_tx = db_txs.pop().unwrap();
 
     // Cache telemetry sender — the cache driver emits metrics through this
     let cache_telemetry_tx = db_txs.pop().unwrap();
@@ -595,12 +606,39 @@ fn main() {
     let trade_mailboxes: Vec<enterprise::services::mailbox::MailboxReceiver<TradeUpdate>> =
         trade_rxs_per_exit.into_iter().map(|rxs| mailbox(rxs)).collect();
 
+    // ─── Pivot tracker ─────────────────────────────────────────────────────
+    // 11 observation queues (unbounded) — one per market observer
+    let mut pivot_obs_txs = Vec::with_capacity(num_market);
+    let mut pivot_obs_rxs = Vec::with_capacity(num_market);
+    for _ in 0..num_market {
+        let (tx, rx) = queue_unbounded::<PivotObservation>();
+        pivot_obs_txs.push(tx);
+        pivot_obs_rxs.push(rx);
+    }
+
+    // slot_to_market mapping: slot_idx / num_exit gives market observer index
+    // With num_exit exit observers per market observer:
+    // slot 0 → market 0, slot 1 → market 0, ..., slot num_exit-1 → market 0,
+    // slot num_exit → market 1, ...
+    let num_pivot_slots = num_market * num_exit;
+    let slot_to_market: Vec<usize> = (0..num_pivot_slots)
+        .map(|i| i / num_exit)
+        .collect();
+
+    let (pivot_handles, pivot_tracker_driver) = pivot_tracker(
+        pivot_obs_rxs,
+        num_pivot_slots,
+        slot_to_market,
+        pivot_tracker_db_tx,
+    );
+
     // ─── Market observers ──────────────────────────────────────────────────
     let observers = config::create_market_observers(dims, recalib_interval);
     let wired = wire_market_observers(
         observers,
         num_exit,
         market_learn_mailboxes,
+        pivot_obs_txs,
         cache_pool,
         console_pool,
         db_pool,
@@ -811,10 +849,15 @@ fn main() {
         ));
     }
 
+    // Drop pivot handles — unused in Phase 1, but must drop for clean shutdown.
+    drop(pivot_handles);
+
     // Drop all handles, join drivers.
+    // Pivot tracker driver must join before db driver — its closure holds a db_tx.
     // Cache driver must join before db driver — its emit closure holds a db_tx.
-    // When cache driver exits, the closure drops, releasing the db sender.
+    // When drivers exit, their closures drop, releasing the db senders.
     drop(stream_handles);
+    pivot_tracker_driver.join();
     cache_driver.join();
     db_driver.join();
     drop(main_handle);

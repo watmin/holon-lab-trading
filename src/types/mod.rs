@@ -7,3 +7,5 @@ pub mod distances;
 pub mod ohlcv;
 pub mod candle;
 pub mod log_entry;
+pub mod rolling_percentile;
+pub mod pivot;

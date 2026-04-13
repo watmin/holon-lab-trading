@@ -113,6 +113,19 @@ pub enum LogEntry {
         duration: usize,
         was_runner: bool,
     },
+    /// Pivot tracker snapshot — emitted periodically and on period transitions.
+    /// Proposals 045/047/048.
+    PivotTrackerSnapshot {
+        candle: usize,
+        market_idx: usize,
+        lens: String,
+        pivot_count: usize,
+        gap_count: usize,
+        current_kind: String,
+        current_duration: usize,
+        threshold: f64,
+        conviction_window_size: usize,
+    },
     /// Broker snapshot — emitted by broker threads every N candles.
     /// Proposal 035: reckoner fields removed, accounting fields added.
     BrokerSnapshot {

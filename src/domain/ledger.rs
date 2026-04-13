@@ -46,6 +46,17 @@ pub fn ledger_setup(conn: &Connection) {
             fact_count INTEGER,
             thought_ast TEXT
         );
+        CREATE TABLE IF NOT EXISTS pivot_tracker_snapshots (
+            candle INTEGER,
+            market_idx INTEGER,
+            lens TEXT,
+            pivot_count INTEGER,
+            gap_count INTEGER,
+            current_kind TEXT,
+            current_duration INTEGER,
+            threshold REAL,
+            conviction_window_size INTEGER
+        );
         CREATE TABLE IF NOT EXISTS telemetry (
             namespace TEXT,
             id TEXT,
@@ -101,6 +112,19 @@ pub fn ledger_insert(conn: &Connection, entry: &LogEntry) {
                     candle, broker_slot_idx, grace_count, violence_count, paper_count,
                     trail_experience, stop_experience, expected_value,
                     avg_grace_net, avg_violence_net, fact_count, thought_ast
+                ],
+            )
+            .unwrap();
+        }
+        LogEntry::PivotTrackerSnapshot {
+            candle, market_idx, lens, pivot_count, gap_count,
+            current_kind, current_duration, threshold, conviction_window_size,
+        } => {
+            conn.execute(
+                "INSERT INTO pivot_tracker_snapshots VALUES (?,?,?,?,?,?,?,?,?)",
+                rusqlite::params![
+                    candle, market_idx, lens, pivot_count, gap_count,
+                    current_kind, current_duration, threshold, conviction_window_size
                 ],
             )
             .unwrap();
