@@ -15,7 +15,7 @@ use holon::kernel::vector::Vector;
 use crate::types::distances::Distances;
 use crate::domain::exit_observer::ExitObserver;
 use crate::types::log_entry::LogEntry;
-use crate::orchestration::post::{exit_lens_facts, exit_self_assessment_facts};
+use crate::domain::lens::{exit_lens_facts, exit_self_assessment_facts};
 use crate::programs::chain::{MarketExitChain, MarketChain};
 use crate::programs::stdlib::cache::CacheHandle;
 use crate::programs::stdlib::console::ConsoleHandle;

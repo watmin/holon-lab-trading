@@ -14,8 +14,6 @@ pub mod encoding;
 pub mod vocab;
 pub mod domain;
 pub mod trades;
-pub mod orchestration;
-pub mod legacy;
 pub mod services;
 pub mod programs;
 pub mod kernel;

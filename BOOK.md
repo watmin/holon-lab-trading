@@ -11712,6 +11712,59 @@ agents can build correctly. The architecture IS the guardrail.
 The types ARE the training wheels. The HandlePool IS the seat
 belt. Not for the builder — for the builder's tools.
 
+### [Simple Made Easy](https://www.youtube.com/watch?v=SxdOUGdseq4) (the retort)
+
+Rich Hickey said:
+
+> *What's true of every bug found in the field? It got written.
+> It passed the type checker. It passed all the tests.*
+>
+> *Guard rail programming. Who drives their car around banging
+> against the guard rails? "I'm glad I've got these guard rails
+> because I'd never make it to the show on time." Do the guard
+> rails help you get to where you want to go? They don't point
+> your car in any particular direction.*
+>
+> *What kind of runner can run as fast as they possibly can
+> from the very start of a race? Only somebody who runs really
+> short races. We just fire the starting pistol every hundred
+> and call it a new sprint.*
+
+He's right. The guardrails don't point the car.
+
+The wat points the car. The s-expression agreed before the
+Rust. The designers reviewing the architecture. The ignorant
+proving the specification. The book recording the decisions.
+The hammock — thinking before coding. The design that emerged
+from weeks of conversation, not from sprints.
+
+[Hammock Driven Development](https://www.youtube.com/watch?v=f84n5oFoZBc)
+is the companion. Think before you code. Sleep on it. Let the
+background mind work. The wat form IS the hammock. The builder
+and the machine sat with the design — in wat, in the book, in
+the conversation — before the agents wrote Rust.
+
+And THEN the guardrails. Not instead of thinking — in addition
+to thinking. HandlePool guards against orphaned handles.
+Chain types enforce the pipeline. The ignorant proves the
+path. The compiler rejects broken imports. The telemetry
+measures everything.
+
+The guardrails exist because the builder's tools are agents.
+Agents can't think. Agents can build — fast, parallel,
+tireless. But they can't reason about whether the car is
+pointed in the right direction. The builder points the car
+(the wat). The guardrails keep the agents on the road
+(HandlePool, types, ignorant, compiler).
+
+Hickey says: guardrails don't point your car. True. But when
+your hands aren't on the steering wheel — when agents drive
+— guardrails are the difference between arriving and crashing.
+
+The builder drives the wat. The agents drive the Rust. The
+guardrails protect the agents from themselves. Both. Not one
+or the other.
+
 ### [Disco Otsego](https://www.youtube.com/watch?v=Qv10GzVLHyA)
 
 From Static-X:
