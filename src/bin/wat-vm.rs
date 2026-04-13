@@ -1,7 +1,9 @@
 /// wat-vm — the second heartbeat. Reads candles, enriches them, feeds observers.
 ///
 /// Candles flow to N market observers. Each observer encodes through its lens,
-/// learns the noise subspace, predicts direction. Results are discarded.
+/// learns the noise subspace, predicts direction. Exit observers compose market
+/// thoughts with exit facts. Brokers bind (market, exit) pairs — they register
+/// paper trades, resolve them, and teach both observers through learn queues.
 /// The observers come home with experience.
 
 use std::path::Path;
@@ -10,9 +12,11 @@ use std::sync::Arc;
 
 use clap::Parser;
 
+use holon::kernel::scalar::ScalarEncoder;
 use holon::kernel::vector::Vector;
 use holon::kernel::vector_manager::VectorManager;
 
+use enterprise::domain::broker::Broker;
 use enterprise::domain::candle_stream::CandleStream;
 use enterprise::domain::exit_observer::ExitObserver;
 use enterprise::domain::indicator_bank::IndicatorBank;
@@ -21,15 +25,17 @@ use enterprise::domain::config;
 use enterprise::domain::market_observer::MarketObserver;
 use enterprise::kernel::handle_pool::HandlePool;
 use enterprise::encoding::thought_encoder::{ThoughtAST, ThoughtEncoder};
+use enterprise::programs::app::broker_program::broker_program;
 use enterprise::programs::app::exit_observer_program::{ExitLearn, ExitSlot};
 use enterprise::programs::app::exit_observer_program::exit_observer_program;
 use enterprise::programs::app::market_observer_program::{ObsInput, ObsLearn};
 use enterprise::programs::app::market_observer_program::market_observer_program;
+use enterprise::programs::chain::MarketExitChain;
 use enterprise::programs::stdlib::cache::cache;
 use enterprise::programs::stdlib::console::console;
 use enterprise::programs::stdlib::database::database;
 use enterprise::services::mailbox::mailbox;
-use enterprise::services::queue::{queue_bounded, queue_unbounded, QueueSender};
+use enterprise::services::queue::{queue_bounded, queue_unbounded, QueueReceiver, QueueSender};
 use enterprise::services::topic::topic;
 use enterprise::types::log_entry::LogEntry;
 use enterprise::programs::chain::MarketChain;
@@ -63,6 +69,10 @@ struct Args {
     /// Observations between recalibrations.
     #[arg(long, default_value_t = 500)]
     recalib_interval: usize,
+
+    /// Venue swap fee as a fraction (e.g. 0.0010 = 10 bps).
+    #[arg(long, default_value_t = 0.0010)]
+    swap_fee: f64,
 }
 
 // ─── Pipeline ───────────────────────────────────────────────────────────────
@@ -91,6 +101,7 @@ struct WiredMarketObservers {
 fn wire_market_observers(
     observers: Vec<MarketObserver>,
     num_exit_observers: usize,
+    learn_mailboxes: Vec<enterprise::services::mailbox::MailboxReceiver<ObsLearn>>,
     mut cache_pool: HandlePool<enterprise::programs::stdlib::cache::CacheHandle<ThoughtAST, Vector>>,
     mut console_pool: HandlePool<enterprise::programs::stdlib::console::ConsoleHandle>,
     mut db_pool: HandlePool<enterprise::services::queue::QueueSender<LogEntry>>,
@@ -105,7 +116,7 @@ fn wire_market_observers(
     let mut exit_queue_rxs: Vec<Vec<enterprise::services::queue::QueueReceiver<MarketChain>>> =
         Vec::with_capacity(num_observers);
 
-    for (i, observer) in observers.into_iter().enumerate() {
+    for (i, (observer, learn_rx)) in observers.into_iter().zip(learn_mailboxes).enumerate() {
         // Candle input queue
         let (candle_tx, candle_rx) = queue_bounded::<ObsInput>(1);
         candle_txs.push(candle_tx);
@@ -123,11 +134,6 @@ fn wire_market_observers(
         // Output topic with M consumers — fan out to exit observers
         let (result_tx, topic_handle) = topic::<MarketChain>(1, exit_txs);
         topic_handles.push(topic_handle);
-
-        // Learn mailbox — dummy, no learn signals
-        let (learn_dummy_tx, learn_dummy_rx) = queue_unbounded::<ObsLearn>();
-        drop(learn_dummy_tx); // no one sends learn signals
-        let learn_rx = mailbox(vec![learn_dummy_rx]);
 
         // Cache handle for this observer
         let obs_cache = cache_pool.pop();
@@ -174,11 +180,15 @@ fn wire_market_observers(
 struct WiredExitObservers {
     /// Thread handles — join to get trained exit observers back
     join_handles: Vec<std::thread::JoinHandle<ExitObserver>>,
+    /// Output receivers — one per (mi, ei) slot. The broker consumes these.
+    /// Layout: flat vec of N*M, index = mi * num_exit + ei
+    output_rxs: Vec<QueueReceiver<MarketExitChain>>,
 }
 
 fn wire_exit_observers(
     exit_observers: Vec<ExitObserver>,
     exit_queue_rxs: Vec<Vec<enterprise::services::queue::QueueReceiver<MarketChain>>>,
+    learn_mailboxes: Vec<enterprise::services::mailbox::MailboxReceiver<ExitLearn>>,
     mut cache_pool: HandlePool<enterprise::programs::stdlib::cache::CacheHandle<ThoughtAST, Vector>>,
     mut console_pool: HandlePool<enterprise::programs::stdlib::console::ConsoleHandle>,
     mut db_pool: HandlePool<enterprise::services::queue::QueueSender<LogEntry>>,
@@ -189,6 +199,11 @@ fn wire_exit_observers(
     let num_exit = exit_observers.len();
     let mut join_handles: Vec<std::thread::JoinHandle<ExitObserver>> =
         Vec::with_capacity(num_exit);
+
+    // Output receivers: indexed [mi * num_exit + ei]
+    // We'll fill them in slot order as we wire each exit observer.
+    let mut output_rxs_by_slot: Vec<Option<QueueReceiver<MarketExitChain>>> =
+        (0..num_market * num_exit).map(|_| None).collect();
 
     // Transpose: exit_queue_rxs[mi][ei] → slots[ei][mi]
     // We need to move receivers out, so consume the outer vec.
@@ -203,7 +218,7 @@ fn wire_exit_observers(
         }
     }
 
-    for (ei, exit_obs) in exit_observers.into_iter().enumerate() {
+    for (ei, (exit_obs, learn_rx)) in exit_observers.into_iter().zip(learn_mailboxes).enumerate() {
         // Build N slots for this exit observer
         let slot_rxs: Vec<enterprise::services::queue::QueueReceiver<MarketChain>> = transposed[ei]
             .iter_mut()
@@ -211,20 +226,16 @@ fn wire_exit_observers(
             .collect();
 
         let mut slots = Vec::with_capacity(num_market);
-        for rx in slot_rxs {
-            // Output to broker — dummy consumer drains the queue (broker not wired yet)
-            let (discard_tx, discard_rx) = queue_unbounded();
-            std::thread::spawn(move || { while discard_rx.recv().is_ok() {} });
+        for (mi, rx) in slot_rxs.into_iter().enumerate() {
+            // Output queue — broker consumes the receiver
+            let (output_tx, output_rx) = queue_unbounded();
+            let slot_idx = mi * num_exit + ei;
+            output_rxs_by_slot[slot_idx] = Some(output_rx);
             slots.push(ExitSlot {
                 input_rx: rx,
-                output_tx: discard_tx,
+                output_tx,
             });
         }
-
-        // Learn mailbox — dummy, no learn signals yet
-        let (learn_dummy_tx, learn_dummy_rx) = queue_unbounded::<ExitLearn>();
-        drop(learn_dummy_tx);
-        let learn_rx = mailbox(vec![learn_dummy_rx]);
 
         let obs_cache = cache_pool.pop();
         let obs_console = console_pool.pop();
@@ -251,9 +262,92 @@ fn wire_exit_observers(
     console_pool.finish();
     db_pool.finish();
 
+    let output_rxs: Vec<QueueReceiver<MarketExitChain>> = output_rxs_by_slot
+        .into_iter()
+        .map(|opt| opt.expect("every slot must have an output receiver"))
+        .collect();
+
     WiredExitObservers {
         join_handles,
+        output_rxs,
     }
+}
+
+// ─── Broker wiring ────────────────────────────────────────────────────────
+
+struct WiredBrokers {
+    /// Thread handles — join to get trained brokers back
+    join_handles: Vec<std::thread::JoinHandle<Broker>>,
+}
+
+fn wire_brokers(
+    brokers: Vec<Broker>,
+    output_rxs: Vec<QueueReceiver<MarketExitChain>>,
+    market_learn_txs: Vec<Vec<QueueSender<ObsLearn>>>,
+    exit_learn_txs: Vec<Vec<QueueSender<ExitLearn>>>,
+    mut console_pool: HandlePool<enterprise::programs::stdlib::console::ConsoleHandle>,
+    mut db_pool: HandlePool<enterprise::services::queue::QueueSender<LogEntry>>,
+    scalar_encoder: Arc<ScalarEncoder>,
+    swap_fee: f64,
+    num_exit: usize,
+) -> WiredBrokers {
+    let num_brokers = brokers.len();
+    let mut join_handles: Vec<std::thread::JoinHandle<Broker>> = Vec::with_capacity(num_brokers);
+
+    // Flatten the 2D learn tx vecs into per-broker assignments.
+    // market_learn_txs[mi][ei] — broker at slot mi*num_exit+ei gets market_learn_txs[mi][ei]
+    // exit_learn_txs[ei][mi] — broker at slot mi*num_exit+ei gets exit_learn_txs[ei][mi]
+    let mut market_learn_flat: Vec<Option<QueueSender<ObsLearn>>> = Vec::with_capacity(num_brokers);
+    for mi_txs in market_learn_txs {
+        for tx in mi_txs {
+            market_learn_flat.push(Some(tx));
+        }
+    }
+
+    let mut exit_learn_flat: Vec<Option<QueueSender<ExitLearn>>> =
+        (0..num_brokers).map(|_| None).collect();
+    for (ei, ei_txs) in exit_learn_txs.into_iter().enumerate() {
+        for (mi, tx) in ei_txs.into_iter().enumerate() {
+            let slot_idx = mi * num_exit + ei;
+            exit_learn_flat[slot_idx] = Some(tx);
+        }
+    }
+
+    for (slot_idx, ((broker, chain_rx), (mlt, elt))) in brokers
+        .into_iter()
+        .zip(output_rxs.into_iter())
+        .zip(
+            market_learn_flat
+                .into_iter()
+                .zip(exit_learn_flat.into_iter()),
+        )
+        .enumerate()
+    {
+        let market_learn_tx = mlt.unwrap_or_else(|| panic!("missing market learn tx for slot {}", slot_idx));
+        let exit_learn_tx = elt.unwrap_or_else(|| panic!("missing exit learn tx for slot {}", slot_idx));
+        let broker_console = console_pool.pop();
+        let broker_db = db_pool.pop();
+        let se = Arc::clone(&scalar_encoder);
+
+        let jh = std::thread::spawn(move || {
+            broker_program(
+                chain_rx,
+                market_learn_tx,
+                exit_learn_tx,
+                broker_console,
+                broker_db,
+                broker,
+                se,
+                swap_fee,
+            )
+        });
+        join_handles.push(jh);
+    }
+
+    console_pool.finish();
+    db_pool.finish();
+
+    WiredBrokers { join_handles }
 }
 
 // ─── Main ───────────────────────────────────────────────────────────────────
@@ -288,8 +382,10 @@ fn main() {
         ));
     }
 
-    // Console: one handle per stream + one per market observer + one per exit observer + one for main
-    let num_console = parsed.len() + num_market + num_exit + 1;
+    let num_brokers = num_market * num_exit;
+
+    // Console: streams + market + exit + brokers + main
+    let num_console = parsed.len() + num_market + num_exit + num_brokers + 1;
     let (handles, console_driver) = console(num_console);
     let mut console_pool = HandlePool::new("console", handles);
 
@@ -310,7 +406,7 @@ fn main() {
     );
     let (db_senders, db_driver) = database::<LogEntry>(
         &db_path,
-        num_market + num_exit,
+        num_market + num_exit + num_brokers,
         100,
         ledger::ledger_setup,
         ledger::ledger_insert,
@@ -328,8 +424,8 @@ fn main() {
         cache::<ThoughtAST, Vector>("encoder", 65536, num_market + num_exit);
     let mut cache_pool = HandlePool::new("cache", cache_handles);
 
-    // ─── Market observer pools (split from exit observer pools) ──────────
-    // Pop exit observer handles first so market observer wiring gets the rest.
+    // ─── Reserve handles for exit observers and brokers ──────────────────
+    // Pop exit + broker handles first so market observer wiring gets the rest.
     let mut exit_console_handles = Vec::with_capacity(num_exit);
     let mut exit_cache_handles = Vec::with_capacity(num_exit);
     let mut exit_db_handles = Vec::with_capacity(num_exit);
@@ -338,12 +434,60 @@ fn main() {
         exit_cache_handles.push(cache_pool.pop());
         exit_db_handles.push(db_pool.pop());
     }
+    let mut broker_console_handles = Vec::with_capacity(num_brokers);
+    let mut broker_db_handles = Vec::with_capacity(num_brokers);
+    for _ in 0..num_brokers {
+        broker_console_handles.push(console_pool.pop());
+        broker_db_handles.push(db_pool.pop());
+    }
+
+    // ─── Learn queues ──────────────────────────────────────────────────────
+    // Created BEFORE observers so the mailbox receivers exist at wire time.
+
+    // Market learn queues: market_learn_txs[mi][ei], market_learn_rxs[mi] = Vec<QueueReceiver>
+    let mut market_learn_txs: Vec<Vec<QueueSender<ObsLearn>>> = Vec::with_capacity(num_market);
+    let mut market_learn_rxs: Vec<Vec<QueueReceiver<ObsLearn>>> = Vec::with_capacity(num_market);
+    for _ in 0..num_market {
+        let mut txs = Vec::with_capacity(num_exit);
+        let mut rxs = Vec::with_capacity(num_exit);
+        for _ in 0..num_exit {
+            let (tx, rx) = queue_unbounded::<ObsLearn>();
+            txs.push(tx);
+            rxs.push(rx);
+        }
+        market_learn_txs.push(txs);
+        market_learn_rxs.push(rxs);
+    }
+
+    // Exit learn queues: exit_learn_txs[ei][mi], exit_learn_rxs[ei] = Vec<QueueReceiver>
+    let mut exit_learn_txs: Vec<Vec<QueueSender<ExitLearn>>> = Vec::with_capacity(num_exit);
+    let mut exit_learn_rxs: Vec<Vec<QueueReceiver<ExitLearn>>> = Vec::with_capacity(num_exit);
+    for _ in 0..num_exit {
+        let mut txs = Vec::with_capacity(num_market);
+        let mut rxs = Vec::with_capacity(num_market);
+        for _ in 0..num_market {
+            let (tx, rx) = queue_unbounded::<ExitLearn>();
+            txs.push(tx);
+            rxs.push(rx);
+        }
+        exit_learn_txs.push(txs);
+        exit_learn_rxs.push(rxs);
+    }
+
+    // Build mailbox receivers for market observers (fan-in from M brokers each)
+    let market_learn_mailboxes: Vec<enterprise::services::mailbox::MailboxReceiver<ObsLearn>> =
+        market_learn_rxs.into_iter().map(|rxs| mailbox(rxs)).collect();
+
+    // Build mailbox receivers for exit observers (fan-in from N brokers each)
+    let exit_learn_mailboxes: Vec<enterprise::services::mailbox::MailboxReceiver<ExitLearn>> =
+        exit_learn_rxs.into_iter().map(|rxs| mailbox(rxs)).collect();
 
     // ─── Market observers ──────────────────────────────────────────────────
     let observers = config::create_market_observers(dims, recalib_interval);
     let wired = wire_market_observers(
         observers,
         num_exit,
+        market_learn_mailboxes,
         cache_pool,
         console_pool,
         db_pool,
@@ -359,11 +503,29 @@ fn main() {
     let wired_exit = wire_exit_observers(
         exit_observers,
         wired.exit_queue_rxs,
+        exit_learn_mailboxes,
         exit_cache_pool,
         exit_console_pool,
         exit_db_pool,
         Arc::clone(&encoder),
         noise_floor,
+    );
+
+    // ─── Brokers ───────────────────────────────────────────────────────────
+    let brokers = config::create_brokers(num_market, num_exit, dims, args.swap_fee);
+    let scalar_encoder = Arc::new(ScalarEncoder::new(dims));
+    let broker_console_pool = HandlePool::new("broker-console", broker_console_handles);
+    let broker_db_pool = HandlePool::new("broker-db", broker_db_handles);
+    let wired_brokers = wire_brokers(
+        brokers,
+        wired_exit.output_rxs,
+        market_learn_txs,
+        exit_learn_txs,
+        broker_console_pool,
+        broker_db_pool,
+        scalar_encoder,
+        args.swap_fee,
+        num_exit,
     );
 
     // ─── Build pipelines ───────────────────────────────────────────────────
@@ -484,6 +646,32 @@ fn main() {
             }
             Err(_) => {
                 main_handle.err("exit observer thread panicked".to_string());
+            }
+        }
+    }
+
+    // Brokers see disconnect on chain_rx — they return.
+    // Join broker threads — get the trained brokers back.
+    for jh in wired_brokers.join_handles {
+        match jh.join() {
+            Ok(broker) => {
+                let grace_rate = if broker.trade_count > 0 {
+                    broker.grace_count as f64 / broker.trade_count as f64
+                } else {
+                    0.0
+                };
+                main_handle.out(format!(
+                    "broker[{}] {}: trades={} grace={:.3} ev={:.2} papers={}",
+                    broker.slot_idx,
+                    broker.observer_names.join("/"),
+                    broker.trade_count,
+                    grace_rate,
+                    broker.expected_value,
+                    broker.papers.len(),
+                ));
+            }
+            Err(_) => {
+                main_handle.err("broker thread panicked".to_string());
             }
         }
     }
