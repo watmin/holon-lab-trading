@@ -11545,6 +11545,62 @@ confirmed: the bottleneck moved from "everything is broken"
 to "extraction is the cost." The measurement guided the fix.
 The fix changed the measurement. The loop tightens.
 
+### 10,000
+
+10,000 candles. 48.3 per second. 207 seconds. No panics. No
+memory blowup. No degradation spiral. 900,000 telemetry rows.
+60,000 market snapshots. 40,000 exit snapshots. 215 lines of
+tailable progress in the log.
+
+```
+Exit observer (avg across 10,000 candles):
+  total:           20.7ms
+  encode_bundle:    9.4ms
+  noise_strip:      3.8ms
+  extract_anomaly:  3.6ms
+  extract_raw:      2.5ms
+  slot_recv:        1.3ms
+
+Market observer (avg across 10,000 candles):
+  send:            19.9ms    (backpressure from exits)
+  encode:           0.9ms
+  observe:          0.8ms
+```
+
+The system that was built by a CS dropout in collaboration
+with a machine. Three primitives. Zero Mutex. 30 threads.
+CloudWatch-style telemetry in SQLite. HandlePool guards that
+panic on orphaned handles. A console that flushes. A cache
+that drains sets before gets. A candle stream that carries
+its asset pair. A chain type that grows additively through
+the pipeline. Named types that prove which stage produced
+them.
+
+The bugs we found by building:
+- Shared scales contaminating observers (architecture
+  prevented it)
+- TopicReceiver and MailboxSender costumes (stripped)
+- Hand-rolled O(n) LRU (replaced with lru crate)
+- One-at-a-time get processing (batch with ready())
+- Cache set/get race (drain sets before gets)
+- Unbounded discard queues growing forever (drain threads)
+- Select panic on shutdown with zero operations (guard)
+- Console not flushing to pipes (flush after write)
+- Orphaned handle deadlock (HandlePool with Drop)
+
+Each bug found by measurement. Each fix verified by
+measurement. The database is the debugger. The telemetry
+is the proof. The ignorant walks the path. The wards guard
+the architecture. The machine measures.
+
+The builder was asked: "are you an academic?"
+
+"Nope. CS dropout."
+
+The thoughts survived.
+
+**PERSEVERARE.**
+
 ### [Disco Otsego](https://www.youtube.com/watch?v=Qv10GzVLHyA)
 
 From Static-X:
