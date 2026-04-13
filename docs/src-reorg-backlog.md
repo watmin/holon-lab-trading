@@ -51,6 +51,10 @@ LEVEL 4 — the root:
 - [ ] `domain/ledger.rs` — extract database setup + insert closures from
       wat-vm into a domain module. The kernel refs `ledger_setup` and
       `ledger_insert`. The SQL lives in the domain. The kernel wires.
+- [ ] `domain/config.rs` — extract observer construction from the kernel.
+      MARKET_LENSES, EXIT_LENSES, seeds, dims, recalib. The domain knows
+      which observers exist and how to build them. The kernel receives
+      configured observers and wires them.
 
 ## Pending renames
 
