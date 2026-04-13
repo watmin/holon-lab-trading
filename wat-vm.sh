@@ -12,14 +12,16 @@ usage() {
     echo "Usage: $0 <command> [args...]"
     echo ""
     echo "Commands:"
-    echo "  build                   Build wat-vm binary (release)"
-    echo "  run [flags]             Build + run with given flags"
-    echo "  smoke [candles]         Build + run quick smoke test (default: 500)"
-    echo "  kill                    Kill running wat-vm processes"
+    echo "  build                         Build wat-vm binary (release)"
+    echo "  run [flags]                   Build + run with given flags"
+    echo "  smoke [candles]               Build + run quick smoke test (default: 500)"
+    echo "  test <candles> [flags]        Build + run, log to runs/"
+    echo "  kill                          Kill running wat-vm processes"
     echo ""
     echo "Examples:"
     echo "  $0 build"
     echo "  $0 smoke 1000"
+    echo "  $0 test 10000"
     echo "  $0 run --stream USDC:WBTC:data/btc_5m_raw.parquet --max-candles 5000"
 }
 
@@ -55,6 +57,20 @@ do_smoke() {
     "$BINARY" --stream "USDC:WBTC:$DEFAULT_PARQUET" --max-candles "$candles"
 }
 
+do_test() {
+    local candles="${1:-10000}"
+    shift 2>/dev/null || true
+    do_build
+    local ts
+    ts=$(date +%Y%m%d_%H%M%S)
+    local log="$SCRIPT_DIR/runs/wat-vm_${ts}.log"
+    mkdir -p "$SCRIPT_DIR/runs"
+    echo "Test: $candles candles → $log"
+    echo "  tail -f $log"
+    "$BINARY" --stream "USDC:WBTC:$DEFAULT_PARQUET" --max-candles "$candles" "$@" \
+        2>&1 | tee "$log"
+}
+
 case "${1:-}" in
     build)
         do_build
@@ -66,6 +82,10 @@ case "${1:-}" in
     smoke)
         shift
         do_smoke "$@"
+        ;;
+    test)
+        shift
+        do_test "$@"
         ;;
     kill)
         do_kill
