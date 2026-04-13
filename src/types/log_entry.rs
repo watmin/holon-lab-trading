@@ -63,6 +63,16 @@ pub enum LogEntry {
         num_resolutions: usize,
         num_active_trades: usize,
     },
+    /// Exit observer snapshot — emitted by exit observer threads every N candles.
+    ExitObserverSnapshot {
+        candle: usize,
+        exit_idx: usize,
+        lens: String,
+        trail_experience: f64,
+        stop_experience: f64,
+        grace_rate: f64,
+        avg_residue: f64,
+    },
     /// Observer snapshot — emitted by observer threads every N candles.
     ObserverSnapshot {
         candle: usize,

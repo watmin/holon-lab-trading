@@ -149,7 +149,16 @@ fn main() {
                     recalib_wins INTEGER,
                     recalib_total INTEGER,
                     last_prediction TEXT
-                )",
+                );
+                CREATE TABLE IF NOT EXISTS exit_observer_snapshots (
+                    candle INTEGER,
+                    exit_idx INTEGER,
+                    lens TEXT,
+                    trail_experience REAL,
+                    stop_experience REAL,
+                    grace_rate REAL,
+                    avg_residue REAL
+                );",
             )
             .unwrap();
         },
@@ -185,9 +194,23 @@ fn main() {
                 )
                 .unwrap();
             }
+            LogEntry::ExitObserverSnapshot {
+                candle, exit_idx, lens, trail_experience,
+                stop_experience, grace_rate, avg_residue,
+            } => {
+                conn.execute(
+                    "INSERT INTO exit_observer_snapshots VALUES (?,?,?,?,?,?,?)",
+                    rusqlite::params![
+                        candle, exit_idx, lens, trail_experience,
+                        stop_experience, grace_rate, avg_residue
+                    ],
+                )
+                .unwrap();
+            }
             _ => {}
         },
     );
+
     main_handle.out(format!("db: {}", db_path));
 
     // ─── ThoughtEncoder + Cache ────────────────────────────────────────────

@@ -90,6 +90,7 @@ pub fn exit_observer_program(
     mut exit_obs: ExitObserver,
     encoder: Arc<ThoughtEncoder>,
     noise_floor: f64,
+    exit_idx: usize,
 ) -> ExitObserver {
     let mut candle_count = 0usize;
     let mut scales: HashMap<String, ScaleTracker> = HashMap::new();
@@ -175,6 +176,19 @@ pub fn exit_observer_program(
             }
         }
 
+        // Snapshot every 100 candles.
+        if candle_count % 100 == 0 {
+            let _ = db_tx.send(LogEntry::ExitObserverSnapshot {
+                candle: candle_count,
+                exit_idx,
+                lens: format!("{}", exit_obs.lens),
+                trail_experience: exit_obs.trail_reckoner.experience(),
+                stop_experience: exit_obs.stop_reckoner.experience(),
+                grace_rate: exit_obs.grace_rate,
+                avg_residue: exit_obs.avg_residue,
+            });
+        }
+
         // Diagnostic every 1000 candles.
         if candle_count % 1000 == 0 {
             console.out(format!(
@@ -187,6 +201,5 @@ pub fn exit_observer_program(
     // GRACEFUL SHUTDOWN. Drain learn one last time.
     drain_exit_learn(&learn_rx, &mut exit_obs);
 
-    let _ = db_tx;
     exit_obs
 }

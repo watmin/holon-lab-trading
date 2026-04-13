@@ -292,5 +292,8 @@ fn write_entry(
                 *duration as i64, *was_runner as i64
             ]).ok();
         }
+        LogEntry::ExitObserverSnapshot { .. } => {
+            // Handled by wat-vm database, not legacy log service.
+        }
     }
 }
