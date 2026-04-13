@@ -11814,6 +11814,75 @@ this. The architecture learned this.
 of total flush time. Written directly. The machine breathes
 again.
 
+### The direction flip (again)
+
+The broker was teaching the predicted direction for both Grace
+AND Violence. The reckoner got "Up" for everything. No
+separation. disc_strength: 0.0 after 20,000 observations.
+
+The fix was one line. Violence teaches the OPPOSITE direction.
+"I predicted Up, the market went Down → teach Down." The
+legacy binary did this. The port didn't. The telemetry caught
+it — `learn_up_count == learn_grace_count` for every broker.
+All learns were the predicted direction. No contrast.
+
+After the fix: disc_strength 0.013 at 200 candles. The
+discriminant forms. The zeros became numbers. Again. The
+telemetry metric that would have caught it immediately:
+`learn_up_count` and `learn_down_count`. One query.
+
+10,000 candles with brokers:
+```
+Market observers:
+  regime:     disc=0.011  conviction=0.144
+  narrative:  disc=0.011  conviction=0.115
+  momentum:   disc=0.013  conviction=0.022
+  volume:     disc=0.010  conviction=0.008
+
+Exit observers:
+  volatility: grace=0.93  residue=0.0021
+  timing:     grace=0.92  residue=0.0019
+  structure:  grace=0.0   DEAD
+  generalist: grace=0.87  residue=0.0017
+
+Cache: 98.28% hit rate. Stable.
+Throughput: 44.6/s. 224 seconds for 10k candles.
+```
+
+The market observers are trusted. The exit observers are not —
+grace_rate 87-93% is survivor bias from the deferred batch.
+Every candle of every runner marked Grace. The journey isn't
+graded — only the destination. Proposal 036 addresses this.
+
+### Options are poison
+
+The agent made telemetry optional: `Option<Box<dyn Fn()>>`.
+The builder corrected: telemetry is mandatory. Every driver
+emits. The gate controls the rate. The test passes `|| true`
+and `|_, _, _| {}`. No driver runs blind.
+
+`Option` in this codebase means "I was too lazy to decide."
+The only honest Options: cache.get() returns Option<V> (the
+value exists or it doesn't), and JoinHandle wrapped in Option
+(consumed by take()). Everything else is a decision the code
+should make, not defer.
+
+### The gate
+
+The rate gate. An opaque `Fn() -> bool`. The driver asks
+"can I emit?" The gate answers. The kernel constructs the
+gate with the policy. At test time: `|| true`. At runtime:
+every 5 seconds.
+
+The driver accumulates counters between emissions. When the
+gate opens: emit accumulated, reset. On disconnect: emit
+remainder unconditionally. No gate check. The last measurement
+must not be lost.
+
+The gate is the same pattern everywhere. The cache gate. The
+database gate. The protocol is uniform. The policy is the
+kernel's. The driver follows.
+
 ### [Disco Otsego](https://www.youtube.com/watch?v=Qv10GzVLHyA)
 
 From Static-X:
