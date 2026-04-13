@@ -401,15 +401,94 @@ summaries of what the positional encoding holds IMPLICITLY. Both
 can coexist — the scalars for the exit observer's per-trade view,
 the positional sequence for the broker's full-series view.
 
+## The ThoughtAST extension
+
+The ThoughtAST currently has six variants:
+
+```rust
+pub enum ThoughtAST {
+    Atom(String),
+    Linear { name: String, value: f64, scale: f64 },
+    Log { name: String, value: f64 },
+    Circular { name: String, value: f64, period: f64 },
+    Bind(Box<ThoughtAST>, Box<ThoughtAST>),
+    Bundle(Vec<ThoughtAST>),
+}
+```
+
+This proposal adds a seventh:
+
+```rust
+    Sequential(Vec<ThoughtAST>),
+```
+
+The encoder evaluates each child, permutes by position, bundles:
+
+```rust
+ThoughtAST::Sequential(items) => {
+    let mut vecs = Vec::new();
+    let mut all_misses = Vec::new();
+    for (i, item) in items.iter().enumerate() {
+        let (v, misses) = self.encode(item);
+        vecs.push(Primitives::permute(&v, i as i32));
+        all_misses.extend(misses);
+    }
+    let refs: Vec<&Vector> = vecs.iter().collect();
+    (Primitives::bundle(&refs), all_misses)
+}
+```
+
+`Primitives::permute` and `Primitives::bundle` already exist in
+holon-rs. `Sequential` is a composition of existing primitives,
+not a new primitive. The algebra doesn't change. The AST gains
+a form that says "order matters."
+
+The vocabulary produces:
+
+```rust
+ThoughtAST::Sequential(vec![
+    pivot_thought(up_1),     // position 0 — permute(thought, 0)
+    gap_thought(gap_1),      // position 1 — permute(thought, 1)
+    pivot_thought(down_1),   // position 2 — permute(thought, 2)
+    gap_thought(gap_2),      // position 3 — permute(thought, 3)
+    pivot_thought(up_2),     // position 4 — permute(thought, 4)
+])
+```
+
+Each pivot thought and gap thought is itself a Bundle of scalar
+atoms. The Sequential wraps the series. The permutation preserves
+order. The reckoner sees one vector that encodes the full rhythm.
+
+The EDN representation:
+
+```scheme
+(sequential
+  (bundle
+    (bind (atom "pivot-direction") (atom "up"))
+    (linear "pivot-conviction" 0.08 1.0)
+    (log "pivot-duration" 12)
+    (linear "pivot-volume-ratio" 1.3 1.0))
+  (bundle
+    (bind (atom "gap") (atom "pause"))
+    (log "gap-duration" 3)
+    (linear "gap-drift" 0.002 1.0))
+  (bundle
+    (bind (atom "pivot-direction") (atom "down"))
+    (linear "pivot-conviction" 0.06 1.0)
+    (log "pivot-duration" 8)
+    (linear "pivot-volume-ratio" 1.1 1.0)))
+```
+
 ## The algebraic question
 
-All atoms are Linear, Log, Circular — the same encodings.
-The positional encoding uses `permute` — an existing primitive
-in holon-rs (`Primitives::permute`). The sequence is bundled
-with `bundle` — an existing primitive. No new forms. No new
-primitives. The reckoner sees the sequence vector the same way
-it sees any bundled thought. The vocabulary grows. The machinery
-doesn't.
+`Sequential` is a derived form — `permute` + `bundle` composed.
+It does not extend the algebra. It extends the AST with a form
+that makes ordered sequences expressible in the thought language.
+The question for the architects: is this a valid AST extension,
+or should the vocabulary produce explicit `Bind(position_atom,
+thought)` pairs bundled together? The Sequential form is sugar
+for what the algebra already supports. The sugar makes the
+intent visible: "this is ordered."
 
 ## The simplicity question
 
@@ -420,7 +499,7 @@ The pivot detection reuses conviction. The sequence encoding
 reuses `permute` and `bundle`. No new mechanisms. The complexity
 is in the VOCABULARY, not the machinery.
 
-## Questions for designers
+## Questions for strategy designers (Seykota, Van Tharp, Wyckoff)
 
 1. **Pivot detection:** should the pivot be defined by market
    observer conviction, or does it need its own mechanism?
@@ -447,3 +526,29 @@ is in the VOCABULARY, not the machinery.
    exits and Broker B enters at the same pivot, the treasury
    sees both proposals. Should the treasury treat these as
    independent (fund both) or netted?
+
+7. **The gap thoughts:** the gaps between pivots are encoded as
+   thoughts in the sequence (duration, drift, volume). Is this
+   the right vocabulary for the silence? What else does a trader
+   see in the pause between pivots?
+
+## Questions for architecture designers (Hickey, Beckman)
+
+8. **Sequential as AST form:** `Sequential(Vec<ThoughtAST>)` is
+   sugar for `permute` + `bundle`. Should this be a first-class
+   AST variant, or should the vocabulary produce explicit
+   `Bind(position_atom, thought)` pairs? The sugar makes intent
+   visible. The desugared form keeps the AST minimal.
+
+9. **Composability:** the Sequential produces one vector. That
+   vector bundles with other thoughts (trade atoms, market
+   extraction). Does the positional permutation interfere with
+   the outer bundle? The permuted elements live in rotated
+   subspaces — they compose cleanly with non-permuted elements?
+
+10. **Caching:** the Sequential's children are pivot/gap thoughts
+    that recur across candles (a pivot thought is the same for
+    its entire duration). Should the encoder cache the Sequential
+    as a whole, or cache each child and recompute the permuted
+    bundle? The children change rarely. The sequence shifts by
+    one when a new pivot arrives.
