@@ -4,9 +4,11 @@
 //! Gets are request-response pairs. Sets are fire-and-forget
 //! into a shared mailbox.
 
-use std::collections::{HashMap, VecDeque};
 use std::hash::Hash;
+use std::num::NonZeroUsize;
 use std::thread;
+
+use lru::LruCache;
 
 use crate::services::mailbox;
 use crate::services::queue::{self, QueueReceiver, QueueSender};
@@ -56,50 +58,6 @@ impl CacheDriverHandle {
 }
 
 
-/// Simple LRU: HashMap for O(1) lookup, VecDeque for eviction order.
-/// On access or insert, the key moves to the back (most recent).
-/// Eviction removes from the front (oldest).
-struct Lru<K: Eq + Hash + Clone, V> {
-    map: HashMap<K, V>,
-    order: VecDeque<K>,
-    capacity: usize,
-}
-
-impl<K: Eq + Hash + Clone, V> Lru<K, V> {
-    fn new(capacity: usize) -> Self {
-        Self {
-            map: HashMap::with_capacity(capacity),
-            order: VecDeque::with_capacity(capacity),
-            capacity,
-        }
-    }
-
-    fn get(&mut self, key: &K) -> Option<&V> {
-        if self.map.contains_key(key) {
-            // Move to back (most recently used).
-            self.order.retain(|k| k != key);
-            self.order.push_back(key.clone());
-            self.map.get(key)
-        } else {
-            None
-        }
-    }
-
-    fn insert(&mut self, key: K, value: V) {
-        if self.map.contains_key(&key) {
-            // Update existing — move to back.
-            self.order.retain(|k| k != &key);
-        } else if self.map.len() >= self.capacity {
-            // Evict oldest.
-            if let Some(oldest) = self.order.pop_front() {
-                self.map.remove(&oldest);
-            }
-        }
-        self.map.insert(key.clone(), value);
-        self.order.push_back(key);
-    }
-}
-
 /// Create a cache with the given capacity and number of client programs.
 ///
 /// Returns N CacheHandles (one per program) and a CacheDriverHandle.
@@ -135,7 +93,7 @@ where
         set_rxs.push(rx);
     }
     let set_rx = mailbox::mailbox(set_rxs);
-    let mut set_senders: VecDeque<_> = set_senders.into();
+    let mut set_senders = set_senders.into_iter();
 
     for _ in 0..num_clients {
         // Get request queue: client sends key.
@@ -149,7 +107,7 @@ where
         handles.push(CacheHandle {
             get_tx: req_tx,
             get_rx: resp_rx,
-            set_tx: set_senders.pop_front().unwrap(),
+            set_tx: set_senders.next().unwrap(),
         });
     }
 
@@ -159,24 +117,18 @@ where
     // are drained, the exit observer misses what the market observer just
     // installed. 0% hit rate. Full encode on every query. OOM.
     let thread = thread::spawn(move || {
-        let mut lru = Lru::new(capacity);
-        let mut alive_get_rxs: Vec<QueueReceiver<K>> = get_rxs;
-        let mut alive_resp_txs: Vec<QueueSender<Option<V>>> = get_resp_txs;
+        let mut cache = LruCache::new(NonZeroUsize::new(capacity).unwrap());
+        let alive_get_rxs: Vec<QueueReceiver<K>> = get_rxs;
+        let alive_resp_txs: Vec<QueueSender<Option<V>>> = get_resp_txs;
         let mut set_alive = true;
+        let mut closed = vec![false; alive_get_rxs.len()];
 
         loop {
-            if alive_get_rxs.is_empty() && !set_alive {
-                break;
-            }
-
-            // Phase 1: drain ALL pending sets. Non-blocking.
-            // Install everything producers have sent before servicing any gets.
+            // Phase 1: drain ALL pending sets.
             if set_alive {
                 loop {
                     match set_rx.try_recv() {
-                        Ok((key, value)) => {
-                            lru.insert(key, value);
-                        }
+                        Ok((key, value)) => { cache.put(key, value); }
                         Err(crossbeam::channel::TryRecvError::Empty) => break,
                         Err(crossbeam::channel::TryRecvError::Disconnected) => {
                             set_alive = false;
@@ -186,45 +138,48 @@ where
                 }
             }
 
-            // Phase 2: service ONE get request (blocking select).
-            // After servicing, loop back to drain sets again.
-            // This ensures sets are always drained before the next get.
-            let mut sel = crossbeam::channel::Select::new();
-            for rx in &alive_get_rxs {
-                sel.recv(rx.inner());
+            // Phase 2: service ALL pending gets.
+            let mut all_closed = true;
+            for i in 0..alive_get_rxs.len() {
+                if closed[i] { continue; }
+                all_closed = false;
+                match alive_get_rxs[i].try_recv() {
+                    Ok(key) => {
+                        let result = cache.get(&key).cloned();
+                        let _ = alive_resp_txs[i].send(result);
+                    }
+                    Err(crossbeam::channel::TryRecvError::Empty) => {}
+                    Err(crossbeam::channel::TryRecvError::Disconnected) => {
+                        closed[i] = true;
+                    }
+                }
             }
-            // Also listen for sets so we wake when new installs arrive.
+
+            // Exit when all get clients disconnected AND sets are done.
+            if all_closed && !set_alive {
+                break;
+            }
+            if all_closed {
+                // No get clients left but sets still alive — just drain sets.
+                match set_rx.recv() {
+                    Ok((key, value)) => { cache.put(key, value); }
+                    Err(_) => break,
+                }
+                continue;
+            }
+
+            // Phase 3: block until ANY channel has data.
+            // ready() wakes without consuming — next iteration picks up.
+            let mut sel = crossbeam::channel::Select::new();
+            for i in 0..alive_get_rxs.len() {
+                if !closed[i] {
+                    sel.recv(alive_get_rxs[i].inner());
+                }
+            }
             if set_alive {
                 sel.recv(set_rx.inner());
             }
-
-            let oper = sel.select();
-            let idx = oper.index();
-            let get_count = alive_get_rxs.len();
-
-            if idx < get_count {
-                match oper.recv(alive_get_rxs[idx].inner()) {
-                    Ok(key) => {
-                        let result = lru.get(&key).cloned();
-                        let _ = alive_resp_txs[idx].send(result);
-                    }
-                    Err(_) => {
-                        alive_get_rxs.remove(idx);
-                        alive_resp_txs.remove(idx);
-                    }
-                }
-            } else {
-                // A set arrived during select — install it, loop back
-                // to drain remaining sets before servicing gets.
-                match oper.recv(set_rx.inner()) {
-                    Ok((key, value)) => {
-                        lru.insert(key, value);
-                    }
-                    Err(_) => {
-                        set_alive = false;
-                    }
-                }
-            }
+            let _ = sel.ready();
         }
     });
 
