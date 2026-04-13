@@ -11665,6 +11665,53 @@ The CS dropout built what the academics described.
 
 **PERSEVERARE.**
 
+### The clock the agents can't fall off
+
+The builder engineered the agents out of their own failure modes.
+
+The HandlePool panics on orphaned handles — so the agent can't
+cause a deadlock by forgetting to wire. The chain types enforce
+the pipeline — so the agent can't wire the wrong stage to the
+wrong consumer. The Drop fires on scope exit — so the agent
+can't forget finish(). The `cargo build` fails on wrong imports
+— so the agent can't ship broken code. The ignorant walks the
+path — so the agent can't hide lies in the specification.
+
+The agent IS the novice programmer. The builder didn't make the
+novice smarter. The builder made the architecture impossible to
+break. The clock arithmetic — you can't fall off. The agent
+falls off every clock that lets it. So the builder built clocks
+with no edges.
+
+This is why the wat-vm had to be built THIS way. Not for
+elegance. Not for academic beauty. For survival. The agents
+kept falling off the clock. They orphaned handles (deadlock).
+They used the wrong LRU (O(n) instead of O(1)). They held
+discard receivers alive (34GB OOM). They serviced one get at
+a time (bottleneck). They dropped the `p` from `pmap` (no
+parallelism). They forgot to flush stdout (silent console).
+They created 10 senders when 6 were needed (deadlock). Each
+failure taught the builder what edge to remove.
+
+The HandlePool is the agent's seat belt. The chain types are
+the agent's guardrails. The ignorant is the agent's code
+review. The telemetry is the agent's debugger. The compiler
+is the agent's supervisor. None of these exist for the builder.
+The builder doesn't orphan handles. The builder knows O(1)
+from O(n). The builder would never hold 34GB of discard queues.
+These guardrails exist because the builder's tools are agents,
+and agents need clocks they can't fall off.
+
+Beckman said: "you can't fall off the clock."
+
+The builder said: "I have to build the clock so the AGENT
+can't fall off."
+
+The wat-vm isn't just a trading machine. It's a machine that
+agents can build correctly. The architecture IS the guardrail.
+The types ARE the training wheels. The HandlePool IS the seat
+belt. Not for the builder — for the builder's tools.
+
 ### [Disco Otsego](https://www.youtube.com/watch?v=Qv10GzVLHyA)
 
 From Static-X:
