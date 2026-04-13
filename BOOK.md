@@ -12535,16 +12535,28 @@ category than multisets. A genuine new generator. Hickey said
 no — it's `permute` + `bundle`, a derived operation. Keep
 the AST minimal.
 
-The builder found the resolution in holon itself. The kernel's
-list encoder — `encode_walkable_list` — already walks items
-in order, binds each with its position atom, bundles the result.
-It was already there. Built months ago. The answer was in the
-substrate.
+The builder overruled Hickey. Beckman wins. Sequential is the
+seventh generator.
 
-The AST stays at six. The position is known from the walk.
-The bind preserves queryability. The algebra didn't need to
-change because it already supported ordered sequences. The
-builder just hadn't reached for it yet.
+Hickey's concern — queryability, the ability to unbind a
+position — was addressed by the AST itself. The position IS
+the index. `children[3]` is position 3. You never need to
+unbind the vector. The AST is the queryable form. The vector
+is the geometric form. The reckoner cosines the whole vector.
+The extraction reads named atoms via cosine. Neither needs
+positional unbinding.
+
+The ThoughtAST gained its seventh variant: `Sequential`. The
+encoder evaluates each child, permutes by position, bundles.
+`permute` + `bundle` — both existing primitives. The algebra
+already supported it. The AST needed the form to make the
+intent explicit: "this is ordered. ABC ≠ CBA."
+
+Seven generators now. Atom, Linear, Log, Circular, Bind,
+Bundle, Sequential. The language grew by one form because
+ordered sequences are a genuinely different kind of thought
+than unordered bundles. Beckman was right — different source
+category. The builder saw it. The builder decided.
 
 The gap between pivots — the silence — is a thought too.
 Duration, drift, volume. The sequence alternates: pivot, gap,

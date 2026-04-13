@@ -1,6 +1,7 @@
 # Resolution v2: Proposal 044 — Pivot Biography (Final)
 
-**Decision: APPROVED. All five designers converged.**
+**Decision: APPROVED. All five designers converged. Sequential
+is the seventh generator. Beckman wins.**
 
 ## Strategy designers — unanimous
 
@@ -12,37 +13,66 @@ portfolio biography are all approved as vocabulary. No hard caps
 on concurrent trades. The reckoner learns from portfolio-heat.
 The treasury manages aggregate risk when built.
 
-## Architecture designers — tension dissolved
+## Architecture designers — Beckman wins
 
-Beckman said Sequential is a genuine seventh generator. Hickey
-said keep the AST at six — Sequential is a derived operation.
+Beckman: Sequential IS a genuine seventh generator. Ordered
+lists are a different source functor than multisets. The
+permutation automorphism is not expressible from the existing
+six generators. Sequential deserves first-class status.
 
-The datamancer found the resolution: **holon-rs already has this.**
+Hickey: CONDITIONAL — wanted to keep AST at six. Concerned
+about queryability: `permute` sacrifices the ability to unbind
+a position.
 
-`encode_walkable_list` in the kernel encoder (line 340):
-- Walks items in order with `enumerate()`
-- Creates position atom `[0]`, `[1]`, `[2]`
-- **Binds** position with item — queryable, unbindable
-- Bundles all bound pairs
+**Resolution: Beckman wins. Sequential is the seventh variant.**
 
-This IS Hickey's `Bind(pos-N, thought)` — already implemented.
-Position is known from the walk. The bind preserves queryability.
-The AST stays at six generators. The pivot series is a LIST
-that the existing encoder walks with automatic position binding.
+Hickey's queryability concern is addressed by the AST itself.
+The position is known from the tree — `children[3]` IS
+position 3. You never need to unbind the vector to know the
+position. The AST is the queryable form. The vector is the
+geometric form. The reckoner cosines the whole vector. The
+extraction reads named atoms via cosine. Neither needs
+positional unbinding.
 
-Beckman's category argument was correct — ordered lists ARE a
-different source functor than multisets. The implementation
-already handles this through `WalkType::List`. The algebra
-didn't need to change. It already supported it.
+holon-rs already has `encode_walkable_list` which uses
+`Bind(pos, item)` for JSON/walkable data. The ThoughtAST's
+Sequential uses `permute(item, i)` — which Beckman correctly
+identifies as the algebraically proper operation for ordered
+composition. The walkable list encoder is for generic data.
+Sequential is for thoughts. Different source categories,
+different encoding strategies, same algebra underneath.
 
-Hickey's architectural note adopted: `permute` sacrifices
-queryability. `Bind(pos, thought)` preserves it. The existing
-list encoder uses bind. If extraction ever needs per-position
-access — "what was at pivot 3?" — it works.
+```rust
+pub enum ThoughtAST {
+    Atom(String),
+    Linear { name: String, value: f64, scale: f64 },
+    Log { name: String, value: f64 },
+    Circular { name: String, value: f64, period: f64 },
+    Bind(Box<ThoughtAST>, Box<ThoughtAST>),
+    Bundle(Vec<ThoughtAST>),
+    Sequential(Vec<ThoughtAST>),  // NEW — seventh generator
+}
+```
 
-Beckman's caching note adopted: cache each child independently.
-The list recomputation (bind + bundle over cached children) is
-trivially cheap at N≤20.
+The encoder:
+
+```rust
+ThoughtAST::Sequential(items) => {
+    let mut vecs = Vec::new();
+    let mut all_misses = Vec::new();
+    for (i, item) in items.iter().enumerate() {
+        let (v, misses) = self.encode(item);
+        vecs.push(Primitives::permute(&v, i as i32));
+        all_misses.extend(misses);
+    }
+    let refs: Vec<&Vector> = vecs.iter().collect();
+    (Primitives::bundle(&refs), all_misses)
+}
+```
+
+Caching (Beckman adopted): cache each child independently.
+The Sequential recomputes from cached children — permute +
+bundle is trivially cheap at N≤20.
 
 ## The complete vocabulary
 
@@ -68,31 +98,39 @@ trivially cheap at N≤20.
   (linear "gap-volume" avg-vol-ratio 1.0))
 ```
 
-### Pivot series (ordered list — walked by existing encoder)
+### Pivot series (Sequential — the seventh generator)
 
-The series alternates pivot and gap thoughts. The encoder
-binds each with its position and bundles. One vector holds
-the full rhythm. Bounded at ~20 entries (10 pivots + 10 gaps).
+```scheme
+(sequential
+  pivot-thought-0    ;; permute(thought, 0) — most recent
+  gap-thought-0      ;; permute(thought, 1)
+  pivot-thought-1    ;; permute(thought, 2)
+  gap-thought-1      ;; permute(thought, 3)
+  pivot-thought-2)   ;; permute(thought, 4)
+```
+
+One vector holds the full rhythm. Bounded at ~20 entries.
+The order IS the geometry. ABC ≠ CBA.
 
 ### Pivot series scalars (explicit summaries)
 
 ```scheme
-(linear "pivot-low-trend" ...)        ;; low-to-low
-(linear "pivot-high-trend" ...)       ;; high-to-high
-(linear "pivot-range-trend" ...)      ;; range expansion/compression
-(linear "pivot-spacing-trend" ...)    ;; spacing acceleration
-(log "candles-since-pivot" ...)       ;; current pause duration
-(log "pivot-count-in-trade" ...)      ;; structure depth
-(linear "pivot-volume-ratio" ...)     ;; effort at pivot
-(linear "pivot-effort-result" ...)    ;; effort vs result
+(linear "pivot-low-trend" ...)
+(linear "pivot-high-trend" ...)
+(linear "pivot-range-trend" ...)
+(linear "pivot-spacing-trend" ...)
+(log "candles-since-pivot" ...)
+(log "pivot-count-in-trade" ...)
+(linear "pivot-volume-ratio" ...)
+(linear "pivot-effort-result" ...)
 ```
 
 ### Trade biography (per-trade, to exit observer)
 
 ```scheme
-(log "pivots-since-entry" ...)        ;; temporal age in pivots
-(log "pivots-survived" ...)           ;; resilience
-(linear "entry-vs-pivot-avg" ...)     ;; where entered vs recent pivots
+(log "pivots-since-entry" ...)
+(log "pivots-survived" ...)
+(linear "entry-vs-pivot-avg" ...)
 ```
 
 ### Portfolio biography (aggregate, on broker)
@@ -112,20 +150,19 @@ the full rhythm. Bounded at ~20 entries (10 pivots + 10 gaps).
 
 ## What changes
 
-1. Broker gains `pivot_memory: VecDeque<PivotRecord>` (bounded ~20)
-2. Broker detects pivots from market observer conviction
-3. Pivot series encoded as a list (existing `WalkType::List` encoder)
-4. Pivot series scalars computed from pivot memory (8 atoms)
-5. Trade biography atoms (3) added to trade update chain
-6. Portfolio biography atoms (10) composed with broker thought
-7. Gap thoughts recorded between pivots
-8. No new AST variant. Six generators stay six.
-9. No hard caps on concurrent trades.
+1. **ThoughtAST gains Sequential** — seventh variant. `permute` + `bundle`.
+2. Broker gains `pivot_memory: VecDeque<PivotRecord>` (bounded ~20)
+3. Broker detects pivots from market observer conviction
+4. Pivot series encoded as Sequential thought
+5. Pivot series scalars computed from pivot memory (8 atoms)
+6. Trade biography atoms (3) added to trade update chain
+7. Portfolio biography atoms (10) composed with broker thought
+8. Gap thoughts recorded between pivots
+9. No hard caps on concurrent trades
 
 ## What doesn't change
 
-- The ThoughtAST enum (six variants)
-- The holon-rs kernel (already supports list encoding)
+- The holon-rs kernel (permute and bundle already exist)
 - The pipeline, observers, chains, telemetry
 - Papers register every candle (043)
 - The three primitives. The architecture just is.
