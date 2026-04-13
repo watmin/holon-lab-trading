@@ -171,13 +171,19 @@ where
             // Phase 3: block until ANY channel has data.
             // ready() wakes without consuming — next iteration picks up.
             let mut sel = crossbeam::channel::Select::new();
+            let mut has_ops = false;
             for i in 0..alive_get_rxs.len() {
                 if !closed[i] {
                     sel.recv(alive_get_rxs[i].inner());
+                    has_ops = true;
                 }
             }
             if set_alive {
                 sel.recv(set_rx.inner());
+                has_ops = true;
+            }
+            if !has_ops {
+                break; // all channels gone between phases
             }
             let _ = sel.ready();
         }
