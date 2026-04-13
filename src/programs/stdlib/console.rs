@@ -93,9 +93,11 @@ pub fn console(num_producers: usize) -> (Vec<ConsoleHandle>, ConsoleDriverHandle
             match rx.recv() {
                 Ok(ConsoleMsg::Out(msg)) => {
                     writeln!(io::stdout(), "{}", msg).ok();
+                    io::stdout().flush().ok();
                 }
                 Ok(ConsoleMsg::Err(msg)) => {
                     writeln!(io::stderr(), "{}", msg).ok();
+                    io::stderr().flush().ok();
                 }
                 Err(_) => break, // all senders dropped
             }
