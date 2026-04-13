@@ -11765,6 +11765,55 @@ The builder drives the wat. The agents drive the Rust. The
 guardrails protect the agents from themselves. Both. Not one
 or the other.
 
+### The self-loop
+
+The database held its own sender.
+
+The `db_self_tx` was captured in the emit closure. The emit
+closure was passed to the database driver. The driver held the
+closure. The closure held the sender. The sender kept the
+mailbox alive. The database waited for all senders to disconnect.
+One sender was inside the database. Circular. Deadlock.
+
+The protocol doesn't support self-loops. A program can't be
+its own client through a mailbox. The mailbox waits for ALL
+senders to disconnect. If one sender is INSIDE the driver,
+it never disconnects. The driver can't exit because the sender
+is alive. The sender can't die because the driver is alive.
+
+The agent built it. The agent jumped off the clock because the
+telemetry senders bypassed the HandlePool. They were popped from
+a vec and captured into closures — no pool, no finish(), no
+guard. Orphaned handles wearing closure costumes. The HandlePool
+couldn't catch them because the HandlePool never saw them.
+
+The fix: the database writes its own telemetry directly. It has
+the connection. The emit closure receives `&Connection` and
+INSERTs directly. No pipe. No sender. No circular dependency.
+The protocol applies to external programs. The database is not
+its own client — it's the writer. It writes.
+
+```
+Before (deadlock):
+  kernel → db_self_tx → db mailbox → db driver → emit closure
+                                         ↑              |
+                                         └──────────────┘
+  Circular. The driver holds its own sender. Forever.
+
+After (direct write):
+  db driver → emit closure → conn.execute(INSERT) → done
+  No pipe. No sender. No circle.
+```
+
+The protocol has a boundary: you can't send to yourself through
+your own mailbox. The mailbox is for OTHERS to reach you. You
+reach yourself through your own connection. The database learned
+this. The architecture learned this.
+
+98.3% cache hit rate. 441 flushes. 44,052 rows. 2.66 seconds
+of total flush time. Written directly. The machine breathes
+again.
+
 ### [Disco Otsego](https://www.youtube.com/watch?v=Qv10GzVLHyA)
 
 From Static-X:
