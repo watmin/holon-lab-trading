@@ -11,10 +11,11 @@ use crate::encoding::scale_tracker::ScaleTracker;
 use crate::encoding::thought_encoder::ThoughtAST;
 
 // Vocab imports -- market
+// Proposals 041+042: fibonacci, ichimoku, stochastic removed from all lenses.
+// Their modules still exist but are no longer called.
 use crate::vocab::market::divergence::encode_divergence_facts;
 use crate::vocab::market::fibonacci::encode_fibonacci_facts;
 use crate::vocab::market::flow::encode_flow_facts;
-use crate::vocab::market::ichimoku::encode_ichimoku_facts;
 use crate::vocab::market::keltner::encode_keltner_facts;
 use crate::vocab::market::momentum::encode_momentum_facts;
 use crate::vocab::market::oscillators::encode_oscillator_facts;
@@ -22,7 +23,6 @@ use crate::vocab::market::persistence::encode_persistence_facts;
 use crate::vocab::market::price_action::encode_price_action_facts;
 use crate::vocab::market::regime::encode_regime_facts;
 use crate::vocab::market::standard::encode_standard_facts;
-use crate::vocab::market::stochastic::encode_stochastic_facts;
 use crate::vocab::market::timeframe::encode_timeframe_facts;
 
 // Vocab imports -- exit
@@ -34,53 +34,129 @@ use crate::vocab::exit::self_assessment::encode_exit_self_assessment_facts;
 use crate::vocab::shared::time::encode_time_facts;
 
 /// Collect market vocab facts for a specific lens.
-/// Each MarketLens selects different modules. All include shared/time + standard.
-/// This is the CRITICAL wiring -- different lenses see different market data.
+/// Proposals 041+042: three schools (Dow, Pring, Wyckoff), 11 lenses.
+/// All include shared/time. Standard window facts go to lenses that need them.
+/// Each lens calls the vocab modules that produce its atoms. A few extra atoms
+/// per module is noise the subspace strips — no per-atom filtering needed.
 pub fn market_lens_facts(lens: &MarketLens, candle: &Candle, window: &[Candle], scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
     // Shared: time facts (all lenses get these)
     let mut facts = encode_time_facts(candle);
 
-    // Standard: window-based facts (all lenses get these)
-    facts.extend(encode_standard_facts(window, scales));
-
-    // Lens-specific modules
     match lens {
-        MarketLens::Momentum => {
-            facts.extend(encode_oscillator_facts(candle, scales));
+        // ── Dow school ──────────────────────────────────────────────────
+        MarketLens::DowTrend => {
+            // close-sma20/50/200, adx, di-spread, macd-hist, atr-ratio
             facts.extend(encode_momentum_facts(candle, scales));
-            facts.extend(encode_stochastic_facts(candle, scales));
-        }
-        MarketLens::Structure => {
-            facts.extend(encode_keltner_facts(candle, scales));
-            facts.extend(encode_fibonacci_facts(candle, scales));
-            facts.extend(encode_ichimoku_facts(candle, scales));
-            facts.extend(encode_price_action_facts(candle, scales));
-        }
-        MarketLens::Volume => {
-            facts.extend(encode_flow_facts(candle, scales));
-        }
-        MarketLens::Narrative => {
-            facts.extend(encode_timeframe_facts(candle, scales));
-            facts.extend(encode_divergence_facts(candle, scales));
-        }
-        MarketLens::Regime => {
+            // hurst, autocorrelation, adx
+            facts.extend(encode_persistence_facts(candle, scales));
+            // kama-er, choppiness, aroon-up/down, ...
             facts.extend(encode_regime_facts(candle, scales));
+            // tf-agreement, tf-4h-trend, tf-5m-1h-align, ...
+            facts.extend(encode_timeframe_facts(candle, scales));
+        }
+        MarketLens::DowVolume => {
+            // volume-ratio, obv-slope, buying-pressure, selling-pressure, body-ratio
+            facts.extend(encode_flow_facts(candle, scales));
+            // since-vol-spike, since-rsi-extreme, since-large-move, dist-from-*, ...
+            facts.extend(encode_standard_facts(window, scales));
+            // squeeze, bb-width, bb-pos, kelt-pos, ...
+            facts.extend(encode_keltner_facts(candle, scales));
+        }
+        MarketLens::DowCycle => {
+            // rsi, cci, mfi, williams-r, roc-1/3/6/12
+            facts.extend(encode_oscillator_facts(candle, scales));
+            // bb-width, squeeze, bb-pos, kelt-pos, ...
+            facts.extend(encode_keltner_facts(candle, scales));
+            // momentum: atr-ratio (also close-sma*, di-spread, macd-hist)
+            facts.extend(encode_momentum_facts(candle, scales));
+            // dist-from-high, dist-from-low, since-large-move, ...
+            facts.extend(encode_standard_facts(window, scales));
+            // tf-4h-trend, tf-5m-1h-align, tf-agreement, ...
+            facts.extend(encode_timeframe_facts(candle, scales));
+        }
+        MarketLens::DowGeneralist => {
+            // All Dow atoms: union of DowTrend + DowVolume + DowCycle modules
+            facts.extend(encode_momentum_facts(candle, scales));
+            facts.extend(encode_persistence_facts(candle, scales));
+            facts.extend(encode_regime_facts(candle, scales));
+            facts.extend(encode_timeframe_facts(candle, scales));
+            facts.extend(encode_flow_facts(candle, scales));
+            facts.extend(encode_standard_facts(window, scales));
+            facts.extend(encode_keltner_facts(candle, scales));
+            facts.extend(encode_oscillator_facts(candle, scales));
+        }
+
+        // ── Pring school ────────────────────────────────────────────────
+        MarketLens::PringImpulse => {
+            // roc-1, roc-6, roc-12 (also rsi, cci, mfi, williams-r, roc-3)
+            facts.extend(encode_oscillator_facts(candle, scales));
+            // macd-hist, di-spread (also close-sma*, atr-ratio)
+            facts.extend(encode_momentum_facts(candle, scales));
+            // adx, hurst, autocorrelation
             facts.extend(encode_persistence_facts(candle, scales));
         }
-        MarketLens::Generalist => {
-            // ALL modules
+        MarketLens::PringConfirmation => {
+            // obv-slope, volume-ratio (also buying/selling-pressure, body-ratio, vwap-distance)
+            facts.extend(encode_flow_facts(candle, scales));
+            // rsi, mfi (also cci, williams-r, roc-*)
+            facts.extend(encode_oscillator_facts(candle, scales));
+            // rsi-divergence-bull, rsi-divergence-bear, divergence-spread
+            facts.extend(encode_divergence_facts(candle, scales));
+            // tf-agreement (also tf-1h-*, tf-4h-*, tf-5m-1h-align)
+            facts.extend(encode_timeframe_facts(candle, scales));
+        }
+        MarketLens::PringRegime => {
+            // kama-er, choppiness (also aroon-up/down, dfa-alpha, ...)
+            facts.extend(encode_regime_facts(candle, scales));
+            // hurst, adx, autocorrelation
+            facts.extend(encode_persistence_facts(candle, scales));
+            // squeeze (also bb-pos, bb-width, kelt-pos, ...)
+            facts.extend(encode_keltner_facts(candle, scales));
+        }
+        MarketLens::PringGeneralist => {
+            // All Pring atoms: union of PringImpulse + PringConfirmation + PringRegime
             facts.extend(encode_oscillator_facts(candle, scales));
             facts.extend(encode_momentum_facts(candle, scales));
-            facts.extend(encode_stochastic_facts(candle, scales));
-            facts.extend(encode_keltner_facts(candle, scales));
-            facts.extend(encode_fibonacci_facts(candle, scales));
-            facts.extend(encode_ichimoku_facts(candle, scales));
-            facts.extend(encode_price_action_facts(candle, scales));
-            facts.extend(encode_flow_facts(candle, scales));
-            facts.extend(encode_timeframe_facts(candle, scales));
-            facts.extend(encode_divergence_facts(candle, scales));
-            facts.extend(encode_regime_facts(candle, scales));
             facts.extend(encode_persistence_facts(candle, scales));
+            facts.extend(encode_flow_facts(candle, scales));
+            facts.extend(encode_divergence_facts(candle, scales));
+            facts.extend(encode_timeframe_facts(candle, scales));
+            facts.extend(encode_regime_facts(candle, scales));
+            facts.extend(encode_keltner_facts(candle, scales));
+        }
+
+        // ── Wyckoff school ──────────────────────────────────────────────
+        MarketLens::WyckoffEffort => {
+            // volume-ratio, obv-slope, buying-pressure, selling-pressure, body-ratio
+            facts.extend(encode_flow_facts(candle, scales));
+            // upper-wick, lower-wick, body-ratio-pa, range-ratio, gap, consecutive-*
+            facts.extend(encode_price_action_facts(candle, scales));
+            // mfi (also rsi, cci, williams-r, roc-*)
+            facts.extend(encode_oscillator_facts(candle, scales));
+            // since-vol-spike (also since-rsi-extreme, dist-from-*, ...)
+            facts.extend(encode_standard_facts(window, scales));
+        }
+        MarketLens::WyckoffPersistence => {
+            // adx, hurst, autocorrelation
+            facts.extend(encode_persistence_facts(candle, scales));
+            // kama-er, choppiness, aroon-up, aroon-down, ...
+            facts.extend(encode_regime_facts(candle, scales));
+            // atr-ratio (also close-sma*, di-spread, macd-hist)
+            facts.extend(encode_momentum_facts(candle, scales));
+            // roc-6, roc-12 (also rsi, cci, mfi, williams-r, roc-1, roc-3)
+            facts.extend(encode_oscillator_facts(candle, scales));
+        }
+        MarketLens::WyckoffPosition => {
+            // close-sma20, close-sma50, close-sma200 (also di-spread, macd-hist, atr-ratio)
+            facts.extend(encode_momentum_facts(candle, scales));
+            // dist-from-high, dist-from-low (also since-*, dist-from-midpoint, ...)
+            facts.extend(encode_standard_facts(window, scales));
+            // aroon-up, aroon-down (also kama-er, choppiness, ...)
+            facts.extend(encode_regime_facts(candle, scales));
+            // rsi-divergence-bull, rsi-divergence-bear, divergence-spread
+            facts.extend(encode_divergence_facts(candle, scales));
+            // range-pos-48 (also range-pos-12/24, fib-dist-*)
+            facts.extend(encode_fibonacci_facts(candle, scales));
         }
     }
 
@@ -142,34 +218,41 @@ mod tests {
         let window = vec![candle.clone()];
         let mut scales = std::collections::HashMap::new();
 
-        let momentum_facts = market_lens_facts(&MarketLens::Momentum, &candle, &window, &mut scales);
-        let volume_facts = market_lens_facts(&MarketLens::Volume, &candle, &window, &mut scales);
-        let regime_facts = market_lens_facts(&MarketLens::Regime, &candle, &window, &mut scales);
+        let dow_trend = market_lens_facts(&MarketLens::DowTrend, &candle, &window, &mut scales);
+        let pring_impulse = market_lens_facts(&MarketLens::PringImpulse, &candle, &window, &mut scales);
+        let wyckoff_effort = market_lens_facts(&MarketLens::WyckoffEffort, &candle, &window, &mut scales);
 
         // Different lenses produce different numbers of facts
-        // (all share time + standard, but lens-specific modules differ)
-        assert_ne!(momentum_facts.len(), volume_facts.len());
-        assert_ne!(volume_facts.len(), regime_facts.len());
+        // (all share time, but lens-specific modules differ)
+        assert_ne!(dow_trend.len(), wyckoff_effort.len());
+        assert_ne!(pring_impulse.len(), wyckoff_effort.len());
     }
 
     #[test]
-    fn test_generalist_includes_all_modules() {
+    fn test_generalists_include_school_modules() {
         let candle = Candle::default();
         let window = vec![candle.clone()];
         let mut scales = std::collections::HashMap::new();
 
-        let gen_facts = market_lens_facts(&MarketLens::Generalist, &candle, &window, &mut scales);
-
-        // Generalist should have more facts than any single specialist
-        for lens in &[MarketLens::Momentum, MarketLens::Structure, MarketLens::Volume,
-                      MarketLens::Narrative, MarketLens::Regime] {
-            let specialist_facts = market_lens_facts(lens, &candle, &window, &mut scales);
+        // Dow generalist >= any Dow specialist
+        let dow_gen = market_lens_facts(&MarketLens::DowGeneralist, &candle, &window, &mut scales);
+        for lens in &[MarketLens::DowTrend, MarketLens::DowVolume, MarketLens::DowCycle] {
+            let specialist = market_lens_facts(lens, &candle, &window, &mut scales);
             assert!(
-                gen_facts.len() >= specialist_facts.len(),
-                "Generalist ({}) should have >= facts than {:?} ({})",
-                gen_facts.len(),
-                lens,
-                specialist_facts.len(),
+                dow_gen.len() >= specialist.len(),
+                "DowGeneralist ({}) should have >= facts than {:?} ({})",
+                dow_gen.len(), lens, specialist.len(),
+            );
+        }
+
+        // Pring generalist >= any Pring specialist
+        let pring_gen = market_lens_facts(&MarketLens::PringGeneralist, &candle, &window, &mut scales);
+        for lens in &[MarketLens::PringImpulse, MarketLens::PringConfirmation, MarketLens::PringRegime] {
+            let specialist = market_lens_facts(lens, &candle, &window, &mut scales);
+            assert!(
+                pring_gen.len() >= specialist.len(),
+                "PringGeneralist ({}) should have >= facts than {:?} ({})",
+                pring_gen.len(), lens, specialist.len(),
             );
         }
     }

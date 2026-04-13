@@ -10,14 +10,23 @@ use crate::learning::window_sampler::WindowSampler;
 use crate::types::distances::Distances;
 use crate::types::enums::{ExitLens, MarketLens, ScalarEncoding};
 
-/// The six market lenses. One observer per lens.
+/// The eleven market lenses. Three schools, one observer per lens.
+/// Proposals 041+042: Dow (4), Pring (4), Wyckoff (3).
 pub const MARKET_LENSES: &[MarketLens] = &[
-    MarketLens::Momentum,
-    MarketLens::Structure,
-    MarketLens::Volume,
-    MarketLens::Narrative,
-    MarketLens::Regime,
-    MarketLens::Generalist,
+    // Dow school
+    MarketLens::DowTrend,
+    MarketLens::DowVolume,
+    MarketLens::DowCycle,
+    MarketLens::DowGeneralist,
+    // Pring school
+    MarketLens::PringImpulse,
+    MarketLens::PringConfirmation,
+    MarketLens::PringRegime,
+    MarketLens::PringGeneralist,
+    // Wyckoff school
+    MarketLens::WyckoffEffort,
+    MarketLens::WyckoffPersistence,
+    MarketLens::WyckoffPosition,
 ];
 
 /// Create all market observers with their configured lenses and window samplers.
@@ -97,25 +106,30 @@ mod tests {
 
     #[test]
     fn test_market_lenses_count() {
-        assert_eq!(MARKET_LENSES.len(), 6);
+        assert_eq!(MARKET_LENSES.len(), 11);
     }
 
     #[test]
     fn test_market_lenses_order() {
-        assert_eq!(MARKET_LENSES[0], MarketLens::Momentum);
-        assert_eq!(MARKET_LENSES[1], MarketLens::Structure);
-        assert_eq!(MARKET_LENSES[2], MarketLens::Volume);
-        assert_eq!(MARKET_LENSES[3], MarketLens::Narrative);
-        assert_eq!(MARKET_LENSES[4], MarketLens::Regime);
-        assert_eq!(MARKET_LENSES[5], MarketLens::Generalist);
+        assert_eq!(MARKET_LENSES[0], MarketLens::DowTrend);
+        assert_eq!(MARKET_LENSES[1], MarketLens::DowVolume);
+        assert_eq!(MARKET_LENSES[2], MarketLens::DowCycle);
+        assert_eq!(MARKET_LENSES[3], MarketLens::DowGeneralist);
+        assert_eq!(MARKET_LENSES[4], MarketLens::PringImpulse);
+        assert_eq!(MARKET_LENSES[5], MarketLens::PringConfirmation);
+        assert_eq!(MARKET_LENSES[6], MarketLens::PringRegime);
+        assert_eq!(MARKET_LENSES[7], MarketLens::PringGeneralist);
+        assert_eq!(MARKET_LENSES[8], MarketLens::WyckoffEffort);
+        assert_eq!(MARKET_LENSES[9], MarketLens::WyckoffPersistence);
+        assert_eq!(MARKET_LENSES[10], MarketLens::WyckoffPosition);
     }
 
     #[test]
     fn test_create_market_observers() {
         let observers = create_market_observers(4096, 500);
-        assert_eq!(observers.len(), 6);
-        assert_eq!(observers[0].lens, MarketLens::Momentum);
-        assert_eq!(observers[5].lens, MarketLens::Generalist);
+        assert_eq!(observers.len(), 11);
+        assert_eq!(observers[0].lens, MarketLens::DowTrend);
+        assert_eq!(observers[10].lens, MarketLens::WyckoffPosition);
     }
 
     #[test]

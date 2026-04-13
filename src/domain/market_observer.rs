@@ -199,7 +199,7 @@ mod tests {
 
     fn make_observer() -> MarketObserver {
         let ws = WindowSampler::new(42, 10, 500);
-        MarketObserver::new(MarketLens::Momentum, DIMS, RECALIB, ws)
+        MarketObserver::new(MarketLens::DowTrend, DIMS, RECALIB, ws)
     }
 
     fn random_vector(name: &str) -> Vector {
@@ -210,7 +210,7 @@ mod tests {
     #[test]
     fn test_market_observer_new() {
         let obs = make_observer();
-        assert_eq!(obs.lens, MarketLens::Momentum);
+        assert_eq!(obs.lens, MarketLens::DowTrend);
         assert_eq!(obs.resolved, 0);
         assert_eq!(obs.last_prediction, Direction::Down);
         assert_eq!(obs.recalib_wins, 0);

@@ -55,25 +55,39 @@ pub enum ScalarEncoding {
 }
 
 /// Market observer lens — which vocabulary modules an observer attends to.
+/// Proposals 041+042: three schools (Dow, Pring, Wyckoff), 11 lenses total.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum MarketLens {
-    Momentum,
-    Structure,
-    Volume,
-    Regime,
-    Narrative,
-    Generalist,
+    // Dow school
+    DowTrend,
+    DowVolume,
+    DowCycle,
+    DowGeneralist,
+    // Pring school
+    PringImpulse,
+    PringConfirmation,
+    PringRegime,
+    PringGeneralist,
+    // Wyckoff school
+    WyckoffEffort,
+    WyckoffPersistence,
+    WyckoffPosition,
 }
 
 impl std::fmt::Display for MarketLens {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            MarketLens::Momentum => write!(f, "momentum"),
-            MarketLens::Structure => write!(f, "structure"),
-            MarketLens::Volume => write!(f, "volume"),
-            MarketLens::Regime => write!(f, "regime"),
-            MarketLens::Narrative => write!(f, "narrative"),
-            MarketLens::Generalist => write!(f, "generalist"),
+            MarketLens::DowTrend => write!(f, "dow-trend"),
+            MarketLens::DowVolume => write!(f, "dow-volume"),
+            MarketLens::DowCycle => write!(f, "dow-cycle"),
+            MarketLens::DowGeneralist => write!(f, "dow-generalist"),
+            MarketLens::PringImpulse => write!(f, "pring-impulse"),
+            MarketLens::PringConfirmation => write!(f, "pring-confirmation"),
+            MarketLens::PringRegime => write!(f, "pring-regime"),
+            MarketLens::PringGeneralist => write!(f, "pring-generalist"),
+            MarketLens::WyckoffEffort => write!(f, "wyckoff-effort"),
+            MarketLens::WyckoffPersistence => write!(f, "wyckoff-persistence"),
+            MarketLens::WyckoffPosition => write!(f, "wyckoff-position"),
         }
     }
 }
@@ -185,18 +199,23 @@ mod tests {
 
     #[test]
     fn test_market_lens_display() {
-        assert_eq!(MarketLens::Momentum.to_string(), "momentum");
-        assert_eq!(MarketLens::Structure.to_string(), "structure");
-        assert_eq!(MarketLens::Volume.to_string(), "volume");
-        assert_eq!(MarketLens::Regime.to_string(), "regime");
-        assert_eq!(MarketLens::Narrative.to_string(), "narrative");
-        assert_eq!(MarketLens::Generalist.to_string(), "generalist");
+        assert_eq!(MarketLens::DowTrend.to_string(), "dow-trend");
+        assert_eq!(MarketLens::DowVolume.to_string(), "dow-volume");
+        assert_eq!(MarketLens::DowCycle.to_string(), "dow-cycle");
+        assert_eq!(MarketLens::DowGeneralist.to_string(), "dow-generalist");
+        assert_eq!(MarketLens::PringImpulse.to_string(), "pring-impulse");
+        assert_eq!(MarketLens::PringConfirmation.to_string(), "pring-confirmation");
+        assert_eq!(MarketLens::PringRegime.to_string(), "pring-regime");
+        assert_eq!(MarketLens::PringGeneralist.to_string(), "pring-generalist");
+        assert_eq!(MarketLens::WyckoffEffort.to_string(), "wyckoff-effort");
+        assert_eq!(MarketLens::WyckoffPersistence.to_string(), "wyckoff-persistence");
+        assert_eq!(MarketLens::WyckoffPosition.to_string(), "wyckoff-position");
     }
 
     #[test]
     fn test_market_lens_equality() {
-        assert_eq!(MarketLens::Momentum, MarketLens::Momentum);
-        assert_ne!(MarketLens::Momentum, MarketLens::Structure);
+        assert_eq!(MarketLens::DowTrend, MarketLens::DowTrend);
+        assert_ne!(MarketLens::DowTrend, MarketLens::PringImpulse);
     }
 
     #[test]
