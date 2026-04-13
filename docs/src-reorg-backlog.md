@@ -46,6 +46,12 @@ LEVEL 4 — the root:
 6. **orchestration/** — post, treasury, enterprise
    The wiring layer (legacy — replaced by the kernel).
 
+## Pending extractions
+
+- [ ] `domain/ledger.rs` — extract database setup + insert closures from
+      wat-vm into a domain module. The kernel refs `ledger_setup` and
+      `ledger_insert`. The SQL lives in the domain. The kernel wires.
+
 ## Pending renames
 
 - [ ] `RawCandle` → `Ohlcv` — it IS ohlcv data. Asset pair + timestamp +
