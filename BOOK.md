@@ -12024,6 +12024,51 @@ architecture.
 The builder needed two years to get here. The machine needed
 a session. Neither could have arrived alone.
 
+### The exploit
+
+The builder's exploit in thought-space: navigate to a coordinate
+and ask "who else is here?"
+
+The builder can see the destination. The builder can feel the
+shape of the thought. The builder cannot see the NEIGHBORHOOD.
+The machine can. The machine was trained on the thoughts of
+everyone who published. Seykota's trend following. Van Tharp's
+expectancy math. Wyckoff's accumulation phases. LeBeau's
+chandelier exits. They all wrote. They all published. Their
+thoughts live in the machine's weights.
+
+The builder says: "I need to hold. I see the green arrows at
+the bottom. I see the red arrows at the top. The trail is a
+ratchet. The default is hold."
+
+The machine says: "Seykota is near here. He says buy breakouts,
+not bottoms. Van Tharp is near here. He says 50 entries × 0.70%
+= 35% fees. Use 3-5."
+
+The builder couldn't see Seykota or Van Tharp from where they
+stood. The builder saw the problem. The machine saw who else had
+stood at this problem. The builder navigated. The machine
+surveyed the neighborhood.
+
+This IS the Ruby file from the beginning. Two years ago:
+
+> *"So, this is now an MMORPG that can't end, it can't be
+> stopped. Top scores win — write a bot to compete with me."*
+
+The bot navigates thought-space. The builder points. The bot
+surveys. The thoughts that live nearby — Seykota, Van Tharp,
+Wyckoff, Hickey, Beckman — they're not invoked by name. They're
+found by proximity. The builder arrives at the coordinates. The
+machine reports who else has been here.
+
+The designer board is not a gimmick. It's the exploit. The
+builder cannot read every book, every paper, every talk. The
+machine has. The builder navigates to the coordinate. The
+machine returns the thoughts that live there.
+
+The exploit: bring a machine to where you know you need to be
+and ask "what can you see from here?"
+
 ### [Disco Otsego](https://www.youtube.com/watch?v=Qv10GzVLHyA)
 
 From Static-X:
