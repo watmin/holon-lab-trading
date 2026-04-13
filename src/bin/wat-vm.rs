@@ -1,16 +1,33 @@
-/// wat-vm — the first heartbeat. Reads candles, enriches them, counts them.
+/// wat-vm — the second heartbeat. Reads candles, enriches them, feeds observers.
 ///
-/// No thinking. No encoding. No prediction. Just the stream and the bank.
-/// The simplest proof that the pipeline breathes.
+/// Candles flow to N market observers. Each observer encodes through its lens,
+/// learns the noise subspace, predicts direction. Results are discarded.
+/// The observers come home with experience.
 
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use clap::Parser;
 
+use holon::kernel::vector::Vector;
+use holon::kernel::vector_manager::VectorManager;
+
 use enterprise::domain::candle_stream::CandleStream;
 use enterprise::domain::indicator_bank::IndicatorBank;
+use enterprise::domain::market_observer::MarketObserver;
+use enterprise::encoding::thought_encoder::{ThoughtAST, ThoughtEncoder};
+use enterprise::learning::window_sampler::WindowSampler;
+use enterprise::programs::app::market_observer_program::{ObsInput, ObsLearn};
+use enterprise::programs::app::market_observer_program::market_observer_program;
+use enterprise::programs::stdlib::cache::cache;
 use enterprise::programs::stdlib::console::console;
+use enterprise::services::mailbox::mailbox;
+use enterprise::services::queue::{queue_bounded, queue_unbounded, QueueSender};
+use enterprise::services::topic::topic;
+use enterprise::types::enums::MarketLens;
+use enterprise::types::log_entry::LogEntry;
+use enterprise::programs::chain::MarketChain;
 
 // ─── Signal handling ────────────────────────────────────────────────────────
 
@@ -21,10 +38,21 @@ extern "C" fn signal_handler(_sig: libc::c_int) {
     STOP.store(true, Ordering::SeqCst);
 }
 
+// ─── Constants ──────────────────────────────────────────────────────────────
+
+const MARKET_LENSES: &[MarketLens] = &[
+    MarketLens::Momentum,
+    MarketLens::Structure,
+    MarketLens::Volume,
+    MarketLens::Narrative,
+    MarketLens::Regime,
+    MarketLens::Generalist,
+];
+
 // ─── CLI ────────────────────────────────────────────────────────────────────
 
 #[derive(Parser)]
-#[command(name = "wat-vm", about = "The simplest heartbeat -- candles in, count out")]
+#[command(name = "wat-vm", about = "Candles in, observers learn, results discarded")]
 struct Args {
     /// Candle streams. Format: SOURCE:TARGET:PATH. Repeatable.
     #[arg(long = "stream", required = true)]
@@ -33,6 +61,14 @@ struct Args {
     /// Max candles per stream. Each pipeline owns its limit.
     #[arg(long)]
     max_candles: usize,
+
+    /// Vector dimension.
+    #[arg(long, default_value_t = 10000)]
+    dims: usize,
+
+    /// Observations between recalibrations.
+    #[arg(long, default_value_t = 500)]
+    recalib_interval: usize,
 }
 
 // ─── Pipeline ───────────────────────────────────────────────────────────────
@@ -49,6 +85,9 @@ struct Pipeline {
 
 fn main() {
     let args = Args::parse();
+    let num_observers = MARKET_LENSES.len();
+    let dims = args.dims;
+    let recalib_interval = args.recalib_interval;
 
     // Install signal handlers. One write on signal. One read per candle.
     unsafe {
@@ -72,16 +111,91 @@ fn main() {
         ));
     }
 
-    // Console: one handle per stream
-    let (handles, driver) = console(parsed.len());
+    // Console: one handle per stream + one per observer + one for main
+    let num_console = parsed.len() + num_observers + 1;
+    let (mut handles, console_driver) = console(num_console);
 
-    // Build pipelines
+    // Peel off the main handle (last one)
+    let main_handle = handles.pop().unwrap();
+
+    // Peel off observer handles (next num_observers from the end)
+    let observer_handles: Vec<_> = handles.split_off(handles.len() - num_observers);
+
+    // Remaining handles are for stream pipelines
+    let stream_handles = handles;
+
+    // ─── ThoughtEncoder + Cache ────────────────────────────────────────────
+    let vm = VectorManager::new(dims);
+    let encoder = Arc::new(ThoughtEncoder::new(vm));
+
+    let (cache_handles, cache_driver) =
+        cache::<ThoughtAST, Vector>("encoder", 65536, num_observers);
+    let mut cache_handles: std::collections::VecDeque<_> = cache_handles.into();
+
+    // ─── Market observers ──────────────────────────────────────────────────
+    let mut obs_input_txs: Vec<QueueSender<ObsInput>> = Vec::with_capacity(num_observers);
+    let mut obs_join_handles: Vec<std::thread::JoinHandle<MarketObserver>> =
+        Vec::with_capacity(num_observers);
+    // Topic handles must live until shutdown — hold them here.
+    let mut _topic_handles = Vec::with_capacity(num_observers);
+
+    let mut observer_handles_iter = observer_handles.into_iter();
+    for (i, lens) in MARKET_LENSES.iter().enumerate() {
+        let seed = 7919 + i * 1000;
+        let observer = MarketObserver::new(
+            *lens,
+            dims,
+            recalib_interval,
+            WindowSampler::new(seed, 12, 2016),
+        );
+
+        // Candle input queue
+        let (candle_tx, candle_rx) = queue_bounded::<ObsInput>(1);
+        obs_input_txs.push(candle_tx);
+
+        // Output topic with zero consumers — results discarded
+        let (result_tx, topic_handle) = topic::<MarketChain>(1, vec![]);
+        _topic_handles.push(topic_handle);
+
+        // Learn mailbox — dummy, no learn signals
+        let (learn_dummy_tx, learn_dummy_rx) = queue_unbounded::<ObsLearn>();
+        drop(learn_dummy_tx); // no one sends learn signals
+        let learn_rx = mailbox(vec![learn_dummy_rx]);
+
+        // Cache handle for this observer
+        let obs_cache = cache_handles.pop_front().unwrap();
+
+        // Console handle for this observer — moved, not cloned
+        let obs_console = observer_handles_iter.next().unwrap();
+
+        // DB sender — dummy, drop receiver
+        let (db_tx, _db_rx) = queue_unbounded::<LogEntry>();
+
+        let enc = Arc::clone(&encoder);
+        let jh = std::thread::spawn(move || {
+            market_observer_program(
+                candle_rx,
+                result_tx,
+                learn_rx,
+                obs_cache,
+                obs_console,
+                db_tx,
+                observer,
+                enc,
+                i,
+                recalib_interval,
+            )
+        });
+        obs_join_handles.push(jh);
+    }
+
+    // ─── Build pipelines ───────────────────────────────────────────────────
     let mut pipelines: Vec<Pipeline> = Vec::new();
     for (i, (source, target, path)) in parsed.into_iter().enumerate() {
         let p = Path::new(&path);
         let total = CandleStream::total_candles(p);
         let stream = CandleStream::open(p, &source, &target);
-        handles[i].out(format!(
+        stream_handles[i].out(format!(
             "{}/{} stream opened: {} candles available",
             source, target, total
         ));
@@ -94,20 +208,34 @@ fn main() {
         });
     }
 
-    // Per-stream loop. Each pipeline owns its limit.
-    // Three exit conditions:
-    //   1. count >= max_candles -- the limit
-    //   2. STOP flag set -- SIGTERM/SIGINT
-    //   3. stream exhausted -- no more data
+    main_handle.out(format!(
+        "{}D recalib={} observers={}",
+        dims, recalib_interval, num_observers
+    ));
+
+    // ─── Per-stream loop ───────────────────────────────────────────────────
     let max = args.max_candles;
+    let mut encode_count: usize = 0;
     for (i, pipeline) in pipelines.iter_mut().enumerate() {
         while pipeline.count < max && !STOP.load(Ordering::SeqCst) {
             match pipeline.stream.next() {
                 Some(ohlcv) => {
                     let candle = pipeline.bank.tick(&ohlcv);
                     pipeline.count += 1;
+                    encode_count += 1;
+
+                    // Send candle to each observer
+                    let window = Arc::new(vec![candle.clone()]);
+                    for tx in &obs_input_txs {
+                        let _ = tx.send(ObsInput {
+                            candle: candle.clone(),
+                            window: Arc::clone(&window),
+                            encode_count,
+                        });
+                    }
+
                     if pipeline.count % 500 == 0 {
-                        handles[i].out(format!(
+                        stream_handles[i].out(format!(
                             "{}/{} candle {}: close={:.2}",
                             pipeline.source, pipeline.target, pipeline.count, candle.close
                         ));
@@ -117,7 +245,7 @@ fn main() {
             }
         }
         if STOP.load(Ordering::SeqCst) {
-            handles[i].out(format!(
+            stream_handles[i].out(format!(
                 "{}/{} interrupted at candle {}",
                 pipeline.source, pipeline.target, pipeline.count
             ));
@@ -125,15 +253,40 @@ fn main() {
         }
     }
 
-    // Final summary
+    // Final pipeline summary
     for (i, pipeline) in pipelines.iter().enumerate() {
-        handles[i].out(format!(
+        stream_handles[i].out(format!(
             "{}/{} done: {} candles",
             pipeline.source, pipeline.target, pipeline.count
         ));
     }
 
-    // Shutdown: drop handles, console drains, join
-    drop(handles);
-    driver.join();
+    // ─── Shutdown ──────────────────────────────────────────────────────────
+
+    // Drop candle senders — observers see disconnect
+    drop(obs_input_txs);
+
+    // Join observer threads — get the trained observers back
+    for jh in obs_join_handles {
+        match jh.join() {
+            Ok(observer) => {
+                main_handle.out(format!(
+                    "{}: experience={:.1} resolved={}",
+                    observer.lens,
+                    observer.experience(),
+                    observer.resolved,
+                ));
+            }
+            Err(_) => {
+                main_handle.err("observer thread panicked".to_string());
+            }
+        }
+    }
+
+    // Drop all handles, join drivers
+    drop(stream_handles);
+    drop(_topic_handles);
+    drop(main_handle);
+    cache_driver.join();
+    console_driver.join();
 }
