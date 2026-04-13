@@ -72,6 +72,85 @@ struct Pipeline {
     count: usize,
 }
 
+// ─── Wiring ────────────────────────────────────────────────────────────────
+
+struct WiredObservers {
+    /// Senders to feed candles to each observer
+    candle_txs: Vec<QueueSender<ObsInput>>,
+    /// Thread handles — join to get trained observers back
+    join_handles: Vec<std::thread::JoinHandle<MarketObserver>>,
+    /// Topic handles — must live until shutdown
+    topic_handles: Vec<enterprise::services::topic::TopicHandle>,
+}
+
+fn wire_market_observers(
+    observers: Vec<MarketObserver>,
+    mut cache_pool: HandlePool<enterprise::programs::stdlib::cache::CacheHandle<ThoughtAST, Vector>>,
+    mut console_pool: HandlePool<enterprise::programs::stdlib::console::ConsoleHandle>,
+    mut db_pool: HandlePool<enterprise::services::queue::QueueSender<LogEntry>>,
+    encoder: Arc<ThoughtEncoder>,
+    recalib_interval: usize,
+) -> WiredObservers {
+    let num_observers = observers.len();
+    let mut candle_txs: Vec<QueueSender<ObsInput>> = Vec::with_capacity(num_observers);
+    let mut join_handles: Vec<std::thread::JoinHandle<MarketObserver>> =
+        Vec::with_capacity(num_observers);
+    let mut topic_handles = Vec::with_capacity(num_observers);
+
+    for (i, observer) in observers.into_iter().enumerate() {
+        // Candle input queue
+        let (candle_tx, candle_rx) = queue_bounded::<ObsInput>(1);
+        candle_txs.push(candle_tx);
+
+        // Output topic with zero consumers — results discarded
+        let (result_tx, topic_handle) = topic::<MarketChain>(1, vec![]);
+        topic_handles.push(topic_handle);
+
+        // Learn mailbox — dummy, no learn signals
+        let (learn_dummy_tx, learn_dummy_rx) = queue_unbounded::<ObsLearn>();
+        drop(learn_dummy_tx); // no one sends learn signals
+        let learn_rx = mailbox(vec![learn_dummy_rx]);
+
+        // Cache handle for this observer
+        let obs_cache = cache_pool.pop();
+
+        // Console handle for this observer
+        let obs_console = console_pool.pop();
+
+        // DB sender — real database
+        let db_tx = db_pool.pop();
+
+        let enc = Arc::clone(&encoder);
+        let jh = std::thread::spawn(move || {
+            market_observer_program(
+                candle_rx,
+                result_tx,
+                learn_rx,
+                obs_cache,
+                obs_console,
+                db_tx,
+                observer,
+                enc,
+                i,
+                recalib_interval,
+            )
+        });
+        join_handles.push(jh);
+    }
+
+    // Assert all pooled handles were claimed — orphans cause deadlocks.
+    // If any finish() is forgotten, Drop fires here at function return.
+    console_pool.finish();
+    cache_pool.finish();
+    db_pool.finish();
+
+    WiredObservers {
+        candle_txs,
+        join_handles,
+        topic_handles,
+    }
+}
+
 // ─── Main ───────────────────────────────────────────────────────────────────
 
 fn main() {
@@ -130,7 +209,7 @@ fn main() {
         ledger::ledger_insert,
     );
 
-    let mut db_pool = HandlePool::new("db", db_senders);
+    let db_pool = HandlePool::new("db", db_senders);
 
     main_handle.out(format!("db: {}", db_path));
 
@@ -140,61 +219,18 @@ fn main() {
 
     let (cache_handles, cache_driver) =
         cache::<ThoughtAST, Vector>("encoder", 65536, num_observers);
-    let mut cache_pool = HandlePool::new("cache", cache_handles);
+    let cache_pool = HandlePool::new("cache", cache_handles);
 
     // ─── Market observers ──────────────────────────────────────────────────
-    let mut obs_input_txs: Vec<QueueSender<ObsInput>> = Vec::with_capacity(num_observers);
-    let mut obs_join_handles: Vec<std::thread::JoinHandle<MarketObserver>> =
-        Vec::with_capacity(num_observers);
-    // Topic handles must live until shutdown — hold them here.
-    let mut _topic_handles = Vec::with_capacity(num_observers);
-
     let observers = config::create_market_observers(dims, recalib_interval);
-    for (i, observer) in observers.into_iter().enumerate() {
-        // Candle input queue
-        let (candle_tx, candle_rx) = queue_bounded::<ObsInput>(1);
-        obs_input_txs.push(candle_tx);
-
-        // Output topic with zero consumers — results discarded
-        let (result_tx, topic_handle) = topic::<MarketChain>(1, vec![]);
-        _topic_handles.push(topic_handle);
-
-        // Learn mailbox — dummy, no learn signals
-        let (learn_dummy_tx, learn_dummy_rx) = queue_unbounded::<ObsLearn>();
-        drop(learn_dummy_tx); // no one sends learn signals
-        let learn_rx = mailbox(vec![learn_dummy_rx]);
-
-        // Cache handle for this observer
-        let obs_cache = cache_pool.pop();
-
-        // Console handle for this observer
-        let obs_console = console_pool.pop();
-
-        // DB sender — real database
-        let db_tx = db_pool.pop();
-
-        let enc = Arc::clone(&encoder);
-        let jh = std::thread::spawn(move || {
-            market_observer_program(
-                candle_rx,
-                result_tx,
-                learn_rx,
-                obs_cache,
-                obs_console,
-                db_tx,
-                observer,
-                enc,
-                i,
-                recalib_interval,
-            )
-        });
-        obs_join_handles.push(jh);
-    }
-
-    // Assert all pooled handles were claimed — orphans cause deadlocks.
-    console_pool.finish();
-    cache_pool.finish();
-    db_pool.finish();
+    let wired = wire_market_observers(
+        observers,
+        cache_pool,
+        console_pool,
+        db_pool,
+        Arc::clone(&encoder),
+        recalib_interval,
+    );
 
     // ─── Build pipelines ───────────────────────────────────────────────────
     let mut pipelines: Vec<Pipeline> = Vec::new();
@@ -233,7 +269,7 @@ fn main() {
 
                     // Send candle to each observer
                     let window = Arc::new(vec![candle.clone()]);
-                    for tx in &obs_input_txs {
+                    for tx in &wired.candle_txs {
                         let _ = tx.send(ObsInput {
                             candle: candle.clone(),
                             window: Arc::clone(&window),
@@ -271,10 +307,10 @@ fn main() {
     // ─── Shutdown ──────────────────────────────────────────────────────────
 
     // Drop candle senders — observers see disconnect
-    drop(obs_input_txs);
+    drop(wired.candle_txs);
 
     // Join observer threads — get the trained observers back
-    for jh in obs_join_handles {
+    for jh in wired.join_handles {
         match jh.join() {
             Ok(observer) => {
                 main_handle.out(format!(
@@ -294,7 +330,7 @@ fn main() {
 
     // Drop all handles, join drivers
     drop(stream_handles);
-    drop(_topic_handles);
+    drop(wired.topic_handles);
     db_driver.join();
     drop(main_handle);
     cache_driver.join();

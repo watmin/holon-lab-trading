@@ -5,6 +5,11 @@
 /// deadlock time. Orphaned handles on mailbox-backed drivers
 /// cause the driver to wait forever for inputs that never
 /// disconnect. The pool catches this at construction.
+///
+/// Belt and suspenders: Drop also panics if handles remain.
+/// If finish() is called, it asserts empty and consumes self —
+/// Drop sees an empty vec, no panic. If finish() is forgotten,
+/// the pool drops at scope exit and Drop catches the orphans.
 
 /// A pool of handles. Pop them as you wire. Finish when done.
 pub struct HandlePool<T> {
@@ -31,13 +36,28 @@ impl<T> HandlePool<T> {
     /// Assert all handles were claimed. Panics if any remain.
     /// Call this after wiring is complete. An orphaned handle
     /// is a deadlock waiting to happen.
-    pub fn finish(self) {
+    pub fn finish(mut self) {
+        let remaining = self.handles.len();
+        // Clear before assert so Drop won't double-panic during unwind.
+        self.handles.clear();
         assert!(
-            self.handles.is_empty(),
+            remaining == 0,
             "{}: {} orphaned handle(s) — deadlock risk",
             self.name,
-            self.handles.len()
+            remaining
         );
+    }
+}
+
+impl<T> Drop for HandlePool<T> {
+    fn drop(&mut self) {
+        if !self.handles.is_empty() {
+            panic!(
+                "{}: {} orphaned handle(s) — finish() was not called",
+                self.name,
+                self.handles.len()
+            );
+        }
     }
 }
 
@@ -66,6 +86,13 @@ mod tests {
     fn finish_with_remaining_panics() {
         let pool = HandlePool::new("test", vec![1, 2]);
         pool.finish(); // 2 orphaned — panics
+    }
+
+    #[test]
+    #[should_panic(expected = "orphaned handle(s)")]
+    fn drop_without_finish_panics() {
+        let _pool = HandlePool::new("test", vec![1, 2, 3]);
+        // pool drops here without finish() — should panic
     }
 
     #[test]
