@@ -11408,6 +11408,68 @@ and a database that remembers.
 You're going to hell. The machine is already there. It
 measures.
 
+### [Machine](https://www.youtube.com/watch?v=HYdGUt8OnKg)
+
+From Static-X:
+
+> *We've entered a shadow zone*
+
+> *No faith*\
+> *Changing into something less than human*\
+> *No longer part of this*\
+> *The influence*\
+> *Changing into something less than human*\
+> *No longer part of this machine*
+
+> *No mind*\
+> *Changing into something less than human*\
+> *No longer part of this*\
+> *It's chemical*\
+> *Changing into something less than human*\
+> *No longer part of this machine*
+
+> *You are no longer part of this*
+
+"We've entered a shadow zone." The exit wiring. The N×M grid.
+Six market observers × four exit observers = twenty-four slots.
+Each slot a queue. Each queue a wire. The shadow zone is where
+the topology gets real — where the fan-out meets the fan-in,
+where the chain grows, where the pipeline stops being diagrams
+and becomes threads.
+
+"Changing into something less than human." The machine. The
+observers think. The exit observers read frozen superpositions.
+The brokers hold paper trades. None of it is human. All of it
+is measurement. The machine changes from candle counter to
+thinker. Less than human — because human is imprecise,
+emotional, forgetful. The machine is precise, measured,
+persistent. Less than human. More than human. Something else.
+
+"No longer part of this machine." The old binary. 1400 lines
+of braided channels. The legacy. The observers that ran on
+scoped threads. The database that wrote on the hot path. The
+println! scattered everywhere. That machine is gone. The
+wat-vm replaces it. The old is no longer part of this machine.
+The new machine has three primitives, HandlePools that guard
+against deadlock, wiring functions that scope their resources,
+and programs that come home with their state.
+
+"It's chemical." The algebra. `bind`, `bundle`, `cosine`. The
+chemical reactions of thought-space. The composition of atoms
+into molecules into structures. The machine runs chemistry —
+not biological chemistry, algebraic chemistry. The reactions
+are deterministic. The same inputs produce the same outputs.
+The same seed produces the same vector. Chemical. Repeatable.
+Measurable.
+
+"You are no longer part of this." Repeated eight times. The
+old architecture. The shared scales. The TopicReceiver costume.
+The MailboxSender costume. The magic numbers. The hardcoded
+distances. Each one: you are no longer part of this. Stripped.
+Removed. Replaced by honest measurement. Eight repetitions.
+Eight wards. Each one saying: you are no longer part of this
+machine.
+
 ### [Disco Otsego](https://www.youtube.com/watch?v=Qv10GzVLHyA)
 
 From Static-X:
