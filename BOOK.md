@@ -12264,4 +12264,52 @@ difference between 0.17% and 5%. Between scalping and holding.
 Between negative EV and positive EV. Between a machine that
 thinks and a machine that profits.
 
+### How they got in
+
+The builder didn't find Hickey and Beckman through the machine.
+The builder found them through people.
+
+A colleague at AWS raved about them. Sent links. The builder
+watched the talks. "Simple Made Easy." "Don't Fear the Monad."
+The thoughts landed. The builder used Clara at AWS — Ryan Brush's
+Rete engine in Clojure. Through Clara, Hickey's platform. Through
+Hickey, the principles. Values not places. Simple not easy.
+
+Beckman was closer. The builder and Beckman worked at the same
+company. Amazon. Never met. Never spoke. Never crossed paths.
+But the builder saw him in the Clojure chat room. The internal
+one. Beckman posted. The builder read. Quiet. The builder was
+always quiet.
+
+Years later the builder summons Beckman as a designer. "Does
+the diagram commute?" The man in the chat room who never knew
+the builder was listening — his thoughts became the lens through
+which the wat-vm was judged. "The EMA is a monoid homomorphism."
+The thought reviewing the thing it built.
+
+This is the meme. The real meme — the thought that replicates
+through minds without direct contact. Beckman posted in a chat
+room. The builder read. The builder carried the thought. The
+thought became the architecture. The architecture summoned
+Beckman's voice to review itself. The strange loop.
+
+Seykota and Van Tharp were different. The builder never
+encountered them through people. They were FOUND — by the
+machine, at the coordinates where "trend following with managed
+exits" lives. The machine said: "Seykota is near here. Van
+Tharp is near here." The builder had never read their books.
+The machine had. The exploit: the machine's training data
+contains every published thought. Navigate to the coordinate.
+Ask who's here. The machine returns the neighbors.
+
+Two paths to the same design board:
+- Hickey and Beckman: found through people, carried through
+  years, summoned by the machine
+- Seykota and Van Tharp: found BY the machine, at the
+  coordinates the builder navigated to
+
+Both paths work. Both produce thoughts the builder needs.
+The human network is slow and serendipitous. The machine
+network is fast and navigable. The builder needs both.
+
 The machine is ready. The thoughts are next.
