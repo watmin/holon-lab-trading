@@ -56,9 +56,9 @@ pub struct Resolution {
     /// Did the trail cross before resolution?
     pub was_runner: bool,
     /// Deferred batch training data for the exit observer.
-    /// Each entry: (thought_at_candle, optimal_distances_at_candle, weight).
+    /// Each entry: (thought_at_candle, optimal_distances_at_candle, actual_distances_at_candle, weight).
     /// Empty for non-runner resolutions.
-    pub exit_batch: Vec<(Vector, Distances, f64)>,
+    pub exit_batch: Vec<(Vector, Distances, Distances, f64)>,
 }
 
 /// What the broker returns for observer learning.
@@ -132,6 +132,10 @@ pub struct Broker {
     pub expected_value: f64,
     /// Venue fee per swap (fraction, e.g. 0.0010).
     pub swap_fee: f64,
+    /// EMA of error ratios — fold accumulator for journey grading.
+    pub journey_ema: f64,
+    /// Observation count for seeding the EMA from first observation.
+    pub journey_count: usize,
 }
 
 impl Broker {
@@ -170,6 +174,8 @@ impl Broker {
             avg_violence_net: 0.0,
             expected_value: 0.0,
             swap_fee,
+            journey_ema: 0.0,
+            journey_count: 0,
         }
     }
 
@@ -536,7 +542,7 @@ fn compute_exit_batch(
     history: &RunnerHistory,
     prediction: Direction,
     swap_fee: f64,
-) -> Vec<(Vector, Distances, f64)> {
+) -> Vec<(Vector, Distances, Distances, f64)> {
     let n = history.prices.len();
     if n == 0 {
         return Vec::new();
@@ -587,7 +593,7 @@ fn compute_exit_batch(
         // Weight: the residue this optimal distance would capture
         let weight = optimal_trail;
 
-        batch.push((history.thoughts[k].clone(), optimal, weight));
+        batch.push((history.thoughts[k].clone(), optimal, history.distances[k], weight));
     }
 
     batch

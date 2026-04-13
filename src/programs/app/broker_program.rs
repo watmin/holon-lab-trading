@@ -139,13 +139,32 @@ pub fn broker_program(
             });
 
             // Deferred batch training for exit observer (runner histories)
-            for (thought, optimal, weight) in &resolution.exit_batch {
+            // Proposal 036+037: journey grading with EMA threshold.
+            for (thought, optimal, actual, excursion) in &resolution.exit_batch {
+                // Error ratio: geometry, not consequence
+                let trail_err = (actual.trail - optimal.trail).abs()
+                    / optimal.trail.max(0.0001);
+                let stop_err = (actual.stop - optimal.stop).abs()
+                    / optimal.stop.max(0.0001);
+                let error = (trail_err + stop_err) / 2.0;
+
+                // EMA: seed from first observation, then fold
+                if broker.journey_count == 0 {
+                    broker.journey_ema = error;
+                } else {
+                    broker.journey_ema = (1.0 - 0.01) * broker.journey_ema + 0.01 * error;
+                }
+                broker.journey_count += 1;
+
+                // Projection: sign(error - ema). Not a judgment — a label for the rolling window.
+                let is_grace = error < broker.journey_ema;
+
                 let _ = exit_learn_tx.send(ExitLearn {
                     exit_thought: thought.clone(),
                     optimal: *optimal,
-                    weight: *weight,
-                    is_grace: true,
-                    residue: *weight,
+                    weight: *excursion,
+                    is_grace,
+                    residue: *excursion,
                 });
             }
         }
