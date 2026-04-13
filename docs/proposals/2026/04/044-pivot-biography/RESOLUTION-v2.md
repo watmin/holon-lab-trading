@@ -102,15 +102,18 @@ bundle is trivially cheap at N≤20.
 
 ```scheme
 (sequential
-  pivot-thought-0    ;; permute(thought, 0) — most recent
+  pivot-thought-0    ;; permute(thought, 0) — oldest
   gap-thought-0      ;; permute(thought, 1)
   pivot-thought-1    ;; permute(thought, 2)
   gap-thought-1      ;; permute(thought, 3)
-  pivot-thought-2)   ;; permute(thought, 4)
+  pivot-thought-2)   ;; permute(thought, 4) — most recent
 ```
 
-One vector holds the full rhythm. Bounded at ~20 entries.
-The order IS the geometry. ABC ≠ CBA.
+Left to right. Position 0 is the oldest. New pivots append at
+the end. Existing positions don't shift — cached children keep
+their permutation. The series reads like a chart: the story
+unfolds in the order it was lived. One vector holds the full
+rhythm. Bounded at ~20 entries. The order IS the geometry.
 
 ### Pivot series scalars (explicit summaries)
 
