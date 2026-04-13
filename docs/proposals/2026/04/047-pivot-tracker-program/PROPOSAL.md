@@ -5,9 +5,22 @@
 **Depends on:** 045 (pivot mechanics), 046 (pivot pipes)
 
 **Corrects:** 046's Option A (enrich chain on main thread).
-The pivot tracker is a PROGRAM, not logic on the main thread.
-Many writers, many readers, concurrent access. The program
-owns the state. The channels are the boundary.
+
+**Principle:** The main thread is the kernel. It wires programs.
+It sends candles. It collects outputs. It schedules. It does
+NOT compute, enrich, transform, or hold domain state. The
+moment domain logic lives on the main thread, orchestration
+is complected with thinking. The main thread must be ONLY a
+kernel for programs. Putting anything on it that isn't
+scheduling will be a failure.
+
+046's Option A was wrong because it placed tracker state and
+tick logic on the main thread. The five designers missed it
+because all three options were flavors of the same mistake —
+none proposed a program. The pivot tracker is a PROGRAM, like
+the cache, like the database, like the console. Many writers,
+many readers, concurrent access. The program owns the state.
+The channels are the boundary.
 
 ## Why a program
 
