@@ -7,6 +7,7 @@ use std::sync::Arc;
 use holon::kernel::vector::Vector;
 
 use crate::types::candle::Candle;
+use crate::types::distances::Distances;
 use crate::encoding::thought_encoder::ThoughtAST;
 
 /// What the market observer produces. What the exit observer receives.
@@ -35,4 +36,5 @@ pub struct MarketExitChain {
     pub exit_raw: Vector,
     pub exit_anomaly: Vector,
     pub exit_ast: ThoughtAST,
+    pub exit_distances: Distances,
 }

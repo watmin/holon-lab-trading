@@ -14,12 +14,15 @@ use holon::kernel::vector::Vector;
 use holon::kernel::vector_manager::VectorManager;
 
 use enterprise::domain::candle_stream::CandleStream;
+use enterprise::domain::exit_observer::ExitObserver;
 use enterprise::domain::indicator_bank::IndicatorBank;
 use enterprise::domain::ledger;
 use enterprise::domain::config;
 use enterprise::domain::market_observer::MarketObserver;
 use enterprise::kernel::handle_pool::HandlePool;
 use enterprise::encoding::thought_encoder::{ThoughtAST, ThoughtEncoder};
+use enterprise::programs::app::exit_observer_program::{ExitLearn, ExitSlot};
+use enterprise::programs::app::exit_observer_program::exit_observer_program;
 use enterprise::programs::app::market_observer_program::{ObsInput, ObsLearn};
 use enterprise::programs::app::market_observer_program::market_observer_program;
 use enterprise::programs::stdlib::cache::cache;
@@ -74,36 +77,51 @@ struct Pipeline {
 
 // ─── Wiring ────────────────────────────────────────────────────────────────
 
-struct WiredObservers {
+struct WiredMarketObservers {
     /// Senders to feed candles to each observer
     candle_txs: Vec<QueueSender<ObsInput>>,
     /// Thread handles — join to get trained observers back
     join_handles: Vec<std::thread::JoinHandle<MarketObserver>>,
     /// Topic handles — must live until shutdown
     topic_handles: Vec<enterprise::services::topic::TopicHandle>,
+    /// Exit slot receivers: exit_queue_rxs[mi][ei] — market observer mi, exit observer ei
+    exit_queue_rxs: Vec<Vec<enterprise::services::queue::QueueReceiver<MarketChain>>>,
 }
 
 fn wire_market_observers(
     observers: Vec<MarketObserver>,
+    num_exit_observers: usize,
     mut cache_pool: HandlePool<enterprise::programs::stdlib::cache::CacheHandle<ThoughtAST, Vector>>,
     mut console_pool: HandlePool<enterprise::programs::stdlib::console::ConsoleHandle>,
     mut db_pool: HandlePool<enterprise::services::queue::QueueSender<LogEntry>>,
     encoder: Arc<ThoughtEncoder>,
     recalib_interval: usize,
-) -> WiredObservers {
+) -> WiredMarketObservers {
     let num_observers = observers.len();
     let mut candle_txs: Vec<QueueSender<ObsInput>> = Vec::with_capacity(num_observers);
     let mut join_handles: Vec<std::thread::JoinHandle<MarketObserver>> =
         Vec::with_capacity(num_observers);
     let mut topic_handles = Vec::with_capacity(num_observers);
+    let mut exit_queue_rxs: Vec<Vec<enterprise::services::queue::QueueReceiver<MarketChain>>> =
+        Vec::with_capacity(num_observers);
 
     for (i, observer) in observers.into_iter().enumerate() {
         // Candle input queue
         let (candle_tx, candle_rx) = queue_bounded::<ObsInput>(1);
         candle_txs.push(candle_tx);
 
-        // Output topic with zero consumers — results discarded
-        let (result_tx, topic_handle) = topic::<MarketChain>(1, vec![]);
+        // Create M queues for fan-out to exit observers
+        let mut exit_txs = Vec::with_capacity(num_exit_observers);
+        let mut exit_rxs = Vec::with_capacity(num_exit_observers);
+        for _ in 0..num_exit_observers {
+            let (tx, rx) = queue_bounded::<MarketChain>(1);
+            exit_txs.push(tx);
+            exit_rxs.push(rx);
+        }
+        exit_queue_rxs.push(exit_rxs);
+
+        // Output topic with M consumers — fan out to exit observers
+        let (result_tx, topic_handle) = topic::<MarketChain>(1, exit_txs);
         topic_handles.push(topic_handle);
 
         // Learn mailbox — dummy, no learn signals
@@ -139,15 +157,109 @@ fn wire_market_observers(
     }
 
     // Assert all pooled handles were claimed — orphans cause deadlocks.
-    // If any finish() is forgotten, Drop fires here at function return.
     console_pool.finish();
     cache_pool.finish();
     db_pool.finish();
 
-    WiredObservers {
+    WiredMarketObservers {
         candle_txs,
         join_handles,
         topic_handles,
+        exit_queue_rxs,
+    }
+}
+
+// ─── Exit observer wiring ──────────────────────────────────────────────────
+
+struct WiredExitObservers {
+    /// Thread handles — join to get trained exit observers back
+    join_handles: Vec<std::thread::JoinHandle<ExitObserver>>,
+    /// Discard receivers — hold alive until shutdown so exit observer sends don't fail
+    _discard_rxs: Vec<enterprise::services::queue::QueueReceiver<enterprise::programs::chain::MarketExitChain>>,
+}
+
+fn wire_exit_observers(
+    exit_observers: Vec<ExitObserver>,
+    exit_queue_rxs: Vec<Vec<enterprise::services::queue::QueueReceiver<MarketChain>>>,
+    mut cache_pool: HandlePool<enterprise::programs::stdlib::cache::CacheHandle<ThoughtAST, Vector>>,
+    mut console_pool: HandlePool<enterprise::programs::stdlib::console::ConsoleHandle>,
+    mut db_pool: HandlePool<enterprise::services::queue::QueueSender<LogEntry>>,
+    encoder: Arc<ThoughtEncoder>,
+    noise_floor: f64,
+) -> WiredExitObservers {
+    let num_market = exit_queue_rxs.len();
+    let num_exit = exit_observers.len();
+    let mut join_handles: Vec<std::thread::JoinHandle<ExitObserver>> =
+        Vec::with_capacity(num_exit);
+
+    // Transpose: exit_queue_rxs[mi][ei] → slots[ei][mi]
+    // We need to move receivers out, so consume the outer vec.
+    let mut transposed: Vec<Vec<Option<enterprise::services::queue::QueueReceiver<MarketChain>>>> =
+        Vec::with_capacity(num_exit);
+    for _ in 0..num_exit {
+        transposed.push(Vec::with_capacity(num_market));
+    }
+    for mi_rxs in exit_queue_rxs {
+        for (ei, rx) in mi_rxs.into_iter().enumerate() {
+            transposed[ei].push(Some(rx));
+        }
+    }
+
+    // Hold discard receivers alive so exit observer sends don't fail
+    let mut discard_rxs = Vec::new();
+
+    for (ei, exit_obs) in exit_observers.into_iter().enumerate() {
+        // Build N slots for this exit observer
+        let slot_rxs: Vec<enterprise::services::queue::QueueReceiver<MarketChain>> = transposed[ei]
+            .iter_mut()
+            .map(|opt| opt.take().expect("each rx used exactly once"))
+            .collect();
+
+        let mut slots = Vec::with_capacity(num_market);
+        for rx in slot_rxs {
+            // Output to broker — discard for now (broker not wired yet)
+            // Keep receiver alive so send() doesn't return Err
+            let (discard_tx, discard_rx) = queue_unbounded();
+            discard_rxs.push(discard_rx);
+            slots.push(ExitSlot {
+                input_rx: rx,
+                output_tx: discard_tx,
+            });
+        }
+
+        // Learn mailbox — dummy, no learn signals yet
+        let (learn_dummy_tx, learn_dummy_rx) = queue_unbounded::<ExitLearn>();
+        drop(learn_dummy_tx);
+        let learn_rx = mailbox(vec![learn_dummy_rx]);
+
+        let obs_cache = cache_pool.pop();
+        let obs_console = console_pool.pop();
+        let db_tx = db_pool.pop();
+
+        let enc = Arc::clone(&encoder);
+        let jh = std::thread::spawn(move || {
+            exit_observer_program(
+                slots,
+                learn_rx,
+                obs_cache,
+                obs_console,
+                db_tx,
+                exit_obs,
+                enc,
+                noise_floor,
+                ei,
+            )
+        });
+        join_handles.push(jh);
+    }
+
+    cache_pool.finish();
+    console_pool.finish();
+    db_pool.finish();
+
+    WiredExitObservers {
+        join_handles,
+        _discard_rxs: discard_rxs,
     }
 }
 
@@ -155,9 +267,11 @@ fn wire_market_observers(
 
 fn main() {
     let args = Args::parse();
-    let num_observers = config::MARKET_LENSES.len();
+    let num_market = config::MARKET_LENSES.len();
+    let num_exit = config::EXIT_LENSES.len();
     let dims = args.dims;
     let recalib_interval = args.recalib_interval;
+    let noise_floor = 5.0 / (dims as f64).sqrt();
 
     // Install signal handlers. One write on signal. One read per candle.
     unsafe {
@@ -181,8 +295,8 @@ fn main() {
         ));
     }
 
-    // Console: one handle per stream + one per observer + one for main
-    let num_console = parsed.len() + num_observers + 1;
+    // Console: one handle per stream + one per market observer + one per exit observer + one for main
+    let num_console = parsed.len() + num_market + num_exit + 1;
     let (handles, console_driver) = console(num_console);
     let mut console_pool = HandlePool::new("console", handles);
 
@@ -203,13 +317,13 @@ fn main() {
     );
     let (db_senders, db_driver) = database::<LogEntry>(
         &db_path,
-        num_observers,
+        num_market + num_exit,
         100,
         ledger::ledger_setup,
         ledger::ledger_insert,
     );
 
-    let db_pool = HandlePool::new("db", db_senders);
+    let mut db_pool = HandlePool::new("db", db_senders);
 
     main_handle.out(format!("db: {}", db_path));
 
@@ -218,18 +332,45 @@ fn main() {
     let encoder = Arc::new(ThoughtEncoder::new(vm));
 
     let (cache_handles, cache_driver) =
-        cache::<ThoughtAST, Vector>("encoder", 65536, num_observers);
-    let cache_pool = HandlePool::new("cache", cache_handles);
+        cache::<ThoughtAST, Vector>("encoder", 65536, num_market + num_exit);
+    let mut cache_pool = HandlePool::new("cache", cache_handles);
+
+    // ─── Market observer pools (split from exit observer pools) ──────────
+    // Pop exit observer handles first so market observer wiring gets the rest.
+    let mut exit_console_handles = Vec::with_capacity(num_exit);
+    let mut exit_cache_handles = Vec::with_capacity(num_exit);
+    let mut exit_db_handles = Vec::with_capacity(num_exit);
+    for _ in 0..num_exit {
+        exit_console_handles.push(console_pool.pop());
+        exit_cache_handles.push(cache_pool.pop());
+        exit_db_handles.push(db_pool.pop());
+    }
 
     // ─── Market observers ──────────────────────────────────────────────────
     let observers = config::create_market_observers(dims, recalib_interval);
     let wired = wire_market_observers(
         observers,
+        num_exit,
         cache_pool,
         console_pool,
         db_pool,
         Arc::clone(&encoder),
         recalib_interval,
+    );
+
+    // ─── Exit observers ────────────────────────────────────────────────────
+    let exit_observers = config::create_exit_observers(dims, recalib_interval);
+    let exit_cache_pool = HandlePool::new("exit-cache", exit_cache_handles);
+    let exit_console_pool = HandlePool::new("exit-console", exit_console_handles);
+    let exit_db_pool = HandlePool::new("exit-db", exit_db_handles);
+    let wired_exit = wire_exit_observers(
+        exit_observers,
+        wired.exit_queue_rxs,
+        exit_cache_pool,
+        exit_console_pool,
+        exit_db_pool,
+        Arc::clone(&encoder),
+        noise_floor,
     );
 
     // ─── Build pipelines ───────────────────────────────────────────────────
@@ -252,8 +393,8 @@ fn main() {
     }
 
     main_handle.out(format!(
-        "{}D recalib={} observers={}",
-        dims, recalib_interval, num_observers
+        "{}D recalib={} market={} exit={} noise_floor={:.4}",
+        dims, recalib_interval, num_market, num_exit, noise_floor
     ));
 
     // ─── Per-stream loop ───────────────────────────────────────────────────
@@ -306,10 +447,10 @@ fn main() {
 
     // ─── Shutdown ──────────────────────────────────────────────────────────
 
-    // Drop candle senders — observers see disconnect
+    // Drop candle senders — market observers see disconnect
     drop(wired.candle_txs);
 
-    // Join observer threads — get the trained observers back
+    // Join market observer threads — get the trained observers back
     for jh in wired.join_handles {
         match jh.join() {
             Ok(observer) => {
@@ -321,7 +462,28 @@ fn main() {
                 ));
             }
             Err(_) => {
-                main_handle.err("observer thread panicked".to_string());
+                main_handle.err("market observer thread panicked".to_string());
+            }
+        }
+    }
+
+    // Drop topic handles — exit observers see disconnect as topics drain
+    drop(wired.topic_handles);
+
+    // Join exit observer threads — get the trained exit observers back
+    for jh in wired_exit.join_handles {
+        match jh.join() {
+            Ok(exit_obs) => {
+                main_handle.out(format!(
+                    "exit-{}: trail_exp={:.1} stop_exp={:.1} grace_rate={:.3}",
+                    exit_obs.lens,
+                    exit_obs.trail_reckoner.experience(),
+                    exit_obs.stop_reckoner.experience(),
+                    exit_obs.grace_rate,
+                ));
+            }
+            Err(_) => {
+                main_handle.err("exit observer thread panicked".to_string());
             }
         }
     }
@@ -330,7 +492,6 @@ fn main() {
 
     // Drop all handles, join drivers
     drop(stream_handles);
-    drop(wired.topic_handles);
     db_driver.join();
     drop(main_handle);
     cache_driver.join();

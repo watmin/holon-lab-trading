@@ -56,10 +56,8 @@ pub fn broker_program(
         // 2. Direction from market prediction
         let direction = direction_from_prediction(&chain.market_prediction);
 
-        // 3. Distances — TODO: MarketExitChain should carry exit_distances from the
-        //    exit observer's reckoner. For now, fall back to the broker's own
-        //    cascade (accumulator → default).
-        let distances = broker.cascade_distances(None);
+        // 3. Distances from exit observer's reckoner, cascaded through broker
+        let distances = broker.cascade_distances(Some(chain.exit_distances));
 
         // 4. Direction flip — close runners in old direction
         let mut flip_resolutions = Vec::new();

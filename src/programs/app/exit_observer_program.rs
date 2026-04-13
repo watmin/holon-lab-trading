@@ -157,6 +157,10 @@ pub fn exit_observer_program(
             exit_obs.noise_subspace.update(&to_f64(&exit_raw));
             let exit_anomaly = exit_obs.strip_noise(&exit_raw);
 
+            // Distances from reckoner, or crutches if not experienced yet.
+            let exit_distances = exit_obs.reckoner_distances(&exit_anomaly)
+                .unwrap_or(exit_obs.default_distances);
+
             // Send MarketExitChain downstream.
             let full = MarketExitChain {
                 candle: chain.candle,
@@ -170,6 +174,7 @@ pub fn exit_observer_program(
                 exit_raw,
                 exit_anomaly,
                 exit_ast: exit_bundle,
+                exit_distances,
             };
             if slot.output_tx.send(full).is_err() {
                 break 'outer;
