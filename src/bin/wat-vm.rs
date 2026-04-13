@@ -174,8 +174,6 @@ fn wire_market_observers(
 struct WiredExitObservers {
     /// Thread handles — join to get trained exit observers back
     join_handles: Vec<std::thread::JoinHandle<ExitObserver>>,
-    /// Discard receivers — hold alive until shutdown so exit observer sends don't fail
-    _discard_rxs: Vec<enterprise::services::queue::QueueReceiver<enterprise::programs::chain::MarketExitChain>>,
 }
 
 fn wire_exit_observers(
@@ -205,9 +203,6 @@ fn wire_exit_observers(
         }
     }
 
-    // Hold discard receivers alive so exit observer sends don't fail
-    let mut discard_rxs = Vec::new();
-
     for (ei, exit_obs) in exit_observers.into_iter().enumerate() {
         // Build N slots for this exit observer
         let slot_rxs: Vec<enterprise::services::queue::QueueReceiver<MarketChain>> = transposed[ei]
@@ -217,10 +212,9 @@ fn wire_exit_observers(
 
         let mut slots = Vec::with_capacity(num_market);
         for rx in slot_rxs {
-            // Output to broker — discard for now (broker not wired yet)
-            // Keep receiver alive so send() doesn't return Err
+            // Output to broker — dummy consumer drains the queue (broker not wired yet)
             let (discard_tx, discard_rx) = queue_unbounded();
-            discard_rxs.push(discard_rx);
+            std::thread::spawn(move || { while discard_rx.recv().is_ok() {} });
             slots.push(ExitSlot {
                 input_rx: rx,
                 output_tx: discard_tx,
@@ -259,7 +253,6 @@ fn wire_exit_observers(
 
     WiredExitObservers {
         join_handles,
-        _discard_rxs: discard_rxs,
     }
 }
 
@@ -400,6 +393,8 @@ fn main() {
     // ─── Per-stream loop ───────────────────────────────────────────────────
     let max = args.max_candles;
     let mut encode_count: usize = 0;
+    let run_start = std::time::Instant::now();
+    let mut last_report = std::time::Instant::now();
     for (i, pipeline) in pipelines.iter_mut().enumerate() {
         while pipeline.count < max && !STOP.load(Ordering::SeqCst) {
             match pipeline.stream.next() {
@@ -418,10 +413,15 @@ fn main() {
                         });
                     }
 
-                    if pipeline.count % 500 == 0 {
+                    if pipeline.count % 100 == 0 {
+                        let elapsed = run_start.elapsed().as_secs_f64();
+                        let throughput = if elapsed > 0.0 { pipeline.count as f64 / elapsed } else { 0.0 };
+                        let interval_ms = last_report.elapsed().as_millis();
+                        last_report = std::time::Instant::now();
                         stream_handles[i].out(format!(
-                            "{}/{} candle {}: close={:.2}",
-                            pipeline.source, pipeline.target, pipeline.count, candle.close
+                            "{}/{} candle {}: close={:.2} {:.1}/s {:.0}ms/100",
+                            pipeline.source, pipeline.target, pipeline.count,
+                            candle.close, throughput, interval_ms
                         ));
                     }
                 }
