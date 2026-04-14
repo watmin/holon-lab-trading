@@ -11,8 +11,9 @@ use crate::encoding::scale_tracker::ScaleTracker;
 use crate::encoding::thought_encoder::ThoughtAST;
 
 // Vocab imports -- market
-// Proposals 041+042: fibonacci, ichimoku, stochastic removed from all lenses.
+// Proposals 041+042: ichimoku, stochastic removed from all lenses.
 // Their modules still exist but are no longer called.
+// fibonacci is used by WyckoffPosition.
 use crate::vocab::market::divergence::encode_divergence_facts;
 use crate::vocab::market::fibonacci::encode_fibonacci_facts;
 use crate::vocab::market::flow::encode_flow_facts;
@@ -255,12 +256,12 @@ mod tests {
         let core_facts = position_lens_facts(&PositionLens::Core, &candle, &mut scales);
         let full_facts = position_lens_facts(&PositionLens::Full, &candle, &mut scales);
 
-        // Proposal 040: both lenses get regime(8) + time(2) = 10 market context atoms.
-        // Proposal 049 Phase 2: + phase-label(1) + phase-duration(1) + phase-series(1) = 13.
+        // Core: regime(8) + time(2) = 10.
+        // Full: regime(8) + time(2) + phase-label(1) + phase-duration(1) + phase-series(1) = 13.
         // (No scalar summaries from empty phase_history on default candle.)
         // Trade atoms arrive through the trade pipe, not here.
-        assert_eq!(core_facts.len(), 13); // regime(8) + time(2) + phase-label(1) + phase-duration(1) + phase-series(1)
-        assert_eq!(full_facts.len(), 13); // regime(8) + time(2) + phase-label(1) + phase-duration(1) + phase-series(1)
+        assert_eq!(core_facts.len(), 10); // regime(8) + time(2)
+        assert_eq!(full_facts.len(), 13); // regime(8) + time(2) + phase(3)
     }
 
     #[test]

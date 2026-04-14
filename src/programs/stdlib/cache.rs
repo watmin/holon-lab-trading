@@ -11,6 +11,7 @@
 //! Programs encode through `EncodingCacheHandle::get()` — opaque,
 //! hit or miss invisible.
 
+#[cfg(test)]
 use std::hash::Hash;
 use std::num::NonZeroUsize;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -29,12 +30,14 @@ use crate::services::queue::{self, QueueReceiver, QueueSender};
 
 /// A program's handle to the cache. Each program gets its own.
 /// Not cloneable — one per program.
+#[cfg(test)]
 pub struct CacheHandle<K, V> {
     get_tx: QueueSender<K>,
     get_rx: QueueReceiver<Option<V>>,
     set_tx: QueueSender<(K, V)>,
 }
 
+#[cfg(test)]
 impl<K: Clone + Send, V: Send> CacheHandle<K, V> {
     /// Synchronous get: send key, block for response.
     /// Returns None on miss or if the driver has shut down.
@@ -90,6 +93,7 @@ impl CacheDriverHandle {
 /// in Drop would deadlock if senders are still alive. The cascade IS
 /// the shutdown guarantee: senders drop → driver drains → driver exits.
 /// Call join() explicitly when you need to wait for the driver to finish.
+#[cfg(test)]
 pub fn cache<K, V>(
     name: &str, // the cache's identity — used for diagnostics and logging
     capacity: usize,

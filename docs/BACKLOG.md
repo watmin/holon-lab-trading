@@ -19,38 +19,38 @@ Five wards scanned 81 Rust files. Leaves to root. Session: 2026-04-13.
 
 ## Dead code — to reap
 
-- [ ] **RollingPercentile.** Entire struct unused. Built for the
-  deleted pivot tracker. Broker uses inline VecDeque.
+- [x] **RollingPercentile.** REAPED. Entire struct deleted.
 
-- [ ] **3 exit vocab modules.** volatility.rs, structure.rs,
-  timing.rs — `encode_*_facts` only called in tests. Never wired
-  into any lens.
+- [x] **3 exit vocab modules.** REAPED. volatility.rs, structure.rs,
+  timing.rs deleted. Never wired into any lens.
 
-- [ ] **2 market vocab imports.** ichimoku and stochastic imported
-  in lens.rs but never called. Dead imports. (fibonacci IS used
-  by WyckoffPosition despite the lying comment.)
+- [x] **Lying comment in lens.rs.** FIXED. Now says "ichimoku,
+  stochastic removed" — fibonacci IS used by WyckoffPosition.
+  (ichimoku/stochastic were never imported in lens.rs — the comment
+  was the only dead part.)
 
-- [ ] **4 broker vocab modules.** derived.rs, input.rs, opinions.rs,
-  self_assessment.rs — `encode_*` functions only called in tests.
-  Broker program computes inline. ~500 lines of dead production code.
+- [x] **4 broker vocab modules.** REAPED. derived.rs, input.rs,
+  opinions.rs, self_assessment.rs deleted. Entire broker vocab
+  directory removed — nothing imported from it.
 
 - [x] **ToAst trait.** REAPED with encoding divergence fix above.
 
-- [ ] **Generic `cache()` + `CacheHandle`.** Test-only. Production
-  uses `encoding_cache()` + `EncodingCacheHandle`.
+- [x] **Generic `cache()` + `CacheHandle`.** Gated behind
+  `#[cfg(test)]`. Tests preserved.
 
-- [ ] **`ThoughtAST::compress()`.** Never called outside tests.
+- [x] **`ThoughtAST::compress()`.** REAPED. Removed entirely.
 
-- [ ] **`ObserveResult::misses`.** Always empty Vec passed in.
-  Never read in production.
+- [x] **`ObserveResult::misses`.** REAPED. Field removed from
+  struct, parameter removed from `observe()`, call sites updated.
 
-- [ ] **`ThoughtEncoder::vm()` and `scalar_encoder()`.** Public
-  accessors never called outside module.
+- [x] **`ThoughtEncoder::vm()` and `scalar_encoder()`.** REAPED.
+  Dead public accessors removed.
 
-- [ ] **`_cp` binding in broker.rs.** Unused destructure.
+- [x] **`_cp` binding in broker.rs.** REAPED. Line removed.
+  Parameter prefixed with underscore.
 
-- [ ] **Lying comment in lens.rs.** "fibonacci, ichimoku,
-  stochastic removed from all lenses" — fibonacci IS used.
+- [x] **Stale test in lens.rs.** FIXED. `test_position_lens_facts_variants`
+  now asserts Core=10, Full=13 (was asserting Core=13, pre-existing bug).
 
 ## Performance — to temper
 

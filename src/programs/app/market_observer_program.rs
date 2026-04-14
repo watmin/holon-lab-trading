@@ -108,7 +108,7 @@ pub fn market_observer_program(
 
         // Observe: noise subspace learns, anomaly extracted, reckoner predicts.
         let t0 = std::time::Instant::now();
-        let result = observer.observe(thought, Vec::new());
+        let result = observer.observe(thought);
         let ns_observe = t0.elapsed().as_nanos() as f64;
 
         // Capture conviction before prediction is moved.

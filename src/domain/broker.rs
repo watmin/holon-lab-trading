@@ -249,10 +249,9 @@ impl Broker {
 
     /// Close all runners — direction flipped. Force-resolve all signaled papers.
     /// Returns runner resolutions for position batch training + market second teaching.
-    pub fn close_all_runners(&mut self, current_price: Price) -> Vec<Resolution> {
+    pub fn close_all_runners(&mut self, _current_price: Price) -> Vec<Resolution> {
         let mut resolutions = Vec::new();
         let mut remaining = VecDeque::new();
-        let _cp = current_price.0;
 
         while let Some(mut paper) = self.papers.pop_front() {
             if paper.signaled && !paper.resolved {

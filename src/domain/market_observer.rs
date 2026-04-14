@@ -8,7 +8,7 @@ use holon::memory::{OnlineSubspace, ReckConfig, Reckoner};
 
 use crate::learning::engram_gate::{check_engram_gate, EngramGateState};
 use crate::types::enums::{Direction, MarketLens};
-use crate::encoding::thought_encoder::{IncrementalBundle, ThoughtAST};
+use crate::encoding::thought_encoder::IncrementalBundle;
 use crate::to_f64;
 use crate::learning::window_sampler::WindowSampler;
 
@@ -49,8 +49,6 @@ pub struct ObserveResult {
     pub prediction: holon::memory::Prediction,
     /// Edge: accuracy_at(conviction) or 0.0 if curve not valid.
     pub edge: f64,
-    /// Cache misses from thought encoding.
-    pub misses: Vec<(ThoughtAST, Vector)>,
 }
 
 impl MarketObserver {
@@ -89,7 +87,6 @@ impl MarketObserver {
     pub fn observe(
         &mut self,
         thought: Vector,
-        misses: Vec<(ThoughtAST, Vector)>,
     ) -> ObserveResult {
         // Clone the raw thought BEFORE noise stripping — consumers need both.
         let raw = thought.clone();
@@ -124,7 +121,6 @@ impl MarketObserver {
             anomaly,
             prediction: pred,
             edge,
-            misses,
         }
     }
 
@@ -221,9 +217,8 @@ mod tests {
     fn test_observe_returns_result() {
         let mut obs = make_observer();
         let thought = random_vector("test_thought");
-        let result = obs.observe(thought, Vec::new());
+        let result = obs.observe(thought);
         assert_eq!(result.anomaly.dimensions(), DIMS);
-        assert!(result.misses.is_empty());
     }
 
     #[test]
@@ -253,7 +248,7 @@ mod tests {
     fn test_observe_sets_last_prediction() {
         let mut obs = make_observer();
         let thought = random_vector("pred_thought");
-        let _ = obs.observe(thought, Vec::new());
+        let _ = obs.observe(thought);
         // last_prediction should have been set (to Up or Down based on reckoner)
         assert!(obs.last_prediction == Direction::Up || obs.last_prediction == Direction::Down);
     }

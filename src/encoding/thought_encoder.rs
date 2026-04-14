@@ -43,41 +43,6 @@ impl ThoughtAST {
         }
     }
 
-    /// Compress: remove structurally identical children from Bundles.
-    /// Recursive. The output encodes to the same vector (majority vote
-    /// is idempotent for identical contributions). Lossless in the algebra.
-    pub fn compress(self) -> Self {
-        match self {
-            ThoughtAST::Bundle(children) => {
-                let compressed: Vec<ThoughtAST> = children
-                    .into_iter()
-                    .map(|c| c.compress())
-                    .collect();
-                let mut seen = Vec::new();
-                let unique: Vec<ThoughtAST> = compressed
-                    .into_iter()
-                    .filter(|c| {
-                        if seen.contains(c) {
-                            false
-                        } else {
-                            seen.push(c.clone());
-                            true
-                        }
-                    })
-                    .collect();
-                ThoughtAST::Bundle(unique)
-            }
-            ThoughtAST::Sequential(items) => {
-                let compressed: Vec<ThoughtAST> = items
-                    .into_iter()
-                    .map(|c| c.compress())
-                    .collect();
-                ThoughtAST::Sequential(compressed)
-            }
-            other => other,
-        }
-    }
-
     /// Render as EDN (extensible data notation) — the thought AS lisp.
     /// Depth-aware indentation. Readable.
     pub fn to_edn(&self) -> String {
@@ -232,15 +197,6 @@ impl ThoughtEncoder {
         }
     }
 
-    /// Access the VectorManager.
-    pub fn vm(&self) -> &VectorManager {
-        &self.vm
-    }
-
-    /// Access the ScalarEncoder.
-    pub fn scalar_encoder(&self) -> &ScalarEncoder {
-        &self.scalar_encoder
-    }
 }
 
 /// Incremental bundling — maintains sums across candles.
