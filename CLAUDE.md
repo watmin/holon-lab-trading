@@ -13,9 +13,10 @@ The Rust in `src/` will implement what the wat specifies. When layers diverge,
 the guide is right. The guide IS the program. The wat is the protein. The
 Rust is the organism. The spells are the ribosomes.
 
-**Current state:** The wat specification is at third inscription — 40 files,
-3248 lines, proven by eight wards. The Rust (`src/`) is empty — it will be
-compiled from the proven wat. Old code lives in `archived/`.
+**Current state:** The Rust is live. The wat-vm runs — 30+ threads, zero
+Mutex, three messaging primitives (queue, topic, mailbox). The wat
+specification served as the blueprint; the Rust is the organism. Proposals
+043-053 track the current development arc. Old code lives in `archived/`.
 
 ## Build & Run
 
@@ -43,15 +44,17 @@ Each has a reckoner, a noise subspace, a window sampler, and a lens that
 selects which vocabulary modules it thinks about. Six lenses: momentum,
 structure, volume, regime, narrative, generalist.
 
-**Exit observers** (M per post) predict distances — how far to set the trailing
-stop, safety stop, take profit, and runner trailing stop. Four continuous
-reckoners each. They compose market thoughts with their own exit-specific facts.
+**Position observers** (M per post) predict distances — how far to set the
+trailing stop and safety stop. Two continuous reckoners each (trail, stop).
+They compose market thoughts with their own position-specific facts through
+a lens (Core or Full). Renamed from "exit observer" in Proposal 050.
 
-**Brokers** (N×M per post) bind one market observer to one exit observer.
-The broker IS the accountability unit. It owns paper trades, scalar
-accumulators, and a Grace/Violence reckoner. When a trade resolves, the
-broker returns PropagationFacts — the post applies them to the observers.
-Values up, not effects down. More Grace → more capital. More Violence → less.
+**Brokers** (N×M per post) bind one market observer to one position observer.
+The broker IS the accountability unit. It owns paper trades and scalar
+accumulators (trail, stop). When a trade resolves, the broker propagates
+learning signals to both observers through mailbox channels. Values up,
+not effects down. Proposal 051 deleted the binary Grace/Violence reckoner —
+continuous reckoners only.
 
 **Post** — per-asset-pair unit. Owns all observers and brokers. Routes candles
 through the four-step loop. Proposes trades to the treasury. Uses
@@ -74,7 +77,7 @@ values against price histories. Owns its own module.
 ### The four-step loop (per candle, per post)
 
 1. **RESOLVE** — settle triggered trades, propagate outcomes to brokers → observers
-2. **COMPUTE+DISPATCH** — encode candle → market observers predict → exit observers compose → brokers propose
+2. **COMPUTE+DISPATCH** — encode candle → market observers predict → position observers compose → brokers propose
 3. **TICK** — 3a: parallel tick all brokers (paper trades). 3b: sequential propagate (shared observers). 3c: update triggers.
 4. **COLLECT+FUND** — treasury evaluates proposals, funds proven ones
 
@@ -124,8 +127,9 @@ the stream, writes the ledger, displays progress. It doesn't think.
 **One encoding path.** Encoding IS the thought — identical at prediction
 and resolution.
 
-**The enterprise vocabulary.** Observer, Broker, Post, Treasury, Enterprise,
-Reckoner. Not expert, manager, desk, journal. The names carry the architecture.
+**The enterprise vocabulary.** Market Observer, Position Observer, Broker,
+Post, Treasury, Enterprise, Reckoner. Not expert, exit observer, manager,
+desk, journal. The names carry the architecture.
 
 **Never average a distribution.** Let values breathe with the market.
 
