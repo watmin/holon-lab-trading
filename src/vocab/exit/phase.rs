@@ -76,25 +76,10 @@ pub fn phase_series_thought(phase_history: &[PhaseRecord]) -> ThoughtAST {
 
             ThoughtAST::Bundle(vec![
                 label_atom,
-                ThoughtAST::Log {
-                    name: "phase-rec-duration".into(),
-                    value: (record.duration as f64).max(1.0),
-                },
-                ThoughtAST::Linear {
-                    name: "phase-rec-range".into(),
-                    value: range,
-                    scale: 1.0,
-                },
-                ThoughtAST::Linear {
-                    name: "phase-rec-move".into(),
-                    value: move_pct,
-                    scale: 1.0,
-                },
-                ThoughtAST::Linear {
-                    name: "phase-rec-volume".into(),
-                    value: round_to(record.volume_avg, 2),
-                    scale: 1.0,
-                },
+                ThoughtAST::Bind(Box::new(ThoughtAST::Atom("phase-rec-duration".into())), Box::new(ThoughtAST::Log { value: (record.duration as f64).max(1.0) })),
+                ThoughtAST::Bind(Box::new(ThoughtAST::Atom("phase-rec-range".into())), Box::new(ThoughtAST::Linear { value: range, scale: 1.0 })),
+                ThoughtAST::Bind(Box::new(ThoughtAST::Atom("phase-rec-move".into())), Box::new(ThoughtAST::Linear { value: move_pct, scale: 1.0 })),
+                ThoughtAST::Bind(Box::new(ThoughtAST::Atom("phase-rec-volume".into())), Box::new(ThoughtAST::Linear { value: round_to(record.volume_avg, 2), scale: 1.0 })),
             ])
         })
         .collect();
@@ -218,10 +203,17 @@ mod tests {
         assert_eq!(facts.len(), 2);
         // First is the label binding
         assert!(matches!(&facts[0], ThoughtAST::Bind(_, _)));
-        // Second is the duration linear
+        // Second is the duration (Bind(Atom("phase-duration"), Linear{..}))
         match &facts[1] {
-            ThoughtAST::Linear { name, .. } => assert_eq!(name, "phase-duration"),
-            _ => panic!("expected Linear for phase-duration"),
+            ThoughtAST::Bind(left, right) => {
+                match (left.as_ref(), right.as_ref()) {
+                    (ThoughtAST::Atom(name), ThoughtAST::Linear { .. }) => {
+                        assert_eq!(name, "phase-duration");
+                    }
+                    _ => panic!("expected Bind(Atom, Linear)"),
+                }
+            }
+            _ => panic!("expected Bind for phase-duration"),
         }
     }
 
@@ -331,7 +323,16 @@ mod tests {
         let facts = phase_scalar_facts(&records, &mut scales);
         // Should have valley-trend + range-trend + spacing-trend (at least)
         assert!(!facts.is_empty());
-        let names: Vec<String> = facts.iter().map(|f| f.name()).collect();
+        // Extract atom names from Bind(Atom(name), _) nodes
+        let names: Vec<String> = facts.iter().map(|f| {
+            match f {
+                ThoughtAST::Bind(left, _) => match left.as_ref() {
+                    ThoughtAST::Atom(name) => name.clone(),
+                    _ => f.name(),
+                },
+                _ => f.name(),
+            }
+        }).collect();
         assert!(names.contains(&"phase-valley-trend".to_string()));
         assert!(names.contains(&"phase-range-trend".to_string()));
         assert!(names.contains(&"phase-spacing-trend".to_string()));

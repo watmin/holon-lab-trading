@@ -37,12 +37,12 @@ impl ToAst for MomentumThought {
 
     fn forms(&self) -> Vec<ThoughtAST> {
         vec![
-            ThoughtAST::Linear { name: "close-sma20".into(), value: self.close_sma20, scale: 0.1 },
-            ThoughtAST::Linear { name: "close-sma50".into(), value: self.close_sma50, scale: 0.1 },
-            ThoughtAST::Linear { name: "close-sma200".into(), value: self.close_sma200, scale: 0.1 },
-            ThoughtAST::Linear { name: "macd-hist".into(), value: self.macd_hist, scale: 0.01 },
-            ThoughtAST::Linear { name: "di-spread".into(), value: self.di_spread, scale: 1.0 },
-            ThoughtAST::Log { name: "atr-ratio".into(), value: self.atr_ratio },
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("close-sma20".into())), Box::new(ThoughtAST::Linear { value: self.close_sma20, scale: 0.1 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("close-sma50".into())), Box::new(ThoughtAST::Linear { value: self.close_sma50, scale: 0.1 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("close-sma200".into())), Box::new(ThoughtAST::Linear { value: self.close_sma200, scale: 0.1 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("macd-hist".into())), Box::new(ThoughtAST::Linear { value: self.macd_hist, scale: 0.01 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("di-spread".into())), Box::new(ThoughtAST::Linear { value: self.di_spread, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("atr-ratio".into())), Box::new(ThoughtAST::Log { value: self.atr_ratio })),
         ]
     }
 }
@@ -55,7 +55,7 @@ pub fn encode_momentum_facts(c: &Candle, scales: &mut HashMap<String, ScaleTrack
         scaled_linear("close-sma200", t.close_sma200, scales),
         scaled_linear("macd-hist", t.macd_hist, scales),
         scaled_linear("di-spread", t.di_spread, scales),
-        ThoughtAST::Log { name: "atr-ratio".into(), value: t.atr_ratio },
+        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("atr-ratio".into())), Box::new(ThoughtAST::Log { value: t.atr_ratio })),
     ]
 }
 
@@ -77,12 +77,17 @@ mod tests {
         let mut scales = HashMap::new();
         let facts = encode_momentum_facts(&c, &mut scales);
         match &facts[4] {
-            ThoughtAST::Linear { name, value, .. } => {
-                assert_eq!(name, "di-spread");
-                // (25 - 20) / 100 = 0.05
-                assert!((value - 0.05).abs() < 1e-9);
+            ThoughtAST::Bind(left, right) => {
+                match (left.as_ref(), right.as_ref()) {
+                    (ThoughtAST::Atom(name), ThoughtAST::Linear { value, .. }) => {
+                        assert_eq!(name, "di-spread");
+                        // (25 - 20) / 100 = 0.05
+                        assert!((value - 0.05).abs() < 1e-9);
+                    }
+                    _ => panic!("expected Bind(Atom, Linear)"),
+                }
             }
-            _ => panic!("expected Linear"),
+            _ => panic!("expected Bind"),
         }
     }
 }

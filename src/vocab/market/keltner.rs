@@ -37,12 +37,12 @@ impl ToAst for KeltnerThought {
 
     fn forms(&self) -> Vec<ThoughtAST> {
         vec![
-            ThoughtAST::Linear { name: "bb-pos".into(), value: self.bb_pos, scale: 1.0 },
-            ThoughtAST::Log { name: "bb-width".into(), value: self.bb_width },
-            ThoughtAST::Linear { name: "kelt-pos".into(), value: self.kelt_pos, scale: 1.0 },
-            ThoughtAST::Linear { name: "squeeze".into(), value: self.squeeze, scale: 1.0 },
-            ThoughtAST::Linear { name: "kelt-upper-dist".into(), value: self.kelt_upper_dist, scale: 0.1 },
-            ThoughtAST::Linear { name: "kelt-lower-dist".into(), value: self.kelt_lower_dist, scale: 0.1 },
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("bb-pos".into())), Box::new(ThoughtAST::Linear { value: self.bb_pos, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("bb-width".into())), Box::new(ThoughtAST::Log { value: self.bb_width })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("kelt-pos".into())), Box::new(ThoughtAST::Linear { value: self.kelt_pos, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("squeeze".into())), Box::new(ThoughtAST::Linear { value: self.squeeze, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("kelt-upper-dist".into())), Box::new(ThoughtAST::Linear { value: self.kelt_upper_dist, scale: 0.1 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("kelt-lower-dist".into())), Box::new(ThoughtAST::Linear { value: self.kelt_lower_dist, scale: 0.1 })),
         ]
     }
 }
@@ -51,7 +51,7 @@ pub fn encode_keltner_facts(c: &Candle, scales: &mut HashMap<String, ScaleTracke
     let t = KeltnerThought::from_candle(c);
     vec![
         scaled_linear("bb-pos", t.bb_pos, scales),
-        ThoughtAST::Log { name: "bb-width".into(), value: t.bb_width },
+        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("bb-width".into())), Box::new(ThoughtAST::Log { value: t.bb_width })),
         scaled_linear("kelt-pos", t.kelt_pos, scales),
         scaled_linear("squeeze", t.squeeze, scales),
         scaled_linear("kelt-upper-dist", t.kelt_upper_dist, scales),
@@ -77,11 +77,16 @@ mod tests {
         let mut scales = HashMap::new();
         let facts = encode_keltner_facts(&c, &mut scales);
         match &facts[3] {
-            ThoughtAST::Linear { name, value, .. } => {
-                assert_eq!(name, "squeeze");
-                assert_eq!(*value, 0.95);
+            ThoughtAST::Bind(left, right) => {
+                match (left.as_ref(), right.as_ref()) {
+                    (ThoughtAST::Atom(name), ThoughtAST::Linear { value, .. }) => {
+                        assert_eq!(name, "squeeze");
+                        assert_eq!(*value, 0.95);
+                    }
+                    _ => panic!("expected Bind(Atom, Linear)"),
+                }
             }
-            _ => panic!("expected Linear"),
+            _ => panic!("expected Bind"),
         }
     }
 }

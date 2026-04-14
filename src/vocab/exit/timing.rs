@@ -36,11 +36,11 @@ impl ToAst for ExitTimingThought {
 
     fn forms(&self) -> Vec<ThoughtAST> {
         vec![
-            ThoughtAST::Linear { name: "rsi".into(), value: self.rsi, scale: 1.0 },
-            ThoughtAST::Linear { name: "stoch-k".into(), value: self.stoch_k, scale: 1.0 },
-            ThoughtAST::Linear { name: "stoch-kd-spread".into(), value: self.stoch_kd_spread, scale: 1.0 },
-            ThoughtAST::Linear { name: "macd-hist".into(), value: self.macd_hist, scale: 0.01 },
-            ThoughtAST::Linear { name: "cci".into(), value: self.cci, scale: 1.0 },
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("rsi".into())), Box::new(ThoughtAST::Linear { value: self.rsi, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("stoch-k".into())), Box::new(ThoughtAST::Linear { value: self.stoch_k, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("stoch-kd-spread".into())), Box::new(ThoughtAST::Linear { value: self.stoch_kd_spread, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("macd-hist".into())), Box::new(ThoughtAST::Linear { value: self.macd_hist, scale: 0.01 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("cci".into())), Box::new(ThoughtAST::Linear { value: self.cci, scale: 1.0 })),
         ]
     }
 }
@@ -74,12 +74,17 @@ mod tests {
         let mut scales = HashMap::new();
         let facts = encode_exit_timing_facts(&c, &mut scales);
         match &facts[2] {
-            ThoughtAST::Linear { name, value, .. } => {
-                assert_eq!(name, "stoch-kd-spread");
-                // (70 - 65) / 100 = 0.05
-                assert!((value - 0.05).abs() < 1e-9);
+            ThoughtAST::Bind(left, right) => {
+                match (left.as_ref(), right.as_ref()) {
+                    (ThoughtAST::Atom(name), ThoughtAST::Linear { value, .. }) => {
+                        assert_eq!(name, "stoch-kd-spread");
+                        // (70 - 65) / 100 = 0.05
+                        assert!((value - 0.05).abs() < 1e-9);
+                    }
+                    _ => panic!("expected Bind(Atom, Linear)"),
+                }
             }
-            _ => panic!("expected Linear"),
+            _ => panic!("expected Bind"),
         }
     }
 }

@@ -37,11 +37,11 @@ impl ToAst for ExitStructureThought {
 
     fn forms(&self) -> Vec<ThoughtAST> {
         vec![
-            ThoughtAST::Linear { name: "trend-consistency-6".into(), value: self.trend_consistency_6, scale: 1.0 },
-            ThoughtAST::Linear { name: "trend-consistency-12".into(), value: self.trend_consistency_12, scale: 1.0 },
-            ThoughtAST::Linear { name: "trend-consistency-24".into(), value: self.trend_consistency_24, scale: 1.0 },
-            ThoughtAST::Linear { name: "adx".into(), value: self.adx, scale: 1.0 },
-            ThoughtAST::Linear { name: "exit-kama-er".into(), value: self.exit_kama_er, scale: 1.0 },
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("trend-consistency-6".into())), Box::new(ThoughtAST::Linear { value: self.trend_consistency_6, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("trend-consistency-12".into())), Box::new(ThoughtAST::Linear { value: self.trend_consistency_12, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("trend-consistency-24".into())), Box::new(ThoughtAST::Linear { value: self.trend_consistency_24, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("adx".into())), Box::new(ThoughtAST::Linear { value: self.adx, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("exit-kama-er".into())), Box::new(ThoughtAST::Linear { value: self.exit_kama_er, scale: 1.0 })),
         ]
     }
 }
@@ -75,11 +75,16 @@ mod tests {
         let mut scales = HashMap::new();
         let facts = encode_exit_structure_facts(&c, &mut scales);
         match &facts[4] {
-            ThoughtAST::Linear { name, value, .. } => {
-                assert_eq!(name, "exit-kama-er");
-                assert_eq!(*value, 0.3);
+            ThoughtAST::Bind(left, right) => {
+                match (left.as_ref(), right.as_ref()) {
+                    (ThoughtAST::Atom(name), ThoughtAST::Linear { value, .. }) => {
+                        assert_eq!(name, "exit-kama-er");
+                        assert_eq!(*value, 0.3);
+                    }
+                    _ => panic!("expected Bind(Atom, Linear)"),
+                }
             }
-            _ => panic!("expected Linear"),
+            _ => panic!("expected Bind"),
         }
     }
 }

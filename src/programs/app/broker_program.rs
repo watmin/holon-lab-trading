@@ -47,10 +47,7 @@ fn compute_portfolio_biography(
     let mut atoms = Vec::with_capacity(10);
 
     // 1. Active trade count
-    atoms.push(ThoughtAST::Log {
-        name: "active-trade-count".into(),
-        value: (active_count as f64).max(1.0),
-    });
+    atoms.push(ThoughtAST::Bind(Box::new(ThoughtAST::Atom("active-trade-count".into())), Box::new(ThoughtAST::Log { value: (active_count as f64).max(1.0) })));
 
     // 2. Oldest active trade's phase age (phases since its entry)
     let oldest_phases = active
@@ -63,10 +60,7 @@ fn compute_portfolio_biography(
         })
         .max()
         .unwrap_or(0);
-    atoms.push(ThoughtAST::Log {
-        name: "oldest-trade-phases".into(),
-        value: (oldest_phases as f64).max(1.0),
-    });
+    atoms.push(ThoughtAST::Bind(Box::new(ThoughtAST::Atom("oldest-trade-phases".into())), Box::new(ThoughtAST::Log { value: (oldest_phases as f64).max(1.0) })));
 
     // 3. Newest active trade's phase age
     let newest_phases = active
@@ -79,10 +73,7 @@ fn compute_portfolio_biography(
         })
         .min()
         .unwrap_or(0);
-    atoms.push(ThoughtAST::Log {
-        name: "newest-trade-phases".into(),
-        value: (newest_phases as f64).max(1.0),
-    });
+    atoms.push(ThoughtAST::Bind(Box::new(ThoughtAST::Atom("newest-trade-phases".into())), Box::new(ThoughtAST::Log { value: (newest_phases as f64).max(1.0) })));
 
     // 4. Weighted average excursion across active trades
     let avg_excursion = if active_count > 0 {
@@ -90,10 +81,7 @@ fn compute_portfolio_biography(
     } else {
         0.0
     };
-    atoms.push(ThoughtAST::Log {
-        name: "portfolio-excursion".into(),
-        value: avg_excursion.abs().max(0.0001),
-    });
+    atoms.push(ThoughtAST::Bind(Box::new(ThoughtAST::Atom("portfolio-excursion".into())), Box::new(ThoughtAST::Log { value: avg_excursion.abs().max(0.0001) })));
 
     // 5. Portfolio heat: active_count / max_seen
     let heat = if *max_papers_seen > 0 {
@@ -101,11 +89,7 @@ fn compute_portfolio_biography(
     } else {
         0.0
     };
-    atoms.push(ThoughtAST::Linear {
-        name: "portfolio-heat".into(),
-        value: heat,
-        scale: 1.0,
-    });
+    atoms.push(ThoughtAST::Bind(Box::new(ThoughtAST::Atom("portfolio-heat".into())), Box::new(ThoughtAST::Linear { value: heat, scale: 1.0 })));
 
     // Phase trend scalars from the current candle's phase history.
     // 6. Valley trend: compare last two valley records' close_avg
@@ -124,11 +108,7 @@ fn compute_portfolio_biography(
     } else {
         0.0
     };
-    atoms.push(ThoughtAST::Linear {
-        name: "broker-phase-valley-trend".into(),
-        value: valley_trend,
-        scale: 1.0,
-    });
+    atoms.push(ThoughtAST::Bind(Box::new(ThoughtAST::Atom("broker-phase-valley-trend".into())), Box::new(ThoughtAST::Linear { value: valley_trend, scale: 1.0 })));
 
     // 7. Peak trend: compare last two peak records' close_avg
     let peaks: Vec<&PhaseRecord> = phase_history
@@ -146,11 +126,7 @@ fn compute_portfolio_biography(
     } else {
         0.0
     };
-    atoms.push(ThoughtAST::Linear {
-        name: "broker-phase-peak-trend".into(),
-        value: peak_trend,
-        scale: 1.0,
-    });
+    atoms.push(ThoughtAST::Bind(Box::new(ThoughtAST::Atom("broker-phase-peak-trend".into())), Box::new(ThoughtAST::Linear { value: peak_trend, scale: 1.0 })));
 
     // 8. Regularity: stddev of phase durations / mean
     let regularity = if phase_history.len() >= 2 {
@@ -166,11 +142,7 @@ fn compute_portfolio_biography(
     } else {
         0.0
     };
-    atoms.push(ThoughtAST::Linear {
-        name: "broker-phase-regularity".into(),
-        value: regularity,
-        scale: 1.0,
-    });
+    atoms.push(ThoughtAST::Bind(Box::new(ThoughtAST::Atom("broker-phase-regularity".into())), Box::new(ThoughtAST::Linear { value: regularity, scale: 1.0 })));
 
     // 9. Entry ratio: fraction of active papers that entered during valley or transition-up
     let entry_ratio = if active_count > 0 {
@@ -192,11 +164,7 @@ fn compute_portfolio_biography(
     } else {
         0.0
     };
-    atoms.push(ThoughtAST::Linear {
-        name: "broker-phase-entry-ratio".into(),
-        value: entry_ratio,
-        scale: 1.0,
-    });
+    atoms.push(ThoughtAST::Bind(Box::new(ThoughtAST::Atom("broker-phase-entry-ratio".into())), Box::new(ThoughtAST::Linear { value: entry_ratio, scale: 1.0 })));
 
     // 10. Average spacing: mean duration of recent phases
     let avg_spacing = if !phase_history.is_empty() {
@@ -205,10 +173,7 @@ fn compute_portfolio_biography(
     } else {
         1.0
     };
-    atoms.push(ThoughtAST::Log {
-        name: "broker-phase-avg-spacing".into(),
-        value: avg_spacing.max(1.0),
-    });
+    atoms.push(ThoughtAST::Bind(Box::new(ThoughtAST::Atom("broker-phase-avg-spacing".into())), Box::new(ThoughtAST::Log { value: avg_spacing.max(1.0) })));
 
     atoms
 }

@@ -65,7 +65,10 @@ mod tests {
     #[test]
     fn test_ctx_insert_cache_misses() {
         let mut ctx = Ctx::new(DIMS, RECALIB);
-        let ast = ThoughtAST::log("vol", 100.0);
+        let ast = ThoughtAST::Bind(
+            Box::new(ThoughtAST::Atom("vol".into())),
+            Box::new(ThoughtAST::Log { value: 100.0 }),
+        );
 
         let (v1, misses) = ctx.thought_encoder.encode(&ast);
         assert!(!misses.is_empty());

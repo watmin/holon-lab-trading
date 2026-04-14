@@ -43,14 +43,14 @@ impl ToAst for ExitRegimeThought {
 
     fn forms(&self) -> Vec<ThoughtAST> {
         vec![
-            ThoughtAST::Linear { name: "kama-er".into(), value: self.kama_er, scale: 1.0 },
-            ThoughtAST::Linear { name: "choppiness".into(), value: self.choppiness, scale: 1.0 },
-            ThoughtAST::Linear { name: "dfa-alpha".into(), value: self.dfa_alpha, scale: 1.0 },
-            ThoughtAST::Log { name: "variance-ratio".into(), value: self.variance_ratio },
-            ThoughtAST::Linear { name: "entropy-rate".into(), value: self.entropy_rate, scale: 1.0 },
-            ThoughtAST::Linear { name: "aroon-up".into(), value: self.aroon_up, scale: 1.0 },
-            ThoughtAST::Linear { name: "aroon-down".into(), value: self.aroon_down, scale: 1.0 },
-            ThoughtAST::Linear { name: "fractal-dim".into(), value: self.fractal_dim, scale: 1.0 },
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("kama-er".into())), Box::new(ThoughtAST::Linear { value: self.kama_er, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("choppiness".into())), Box::new(ThoughtAST::Linear { value: self.choppiness, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("dfa-alpha".into())), Box::new(ThoughtAST::Linear { value: self.dfa_alpha, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("variance-ratio".into())), Box::new(ThoughtAST::Log { value: self.variance_ratio })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("entropy-rate".into())), Box::new(ThoughtAST::Linear { value: self.entropy_rate, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("aroon-up".into())), Box::new(ThoughtAST::Linear { value: self.aroon_up, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("aroon-down".into())), Box::new(ThoughtAST::Linear { value: self.aroon_down, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("fractal-dim".into())), Box::new(ThoughtAST::Linear { value: self.fractal_dim, scale: 1.0 })),
         ]
     }
 }
@@ -61,7 +61,7 @@ pub fn encode_exit_regime_facts(c: &Candle, scales: &mut HashMap<String, ScaleTr
         scaled_linear("kama-er", t.kama_er, scales),
         scaled_linear("choppiness", t.choppiness, scales),
         scaled_linear("dfa-alpha", t.dfa_alpha, scales),
-        ThoughtAST::Log { name: "variance-ratio".into(), value: t.variance_ratio },
+        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("variance-ratio".into())), Box::new(ThoughtAST::Log { value: t.variance_ratio })),
         scaled_linear("entropy-rate", t.entropy_rate, scales),
         scaled_linear("aroon-up", t.aroon_up, scales),
         scaled_linear("aroon-down", t.aroon_down, scales),
@@ -87,11 +87,16 @@ mod tests {
         let mut scales = HashMap::new();
         let facts = encode_exit_regime_facts(&c, &mut scales);
         match &facts[3] {
-            ThoughtAST::Log { name, value } => {
-                assert_eq!(name, "variance-ratio");
-                assert_eq!(*value, 1.05);
+            ThoughtAST::Bind(left, right) => {
+                match (left.as_ref(), right.as_ref()) {
+                    (ThoughtAST::Atom(name), ThoughtAST::Log { value }) => {
+                        assert_eq!(name, "variance-ratio");
+                        assert_eq!(*value, 1.05);
+                    }
+                    _ => panic!("expected Bind(Atom, Log)"),
+                }
             }
-            _ => panic!("expected Log"),
+            _ => panic!("expected Bind"),
         }
     }
 }

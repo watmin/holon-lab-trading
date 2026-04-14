@@ -19,9 +19,9 @@ use holon::kernel::vector_manager::VectorManager;
 #[derive(Clone, Debug, PartialEq)]
 pub enum ThoughtAST {
     Atom(String),
-    Linear { name: String, value: f64, scale: f64 },
-    Log { name: String, value: f64 },
-    Circular { name: String, value: f64, period: f64 },
+    Linear { value: f64, scale: f64 },
+    Log { value: f64 },
+    Circular { value: f64, period: f64 },
     Bind(Box<ThoughtAST>, Box<ThoughtAST>),
     Bundle(Vec<ThoughtAST>),
     /// Ordered sequence — each item is permuted by its index before bundling.
@@ -30,29 +30,16 @@ pub enum ThoughtAST {
 }
 
 impl ThoughtAST {
-    /// Convenience constructors.
-    pub fn linear(name: impl Into<String>, value: f64, scale: f64) -> Self {
-        ThoughtAST::Linear { name: name.into(), value, scale }
-    }
-
-    pub fn log(name: impl Into<String>, value: f64) -> Self {
-        ThoughtAST::Log { name: name.into(), value }
-    }
-
-    pub fn circular(name: impl Into<String>, value: f64, period: f64) -> Self {
-        ThoughtAST::Circular { name: name.into(), value, period }
-    }
-
     /// Extract the human-readable name of this AST node.
-    /// Atoms, Linear, Log, Circular have explicit names.
+    /// Atoms have explicit names. Scalars describe their encoding.
     /// Bind returns "bind(<left>:<right>)".
     /// Bundle returns "bundle(<n>)" where n is the child count.
     pub fn name(&self) -> String {
         match self {
             ThoughtAST::Atom(name) => name.clone(),
-            ThoughtAST::Linear { name, .. } => name.clone(),
-            ThoughtAST::Log { name, .. } => name.clone(),
-            ThoughtAST::Circular { name, .. } => name.clone(),
+            ThoughtAST::Linear { value, scale } => format!("linear({},{})", value, scale),
+            ThoughtAST::Log { value } => format!("log({})", value),
+            ThoughtAST::Circular { value, period } => format!("circular({},{})", value, period),
             ThoughtAST::Bind(left, right) => format!("bind({}:{})", left.name(), right.name()),
             ThoughtAST::Bundle(children) => format!("bundle({})", children.len()),
             ThoughtAST::Sequential(items) => format!("sequential({})", items.len()),
@@ -105,12 +92,12 @@ impl ThoughtAST {
         match self {
             ThoughtAST::Atom(name) =>
                 format!("(atom \"{}\")", name),
-            ThoughtAST::Linear { name, value, scale } =>
-                format!("(linear \"{}\" {} {})", name, value, scale),
-            ThoughtAST::Log { name, value } =>
-                format!("(log \"{}\" {})", name, value),
-            ThoughtAST::Circular { name, value, period } =>
-                format!("(circular \"{}\" {} {})", name, value, period),
+            ThoughtAST::Linear { value, scale } =>
+                format!("(linear {} {})", value, scale),
+            ThoughtAST::Log { value } =>
+                format!("(log {})", value),
+            ThoughtAST::Circular { value, period } =>
+                format!("(circular {} {})", value, period),
             ThoughtAST::Bind(left, right) =>
                 format!("(bind\n{}{}\n{}{})",
                     child_indent, left.to_edn_depth(depth + 1),
@@ -139,17 +126,14 @@ impl std::hash::Hash for ThoughtAST {
         std::mem::discriminant(self).hash(state);
         match self {
             ThoughtAST::Atom(name) => name.hash(state),
-            ThoughtAST::Linear { name, value, scale } => {
-                name.hash(state);
+            ThoughtAST::Linear { value, scale } => {
                 value.to_bits().hash(state);
                 scale.to_bits().hash(state);
             }
-            ThoughtAST::Log { name, value } => {
-                name.hash(state);
+            ThoughtAST::Log { value } => {
                 value.to_bits().hash(state);
             }
-            ThoughtAST::Circular { name, value, period } => {
-                name.hash(state);
+            ThoughtAST::Circular { value, period } => {
                 value.to_bits().hash(state);
                 period.to_bits().hash(state);
             }
@@ -250,26 +234,23 @@ impl ThoughtEncoder {
                 let v = self.get_atom(name);
                 (v, Vec::new())
             }
-            ThoughtAST::Linear { name, value, scale } => {
-                let (atom_vec, atom_misses) = self.encode(&ThoughtAST::Atom(name.clone()));
+            ThoughtAST::Linear { value, scale } => {
                 let scalar_vec = self.scalar_encoder.encode(
                     *value,
                     ScalarMode::Linear { scale: *scale },
                 );
-                (Primitives::bind(&atom_vec, &scalar_vec), atom_misses)
+                (scalar_vec, vec![])
             }
-            ThoughtAST::Log { name, value } => {
-                let (atom_vec, atom_misses) = self.encode(&ThoughtAST::Atom(name.clone()));
+            ThoughtAST::Log { value } => {
                 let scalar_vec = self.scalar_encoder.encode_log(*value);
-                (Primitives::bind(&atom_vec, &scalar_vec), atom_misses)
+                (scalar_vec, vec![])
             }
-            ThoughtAST::Circular { name, value, period } => {
-                let (atom_vec, atom_misses) = self.encode(&ThoughtAST::Atom(name.clone()));
+            ThoughtAST::Circular { value, period } => {
                 let scalar_vec = self.scalar_encoder.encode(
                     *value,
                     ScalarMode::Circular { period: *period },
                 );
-                (Primitives::bind(&atom_vec, &scalar_vec), atom_misses)
+                (scalar_vec, vec![])
             }
             ThoughtAST::Bind(left, right) => {
                 let (l_vec, l_misses) = self.encode(left);
@@ -517,9 +498,18 @@ mod tests {
     #[test]
     fn test_thought_ast_variants() {
         let a = ThoughtAST::Atom("rsi".into());
-        let l = ThoughtAST::linear("rsi", 0.5, 1.0);
-        let g = ThoughtAST::log("vol", 2.0);
-        let c = ThoughtAST::circular("hour", 14.0, 24.0);
+        let l = ThoughtAST::Bind(
+            Box::new(ThoughtAST::Atom("rsi".into())),
+            Box::new(ThoughtAST::Linear { value: 0.5, scale: 1.0 }),
+        );
+        let g = ThoughtAST::Bind(
+            Box::new(ThoughtAST::Atom("vol".into())),
+            Box::new(ThoughtAST::Log { value: 2.0 }),
+        );
+        let c = ThoughtAST::Bind(
+            Box::new(ThoughtAST::Atom("hour".into())),
+            Box::new(ThoughtAST::Circular { value: 14.0, period: 24.0 }),
+        );
         let b = ThoughtAST::Bind(Box::new(a.clone()), Box::new(l.clone()));
         let u = ThoughtAST::Bundle(vec![a, l, g, c]);
         assert!(matches!(b, ThoughtAST::Bind(_, _)));
@@ -545,9 +535,12 @@ mod tests {
     }
 
     #[test]
-    fn test_encode_log_produces_bound_vector() {
+    fn test_encode_named_log_produces_bound_vector() {
         let enc = make_encoder();
-        let ast = ThoughtAST::log("vol", 100.0);
+        let ast = ThoughtAST::Bind(
+            Box::new(ThoughtAST::Atom("vol".into())),
+            Box::new(ThoughtAST::Log { value: 100.0 }),
+        );
         let (v, misses) = enc.encode(&ast);
         assert_eq!(v.dimensions(), DIMS);
         assert!(v.nnz() > 0);
@@ -581,7 +574,10 @@ mod tests {
     #[test]
     fn test_cache_hit_returns_empty_misses() {
         let mut enc = make_encoder();
-        let ast = ThoughtAST::log("vol", 50.0);
+        let ast = ThoughtAST::Bind(
+            Box::new(ThoughtAST::Atom("vol".into())),
+            Box::new(ThoughtAST::Log { value: 50.0 }),
+        );
 
         let (v1, misses1) = enc.encode(&ast);
         assert!(!misses1.is_empty());
@@ -598,7 +594,10 @@ mod tests {
     #[test]
     fn test_encode_never_writes_cache() {
         let enc = make_encoder();
-        let ast = ThoughtAST::log("vol", 50.0);
+        let ast = ThoughtAST::Bind(
+            Box::new(ThoughtAST::Atom("vol".into())),
+            Box::new(ThoughtAST::Log { value: 50.0 }),
+        );
         let _ = enc.encode(&ast);
         // Cache should still be empty -- encode never writes
         assert_eq!(enc.cache_size(), 0);
@@ -627,9 +626,14 @@ mod tests {
     #[test]
     fn test_thought_ast_name() {
         assert_eq!(ThoughtAST::Atom("rsi".into()).name(), "rsi");
-        assert_eq!(ThoughtAST::linear("vol", 1.0, 1.0).name(), "vol");
-        assert_eq!(ThoughtAST::log("atr", 2.0).name(), "atr");
-        assert_eq!(ThoughtAST::circular("hour", 14.0, 24.0).name(), "hour");
+        assert_eq!((ThoughtAST::Linear { value: 1.0, scale: 1.0 }).name(), "linear(1,1)");
+        assert_eq!((ThoughtAST::Log { value: 2.0 }).name(), "log(2)");
+        assert_eq!((ThoughtAST::Circular { value: 14.0, period: 24.0 }).name(), "circular(14,24)");
+        // Bind(Atom, Linear) — name is bind(vol:linear(1,1))
+        assert_eq!(ThoughtAST::Bind(
+            Box::new(ThoughtAST::Atom("vol".into())),
+            Box::new(ThoughtAST::Linear { value: 1.0, scale: 1.0 }),
+        ).name(), "bind(vol:linear(1,1))");
         let bind = ThoughtAST::Bind(
             Box::new(ThoughtAST::Atom("a".into())),
             Box::new(ThoughtAST::Atom("b".into())),
@@ -645,7 +649,10 @@ mod tests {
     #[test]
     fn test_extract_flat_self_cosine() {
         let enc = make_encoder();
-        let leaf = ThoughtAST::linear("rsi", 0.7, 1.0);
+        let leaf = ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("rsi".into())),
+                Box::new(ThoughtAST::Linear { value: 0.7, scale: 1.0 }),
+            );
         // Encode the leaf to get a vector, use it as the thought
         let (leaf_vec, _) = enc.encode(&leaf);
         let results = extract(&leaf_vec, &[leaf.clone()], |ast| enc.encode(ast).0);
@@ -659,9 +666,18 @@ mod tests {
     fn test_extract_flat_multiple_forms() {
         let enc = make_encoder();
         let forms = vec![
-            ThoughtAST::linear("rsi", 0.7, 1.0),
-            ThoughtAST::linear("vol", 1.5, 1.0),
-            ThoughtAST::linear("trend", 0.3, 1.0),
+            ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("rsi".into())),
+                Box::new(ThoughtAST::Linear { value: 0.7, scale: 1.0 }),
+            ),
+            ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("vol".into())),
+                Box::new(ThoughtAST::Linear { value: 1.5, scale: 1.0 }),
+            ),
+            ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("trend".into())),
+                Box::new(ThoughtAST::Linear { value: 0.3, scale: 1.0 }),
+            ),
         ];
         // Bundle all forms, then extract — each form should have non-trivial presence
         let bundle = ThoughtAST::Bundle(forms.clone());
@@ -678,10 +694,16 @@ mod tests {
     fn test_extract_flat_unrelated_low_cosine() {
         let enc = make_encoder();
         let forms = vec![
-            ThoughtAST::linear("rsi", 0.7, 1.0),
+            ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("rsi".into())),
+                Box::new(ThoughtAST::Linear { value: 0.7, scale: 1.0 }),
+            ),
         ];
         // Use an unrelated vector
-        let unrelated = ThoughtAST::linear("hour", 12.0, 24.0);
+        let unrelated = ThoughtAST::Bind(
+            Box::new(ThoughtAST::Atom("hour".into())),
+            Box::new(ThoughtAST::Linear { value: 12.0, scale: 24.0 }),
+        );
         let (unrelated_vec, _) = enc.encode(&unrelated);
         let results = extract(&unrelated_vec, &forms, |ast| enc.encode(ast).0);
         assert_eq!(results.len(), 1);
@@ -694,10 +716,19 @@ mod tests {
         let enc = make_encoder();
         // Extract always returns ALL forms, no filtering
         let forms = vec![
-            ThoughtAST::linear("rsi", 0.7, 1.0),
-            ThoughtAST::linear("vol", 1.5, 1.0),
+            ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("rsi".into())),
+                Box::new(ThoughtAST::Linear { value: 0.7, scale: 1.0 }),
+            ),
+            ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("vol".into())),
+                Box::new(ThoughtAST::Linear { value: 1.5, scale: 1.0 }),
+            ),
         ];
-        let unrelated = ThoughtAST::linear("hour", 12.0, 24.0);
+        let unrelated = ThoughtAST::Bind(
+            Box::new(ThoughtAST::Atom("hour".into())),
+            Box::new(ThoughtAST::Linear { value: 12.0, scale: 24.0 }),
+        );
         let (unrelated_vec, _) = enc.encode(&unrelated);
         let results = extract(&unrelated_vec, &forms, |ast| enc.encode(ast).0);
         // Both forms returned regardless of cosine value
@@ -728,22 +759,37 @@ mod tests {
     #[test]
     fn test_collect_facts_bundle() {
         let ast = ThoughtAST::Bundle(vec![
-            ThoughtAST::linear("rsi", 0.7, 1.0),
-            ThoughtAST::log("vol", 2.0),
+            ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("rsi".into())),
+                Box::new(ThoughtAST::Linear { value: 0.7, scale: 1.0 }),
+            ),
+            ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("vol".into())),
+                Box::new(ThoughtAST::Log { value: 2.0 }),
+            ),
             ThoughtAST::Atom("trend".into()), // skipped
         ]);
         let facts = collect_facts(&ast);
-        assert_eq!(facts.len(), 2); // Linear + Log, not Atom
+        assert_eq!(facts.len(), 2); // named scalars (Bind nodes), not bare Atom
     }
 
     #[test]
     fn test_collect_facts_nested_bundles() {
         let ast = ThoughtAST::Bundle(vec![
             ThoughtAST::Bundle(vec![
-                ThoughtAST::linear("rsi", 0.7, 1.0),
-                ThoughtAST::linear("vol", 1.5, 1.0),
+                ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("rsi".into())),
+                Box::new(ThoughtAST::Linear { value: 0.7, scale: 1.0 }),
+            ),
+                ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("vol".into())),
+                Box::new(ThoughtAST::Linear { value: 1.5, scale: 1.0 }),
+            ),
             ]),
-            ThoughtAST::log("trend", 0.03),
+            ThoughtAST::Bind(
+            Box::new(ThoughtAST::Atom("trend".into())),
+            Box::new(ThoughtAST::Log { value: 0.03 }),
+        ),
         ]);
         let facts = collect_facts(&ast);
         assert_eq!(facts.len(), 3);

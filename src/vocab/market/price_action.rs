@@ -44,13 +44,13 @@ impl ToAst for PriceActionThought {
 
     fn forms(&self) -> Vec<ThoughtAST> {
         vec![
-            ThoughtAST::Log { name: "range-ratio".into(), value: self.range_ratio },
-            ThoughtAST::Linear { name: "gap".into(), value: self.gap, scale: 1.0 },
-            ThoughtAST::Log { name: "consecutive-up".into(), value: self.consecutive_up },
-            ThoughtAST::Log { name: "consecutive-down".into(), value: self.consecutive_down },
-            ThoughtAST::Linear { name: "body-ratio-pa".into(), value: self.body_ratio_pa, scale: 1.0 },
-            ThoughtAST::Linear { name: "upper-wick".into(), value: self.upper_wick, scale: 1.0 },
-            ThoughtAST::Linear { name: "lower-wick".into(), value: self.lower_wick, scale: 1.0 },
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("range-ratio".into())), Box::new(ThoughtAST::Log { value: self.range_ratio })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("gap".into())), Box::new(ThoughtAST::Linear { value: self.gap, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("consecutive-up".into())), Box::new(ThoughtAST::Log { value: self.consecutive_up })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("consecutive-down".into())), Box::new(ThoughtAST::Log { value: self.consecutive_down })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("body-ratio-pa".into())), Box::new(ThoughtAST::Linear { value: self.body_ratio_pa, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("upper-wick".into())), Box::new(ThoughtAST::Linear { value: self.upper_wick, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("lower-wick".into())), Box::new(ThoughtAST::Linear { value: self.lower_wick, scale: 1.0 })),
         ]
     }
 }
@@ -58,10 +58,10 @@ impl ToAst for PriceActionThought {
 pub fn encode_price_action_facts(c: &Candle, scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
     let t = PriceActionThought::from_candle(c);
     vec![
-        ThoughtAST::Log { name: "range-ratio".into(), value: t.range_ratio },
+        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("range-ratio".into())), Box::new(ThoughtAST::Log { value: t.range_ratio })),
         scaled_linear("gap", t.gap, scales),
-        ThoughtAST::Log { name: "consecutive-up".into(), value: t.consecutive_up },
-        ThoughtAST::Log { name: "consecutive-down".into(), value: t.consecutive_down },
+        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("consecutive-up".into())), Box::new(ThoughtAST::Log { value: t.consecutive_up })),
+        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("consecutive-down".into())), Box::new(ThoughtAST::Log { value: t.consecutive_down })),
         scaled_linear("body-ratio-pa", t.body_ratio_pa, scales),
         scaled_linear("upper-wick", t.upper_wick, scales),
         scaled_linear("lower-wick", t.lower_wick, scales),
@@ -86,12 +86,17 @@ mod tests {
         let mut scales = HashMap::new();
         let facts = encode_price_action_facts(&c, &mut scales);
         match &facts[4] {
-            ThoughtAST::Linear { name, value, .. } => {
-                assert_eq!(name, "body-ratio-pa");
-                // |42200 - 42000| / (42500 - 41500) = 200/1000 = 0.2
-                assert!((value - 0.2).abs() < 1e-9);
+            ThoughtAST::Bind(left, right) => {
+                match (left.as_ref(), right.as_ref()) {
+                    (ThoughtAST::Atom(name), ThoughtAST::Linear { value, .. }) => {
+                        assert_eq!(name, "body-ratio-pa");
+                        // |42200 - 42000| / (42500 - 41500) = 200/1000 = 0.2
+                        assert!((value - 0.2).abs() < 1e-9);
+                    }
+                    _ => panic!("expected Bind(Atom, Linear)"),
+                }
             }
-            _ => panic!("expected Linear"),
+            _ => panic!("expected Bind"),
         }
     }
 }

@@ -28,8 +28,8 @@ impl ToAst for ExitTimeThought {
 
     fn forms(&self) -> Vec<ThoughtAST> {
         vec![
-            ThoughtAST::Circular { name: "hour".into(), value: self.hour, period: 24.0 },
-            ThoughtAST::Circular { name: "day-of-week".into(), value: self.day_of_week, period: 7.0 },
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("hour".into())), Box::new(ThoughtAST::Circular { value: self.hour, period: 24.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("day-of-week".into())), Box::new(ThoughtAST::Circular { value: self.day_of_week, period: 7.0 })),
         ]
     }
 }
@@ -54,16 +54,17 @@ mod tests {
         let c = Candle::default();
         let facts = encode_exit_time_facts(&c);
         match &facts[0] {
-            ThoughtAST::Circular {
-                name,
-                value,
-                period,
-            } => {
-                assert_eq!(name, "hour");
-                assert_eq!(*value, 14.0);
-                assert_eq!(*period, 24.0);
+            ThoughtAST::Bind(left, right) => {
+                match (left.as_ref(), right.as_ref()) {
+                    (ThoughtAST::Atom(name), ThoughtAST::Circular { value, period }) => {
+                        assert_eq!(name, "hour");
+                        assert_eq!(*value, 14.0);
+                        assert_eq!(*period, 24.0);
+                    }
+                    _ => panic!("expected Bind(Atom, Circular)"),
+                }
             }
-            _ => panic!("expected Circular"),
+            _ => panic!("expected Bind"),
         }
     }
 
@@ -72,17 +73,16 @@ mod tests {
         let c = Candle::default();
         let facts = encode_exit_time_facts(&c);
         match &facts[1] {
-            ThoughtAST::Circular {
-                name,
-                value,
-                period,
-            } => {
-                assert_eq!(name, "day-of-week");
-                assert_eq!(*period, 7.0);
-                // Default candle's day_of_week value
-                let _ = value;
+            ThoughtAST::Bind(left, right) => {
+                match (left.as_ref(), right.as_ref()) {
+                    (ThoughtAST::Atom(name), ThoughtAST::Circular { period, .. }) => {
+                        assert_eq!(name, "day-of-week");
+                        assert_eq!(*period, 7.0);
+                    }
+                    _ => panic!("expected Bind(Atom, Circular)"),
+                }
             }
-            _ => panic!("expected Circular"),
+            _ => panic!("expected Bind"),
         }
     }
 }

@@ -74,9 +74,18 @@ mod tests {
 
         // Build an AST with known facts
         let facts = vec![
-            ThoughtAST::linear("rsi", 0.7, 1.0),
-            ThoughtAST::log("vol", 100.0),
-            ThoughtAST::linear("trend", 0.3, 1.0),
+            ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("rsi".into())),
+                Box::new(ThoughtAST::Linear { value: 0.7, scale: 1.0 }),
+            ),
+            ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("vol".into())),
+                Box::new(ThoughtAST::Log { value: 100.0 }),
+            ),
+            ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("trend".into())),
+                Box::new(ThoughtAST::Linear { value: 0.3, scale: 1.0 }),
+            ),
         ];
         let ast = ThoughtAST::Bundle(facts);
 
@@ -98,8 +107,14 @@ mod tests {
         let encoder = make_encoder();
 
         let facts = vec![
-            ThoughtAST::linear("rsi", 0.7, 1.0),
-            ThoughtAST::log("vol", 100.0),
+            ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("rsi".into())),
+                Box::new(ThoughtAST::Linear { value: 0.7, scale: 1.0 }),
+            ),
+            ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("vol".into())),
+                Box::new(ThoughtAST::Log { value: 100.0 }),
+            ),
         ];
         let ast = ThoughtAST::Bundle(facts);
         let (anomaly, _) = encoder.encode(&ast);
@@ -119,8 +134,14 @@ mod tests {
         let encoder = make_encoder();
 
         let facts = vec![
-            ThoughtAST::linear("trail-distance", 0.015, 1.0),
-            ThoughtAST::linear("stop-distance", 0.030, 1.0),
+            ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("trail-distance".into())),
+                Box::new(ThoughtAST::Linear { value: 0.015, scale: 1.0 }),
+            ),
+            ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("stop-distance".into())),
+                Box::new(ThoughtAST::Linear { value: 0.030, scale: 1.0 }),
+            ),
         ];
         let ast = ThoughtAST::Bundle(facts);
         let (anomaly, _) = encoder.encode(&ast);

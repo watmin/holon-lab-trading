@@ -43,14 +43,14 @@ impl ToAst for FibonacciThought {
 
     fn forms(&self) -> Vec<ThoughtAST> {
         vec![
-            ThoughtAST::Linear { name: "range-pos-12".into(), value: self.range_pos_12, scale: 1.0 },
-            ThoughtAST::Linear { name: "range-pos-24".into(), value: self.range_pos_24, scale: 1.0 },
-            ThoughtAST::Linear { name: "range-pos-48".into(), value: self.range_pos_48, scale: 1.0 },
-            ThoughtAST::Linear { name: "fib-dist-236".into(), value: self.fib_dist_236, scale: 1.0 },
-            ThoughtAST::Linear { name: "fib-dist-382".into(), value: self.fib_dist_382, scale: 1.0 },
-            ThoughtAST::Linear { name: "fib-dist-500".into(), value: self.fib_dist_500, scale: 1.0 },
-            ThoughtAST::Linear { name: "fib-dist-618".into(), value: self.fib_dist_618, scale: 1.0 },
-            ThoughtAST::Linear { name: "fib-dist-786".into(), value: self.fib_dist_786, scale: 1.0 },
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("range-pos-12".into())), Box::new(ThoughtAST::Linear { value: self.range_pos_12, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("range-pos-24".into())), Box::new(ThoughtAST::Linear { value: self.range_pos_24, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("range-pos-48".into())), Box::new(ThoughtAST::Linear { value: self.range_pos_48, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("fib-dist-236".into())), Box::new(ThoughtAST::Linear { value: self.fib_dist_236, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("fib-dist-382".into())), Box::new(ThoughtAST::Linear { value: self.fib_dist_382, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("fib-dist-500".into())), Box::new(ThoughtAST::Linear { value: self.fib_dist_500, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("fib-dist-618".into())), Box::new(ThoughtAST::Linear { value: self.fib_dist_618, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("fib-dist-786".into())), Box::new(ThoughtAST::Linear { value: self.fib_dist_786, scale: 1.0 })),
         ]
     }
 }
@@ -87,12 +87,17 @@ mod tests {
         let mut scales = HashMap::new();
         let facts = encode_fibonacci_facts(&c, &mut scales);
         match &facts[5] {
-            ThoughtAST::Linear { name, value, .. } => {
-                assert_eq!(name, "fib-dist-500");
-                // range_pos_48 = 0.6, so 0.6 - 0.5 = 0.1
-                assert!((value - 0.1).abs() < 1e-9);
+            ThoughtAST::Bind(left, right) => {
+                match (left.as_ref(), right.as_ref()) {
+                    (ThoughtAST::Atom(name), ThoughtAST::Linear { value, .. }) => {
+                        assert_eq!(name, "fib-dist-500");
+                        // range_pos_48 = 0.6, so 0.6 - 0.5 = 0.1
+                        assert!((value - 0.1).abs() < 1e-9);
+                    }
+                    _ => panic!("expected Bind(Atom, Linear)"),
+                }
             }
-            _ => panic!("expected Linear"),
+            _ => panic!("expected Bind"),
         }
     }
 }

@@ -88,14 +88,14 @@ impl ToAst for StandardThought {
 
     fn forms(&self) -> Vec<ThoughtAST> {
         vec![
-            ThoughtAST::Log { name: "since-rsi-extreme".into(), value: self.since_rsi_extreme },
-            ThoughtAST::Log { name: "since-vol-spike".into(), value: self.since_vol_spike },
-            ThoughtAST::Log { name: "since-large-move".into(), value: self.since_large_move },
-            ThoughtAST::Linear { name: "dist-from-high".into(), value: self.dist_from_high, scale: 0.1 },
-            ThoughtAST::Linear { name: "dist-from-low".into(), value: self.dist_from_low, scale: 0.1 },
-            ThoughtAST::Linear { name: "dist-from-midpoint".into(), value: self.dist_from_midpoint, scale: 0.1 },
-            ThoughtAST::Linear { name: "dist-from-sma200".into(), value: self.dist_from_sma200, scale: 0.1 },
-            ThoughtAST::Log { name: "session-depth".into(), value: self.session_depth },
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("since-rsi-extreme".into())), Box::new(ThoughtAST::Log { value: self.since_rsi_extreme })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("since-vol-spike".into())), Box::new(ThoughtAST::Log { value: self.since_vol_spike })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("since-large-move".into())), Box::new(ThoughtAST::Log { value: self.since_large_move })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("dist-from-high".into())), Box::new(ThoughtAST::Linear { value: self.dist_from_high, scale: 0.1 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("dist-from-low".into())), Box::new(ThoughtAST::Linear { value: self.dist_from_low, scale: 0.1 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("dist-from-midpoint".into())), Box::new(ThoughtAST::Linear { value: self.dist_from_midpoint, scale: 0.1 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("dist-from-sma200".into())), Box::new(ThoughtAST::Linear { value: self.dist_from_sma200, scale: 0.1 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("session-depth".into())), Box::new(ThoughtAST::Log { value: self.session_depth })),
         ]
     }
 }
@@ -103,14 +103,14 @@ impl ToAst for StandardThought {
 pub fn encode_standard_facts(candle_window: &[Candle], scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
     match StandardThought::from_window(candle_window) {
         Some(t) => vec![
-            ThoughtAST::Log { name: "since-rsi-extreme".into(), value: t.since_rsi_extreme },
-            ThoughtAST::Log { name: "since-vol-spike".into(), value: t.since_vol_spike },
-            ThoughtAST::Log { name: "since-large-move".into(), value: t.since_large_move },
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("since-rsi-extreme".into())), Box::new(ThoughtAST::Log { value: t.since_rsi_extreme })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("since-vol-spike".into())), Box::new(ThoughtAST::Log { value: t.since_vol_spike })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("since-large-move".into())), Box::new(ThoughtAST::Log { value: t.since_large_move })),
             scaled_linear("dist-from-high", t.dist_from_high, scales),
             scaled_linear("dist-from-low", t.dist_from_low, scales),
             scaled_linear("dist-from-midpoint", t.dist_from_midpoint, scales),
             scaled_linear("dist-from-sma200", t.dist_from_sma200, scales),
-            ThoughtAST::Log { name: "session-depth".into(), value: t.session_depth },
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("session-depth".into())), Box::new(ThoughtAST::Log { value: t.session_depth })),
         ],
         None => Vec::new(),
     }
@@ -141,12 +141,17 @@ mod tests {
         let mut scales = HashMap::new();
         let facts = encode_standard_facts(&window, &mut scales);
         match &facts[3] {
-            ThoughtAST::Linear { name, value, .. } => {
-                assert_eq!(name, "dist-from-high");
-                // (42200 - 42500) / 42200 = -300/42200 ~ -0.00711
-                assert!(*value < 0.0);
+            ThoughtAST::Bind(left, right) => {
+                match (left.as_ref(), right.as_ref()) {
+                    (ThoughtAST::Atom(name), ThoughtAST::Linear { value, .. }) => {
+                        assert_eq!(name, "dist-from-high");
+                        // (42200 - 42500) / 42200 = -300/42200 ~ -0.00711
+                        assert!(*value < 0.0);
+                    }
+                    _ => panic!("expected Bind(Atom, Linear)"),
+                }
             }
-            _ => panic!("expected Linear"),
+            _ => panic!("expected Bind"),
         }
     }
 
@@ -162,14 +167,18 @@ mod tests {
         let facts = encode_standard_facts(&window, &mut scales);
         assert_eq!(facts.len(), 8);
 
-        // since-rsi-extreme should be 1.0 (last candle at idx 0, n=2, 2-0=2, but max(1.0, 2.0)=2.0)
-        // Actually: last_rsi_extreme_idx=0, n=2, since=2-0=2
+        // since-rsi-extreme should be 2.0 (last_rsi_extreme_idx=0, n=2, 2-0=2)
         match &facts[0] {
-            ThoughtAST::Log { name, value } => {
-                assert_eq!(name, "since-rsi-extreme");
-                assert_eq!(*value, 2.0);
+            ThoughtAST::Bind(left, right) => {
+                match (left.as_ref(), right.as_ref()) {
+                    (ThoughtAST::Atom(name), ThoughtAST::Log { value }) => {
+                        assert_eq!(name, "since-rsi-extreme");
+                        assert_eq!(*value, 2.0);
+                    }
+                    _ => panic!("expected Bind(Atom, Log)"),
+                }
             }
-            _ => panic!("expected Log"),
+            _ => panic!("expected Bind"),
         }
     }
 }

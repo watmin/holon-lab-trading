@@ -54,12 +54,12 @@ impl ToAst for IchimokuThought {
 
     fn forms(&self) -> Vec<ThoughtAST> {
         vec![
-            ThoughtAST::Linear { name: "cloud-position".into(), value: self.cloud_position, scale: 1.0 },
-            ThoughtAST::Log { name: "cloud-thickness".into(), value: self.cloud_thickness },
-            ThoughtAST::Linear { name: "tk-cross-delta".into(), value: self.tk_cross_delta, scale: 1.0 },
-            ThoughtAST::Linear { name: "tk-spread".into(), value: self.tk_spread, scale: 1.0 },
-            ThoughtAST::Linear { name: "tenkan-dist".into(), value: self.tenkan_dist, scale: 1.0 },
-            ThoughtAST::Linear { name: "kijun-dist".into(), value: self.kijun_dist, scale: 1.0 },
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("cloud-position".into())), Box::new(ThoughtAST::Linear { value: self.cloud_position, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("cloud-thickness".into())), Box::new(ThoughtAST::Log { value: self.cloud_thickness })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("tk-cross-delta".into())), Box::new(ThoughtAST::Linear { value: self.tk_cross_delta, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("tk-spread".into())), Box::new(ThoughtAST::Linear { value: self.tk_spread, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("tenkan-dist".into())), Box::new(ThoughtAST::Linear { value: self.tenkan_dist, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("kijun-dist".into())), Box::new(ThoughtAST::Linear { value: self.kijun_dist, scale: 1.0 })),
         ]
     }
 }
@@ -68,7 +68,7 @@ pub fn encode_ichimoku_facts(c: &Candle, scales: &mut HashMap<String, ScaleTrack
     let t = IchimokuThought::from_candle(c);
     vec![
         scaled_linear("cloud-position", t.cloud_position, scales),
-        ThoughtAST::Log { name: "cloud-thickness".into(), value: t.cloud_thickness },
+        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("cloud-thickness".into())), Box::new(ThoughtAST::Log { value: t.cloud_thickness })),
         scaled_linear("tk-cross-delta", t.tk_cross_delta, scales),
         scaled_linear("tk-spread", t.tk_spread, scales),
         scaled_linear("tenkan-dist", t.tenkan_dist, scales),
@@ -94,13 +94,18 @@ mod tests {
         let mut scales = HashMap::new();
         let facts = encode_ichimoku_facts(&c, &mut scales);
         match &facts[0] {
-            ThoughtAST::Linear { name, value, .. } => {
-                assert_eq!(name, "cloud-position");
-                // close=42200, cloud_mid=41900, cloud_width=200
-                // (42200 - 41900) / 200 = 1.5 -> clamped to 1.0
-                assert_eq!(*value, 1.0);
+            ThoughtAST::Bind(left, right) => {
+                match (left.as_ref(), right.as_ref()) {
+                    (ThoughtAST::Atom(name), ThoughtAST::Linear { value, .. }) => {
+                        assert_eq!(name, "cloud-position");
+                        // close=42200, cloud_mid=41900, cloud_width=200
+                        // (42200 - 41900) / 200 = 1.5 -> clamped to 1.0
+                        assert_eq!(*value, 1.0);
+                    }
+                    _ => panic!("expected Bind(Atom, Linear)"),
+                }
             }
-            _ => panic!("expected Linear"),
+            _ => panic!("expected Bind"),
         }
     }
 }

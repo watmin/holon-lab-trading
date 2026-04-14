@@ -28,8 +28,8 @@ impl ToAst for ExitSelfAssessmentThought {
 
     fn forms(&self) -> Vec<ThoughtAST> {
         vec![
-            ThoughtAST::Linear { name: "exit-grace-rate".into(), value: self.exit_grace_rate, scale: 1.0 },
-            ThoughtAST::Log { name: "exit-avg-residue".into(), value: self.exit_avg_residue },
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("exit-grace-rate".into())), Box::new(ThoughtAST::Linear { value: self.exit_grace_rate, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("exit-avg-residue".into())), Box::new(ThoughtAST::Log { value: self.exit_avg_residue })),
         ]
     }
 }
@@ -38,7 +38,7 @@ pub fn encode_exit_self_assessment_facts(grace_rate: f64, avg_residue: f64, scal
     let t = ExitSelfAssessmentThought::new(grace_rate, avg_residue);
     vec![
         scaled_linear("exit-grace-rate", t.exit_grace_rate, scales),
-        ThoughtAST::Log { name: "exit-avg-residue".into(), value: t.exit_avg_residue },
+        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("exit-avg-residue".into())), Box::new(ThoughtAST::Log { value: t.exit_avg_residue })),
     ]
 }
 
@@ -58,11 +58,16 @@ mod tests {
         let mut scales = HashMap::new();
         let facts = encode_exit_self_assessment_facts(0.75, 0.0005, &mut scales);
         match &facts[0] {
-            ThoughtAST::Linear { name, value, .. } => {
-                assert_eq!(name, "exit-grace-rate");
-                assert!((value - 0.75).abs() < 1e-3);
+            ThoughtAST::Bind(left, right) => {
+                match (left.as_ref(), right.as_ref()) {
+                    (ThoughtAST::Atom(name), ThoughtAST::Linear { value, .. }) => {
+                        assert_eq!(name, "exit-grace-rate");
+                        assert!((value - 0.75).abs() < 1e-3);
+                    }
+                    _ => panic!("expected Bind(Atom, Linear)"),
+                }
             }
-            _ => panic!("expected Linear"),
+            _ => panic!("expected Bind"),
         }
     }
 
@@ -71,11 +76,16 @@ mod tests {
         let mut scales = HashMap::new();
         let facts = encode_exit_self_assessment_facts(0.5, 0.0005, &mut scales);
         match &facts[1] {
-            ThoughtAST::Log { name, value } => {
-                assert_eq!(name, "exit-avg-residue");
-                assert_eq!(*value, 0.001); // clamped to min 0.001
+            ThoughtAST::Bind(left, right) => {
+                match (left.as_ref(), right.as_ref()) {
+                    (ThoughtAST::Atom(name), ThoughtAST::Log { value }) => {
+                        assert_eq!(name, "exit-avg-residue");
+                        assert_eq!(*value, 0.001); // clamped to min 0.001
+                    }
+                    _ => panic!("expected Bind(Atom, Log)"),
+                }
             }
-            _ => panic!("expected Log"),
+            _ => panic!("expected Bind"),
         }
     }
 
@@ -84,11 +94,13 @@ mod tests {
         let mut scales = HashMap::new();
         let facts = encode_exit_self_assessment_facts(1.5, 0.01, &mut scales);
         match &facts[0] {
-            ThoughtAST::Linear { name, value, .. } => {
-                assert_eq!(name, "exit-grace-rate");
-                assert!(*value <= 1.0);
+            ThoughtAST::Bind(_, right) => {
+                match right.as_ref() {
+                    ThoughtAST::Linear { value, .. } => assert!(*value <= 1.0),
+                    _ => panic!("expected Linear"),
+                }
             }
-            _ => panic!("expected Linear"),
+            _ => panic!("expected Bind"),
         }
     }
 }

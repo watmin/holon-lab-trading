@@ -41,12 +41,12 @@ impl ToAst for FlowThought {
 
     fn forms(&self) -> Vec<ThoughtAST> {
         vec![
-            ThoughtAST::Log { name: "obv-slope".into(), value: self.obv_slope },
-            ThoughtAST::Linear { name: "vwap-distance".into(), value: self.vwap_distance, scale: 0.1 },
-            ThoughtAST::Linear { name: "buying-pressure".into(), value: self.buying_pressure, scale: 1.0 },
-            ThoughtAST::Linear { name: "selling-pressure".into(), value: self.selling_pressure, scale: 1.0 },
-            ThoughtAST::Log { name: "volume-ratio".into(), value: self.volume_ratio },
-            ThoughtAST::Linear { name: "body-ratio".into(), value: self.body_ratio, scale: 1.0 },
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("obv-slope".into())), Box::new(ThoughtAST::Log { value: self.obv_slope })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("vwap-distance".into())), Box::new(ThoughtAST::Linear { value: self.vwap_distance, scale: 0.1 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("buying-pressure".into())), Box::new(ThoughtAST::Linear { value: self.buying_pressure, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("selling-pressure".into())), Box::new(ThoughtAST::Linear { value: self.selling_pressure, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("volume-ratio".into())), Box::new(ThoughtAST::Log { value: self.volume_ratio })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("body-ratio".into())), Box::new(ThoughtAST::Linear { value: self.body_ratio, scale: 1.0 })),
         ]
     }
 }
@@ -54,11 +54,11 @@ impl ToAst for FlowThought {
 pub fn encode_flow_facts(c: &Candle, scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
     let t = FlowThought::from_candle(c);
     vec![
-        ThoughtAST::Log { name: "obv-slope".into(), value: t.obv_slope },
+        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("obv-slope".into())), Box::new(ThoughtAST::Log { value: t.obv_slope })),
         scaled_linear("vwap-distance", t.vwap_distance, scales),
         scaled_linear("buying-pressure", t.buying_pressure, scales),
         scaled_linear("selling-pressure", t.selling_pressure, scales),
-        ThoughtAST::Log { name: "volume-ratio".into(), value: t.volume_ratio },
+        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("volume-ratio".into())), Box::new(ThoughtAST::Log { value: t.volume_ratio })),
         scaled_linear("body-ratio", t.body_ratio, scales),
     ]
 }
@@ -81,12 +81,17 @@ mod tests {
         let mut scales = HashMap::new();
         let facts = encode_flow_facts(&c, &mut scales);
         match &facts[2] {
-            ThoughtAST::Linear { name, value, .. } => {
-                assert_eq!(name, "buying-pressure");
-                // (42200 - 41500) / (42500 - 41500) = 700/1000 = 0.7
-                assert!((value - 0.7).abs() < 1e-9);
+            ThoughtAST::Bind(left, right) => {
+                match (left.as_ref(), right.as_ref()) {
+                    (ThoughtAST::Atom(name), ThoughtAST::Linear { value, .. }) => {
+                        assert_eq!(name, "buying-pressure");
+                        // (42200 - 41500) / (42500 - 41500) = 700/1000 = 0.7
+                        assert!((value - 0.7).abs() < 1e-9);
+                    }
+                    _ => panic!("expected Bind(Atom, Linear)"),
+                }
             }
-            _ => panic!("expected Linear"),
+            _ => panic!("expected Bind"),
         }
     }
 }

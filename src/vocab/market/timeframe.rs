@@ -47,12 +47,12 @@ impl ToAst for TimeframeThought {
 
     fn forms(&self) -> Vec<ThoughtAST> {
         vec![
-            ThoughtAST::Linear { name: "tf-1h-trend".into(), value: self.tf_1h_trend, scale: 1.0 },
-            ThoughtAST::Linear { name: "tf-1h-ret".into(), value: self.tf_1h_ret, scale: 0.1 },
-            ThoughtAST::Linear { name: "tf-4h-trend".into(), value: self.tf_4h_trend, scale: 1.0 },
-            ThoughtAST::Linear { name: "tf-4h-ret".into(), value: self.tf_4h_ret, scale: 0.1 },
-            ThoughtAST::Linear { name: "tf-agreement".into(), value: self.tf_agreement, scale: 1.0 },
-            ThoughtAST::Linear { name: "tf-5m-1h-align".into(), value: self.tf_5m_1h_align, scale: 0.1 },
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("tf-1h-trend".into())), Box::new(ThoughtAST::Linear { value: self.tf_1h_trend, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("tf-1h-ret".into())), Box::new(ThoughtAST::Linear { value: self.tf_1h_ret, scale: 0.1 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("tf-4h-trend".into())), Box::new(ThoughtAST::Linear { value: self.tf_4h_trend, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("tf-4h-ret".into())), Box::new(ThoughtAST::Linear { value: self.tf_4h_ret, scale: 0.1 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("tf-agreement".into())), Box::new(ThoughtAST::Linear { value: self.tf_agreement, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("tf-5m-1h-align".into())), Box::new(ThoughtAST::Linear { value: self.tf_5m_1h_align, scale: 0.1 })),
         ]
     }
 }
@@ -87,11 +87,16 @@ mod tests {
         let mut scales = HashMap::new();
         let facts = encode_timeframe_facts(&c, &mut scales);
         match &facts[4] {
-            ThoughtAST::Linear { name, value, .. } => {
-                assert_eq!(name, "tf-agreement");
-                assert_eq!(*value, 0.67);
+            ThoughtAST::Bind(left, right) => {
+                match (left.as_ref(), right.as_ref()) {
+                    (ThoughtAST::Atom(name), ThoughtAST::Linear { value, .. }) => {
+                        assert_eq!(name, "tf-agreement");
+                        assert_eq!(*value, 0.67);
+                    }
+                    _ => panic!("expected Bind(Atom, Linear)"),
+                }
             }
-            _ => panic!("expected Linear"),
+            _ => panic!("expected Bind"),
         }
     }
 }

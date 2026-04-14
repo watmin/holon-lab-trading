@@ -41,13 +41,13 @@ impl ToAst for DivergenceThought {
     fn forms(&self) -> Vec<ThoughtAST> {
         let mut facts = Vec::new();
         if let Some(v) = self.rsi_divergence_bull {
-            facts.push(ThoughtAST::Linear { name: "rsi-divergence-bull".into(), value: v, scale: 1.0 });
+            facts.push(ThoughtAST::Bind(Box::new(ThoughtAST::Atom("rsi-divergence-bull".into())), Box::new(ThoughtAST::Linear { value: v, scale: 1.0 })));
         }
         if let Some(v) = self.rsi_divergence_bear {
-            facts.push(ThoughtAST::Linear { name: "rsi-divergence-bear".into(), value: v, scale: 1.0 });
+            facts.push(ThoughtAST::Bind(Box::new(ThoughtAST::Atom("rsi-divergence-bear".into())), Box::new(ThoughtAST::Linear { value: v, scale: 1.0 })));
         }
         if let Some(v) = self.divergence_spread {
-            facts.push(ThoughtAST::Linear { name: "divergence-spread".into(), value: v, scale: 1.0 });
+            facts.push(ThoughtAST::Bind(Box::new(ThoughtAST::Atom("divergence-spread".into())), Box::new(ThoughtAST::Linear { value: v, scale: 1.0 })));
         }
         facts
     }

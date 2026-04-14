@@ -58,36 +58,57 @@ impl ToAst for BrokerSelfAssessmentThought {
         let mut facts = Vec::with_capacity(7);
 
         // Am I winning? Linear [0, 1]
-        facts.push(ThoughtAST::linear("grace-rate", round_to(self.grace_rate, 2), 1.0));
+        facts.push(ThoughtAST::Bind(
+            Box::new(ThoughtAST::Atom("grace-rate".into())),
+            Box::new(ThoughtAST::Linear { value: round_to(self.grace_rate, 2), scale: 1.0 }),
+        ));
 
         // How long do my papers live? Log-encoded (unbounded positive)
         if self.avg_paper_duration > 0.0 {
-            facts.push(ThoughtAST::log("paper-duration-avg", round_to(self.avg_paper_duration, 1)));
+            facts.push(ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("paper-duration-avg".into())),
+                Box::new(ThoughtAST::Log { value: round_to(self.avg_paper_duration, 1) }),
+            ));
         }
 
         // How many open papers? Log-encoded
         if self.paper_count > 0 {
-            facts.push(ThoughtAST::log("paper-count", self.paper_count as f64));
+            facts.push(ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("paper-count".into())),
+                Box::new(ThoughtAST::Log { value: self.paper_count as f64 }),
+            ));
         }
 
         // How tight are my stops? Log-encoded
         if self.trail_distance > 0.0 {
-            facts.push(ThoughtAST::log("trail-distance", round_to(self.trail_distance, 4)));
+            facts.push(ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("trail-distance".into())),
+                Box::new(ThoughtAST::Log { value: round_to(self.trail_distance, 4) }),
+            ));
         }
 
         // How wide is my safety? Log-encoded
         if self.stop_distance > 0.0 {
-            facts.push(ThoughtAST::log("stop-distance", round_to(self.stop_distance, 4)));
+            facts.push(ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("stop-distance".into())),
+                Box::new(ThoughtAST::Log { value: round_to(self.stop_distance, 4) }),
+            ));
         }
 
         // How stale is my discriminant? Log-encoded
         if self.recalib_freshness > 0 {
-            facts.push(ThoughtAST::log("recalib-freshness", self.recalib_freshness as f64));
+            facts.push(ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("recalib-freshness".into())),
+                Box::new(ThoughtAST::Log { value: self.recalib_freshness as f64 }),
+            ));
         }
 
         // How far does price move for me? Log-encoded
         if self.avg_excursion > 0.0 {
-            facts.push(ThoughtAST::log("excursion-avg", round_to(self.avg_excursion, 4)));
+            facts.push(ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("excursion-avg".into())),
+                Box::new(ThoughtAST::Log { value: round_to(self.avg_excursion, 4) }),
+            ));
         }
 
         facts
@@ -112,32 +133,50 @@ pub fn encode_broker_self_facts(
 
     // How long do my papers live? Log-encoded (unbounded positive)
     if avg_paper_duration > 0.0 {
-        facts.push(ThoughtAST::log("paper-duration-avg", round_to(avg_paper_duration, 1)));
+        facts.push(ThoughtAST::Bind(
+            Box::new(ThoughtAST::Atom("paper-duration-avg".into())),
+            Box::new(ThoughtAST::Log { value: round_to(avg_paper_duration, 1) }),
+        ));
     }
 
     // How many open papers? Log-encoded
     if paper_count > 0 {
-        facts.push(ThoughtAST::log("paper-count", paper_count as f64));
+        facts.push(ThoughtAST::Bind(
+            Box::new(ThoughtAST::Atom("paper-count".into())),
+            Box::new(ThoughtAST::Log { value: paper_count as f64 }),
+        ));
     }
 
     // How tight are my stops? Log-encoded
     if trail_distance > 0.0 {
-        facts.push(ThoughtAST::log("trail-distance", round_to(trail_distance, 4)));
+        facts.push(ThoughtAST::Bind(
+            Box::new(ThoughtAST::Atom("trail-distance".into())),
+            Box::new(ThoughtAST::Log { value: round_to(trail_distance, 4) }),
+        ));
     }
 
     // How wide is my safety? Log-encoded
     if stop_distance > 0.0 {
-        facts.push(ThoughtAST::log("stop-distance", round_to(stop_distance, 4)));
+        facts.push(ThoughtAST::Bind(
+            Box::new(ThoughtAST::Atom("stop-distance".into())),
+            Box::new(ThoughtAST::Log { value: round_to(stop_distance, 4) }),
+        ));
     }
 
     // How stale is my discriminant? Log-encoded
     if recalib_freshness > 0 {
-        facts.push(ThoughtAST::log("recalib-freshness", recalib_freshness as f64));
+        facts.push(ThoughtAST::Bind(
+            Box::new(ThoughtAST::Atom("recalib-freshness".into())),
+            Box::new(ThoughtAST::Log { value: recalib_freshness as f64 }),
+        ));
     }
 
     // How far does price move for me? Log-encoded
     if avg_excursion > 0.0 {
-        facts.push(ThoughtAST::log("excursion-avg", round_to(avg_excursion, 4)));
+        facts.push(ThoughtAST::Bind(
+            Box::new(ThoughtAST::Atom("excursion-avg".into())),
+            Box::new(ThoughtAST::Log { value: round_to(avg_excursion, 4) }),
+        ));
     }
 
     facts

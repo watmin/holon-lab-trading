@@ -38,12 +38,12 @@ impl ToAst for ExitVolatilityThought {
 
     fn forms(&self) -> Vec<ThoughtAST> {
         vec![
-            ThoughtAST::Log { name: "atr-ratio".into(), value: self.atr_ratio },
-            ThoughtAST::Log { name: "atr-r".into(), value: self.atr_r },
-            ThoughtAST::Linear { name: "atr-roc-6".into(), value: self.atr_roc_6, scale: 1.0 },
-            ThoughtAST::Linear { name: "atr-roc-12".into(), value: self.atr_roc_12, scale: 1.0 },
-            ThoughtAST::Linear { name: "squeeze".into(), value: self.squeeze, scale: 1.0 },
-            ThoughtAST::Log { name: "bb-width".into(), value: self.bb_width },
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("atr-ratio".into())), Box::new(ThoughtAST::Log { value: self.atr_ratio })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("atr-r".into())), Box::new(ThoughtAST::Log { value: self.atr_r })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("atr-roc-6".into())), Box::new(ThoughtAST::Linear { value: self.atr_roc_6, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("atr-roc-12".into())), Box::new(ThoughtAST::Linear { value: self.atr_roc_12, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("squeeze".into())), Box::new(ThoughtAST::Linear { value: self.squeeze, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("bb-width".into())), Box::new(ThoughtAST::Log { value: self.bb_width })),
         ]
     }
 }
@@ -51,12 +51,12 @@ impl ToAst for ExitVolatilityThought {
 pub fn encode_exit_volatility_facts(c: &Candle, scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
     let t = ExitVolatilityThought::from_candle(c);
     vec![
-        ThoughtAST::Log { name: "atr-ratio".into(), value: t.atr_ratio },
-        ThoughtAST::Log { name: "atr-r".into(), value: t.atr_r },
+        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("atr-ratio".into())), Box::new(ThoughtAST::Log { value: t.atr_ratio })),
+        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("atr-r".into())), Box::new(ThoughtAST::Log { value: t.atr_r })),
         scaled_linear("atr-roc-6", t.atr_roc_6, scales),
         scaled_linear("atr-roc-12", t.atr_roc_12, scales),
         scaled_linear("squeeze", t.squeeze, scales),
-        ThoughtAST::Log { name: "bb-width".into(), value: t.bb_width },
+        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("bb-width".into())), Box::new(ThoughtAST::Log { value: t.bb_width })),
     ]
 }
 
@@ -78,11 +78,16 @@ mod tests {
         let mut scales = HashMap::new();
         let facts = encode_exit_volatility_facts(&c, &mut scales);
         match &facts[0] {
-            ThoughtAST::Log { name, value } => {
-                assert_eq!(name, "atr-ratio");
-                assert_eq!(*value, 0.01);
+            ThoughtAST::Bind(left, right) => {
+                match (left.as_ref(), right.as_ref()) {
+                    (ThoughtAST::Atom(name), ThoughtAST::Log { value }) => {
+                        assert_eq!(name, "atr-ratio");
+                        assert_eq!(*value, 0.01);
+                    }
+                    _ => panic!("expected Bind(Atom, Log)"),
+                }
             }
-            _ => panic!("expected Log"),
+            _ => panic!("expected Bind"),
         }
     }
 }

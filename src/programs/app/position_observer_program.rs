@@ -103,96 +103,56 @@ pub fn compute_trade_atoms(paper: &PaperEntry, current_price: f64, phase_history
         0.0
     };
 
+    // Phase 3 trade biography atoms (Proposal 044)
+    let phases_since_entry = {
+        let count = phase_history
+            .iter()
+            .filter(|r| r.start_candle >= paper.entry_candle)
+            .count();
+        (count as f64).max(1.0)
+    };
+    let phases_survived = {
+        let count = phase_history
+            .iter()
+            .filter(|r| r.start_candle >= paper.entry_candle && r.label == PhaseLabel::Peak)
+            .count();
+        (count as f64).max(1.0)
+    };
+    let entry_vs_phase_avg = {
+        let entry = paper.entry_price.0;
+        if phase_history.is_empty() || entry == 0.0 {
+            0.0
+        } else {
+            let avg_phase_close: f64 = phase_history
+                .iter()
+                .map(|r| r.close_avg)
+                .sum::<f64>()
+                / phase_history.len() as f64;
+            (entry - avg_phase_close) / entry
+        }
+    };
+
     vec![
         // Core 5 (all three agreed)
-        ThoughtAST::Log {
-            name: "exit-excursion".into(),
-            value: excursion.max(0.0001),
-        },
-        ThoughtAST::Linear {
-            name: "exit-retracement".into(),
-            value: retracement,
-            scale: 1.0,
-        },
-        ThoughtAST::Log {
-            name: "exit-age".into(),
-            value: age.max(1.0),
-        },
-        ThoughtAST::Log {
-            name: "exit-peak-age".into(),
-            value: peak_age.max(1.0),
-        },
-        ThoughtAST::Linear {
-            name: "exit-signaled".into(),
-            value: signaled,
-            scale: 1.0,
-        },
+        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("exit-excursion".into())), Box::new(ThoughtAST::Log { value: excursion.max(0.0001) })),
+        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("exit-retracement".into())), Box::new(ThoughtAST::Linear { value: retracement, scale: 1.0 })),
+        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("exit-age".into())), Box::new(ThoughtAST::Log { value: age.max(1.0) })),
+        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("exit-peak-age".into())), Box::new(ThoughtAST::Log { value: peak_age.max(1.0) })),
+        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("exit-signaled".into())), Box::new(ThoughtAST::Linear { value: signaled, scale: 1.0 })),
         // Seykota additions
-        ThoughtAST::Log {
-            name: "exit-trail-distance".into(),
-            value: trail_distance.max(0.0001),
-        },
-        ThoughtAST::Log {
-            name: "exit-stop-distance".into(),
-            value: stop_distance.max(0.0001),
-        },
+        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("exit-trail-distance".into())), Box::new(ThoughtAST::Log { value: trail_distance.max(0.0001) })),
+        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("exit-stop-distance".into())), Box::new(ThoughtAST::Log { value: stop_distance.max(0.0001) })),
         // Van Tharp additions
-        ThoughtAST::Log {
-            name: "exit-r-multiple".into(),
-            value: r_multiple.max(0.0001),
-        },
-        ThoughtAST::Linear {
-            name: "exit-heat".into(),
-            value: heat.min(1.0),
-            scale: 1.0,
-        },
+        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("exit-r-multiple".into())), Box::new(ThoughtAST::Log { value: r_multiple.max(0.0001) })),
+        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("exit-heat".into())), Box::new(ThoughtAST::Linear { value: heat.min(1.0), scale: 1.0 })),
         // Wyckoff addition
-        ThoughtAST::Linear {
-            name: "exit-trail-cushion".into(),
-            value: trail_cushion,
-            scale: 1.0,
-        },
-        // Phase 3 trade biography atoms (Proposal 044)
+        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("exit-trail-cushion".into())), Box::new(ThoughtAST::Linear { value: trail_cushion, scale: 1.0 })),
         // phases-since-entry: how many phase transitions has this trade survived?
-        ThoughtAST::Log {
-            name: "phases-since-entry".into(),
-            value: {
-                let count = phase_history
-                    .iter()
-                    .filter(|r| r.start_candle >= paper.entry_candle)
-                    .count();
-                (count as f64).max(1.0)
-            },
-        },
+        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("phases-since-entry".into())), Box::new(ThoughtAST::Log { value: phases_since_entry })),
         // phases-survived: phase transitions that were peaks (potential exit points)
-        ThoughtAST::Log {
-            name: "phases-survived".into(),
-            value: {
-                let count = phase_history
-                    .iter()
-                    .filter(|r| r.start_candle >= paper.entry_candle && r.label == PhaseLabel::Peak)
-                    .count();
-                (count as f64).max(1.0)
-            },
-        },
+        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("phases-survived".into())), Box::new(ThoughtAST::Log { value: phases_survived })),
         // entry-vs-phase-avg: where did this trade enter relative to recent phase avg close?
-        ThoughtAST::Linear {
-            name: "entry-vs-phase-avg".into(),
-            value: {
-                let entry = paper.entry_price.0;
-                if phase_history.is_empty() || entry == 0.0 {
-                    0.0
-                } else {
-                    let avg_phase_close: f64 = phase_history
-                        .iter()
-                        .map(|r| r.close_avg)
-                        .sum::<f64>()
-                        / phase_history.len() as f64;
-                    (entry - avg_phase_close) / entry
-                }
-            },
-            scale: 1.0,
-        },
+        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("entry-vs-phase-avg".into())), Box::new(ThoughtAST::Linear { value: entry_vs_phase_avg, scale: 1.0 })),
     ]
 }
 

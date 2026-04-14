@@ -31,9 +31,9 @@ impl ToAst for PersistenceThought {
 
     fn forms(&self) -> Vec<ThoughtAST> {
         vec![
-            ThoughtAST::Linear { name: "hurst".into(), value: self.hurst, scale: 1.0 },
-            ThoughtAST::Linear { name: "autocorrelation".into(), value: self.autocorrelation, scale: 1.0 },
-            ThoughtAST::Linear { name: "adx".into(), value: self.adx, scale: 1.0 },
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("hurst".into())), Box::new(ThoughtAST::Linear { value: self.hurst, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("autocorrelation".into())), Box::new(ThoughtAST::Linear { value: self.autocorrelation, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("adx".into())), Box::new(ThoughtAST::Linear { value: self.adx, scale: 1.0 })),
         ]
     }
 }
@@ -65,11 +65,16 @@ mod tests {
         let mut scales = HashMap::new();
         let facts = encode_persistence_facts(&c, &mut scales);
         match &facts[0] {
-            ThoughtAST::Linear { name, value, .. } => {
-                assert_eq!(name, "hurst");
-                assert_eq!(*value, 0.55);
+            ThoughtAST::Bind(left, right) => {
+                match (left.as_ref(), right.as_ref()) {
+                    (ThoughtAST::Atom(name), ThoughtAST::Linear { value, .. }) => {
+                        assert_eq!(name, "hurst");
+                        assert_eq!(*value, 0.55);
+                    }
+                    _ => panic!("expected Bind(Atom, Linear)"),
+                }
             }
-            _ => panic!("expected Linear"),
+            _ => panic!("expected Bind"),
         }
     }
 }

@@ -39,13 +39,18 @@ impl ToAst for MarketOpinionThought {
 
     fn forms(&self) -> Vec<ThoughtAST> {
         vec![
-            ThoughtAST::linear(
-                "market-direction",
-                round_to(self.signed_conviction, 3),
-                1.0,
+            ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("market-direction".into())),
+                Box::new(ThoughtAST::Linear { value: round_to(self.signed_conviction, 3), scale: 1.0 }),
             ),
-            ThoughtAST::linear("market-conviction", round_to(self.conviction, 3), 1.0),
-            ThoughtAST::linear("market-edge", round_to(self.edge, 3), 1.0),
+            ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("market-conviction".into())),
+                Box::new(ThoughtAST::Linear { value: round_to(self.conviction, 3), scale: 1.0 }),
+            ),
+            ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("market-edge".into())),
+                Box::new(ThoughtAST::Linear { value: round_to(self.edge, 3), scale: 1.0 }),
+            ),
         ]
     }
 }
@@ -96,10 +101,22 @@ impl ToAst for ExitOpinionThought {
 
     fn forms(&self) -> Vec<ThoughtAST> {
         vec![
-            ThoughtAST::log("exit-trail", round_to(self.trail.max(0.001), 4)),
-            ThoughtAST::log("exit-stop", round_to(self.stop.max(0.001), 4)),
-            ThoughtAST::linear("exit-grace-rate", round_to(self.grace_rate, 2), 1.0),
-            ThoughtAST::log("exit-avg-residue", round_to(self.avg_residue.max(0.001), 4)),
+            ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("exit-trail".into())),
+                Box::new(ThoughtAST::Log { value: round_to(self.trail.max(0.001), 4) }),
+            ),
+            ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("exit-stop".into())),
+                Box::new(ThoughtAST::Log { value: round_to(self.stop.max(0.001), 4) }),
+            ),
+            ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("exit-grace-rate".into())),
+                Box::new(ThoughtAST::Linear { value: round_to(self.grace_rate, 2), scale: 1.0 }),
+            ),
+            ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("exit-avg-residue".into())),
+                Box::new(ThoughtAST::Log { value: round_to(self.avg_residue.max(0.001), 4) }),
+            ),
         ]
     }
 }
@@ -114,10 +131,19 @@ pub fn encode_exit_opinions(
     scales: &mut HashMap<String, ScaleTracker>,
 ) -> Vec<ThoughtAST> {
     vec![
-        ThoughtAST::log("exit-trail", round_to(trail.max(0.001), 4)),
-        ThoughtAST::log("exit-stop", round_to(stop.max(0.001), 4)),
+        ThoughtAST::Bind(
+            Box::new(ThoughtAST::Atom("exit-trail".into())),
+            Box::new(ThoughtAST::Log { value: round_to(trail.max(0.001), 4) }),
+        ),
+        ThoughtAST::Bind(
+            Box::new(ThoughtAST::Atom("exit-stop".into())),
+            Box::new(ThoughtAST::Log { value: round_to(stop.max(0.001), 4) }),
+        ),
         scaled_linear("exit-grace-rate", round_to(grace_rate, 2), scales),
-        ThoughtAST::log("exit-avg-residue", round_to(avg_residue.max(0.001), 4)),
+        ThoughtAST::Bind(
+            Box::new(ThoughtAST::Atom("exit-avg-residue".into())),
+            Box::new(ThoughtAST::Log { value: round_to(avg_residue.max(0.001), 4) }),
+        ),
     ]
 }
 
@@ -132,11 +158,33 @@ mod tests {
         assert_eq!(facts.len(), 3);
     }
 
+    /// Helper: extract atom name from Bind(Atom(name), _).
+    fn atom_name(ast: &ThoughtAST) -> &str {
+        match ast {
+            ThoughtAST::Bind(left, _) => match left.as_ref() {
+                ThoughtAST::Atom(name) => name.as_str(),
+                _ => panic!("expected Bind(Atom, _)"),
+            },
+            _ => panic!("expected Bind"),
+        }
+    }
+
+    /// Helper: extract scalar value from Bind(_, Linear{value, ..}).
+    fn linear_value(ast: &ThoughtAST) -> f64 {
+        match ast {
+            ThoughtAST::Bind(_, right) => match right.as_ref() {
+                ThoughtAST::Linear { value, .. } => *value,
+                _ => panic!("expected Bind(_, Linear)"),
+            },
+            _ => panic!("expected Bind"),
+        }
+    }
+
     #[test]
     fn test_encode_market_opinions_names() {
         let mut scales = HashMap::new();
         let facts = encode_market_opinions(-0.08, 0.08, 0.55, &mut scales);
-        let names: Vec<String> = facts.iter().map(|f| f.name()).collect();
+        let names: Vec<&str> = facts.iter().map(|f| atom_name(f)).collect();
         assert_eq!(names, vec!["market-direction", "market-conviction", "market-edge"]);
     }
 
@@ -145,34 +193,19 @@ mod tests {
         let mut scales = HashMap::new();
         // Up at 0.15 → +0.15
         let facts = encode_market_opinions(0.15, 0.15, 0.62, &mut scales);
-        match &facts[0] {
-            ThoughtAST::Linear { value, .. } => assert!(*value > 0.0),
-            _ => panic!("expected Linear"),
-        }
+        assert!(linear_value(&facts[0]) > 0.0);
         // Down at 0.08 → -0.08
         let facts = encode_market_opinions(-0.08, 0.08, 0.55, &mut scales);
-        match &facts[0] {
-            ThoughtAST::Linear { value, .. } => assert!(*value < 0.0),
-            _ => panic!("expected Linear"),
-        }
+        assert!(linear_value(&facts[0]) < 0.0);
     }
 
     #[test]
     fn test_encode_market_opinions_rounding() {
         let mut scales = HashMap::new();
         let facts = encode_market_opinions(0.12345, 0.6789, 0.4321, &mut scales);
-        match &facts[0] {
-            ThoughtAST::Linear { value, .. } => assert_eq!(*value, 0.12),
-            _ => panic!("expected Linear"),
-        }
-        match &facts[1] {
-            ThoughtAST::Linear { value, .. } => assert_eq!(*value, 0.68),
-            _ => panic!("expected Linear"),
-        }
-        match &facts[2] {
-            ThoughtAST::Linear { value, .. } => assert_eq!(*value, 0.43),
-            _ => panic!("expected Linear"),
-        }
+        assert_eq!(linear_value(&facts[0]), 0.12);
+        assert_eq!(linear_value(&facts[1]), 0.68);
+        assert_eq!(linear_value(&facts[2]), 0.43);
     }
 
     #[test]
@@ -182,11 +215,22 @@ mod tests {
         assert_eq!(facts.len(), 4);
     }
 
+    /// Helper: extract scalar value from Bind(_, Log{value}).
+    fn log_value(ast: &ThoughtAST) -> f64 {
+        match ast {
+            ThoughtAST::Bind(_, right) => match right.as_ref() {
+                ThoughtAST::Log { value } => *value,
+                _ => panic!("expected Bind(_, Log)"),
+            },
+            _ => panic!("expected Bind"),
+        }
+    }
+
     #[test]
     fn test_encode_exit_opinions_names() {
         let mut scales = HashMap::new();
         let facts = encode_exit_opinions(0.015, 0.030, 0.55, 0.005, &mut scales);
-        let names: Vec<String> = facts.iter().map(|f| f.name()).collect();
+        let names: Vec<&str> = facts.iter().map(|f| atom_name(f)).collect();
         assert_eq!(
             names,
             vec!["exit-trail", "exit-stop", "exit-grace-rate", "exit-avg-residue"]
@@ -197,10 +241,19 @@ mod tests {
     fn test_encode_exit_opinions_log_encoding() {
         let mut scales = HashMap::new();
         let facts = encode_exit_opinions(0.015, 0.030, 0.55, 0.005, &mut scales);
-        assert!(matches!(&facts[0], ThoughtAST::Log { .. }));
-        assert!(matches!(&facts[1], ThoughtAST::Log { .. }));
-        assert!(matches!(&facts[2], ThoughtAST::Linear { .. }));
-        assert!(matches!(&facts[3], ThoughtAST::Log { .. }));
+        // All are Bind nodes; check the inner scalar type
+        for (i, expected_log) in [(0, true), (1, true), (2, false), (3, true)] {
+            match &facts[i] {
+                ThoughtAST::Bind(_, right) => {
+                    if expected_log {
+                        assert!(matches!(right.as_ref(), ThoughtAST::Log { .. }), "fact {} should be Log", i);
+                    } else {
+                        assert!(matches!(right.as_ref(), ThoughtAST::Linear { .. }), "fact {} should be Linear", i);
+                    }
+                }
+                _ => panic!("fact {} should be Bind", i),
+            }
+        }
     }
 
     #[test]
@@ -208,18 +261,9 @@ mod tests {
         let mut scales = HashMap::new();
         // Values below 0.001 should be clamped
         let facts = encode_exit_opinions(0.0001, 0.0, 0.55, 0.0, &mut scales);
-        match &facts[0] {
-            ThoughtAST::Log { value, .. } => assert!(*value >= 0.001),
-            _ => panic!("expected Log"),
-        }
-        match &facts[1] {
-            ThoughtAST::Log { value, .. } => assert!(*value >= 0.001),
-            _ => panic!("expected Log"),
-        }
-        match &facts[3] {
-            ThoughtAST::Log { value, .. } => assert!(*value >= 0.001),
-            _ => panic!("expected Log"),
-        }
+        assert!(log_value(&facts[0]) >= 0.001);
+        assert!(log_value(&facts[1]) >= 0.001);
+        assert!(log_value(&facts[3]) >= 0.001);
     }
 
     #[test]

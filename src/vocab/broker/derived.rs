@@ -68,17 +68,50 @@ impl ToAst for BrokerDerivedThought {
     /// Forms with hardcoded scales — used for extraction queries, not encoding.
     fn forms(&self) -> Vec<ThoughtAST> {
         vec![
-            ThoughtAST::Log { name: "trail-atr-multiple".into(), value: round_to(self.trail / self.atr_ratio.max(0.001), 2) },
-            ThoughtAST::Log { name: "stop-atr-multiple".into(), value: round_to(self.stop / self.atr_ratio.max(0.001), 2) },
-            ThoughtAST::Log { name: "risk-reward-ratio".into(), value: round_to(self.trail / self.stop.max(0.001), 2) },
-            ThoughtAST::Log { name: "conviction-vol-magnitude".into(), value: round_to((self.signed_conviction.abs() / self.atr_ratio.max(0.001)).max(0.001), 2) },
-            ThoughtAST::Linear { name: "conviction-vol-sign".into(), value: if self.signed_conviction >= 0.0 { 1.0 } else { -1.0 }, scale: 1.0 },
-            ThoughtAST::Linear { name: "exit-confidence".into(), value: round_to(self.exit_grace_rate * self.exit_avg_residue.max(0.001), 4), scale: 1.0 },
-            ThoughtAST::Linear { name: "self-exit-agreement".into(), value: round_to(self.broker_grace_rate - self.exit_grace_rate, 2), scale: 1.0 },
-            ThoughtAST::Log { name: "activity-rate".into(), value: round_to(self.paper_count.max(1) as f64 / self.paper_duration.max(1.0), 2) },
-            ThoughtAST::Linear { name: "excursion-trail-ratio".into(), value: round_to(self.excursion_avg / self.trail.max(0.001), 2), scale: 1.0 },
-            ThoughtAST::Log { name: "market-signal-strength".into(), value: round_to(self.market_anomaly_norm.max(0.001), 2) },
-            ThoughtAST::Log { name: "exit-signal-strength".into(), value: round_to(self.exit_anomaly_norm.max(0.001), 2) },
+            ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("trail-atr-multiple".into())),
+                Box::new(ThoughtAST::Log { value: round_to(self.trail / self.atr_ratio.max(0.001), 2) }),
+            ),
+            ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("stop-atr-multiple".into())),
+                Box::new(ThoughtAST::Log { value: round_to(self.stop / self.atr_ratio.max(0.001), 2) }),
+            ),
+            ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("risk-reward-ratio".into())),
+                Box::new(ThoughtAST::Log { value: round_to(self.trail / self.stop.max(0.001), 2) }),
+            ),
+            ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("conviction-vol-magnitude".into())),
+                Box::new(ThoughtAST::Log { value: round_to((self.signed_conviction.abs() / self.atr_ratio.max(0.001)).max(0.001), 2) }),
+            ),
+            ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("conviction-vol-sign".into())),
+                Box::new(ThoughtAST::Linear { value: if self.signed_conviction >= 0.0 { 1.0 } else { -1.0 }, scale: 1.0 }),
+            ),
+            ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("exit-confidence".into())),
+                Box::new(ThoughtAST::Linear { value: round_to(self.exit_grace_rate * self.exit_avg_residue.max(0.001), 4), scale: 1.0 }),
+            ),
+            ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("self-exit-agreement".into())),
+                Box::new(ThoughtAST::Linear { value: round_to(self.broker_grace_rate - self.exit_grace_rate, 2), scale: 1.0 }),
+            ),
+            ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("activity-rate".into())),
+                Box::new(ThoughtAST::Log { value: round_to(self.paper_count.max(1) as f64 / self.paper_duration.max(1.0), 2) }),
+            ),
+            ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("excursion-trail-ratio".into())),
+                Box::new(ThoughtAST::Linear { value: round_to(self.excursion_avg / self.trail.max(0.001), 2), scale: 1.0 }),
+            ),
+            ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("market-signal-strength".into())),
+                Box::new(ThoughtAST::Log { value: round_to(self.market_anomaly_norm.max(0.001), 2) }),
+            ),
+            ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("exit-signal-strength".into())),
+                Box::new(ThoughtAST::Log { value: round_to(self.exit_anomaly_norm.max(0.001), 2) }),
+            ),
         ]
     }
 }
@@ -102,48 +135,48 @@ pub fn encode_broker_derived_facts(
 ) -> Vec<ThoughtAST> {
     vec![
         // Distance relative to volatility (2 atoms)
-        ThoughtAST::Log {
-            name: "trail-atr-multiple".into(),
-            value: round_to(trail / atr_ratio.max(0.001), 2),
-        },
-        ThoughtAST::Log {
-            name: "stop-atr-multiple".into(),
-            value: round_to(stop / atr_ratio.max(0.001), 2),
-        },
+        ThoughtAST::Bind(
+            Box::new(ThoughtAST::Atom("trail-atr-multiple".into())),
+            Box::new(ThoughtAST::Log { value: round_to(trail / atr_ratio.max(0.001), 2) }),
+        ),
+        ThoughtAST::Bind(
+            Box::new(ThoughtAST::Atom("stop-atr-multiple".into())),
+            Box::new(ThoughtAST::Log { value: round_to(stop / atr_ratio.max(0.001), 2) }),
+        ),
         // Risk-reward ratio (1 atom) — Log per Beckman
-        ThoughtAST::Log {
-            name: "risk-reward-ratio".into(),
-            value: round_to(trail / stop.max(0.001), 2),
-        },
+        ThoughtAST::Bind(
+            Box::new(ThoughtAST::Atom("risk-reward-ratio".into())),
+            Box::new(ThoughtAST::Log { value: round_to(trail / stop.max(0.001), 2) }),
+        ),
         // Conviction-volatility interaction (2 atoms) — split per Beckman
-        ThoughtAST::Log {
-            name: "conviction-vol-magnitude".into(),
-            value: round_to(
+        ThoughtAST::Bind(
+            Box::new(ThoughtAST::Atom("conviction-vol-magnitude".into())),
+            Box::new(ThoughtAST::Log { value: round_to(
                 (signed_conviction.abs() / atr_ratio.max(0.001)).max(0.001),
                 2,
-            ),
-        },
+            ) }),
+        ),
         scaled_linear("conviction-vol-sign", if signed_conviction >= 0.0 { 1.0 } else { -1.0 }, scales),
         // Exit confidence (1 atom)
         scaled_linear("exit-confidence", round_to(exit_grace_rate * exit_avg_residue.max(0.001), 4), scales),
         // Self-exit agreement (1 atom)
         scaled_linear("self-exit-agreement", round_to(broker_grace_rate - exit_grace_rate, 2), scales),
         // Activity rate (1 atom)
-        ThoughtAST::Log {
-            name: "activity-rate".into(),
-            value: round_to(paper_count.max(1) as f64 / paper_duration.max(1.0), 2),
-        },
+        ThoughtAST::Bind(
+            Box::new(ThoughtAST::Atom("activity-rate".into())),
+            Box::new(ThoughtAST::Log { value: round_to(paper_count.max(1) as f64 / paper_duration.max(1.0), 2) }),
+        ),
         // Excursion-trail ratio (1 atom)
         scaled_linear("excursion-trail-ratio", round_to(excursion_avg / trail.max(0.001), 2), scales),
         // Signal strength (2 atoms)
-        ThoughtAST::Log {
-            name: "market-signal-strength".into(),
-            value: round_to(market_anomaly_norm.max(0.001), 2),
-        },
-        ThoughtAST::Log {
-            name: "exit-signal-strength".into(),
-            value: round_to(exit_anomaly_norm.max(0.001), 2),
-        },
+        ThoughtAST::Bind(
+            Box::new(ThoughtAST::Atom("market-signal-strength".into())),
+            Box::new(ThoughtAST::Log { value: round_to(market_anomaly_norm.max(0.001), 2) }),
+        ),
+        ThoughtAST::Bind(
+            Box::new(ThoughtAST::Atom("exit-signal-strength".into())),
+            Box::new(ThoughtAST::Log { value: round_to(exit_anomaly_norm.max(0.001), 2) }),
+        ),
     ]
 }
 
@@ -163,10 +196,43 @@ mod tests {
         assert_eq!(sample_facts().len(), 11);
     }
 
+    /// Helper: extract the atom name from a Bind(Atom(name), _) node.
+    fn atom_name(ast: &ThoughtAST) -> &str {
+        match ast {
+            ThoughtAST::Bind(left, _) => match left.as_ref() {
+                ThoughtAST::Atom(name) => name.as_str(),
+                _ => panic!("expected Bind(Atom, _)"),
+            },
+            _ => panic!("expected Bind"),
+        }
+    }
+
+    /// Helper: extract the scalar value from a Bind(_, Log{value}) node.
+    fn log_value(ast: &ThoughtAST) -> f64 {
+        match ast {
+            ThoughtAST::Bind(_, right) => match right.as_ref() {
+                ThoughtAST::Log { value } => *value,
+                _ => panic!("expected Bind(_, Log)"),
+            },
+            _ => panic!("expected Bind"),
+        }
+    }
+
+    /// Helper: extract the scalar value from a Bind(_, Linear{value, ..}) node.
+    fn linear_value(ast: &ThoughtAST) -> f64 {
+        match ast {
+            ThoughtAST::Bind(_, right) => match right.as_ref() {
+                ThoughtAST::Linear { value, .. } => *value,
+                _ => panic!("expected Bind(_, Linear)"),
+            },
+            _ => panic!("expected Bind"),
+        }
+    }
+
     #[test]
     fn test_names() {
         let facts = sample_facts();
-        let names: Vec<String> = facts.iter().map(|f| f.name()).collect();
+        let names: Vec<&str> = facts.iter().map(|f| atom_name(f)).collect();
         assert_eq!(
             names,
             vec![
@@ -187,52 +253,32 @@ mod tests {
 
     #[test]
     fn test_trail_atr_multiple() {
-        // trail=0.015, atr_ratio=0.012 → 0.015/0.012 = 1.25
         let facts = sample_facts();
-        match &facts[0] {
-            ThoughtAST::Log { value, .. } => assert_eq!(*value, 1.25),
-            _ => panic!("expected Log"),
-        }
+        assert_eq!(log_value(&facts[0]), 1.25);
     }
 
     #[test]
     fn test_stop_atr_multiple() {
-        // stop=0.030, atr_ratio=0.012 → 0.030/0.012 = 2.5
         let facts = sample_facts();
-        match &facts[1] {
-            ThoughtAST::Log { value, .. } => assert_eq!(*value, 2.5),
-            _ => panic!("expected Log"),
-        }
+        assert_eq!(log_value(&facts[1]), 2.5);
     }
 
     #[test]
     fn test_risk_reward_ratio() {
-        // trail=0.015, stop=0.030 → 0.015/0.030 = 0.5
         let facts = sample_facts();
-        match &facts[2] {
-            ThoughtAST::Log { value, .. } => assert_eq!(*value, 0.5),
-            _ => panic!("expected Log"),
-        }
+        assert_eq!(log_value(&facts[2]), 0.5);
     }
 
     #[test]
     fn test_conviction_vol_magnitude() {
-        // |0.25| / 0.012 = 20.833... → round to 20.83
         let facts = sample_facts();
-        match &facts[3] {
-            ThoughtAST::Log { value, .. } => assert_eq!(*value, 20.83),
-            _ => panic!("expected Log"),
-        }
+        assert_eq!(log_value(&facts[3]), 20.83);
     }
 
     #[test]
     fn test_conviction_vol_sign_positive() {
         let facts = sample_facts();
-        match &facts[4] {
-            // scaled_linear rounds to 2: round_to(1.0, 2) = 1.0
-            ThoughtAST::Linear { value, .. } => assert_eq!(*value, 1.0),
-            _ => panic!("expected Linear"),
-        }
+        assert_eq!(linear_value(&facts[4]), 1.0);
     }
 
     #[test]
@@ -241,71 +287,43 @@ mod tests {
         let facts = encode_broker_derived_facts(
             0.015, 0.030, 0.012, -0.25, 0.55, 0.005, 0.60, 20, 25.0, 0.008, 3.5, 2.1, &mut scales,
         );
-        match &facts[4] {
-            ThoughtAST::Linear { value, .. } => assert_eq!(*value, -1.0),
-            _ => panic!("expected Linear"),
-        }
+        assert_eq!(linear_value(&facts[4]), -1.0);
     }
 
     #[test]
     fn test_exit_confidence() {
-        // 0.55 * max(0.005, 0.001) = 0.55 * 0.005 = 0.00275
-        // round_to(0.00275, 4) = 0.0028, then scaled_linear rounds to 2 → 0.0
         let facts = sample_facts();
-        match &facts[5] {
-            ThoughtAST::Linear { value, .. } => assert_eq!(*value, 0.0),
-            _ => panic!("expected Linear"),
-        }
+        assert_eq!(linear_value(&facts[5]), 0.0);
     }
 
     #[test]
     fn test_self_exit_agreement() {
-        // 0.60 - 0.55 = 0.05
         let facts = sample_facts();
-        match &facts[6] {
-            ThoughtAST::Linear { value, .. } => assert_eq!(*value, 0.05),
-            _ => panic!("expected Linear"),
-        }
+        assert_eq!(linear_value(&facts[6]), 0.05);
     }
 
     #[test]
     fn test_activity_rate() {
-        // max(20,1) / max(25.0,1.0) = 20/25 = 0.8
         let facts = sample_facts();
-        match &facts[7] {
-            ThoughtAST::Log { value, .. } => assert_eq!(*value, 0.8),
-            _ => panic!("expected Log"),
-        }
+        assert_eq!(log_value(&facts[7]), 0.8);
     }
 
     #[test]
     fn test_excursion_trail_ratio() {
-        // 0.008 / max(0.015, 0.001) = 0.008 / 0.015 = 0.5333... → round_to(2) = 0.53
         let facts = sample_facts();
-        match &facts[8] {
-            ThoughtAST::Linear { value, .. } => assert_eq!(*value, 0.53),
-            _ => panic!("expected Linear"),
-        }
+        assert_eq!(linear_value(&facts[8]), 0.53);
     }
 
     #[test]
     fn test_market_signal_strength() {
-        // max(3.5, 0.001) = 3.5, round_to(2) = 3.5
         let facts = sample_facts();
-        match &facts[9] {
-            ThoughtAST::Log { value, .. } => assert_eq!(*value, 3.5),
-            _ => panic!("expected Log"),
-        }
+        assert_eq!(log_value(&facts[9]), 3.5);
     }
 
     #[test]
     fn test_exit_signal_strength() {
-        // max(2.1, 0.001) = 2.1, round_to(2) = 2.1
         let facts = sample_facts();
-        match &facts[10] {
-            ThoughtAST::Log { value, .. } => assert_eq!(*value, 2.1),
-            _ => panic!("expected Log"),
-        }
+        assert_eq!(log_value(&facts[10]), 2.1);
     }
 
     #[test]
@@ -314,11 +332,7 @@ mod tests {
         let facts = encode_broker_derived_facts(
             0.015, 0.030, 0.0, 0.25, 0.55, 0.005, 0.60, 20, 25.0, 0.008, 3.5, 2.1, &mut scales,
         );
-        // atr_ratio clamped to 0.001 → trail/0.001 = 15.0
-        match &facts[0] {
-            ThoughtAST::Log { value, .. } => assert_eq!(*value, 15.0),
-            _ => panic!("expected Log"),
-        }
+        assert_eq!(log_value(&facts[0]), 15.0);
     }
 
     #[test]
@@ -327,11 +341,7 @@ mod tests {
         let facts = encode_broker_derived_facts(
             0.015, 0.030, 0.012, 0.25, 0.55, 0.005, 0.60, 0, 25.0, 0.008, 3.5, 2.1, &mut scales,
         );
-        // max(0,1) / 25.0 = 0.04
-        match &facts[7] {
-            ThoughtAST::Log { value, .. } => assert_eq!(*value, 0.04),
-            _ => panic!("expected Log"),
-        }
+        assert_eq!(log_value(&facts[7]), 0.04);
     }
 
     #[test]
@@ -351,21 +361,23 @@ mod tests {
         let facts = sample_facts();
         // Log atoms: 0,1,2,3,7,9,10
         for i in [0, 1, 2, 3, 7, 9, 10] {
-            assert!(
-                matches!(&facts[i], ThoughtAST::Log { .. }),
-                "fact {} should be Log, got {:?}",
-                i,
-                facts[i]
-            );
+            match &facts[i] {
+                ThoughtAST::Bind(_, right) => assert!(
+                    matches!(right.as_ref(), ThoughtAST::Log { .. }),
+                    "fact {} should be Bind(_, Log), got {:?}", i, facts[i]
+                ),
+                _ => panic!("fact {} should be Bind, got {:?}", i, facts[i]),
+            }
         }
         // Linear atoms: 4,5,6,8
         for i in [4, 5, 6, 8] {
-            assert!(
-                matches!(&facts[i], ThoughtAST::Linear { .. }),
-                "fact {} should be Linear, got {:?}",
-                i,
-                facts[i]
-            );
+            match &facts[i] {
+                ThoughtAST::Bind(_, right) => assert!(
+                    matches!(right.as_ref(), ThoughtAST::Linear { .. }),
+                    "fact {} should be Bind(_, Linear), got {:?}", i, facts[i]
+                ),
+                _ => panic!("fact {} should be Bind, got {:?}", i, facts[i]),
+            }
         }
     }
 }

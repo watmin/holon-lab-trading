@@ -41,14 +41,14 @@ impl ToAst for OscillatorsThought {
 
     fn forms(&self) -> Vec<ThoughtAST> {
         vec![
-            ThoughtAST::Linear { name: "rsi".into(), value: self.rsi, scale: 1.0 },
-            ThoughtAST::Linear { name: "cci".into(), value: self.cci, scale: 1.0 },
-            ThoughtAST::Linear { name: "mfi".into(), value: self.mfi, scale: 1.0 },
-            ThoughtAST::Linear { name: "williams-r".into(), value: self.williams_r, scale: 1.0 },
-            ThoughtAST::Log { name: "roc-1".into(), value: self.roc_1 },
-            ThoughtAST::Log { name: "roc-3".into(), value: self.roc_3 },
-            ThoughtAST::Log { name: "roc-6".into(), value: self.roc_6 },
-            ThoughtAST::Log { name: "roc-12".into(), value: self.roc_12 },
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("rsi".into())), Box::new(ThoughtAST::Linear { value: self.rsi, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("cci".into())), Box::new(ThoughtAST::Linear { value: self.cci, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("mfi".into())), Box::new(ThoughtAST::Linear { value: self.mfi, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("williams-r".into())), Box::new(ThoughtAST::Linear { value: self.williams_r, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("roc-1".into())), Box::new(ThoughtAST::Log { value: self.roc_1 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("roc-3".into())), Box::new(ThoughtAST::Log { value: self.roc_3 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("roc-6".into())), Box::new(ThoughtAST::Log { value: self.roc_6 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("roc-12".into())), Box::new(ThoughtAST::Log { value: self.roc_12 })),
         ]
     }
 }
@@ -60,10 +60,10 @@ pub fn encode_oscillator_facts(c: &Candle, scales: &mut HashMap<String, ScaleTra
         scaled_linear("cci", t.cci, scales),
         scaled_linear("mfi", t.mfi, scales),
         scaled_linear("williams-r", t.williams_r, scales),
-        ThoughtAST::Log { name: "roc-1".into(), value: t.roc_1 },
-        ThoughtAST::Log { name: "roc-3".into(), value: t.roc_3 },
-        ThoughtAST::Log { name: "roc-6".into(), value: t.roc_6 },
-        ThoughtAST::Log { name: "roc-12".into(), value: t.roc_12 },
+        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("roc-1".into())), Box::new(ThoughtAST::Log { value: t.roc_1 })),
+        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("roc-3".into())), Box::new(ThoughtAST::Log { value: t.roc_3 })),
+        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("roc-6".into())), Box::new(ThoughtAST::Log { value: t.roc_6 })),
+        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("roc-12".into())), Box::new(ThoughtAST::Log { value: t.roc_12 })),
     ]
 }
 
@@ -84,12 +84,18 @@ mod tests {
         let c = Candle::default();
         let mut scales = HashMap::new();
         let facts = encode_oscillator_facts(&c, &mut scales);
+        // scaled_linear returns Bind(Atom("rsi"), Linear{value, scale})
         match &facts[0] {
-            ThoughtAST::Linear { name, value, .. } => {
-                assert_eq!(name, "rsi");
-                assert_eq!(*value, 55.0);
+            ThoughtAST::Bind(left, right) => {
+                match (left.as_ref(), right.as_ref()) {
+                    (ThoughtAST::Atom(name), ThoughtAST::Linear { value, .. }) => {
+                        assert_eq!(name, "rsi");
+                        assert_eq!(*value, 55.0);
+                    }
+                    _ => panic!("expected Bind(Atom, Linear)"),
+                }
             }
-            _ => panic!("expected Linear"),
+            _ => panic!("expected Bind"),
         }
     }
 }

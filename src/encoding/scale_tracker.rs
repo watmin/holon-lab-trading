@@ -53,11 +53,10 @@ pub fn scaled_linear(
         .or_insert_with(ScaleTracker::new);
     tracker.update(value);
     let s = tracker.scale();
-    ThoughtAST::Linear {
-        name: name.into(),
-        value: round_to(value, 2),
-        scale: s,
-    }
+    ThoughtAST::Bind(
+        Box::new(ThoughtAST::Atom(name.into())),
+        Box::new(ThoughtAST::Linear { value: round_to(value, 2), scale: s }),
+    )
 }
 
 #[cfg(test)]
@@ -100,15 +99,21 @@ mod tests {
         let mut scales = HashMap::new();
         // First call: tracker starts at zero
         let ast = scaled_linear("test-atom", 0.5, &mut scales);
+        // scaled_linear now returns Bind(Atom("test-atom"), Linear { value, scale })
         match ast {
-            ThoughtAST::Linear { name, value, scale } => {
-                assert_eq!(name, "test-atom");
-                assert_eq!(value, 0.5);
-                // First update: count=1, alpha=1/100, ema_abs = 0 + 0.01*0.5 = 0.005
-                // scale = round_to(2.0 * 0.005, 2) = round_to(0.01, 2) = 0.01
-                assert_eq!(scale, 0.01);
+            ThoughtAST::Bind(left, right) => {
+                match (*left, *right) {
+                    (ThoughtAST::Atom(name), ThoughtAST::Linear { value, scale }) => {
+                        assert_eq!(name, "test-atom");
+                        assert_eq!(value, 0.5);
+                        // First update: count=1, alpha=1/100, ema_abs = 0 + 0.01*0.5 = 0.005
+                        // scale = round_to(2.0 * 0.005, 2) = round_to(0.01, 2) = 0.01
+                        assert_eq!(scale, 0.01);
+                    }
+                    _ => panic!("expected Bind(Atom, Linear)"),
+                }
             }
-            _ => panic!("expected Linear"),
+            _ => panic!("expected Bind"),
         }
         // Verify tracker was stored
         assert!(scales.contains_key("test-atom"));

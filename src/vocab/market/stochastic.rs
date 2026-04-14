@@ -35,10 +35,10 @@ impl ToAst for StochasticThought {
 
     fn forms(&self) -> Vec<ThoughtAST> {
         vec![
-            ThoughtAST::Linear { name: "stoch-k".into(), value: self.stoch_k, scale: 1.0 },
-            ThoughtAST::Linear { name: "stoch-d".into(), value: self.stoch_d, scale: 1.0 },
-            ThoughtAST::Linear { name: "stoch-kd-spread".into(), value: self.stoch_kd_spread, scale: 1.0 },
-            ThoughtAST::Linear { name: "stoch-cross-delta".into(), value: self.stoch_cross_delta, scale: 1.0 },
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("stoch-k".into())), Box::new(ThoughtAST::Linear { value: self.stoch_k, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("stoch-d".into())), Box::new(ThoughtAST::Linear { value: self.stoch_d, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("stoch-kd-spread".into())), Box::new(ThoughtAST::Linear { value: self.stoch_kd_spread, scale: 1.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("stoch-cross-delta".into())), Box::new(ThoughtAST::Linear { value: self.stoch_cross_delta, scale: 1.0 })),
         ]
     }
 }
@@ -71,11 +71,16 @@ mod tests {
         let mut scales = HashMap::new();
         let facts = encode_stochastic_facts(&c, &mut scales);
         match &facts[0] {
-            ThoughtAST::Linear { name, value, .. } => {
-                assert_eq!(name, "stoch-k");
-                assert!((value - 0.7).abs() < 1e-9); // 70/100
+            ThoughtAST::Bind(left, right) => {
+                match (left.as_ref(), right.as_ref()) {
+                    (ThoughtAST::Atom(name), ThoughtAST::Linear { value, .. }) => {
+                        assert_eq!(name, "stoch-k");
+                        assert!((value - 0.7).abs() < 1e-9); // 70/100
+                    }
+                    _ => panic!("expected Bind(Atom, Linear)"),
+                }
             }
-            _ => panic!("expected Linear"),
+            _ => panic!("expected Bind"),
         }
     }
 }
