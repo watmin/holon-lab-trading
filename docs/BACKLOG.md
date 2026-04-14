@@ -86,8 +86,8 @@ Five wards scanned 81 Rust files. Leaves to root. Session: 2026-04-13.
 - [ ] **Multiple phase_history scans in portfolio biography.**
   Fuse valley/peak/regularity into one pass. Medium.
 
-- [ ] **Invariant telemetry string `dims`.** Hoist above loop.
-  Low.
+- [x] **Invariant telemetry string `dims`.** Renamed to metric_dims
+  (done with dims shadowing fix).
 
 - [ ] **Redundant `collect_facts()` for snapshot count.** Use
   `slot_facts.len()` instead of re-walking AST. Low.
@@ -107,16 +107,15 @@ Five wards scanned 81 Rust files. Leaves to root. Session: 2026-04-13.
 - [x] **Stale test names.** FIXED. Renamed to
   `test_position_lens_display` and `test_position_lens_equality`.
 
-- [ ] **Stale comment.** rolling_percentile.rs references
-  "pivot tracker" — replaced by PhaseState.
+- [x] **Stale comment.** rolling_percentile.rs deleted entirely.
 
 - [x] **`dims` shadowing.** FIXED. Renamed to `metric_dims` in
   market_observer_program, position_observer_program, broker_program.
 
 - [ ] **`atr_r` mumbles.** Should be `atr_ratio` on Candle struct.
 
-- [ ] **`compute_portfolio_biography` claims purity but mutates.**
-  Rename or restructure (overlaps with critical #3).
+- [x] **`compute_portfolio_biography` claims purity but mutates.**
+  Fixed in critical #3 — returns values now.
 
 ## Next phases (from prior session)
 
