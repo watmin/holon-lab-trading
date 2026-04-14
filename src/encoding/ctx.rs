@@ -1,8 +1,8 @@
 /// ctx.rs — the immutable world. Born at startup. Passed to posts via on-candle.
 /// Compiled from wat/ctx.wat.
 ///
-/// Fully immutable. No seam. Encoding goes through EncodingCacheHandle::get()
-/// which manages the LRU cache independently.
+/// Fully immutable. No seam. Production encoding goes through encode()
+/// in encoding::encode, which manages the LRU cache independently.
 
 use holon::kernel::vector_manager::VectorManager;
 
@@ -14,7 +14,7 @@ use crate::encoding::thought_encoder::ThoughtAST;
 pub struct Ctx {
     /// ThoughtEncoder for direct (non-cached) encoding. Used by tests
     /// and IncrementalBundle. Production encoding goes through
-    /// EncodingCacheHandle::get().
+    /// encoding::encode::encode().
     pub thought_encoder: ThoughtEncoder,
     /// Vector dimensionality.
     pub dims: usize,

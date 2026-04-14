@@ -9,21 +9,24 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use holon::kernel::scalar::ScalarEncoder;
 use holon::kernel::vector::Vector;
+use holon::kernel::vector_manager::VectorManager;
 
 use crate::types::candle::Candle;
 use crate::types::enums::Direction;
 use crate::types::log_entry::LogEntry;
 use crate::domain::market_observer::MarketObserver;
 use crate::domain::lens::market_lens_facts;
+use crate::encoding::encode::encode;
+use crate::encoding::thought_encoder::ThoughtAST;
 use crate::programs::chain::MarketChain;
-use crate::programs::stdlib::cache::EncodingCacheHandle;
+use crate::programs::stdlib::cache::CacheHandle;
 use crate::programs::stdlib::console::ConsoleHandle;
 use crate::encoding::scale_tracker::ScaleTracker;
 use crate::services::mailbox::MailboxReceiver;
 use crate::services::queue::{QueueReceiver, QueueSender};
 use crate::services::topic::TopicSender;
-use crate::encoding::thought_encoder::ThoughtAST;
 use crate::programs::telemetry::emit_metric;
 
 /// Input to the observer: enriched candle, window snapshot, encode count.
@@ -59,7 +62,9 @@ pub fn market_observer_program(
     candle_rx: QueueReceiver<ObsInput>,
     result_tx: TopicSender<MarketChain>,
     learn_rx: MailboxReceiver<ObsLearn>,
-    cache: EncodingCacheHandle,
+    cache: CacheHandle<ThoughtAST, Vector>,
+    vm: VectorManager,
+    scalar: Arc<ScalarEncoder>,
     console: ConsoleHandle,
     db_tx: QueueSender<LogEntry>,
     mut observer: MarketObserver,
@@ -104,7 +109,7 @@ pub fn market_observer_program(
 
         // Encode via cache: check → compute → install.
         let t0 = std::time::Instant::now();
-        let thought = cache.get(&bundle_ast).expect("cache driver disconnected");
+        let thought = encode(&cache, &bundle_ast, &vm, &scalar);
         let ns_encode = t0.elapsed().as_nanos() as f64;
 
         // Observe: noise subspace learns, anomaly extracted, reckoner predicts.

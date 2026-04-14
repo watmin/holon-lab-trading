@@ -11,6 +11,8 @@ use std::sync::Arc;
 
 use holon::kernel::primitives::Primitives;
 use holon::kernel::scalar::ScalarEncoder;
+use holon::kernel::vector::Vector;
+use holon::kernel::vector_manager::VectorManager;
 
 use crate::domain::broker::Broker;
 use crate::types::enums::{Direction, Outcome};
@@ -20,10 +22,11 @@ use crate::programs::app::position_observer_program::{PositionLearn, TradeUpdate
 use crate::vocab::broker::portfolio::compute_portfolio_biography;
 use crate::programs::app::market_observer_program::ObsLearn;
 use crate::programs::chain::MarketPositionChain;
-use crate::programs::stdlib::cache::EncodingCacheHandle;
+use crate::encoding::encode::encode;
+use crate::encoding::thought_encoder::ThoughtAST;
+use crate::programs::stdlib::cache::CacheHandle;
 use crate::programs::stdlib::console::ConsoleHandle;
 use crate::programs::telemetry::emit_metric;
-use crate::encoding::thought_encoder::ThoughtAST;
 use crate::services::queue::{QueueReceiver, QueueSender};
 
 /// Extract Direction from a holon Prediction.
@@ -43,11 +46,12 @@ pub fn broker_program(
     market_learn_tx: QueueSender<ObsLearn>,
     position_learn_tx: QueueSender<PositionLearn>,
     trade_tx: QueueSender<TradeUpdate>,
-    cache: EncodingCacheHandle,
+    cache: CacheHandle<ThoughtAST, Vector>,
+    vm: VectorManager,
+    scalar: Arc<ScalarEncoder>,
     console: ConsoleHandle,
     db_tx: QueueSender<LogEntry>,
     mut broker: Broker,
-    scalar_encoder: Arc<ScalarEncoder>,
 ) -> Broker {
     let mut candle_count = 0usize;
     let mut max_papers_seen: usize = 0;
@@ -82,14 +86,14 @@ pub fn broker_program(
         max_papers_seen = updated_max;
         let portfolio_fact_count = portfolio_atoms.len();
         let portfolio_ast = ThoughtAST::Bundle(portfolio_atoms);
-        let portfolio_vec = cache.get(&portfolio_ast).expect("cache driver disconnected");
+        let portfolio_vec = encode(&cache, &portfolio_ast, &vm, &scalar);
         let composed = Primitives::bundle(&[&chain.market_anomaly, &chain.position_anomaly, &portfolio_vec]);
 
         // 2. Direction from market prediction
         let direction = direction_from_prediction(&chain.market_prediction);
 
         // 3. Distances from position observer's reckoner, cascaded through broker
-        let distances = broker.cascade_distances(Some(chain.position_distances), &scalar_encoder);
+        let distances = broker.cascade_distances(Some(chain.position_distances), &scalar);
 
         // 4. Direction flip — close runners in old direction
         let mut flip_resolutions = Vec::new();
@@ -137,7 +141,7 @@ pub fn broker_program(
                 resolution.amount,
                 resolution.prediction,
                 &resolution.optimal_distances,
-                &scalar_encoder,
+                &scalar,
             );
 
             // Teach market observer — directional accuracy, not trade outcome (Proposal 043).

@@ -8,21 +8,25 @@
 /// The learned state comes home.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
+use holon::kernel::scalar::ScalarEncoder;
 use holon::kernel::vector::Vector;
+use holon::kernel::vector_manager::VectorManager;
 
 use crate::types::distances::Distances;
 use crate::domain::position_observer::PositionObserver;
 use crate::types::log_entry::LogEntry;
 use crate::domain::lens::{position_lens_facts, position_self_assessment_facts};
+use crate::encoding::encode::encode;
+use crate::encoding::thought_encoder::{collect_facts, ThoughtAST};
 use crate::programs::chain::{MarketPositionChain, MarketChain};
-use crate::programs::stdlib::cache::EncodingCacheHandle;
+use crate::programs::stdlib::cache::CacheHandle;
 use crate::programs::stdlib::console::ConsoleHandle;
 use crate::encoding::scale_tracker::ScaleTracker;
 use crate::services::mailbox::MailboxReceiver;
 use crate::services::queue::{QueueReceiver, QueueSender};
 
-use crate::encoding::thought_encoder::{collect_facts, ThoughtAST};
 use crate::programs::telemetry::emit_metric;
 use crate::to_f64;
 
@@ -81,7 +85,9 @@ pub fn position_observer_program(
     slots: Vec<PositionSlot>,
     learn_rx: MailboxReceiver<PositionLearn>,
     trade_rx: MailboxReceiver<TradeUpdate>,
-    cache: EncodingCacheHandle,
+    cache: CacheHandle<ThoughtAST, Vector>,
+    vm: VectorManager,
+    scalar: Arc<ScalarEncoder>,
     console: ConsoleHandle,
     db_tx: QueueSender<LogEntry>,
     mut position_obs: PositionObserver,
@@ -167,7 +173,7 @@ pub fn position_observer_program(
             let fact_vecs: Vec<(ThoughtAST, Vector)> = market_facts
                 .into_iter()
                 .map(|fact| {
-                    let vec = cache.get(&fact).expect("cache driver disconnected");
+                    let vec = encode(&cache, &fact, &vm, &scalar);
                     (fact, vec)
                 })
                 .collect();
@@ -210,7 +216,7 @@ pub fn position_observer_program(
                 snapshot_ast = position_bundle.to_edn();
             }
 
-            let position_raw = cache.get(&position_bundle).expect("cache driver disconnected");
+            let position_raw = encode(&cache, &position_bundle, &vm, &scalar);
             ns_encode_bundle += t0.elapsed().as_nanos() as f64;
 
             // Noise subspace learns, then strip noise — single to_f64 conversion.

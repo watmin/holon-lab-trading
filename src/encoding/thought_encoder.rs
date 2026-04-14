@@ -2,7 +2,7 @@
 /// and the evaluator that walks it into vectors. Compiled from wat/thought-encoder.wat.
 ///
 /// The ThoughtEncoder is stateless — no cache. Production encoding goes
-/// through EncodingCacheHandle::get() which owns the LRU. This struct
+/// through encoding::encode::encode() which checks the LRU. This struct
 /// exists for tests and IncrementalBundle.
 
 use std::collections::HashMap;
@@ -122,8 +122,8 @@ pub fn round_to(v: f64, digits: u32) -> f64 {
 }
 
 /// The evaluator. Walks ThoughtAST into vectors. Stateless — no cache.
-/// Production encoding goes through EncodingCacheHandle::get() which
-/// owns the LRU cache. This struct exists for tests and IncrementalBundle.
+/// Production encoding goes through encoding::encode::encode() which
+/// checks the LRU cache. This struct exists for tests and IncrementalBundle.
 #[derive(Clone)]
 pub struct ThoughtEncoder {
     /// Scalar encoder for Linear/Log/Circular nodes.
@@ -143,7 +143,7 @@ impl ThoughtEncoder {
     }
 
     /// Recursive encode. Returns the vector.
-    /// Used by tests and IncrementalBundle. Production uses EncodingCacheHandle::get().
+    /// Used by tests and IncrementalBundle. Production uses encoding::encode::encode().
     pub fn encode(&self, ast: &ThoughtAST) -> Vector {
         match ast {
             ThoughtAST::Atom(name) => {
@@ -317,7 +317,7 @@ impl IncrementalBundle {
 /// No hierarchy. No threshold. The consumer filters.
 ///
 /// Accepts a closure that encodes a ThoughtAST into a Vector.
-/// On hot paths, pass the EncodingCacheHandle's get (which checks the LRU).
+/// On hot paths, pass encoding::encode::encode (which checks the LRU).
 /// At startup or in tests, pass ThoughtEncoder::encode directly.
 pub fn extract<F>(thought_vec: &Vector, forms: &[ThoughtAST], encode_fn: F) -> Vec<(ThoughtAST, f64)>
 where

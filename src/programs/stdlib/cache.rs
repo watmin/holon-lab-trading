@@ -3,41 +3,26 @@
 //! Each program gets its OWN handles (contention-free).
 //! Gets are request-response pairs. Sets are fire-and-forget
 //! into a shared mailbox.
-//!
-//! The encoding cache is a specialization: each handle owns the LEAF tools
-//! (VectorManager + ScalarEncoder) directly. On miss, encoding happens
-//! LOCALLY on the caller's thread — the handle walks the AST recursively.
-//! The cache thread only manages the LRU — gets and sets, no computation.
-//! Programs encode through `EncodingCacheHandle::get()` — opaque,
-//! hit or miss invisible.
 
-#[cfg(test)]
 use std::hash::Hash;
 use std::num::NonZeroUsize;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread;
 
-use holon::kernel::primitives::Primitives;
-use holon::kernel::scalar::{ScalarEncoder, ScalarMode};
-use holon::kernel::vector::Vector;
-use holon::kernel::vector_manager::VectorManager;
 use lru::LruCache;
 
-use crate::encoding::thought_encoder::ThoughtAST;
 use crate::services::mailbox;
 use crate::services::queue::{self, QueueReceiver, QueueSender};
 
 /// A program's handle to the cache. Each program gets its own.
 /// Not cloneable — one per program.
-#[cfg(test)]
 pub struct CacheHandle<K, V> {
     get_tx: QueueSender<K>,
     get_rx: QueueReceiver<Option<V>>,
     set_tx: QueueSender<(K, V)>,
 }
 
-#[cfg(test)]
 impl<K: Clone + Send, V: Send> CacheHandle<K, V> {
     /// Synchronous get: send key, block for response.
     /// Returns None on miss or if the driver has shut down.
@@ -93,7 +78,6 @@ impl CacheDriverHandle {
 /// in Drop would deadlock if senders are still alive. The cascade IS
 /// the shutdown guarantee: senders drop → driver drains → driver exits.
 /// Call join() explicitly when you need to wait for the driver to finish.
-#[cfg(test)]
 pub fn cache<K, V>(
     name: &str, // the cache's identity — used for diagnostics and logging
     capacity: usize,
@@ -251,267 +235,6 @@ where
             }
             if !has_ops {
                 // Emit remainder on this exit path too.
-                if period_hits > 0 || period_misses > 0 {
-                    let cache_size = cache.len();
-                    emit(period_hits, period_misses, cache_size);
-                }
-                break; // all channels gone between phases
-            }
-            let _ = sel.ready();
-        }
-    });
-
-    (
-        handles,
-        CacheDriverHandle {
-            name: name.to_string(),
-            thread: Some(thread),
-            hits,
-            misses,
-        },
-    )
-}
-
-// ─── Encoding cache ─────────────────────────────────────────────────────────
-// Specialization: each handle owns the LEAF tools (VectorManager + ScalarEncoder).
-// On cache miss, encoding happens LOCALLY on the caller's thread — the handle
-// walks the AST recursively, checking the LRU only for compositions.
-// The cache thread only manages the LRU — gets and sets, no computation.
-
-/// A program's handle to the encoding cache. Each program gets its own.
-/// Not cloneable — one per program.
-/// The ONLY way to encode a ThoughtAST into a Vector.
-pub struct EncodingCacheHandle {
-    get_tx: QueueSender<ThoughtAST>,
-    get_rx: QueueReceiver<Option<Vector>>,
-    set_tx: QueueSender<(ThoughtAST, Vector)>,
-    // Leaf-level tools — stateless, cloneable
-    vm: VectorManager,           // atom name → vector (deterministic)
-    scalar: Arc<ScalarEncoder>,  // scalar value → vector (stateless)
-    dims: usize,                 // dimensionality
-}
-
-impl EncodingCacheHandle {
-    /// get IS encode. Walks the AST top-down. Checks the cache at
-    /// EVERY node. On miss, computes locally and installs. The cache
-    /// is Redis — get/set. The computation is on the caller's thread.
-    /// Every form is cached. No exceptions.
-    pub fn get(&self, ast: &ThoughtAST) -> Option<Vector> {
-        // Check cache for this exact form — every node, every time
-        self.get_tx.send(ast.clone()).ok()?;
-        if let Some(cached) = self.get_rx.recv().ok()? {
-            return Some(cached);
-        }
-
-        // Miss — compute locally
-        let vec = match ast {
-            ThoughtAST::Atom(name) => {
-                self.vm.get_vector(name)
-            }
-            ThoughtAST::Linear { value, scale } => {
-                self.scalar.encode(*value, ScalarMode::Linear { scale: *scale })
-            }
-            ThoughtAST::Log { value } => {
-                self.scalar.encode_log(*value)
-            }
-            ThoughtAST::Circular { value, period } => {
-                self.scalar.encode(*value, ScalarMode::Circular { period: *period })
-            }
-            ThoughtAST::Bind(left, right) => {
-                let l = self.get(left)?;
-                let r = self.get(right)?;
-                Primitives::bind(&l, &r)
-            }
-            ThoughtAST::Bundle(children) => {
-                let vecs: Vec<Vector> = children.iter()
-                    .map(|c| self.get(c))
-                    .collect::<Option<Vec<_>>>()?;
-                if vecs.is_empty() {
-                    Vector::zeros(self.dims)
-                } else {
-                    let refs: Vec<&Vector> = vecs.iter().collect();
-                    Primitives::bundle(&refs)
-                }
-            }
-            ThoughtAST::Sequential(items) => {
-                let vecs: Vec<Vector> = items.iter().enumerate()
-                    .map(|(i, c)| self.get(c).map(|v| Primitives::permute(&v, i as i32)))
-                    .collect::<Option<Vec<_>>>()?;
-                if vecs.is_empty() {
-                    Vector::zeros(self.dims)
-                } else {
-                    let refs: Vec<&Vector> = vecs.iter().collect();
-                    Primitives::bundle(&refs)
-                }
-            }
-        };
-
-        // Install in cache — fire and forget
-        let _ = self.set_tx.send((ast.clone(), vec.clone()));
-        Some(vec)
-    }
-}
-
-/// Create an encoding cache. Each handle gets a clone of the leaf tools
-/// (VectorManager + ScalarEncoder). Programs encode through
-/// `EncodingCacheHandle::get()`.
-///
-/// The cache thread owns ONLY the LRU. It services gets (check LRU, respond
-/// Some or None) and sets (install into LRU). It does NOT encode.
-///
-/// Returns N EncodingCacheHandles (one per program) and a CacheDriverHandle.
-/// The driver thread exits when all client handles are dropped.
-pub fn encoding_cache(
-    name: &str,
-    vm: VectorManager,
-    scalar: ScalarEncoder,
-    dims: usize,
-    capacity: usize,
-    num_clients: usize,
-    can_emit: Box<dyn Fn() -> bool + Send>,
-    emit: Box<dyn Fn(usize, usize, usize) + Send>,
-) -> (Vec<EncodingCacheHandle>, CacheDriverHandle) {
-    assert!(num_clients > 0, "cache requires at least one client");
-    assert!(capacity > 0, "cache requires non-zero capacity");
-
-    let scalar = Arc::new(scalar);
-
-    let mut handles = Vec::with_capacity(num_clients);
-    let mut get_rxs = Vec::with_capacity(num_clients);
-    let mut get_resp_txs = Vec::with_capacity(num_clients);
-
-    // Create set queues: one per client. Mailbox gets the receivers.
-    let mut set_senders = Vec::with_capacity(num_clients);
-    let mut set_rxs = Vec::with_capacity(num_clients);
-    for _ in 0..num_clients {
-        let (tx, rx) = queue::queue_unbounded::<(ThoughtAST, Vector)>();
-        set_senders.push(tx);
-        set_rxs.push(rx);
-    }
-    let set_rx = mailbox::mailbox(set_rxs);
-    let mut set_senders = set_senders.into_iter();
-
-    for _ in 0..num_clients {
-        // Get request queue: client sends key.
-        let (req_tx, req_rx) = queue::queue_unbounded::<ThoughtAST>();
-        // Get response queue: driver sends Option<Vector>.
-        let (resp_tx, resp_rx) = queue::queue_unbounded::<Option<Vector>>();
-
-        get_rxs.push(req_rx);
-        get_resp_txs.push(resp_tx);
-
-        handles.push(EncodingCacheHandle {
-            get_tx: req_tx,
-            get_rx: resp_rx,
-            set_tx: set_senders.next().unwrap(),
-            vm: vm.clone(),
-            scalar: Arc::clone(&scalar),
-            dims,
-        });
-    }
-
-    let hits = Arc::new(AtomicUsize::new(0));
-    let misses = Arc::new(AtomicUsize::new(0));
-    let hits_inner = Arc::clone(&hits);
-    let misses_inner = Arc::clone(&misses);
-
-    // The driver thread: owns the LRU. Drain sets FIRST, then service gets.
-    // This ordering is critical: callers install via set (async fire-and-forget),
-    // then query via get (sync). If gets are serviced before sets are drained,
-    // we miss what was just installed. 0% hit rate.
-    let thread = thread::spawn(move || {
-        let mut cache = LruCache::new(NonZeroUsize::new(capacity).unwrap());
-        let mut closed = vec![false; get_rxs.len()];
-        let mut set_alive = true;
-
-        let mut period_hits: usize = 0;
-        let mut period_misses: usize = 0;
-
-        loop {
-            // Phase 1: drain ALL pending sets.
-            if set_alive {
-                loop {
-                    match set_rx.try_recv() {
-                        Ok((key, value)) => { cache.put(key, value); }
-                        Err(crossbeam::channel::TryRecvError::Empty) => break,
-                        Err(crossbeam::channel::TryRecvError::Disconnected) => {
-                            set_alive = false;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            // Phase 2: service ALL pending gets.
-            let mut all_closed = true;
-            for i in 0..get_rxs.len() {
-                if closed[i] { continue; }
-                all_closed = false;
-                match get_rxs[i].try_recv() {
-                    Ok(key) => {
-                        let result = cache.get(&key).cloned();
-                        if result.is_some() {
-                            hits_inner.fetch_add(1, Ordering::Relaxed);
-                            period_hits += 1;
-                        } else {
-                            misses_inner.fetch_add(1, Ordering::Relaxed);
-                            period_misses += 1;
-                        }
-                        let _ = get_resp_txs[i].send(result);
-                    }
-                    Err(crossbeam::channel::TryRecvError::Empty) => {}
-                    Err(crossbeam::channel::TryRecvError::Disconnected) => {
-                        closed[i] = true;
-                    }
-                }
-            }
-
-            // Gate check after servicing gets.
-            if can_emit() {
-                let cache_size = cache.len();
-                emit(period_hits, period_misses, cache_size);
-                period_hits = 0;
-                period_misses = 0;
-            }
-
-            // Exit when all get clients disconnected AND sets are done.
-            if all_closed && !set_alive {
-                if period_hits > 0 || period_misses > 0 {
-                    let cache_size = cache.len();
-                    emit(period_hits, period_misses, cache_size);
-                }
-                break;
-            }
-            if all_closed {
-                // No get clients left but sets still alive — just drain sets.
-                match set_rx.recv() {
-                    Ok((key, value)) => { cache.put(key, value); }
-                    Err(_) => {
-                        if period_hits > 0 || period_misses > 0 {
-                            let cache_size = cache.len();
-                            emit(period_hits, period_misses, cache_size);
-                        }
-                        break;
-                    }
-                }
-                continue;
-            }
-
-            // Phase 3: block until ANY channel has data.
-            // ready() wakes without consuming — next iteration picks up.
-            let mut sel = crossbeam::channel::Select::new();
-            let mut has_ops = false;
-            for i in 0..get_rxs.len() {
-                if !closed[i] {
-                    sel.recv(get_rxs[i].inner());
-                    has_ops = true;
-                }
-            }
-            if set_alive {
-                sel.recv(set_rx.inner());
-                has_ops = true;
-            }
-            if !has_ops {
                 if period_hits > 0 || period_misses > 0 {
                     let cache_size = cache.len();
                     emit(period_hits, period_misses, cache_size);

@@ -13,6 +13,7 @@ use std::sync::Arc;
 use clap::Parser;
 
 use holon::kernel::scalar::ScalarEncoder;
+use holon::kernel::vector::Vector;
 use holon::kernel::vector_manager::VectorManager;
 
 use enterprise::domain::broker::Broker;
@@ -22,6 +23,7 @@ use enterprise::domain::indicator_bank::IndicatorBank;
 use enterprise::domain::ledger;
 use enterprise::domain::config;
 use enterprise::domain::market_observer::MarketObserver;
+use enterprise::encoding::thought_encoder::ThoughtAST;
 use enterprise::kernel::handle_pool::HandlePool;
 use enterprise::programs::app::broker_program::broker_program;
 use enterprise::programs::app::position_observer_program::{PositionLearn, PositionSlot, TradeUpdate};
@@ -29,7 +31,7 @@ use enterprise::programs::app::position_observer_program::position_observer_prog
 use enterprise::programs::app::market_observer_program::{ObsInput, ObsLearn};
 use enterprise::programs::app::market_observer_program::market_observer_program;
 use enterprise::programs::chain::MarketPositionChain;
-use enterprise::programs::stdlib::cache::{EncodingCacheHandle, encoding_cache};
+use enterprise::programs::stdlib::cache::{CacheHandle, cache};
 use enterprise::programs::stdlib::console::console;
 use enterprise::programs::stdlib::database::database;
 use enterprise::services::mailbox::mailbox;
@@ -100,9 +102,11 @@ fn wire_market_observers(
     observers: Vec<MarketObserver>,
     num_position_observers: usize,
     learn_mailboxes: Vec<enterprise::services::mailbox::MailboxReceiver<ObsLearn>>,
-    mut cache_pool: HandlePool<EncodingCacheHandle>,
+    mut cache_pool: HandlePool<CacheHandle<ThoughtAST, Vector>>,
     mut console_pool: HandlePool<enterprise::programs::stdlib::console::ConsoleHandle>,
     mut db_pool: HandlePool<enterprise::services::queue::QueueSender<LogEntry>>,
+    vm: &VectorManager,
+    scalar: &Arc<ScalarEncoder>,
     recalib_interval: usize,
 ) -> WiredMarketObservers {
     let num_observers = observers.len();
@@ -141,12 +145,18 @@ fn wire_market_observers(
         // DB sender — real database
         let db_tx = db_pool.pop();
 
+        // Leaf tools — cloned per program
+        let obs_vm = vm.clone();
+        let obs_scalar = Arc::clone(scalar);
+
         let jh = std::thread::spawn(move || {
             market_observer_program(
                 candle_rx,
                 result_tx,
                 learn_rx,
                 obs_cache,
+                obs_vm,
+                obs_scalar,
                 obs_console,
                 db_tx,
                 observer,
@@ -185,9 +195,11 @@ fn wire_position_observers(
     position_queue_rxs: Vec<Vec<enterprise::services::queue::QueueReceiver<MarketChain>>>,
     learn_mailboxes: Vec<enterprise::services::mailbox::MailboxReceiver<PositionLearn>>,
     trade_mailboxes: Vec<enterprise::services::mailbox::MailboxReceiver<TradeUpdate>>,
-    mut cache_pool: HandlePool<EncodingCacheHandle>,
+    mut cache_pool: HandlePool<CacheHandle<ThoughtAST, Vector>>,
     mut console_pool: HandlePool<enterprise::programs::stdlib::console::ConsoleHandle>,
     mut db_pool: HandlePool<enterprise::services::queue::QueueSender<LogEntry>>,
+    vm: &VectorManager,
+    scalar: &Arc<ScalarEncoder>,
     noise_floor: f64,
 ) -> WiredPositionObservers {
     let num_market = position_queue_rxs.len();
@@ -236,12 +248,18 @@ fn wire_position_observers(
         let obs_console = console_pool.pop();
         let db_tx = db_pool.pop();
 
+        // Leaf tools — cloned per program
+        let obs_vm = vm.clone();
+        let obs_scalar = Arc::clone(scalar);
+
         let jh = std::thread::spawn(move || {
             position_observer_program(
                 slots,
                 learn_rx,
                 trade_rx,
                 obs_cache,
+                obs_vm,
+                obs_scalar,
                 obs_console,
                 db_tx,
                 position_obs,
@@ -280,10 +298,11 @@ fn wire_brokers(
     market_learn_txs: Vec<Vec<QueueSender<ObsLearn>>>,
     position_learn_txs: Vec<Vec<QueueSender<PositionLearn>>>,
     trade_txs: Vec<Option<QueueSender<TradeUpdate>>>,
-    mut cache_pool: HandlePool<EncodingCacheHandle>,
+    mut cache_pool: HandlePool<CacheHandle<ThoughtAST, Vector>>,
     mut console_pool: HandlePool<enterprise::programs::stdlib::console::ConsoleHandle>,
     mut db_pool: HandlePool<enterprise::services::queue::QueueSender<LogEntry>>,
-    scalar_encoder: Arc<ScalarEncoder>,
+    vm: &VectorManager,
+    scalar: &Arc<ScalarEncoder>,
     num_position: usize,
 ) -> WiredBrokers {
     let num_brokers = brokers.len();
@@ -325,7 +344,10 @@ fn wire_brokers(
         let broker_cache = cache_pool.pop();
         let broker_console = console_pool.pop();
         let broker_db = db_pool.pop();
-        let se = Arc::clone(&scalar_encoder);
+
+        // Leaf tools — cloned per program
+        let broker_vm = vm.clone();
+        let broker_scalar = Arc::clone(scalar);
 
         let jh = std::thread::spawn(move || {
             broker_program(
@@ -334,10 +356,11 @@ fn wire_brokers(
                 position_learn_tx,
                 trade_tx,
                 broker_cache,
+                broker_vm,
+                broker_scalar,
                 broker_console,
                 broker_db,
                 broker,
-                se,
             )
         });
         join_handles.push(jh);
@@ -464,11 +487,11 @@ fn main() {
     main_handle.out(format!("db: {}", db_path));
 
     // ─── Encoding Cache ─────────────────────────────────────────────────────
-    // The cache handle IS the encoder. Each handle owns the leaf tools
-    // (VectorManager + ScalarEncoder). On miss, the handle walks the AST
-    // recursively on the caller's thread. The cache thread is pure Redis.
+    // Generic cache<ThoughtAST, Vector>. The encode() function owns the leaf
+    // tools (VectorManager + ScalarEncoder) — passed to programs alongside
+    // the cache handle. The cache thread is pure LRU: gets and sets, no computation.
     let vm = VectorManager::new(dims);
-    let scalar = ScalarEncoder::new(dims);
+    let scalar = Arc::new(ScalarEncoder::new(dims));
 
     let cache_gate = enterprise::programs::telemetry::make_rate_gate(
         std::time::Duration::from_secs(5),
@@ -503,11 +526,8 @@ fn main() {
             );
         }
     };
-    let (cache_handles, cache_driver) = encoding_cache(
+    let (cache_handles, cache_driver) = cache::<ThoughtAST, Vector>(
         "encoder",
-        vm,
-        scalar,
-        dims,
         262144, // 256K — cache everything we can
         num_market + num_position + num_brokers,
         Box::new(cache_gate),
@@ -606,6 +626,8 @@ fn main() {
         cache_pool,
         console_pool,
         db_pool,
+        &vm,
+        &scalar,
         recalib_interval,
     );
 
@@ -622,12 +644,13 @@ fn main() {
         position_cache_pool,
         position_console_pool,
         position_db_pool,
+        &vm,
+        &scalar,
         noise_floor,
     );
 
     // ─── Brokers ───────────────────────────────────────────────────────────
     let brokers = config::create_brokers(num_market, num_position, dims, args.swap_fee);
-    let scalar_encoder = Arc::new(ScalarEncoder::new(dims));
     let broker_console_pool = HandlePool::new("broker-console", broker_console_handles);
     let broker_db_pool = HandlePool::new("broker-db", broker_db_handles);
     let broker_cache_pool = HandlePool::new("broker-cache", broker_cache_handles);
@@ -640,7 +663,8 @@ fn main() {
         broker_cache_pool,
         broker_console_pool,
         broker_db_pool,
-        scalar_encoder,
+        &vm,
+        &scalar,
         num_position,
     );
 
