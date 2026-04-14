@@ -122,14 +122,38 @@ impl PositionObserver {
     /// facts — NOT the composition with market thought.
     /// Proposal 026: position learns from position_thought only.
     /// Proposal 051: continuous reckoners only. No binary Grace/Violence path.
+    /// Learn from hindsight-optimal distances and return the prediction error.
+    /// The error is: |predicted - optimal| / optimal.max(0.0001)
+    /// This is a READ-ONLY diagnostic. No feedback loop. Just measurement.
     pub fn observe_distances(
         &mut self,
         position_thought: &Vector,
         optimal: &Distances,
         weight: f64,
-    ) {
+    ) -> (f64, f64) {
+        // Query what the reckoner WOULD predict for this thought (before learning)
+        let predicted_trail = if self.trail_reckoner.experience() > 0.0 {
+            self.trail_reckoner.query(position_thought)
+        } else {
+            self.default_distances.trail
+        };
+        let predicted_stop = if self.stop_reckoner.experience() > 0.0 {
+            self.stop_reckoner.query(position_thought)
+        } else {
+            self.default_distances.stop
+        };
+
+        // Error: how far off was the prediction?
+        let trail_error = (predicted_trail - optimal.trail).abs()
+            / optimal.trail.max(0.0001);
+        let stop_error = (predicted_stop - optimal.stop).abs()
+            / optimal.stop.max(0.0001);
+
+        // Learn from the optimal (the honest teacher)
         self.trail_reckoner.observe_scalar(position_thought, optimal.trail, weight);
         self.stop_reckoner.observe_scalar(position_thought, optimal.stop, weight);
+
+        (trail_error, stop_error)
     }
 
     /// Return the anomalous component — what the noise subspace CANNOT explain.
