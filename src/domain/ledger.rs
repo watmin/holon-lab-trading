@@ -46,6 +46,14 @@ pub fn ledger_setup(conn: &Connection) {
             fact_count INTEGER,
             thought_ast TEXT
         );
+        CREATE TABLE IF NOT EXISTS phase_snapshots (
+            candle INTEGER,
+            phase_label TEXT,
+            phase_direction TEXT,
+            phase_duration INTEGER,
+            phase_count INTEGER,
+            phase_history_len INTEGER
+        );
         CREATE TABLE IF NOT EXISTS telemetry (
             namespace TEXT,
             id TEXT,
@@ -101,6 +109,19 @@ pub fn ledger_insert(conn: &Connection, entry: &LogEntry) {
                     candle, broker_slot_idx, grace_count, violence_count, paper_count,
                     trail_experience, stop_experience, expected_value,
                     avg_grace_net, avg_violence_net, fact_count, thought_ast
+                ],
+            )
+            .unwrap();
+        }
+        LogEntry::PhaseSnapshot {
+            candle, phase_label, phase_direction, phase_duration,
+            phase_count, phase_history_len,
+        } => {
+            conn.execute(
+                "INSERT INTO phase_snapshots VALUES (?,?,?,?,?,?)",
+                rusqlite::params![
+                    candle, phase_label, phase_direction, phase_duration,
+                    phase_count, phase_history_len
                 ],
             )
             .unwrap();

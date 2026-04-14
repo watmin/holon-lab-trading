@@ -113,6 +113,15 @@ pub enum LogEntry {
         duration: usize,
         was_runner: bool,
     },
+    /// Phase snapshot — emitted by broker slot 0 every 100 candles.
+    PhaseSnapshot {
+        candle: usize,
+        phase_label: String,
+        phase_direction: String,
+        phase_duration: usize,
+        phase_count: usize,
+        phase_history_len: usize,
+    },
     /// Broker snapshot — emitted by broker threads every N candles.
     /// Proposal 035: reckoner fields removed, accounting fields added.
     BrokerSnapshot {

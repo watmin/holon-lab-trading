@@ -166,10 +166,12 @@ pub fn select_trade_atoms(lens: &PositionLens, all_atoms: Vec<ThoughtAST>) -> Ve
 }
 
 /// Drain all pending position learn signals. Non-blocking.
+/// Returns the count of signals drained.
 fn drain_position_learn(
     learn_rx: &MailboxReceiver<PositionLearn>,
     position_obs: &mut PositionObserver,
-) {
+) -> usize {
+    let mut count = 0;
     while let Ok(signal) = learn_rx.try_recv() {
         position_obs.observe_distances(
             &signal.position_thought,
@@ -178,7 +180,9 @@ fn drain_position_learn(
             signal.is_grace,
             signal.residue,
         );
+        count += 1;
     }
+    count
 }
 
 /// Run the position observer program. Call this inside thread::spawn.
@@ -213,7 +217,7 @@ pub fn position_observer_program(
 
         // LEARN FIRST. Drain all pending signals before encoding.
         let t0 = std::time::Instant::now();
-        drain_position_learn(&learn_rx, &mut position_obs);
+        let learn_count = drain_position_learn(&learn_rx, &mut position_obs);
         let ns_drain = t0.elapsed().as_nanos() as f64;
 
         // Drain trade state updates — absorb current trade atoms.
@@ -337,6 +341,7 @@ pub fn position_observer_program(
 
         // Emit telemetry.
         emit_metric(&db_tx, ns, &id, &dims, batch_ts, "drain_learn", ns_drain, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "learn_drained", learn_count as f64, "Count");
         emit_metric(&db_tx, ns, &id, &dims, batch_ts, "slot_recv", ns_slot_recv, "Nanoseconds");
         emit_metric(&db_tx, ns, &id, &dims, batch_ts, "collect_facts", ns_collect_facts, "Nanoseconds");
         emit_metric(&db_tx, ns, &id, &dims, batch_ts, "extract_anomaly", ns_extract_anomaly, "Nanoseconds");

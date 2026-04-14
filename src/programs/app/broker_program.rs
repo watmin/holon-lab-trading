@@ -215,6 +215,11 @@ pub fn broker_program(
         let mut learn_violence: f64 = 0.0;
         let mut learn_at_boundary: f64 = 0.0;
         let mut learn_mid_phase: f64 = 0.0;
+        let mut papers_resolved: f64 = 0.0;
+        let mut papers_grace: f64 = 0.0;
+        let mut papers_violence: f64 = 0.0;
+        let mut total_paper_age: f64 = 0.0;
+        let mut total_paper_excursion: f64 = 0.0;
 
         // Phase 4: detect phase boundary — small phase_duration means we just entered a new phase.
         let near_phase_boundary = chain.candle.phase_duration <= 5;
@@ -261,6 +266,17 @@ pub fn broker_program(
         // 5. Tick papers
         let (market_signals, mut runner_resolutions) = broker.tick_papers(Price(price));
         runner_resolutions.extend(flip_resolutions);
+
+        // Count paper resolution stats for telemetry.
+        for resolution in market_signals.iter().chain(runner_resolutions.iter()) {
+            papers_resolved += 1.0;
+            match resolution.outcome {
+                Outcome::Grace => papers_grace += 1.0,
+                Outcome::Violence => papers_violence += 1.0,
+            }
+            total_paper_age += resolution.duration as f64;
+            total_paper_excursion += resolution.excursion;
+        }
 
         // 6. Process all resolutions — propagate and teach observers
         for resolution in market_signals.iter().chain(runner_resolutions.iter()) {
@@ -385,6 +401,17 @@ pub fn broker_program(
                 fact_count: 0,
                 thought_ast: String::new(),
             });
+            // Phase snapshot — only slot 0 emits since phase is the same for all brokers.
+            if broker.slot_idx == 0 {
+                let _ = db_tx.send(LogEntry::PhaseSnapshot {
+                    candle: candle_count,
+                    phase_label: chain.candle.phase_label.to_string(),
+                    phase_direction: chain.candle.phase_direction.to_string(),
+                    phase_duration: chain.candle.phase_duration,
+                    phase_count: chain.candle.phase_history.len(),
+                    phase_history_len: chain.candle.phase_history.len(),
+                });
+            }
         }
 
         // Telemetry
@@ -403,6 +430,13 @@ pub fn broker_program(
         emit_metric(&db_tx, ns, &id, &dims, batch_ts, "learn_violence_count", learn_violence, "Count");
         emit_metric(&db_tx, ns, &id, &dims, batch_ts, "learn_at_boundary", learn_at_boundary, "Count");
         emit_metric(&db_tx, ns, &id, &dims, batch_ts, "learn_mid_phase", learn_mid_phase, "Count");
+        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "papers_resolved", papers_resolved, "Count");
+        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "papers_grace", papers_grace, "Count");
+        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "papers_violence", papers_violence, "Count");
+        let avg_paper_age = if papers_resolved > 0.0 { total_paper_age / papers_resolved } else { 0.0 };
+        let avg_paper_excursion = if papers_resolved > 0.0 { total_paper_excursion / papers_resolved } else { 0.0 };
+        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "avg_paper_age", avg_paper_age, "Count");
+        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "avg_paper_excursion", avg_paper_excursion, "Count");
 
         // 8. Console diagnostic every 1000 candles
         if candle_count % 1000 == 0 {
