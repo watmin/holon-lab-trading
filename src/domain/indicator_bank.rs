@@ -45,12 +45,6 @@ impl RingBuffer {
         self.len == self.capacity
     }
 
-    /// idx 0 = oldest, idx (len-1) = newest (wat convention).
-    pub fn get_oldest_first(&self, idx: usize) -> f64 {
-        let actual = (self.head + self.capacity - self.len + idx) % self.capacity;
-        self.data[actual]
-    }
-
     /// ago 0 = most recent, ago (len-1) = oldest.
     pub fn get(&self, ago: usize) -> f64 {
         let idx = (self.head + self.capacity - 1 - ago) % self.capacity;

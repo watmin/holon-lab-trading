@@ -319,6 +319,7 @@ impl IncrementalBundle {
 /// Accepts a closure that encodes a ThoughtAST into a Vector.
 /// On hot paths, pass encoding::encode::encode (which checks the LRU).
 /// At startup or in tests, pass ThoughtEncoder::encode directly.
+// rune:reap(scaffolding) — awaiting Phase 6 discriminant decode. Not dead, ahead of its consumer.
 pub fn extract<F>(thought_vec: &Vector, forms: &[ThoughtAST], encode_fn: F) -> Vec<(ThoughtAST, f64)>
 where
     F: Fn(&ThoughtAST) -> Vector,

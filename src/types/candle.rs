@@ -1,5 +1,8 @@
 /// The enriched candle — raw OHLCV in, 100+ computed indicators out.
 /// Produced by IndicatorBank.tick(ohlcv).
+// rune:forge(bare-type) — 90+ f64 fields are indicator values, not money.
+// Newtypes for each indicator would be verbose noise. Price/Amount newtypes
+// guard the money boundary. Indicator fields are intermediate computation.
 
 use crate::types::pivot::{PhaseDirection, PhaseLabel, PhaseRecord};
 

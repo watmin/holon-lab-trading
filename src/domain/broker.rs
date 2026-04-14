@@ -232,6 +232,7 @@ impl Broker {
 
     /// Is the gate open? During cold start (< 50 of either outcome), always open.
     /// After warm-up, open only when expected value is positive.
+    // rune:reap(scaffolding) — awaiting Phase 5 treasury. The gate controls funded proposals.
     pub fn gate_open(&self) -> bool {
         let cold_start = self.grace_count < 50 || self.violence_count < 50;
         cold_start || self.expected_value > 0.0

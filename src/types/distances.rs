@@ -16,6 +16,7 @@ impl Distances {
     }
 
     /// Convert percentage distances to absolute price levels.
+    // rune:reap(scaffolding) — awaiting Phase 5 treasury. The trade lifecycle needs this.
     pub fn to_levels(&self, price: Price, side: Side) -> Levels {
         let p = price.0;
         match side {
