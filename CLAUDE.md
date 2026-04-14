@@ -21,10 +21,11 @@ specification served as the blueprint; the Rust is the organism. Proposals
 ## Build & Run
 
 ```bash
-./enterprise.sh build                                    # compile (release)
-./enterprise.sh run --max-candles 5000 --asset-mode hold  # quick run
-./enterprise.sh test 100000 --asset-mode hold --name my-run  # benchmark → runs/
-./enterprise.sh kill                                      # kill switch
+./wat-vm.sh build                          # compile (release)
+./wat-vm.sh smoke 500                      # smoke test — 500 candles
+./wat-vm.sh test 10000                     # 10k test → runs/
+./wat-vm.sh test 100000                    # 100k benchmark → runs/
+./wat-vm.sh kill                           # kill switch
 ```
 
 Kill switch file: `touch trader-stop`
@@ -143,5 +144,5 @@ desk, journal. The names carry the architecture.
 100k candles is the benchmark. 500 for smoke tests. 652k for full validation.
 
 ```bash
-./enterprise.sh test 100000 --asset-mode hold --swap-fee 0.0010 --slippage 0.0025 --name benchmark
+./wat-vm.sh test 100000
 ```
