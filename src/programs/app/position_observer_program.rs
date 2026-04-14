@@ -213,7 +213,7 @@ pub fn position_observer_program(
 
         let ns = "position-observer";
         let id = format!("position:{}:{}", lens, candle_count);
-        let dims = format!("{{\"lens\":\"{}\"}}", lens);
+        let metric_dims = format!("{{\"lens\":\"{}\"}}", lens);
 
         // LEARN FIRST. Drain all pending signals before encoding.
         let t0 = std::time::Instant::now();
@@ -240,6 +240,11 @@ pub fn position_observer_program(
         let mut snapshot_ast = String::new();
         let mut snapshot_fact_count: usize = 0;
 
+        // Compute position-specific facts once — identical across all slots
+        // (same candle, same lens, same self-assessment). Hoisted from slot loop.
+        let mut base_facts_computed = false;
+        let mut base_facts: Vec<ThoughtAST> = Vec::new();
+
         // Process each slot sequentially.
         for slot in &slots {
             let t0 = std::time::Instant::now();
@@ -249,17 +254,21 @@ pub fn position_observer_program(
             };
             ns_slot_recv += t0.elapsed().as_nanos() as f64;
 
-            // Collect position-specific facts through the lens.
+            // Collect position-specific facts — compute once from first slot's candle,
+            // then clone for subsequent slots.
             let t0 = std::time::Instant::now();
-            let mut slot_facts = position_lens_facts(&position_obs.lens, &chain.candle, &mut scales);
-            let self_facts = position_self_assessment_facts(
-                position_obs.grace_rate,
-                position_obs.avg_residue,
-                &mut scales,
-            );
-            slot_facts.extend(self_facts);
-            // Add trade atoms from broker pipe (Proposal 040).
-            slot_facts.extend(current_trade_atoms.clone());
+            if !base_facts_computed {
+                base_facts = position_lens_facts(&position_obs.lens, &chain.candle, &mut scales);
+                let self_facts = position_self_assessment_facts(
+                    position_obs.grace_rate,
+                    position_obs.avg_residue,
+                    &mut scales,
+                );
+                base_facts.extend(self_facts);
+                base_facts.extend(current_trade_atoms.clone());
+                base_facts_computed = true;
+            }
+            let mut slot_facts = base_facts.clone();
             ns_collect_facts += t0.elapsed().as_nanos() as f64;
 
             // Extract from market anomaly: unbind individual facts, keep those above noise floor.
@@ -349,19 +358,19 @@ pub fn position_observer_program(
         let ns_total = t_total.elapsed().as_nanos() as f64;
 
         // Emit telemetry.
-        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "drain_learn", ns_drain, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "learn_drained", learn_count as f64, "Count");
-        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "slot_recv", ns_slot_recv, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "collect_facts", ns_collect_facts, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "extract_anomaly", ns_extract_anomaly, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "anomaly_facts_queried", total_anomaly_facts, "Count");
-        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "extract_raw", ns_extract_raw, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "raw_facts_queried", total_raw_facts, "Count");
-        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "encode_bundle", ns_encode_bundle, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "noise_strip", ns_noise_strip, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "send", ns_send, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "slots_count", slots_processed, "Count");
-        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "total", ns_total, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "drain_learn", ns_drain, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "learn_drained", learn_count as f64, "Count");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "slot_recv", ns_slot_recv, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "collect_facts", ns_collect_facts, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "extract_anomaly", ns_extract_anomaly, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "anomaly_facts_queried", total_anomaly_facts, "Count");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "extract_raw", ns_extract_raw, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "raw_facts_queried", total_raw_facts, "Count");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "encode_bundle", ns_encode_bundle, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "noise_strip", ns_noise_strip, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "send", ns_send, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "slots_count", slots_processed, "Count");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "total", ns_total, "Nanoseconds");
 
         let us_elapsed = (ns_total / 1000.0) as u64;
 

@@ -80,7 +80,7 @@ pub fn market_observer_program(
 
         let ns = "market-observer";
         let id = format!("market:{}:{}", lens, candle_count);
-        let dims = format!("{{\"lens\":\"{}\"}}", lens);
+        let metric_dims = format!("{{\"lens\":\"{}\"}}", lens);
 
         // LEARN FIRST. Drain all pending signals before encoding.
         let t0 = std::time::Instant::now();
@@ -91,7 +91,7 @@ pub fn market_observer_program(
         let ws = observer.window_sampler.sample(candle_count);
         let full_len = input.window.len();
         let start = if full_len > ws { full_len - ws } else { 0 };
-        let sliced: Vec<Candle> = input.window[start..].to_vec();
+        let sliced = &input.window[start..];
 
         // Collect facts through the lens.
         let t0 = std::time::Instant::now();
@@ -131,13 +131,13 @@ pub fn market_observer_program(
         let ns_total = t_total.elapsed().as_nanos() as f64;
 
         // Emit telemetry.
-        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "drain_learn", ns_drain, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "collect_facts", ns_collect, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "facts_count", fact_count, "Count");
-        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "encode", ns_encode, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "observe", ns_observe, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "send", ns_send, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "total", ns_total, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "drain_learn", ns_drain, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "collect_facts", ns_collect, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "facts_count", fact_count, "Count");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "encode", ns_encode, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "observe", ns_observe, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "send", ns_send, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "total", ns_total, "Nanoseconds");
 
         let us_elapsed = (ns_total / 1000.0) as u64;
 

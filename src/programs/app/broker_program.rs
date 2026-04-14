@@ -379,13 +379,12 @@ pub fn broker_program(
             }
         }
 
-        // 6b. Send trade updates for ACTIVE papers (Proposal 040).
-        // The position observer needs trade-state atoms to compose with market facts.
-        for paper in &broker.papers {
-            if !paper.resolved {
-                let atoms = compute_trade_atoms(paper, price, &chain.candle.phase_history);
-                let _ = trade_tx.send(TradeUpdate { atoms });
-            }
+        // 6b. Send trade update for the LATEST active paper (Proposal 040).
+        // The position observer drains TradeUpdates and only uses the last one,
+        // so sending one per broker per candle avoids redundant compute_trade_atoms.
+        if let Some(paper) = broker.papers.iter().rev().find(|p| !p.resolved) {
+            let atoms = compute_trade_atoms(paper, price, &chain.candle.phase_history);
+            let _ = trade_tx.send(TradeUpdate { atoms });
         }
 
         // 7. DB snapshot every 100 candles
@@ -427,21 +426,21 @@ pub fn broker_program(
             .as_nanos() as u64;
         let ns = "broker";
         let id = format!("broker:{}:{}", broker.slot_idx, candle_count);
-        let dims = format!("{{\"slot\":{}}}", broker.slot_idx);
-        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "total", ns_total, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "learn_up_count", learn_up, "Count");
-        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "learn_down_count", learn_down, "Count");
-        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "learn_grace_count", learn_grace, "Count");
-        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "learn_violence_count", learn_violence, "Count");
-        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "learn_at_boundary", learn_at_boundary, "Count");
-        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "learn_mid_phase", learn_mid_phase, "Count");
-        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "papers_resolved", papers_resolved, "Count");
-        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "papers_grace", papers_grace, "Count");
-        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "papers_violence", papers_violence, "Count");
+        let metric_dims = format!("{{\"slot\":{}}}", broker.slot_idx);
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "total", ns_total, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "learn_up_count", learn_up, "Count");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "learn_down_count", learn_down, "Count");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "learn_grace_count", learn_grace, "Count");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "learn_violence_count", learn_violence, "Count");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "learn_at_boundary", learn_at_boundary, "Count");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "learn_mid_phase", learn_mid_phase, "Count");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "papers_resolved", papers_resolved, "Count");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "papers_grace", papers_grace, "Count");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "papers_violence", papers_violence, "Count");
         let avg_paper_age = if papers_resolved > 0.0 { total_paper_age / papers_resolved } else { 0.0 };
         let avg_paper_excursion = if papers_resolved > 0.0 { total_paper_excursion / papers_resolved } else { 0.0 };
-        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "avg_paper_age", avg_paper_age, "Count");
-        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "avg_paper_excursion", avg_paper_excursion, "Count");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "avg_paper_age", avg_paper_age, "Count");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "avg_paper_excursion", avg_paper_excursion, "Count");
 
         // 8. Console diagnostic every 1000 candles
         if candle_count % 1000 == 0 {

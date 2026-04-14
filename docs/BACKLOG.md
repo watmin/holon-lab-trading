@@ -54,21 +54,21 @@ Five wards scanned 81 Rust files. Leaves to root. Session: 2026-04-13.
 
 ## Performance — to temper
 
-- [ ] **Window slice `.to_vec()`.** Clones up to 2016 Candles
-  per observer per candle. Fix: pass `&input.window[start..]`
-  directly. High priority.
+- [x] **Window slice `.to_vec()`.** FIXED. Pass `&input.window[start..]`
+  directly — `market_lens_facts` already takes `&[Candle]`. Eliminates
+  up to 2016 deep Candle clones per observer per candle.
 
 - [ ] **7 `to_vec()` in indicator bank tick.** Ring buffer to
   Vec allocation per candle. Fix: reusable scratch buffer on
   IndicatorBank. High priority.
 
-- [ ] **`position_lens_facts()` called 11x.** Same candle, same
-  lens, identical result across all 11 slots. Fix: hoist above
-  slot loop. High priority.
+- [x] **`position_lens_facts()` called 11x.** FIXED. Hoisted above
+  slot loop — computed once from first slot's candle, cloned into
+  each slot's fact collection. 10x fewer lens+self-assessment calls.
 
-- [ ] **`compute_trade_atoms()` per active paper.** Position
-  observer only uses the latest TradeUpdate. Fix: send one per
-  broker, not one per paper. High priority.
+- [x] **`compute_trade_atoms()` per active paper.** FIXED. Send one
+  TradeUpdate per broker per candle (last active paper only). Position
+  observer drains and keeps the last anyway.
 
 - [ ] **Double extraction encoding.** Position observer encodes
   market facts twice (for anomaly and raw extraction). Fix:
@@ -104,16 +104,14 @@ Five wards scanned 81 Rust files. Leaves to root. Session: 2026-04-13.
 
 ## Naming — gaze fixes
 
-- [ ] **Stale test names.** `test_exit_lens_display` and
-  `test_exit_lens_equality` test PositionLens, not ExitLens.
+- [x] **Stale test names.** FIXED. Renamed to
+  `test_position_lens_display` and `test_position_lens_equality`.
 
 - [ ] **Stale comment.** rolling_percentile.rs references
   "pivot tracker" — replaced by PhaseState.
 
-- [ ] **`dims` shadowing.** Telemetry dimensions string shadows
-  vector dimensionality in market_observer_program,
-  position_observer_program, broker_program. Rename to
-  `telemetry_dims` or `metric_dims`.
+- [x] **`dims` shadowing.** FIXED. Renamed to `metric_dims` in
+  market_observer_program, position_observer_program, broker_program.
 
 - [ ] **`atr_r` mumbles.** Should be `atr_ratio` on Candle struct.
 

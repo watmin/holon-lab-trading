@@ -219,13 +219,13 @@ mod tests {
     }
 
     #[test]
-    fn test_exit_lens_display() {
+    fn test_position_lens_display() {
         assert_eq!(PositionLens::Core.to_string(), "core");
         assert_eq!(PositionLens::Full.to_string(), "full");
     }
 
     #[test]
-    fn test_exit_lens_equality() {
+    fn test_position_lens_equality() {
         assert_eq!(PositionLens::Core, PositionLens::Core);
         assert_ne!(PositionLens::Core, PositionLens::Full);
     }
