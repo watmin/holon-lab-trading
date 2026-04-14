@@ -206,6 +206,7 @@ pub fn position_observer_program(
 
             if slots_processed == 0.0 {
                 snapshot_fact_count = slot_fact_count;
+                // rune:temper(intentional) — being blind is being incapable. Full thought logging every candle.
                 snapshot_ast = position_bundle.to_edn();
             }
 

@@ -247,6 +247,7 @@ pub fn broker_program(
                 avg_grace_net: broker.avg_grace_net,
                 avg_violence_net: broker.avg_violence_net,
                 fact_count: portfolio_fact_count,
+                // rune:temper(intentional) — being blind is being incapable
                 thought_ast: portfolio_ast.to_edn(),
             });
         }

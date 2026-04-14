@@ -98,6 +98,7 @@ pub fn market_observer_program(
         let facts = market_lens_facts(&lens, &input.candle, &sliced, &mut scales);
         let fact_count = facts.len() as f64;
         let bundle_ast = ThoughtAST::Bundle(facts);
+        // rune:temper(intentional) — being blind is being incapable. Full thought logging every candle.
         let snapshot_edn = bundle_ast.to_edn();
         let ns_collect = t0.elapsed().as_nanos() as f64;
 
