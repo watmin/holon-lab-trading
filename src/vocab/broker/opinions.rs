@@ -8,55 +8,10 @@
 /// broker ~142 atoms. The noise subspace strips what doesn't matter.
 
 use std::collections::HashMap;
-use crate::encoding::thought_encoder::{round_to, ThoughtAST, ToAst};
+use crate::encoding::thought_encoder::{round_to, ThoughtAST};
 use crate::encoding::scale_tracker::{ScaleTracker, scaled_linear};
 
-/// Market observer's decisions as scalar facts.
-///
-/// signed_conviction: positive = Up, negative = Down. Range [-1, +1].
-/// conviction: absolute conviction. Range [0, 1].
-/// edge: accuracy at this conviction level. Range [0, 1].
-pub struct MarketOpinionThought {
-    pub signed_conviction: f64,
-    pub conviction: f64,
-    pub edge: f64,
-}
-
-impl MarketOpinionThought {
-    pub fn new(signed_conviction: f64, conviction: f64, edge: f64) -> Self {
-        Self {
-            signed_conviction,
-            conviction,
-            edge,
-        }
-    }
-}
-
-impl ToAst for MarketOpinionThought {
-    fn to_ast(&self) -> ThoughtAST {
-        ThoughtAST::Bundle(self.forms())
-    }
-
-    fn forms(&self) -> Vec<ThoughtAST> {
-        vec![
-            ThoughtAST::Bind(
-                Box::new(ThoughtAST::Atom("market-direction".into())),
-                Box::new(ThoughtAST::Linear { value: round_to(self.signed_conviction, 3), scale: 1.0 }),
-            ),
-            ThoughtAST::Bind(
-                Box::new(ThoughtAST::Atom("market-conviction".into())),
-                Box::new(ThoughtAST::Linear { value: round_to(self.conviction, 3), scale: 1.0 }),
-            ),
-            ThoughtAST::Bind(
-                Box::new(ThoughtAST::Atom("market-edge".into())),
-                Box::new(ThoughtAST::Linear { value: round_to(self.edge, 3), scale: 1.0 }),
-            ),
-        ]
-    }
-}
-
 /// Encode the market observer's decisions as scalar facts.
-/// Delegates to MarketOpinionThought.
 pub fn encode_market_opinions(
     signed_conviction: f64,
     conviction: f64,
@@ -70,59 +25,7 @@ pub fn encode_market_opinions(
     ]
 }
 
-/// Exit observer's decisions as scalar facts.
-///
-/// trail: chosen trail distance. Log-encoded (small positive fraction).
-/// stop: chosen stop distance. Log-encoded (small positive fraction).
-/// grace_rate: exit's recent performance [0, 1].
-/// avg_residue: exit's recent residue per paper. Log-encoded.
-pub struct ExitOpinionThought {
-    pub trail: f64,
-    pub stop: f64,
-    pub grace_rate: f64,
-    pub avg_residue: f64,
-}
-
-impl ExitOpinionThought {
-    pub fn new(trail: f64, stop: f64, grace_rate: f64, avg_residue: f64) -> Self {
-        Self {
-            trail,
-            stop,
-            grace_rate,
-            avg_residue,
-        }
-    }
-}
-
-impl ToAst for ExitOpinionThought {
-    fn to_ast(&self) -> ThoughtAST {
-        ThoughtAST::Bundle(self.forms())
-    }
-
-    fn forms(&self) -> Vec<ThoughtAST> {
-        vec![
-            ThoughtAST::Bind(
-                Box::new(ThoughtAST::Atom("exit-trail".into())),
-                Box::new(ThoughtAST::Log { value: round_to(self.trail.max(0.001), 4) }),
-            ),
-            ThoughtAST::Bind(
-                Box::new(ThoughtAST::Atom("exit-stop".into())),
-                Box::new(ThoughtAST::Log { value: round_to(self.stop.max(0.001), 4) }),
-            ),
-            ThoughtAST::Bind(
-                Box::new(ThoughtAST::Atom("exit-grace-rate".into())),
-                Box::new(ThoughtAST::Linear { value: round_to(self.grace_rate, 2), scale: 1.0 }),
-            ),
-            ThoughtAST::Bind(
-                Box::new(ThoughtAST::Atom("exit-avg-residue".into())),
-                Box::new(ThoughtAST::Log { value: round_to(self.avg_residue.max(0.001), 4) }),
-            ),
-        ]
-    }
-}
-
 /// Encode the exit observer's decisions as scalar facts.
-/// Delegates to ExitOpinionThought.
 pub fn encode_exit_opinions(
     trail: f64,
     stop: f64,
@@ -264,26 +167,6 @@ mod tests {
         assert!(log_value(&facts[0]) >= 0.001);
         assert!(log_value(&facts[1]) >= 0.001);
         assert!(log_value(&facts[3]) >= 0.001);
-    }
-
-    #[test]
-    fn test_market_struct_to_ast_is_bundle() {
-        let thought = MarketOpinionThought::new(0.15, 0.15, 0.62);
-        let ast = thought.to_ast();
-        match ast {
-            ThoughtAST::Bundle(children) => assert_eq!(children.len(), 3),
-            _ => panic!("expected Bundle"),
-        }
-    }
-
-    #[test]
-    fn test_exit_struct_to_ast_is_bundle() {
-        let thought = ExitOpinionThought::new(0.015, 0.030, 0.55, 0.005);
-        let ast = thought.to_ast();
-        match ast {
-            ThoughtAST::Bundle(children) => assert_eq!(children.len(), 4),
-            _ => panic!("expected Bundle"),
-        }
     }
 
     #[test]

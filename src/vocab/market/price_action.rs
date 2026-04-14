@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 use crate::types::candle::Candle;
-use crate::encoding::thought_encoder::{ThoughtAST, ToAst, round_to};
+use crate::encoding::thought_encoder::{ThoughtAST, round_to};
 use crate::encoding::scale_tracker::{ScaleTracker, scaled_linear};
 
 pub struct PriceActionThought {
@@ -34,24 +34,6 @@ impl PriceActionThought {
             upper_wick: round_to(if range > 0.0 { upper_wick / range } else { 0.0 }, 2),
             lower_wick: round_to(if range > 0.0 { lower_wick / range } else { 0.0 }, 2),
         }
-    }
-}
-
-impl ToAst for PriceActionThought {
-    fn to_ast(&self) -> ThoughtAST {
-        ThoughtAST::Bundle(self.forms())
-    }
-
-    fn forms(&self) -> Vec<ThoughtAST> {
-        vec![
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("range-ratio".into())), Box::new(ThoughtAST::Log { value: self.range_ratio })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("gap".into())), Box::new(ThoughtAST::Linear { value: self.gap, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("consecutive-up".into())), Box::new(ThoughtAST::Log { value: self.consecutive_up })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("consecutive-down".into())), Box::new(ThoughtAST::Log { value: self.consecutive_down })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("body-ratio-pa".into())), Box::new(ThoughtAST::Linear { value: self.body_ratio_pa, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("upper-wick".into())), Box::new(ThoughtAST::Linear { value: self.upper_wick, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("lower-wick".into())), Box::new(ThoughtAST::Linear { value: self.lower_wick, scale: 1.0 })),
-        ]
     }
 }
 

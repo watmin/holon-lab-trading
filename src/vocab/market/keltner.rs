@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 use crate::types::candle::Candle;
-use crate::encoding::thought_encoder::{ThoughtAST, ToAst, round_to};
+use crate::encoding::thought_encoder::{ThoughtAST, round_to};
 use crate::encoding::scale_tracker::{ScaleTracker, scaled_linear};
 
 pub struct KeltnerThought {
@@ -27,23 +27,6 @@ impl KeltnerThought {
             kelt_upper_dist: round_to((c.close - c.kelt_upper) / c.close, 4),
             kelt_lower_dist: round_to((c.close - c.kelt_lower) / c.close, 4),
         }
-    }
-}
-
-impl ToAst for KeltnerThought {
-    fn to_ast(&self) -> ThoughtAST {
-        ThoughtAST::Bundle(self.forms())
-    }
-
-    fn forms(&self) -> Vec<ThoughtAST> {
-        vec![
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("bb-pos".into())), Box::new(ThoughtAST::Linear { value: self.bb_pos, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("bb-width".into())), Box::new(ThoughtAST::Log { value: self.bb_width })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("kelt-pos".into())), Box::new(ThoughtAST::Linear { value: self.kelt_pos, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("squeeze".into())), Box::new(ThoughtAST::Linear { value: self.squeeze, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("kelt-upper-dist".into())), Box::new(ThoughtAST::Linear { value: self.kelt_upper_dist, scale: 0.1 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("kelt-lower-dist".into())), Box::new(ThoughtAST::Linear { value: self.kelt_lower_dist, scale: 0.1 })),
-        ]
     }
 }
 

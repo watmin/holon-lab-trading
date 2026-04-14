@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 use crate::types::candle::Candle;
-use crate::encoding::thought_encoder::{ThoughtAST, ToAst, round_to};
+use crate::encoding::thought_encoder::{ThoughtAST, round_to};
 use crate::encoding::scale_tracker::{ScaleTracker, scaled_linear};
 
 /// Divergence thought — conditional emission. Fields are Option because
@@ -30,26 +30,6 @@ impl DivergenceThought {
                 None
             },
         }
-    }
-}
-
-impl ToAst for DivergenceThought {
-    fn to_ast(&self) -> ThoughtAST {
-        ThoughtAST::Bundle(self.forms())
-    }
-
-    fn forms(&self) -> Vec<ThoughtAST> {
-        let mut facts = Vec::new();
-        if let Some(v) = self.rsi_divergence_bull {
-            facts.push(ThoughtAST::Bind(Box::new(ThoughtAST::Atom("rsi-divergence-bull".into())), Box::new(ThoughtAST::Linear { value: v, scale: 1.0 })));
-        }
-        if let Some(v) = self.rsi_divergence_bear {
-            facts.push(ThoughtAST::Bind(Box::new(ThoughtAST::Atom("rsi-divergence-bear".into())), Box::new(ThoughtAST::Linear { value: v, scale: 1.0 })));
-        }
-        if let Some(v) = self.divergence_spread {
-            facts.push(ThoughtAST::Bind(Box::new(ThoughtAST::Atom("divergence-spread".into())), Box::new(ThoughtAST::Linear { value: v, scale: 1.0 })));
-        }
-        facts
     }
 }
 

@@ -7,7 +7,7 @@
 
 use std::collections::HashMap;
 use crate::types::candle::Candle;
-use crate::encoding::thought_encoder::{ThoughtAST, ToAst, round_to};
+use crate::encoding::thought_encoder::{ThoughtAST, round_to};
 use crate::encoding::scale_tracker::{ScaleTracker, scaled_linear};
 
 pub struct TimeframeThought {
@@ -37,23 +37,6 @@ impl TimeframeThought {
             tf_agreement: round_to(c.tf_agreement, 2),
             tf_5m_1h_align: round_to(signum_1h * five_m_ret, 4),
         }
-    }
-}
-
-impl ToAst for TimeframeThought {
-    fn to_ast(&self) -> ThoughtAST {
-        ThoughtAST::Bundle(self.forms())
-    }
-
-    fn forms(&self) -> Vec<ThoughtAST> {
-        vec![
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("tf-1h-trend".into())), Box::new(ThoughtAST::Linear { value: self.tf_1h_trend, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("tf-1h-ret".into())), Box::new(ThoughtAST::Linear { value: self.tf_1h_ret, scale: 0.1 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("tf-4h-trend".into())), Box::new(ThoughtAST::Linear { value: self.tf_4h_trend, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("tf-4h-ret".into())), Box::new(ThoughtAST::Linear { value: self.tf_4h_ret, scale: 0.1 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("tf-agreement".into())), Box::new(ThoughtAST::Linear { value: self.tf_agreement, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("tf-5m-1h-align".into())), Box::new(ThoughtAST::Linear { value: self.tf_5m_1h_align, scale: 0.1 })),
-        ]
     }
 }
 

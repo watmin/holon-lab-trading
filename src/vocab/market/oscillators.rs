@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 use crate::types::candle::Candle;
-use crate::encoding::thought_encoder::{ThoughtAST, ToAst, round_to};
+use crate::encoding::thought_encoder::{ThoughtAST, round_to};
 use crate::encoding::scale_tracker::{ScaleTracker, scaled_linear};
 
 pub struct OscillatorsThought {
@@ -31,25 +31,6 @@ impl OscillatorsThought {
             roc_6: round_to(1.0 + c.roc_6, 2),
             roc_12: round_to(1.0 + c.roc_12, 2),
         }
-    }
-}
-
-impl ToAst for OscillatorsThought {
-    fn to_ast(&self) -> ThoughtAST {
-        ThoughtAST::Bundle(self.forms())
-    }
-
-    fn forms(&self) -> Vec<ThoughtAST> {
-        vec![
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("rsi".into())), Box::new(ThoughtAST::Linear { value: self.rsi, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("cci".into())), Box::new(ThoughtAST::Linear { value: self.cci, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("mfi".into())), Box::new(ThoughtAST::Linear { value: self.mfi, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("williams-r".into())), Box::new(ThoughtAST::Linear { value: self.williams_r, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("roc-1".into())), Box::new(ThoughtAST::Log { value: self.roc_1 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("roc-3".into())), Box::new(ThoughtAST::Log { value: self.roc_3 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("roc-6".into())), Box::new(ThoughtAST::Log { value: self.roc_6 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("roc-12".into())), Box::new(ThoughtAST::Log { value: self.roc_12 })),
-        ]
     }
 }
 

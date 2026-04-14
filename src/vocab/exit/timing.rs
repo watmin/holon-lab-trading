@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 use crate::types::candle::Candle;
-use crate::encoding::thought_encoder::{ThoughtAST, ToAst, round_to};
+use crate::encoding::thought_encoder::{ThoughtAST, round_to};
 use crate::encoding::scale_tracker::{ScaleTracker, scaled_linear};
 
 pub struct ExitTimingThought {
@@ -26,22 +26,6 @@ impl ExitTimingThought {
             macd_hist: round_to(c.macd_hist / c.close, 4),
             cci: round_to(c.cci / 300.0, 2),
         }
-    }
-}
-
-impl ToAst for ExitTimingThought {
-    fn to_ast(&self) -> ThoughtAST {
-        ThoughtAST::Bundle(self.forms())
-    }
-
-    fn forms(&self) -> Vec<ThoughtAST> {
-        vec![
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("rsi".into())), Box::new(ThoughtAST::Linear { value: self.rsi, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("stoch-k".into())), Box::new(ThoughtAST::Linear { value: self.stoch_k, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("stoch-kd-spread".into())), Box::new(ThoughtAST::Linear { value: self.stoch_kd_spread, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("macd-hist".into())), Box::new(ThoughtAST::Linear { value: self.macd_hist, scale: 0.01 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("cci".into())), Box::new(ThoughtAST::Linear { value: self.cci, scale: 1.0 })),
-        ]
     }
 }
 

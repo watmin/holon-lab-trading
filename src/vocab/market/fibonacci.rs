@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 use crate::types::candle::Candle;
-use crate::encoding::thought_encoder::{ThoughtAST, ToAst, round_to};
+use crate::encoding::thought_encoder::{ThoughtAST, round_to};
 use crate::encoding::scale_tracker::{ScaleTracker, scaled_linear};
 
 pub struct FibonacciThought {
@@ -33,25 +33,6 @@ impl FibonacciThought {
             fib_dist_618: round_to(pos48 - 0.618, 2),
             fib_dist_786: round_to(pos48 - 0.786, 2),
         }
-    }
-}
-
-impl ToAst for FibonacciThought {
-    fn to_ast(&self) -> ThoughtAST {
-        ThoughtAST::Bundle(self.forms())
-    }
-
-    fn forms(&self) -> Vec<ThoughtAST> {
-        vec![
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("range-pos-12".into())), Box::new(ThoughtAST::Linear { value: self.range_pos_12, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("range-pos-24".into())), Box::new(ThoughtAST::Linear { value: self.range_pos_24, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("range-pos-48".into())), Box::new(ThoughtAST::Linear { value: self.range_pos_48, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("fib-dist-236".into())), Box::new(ThoughtAST::Linear { value: self.fib_dist_236, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("fib-dist-382".into())), Box::new(ThoughtAST::Linear { value: self.fib_dist_382, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("fib-dist-500".into())), Box::new(ThoughtAST::Linear { value: self.fib_dist_500, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("fib-dist-618".into())), Box::new(ThoughtAST::Linear { value: self.fib_dist_618, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("fib-dist-786".into())), Box::new(ThoughtAST::Linear { value: self.fib_dist_786, scale: 1.0 })),
-        ]
     }
 }
 

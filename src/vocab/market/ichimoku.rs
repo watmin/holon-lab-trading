@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 use crate::types::candle::Candle;
-use crate::encoding::thought_encoder::{ThoughtAST, ToAst, round_to};
+use crate::encoding::thought_encoder::{ThoughtAST, round_to};
 use crate::encoding::scale_tracker::{ScaleTracker, scaled_linear};
 
 fn clamp(v: f64, lo: f64, hi: f64) -> f64 {
@@ -44,23 +44,6 @@ impl IchimokuThought {
             tenkan_dist: round_to(clamp((close - tenkan) / (close * 0.01), -1.0, 1.0), 2),
             kijun_dist: round_to(clamp((close - kijun) / (close * 0.01), -1.0, 1.0), 2),
         }
-    }
-}
-
-impl ToAst for IchimokuThought {
-    fn to_ast(&self) -> ThoughtAST {
-        ThoughtAST::Bundle(self.forms())
-    }
-
-    fn forms(&self) -> Vec<ThoughtAST> {
-        vec![
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("cloud-position".into())), Box::new(ThoughtAST::Linear { value: self.cloud_position, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("cloud-thickness".into())), Box::new(ThoughtAST::Log { value: self.cloud_thickness })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("tk-cross-delta".into())), Box::new(ThoughtAST::Linear { value: self.tk_cross_delta, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("tk-spread".into())), Box::new(ThoughtAST::Linear { value: self.tk_spread, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("tenkan-dist".into())), Box::new(ThoughtAST::Linear { value: self.tenkan_dist, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("kijun-dist".into())), Box::new(ThoughtAST::Linear { value: self.kijun_dist, scale: 1.0 })),
-        ]
     }
 }
 

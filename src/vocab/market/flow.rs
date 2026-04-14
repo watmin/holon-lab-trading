@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 use crate::types::candle::Candle;
-use crate::encoding::thought_encoder::{ThoughtAST, ToAst, round_to};
+use crate::encoding::thought_encoder::{ThoughtAST, round_to};
 use crate::encoding::scale_tracker::{ScaleTracker, scaled_linear};
 
 pub struct FlowThought {
@@ -31,23 +31,6 @@ impl FlowThought {
             volume_ratio: round_to(c.volume_accel.exp().max(0.001), 2),
             body_ratio: round_to(if range > 0.0 { abs_body / range } else { 0.0 }, 2),
         }
-    }
-}
-
-impl ToAst for FlowThought {
-    fn to_ast(&self) -> ThoughtAST {
-        ThoughtAST::Bundle(self.forms())
-    }
-
-    fn forms(&self) -> Vec<ThoughtAST> {
-        vec![
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("obv-slope".into())), Box::new(ThoughtAST::Log { value: self.obv_slope })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("vwap-distance".into())), Box::new(ThoughtAST::Linear { value: self.vwap_distance, scale: 0.1 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("buying-pressure".into())), Box::new(ThoughtAST::Linear { value: self.buying_pressure, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("selling-pressure".into())), Box::new(ThoughtAST::Linear { value: self.selling_pressure, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("volume-ratio".into())), Box::new(ThoughtAST::Log { value: self.volume_ratio })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("body-ratio".into())), Box::new(ThoughtAST::Linear { value: self.body_ratio, scale: 1.0 })),
-        ]
     }
 }
 

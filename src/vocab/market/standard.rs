@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 use crate::types::candle::Candle;
-use crate::encoding::thought_encoder::{ThoughtAST, ToAst, round_to};
+use crate::encoding::thought_encoder::{ThoughtAST, round_to};
 use crate::encoding::scale_tracker::{ScaleTracker, scaled_linear};
 
 pub struct StandardThought {
@@ -78,25 +78,6 @@ impl StandardThought {
             dist_from_sma200: round_to((price - current.sma200) / price, 4),
             session_depth: round_to((1.0 + n as f64).max(1.0), 2),
         })
-    }
-}
-
-impl ToAst for StandardThought {
-    fn to_ast(&self) -> ThoughtAST {
-        ThoughtAST::Bundle(self.forms())
-    }
-
-    fn forms(&self) -> Vec<ThoughtAST> {
-        vec![
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("since-rsi-extreme".into())), Box::new(ThoughtAST::Log { value: self.since_rsi_extreme })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("since-vol-spike".into())), Box::new(ThoughtAST::Log { value: self.since_vol_spike })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("since-large-move".into())), Box::new(ThoughtAST::Log { value: self.since_large_move })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("dist-from-high".into())), Box::new(ThoughtAST::Linear { value: self.dist_from_high, scale: 0.1 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("dist-from-low".into())), Box::new(ThoughtAST::Linear { value: self.dist_from_low, scale: 0.1 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("dist-from-midpoint".into())), Box::new(ThoughtAST::Linear { value: self.dist_from_midpoint, scale: 0.1 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("dist-from-sma200".into())), Box::new(ThoughtAST::Linear { value: self.dist_from_sma200, scale: 0.1 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("session-depth".into())), Box::new(ThoughtAST::Log { value: self.session_depth })),
-        ]
     }
 }
 

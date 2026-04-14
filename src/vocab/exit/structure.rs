@@ -7,7 +7,7 @@
 
 use std::collections::HashMap;
 use crate::types::candle::Candle;
-use crate::encoding::thought_encoder::{ThoughtAST, ToAst, round_to};
+use crate::encoding::thought_encoder::{ThoughtAST, round_to};
 use crate::encoding::scale_tracker::{ScaleTracker, scaled_linear};
 
 pub struct ExitStructureThought {
@@ -27,22 +27,6 @@ impl ExitStructureThought {
             adx: round_to(c.adx / 100.0, 2),
             exit_kama_er: round_to(c.kama_er, 2),
         }
-    }
-}
-
-impl ToAst for ExitStructureThought {
-    fn to_ast(&self) -> ThoughtAST {
-        ThoughtAST::Bundle(self.forms())
-    }
-
-    fn forms(&self) -> Vec<ThoughtAST> {
-        vec![
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("trend-consistency-6".into())), Box::new(ThoughtAST::Linear { value: self.trend_consistency_6, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("trend-consistency-12".into())), Box::new(ThoughtAST::Linear { value: self.trend_consistency_12, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("trend-consistency-24".into())), Box::new(ThoughtAST::Linear { value: self.trend_consistency_24, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("adx".into())), Box::new(ThoughtAST::Linear { value: self.adx, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("exit-kama-er".into())), Box::new(ThoughtAST::Linear { value: self.exit_kama_er, scale: 1.0 })),
-        ]
     }
 }
 

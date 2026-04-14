@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 use crate::types::candle::Candle;
-use crate::encoding::thought_encoder::{ThoughtAST, ToAst, round_to};
+use crate::encoding::thought_encoder::{ThoughtAST, round_to};
 use crate::encoding::scale_tracker::{ScaleTracker, scaled_linear};
 
 pub struct RegimeThought {
@@ -32,25 +32,6 @@ impl RegimeThought {
             aroon_down: round_to(c.aroon_down / 100.0, 2),
             fractal_dim: round_to(c.fractal_dim - 1.0, 2),
         }
-    }
-}
-
-impl ToAst for RegimeThought {
-    fn to_ast(&self) -> ThoughtAST {
-        ThoughtAST::Bundle(self.forms())
-    }
-
-    fn forms(&self) -> Vec<ThoughtAST> {
-        vec![
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("kama-er".into())), Box::new(ThoughtAST::Linear { value: self.kama_er, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("choppiness".into())), Box::new(ThoughtAST::Linear { value: self.choppiness, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("dfa-alpha".into())), Box::new(ThoughtAST::Linear { value: self.dfa_alpha, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("variance-ratio".into())), Box::new(ThoughtAST::Log { value: self.variance_ratio })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("entropy-rate".into())), Box::new(ThoughtAST::Linear { value: self.entropy_rate, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("aroon-up".into())), Box::new(ThoughtAST::Linear { value: self.aroon_up, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("aroon-down".into())), Box::new(ThoughtAST::Linear { value: self.aroon_down, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("fractal-dim".into())), Box::new(ThoughtAST::Linear { value: self.fractal_dim, scale: 1.0 })),
-        ]
     }
 }
 

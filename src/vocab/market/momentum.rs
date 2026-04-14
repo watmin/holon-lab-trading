@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 use crate::types::candle::Candle;
-use crate::encoding::thought_encoder::{ThoughtAST, ToAst, round_to};
+use crate::encoding::thought_encoder::{ThoughtAST, round_to};
 use crate::encoding::scale_tracker::{ScaleTracker, scaled_linear};
 
 pub struct MomentumThought {
@@ -27,23 +27,6 @@ impl MomentumThought {
             di_spread: round_to((c.plus_di - c.minus_di) / 100.0, 2),
             atr_ratio: round_to(c.atr_r.max(0.001), 2),
         }
-    }
-}
-
-impl ToAst for MomentumThought {
-    fn to_ast(&self) -> ThoughtAST {
-        ThoughtAST::Bundle(self.forms())
-    }
-
-    fn forms(&self) -> Vec<ThoughtAST> {
-        vec![
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("close-sma20".into())), Box::new(ThoughtAST::Linear { value: self.close_sma20, scale: 0.1 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("close-sma50".into())), Box::new(ThoughtAST::Linear { value: self.close_sma50, scale: 0.1 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("close-sma200".into())), Box::new(ThoughtAST::Linear { value: self.close_sma200, scale: 0.1 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("macd-hist".into())), Box::new(ThoughtAST::Linear { value: self.macd_hist, scale: 0.01 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("di-spread".into())), Box::new(ThoughtAST::Linear { value: self.di_spread, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("atr-ratio".into())), Box::new(ThoughtAST::Log { value: self.atr_ratio })),
-        ]
     }
 }
 

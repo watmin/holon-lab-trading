@@ -5,7 +5,7 @@
 // atoms: hour, day-of-week
 
 use crate::types::candle::Candle;
-use crate::encoding::thought_encoder::{ThoughtAST, ToAst, round_to};
+use crate::encoding::thought_encoder::{ThoughtAST, round_to};
 
 pub struct ExitTimeThought {
     pub hour: f64,
@@ -21,21 +21,12 @@ impl ExitTimeThought {
     }
 }
 
-impl ToAst for ExitTimeThought {
-    fn to_ast(&self) -> ThoughtAST {
-        ThoughtAST::Bundle(self.forms())
-    }
-
-    fn forms(&self) -> Vec<ThoughtAST> {
-        vec![
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("hour".into())), Box::new(ThoughtAST::Circular { value: self.hour, period: 24.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("day-of-week".into())), Box::new(ThoughtAST::Circular { value: self.day_of_week, period: 7.0 })),
-        ]
-    }
-}
-
 pub fn encode_exit_time_facts(c: &Candle) -> Vec<ThoughtAST> {
-    ExitTimeThought::from_candle(c).forms()
+    let t = ExitTimeThought::from_candle(c);
+    vec![
+        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("hour".into())), Box::new(ThoughtAST::Circular { value: t.hour, period: 24.0 })),
+        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("day-of-week".into())), Box::new(ThoughtAST::Circular { value: t.day_of_week, period: 7.0 })),
+    ]
 }
 
 #[cfg(test)]

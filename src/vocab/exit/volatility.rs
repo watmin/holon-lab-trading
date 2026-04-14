@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 use crate::types::candle::Candle;
-use crate::encoding::thought_encoder::{ThoughtAST, ToAst, round_to};
+use crate::encoding::thought_encoder::{ThoughtAST, round_to};
 use crate::encoding::scale_tracker::{ScaleTracker, scaled_linear};
 
 pub struct ExitVolatilityThought {
@@ -28,23 +28,6 @@ impl ExitVolatilityThought {
             squeeze: round_to(c.squeeze, 2),
             bb_width: round_to(c.bb_width.max(0.001), 2),
         }
-    }
-}
-
-impl ToAst for ExitVolatilityThought {
-    fn to_ast(&self) -> ThoughtAST {
-        ThoughtAST::Bundle(self.forms())
-    }
-
-    fn forms(&self) -> Vec<ThoughtAST> {
-        vec![
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("atr-ratio".into())), Box::new(ThoughtAST::Log { value: self.atr_ratio })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("atr-r".into())), Box::new(ThoughtAST::Log { value: self.atr_r })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("atr-roc-6".into())), Box::new(ThoughtAST::Linear { value: self.atr_roc_6, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("atr-roc-12".into())), Box::new(ThoughtAST::Linear { value: self.atr_roc_12, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("squeeze".into())), Box::new(ThoughtAST::Linear { value: self.squeeze, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("bb-width".into())), Box::new(ThoughtAST::Log { value: self.bb_width })),
-        ]
     }
 }
 

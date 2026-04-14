@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 use crate::types::candle::Candle;
-use crate::encoding::thought_encoder::{ThoughtAST, ToAst, round_to};
+use crate::encoding::thought_encoder::{ThoughtAST, round_to};
 use crate::encoding::scale_tracker::{ScaleTracker, scaled_linear};
 
 pub struct StochasticThought {
@@ -25,21 +25,6 @@ impl StochasticThought {
             stoch_kd_spread: round_to(k - d, 2),
             stoch_cross_delta: round_to(c.stoch_cross_delta.max(-1.0).min(1.0), 2),
         }
-    }
-}
-
-impl ToAst for StochasticThought {
-    fn to_ast(&self) -> ThoughtAST {
-        ThoughtAST::Bundle(self.forms())
-    }
-
-    fn forms(&self) -> Vec<ThoughtAST> {
-        vec![
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("stoch-k".into())), Box::new(ThoughtAST::Linear { value: self.stoch_k, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("stoch-d".into())), Box::new(ThoughtAST::Linear { value: self.stoch_d, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("stoch-kd-spread".into())), Box::new(ThoughtAST::Linear { value: self.stoch_kd_spread, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("stoch-cross-delta".into())), Box::new(ThoughtAST::Linear { value: self.stoch_cross_delta, scale: 1.0 })),
-        ]
     }
 }
 

@@ -9,112 +9,8 @@
 ///   - conviction-vol → Log(abs) + sign as separate atom (avoids saturation)
 
 use std::collections::HashMap;
-use crate::encoding::thought_encoder::{round_to, ThoughtAST, ToAst};
+use crate::encoding::thought_encoder::{round_to, ThoughtAST};
 use crate::encoding::scale_tracker::{ScaleTracker, scaled_linear};
-
-/// Typed struct for broker derived facts.
-pub struct BrokerDerivedThought {
-    pub trail: f64,
-    pub stop: f64,
-    pub atr_ratio: f64,
-    pub signed_conviction: f64,
-    pub exit_grace_rate: f64,
-    pub exit_avg_residue: f64,
-    pub broker_grace_rate: f64,
-    pub paper_count: usize,
-    pub paper_duration: f64,
-    pub excursion_avg: f64,
-    pub market_anomaly_norm: f64,
-    pub exit_anomaly_norm: f64,
-}
-
-impl BrokerDerivedThought {
-    pub fn new(
-        trail: f64,
-        stop: f64,
-        atr_ratio: f64,
-        signed_conviction: f64,
-        exit_grace_rate: f64,
-        exit_avg_residue: f64,
-        broker_grace_rate: f64,
-        paper_count: usize,
-        paper_duration: f64,
-        excursion_avg: f64,
-        market_anomaly_norm: f64,
-        exit_anomaly_norm: f64,
-    ) -> Self {
-        Self {
-            trail,
-            stop,
-            atr_ratio,
-            signed_conviction,
-            exit_grace_rate,
-            exit_avg_residue,
-            broker_grace_rate,
-            paper_count,
-            paper_duration,
-            excursion_avg,
-            market_anomaly_norm,
-            exit_anomaly_norm,
-        }
-    }
-}
-
-impl ToAst for BrokerDerivedThought {
-    fn to_ast(&self) -> ThoughtAST {
-        ThoughtAST::Bundle(self.forms())
-    }
-
-    /// Forms with hardcoded scales — used for extraction queries, not encoding.
-    fn forms(&self) -> Vec<ThoughtAST> {
-        vec![
-            ThoughtAST::Bind(
-                Box::new(ThoughtAST::Atom("trail-atr-multiple".into())),
-                Box::new(ThoughtAST::Log { value: round_to(self.trail / self.atr_ratio.max(0.001), 2) }),
-            ),
-            ThoughtAST::Bind(
-                Box::new(ThoughtAST::Atom("stop-atr-multiple".into())),
-                Box::new(ThoughtAST::Log { value: round_to(self.stop / self.atr_ratio.max(0.001), 2) }),
-            ),
-            ThoughtAST::Bind(
-                Box::new(ThoughtAST::Atom("risk-reward-ratio".into())),
-                Box::new(ThoughtAST::Log { value: round_to(self.trail / self.stop.max(0.001), 2) }),
-            ),
-            ThoughtAST::Bind(
-                Box::new(ThoughtAST::Atom("conviction-vol-magnitude".into())),
-                Box::new(ThoughtAST::Log { value: round_to((self.signed_conviction.abs() / self.atr_ratio.max(0.001)).max(0.001), 2) }),
-            ),
-            ThoughtAST::Bind(
-                Box::new(ThoughtAST::Atom("conviction-vol-sign".into())),
-                Box::new(ThoughtAST::Linear { value: if self.signed_conviction >= 0.0 { 1.0 } else { -1.0 }, scale: 1.0 }),
-            ),
-            ThoughtAST::Bind(
-                Box::new(ThoughtAST::Atom("exit-confidence".into())),
-                Box::new(ThoughtAST::Linear { value: round_to(self.exit_grace_rate * self.exit_avg_residue.max(0.001), 4), scale: 1.0 }),
-            ),
-            ThoughtAST::Bind(
-                Box::new(ThoughtAST::Atom("self-exit-agreement".into())),
-                Box::new(ThoughtAST::Linear { value: round_to(self.broker_grace_rate - self.exit_grace_rate, 2), scale: 1.0 }),
-            ),
-            ThoughtAST::Bind(
-                Box::new(ThoughtAST::Atom("activity-rate".into())),
-                Box::new(ThoughtAST::Log { value: round_to(self.paper_count.max(1) as f64 / self.paper_duration.max(1.0), 2) }),
-            ),
-            ThoughtAST::Bind(
-                Box::new(ThoughtAST::Atom("excursion-trail-ratio".into())),
-                Box::new(ThoughtAST::Linear { value: round_to(self.excursion_avg / self.trail.max(0.001), 2), scale: 1.0 }),
-            ),
-            ThoughtAST::Bind(
-                Box::new(ThoughtAST::Atom("market-signal-strength".into())),
-                Box::new(ThoughtAST::Log { value: round_to(self.market_anomaly_norm.max(0.001), 2) }),
-            ),
-            ThoughtAST::Bind(
-                Box::new(ThoughtAST::Atom("exit-signal-strength".into())),
-                Box::new(ThoughtAST::Log { value: round_to(self.exit_anomaly_norm.max(0.001), 2) }),
-            ),
-        ]
-    }
-}
 
 /// Encode 11 derived atoms from cross-cutting broker context.
 /// Pure function — no state, no side effects.
@@ -342,18 +238,6 @@ mod tests {
             0.015, 0.030, 0.012, 0.25, 0.55, 0.005, 0.60, 0, 25.0, 0.008, 3.5, 2.1, &mut scales,
         );
         assert_eq!(log_value(&facts[7]), 0.04);
-    }
-
-    #[test]
-    fn test_struct_to_ast_is_bundle() {
-        let thought = BrokerDerivedThought::new(
-            0.015, 0.030, 0.012, 0.25, 0.55, 0.005, 0.60, 20, 25.0, 0.008, 3.5, 2.1,
-        );
-        let ast = thought.to_ast();
-        match ast {
-            ThoughtAST::Bundle(children) => assert_eq!(children.len(), 11),
-            _ => panic!("expected Bundle"),
-        }
     }
 
     #[test]

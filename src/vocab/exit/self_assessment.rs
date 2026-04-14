@@ -4,7 +4,7 @@
 // atoms: exit-grace-rate, exit-avg-residue
 
 use std::collections::HashMap;
-use crate::encoding::thought_encoder::{ThoughtAST, ToAst, round_to};
+use crate::encoding::thought_encoder::{ThoughtAST, round_to};
 use crate::encoding::scale_tracker::{ScaleTracker, scaled_linear};
 
 pub struct ExitSelfAssessmentThought {
@@ -18,19 +18,6 @@ impl ExitSelfAssessmentThought {
             exit_grace_rate: round_to(grace_rate.clamp(0.0, 1.0), 3),
             exit_avg_residue: round_to(avg_residue.max(0.001), 4),
         }
-    }
-}
-
-impl ToAst for ExitSelfAssessmentThought {
-    fn to_ast(&self) -> ThoughtAST {
-        ThoughtAST::Bundle(self.forms())
-    }
-
-    fn forms(&self) -> Vec<ThoughtAST> {
-        vec![
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("exit-grace-rate".into())), Box::new(ThoughtAST::Linear { value: self.exit_grace_rate, scale: 1.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("exit-avg-residue".into())), Box::new(ThoughtAST::Log { value: self.exit_avg_residue })),
-        ]
     }
 }
 
