@@ -29,6 +29,7 @@ use crate::vocab::market::timeframe::encode_timeframe_facts;
 use crate::vocab::exit::regime::encode_exit_regime_facts;
 use crate::vocab::exit::time::encode_exit_time_facts;
 use crate::vocab::exit::self_assessment::encode_exit_self_assessment_facts;
+use crate::vocab::exit::phase::{encode_phase_current_facts, phase_series_thought, phase_scalar_facts};
 
 // Vocab imports -- shared
 use crate::vocab::shared::time::encode_time_facts;
@@ -172,6 +173,15 @@ pub fn position_lens_facts(lens: &PositionLens, candle: &Candle, scales: &mut Ha
     let _ = lens; // both lenses get the same market context
     let mut facts = encode_exit_regime_facts(candle, scales);
     facts.extend(encode_exit_time_facts(candle));
+
+    // Phase atoms — Proposal 049 Phase 2.
+    // Current phase label + duration.
+    facts.extend(encode_phase_current_facts(candle, scales));
+    // Phase series as Sequential thought (geometry of recent phase history).
+    facts.push(phase_series_thought(&candle.phase_history));
+    // Scalar summaries from phase history (explicit trend measurements).
+    facts.extend(phase_scalar_facts(&candle.phase_history, scales));
+
     facts
 }
 
@@ -266,9 +276,11 @@ mod tests {
         let full_facts = position_lens_facts(&PositionLens::Full, &candle, &mut scales);
 
         // Proposal 040: both lenses get regime(8) + time(2) = 10 market context atoms.
+        // Proposal 049 Phase 2: + phase-label(1) + phase-duration(1) + phase-series(1) = 13.
+        // (No scalar summaries from empty phase_history on default candle.)
         // Trade atoms arrive through the trade pipe, not here.
-        assert_eq!(core_facts.len(), 10); // regime(8) + time(2)
-        assert_eq!(full_facts.len(), 10); // regime(8) + time(2)
+        assert_eq!(core_facts.len(), 13); // regime(8) + time(2) + phase-label(1) + phase-duration(1) + phase-series(1)
+        assert_eq!(full_facts.len(), 13); // regime(8) + time(2) + phase-label(1) + phase-duration(1) + phase-series(1)
     }
 
     #[test]
