@@ -101,9 +101,45 @@ The definitions drift apart. The predictions degrade.
    accuracy is measured (recalib_wins/recalib_total). The
    position observer's wasn't until this session.
 
+## The engram question
+
+Holon has engrams — named, serializable snapshots of a trained
+OnlineSubspace. An engram freezes the subspace at a moment:
+the mean, the k principal components, the threshold state. The
+engram can score any new vector against that frozen state.
+
+If the drift comes from the subspace evolving underneath the
+reckoner, engrams offer a possible fix:
+
+1. **Periodic snapshots.** Snapshot the subspace every N candles.
+   When the reckoner predicts, score the current thought against
+   the SNAPSHOT that was active when the reckoner last learned —
+   not against the current live subspace. The reckoner and the
+   snapshot are synchronized.
+
+2. **Engram-per-regime.** Different market regimes produce
+   different "normal" backgrounds. The subspace for a trending
+   market looks different from a choppy market. Engrams could
+   store regime-specific snapshots. The reckoner learns per-engram.
+
+3. **The anomaly IS the engram's residual, not the live
+   subspace's residual.** The reckoner sees what the FROZEN
+   subspace considers anomalous, not what the EVOLVING subspace
+   considers anomalous. The frozen subspace is stable. The
+   reckoner's inputs are stable.
+
+But this may be overengineering. The simpler question: should
+the reckoner see the RAW thought (before noise stripping)
+instead of the anomaly? The raw thought is stable — it doesn't
+depend on the subspace at all.
+
 ## For the designers
 
 This may be architectural — a tension in the substrate, not
-the application. The panel should consider whether this is
-fixable at the application level or requires changes to
-holon-rs.
+the application. The panel should consider:
+
+- Is the noise subspace the cause? (Verify by running without it)
+- Should the reckoner see raw thoughts instead of anomalies?
+- Can engrams synchronize the subspace and reckoner?
+- Is this a fundamental tension in the substrate?
+- Does the market observer have the same drift?
