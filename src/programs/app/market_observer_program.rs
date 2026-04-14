@@ -17,13 +17,13 @@ use crate::types::log_entry::LogEntry;
 use crate::domain::market_observer::MarketObserver;
 use crate::domain::lens::market_lens_facts;
 use crate::programs::chain::MarketChain;
-use crate::programs::stdlib::cache::CacheHandle;
+use crate::programs::stdlib::cache::EncodingCacheHandle;
 use crate::programs::stdlib::console::ConsoleHandle;
 use crate::encoding::scale_tracker::ScaleTracker;
 use crate::services::mailbox::MailboxReceiver;
 use crate::services::queue::{QueueReceiver, QueueSender};
 use crate::services::topic::TopicSender;
-use crate::encoding::thought_encoder::{ThoughtAST, ThoughtEncoder};
+use crate::encoding::thought_encoder::ThoughtAST;
 use crate::programs::telemetry::emit_metric;
 
 /// Input to the observer: enriched candle, window snapshot, encode count.
@@ -38,26 +38,6 @@ pub struct ObsLearn {
     pub thought: Vector,
     pub direction: Direction,
     pub weight: f64,
-}
-
-/// Encode with cache protocol: check → compute → install.
-/// The cache is the lookup. The encoder is the computation.
-fn encode_with_cache(
-    ast: &ThoughtAST,
-    cache: &CacheHandle<ThoughtAST, Vector>,
-    encoder: &ThoughtEncoder,
-) -> Vector {
-    if let Some(cached) = cache.get(ast) {
-        return cached;
-    }
-    let (vec, misses) = encoder.encode(ast);
-    // Install the main AST
-    cache.set(ast.clone(), vec.clone());
-    // Install sub-tree misses too
-    for (sub_ast, sub_vec) in misses {
-        cache.set(sub_ast, sub_vec);
-    }
-    vec
 }
 
 /// Drain all pending learn signals. Non-blocking.
@@ -79,11 +59,10 @@ pub fn market_observer_program(
     candle_rx: QueueReceiver<ObsInput>,
     result_tx: TopicSender<MarketChain>,
     learn_rx: MailboxReceiver<ObsLearn>,
-    cache: CacheHandle<ThoughtAST, Vector>,
+    cache: EncodingCacheHandle,
     console: ConsoleHandle,
     db_tx: QueueSender<LogEntry>,
     mut observer: MarketObserver,
-    encoder: Arc<ThoughtEncoder>,
     observer_idx: usize,
     recalib_interval: usize,
 ) -> MarketObserver {
@@ -123,7 +102,7 @@ pub fn market_observer_program(
 
         // Encode via cache: check → compute → install.
         let t0 = std::time::Instant::now();
-        let thought = encode_with_cache(&bundle_ast, &cache, &encoder);
+        let thought = cache.encode(&bundle_ast).expect("cache driver disconnected");
         let ns_encode = t0.elapsed().as_nanos() as f64;
 
         // Observe: noise subspace learns, anomaly extracted, reckoner predicts.

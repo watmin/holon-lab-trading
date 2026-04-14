@@ -8,7 +8,6 @@
 /// The learned state comes home.
 
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use holon::kernel::vector::Vector;
 
@@ -18,14 +17,14 @@ use crate::domain::position_observer::PositionObserver;
 use crate::types::log_entry::LogEntry;
 use crate::domain::lens::{position_lens_facts, position_self_assessment_facts};
 use crate::programs::chain::{MarketPositionChain, MarketChain};
-use crate::programs::stdlib::cache::CacheHandle;
+use crate::programs::stdlib::cache::EncodingCacheHandle;
 use crate::programs::stdlib::console::ConsoleHandle;
 use crate::encoding::scale_tracker::ScaleTracker;
 use crate::services::mailbox::MailboxReceiver;
 use crate::services::queue::{QueueReceiver, QueueSender};
 use crate::trades::paper_entry::PaperEntry;
 
-use crate::encoding::thought_encoder::{collect_facts, extract, ThoughtAST, ThoughtEncoder};
+use crate::encoding::thought_encoder::{collect_facts, extract, ThoughtAST};
 use crate::programs::telemetry::emit_metric;
 use crate::types::pivot::{PhaseLabel, PhaseRecord};
 use crate::to_f64;
@@ -206,23 +205,6 @@ pub fn select_trade_atoms(lens: &PositionLens, all_atoms: Vec<ThoughtAST>) -> Ve
     }
 }
 
-/// Encode with cache protocol: check -> compute -> install.
-fn encode_with_cache(
-    ast: &ThoughtAST,
-    cache: &CacheHandle<ThoughtAST, Vector>,
-    encoder: &ThoughtEncoder,
-) -> Vector {
-    if let Some(cached) = cache.get(ast) {
-        return cached;
-    }
-    let (vec, misses) = encoder.encode(ast);
-    cache.set(ast.clone(), vec.clone());
-    for (sub_ast, sub_vec) in misses {
-        cache.set(sub_ast, sub_vec);
-    }
-    vec
-}
-
 /// Drain all pending position learn signals. Non-blocking.
 fn drain_position_learn(
     learn_rx: &MailboxReceiver<PositionLearn>,
@@ -246,11 +228,10 @@ pub fn position_observer_program(
     slots: Vec<PositionSlot>,
     learn_rx: MailboxReceiver<PositionLearn>,
     trade_rx: MailboxReceiver<TradeUpdate>,
-    cache: CacheHandle<ThoughtAST, Vector>,
+    cache: EncodingCacheHandle,
     console: ConsoleHandle,
     db_tx: QueueSender<LogEntry>,
     mut position_obs: PositionObserver,
-    encoder: Arc<ThoughtEncoder>,
     noise_floor: f64,
     position_idx: usize,
 ) -> PositionObserver {
@@ -321,7 +302,7 @@ pub fn position_observer_program(
             let extracted_anomaly = extract(
                 &chain.market_anomaly,
                 &market_facts,
-                |ast| encode_with_cache(ast, &cache, &encoder),
+                |ast| cache.encode(ast).expect("cache driver disconnected"),
             );
             total_anomaly_facts += market_facts.len() as f64;
             for (fact, presence) in extracted_anomaly {
@@ -339,7 +320,7 @@ pub fn position_observer_program(
             let extracted_raw = extract(
                 &chain.market_raw,
                 &market_facts,
-                |ast| encode_with_cache(ast, &cache, &encoder),
+                |ast| cache.encode(ast).expect("cache driver disconnected"),
             );
             total_raw_facts += market_facts.len() as f64;
             for (fact, presence) in extracted_raw {
@@ -355,7 +336,7 @@ pub fn position_observer_program(
             // Encode the combined bundle.
             let t0 = std::time::Instant::now();
             let position_bundle = ThoughtAST::Bundle(slot_facts);
-            let position_raw = encode_with_cache(&position_bundle, &cache, &encoder);
+            let position_raw = cache.encode(&position_bundle).expect("cache driver disconnected");
             ns_encode_bundle += t0.elapsed().as_nanos() as f64;
 
             // Noise subspace learns, then strip noise.

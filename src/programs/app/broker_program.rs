@@ -20,6 +20,7 @@ use crate::types::pivot::{PhaseLabel, PhaseRecord};
 use crate::programs::app::position_observer_program::{PositionLearn, TradeUpdate, compute_trade_atoms};
 use crate::programs::app::market_observer_program::ObsLearn;
 use crate::programs::chain::MarketPositionChain;
+use crate::programs::stdlib::cache::EncodingCacheHandle;
 use crate::programs::stdlib::console::ConsoleHandle;
 use crate::programs::telemetry::emit_metric;
 use crate::encoding::thought_encoder::ThoughtAST;
@@ -229,11 +230,11 @@ pub fn broker_program(
     market_learn_tx: QueueSender<ObsLearn>,
     position_learn_tx: QueueSender<PositionLearn>,
     trade_tx: QueueSender<TradeUpdate>,
+    cache: EncodingCacheHandle,
     console: ConsoleHandle,
     db_tx: QueueSender<LogEntry>,
     mut broker: Broker,
     scalar_encoder: Arc<ScalarEncoder>,
-    encoder: Arc<crate::encoding::thought_encoder::ThoughtEncoder>,
     _swap_fee: f64,
 ) -> Broker {
     let mut candle_count = 0usize;
@@ -262,7 +263,7 @@ pub fn broker_program(
             &mut max_papers_seen,
         );
         let portfolio_ast = ThoughtAST::Bundle(portfolio_atoms);
-        let (portfolio_vec, _portfolio_misses) = encoder.encode(&portfolio_ast);
+        let portfolio_vec = cache.encode(&portfolio_ast).expect("cache driver disconnected");
         let composed = Primitives::bundle(&[&chain.market_anomaly, &chain.position_anomaly, &portfolio_vec]);
 
         // 2. Direction from market prediction

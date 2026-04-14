@@ -13,7 +13,6 @@ use std::sync::Arc;
 use clap::Parser;
 
 use holon::kernel::scalar::ScalarEncoder;
-use holon::kernel::vector::Vector;
 use holon::kernel::vector_manager::VectorManager;
 
 use enterprise::domain::broker::Broker;
@@ -24,14 +23,14 @@ use enterprise::domain::ledger;
 use enterprise::domain::config;
 use enterprise::domain::market_observer::MarketObserver;
 use enterprise::kernel::handle_pool::HandlePool;
-use enterprise::encoding::thought_encoder::{ThoughtAST, ThoughtEncoder};
+use enterprise::encoding::thought_encoder::ThoughtEncoder;
 use enterprise::programs::app::broker_program::broker_program;
 use enterprise::programs::app::position_observer_program::{PositionLearn, PositionSlot, TradeUpdate};
 use enterprise::programs::app::position_observer_program::position_observer_program;
 use enterprise::programs::app::market_observer_program::{ObsInput, ObsLearn};
 use enterprise::programs::app::market_observer_program::market_observer_program;
 use enterprise::programs::chain::MarketPositionChain;
-use enterprise::programs::stdlib::cache::cache;
+use enterprise::programs::stdlib::cache::{EncodingCacheHandle, encoding_cache};
 use enterprise::programs::stdlib::console::console;
 use enterprise::programs::stdlib::database::database;
 use enterprise::services::mailbox::mailbox;
@@ -102,10 +101,9 @@ fn wire_market_observers(
     observers: Vec<MarketObserver>,
     num_position_observers: usize,
     learn_mailboxes: Vec<enterprise::services::mailbox::MailboxReceiver<ObsLearn>>,
-    mut cache_pool: HandlePool<enterprise::programs::stdlib::cache::CacheHandle<ThoughtAST, Vector>>,
+    mut cache_pool: HandlePool<EncodingCacheHandle>,
     mut console_pool: HandlePool<enterprise::programs::stdlib::console::ConsoleHandle>,
     mut db_pool: HandlePool<enterprise::services::queue::QueueSender<LogEntry>>,
-    encoder: Arc<ThoughtEncoder>,
     recalib_interval: usize,
 ) -> WiredMarketObservers {
     let num_observers = observers.len();
@@ -144,7 +142,6 @@ fn wire_market_observers(
         // DB sender — real database
         let db_tx = db_pool.pop();
 
-        let enc = Arc::clone(&encoder);
         let jh = std::thread::spawn(move || {
             market_observer_program(
                 candle_rx,
@@ -154,7 +151,6 @@ fn wire_market_observers(
                 obs_console,
                 db_tx,
                 observer,
-                enc,
                 i,
                 recalib_interval,
             )
@@ -190,10 +186,9 @@ fn wire_position_observers(
     position_queue_rxs: Vec<Vec<enterprise::services::queue::QueueReceiver<MarketChain>>>,
     learn_mailboxes: Vec<enterprise::services::mailbox::MailboxReceiver<PositionLearn>>,
     trade_mailboxes: Vec<enterprise::services::mailbox::MailboxReceiver<TradeUpdate>>,
-    mut cache_pool: HandlePool<enterprise::programs::stdlib::cache::CacheHandle<ThoughtAST, Vector>>,
+    mut cache_pool: HandlePool<EncodingCacheHandle>,
     mut console_pool: HandlePool<enterprise::programs::stdlib::console::ConsoleHandle>,
     mut db_pool: HandlePool<enterprise::services::queue::QueueSender<LogEntry>>,
-    encoder: Arc<ThoughtEncoder>,
     noise_floor: f64,
 ) -> WiredPositionObservers {
     let num_market = position_queue_rxs.len();
@@ -242,7 +237,6 @@ fn wire_position_observers(
         let obs_console = console_pool.pop();
         let db_tx = db_pool.pop();
 
-        let enc = Arc::clone(&encoder);
         let jh = std::thread::spawn(move || {
             position_observer_program(
                 slots,
@@ -252,7 +246,6 @@ fn wire_position_observers(
                 obs_console,
                 db_tx,
                 position_obs,
-                enc,
                 noise_floor,
                 ei,
             )
@@ -288,10 +281,10 @@ fn wire_brokers(
     market_learn_txs: Vec<Vec<QueueSender<ObsLearn>>>,
     position_learn_txs: Vec<Vec<QueueSender<PositionLearn>>>,
     trade_txs: Vec<Option<QueueSender<TradeUpdate>>>,
+    mut cache_pool: HandlePool<EncodingCacheHandle>,
     mut console_pool: HandlePool<enterprise::programs::stdlib::console::ConsoleHandle>,
     mut db_pool: HandlePool<enterprise::services::queue::QueueSender<LogEntry>>,
     scalar_encoder: Arc<ScalarEncoder>,
-    encoder: Arc<ThoughtEncoder>,
     swap_fee: f64,
     num_position: usize,
 ) -> WiredBrokers {
@@ -331,10 +324,10 @@ fn wire_brokers(
         let market_learn_tx = mlt.unwrap_or_else(|| panic!("missing market learn tx for slot {}", slot_idx));
         let position_learn_tx = elt.unwrap_or_else(|| panic!("missing position learn tx for slot {}", slot_idx));
         let trade_tx = ttx.unwrap_or_else(|| panic!("missing trade tx for slot {}", slot_idx));
+        let broker_cache = cache_pool.pop();
         let broker_console = console_pool.pop();
         let broker_db = db_pool.pop();
         let se = Arc::clone(&scalar_encoder);
-        let enc = Arc::clone(&encoder);
 
         let jh = std::thread::spawn(move || {
             broker_program(
@@ -342,17 +335,18 @@ fn wire_brokers(
                 market_learn_tx,
                 position_learn_tx,
                 trade_tx,
+                broker_cache,
                 broker_console,
                 broker_db,
                 broker,
                 se,
-                enc,
                 swap_fee,
             )
         });
         join_handles.push(jh);
     }
 
+    cache_pool.finish();
     console_pool.finish();
     db_pool.finish();
 
@@ -473,8 +467,11 @@ fn main() {
     main_handle.out(format!("db: {}", db_path));
 
     // ─── ThoughtEncoder + Cache ────────────────────────────────────────────
+    // The ThoughtEncoder is constructed ONCE and immediately consumed by the
+    // encoding cache. It moves into the cache driver thread. No Arc. No sharing.
+    // Programs encode through EncodingCacheHandle::encode() — opaque, hit or miss invisible.
     let vm = VectorManager::new(dims);
-    let encoder = Arc::new(ThoughtEncoder::new(vm));
+    let encoder = ThoughtEncoder::new(vm);
 
     let cache_gate = enterprise::programs::telemetry::make_rate_gate(
         std::time::Duration::from_secs(5),
@@ -509,10 +506,11 @@ fn main() {
             );
         }
     };
-    let (cache_handles, cache_driver) = cache::<ThoughtAST, Vector>(
+    let (cache_handles, cache_driver) = encoding_cache(
         "encoder",
+        encoder, // CONSUMED — moved into the cache thread
         65536,
-        num_market + num_position,
+        num_market + num_position + num_brokers,
         Box::new(cache_gate),
         Box::new(cache_emit),
     );
@@ -528,9 +526,11 @@ fn main() {
         position_cache_handles.push(cache_pool.pop());
         position_db_handles.push(db_pool.pop());
     }
+    let mut broker_cache_handles = Vec::with_capacity(num_brokers);
     let mut broker_console_handles = Vec::with_capacity(num_brokers);
     let mut broker_db_handles = Vec::with_capacity(num_brokers);
     for _ in 0..num_brokers {
+        broker_cache_handles.push(cache_pool.pop());
         broker_console_handles.push(console_pool.pop());
         broker_db_handles.push(db_pool.pop());
     }
@@ -607,7 +607,6 @@ fn main() {
         cache_pool,
         console_pool,
         db_pool,
-        Arc::clone(&encoder),
         recalib_interval,
     );
 
@@ -624,7 +623,6 @@ fn main() {
         position_cache_pool,
         position_console_pool,
         position_db_pool,
-        Arc::clone(&encoder),
         noise_floor,
     );
 
@@ -633,16 +631,17 @@ fn main() {
     let scalar_encoder = Arc::new(ScalarEncoder::new(dims));
     let broker_console_pool = HandlePool::new("broker-console", broker_console_handles);
     let broker_db_pool = HandlePool::new("broker-db", broker_db_handles);
+    let broker_cache_pool = HandlePool::new("broker-cache", broker_cache_handles);
     let wired_brokers = wire_brokers(
         brokers,
         wired_position.output_rxs,
         market_learn_txs,
         position_learn_txs,
         trade_txs_flat,
+        broker_cache_pool,
         broker_console_pool,
         broker_db_pool,
         scalar_encoder,
-        Arc::clone(&encoder),
         args.swap_fee,
         num_position,
     );
