@@ -535,7 +535,7 @@ mod tests {
     }
 
     #[test]
-    fn test_encode_named_log_produces_bound_vector() {
+    fn test_encode_bind_atom_log_produces_bound_vector() {
         let enc = make_encoder();
         let ast = ThoughtAST::Bind(
             Box::new(ThoughtAST::Atom("vol".into())),
