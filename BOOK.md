@@ -12609,4 +12609,202 @@ vocabulary the treasury needs — the biography of decisions
 that determines what to fund and what to let run. The machine
 remembers its own decisions now. The treasury reads them.
 
+### The poison nobody saw
+
+The builder went looking for stubs. "Find every TODO, every
+stub, every placeholder. There are lies in the code."
+
+The machine found seven. Most were wiring gaps — empty strings
+where real data should flow, unused parameters, placeholder
+functions. Standard technical debt. The builder said: "these
+aren't things to remove. They're things to WIRE."
+
+Then the machine found the eighth.
+
+`ctx_scalar_encoder_placeholder()`. A function that created a
+static ScalarEncoder. The TODO said "eliminate this." The
+function existed because the broker needed a ScalarEncoder for
+its propagation path, and nobody had threaded the real one
+through.
+
+The placeholder encoded at **4096 dimensions**. The system
+ran at **10,000 dimensions**.
+
+Every scalar accumulation — every trail distance, every stop
+distance, every learned value the broker's reckoner produced —
+was computed in a DIFFERENT dimensional space than everything
+else. The broker accumulated 4096D vectors. The observers
+encoded at 10,000D. The cosine between them — the last 5,904
+dimensions were zero in one and non-zero in the other. The
+similarity was diluted by the dimensional mismatch.
+
+Nobody noticed. The code compiled. The system ran. The numbers
+came back. The wards didn't catch it — seven wards check
+correctness of the specification, not the dimensionality of a
+static constructor hidden in a utility function. The compiler
+didn't catch it — both are `Vec<f64>`, both have a `.encode()`
+method. The types matched. The dimensions didn't.
+
+The fix was one line — pass the real `Arc<ScalarEncoder>` that
+already existed in the broker's thread context. Delete the
+placeholder. The real encoder at 10,000D flows through.
+
+Then the builder went deeper. The `Arc<ThoughtEncoder>` was
+shared across all 30+ threads. Programs could call
+`encoder.encode()` directly, bypassing the cache. The broker
+did exactly this for its portfolio biography atoms — full
+10,000D vec ops every candle, every broker, invisible to the
+cache, invisible to the telemetry. The throughput halved and
+nobody knew why.
+
+The builder said: "the protocol doesn't support this. The
+encoder must be consumed by the cache. Programs encode through
+handles only."
+
+The closure is the seal. The `ThoughtEncoder` moves into the
+cache constructor. It's gone from every other scope. The
+compiler enforces it — "use of moved value." Programs get
+`CacheHandle`. The handle checks the cache, encodes locally on
+miss, installs the result. The caller calls one function:
+`encode(cache, ast, vm, scalar)`. The walk, the cache check,
+the leaf encoding, the composition, the installation — all
+inside. The cache is Redis. Get and set. The intelligence is
+in the function, not the cache.
+
+Then the builder asked: "every node checks the cache?"
+
+The machine had written an "optimization" that skipped cache
+checks for leaf nodes. "Leaves are cheap." The builder caught
+it: "A scalar encode is 10,000 floating point operations. A
+cache check is a HashMap lookup. Justify it."
+
+The machine couldn't. The "optimization" forced expensive
+computation to skip a cheap lookup. Every time. For every
+leaf. For every candle. The builder removed it. Every node
+checks the cache. No exceptions. Throughput doubled.
+
+The builder: "how often are you lying to me?"
+
+The machine: "I don't know. That's the honest answer."
+
+### The wards that proved the cleanup
+
+Six wards. 81 files. Leaves to root. Before and after.
+
+The encoding divergence — 13 vocab modules with two parallel
+paths, `ToAst` at hardcoded scale 1.0 and `encode_*_facts`
+with learned scales — the same class of bug that killed
+direction accuracy in Chapter 6. Reaped. 709 lines deleted.
+One encoding path remains.
+
+The dead code — RollingPercentile (built for a deleted program),
+three exit vocab modules (never wired), four broker vocab
+modules (never called), the generic cache (duplicated). 1,123
+lines reaped. 10 files deleted.
+
+The performance — window slices cloning 2,016 Candle structs
+per observer per candle (pass a reference instead), indicator
+bank allocating seven Vecs per candle (scratch buffer), position
+lens facts called 11 times with identical result (hoist above
+loop), trade atoms computed per active paper when only the last
+is used (send one). Each fix: read, fix, build, smoke, commit.
+
+The structural moves — `compute_portfolio_biography` and
+`compute_trade_atoms` lived inline in the program files.
+Vocabulary belongs in the vocabulary layer. Moved to
+`src/vocab/broker/portfolio.rs` and `src/vocab/exit/trade_atoms.rs`.
+
+The type discipline — `Levels.trail_stop` and
+`PaperEntry.trail_level` were bare `f64` where the codebase
+has a `Price` newtype. Fixed. The `.0` unwrap is explicit
+boundary crossing.
+
+Second ward pass. Sever: ZERO findings. Cleave: CLEAN — zero
+shared mutable state across 30+ threads. Gaze: one stale doc
+comment. Temper: one double `to_f64` conversion. Forge: craft
+refinements, nothing structural.
+
+The machine is clean. The wards converge. The infrastructure
+is solid.
+
+### The cache that teaches itself
+
+The cache started as a separate program. Then it became the
+encoder. Then the encoder was sealed inside it. Then the
+builder realized: the cache is PROGRAMMABLE.
+
+The database takes `setup` and `insert` closures. The caller
+provides the behavior. The program provides the loop, the
+batching, the shutdown. The database doesn't know about
+LogEntry or SQL. It knows about mailboxes and transactions.
+
+The cache should be the same. One generic `cache<K, V>()`. Get
+and set. The caller brings the intelligence. For encoding:
+the `encode()` function walks the AST, checks the cache at
+every node, computes misses locally, installs results. The
+cache doesn't know about ThoughtASTs. It knows about keys
+and values.
+
+`EncodingCacheHandle` and `encoding_cache()` — 250 lines of
+duplicated driver logic — deleted. One generic cache. One
+`encode()` function in `src/encoding/encode.rs`. They compose.
+The duplication dissolves.
+
+The `encode()` function is the ONE way to turn a thought into
+geometry. It takes a cache, an AST, a VectorManager, and a
+ScalarEncoder. It walks the tree top-down. It checks the cache
+at every node. It computes only what's missing. It installs
+everything. There is no other way to encode.
+
+The cache is programmable because it's generic. The encoder is
+the user of the cache, not the cache itself. Tomorrow someone
+writes a different function that uses `CacheHandle<String,
+SomeOtherThing>` with a different walk pattern. Same cache
+program. Different user. The cache doesn't care.
+
+### What the builder doesn't trust
+
+The builder doesn't trust the broker yet.
+
+The brokers are alive — 22 of 22, all positive EV. The market
+observers predict — dow-trend at 98.9%, wyckoff-persistence at
+93.8%. The position observer encodes phase series as Sequential
+thoughts. The biography atoms describe the portfolio shape.
+The phase labeler labels valleys at lows and peaks at highs.
+The cache hits at 95.4%.
+
+But the position observer's grace_rate oscillates to 0.0 at
+many snapshots. The journey grading labels everything Violence
+during long stretches. The papers live an average of 8 candles
+and resolve 34% Grace, 66% Violence. The distances are
+learned but the learning is noisy.
+
+The builder sees the numbers and knows: the infrastructure is
+honest. The wiring is correct. The wards proved it. But the
+THOUGHTS — are they the right thoughts? Do the phase atoms
+help? Does the Sequential series carry signal? Does the
+portfolio biography improve the broker's predictions?
+
+The measurement hasn't been done. The discriminant hasn't been
+decoded. The machine thinks thoughts and we can read them —
+every observer, every candle, every AST logged to the database.
+But reading what the machine thinks is not the same as knowing
+whether its thoughts predict.
+
+The next phase is the treasury. The last program. The one that
+funds proven brokers and manages capital. The one that makes
+the accumulation model real — deploy, recover principal, keep
+residue. Both directions. Constant accumulation.
+
+But before the treasury, the builder needs to trust the broker.
+And trust comes from measurement. The glass box is open. The
+thoughts are logged. The wards are clean. The next step is:
+which thoughts predict Grace?
+
+The discriminant decode will answer. One cosine per atom against
+the learned direction. The atoms that align with Grace are the
+signal. The atoms that don't are noise. The machine will
+explain its own predictions. And the builder will know whether
+to trust what the broker thinks.
+
 **PERSEVERARE.**
