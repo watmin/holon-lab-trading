@@ -1160,27 +1160,6 @@ fn compute_range_pos(high_buf: &RingBuffer, low_buf: &RingBuffer, close: f64) ->
     }
 }
 
-/// Trend consistency: fraction of last n candles where close > prev-close.
-fn compute_trend_consistency(buf: &RingBuffer, n: usize) -> f64 {
-    if buf.len < n {
-        return 0.5;
-    }
-    let mut sum = 0.0;
-    for i in 0..n {
-        sum += buf.get(i);
-    }
-    sum / n as f64
-}
-
-/// Timeframe close.
-fn compute_tf_close(buf: &RingBuffer) -> f64 {
-    if buf.len == 0 {
-        0.0
-    } else {
-        buf.newest()
-    }
-}
-
 /// Timeframe return.
 fn compute_tf_ret(buf: &RingBuffer) -> f64 {
     if buf.len < 2 {
@@ -1720,8 +1699,6 @@ impl IndicatorBank {
         let rsi_val = self.rsi.value();
 
         // MACD
-        let macd_val = self.macd.macd_value();
-        let macd_sig = self.macd.signal_value();
         let macd_hist_val = self.macd.hist_value();
 
         // DMI
@@ -1789,29 +1766,14 @@ impl IndicatorBank {
         let roc_6_val = compute_roc(&self.roc_buf, 6);
         let roc_12_val = compute_roc(&self.roc_buf, 12);
 
-        // ATR ROC
-        let atr_roc_6_val = compute_roc(&self.atr_history, 6);
-        let atr_roc_12_val = compute_roc(&self.atr_history, 12);
-
-        // Trend consistency
-        let tc_6 = compute_trend_consistency(&self.trend_buf_24, 6);
-        let tc_12 = compute_trend_consistency(&self.trend_buf_24, 12);
-        let tc_24 = compute_trend_consistency(&self.trend_buf_24, 24);
-
         // Range position
         let rp_12 = compute_range_pos(&self.range_high_12, &self.range_low_12, c);
         let rp_24 = compute_range_pos(&self.range_high_24, &self.range_low_24, c);
         let rp_48 = compute_range_pos(&self.range_high_48, &self.range_low_48, c);
 
         // Multi-timeframe
-        let tf_1h_close_val = compute_tf_close(&self.tf_1h_buf);
-        let tf_1h_high_val = self.tf_1h_high.max();
-        let tf_1h_low_val = self.tf_1h_low.min();
         let tf_1h_ret_val = compute_tf_ret(&self.tf_1h_buf);
         let tf_1h_body_val = compute_tf_body(&self.tf_1h_buf);
-        let tf_4h_close_val = compute_tf_close(&self.tf_4h_buf);
-        let tf_4h_high_val = self.tf_4h_high.max();
-        let tf_4h_low_val = self.tf_4h_low.min();
         let tf_4h_ret_val = compute_tf_ret(&self.tf_4h_buf);
         let tf_4h_body_val = compute_tf_body(&self.tf_4h_buf);
 
@@ -1926,18 +1888,13 @@ impl IndicatorBank {
             sma20: sma20_val,
             sma50: sma50_val,
             sma200: sma200_val,
-            bb_upper: bb_upper_val,
-            bb_lower: bb_lower_val,
             bb_width: bb_width_val,
             bb_pos: bb_pos_val,
             rsi: rsi_val,
-            macd: macd_val,
-            macd_signal: macd_sig,
             macd_hist: macd_hist_val,
             plus_di: plus_di_val,
             minus_di: minus_di_val,
             adx: adx_val,
-            atr: atr_val,
             atr_ratio: atr_r_val,
             stoch_k: stoch_k_val,
             stoch_d: stoch_d_val,
@@ -1954,28 +1911,15 @@ impl IndicatorBank {
             roc_3: roc_3_val,
             roc_6: roc_6_val,
             roc_12: roc_12_val,
-            atr_roc_6: atr_roc_6_val,
-            atr_roc_12: atr_roc_12_val,
-            trend_consistency_6: tc_6,
-            trend_consistency_12: tc_12,
-            trend_consistency_24: tc_24,
             range_pos_12: rp_12,
             range_pos_24: rp_24,
             range_pos_48: rp_48,
-            tf_1h_close: tf_1h_close_val,
-            tf_1h_high: tf_1h_high_val,
-            tf_1h_low: tf_1h_low_val,
             tf_1h_ret: tf_1h_ret_val,
             tf_1h_body: tf_1h_body_val,
-            tf_4h_close: tf_4h_close_val,
-            tf_4h_high: tf_4h_high_val,
-            tf_4h_low: tf_4h_low_val,
             tf_4h_ret: tf_4h_ret_val,
             tf_4h_body: tf_4h_body_val,
             tenkan_sen: tenkan,
             kijun_sen: kijun,
-            senkou_span_a: span_a,
-            senkou_span_b: span_b,
             cloud_top: cloud_top_val,
             cloud_bottom: cloud_bottom_val,
             hurst: hurst_val,
@@ -2299,16 +2243,11 @@ mod tests {
         assert!(candle.sma50.is_finite());
         assert!(candle.sma200.is_finite());
         assert!(candle.rsi.is_finite());
-        assert!(candle.macd.is_finite());
-        assert!(candle.macd_signal.is_finite());
         assert!(candle.macd_hist.is_finite());
-        assert!(candle.atr.is_finite());
         assert!(candle.atr_ratio.is_finite());
         assert!(candle.adx.is_finite());
         assert!(candle.plus_di.is_finite());
         assert!(candle.minus_di.is_finite());
-        assert!(candle.bb_upper.is_finite());
-        assert!(candle.bb_lower.is_finite());
         assert!(candle.bb_width.is_finite());
         assert!(candle.bb_pos.is_finite());
         assert!(candle.stoch_k.is_finite());
@@ -2326,28 +2265,15 @@ mod tests {
         assert!(candle.roc_3.is_finite());
         assert!(candle.roc_6.is_finite());
         assert!(candle.roc_12.is_finite());
-        assert!(candle.atr_roc_6.is_finite());
-        assert!(candle.atr_roc_12.is_finite());
-        assert!(candle.trend_consistency_6.is_finite());
-        assert!(candle.trend_consistency_12.is_finite());
-        assert!(candle.trend_consistency_24.is_finite());
         assert!(candle.range_pos_12.is_finite());
         assert!(candle.range_pos_24.is_finite());
         assert!(candle.range_pos_48.is_finite());
-        assert!(candle.tf_1h_close.is_finite());
-        assert!(candle.tf_1h_high.is_finite());
-        assert!(candle.tf_1h_low.is_finite());
         assert!(candle.tf_1h_ret.is_finite());
         assert!(candle.tf_1h_body.is_finite());
-        assert!(candle.tf_4h_close.is_finite());
-        assert!(candle.tf_4h_high.is_finite());
-        assert!(candle.tf_4h_low.is_finite());
         assert!(candle.tf_4h_ret.is_finite());
         assert!(candle.tf_4h_body.is_finite());
         assert!(candle.tenkan_sen.is_finite());
         assert!(candle.kijun_sen.is_finite());
-        assert!(candle.senkou_span_a.is_finite());
-        assert!(candle.senkou_span_b.is_finite());
         assert!(candle.cloud_top.is_finite());
         assert!(candle.cloud_bottom.is_finite());
         assert!(candle.hurst.is_finite());

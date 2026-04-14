@@ -98,7 +98,7 @@ impl std::fmt::Display for MarketLens {
 pub enum PositionLens {
     /// 5 trade atoms — the consensus (excursion, retracement, age, peak-age, signaled).
     Core,
-    /// 10 trade atoms — all three voices (core + trail/stop distance, r-multiple, heat, trail-cushion).
+    /// 13 trade atoms (10 original + 3 phase biography) — all three voices plus phase context.
     Full,
 }
 

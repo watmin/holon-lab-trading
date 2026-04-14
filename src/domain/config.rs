@@ -83,15 +83,12 @@ pub fn create_brokers(
             let slot_idx = mi * num_exit + ei;
             let market_name = format!("{}", MARKET_LENSES[mi]);
             let exit_name = format!("{}", POSITION_LENSES[ei]);
-            let scalar_accums = vec![
-                ScalarAccumulator::new("trail-distance", ScalarEncoding::Log, dims),
-                ScalarAccumulator::new("stop-distance", ScalarEncoding::Log, dims),
-            ];
             brokers.push(Broker::new(
                 vec![market_name, exit_name],
                 slot_idx,
                 num_exit,
-                scalar_accums,
+                ScalarAccumulator::new("trail-distance", ScalarEncoding::Log, dims),
+                ScalarAccumulator::new("stop-distance", ScalarEncoding::Log, dims),
                 Distances::new(0.0001, 0.0001),
                 swap_fee,
             ));

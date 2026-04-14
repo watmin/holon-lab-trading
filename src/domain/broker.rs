@@ -61,6 +61,42 @@ pub struct Resolution {
     pub position_batch: Vec<(Vector, Distances, Distances, f64)>,
 }
 
+impl Resolution {
+    /// Construct from a paper entry and resolution context.
+    /// One place to derive all 15 fields.
+    fn from_paper(
+        paper: &PaperEntry,
+        broker_slot_idx: usize,
+        outcome: Outcome,
+        optimal_distances: Distances,
+        was_runner: bool,
+        position_batch: Vec<(Vector, Distances, Distances, f64)>,
+    ) -> Self {
+        let amount = match outcome {
+            Outcome::Grace => paper.excursion(),
+            Outcome::Violence => paper.distances.stop,
+        };
+        Self {
+            broker_slot_idx,
+            composed_thought: paper.composed_thought.clone(),
+            market_thought: paper.market_thought.clone(),
+            position_thought: paper.position_thought.clone(),
+            prediction: paper.prediction,
+            outcome,
+            amount,
+            optimal_distances,
+            entry_price: paper.entry_price.0,
+            extreme: paper.extreme,
+            excursion: paper.excursion(),
+            trail_distance: paper.distances.trail,
+            stop_distance: paper.distances.stop,
+            duration: paper.age,
+            was_runner,
+            position_batch,
+        }
+    }
+}
+
 /// What the broker returns for observer learning.
 #[derive(Clone)]
 pub struct PropagationFacts {
@@ -109,8 +145,10 @@ pub struct Broker {
     pub active_direction: Option<Direction>,
     /// Capped paper trade queue.
     pub papers: VecDeque<PaperEntry>,
-    /// Two scalar accumulators: trail-distance, stop-distance.
-    pub scalar_accums: Vec<ScalarAccumulator>,
+    /// Scalar accumulator for trail-distance.
+    pub trail_accum: ScalarAccumulator,
+    /// Scalar accumulator for stop-distance.
+    pub stop_accum: ScalarAccumulator,
     /// Default trail/stop distances — the tier 3 fallback.
     pub default_distances: Distances,
     /// Running average paper duration (candles). Self-assessment vocab.
@@ -147,7 +185,8 @@ impl Broker {
         observer_names: Vec<String>,
         slot_idx: usize,
         position_count: usize,
-        scalar_accums: Vec<ScalarAccumulator>,
+        trail_accum: ScalarAccumulator,
+        stop_accum: ScalarAccumulator,
         default_distances: Distances,
         swap_fee: f64,
     ) -> Self {
@@ -163,7 +202,8 @@ impl Broker {
             violence_count: 0,
             active_direction: None,
             papers: VecDeque::new(),
-            scalar_accums,
+            trail_accum,
+            stop_accum,
             default_distances,
             avg_paper_duration: 0.0,
             avg_excursion: 0.0,
@@ -205,14 +245,14 @@ impl Broker {
         }
 
         // Tier 2: scalar accumulators (global per-pair)
-        let trail = if self.scalar_accums.len() > 0 && self.scalar_accums[0].count > 0 {
-            self.scalar_accums[0].extract(100, (0.001, 0.10), se)
+        let trail = if self.trail_accum.count > 0 {
+            self.trail_accum.extract(100, (0.001, 0.10), se)
         } else {
             self.default_distances.trail
         };
 
-        let stop = if self.scalar_accums.len() > 1 && self.scalar_accums[1].count > 0 {
-            self.scalar_accums[1].extract(100, (0.001, 0.10), se)
+        let stop = if self.stop_accum.count > 0 {
+            self.stop_accum.extract(100, (0.001, 0.10), se)
         } else {
             self.default_distances.stop
         };
@@ -266,24 +306,9 @@ impl Broker {
                     Vec::new()
                 };
 
-                resolutions.push(Resolution {
-                    broker_slot_idx: self.slot_idx,
-                    composed_thought: paper.composed_thought.clone(),
-                    market_thought: paper.market_thought.clone(),
-                    position_thought: paper.position_thought.clone(),
-                    prediction: paper.prediction,
-                    outcome: Outcome::Grace,
-                    amount: paper.excursion(),
-                    optimal_distances: optimal,
-                    entry_price: paper.entry_price.0,
-                    extreme: paper.extreme,
-                    excursion: paper.excursion(),
-                    trail_distance: paper.distances.trail,
-                    stop_distance: paper.distances.stop,
-                    duration: paper.age,
-                    was_runner: true,
-                    position_batch,
-                });
+                resolutions.push(Resolution::from_paper(
+                    &paper, self.slot_idx, Outcome::Grace, optimal, true, position_batch,
+                ));
             } else if !paper.resolved {
                 // Non-runner papers survive the flip (they'll hit stop naturally)
                 remaining.push_back(paper);
@@ -317,24 +342,9 @@ impl Broker {
                     paper.extreme,
                     paper.prediction,
                 );
-                market_signals.push(Resolution {
-                    broker_slot_idx: self.slot_idx,
-                    composed_thought: paper.composed_thought.clone(),
-                    market_thought: paper.market_thought.clone(),
-                    position_thought: paper.position_thought.clone(),
-                    prediction: paper.prediction,
-                    outcome: Outcome::Grace,
-                    amount: paper.excursion(),
-                    optimal_distances: optimal,
-                    entry_price: paper.entry_price.0,
-                    extreme: paper.extreme,
-                    excursion: paper.excursion(),
-                    trail_distance: paper.distances.trail,
-                    stop_distance: paper.distances.stop,
-                    duration: paper.age,
-                    was_runner: true,
-                    position_batch: Vec::new(),
-                });
+                market_signals.push(Resolution::from_paper(
+                    &paper, self.slot_idx, Outcome::Grace, optimal, true, Vec::new(),
+                ));
                 // Create runner history — accumulation starts now
                 self.runner_histories.insert(paper.paper_id, RunnerHistory {
                     thoughts: Vec::new(),
@@ -362,24 +372,9 @@ impl Broker {
 
                 if !paper.signaled {
                     // Violence — stop fired before trail crossed
-                    market_signals.push(Resolution {
-                        broker_slot_idx: self.slot_idx,
-                        composed_thought: paper.composed_thought.clone(),
-                        market_thought: paper.market_thought.clone(),
-                        position_thought: paper.position_thought.clone(),
-                        prediction: paper.prediction,
-                        outcome: Outcome::Violence,
-                        amount: paper.distances.stop,
-                        optimal_distances: optimal,
-                        entry_price: paper.entry_price.0,
-                        extreme: paper.extreme,
-                        excursion: paper.excursion(),
-                        trail_distance: paper.distances.trail,
-                        stop_distance: paper.distances.stop,
-                        duration: paper.age,
-                        was_runner: false,
-                        position_batch: Vec::new(),
-                    });
+                    market_signals.push(Resolution::from_paper(
+                        &paper, self.slot_idx, Outcome::Violence, optimal, false, Vec::new(),
+                    ));
                 } else {
                     // Runner finished — compute position batch from accumulated history
                     let position_batch = if let Some(history) = self.runner_histories.remove(&paper.paper_id) {
@@ -389,24 +384,9 @@ impl Broker {
                     };
 
                     // Runner finished — trail fired after signal
-                    runner_resolutions.push(Resolution {
-                        broker_slot_idx: self.slot_idx,
-                        composed_thought: paper.composed_thought.clone(),
-                        market_thought: paper.market_thought.clone(),
-                        position_thought: paper.position_thought.clone(),
-                        prediction: paper.prediction,
-                        outcome: Outcome::Grace,
-                        amount: paper.excursion(),
-                        optimal_distances: optimal,
-                        entry_price: paper.entry_price.0,
-                        extreme: paper.extreme,
-                        excursion: paper.excursion(),
-                        trail_distance: paper.distances.trail,
-                        stop_distance: paper.distances.stop,
-                        duration: paper.age,
-                        was_runner: true,
-                        position_batch,
-                    });
+                    runner_resolutions.push(Resolution::from_paper(
+                        &paper, self.slot_idx, Outcome::Grace, optimal, true, position_batch,
+                    ));
                 }
 
                 // Update self-assessment running averages
@@ -461,10 +441,8 @@ impl Broker {
         self.trade_count += 1;
 
         // 2. Scalar accumulators learn -- trail and stop distances
-        if self.scalar_accums.len() >= 2 {
-            self.scalar_accums[0].observe(optimal.trail, outcome, weight, scalar_encoder);
-            self.scalar_accums[1].observe(optimal.stop, outcome, weight, scalar_encoder);
-        }
+        self.trail_accum.observe(optimal.trail, outcome, weight, scalar_encoder);
+        self.stop_accum.observe(optimal.stop, outcome, weight, scalar_encoder);
 
         // 3. Dollar P&L computation and EMA update (Proposal 035)
         let reference = 10_000.0;
@@ -608,19 +586,13 @@ mod tests {
 
     const DIMS: usize = 4096;
 
-    fn make_scalar_accums() -> Vec<ScalarAccumulator> {
-        vec![
-            ScalarAccumulator::new("trail-distance", ScalarEncoding::Log, DIMS),
-            ScalarAccumulator::new("stop-distance", ScalarEncoding::Log, DIMS),
-        ]
-    }
-
     fn make_broker() -> Broker {
         Broker::new(
             vec!["momentum".into(), "volatility".into()],
             0, // slot_idx
             2, // position_count
-            make_scalar_accums(),
+            ScalarAccumulator::new("trail-distance", ScalarEncoding::Log, DIMS),
+            ScalarAccumulator::new("stop-distance", ScalarEncoding::Log, DIMS),
             Distances::new(0.015, 0.030),
             0.0010, // swap_fee
         )
@@ -650,7 +622,8 @@ mod tests {
         let broker = Broker::new(
             vec!["a".into(), "b".into()],
             5, 3,
-            make_scalar_accums(),
+            ScalarAccumulator::new("trail-distance", ScalarEncoding::Log, DIMS),
+            ScalarAccumulator::new("stop-distance", ScalarEncoding::Log, DIMS),
             Distances::new(0.015, 0.030),
             0.0010,
         );
@@ -889,11 +862,10 @@ mod tests {
     }
 
     #[test]
-    fn test_scalar_accums_count() {
+    fn test_scalar_accums_named() {
         let broker = make_broker();
-        assert_eq!(broker.scalar_accums.len(), 2);
-        assert_eq!(broker.scalar_accums[0].name, "trail-distance");
-        assert_eq!(broker.scalar_accums[1].name, "stop-distance");
+        assert_eq!(broker.trail_accum.name, "trail-distance");
+        assert_eq!(broker.stop_accum.name, "stop-distance");
     }
 
     #[test]

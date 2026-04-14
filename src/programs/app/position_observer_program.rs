@@ -213,10 +213,11 @@ pub fn position_observer_program(
             let position_raw = cache.get(&position_bundle).expect("cache driver disconnected");
             ns_encode_bundle += t0.elapsed().as_nanos() as f64;
 
-            // Noise subspace learns, then strip noise.
+            // Noise subspace learns, then strip noise — single to_f64 conversion.
             let t0 = std::time::Instant::now();
-            position_obs.noise_subspace.update(&to_f64(&position_raw));
-            let position_anomaly = position_obs.strip_noise(&position_raw);
+            let position_f64 = to_f64(&position_raw);
+            position_obs.noise_subspace.update(&position_f64);
+            let position_anomaly = Vector::from_f64(&position_obs.noise_subspace.anomalous_component(&position_f64));
             ns_noise_strip += t0.elapsed().as_nanos() as f64;
 
             // Distances from reckoner, or crutches if not experienced yet.

@@ -4,6 +4,8 @@
 /// Intentionally simpler than MarketObserver. No noise-subspace, no curve,
 /// no engram gating. Quality is measured through the BROKER's curve.
 
+use std::collections::VecDeque;
+
 use holon::kernel::vector::Vector;
 use holon::memory::{OnlineSubspace, ReckConfig, Reckoner};
 
@@ -32,9 +34,9 @@ pub struct PositionObserver {
     /// Incremental bundling for exit facts — optimization cache, not cognition.
     pub incremental: IncrementalBundle,
     /// Rolling window of outcomes: true=Grace, false=Violence.
-    pub outcome_window: Vec<bool>,
+    pub outcome_window: VecDeque<bool>,
     /// Rolling window of residue per resolution.
-    pub residue_window: Vec<f64>,
+    pub residue_window: VecDeque<f64>,
     /// Fraction of Grace in the rolling window.
     pub grace_rate: f64,
     /// Average residue in the rolling window.
@@ -73,8 +75,8 @@ impl PositionObserver {
             default_distances: Distances::new(default_trail, default_stop),
             noise_subspace: OnlineSubspace::new(dims, 8),
             incremental: IncrementalBundle::new(dims),
-            outcome_window: Vec::with_capacity(SELF_ASSESSMENT_WINDOW),
-            residue_window: Vec::with_capacity(SELF_ASSESSMENT_WINDOW),
+            outcome_window: VecDeque::with_capacity(SELF_ASSESSMENT_WINDOW),
+            residue_window: VecDeque::with_capacity(SELF_ASSESSMENT_WINDOW),
             grace_rate: 0.0,
             avg_residue: 0.0,
         }
@@ -149,13 +151,13 @@ impl PositionObserver {
         self.stop_reckoner.observe_scalar(position_thought, optimal.stop, weight);
 
         // Update rolling self-assessment window
-        self.outcome_window.push(is_grace);
+        self.outcome_window.push_back(is_grace);
         if self.outcome_window.len() > SELF_ASSESSMENT_WINDOW {
-            self.outcome_window.remove(0);
+            self.outcome_window.pop_front();
         }
-        self.residue_window.push(residue);
+        self.residue_window.push_back(residue);
         if self.residue_window.len() > SELF_ASSESSMENT_WINDOW {
-            self.residue_window.remove(0);
+            self.residue_window.pop_front();
         }
 
         // Recompute rates from window

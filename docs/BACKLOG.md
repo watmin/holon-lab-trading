@@ -4,32 +4,29 @@ Six wards scanned all Rust files. Post-cleanup. 2026-04-13.
 
 ## Findings — to fix
 
-- [ ] **16 dead Candle fields (reap).** Computed by indicator bank,
-  stored on Candle, never read by any vocab module. 128 bytes/candle
-  of waste plus computation cycles. Fields: bb_upper, bb_lower,
+- [x] **16 dead Candle fields (reap).** Removed bb_upper, bb_lower,
   macd, macd_signal, atr, atr_roc_6, atr_roc_12,
   trend_consistency_6/12/24, senkou_span_a/b, tf_1h_close/high/low,
-  tf_4h_close/high/low.
+  tf_4h_close/high/low. Dead compute_trend_consistency and
+  compute_tf_close helper functions also removed.
 
-- [ ] **Double to_f64 conversion (temper).** MarketObserver::observe()
-  and position observer strip_noise both convert i8→f64 twice for
-  the same vector. 80KB redundant allocation per observer per candle.
-  Fix: compute once, pass the &[f64] to both update and anomalous_component.
+- [x] **Double to_f64 conversion (temper).** MarketObserver::observe()
+  now converts once and passes &[f64] to both update and
+  anomalous_component. Same fix in position_observer_program.rs.
 
-- [ ] **Stale doc comment (gaze).** PositionLens::Full says "10 trade
-  atoms" — should say "13" (10 original + 3 phase biography).
+- [x] **Stale doc comment (gaze).** PositionLens::Full now says
+  "13 trade atoms (10 original + 3 phase biography)".
 
-- [ ] **Scalar accum index-based (forge).** broker.scalar_accums[0]
-  is trail, [1] is stop. Magic indices. Fix: named fields
-  trail_accum and stop_accum on Broker.
+- [x] **Scalar accum index-based (forge).** broker.trail_accum and
+  broker.stop_accum replace scalar_accums[0] and [1]. Named fields
+  throughout broker, config, and broker_program.
 
-- [ ] **Vec::remove(0) in position observer (forge).** O(n) shift
-  for outcome_window and residue_window. Fix: VecDeque with
-  pop_front. The broker already uses VecDeque for journey_errors.
+- [x] **Vec::remove(0) in position observer (forge).** outcome_window
+  and residue_window are now VecDeque with push_back/pop_front.
 
-- [ ] **Resolution constructor (forge).** 15-field struct constructed
-  in 3 places with near-identical field lists. Fix: Resolution::from_paper()
-  constructor. One place to add fields.
+- [x] **Resolution constructor (forge).** Resolution::from_paper()
+  extracts the 15-field construction. Four call sites reduced to
+  one-liners.
 
 - [ ] **Levels as bare f64 (forge).** trail_stop and safety_stop
   should be Price, not f64. PaperEntry trail_level and stop_level same.

@@ -91,14 +91,17 @@ impl MarketObserver {
         // Clone the raw thought BEFORE noise stripping — consumers need both.
         let raw = thought.clone();
 
-        // Noise subspace learns the background distribution.
+        // Convert once — used for both update and anomalous_component.
         let thought_f64 = to_f64(&thought);
+
+        // Noise subspace learns the background distribution.
         self.noise_subspace.update(&thought_f64);
 
         // Strip noise — the anomaly is what the subspace cannot explain.
         // Proposal 024: predict on the anomaly, store the anomaly on the paper,
         // learn from the anomaly at resolution. Prediction and learning are aligned.
-        let anomaly = self.strip_noise(&thought);
+        let anomalous = self.noise_subspace.anomalous_component(&thought_f64);
+        let anomaly = Vector::from_f64(&anomalous);
 
         // Predict direction on the ANOMALY — noise stripped
         let pred = self.reckoner.predict(&anomaly);
