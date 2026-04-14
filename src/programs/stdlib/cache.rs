@@ -4,11 +4,12 @@
 //! Gets are request-response pairs. Sets are fire-and-forget
 //! into a shared mailbox.
 //!
-//! The encoding cache is a specialization: each handle owns a CLONE of the
-//! ThoughtEncoder. On miss, encoding happens LOCALLY on the caller's thread.
+//! The encoding cache is a specialization: each handle owns the LEAF tools
+//! (VectorManager + ScalarEncoder) directly. On miss, encoding happens
+//! LOCALLY on the caller's thread — the handle walks the AST recursively.
 //! The cache thread only manages the LRU — gets and sets, no computation.
-//! Programs encode through `EncodingCacheHandle::encode()` — opaque,
-//! hit or miss invisible. The ThoughtEncoder is never accessible to programs.
+//! Programs encode through `EncodingCacheHandle::get()` — opaque,
+//! hit or miss invisible.
 
 use std::hash::Hash;
 use std::num::NonZeroUsize;
@@ -16,10 +17,13 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread;
 
+use holon::kernel::primitives::Primitives;
+use holon::kernel::scalar::{ScalarEncoder, ScalarMode};
 use holon::kernel::vector::Vector;
+use holon::kernel::vector_manager::VectorManager;
 use lru::LruCache;
 
-use crate::encoding::thought_encoder::{ThoughtAST, ThoughtEncoder};
+use crate::encoding::thought_encoder::ThoughtAST;
 use crate::services::mailbox;
 use crate::services::queue::{self, QueueReceiver, QueueSender};
 
@@ -265,8 +269,9 @@ where
 }
 
 // ─── Encoding cache ─────────────────────────────────────────────────────────
-// Specialization: each handle owns a CLONE of the ThoughtEncoder.
-// On cache miss, encoding happens LOCALLY on the caller's thread (parallel).
+// Specialization: each handle owns the LEAF tools (VectorManager + ScalarEncoder).
+// On cache miss, encoding happens LOCALLY on the caller's thread — the handle
+// walks the AST recursively, checking the LRU only for compositions.
 // The cache thread only manages the LRU — gets and sets, no computation.
 
 /// A program's handle to the encoding cache. Each program gets its own.
@@ -276,34 +281,76 @@ pub struct EncodingCacheHandle {
     get_tx: QueueSender<ThoughtAST>,
     get_rx: QueueReceiver<Option<Vector>>,
     set_tx: QueueSender<(ThoughtAST, Vector)>,
-    encoder: ThoughtEncoder, // LOCAL clone — computation happens here
+    // Leaf-level tools — stateless, cloneable
+    vm: VectorManager,           // atom name → vector (deterministic)
+    scalar: Arc<ScalarEncoder>,  // scalar value → vector (stateless)
+    dims: usize,                 // dimensionality
 }
 
 impl EncodingCacheHandle {
-    /// Encode an AST. Hit or miss is invisible to the caller.
-    /// On hit: returns cached vector from the LRU (via the cache thread).
-    /// On miss: encodes LOCALLY on the caller's thread, then notifies
-    /// the cache thread to install the result (fire-and-forget).
-    pub fn encode(&self, ast: &ThoughtAST) -> Option<Vector> {
-        // 1. Check cache
+    /// get IS encode. Walks the AST top-down. Checks the cache at
+    /// EVERY node. On miss, computes locally and installs. The cache
+    /// is Redis — get/set. The computation is on the caller's thread.
+    /// Every form is cached. No exceptions.
+    pub fn get(&self, ast: &ThoughtAST) -> Option<Vector> {
+        // Check cache for this exact form — every node, every time
         self.get_tx.send(ast.clone()).ok()?;
         if let Some(cached) = self.get_rx.recv().ok()? {
-            return Some(cached); // hit
+            return Some(cached);
         }
-        // 2. Miss — encode locally (on caller's thread)
-        let (vec, misses) = self.encoder.encode(ast);
-        // 3. Notify cache — fire and forget
+
+        // Miss — compute locally
+        let vec = match ast {
+            ThoughtAST::Atom(name) => {
+                self.vm.get_vector(name)
+            }
+            ThoughtAST::Linear { value, scale } => {
+                self.scalar.encode(*value, ScalarMode::Linear { scale: *scale })
+            }
+            ThoughtAST::Log { value } => {
+                self.scalar.encode_log(*value)
+            }
+            ThoughtAST::Circular { value, period } => {
+                self.scalar.encode(*value, ScalarMode::Circular { period: *period })
+            }
+            ThoughtAST::Bind(left, right) => {
+                let l = self.get(left)?;
+                let r = self.get(right)?;
+                Primitives::bind(&l, &r)
+            }
+            ThoughtAST::Bundle(children) => {
+                let vecs: Vec<Vector> = children.iter()
+                    .map(|c| self.get(c))
+                    .collect::<Option<Vec<_>>>()?;
+                if vecs.is_empty() {
+                    Vector::zeros(self.dims)
+                } else {
+                    let refs: Vec<&Vector> = vecs.iter().collect();
+                    Primitives::bundle(&refs)
+                }
+            }
+            ThoughtAST::Sequential(items) => {
+                let vecs: Vec<Vector> = items.iter().enumerate()
+                    .map(|(i, c)| self.get(c).map(|v| Primitives::permute(&v, i as i32)))
+                    .collect::<Option<Vec<_>>>()?;
+                if vecs.is_empty() {
+                    Vector::zeros(self.dims)
+                } else {
+                    let refs: Vec<&Vector> = vecs.iter().collect();
+                    Primitives::bundle(&refs)
+                }
+            }
+        };
+
+        // Install in cache — fire and forget
         let _ = self.set_tx.send((ast.clone(), vec.clone()));
-        for (sub_ast, sub_vec) in misses {
-            let _ = self.set_tx.send((sub_ast, sub_vec));
-        }
         Some(vec)
     }
 }
 
-/// Create an encoding cache. The ThoughtEncoder is CONSUMED — cloned into
-/// each handle. No program can reference it directly. Programs encode
-/// through `EncodingCacheHandle::encode()`.
+/// Create an encoding cache. Each handle gets a clone of the leaf tools
+/// (VectorManager + ScalarEncoder). Programs encode through
+/// `EncodingCacheHandle::get()`.
 ///
 /// The cache thread owns ONLY the LRU. It services gets (check LRU, respond
 /// Some or None) and sets (install into LRU). It does NOT encode.
@@ -312,7 +359,9 @@ impl EncodingCacheHandle {
 /// The driver thread exits when all client handles are dropped.
 pub fn encoding_cache(
     name: &str,
-    encoder: ThoughtEncoder, // CONSUMED — cloned into handles
+    vm: VectorManager,
+    scalar: ScalarEncoder,
+    dims: usize,
     capacity: usize,
     num_clients: usize,
     can_emit: Box<dyn Fn() -> bool + Send>,
@@ -320,6 +369,8 @@ pub fn encoding_cache(
 ) -> (Vec<EncodingCacheHandle>, CacheDriverHandle) {
     assert!(num_clients > 0, "cache requires at least one client");
     assert!(capacity > 0, "cache requires non-zero capacity");
+
+    let scalar = Arc::new(scalar);
 
     let mut handles = Vec::with_capacity(num_clients);
     let mut get_rxs = Vec::with_capacity(num_clients);
@@ -349,7 +400,9 @@ pub fn encoding_cache(
             get_tx: req_tx,
             get_rx: resp_rx,
             set_tx: set_senders.next().unwrap(),
-            encoder: encoder.clone(), // each handle gets a clone
+            vm: vm.clone(),
+            scalar: Arc::clone(&scalar),
+            dims,
         });
     }
 
@@ -359,7 +412,7 @@ pub fn encoding_cache(
     let misses_inner = Arc::clone(&misses);
 
     // The driver thread: owns the LRU. Drain sets FIRST, then service gets.
-    // This ordering is critical: callers install via set (async after local encode),
+    // This ordering is critical: callers install via set (async fire-and-forget),
     // then query via get (sync). If gets are serviced before sets are drained,
     // we miss what was just installed. 0% hit rate.
     let thread = thread::spawn(move || {

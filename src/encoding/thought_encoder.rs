@@ -1,12 +1,9 @@
 /// thought_encoder.rs — the AST that vocabulary modules produce,
 /// and the evaluator that walks it into vectors. Compiled from wat/thought-encoder.wat.
 ///
-/// Two kinds of memory:
-///   Atoms: a dictionary. Finite. Known at startup. Pre-computed. Never evicted.
-///   Compositions: a cache. Optimistic. Use if we have it. Compute if we don't.
-///
-/// The encode function NEVER writes to the cache — misses are returned as
-/// values. The enterprise collects them and inserts between candles.
+/// The ThoughtEncoder is stateless — no cache. Production encoding goes
+/// through EncodingCacheHandle::get() which owns the LRU. This struct
+/// exists for tests and IncrementalBundle.
 
 use std::collections::HashMap;
 
@@ -171,13 +168,11 @@ pub fn round_to(v: f64, digits: u32) -> f64 {
     (v * factor).round() / factor
 }
 
-/// The evaluator. Walks ThoughtAST bottom-up, checking cache at every node.
+/// The evaluator. Walks ThoughtAST into vectors. Stateless — no cache.
+/// Production encoding goes through EncodingCacheHandle::get() which
+/// owns the LRU cache. This struct exists for tests and IncrementalBundle.
 #[derive(Clone)]
 pub struct ThoughtEncoder {
-    /// Finite, pre-computed atom vectors. Never evicted.
-    atoms: HashMap<String, Vector>,
-    /// Optimistic composition cache. Use if we have it. Compute if we don't.
-    compositions: HashMap<ThoughtAST, Vector>,
     /// Scalar encoder for Linear/Log/Circular nodes.
     scalar_encoder: ScalarEncoder,
     /// VectorManager for atom allocation.
@@ -185,121 +180,67 @@ pub struct ThoughtEncoder {
 }
 
 impl ThoughtEncoder {
-    /// Construct a new ThoughtEncoder. Atoms dictionary starts empty --
-    /// call `register_atom` to pre-allocate known atom names.
+    /// Construct a new ThoughtEncoder.
     pub fn new(vm: VectorManager) -> Self {
         let dims = vm.dimensions();
         Self {
-            atoms: HashMap::new(),
-            compositions: HashMap::with_capacity(4096),
             scalar_encoder: ScalarEncoder::new(dims),
             vm,
         }
     }
 
-    /// Pre-allocate an atom vector. Idempotent.
-    /// (Test-only — production uses get_atom's lazy fallback.)
-    #[cfg(test)]
-    pub fn register_atom(&mut self, name: &str) {
-        if !self.atoms.contains_key(name) {
-            let v = self.vm.get_vector(name);
-            self.atoms.insert(name.to_string(), v);
-        }
-    }
-
-    /// Look up (or lazily allocate) an atom vector.
-    fn get_atom(&self, name: &str) -> Vector {
-        if let Some(v) = self.atoms.get(name) {
-            v.clone()
-        } else {
-            // Fallback: compute on the fly (not cached in atoms --
-            // atoms are pre-registered). Still deterministic.
-            self.vm.get_vector(name)
-        }
-    }
-
-    /// Recursive, cache-aware encode. Returns the vector AND any cache misses.
-    /// On cache hit: returns the vector and empty misses.
-    /// On cache miss: computes, returns vector AND the (ast, vector) pair in misses.
-    /// The caller collects all misses and inserts between candles.
-    pub fn encode(&self, ast: &ThoughtAST) -> (Vector, Vec<(ThoughtAST, Vector)>) {
-        // Check composition cache first
-        if let Some(cached) = self.compositions.get(ast) {
-            return (cached.clone(), Vec::new());
-        }
-
-        // Cache miss -- evaluate the AST node
-        let (result, mut misses) = match ast {
+    /// Recursive encode. Returns the vector.
+    /// Used by tests and IncrementalBundle. Production uses EncodingCacheHandle::get().
+    pub fn encode(&self, ast: &ThoughtAST) -> Vector {
+        match ast {
             ThoughtAST::Atom(name) => {
-                let v = self.get_atom(name);
-                (v, Vec::new())
+                self.vm.get_vector(name)
             }
             ThoughtAST::Linear { value, scale } => {
-                let scalar_vec = self.scalar_encoder.encode(
+                self.scalar_encoder.encode(
                     *value,
                     ScalarMode::Linear { scale: *scale },
-                );
-                (scalar_vec, vec![])
+                )
             }
             ThoughtAST::Log { value } => {
-                let scalar_vec = self.scalar_encoder.encode_log(*value);
-                (scalar_vec, vec![])
+                self.scalar_encoder.encode_log(*value)
             }
             ThoughtAST::Circular { value, period } => {
-                let scalar_vec = self.scalar_encoder.encode(
+                self.scalar_encoder.encode(
                     *value,
                     ScalarMode::Circular { period: *period },
-                );
-                (scalar_vec, vec![])
+                )
             }
             ThoughtAST::Bind(left, right) => {
-                let (l_vec, l_misses) = self.encode(left);
-                let (r_vec, r_misses) = self.encode(right);
-                let mut combined = l_misses;
-                combined.extend(r_misses);
-                (Primitives::bind(&l_vec, &r_vec), combined)
+                let l_vec = self.encode(left);
+                let r_vec = self.encode(right);
+                Primitives::bind(&l_vec, &r_vec)
             }
             ThoughtAST::Bundle(children) => {
-                let mut all_vecs = Vec::with_capacity(children.len());
-                let mut all_misses = Vec::new();
-                for child in children {
-                    let (v, m) = self.encode(child);
-                    all_vecs.push(v);
-                    all_misses.extend(m);
-                }
+                let all_vecs: Vec<Vector> = children.iter()
+                    .map(|child| self.encode(child))
+                    .collect();
                 let refs: Vec<&Vector> = all_vecs.iter().collect();
                 if refs.is_empty() {
-                    (Vector::zeros(self.vm.dimensions()), all_misses)
+                    Vector::zeros(self.vm.dimensions())
                 } else {
-                    (Primitives::bundle(&refs), all_misses)
+                    Primitives::bundle(&refs)
                 }
             }
             ThoughtAST::Sequential(items) => {
-                let mut all_vecs = Vec::with_capacity(items.len());
-                let mut all_misses = Vec::new();
-                for (i, item) in items.iter().enumerate() {
-                    let (v, m) = self.encode(item);
-                    all_vecs.push(Primitives::permute(&v, i as i32));
-                    all_misses.extend(m);
-                }
+                let all_vecs: Vec<Vector> = items.iter().enumerate()
+                    .map(|(i, item)| {
+                        let v = self.encode(item);
+                        Primitives::permute(&v, i as i32)
+                    })
+                    .collect();
                 let refs: Vec<&Vector> = all_vecs.iter().collect();
                 if refs.is_empty() {
-                    (Vector::zeros(self.vm.dimensions()), all_misses)
+                    Vector::zeros(self.vm.dimensions())
                 } else {
-                    (Primitives::bundle(&refs), all_misses)
+                    Primitives::bundle(&refs)
                 }
             }
-        };
-
-        // Record this miss for later insertion
-        misses.push((ast.clone(), result.clone()));
-        (result, misses)
-    }
-
-    /// Insert cache entries (called between candles by ctx).
-    pub fn insert_cache_entries(&mut self, misses: Vec<(ThoughtAST, Vector)>) {
-        for (ast, vec) in misses {
-            self.compositions.insert(ast, vec);
         }
     }
 
@@ -311,11 +252,6 @@ impl ThoughtEncoder {
     /// Access the ScalarEncoder.
     pub fn scalar_encoder(&self) -> &ScalarEncoder {
         &self.scalar_encoder
-    }
-
-    /// Number of cached compositions.
-    pub fn cache_size(&self) -> usize {
-        self.compositions.len()
     }
 }
 
@@ -350,23 +286,22 @@ impl IncrementalBundle {
         }
     }
 
-    /// Encode facts incrementally. Returns (thought_vector, cache_misses).
+    /// Encode facts incrementally. Returns the thought vector.
     ///
     /// First candle: full encode, populate sums and last_facts.
     /// Subsequent candles: diff against last_facts, patch sums, threshold.
     ///
-    /// Uses the ThoughtEncoder to evaluate individual changed facts (benefiting
-    /// from the composition cache). The sums buffer avoids re-summing unchanged facts.
+    /// Uses the ThoughtEncoder to evaluate individual changed facts.
+    /// The sums buffer avoids re-summing unchanged facts.
     pub fn encode(
         &mut self,
         new_facts: &[ThoughtAST],
         encoder: &ThoughtEncoder,
-    ) -> (Vector, Vec<(ThoughtAST, Vector)>) {
+    ) -> Vector {
         if !self.initialized {
             return self.full_encode(new_facts, encoder);
         }
 
-        let mut all_misses = Vec::new();
         let mut new_last_facts = HashMap::with_capacity(new_facts.len());
 
         // Build set of new facts for O(1) lookup
@@ -388,8 +323,7 @@ impl IncrementalBundle {
                 new_last_facts.insert(fact.clone(), old_vec.clone());
             } else {
                 // CHANGED or ADDED — encode, add to sums
-                let (new_vec, misses) = encoder.encode(fact);
-                all_misses.extend(misses);
+                let new_vec = encoder.encode(fact);
                 // Add new contribution
                 for (s, &val) in self.sums.iter_mut().zip(new_vec.data()) {
                     *s += val as i32;
@@ -398,14 +332,10 @@ impl IncrementalBundle {
             }
         }
 
-        // Subtract old facts that were matched (they're still in sums from before)
-        // — no, they stay. Only removed facts were subtracted above. This is correct.
-
         self.last_facts = new_last_facts;
 
         // Threshold the sums
-        let thought = self.threshold();
-        (thought, all_misses)
+        self.threshold()
     }
 
     /// First candle: full encode from scratch.
@@ -413,14 +343,12 @@ impl IncrementalBundle {
         &mut self,
         facts: &[ThoughtAST],
         encoder: &ThoughtEncoder,
-    ) -> (Vector, Vec<(ThoughtAST, Vector)>) {
+    ) -> Vector {
         self.sums.iter_mut().for_each(|s| *s = 0);
         self.last_facts.clear();
 
-        let mut all_misses = Vec::new();
         for fact in facts {
-            let (vec, misses) = encoder.encode(fact);
-            all_misses.extend(misses);
+            let vec = encoder.encode(fact);
             for (s, &val) in self.sums.iter_mut().zip(vec.data()) {
                 *s += val as i32;
             }
@@ -428,8 +356,7 @@ impl IncrementalBundle {
         }
 
         self.initialized = true;
-        let thought = self.threshold();
-        (thought, all_misses)
+        self.threshold()
     }
 
     /// Apply sign threshold to sums, producing the bundled vector.
@@ -446,7 +373,7 @@ impl IncrementalBundle {
 /// No hierarchy. No threshold. The consumer filters.
 ///
 /// Accepts a closure that encodes a ThoughtAST into a Vector.
-/// On hot paths, pass the EncoderHandle's encode (which checks the cache).
+/// On hot paths, pass the EncodingCacheHandle's get (which checks the LRU).
 /// At startup or in tests, pass ThoughtEncoder::encode directly.
 pub fn extract<F>(thought_vec: &Vector, forms: &[ThoughtAST], encode_fn: F) -> Vec<(ThoughtAST, f64)>
 where
@@ -487,12 +414,7 @@ mod tests {
 
     fn make_encoder() -> ThoughtEncoder {
         let vm = VectorManager::new(DIMS);
-        let mut enc = ThoughtEncoder::new(vm);
-        enc.register_atom("rsi");
-        enc.register_atom("vol");
-        enc.register_atom("hour");
-        enc.register_atom("trend");
-        enc
+        ThoughtEncoder::new(vm)
     }
 
     #[test]
@@ -519,18 +441,16 @@ mod tests {
     #[test]
     fn test_encode_atom_returns_vector() {
         let enc = make_encoder();
-        let (v, misses) = enc.encode(&ThoughtAST::Atom("rsi".into()));
+        let v = enc.encode(&ThoughtAST::Atom("rsi".into()));
         assert_eq!(v.dimensions(), DIMS);
         assert!(v.nnz() > 0);
-        // Atom produces one miss (itself)
-        assert!(!misses.is_empty());
     }
 
     #[test]
     fn test_encode_atom_deterministic() {
         let enc = make_encoder();
-        let (v1, _) = enc.encode(&ThoughtAST::Atom("rsi".into()));
-        let (v2, _) = enc.encode(&ThoughtAST::Atom("rsi".into()));
+        let v1 = enc.encode(&ThoughtAST::Atom("rsi".into()));
+        let v2 = enc.encode(&ThoughtAST::Atom("rsi".into()));
         assert_eq!(v1, v2);
     }
 
@@ -541,10 +461,9 @@ mod tests {
             Box::new(ThoughtAST::Atom("vol".into())),
             Box::new(ThoughtAST::Log { value: 100.0 }),
         );
-        let (v, misses) = enc.encode(&ast);
+        let v = enc.encode(&ast);
         assert_eq!(v.dimensions(), DIMS);
         assert!(v.nnz() > 0);
-        assert!(!misses.is_empty());
     }
 
     #[test]
@@ -554,7 +473,7 @@ mod tests {
             ThoughtAST::Atom("rsi".into()),
             ThoughtAST::Atom("vol".into()),
         ]);
-        let (v, _) = enc.encode(&ast);
+        let v = enc.encode(&ast);
         assert_eq!(v.dimensions(), DIMS);
         assert!(v.nnz() > 0);
     }
@@ -566,61 +485,22 @@ mod tests {
             Box::new(ThoughtAST::Atom("rsi".into())),
             Box::new(ThoughtAST::Atom("vol".into())),
         );
-        let (v, _) = enc.encode(&ast);
+        let v = enc.encode(&ast);
         assert_eq!(v.dimensions(), DIMS);
         assert!(v.nnz() > 0);
     }
 
     #[test]
-    fn test_cache_hit_returns_empty_misses() {
-        let mut enc = make_encoder();
-        let ast = ThoughtAST::Bind(
-            Box::new(ThoughtAST::Atom("vol".into())),
-            Box::new(ThoughtAST::Log { value: 50.0 }),
-        );
-
-        let (v1, misses1) = enc.encode(&ast);
-        assert!(!misses1.is_empty());
-
-        // Insert misses into cache
-        enc.insert_cache_entries(misses1);
-
-        // Second encode should be a cache hit
-        let (v2, misses2) = enc.encode(&ast);
-        assert!(misses2.is_empty());
-        assert_eq!(v1, v2);
-    }
-
-    #[test]
-    fn test_encode_never_writes_cache() {
+    fn test_encode_deterministic_across_calls() {
         let enc = make_encoder();
         let ast = ThoughtAST::Bind(
             Box::new(ThoughtAST::Atom("vol".into())),
             Box::new(ThoughtAST::Log { value: 50.0 }),
         );
-        let _ = enc.encode(&ast);
-        // Cache should still be empty -- encode never writes
-        assert_eq!(enc.cache_size(), 0);
-    }
 
-    #[test]
-    fn test_insert_cache_entries() {
-        let mut enc = make_encoder();
-        let ast = ThoughtAST::Atom("rsi".into());
-        let (_, misses) = enc.encode(&ast);
-        let miss_count = misses.len();
-        enc.insert_cache_entries(misses);
-        assert_eq!(enc.cache_size(), miss_count);
-    }
-
-    #[test]
-    fn test_register_atom_idempotent() {
-        let mut enc = make_encoder();
-        enc.register_atom("rsi"); // already registered
-        enc.register_atom("rsi"); // no-op
-        // Should still work
-        let (v, _) = enc.encode(&ThoughtAST::Atom("rsi".into()));
-        assert!(v.nnz() > 0);
+        let v1 = enc.encode(&ast);
+        let v2 = enc.encode(&ast);
+        assert_eq!(v1, v2);
     }
 
     #[test]
@@ -654,8 +534,8 @@ mod tests {
                 Box::new(ThoughtAST::Linear { value: 0.7, scale: 1.0 }),
             );
         // Encode the leaf to get a vector, use it as the thought
-        let (leaf_vec, _) = enc.encode(&leaf);
-        let results = extract(&leaf_vec, &[leaf.clone()], |ast| enc.encode(ast).0);
+        let leaf_vec = enc.encode(&leaf);
+        let results = extract(&leaf_vec, &[leaf.clone()], |ast| enc.encode(ast));
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].0, leaf);
         // Self-cosine should be high (close to 1.0)
@@ -681,8 +561,8 @@ mod tests {
         ];
         // Bundle all forms, then extract — each form should have non-trivial presence
         let bundle = ThoughtAST::Bundle(forms.clone());
-        let (thought_vec, _) = enc.encode(&bundle);
-        let results = extract(&thought_vec, &forms, |ast| enc.encode(ast).0);
+        let thought_vec = enc.encode(&bundle);
+        let results = extract(&thought_vec, &forms, |ast| enc.encode(ast));
         assert_eq!(results.len(), 3);
         // Each bundled form should have positive cosine with the bundle
         for (_ast, cos) in &results {
@@ -704,8 +584,8 @@ mod tests {
             Box::new(ThoughtAST::Atom("hour".into())),
             Box::new(ThoughtAST::Linear { value: 12.0, scale: 24.0 }),
         );
-        let (unrelated_vec, _) = enc.encode(&unrelated);
-        let results = extract(&unrelated_vec, &forms, |ast| enc.encode(ast).0);
+        let unrelated_vec = enc.encode(&unrelated);
+        let results = extract(&unrelated_vec, &forms, |ast| enc.encode(ast));
         assert_eq!(results.len(), 1);
         // Cosine between unrelated vectors should be near zero
         assert!(results[0].1.abs() < 0.2, "unrelated cosine should be near zero, got {}", results[0].1);
@@ -729,8 +609,8 @@ mod tests {
             Box::new(ThoughtAST::Atom("hour".into())),
             Box::new(ThoughtAST::Linear { value: 12.0, scale: 24.0 }),
         );
-        let (unrelated_vec, _) = enc.encode(&unrelated);
-        let results = extract(&unrelated_vec, &forms, |ast| enc.encode(ast).0);
+        let unrelated_vec = enc.encode(&unrelated);
+        let results = extract(&unrelated_vec, &forms, |ast| enc.encode(ast));
         // Both forms returned regardless of cosine value
         assert_eq!(results.len(), 2);
     }
@@ -742,8 +622,8 @@ mod tests {
             Box::new(ThoughtAST::Atom("rsi".into())),
             Box::new(ThoughtAST::Atom("vol".into())),
         );
-        let (bind_vec, _) = enc.encode(&bind);
-        let results = extract(&bind_vec, &[bind.clone()], |ast| enc.encode(ast).0);
+        let bind_vec = enc.encode(&bind);
+        let results = extract(&bind_vec, &[bind.clone()], |ast| enc.encode(ast));
         assert_eq!(results.len(), 1);
         assert!(matches!(results[0].0, ThoughtAST::Bind(_, _)));
         assert!(results[0].1 > 0.9);

@@ -228,7 +228,7 @@ pub fn broker_program(
             &mut max_papers_seen,
         );
         let portfolio_ast = ThoughtAST::Bundle(portfolio_atoms);
-        let portfolio_vec = cache.encode(&portfolio_ast).expect("cache driver disconnected");
+        let portfolio_vec = cache.get(&portfolio_ast).expect("cache driver disconnected");
         let composed = Primitives::bundle(&[&chain.market_anomaly, &chain.position_anomaly, &portfolio_vec]);
 
         // 2. Direction from market prediction

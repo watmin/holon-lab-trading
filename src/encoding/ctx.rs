@@ -1,17 +1,20 @@
 /// ctx.rs — the immutable world. Born at startup. Passed to posts via on-candle.
 /// Compiled from wat/ctx.wat.
 ///
-/// Immutable DURING each candle. The ThoughtEncoder's composition cache
-/// is the one seam -- updated BETWEEN candles from collected misses.
+/// Fully immutable. No seam. Encoding goes through EncodingCacheHandle::get()
+/// which manages the LRU cache independently.
 
-use holon::kernel::vector::Vector;
 use holon::kernel::vector_manager::VectorManager;
 
-use crate::encoding::thought_encoder::{ThoughtAST, ThoughtEncoder};
+use crate::encoding::thought_encoder::ThoughtEncoder;
+#[cfg(test)]
+use crate::encoding::thought_encoder::ThoughtAST;
 
 /// The immutable world context. Three fields, nothing else.
 pub struct Ctx {
-    /// Contains VectorManager + composition cache (the seam).
+    /// ThoughtEncoder for direct (non-cached) encoding. Used by tests
+    /// and IncrementalBundle. Production encoding goes through
+    /// EncodingCacheHandle::get().
     pub thought_encoder: ThoughtEncoder,
     /// Vector dimensionality.
     pub dims: usize,
@@ -29,13 +32,6 @@ impl Ctx {
             dims,
             recalib_interval,
         }
-    }
-
-    /// Cache maintenance -- the one seam. Called BETWEEN candles by the
-    /// enterprise. Inserts all collected misses from the previous candle's
-    /// parallel encoding phases. This is the only mutation on ctx.
-    pub fn insert_cache_misses(&mut self, misses: Vec<(ThoughtAST, Vector)>) {
-        self.thought_encoder.insert_cache_entries(misses);
     }
 }
 
@@ -57,48 +53,20 @@ mod tests {
     fn test_ctx_encode_through_thought_encoder() {
         let ctx = Ctx::new(DIMS, RECALIB);
         let ast = ThoughtAST::Atom("test".into());
-        let (v, misses) = ctx.thought_encoder.encode(&ast);
+        let v = ctx.thought_encoder.encode(&ast);
         assert_eq!(v.dimensions(), DIMS);
-        assert!(!misses.is_empty());
     }
 
     #[test]
-    fn test_ctx_insert_cache_misses() {
-        let mut ctx = Ctx::new(DIMS, RECALIB);
+    fn test_ctx_deterministic() {
+        let ctx = Ctx::new(DIMS, RECALIB);
         let ast = ThoughtAST::Bind(
             Box::new(ThoughtAST::Atom("vol".into())),
             Box::new(ThoughtAST::Log { value: 100.0 }),
         );
 
-        let (v1, misses) = ctx.thought_encoder.encode(&ast);
-        assert!(!misses.is_empty());
-
-        ctx.insert_cache_misses(misses);
-
-        // Second encode should hit cache
-        let (v2, misses2) = ctx.thought_encoder.encode(&ast);
-        assert!(misses2.is_empty());
+        let v1 = ctx.thought_encoder.encode(&ast);
+        let v2 = ctx.thought_encoder.encode(&ast);
         assert_eq!(v1, v2);
-    }
-
-    #[test]
-    fn test_ctx_multiple_inserts() {
-        let mut ctx = Ctx::new(DIMS, RECALIB);
-
-        let ast1 = ThoughtAST::Atom("a".into());
-        let ast2 = ThoughtAST::Atom("b".into());
-
-        let (_, m1) = ctx.thought_encoder.encode(&ast1);
-        let (_, m2) = ctx.thought_encoder.encode(&ast2);
-
-        let mut all_misses = m1;
-        all_misses.extend(m2);
-        ctx.insert_cache_misses(all_misses);
-
-        // Both should be cached now
-        let (_, m1_again) = ctx.thought_encoder.encode(&ast1);
-        let (_, m2_again) = ctx.thought_encoder.encode(&ast2);
-        assert!(m1_again.is_empty());
-        assert!(m2_again.is_empty());
     }
 }

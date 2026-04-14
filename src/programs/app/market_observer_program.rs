@@ -102,7 +102,7 @@ pub fn market_observer_program(
 
         // Encode via cache: check → compute → install.
         let t0 = std::time::Instant::now();
-        let thought = cache.encode(&bundle_ast).expect("cache driver disconnected");
+        let thought = cache.get(&bundle_ast).expect("cache driver disconnected");
         let ns_encode = t0.elapsed().as_nanos() as f64;
 
         // Observe: noise subspace learns, anomaly extracted, reckoner predicts.

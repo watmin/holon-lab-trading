@@ -90,14 +90,14 @@ mod tests {
         let ast = ThoughtAST::Bundle(facts);
 
         // Encode the AST to get the anomaly vector
-        let (anomaly, _) = encoder.encode(&ast);
+        let anomaly = encoder.encode(&ast);
 
         let input = BrokerMarketInput {
             ast: ast.clone(),
             anomaly,
         };
 
-        let extracted = input.extract_facts(|a| encoder.encode(a).0, 0.0);
+        let extracted = input.extract_facts(|a| encoder.encode(a), 0.0);
         // All three facts should be present (self-cosine is high)
         assert_eq!(extracted.len(), 3);
     }
@@ -117,7 +117,7 @@ mod tests {
             ),
         ];
         let ast = ThoughtAST::Bundle(facts);
-        let (anomaly, _) = encoder.encode(&ast);
+        let anomaly = encoder.encode(&ast);
 
         let input = BrokerMarketInput {
             ast: ast.clone(),
@@ -125,7 +125,7 @@ mod tests {
         };
 
         // With a very high noise floor, nothing should pass
-        let extracted = input.extract_facts(|a| encoder.encode(a).0, 0.99);
+        let extracted = input.extract_facts(|a| encoder.encode(a), 0.99);
         assert!(extracted.is_empty());
     }
 
@@ -144,14 +144,14 @@ mod tests {
             ),
         ];
         let ast = ThoughtAST::Bundle(facts);
-        let (anomaly, _) = encoder.encode(&ast);
+        let anomaly = encoder.encode(&ast);
 
         let input = BrokerExitInput {
             ast: ast.clone(),
             anomaly,
         };
 
-        let extracted = input.extract_facts(|a| encoder.encode(a).0, 0.0);
+        let extracted = input.extract_facts(|a| encoder.encode(a), 0.0);
         assert_eq!(extracted.len(), 2);
     }
 }

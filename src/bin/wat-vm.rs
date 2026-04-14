@@ -23,7 +23,6 @@ use enterprise::domain::ledger;
 use enterprise::domain::config;
 use enterprise::domain::market_observer::MarketObserver;
 use enterprise::kernel::handle_pool::HandlePool;
-use enterprise::encoding::thought_encoder::ThoughtEncoder;
 use enterprise::programs::app::broker_program::broker_program;
 use enterprise::programs::app::position_observer_program::{PositionLearn, PositionSlot, TradeUpdate};
 use enterprise::programs::app::position_observer_program::position_observer_program;
@@ -466,12 +465,12 @@ fn main() {
 
     main_handle.out(format!("db: {}", db_path));
 
-    // ─── ThoughtEncoder + Cache ────────────────────────────────────────────
-    // The ThoughtEncoder is constructed ONCE and immediately consumed by the
-    // encoding cache. It moves into the cache driver thread. No Arc. No sharing.
-    // Programs encode through EncodingCacheHandle::encode() — opaque, hit or miss invisible.
+    // ─── Encoding Cache ─────────────────────────────────────────────────────
+    // The cache handle IS the encoder. Each handle owns the leaf tools
+    // (VectorManager + ScalarEncoder). On miss, the handle walks the AST
+    // recursively on the caller's thread. The cache thread is pure Redis.
     let vm = VectorManager::new(dims);
-    let encoder = ThoughtEncoder::new(vm);
+    let scalar = ScalarEncoder::new(dims);
 
     let cache_gate = enterprise::programs::telemetry::make_rate_gate(
         std::time::Duration::from_secs(5),
@@ -508,7 +507,9 @@ fn main() {
     };
     let (cache_handles, cache_driver) = encoding_cache(
         "encoder",
-        encoder, // CONSUMED — cloned into handles, computation on caller threads
+        vm,
+        scalar,
+        dims,
         262144, // 256K — cache everything we can
         num_market + num_position + num_brokers,
         Box::new(cache_gate),

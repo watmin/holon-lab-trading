@@ -262,7 +262,7 @@ pub fn position_observer_program(
             let extracted_anomaly = extract(
                 &chain.market_anomaly,
                 &market_facts,
-                |ast| cache.encode(ast).expect("cache driver disconnected"),
+                |ast| cache.get(ast).expect("cache driver disconnected"),
             );
             total_anomaly_facts += market_facts.len() as f64;
             for (fact, presence) in extracted_anomaly {
@@ -280,7 +280,7 @@ pub fn position_observer_program(
             let extracted_raw = extract(
                 &chain.market_raw,
                 &market_facts,
-                |ast| cache.encode(ast).expect("cache driver disconnected"),
+                |ast| cache.get(ast).expect("cache driver disconnected"),
             );
             total_raw_facts += market_facts.len() as f64;
             for (fact, presence) in extracted_raw {
@@ -296,7 +296,7 @@ pub fn position_observer_program(
             // Encode the combined bundle.
             let t0 = std::time::Instant::now();
             let position_bundle = ThoughtAST::Bundle(slot_facts);
-            let position_raw = cache.encode(&position_bundle).expect("cache driver disconnected");
+            let position_raw = cache.get(&position_bundle).expect("cache driver disconnected");
             ns_encode_bundle += t0.elapsed().as_nanos() as f64;
 
             // Noise subspace learns, then strip noise.
