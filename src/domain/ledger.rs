@@ -20,7 +20,9 @@ pub fn ledger_setup(conn: &Connection) {
             recalib_wins INTEGER,
             recalib_total INTEGER,
             last_prediction TEXT,
-            us_elapsed INTEGER
+            us_elapsed INTEGER,
+            thought_ast TEXT,
+            fact_count INTEGER
         );
         CREATE TABLE IF NOT EXISTS position_observer_snapshots (
             candle INTEGER,
@@ -30,7 +32,9 @@ pub fn ledger_setup(conn: &Connection) {
             stop_experience REAL,
             grace_rate REAL,
             avg_residue REAL,
-            us_elapsed INTEGER
+            us_elapsed INTEGER,
+            thought_ast TEXT,
+            fact_count INTEGER
         );
         CREATE TABLE IF NOT EXISTS broker_snapshots (
             candle INTEGER,
@@ -75,13 +79,15 @@ pub fn ledger_insert(conn: &Connection, entry: &LogEntry) {
             candle, observer_idx, lens, disc_strength, conviction,
             experience, resolved, recalib_count, recalib_wins,
             recalib_total, last_prediction, us_elapsed,
+            thought_ast, fact_count,
         } => {
             conn.execute(
-                "INSERT INTO observer_snapshots VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO observer_snapshots VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 rusqlite::params![
                     candle, observer_idx, lens, disc_strength, conviction,
                     experience, resolved, recalib_count, recalib_wins,
-                    recalib_total, last_prediction, us_elapsed
+                    recalib_total, last_prediction, us_elapsed,
+                    thought_ast, fact_count
                 ],
             )
             .unwrap();
@@ -89,12 +95,14 @@ pub fn ledger_insert(conn: &Connection, entry: &LogEntry) {
         LogEntry::PositionObserverSnapshot {
             candle, position_idx, lens, trail_experience,
             stop_experience, grace_rate, avg_residue, us_elapsed,
+            thought_ast, fact_count,
         } => {
             conn.execute(
-                "INSERT INTO position_observer_snapshots VALUES (?,?,?,?,?,?,?,?)",
+                "INSERT INTO position_observer_snapshots VALUES (?,?,?,?,?,?,?,?,?,?)",
                 rusqlite::params![
                     candle, position_idx, lens, trail_experience,
-                    stop_experience, grace_rate, avg_residue, us_elapsed
+                    stop_experience, grace_rate, avg_residue, us_elapsed,
+                    thought_ast, fact_count
                 ],
             )
             .unwrap();

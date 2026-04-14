@@ -83,6 +83,8 @@ pub enum LogEntry {
         grace_rate: f64,
         avg_residue: f64,
         us_elapsed: u64,
+        thought_ast: String,
+        fact_count: usize,
     },
     /// Observer snapshot — emitted by observer threads every N candles.
     ObserverSnapshot {
@@ -98,6 +100,8 @@ pub enum LogEntry {
         recalib_total: usize,
         last_prediction: String,
         us_elapsed: u64,
+        thought_ast: String,
+        fact_count: usize,
     },
     /// Paper detail — the full story of a resolved paper.
     PaperDetail {

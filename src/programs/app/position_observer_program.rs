@@ -237,6 +237,8 @@ pub fn position_observer_program(
         let mut total_anomaly_facts: f64 = 0.0;
         let mut total_raw_facts: f64 = 0.0;
         let mut slots_processed: f64 = 0.0;
+        let mut snapshot_ast = String::new();
+        let mut snapshot_fact_count: usize = 0;
 
         // Process each slot sequentially.
         for slot in &slots {
@@ -300,6 +302,13 @@ pub fn position_observer_program(
             // Encode the combined bundle.
             let t0 = std::time::Instant::now();
             let position_bundle = ThoughtAST::Bundle(slot_facts);
+
+            // Capture thought AST from slot 0 for the snapshot.
+            if slots_processed == 0.0 {
+                snapshot_fact_count = collect_facts(&position_bundle).len();
+                snapshot_ast = position_bundle.to_edn();
+            }
+
             let position_raw = cache.get(&position_bundle).expect("cache driver disconnected");
             ns_encode_bundle += t0.elapsed().as_nanos() as f64;
 
@@ -367,6 +376,8 @@ pub fn position_observer_program(
                 grace_rate: position_obs.grace_rate,
                 avg_residue: position_obs.avg_residue,
                 us_elapsed,
+                thought_ast: snapshot_ast.clone(),
+                fact_count: snapshot_fact_count,
             });
         }
 

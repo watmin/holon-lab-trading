@@ -98,6 +98,7 @@ pub fn market_observer_program(
         let facts = market_lens_facts(&lens, &input.candle, &sliced, &mut scales);
         let fact_count = facts.len() as f64;
         let bundle_ast = ThoughtAST::Bundle(facts);
+        let snapshot_edn = bundle_ast.to_edn();
         let ns_collect = t0.elapsed().as_nanos() as f64;
 
         // Encode via cache: check → compute → install.
@@ -155,6 +156,8 @@ pub fn market_observer_program(
                 recalib_total: observer.recalib_total,
                 last_prediction: format!("{:?}", observer.last_prediction),
                 us_elapsed,
+                thought_ast: snapshot_edn.clone(),
+                fact_count: fact_count as usize,
             });
         }
 
