@@ -200,7 +200,6 @@ pub fn broker_program(
     db_tx: QueueSender<LogEntry>,
     mut broker: Broker,
     scalar_encoder: Arc<ScalarEncoder>,
-    _swap_fee: f64,
 ) -> Broker {
     let mut candle_count = 0usize;
     let mut max_papers_seen: usize = 0;
@@ -232,6 +231,7 @@ pub fn broker_program(
             &chain.candle.phase_history,
             &mut max_papers_seen,
         );
+        let portfolio_fact_count = portfolio_atoms.len();
         let portfolio_ast = ThoughtAST::Bundle(portfolio_atoms);
         let portfolio_vec = cache.get(&portfolio_ast).expect("cache driver disconnected");
         let composed = Primitives::bundle(&[&chain.market_anomaly, &chain.position_anomaly, &portfolio_vec]);
@@ -240,7 +240,7 @@ pub fn broker_program(
         let direction = direction_from_prediction(&chain.market_prediction);
 
         // 3. Distances from position observer's reckoner, cascaded through broker
-        let distances = broker.cascade_distances(Some(chain.position_distances));
+        let distances = broker.cascade_distances(Some(chain.position_distances), &scalar_encoder);
 
         // 4. Direction flip — close runners in old direction
         let mut flip_resolutions = Vec::new();
@@ -398,8 +398,8 @@ pub fn broker_program(
                 expected_value: broker.expected_value,
                 avg_grace_net: broker.avg_grace_net,
                 avg_violence_net: broker.avg_violence_net,
-                fact_count: 0,
-                thought_ast: String::new(),
+                fact_count: portfolio_fact_count,
+                thought_ast: portfolio_ast.to_edn(),
             });
         }
         // Phase snapshot — every candle, only slot 0. Phases last ~6 candles,

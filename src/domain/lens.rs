@@ -193,29 +193,6 @@ pub fn position_self_assessment_facts(grace_rate: f64, avg_residue: f64, scales:
     encode_exit_self_assessment_facts(grace_rate, avg_residue, scales)
 }
 
-/// Static ScalarEncoder shared across the process.
-///
-/// WHY this exists: broker.propagate() needs a &ScalarEncoder to encode optimal
-/// distances into the scalar accumulators. The proper owner is Ctx (via
-/// ThoughtEncoder), but propagate() is called from both the Post (which has ctx)
-/// and the binary's broker threads (which don't). Threading &ctx through the
-/// broker channel would require either an Arc or restructuring the channel
-/// protocol — a larger refactor than justified right now.
-///
-/// WHY OnceLock: the ScalarEncoder is deterministic for a given dimension, so a
-/// single static instance at 4096 dims is bit-identical to what ctx holds. There
-/// is no divergence risk as long as dims don't change at runtime (they don't).
-///
-/// TODO: eliminate this by passing &ScalarEncoder (or &Ctx) through the broker
-/// propagation path. Options: (a) bundle it into the channel message, (b) wrap
-/// ctx in Arc and share with broker threads, or (c) move propagation back to
-/// the main thread where ctx is available. Option (c) is cleanest but requires
-/// rethinking the broker-thread drain loop.
-pub fn ctx_scalar_encoder_placeholder() -> &'static holon::kernel::scalar::ScalarEncoder {
-    use std::sync::OnceLock;
-    static SE: OnceLock<holon::kernel::scalar::ScalarEncoder> = OnceLock::new();
-    SE.get_or_init(|| holon::kernel::scalar::ScalarEncoder::new(4096))
-}
 
 #[cfg(test)]
 mod tests {

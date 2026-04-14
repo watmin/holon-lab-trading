@@ -284,7 +284,6 @@ fn wire_brokers(
     mut console_pool: HandlePool<enterprise::programs::stdlib::console::ConsoleHandle>,
     mut db_pool: HandlePool<enterprise::services::queue::QueueSender<LogEntry>>,
     scalar_encoder: Arc<ScalarEncoder>,
-    swap_fee: f64,
     num_position: usize,
 ) -> WiredBrokers {
     let num_brokers = brokers.len();
@@ -339,7 +338,6 @@ fn wire_brokers(
                 broker_db,
                 broker,
                 se,
-                swap_fee,
             )
         });
         join_handles.push(jh);
@@ -643,7 +641,6 @@ fn main() {
         broker_console_pool,
         broker_db_pool,
         scalar_encoder,
-        args.swap_fee,
         num_position,
     );
 

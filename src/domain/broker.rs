@@ -199,12 +199,10 @@ impl Broker {
 
     /// Distance cascade: reckoner answer -> own accumulators -> default.
     /// The broker owns the full cascade because it owns the scalar accumulators.
-    pub fn cascade_distances(&self, reckoner_answer: Option<Distances>) -> Distances {
+    pub fn cascade_distances(&self, reckoner_answer: Option<Distances>, se: &ScalarEncoder) -> Distances {
         if let Some(dists) = reckoner_answer {
             return dists;
         }
-
-        let se = crate::domain::lens::ctx_scalar_encoder_placeholder();
 
         // Tier 2: scalar accumulators (global per-pair)
         let trail = if self.scalar_accums.len() > 0 && self.scalar_accums[0].count > 0 {
