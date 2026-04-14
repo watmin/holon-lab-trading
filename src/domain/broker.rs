@@ -120,9 +120,6 @@ pub struct PropagationFacts {
     pub weight: f64,
 }
 
-/// Rolling window size for journey grading (Proposal 043).
-pub const JOURNEY_WINDOW: usize = 200;
-
 /// The accountability primitive. N x M brokers total.
 pub struct Broker {
     /// Diagnostic identity for the ledger. e.g. ["momentum", "volatility"].
@@ -173,9 +170,6 @@ pub struct Broker {
     pub expected_value: f64,
     /// Venue fee per swap (fraction, e.g. 0.0010).
     pub swap_fee: f64,
-    /// Rolling window of error ratios for journey grading (Proposal 043).
-    /// Replaces EMA — per-broker, median threshold, finite memory.
-    pub journey_errors: VecDeque<f64>,
 }
 
 impl Broker {
@@ -216,7 +210,6 @@ impl Broker {
             avg_violence_net: 0.0,
             expected_value: 0.0,
             swap_fee,
-            journey_errors: VecDeque::new(),
         }
     }
 

@@ -777,11 +777,10 @@ fn main() {
         match jh.join() {
             Ok(position_obs) => {
                 main_handle.out(format!(
-                    "position-{}: trail_exp={:.1} stop_exp={:.1} grace_rate={:.3}",
+                    "position-{}: trail_exp={:.1} stop_exp={:.1}",
                     position_obs.lens,
                     position_obs.trail_reckoner.experience(),
                     position_obs.stop_reckoner.experience(),
-                    position_obs.grace_rate,
                 ));
             }
             Err(_) => {

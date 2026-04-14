@@ -4,8 +4,6 @@
 /// Intentionally simpler than MarketObserver. No noise-subspace, no curve,
 /// no engram gating. Quality is measured through the BROKER's curve.
 
-use std::collections::VecDeque;
-
 use holon::kernel::vector::Vector;
 use holon::memory::{OnlineSubspace, ReckConfig, Reckoner};
 
@@ -14,9 +12,6 @@ use crate::types::enums::PositionLens;
 #[cfg(test)]
 use crate::learning::scalar_accumulator::ScalarAccumulator;
 use crate::encoding::thought_encoder::IncrementalBundle;
-
-/// Rolling window capacity for self-assessment.
-const SELF_ASSESSMENT_WINDOW: usize = 100;
 
 /// Estimates exit distances through a specific judgment lens.
 pub struct PositionObserver {
@@ -33,14 +28,6 @@ pub struct PositionObserver {
     pub noise_subspace: OnlineSubspace,
     /// Incremental bundling for exit facts — optimization cache, not cognition.
     pub incremental: IncrementalBundle,
-    /// Rolling window of outcomes: true=Grace, false=Violence.
-    pub outcome_window: VecDeque<bool>,
-    /// Rolling window of residue per resolution.
-    pub residue_window: VecDeque<f64>,
-    /// Fraction of Grace in the rolling window.
-    pub grace_rate: f64,
-    /// Average residue in the rolling window.
-    pub avg_residue: f64,
 }
 
 impl PositionObserver {
@@ -75,10 +62,6 @@ impl PositionObserver {
             default_distances: Distances::new(default_trail, default_stop),
             noise_subspace: OnlineSubspace::new(dims, 8),
             incremental: IncrementalBundle::new(dims),
-            outcome_window: VecDeque::with_capacity(SELF_ASSESSMENT_WINDOW),
-            residue_window: VecDeque::with_capacity(SELF_ASSESSMENT_WINDOW),
-            grace_rate: 0.0,
-            avg_residue: 0.0,
         }
     }
 
@@ -138,36 +121,15 @@ impl PositionObserver {
     /// one resolution. The position_thought is the position observer's own encoded
     /// facts — NOT the composition with market thought.
     /// Proposal 026: position learns from position_thought only.
-    /// Also updates the rolling self-assessment window.
+    /// Proposal 051: continuous reckoners only. No binary Grace/Violence path.
     pub fn observe_distances(
         &mut self,
         position_thought: &Vector,
         optimal: &Distances,
         weight: f64,
-        is_grace: bool,
-        residue: f64,
     ) {
         self.trail_reckoner.observe_scalar(position_thought, optimal.trail, weight);
         self.stop_reckoner.observe_scalar(position_thought, optimal.stop, weight);
-
-        // Update rolling self-assessment window
-        self.outcome_window.push_back(is_grace);
-        if self.outcome_window.len() > SELF_ASSESSMENT_WINDOW {
-            self.outcome_window.pop_front();
-        }
-        self.residue_window.push_back(residue);
-        if self.residue_window.len() > SELF_ASSESSMENT_WINDOW {
-            self.residue_window.pop_front();
-        }
-
-        // Recompute rates from window
-        if !self.outcome_window.is_empty() {
-            let grace_count = self.outcome_window.iter().filter(|&&g| g).count();
-            self.grace_rate = grace_count as f64 / self.outcome_window.len() as f64;
-        }
-        if !self.residue_window.is_empty() {
-            self.avg_residue = self.residue_window.iter().sum::<f64>() / self.residue_window.len() as f64;
-        }
     }
 
     /// Return the anomalous component — what the noise subspace CANNOT explain.
@@ -242,26 +204,8 @@ mod tests {
         let mut obs = make_observer();
         let position_thought = random_vector("position_thought");
         let optimal = Distances::new(0.03, 0.06);
-        obs.observe_distances(&position_thought, &optimal, 1.0, true, 0.01);
+        obs.observe_distances(&position_thought, &optimal, 1.0);
         assert!(obs.experienced());
-    }
-
-    #[test]
-    fn test_self_assessment_window() {
-        let mut obs = make_observer();
-        let position_thought = random_vector("position_thought");
-        let optimal = Distances::new(0.03, 0.06);
-
-        // Add some Grace outcomes
-        for _ in 0..3 {
-            obs.observe_distances(&position_thought, &optimal, 1.0, true, 0.01);
-        }
-        // Add a Violence outcome
-        obs.observe_distances(&position_thought, &optimal, 1.0, false, 0.005);
-
-        assert_eq!(obs.outcome_window.len(), 4);
-        assert!((obs.grace_rate - 0.75).abs() < 1e-10);
-        assert!(obs.avg_residue > 0.0);
     }
 
     #[test]
@@ -277,7 +221,7 @@ mod tests {
         for i in 0..10 {
             let position_thought = random_vector(&format!("training_{}", i));
             let optimal = Distances::new(0.03, 0.06);
-            obs.observe_distances(&position_thought, &optimal, 1.0, true, 0.01);
+            obs.observe_distances(&position_thought, &optimal, 1.0);
         }
 
         assert!(obs.experienced());

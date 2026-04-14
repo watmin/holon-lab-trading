@@ -17,7 +17,7 @@ use holon::kernel::vector_manager::VectorManager;
 use crate::types::distances::Distances;
 use crate::domain::position_observer::PositionObserver;
 use crate::types::log_entry::LogEntry;
-use crate::domain::lens::{position_lens_facts, position_self_assessment_facts};
+use crate::domain::lens::position_lens_facts;
 use crate::encoding::encode::encode;
 use crate::encoding::thought_encoder::{collect_facts, ThoughtAST};
 use crate::programs::chain::{MarketPositionChain, MarketChain};
@@ -37,12 +37,11 @@ pub struct TradeUpdate {
 }
 
 /// Learn signal for position observers: distance labels from broker propagation.
+/// Proposal 051: continuous reckoners only. No binary Grace/Violence label.
 pub struct PositionLearn {
     pub position_thought: Vector,
     pub optimal: Distances,
     pub weight: f64,
-    pub is_grace: bool,
-    pub residue: f64,
 }
 
 /// One slot: a (receiver, sender) pair connecting one market observer to one broker.
@@ -70,8 +69,6 @@ fn drain_position_learn(
             &signal.position_thought,
             &signal.optimal,
             signal.weight,
-            signal.is_grace,
-            signal.residue,
         );
         count += 1;
     }
@@ -154,12 +151,6 @@ pub fn position_observer_program(
             let t0 = std::time::Instant::now();
             if !base_facts_computed {
                 base_facts = position_lens_facts(&position_obs.lens, &chain.candle, &mut scales);
-                let self_facts = position_self_assessment_facts(
-                    position_obs.grace_rate,
-                    position_obs.avg_residue,
-                    &mut scales,
-                );
-                base_facts.extend(self_facts);
                 base_facts.extend(current_trade_atoms.clone());
                 base_facts_computed = true;
             }
@@ -281,8 +272,6 @@ pub fn position_observer_program(
                 lens: format!("{}", position_obs.lens),
                 trail_experience: position_obs.trail_reckoner.experience(),
                 stop_experience: position_obs.stop_reckoner.experience(),
-                grace_rate: position_obs.grace_rate,
-                avg_residue: position_obs.avg_residue,
                 us_elapsed,
                 thought_ast: snapshot_ast.clone(),
                 fact_count: snapshot_fact_count,
@@ -292,8 +281,8 @@ pub fn position_observer_program(
         // Diagnostic every 1000 candles.
         if candle_count % 1000 == 0 {
             console.out(format!(
-                "position-{}: grace_rate={:.3} avg_residue={:.4} candles={}",
-                lens, position_obs.grace_rate, position_obs.avg_residue, candle_count,
+                "position-{}: trail_exp={:.1} stop_exp={:.1} candles={}",
+                lens, position_obs.trail_reckoner.experience(), position_obs.stop_reckoner.experience(), candle_count,
             ));
         }
     }

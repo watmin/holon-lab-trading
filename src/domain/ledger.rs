@@ -30,8 +30,6 @@ pub fn ledger_setup(conn: &Connection) {
             lens TEXT,
             trail_experience REAL,
             stop_experience REAL,
-            grace_rate REAL,
-            avg_residue REAL,
             us_elapsed INTEGER,
             thought_ast TEXT,
             fact_count INTEGER
@@ -94,14 +92,14 @@ pub fn ledger_insert(conn: &Connection, entry: &LogEntry) {
         }
         LogEntry::PositionObserverSnapshot {
             candle, position_idx, lens, trail_experience,
-            stop_experience, grace_rate, avg_residue, us_elapsed,
+            stop_experience, us_elapsed,
             thought_ast, fact_count,
         } => {
             conn.execute(
-                "INSERT INTO position_observer_snapshots VALUES (?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO position_observer_snapshots VALUES (?,?,?,?,?,?,?,?)",
                 rusqlite::params![
                     candle, position_idx, lens, trail_experience,
-                    stop_experience, grace_rate, avg_residue, us_elapsed,
+                    stop_experience, us_elapsed,
                     thought_ast, fact_count
                 ],
             )

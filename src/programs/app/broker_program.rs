@@ -183,50 +183,12 @@ pub fn broker_program(
                 weight: phase_weight,
             });
 
-            // Teach position observer — immediate resolution signal
-            let is_grace = resolution.outcome == Outcome::Grace;
+            // Teach position observer — immediate resolution signal (Proposal 051: continuous only)
             let _ = position_learn_tx.send(PositionLearn {
                 position_thought: facts.position_thought,
                 optimal: facts.optimal,
                 weight: facts.weight,
-                is_grace,
-                residue: if is_grace { resolution.excursion } else { 0.0 },
             });
-
-            // Deferred batch training for position observer (runner histories)
-            // Proposal 043: per-broker rolling percentile replaces EMA.
-            for (thought, optimal, actual, excursion) in &resolution.position_batch {
-                // Error ratio: geometry, not consequence
-                let trail_err = (actual.trail - optimal.trail).abs()
-                    / optimal.trail.max(0.0001);
-                let stop_err = (actual.stop - optimal.stop).abs()
-                    / optimal.stop.max(0.0001);
-                let error = (trail_err + stop_err) / 2.0;
-
-                // Push into rolling window, pop front if at capacity.
-                if broker.journey_errors.len() >= crate::domain::broker::JOURNEY_WINDOW {
-                    broker.journey_errors.pop_front();
-                }
-                broker.journey_errors.push_back(error);
-
-                // Median of the window: copy, sort, take middle.
-                // Runs once per batch training observation — not hot path.
-                let median = {
-                    let mut sorted: Vec<f64> = broker.journey_errors.iter().copied().collect();
-                    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-                    sorted[sorted.len() / 2]
-                };
-
-                let is_grace = error < median;
-
-                let _ = position_learn_tx.send(PositionLearn {
-                    position_thought: thought.clone(),
-                    optimal: *optimal,
-                    weight: *excursion,
-                    is_grace,
-                    residue: *excursion,
-                });
-            }
         }
 
         // 6b. Send trade update for the LATEST active paper (Proposal 040).

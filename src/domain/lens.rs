@@ -29,7 +29,6 @@ use crate::vocab::market::timeframe::encode_timeframe_facts;
 // Vocab imports -- exit
 use crate::vocab::exit::regime::encode_exit_regime_facts;
 use crate::vocab::exit::time::encode_exit_time_facts;
-use crate::vocab::exit::self_assessment::encode_exit_self_assessment_facts;
 use crate::vocab::exit::phase::{encode_phase_current_facts, phase_series_thought, phase_scalar_facts};
 
 // Vocab imports -- shared
@@ -189,14 +188,6 @@ pub fn position_lens_facts(lens: &PositionLens, candle: &Candle, scales: &mut Ha
     }
 }
 
-/// Collect position self-assessment facts from the position observer's rolling window.
-/// Every position observer gets self-assessment — it's an internal property.
-pub fn position_self_assessment_facts(grace_rate: f64, avg_residue: f64, scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
-    // Self-assessment is on ALL lenses — it's an internal property
-    // every position observer has, not a generalist-only feature.
-    encode_exit_self_assessment_facts(grace_rate, avg_residue, scales)
-}
-
 
 #[cfg(test)]
 mod tests {
@@ -264,10 +255,4 @@ mod tests {
         assert_eq!(full_facts.len(), 13); // regime(8) + time(2) + phase(3)
     }
 
-    #[test]
-    fn test_exit_self_assessment_generalist_only() {
-        let mut scales = std::collections::HashMap::new();
-        let facts = position_self_assessment_facts(0.6, 0.005, &mut scales);
-        assert_eq!(facts.len(), 2);
-    }
 }

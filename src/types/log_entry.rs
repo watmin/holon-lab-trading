@@ -80,8 +80,6 @@ pub enum LogEntry {
         lens: String,
         trail_experience: f64,
         stop_experience: f64,
-        grace_rate: f64,
-        avg_residue: f64,
         us_elapsed: u64,
         thought_ast: String,
         fact_count: usize,
