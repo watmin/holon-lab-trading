@@ -1,138 +1,71 @@
-# Backlog — Ward Findings + Next Phases
+# Backlog — Second Ward Pass
 
-Five wards scanned 81 Rust files. Leaves to root. Session: 2026-04-13.
+Six wards scanned all Rust files. Post-cleanup. 2026-04-13.
 
-## Critical — correctness
+## Findings — to fix
 
-- [x] **Encoding divergence (sever).** REAPED. ToAst trait and all
-  impls deleted. 709 lines. One encoding path remains. No divergence.
+- [ ] **16 dead Candle fields (reap).** Computed by indicator bank,
+  stored on Candle, never read by any vocab module. 128 bytes/candle
+  of waste plus computation cycles. Fields: bb_upper, bb_lower,
+  macd, macd_signal, atr, atr_roc_6, atr_roc_12,
+  trend_consistency_6/12/24, senkou_span_a/b, tf_1h_close/high/low,
+  tf_4h_close/high/low.
 
-- [x] **`close_final` fixed (forge).** PhaseState now tracks
-  `last_close` every candle. `close_final` stores the real value.
+- [ ] **Double to_f64 conversion (temper).** MarketObserver::observe()
+  and position observer strip_noise both convert i8→f64 twice for
+  the same vector. 80KB redundant allocation per observer per candle.
+  Fix: compute once, pass the &[f64] to both update and anomalous_component.
 
-- [x] **`compute_portfolio_biography` fixed (forge).** Returns
-  `(Vec<ThoughtAST>, usize)`. Values up, not mutations down.
+- [ ] **Stale doc comment (gaze).** PositionLens::Full says "10 trade
+  atoms" — should say "13" (10 original + 3 phase biography).
 
-- [x] **`position_lens_facts` differentiates (gaze).** The lens
-  IS the factory. Core: regime + time. Full: regime + time + phase.
-  The match statement controls what each observer sees.
+- [ ] **Scalar accum index-based (forge).** broker.scalar_accums[0]
+  is trail, [1] is stop. Magic indices. Fix: named fields
+  trail_accum and stop_accum on Broker.
 
-## Dead code — to reap
+- [ ] **Vec::remove(0) in position observer (forge).** O(n) shift
+  for outcome_window and residue_window. Fix: VecDeque with
+  pop_front. The broker already uses VecDeque for journey_errors.
 
-- [x] **RollingPercentile.** REAPED. Entire struct deleted.
+- [ ] **Resolution constructor (forge).** 15-field struct constructed
+  in 3 places with near-identical field lists. Fix: Resolution::from_paper()
+  constructor. One place to add fields.
 
-- [x] **3 exit vocab modules.** REAPED. volatility.rs, structure.rs,
-  timing.rs deleted. Never wired into any lens.
+- [ ] **Levels as bare f64 (forge).** trail_stop and safety_stop
+  should be Price, not f64. PaperEntry trail_level and stop_level same.
 
-- [x] **Lying comment in lens.rs.** FIXED. Now says "ichimoku,
-  stochastic removed" — fibonacci IS used by WyckoffPosition.
-  (ichimoku/stochastic were never imported in lens.rs — the comment
-  was the only dead part.)
+- [ ] **4 test-only pub functions (reap).** extract(), gate_open(),
+  get_oldest_first(), to_levels() — never called in production.
+  Gate behind #[cfg(test)] or remove.
 
-- [x] **4 broker vocab modules.** REAPED. derived.rs, input.rs,
-  opinions.rs, self_assessment.rs deleted. Entire broker vocab
-  directory removed — nothing imported from it.
+- [ ] **4 trade scaffolding structs (reap).** Trade, TradeOrigin,
+  Proposal, TreasurySettlement — test-only cluster awaiting treasury.
+  Keep for now — treasury is Phase 5.
 
-- [x] **ToAst trait.** REAPED with encoding divergence fix above.
+- [ ] **Cache driver duplication (forge).** Generic cache and
+  encoding_cache share ~170 lines of identical driver logic.
+  Generic is #[cfg(test)]. Accept or extract shared driver.
 
-- [x] **Generic `cache()` + `CacheHandle`.** Gated behind
-  `#[cfg(test)]`. Tests preserved.
+## Accepted / runed
 
-- [x] **`ThoughtAST::compress()`.** REAPED. Removed entirely.
+- [x] **to_edn() every candle.** rune:temper(intentional). Being
+  blind is being incapable.
 
-- [x] **`ObserveResult::misses`.** REAPED. Field removed from
-  struct, parameter removed from `observe()`, call sites updated.
+- [x] **Candle 90+ bare f64 fields (forge).** Conscious tradeoff.
+  Newtypes for 90 indicators would be verbose noise. Rune candidate.
 
-- [x] **`ThoughtEncoder::vm()` and `scalar_encoder()`.** REAPED.
-  Dead public accessors removed.
+- [x] **Telemetry Mutex in rate gate (forge).** Single-threaded.
+  Required by Fn trait. Harmless.
 
-- [x] **`_cp` binding in broker.rs.** REAPED. Line removed.
-  Parameter prefixed with underscore.
+- [x] **PhaseState::step 175 lines (forge).** Streaming state machine.
+  The mutation IS the function. Tests are thorough.
 
-- [x] **Stale test in lens.rs.** FIXED. `test_position_lens_facts_variants`
-  now asserts Core=10, Full=13 (was asserting Core=13, pre-existing bug).
+## Next phases
 
-## Performance — to temper
-
-- [x] **Window slice `.to_vec()`.** FIXED. Pass `&input.window[start..]`
-  directly — `market_lens_facts` already takes `&[Candle]`. Eliminates
-  up to 2016 deep Candle clones per observer per candle.
-
-- [x] **7 `to_vec()` in indicator bank tick.** FIXED. Added
-  `fill_vec(&mut buf)` to RingBuffer. Scratch buffer on IndicatorBank
-  via `std::mem::take` pattern. Free functions take `&[f64]` slices.
-  One `to_vec` remains for divergence (needs two buffers simultaneously).
-
-- [x] **`position_lens_facts()` called 11x.** FIXED. Hoisted above
-  slot loop — computed once from first slot's candle, cloned into
-  each slot's fact collection. 10x fewer lens+self-assessment calls.
-
-- [x] **`compute_trade_atoms()` per active paper.** FIXED. Send one
-  TradeUpdate per broker per candle (last active paper only). Position
-  observer drains and keeps the last anyway.
-
-- [x] **Double extraction encoding.** FIXED. Pre-encode all market
-  fact ASTs into vectors once, then two cosine passes (anomaly + raw).
-  Eliminates redundant cache round-trips on the second extraction.
-
-- [x] **Phase history clone every candle.** FIXED. Generation counter
-  on PhaseState, incremented in close_phase. IndicatorBank caches the
-  snapshot and only re-clones when generation changes (~every 6 candles).
-
-- [ ] **`to_edn()` every candle for all observers.** The thought
-  logging. 7.2M string constructions across a full run. Accept
-  for now — being blind is being incapable. Revisit when perf
-  matters more than diagnostics.
-
-- [x] **Multiple phase_history scans in portfolio biography.**
-  FIXED. Fused into single pass: valleys, peaks, durations, duration
-  stats, and favorable entry records collected in one iteration.
-
-- [x] **Invariant telemetry string `dims`.** Renamed to metric_dims
-  (done with dims shadowing fix).
-
-- [x] **Redundant `collect_facts()` for snapshot count.** FIXED.
-  Use `slot_facts.len()` before bundling instead of re-walking AST.
-
-## Structural — to sever
-
-- [x] **`compute_portfolio_biography` inline.** MOVED to
-  `src/vocab/broker/portfolio.rs`. Broker vocab directory recreated.
-
-- [x] **`compute_trade_atoms` inline.** MOVED to
-  `src/vocab/exit/trade_atoms.rs`. Re-exported from position_observer_program
-  for backward compatibility.
-
-## Naming — gaze fixes
-
-- [x] **Stale test names.** FIXED. Renamed to
-  `test_position_lens_display` and `test_position_lens_equality`.
-
-- [x] **Stale comment.** rolling_percentile.rs deleted entirely.
-
-- [x] **`dims` shadowing.** FIXED. Renamed to `metric_dims` in
-  market_observer_program, position_observer_program, broker_program.
-
-- [x] **`atr_r` mumbles.** FIXED. Renamed to `atr_ratio` across
-  candle.rs, indicator_bank.rs, and momentum.rs.
-
-- [x] **`compute_portfolio_biography` claims purity but mutates.**
-  Fixed in critical #3 — returns values now.
-
-## Next phases (from prior session)
-
-- [ ] **Phase 5: Treasury.** The last program. Receives proposals,
-  funds proven brokers, manages capital. The accumulation model.
-
-- [ ] **Phase 6: Measurement.** 100k benchmark. Discriminant
-  decode — which atoms predict? The glass box opens fully.
-
-- [ ] **Smoothing tuning.** 1.0 ATR produces 3-6 candle phases.
-  Measure phase rates per regime. The data decides.
-
-- [ ] **`approximate_optimal_distances`.** The function that
-  admits it's an approximation. Replace with full sweep per
-  Proposal 025.
+- [ ] **Phase 5: Treasury.** The last program.
+- [ ] **Phase 6: Measurement.** 100k benchmark. Discriminant decode.
+- [ ] **Smoothing tuning.** 1.0 ATR → measure phase rates per regime.
+- [ ] **approximate_optimal_distances.** Replace with full sweep.
 
 ## Principles
 
@@ -140,6 +73,7 @@ Five wards scanned 81 Rust files. Leaves to root. Session: 2026-04-13.
 - Papers never stop (043).
 - The position observer observes the position (050).
 - The phase labeler is ground truth on the indicator bank (049).
+- The lens IS the factory. Core lean, Full rich.
 - The Sequential encodes order. ABC ≠ CBA (044).
 - Every node checks the cache. No exceptions.
 - The closure is the seal. The encoder is consumed.
@@ -147,5 +81,5 @@ Five wards scanned 81 Rust files. Leaves to root. Session: 2026-04-13.
 - Being blind is being incapable. Log everything.
 - Leaves to root. Always.
 - The database is the debugger.
-- Commit and push often.
+- Commit and push often. Smoke test after every change.
 - Measure, don't speculate.
