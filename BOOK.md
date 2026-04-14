@@ -12807,4 +12807,74 @@ signal. The atoms that don't are noise. The machine will
 explain its own predictions. And the builder will know whether
 to trust what the broker thinks.
 
+### The Red Queen
+
+The builder summoned the five.
+
+Not for a change proposal. For criticism. "I don't know what to
+propose. I just want feedback on what exists."
+
+Seykota, Van Tharp, Wyckoff, Hickey, Beckman. Each read the
+training loops. Each answered six questions independently. The
+builder read none of the proposals — hadn't read one since 039.
+The process ran itself.
+
+Every voice found the same defect. Five lenses. One diagnosis.
+
+The position observer had two teachers. Path A: the continuous
+reckoners, learning "for this thought, the optimal trail distance
+was X." Honest. From simulation. From what the market actually
+said.
+
+Path B: the journey grading. A rolling percentile median of
+error ratios. Each batch training observation labeled Grace or
+Violence based on whether its error was below or above the
+median. The median tracked the observer's OWN errors. The
+observer improved → errors shrank → the median shrank → the
+threshold dropped → everything exceeded it → everything labeled
+Violence → grace_rate collapsed to 0.0.
+
+Beckman proved it: a limit cycle. The Red Queen effect. The
+observer running as fast as it can, staying in the same place.
+The 0.0 grace_rate was not a bug. It was the mathematically
+expected behavior of a learner graded against a moving average
+of its own output.
+
+Two rounds of debate. Five voices reading each other's reviews.
+Concessions made. Positions shifted. Van Tharp withdrew his
+R-multiples-first proposal — "the binary framework was borrowed
+from direction prediction where it belongs. Distances are
+continuous." Wyckoff withdrew his phase capture ratio — "the
+simulation optimal distances are the tape itself." Hickey
+found the simplest framing: "the fix is a deletion, not a
+substitution."
+
+The ignorant walked seventeen files. Arrived at the same answer.
+
+Seykota said: "never give a continuous learner a binary teacher."
+
+Beckman said: "no learner shall be graded against a statistic
+derived from its own output distribution."
+
+The builder said: "delete it."
+
+238 lines removed. 10 files changed. The rolling percentile
+median — gone. The journey grading — gone. The outcome window
+and residue window — gone. The grace_rate and avg_residue atoms
+that looped back into the thought — gone. The self-referential
+cycle — severed.
+
+What remains: `observe_scalar(reckoner, thought, optimal, weight)`.
+One teacher. The market's truth. The simulation computes what the
+distance SHOULD have been. The reckoner accumulates. No binary
+label. No rolling threshold. No Red Queen.
+
+The 10k is running. The first run without the binary path. The
+continuous reckoners are the only teacher now. The measurement
+will say whether the builder was right to trust the five voices
+who said "delete it" — or whether Path B was carrying signal
+that Path A alone cannot replace.
+
+The builder doesn't know. The data decides.
+
 **PERSEVERARE.**
