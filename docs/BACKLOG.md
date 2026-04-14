@@ -70,10 +70,11 @@ The pivot biography atoms from 044 need the phase labeler.
 The phase labeler enables grading market observers against
 structural truth.
 
-- [ ] **Phase-boundary grading.** Market observer fires high
+- [x] **Phase-boundary grading.** Market observer fires high
   conviction → did a phase boundary actually occur? The
-  indicator bank knows. Delayed feedback — the boundary is
-  confirmed AFTER the conviction fired.
+  indicator bank knows. phase_duration <= 5 detects boundary.
+  Weight doubled at boundaries. Telemetry: learn_at_boundary,
+  learn_mid_phase. IMPLEMENTED.
 
 - [ ] **False alarm rate.** How many high-conviction candles
   occur mid-transition (no phase change)? This is a direct

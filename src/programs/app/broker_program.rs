@@ -247,6 +247,11 @@ pub fn broker_program(
         let mut learn_down: f64 = 0.0;
         let mut learn_grace: f64 = 0.0;
         let mut learn_violence: f64 = 0.0;
+        let mut learn_at_boundary: f64 = 0.0;
+        let mut learn_mid_phase: f64 = 0.0;
+
+        // Phase 4: detect phase boundary — small phase_duration means we just entered a new phase.
+        let near_phase_boundary = chain.candle.phase_duration <= 5;
 
         // 1. Compose: market anomaly + position anomaly + portfolio biography
         //    Portfolio biography atoms (Phase 3, Proposal 044) describe the broker's
@@ -327,10 +332,20 @@ pub fn broker_program(
                 Outcome::Grace => learn_grace += 1.0,
                 Outcome::Violence => learn_violence += 1.0,
             }
+
+            // Phase 4: modulate learn weight — phase boundary predictions are more valuable.
+            let phase_weight = if near_phase_boundary {
+                learn_at_boundary += 1.0;
+                facts.weight * 2.0
+            } else {
+                learn_mid_phase += 1.0;
+                facts.weight
+            };
+
             let _ = market_learn_tx.send(ObsLearn {
                 thought: facts.market_thought,
                 direction: learn_direction,
-                weight: facts.weight,
+                weight: phase_weight,
             });
 
             // Teach position observer — immediate resolution signal
@@ -420,6 +435,8 @@ pub fn broker_program(
         emit_metric(&db_tx, ns, &id, &dims, batch_ts, "learn_down_count", learn_down, "Count");
         emit_metric(&db_tx, ns, &id, &dims, batch_ts, "learn_grace_count", learn_grace, "Count");
         emit_metric(&db_tx, ns, &id, &dims, batch_ts, "learn_violence_count", learn_violence, "Count");
+        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "learn_at_boundary", learn_at_boundary, "Count");
+        emit_metric(&db_tx, ns, &id, &dims, batch_ts, "learn_mid_phase", learn_mid_phase, "Count");
 
         // 8. Console diagnostic every 1000 candles
         if candle_count % 1000 == 0 {
