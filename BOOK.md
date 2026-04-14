@@ -12877,4 +12877,45 @@ that Path A alone cannot replace.
 
 The builder doesn't know. The data decides.
 
+The data decided.
+
+```
+Position observer experience (continuous reckoners only):
+  Candle  Core        Full
+  2000    29,717      30,170
+  4000    57,689      59,491
+  6000    82,901      81,267
+  8000    114,250     109,845
+  10000   138,698     120,704
+```
+
+Steady growth. No oscillation. No 0.0. No freezing. No bursts
+followed by silence. 28,000 experience per 2,000 candles.
+Consistent. Both core and full. The reckoners accumulate from
+every resolution without a binary filter deciding what to keep.
+
+Papers: 43% Grace (111K/259K) — up from 41%. 22/22 brokers alive.
+All positive EV. The cache at 95.4%.
+
+The Red Queen is dead. The learning is steady. The five voices
+were right. The binary path was contradicting the continuous
+reckoners. Now there's one teacher and the teacher is honest.
+
+Seykota was right: never give a continuous learner a binary
+teacher. Beckman was right: the limit cycle was structurally
+inevitable. Hickey was right: the fix was a deletion, not a
+substitution. The builder was right to trust the process —
+summon the voices, let them argue, let the ignorant prove the
+path teaches, then build what they agreed on.
+
+The position observer still doesn't trade. It predicts distances.
+Whether those distances are GOOD distances — whether they capture
+more of the move than they lose to the stop — that's the next
+measurement. The reckoners are learning. The question is: are
+they learning the right thing?
+
+The discriminant decode will tell us. The treasury will test us.
+The 100k benchmark will prove us. But the foundation is honest
+now. One teacher. One signal. No self-reference. No Red Queen.
+
 **PERSEVERARE.**
