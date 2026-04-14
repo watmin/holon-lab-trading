@@ -4,7 +4,9 @@
 //! Gets are request-response pairs. Sets are fire-and-forget
 //! into a shared mailbox.
 //!
-//! The encoding cache is a specialization: it owns the ThoughtEncoder.
+//! The encoding cache is a specialization: each handle owns a CLONE of the
+//! ThoughtEncoder. On miss, encoding happens LOCALLY on the caller's thread.
+//! The cache thread only manages the LRU — gets and sets, no computation.
 //! Programs encode through `EncodingCacheHandle::encode()` — opaque,
 //! hit or miss invisible. The ThoughtEncoder is never accessible to programs.
 
@@ -263,38 +265,54 @@ where
 }
 
 // ─── Encoding cache ─────────────────────────────────────────────────────────
-// Specialization: owns the ThoughtEncoder. Programs see only `encode(&ast)`.
-// Hit or miss is invisible. The encoder lives on the driver thread.
+// Specialization: each handle owns a CLONE of the ThoughtEncoder.
+// On cache miss, encoding happens LOCALLY on the caller's thread (parallel).
+// The cache thread only manages the LRU — gets and sets, no computation.
 
 /// A program's handle to the encoding cache. Each program gets its own.
 /// Not cloneable — one per program.
 /// The ONLY way to encode a ThoughtAST into a Vector.
 pub struct EncodingCacheHandle {
-    request_tx: QueueSender<ThoughtAST>,
-    reply_rx: QueueReceiver<Vector>,
+    get_tx: QueueSender<ThoughtAST>,
+    get_rx: QueueReceiver<Option<Vector>>,
+    set_tx: QueueSender<(ThoughtAST, Vector)>,
+    encoder: ThoughtEncoder, // LOCAL clone — computation happens here
 }
 
 impl EncodingCacheHandle {
     /// Encode an AST. Hit or miss is invisible to the caller.
-    /// The cache driver checks the LRU. On miss, it encodes using the
-    /// ThoughtEncoder it owns, installs the result (and sub-tree misses),
-    /// and returns the vector.
+    /// On hit: returns cached vector from the LRU (via the cache thread).
+    /// On miss: encodes LOCALLY on the caller's thread, then notifies
+    /// the cache thread to install the result (fire-and-forget).
     pub fn encode(&self, ast: &ThoughtAST) -> Option<Vector> {
-        self.request_tx.send(ast.clone()).ok()?;
-        self.reply_rx.recv().ok()
+        // 1. Check cache
+        self.get_tx.send(ast.clone()).ok()?;
+        if let Some(cached) = self.get_rx.recv().ok()? {
+            return Some(cached); // hit
+        }
+        // 2. Miss — encode locally (on caller's thread)
+        let (vec, misses) = self.encoder.encode(ast);
+        // 3. Notify cache — fire and forget
+        let _ = self.set_tx.send((ast.clone(), vec.clone()));
+        for (sub_ast, sub_vec) in misses {
+            let _ = self.set_tx.send((sub_ast, sub_vec));
+        }
+        Some(vec)
     }
 }
 
-/// Create an encoding cache that owns the ThoughtEncoder.
+/// Create an encoding cache. The ThoughtEncoder is CONSUMED — cloned into
+/// each handle. No program can reference it directly. Programs encode
+/// through `EncodingCacheHandle::encode()`.
 ///
-/// The ThoughtEncoder is CONSUMED — moved into the cache driver thread.
-/// No program can reference it. Programs encode through `EncodingCacheHandle::encode()`.
+/// The cache thread owns ONLY the LRU. It services gets (check LRU, respond
+/// Some or None) and sets (install into LRU). It does NOT encode.
 ///
 /// Returns N EncodingCacheHandles (one per program) and a CacheDriverHandle.
 /// The driver thread exits when all client handles are dropped.
 pub fn encoding_cache(
     name: &str,
-    encoder: ThoughtEncoder, // CONSUMED — moved into the cache thread
+    encoder: ThoughtEncoder, // CONSUMED — cloned into handles
     capacity: usize,
     num_clients: usize,
     can_emit: Box<dyn Fn() -> bool + Send>,
@@ -304,17 +322,34 @@ pub fn encoding_cache(
     assert!(capacity > 0, "cache requires non-zero capacity");
 
     let mut handles = Vec::with_capacity(num_clients);
-    let mut req_rxs = Vec::with_capacity(num_clients);
-    let mut resp_txs = Vec::with_capacity(num_clients);
+    let mut get_rxs = Vec::with_capacity(num_clients);
+    let mut get_resp_txs = Vec::with_capacity(num_clients);
+
+    // Create set queues: one per client. Mailbox gets the receivers.
+    let mut set_senders = Vec::with_capacity(num_clients);
+    let mut set_rxs = Vec::with_capacity(num_clients);
+    for _ in 0..num_clients {
+        let (tx, rx) = queue::queue_unbounded::<(ThoughtAST, Vector)>();
+        set_senders.push(tx);
+        set_rxs.push(rx);
+    }
+    let set_rx = mailbox::mailbox(set_rxs);
+    let mut set_senders = set_senders.into_iter();
 
     for _ in 0..num_clients {
+        // Get request queue: client sends key.
         let (req_tx, req_rx) = queue::queue_unbounded::<ThoughtAST>();
-        let (resp_tx, resp_rx) = queue::queue_unbounded::<Vector>();
-        req_rxs.push(req_rx);
-        resp_txs.push(resp_tx);
+        // Get response queue: driver sends Option<Vector>.
+        let (resp_tx, resp_rx) = queue::queue_unbounded::<Option<Vector>>();
+
+        get_rxs.push(req_rx);
+        get_resp_txs.push(resp_tx);
+
         handles.push(EncodingCacheHandle {
-            request_tx: req_tx,
-            reply_rx: resp_rx,
+            get_tx: req_tx,
+            get_rx: resp_rx,
+            set_tx: set_senders.next().unwrap(),
+            encoder: encoder.clone(), // each handle gets a clone
         });
     }
 
@@ -323,40 +358,49 @@ pub fn encoding_cache(
     let hits_inner = Arc::clone(&hits);
     let misses_inner = Arc::clone(&misses);
 
+    // The driver thread: owns the LRU. Drain sets FIRST, then service gets.
+    // This ordering is critical: callers install via set (async after local encode),
+    // then query via get (sync). If gets are serviced before sets are drained,
+    // we miss what was just installed. 0% hit rate.
     let thread = thread::spawn(move || {
         let mut cache = LruCache::new(NonZeroUsize::new(capacity).unwrap());
-        let encoder = encoder; // moved in — lives here and nowhere else
-        let mut closed = vec![false; req_rxs.len()];
+        let mut closed = vec![false; get_rxs.len()];
+        let mut set_alive = true;
 
         let mut period_hits: usize = 0;
         let mut period_misses: usize = 0;
 
         loop {
-            // Service ALL pending requests.
+            // Phase 1: drain ALL pending sets.
+            if set_alive {
+                loop {
+                    match set_rx.try_recv() {
+                        Ok((key, value)) => { cache.put(key, value); }
+                        Err(crossbeam::channel::TryRecvError::Empty) => break,
+                        Err(crossbeam::channel::TryRecvError::Disconnected) => {
+                            set_alive = false;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Phase 2: service ALL pending gets.
             let mut all_closed = true;
-            for i in 0..req_rxs.len() {
+            for i in 0..get_rxs.len() {
                 if closed[i] { continue; }
                 all_closed = false;
-                match req_rxs[i].try_recv() {
-                    Ok(ast) => {
-                        // Check LRU first
-                        if let Some(cached) = cache.get(&ast).cloned() {
+                match get_rxs[i].try_recv() {
+                    Ok(key) => {
+                        let result = cache.get(&key).cloned();
+                        if result.is_some() {
                             hits_inner.fetch_add(1, Ordering::Relaxed);
                             period_hits += 1;
-                            let _ = resp_txs[i].send(cached);
                         } else {
-                            // Miss: encode, install result + sub-tree misses
                             misses_inner.fetch_add(1, Ordering::Relaxed);
                             period_misses += 1;
-                            let (vec, sub_misses) = encoder.encode(&ast);
-                            // Install the main AST
-                            cache.put(ast, vec.clone());
-                            // Install sub-tree misses
-                            for (sub_ast, sub_vec) in sub_misses {
-                                cache.put(sub_ast, sub_vec);
-                            }
-                            let _ = resp_txs[i].send(vec);
                         }
+                        let _ = get_resp_txs[i].send(result);
                     }
                     Err(crossbeam::channel::TryRecvError::Empty) => {}
                     Err(crossbeam::channel::TryRecvError::Disconnected) => {
@@ -365,7 +409,7 @@ pub fn encoding_cache(
                 }
             }
 
-            // Gate check after servicing requests.
+            // Gate check after servicing gets.
             if can_emit() {
                 let cache_size = cache.len();
                 emit(period_hits, period_misses, cache_size);
@@ -373,30 +417,49 @@ pub fn encoding_cache(
                 period_misses = 0;
             }
 
-            // Exit when all clients disconnected.
-            if all_closed {
+            // Exit when all get clients disconnected AND sets are done.
+            if all_closed && !set_alive {
                 if period_hits > 0 || period_misses > 0 {
                     let cache_size = cache.len();
                     emit(period_hits, period_misses, cache_size);
                 }
                 break;
             }
+            if all_closed {
+                // No get clients left but sets still alive — just drain sets.
+                match set_rx.recv() {
+                    Ok((key, value)) => { cache.put(key, value); }
+                    Err(_) => {
+                        if period_hits > 0 || period_misses > 0 {
+                            let cache_size = cache.len();
+                            emit(period_hits, period_misses, cache_size);
+                        }
+                        break;
+                    }
+                }
+                continue;
+            }
 
-            // Block until ANY channel has data.
+            // Phase 3: block until ANY channel has data.
+            // ready() wakes without consuming — next iteration picks up.
             let mut sel = crossbeam::channel::Select::new();
             let mut has_ops = false;
-            for i in 0..req_rxs.len() {
+            for i in 0..get_rxs.len() {
                 if !closed[i] {
-                    sel.recv(req_rxs[i].inner());
+                    sel.recv(get_rxs[i].inner());
                     has_ops = true;
                 }
+            }
+            if set_alive {
+                sel.recv(set_rx.inner());
+                has_ops = true;
             }
             if !has_ops {
                 if period_hits > 0 || period_misses > 0 {
                     let cache_size = cache.len();
                     emit(period_hits, period_misses, cache_size);
                 }
-                break;
+                break; // all channels gone between phases
             }
             let _ = sel.ready();
         }

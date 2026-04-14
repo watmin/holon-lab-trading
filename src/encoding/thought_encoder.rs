@@ -188,6 +188,7 @@ pub fn round_to(v: f64, digits: u32) -> f64 {
 }
 
 /// The evaluator. Walks ThoughtAST bottom-up, checking cache at every node.
+#[derive(Clone)]
 pub struct ThoughtEncoder {
     /// Finite, pre-computed atom vectors. Never evicted.
     atoms: HashMap<String, Vector>,

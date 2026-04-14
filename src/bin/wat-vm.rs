@@ -508,7 +508,7 @@ fn main() {
     };
     let (cache_handles, cache_driver) = encoding_cache(
         "encoder",
-        encoder, // CONSUMED — moved into the cache thread
+        encoder, // CONSUMED — cloned into handles, computation on caller threads
         65536,
         num_market + num_position + num_brokers,
         Box::new(cache_gate),
