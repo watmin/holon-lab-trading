@@ -6,7 +6,7 @@
 
 use crate::types::candle::Candle;
 use crate::types::ohlcv::Ohlcv;
-use crate::types::pivot::PhaseState;
+use crate::types::pivot::{PhaseRecord, PhaseState};
 
 // ════════════════════════════════════════════════════════════════════
 // STREAMING PRIMITIVES — the building blocks of indicator state
@@ -96,6 +96,14 @@ impl RingBuffer {
             v.push(self.get(i));
         }
         v
+    }
+
+    /// Fill an existing Vec with values oldest to newest. Reuses allocation.
+    pub fn fill_vec(&self, buf: &mut Vec<f64>) {
+        buf.clear();
+        for i in (0..self.len).rev() {
+            buf.push(self.get(i));
+        }
     }
 }
 
@@ -772,12 +780,11 @@ pub fn linreg_slope(ys: &[f64]) -> f64 {
 }
 
 /// OBV slope over its history buffer.
-fn obv_slope_12(st: &ObvState) -> f64 {
-    if st.history.len < 3 {
+fn obv_slope_12(vals: &[f64]) -> f64 {
+    if vals.len() < 3 {
         return 0.0;
     }
-    let vals = st.history.to_vec();
-    linreg_slope(&vals)
+    linreg_slope(vals)
 }
 
 /// Hurst exponent via R/S analysis.
@@ -1016,11 +1023,10 @@ fn choppiness_index(atr_sum: f64, high_buf: &RingBuffer, low_buf: &RingBuffer) -
 }
 
 /// Aroon up — how recently was the highest high.
-fn aroon_up(buf: &RingBuffer) -> f64 {
-    if !buf.is_full() {
+fn aroon_up(vals: &[f64]) -> f64 {
+    if vals.is_empty() {
         return 50.0;
     }
-    let vals = buf.to_vec();
     let n = vals.len();
     let max_val = vals.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
     // Find most recent index of max (oldest first)
@@ -1034,11 +1040,10 @@ fn aroon_up(buf: &RingBuffer) -> f64 {
 }
 
 /// Aroon down — how recently was the lowest low.
-fn aroon_down(buf: &RingBuffer) -> f64 {
-    if !buf.is_full() {
+fn aroon_down(vals: &[f64]) -> f64 {
+    if vals.is_empty() {
         return 50.0;
     }
-    let vals = buf.to_vec();
     let n = vals.len();
     let min_val = vals.iter().cloned().fold(f64::INFINITY, f64::min);
     let mut idx = 0;
@@ -1092,14 +1097,12 @@ fn higuchi_length(prices: &[f64], k: usize) -> f64 {
     }
 }
 
-/// Divergence detection between price and RSI buffers.
-fn detect_divergence(price_buf: &RingBuffer, rsi_buf: &RingBuffer) -> (f64, f64) {
-    let n = price_buf.len.min(rsi_buf.len);
+/// Divergence detection between price and RSI slices.
+fn detect_divergence(prices: &[f64], rsis: &[f64]) -> (f64, f64) {
+    let n = prices.len().min(rsis.len());
     if n < 5 {
         return (0.0, 0.0);
     }
-    let prices = price_buf.to_vec();
-    let rsis = rsi_buf.to_vec();
     let half = n / 2;
     let first_prices = &prices[..half];
     let second_prices = &prices[half..n];
@@ -1390,6 +1393,11 @@ pub struct IndicatorBank {
     pub prev_close: f64,
     // Phase labeler
     pub phase_state: PhaseState,
+    // Phase history cache — only re-clone when generation changes
+    pub last_phase_generation: u64,
+    pub cached_phase_history: Vec<PhaseRecord>,
+    // Scratch buffer — reused across indicator computations to avoid allocation
+    scratch: Vec<f64>,
     // Counter
     pub count: usize,
 }
@@ -1468,6 +1476,11 @@ impl IndicatorBank {
             prev_close: 0.0,
             // Phase labeler
             phase_state: PhaseState::new(),
+            // Phase history cache
+            last_phase_generation: 0,
+            cached_phase_history: Vec::new(),
+            // Scratch buffer — capacity = largest ring buffer (48)
+            scratch: Vec::with_capacity(48),
             // Counter
             count: 0,
         }
@@ -1732,7 +1745,12 @@ impl IndicatorBank {
         let mfi_val = self.mfi.value();
 
         // OBV slope
-        let obv_slope_val = obv_slope_12(&self.obv);
+        // Take scratch buffer out to avoid split-borrow issues.
+        // Capacity persists across the lifetime of IndicatorBank.
+        let mut scratch = std::mem::take(&mut self.scratch);
+
+        self.obv.history.fill_vec(&mut scratch);
+        let obv_slope_val = obv_slope_12(&scratch);
 
         // Volume accel
         let vol_sma_val = self.volume_sma20.value();
@@ -1813,16 +1831,16 @@ impl IndicatorBank {
         let stoch_kd = stoch_k_val - stoch_d_val;
         let stoch_delta = stoch_kd - self.prev_stoch_kd;
 
-        // Persistence
-        let close_vals = self.close_buf_48.to_vec();
-        let hurst_val = hurst_exponent(&close_vals);
-        let autocorr_val = autocorrelation_lag1(&close_vals);
+        // Persistence — reuse scratch buffer for all ring buffer extractions
+        self.close_buf_48.fill_vec(&mut scratch);
+        let hurst_val = hurst_exponent(&scratch);
+        let autocorr_val = autocorrelation_lag1(&scratch);
         let vwap_val = compute_vwap_distance(self.vwap_cum_vol, self.vwap_cum_pv, c);
 
         // Regime
-        let kama_vals = self.kama_er_buf.to_vec();
+        self.kama_er_buf.fill_vec(&mut scratch);
         let kama_er_val = if self.kama_er_buf.is_full() {
-            kama_efficiency_ratio(&kama_vals)
+            kama_efficiency_ratio(&scratch)
         } else {
             0.5
         };
@@ -1831,19 +1849,23 @@ impl IndicatorBank {
         } else {
             50.0
         };
-        let dfa_vals = self.dfa_buf.to_vec();
-        let dfa_val = dfa_alpha(&dfa_vals);
-        let vr_vals = self.var_ratio_buf.to_vec();
-        let var_ratio_val = variance_ratio(&vr_vals);
-        let ent_vals = self.entropy_buf.to_vec();
-        let entropy_val = entropy_rate(&ent_vals);
-        let aroon_up_val = aroon_up(&self.aroon_high_buf);
-        let aroon_down_val = aroon_down(&self.aroon_low_buf);
-        let frac_vals = self.fractal_buf.to_vec();
-        let fractal_val = fractal_dimension(&frac_vals);
+        self.dfa_buf.fill_vec(&mut scratch);
+        let dfa_val = dfa_alpha(&scratch);
+        self.var_ratio_buf.fill_vec(&mut scratch);
+        let var_ratio_val = variance_ratio(&scratch);
+        self.entropy_buf.fill_vec(&mut scratch);
+        let entropy_val = entropy_rate(&scratch);
+        self.aroon_high_buf.fill_vec(&mut scratch);
+        let aroon_up_val = if self.aroon_high_buf.is_full() { aroon_up(&scratch) } else { 50.0 };
+        self.aroon_low_buf.fill_vec(&mut scratch);
+        let aroon_down_val = if self.aroon_low_buf.is_full() { aroon_down(&scratch) } else { 50.0 };
+        self.fractal_buf.fill_vec(&mut scratch);
+        let fractal_val = fractal_dimension(&scratch);
 
-        // Divergence
-        let (div_bull, div_bear) = detect_divergence(&self.price_peak_buf, &self.rsi_peak_buf);
+        // Divergence — needs two buffers simultaneously, use a second local vec
+        let price_vals = self.price_peak_buf.to_vec();
+        self.rsi_peak_buf.fill_vec(&mut scratch);
+        let (div_bull, div_bear) = detect_divergence(&price_vals, &scratch);
 
         // Keltner, squeeze already computed above
 
@@ -1871,13 +1893,21 @@ impl IndicatorBank {
         let dom_val = parse_day_of_month(ts);
         let moy_val = parse_month_of_year(ts);
 
+        // Return scratch buffer to struct for reuse next candle.
+        self.scratch = scratch;
+
         // ── 2b. Phase labeler (after ATR) ────────────────────────
         let smoothing = atr_val * 1.0; // 1.0 ATR, Seykota's recommendation
         self.phase_state.step(c, v, self.count + 1, smoothing);
         let phase_label = self.phase_state.current_label;
         let phase_direction = self.phase_state.current_direction;
         let phase_duration = self.phase_state.current_duration();
-        let phase_history = self.phase_state.history_snapshot();
+        // Only clone phase history when generation changes (every ~6 candles)
+        if self.phase_state.generation != self.last_phase_generation {
+            self.cached_phase_history = self.phase_state.history_snapshot();
+            self.last_phase_generation = self.phase_state.generation;
+        }
+        let phase_history = self.cached_phase_history.clone();
 
         // ── 3. Update prev-state for next candle ─────────────────
         self.prev_tk_spread = tk_spread;
@@ -1908,7 +1938,7 @@ impl IndicatorBank {
             minus_di: minus_di_val,
             adx: adx_val,
             atr: atr_val,
-            atr_r: atr_r_val,
+            atr_ratio: atr_r_val,
             stoch_k: stoch_k_val,
             stoch_d: stoch_d_val,
             williams_r: williams_val,
@@ -2273,7 +2303,7 @@ mod tests {
         assert!(candle.macd_signal.is_finite());
         assert!(candle.macd_hist.is_finite());
         assert!(candle.atr.is_finite());
-        assert!(candle.atr_r.is_finite());
+        assert!(candle.atr_ratio.is_finite());
         assert!(candle.adx.is_finite());
         assert!(candle.plus_di.is_finite());
         assert!(candle.minus_di.is_finite());

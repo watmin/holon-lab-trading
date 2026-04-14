@@ -25,7 +25,7 @@ impl MomentumThought {
             close_sma200: round_to((c.close - c.sma200) / c.close, 4),
             macd_hist: round_to(c.macd_hist / c.close, 4),
             di_spread: round_to((c.plus_di - c.minus_di) / 100.0, 2),
-            atr_ratio: round_to(c.atr_r.max(0.001), 2),
+            atr_ratio: round_to(c.atr_ratio.max(0.001), 2),
         }
     }
 }

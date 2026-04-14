@@ -12,7 +12,6 @@ use std::collections::HashMap;
 use holon::kernel::vector::Vector;
 
 use crate::types::distances::Distances;
-use crate::types::enums::PositionLens;
 use crate::domain::position_observer::PositionObserver;
 use crate::types::log_entry::LogEntry;
 use crate::domain::lens::{position_lens_facts, position_self_assessment_facts};
@@ -22,11 +21,9 @@ use crate::programs::stdlib::console::ConsoleHandle;
 use crate::encoding::scale_tracker::ScaleTracker;
 use crate::services::mailbox::MailboxReceiver;
 use crate::services::queue::{QueueReceiver, QueueSender};
-use crate::trades::paper_entry::PaperEntry;
 
-use crate::encoding::thought_encoder::{collect_facts, extract, ThoughtAST};
+use crate::encoding::thought_encoder::{collect_facts, ThoughtAST};
 use crate::programs::telemetry::emit_metric;
-use crate::types::pivot::{PhaseLabel, PhaseRecord};
 use crate::to_f64;
 
 /// Trade-state update from a broker. Contains the 10 trade atoms
@@ -54,116 +51,8 @@ pub struct PositionSlot {
     pub output_tx: QueueSender<MarketPositionChain>,
 }
 
-/// Compute trade atoms from a paper's state. Proposal 040 + Phase 3 biography.
-///
-/// Returns the full 13-atom vocabulary (10 original + 3 phase biography).
-/// The caller selects the subset based on PositionLens (Core = first 5, Full = all 13).
-pub fn compute_trade_atoms(paper: &PaperEntry, current_price: f64, phase_history: &[PhaseRecord]) -> Vec<ThoughtAST> {
-    let entry = paper.entry_price.0;
-    let extreme = paper.extreme;
-    let excursion = ((extreme - entry) / entry).abs();
-    let retracement = if excursion > 0.0001 {
-        ((extreme - current_price) / (extreme - entry)).abs().min(1.0)
-    } else {
-        0.0
-    };
-    let age = paper.age as f64;
-
-    // peak_age: candles since the extreme was last set.
-    // Scan backward through price_history to find when the extreme was reached.
-    let peak_age = {
-        let mut pa = 0.0;
-        for (i, &p) in paper.price_history.iter().enumerate().rev() {
-            if (p - extreme).abs() < 1e-10 {
-                pa = (paper.price_history.len() - 1 - i) as f64;
-                break;
-            }
-        }
-        pa
-    };
-
-    let signaled = if paper.signaled { 1.0 } else { 0.0 };
-    let trail_distance = paper.distances.trail;
-    let stop_distance = paper.distances.stop;
-    let initial_risk = paper.distances.stop;
-    let r_multiple = if initial_risk > 0.0001 {
-        excursion / initial_risk
-    } else {
-        0.0
-    };
-    let remaining_profit = (excursion - retracement * excursion).max(0.0);
-    let heat = if remaining_profit > 0.0001 {
-        trail_distance / remaining_profit
-    } else {
-        1.0
-    };
-    let trail_cushion = if excursion > 0.0001 {
-        ((current_price - paper.trail_level).abs() / (extreme - entry).abs()).min(1.0)
-    } else {
-        0.0
-    };
-
-    // Phase 3 trade biography atoms (Proposal 044)
-    let phases_since_entry = {
-        let count = phase_history
-            .iter()
-            .filter(|r| r.start_candle >= paper.entry_candle)
-            .count();
-        (count as f64).max(1.0)
-    };
-    let phases_survived = {
-        let count = phase_history
-            .iter()
-            .filter(|r| r.start_candle >= paper.entry_candle && r.label == PhaseLabel::Peak)
-            .count();
-        (count as f64).max(1.0)
-    };
-    let entry_vs_phase_avg = {
-        let entry = paper.entry_price.0;
-        if phase_history.is_empty() || entry == 0.0 {
-            0.0
-        } else {
-            let avg_phase_close: f64 = phase_history
-                .iter()
-                .map(|r| r.close_avg)
-                .sum::<f64>()
-                / phase_history.len() as f64;
-            (entry - avg_phase_close) / entry
-        }
-    };
-
-    vec![
-        // Core 5 (all three agreed)
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("exit-excursion".into())), Box::new(ThoughtAST::Log { value: excursion.max(0.0001) })),
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("exit-retracement".into())), Box::new(ThoughtAST::Linear { value: retracement, scale: 1.0 })),
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("exit-age".into())), Box::new(ThoughtAST::Log { value: age.max(1.0) })),
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("exit-peak-age".into())), Box::new(ThoughtAST::Log { value: peak_age.max(1.0) })),
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("exit-signaled".into())), Box::new(ThoughtAST::Linear { value: signaled, scale: 1.0 })),
-        // Seykota additions
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("exit-trail-distance".into())), Box::new(ThoughtAST::Log { value: trail_distance.max(0.0001) })),
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("exit-stop-distance".into())), Box::new(ThoughtAST::Log { value: stop_distance.max(0.0001) })),
-        // Van Tharp additions
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("exit-r-multiple".into())), Box::new(ThoughtAST::Log { value: r_multiple.max(0.0001) })),
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("exit-heat".into())), Box::new(ThoughtAST::Linear { value: heat.min(1.0), scale: 1.0 })),
-        // Wyckoff addition
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("exit-trail-cushion".into())), Box::new(ThoughtAST::Linear { value: trail_cushion, scale: 1.0 })),
-        // phases-since-entry: how many phase transitions has this trade survived?
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("phases-since-entry".into())), Box::new(ThoughtAST::Log { value: phases_since_entry })),
-        // phases-survived: phase transitions that were peaks (potential exit points)
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("phases-survived".into())), Box::new(ThoughtAST::Log { value: phases_survived })),
-        // entry-vs-phase-avg: where did this trade enter relative to recent phase avg close?
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("entry-vs-phase-avg".into())), Box::new(ThoughtAST::Linear { value: entry_vs_phase_avg, scale: 1.0 })),
-    ]
-}
-
-/// Select trade atoms for a given position lens.
-/// Core = first 5 (the consensus). Full = all 10 (all three voices).
-pub fn select_trade_atoms(lens: &PositionLens, all_atoms: Vec<ThoughtAST>) -> Vec<ThoughtAST> {
-    match lens {
-        PositionLens::Core => all_atoms.into_iter().take(5).collect(),
-        PositionLens::Full => all_atoms,
-    }
-}
+// Re-export trade atom functions for backward compatibility.
+pub use crate::vocab::exit::trade_atoms::{compute_trade_atoms, select_trade_atoms};
 
 /// Drain all pending position learn signals. Non-blocking.
 /// Returns the count of signals drained.
@@ -271,38 +160,38 @@ pub fn position_observer_program(
             let mut slot_facts = base_facts.clone();
             ns_collect_facts += t0.elapsed().as_nanos() as f64;
 
-            // Extract from market anomaly: unbind individual facts, keep those above noise floor.
+            // Extract from market anomaly + raw: encode facts ONCE, cosine TWICE.
             let t0 = std::time::Instant::now();
             let market_facts = collect_facts(&chain.market_ast);
-            let extracted_anomaly = extract(
-                &chain.market_anomaly,
-                &market_facts,
-                |ast| cache.get(ast).expect("cache driver disconnected"),
-            );
-            total_anomaly_facts += market_facts.len() as f64;
-            for (fact, presence) in extracted_anomaly {
+            // Pre-encode all fact ASTs into vectors — one encoding pass.
+            let fact_vecs: Vec<(ThoughtAST, Vector)> = market_facts
+                .into_iter()
+                .map(|fact| {
+                    let vec = cache.get(&fact).expect("cache driver disconnected");
+                    (fact, vec)
+                })
+                .collect();
+            total_anomaly_facts += fact_vecs.len() as f64;
+            for (fact, ref fact_vec) in &fact_vecs {
+                let presence = holon::kernel::similarity::Similarity::cosine(fact_vec, &chain.market_anomaly);
                 if presence.abs() > noise_floor {
                     slot_facts.push(ThoughtAST::Bind(
                         Box::new(ThoughtAST::Atom("market".into())),
-                        Box::new(fact),
+                        Box::new(fact.clone()),
                     ));
                 }
             }
             ns_extract_anomaly += t0.elapsed().as_nanos() as f64;
 
-            // Extract from market raw: same pattern, different source binding.
+            // Second cosine pass against market raw — same pre-encoded vectors.
             let t0 = std::time::Instant::now();
-            let extracted_raw = extract(
-                &chain.market_raw,
-                &market_facts,
-                |ast| cache.get(ast).expect("cache driver disconnected"),
-            );
-            total_raw_facts += market_facts.len() as f64;
-            for (fact, presence) in extracted_raw {
+            total_raw_facts += fact_vecs.len() as f64;
+            for (fact, ref fact_vec) in &fact_vecs {
+                let presence = holon::kernel::similarity::Similarity::cosine(fact_vec, &chain.market_raw);
                 if presence.abs() > noise_floor {
                     slot_facts.push(ThoughtAST::Bind(
                         Box::new(ThoughtAST::Atom("market-raw".into())),
-                        Box::new(fact),
+                        Box::new(fact.clone()),
                     ));
                 }
             }
@@ -310,11 +199,13 @@ pub fn position_observer_program(
 
             // Encode the combined bundle.
             let t0 = std::time::Instant::now();
+            // Capture fact count from slot 0 for the snapshot — use slot_facts.len()
+            // directly instead of re-walking the AST with collect_facts().
+            let slot_fact_count = slot_facts.len();
             let position_bundle = ThoughtAST::Bundle(slot_facts);
 
-            // Capture thought AST from slot 0 for the snapshot.
             if slots_processed == 0.0 {
-                snapshot_fact_count = collect_facts(&position_bundle).len();
+                snapshot_fact_count = slot_fact_count;
                 snapshot_ast = position_bundle.to_edn();
             }
 

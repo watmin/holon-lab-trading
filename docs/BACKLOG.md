@@ -58,9 +58,10 @@ Five wards scanned 81 Rust files. Leaves to root. Session: 2026-04-13.
   directly — `market_lens_facts` already takes `&[Candle]`. Eliminates
   up to 2016 deep Candle clones per observer per candle.
 
-- [ ] **7 `to_vec()` in indicator bank tick.** Ring buffer to
-  Vec allocation per candle. Fix: reusable scratch buffer on
-  IndicatorBank. High priority.
+- [x] **7 `to_vec()` in indicator bank tick.** FIXED. Added
+  `fill_vec(&mut buf)` to RingBuffer. Scratch buffer on IndicatorBank
+  via `std::mem::take` pattern. Free functions take `&[f64]` slices.
+  One `to_vec` remains for divergence (needs two buffers simultaneously).
 
 - [x] **`position_lens_facts()` called 11x.** FIXED. Hoisted above
   slot loop — computed once from first slot's candle, cloned into
@@ -70,37 +71,37 @@ Five wards scanned 81 Rust files. Leaves to root. Session: 2026-04-13.
   TradeUpdate per broker per candle (last active paper only). Position
   observer drains and keeps the last anyway.
 
-- [ ] **Double extraction encoding.** Position observer encodes
-  market facts twice (for anomaly and raw extraction). Fix:
-  encode once, cosine twice. Medium.
+- [x] **Double extraction encoding.** FIXED. Pre-encode all market
+  fact ASTs into vectors once, then two cosine passes (anomaly + raw).
+  Eliminates redundant cache round-trips on the second extraction.
 
-- [ ] **Phase history clone every candle.** `history_snapshot()`
-  clones even when unchanged. Fix: Arc with generation counter.
-  Medium.
+- [x] **Phase history clone every candle.** FIXED. Generation counter
+  on PhaseState, incremented in close_phase. IndicatorBank caches the
+  snapshot and only re-clones when generation changes (~every 6 candles).
 
 - [ ] **`to_edn()` every candle for all observers.** The thought
   logging. 7.2M string constructions across a full run. Accept
   for now — being blind is being incapable. Revisit when perf
   matters more than diagnostics.
 
-- [ ] **Multiple phase_history scans in portfolio biography.**
-  Fuse valley/peak/regularity into one pass. Medium.
+- [x] **Multiple phase_history scans in portfolio biography.**
+  FIXED. Fused into single pass: valleys, peaks, durations, duration
+  stats, and favorable entry records collected in one iteration.
 
 - [x] **Invariant telemetry string `dims`.** Renamed to metric_dims
   (done with dims shadowing fix).
 
-- [ ] **Redundant `collect_facts()` for snapshot count.** Use
-  `slot_facts.len()` instead of re-walking AST. Low.
+- [x] **Redundant `collect_facts()` for snapshot count.** FIXED.
+  Use `slot_facts.len()` before bundling instead of re-walking AST.
 
 ## Structural — to sever
 
-- [ ] **`compute_portfolio_biography` inline.** 148 lines of
-  vocabulary in broker_program.rs. Move to
-  `src/vocab/broker/portfolio.rs`.
+- [x] **`compute_portfolio_biography` inline.** MOVED to
+  `src/vocab/broker/portfolio.rs`. Broker vocab directory recreated.
 
-- [ ] **`compute_trade_atoms` inline.** 96 lines of vocabulary
-  in position_observer_program.rs. Move to
-  `src/vocab/exit/trade_atoms.rs`.
+- [x] **`compute_trade_atoms` inline.** MOVED to
+  `src/vocab/exit/trade_atoms.rs`. Re-exported from position_observer_program
+  for backward compatibility.
 
 ## Naming — gaze fixes
 
@@ -112,7 +113,8 @@ Five wards scanned 81 Rust files. Leaves to root. Session: 2026-04-13.
 - [x] **`dims` shadowing.** FIXED. Renamed to `metric_dims` in
   market_observer_program, position_observer_program, broker_program.
 
-- [ ] **`atr_r` mumbles.** Should be `atr_ratio` on Candle struct.
+- [x] **`atr_r` mumbles.** FIXED. Renamed to `atr_ratio` across
+  candle.rs, indicator_bank.rs, and momentum.rs.
 
 - [x] **`compute_portfolio_biography` claims purity but mutates.**
   Fixed in critical #3 — returns values now.

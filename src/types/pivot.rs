@@ -85,6 +85,8 @@ pub struct PhaseState {
     pub last_close: f64,
     pub count: usize,
     pub phase_history: VecDeque<PhaseRecord>,
+    /// Generation counter — incremented on every close_phase.
+    pub generation: u64,
 }
 
 const PHASE_HISTORY_CAPACITY: usize = 20;
@@ -107,6 +109,7 @@ impl PhaseState {
             last_close: 0.0,
             count: 0,
             phase_history: VecDeque::with_capacity(PHASE_HISTORY_CAPACITY),
+            generation: 0,
         }
     }
 
@@ -238,6 +241,7 @@ impl PhaseState {
             self.phase_history.pop_front();
         }
         self.phase_history.push_back(record);
+        self.generation += 1;
     }
 
     /// Begin a new phase.
