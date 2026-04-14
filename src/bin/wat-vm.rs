@@ -509,7 +509,7 @@ fn main() {
     let (cache_handles, cache_driver) = encoding_cache(
         "encoder",
         encoder, // CONSUMED — cloned into handles, computation on caller threads
-        65536,
+        262144, // 256K — cache everything we can
         num_market + num_position + num_brokers,
         Box::new(cache_gate),
         Box::new(cache_emit),
