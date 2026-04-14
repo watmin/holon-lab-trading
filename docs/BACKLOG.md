@@ -28,8 +28,8 @@ Six wards scanned all Rust files. Post-cleanup. 2026-04-13.
   extracts the 15-field construction. Four call sites reduced to
   one-liners.
 
-- [ ] **Levels as bare f64 (forge).** trail_stop and safety_stop
-  should be Price, not f64. PaperEntry trail_level and stop_level same.
+- [x] **Levels as Price (forge).** trail_stop, safety_stop,
+  trail_level, stop_level now use Price newtype. .0 for arithmetic.
 
 - [ ] **4 test-only pub functions (reap).** extract(), gate_open(),
   get_oldest_first(), to_levels() — never called in production.
@@ -39,9 +39,8 @@ Six wards scanned all Rust files. Post-cleanup. 2026-04-13.
   Proposal, TreasurySettlement — test-only cluster awaiting treasury.
   Keep for now — treasury is Phase 5.
 
-- [ ] **Cache driver duplication (forge).** Generic cache and
-  encoding_cache share ~170 lines of identical driver logic.
-  Generic is #[cfg(test)]. Accept or extract shared driver.
+- [x] **Cache driver duplication (forge).** RESOLVED. encoding_cache
+  deleted. One generic cache<K,V>. encode() function composes with it.
 
 ## Accepted / runed
 
