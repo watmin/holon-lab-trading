@@ -58,15 +58,25 @@ pub struct PhaseRecord {
     pub volume_avg: f64,
 }
 
+/// Internal tracking state — what the machine is currently measuring.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TrackingState {
+    Rising,  // tracking the running high
+    Falling, // tracking the running low
+}
+
 /// Streaming state machine for phase labeling.
 /// Lives on the IndicatorBank. Steps once per candle.
 #[derive(Clone, Debug)]
 pub struct PhaseState {
+    tracking: TrackingState,
     pub current_label: PhaseLabel,
     pub current_direction: PhaseDirection,
+    extreme: f64,              // the running high (Rising) or low (Falling)
+    extreme_candle: usize,
+    // Current phase accumulation (for PhaseRecords when phase changes)
+    current_phase_label: PhaseLabel, // the label at the START of this phase
     pub current_start: usize,
-    pub extreme: f64,
-    pub extreme_candle: usize,
     pub close_sum: f64,
     pub volume_sum: f64,
     pub high: f64,
@@ -81,11 +91,13 @@ const PHASE_HISTORY_CAPACITY: usize = 20;
 impl PhaseState {
     pub fn new() -> Self {
         Self {
+            tracking: TrackingState::Falling,
             current_label: PhaseLabel::Valley,
             current_direction: PhaseDirection::None,
-            current_start: 0,
             extreme: 0.0,
             extreme_candle: 0,
+            current_phase_label: PhaseLabel::Valley,
+            current_start: 0,
             close_sum: 0.0,
             volume_sum: 0.0,
             high: f64::NEG_INFINITY,
@@ -98,9 +110,15 @@ impl PhaseState {
 
     /// Advance the state machine by one candle.
     /// Called AFTER ATR is computed so smoothing is available.
+    ///
+    /// Two tracking states (Rising/Falling), three labels derived from position:
+    /// - Peak: Rising and close is near the tracked high
+    /// - Valley: Falling and close is near the tracked low
+    /// - Transition: moving between extremes
     pub fn step(&mut self, close: f64, volume: f64, candle_num: usize, smoothing: f64) {
         // First candle: initialize
         if self.count == 0 {
+            self.tracking = TrackingState::Falling;
             self.extreme = close;
             self.extreme_candle = candle_num;
             self.current_start = candle_num;
@@ -110,6 +128,9 @@ impl PhaseState {
             self.close_sum = close;
             self.volume_sum = volume;
             self.count = 1;
+            self.current_label = PhaseLabel::Valley;
+            self.current_direction = PhaseDirection::None;
+            self.current_phase_label = PhaseLabel::Valley;
             return;
         }
 
@@ -124,75 +145,62 @@ impl PhaseState {
             self.low = close;
         }
 
-        match self.current_label {
-            PhaseLabel::Valley => {
-                // Tracking a potential valley — price was low, watching for rise
-                if close < self.extreme {
-                    // New low — extend valley
-                    self.extreme = close;
-                    self.extreme_candle = candle_num;
-                } else if close - self.extreme > smoothing {
-                    // Risen by > smoothing from low — CONFIRM valley, begin transition-up
-                    self.close_phase(candle_num);
-                    self.begin_phase(PhaseLabel::Transition, PhaseDirection::Up, close, volume, candle_num);
-                    self.extreme = close;
-                    self.extreme_candle = candle_num;
-                }
-                // else: still near low, extend valley zone
-            }
-            PhaseLabel::Peak => {
-                // Tracking a potential peak — price was high, watching for fall
+        // Check for state transition
+        match self.tracking {
+            TrackingState::Rising => {
                 if close > self.extreme {
-                    // New high — extend peak
-                    self.extreme = close;
-                    self.extreme_candle = candle_num;
-                } else if self.extreme - close > smoothing {
-                    // Fallen by > smoothing from high — CONFIRM peak, begin transition-down
-                    self.close_phase(candle_num);
-                    self.begin_phase(PhaseLabel::Transition, PhaseDirection::Down, close, volume, candle_num);
                     self.extreme = close;
                     self.extreme_candle = candle_num;
                 }
-                // else: still near high, extend peak zone
+                if self.extreme - close > smoothing {
+                    // Price fell from the high — switch to Falling
+                    self.tracking = TrackingState::Falling;
+                    self.extreme = close;
+                    self.extreme_candle = candle_num;
+                }
             }
-            PhaseLabel::Transition => {
-                match self.current_direction {
-                    PhaseDirection::Up => {
-                        if close > self.extreme {
-                            // New high during transition-up
-                            self.extreme = close;
-                            self.extreme_candle = candle_num;
-                        } else if self.extreme - close > smoothing {
-                            // Fallen by > smoothing — close transition, begin peak zone
-                            self.close_phase(candle_num);
-                            self.begin_phase(PhaseLabel::Peak, PhaseDirection::None, close, volume, candle_num);
-                            self.extreme = close;
-                            self.extreme_candle = candle_num;
-                            // Peak tracks high, so set extreme to the transition's high
-                            self.extreme = self.high;
-                        }
-                    }
-                    PhaseDirection::Down => {
-                        if close < self.extreme {
-                            // New low during transition-down
-                            self.extreme = close;
-                            self.extreme_candle = candle_num;
-                        } else if close - self.extreme > smoothing {
-                            // Risen by > smoothing — close transition, begin valley zone
-                            self.close_phase(candle_num);
-                            self.begin_phase(PhaseLabel::Valley, PhaseDirection::None, close, volume, candle_num);
-                            self.extreme = close;
-                            self.extreme_candle = candle_num;
-                            // Valley tracks low, so set extreme to the transition's low
-                            self.extreme = self.low;
-                        }
-                    }
-                    PhaseDirection::None => {
-                        // Shouldn't happen for transition, but handle gracefully
-                    }
+            TrackingState::Falling => {
+                if close < self.extreme {
+                    self.extreme = close;
+                    self.extreme_candle = candle_num;
+                }
+                if close - self.extreme > smoothing {
+                    // Price rose from the low — switch to Rising
+                    self.tracking = TrackingState::Rising;
+                    self.extreme = close;
+                    self.extreme_candle = candle_num;
                 }
             }
         }
+
+        // Derive label from state + position
+        let half_smooth = smoothing / 2.0;
+        let (new_label, new_direction) = match self.tracking {
+            TrackingState::Rising => {
+                if close >= self.extreme - half_smooth {
+                    (PhaseLabel::Peak, PhaseDirection::None)
+                } else {
+                    (PhaseLabel::Transition, PhaseDirection::Up)
+                }
+            }
+            TrackingState::Falling => {
+                if close <= self.extreme + half_smooth {
+                    (PhaseLabel::Valley, PhaseDirection::None)
+                } else {
+                    (PhaseLabel::Transition, PhaseDirection::Down)
+                }
+            }
+        };
+
+        // If label changed, close the old phase and start a new one
+        if new_label != self.current_phase_label {
+            self.close_phase(candle_num);
+            self.begin_phase(new_label, new_direction, close, volume, candle_num);
+            self.current_phase_label = new_label;
+        }
+
+        self.current_label = new_label;
+        self.current_direction = new_direction;
     }
 
     /// Close the current phase into a PhaseRecord and push to history.
@@ -292,26 +300,31 @@ mod tests {
         let mut state = PhaseState::new();
         state.step(100.0, 50.0, 1, 5.0);
         assert_eq!(state.count, 1);
+        // First candle: Falling state, close == extreme → Valley
         assert_eq!(state.current_label, PhaseLabel::Valley);
     }
 
     #[test]
-    fn test_valley_to_transition_up() {
+    fn test_valley_to_transition_to_peak() {
         let mut state = PhaseState::new();
         let smoothing = 5.0;
 
-        // Start in valley
+        // Start in valley (Falling state, near low)
         state.step(100.0, 50.0, 1, smoothing);
         state.step(98.0, 50.0, 2, smoothing); // new low
-        state.step(97.0, 50.0, 3, smoothing); // new low
+        state.step(97.0, 50.0, 3, smoothing); // new low, extreme=97
         assert_eq!(state.current_label, PhaseLabel::Valley);
-        assert_eq!(state.extreme, 97.0);
+        assert_eq!(state.tracking, TrackingState::Falling);
 
         // Rise by more than smoothing (97 + 5 = 102, need close > 102)
+        // This switches tracking to Rising, extreme=103
+        // close=103, extreme=103, 103 >= 103 - 2.5 → Peak (near the new high)
         state.step(103.0, 50.0, 4, smoothing);
-        assert_eq!(state.current_label, PhaseLabel::Transition);
-        assert_eq!(state.current_direction, PhaseDirection::Up);
-        assert_eq!(state.phase_history.len(), 1); // valley closed
+        assert_eq!(state.tracking, TrackingState::Rising);
+        assert_eq!(state.current_label, PhaseLabel::Peak);
+        assert_eq!(state.current_direction, PhaseDirection::None);
+        // Valley phase was closed
+        assert_eq!(state.phase_history.len(), 1);
         assert_eq!(state.phase_history[0].label, PhaseLabel::Valley);
     }
 
@@ -320,34 +333,75 @@ mod tests {
         let mut state = PhaseState::new();
         let smoothing = 5.0;
 
-        // Valley
+        // Valley — Falling state, near low
         state.step(100.0, 50.0, 1, smoothing);
-        state.step(95.0, 50.0, 2, smoothing);
+        state.step(95.0, 50.0, 2, smoothing); // extreme=95
+        assert_eq!(state.current_label, PhaseLabel::Valley);
 
-        // Transition up (95 + 5 = 100, need > 100)
+        // Rise past smoothing from low (95 + 5 = 100, need > 100)
+        // Switches to Rising, extreme=101
+        // close=101, extreme=101, 101 >= 101-2.5 → Peak
         state.step(101.0, 50.0, 3, smoothing);
+        assert_eq!(state.tracking, TrackingState::Rising);
+        assert_eq!(state.current_label, PhaseLabel::Peak);
+
+        // Continue up — still Peak, extreme tracks higher
+        state.step(105.0, 50.0, 4, smoothing);
+        assert_eq!(state.current_label, PhaseLabel::Peak);
+
+        // Price eases slightly — still near extreme (105 - 2.5 = 102.5)
+        state.step(103.0, 50.0, 5, smoothing);
+        assert_eq!(state.current_label, PhaseLabel::Peak); // 103 >= 105 - 2.5
+
+        // Price drops further — no longer near extreme but not past smoothing
+        // 100 < 105 - 2.5 = 102.5 → Transition-up
+        // But 105 - 100 = 5, not > 5, so still Rising
+        state.step(100.0, 50.0, 6, smoothing);
+        assert_eq!(state.tracking, TrackingState::Rising);
         assert_eq!(state.current_label, PhaseLabel::Transition);
         assert_eq!(state.current_direction, PhaseDirection::Up);
 
-        // Continue up
-        state.step(105.0, 50.0, 4, smoothing);
+        // Price drops past smoothing from extreme (105 - 99 = 6 > 5)
+        // Switches to Falling, extreme=99
+        // close=99, extreme=99, 99 <= 99 + 2.5 → Valley
+        state.step(99.0, 50.0, 7, smoothing);
+        assert_eq!(state.tracking, TrackingState::Falling);
+        assert_eq!(state.current_label, PhaseLabel::Valley);
+    }
 
-        // Fall enough to close transition → peak (105 - 5 = 100, need < 100)
-        state.step(99.0, 50.0, 5, smoothing);
+    #[test]
+    fn test_peak_at_high_valley_at_low() {
+        // The core correctness property: peaks are near highs, valleys near lows.
+        let mut state = PhaseState::new();
+        let smoothing = 10.0;
+
+        // Start low
+        state.step(100.0, 50.0, 1, smoothing);
+        assert_eq!(state.current_label, PhaseLabel::Valley);
+
+        // Rise to 115 (100 + 10 = 110, 115 > 110 → switch to Rising)
+        // extreme=115, close=115, 115 >= 115-5 → Peak at HIGH price
+        state.step(115.0, 50.0, 2, smoothing);
         assert_eq!(state.current_label, PhaseLabel::Peak);
-        assert!(state.phase_history.len() >= 2);
 
-        // Peak continues to track high
-        state.step(98.0, 50.0, 6, smoothing);
+        // Stay near the high — still Peak
+        state.step(112.0, 50.0, 3, smoothing); // 112 >= 115-5=110 → Peak
+        assert_eq!(state.current_label, PhaseLabel::Peak);
 
-        // Fall enough from peak extreme to transition down
-        // Peak extreme is high of peak phase, which started at 99 (the close at begin_phase)
-        // But we set extreme = self.high after begin_phase for peak
-        // self.high was set to close=99 in begin_phase, then 98 didn't exceed it
-        // So extreme = 99 (the high from begin_phase overwrite)
-        // Wait, actually in the Peak transition: after close_phase + begin_phase,
-        // extreme is set to close (99), then overwritten to self.high (99).
-        // Then tick 6: close=98 < 99, doesn't update extreme. 99-98=1 < 5, stays in peak.
+        // Drop below half_smooth from extreme but not past smoothing
+        state.step(108.0, 50.0, 4, smoothing); // 108 < 115-5=110 → Transition-up
+        assert_eq!(state.current_label, PhaseLabel::Transition);
+
+        // Drop past smoothing from extreme (115 - 104 = 11 > 10)
+        // Switch to Falling, extreme=104
+        // close=104, extreme=104, 104 <= 104+5 → Valley at LOW price
+        state.step(104.0, 50.0, 5, smoothing);
+        assert_eq!(state.current_label, PhaseLabel::Valley);
+        assert_eq!(state.tracking, TrackingState::Falling);
+
+        // Verify: Peak was labeled at 115 and 112 (HIGH prices)
+        // Valley is labeled at 104 (LOW price relative to the move)
+        // This is the correct behavior — peaks at highs, valleys at lows.
     }
 
     #[test]
