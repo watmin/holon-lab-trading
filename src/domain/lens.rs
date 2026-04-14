@@ -165,24 +165,27 @@ pub fn market_lens_facts(lens: &MarketLens, candle: &Candle, window: &[Candle], 
 }
 
 /// Collect position vocab facts for a specific lens.
-/// Proposal 040: trade atoms come through the trade pipe, not the candle.
-/// Position lenses keep regime + time facts as market context alongside trade atoms.
+/// The lens IS the factory. It determines what this observer sees.
+/// Core: lean — regime + time. 5 trade atoms downstream.
+/// Full: rich — regime + time + phase series. 13 trade atoms downstream.
 pub fn position_lens_facts(lens: &PositionLens, candle: &Candle, scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
-    // Both Core and Full get regime + time as market context.
-    // The trade-specific atoms arrive through the trade pipe.
-    let _ = lens; // both lenses get the same market context
-    let mut facts = encode_exit_regime_facts(candle, scales);
-    facts.extend(encode_exit_time_facts(candle));
-
-    // Phase atoms — Proposal 049 Phase 2.
-    // Current phase label + duration.
-    facts.extend(encode_phase_current_facts(candle, scales));
-    // Phase series as Sequential thought (geometry of recent phase history).
-    facts.push(phase_series_thought(&candle.phase_history));
-    // Scalar summaries from phase history (explicit trend measurements).
-    facts.extend(phase_scalar_facts(&candle.phase_history, scales));
-
-    facts
+    match lens {
+        PositionLens::Core => {
+            // Lean: regime + time. The consensus minimum.
+            let mut facts = encode_exit_regime_facts(candle, scales);
+            facts.extend(encode_exit_time_facts(candle));
+            facts
+        }
+        PositionLens::Full => {
+            // Rich: regime + time + phase. The full picture.
+            let mut facts = encode_exit_regime_facts(candle, scales);
+            facts.extend(encode_exit_time_facts(candle));
+            facts.extend(encode_phase_current_facts(candle, scales));
+            facts.push(phase_series_thought(&candle.phase_history));
+            facts.extend(phase_scalar_facts(&candle.phase_history, scales));
+            facts
+        }
+    }
 }
 
 /// Collect position self-assessment facts from the position observer's rolling window.

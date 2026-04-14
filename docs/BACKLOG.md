@@ -13,9 +13,9 @@ Five wards scanned 81 Rust files. Leaves to root. Session: 2026-04-13.
 - [x] **`compute_portfolio_biography` fixed (forge).** Returns
   `(Vec<ThoughtAST>, usize)`. Values up, not mutations down.
 
-- [ ] **`position_lens_facts` ignores lens (gaze).** Both Core
-  and Full get identical facts. The function signature promises
-  differentiation. Either remove the parameter or differentiate.
+- [x] **`position_lens_facts` differentiates (gaze).** The lens
+  IS the factory. Core: regime + time. Full: regime + time + phase.
+  The match statement controls what each observer sees.
 
 ## Dead code — to reap
 
