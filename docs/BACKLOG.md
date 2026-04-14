@@ -7,10 +7,8 @@ Five wards scanned 81 Rust files. Leaves to root. Session: 2026-04-13.
 - [x] **Encoding divergence (sever).** REAPED. ToAst trait and all
   impls deleted. 709 lines. One encoding path remains. No divergence.
 
-- [ ] **`close_final` lies (forge).** PhaseRecord field named
-  `close_final` stores `close_avg`. The name promises the last
-  close of the phase. It delivers the average. Fix: rename to
-  `close_avg` or track the actual final close.
+- [x] **`close_final` fixed (forge).** PhaseState now tracks
+  `last_close` every candle. `close_final` stores the real value.
 
 - [ ] **`compute_portfolio_biography` mutates (forge).** Takes
   `&mut max_papers_seen` — algebraic escape. Should return the

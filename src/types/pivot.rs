@@ -82,6 +82,7 @@ pub struct PhaseState {
     pub high: f64,
     pub low: f64,
     pub open_close: f64,
+    pub last_close: f64,
     pub count: usize,
     pub phase_history: VecDeque<PhaseRecord>,
 }
@@ -103,6 +104,7 @@ impl PhaseState {
             high: f64::NEG_INFINITY,
             low: f64::MAX,
             open_close: 0.0,
+            last_close: 0.0,
             count: 0,
             phase_history: VecDeque::with_capacity(PHASE_HISTORY_CAPACITY),
         }
@@ -127,6 +129,7 @@ impl PhaseState {
             self.low = close;
             self.close_sum = close;
             self.volume_sum = volume;
+            self.last_close = close;
             self.count = 1;
             self.current_label = PhaseLabel::Valley;
             self.current_direction = PhaseDirection::None;
@@ -137,6 +140,7 @@ impl PhaseState {
         // Update running stats
         self.close_sum += close;
         self.volume_sum += volume;
+        self.last_close = close;
         self.count += 1;
         if close > self.high {
             self.high = close;
@@ -226,16 +230,7 @@ impl PhaseState {
             close_max: self.high,
             close_avg: avg_close,
             close_open: self.open_close,
-            close_final: if duration > 0 {
-                // The last close added is close_sum - (close_sum - close) but we
-                // don't have it separately. Use high or low depending on phase.
-                // Actually, the current close IS the final close of this phase.
-                // But we already advanced count. We'll store the boundary close
-                // as close_final via the close at the transition point.
-                avg_close // approximation — the true final close would require storing it
-            } else {
-                0.0
-            },
+            close_final: self.last_close,
             volume_avg: avg_volume,
         };
 
@@ -262,6 +257,7 @@ impl PhaseState {
         self.high = close;
         self.low = close;
         self.open_close = close;
+        self.last_close = close;
         self.count = 1;
     }
 
