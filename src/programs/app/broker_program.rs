@@ -31,18 +31,20 @@ use crate::services::queue::{QueueReceiver, QueueSender};
 fn compute_portfolio_biography(
     papers: &std::collections::VecDeque<crate::trades::paper_entry::PaperEntry>,
     phase_history: &[PhaseRecord],
-    max_papers_seen: &mut usize,
-) -> Vec<ThoughtAST> {
+    max_papers_seen: usize,
+) -> (Vec<ThoughtAST>, usize) {
     let active: Vec<&crate::trades::paper_entry::PaperEntry> = papers
         .iter()
         .filter(|p| !p.resolved)
         .collect();
     let active_count = active.len();
 
-    // Track max for portfolio-heat normalization.
-    if active_count > *max_papers_seen {
-        *max_papers_seen = active_count;
-    }
+    // Return updated max — values up, not mutations down.
+    let new_max = if active_count > max_papers_seen {
+        active_count
+    } else {
+        max_papers_seen
+    };
 
     let mut atoms = Vec::with_capacity(10);
 
@@ -84,8 +86,8 @@ fn compute_portfolio_biography(
     atoms.push(ThoughtAST::Bind(Box::new(ThoughtAST::Atom("portfolio-excursion".into())), Box::new(ThoughtAST::Log { value: avg_excursion.abs().max(0.0001) })));
 
     // 5. Portfolio heat: active_count / max_seen
-    let heat = if *max_papers_seen > 0 {
-        active_count as f64 / *max_papers_seen as f64
+    let heat = if new_max > 0 {
+        active_count as f64 / new_max as f64
     } else {
         0.0
     };
@@ -175,7 +177,7 @@ fn compute_portfolio_biography(
     };
     atoms.push(ThoughtAST::Bind(Box::new(ThoughtAST::Atom("broker-phase-avg-spacing".into())), Box::new(ThoughtAST::Log { value: avg_spacing.max(1.0) })));
 
-    atoms
+    (atoms, new_max)
 }
 
 /// Extract Direction from a holon Prediction.
@@ -226,11 +228,12 @@ pub fn broker_program(
         // 1. Compose: market anomaly + position anomaly + portfolio biography
         //    Portfolio biography atoms (Phase 3, Proposal 044) describe the broker's
         //    portfolio shape. The broker's reckoner sees them in ITS composed thought.
-        let portfolio_atoms = compute_portfolio_biography(
+        let (portfolio_atoms, updated_max) = compute_portfolio_biography(
             &broker.papers,
             &chain.candle.phase_history,
-            &mut max_papers_seen,
+            max_papers_seen,
         );
+        max_papers_seen = updated_max;
         let portfolio_fact_count = portfolio_atoms.len();
         let portfolio_ast = ThoughtAST::Bundle(portfolio_atoms);
         let portfolio_vec = cache.get(&portfolio_ast).expect("cache driver disconnected");
