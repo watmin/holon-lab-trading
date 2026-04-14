@@ -48,6 +48,7 @@ pub fn ledger_setup(conn: &Connection) {
         );
         CREATE TABLE IF NOT EXISTS phase_snapshots (
             candle INTEGER,
+            close REAL,
             phase_label TEXT,
             phase_direction TEXT,
             phase_duration INTEGER,
@@ -114,13 +115,13 @@ pub fn ledger_insert(conn: &Connection, entry: &LogEntry) {
             .unwrap();
         }
         LogEntry::PhaseSnapshot {
-            candle, phase_label, phase_direction, phase_duration,
+            candle, close, phase_label, phase_direction, phase_duration,
             phase_count, phase_history_len,
         } => {
             conn.execute(
-                "INSERT INTO phase_snapshots VALUES (?,?,?,?,?,?)",
+                "INSERT INTO phase_snapshots VALUES (?,?,?,?,?,?,?)",
                 rusqlite::params![
-                    candle, phase_label, phase_direction, phase_duration,
+                    candle, close, phase_label, phase_direction, phase_duration,
                     phase_count, phase_history_len
                 ],
             )

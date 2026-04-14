@@ -401,17 +401,19 @@ pub fn broker_program(
                 fact_count: 0,
                 thought_ast: String::new(),
             });
-            // Phase snapshot — only slot 0 emits since phase is the same for all brokers.
-            if broker.slot_idx == 0 {
-                let _ = db_tx.send(LogEntry::PhaseSnapshot {
-                    candle: candle_count,
-                    phase_label: chain.candle.phase_label.to_string(),
-                    phase_direction: chain.candle.phase_direction.to_string(),
-                    phase_duration: chain.candle.phase_duration,
-                    phase_count: chain.candle.phase_history.len(),
-                    phase_history_len: chain.candle.phase_history.len(),
-                });
-            }
+        }
+        // Phase snapshot — every candle, only slot 0. Phases last ~6 candles,
+        // every-100 misses the structure entirely.
+        if broker.slot_idx == 0 {
+            let _ = db_tx.send(LogEntry::PhaseSnapshot {
+                candle: candle_count,
+                close: price,
+                phase_label: chain.candle.phase_label.to_string(),
+                phase_direction: chain.candle.phase_direction.to_string(),
+                phase_duration: chain.candle.phase_duration,
+                phase_count: chain.candle.phase_history.len(),
+                phase_history_len: chain.candle.phase_history.len(),
+            });
         }
 
         // Telemetry

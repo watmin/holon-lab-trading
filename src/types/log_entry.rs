@@ -116,6 +116,7 @@ pub enum LogEntry {
     /// Phase snapshot — emitted by broker slot 0 every 100 candles.
     PhaseSnapshot {
         candle: usize,
+        close: f64,
         phase_label: String,
         phase_direction: String,
         phase_duration: usize,
