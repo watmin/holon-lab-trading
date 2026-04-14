@@ -1,9 +1,9 @@
 /// broker_program.rs — the broker thread body.
 /// Compiled from wat/broker-program.wat.
 ///
-/// Receives MarketExitChains through a queue (one per exit observer slot).
+/// Receives MarketPositionChains through a queue (one per position observer slot).
 /// Registers paper trades, ticks them against price, resolves them,
-/// and teaches both its market observer and exit observer through
+/// and teaches both its market observer and position observer through
 /// learn handles wired at construction.
 /// On shutdown it returns the broker. The accounting comes home.
 
@@ -16,9 +16,9 @@ use crate::domain::broker::Broker;
 use crate::types::enums::{Direction, Outcome};
 use crate::types::log_entry::LogEntry;
 use crate::types::newtypes::Price;
-use crate::programs::app::exit_observer_program::{ExitLearn, TradeUpdate, compute_trade_atoms};
+use crate::programs::app::position_observer_program::{PositionLearn, TradeUpdate, compute_trade_atoms};
 use crate::programs::app::market_observer_program::ObsLearn;
-use crate::programs::chain::MarketExitChain;
+use crate::programs::chain::MarketPositionChain;
 use crate::programs::stdlib::console::ConsoleHandle;
 use crate::programs::telemetry::emit_metric;
 use crate::services::queue::{QueueReceiver, QueueSender};
@@ -36,9 +36,9 @@ fn direction_from_prediction(pred: &holon::memory::Prediction) -> Direction {
 /// Run the broker program. Call this inside thread::spawn.
 /// Returns the trained Broker when the chain source disconnects.
 pub fn broker_program(
-    chain_rx: QueueReceiver<MarketExitChain>,
+    chain_rx: QueueReceiver<MarketPositionChain>,
     market_learn_tx: QueueSender<ObsLearn>,
-    exit_learn_tx: QueueSender<ExitLearn>,
+    position_learn_tx: QueueSender<PositionLearn>,
     trade_tx: QueueSender<TradeUpdate>,
     console: ConsoleHandle,
     db_tx: QueueSender<LogEntry>,
@@ -57,14 +57,14 @@ pub fn broker_program(
         let mut learn_grace: f64 = 0.0;
         let mut learn_violence: f64 = 0.0;
 
-        // 1. Compose: market anomaly + exit anomaly
-        let composed = Primitives::bundle(&[&chain.market_anomaly, &chain.exit_anomaly]);
+        // 1. Compose: market anomaly + position anomaly
+        let composed = Primitives::bundle(&[&chain.market_anomaly, &chain.position_anomaly]);
 
         // 2. Direction from market prediction
         let direction = direction_from_prediction(&chain.market_prediction);
 
-        // 3. Distances from exit observer's reckoner, cascaded through broker
-        let distances = broker.cascade_distances(Some(chain.exit_distances));
+        // 3. Distances from position observer's reckoner, cascaded through broker
+        let distances = broker.cascade_distances(Some(chain.position_distances));
 
         // 4. Direction flip — close runners in old direction
         let mut flip_resolutions = Vec::new();
@@ -80,7 +80,7 @@ pub fn broker_program(
         broker.register_paper(
             composed.clone(),
             chain.market_anomaly.clone(),
-            chain.exit_anomaly.clone(),
+            chain.position_anomaly.clone(),
             direction,
             Price(price),
             distances,
@@ -95,7 +95,7 @@ pub fn broker_program(
             let facts = broker.propagate(
                 &resolution.composed_thought,
                 &resolution.market_thought,
-                &resolution.exit_thought,
+                &resolution.position_thought,
                 resolution.outcome,
                 resolution.amount,
                 resolution.prediction,
@@ -132,19 +132,19 @@ pub fn broker_program(
                 weight: facts.weight,
             });
 
-            // Teach exit observer — immediate resolution signal
+            // Teach position observer — immediate resolution signal
             let is_grace = resolution.outcome == Outcome::Grace;
-            let _ = exit_learn_tx.send(ExitLearn {
-                exit_thought: facts.exit_thought,
+            let _ = position_learn_tx.send(PositionLearn {
+                position_thought: facts.position_thought,
                 optimal: facts.optimal,
                 weight: facts.weight,
                 is_grace,
                 residue: if is_grace { resolution.excursion } else { 0.0 },
             });
 
-            // Deferred batch training for exit observer (runner histories)
+            // Deferred batch training for position observer (runner histories)
             // Proposal 043: per-broker rolling percentile replaces EMA.
-            for (thought, optimal, actual, excursion) in &resolution.exit_batch {
+            for (thought, optimal, actual, excursion) in &resolution.position_batch {
                 // Error ratio: geometry, not consequence
                 let trail_err = (actual.trail - optimal.trail).abs()
                     / optimal.trail.max(0.0001);
@@ -168,8 +168,8 @@ pub fn broker_program(
 
                 let is_grace = error < median;
 
-                let _ = exit_learn_tx.send(ExitLearn {
-                    exit_thought: thought.clone(),
+                let _ = position_learn_tx.send(PositionLearn {
+                    position_thought: thought.clone(),
                     optimal: *optimal,
                     weight: *excursion,
                     is_grace,
@@ -179,7 +179,7 @@ pub fn broker_program(
         }
 
         // 6b. Send trade updates for ACTIVE papers (Proposal 040).
-        // The exit observer needs trade-state atoms to compose with market facts.
+        // The position observer needs trade-state atoms to compose with market facts.
         for paper in &broker.papers {
             if !paper.resolved {
                 let atoms = compute_trade_atoms(paper, price);

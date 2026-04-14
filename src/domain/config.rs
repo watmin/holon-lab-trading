@@ -3,12 +3,12 @@
 /// The lenses, seeds, and parameters live here, not in the binary.
 
 use crate::domain::broker::Broker;
-use crate::domain::exit_observer::ExitObserver;
+use crate::domain::position_observer::PositionObserver;
 use crate::domain::market_observer::MarketObserver;
 use crate::learning::scalar_accumulator::ScalarAccumulator;
 use crate::learning::window_sampler::WindowSampler;
 use crate::types::distances::Distances;
-use crate::types::enums::{ExitLens, MarketLens, ScalarEncoding};
+use crate::types::enums::{PositionLens, MarketLens, ScalarEncoding};
 
 /// The eleven market lenses. Three schools, one observer per lens.
 /// Proposals 041+042: Dow (4), Pring (4), Wyckoff (3).
@@ -47,19 +47,19 @@ pub fn create_market_observers(dims: usize, recalib_interval: usize) -> Vec<Mark
         .collect()
 }
 
-/// The two exit lenses. One exit observer per lens.
+/// The two position lenses. One exit observer per lens.
 /// Proposal 040: trade-state atoms, not market data.
-pub const EXIT_LENSES: &[ExitLens] = &[
-    ExitLens::Core,
-    ExitLens::Full,
+pub const POSITION_LENSES: &[PositionLens] = &[
+    PositionLens::Core,
+    PositionLens::Full,
 ];
 
-/// Create all exit observers with their configured lenses.
-pub fn create_exit_observers(dims: usize, recalib_interval: usize) -> Vec<ExitObserver> {
-    EXIT_LENSES
+/// Create all position observers with their configured lenses.
+pub fn create_position_observers(dims: usize, recalib_interval: usize) -> Vec<PositionObserver> {
+    POSITION_LENSES
         .iter()
         .map(|lens| {
-            ExitObserver::new(
+            PositionObserver::new(
                 *lens,
                 dims,
                 recalib_interval,
@@ -82,7 +82,7 @@ pub fn create_brokers(
         for ei in 0..num_exit {
             let slot_idx = mi * num_exit + ei;
             let market_name = format!("{}", MARKET_LENSES[mi]);
-            let exit_name = format!("{}", EXIT_LENSES[ei]);
+            let exit_name = format!("{}", POSITION_LENSES[ei]);
             let scalar_accums = vec![
                 ScalarAccumulator::new("trail-distance", ScalarEncoding::Log, dims),
                 ScalarAccumulator::new("stop-distance", ScalarEncoding::Log, dims),
@@ -143,20 +143,20 @@ mod tests {
 
     #[test]
     fn test_exit_lenses_count() {
-        assert_eq!(EXIT_LENSES.len(), 2);
+        assert_eq!(POSITION_LENSES.len(), 2);
     }
 
     #[test]
-    fn test_create_exit_observers() {
-        let observers = create_exit_observers(4096, 500);
+    fn test_create_position_observers() {
+        let observers = create_position_observers(4096, 500);
         assert_eq!(observers.len(), 2);
-        assert_eq!(observers[0].lens, ExitLens::Core);
-        assert_eq!(observers[1].lens, ExitLens::Full);
+        assert_eq!(observers[0].lens, PositionLens::Core);
+        assert_eq!(observers[1].lens, PositionLens::Full);
     }
 
     #[test]
-    fn test_exit_observers_start_inexperienced() {
-        let observers = create_exit_observers(4096, 500);
+    fn test_position_observers_start_inexperienced() {
+        let observers = create_position_observers(4096, 500);
         for obs in &observers {
             assert!(!obs.experienced());
         }

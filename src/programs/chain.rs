@@ -10,7 +10,7 @@ use crate::types::candle::Candle;
 use crate::types::distances::Distances;
 use crate::encoding::thought_encoder::ThoughtAST;
 
-/// What the market observer produces. What the exit observer receives.
+/// What the market observer produces. What the position observer receives.
 #[derive(Clone)]
 pub struct MarketChain {
     pub candle: Candle,
@@ -23,8 +23,8 @@ pub struct MarketChain {
     pub edge: f64,
 }
 
-/// What the exit observer produces. What the broker receives.
-pub struct MarketExitChain {
+/// What the position observer produces. What the broker receives.
+pub struct MarketPositionChain {
     pub candle: Candle,
     pub window: Arc<Vec<Candle>>,
     pub encode_count: usize,
@@ -33,8 +33,8 @@ pub struct MarketExitChain {
     pub market_ast: ThoughtAST,
     pub market_prediction: holon::memory::Prediction,
     pub market_edge: f64,
-    pub exit_raw: Vector,
-    pub exit_anomaly: Vector,
-    pub exit_ast: ThoughtAST,
-    pub exit_distances: Distances,
+    pub position_raw: Vector,
+    pub position_anomaly: Vector,
+    pub position_ast: ThoughtAST,
+    pub position_distances: Distances,
 }

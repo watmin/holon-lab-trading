@@ -1,6 +1,8 @@
 /// The enriched candle — raw OHLCV in, 100+ computed indicators out.
 /// Produced by IndicatorBank.tick(ohlcv).
 
+use crate::types::pivot::{PhaseDirection, PhaseLabel, PhaseRecord};
+
 #[derive(Clone, Debug)]
 pub struct Candle {
     // Raw
@@ -108,6 +110,11 @@ pub struct Candle {
     pub day_of_week: f64,
     pub day_of_month: f64,
     pub month_of_year: f64,
+    // Phase labeler — proposal 049
+    pub phase_label: PhaseLabel,
+    pub phase_direction: PhaseDirection,
+    pub phase_duration: usize,
+    pub phase_history: Vec<PhaseRecord>,
 }
 
 impl Default for Candle {
@@ -199,6 +206,10 @@ impl Default for Candle {
             day_of_week: 3.0,
             day_of_month: 15.0,
             month_of_year: 6.0,
+            phase_label: PhaseLabel::Valley,
+            phase_direction: PhaseDirection::None,
+            phase_duration: 0,
+            phase_history: Vec::new(),
         }
     }
 }
@@ -254,6 +265,8 @@ mod tests {
             range_ratio: 0.0, gap: 0.0, consecutive_up: 0.0, consecutive_down: 0.0,
             tf_agreement: 0.0,
             minute: 0.0, hour: 0.0, day_of_week: 0.0, day_of_month: 0.0, month_of_year: 0.0,
+            phase_label: PhaseLabel::Valley, phase_direction: PhaseDirection::None,
+            phase_duration: 0, phase_history: Vec::new(),
         };
         assert_eq!(c.close, 0.0);
     }

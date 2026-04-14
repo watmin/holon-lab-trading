@@ -6,4 +6,3 @@
 pub mod cache;
 pub mod console;
 pub mod database;
-pub mod pivot_tracker;

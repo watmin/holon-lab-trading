@@ -12,8 +12,8 @@ use crate::types::ohlcv::Asset;
 pub struct Proposal {
     pub composed_thought: Vector,
     pub market_thought: Vector,
-    /// The exit observer's own encoded facts. Proposal 026.
-    pub exit_thought: Vector,
+    /// The position observer's own encoded facts. Proposal 026.
+    pub position_thought: Vector,
     pub distances: Distances,
     pub edge: f64,
     pub side: Side,
@@ -28,7 +28,7 @@ impl Proposal {
     pub fn new(
         composed_thought: Vector,
         market_thought: Vector,
-        exit_thought: Vector,
+        position_thought: Vector,
         distances: Distances,
         edge: f64,
         side: Side,
@@ -41,7 +41,7 @@ impl Proposal {
         Self {
             composed_thought,
             market_thought,
-            exit_thought,
+            position_thought,
             distances,
             edge,
             side,

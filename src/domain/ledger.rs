@@ -22,9 +22,9 @@ pub fn ledger_setup(conn: &Connection) {
             last_prediction TEXT,
             us_elapsed INTEGER
         );
-        CREATE TABLE IF NOT EXISTS exit_observer_snapshots (
+        CREATE TABLE IF NOT EXISTS position_observer_snapshots (
             candle INTEGER,
-            exit_idx INTEGER,
+            position_idx INTEGER,
             lens TEXT,
             trail_experience REAL,
             stop_experience REAL,
@@ -45,17 +45,6 @@ pub fn ledger_setup(conn: &Connection) {
             avg_violence_net REAL,
             fact_count INTEGER,
             thought_ast TEXT
-        );
-        CREATE TABLE IF NOT EXISTS pivot_tracker_snapshots (
-            candle INTEGER,
-            market_idx INTEGER,
-            lens TEXT,
-            pivot_count INTEGER,
-            gap_count INTEGER,
-            current_kind TEXT,
-            current_duration INTEGER,
-            threshold REAL,
-            conviction_window_size INTEGER
         );
         CREATE TABLE IF NOT EXISTS telemetry (
             namespace TEXT,
@@ -88,14 +77,14 @@ pub fn ledger_insert(conn: &Connection, entry: &LogEntry) {
             )
             .unwrap();
         }
-        LogEntry::ExitObserverSnapshot {
-            candle, exit_idx, lens, trail_experience,
+        LogEntry::PositionObserverSnapshot {
+            candle, position_idx, lens, trail_experience,
             stop_experience, grace_rate, avg_residue, us_elapsed,
         } => {
             conn.execute(
-                "INSERT INTO exit_observer_snapshots VALUES (?,?,?,?,?,?,?,?)",
+                "INSERT INTO position_observer_snapshots VALUES (?,?,?,?,?,?,?,?)",
                 rusqlite::params![
-                    candle, exit_idx, lens, trail_experience,
+                    candle, position_idx, lens, trail_experience,
                     stop_experience, grace_rate, avg_residue, us_elapsed
                 ],
             )
@@ -112,19 +101,6 @@ pub fn ledger_insert(conn: &Connection, entry: &LogEntry) {
                     candle, broker_slot_idx, grace_count, violence_count, paper_count,
                     trail_experience, stop_experience, expected_value,
                     avg_grace_net, avg_violence_net, fact_count, thought_ast
-                ],
-            )
-            .unwrap();
-        }
-        LogEntry::PivotTrackerSnapshot {
-            candle, market_idx, lens, pivot_count, gap_count,
-            current_kind, current_duration, threshold, conviction_window_size,
-        } => {
-            conn.execute(
-                "INSERT INTO pivot_tracker_snapshots VALUES (?,?,?,?,?,?,?,?,?)",
-                rusqlite::params![
-                    candle, market_idx, lens, pivot_count, gap_count,
-                    current_kind, current_duration, threshold, conviction_window_size
                 ],
             )
             .unwrap();

@@ -1,5 +1,5 @@
 /// broker.rs — The accountability primitive. Binds one market observer + one
-/// exit observer. Compiled from wat/broker.wat.
+/// position observer. Compiled from wat/broker.wat.
 ///
 /// The broker IS the accountability unit. It owns paper trades, scalar
 /// accumulators, and a Grace/Violence reckoner. Values up, not effects down.
@@ -17,7 +17,7 @@ use crate::trades::paper_entry::PaperEntry;
 use crate::learning::scalar_accumulator::ScalarAccumulator;
 
 /// Accumulated history for a runner paper. Created when a paper signals Grace.
-/// Stores per-candle data for deferred batch training of the exit observer.
+/// Stores per-candle data for deferred batch training of the position observer.
 #[derive(Clone)]
 pub struct RunnerHistory {
     pub thoughts: Vec<Vector>,
@@ -31,13 +31,13 @@ pub struct RunnerHistory {
 pub struct Resolution {
     /// Which broker produced this.
     pub broker_slot_idx: usize,
-    /// The composed thought (market + exit) that was tested.
+    /// The composed thought (market + position) that was tested.
     pub composed_thought: Vector,
     /// The raw market thought (for market observer learning).
     pub market_thought: Vector,
-    /// The exit observer's own encoded facts (for exit observer learning).
-    /// Proposal 026: exit learns from exit_thought, not composed.
-    pub exit_thought: Vector,
+    /// The position observer's own encoded facts (for position observer learning).
+    /// Proposal 026: position learns from position_thought, not composed.
+    pub position_thought: Vector,
     /// What the market observer predicted.
     pub prediction: Direction,
     /// Grace or Violence.
@@ -55,10 +55,10 @@ pub struct Resolution {
     pub duration: usize,
     /// Did the trail cross before resolution?
     pub was_runner: bool,
-    /// Deferred batch training data for the exit observer.
+    /// Deferred batch training data for the position observer.
     /// Each entry: (thought_at_candle, optimal_distances_at_candle, actual_distances_at_candle, weight).
     /// Empty for non-runner resolutions.
-    pub exit_batch: Vec<(Vector, Distances, Distances, f64)>,
+    pub position_batch: Vec<(Vector, Distances, Distances, f64)>,
 }
 
 /// What the broker returns for observer learning.
@@ -66,8 +66,8 @@ pub struct Resolution {
 pub struct PropagationFacts {
     /// Which market observer should learn.
     pub market_idx: usize,
-    /// Which exit observer should learn.
-    pub exit_idx: usize,
+    /// Which position observer should learn.
+    pub position_idx: usize,
     /// For the market observer.
     pub direction: Direction,
     /// For both observers.
@@ -75,10 +75,10 @@ pub struct PropagationFacts {
     /// For the market observer — the anomaly it predicted on.
     /// Proposal 024: market observer learns from the anomaly, not composed thought.
     pub market_thought: Vector,
-    /// For the exit observer — its own encoded facts, NOT the composition.
-    /// Proposal 026: exit observer learns from exit_thought only.
-    pub exit_thought: Vector,
-    /// For the exit observer.
+    /// For the position observer — its own encoded facts, NOT the composition.
+    /// Proposal 026: position observer learns from position_thought only.
+    pub position_thought: Vector,
+    /// For the position observer.
     pub optimal: Distances,
     /// For both observers.
     pub weight: f64,
@@ -93,8 +93,8 @@ pub struct Broker {
     pub observer_names: Vec<String>,
     /// Position in the N x M grid. THE identity.
     pub slot_idx: usize,
-    /// M -- needed to derive market-idx and exit-idx.
-    pub exit_count: usize,
+    /// M -- needed to derive market-idx and position-idx.
+    pub position_count: usize,
     /// Cumulative grace value (weighted).
     pub cumulative_grace: f64,
     /// Cumulative violence value (weighted).
@@ -146,16 +146,16 @@ impl Broker {
     pub fn new(
         observer_names: Vec<String>,
         slot_idx: usize,
-        exit_count: usize,
+        position_count: usize,
         scalar_accums: Vec<ScalarAccumulator>,
         default_distances: Distances,
         swap_fee: f64,
     ) -> Self {
-        assert!(exit_count > 0, "broker exit_count must be > 0 (divide-by-zero guard)");
+        assert!(position_count > 0, "broker position_count must be > 0 (divide-by-zero guard)");
         Self {
             observer_names,
             slot_idx,
-            exit_count,
+            position_count,
             cumulative_grace: 0.0,
             cumulative_violence: 0.0,
             trade_count: 0,
@@ -182,12 +182,12 @@ impl Broker {
 
     /// Derive market observer index from slot_idx.
     pub fn market_idx(&self) -> usize {
-        self.slot_idx / self.exit_count
+        self.slot_idx / self.position_count
     }
 
-    /// Derive exit observer index from slot_idx.
-    pub fn exit_idx(&self) -> usize {
-        self.slot_idx % self.exit_count
+    /// Derive position observer index from slot_idx.
+    pub fn position_idx(&self) -> usize {
+        self.slot_idx % self.position_count
     }
 
     /// Is the gate open? During cold start (< 50 of either outcome), always open.
@@ -223,13 +223,13 @@ impl Broker {
     }
 
     /// Create a paper entry — every candle, every broker.
-    /// Takes the market observer's prediction, raw market thought, and exit thought.
-    /// Proposal 026: exit_thought stored on paper for aligned exit observer learning.
+    /// Takes the market observer's prediction, raw market thought, and position thought.
+    /// Proposal 026: position_thought stored on paper for aligned position observer learning.
     pub fn register_paper(
         &mut self,
         composed: Vector,
         market_thought: Vector,
-        exit_thought: Vector,
+        position_thought: Vector,
         prediction: Direction,
         entry_price: Price,
         distances: Distances,
@@ -240,7 +240,7 @@ impl Broker {
             paper_id,
             composed,
             market_thought,
-            exit_thought,
+            position_thought,
             prediction,
             entry_price,
             distances,
@@ -248,7 +248,7 @@ impl Broker {
     }
 
     /// Close all runners — direction flipped. Force-resolve all signaled papers.
-    /// Returns runner resolutions for exit batch training + market second teaching.
+    /// Returns runner resolutions for position batch training + market second teaching.
     pub fn close_all_runners(&mut self, current_price: Price) -> Vec<Resolution> {
         let mut resolutions = Vec::new();
         let mut remaining = VecDeque::new();
@@ -261,8 +261,8 @@ impl Broker {
                 let optimal = simulation::compute_optimal_distances(
                     &paper.price_history, paper.prediction, self.swap_fee,
                 );
-                let exit_batch = if let Some(history) = self.runner_histories.remove(&paper.paper_id) {
-                    compute_exit_batch(&history, paper.prediction, self.swap_fee)
+                let position_batch = if let Some(history) = self.runner_histories.remove(&paper.paper_id) {
+                    compute_position_batch(&history, paper.prediction, self.swap_fee)
                 } else {
                     Vec::new()
                 };
@@ -271,7 +271,7 @@ impl Broker {
                     broker_slot_idx: self.slot_idx,
                     composed_thought: paper.composed_thought.clone(),
                     market_thought: paper.market_thought.clone(),
-                    exit_thought: paper.exit_thought.clone(),
+                    position_thought: paper.position_thought.clone(),
                     prediction: paper.prediction,
                     outcome: Outcome::Grace,
                     amount: paper.excursion(),
@@ -283,7 +283,7 @@ impl Broker {
                     stop_distance: paper.distances.stop,
                     duration: paper.age,
                     was_runner: true,
-                    exit_batch,
+                    position_batch,
                 });
             } else if !paper.resolved {
                 // Non-runner papers survive the flip (they'll hit stop naturally)
@@ -298,7 +298,7 @@ impl Broker {
 
     /// Tick all papers, resolve completed. Returns two vecs:
     /// - market_signals: for market observer learning (Grace or Violence)
-    /// - runner_resolutions: for exit observer + broker learning (runner finished)
+    /// - runner_resolutions: for position observer + broker learning (runner finished)
     pub fn tick_papers(&mut self, current_price: Price) -> (Vec<Resolution>, Vec<Resolution>) {
         let mut market_signals = Vec::new();
         let mut runner_resolutions = Vec::new();
@@ -322,7 +322,7 @@ impl Broker {
                     broker_slot_idx: self.slot_idx,
                     composed_thought: paper.composed_thought.clone(),
                     market_thought: paper.market_thought.clone(),
-                    exit_thought: paper.exit_thought.clone(),
+                    position_thought: paper.position_thought.clone(),
                     prediction: paper.prediction,
                     outcome: Outcome::Grace,
                     amount: paper.excursion(),
@@ -334,7 +334,7 @@ impl Broker {
                     stop_distance: paper.distances.stop,
                     duration: paper.age,
                     was_runner: true,
-                    exit_batch: Vec::new(),
+                    position_batch: Vec::new(),
                 });
                 // Create runner history — accumulation starts now
                 self.runner_histories.insert(paper.paper_id, RunnerHistory {
@@ -367,7 +367,7 @@ impl Broker {
                         broker_slot_idx: self.slot_idx,
                         composed_thought: paper.composed_thought.clone(),
                         market_thought: paper.market_thought.clone(),
-                        exit_thought: paper.exit_thought.clone(),
+                        position_thought: paper.position_thought.clone(),
                         prediction: paper.prediction,
                         outcome: Outcome::Violence,
                         amount: paper.distances.stop,
@@ -379,12 +379,12 @@ impl Broker {
                         stop_distance: paper.distances.stop,
                         duration: paper.age,
                         was_runner: false,
-                        exit_batch: Vec::new(),
+                        position_batch: Vec::new(),
                     });
                 } else {
-                    // Runner finished — compute exit batch from accumulated history
-                    let exit_batch = if let Some(history) = self.runner_histories.remove(&paper.paper_id) {
-                        compute_exit_batch(&history, paper.prediction, self.swap_fee)
+                    // Runner finished — compute position batch from accumulated history
+                    let position_batch = if let Some(history) = self.runner_histories.remove(&paper.paper_id) {
+                        compute_position_batch(&history, paper.prediction, self.swap_fee)
                     } else {
                         Vec::new()
                     };
@@ -394,7 +394,7 @@ impl Broker {
                         broker_slot_idx: self.slot_idx,
                         composed_thought: paper.composed_thought.clone(),
                         market_thought: paper.market_thought.clone(),
-                        exit_thought: paper.exit_thought.clone(),
+                        position_thought: paper.position_thought.clone(),
                         prediction: paper.prediction,
                         outcome: Outcome::Grace,
                         amount: paper.excursion(),
@@ -406,7 +406,7 @@ impl Broker {
                         stop_distance: paper.distances.stop,
                         duration: paper.age,
                         was_runner: true,
-                        exit_batch,
+                        position_batch,
                     });
                 }
 
@@ -441,7 +441,7 @@ impl Broker {
         &mut self,
         thought: &Vector,
         market_thought: &Vector,
-        exit_thought: &Vector,
+        position_thought: &Vector,
         outcome: Outcome,
         weight: f64,
         direction: Direction,
@@ -501,11 +501,11 @@ impl Broker {
         // Return propagation facts for the post
         PropagationFacts {
             market_idx: self.market_idx(),
-            exit_idx: self.exit_idx(),
+            position_idx: self.position_idx(),
             direction,
             composed_thought: thought.clone(),
             market_thought: market_thought.clone(),
-            exit_thought: exit_thought.clone(),
+            position_thought: position_thought.clone(),
             optimal: *optimal,
             weight,
         }
@@ -536,10 +536,10 @@ fn approximate_optimal_distances(
     Distances::new(trail, stop)
 }
 
-/// Compute deferred batch training data for the exit observer from a runner's history.
+/// Compute deferred batch training data for the position observer from a runner's history.
 /// Uses a suffix-max (or suffix-min for Down) pass to find the optimal trail distance
 /// at each candle in O(n).
-fn compute_exit_batch(
+fn compute_position_batch(
     history: &RunnerHistory,
     prediction: Direction,
     swap_fee: f64,
@@ -620,7 +620,7 @@ mod tests {
         Broker::new(
             vec!["momentum".into(), "volatility".into()],
             0, // slot_idx
-            2, // exit_count
+            2, // position_count
             make_scalar_accums(),
             Distances::new(0.015, 0.030),
             0.0010, // swap_fee
@@ -636,7 +636,7 @@ mod tests {
     fn test_broker_new() {
         let broker = make_broker();
         assert_eq!(broker.slot_idx, 0);
-        assert_eq!(broker.exit_count, 2);
+        assert_eq!(broker.position_count, 2);
         assert_eq!(broker.trade_count, 0);
         assert_eq!(broker.paper_count(), 0);
         assert!((broker.cumulative_grace - 0.0).abs() < 1e-10);
@@ -647,7 +647,7 @@ mod tests {
     }
 
     #[test]
-    fn test_market_exit_idx() {
+    fn test_market_position_idx() {
         let broker = Broker::new(
             vec!["a".into(), "b".into()],
             5, 3,
@@ -656,7 +656,7 @@ mod tests {
             0.0010,
         );
         assert_eq!(broker.market_idx(), 1);
-        assert_eq!(broker.exit_idx(), 2);
+        assert_eq!(broker.position_idx(), 2);
     }
 
     #[test]
@@ -692,9 +692,9 @@ mod tests {
         let mut broker = make_broker();
         let composed = random_vector("thought");
         let market_thought = random_vector("market");
-        let exit_thought = random_vector("exit");
+        let position_thought = random_vector("exit");
         let distances = Distances::new(0.02, 0.05);
-        broker.register_paper(composed, market_thought, exit_thought, Direction::Up, Price(50000.0), distances);
+        broker.register_paper(composed, market_thought, position_thought, Direction::Up, Price(50000.0), distances);
         assert_eq!(broker.paper_count(), 1);
     }
 
@@ -703,9 +703,9 @@ mod tests {
         let mut broker = make_broker();
         let composed = random_vector("thought");
         let market_thought = random_vector("market");
-        let exit_thought = random_vector("exit");
+        let position_thought = random_vector("exit");
         let distances = Distances::new(0.05, 0.10);
-        broker.register_paper(composed, market_thought, exit_thought, Direction::Up, Price(100.0), distances);
+        broker.register_paper(composed, market_thought, position_thought, Direction::Up, Price(100.0), distances);
 
         // Price barely moves -- no resolution
         let (market_signals, runner_resolutions) = broker.tick_papers(Price(100.5));
@@ -719,10 +719,10 @@ mod tests {
         let mut broker = make_broker();
         let composed = random_vector("thought");
         let market_thought = random_vector("market");
-        let exit_thought = random_vector("exit");
+        let position_thought = random_vector("exit");
         // Trail=0.05, Stop=0.10: stop_level=90
         let distances = Distances::new(0.05, 0.10);
-        broker.register_paper(composed, market_thought, exit_thought, Direction::Up, Price(100.0), distances);
+        broker.register_paper(composed, market_thought, position_thought, Direction::Up, Price(100.0), distances);
 
         // Price drops below stop → Violence
         let (market_signals, runner_resolutions) = broker.tick_papers(Price(89.0));
@@ -738,10 +738,10 @@ mod tests {
         let mut broker = make_broker();
         let composed = random_vector("thought");
         let market_thought = random_vector("market");
-        let exit_thought = random_vector("exit");
+        let position_thought = random_vector("exit");
         // Trail=0.05, Stop=0.10
         let distances = Distances::new(0.05, 0.10);
-        broker.register_paper(composed, market_thought, exit_thought, Direction::Up, Price(100.0), distances);
+        broker.register_paper(composed, market_thought, position_thought, Direction::Up, Price(100.0), distances);
 
         // Price rises above entry + entry*trail = 105 → Grace signal
         let (market_signals, runner_resolutions) = broker.tick_papers(Price(110.0));
@@ -767,11 +767,11 @@ mod tests {
         let optimal = Distances::new(0.03, 0.06);
 
         let market_thought = random_vector("market");
-        let exit_thought = random_vector("exit");
+        let position_thought = random_vector("exit");
         let facts = broker.propagate(
             &thought,
             &market_thought,
-            &exit_thought,
+            &position_thought,
             Outcome::Grace,
             1.0,
             Direction::Up,
@@ -782,7 +782,7 @@ mod tests {
         assert_eq!(broker.trade_count, 1);
         assert!((broker.cumulative_grace - 1.0).abs() < 1e-10);
         assert_eq!(facts.market_idx, 0);
-        assert_eq!(facts.exit_idx, 0);
+        assert_eq!(facts.position_idx, 0);
         assert_eq!(facts.direction, Direction::Up);
     }
 
@@ -794,11 +794,11 @@ mod tests {
         let optimal = Distances::new(0.03, 0.06);
 
         let market_thought = random_vector("market");
-        let exit_thought = random_vector("exit");
+        let position_thought = random_vector("exit");
         broker.propagate(
             &thought,
             &market_thought,
-            &exit_thought,
+            &position_thought,
             Outcome::Violence,
             2.5,
             Direction::Down,
@@ -820,11 +820,11 @@ mod tests {
 
         // Grace with weight=0.05 (5% excursion), swap_fee=0.0010
         let market_thought = random_vector("market");
-        let exit_thought = random_vector("exit");
+        let position_thought = random_vector("exit");
         broker.propagate(
             &thought,
             &market_thought,
-            &exit_thought,
+            &position_thought,
             Outcome::Grace,
             0.05,
             Direction::Up,
@@ -848,11 +848,11 @@ mod tests {
 
         // Violence with weight=0.03 (3% stop distance), swap_fee=0.0010
         let market_thought = random_vector("market");
-        let exit_thought = random_vector("exit");
+        let position_thought = random_vector("exit");
         broker.propagate(
             &thought,
             &market_thought,
-            &exit_thought,
+            &position_thought,
             Outcome::Violence,
             0.03,
             Direction::Down,
@@ -874,14 +874,14 @@ mod tests {
         let se = ScalarEncoder::new(DIMS);
         let optimal = Distances::new(0.03, 0.06);
         let market_thought = random_vector("market");
-        let exit_thought = random_vector("exit");
+        let position_thought = random_vector("exit");
 
         // Two Grace propagations — EMA should blend
-        broker.propagate(&thought, &market_thought, &exit_thought,
+        broker.propagate(&thought, &market_thought, &position_thought,
             Outcome::Grace, 0.05, Direction::Up, &optimal, &se);
         let first = broker.avg_grace_net;
 
-        broker.propagate(&thought, &market_thought, &exit_thought,
+        broker.propagate(&thought, &market_thought, &position_thought,
             Outcome::Grace, 0.05, Direction::Up, &optimal, &se);
         let second = broker.avg_grace_net;
 

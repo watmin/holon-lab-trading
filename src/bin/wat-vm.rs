@@ -1,8 +1,8 @@
 /// wat-vm — the second heartbeat. Reads candles, enriches them, feeds observers.
 ///
 /// Candles flow to N market observers. Each observer encodes through its lens,
-/// learns the noise subspace, predicts direction. Exit observers compose market
-/// thoughts with exit facts. Brokers bind (market, exit) pairs — they register
+/// learns the noise subspace, predicts direction. Position observers compose market
+/// thoughts with position facts. Brokers bind (market, position) pairs — they register
 /// paper trades, resolve them, and teach both observers through learn queues.
 /// The observers come home with experience.
 
@@ -18,7 +18,7 @@ use holon::kernel::vector_manager::VectorManager;
 
 use enterprise::domain::broker::Broker;
 use enterprise::domain::candle_stream::CandleStream;
-use enterprise::domain::exit_observer::ExitObserver;
+use enterprise::domain::position_observer::PositionObserver;
 use enterprise::domain::indicator_bank::IndicatorBank;
 use enterprise::domain::ledger;
 use enterprise::domain::config;
@@ -26,16 +26,14 @@ use enterprise::domain::market_observer::MarketObserver;
 use enterprise::kernel::handle_pool::HandlePool;
 use enterprise::encoding::thought_encoder::{ThoughtAST, ThoughtEncoder};
 use enterprise::programs::app::broker_program::broker_program;
-use enterprise::programs::app::exit_observer_program::{ExitLearn, ExitSlot, TradeUpdate};
-use enterprise::programs::app::exit_observer_program::exit_observer_program;
+use enterprise::programs::app::position_observer_program::{PositionLearn, PositionSlot, TradeUpdate};
+use enterprise::programs::app::position_observer_program::position_observer_program;
 use enterprise::programs::app::market_observer_program::{ObsInput, ObsLearn};
 use enterprise::programs::app::market_observer_program::market_observer_program;
-use enterprise::programs::chain::MarketExitChain;
+use enterprise::programs::chain::MarketPositionChain;
 use enterprise::programs::stdlib::cache::cache;
 use enterprise::programs::stdlib::console::console;
 use enterprise::programs::stdlib::database::database;
-use enterprise::programs::stdlib::pivot_tracker::pivot_tracker;
-use enterprise::types::pivot::PivotObservation;
 use enterprise::services::mailbox::mailbox;
 use enterprise::services::queue::{queue_bounded, queue_unbounded, QueueReceiver, QueueSender};
 use enterprise::services::topic::topic;
@@ -96,15 +94,14 @@ struct WiredMarketObservers {
     join_handles: Vec<std::thread::JoinHandle<MarketObserver>>,
     /// Topic handles — must live until shutdown
     topic_handles: Vec<enterprise::services::topic::TopicHandle>,
-    /// Exit slot receivers: exit_queue_rxs[mi][ei] — market observer mi, exit observer ei
-    exit_queue_rxs: Vec<Vec<enterprise::services::queue::QueueReceiver<MarketChain>>>,
+    /// Position slot receivers: position_queue_rxs[mi][ei] — market observer mi, position observer ei
+    position_queue_rxs: Vec<Vec<enterprise::services::queue::QueueReceiver<MarketChain>>>,
 }
 
 fn wire_market_observers(
     observers: Vec<MarketObserver>,
-    num_exit_observers: usize,
+    num_position_observers: usize,
     learn_mailboxes: Vec<enterprise::services::mailbox::MailboxReceiver<ObsLearn>>,
-    pivot_txs: Vec<QueueSender<PivotObservation>>,
     mut cache_pool: HandlePool<enterprise::programs::stdlib::cache::CacheHandle<ThoughtAST, Vector>>,
     mut console_pool: HandlePool<enterprise::programs::stdlib::console::ConsoleHandle>,
     mut db_pool: HandlePool<enterprise::services::queue::QueueSender<LogEntry>>,
@@ -116,27 +113,26 @@ fn wire_market_observers(
     let mut join_handles: Vec<std::thread::JoinHandle<MarketObserver>> =
         Vec::with_capacity(num_observers);
     let mut topic_handles = Vec::with_capacity(num_observers);
-    let mut exit_queue_rxs: Vec<Vec<enterprise::services::queue::QueueReceiver<MarketChain>>> =
+    let mut position_queue_rxs: Vec<Vec<enterprise::services::queue::QueueReceiver<MarketChain>>> =
         Vec::with_capacity(num_observers);
 
-    let mut pivot_txs = pivot_txs.into_iter();
     for (i, (observer, learn_rx)) in observers.into_iter().zip(learn_mailboxes).enumerate() {
         // Candle input queue
         let (candle_tx, candle_rx) = queue_bounded::<ObsInput>(1);
         candle_txs.push(candle_tx);
 
-        // Create M queues for fan-out to exit observers
-        let mut exit_txs = Vec::with_capacity(num_exit_observers);
-        let mut exit_rxs = Vec::with_capacity(num_exit_observers);
-        for _ in 0..num_exit_observers {
+        // Create M queues for fan-out to position observers
+        let mut position_txs = Vec::with_capacity(num_position_observers);
+        let mut position_rxs = Vec::with_capacity(num_position_observers);
+        for _ in 0..num_position_observers {
             let (tx, rx) = queue_bounded::<MarketChain>(1);
-            exit_txs.push(tx);
-            exit_rxs.push(rx);
+            position_txs.push(tx);
+            position_rxs.push(rx);
         }
-        exit_queue_rxs.push(exit_rxs);
+        position_queue_rxs.push(position_rxs);
 
-        // Output topic with M consumers — fan out to exit observers
-        let (result_tx, topic_handle) = topic::<MarketChain>(1, exit_txs);
+        // Output topic with M consumers — fan out to position observers
+        let (result_tx, topic_handle) = topic::<MarketChain>(1, position_txs);
         topic_handles.push(topic_handle);
 
         // Cache handle for this observer
@@ -148,9 +144,6 @@ fn wire_market_observers(
         // DB sender — real database
         let db_tx = db_pool.pop();
 
-        // Pivot observation sender — fire and forget to pivot tracker
-        let obs_pivot_tx = pivot_txs.next().expect("one pivot_tx per market observer");
-
         let enc = Arc::clone(&encoder);
         let jh = std::thread::spawn(move || {
             market_observer_program(
@@ -160,7 +153,6 @@ fn wire_market_observers(
                 obs_cache,
                 obs_console,
                 db_tx,
-                obs_pivot_tx,
                 observer,
                 enc,
                 i,
@@ -179,56 +171,56 @@ fn wire_market_observers(
         candle_txs,
         join_handles,
         topic_handles,
-        exit_queue_rxs,
+        position_queue_rxs,
     }
 }
 
-// ─── Exit observer wiring ──────────────────────────────────────────────────
+// ─── Position observer wiring ──────────────────────────────────────────────────
 
-struct WiredExitObservers {
-    /// Thread handles — join to get trained exit observers back
-    join_handles: Vec<std::thread::JoinHandle<ExitObserver>>,
+struct WiredPositionObservers {
+    /// Thread handles — join to get trained position observers back
+    join_handles: Vec<std::thread::JoinHandle<PositionObserver>>,
     /// Output receivers — one per (mi, ei) slot. The broker consumes these.
-    /// Layout: flat vec of N*M, index = mi * num_exit + ei
-    output_rxs: Vec<QueueReceiver<MarketExitChain>>,
+    /// Layout: flat vec of N*M, index = mi * num_position + ei
+    output_rxs: Vec<QueueReceiver<MarketPositionChain>>,
 }
 
-fn wire_exit_observers(
-    exit_observers: Vec<ExitObserver>,
-    exit_queue_rxs: Vec<Vec<enterprise::services::queue::QueueReceiver<MarketChain>>>,
-    learn_mailboxes: Vec<enterprise::services::mailbox::MailboxReceiver<ExitLearn>>,
+fn wire_position_observers(
+    position_observers: Vec<PositionObserver>,
+    position_queue_rxs: Vec<Vec<enterprise::services::queue::QueueReceiver<MarketChain>>>,
+    learn_mailboxes: Vec<enterprise::services::mailbox::MailboxReceiver<PositionLearn>>,
     trade_mailboxes: Vec<enterprise::services::mailbox::MailboxReceiver<TradeUpdate>>,
     mut cache_pool: HandlePool<enterprise::programs::stdlib::cache::CacheHandle<ThoughtAST, Vector>>,
     mut console_pool: HandlePool<enterprise::programs::stdlib::console::ConsoleHandle>,
     mut db_pool: HandlePool<enterprise::services::queue::QueueSender<LogEntry>>,
     encoder: Arc<ThoughtEncoder>,
     noise_floor: f64,
-) -> WiredExitObservers {
-    let num_market = exit_queue_rxs.len();
-    let num_exit = exit_observers.len();
-    let mut join_handles: Vec<std::thread::JoinHandle<ExitObserver>> =
-        Vec::with_capacity(num_exit);
+) -> WiredPositionObservers {
+    let num_market = position_queue_rxs.len();
+    let num_position = position_observers.len();
+    let mut join_handles: Vec<std::thread::JoinHandle<PositionObserver>> =
+        Vec::with_capacity(num_position);
 
-    // Output receivers: indexed [mi * num_exit + ei]
-    // We'll fill them in slot order as we wire each exit observer.
-    let mut output_rxs_by_slot: Vec<Option<QueueReceiver<MarketExitChain>>> =
-        (0..num_market * num_exit).map(|_| None).collect();
+    // Output receivers: indexed [mi * num_position + ei]
+    // We'll fill them in slot order as we wire each position observer.
+    let mut output_rxs_by_slot: Vec<Option<QueueReceiver<MarketPositionChain>>> =
+        (0..num_market * num_position).map(|_| None).collect();
 
-    // Transpose: exit_queue_rxs[mi][ei] → slots[ei][mi]
+    // Transpose: position_queue_rxs[mi][ei] → slots[ei][mi]
     // We need to move receivers out, so consume the outer vec.
     let mut transposed: Vec<Vec<Option<enterprise::services::queue::QueueReceiver<MarketChain>>>> =
-        Vec::with_capacity(num_exit);
-    for _ in 0..num_exit {
+        Vec::with_capacity(num_position);
+    for _ in 0..num_position {
         transposed.push(Vec::with_capacity(num_market));
     }
-    for mi_rxs in exit_queue_rxs {
+    for mi_rxs in position_queue_rxs {
         for (ei, rx) in mi_rxs.into_iter().enumerate() {
             transposed[ei].push(Some(rx));
         }
     }
 
-    for (ei, ((exit_obs, learn_rx), trade_rx)) in exit_observers.into_iter().zip(learn_mailboxes).zip(trade_mailboxes).enumerate() {
-        // Build N slots for this exit observer
+    for (ei, ((position_obs, learn_rx), trade_rx)) in position_observers.into_iter().zip(learn_mailboxes).zip(trade_mailboxes).enumerate() {
+        // Build N slots for this position observer
         let slot_rxs: Vec<enterprise::services::queue::QueueReceiver<MarketChain>> = transposed[ei]
             .iter_mut()
             .map(|opt| opt.take().expect("each rx used exactly once"))
@@ -238,9 +230,9 @@ fn wire_exit_observers(
         for (mi, rx) in slot_rxs.into_iter().enumerate() {
             // Output queue — broker consumes the receiver
             let (output_tx, output_rx) = queue_unbounded();
-            let slot_idx = mi * num_exit + ei;
+            let slot_idx = mi * num_position + ei;
             output_rxs_by_slot[slot_idx] = Some(output_rx);
-            slots.push(ExitSlot {
+            slots.push(PositionSlot {
                 input_rx: rx,
                 output_tx,
             });
@@ -252,14 +244,14 @@ fn wire_exit_observers(
 
         let enc = Arc::clone(&encoder);
         let jh = std::thread::spawn(move || {
-            exit_observer_program(
+            position_observer_program(
                 slots,
                 learn_rx,
                 trade_rx,
                 obs_cache,
                 obs_console,
                 db_tx,
-                exit_obs,
+                position_obs,
                 enc,
                 noise_floor,
                 ei,
@@ -272,12 +264,12 @@ fn wire_exit_observers(
     console_pool.finish();
     db_pool.finish();
 
-    let output_rxs: Vec<QueueReceiver<MarketExitChain>> = output_rxs_by_slot
+    let output_rxs: Vec<QueueReceiver<MarketPositionChain>> = output_rxs_by_slot
         .into_iter()
         .map(|opt| opt.expect("every slot must have an output receiver"))
         .collect();
 
-    WiredExitObservers {
+    WiredPositionObservers {
         join_handles,
         output_rxs,
     }
@@ -292,22 +284,22 @@ struct WiredBrokers {
 
 fn wire_brokers(
     brokers: Vec<Broker>,
-    output_rxs: Vec<QueueReceiver<MarketExitChain>>,
+    output_rxs: Vec<QueueReceiver<MarketPositionChain>>,
     market_learn_txs: Vec<Vec<QueueSender<ObsLearn>>>,
-    exit_learn_txs: Vec<Vec<QueueSender<ExitLearn>>>,
+    position_learn_txs: Vec<Vec<QueueSender<PositionLearn>>>,
     trade_txs: Vec<Option<QueueSender<TradeUpdate>>>,
     mut console_pool: HandlePool<enterprise::programs::stdlib::console::ConsoleHandle>,
     mut db_pool: HandlePool<enterprise::services::queue::QueueSender<LogEntry>>,
     scalar_encoder: Arc<ScalarEncoder>,
     swap_fee: f64,
-    num_exit: usize,
+    num_position: usize,
 ) -> WiredBrokers {
     let num_brokers = brokers.len();
     let mut join_handles: Vec<std::thread::JoinHandle<Broker>> = Vec::with_capacity(num_brokers);
 
     // Flatten the 2D learn tx vecs into per-broker assignments.
-    // market_learn_txs[mi][ei] — broker at slot mi*num_exit+ei gets market_learn_txs[mi][ei]
-    // exit_learn_txs[ei][mi] — broker at slot mi*num_exit+ei gets exit_learn_txs[ei][mi]
+    // market_learn_txs[mi][ei] — broker at slot mi*num_position+ei gets market_learn_txs[mi][ei]
+    // position_learn_txs[ei][mi] — broker at slot mi*num_position+ei gets position_learn_txs[ei][mi]
     let mut market_learn_flat: Vec<Option<QueueSender<ObsLearn>>> = Vec::with_capacity(num_brokers);
     for mi_txs in market_learn_txs {
         for tx in mi_txs {
@@ -315,12 +307,12 @@ fn wire_brokers(
         }
     }
 
-    let mut exit_learn_flat: Vec<Option<QueueSender<ExitLearn>>> =
+    let mut position_learn_flat: Vec<Option<QueueSender<PositionLearn>>> =
         (0..num_brokers).map(|_| None).collect();
-    for (ei, ei_txs) in exit_learn_txs.into_iter().enumerate() {
+    for (ei, ei_txs) in position_learn_txs.into_iter().enumerate() {
         for (mi, tx) in ei_txs.into_iter().enumerate() {
-            let slot_idx = mi * num_exit + ei;
-            exit_learn_flat[slot_idx] = Some(tx);
+            let slot_idx = mi * num_position + ei;
+            position_learn_flat[slot_idx] = Some(tx);
         }
     }
 
@@ -330,13 +322,13 @@ fn wire_brokers(
         .zip(
             market_learn_flat
                 .into_iter()
-                .zip(exit_learn_flat.into_iter()),
+                .zip(position_learn_flat.into_iter()),
         )
         .zip(trade_txs.into_iter())
         .enumerate()
     {
         let market_learn_tx = mlt.unwrap_or_else(|| panic!("missing market learn tx for slot {}", slot_idx));
-        let exit_learn_tx = elt.unwrap_or_else(|| panic!("missing exit learn tx for slot {}", slot_idx));
+        let position_learn_tx = elt.unwrap_or_else(|| panic!("missing position learn tx for slot {}", slot_idx));
         let trade_tx = ttx.unwrap_or_else(|| panic!("missing trade tx for slot {}", slot_idx));
         let broker_console = console_pool.pop();
         let broker_db = db_pool.pop();
@@ -346,7 +338,7 @@ fn wire_brokers(
             broker_program(
                 chain_rx,
                 market_learn_tx,
-                exit_learn_tx,
+                position_learn_tx,
                 trade_tx,
                 broker_console,
                 broker_db,
@@ -369,7 +361,7 @@ fn wire_brokers(
 fn main() {
     let args = Args::parse();
     let num_market = config::MARKET_LENSES.len();
-    let num_exit = config::EXIT_LENSES.len();
+    let num_position = config::POSITION_LENSES.len();
     let dims = args.dims;
     let recalib_interval = args.recalib_interval;
     let noise_floor = 5.0 / (dims as f64).sqrt();
@@ -396,10 +388,10 @@ fn main() {
         ));
     }
 
-    let num_brokers = num_market * num_exit;
+    let num_brokers = num_market * num_position;
 
-    // Console: streams + market + exit + brokers + main
-    let num_console = parsed.len() + num_market + num_exit + num_brokers + 1;
+    // Console: streams + market + position + brokers + main
+    let num_console = parsed.len() + num_market + num_position + num_brokers + 1;
     let (handles, console_driver) = console(num_console);
     let mut console_pool = HandlePool::new("console", handles);
 
@@ -421,8 +413,8 @@ fn main() {
 
     // All wires before any work. The kernel creates all queues, builds the
     // mailbox, then spawns the database. +1 self-telemetry, +1 cache telemetry.
-    let num_db_producers = num_market + num_exit + num_brokers;
-    let num_db_total = num_db_producers + 1 + 1; // +1 cache telemetry, +1 pivot tracker telemetry
+    let num_db_producers = num_market + num_position + num_brokers;
+    let num_db_total = num_db_producers + 1; // +1 cache telemetry
     let mut db_txs = Vec::with_capacity(num_db_total);
     let mut db_rxs = Vec::with_capacity(num_db_total);
     for _ in 0..num_db_total {
@@ -431,9 +423,6 @@ fn main() {
         db_rxs.push(rx);
     }
     let db_mailbox_rx = mailbox(db_rxs);
-
-    // Pivot tracker telemetry sender
-    let pivot_tracker_db_tx = db_txs.pop().unwrap();
 
     // Cache telemetry sender — the cache driver emits metrics through this
     let cache_telemetry_tx = db_txs.pop().unwrap();
@@ -520,21 +509,21 @@ fn main() {
     let (cache_handles, cache_driver) = cache::<ThoughtAST, Vector>(
         "encoder",
         65536,
-        num_market + num_exit,
+        num_market + num_position,
         Box::new(cache_gate),
         Box::new(cache_emit),
     );
     let mut cache_pool = HandlePool::new("cache", cache_handles);
 
-    // ─── Reserve handles for exit observers and brokers ──────────────────
-    // Pop exit + broker handles first so market observer wiring gets the rest.
-    let mut exit_console_handles = Vec::with_capacity(num_exit);
-    let mut exit_cache_handles = Vec::with_capacity(num_exit);
-    let mut exit_db_handles = Vec::with_capacity(num_exit);
-    for _ in 0..num_exit {
-        exit_console_handles.push(console_pool.pop());
-        exit_cache_handles.push(cache_pool.pop());
-        exit_db_handles.push(db_pool.pop());
+    // ─── Reserve handles for position observers and brokers ──────────────────
+    // Pop position + broker handles first so market observer wiring gets the rest.
+    let mut position_console_handles = Vec::with_capacity(num_position);
+    let mut position_cache_handles = Vec::with_capacity(num_position);
+    let mut position_db_handles = Vec::with_capacity(num_position);
+    for _ in 0..num_position {
+        position_console_handles.push(console_pool.pop());
+        position_cache_handles.push(cache_pool.pop());
+        position_db_handles.push(db_pool.pop());
     }
     let mut broker_console_handles = Vec::with_capacity(num_brokers);
     let mut broker_db_handles = Vec::with_capacity(num_brokers);
@@ -550,9 +539,9 @@ fn main() {
     let mut market_learn_txs: Vec<Vec<QueueSender<ObsLearn>>> = Vec::with_capacity(num_market);
     let mut market_learn_rxs: Vec<Vec<QueueReceiver<ObsLearn>>> = Vec::with_capacity(num_market);
     for _ in 0..num_market {
-        let mut txs = Vec::with_capacity(num_exit);
-        let mut rxs = Vec::with_capacity(num_exit);
-        for _ in 0..num_exit {
+        let mut txs = Vec::with_capacity(num_position);
+        let mut rxs = Vec::with_capacity(num_position);
+        for _ in 0..num_position {
             let (tx, rx) = queue_unbounded::<ObsLearn>();
             txs.push(tx);
             rxs.push(rx);
@@ -561,84 +550,57 @@ fn main() {
         market_learn_rxs.push(rxs);
     }
 
-    // Exit learn queues: exit_learn_txs[ei][mi], exit_learn_rxs[ei] = Vec<QueueReceiver>
-    let mut exit_learn_txs: Vec<Vec<QueueSender<ExitLearn>>> = Vec::with_capacity(num_exit);
-    let mut exit_learn_rxs: Vec<Vec<QueueReceiver<ExitLearn>>> = Vec::with_capacity(num_exit);
-    for _ in 0..num_exit {
+    // Position learn queues: position_learn_txs[ei][mi], position_learn_rxs[ei] = Vec<QueueReceiver>
+    let mut position_learn_txs: Vec<Vec<QueueSender<PositionLearn>>> = Vec::with_capacity(num_position);
+    let mut position_learn_rxs: Vec<Vec<QueueReceiver<PositionLearn>>> = Vec::with_capacity(num_position);
+    for _ in 0..num_position {
         let mut txs = Vec::with_capacity(num_market);
         let mut rxs = Vec::with_capacity(num_market);
         for _ in 0..num_market {
-            let (tx, rx) = queue_unbounded::<ExitLearn>();
+            let (tx, rx) = queue_unbounded::<PositionLearn>();
             txs.push(tx);
             rxs.push(rx);
         }
-        exit_learn_txs.push(txs);
-        exit_learn_rxs.push(rxs);
+        position_learn_txs.push(txs);
+        position_learn_rxs.push(rxs);
     }
 
     // Build mailbox receivers for market observers (fan-in from M brokers each)
     let market_learn_mailboxes: Vec<enterprise::services::mailbox::MailboxReceiver<ObsLearn>> =
         market_learn_rxs.into_iter().map(|rxs| mailbox(rxs)).collect();
 
-    // Build mailbox receivers for exit observers (fan-in from N brokers each)
-    let exit_learn_mailboxes: Vec<enterprise::services::mailbox::MailboxReceiver<ExitLearn>> =
-        exit_learn_rxs.into_iter().map(|rxs| mailbox(rxs)).collect();
+    // Build mailbox receivers for position observers (fan-in from N brokers each)
+    let position_learn_mailboxes: Vec<enterprise::services::mailbox::MailboxReceiver<PositionLearn>> =
+        position_learn_rxs.into_iter().map(|rxs| mailbox(rxs)).collect();
 
-    // Trade-state queues: trade_txs[slot_idx] → trade_rxs[ei] (fan-in per exit observer)
-    // Each broker sends trade updates to its exit observer through a dedicated queue.
-    // Proposal 040: brokers send trade atoms, exit observers receive through mailbox.
+    // Trade-state queues: trade_txs[slot_idx] → trade_rxs[ei] (fan-in per position observer)
+    // Each broker sends trade updates to its position observer through a dedicated queue.
+    // Proposal 040: brokers send trade atoms, position observers receive through mailbox.
     let mut trade_txs_flat: Vec<Option<QueueSender<TradeUpdate>>> =
         (0..num_brokers).map(|_| None).collect();
-    let mut trade_rxs_per_exit: Vec<Vec<QueueReceiver<TradeUpdate>>> = Vec::with_capacity(num_exit);
-    for _ in 0..num_exit {
-        trade_rxs_per_exit.push(Vec::with_capacity(num_market));
+    let mut trade_rxs_per_position: Vec<Vec<QueueReceiver<TradeUpdate>>> = Vec::with_capacity(num_position);
+    for _ in 0..num_position {
+        trade_rxs_per_position.push(Vec::with_capacity(num_market));
     }
     for mi in 0..num_market {
-        for ei in 0..num_exit {
+        for ei in 0..num_position {
             let (tx, rx) = queue_unbounded::<TradeUpdate>();
-            let slot_idx = mi * num_exit + ei;
+            let slot_idx = mi * num_position + ei;
             trade_txs_flat[slot_idx] = Some(tx);
-            trade_rxs_per_exit[ei].push(rx);
+            trade_rxs_per_position[ei].push(rx);
         }
     }
 
-    // Build trade mailbox receivers for exit observers (fan-in from N brokers each)
+    // Build trade mailbox receivers for position observers (fan-in from N brokers each)
     let trade_mailboxes: Vec<enterprise::services::mailbox::MailboxReceiver<TradeUpdate>> =
-        trade_rxs_per_exit.into_iter().map(|rxs| mailbox(rxs)).collect();
-
-    // ─── Pivot tracker ─────────────────────────────────────────────────────
-    // 11 observation queues (unbounded) — one per market observer
-    let mut pivot_obs_txs = Vec::with_capacity(num_market);
-    let mut pivot_obs_rxs = Vec::with_capacity(num_market);
-    for _ in 0..num_market {
-        let (tx, rx) = queue_unbounded::<PivotObservation>();
-        pivot_obs_txs.push(tx);
-        pivot_obs_rxs.push(rx);
-    }
-
-    // slot_to_market mapping: slot_idx / num_exit gives market observer index
-    // With num_exit exit observers per market observer:
-    // slot 0 → market 0, slot 1 → market 0, ..., slot num_exit-1 → market 0,
-    // slot num_exit → market 1, ...
-    let num_pivot_slots = num_market * num_exit;
-    let slot_to_market: Vec<usize> = (0..num_pivot_slots)
-        .map(|i| i / num_exit)
-        .collect();
-
-    let (pivot_handles, pivot_tracker_driver) = pivot_tracker(
-        pivot_obs_rxs,
-        num_pivot_slots,
-        slot_to_market,
-        pivot_tracker_db_tx,
-    );
+        trade_rxs_per_position.into_iter().map(|rxs| mailbox(rxs)).collect();
 
     // ─── Market observers ──────────────────────────────────────────────────
     let observers = config::create_market_observers(dims, recalib_interval);
     let wired = wire_market_observers(
         observers,
-        num_exit,
+        num_position,
         market_learn_mailboxes,
-        pivot_obs_txs,
         cache_pool,
         console_pool,
         db_pool,
@@ -646,39 +608,39 @@ fn main() {
         recalib_interval,
     );
 
-    // ─── Exit observers ────────────────────────────────────────────────────
-    let exit_observers = config::create_exit_observers(dims, recalib_interval);
-    let exit_cache_pool = HandlePool::new("exit-cache", exit_cache_handles);
-    let exit_console_pool = HandlePool::new("exit-console", exit_console_handles);
-    let exit_db_pool = HandlePool::new("exit-db", exit_db_handles);
-    let wired_exit = wire_exit_observers(
-        exit_observers,
-        wired.exit_queue_rxs,
-        exit_learn_mailboxes,
+    // ─── Position observers ────────────────────────────────────────────────────
+    let position_observers = config::create_position_observers(dims, recalib_interval);
+    let position_cache_pool = HandlePool::new("position-cache", position_cache_handles);
+    let position_console_pool = HandlePool::new("position-console", position_console_handles);
+    let position_db_pool = HandlePool::new("position-db", position_db_handles);
+    let wired_position = wire_position_observers(
+        position_observers,
+        wired.position_queue_rxs,
+        position_learn_mailboxes,
         trade_mailboxes,
-        exit_cache_pool,
-        exit_console_pool,
-        exit_db_pool,
+        position_cache_pool,
+        position_console_pool,
+        position_db_pool,
         Arc::clone(&encoder),
         noise_floor,
     );
 
     // ─── Brokers ───────────────────────────────────────────────────────────
-    let brokers = config::create_brokers(num_market, num_exit, dims, args.swap_fee);
+    let brokers = config::create_brokers(num_market, num_position, dims, args.swap_fee);
     let scalar_encoder = Arc::new(ScalarEncoder::new(dims));
     let broker_console_pool = HandlePool::new("broker-console", broker_console_handles);
     let broker_db_pool = HandlePool::new("broker-db", broker_db_handles);
     let wired_brokers = wire_brokers(
         brokers,
-        wired_exit.output_rxs,
+        wired_position.output_rxs,
         market_learn_txs,
-        exit_learn_txs,
+        position_learn_txs,
         trade_txs_flat,
         broker_console_pool,
         broker_db_pool,
         scalar_encoder,
         args.swap_fee,
-        num_exit,
+        num_position,
     );
 
     // ─── Build pipelines ───────────────────────────────────────────────────
@@ -701,8 +663,8 @@ fn main() {
     }
 
     main_handle.out(format!(
-        "{}D recalib={} market={} exit={} noise_floor={:.4}",
-        dims, recalib_interval, num_market, num_exit, noise_floor
+        "{}D recalib={} market={} position={} noise_floor={:.4}",
+        dims, recalib_interval, num_market, num_position, noise_floor
     ));
 
     // ─── Per-stream loop ───────────────────────────────────────────────────
@@ -782,23 +744,23 @@ fn main() {
         }
     }
 
-    // Drop topic handles — exit observers see disconnect as topics drain
+    // Drop topic handles — position observers see disconnect as topics drain
     drop(wired.topic_handles);
 
-    // Join exit observer threads — get the trained exit observers back
-    for jh in wired_exit.join_handles {
+    // Join position observer threads — get the trained position observers back
+    for jh in wired_position.join_handles {
         match jh.join() {
-            Ok(exit_obs) => {
+            Ok(position_obs) => {
                 main_handle.out(format!(
-                    "exit-{}: trail_exp={:.1} stop_exp={:.1} grace_rate={:.3}",
-                    exit_obs.lens,
-                    exit_obs.trail_reckoner.experience(),
-                    exit_obs.stop_reckoner.experience(),
-                    exit_obs.grace_rate,
+                    "position-{}: trail_exp={:.1} stop_exp={:.1} grace_rate={:.3}",
+                    position_obs.lens,
+                    position_obs.trail_reckoner.experience(),
+                    position_obs.stop_reckoner.experience(),
+                    position_obs.grace_rate,
                 ));
             }
             Err(_) => {
-                main_handle.err("exit observer thread panicked".to_string());
+                main_handle.err("position observer thread panicked".to_string());
             }
         }
     }
@@ -849,15 +811,10 @@ fn main() {
         ));
     }
 
-    // Drop pivot handles — unused in Phase 1, but must drop for clean shutdown.
-    drop(pivot_handles);
-
     // Drop all handles, join drivers.
-    // Pivot tracker driver must join before db driver — its closure holds a db_tx.
     // Cache driver must join before db driver — its emit closure holds a db_tx.
     // When drivers exit, their closures drop, releasing the db senders.
     drop(stream_handles);
-    pivot_tracker_driver.join();
     cache_driver.join();
     db_driver.join();
     drop(main_handle);

@@ -1,4 +1,4 @@
-/// Lens wiring. Maps MarketLens/ExitLens to vocabulary facts.
+/// Lens wiring. Maps MarketLens/PositionLens to vocabulary facts.
 ///
 /// Extracted from orchestration/post.rs. These are the live functions that
 /// the wat-vm programs call to wire vocab modules to observer lenses.
@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 
 use crate::types::candle::Candle;
-use crate::types::enums::{ExitLens, MarketLens};
+use crate::types::enums::{PositionLens, MarketLens};
 use crate::encoding::scale_tracker::ScaleTracker;
 use crate::encoding::thought_encoder::ThoughtAST;
 
@@ -163,10 +163,10 @@ pub fn market_lens_facts(lens: &MarketLens, candle: &Candle, window: &[Candle], 
     facts
 }
 
-/// Collect exit vocab facts for a specific lens.
+/// Collect position vocab facts for a specific lens.
 /// Proposal 040: trade atoms come through the trade pipe, not the candle.
-/// Exit lenses keep regime + time facts as market context alongside trade atoms.
-pub fn exit_lens_facts(lens: &ExitLens, candle: &Candle, scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
+/// Position lenses keep regime + time facts as market context alongside trade atoms.
+pub fn position_lens_facts(lens: &PositionLens, candle: &Candle, scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
     // Both Core and Full get regime + time as market context.
     // The trade-specific atoms arrive through the trade pipe.
     let _ = lens; // both lenses get the same market context
@@ -175,11 +175,11 @@ pub fn exit_lens_facts(lens: &ExitLens, candle: &Candle, scales: &mut HashMap<St
     facts
 }
 
-/// Collect exit self-assessment facts from the exit observer's rolling window.
+/// Collect position self-assessment facts from the position observer's rolling window.
 /// Generalist-only for now. Returns empty for non-generalist lenses.
-pub fn exit_self_assessment_facts(grace_rate: f64, avg_residue: f64, scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
+pub fn position_self_assessment_facts(grace_rate: f64, avg_residue: f64, scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
     // Self-assessment is on ALL lenses — it's an internal property
-    // every exit observer has, not a generalist-only feature.
+    // every position observer has, not a generalist-only feature.
     encode_exit_self_assessment_facts(grace_rate, avg_residue, scales)
 }
 
@@ -210,7 +210,7 @@ pub fn ctx_scalar_encoder_placeholder() -> &'static holon::kernel::scalar::Scala
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::enums::{MarketLens, ExitLens};
+    use crate::types::enums::{MarketLens, PositionLens};
 
     #[test]
     fn test_market_lens_facts_differ_by_lens() {
@@ -258,12 +258,12 @@ mod tests {
     }
 
     #[test]
-    fn test_exit_lens_facts_variants() {
+    fn test_position_lens_facts_variants() {
         let candle = Candle::default();
         let mut scales = std::collections::HashMap::new();
 
-        let core_facts = exit_lens_facts(&ExitLens::Core, &candle, &mut scales);
-        let full_facts = exit_lens_facts(&ExitLens::Full, &candle, &mut scales);
+        let core_facts = position_lens_facts(&PositionLens::Core, &candle, &mut scales);
+        let full_facts = position_lens_facts(&PositionLens::Full, &candle, &mut scales);
 
         // Proposal 040: both lenses get regime(8) + time(2) = 10 market context atoms.
         // Trade atoms arrive through the trade pipe, not here.
@@ -274,7 +274,7 @@ mod tests {
     #[test]
     fn test_exit_self_assessment_generalist_only() {
         let mut scales = std::collections::HashMap::new();
-        let facts = exit_self_assessment_facts(0.6, 0.005, &mut scales);
+        let facts = position_self_assessment_facts(0.6, 0.005, &mut scales);
         assert_eq!(facts.len(), 2);
     }
 }

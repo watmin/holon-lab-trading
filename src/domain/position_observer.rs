@@ -1,5 +1,5 @@
-/// exit_observer.rs — Estimates exit distances. Learned. Two continuous reckoners
-/// (trail, stop). Compiled from wat/exit-observer.wat.
+/// position_observer.rs — Estimates position distances. Learned. Two continuous reckoners
+/// (trail, stop). Compiled from wat/position-observer.wat.
 ///
 /// Intentionally simpler than MarketObserver. No noise-subspace, no curve,
 /// no engram gating. Quality is measured through the BROKER's curve.
@@ -8,7 +8,7 @@ use holon::kernel::vector::Vector;
 use holon::memory::{OnlineSubspace, ReckConfig, Reckoner};
 
 use crate::types::distances::Distances;
-use crate::types::enums::ExitLens;
+use crate::types::enums::PositionLens;
 #[cfg(test)]
 use crate::learning::scalar_accumulator::ScalarAccumulator;
 use crate::encoding::thought_encoder::IncrementalBundle;
@@ -17,9 +17,9 @@ use crate::encoding::thought_encoder::IncrementalBundle;
 const SELF_ASSESSMENT_WINDOW: usize = 100;
 
 /// Estimates exit distances through a specific judgment lens.
-pub struct ExitObserver {
+pub struct PositionObserver {
     /// Which judgment vocabulary.
-    pub lens: ExitLens,
+    pub lens: PositionLens,
     /// Continuous reckoner -- trailing stop distance.
     pub trail_reckoner: Reckoner,
     /// Continuous reckoner -- safety stop distance.
@@ -41,10 +41,10 @@ pub struct ExitObserver {
     pub avg_residue: f64,
 }
 
-impl ExitObserver {
-    /// Construct a new exit observer with two continuous reckoners.
+impl PositionObserver {
+    /// Construct a new position observer with two continuous reckoners.
     pub fn new(
-        lens: ExitLens,
+        lens: PositionLens,
         dims: usize,
         recalib_interval: usize,
         default_trail: f64,
@@ -83,14 +83,14 @@ impl ExitObserver {
     /// Tier 1 only: query both reckoners. Returns Some(Distances) if both
     /// reckoners are experienced, None otherwise. The broker owns the full
     /// cascade (reckoner → accumulator → default).
-    /// Proposal 026: queries on exit_thought only, not composed.
-    pub fn reckoner_distances(&self, exit_thought: &Vector) -> Option<Distances> {
+    /// Proposal 026: queries on position_thought only, not composed.
+    pub fn reckoner_distances(&self, position_thought: &Vector) -> Option<Distances> {
         let trail_exp = self.trail_reckoner.experience();
         let stop_exp = self.stop_reckoner.experience();
 
         if trail_exp > 0.0 && stop_exp > 0.0 {
-            let trail = self.trail_reckoner.query(exit_thought);
-            let stop = self.stop_reckoner.query(exit_thought);
+            let trail = self.trail_reckoner.query(position_thought);
+            let stop = self.stop_reckoner.query(position_thought);
             Some(Distances::new(trail, stop))
         } else {
             None
@@ -99,11 +99,11 @@ impl ExitObserver {
 
     /// Full cascade: reckoner -> accumulator -> default.
     /// Kept for tests only — the broker owns the cascade in production.
-    /// Proposal 026: queries on exit_thought only, not composed.
+    /// Proposal 026: queries on position_thought only, not composed.
     #[cfg(test)]
     pub fn recommended_distances(
         &self,
-        exit_thought: &Vector,
+        position_thought: &Vector,
         broker_accums: &[ScalarAccumulator],
         scalar_encoder: &holon::kernel::scalar::ScalarEncoder,
     ) -> (Distances, f64) {
@@ -112,7 +112,7 @@ impl ExitObserver {
 
         // Trail distance cascade
         let trail = if trail_exp > 0.0 {
-            self.trail_reckoner.query(exit_thought)
+            self.trail_reckoner.query(position_thought)
         } else if broker_accums.len() > 0 && broker_accums[0].count > 0 {
             broker_accums[0].extract(100, (0.001, 0.10), scalar_encoder)
         } else {
@@ -121,7 +121,7 @@ impl ExitObserver {
 
         // Stop distance cascade
         let stop = if stop_exp > 0.0 {
-            self.stop_reckoner.query(exit_thought)
+            self.stop_reckoner.query(position_thought)
         } else if broker_accums.len() > 1 && broker_accums[1].count > 0 {
             broker_accums[1].extract(100, (0.001, 0.10), scalar_encoder)
         } else {
@@ -133,20 +133,20 @@ impl ExitObserver {
     }
 
     /// Learn from hindsight-optimal distances. Both reckoners learn from
-    /// one resolution. The exit_thought is the exit observer's own encoded
+    /// one resolution. The position_thought is the position observer's own encoded
     /// facts — NOT the composition with market thought.
-    /// Proposal 026: exit learns from exit_thought only.
+    /// Proposal 026: position learns from position_thought only.
     /// Also updates the rolling self-assessment window.
     pub fn observe_distances(
         &mut self,
-        exit_thought: &Vector,
+        position_thought: &Vector,
         optimal: &Distances,
         weight: f64,
         is_grace: bool,
         residue: f64,
     ) {
-        self.trail_reckoner.observe_scalar(exit_thought, optimal.trail, weight);
-        self.stop_reckoner.observe_scalar(exit_thought, optimal.stop, weight);
+        self.trail_reckoner.observe_scalar(position_thought, optimal.trail, weight);
+        self.stop_reckoner.observe_scalar(position_thought, optimal.stop, weight);
 
         // Update rolling self-assessment window
         self.outcome_window.push(is_grace);
@@ -196,8 +196,8 @@ mod tests {
     const DEFAULT_TRAIL: f64 = 0.02;
     const DEFAULT_STOP: f64 = 0.05;
 
-    fn make_observer() -> ExitObserver {
-        ExitObserver::new(ExitLens::Core, DIMS, RECALIB, DEFAULT_TRAIL, DEFAULT_STOP)
+    fn make_observer() -> PositionObserver {
+        PositionObserver::new(PositionLens::Core, DIMS, RECALIB, DEFAULT_TRAIL, DEFAULT_STOP)
     }
 
     fn random_vector(name: &str) -> Vector {
@@ -206,9 +206,9 @@ mod tests {
     }
 
     #[test]
-    fn test_exit_observer_new() {
+    fn test_position_observer_new() {
         let obs = make_observer();
-        assert_eq!(obs.lens, ExitLens::Core);
+        assert_eq!(obs.lens, PositionLens::Core);
         assert!((obs.default_distances.trail - DEFAULT_TRAIL).abs() < 1e-10);
         assert!((obs.default_distances.stop - DEFAULT_STOP).abs() < 1e-10);
     }
@@ -238,24 +238,24 @@ mod tests {
     #[test]
     fn test_observe_distances_makes_experienced() {
         let mut obs = make_observer();
-        let exit_thought = random_vector("exit_thought");
+        let position_thought = random_vector("position_thought");
         let optimal = Distances::new(0.03, 0.06);
-        obs.observe_distances(&exit_thought, &optimal, 1.0, true, 0.01);
+        obs.observe_distances(&position_thought, &optimal, 1.0, true, 0.01);
         assert!(obs.experienced());
     }
 
     #[test]
     fn test_self_assessment_window() {
         let mut obs = make_observer();
-        let exit_thought = random_vector("exit_thought");
+        let position_thought = random_vector("position_thought");
         let optimal = Distances::new(0.03, 0.06);
 
         // Add some Grace outcomes
         for _ in 0..3 {
-            obs.observe_distances(&exit_thought, &optimal, 1.0, true, 0.01);
+            obs.observe_distances(&position_thought, &optimal, 1.0, true, 0.01);
         }
         // Add a Violence outcome
-        obs.observe_distances(&exit_thought, &optimal, 1.0, false, 0.005);
+        obs.observe_distances(&position_thought, &optimal, 1.0, false, 0.005);
 
         assert_eq!(obs.outcome_window.len(), 4);
         assert!((obs.grace_rate - 0.75).abs() < 1e-10);
@@ -273,9 +273,9 @@ mod tests {
 
         // Teach the reckoner
         for i in 0..10 {
-            let exit_thought = random_vector(&format!("training_{}", i));
+            let position_thought = random_vector(&format!("training_{}", i));
             let optimal = Distances::new(0.03, 0.06);
-            obs.observe_distances(&exit_thought, &optimal, 1.0, true, 0.01);
+            obs.observe_distances(&position_thought, &optimal, 1.0, true, 0.01);
         }
 
         assert!(obs.experienced());
@@ -301,7 +301,7 @@ mod tests {
     #[test]
     fn test_strip_noise_returns_vector() {
         let obs = make_observer();
-        let thought = random_vector("exit_thought");
+        let thought = random_vector("position_thought");
         let stripped = obs.strip_noise(&thought);
         assert_eq!(stripped.dimensions(), DIMS);
     }

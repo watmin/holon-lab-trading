@@ -25,7 +25,6 @@ use crate::services::queue::{QueueReceiver, QueueSender};
 use crate::services::topic::TopicSender;
 use crate::encoding::thought_encoder::{ThoughtAST, ThoughtEncoder};
 use crate::programs::telemetry::emit_metric;
-use crate::types::pivot::PivotObservation;
 
 /// Input to the observer: enriched candle, window snapshot, encode count.
 pub struct ObsInput {
@@ -83,7 +82,6 @@ pub fn market_observer_program(
     cache: CacheHandle<ThoughtAST, Vector>,
     console: ConsoleHandle,
     db_tx: QueueSender<LogEntry>,
-    pivot_tx: QueueSender<PivotObservation>,
     mut observer: MarketObserver,
     encoder: Arc<ThoughtEncoder>,
     observer_idx: usize,
@@ -136,18 +134,7 @@ pub fn market_observer_program(
         // Capture conviction before prediction is moved.
         let conviction = result.prediction.conviction;
 
-        // Pivot observation first — fire and forget (unbounded).
-        // Van Tharp's invariant: tick before chain.
-        let _ = pivot_tx.send(PivotObservation {
-            market_idx: observer_idx,
-            conviction,
-            direction: observer.last_prediction,
-            candle_num: candle_count,
-            close: input.candle.close,
-            volume: input.candle.volume,
-        });
-
-        // Then the chain — bounded(1), blocks until exit takes it.
+        // Send the chain — bounded(1), blocks until exit takes it.
         let t0 = std::time::Instant::now();
         let _ = result_tx.send(MarketChain {
             candle: input.candle,

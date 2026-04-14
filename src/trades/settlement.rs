@@ -19,8 +19,8 @@ pub struct TreasurySettlement {
     pub amount: Amount,
     pub composed_thought: Vector,
     pub market_thought: Vector,
-    /// The exit observer's own encoded facts. Proposal 026.
-    pub exit_thought: Vector,
+    /// The position observer's own encoded facts. Proposal 026.
+    pub position_thought: Vector,
     pub prediction: Prediction,
 }
 
@@ -32,7 +32,7 @@ impl TreasurySettlement {
         amount: Amount,
         composed_thought: Vector,
         market_thought: Vector,
-        exit_thought: Vector,
+        position_thought: Vector,
         prediction: Prediction,
     ) -> Self {
         Self {
@@ -42,7 +42,7 @@ impl TreasurySettlement {
             amount,
             composed_thought,
             market_thought,
-            exit_thought,
+            position_thought,
             prediction,
         }
     }

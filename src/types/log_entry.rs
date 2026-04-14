@@ -73,10 +73,10 @@ pub enum LogEntry {
         metric_value: f64,
         metric_unit: String,
     },
-    /// Exit observer snapshot — emitted by exit observer threads every N candles.
-    ExitObserverSnapshot {
+    /// Position observer snapshot — emitted by exit observer threads every N candles.
+    PositionObserverSnapshot {
         candle: usize,
-        exit_idx: usize,
+        position_idx: usize,
         lens: String,
         trail_experience: f64,
         stop_experience: f64,
@@ -112,19 +112,6 @@ pub enum LogEntry {
         optimal_stop: f64,
         duration: usize,
         was_runner: bool,
-    },
-    /// Pivot tracker snapshot — emitted periodically and on period transitions.
-    /// Proposals 045/047/048.
-    PivotTrackerSnapshot {
-        candle: usize,
-        market_idx: usize,
-        lens: String,
-        pivot_count: usize,
-        gap_count: usize,
-        current_kind: String,
-        current_duration: usize,
-        threshold: f64,
-        conviction_window_size: usize,
     },
     /// Broker snapshot — emitted by broker threads every N candles.
     /// Proposal 035: reckoner fields removed, accounting fields added.

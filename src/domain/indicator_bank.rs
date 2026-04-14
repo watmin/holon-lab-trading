@@ -6,6 +6,7 @@
 
 use crate::types::candle::Candle;
 use crate::types::ohlcv::Ohlcv;
+use crate::types::pivot::PhaseState;
 
 // ════════════════════════════════════════════════════════════════════
 // STREAMING PRIMITIVES — the building blocks of indicator state
@@ -1387,6 +1388,8 @@ pub struct IndicatorBank {
     pub prev_tf_4h_ret: f64,
     // Previous values
     pub prev_close: f64,
+    // Phase labeler
+    pub phase_state: PhaseState,
     // Counter
     pub count: usize,
 }
@@ -1463,6 +1466,8 @@ impl IndicatorBank {
             prev_tf_4h_ret: 0.0,
             // Previous values
             prev_close: 0.0,
+            // Phase labeler
+            phase_state: PhaseState::new(),
             // Counter
             count: 0,
         }
@@ -1866,6 +1871,14 @@ impl IndicatorBank {
         let dom_val = parse_day_of_month(ts);
         let moy_val = parse_month_of_year(ts);
 
+        // ── 2b. Phase labeler (after ATR) ────────────────────────
+        let smoothing = atr_val * 1.0; // 1.0 ATR, Seykota's recommendation
+        self.phase_state.step(c, v, self.count + 1, smoothing);
+        let phase_label = self.phase_state.current_label;
+        let phase_direction = self.phase_state.current_direction;
+        let phase_duration = self.phase_state.current_duration();
+        let phase_history = self.phase_state.history_snapshot();
+
         // ── 3. Update prev-state for next candle ─────────────────
         self.prev_tk_spread = tk_spread;
         self.prev_stoch_kd = stoch_kd;
@@ -1960,6 +1973,10 @@ impl IndicatorBank {
             day_of_week: dow_val,
             day_of_month: dom_val,
             month_of_year: moy_val,
+            phase_label,
+            phase_direction,
+            phase_duration,
+            phase_history,
         }
     }
 }

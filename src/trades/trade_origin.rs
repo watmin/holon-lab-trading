@@ -15,8 +15,8 @@ pub struct TradeOrigin {
     pub broker_slot_idx: usize,
     pub composed_thought: Vector,
     pub market_thought: Vector,
-    /// The exit observer's own encoded facts. Proposal 026.
-    pub exit_thought: Vector,
+    /// The position observer's own encoded facts. Proposal 026.
+    pub position_thought: Vector,
     pub prediction: Prediction,
 }
 
@@ -26,7 +26,7 @@ impl TradeOrigin {
         broker_slot_idx: usize,
         composed_thought: Vector,
         market_thought: Vector,
-        exit_thought: Vector,
+        position_thought: Vector,
         prediction: Prediction,
     ) -> Self {
         Self {
@@ -34,7 +34,7 @@ impl TradeOrigin {
             broker_slot_idx,
             composed_thought,
             market_thought,
-            exit_thought,
+            position_thought,
             prediction,
         }
     }

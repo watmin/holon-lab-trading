@@ -92,21 +92,21 @@ impl std::fmt::Display for MarketLens {
     }
 }
 
-/// Exit observer lens — which trade-state vocabulary an exit observer uses.
+/// Position observer lens — which trade-state vocabulary a position observer uses.
 /// Proposal 040: two lenses based on trade atoms, not market data.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum ExitLens {
+pub enum PositionLens {
     /// 5 trade atoms — the consensus (excursion, retracement, age, peak-age, signaled).
     Core,
     /// 10 trade atoms — all three voices (core + trail/stop distance, r-multiple, heat, trail-cushion).
     Full,
 }
 
-impl std::fmt::Display for ExitLens {
+impl std::fmt::Display for PositionLens {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ExitLens::Core => write!(f, "core"),
-            ExitLens::Full => write!(f, "full"),
+            PositionLens::Core => write!(f, "core"),
+            PositionLens::Full => write!(f, "full"),
         }
     }
 }
@@ -220,14 +220,14 @@ mod tests {
 
     #[test]
     fn test_exit_lens_display() {
-        assert_eq!(ExitLens::Core.to_string(), "core");
-        assert_eq!(ExitLens::Full.to_string(), "full");
+        assert_eq!(PositionLens::Core.to_string(), "core");
+        assert_eq!(PositionLens::Full.to_string(), "full");
     }
 
     #[test]
     fn test_exit_lens_equality() {
-        assert_eq!(ExitLens::Core, ExitLens::Core);
-        assert_ne!(ExitLens::Core, ExitLens::Full);
+        assert_eq!(PositionLens::Core, PositionLens::Core);
+        assert_ne!(PositionLens::Core, PositionLens::Full);
     }
 
     #[test]
