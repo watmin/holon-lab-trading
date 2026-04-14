@@ -104,8 +104,8 @@ mod tests {
     #[test]
     fn test_trade_levels_two_fields() {
         let t = make_test_trade();
-        assert!((t.stop_levels.trail_stop - 49000.0).abs() < 1e-10);
-        assert!((t.stop_levels.safety_stop - 47500.0).abs() < 1e-10);
+        assert!((t.stop_levels.trail_stop.0 - 49000.0).abs() < 1e-10);
+        assert!((t.stop_levels.safety_stop.0 - 47500.0).abs() < 1e-10);
     }
 
     #[test]

@@ -30,9 +30,9 @@ pub struct PaperEntry {
     /// Best price in predicted direction so far.
     pub extreme: f64,
     /// Trailing stop level (follows extreme with trail_distance gap).
-    pub trail_level: f64,
+    pub trail_level: Price,
     /// Fixed stop loss (capital protection).
-    pub stop_level: f64,
+    pub stop_level: Price,
     /// Has the trail crossed (Grace signal sent)?
     pub signaled: bool,
     /// Has a trigger fired (paper done)?
@@ -62,8 +62,8 @@ impl PaperEntry {
     ) -> Self {
         let p = entry_price.0;
         let (stop_level, trail_level) = match prediction {
-            Direction::Up => (p - p * distances.stop, p),
-            Direction::Down => (p + p * distances.stop, p),
+            Direction::Up => (Price(p - p * distances.stop), Price(p)),
+            Direction::Down => (Price(p + p * distances.stop), Price(p)),
         };
         Self {
             paper_id,
@@ -101,12 +101,12 @@ impl PaperEntry {
                     self.extreme = current_price;
                 }
                 // Trail follows extreme with trail_distance gap
-                let new_trail = self.extreme - self.extreme * self.distances.trail;
+                let new_trail = Price(self.extreme - self.extreme * self.distances.trail);
                 if new_trail > self.trail_level {
                     self.trail_level = new_trail;
                 }
                 // Check stop (Violence): price fell below stop_level
-                if current_price <= self.stop_level {
+                if current_price <= self.stop_level.0 {
                     self.resolved = true;
                     return;
                 }
@@ -115,7 +115,7 @@ impl PaperEntry {
                     self.signaled = true;
                 }
                 // If signaled: check trail fire (runner finished)
-                if self.signaled && current_price <= self.trail_level {
+                if self.signaled && current_price <= self.trail_level.0 {
                     self.resolved = true;
                 }
             }
@@ -125,12 +125,12 @@ impl PaperEntry {
                     self.extreme = current_price;
                 }
                 // Trail follows extreme with trail_distance gap (upward)
-                let new_trail = self.extreme + self.extreme * self.distances.trail;
+                let new_trail = Price(self.extreme + self.extreme * self.distances.trail);
                 if new_trail < self.trail_level {
                     self.trail_level = new_trail;
                 }
                 // Check stop (Violence): price rose above stop_level
-                if current_price >= self.stop_level {
+                if current_price >= self.stop_level.0 {
                     self.resolved = true;
                     return;
                 }
@@ -139,7 +139,7 @@ impl PaperEntry {
                     self.signaled = true;
                 }
                 // If signaled: check trail fire (runner finished)
-                if self.signaled && current_price >= self.trail_level {
+                if self.signaled && current_price >= self.trail_level.0 {
                     self.resolved = true;
                 }
             }
@@ -203,9 +203,9 @@ mod tests {
         assert!((paper.entry_price.0 - 100.0).abs() < 1e-10);
         assert!((paper.extreme - 100.0).abs() < 1e-10);
         // Stop below entry for Up prediction
-        assert!((paper.stop_level - 90.0).abs() < 1e-10);
+        assert!((paper.stop_level.0 - 90.0).abs() < 1e-10);
         // Trail starts at entry
-        assert!((paper.trail_level - 100.0).abs() < 1e-10);
+        assert!((paper.trail_level.0 - 100.0).abs() < 1e-10);
         assert!(!paper.signaled);
         assert!(!paper.resolved);
         assert_eq!(paper.prediction, Direction::Up);
@@ -219,9 +219,9 @@ mod tests {
         let paper = PaperEntry::new(0, thought, mt, make_position_thought(), Direction::Down, Price(100.0), distances, 0);
 
         // Stop above entry for Down prediction
-        assert!((paper.stop_level - 110.0).abs() < 1e-10);
+        assert!((paper.stop_level.0 - 110.0).abs() < 1e-10);
         // Trail starts at entry
-        assert!((paper.trail_level - 100.0).abs() < 1e-10);
+        assert!((paper.trail_level.0 - 100.0).abs() < 1e-10);
         assert_eq!(paper.prediction, Direction::Down);
     }
 

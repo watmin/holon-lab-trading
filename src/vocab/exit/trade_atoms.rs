@@ -50,7 +50,7 @@ pub fn compute_trade_atoms(paper: &PaperEntry, current_price: f64, phase_history
         1.0
     };
     let trail_cushion = if excursion > 0.0001 {
-        ((current_price - paper.trail_level).abs() / (extreme - entry).abs()).min(1.0)
+        ((current_price - paper.trail_level.0).abs() / (extreme - entry).abs()).min(1.0)
     } else {
         0.0
     };

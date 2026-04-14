@@ -20,12 +20,12 @@ impl Distances {
         let p = price.0;
         match side {
             Side::Buy => Levels {
-                trail_stop: p - p * self.trail,
-                safety_stop: p - p * self.stop,
+                trail_stop: Price(p - p * self.trail),
+                safety_stop: Price(p - p * self.stop),
             },
             Side::Sell => Levels {
-                trail_stop: p + p * self.trail,
-                safety_stop: p + p * self.stop,
+                trail_stop: Price(p + p * self.trail),
+                safety_stop: Price(p + p * self.stop),
             },
         }
     }
@@ -34,8 +34,8 @@ impl Distances {
 /// Levels: absolute price levels. Stored on Trade.
 #[derive(Clone, Copy, Debug)]
 pub struct Levels {
-    pub trail_stop: f64,
-    pub safety_stop: f64,
+    pub trail_stop: Price,
+    pub safety_stop: Price,
 }
 
 impl Levels {
@@ -43,8 +43,8 @@ impl Levels {
     #[cfg(test)]
     pub fn new(trail_stop: f64, safety_stop: f64) -> Self {
         Self {
-            trail_stop,
-            safety_stop,
+            trail_stop: Price(trail_stop),
+            safety_stop: Price(safety_stop),
         }
     }
 }
@@ -63,19 +63,19 @@ mod tests {
     #[test]
     fn test_levels_new() {
         let l = Levels::new(49000.0, 47500.0);
-        assert!((l.trail_stop - 49000.0).abs() < 1e-10);
-        assert!((l.safety_stop - 47500.0).abs() < 1e-10);
+        assert!((l.trail_stop.0 - 49000.0).abs() < 1e-10);
+        assert!((l.safety_stop.0 - 47500.0).abs() < 1e-10);
     }
 
     #[test]
     fn test_distances_to_levels_buy() {
         let d = Distances::new(0.05, 0.10);
         let levels = d.to_levels(Price(100.0), Side::Buy);
-        assert!((levels.trail_stop - 95.0).abs() < 1e-10);
-        assert!((levels.safety_stop - 90.0).abs() < 1e-10);
+        assert!((levels.trail_stop.0 - 95.0).abs() < 1e-10);
+        assert!((levels.safety_stop.0 - 90.0).abs() < 1e-10);
         // Both below price for buys
-        assert!(levels.trail_stop < 100.0);
-        assert!(levels.safety_stop < 100.0);
+        assert!(levels.trail_stop.0 < 100.0);
+        assert!(levels.safety_stop.0 < 100.0);
         // Trail closer to price than safety
         assert!(levels.trail_stop > levels.safety_stop);
     }
@@ -84,11 +84,11 @@ mod tests {
     fn test_distances_to_levels_sell() {
         let d = Distances::new(0.05, 0.10);
         let levels = d.to_levels(Price(100.0), Side::Sell);
-        assert!((levels.trail_stop - 105.0).abs() < 1e-10);
-        assert!((levels.safety_stop - 110.0).abs() < 1e-10);
+        assert!((levels.trail_stop.0 - 105.0).abs() < 1e-10);
+        assert!((levels.safety_stop.0 - 110.0).abs() < 1e-10);
         // Both above price for sells
-        assert!(levels.trail_stop > 100.0);
-        assert!(levels.safety_stop > 100.0);
+        assert!(levels.trail_stop.0 > 100.0);
+        assert!(levels.safety_stop.0 > 100.0);
         // Trail closer to price than safety
         assert!(levels.trail_stop < levels.safety_stop);
     }
@@ -100,8 +100,8 @@ mod tests {
         let buy = d.to_levels(price, Side::Buy);
         let sell = d.to_levels(price, Side::Sell);
         // Symmetric around price
-        assert!(((buy.trail_stop + sell.trail_stop) / 2.0 - price.0).abs() < 1e-10);
-        assert!(((buy.safety_stop + sell.safety_stop) / 2.0 - price.0).abs() < 1e-10);
+        assert!(((buy.trail_stop.0 + sell.trail_stop.0) / 2.0 - price.0).abs() < 1e-10);
+        assert!(((buy.safety_stop.0 + sell.safety_stop.0) / 2.0 - price.0).abs() < 1e-10);
     }
 
     #[test]
