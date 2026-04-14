@@ -1853,7 +1853,7 @@ impl IndicatorBank {
         self.scratch = scratch;
 
         // ── 2b. Phase labeler (after ATR) ────────────────────────
-        let smoothing = atr_val * 1.0; // 1.0 ATR, Seykota's recommendation
+        let smoothing = atr_val * 2.0; // 2.0 ATR — twice the noise floor (Proposal 052)
         self.phase_state.step(c, v, self.count + 1, smoothing);
         let phase_label = self.phase_state.current_label;
         let phase_direction = self.phase_state.current_direction;
