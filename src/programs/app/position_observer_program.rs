@@ -38,10 +38,11 @@ pub struct TradeUpdate {
 
 /// Learn signal for position observers: distance labels from broker propagation.
 /// Proposal 051: continuous reckoners only. No binary Grace/Violence label.
+/// Weight is always 1.0 — each observation counts once. The value teaches,
+/// not the magnitude of the outcome.
 pub struct PositionLearn {
     pub position_thought: Vector,
     pub optimal: Distances,
-    pub weight: f64,
 }
 
 /// One slot: a (receiver, sender) pair connecting one market observer to one broker.
@@ -57,27 +58,46 @@ pub struct PositionSlot {
 // Re-export trade atom functions for backward compatibility.
 pub use crate::vocab::exit::trade_atoms::{compute_trade_atoms, select_trade_atoms};
 
+/// Drain result: counts, errors, and raw predicted/optimal values for diagnostics.
+struct DrainResult {
+    count: usize,
+    total_trail_err: f64,
+    total_stop_err: f64,
+    total_predicted_trail: f64,
+    total_predicted_stop: f64,
+    total_optimal_trail: f64,
+    total_optimal_stop: f64,
+}
+
 /// Drain all pending position learn signals. Non-blocking.
-/// Returns the count of signals drained.
-/// Returns (count, total_trail_error, total_stop_error).
 fn drain_position_learn(
     learn_rx: &MailboxReceiver<PositionLearn>,
     position_obs: &mut PositionObserver,
-) -> (usize, f64, f64) {
-    let mut count = 0;
-    let mut total_trail_err = 0.0;
-    let mut total_stop_err = 0.0;
+) -> DrainResult {
+    let mut r = DrainResult {
+        count: 0,
+        total_trail_err: 0.0,
+        total_stop_err: 0.0,
+        total_predicted_trail: 0.0,
+        total_predicted_stop: 0.0,
+        total_optimal_trail: 0.0,
+        total_optimal_stop: 0.0,
+    };
     while let Ok(signal) = learn_rx.try_recv() {
-        let (trail_err, stop_err) = position_obs.observe_distances(
-            &signal.position_thought,
-            &signal.optimal,
-            signal.weight,
-        );
-        total_trail_err += trail_err;
-        total_stop_err += stop_err;
-        count += 1;
+        let (trail_err, stop_err, pred_trail, pred_stop, opt_trail, opt_stop) =
+            position_obs.observe_distances(
+                &signal.position_thought,
+                &signal.optimal,
+            );
+        r.total_trail_err += trail_err;
+        r.total_stop_err += stop_err;
+        r.total_predicted_trail += pred_trail;
+        r.total_predicted_stop += pred_stop;
+        r.total_optimal_trail += opt_trail;
+        r.total_optimal_stop += opt_stop;
+        r.count += 1;
     }
-    (count, total_trail_err, total_stop_err)
+    r
 }
 
 /// Run the position observer program. Call this inside thread::spawn.
@@ -114,7 +134,10 @@ pub fn position_observer_program(
 
         // LEARN FIRST. Drain all pending signals before encoding.
         let t0 = std::time::Instant::now();
-        let (learn_count, trail_err_sum, stop_err_sum) = drain_position_learn(&learn_rx, &mut position_obs);
+        let drain = drain_position_learn(&learn_rx, &mut position_obs);
+        let learn_count = drain.count;
+        let trail_err_sum = drain.total_trail_err;
+        let stop_err_sum = drain.total_stop_err;
         let ns_drain = t0.elapsed().as_nanos() as f64;
 
         // Drain trade state updates — absorb current trade atoms.
@@ -223,7 +246,10 @@ pub fn position_observer_program(
             ns_noise_strip += t0.elapsed().as_nanos() as f64;
 
             // Distances from reckoner, or crutches if not experienced yet.
-            let position_distances = position_obs.reckoner_distances(&position_anomaly)
+            // Proposal 053 Variant A: reckoner queries on raw thought, not anomaly.
+            // The noise subspace still updates (above). The anomaly still computes
+            // for the chain downstream. The reckoner just stops seeing it.
+            let position_distances = position_obs.reckoner_distances(&position_raw)
                 .unwrap_or(position_obs.default_distances);
 
             // Send MarketPositionChain downstream.
@@ -256,10 +282,16 @@ pub fn position_observer_program(
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "drain_learn", ns_drain, "Nanoseconds");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "learn_drained", learn_count as f64, "Count");
         if learn_count > 0 {
-            let avg_trail_err = trail_err_sum / learn_count as f64;
-            let avg_stop_err = stop_err_sum / learn_count as f64;
+            let n = learn_count as f64;
+            let avg_trail_err = trail_err_sum / n;
+            let avg_stop_err = stop_err_sum / n;
             emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "avg_trail_error", avg_trail_err, "Count");
             emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "avg_stop_error", avg_stop_err, "Count");
+            // Raw values — resolve the unknowns
+            emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "avg_predicted_trail", drain.total_predicted_trail / n, "Count");
+            emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "avg_predicted_stop", drain.total_predicted_stop / n, "Count");
+            emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "avg_optimal_trail", drain.total_optimal_trail / n, "Count");
+            emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "avg_optimal_stop", drain.total_optimal_stop / n, "Count");
         }
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "slot_recv", ns_slot_recv, "Nanoseconds");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "collect_facts", ns_collect_facts, "Nanoseconds");

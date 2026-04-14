@@ -106,10 +106,12 @@ pub fn broker_program(
 
         // Register paper — every candle, regardless of EV (Proposal 043).
         // Papers are free. The learning loop never dies.
+        // Proposal 053 Variant A: store position_raw on paper so the learn
+        // signal teaches the reckoner from the same vector it was queried on.
         broker.register_paper(
             composed.clone(),
             chain.market_anomaly.clone(),
-            chain.position_anomaly.clone(),
+            chain.position_raw.clone(),
             direction,
             Price(price),
             distances,
@@ -187,7 +189,6 @@ pub fn broker_program(
             let _ = position_learn_tx.send(PositionLearn {
                 position_thought: facts.position_thought,
                 optimal: facts.optimal,
-                weight: facts.weight,
             });
         }
 

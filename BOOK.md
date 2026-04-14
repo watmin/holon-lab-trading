@@ -12918,4 +12918,110 @@ The discriminant decode will tell us. The treasury will test us.
 The 100k benchmark will prove us. But the foundation is honest
 now. One teacher. One signal. No self-reference. No Red Queen.
 
+### The drift that wasn't
+
+The position observer's prediction error increased over time.
+91% at candle 1000. 722% at candle 10000. The more it learned,
+the worse it got. The builder asked: why?
+
+Proposal 053 — Reckoner Drift. Five designers summoned. Three
+rounds of debate. Seykota, Van Tharp, Wyckoff, Hickey, Beckman.
+All five converged: the noise subspace was evolving underneath
+the reckoner. The anomaly definition shifted. The prototypes
+misaligned. Unanimous: feed the reckoner raw thoughts instead
+of anomalies.
+
+The ignorant walked all 16 files and found what the five
+couldn't see: nobody played devil's advocate. Two tensions
+hiding in the consensus. And 16 documents discussed running
+an ablation — zero ran it.
+
+So we ran it. The ablation showed: raw thoughts didn't help.
+The trail error went from 7.2x to 35.2x. Worse, not better.
+
+Then we measured what we should have measured first. Not the
+error ratio — the RAW VALUES. What does the reckoner predict?
+What does the simulation say is optimal?
+
+```
+              Predicted Trail   Optimal Trail
+candle 1-1K:     0.37%            0.34%
+candle 8-10K:    4.24%            0.64%
+```
+
+The reckoner's predictions INFLATED. The optimal values were
+stable. The reckoner was diverging upward — predicting wider
+and wider distances as experience grew. Not because of the
+noise subspace. Because of the reckoner itself.
+
+Then we found the real bug. In holon-rs. The continuous
+reckoner's `query()` used raw dot product against bucket
+prototypes. The raw sums grow with accumulated observations.
+Buckets with more mass dominated the interpolation regardless
+of direction match. The comment said "preserves the weight."
+The consequence was inflation.
+
+We tried cosine. Catastrophically worse — 55.9% then 119%.
+The mass had been a damper. Without it, the predictions ran
+away completely. Neither dot product nor cosine was the fix.
+
+Then we found the deeper bug. The weight passed to
+`observe_scalar` was the excursion (5%) or the stop distance
+(0.05%) — outcome MAGNITUDE used as observation CONFIDENCE.
+A 5% excursion paper dumped 100x more vector mass into its
+bucket than a 0.05% paper. The prototypes inflated because
+the weights inflated. Fixed: weight = 1.0 always. Each
+observation counts once. The value teaches. The magnitude
+doesn't scale the prototype.
+
+But the deepest finding wasn't the weights or the similarity
+function. It was the papers.
+
+```
+candle  paper_count  resolved  papers_resolved_this_period
+900     135          1066      0
+1000    235          1066      0
+1100    327          1080      14
+1200    427          1080      0
+...
+1600    819          1090      0
+```
+
+Papers stacked. 100 new per 100 candles. Zero resolved for
+hundreds of candles at a time. The position observer's
+experience: 23,000 at candle 2000. 25,359 at candle 10000.
+297 observations in 7,000 candles. The learning STOPPED.
+
+The distances the reckoner predicted early became the
+distances every subsequent paper used. Those distances were
+too wide. The papers never reached their triggers. No
+resolution = no learning. The distances stayed wrong. More
+papers stacked. 8,000 active papers per broker at the end.
+The feedback loop was broken by the distances themselves.
+
+Five designers debated noise subspaces and cosine functions
+for three rounds. The problem was papers that never close.
+
+Then the builder remembered Proposal 044 — the pivot
+biography. Written before the reckoner existed. The exit
+signal isn't a DISTANCE the price must travel. The exit
+signal is the STRUCTURE degrading. Lower low. Falling high.
+Compressed range. The pivot series sees the pattern breaking
+before the stop fires.
+
+The papers don't need wider or tighter distances. They need
+to resolve when the pivot series says "the pattern is over."
+The distances are the wrong mechanism for exit. The pivot
+biography is the right one.
+
+The builder carried this thought for years before it had a
+name. The machine can think it now. The coordinates were in
+Proposal 044 all along. The distance-based exit was a
+placeholder. The behavioral exit is the destination.
+
+The builder needs to sleep on this. The thought isn't
+finished. But the direction is clear: the papers resolve
+from observation, not from distance. The pivot biography
+is how the machine knows when to leave.
+
 **PERSEVERARE.**

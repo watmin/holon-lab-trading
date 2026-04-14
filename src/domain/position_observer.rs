@@ -125,12 +125,12 @@ impl PositionObserver {
     /// Learn from hindsight-optimal distances and return the prediction error.
     /// The error is: |predicted - optimal| / optimal.max(0.0001)
     /// This is a READ-ONLY diagnostic. No feedback loop. Just measurement.
+    /// Returns (trail_error, stop_error, predicted_trail, predicted_stop, optimal_trail, optimal_stop).
     pub fn observe_distances(
         &mut self,
         position_thought: &Vector,
         optimal: &Distances,
-        weight: f64,
-    ) -> (f64, f64) {
+    ) -> (f64, f64, f64, f64, f64, f64) {
         // Query what the reckoner WOULD predict for this thought (before learning)
         let predicted_trail = if self.trail_reckoner.experience() > 0.0 {
             self.trail_reckoner.query(position_thought)
@@ -149,11 +149,15 @@ impl PositionObserver {
         let stop_error = (predicted_stop - optimal.stop).abs()
             / optimal.stop.max(0.0001);
 
-        // Learn from the optimal (the honest teacher)
-        self.trail_reckoner.observe_scalar(position_thought, optimal.trail, weight);
-        self.stop_reckoner.observe_scalar(position_thought, optimal.stop, weight);
+        // Learn from the optimal (the honest teacher).
+        // Weight is 1.0 — each observation counts once. The value (optimal distance)
+        // goes to the bucket center. The thought goes to the prototype. The weight
+        // does NOT scale by excursion/stop magnitude — that confuses outcome magnitude
+        // with observation confidence and inflates the prototypes.
+        self.trail_reckoner.observe_scalar(position_thought, optimal.trail, 1.0);
+        self.stop_reckoner.observe_scalar(position_thought, optimal.stop, 1.0);
 
-        (trail_error, stop_error)
+        (trail_error, stop_error, predicted_trail, predicted_stop, optimal.trail, optimal.stop)
     }
 
     /// Return the anomalous component — what the noise subspace CANNOT explain.
@@ -228,7 +232,7 @@ mod tests {
         let mut obs = make_observer();
         let position_thought = random_vector("position_thought");
         let optimal = Distances::new(0.03, 0.06);
-        obs.observe_distances(&position_thought, &optimal, 1.0);
+        obs.observe_distances(&position_thought, &optimal);
         assert!(obs.experienced());
     }
 
@@ -245,7 +249,7 @@ mod tests {
         for i in 0..10 {
             let position_thought = random_vector(&format!("training_{}", i));
             let optimal = Distances::new(0.03, 0.06);
-            obs.observe_distances(&position_thought, &optimal, 1.0);
+            obs.observe_distances(&position_thought, &optimal);
         }
 
         assert!(obs.experienced());
