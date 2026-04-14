@@ -4,14 +4,8 @@ Five wards scanned 81 Rust files. Leaves to root. Session: 2026-04-13.
 
 ## Critical — correctness
 
-- [ ] **Encoding divergence (sever).** 13 vocab modules have two
-  parallel paths: `ToAst` (hardcoded scale 1.0) and `encode_*_facts`
-  (learned scales). If extraction uses one and encoding uses the
-  other, cosine compares different geometries. Same class of bug
-  as the abs() sort from Chapter 6.
-  Files: oscillators, flow, persistence, regime, divergence,
-  ichimoku, stochastic, fibonacci, keltner, momentum, price_action,
-  timeframe, timing.
+- [x] **Encoding divergence (sever).** REAPED. ToAst trait and all
+  impls deleted. 709 lines. One encoding path remains. No divergence.
 
 - [ ] **`close_final` lies (forge).** PhaseRecord field named
   `close_final` stores `close_avg`. The name promises the last
@@ -43,9 +37,7 @@ Five wards scanned 81 Rust files. Leaves to root. Session: 2026-04-13.
   self_assessment.rs — `encode_*` functions only called in tests.
   Broker program computes inline. ~500 lines of dead production code.
 
-- [ ] **ToAst trait.** Only exercised in tests. Production uses
-  `encode_*_facts`. If removed, resolves the encoding divergence
-  (critical #1) by eliminating the divergent path.
+- [x] **ToAst trait.** REAPED with encoding divergence fix above.
 
 - [ ] **Generic `cache()` + `CacheHandle`.** Test-only. Production
   uses `encoding_cache()` + `EncodingCacheHandle`.
