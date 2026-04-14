@@ -291,6 +291,7 @@ fn wire_brokers(
     mut console_pool: HandlePool<enterprise::programs::stdlib::console::ConsoleHandle>,
     mut db_pool: HandlePool<enterprise::services::queue::QueueSender<LogEntry>>,
     scalar_encoder: Arc<ScalarEncoder>,
+    encoder: Arc<ThoughtEncoder>,
     swap_fee: f64,
     num_position: usize,
 ) -> WiredBrokers {
@@ -333,6 +334,7 @@ fn wire_brokers(
         let broker_console = console_pool.pop();
         let broker_db = db_pool.pop();
         let se = Arc::clone(&scalar_encoder);
+        let enc = Arc::clone(&encoder);
 
         let jh = std::thread::spawn(move || {
             broker_program(
@@ -344,6 +346,7 @@ fn wire_brokers(
                 broker_db,
                 broker,
                 se,
+                enc,
                 swap_fee,
             )
         });
@@ -639,6 +642,7 @@ fn main() {
         broker_console_pool,
         broker_db_pool,
         scalar_encoder,
+        Arc::clone(&encoder),
         args.swap_fee,
         num_position,
     );

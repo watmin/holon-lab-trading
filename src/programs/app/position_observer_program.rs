@@ -27,6 +27,7 @@ use crate::trades::paper_entry::PaperEntry;
 
 use crate::encoding::thought_encoder::{collect_facts, extract, ThoughtAST, ThoughtEncoder};
 use crate::programs::telemetry::emit_metric;
+use crate::types::pivot::{PhaseLabel, PhaseRecord};
 use crate::to_f64;
 
 /// Trade-state update from a broker. Contains the 10 trade atoms
@@ -54,11 +55,11 @@ pub struct PositionSlot {
     pub output_tx: QueueSender<MarketPositionChain>,
 }
 
-/// Compute trade atoms from a paper's state. Proposal 040.
+/// Compute trade atoms from a paper's state. Proposal 040 + Phase 3 biography.
 ///
-/// Returns the full 10-atom vocabulary. The caller selects the subset
-/// based on PositionLens (Core = first 5, Full = all 10).
-pub fn compute_trade_atoms(paper: &PaperEntry, current_price: f64) -> Vec<ThoughtAST> {
+/// Returns the full 13-atom vocabulary (10 original + 3 phase biography).
+/// The caller selects the subset based on PositionLens (Core = first 5, Full = all 13).
+pub fn compute_trade_atoms(paper: &PaperEntry, current_price: f64, phase_history: &[PhaseRecord]) -> Vec<ThoughtAST> {
     let entry = paper.entry_price.0;
     let extreme = paper.extreme;
     let excursion = ((extreme - entry) / entry).abs();
@@ -150,6 +151,47 @@ pub fn compute_trade_atoms(paper: &PaperEntry, current_price: f64) -> Vec<Though
         ThoughtAST::Linear {
             name: "exit-trail-cushion".into(),
             value: trail_cushion,
+            scale: 1.0,
+        },
+        // Phase 3 trade biography atoms (Proposal 044)
+        // phases-since-entry: how many phase transitions has this trade survived?
+        ThoughtAST::Log {
+            name: "phases-since-entry".into(),
+            value: {
+                let count = phase_history
+                    .iter()
+                    .filter(|r| r.start_candle >= paper.entry_candle)
+                    .count();
+                (count as f64).max(1.0)
+            },
+        },
+        // phases-survived: phase transitions that were peaks (potential exit points)
+        ThoughtAST::Log {
+            name: "phases-survived".into(),
+            value: {
+                let count = phase_history
+                    .iter()
+                    .filter(|r| r.start_candle >= paper.entry_candle && r.label == PhaseLabel::Peak)
+                    .count();
+                (count as f64).max(1.0)
+            },
+        },
+        // entry-vs-phase-avg: where did this trade enter relative to recent phase avg close?
+        ThoughtAST::Linear {
+            name: "entry-vs-phase-avg".into(),
+            value: {
+                let entry = paper.entry_price.0;
+                if phase_history.is_empty() || entry == 0.0 {
+                    0.0
+                } else {
+                    let avg_phase_close: f64 = phase_history
+                        .iter()
+                        .map(|r| r.close_avg)
+                        .sum::<f64>()
+                        / phase_history.len() as f64;
+                    (entry - avg_phase_close) / entry
+                }
+            },
             scale: 1.0,
         },
     ]

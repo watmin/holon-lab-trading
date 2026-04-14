@@ -16,12 +16,201 @@ use crate::domain::broker::Broker;
 use crate::types::enums::{Direction, Outcome};
 use crate::types::log_entry::LogEntry;
 use crate::types::newtypes::Price;
+use crate::types::pivot::{PhaseLabel, PhaseRecord};
 use crate::programs::app::position_observer_program::{PositionLearn, TradeUpdate, compute_trade_atoms};
 use crate::programs::app::market_observer_program::ObsLearn;
 use crate::programs::chain::MarketPositionChain;
 use crate::programs::stdlib::console::ConsoleHandle;
 use crate::programs::telemetry::emit_metric;
+use crate::encoding::thought_encoder::ThoughtAST;
 use crate::services::queue::{QueueReceiver, QueueSender};
+
+/// Compute portfolio biography atoms from broker's active papers + phase data.
+/// Phase 3 (Proposal 044): 10 atoms describing the broker's portfolio shape.
+fn compute_portfolio_biography(
+    papers: &std::collections::VecDeque<crate::trades::paper_entry::PaperEntry>,
+    phase_history: &[PhaseRecord],
+    max_papers_seen: &mut usize,
+) -> Vec<ThoughtAST> {
+    let active: Vec<&crate::trades::paper_entry::PaperEntry> = papers
+        .iter()
+        .filter(|p| !p.resolved)
+        .collect();
+    let active_count = active.len();
+
+    // Track max for portfolio-heat normalization.
+    if active_count > *max_papers_seen {
+        *max_papers_seen = active_count;
+    }
+
+    let mut atoms = Vec::with_capacity(10);
+
+    // 1. Active trade count
+    atoms.push(ThoughtAST::Log {
+        name: "active-trade-count".into(),
+        value: (active_count as f64).max(1.0),
+    });
+
+    // 2. Oldest active trade's phase age (phases since its entry)
+    let oldest_phases = active
+        .iter()
+        .map(|p| {
+            phase_history
+                .iter()
+                .filter(|r| r.start_candle >= p.entry_candle)
+                .count()
+        })
+        .max()
+        .unwrap_or(0);
+    atoms.push(ThoughtAST::Log {
+        name: "oldest-trade-phases".into(),
+        value: (oldest_phases as f64).max(1.0),
+    });
+
+    // 3. Newest active trade's phase age
+    let newest_phases = active
+        .iter()
+        .map(|p| {
+            phase_history
+                .iter()
+                .filter(|r| r.start_candle >= p.entry_candle)
+                .count()
+        })
+        .min()
+        .unwrap_or(0);
+    atoms.push(ThoughtAST::Log {
+        name: "newest-trade-phases".into(),
+        value: (newest_phases as f64).max(1.0),
+    });
+
+    // 4. Weighted average excursion across active trades
+    let avg_excursion = if active_count > 0 {
+        active.iter().map(|p| p.excursion()).sum::<f64>() / active_count as f64
+    } else {
+        0.0
+    };
+    atoms.push(ThoughtAST::Log {
+        name: "portfolio-excursion".into(),
+        value: avg_excursion.abs().max(0.0001),
+    });
+
+    // 5. Portfolio heat: active_count / max_seen
+    let heat = if *max_papers_seen > 0 {
+        active_count as f64 / *max_papers_seen as f64
+    } else {
+        0.0
+    };
+    atoms.push(ThoughtAST::Linear {
+        name: "portfolio-heat".into(),
+        value: heat,
+        scale: 1.0,
+    });
+
+    // Phase trend scalars from the current candle's phase history.
+    // 6. Valley trend: compare last two valley records' close_avg
+    let valleys: Vec<&PhaseRecord> = phase_history
+        .iter()
+        .filter(|r| r.label == PhaseLabel::Valley)
+        .collect();
+    let valley_trend = if valleys.len() >= 2 {
+        let last = valleys[valleys.len() - 1];
+        let prev = valleys[valleys.len() - 2];
+        if prev.close_avg > 0.0 {
+            (last.close_avg - prev.close_avg) / prev.close_avg
+        } else {
+            0.0
+        }
+    } else {
+        0.0
+    };
+    atoms.push(ThoughtAST::Linear {
+        name: "broker-phase-valley-trend".into(),
+        value: valley_trend,
+        scale: 1.0,
+    });
+
+    // 7. Peak trend: compare last two peak records' close_avg
+    let peaks: Vec<&PhaseRecord> = phase_history
+        .iter()
+        .filter(|r| r.label == PhaseLabel::Peak)
+        .collect();
+    let peak_trend = if peaks.len() >= 2 {
+        let last = peaks[peaks.len() - 1];
+        let prev = peaks[peaks.len() - 2];
+        if prev.close_avg > 0.0 {
+            (last.close_avg - prev.close_avg) / prev.close_avg
+        } else {
+            0.0
+        }
+    } else {
+        0.0
+    };
+    atoms.push(ThoughtAST::Linear {
+        name: "broker-phase-peak-trend".into(),
+        value: peak_trend,
+        scale: 1.0,
+    });
+
+    // 8. Regularity: stddev of phase durations / mean
+    let regularity = if phase_history.len() >= 2 {
+        let durations: Vec<f64> = phase_history.iter().map(|r| r.duration as f64).collect();
+        let mean = durations.iter().sum::<f64>() / durations.len() as f64;
+        if mean > 0.0 {
+            let variance = durations.iter().map(|d| (d - mean).powi(2)).sum::<f64>()
+                / durations.len() as f64;
+            variance.sqrt() / mean
+        } else {
+            0.0
+        }
+    } else {
+        0.0
+    };
+    atoms.push(ThoughtAST::Linear {
+        name: "broker-phase-regularity".into(),
+        value: regularity,
+        scale: 1.0,
+    });
+
+    // 9. Entry ratio: fraction of active papers that entered during valley or transition-up
+    let entry_ratio = if active_count > 0 {
+        let favorable = active
+            .iter()
+            .filter(|p| {
+                // Find the phase that was active at entry by checking which phase record
+                // contains the entry candle.
+                phase_history.iter().any(|r| {
+                    p.entry_candle >= r.start_candle
+                        && p.entry_candle <= r.end_candle
+                        && (r.label == PhaseLabel::Valley
+                            || (r.label == PhaseLabel::Transition
+                                && r.direction == crate::types::pivot::PhaseDirection::Up))
+                })
+            })
+            .count();
+        favorable as f64 / active_count as f64
+    } else {
+        0.0
+    };
+    atoms.push(ThoughtAST::Linear {
+        name: "broker-phase-entry-ratio".into(),
+        value: entry_ratio,
+        scale: 1.0,
+    });
+
+    // 10. Average spacing: mean duration of recent phases
+    let avg_spacing = if !phase_history.is_empty() {
+        phase_history.iter().map(|r| r.duration as f64).sum::<f64>()
+            / phase_history.len() as f64
+    } else {
+        1.0
+    };
+    atoms.push(ThoughtAST::Log {
+        name: "broker-phase-avg-spacing".into(),
+        value: avg_spacing.max(1.0),
+    });
+
+    atoms
+}
 
 /// Extract Direction from a holon Prediction.
 /// Label index 0 is Up, index 1 is Down. Default to Up when no direction.
@@ -44,9 +233,11 @@ pub fn broker_program(
     db_tx: QueueSender<LogEntry>,
     mut broker: Broker,
     scalar_encoder: Arc<ScalarEncoder>,
+    encoder: Arc<crate::encoding::thought_encoder::ThoughtEncoder>,
     _swap_fee: f64,
 ) -> Broker {
     let mut candle_count = 0usize;
+    let mut max_papers_seen: usize = 0;
 
     while let Ok(chain) = chain_rx.recv() {
         let t_total = std::time::Instant::now();
@@ -57,8 +248,17 @@ pub fn broker_program(
         let mut learn_grace: f64 = 0.0;
         let mut learn_violence: f64 = 0.0;
 
-        // 1. Compose: market anomaly + position anomaly
-        let composed = Primitives::bundle(&[&chain.market_anomaly, &chain.position_anomaly]);
+        // 1. Compose: market anomaly + position anomaly + portfolio biography
+        //    Portfolio biography atoms (Phase 3, Proposal 044) describe the broker's
+        //    portfolio shape. The broker's reckoner sees them in ITS composed thought.
+        let portfolio_atoms = compute_portfolio_biography(
+            &broker.papers,
+            &chain.candle.phase_history,
+            &mut max_papers_seen,
+        );
+        let portfolio_ast = ThoughtAST::Bundle(portfolio_atoms);
+        let (portfolio_vec, _portfolio_misses) = encoder.encode(&portfolio_ast);
+        let composed = Primitives::bundle(&[&chain.market_anomaly, &chain.position_anomaly, &portfolio_vec]);
 
         // 2. Direction from market prediction
         let direction = direction_from_prediction(&chain.market_prediction);
@@ -84,6 +284,7 @@ pub fn broker_program(
             direction,
             Price(price),
             distances,
+            chain.encode_count,
         );
 
         // 5. Tick papers
@@ -182,7 +383,7 @@ pub fn broker_program(
         // The position observer needs trade-state atoms to compose with market facts.
         for paper in &broker.papers {
             if !paper.resolved {
-                let atoms = compute_trade_atoms(paper, price);
+                let atoms = compute_trade_atoms(paper, price, &chain.candle.phase_history);
                 let _ = trade_tx.send(TradeUpdate { atoms });
             }
         }

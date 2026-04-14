@@ -233,6 +233,7 @@ impl Broker {
         prediction: Direction,
         entry_price: Price,
         distances: Distances,
+        candle_num: usize,
     ) {
         let paper_id = self.next_paper_id;
         self.next_paper_id += 1;
@@ -244,6 +245,7 @@ impl Broker {
             prediction,
             entry_price,
             distances,
+            candle_num,
         ));
     }
 
@@ -694,7 +696,7 @@ mod tests {
         let market_thought = random_vector("market");
         let position_thought = random_vector("exit");
         let distances = Distances::new(0.02, 0.05);
-        broker.register_paper(composed, market_thought, position_thought, Direction::Up, Price(50000.0), distances);
+        broker.register_paper(composed, market_thought, position_thought, Direction::Up, Price(50000.0), distances, 0);
         assert_eq!(broker.paper_count(), 1);
     }
 
@@ -705,7 +707,7 @@ mod tests {
         let market_thought = random_vector("market");
         let position_thought = random_vector("exit");
         let distances = Distances::new(0.05, 0.10);
-        broker.register_paper(composed, market_thought, position_thought, Direction::Up, Price(100.0), distances);
+        broker.register_paper(composed, market_thought, position_thought, Direction::Up, Price(100.0), distances, 0);
 
         // Price barely moves -- no resolution
         let (market_signals, runner_resolutions) = broker.tick_papers(Price(100.5));
@@ -722,7 +724,7 @@ mod tests {
         let position_thought = random_vector("exit");
         // Trail=0.05, Stop=0.10: stop_level=90
         let distances = Distances::new(0.05, 0.10);
-        broker.register_paper(composed, market_thought, position_thought, Direction::Up, Price(100.0), distances);
+        broker.register_paper(composed, market_thought, position_thought, Direction::Up, Price(100.0), distances, 0);
 
         // Price drops below stop → Violence
         let (market_signals, runner_resolutions) = broker.tick_papers(Price(89.0));
@@ -741,7 +743,7 @@ mod tests {
         let position_thought = random_vector("exit");
         // Trail=0.05, Stop=0.10
         let distances = Distances::new(0.05, 0.10);
-        broker.register_paper(composed, market_thought, position_thought, Direction::Up, Price(100.0), distances);
+        broker.register_paper(composed, market_thought, position_thought, Direction::Up, Price(100.0), distances, 0);
 
         // Price rises above entry + entry*trail = 105 → Grace signal
         let (market_signals, runner_resolutions) = broker.tick_papers(Price(110.0));
