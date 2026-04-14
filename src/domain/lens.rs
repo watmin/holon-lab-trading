@@ -186,7 +186,7 @@ pub fn position_lens_facts(lens: &PositionLens, candle: &Candle, scales: &mut Ha
 }
 
 /// Collect position self-assessment facts from the position observer's rolling window.
-/// Generalist-only for now. Returns empty for non-generalist lenses.
+/// Every position observer gets self-assessment — it's an internal property.
 pub fn position_self_assessment_facts(grace_rate: f64, avg_residue: f64, scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
     // Self-assessment is on ALL lenses — it's an internal property
     // every position observer has, not a generalist-only feature.
