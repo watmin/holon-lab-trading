@@ -26,7 +26,7 @@ enum PositionState {
     Violence,                        // deadline hit, reclaimed
 }
 
-struct Paper {
+struct PaperPosition {
     paper_id: u64,
     owner: BrokerSlot,                // (market_idx, position_idx)
     from_asset: Asset,                // what was borrowed (e.g. USDC)
@@ -104,7 +104,7 @@ struct Treasury {
     balances: HashMap<Asset, f64>,
 
     // All papers — the source of truth
-    papers: HashMap<u64, Paper>,
+    papers: HashMap<u64, PaperPosition>,
     next_paper_id: u64,
 
     // Papers indexed by owner for fast lookup
