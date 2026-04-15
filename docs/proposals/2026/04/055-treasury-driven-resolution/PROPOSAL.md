@@ -179,6 +179,38 @@ Same four gates. The game rewards the THOUGHT, not the capital.
 A small proposer with good thoughts earns the same percentage
 as a whale with good thoughts. The edge is in the thinking.
 
+### Two kinds of claim
+
+Every participant has capital in the treasury. That capital
+exists in two states:
+
+**Deposited** — available. Not assigned to any trade. Earning
+passively from the treasury's growth (the pool's half of every
+Grace residue). Depositors can enqueue a withdrawal request
+against their deposited balance. The withdrawal fulfills as
+trades resolve and capital becomes available. The treasury never
+breaks active trades to satisfy a withdrawal — it queues them
+and fills them from returning principal.
+
+**In trade** — reserved. Assigned to an active paper or real
+position. Not available for withdrawal until the position
+resolves. When the position exits Grace: the principal returns
+to the treasury (deposited state), the proposer's half of the
+residue credits to their deposited balance, the treasury's half
+stays in the pool. When the position hits the deadline: the
+remaining value returns to the treasury's deposited pool. The
+proposer's in-trade claim is revoked.
+
+The proposer's deposited balance includes their deposit PLUS
+their accumulated Grace residue halves. The proposer can
+withdraw from the deposited balance (in the contract — not
+in the lab program). The in-trade balance cannot be touched
+until the position resolves.
+
+In the lab: brokers never withdraw. Everything reinvests. The
+claims exist in the ledger for accounting. The withdrawal
+mechanism is a contract concern for Solana.
+
 If denied:
 - The paper lives. The deadline ticks. The broker holds.
 
