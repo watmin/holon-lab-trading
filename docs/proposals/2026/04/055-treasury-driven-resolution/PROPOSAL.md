@@ -192,14 +192,18 @@ trades resolve and capital becomes available. The treasury never
 breaks active trades to satisfy a withdrawal — it queues them
 and fills them from returning principal.
 
-**In trade** — reserved. Assigned to an active paper or real
-position. Not available for withdrawal until the position
-resolves. When the position exits Grace: the principal returns
-to the treasury (deposited state), the proposer's half of the
-residue credits to their deposited balance, the treasury's half
-stays in the pool. When the position hits the deadline: the
-remaining value returns to the treasury's deposited pool. The
-proposer's in-trade claim is revoked.
+**In trade** — reserved. Assigned to an active REAL position.
+Not available for withdrawal until the position resolves.
+Papers never reserve capital — papers are always a fixed
+reference amount ($100 or $10,000), returning percentages
+only. Papers are proof of thoughts, not capital at risk.
+
+When a real position exits Grace: the principal returns to
+the treasury (deposited state), the proposer's half of the
+residue credits to their deposited balance, the treasury's
+half stays in the pool. When a real position hits the deadline:
+the remaining value returns to the treasury's deposited pool.
+The proposer's in-trade claim is revoked.
 
 The proposer's deposited balance includes their deposit PLUS
 their accumulated Grace residue halves. The proposer can
