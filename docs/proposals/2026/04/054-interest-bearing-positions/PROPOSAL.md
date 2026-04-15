@@ -463,6 +463,23 @@ from the ledger, and the treasury reads it before lending.
 Anyone who wants to risk the treasury's money must have risked
 their own to prove themselves.
 
+The treasury is intentionally ignorant of the proposer's thoughts.
+The proposer is free to disclose what they are doing — publish
+their vocabulary, explain their strategy, open-source their
+machine. But the treasury is not the authority on strategy. The
+treasury is the authority on outcomes. Private ideas can remain
+private. That is not the treasury's concern.
+
+The treasury's concern: do you produce Grace or Violence?
+Prosperity or poverty? Proven. Through the ledger. Through the
+struct. Through the predicate that reads it.
+
+The proposer who publishes everything and produces Violence is
+denied. The proposer who reveals nothing and produces Grace is
+funded. The transparency is in the OUTCOMES, not the strategy.
+The glass box shows the record. The strategy is the proposer's
+business. The outcomes are the treasury's.
+
 It hurts to lose. It pays to win.
 
 ## The headless treasury
