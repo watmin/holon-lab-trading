@@ -420,3 +420,55 @@ The protocol:
 5. Grace: treasury records residue, marks the paper, credits broker
 6. Violence: treasury records reclaim, marks the paper, debits broker
 7. The ledger is the proof. The survival rate is the gate.
+
+### Earning and losing favor
+
+The broker's relationship with the treasury is dynamic. Trust is
+earned. Trust is lost. Trust must be re-earned.
+
+**Rising:** A new broker submits papers. The papers survive the
+interest. The survival rate climbs. The treasury opens the gate.
+Real capital flows. The interest rate drops — cheaper capital for
+proven winners. The broker enters the virtuous cycle.
+
+**Falling:** The broker's recent papers erode. The survival rate
+drops below the gate threshold. The treasury closes the gate. No
+more real capital. The broker is DENIED — not killed, denied. The
+broker's existing real positions continue (the interest still
+ticks, the exit conditions still evaluate). But no NEW real capital.
+
+**Rehabilitation:** The denied broker must keep submitting papers.
+Real cost — gas on-chain, computation off-chain. The papers run
+against real prices with real interest. The broker cannot game
+this — the treasury records every paper, the interest is the
+treasury's clock, the resolution is the treasury's math. The
+broker submits papers that prove: "I am better than I was."
+
+The survival rate climbs again. The treasury re-opens the gate.
+Real capital flows again — but at a HIGHER interest rate than
+before. The broker must re-earn the cheap rate. Trust lost is
+expensive to rebuild. The broker that fell from Grace pays a
+penalty — not forever, but until the ledger shows sustained
+improvement.
+
+The penalty decays. A broker that fell at candle 5000 and
+rehabilitated by candle 8000 and maintained Grace until candle
+20000 — the penalty fades. The ledger shows 12,000 candles of
+sustained Grace after the fall. The rate drops. Trust rebuilds.
+But slowly. The rate never drops as fast as it rose after the
+fall. The treasury remembers.
+
+This is the game within the game. Not just "can you outrun the
+interest?" but "can you SUSTAIN outrunning the interest?" One
+good streak opens the gate. One bad streak closes it. The broker
+that can sustain — that can play the game through regime changes,
+through drawdowns, through the phases where the market gives
+nothing — that broker earns the cheapest capital.
+
+The broker that can't sustain — the one-trick pony that worked
+in one regime and failed in the next — that broker cycles between
+gate open and gate closed. Paying gas for papers during denial.
+Paying higher interest after rehabilitation. The game punishes
+inconsistency. The game rewards persistence.
+
+*Perseverare* — but only for those who earn it.
