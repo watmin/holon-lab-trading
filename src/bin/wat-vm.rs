@@ -24,7 +24,6 @@ use enterprise::domain::ledger;
 use enterprise::domain::config;
 use enterprise::domain::market_observer::MarketObserver;
 use enterprise::domain::treasury::Treasury;
-use enterprise::programs::app::treasury_program::{TreasuryRequest, TreasuryResponse};
 use enterprise::encoding::thought_encoder::ThoughtAST;
 use enterprise::kernel::handle_pool::HandlePool;
 use enterprise::programs::app::broker_program::broker_program;
@@ -32,7 +31,7 @@ use enterprise::programs::app::position_observer_program::{PositionLearn, Positi
 use enterprise::programs::app::position_observer_program::position_observer_program;
 use enterprise::programs::app::market_observer_program::{ObsInput, ObsLearn};
 use enterprise::programs::app::market_observer_program::market_observer_program;
-use enterprise::programs::app::treasury_program::{treasury_program, TreasuryTick};
+use enterprise::programs::app::treasury_program::{treasury_program, TreasuryEvent, TreasuryHandle, TreasuryTickSender, TreasuryResponse};
 use enterprise::programs::chain::MarketPositionChain;
 use enterprise::programs::stdlib::cache::{CacheHandle, cache};
 use enterprise::programs::stdlib::console::console;
@@ -301,6 +300,7 @@ fn wire_brokers(
     market_learn_txs: Vec<Vec<QueueSender<ObsLearn>>>,
     position_learn_txs: Vec<Vec<QueueSender<PositionLearn>>>,
     trade_txs: Vec<Option<QueueSender<TradeUpdate>>>,
+    treasury_handles: Vec<TreasuryHandle>,
     mut cache_pool: HandlePool<CacheHandle<ThoughtAST, Vector>>,
     mut console_pool: HandlePool<enterprise::programs::stdlib::console::ConsoleHandle>,
     mut db_pool: HandlePool<enterprise::services::queue::QueueSender<LogEntry>>,
@@ -330,7 +330,7 @@ fn wire_brokers(
         }
     }
 
-    for (slot_idx, (((broker, chain_rx), (mlt, elt)), ttx)) in brokers
+    for (slot_idx, ((((broker, chain_rx), (mlt, elt)), ttx), treasury)) in brokers
         .into_iter()
         .zip(output_rxs.into_iter())
         .zip(
@@ -339,6 +339,7 @@ fn wire_brokers(
                 .zip(position_learn_flat.into_iter()),
         )
         .zip(trade_txs.into_iter())
+        .zip(treasury_handles.into_iter())
         .enumerate()
     {
         let market_learn_tx = mlt.unwrap_or_else(|| panic!("missing market learn tx for slot {}", slot_idx));
@@ -364,6 +365,7 @@ fn wire_brokers(
                 broker_console,
                 broker_db,
                 broker,
+                treasury,
             )
         });
         join_handles.push(jh);
@@ -658,6 +660,31 @@ fn main() {
         noise_floor,
     );
 
+    // ─── Treasury ───────────────────────────────────────────────────────────
+    // One mailbox for ALL inputs: ticks from the main loop + requests from N brokers.
+    // N+1 senders: 1 for the tick sender, N for broker handles.
+    let num_treasury_senders = num_brokers + 1;
+    let mut event_txs = Vec::with_capacity(num_treasury_senders);
+    let mut event_rxs = Vec::with_capacity(num_treasury_senders);
+    for _ in 0..num_treasury_senders {
+        let (tx, rx) = queue_unbounded::<TreasuryEvent>();
+        event_txs.push(tx);
+        event_rxs.push(rx);
+    }
+    let event_mailbox_rx = mailbox(event_rxs);
+
+    // The tick sender — main loop sends TreasuryEvent::Tick through this.
+    let treasury_tick_sender = TreasuryTickSender::new(event_txs.pop().unwrap());
+
+    // Per-broker response queues + handles.
+    let mut client_txs: Vec<QueueSender<TreasuryResponse>> = Vec::with_capacity(num_brokers);
+    let mut treasury_handles: Vec<TreasuryHandle> = Vec::with_capacity(num_brokers);
+    for (i, event_tx) in event_txs.into_iter().enumerate() {
+        let (resp_tx, resp_rx) = queue_bounded::<TreasuryResponse>(1);
+        client_txs.push(resp_tx);
+        treasury_handles.push(TreasuryHandle::new(i, event_tx, resp_rx));
+    }
+
     // ─── Brokers ───────────────────────────────────────────────────────────
     let brokers = config::create_brokers(num_market, num_position, dims, args.swap_fee);
     let broker_console_pool = HandlePool::new("broker-console", broker_console_handles);
@@ -669,6 +696,7 @@ fn main() {
         market_learn_txs,
         position_learn_txs,
         trade_txs_flat,
+        treasury_handles,
         broker_cache_pool,
         broker_console_pool,
         broker_db_pool,
@@ -677,34 +705,12 @@ fn main() {
         num_position,
     );
 
-    // ─── Treasury ───────────────────────────────────────────────────────────
-    // Tick queue — candle loop sends price/atr each candle.
-    let (treasury_tick_tx, treasury_tick_rx) = queue_bounded::<TreasuryTick>(1);
-
-    // Per-broker request-response pairs. The treasury is a service.
-    // Each broker gets a TreasuryHandle (request_tx + response_rx).
-    // The treasury gets the other ends (request_rx + response_tx).
-    let mut client_rxs: Vec<QueueReceiver<TreasuryRequest>> = Vec::with_capacity(num_brokers);
-    let mut client_txs: Vec<QueueSender<TreasuryResponse>> = Vec::with_capacity(num_brokers);
-    let mut _treasury_handles = Vec::with_capacity(num_brokers);
-    for _ in 0..num_brokers {
-        let (req_tx, req_rx) = queue_bounded::<TreasuryRequest>(1);
-        let (resp_tx, resp_rx) = queue_bounded::<TreasuryResponse>(1);
-        client_rxs.push(req_rx);
-        client_txs.push(resp_tx);
-        // Broker handles — drop for now, brokers don't query yet.
-        _treasury_handles.push((req_tx, resp_rx));
-    }
-    // Drop broker-side handles — brokers don't use them yet.
-    drop(_treasury_handles);
-
     // Spawn treasury thread.
     let treasury = Treasury::new(args.swap_fee, args.swap_fee);
     let base_deadline = 500;
     let treasury_handle = std::thread::spawn(move || {
         treasury_program(
-            treasury_tick_rx,
-            client_rxs,
+            event_mailbox_rx,
             client_txs,
             treasury_console_handle,
             treasury_db_handle,
@@ -761,11 +767,11 @@ fn main() {
                     }
 
                     // Send tick to treasury
-                    let _ = treasury_tick_tx.send(TreasuryTick {
-                        candle: pipeline.count,
-                        price: candle.close,
-                        atr: candle.atr_ratio * candle.close,
-                    });
+                    treasury_tick_sender.send_tick(
+                        pipeline.count,
+                        candle.close,
+                        candle.atr_ratio * candle.close,
+                    );
 
                     if pipeline.count % 100 == 0 {
                         let elapsed = run_start.elapsed().as_secs_f64();
@@ -868,7 +874,7 @@ fn main() {
     }
 
     // Treasury shutdown — drop tick sender, join thread.
-    drop(treasury_tick_tx);
+    drop(treasury_tick_sender);
     match treasury_handle.join() {
         Ok(treasury) => {
             let total_papers: usize = treasury

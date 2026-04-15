@@ -1,101 +1,100 @@
 /// treasury_program.rs — the treasury service thread body.
 ///
-/// The treasury is a service. Brokers are clients. The broker submits
-/// requests and reads responses. The treasury does not push.
+/// One mailbox. Ticks and requests arrive in natural order. The treasury
+/// processes whatever comes next. A tick advances deadlines. A request
+/// gets an immediate response. No polling. No spinning. No deadlock.
 ///
-/// Request-response per client (like the cache service).
-/// One request type, one response type. The broker sends a TreasuryRequest,
-/// blocks on the response. The treasury processes and replies.
-///
-/// The treasury's only autonomous action: deadline enforcement on tick.
-/// Brokers discover deadline Violence by querying their positions.
+/// The broker calls treasury_handle.submit_paper() which wraps the request,
+/// sends it into the shared mailbox, and blocks on the per-broker response
+/// queue. The handle IS the interface.
 ///
 /// On shutdown, returns the Treasury — the state comes home.
 
-use crate::domain::treasury::{
-    PositionReceipt, PositionState, Treasury,
-};
+use crate::domain::treasury::{PositionReceipt, PositionState, Treasury};
 use crate::programs::stdlib::console::ConsoleHandle;
+use crate::services::mailbox::MailboxReceiver;
 use crate::services::queue::{QueueReceiver, QueueSender};
 use crate::types::log_entry::LogEntry;
 
-/// Candle tick — the treasury's clock.
-#[derive(Debug, Clone)]
-pub struct TreasuryTick {
-    pub candle: usize,
-    pub price: f64,
-    pub atr: f64,
+// ─── Events ────────────────────────────────────────────────────────────────
+
+/// Everything that enters the treasury's mailbox.
+#[derive(Debug)]
+pub enum TreasuryEvent {
+    /// The candle clock. Advances deadlines.
+    Tick { candle: usize, price: f64, atr: f64 },
+    /// A broker request. The client_id indexes the response queue.
+    Request { client_id: usize, request: TreasuryRequest },
 }
 
-/// A broker's request to the treasury.
+/// What the broker can ask the treasury.
 #[derive(Debug, Clone)]
 pub enum TreasuryRequest {
-    /// Submit a paper proposal. Always succeeds.
     SubmitPaper {
-        owner: usize,
         from_asset: String,
         to_asset: String,
         price: f64,
     },
-    /// Submit a real proposal. Treasury decides amount. May be denied.
     SubmitReal {
-        owner: usize,
         from_asset: String,
         to_asset: String,
         price: f64,
     },
-    /// Submit an exit proposal. Treasury validates the arithmetic.
     SubmitExit {
         paper_id: u64,
         current_price: f64,
     },
-    /// Query a paper position's current state.
-    GetPaperPosition {
+    GetPaperState {
         paper_id: u64,
     },
 }
 
-/// The treasury's response to a broker request.
+/// What the treasury sends back.
 #[derive(Debug, Clone)]
 pub enum TreasuryResponse {
-    /// Paper issued. Here's the receipt.
     PaperIssued(PositionReceipt),
-    /// Real position approved. Here's the receipt.
     RealApproved(PositionReceipt),
-    /// Real position denied. No record, insufficient balance, or unproven.
     RealDenied,
-    /// Exit approved. Grace. Here's the residue.
     ExitApproved { paper_id: u64, residue: f64 },
-    /// Exit denied. Residue doesn't cover fees. Keep holding.
     ExitDenied,
-    /// Position state query result.
     PaperState { paper_id: u64, state: PositionState },
-    /// Position not found.
     NotFound,
 }
 
-/// A broker's handle to the treasury service. One per broker.
-/// Request-response: send request, block for response.
+// ─── Handle ────────────────────────────────────────────────────────────────
+
+/// A broker's handle to the treasury. One per broker.
+/// Send request into the shared mailbox, block on per-broker response.
 pub struct TreasuryHandle {
-    pub request_tx: QueueSender<TreasuryRequest>,
-    pub response_rx: QueueReceiver<TreasuryResponse>,
+    client_id: usize,
+    event_tx: QueueSender<TreasuryEvent>,
+    response_rx: QueueReceiver<TreasuryResponse>,
 }
 
 impl TreasuryHandle {
+    pub fn new(
+        client_id: usize,
+        event_tx: QueueSender<TreasuryEvent>,
+        response_rx: QueueReceiver<TreasuryResponse>,
+    ) -> Self {
+        Self { client_id, event_tx, response_rx }
+    }
+
     /// Submit a paper proposal. Always succeeds. Returns the receipt.
     pub fn submit_paper(
         &self,
-        owner: usize,
         from_asset: &str,
         to_asset: &str,
         price: f64,
     ) -> Option<PositionReceipt> {
-        self.request_tx
-            .send(TreasuryRequest::SubmitPaper {
-                owner,
-                from_asset: from_asset.to_string(),
-                to_asset: to_asset.to_string(),
-                price,
+        self.event_tx
+            .send(TreasuryEvent::Request {
+                client_id: self.client_id,
+                request: TreasuryRequest::SubmitPaper {
+                    from_asset: from_asset.to_string(),
+                    to_asset: to_asset.to_string(),
+                    price,
+                },
             })
             .ok()?;
         match self.response_rx.recv().ok()? {
@@ -107,17 +106,18 @@ impl TreasuryHandle {
     /// Submit a real proposal. Treasury decides amount. Returns receipt or None.
     pub fn submit_real(
         &self,
-        owner: usize,
         from_asset: &str,
         to_asset: &str,
         price: f64,
     ) -> Option<PositionReceipt> {
-        self.request_tx
-            .send(TreasuryRequest::SubmitReal {
-                owner,
-                from_asset: from_asset.to_string(),
-                to_asset: to_asset.to_string(),
-                price,
+        self.event_tx
+            .send(TreasuryEvent::Request {
+                client_id: self.client_id,
+                request: TreasuryRequest::SubmitReal {
+                    from_asset: from_asset.to_string(),
+                    to_asset: to_asset.to_string(),
+                    price,
+                },
             })
             .ok()?;
         match self.response_rx.recv().ok()? {
@@ -128,10 +128,13 @@ impl TreasuryHandle {
 
     /// Submit an exit. Returns Some(residue) if approved, None if denied.
     pub fn submit_exit(&self, paper_id: u64, current_price: f64) -> Option<f64> {
-        self.request_tx
-            .send(TreasuryRequest::SubmitExit {
-                paper_id,
-                current_price,
+        self.event_tx
+            .send(TreasuryEvent::Request {
+                client_id: self.client_id,
+                request: TreasuryRequest::SubmitExit {
+                    paper_id,
+                    current_price,
+                },
             })
             .ok()?;
         match self.response_rx.recv().ok()? {
@@ -140,10 +143,13 @@ impl TreasuryHandle {
         }
     }
 
-    /// Query a paper position's state. Returns the state or None if not found.
+    /// Query a paper position's state. Returns the state or None.
     pub fn get_paper_state(&self, paper_id: u64) -> Option<PositionState> {
-        self.request_tx
-            .send(TreasuryRequest::GetPaperPosition { paper_id })
+        self.event_tx
+            .send(TreasuryEvent::Request {
+                client_id: self.client_id,
+                request: TreasuryRequest::GetPaperState { paper_id },
+            })
             .ok()?;
         match self.response_rx.recv().ok()? {
             TreasuryResponse::PaperState { state, .. } => Some(state),
@@ -152,31 +158,34 @@ impl TreasuryHandle {
     }
 }
 
-/// Process one request against the treasury. Pure function.
+// ─── Request handler ───────────────────────────────────────────────────────
+
+/// Process one request. Pure function.
 fn handle_request(
     treasury: &mut Treasury,
+    client_id: usize,
     request: TreasuryRequest,
     candle: usize,
     deadline_candles: usize,
 ) -> TreasuryResponse {
     match request {
         TreasuryRequest::SubmitPaper {
-            owner,
             from_asset,
             to_asset,
             price,
         } => {
-            let receipt =
-                treasury.issue_paper(owner, &from_asset, &to_asset, price, candle, deadline_candles);
+            let receipt = treasury.issue_paper(
+                client_id, &from_asset, &to_asset, price, candle, deadline_candles,
+            );
             TreasuryResponse::PaperIssued(receipt)
         }
         TreasuryRequest::SubmitReal {
-            owner,
             from_asset,
             to_asset,
             price,
-        } => match treasury.issue_real(owner, &from_asset, &to_asset, price, candle, deadline_candles)
-        {
+        } => match treasury.issue_real(
+            client_id, &from_asset, &to_asset, price, candle, deadline_candles,
+        ) {
             Some(receipt) => TreasuryResponse::RealApproved(receipt),
             None => TreasuryResponse::RealDenied,
         },
@@ -193,7 +202,7 @@ fn handle_request(
             }
             None => TreasuryResponse::ExitDenied,
         },
-        TreasuryRequest::GetPaperPosition { paper_id } => {
+        TreasuryRequest::GetPaperState { paper_id } => {
             match treasury.get_paper_position(paper_id) {
                 Some(paper) => TreasuryResponse::PaperState {
                     paper_id,
@@ -205,11 +214,12 @@ fn handle_request(
     }
 }
 
-/// Run the treasury service. Call this inside thread::spawn.
-/// Returns the Treasury when the tick source disconnects.
+// ─── Program ───────────────────────────────────────────────────────────────
+
+/// Run the treasury service. One recv loop. Two-level match.
+/// Returns the Treasury when the mailbox disconnects.
 pub fn treasury_program(
-    tick_rx: QueueReceiver<TreasuryTick>,
-    client_rxs: Vec<QueueReceiver<TreasuryRequest>>,
+    event_rx: MailboxReceiver<TreasuryEvent>,
     client_txs: Vec<QueueSender<TreasuryResponse>>,
     console: ConsoleHandle,
     _db_tx: QueueSender<LogEntry>,
@@ -219,59 +229,50 @@ pub fn treasury_program(
     let mut candle_count = 0usize;
     let mut current_candle = 0usize;
 
-    while let Ok(tick) = tick_rx.recv() {
-        candle_count += 1;
-        current_candle = tick.candle;
+    while let Ok(event) = event_rx.recv() {
+        match event {
+            TreasuryEvent::Tick { candle, .. } => {
+                candle_count += 1;
+                current_candle = candle;
 
-        // 1. Check deadlines — the treasury's only autonomous action.
-        let _ = treasury.check_deadlines(tick.candle);
+                // Advance deadlines — the treasury's autonomous action.
+                let _ = treasury.check_deadlines(candle);
 
-        // 2. Service all client requests — round-robin, non-blocking.
-        // Each client may have submitted requests since last tick.
-        for (i, rx) in client_rxs.iter().enumerate() {
-            while let Ok(request) = rx.try_recv() {
-                let response = handle_request(
-                    &mut treasury,
-                    request,
-                    tick.candle,
-                    base_deadline,
-                );
-                if i < client_txs.len() {
-                    let _ = client_txs[i].send(response);
+                // Diagnostics every 1000 candles.
+                if candle_count % 1000 == 0 {
+                    let active_papers = treasury
+                        .papers
+                        .values()
+                        .filter(|p| p.state == PositionState::Active)
+                        .count();
+                    let total_submitted: usize = treasury
+                        .proposer_records
+                        .values()
+                        .map(|r| r.papers_submitted)
+                        .sum();
+                    let total_survived: usize = treasury
+                        .proposer_records
+                        .values()
+                        .map(|r| r.papers_survived)
+                        .sum();
+                    console.out(format!(
+                        "treasury: candle={} active={} submitted={} survived={}",
+                        candle, active_papers, total_submitted, total_survived,
+                    ));
                 }
             }
-        }
 
-        // 3. Diagnostics every 1000 candles.
-        if candle_count % 1000 == 0 {
-            let active_papers = treasury
-                .papers
-                .values()
-                .filter(|p| p.state == PositionState::Active)
-                .count();
-            let total_records: usize = treasury
-                .proposer_records
-                .values()
-                .map(|r| r.papers_submitted)
-                .sum();
-            console.out(format!(
-                "treasury: candle={} active_papers={} total_submitted={}",
-                tick.candle, active_papers, total_records,
-            ));
-        }
-    }
-
-    // GRACEFUL SHUTDOWN. Service remaining requests.
-    for (i, rx) in client_rxs.iter().enumerate() {
-        while let Ok(request) = rx.try_recv() {
-            let response = handle_request(
-                &mut treasury,
-                request,
-                current_candle,
-                base_deadline,
-            );
-            if i < client_txs.len() {
-                let _ = client_txs[i].send(response);
+            TreasuryEvent::Request { client_id, request } => {
+                let response = handle_request(
+                    &mut treasury,
+                    client_id,
+                    request,
+                    current_candle,
+                    base_deadline,
+                );
+                if client_id < client_txs.len() {
+                    let _ = client_txs[client_id].send(response);
+                }
             }
         }
     }
@@ -280,77 +281,92 @@ pub fn treasury_program(
     treasury
 }
 
+// ─── Tick sender helper ────────────────────────────────────────────────────
+
+/// A handle for the main loop to send ticks. Wraps the event sender.
+pub struct TreasuryTickSender {
+    event_tx: QueueSender<TreasuryEvent>,
+}
+
+impl TreasuryTickSender {
+    pub fn new(event_tx: QueueSender<TreasuryEvent>) -> Self {
+        Self { event_tx }
+    }
+
+    pub fn send_tick(&self, candle: usize, price: f64, atr: f64) {
+        let _ = self.event_tx.send(TreasuryEvent::Tick { candle, price, atr });
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn treasury_tick_can_be_constructed() {
-        let tick = TreasuryTick {
-            candle: 100,
-            price: 90_000.0,
-            atr: 1500.0,
-        };
-        assert_eq!(tick.candle, 100);
+    fn treasury_event_tick() {
+        let event = TreasuryEvent::Tick { candle: 100, price: 90_000.0, atr: 1500.0 };
+        assert!(matches!(event, TreasuryEvent::Tick { .. }));
     }
 
     #[test]
-    fn treasury_request_submit_paper() {
-        let req = TreasuryRequest::SubmitPaper {
-            owner: 0,
-            from_asset: "USDC".to_string(),
-            to_asset: "WBTC".to_string(),
-            price: 90_000.0,
+    fn treasury_event_request() {
+        let event = TreasuryEvent::Request {
+            client_id: 0,
+            request: TreasuryRequest::SubmitPaper {
+                from_asset: "USDC".to_string(),
+                to_asset: "WBTC".to_string(),
+                price: 90_000.0,
+            },
         };
-        assert!(matches!(req, TreasuryRequest::SubmitPaper { .. }));
-    }
-
-    #[test]
-    fn treasury_response_variants() {
-        let denied = TreasuryResponse::RealDenied;
-        assert!(matches!(denied, TreasuryResponse::RealDenied));
-
-        let exit_denied = TreasuryResponse::ExitDenied;
-        assert!(matches!(exit_denied, TreasuryResponse::ExitDenied));
+        assert!(matches!(event, TreasuryEvent::Request { .. }));
     }
 
     #[test]
     fn handle_request_submit_paper() {
         let mut treasury = Treasury::new(0.0035, 0.0035);
-        let req = TreasuryRequest::SubmitPaper {
-            owner: 0,
-            from_asset: "USDC".to_string(),
-            to_asset: "WBTC".to_string(),
-            price: 90_000.0,
-        };
-        let resp = handle_request(&mut treasury, req, 100, 288);
+        let resp = handle_request(
+            &mut treasury,
+            0,
+            TreasuryRequest::SubmitPaper {
+                from_asset: "USDC".to_string(),
+                to_asset: "WBTC".to_string(),
+                price: 90_000.0,
+            },
+            100,
+            288,
+        );
         assert!(matches!(resp, TreasuryResponse::PaperIssued(_)));
         assert_eq!(treasury.papers.len(), 1);
     }
 
     #[test]
-    fn handle_request_get_paper_position() {
+    fn handle_request_get_paper_state() {
         let mut treasury = Treasury::new(0.0035, 0.0035);
         let receipt = treasury.issue_paper(0, "USDC", "WBTC", 90_000.0, 100, 288);
 
-        let req = TreasuryRequest::GetPaperPosition {
-            paper_id: receipt.position_id,
-        };
-        let resp = handle_request(&mut treasury, req, 100, 288);
+        let resp = handle_request(
+            &mut treasury,
+            0,
+            TreasuryRequest::GetPaperState { paper_id: receipt.position_id },
+            100,
+            288,
+        );
         assert!(matches!(
             resp,
-            TreasuryResponse::PaperState {
-                state: PositionState::Active,
-                ..
-            }
+            TreasuryResponse::PaperState { state: PositionState::Active, .. }
         ));
     }
 
     #[test]
-    fn handle_request_get_nonexistent_paper() {
+    fn handle_request_not_found() {
         let mut treasury = Treasury::new(0.0035, 0.0035);
-        let req = TreasuryRequest::GetPaperPosition { paper_id: 999 };
-        let resp = handle_request(&mut treasury, req, 100, 288);
+        let resp = handle_request(
+            &mut treasury,
+            0,
+            TreasuryRequest::GetPaperState { paper_id: 999 },
+            100,
+            288,
+        );
         assert!(matches!(resp, TreasuryResponse::NotFound));
     }
 }

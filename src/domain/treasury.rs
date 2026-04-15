@@ -86,6 +86,7 @@ pub struct ProposerRecord {
 #[derive(Debug, Clone)]
 pub struct PositionReceipt {
     pub position_id: u64,
+    pub owner: usize,
     pub from_asset: String,
     pub to_asset: String,
     pub amount: f64,
@@ -188,6 +189,7 @@ impl Treasury {
 
         PositionReceipt {
             position_id: id,
+            owner,
             from_asset: from_asset.to_string(),
             to_asset: to_asset.to_string(),
             amount,
@@ -249,6 +251,7 @@ impl Treasury {
 
         Some(PositionReceipt {
             position_id: id,
+            owner,
             from_asset: from_asset.to_string(),
             to_asset: to_asset.to_string(),
             amount,

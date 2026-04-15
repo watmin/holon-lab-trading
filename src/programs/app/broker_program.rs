@@ -15,6 +15,8 @@ use holon::kernel::vector::Vector;
 use holon::kernel::vector_manager::VectorManager;
 
 use crate::domain::broker::Broker;
+use crate::domain::treasury::PositionState;
+use crate::programs::app::treasury_program::TreasuryHandle;
 use crate::types::enums::{Direction, Outcome};
 use crate::types::log_entry::LogEntry;
 use crate::types::newtypes::Price;
@@ -52,9 +54,11 @@ pub fn broker_program(
     console: ConsoleHandle,
     db_tx: QueueSender<LogEntry>,
     mut broker: Broker,
+    treasury: TreasuryHandle,
 ) -> Broker {
     let mut candle_count = 0usize;
     let mut max_papers_seen: usize = 0;
+    let mut active_paper_ids: Vec<u64> = Vec::new();
 
     while let Ok(chain) = chain_rx.recv() {
         let t_total = std::time::Instant::now();
@@ -199,6 +203,31 @@ pub fn broker_program(
             let atoms = compute_trade_atoms(paper, price, &chain.candle.phase_history);
             let _ = trade_tx.send(TradeUpdate { atoms });
         }
+
+        // 6c. Treasury interaction — submit paper proposal based on market direction.
+        let from_asset = if direction == Direction::Up { "USDC" } else { "WBTC" };
+        let to_asset = if from_asset == "USDC" { "WBTC" } else { "USDC" };
+        if let Some(receipt) = treasury.submit_paper(
+            from_asset,
+            to_asset,
+            price,
+        ) {
+            active_paper_ids.push(receipt.position_id);
+        }
+
+        // 6d. Check active papers — discover Violence from treasury deadlines.
+        active_paper_ids.retain(|&id| {
+            match treasury.get_paper_state(id) {
+                Some(PositionState::Active) => true,  // still alive
+                Some(PositionState::Violence) => {
+                    // Deadline hit. The broker discovers it by reading.
+                    // TODO: propagate violence to observers
+                    false  // remove from active list
+                }
+                Some(PositionState::Grace { .. }) => false,  // already resolved
+                None => false,  // not found
+            }
+        });
 
         // 7. DB snapshot every 100 candles
         if candle_count % 100 == 0 {
