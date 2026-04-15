@@ -230,6 +230,34 @@ similar-but-not-identical directions. They REINFORCE the common shape
 in the bundle. The scalar differences create SPREAD around that
 direction. The reckoner reads both the pattern and the drift.
 
+### Order Lives in the Deltas, Not the Container
+
+The bundle is a set — it loses the order of pairs. "Pair-0 happened
+before pair-4" is not expressed. But the ORDER is not lost. It moved
+from the container to the content.
+
+Each phase record carries `same-move-delta`: "I moved X% less than the
+last phase of my type." This IS ordering. A weakening sequence of
+rallies produces:
+
+- Rally 1: no same-move-delta (first rally)
+- Rally 2: `same-move-delta = -0.01` (weaker than rally 1)
+- Rally 3: `same-move-delta = -0.02` (weaker than rally 2)
+
+The delta on rally 3 says "I am weaker than my predecessor." It
+doesn't need to know where rally 2 is in the bundle. The relation
+is IN the scalar. The degradation is encoded on each record, not
+between records.
+
+The bundle sees "rallies with increasingly negative same-move-delta."
+The composite direction drifts toward weakness. The reckoner reads
+the drift. The ordering that the bundle lost is carried by the
+deltas the bundle contains.
+
+If the deltas were absent — if each phase only had its own properties —
+the bundle truly couldn't distinguish "strong then weak" from "weak
+then strong." The deltas make the distinction. They are the linkage.
+
 ### Why Familiar Shapes Stay Familiar
 
 Bind is deterministic. The same two vectors always produce the same
