@@ -157,10 +157,13 @@ validates the arithmetic. The record tracks the outcome.
 If approved:
 - Treasury recovers `paper.amount` of from_asset (the principal)
 - Treasury deducts exit fee
-- Residue credited to broker's claim in the to_asset
-- Treasury notifies broker: Grace, paper_id, residue amount
-- Proposer record updated: `papers_survived += 1`,
+- Residue stays in the treasury's to_asset balance (treasury grows)
+- Broker's proposer record updated: `papers_survived += 1`,
   `total_grace_residue += residue`
+- Treasury notifies broker: Grace, paper_id, residue amount
+- The broker's reward: the record earns longer deadlines next
+  time. More patience. More room for runners. The residue grows
+  the treasury. The record grows the trust.
 
 If denied:
 - The paper lives. The deadline ticks. The broker holds.
