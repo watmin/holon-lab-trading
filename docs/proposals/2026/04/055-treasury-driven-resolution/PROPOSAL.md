@@ -157,13 +157,27 @@ validates the arithmetic. The record tracks the outcome.
 If approved:
 - Treasury recovers `paper.amount` of from_asset (the principal)
 - Treasury deducts exit fee
-- Residue stays in the treasury's to_asset balance (treasury grows)
+- Residue is split: half to the proposer, half to the treasury
+  - Proposer's half: credited to the proposer's deposit in to_asset.
+    This is the honest reward. The proposer earned it through
+    good thoughts.
+  - Treasury's half: stays in the pool's to_asset balance. The
+    pool grows. All depositors benefit proportionally.
 - Broker's proposer record updated: `papers_survived += 1`,
   `total_grace_residue += residue`
 - Treasury notifies broker: Grace, paper_id, residue amount
-- The broker's reward: the record earns longer deadlines next
-  time. More patience. More room for runners. The residue grows
-  the treasury. The record grows the trust.
+
+The incentive aligns. The proposer wants Grace because they
+earn half the residue. The treasury wants Grace because it keeps
+half. The passive depositors want Grace because the pool grows.
+Everyone benefits from the same outcome. Nobody benefits from
+Violence.
+
+The proposer with $100 and the proposer with $10,000,000 play
+the same game. Same deadlines (adjusted by record, not deposit).
+Same four gates. The game rewards the THOUGHT, not the capital.
+A small proposer with good thoughts earns the same percentage
+as a whale with good thoughts. The edge is in the thinking.
 
 If denied:
 - The paper lives. The deadline ticks. The broker holds.
