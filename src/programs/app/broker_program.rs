@@ -89,20 +89,21 @@ pub fn broker_program(
                 None => return false,
             };
 
-            let (outcome, weight) = match state {
+            let outcome = match state {
                 PositionState::Active => return true,
                 PositionState::Violence => {
                     learn_violence += 1.0;
-                    (Outcome::Violence, 0.01)
+                    Outcome::Violence
                 }
-                PositionState::Grace { residue } => {
+                PositionState::Grace { .. } => {
                     learn_grace += 1.0;
-                    (Outcome::Grace, (residue / 10_000.0).max(0.001).min(0.10))
+                    Outcome::Grace
                 }
             };
 
-            // One propagation path. Outcome determines the label.
-            let optimal = crate::types::distances::Distances::new(weight, 0.01);
+            // Each observation counts once. The outcome is the label.
+            let weight = 1.0;
+            let optimal = crate::types::distances::Distances::new(0.01, 0.01);
             let facts = broker.propagate(
                 &composed,
                 &chain.market_anomaly,
