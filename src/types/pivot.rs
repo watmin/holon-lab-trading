@@ -411,16 +411,22 @@ mod tests {
     }
 
     #[test]
-    fn test_history_bounded() {
+    fn test_history_time_trimmed() {
         let mut state = PhaseState::new();
         let smoothing = 1.0;
 
-        // Force many transitions by oscillating
-        for i in 0..100 {
+        // Force many transitions by oscillating over 3000 candles (> 1 week)
+        for i in 0..3000 {
             let close = if i % 4 < 2 { 100.0 + (i as f64) * 0.01 } else { 90.0 };
             state.step(close, 50.0, i, smoothing);
         }
 
-        assert!(state.phase_history.len() <= PHASE_HISTORY_CAPACITY);
+        // History should contain phases but be trimmed — not everything from 3000 candles
+        assert!(!state.phase_history.is_empty());
+        // The oldest phase should be within ~one week of the newest
+        let newest = state.phase_history.back().unwrap().start_candle;
+        let oldest = state.phase_history.front().unwrap().start_candle;
+        assert!(newest - oldest <= PHASE_HISTORY_MAX_AGE + 100,
+            "history spans {} candles, expected ~{}", newest - oldest, PHASE_HISTORY_MAX_AGE);
     }
 }

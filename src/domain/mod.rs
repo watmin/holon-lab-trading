@@ -12,3 +12,4 @@ pub mod indicator_bank;
 pub mod simulation;
 pub mod ledger;
 pub mod lens;
+pub mod treasury;
