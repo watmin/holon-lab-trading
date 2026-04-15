@@ -107,8 +107,8 @@ pub struct ExitProposal {
 /// Pushed down to brokers through their pipe.
 #[derive(Debug, Clone, PartialEq)]
 pub enum TreasuryVerdict {
-    Grace { paper_id: u64, residue: f64 },
-    Violence { paper_id: u64 },
+    Grace { position_id: u64, residue: f64 },
+    Violence { position_id: u64 },
 }
 
 /// The treasury — the bank. Headless. Blind to strategy.
@@ -318,7 +318,7 @@ impl Treasury {
         // or the caller passes the real position ID. For this implementation,
         // we handle paper grace only through this method.
 
-        Some(TreasuryVerdict::Grace { paper_id, residue })
+        Some(TreasuryVerdict::Grace { position_id: paper_id, residue })
     }
 
     /// Check all active papers and real positions against the deadline.
@@ -342,7 +342,7 @@ impl Treasury {
             let record = self.proposer_records.entry(owner).or_default();
             record.papers_failed += 1;
 
-            verdicts.push(TreasuryVerdict::Violence { paper_id: id });
+            verdicts.push(TreasuryVerdict::Violence { position_id: id });
         }
 
         // Real positions
@@ -366,7 +366,7 @@ impl Treasury {
             let record = self.proposer_records.entry(owner).or_default();
             record.papers_failed += 1;
 
-            verdicts.push(TreasuryVerdict::Violence { paper_id: id });
+            verdicts.push(TreasuryVerdict::Violence { position_id: id });
         }
 
         verdicts
@@ -537,7 +537,7 @@ mod tests {
         // Current candle past deadline.
         let verdicts = t.check_deadlines(100 + 288);
         assert_eq!(verdicts.len(), 1);
-        assert_eq!(verdicts[0], TreasuryVerdict::Violence { paper_id: id });
+        assert_eq!(verdicts[0], TreasuryVerdict::Violence { position_id: id });
 
         // Paper state is Violence.
         assert_eq!(t.papers[&id].state, PositionState::Violence);
@@ -557,7 +557,7 @@ mod tests {
         assert!(verdict.is_some());
 
         match verdict.unwrap() {
-            TreasuryVerdict::Grace { paper_id, residue } => {
+            TreasuryVerdict::Grace { position_id: paper_id, residue } => {
                 assert_eq!(paper_id, id);
                 assert!(residue > 0.0);
             }
@@ -737,7 +737,7 @@ mod tests {
         // Deadline expires.
         let verdicts = t.check_deadlines(100 + 288);
         assert_eq!(verdicts.len(), 1);
-        assert_eq!(verdicts[0], TreasuryVerdict::Violence { paper_id: receipt.position_id });
+        assert_eq!(verdicts[0], TreasuryVerdict::Violence { position_id: receipt.position_id });
 
         // Balance restored.
         let balance_after_violence = t.balances["USDC"];

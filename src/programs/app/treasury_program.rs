@@ -55,9 +55,9 @@ pub enum TreasuryResponse {
     PaperIssued(PositionReceipt),
     RealApproved(PositionReceipt),
     RealDenied,
-    ExitApproved { paper_id: u64, residue: f64 },
+    ExitApproved { position_id: u64, residue: f64 },
     ExitDenied,
-    PaperState { paper_id: u64, state: PositionState },
+    PaperState { position_id: u64, state: PositionState },
     NotFound,
 }
 
@@ -198,14 +198,14 @@ fn handle_request(
                     crate::domain::treasury::TreasuryVerdict::Grace { residue, .. } => residue,
                     _ => 0.0,
                 };
-                TreasuryResponse::ExitApproved { paper_id, residue }
+                TreasuryResponse::ExitApproved { position_id: paper_id, residue }
             }
             None => TreasuryResponse::ExitDenied,
         },
         TreasuryRequest::GetPaperState { paper_id } => {
             match treasury.get_paper_position(paper_id) {
                 Some(paper) => TreasuryResponse::PaperState {
-                    paper_id,
+                    position_id: paper_id,
                     state: paper.state.clone(),
                 },
                 None => TreasuryResponse::NotFound,
