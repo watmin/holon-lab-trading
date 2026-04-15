@@ -2,7 +2,7 @@
 /// Compiled from wat/broker-program.wat.
 ///
 /// Receives MarketPositionChains through a queue (one per position observer slot).
-/// Registers paper trades, ticks them against price, resolves them,
+/// Submits papers to the treasury, discovers outcomes by reading treasury state,
 /// and teaches both its market observer and position observer through
 /// learn handles wired at construction.
 /// On shutdown it returns the broker. The accounting comes home.
@@ -19,12 +19,9 @@ use crate::domain::treasury::PositionState;
 use crate::programs::app::treasury_program::TreasuryHandle;
 use crate::types::enums::{Direction, Outcome};
 use crate::types::log_entry::LogEntry;
-use crate::types::newtypes::Price;
-use crate::programs::app::position_observer_program::{PositionLearn, TradeUpdate, compute_trade_atoms};
-use crate::vocab::broker::portfolio::compute_portfolio_biography;
+use crate::programs::app::position_observer_program::PositionLearn;
 use crate::programs::app::market_observer_program::ObsLearn;
 use crate::programs::chain::MarketPositionChain;
-use crate::encoding::encode::encode;
 use crate::encoding::thought_encoder::ThoughtAST;
 use crate::programs::stdlib::cache::CacheHandle;
 use crate::programs::stdlib::console::ConsoleHandle;
@@ -47,9 +44,9 @@ pub fn broker_program(
     chain_rx: QueueReceiver<MarketPositionChain>,
     market_learn_tx: QueueSender<ObsLearn>,
     position_learn_tx: QueueSender<PositionLearn>,
-    trade_tx: QueueSender<TradeUpdate>,
-    cache: CacheHandle<ThoughtAST, Vector>,
-    vm: VectorManager,
+    _trade_tx: QueueSender<crate::programs::app::position_observer_program::TradeUpdate>,
+    _cache: CacheHandle<ThoughtAST, Vector>,
+    _vm: VectorManager,
     scalar: Arc<ScalarEncoder>,
     console: ConsoleHandle,
     db_tx: QueueSender<LogEntry>,
@@ -57,7 +54,6 @@ pub fn broker_program(
     treasury: TreasuryHandle,
 ) -> Broker {
     let mut candle_count = 0usize;
-    let mut max_papers_seen: usize = 0;
     let mut active_paper_ids: Vec<u64> = Vec::new();
 
     while let Ok(chain) = chain_rx.recv() {
@@ -70,141 +66,21 @@ pub fn broker_program(
         let mut learn_violence: f64 = 0.0;
         let mut learn_at_boundary: f64 = 0.0;
         let mut learn_mid_phase: f64 = 0.0;
-        let mut papers_resolved: f64 = 0.0;
-        let mut papers_grace: f64 = 0.0;
-        let mut papers_violence: f64 = 0.0;
-        let mut total_paper_age: f64 = 0.0;
-        let mut total_paper_excursion: f64 = 0.0;
 
         // Phase 4: detect phase boundary — small phase_duration means we just entered a new phase.
         let near_phase_boundary = chain.candle.phase_duration <= 5;
 
-        // 1. Compose: market anomaly + position anomaly + portfolio biography
-        //    Portfolio biography atoms (Phase 3, Proposal 044) describe the broker's
-        //    portfolio shape. The broker's reckoner sees them in ITS composed thought.
-        let (portfolio_atoms, updated_max) = compute_portfolio_biography(
-            &broker.papers,
-            &chain.candle.phase_history,
-            max_papers_seen,
-        );
-        max_papers_seen = updated_max;
-        let portfolio_fact_count = portfolio_atoms.len();
-        let portfolio_ast = ThoughtAST::Bundle(portfolio_atoms);
-        let portfolio_vec = encode(&cache, &portfolio_ast, &vm, &scalar);
-        let composed = Primitives::bundle(&[&chain.market_anomaly, &chain.position_anomaly, &portfolio_vec]);
+        // 1. Compose: market anomaly + position anomaly
+        let composed = Primitives::bundle(&[&chain.market_anomaly, &chain.position_anomaly]);
 
         // 2. Direction from market prediction
         let direction = direction_from_prediction(&chain.market_prediction);
-
-        // 3. Distances from position observer's reckoner, cascaded through broker
-        let distances = broker.cascade_distances(Some(chain.position_distances), &scalar);
-
-        // 4. Direction flip — close runners in old direction
-        let mut flip_resolutions = Vec::new();
-        if let Some(active_dir) = broker.active_direction {
-            if direction != active_dir {
-                flip_resolutions = broker.close_all_runners(Price(price));
-            }
-        }
         broker.active_direction = Some(direction);
 
-        // Register paper — every candle, regardless of EV (Proposal 043).
-        // Papers are free. The learning loop never dies.
-        // Proposal 053 Variant A: store position_raw on paper so the learn
-        // signal teaches the reckoner from the same vector it was queried on.
-        broker.register_paper(
-            composed.clone(),
-            chain.market_anomaly.clone(),
-            chain.position_raw.clone(),
-            direction,
-            Price(price),
-            distances,
-            chain.encode_count,
-        );
+        // 3. Distances from position observer's reckoner, cascaded through broker
+        let _distances = broker.cascade_distances(Some(chain.position_distances), &scalar);
 
-        // 5. Tick papers
-        let (market_signals, mut runner_resolutions) = broker.tick_papers(Price(price));
-        runner_resolutions.extend(flip_resolutions);
-
-        // Count paper resolution stats for telemetry.
-        for resolution in market_signals.iter().chain(runner_resolutions.iter()) {
-            papers_resolved += 1.0;
-            match resolution.outcome {
-                Outcome::Grace => papers_grace += 1.0,
-                Outcome::Violence => papers_violence += 1.0,
-            }
-            total_paper_age += resolution.duration as f64;
-            total_paper_excursion += resolution.excursion;
-        }
-
-        // 6. Process all resolutions — propagate and teach observers
-        for resolution in market_signals.iter().chain(runner_resolutions.iter()) {
-            let facts = broker.propagate(
-                &resolution.composed_thought,
-                &resolution.market_thought,
-                &resolution.position_thought,
-                resolution.outcome,
-                resolution.amount,
-                resolution.prediction,
-                &resolution.optimal_distances,
-                &scalar,
-            );
-
-            // Teach market observer — directional accuracy, not trade outcome (Proposal 043).
-            // Did the predicted direction match the actual price movement?
-            // Correct: learn the predicted direction. Incorrect: learn the opposite.
-            let direction_correct = match facts.direction {
-                Direction::Up => price > resolution.entry_price,
-                Direction::Down => price < resolution.entry_price,
-            };
-            let learn_direction = if direction_correct {
-                facts.direction
-            } else {
-                match facts.direction {
-                    Direction::Up => Direction::Down,
-                    Direction::Down => Direction::Up,
-                }
-            };
-            match learn_direction {
-                Direction::Up => learn_up += 1.0,
-                Direction::Down => learn_down += 1.0,
-            }
-            match resolution.outcome {
-                Outcome::Grace => learn_grace += 1.0,
-                Outcome::Violence => learn_violence += 1.0,
-            }
-
-            // Phase 4: modulate learn weight — phase boundary predictions are more valuable.
-            let phase_weight = if near_phase_boundary {
-                learn_at_boundary += 1.0;
-                facts.weight * 2.0
-            } else {
-                learn_mid_phase += 1.0;
-                facts.weight
-            };
-
-            let _ = market_learn_tx.send(ObsLearn {
-                thought: facts.market_thought,
-                direction: learn_direction,
-                weight: phase_weight,
-            });
-
-            // Teach position observer — immediate resolution signal (Proposal 051: continuous only)
-            let _ = position_learn_tx.send(PositionLearn {
-                position_thought: facts.position_thought,
-                optimal: facts.optimal,
-            });
-        }
-
-        // 6b. Send trade update for the LATEST active paper (Proposal 040).
-        // The position observer drains TradeUpdates and only uses the last one,
-        // so sending one per broker per candle avoids redundant compute_trade_atoms.
-        if let Some(paper) = broker.papers.iter().rev().find(|p| !p.resolved) {
-            let atoms = compute_trade_atoms(paper, price, &chain.candle.phase_history);
-            let _ = trade_tx.send(TradeUpdate { atoms });
-        }
-
-        // 6c. Treasury interaction — submit paper proposal based on market direction.
+        // 4. Treasury interaction — submit paper proposal based on market direction.
         let from_asset = if direction == Direction::Up { "USDC" } else { "WBTC" };
         let to_asset = if from_asset == "USDC" { "WBTC" } else { "USDC" };
         if let Some(receipt) = treasury.submit_paper(
@@ -215,36 +91,135 @@ pub fn broker_program(
             active_paper_ids.push(receipt.position_id);
         }
 
-        // 6d. Check active papers — discover Violence from treasury deadlines.
+        // 5. Check active papers — discover outcomes from treasury.
         active_paper_ids.retain(|&id| {
             match treasury.get_paper_state(id) {
                 Some(PositionState::Active) => true,  // still alive
                 Some(PositionState::Violence) => {
                     // Deadline hit. The broker discovers it by reading.
-                    // TODO: propagate violence to observers
+                    let weight = 0.01; // stop distance placeholder
+                    let optimal = crate::types::distances::Distances::new(0.01, 0.01);
+
+                    // Phase 4: modulate learn weight.
+                    let phase_weight = if near_phase_boundary {
+                        learn_at_boundary += 1.0;
+                        weight * 2.0
+                    } else {
+                        learn_mid_phase += 1.0;
+                        weight
+                    };
+
+                    let facts = broker.propagate(
+                        &composed,
+                        &chain.market_anomaly,
+                        &chain.position_raw,
+                        Outcome::Violence,
+                        weight,
+                        direction,
+                        &optimal,
+                        &scalar,
+                    );
+
+                    learn_violence += 1.0;
+                    // Teach market observer — direction wrong (Violence = deadline hit).
+                    let learn_direction = match facts.direction {
+                        Direction::Up => Direction::Down,
+                        Direction::Down => Direction::Up,
+                    };
+                    match learn_direction {
+                        Direction::Up => learn_up += 1.0,
+                        Direction::Down => learn_down += 1.0,
+                    }
+                    let _ = market_learn_tx.send(ObsLearn {
+                        thought: facts.market_thought,
+                        direction: learn_direction,
+                        weight: phase_weight,
+                    });
+                    let _ = position_learn_tx.send(PositionLearn {
+                        position_thought: facts.position_thought,
+                        optimal: facts.optimal,
+                    });
+
                     false  // remove from active list
                 }
-                Some(PositionState::Grace { .. }) => false,  // already resolved
+                Some(PositionState::Grace { residue }) => {
+                    // Treasury resolved grace. Propagate the win.
+                    let weight = residue / 10_000.0; // normalize to fraction
+                    let optimal = crate::types::distances::Distances::new(
+                        weight.max(0.001).min(0.10),
+                        0.01,
+                    );
+
+                    // Phase 4: modulate learn weight.
+                    let phase_weight = if near_phase_boundary {
+                        learn_at_boundary += 1.0;
+                        weight * 2.0
+                    } else {
+                        learn_mid_phase += 1.0;
+                        weight
+                    };
+
+                    let facts = broker.propagate(
+                        &composed,
+                        &chain.market_anomaly,
+                        &chain.position_raw,
+                        Outcome::Grace,
+                        weight,
+                        direction,
+                        &optimal,
+                        &scalar,
+                    );
+
+                    learn_grace += 1.0;
+                    // Teach market observer — direction correct (Grace = profitable).
+                    let direction_correct = match facts.direction {
+                        Direction::Up => price > 0.0, // Grace means profitable
+                        Direction::Down => price > 0.0,
+                    };
+                    let learn_direction = if direction_correct {
+                        facts.direction
+                    } else {
+                        match facts.direction {
+                            Direction::Up => Direction::Down,
+                            Direction::Down => Direction::Up,
+                        }
+                    };
+                    match learn_direction {
+                        Direction::Up => learn_up += 1.0,
+                        Direction::Down => learn_down += 1.0,
+                    }
+                    let _ = market_learn_tx.send(ObsLearn {
+                        thought: facts.market_thought,
+                        direction: learn_direction,
+                        weight: phase_weight,
+                    });
+                    let _ = position_learn_tx.send(PositionLearn {
+                        position_thought: facts.position_thought,
+                        optimal: facts.optimal,
+                    });
+
+                    false  // remove from active list
+                }
                 None => false,  // not found
             }
         });
 
-        // 7. DB snapshot every 100 candles
+        // 6. DB snapshot every 100 candles
         if candle_count % 100 == 0 {
             let _ = db_tx.send(LogEntry::BrokerSnapshot {
                 candle: candle_count,
                 broker_slot_idx: broker.slot_idx,
                 grace_count: broker.grace_count,
                 violence_count: broker.violence_count,
-                paper_count: broker.papers.len(),
+                paper_count: active_paper_ids.len(),
                 trail_experience: broker.trail_accum.count as f64,
                 stop_experience: broker.stop_accum.count as f64,
                 expected_value: broker.expected_value,
                 avg_grace_net: broker.avg_grace_net,
                 avg_violence_net: broker.avg_violence_net,
-                fact_count: portfolio_fact_count,
+                fact_count: 0,
                 // rune:temper(intentional) — being blind is being incapable
-                thought_ast: portfolio_ast.to_edn(),
+                thought_ast: String::new(),
             });
         }
         // Phase snapshot — every candle, only slot 0. Phases last ~6 candles,
@@ -277,15 +252,8 @@ pub fn broker_program(
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "learn_violence_count", learn_violence, "Count");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "learn_at_boundary", learn_at_boundary, "Count");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "learn_mid_phase", learn_mid_phase, "Count");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "papers_resolved", papers_resolved, "Count");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "papers_grace", papers_grace, "Count");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "papers_violence", papers_violence, "Count");
-        let avg_paper_age = if papers_resolved > 0.0 { total_paper_age / papers_resolved } else { 0.0 };
-        let avg_paper_excursion = if papers_resolved > 0.0 { total_paper_excursion / papers_resolved } else { 0.0 };
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "avg_paper_age", avg_paper_age, "Count");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "avg_paper_excursion", avg_paper_excursion, "Count");
 
-        // 8. Console diagnostic every 1000 candles
+        // 7. Console diagnostic every 1000 candles
         if candle_count % 1000 == 0 {
             let grace_rate = if broker.trade_count > 0 {
                 broker.grace_count as f64 / broker.trade_count as f64
@@ -293,13 +261,13 @@ pub fn broker_program(
                 0.0
             };
             console.out(format!(
-                "broker[{}] {}: trades={} grace={:.3} ev={:.2} papers={}",
+                "broker[{}] {}: trades={} grace={:.3} ev={:.2} active_papers={}",
                 broker.slot_idx,
                 broker.observer_names.join("-"),
                 broker.trade_count,
                 grace_rate,
                 broker.expected_value,
-                broker.papers.len(),
+                active_paper_ids.len(),
             ));
         }
     }

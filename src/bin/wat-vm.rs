@@ -858,13 +858,12 @@ fn main() {
                     0.0
                 };
                 main_handle.out(format!(
-                    "broker[{}] {}: trades={} grace={:.3} ev={:.2} papers={}",
+                    "broker[{}] {}: trades={} grace={:.3} ev={:.2}",
                     broker.slot_idx,
                     broker.observer_names.join("/"),
                     broker.trade_count,
                     grace_rate,
                     broker.expected_value,
-                    broker.papers.len(),
                 ));
             }
             Err(_) => {

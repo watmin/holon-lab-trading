@@ -1,101 +1,16 @@
 /// broker.rs — The accountability primitive. Binds one market observer + one
 /// position observer. Compiled from wat/broker.wat.
 ///
-/// The broker IS the accountability unit. It owns paper trades, scalar
-/// accumulators, and a Grace/Violence reckoner. Values up, not effects down.
-
-use std::collections::{HashMap, VecDeque};
+/// The broker IS the accountability unit. It owns scalar accumulators and a
+/// Grace/Violence reckoner. The treasury owns papers now. Values up, not
+/// effects down.
 
 use holon::kernel::scalar::ScalarEncoder;
 use holon::kernel::vector::Vector;
 
 use crate::types::distances::Distances;
 use crate::types::enums::{Direction, Outcome};
-use crate::domain::simulation;
-use crate::types::newtypes::Price;
-use crate::trades::paper_entry::PaperEntry;
 use crate::learning::scalar_accumulator::ScalarAccumulator;
-
-/// Accumulated history for a runner paper. Created when a paper signals Grace.
-/// Stores per-candle data for deferred batch training of the position observer.
-#[derive(Clone)]
-pub struct RunnerHistory {
-    pub thoughts: Vec<Vector>,
-    pub distances: Vec<Distances>,
-    pub prices: Vec<f64>,
-}
-
-/// What a broker produces when a paper resolves or signals.
-/// Facts, not mutations. Collected from parallel tick, applied sequentially.
-#[derive(Clone)]
-pub struct Resolution {
-    /// Which broker produced this.
-    pub broker_slot_idx: usize,
-    /// The composed thought (market + position) that was tested.
-    pub composed_thought: Vector,
-    /// The raw market thought (for market observer learning).
-    pub market_thought: Vector,
-    /// The position observer's own encoded facts (for position observer learning).
-    /// Proposal 026: position learns from position_thought, not composed.
-    pub position_thought: Vector,
-    /// What the market observer predicted.
-    pub prediction: Direction,
-    /// Grace or Violence.
-    pub outcome: Outcome,
-    /// How much value (excursion or stop distance).
-    pub amount: f64,
-    /// Hindsight optimal distances.
-    pub optimal_distances: Distances,
-    /// Paper details for diagnostics.
-    pub entry_price: f64,
-    pub extreme: f64,
-    pub excursion: f64,
-    pub trail_distance: f64,
-    pub stop_distance: f64,
-    pub duration: usize,
-    /// Did the trail cross before resolution?
-    pub was_runner: bool,
-    /// Deferred batch training data for the position observer.
-    /// Each entry: (thought_at_candle, optimal_distances_at_candle, actual_distances_at_candle, weight).
-    /// Empty for non-runner resolutions.
-    pub position_batch: Vec<(Vector, Distances, Distances, f64)>,
-}
-
-impl Resolution {
-    /// Construct from a paper entry and resolution context.
-    /// One place to derive all 15 fields.
-    fn from_paper(
-        paper: &PaperEntry,
-        broker_slot_idx: usize,
-        outcome: Outcome,
-        optimal_distances: Distances,
-        was_runner: bool,
-        position_batch: Vec<(Vector, Distances, Distances, f64)>,
-    ) -> Self {
-        let amount = match outcome {
-            Outcome::Grace => paper.excursion(),
-            Outcome::Violence => paper.distances.stop,
-        };
-        Self {
-            broker_slot_idx,
-            composed_thought: paper.composed_thought.clone(),
-            market_thought: paper.market_thought.clone(),
-            position_thought: paper.position_thought.clone(),
-            prediction: paper.prediction,
-            outcome,
-            amount,
-            optimal_distances,
-            entry_price: paper.entry_price.0,
-            extreme: paper.extreme,
-            excursion: paper.excursion(),
-            trail_distance: paper.distances.trail,
-            stop_distance: paper.distances.stop,
-            duration: paper.age,
-            was_runner,
-            position_batch,
-        }
-    }
-}
 
 /// What the broker returns for observer learning.
 #[derive(Clone)]
@@ -140,28 +55,14 @@ pub struct Broker {
     pub violence_count: usize,
     /// Current active direction — the broker's stance. None = cold start.
     pub active_direction: Option<Direction>,
-    /// Capped paper trade queue.
-    pub papers: VecDeque<PaperEntry>,
     /// Scalar accumulator for trail-distance.
     pub trail_accum: ScalarAccumulator,
     /// Scalar accumulator for stop-distance.
     pub stop_accum: ScalarAccumulator,
     /// Default trail/stop distances — the tier 3 fallback.
     pub default_distances: Distances,
-    /// Running average paper duration (candles). Self-assessment vocab.
-    pub avg_paper_duration: f64,
-    /// Running average excursion. Self-assessment vocab.
-    pub avg_excursion: f64,
-    /// Last trail distance used. Self-assessment vocab.
-    pub last_trail: f64,
-    /// Last stop distance used. Self-assessment vocab.
-    pub last_stop: f64,
     /// Count of resolved sides (for running average computation).
     pub resolution_count: usize,
-    /// Monotonic counter for paper IDs.
-    pub next_paper_id: usize,
-    /// Per-runner accumulated history for deferred batch training.
-    pub runner_histories: HashMap<usize, RunnerHistory>,
     /// EMA of net dollars per Grace paper (Proposal 035).
     pub avg_grace_net: f64,
     /// EMA of net dollars per Violence paper (Proposal 035).
@@ -195,17 +96,10 @@ impl Broker {
             grace_count: 0,
             violence_count: 0,
             active_direction: None,
-            papers: VecDeque::new(),
             trail_accum,
             stop_accum,
             default_distances,
-            avg_paper_duration: 0.0,
-            avg_excursion: 0.0,
-            last_trail: 0.0,
-            last_stop: 0.0,
             resolution_count: 0,
-            next_paper_id: 0,
-            runner_histories: HashMap::new(),
             avg_grace_net: 0.0,
             avg_violence_net: 0.0,
             expected_value: 0.0,
@@ -254,157 +148,6 @@ impl Broker {
         Distances::new(trail, stop)
     }
 
-    /// Create a paper entry — every candle, every broker.
-    /// Takes the market observer's prediction, raw market thought, and position thought.
-    /// Proposal 026: position_thought stored on paper for aligned position observer learning.
-    pub fn register_paper(
-        &mut self,
-        composed: Vector,
-        market_thought: Vector,
-        position_thought: Vector,
-        prediction: Direction,
-        entry_price: Price,
-        distances: Distances,
-        candle_num: usize,
-    ) {
-        let paper_id = self.next_paper_id;
-        self.next_paper_id += 1;
-        self.papers.push_back(PaperEntry::new(
-            paper_id,
-            composed,
-            market_thought,
-            position_thought,
-            prediction,
-            entry_price,
-            distances,
-            candle_num,
-        ));
-    }
-
-    /// Close all runners — direction flipped. Force-resolve all signaled papers.
-    /// Returns runner resolutions for position batch training + market second teaching.
-    pub fn close_all_runners(&mut self, _current_price: Price) -> Vec<Resolution> {
-        let mut resolutions = Vec::new();
-        let mut remaining = VecDeque::new();
-
-        while let Some(mut paper) = self.papers.pop_front() {
-            if paper.signaled && !paper.resolved {
-                // Force-resolve the runner at current price
-                paper.resolved = true;
-                let optimal = simulation::compute_optimal_distances(
-                    &paper.price_history, paper.prediction, self.swap_fee,
-                );
-                let position_batch = if let Some(history) = self.runner_histories.remove(&paper.paper_id) {
-                    compute_position_batch(&history, paper.prediction, self.swap_fee)
-                } else {
-                    Vec::new()
-                };
-
-                resolutions.push(Resolution::from_paper(
-                    &paper, self.slot_idx, Outcome::Grace, optimal, true, position_batch,
-                ));
-            } else if !paper.resolved {
-                // Non-runner papers survive the flip (they'll hit stop naturally)
-                remaining.push_back(paper);
-            }
-            // Resolved papers (stop-fired) are already removed normally
-        }
-
-        self.papers = remaining;
-        resolutions
-    }
-
-    /// Tick all papers, resolve completed. Returns two vecs:
-    /// - market_signals: for market observer learning (Grace or Violence)
-    /// - runner_resolutions: for position observer + broker learning (runner finished)
-    pub fn tick_papers(&mut self, current_price: Price) -> (Vec<Resolution>, Vec<Resolution>) {
-        let mut market_signals = Vec::new();
-        let mut runner_resolutions = Vec::new();
-        let mut remaining = VecDeque::new();
-        let cp = current_price.0;
-
-        while let Some(mut paper) = self.papers.pop_front() {
-            let was_signaled = paper.signaled;
-            let was_resolved = paper.resolved;
-
-            paper.tick(cp);
-
-            // Paper just signaled this tick (Grace — trail crossed for first time)
-            if paper.signaled && !was_signaled {
-                let optimal = approximate_optimal_distances(
-                    paper.entry_price.0,
-                    paper.extreme,
-                    paper.prediction,
-                );
-                market_signals.push(Resolution::from_paper(
-                    &paper, self.slot_idx, Outcome::Grace, optimal, true, Vec::new(),
-                ));
-                // Create runner history — accumulation starts now
-                self.runner_histories.insert(paper.paper_id, RunnerHistory {
-                    thoughts: Vec::new(),
-                    distances: Vec::new(),
-                    prices: Vec::new(),
-                });
-            }
-
-            // Accumulate history for active runners.
-            if paper.signaled && !paper.resolved {
-                if let Some(history) = self.runner_histories.get_mut(&paper.paper_id) {
-                    history.thoughts.push(paper.composed_thought.clone());
-                    history.distances.push(paper.distances);
-                    history.prices.push(cp);
-                }
-            }
-
-            // Paper resolved this tick
-            if paper.resolved && !was_resolved {
-                let optimal = approximate_optimal_distances(
-                    paper.entry_price.0,
-                    paper.extreme,
-                    paper.prediction,
-                );
-
-                if !paper.signaled {
-                    // Violence — stop fired before trail crossed
-                    market_signals.push(Resolution::from_paper(
-                        &paper, self.slot_idx, Outcome::Violence, optimal, false, Vec::new(),
-                    ));
-                } else {
-                    // Runner finished — compute position batch from accumulated history
-                    let position_batch = if let Some(history) = self.runner_histories.remove(&paper.paper_id) {
-                        compute_position_batch(&history, paper.prediction, self.swap_fee)
-                    } else {
-                        Vec::new()
-                    };
-
-                    // Runner finished — trail fired after signal
-                    runner_resolutions.push(Resolution::from_paper(
-                        &paper, self.slot_idx, Outcome::Grace, optimal, true, position_batch,
-                    ));
-                }
-
-                // Update self-assessment running averages
-                self.resolution_count += 1;
-                let n = self.resolution_count as f64;
-                let excursion = paper.excursion();
-                self.avg_paper_duration += (paper.age as f64 - self.avg_paper_duration) / n;
-                self.avg_excursion += (excursion - self.avg_excursion) / n;
-                self.last_trail = paper.distances.trail;
-                self.last_stop = paper.distances.stop;
-            }
-
-            // Keep until resolved, then remove
-            if paper.resolved {
-                // Paper done. Remove.
-            } else {
-                remaining.push_back(paper);
-            }
-        }
-
-        self.papers = remaining;
-        (market_signals, runner_resolutions)
-    }
-
     /// The broker learns its OWN lessons and RETURNS what the observers need.
     /// Values up, not effects down.
     ///
@@ -433,6 +176,7 @@ impl Broker {
             }
         }
         self.trade_count += 1;
+        self.resolution_count += 1;
 
         // 2. Scalar accumulators learn -- trail and stop distances
         self.trail_accum.observe(optimal.trail, outcome, weight, scalar_encoder);
@@ -481,94 +225,6 @@ impl Broker {
             weight,
         }
     }
-
-    /// Number of active paper trades.
-    pub fn paper_count(&self) -> usize {
-        self.papers.len()
-    }
-}
-
-/// Approximate optimal distances from tracked extreme (single-direction paper).
-/// Uses the excursion as a proxy for what distance would have been ideal.
-fn approximate_optimal_distances(
-    entry: f64,
-    extreme: f64,
-    prediction: Direction,
-) -> Distances {
-    let excursion = match prediction {
-        Direction::Up => ((extreme - entry) / entry).max(0.001),
-        Direction::Down => ((entry - extreme) / entry).max(0.001),
-    };
-    let trail = (excursion * 0.5).max(0.001).min(0.10);
-    // Stop is learned independently — near-zero bootstrap.
-    // The simulation (compute_optimal_distances) teaches the real value.
-    // This approximation doesn't have enough information to derive stop.
-    let stop = 0.001;
-    Distances::new(trail, stop)
-}
-
-/// Compute deferred batch training data for the position observer from a runner's history.
-/// Uses a suffix-max (or suffix-min for Down) pass to find the optimal trail distance
-/// at each candle in O(n).
-fn compute_position_batch(
-    history: &RunnerHistory,
-    prediction: Direction,
-    swap_fee: f64,
-) -> Vec<(Vector, Distances, Distances, f64)> {
-    let n = history.prices.len();
-    if n == 0 {
-        return Vec::new();
-    }
-
-    // Compute the optimal stop for the whole runner — one simulation call.
-    // The stop is a property of the full trade, not per-candle.
-    let runner_optimal = simulation::compute_optimal_distances(&history.prices, prediction, swap_fee);
-    let optimal_stop = runner_optimal.stop;
-
-    // Suffix extremum pass — O(n)
-    let mut suffix_ext = vec![0.0f64; n];
-    suffix_ext[n - 1] = history.prices[n - 1];
-    for i in (0..n - 1).rev() {
-        suffix_ext[i] = match prediction {
-            Direction::Up => history.prices[i].max(suffix_ext[i + 1]),
-            Direction::Down => history.prices[i].min(suffix_ext[i + 1]),
-        };
-    }
-
-    let mut batch = Vec::new();
-    let mut last_optimal_trail = f64::NAN;
-
-    for k in 0..n {
-        let price_k = history.prices[k];
-        if price_k == 0.0 {
-            continue;
-        }
-
-        // Optimal trail: how far price moved in the predicted direction from candle k
-        let optimal_trail = match prediction {
-            Direction::Up => ((suffix_ext[k] - price_k) / price_k).max(0.001).min(0.10),
-            Direction::Down => ((price_k - suffix_ext[k]) / price_k).max(0.001).min(0.10),
-        };
-
-        // Only train when the optimal changed meaningfully (>10% relative change).
-        // If the answer is the same candle over candle, there's nothing to learn.
-        let changed = last_optimal_trail.is_nan()
-            || ((optimal_trail - last_optimal_trail).abs() / last_optimal_trail.max(0.001)) > 0.10;
-
-        if !changed {
-            continue;
-        }
-        last_optimal_trail = optimal_trail;
-
-        let optimal = Distances::new(optimal_trail, optimal_stop);
-
-        // Weight: the residue this optimal distance would capture
-        let weight = optimal_trail;
-
-        batch.push((history.thoughts[k].clone(), optimal, history.distances[k], weight));
-    }
-
-    batch
 }
 
 #[cfg(test)]
@@ -603,7 +259,6 @@ mod tests {
         assert_eq!(broker.slot_idx, 0);
         assert_eq!(broker.position_count, 2);
         assert_eq!(broker.trade_count, 0);
-        assert_eq!(broker.paper_count(), 0);
         assert!((broker.cumulative_grace - 0.0).abs() < 1e-10);
         assert!((broker.cumulative_violence - 0.0).abs() < 1e-10);
         assert!((broker.avg_grace_net - 0.0).abs() < 1e-10);
@@ -651,78 +306,6 @@ mod tests {
         broker.trade_count = 120;
         broker.expected_value = 10.0;
         assert!(broker.gate_open());
-    }
-
-    #[test]
-    fn test_register_paper() {
-        let mut broker = make_broker();
-        let composed = random_vector("thought");
-        let market_thought = random_vector("market");
-        let position_thought = random_vector("exit");
-        let distances = Distances::new(0.02, 0.05);
-        broker.register_paper(composed, market_thought, position_thought, Direction::Up, Price(50000.0), distances, 0);
-        assert_eq!(broker.paper_count(), 1);
-    }
-
-    #[test]
-    fn test_tick_papers_no_resolution() {
-        let mut broker = make_broker();
-        let composed = random_vector("thought");
-        let market_thought = random_vector("market");
-        let position_thought = random_vector("exit");
-        let distances = Distances::new(0.05, 0.10);
-        broker.register_paper(composed, market_thought, position_thought, Direction::Up, Price(100.0), distances, 0);
-
-        // Price barely moves -- no resolution
-        let (market_signals, runner_resolutions) = broker.tick_papers(Price(100.5));
-        assert!(market_signals.is_empty());
-        assert!(runner_resolutions.is_empty());
-        assert_eq!(broker.paper_count(), 1);
-    }
-
-    #[test]
-    fn test_tick_papers_violence() {
-        let mut broker = make_broker();
-        let composed = random_vector("thought");
-        let market_thought = random_vector("market");
-        let position_thought = random_vector("exit");
-        // Trail=0.05, Stop=0.10: stop_level=90
-        let distances = Distances::new(0.05, 0.10);
-        broker.register_paper(composed, market_thought, position_thought, Direction::Up, Price(100.0), distances, 0);
-
-        // Price drops below stop → Violence
-        let (market_signals, runner_resolutions) = broker.tick_papers(Price(89.0));
-        assert_eq!(market_signals.len(), 1);
-        assert_eq!(market_signals[0].outcome, Outcome::Violence);
-        assert_eq!(market_signals[0].prediction, Direction::Up);
-        assert!(runner_resolutions.is_empty());
-        assert_eq!(broker.paper_count(), 0); // removed
-    }
-
-    #[test]
-    fn test_tick_papers_grace_then_runner_resolution() {
-        let mut broker = make_broker();
-        let composed = random_vector("thought");
-        let market_thought = random_vector("market");
-        let position_thought = random_vector("exit");
-        // Trail=0.05, Stop=0.10
-        let distances = Distances::new(0.05, 0.10);
-        broker.register_paper(composed, market_thought, position_thought, Direction::Up, Price(100.0), distances, 0);
-
-        // Price rises above entry + entry*trail = 105 → Grace signal
-        let (market_signals, runner_resolutions) = broker.tick_papers(Price(110.0));
-        assert_eq!(market_signals.len(), 1); // Grace signal
-        assert_eq!(market_signals[0].outcome, Outcome::Grace);
-        assert!(runner_resolutions.is_empty());
-        assert_eq!(broker.paper_count(), 1); // still alive as runner
-
-        // Price drops below trail_level: 110 - 110*0.05 = 104.5 → runner resolves
-        let (market_signals, runner_resolutions) = broker.tick_papers(Price(104.0));
-        assert!(market_signals.is_empty()); // already signaled
-        assert_eq!(runner_resolutions.len(), 1);
-        assert_eq!(runner_resolutions[0].outcome, Outcome::Grace);
-        assert!(runner_resolutions[0].was_runner);
-        assert_eq!(broker.paper_count(), 0); // removed
     }
 
     #[test]
@@ -860,28 +443,5 @@ mod tests {
         let broker = make_broker();
         assert_eq!(broker.trail_accum.name, "trail-distance");
         assert_eq!(broker.stop_accum.name, "stop-distance");
-    }
-
-    #[test]
-    fn test_approximate_optimal_distances_up() {
-        let d = approximate_optimal_distances(100.0, 110.0, Direction::Up);
-        // excursion = 0.10, trail = 0.05, stop = 0.001 (bootstrap)
-        assert!((d.trail - 0.05).abs() < 1e-10);
-        assert!((d.stop - 0.001).abs() < 1e-10);
-    }
-
-    #[test]
-    fn test_approximate_optimal_distances_down() {
-        let d = approximate_optimal_distances(100.0, 90.0, Direction::Down);
-        // excursion = 0.10, trail = 0.05, stop = 0.001 (bootstrap)
-        assert!((d.trail - 0.05).abs() < 1e-10);
-        assert!((d.stop - 0.001).abs() < 1e-10);
-    }
-
-    #[test]
-    fn test_approximate_optimal_distances_clamped() {
-        let d = approximate_optimal_distances(100.0, 100.0, Direction::Up);
-        assert!(d.trail >= 0.001);
-        assert!(d.stop >= 0.001);
     }
 }
