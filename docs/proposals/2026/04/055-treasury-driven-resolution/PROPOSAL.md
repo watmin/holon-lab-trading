@@ -20,10 +20,10 @@ Issued by the treasury. Held by both treasury and broker.
 The treasury's copy is the source of truth.
 
 ```rust
-enum PaperState {
-    Active,
-    Grace { residue: f64 },
-    Violence,
+enum PositionState {
+    Active,                          // open, clock ticking
+    Grace { residue: f64 },          // exited profitably
+    Violence,                        // deadline hit, reclaimed
 }
 
 struct Paper {
@@ -36,7 +36,7 @@ struct Paper {
     entry_price: f64,                 // exchange rate at entry
     entry_candle: usize,
     deadline: usize,                  // entry_candle + N
-    state: PaperState,                // one enum, not bool + Option
+    state: PositionState,                // one enum, not bool + Option
 }
 ```
 
@@ -57,7 +57,7 @@ struct RealPosition {
     entry_price: f64,
     entry_candle: usize,
     deadline: usize,
-    state: PaperState,                // same state machine
+    state: PositionState,                // same state machine
 }
 ```
 
@@ -76,9 +76,13 @@ The `deadline_candles` comes from the treasury's configuration,
 derived from ATR at entry time. Volatile market → shorter deadline
 (things move fast, prove it fast). Calm market → longer deadline.
 
-The ATR lookback window for the deadline calculation is an
-open question for the designers — it must be specified before
-implementation.
+The ATR lookback window for the median: **2016 candles (one week)**.
+Matches the phase history window. Spans one full weekly cycle
+(Asia/London/NY sessions + weekend). Seykota: "the median
+window should span one full cycle of the dominant periodicity."
+Clamped: deadline bounded between a minimum (e.g. 50 candles)
+and maximum (e.g. 5000 candles) to prevent near-zero or
+infinite deadlines from ATR extremes.
 
 The `units_acquired`: the broker borrowed `amount` of `from_asset`,
 paid the 0.35% entry fee, and acquired this many units of `to_asset`.
@@ -292,7 +296,7 @@ fn issue_paper(&mut self, owner: BrokerSlot, from: Asset,
         amount, units_acquired: units, entry_price: price,
         entry_candle: candle,
         deadline: candle + self.compute_deadline(candle),
-        state: PaperState::Active,
+        state: PositionState::Active,
     };
 
     self.papers.insert(id, paper);
@@ -323,7 +327,7 @@ fn issue_real(&mut self, owner: BrokerSlot, from: Asset,
         amount, units_acquired: units, entry_price: price,
         entry_candle: candle,
         deadline: candle + self.compute_deadline(candle),
-        state: PaperState::Active,
+        state: PositionState::Active,
     };
 
     self.real_positions.insert(id, position);
