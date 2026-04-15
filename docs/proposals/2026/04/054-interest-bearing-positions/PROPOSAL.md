@@ -149,22 +149,89 @@ labels. Same algebra.
 
 ## The treasury as lender
 
-The treasury holds both assets (USDC and WBTC). When a broker enters
-long, the treasury lends USDC. When a broker enters short, the treasury
-lends WBTC equivalent. The lending rate is per-candle, per-dollar.
+The treasury holds BOTH assets. USDC and WBTC (or any pair). The
+broker can borrow EITHER side. Borrow USDC → buy WBTC (long).
+Borrow WBTC → sell for USDC (short). The treasury doesn't care
+which direction. It lent an asset. It wants that asset back plus
+interest.
+
+The interest accrues IN THE ASSET THAT WAS BORROWED. Borrow USDC →
+owe USDC interest. Borrow WBTC → owe WBTC interest. The denomination
+follows the loan, not a hardcoded currency. The treasury's primary
+denomination is a configuration — it measures everything in that
+unit, but both sides of the pair are lendable.
+
+The rate is per-candle, per-unit-of-asset-lent. Every candle, the
+treasury applies a twist. Next candle, more twist. The broker must
+outrun the twist.
 
 The rate IS the treasury's control mechanism. Higher rate = more
 selective pressure. Only strong runners survive. Lower rate = more
 permissive. Weaker trades survive longer. The rate is the ONE parameter
 the treasury sets. Everything else emerges from the game.
 
+### The swap stays in the treasury
+
+The proposals move funds from one asset to another. The swap stays
+inside the treasury's portfolio. When a broker enters long — USDC
+moves to WBTC. Both are in the treasury. The broker has a CLAIM on
+the WBTC position, not possession. The treasury's total value doesn't
+change at entry — it just rebalanced from one asset to another.
+
+When the broker exits Grace: the WBTC position is swapped back. The
+treasury recovers USDC principal + interest. The residue stays as
+WBTC in the treasury, tagged to the broker's claim. The broker
+earned WBTC residue. The treasury holds it.
+
+When the broker "stops out" by interest: the position still exists.
+The WBTC is still in the treasury. The interest exceeded the
+position's value in the lending denomination. The treasury reclaims
+the position. The asset didn't disappear — it moved from one side
+of the treasury to the other. The treasury is WHOLE. The broker
+lost its claim. The broker is punished — no residue, bad record,
+lower gate score.
+
+The treasury can't lose. It can only rebalance. The broker can
+lose — its claim, its record, its future ability to borrow.
+
+### Papers as proof
+
+Papers ARE the simulation. The broker doesn't need a separate sim
+to prove itself. Papers run on real price data with real interest
+ticking. The paper starts at a fixed reference position ($10,000).
+Interest accrues every candle. The paper's value changes with the
+price. The interest erodes the paper's profitability.
+
+If the paper can't outrun the interest — it dies on its own. No
+one kills it. The math kills it. The papers organically sort the
+brokers. The good ones survive the interest. The bad ones erode.
+No parameters. No thresholds. No magic numbers. Just: can you
+outrun the twist?
+
+A broker with 100 papers that outran the interest has PROVEN it
+can play the game. The gate opens. Real capital flows. A broker
+whose papers all eroded — the gate stays closed. The papers decided.
+
+The treasury never moves real funds until the paper trail proves
+the broker can outrun the twist. When the gate opens and real capital
+flows — the broker already knows the game. It played it on paper.
+The real position behaves identically.
+
+### Any asset pair
+
+The model is pair-agnostic. USDC/WBTC today. USDC/SOL tomorrow.
+WBTC/ETH. USD/GOLD. The treasury holds both sides of whatever
+pair it's configured for. The interest is denominated in whatever
+was lent. The price per candle is the exchange rate. The game is
+the same everywhere.
+
 When a position exits Grace:
-- Treasury receives: principal + accrued interest
-- Broker receives: residue in the asset
+- Treasury receives: principal + accrued interest (in the lent asset)
+- Broker claim: residue in the acquired asset (held by treasury)
 
 When a position dies (interest exceeds value):
-- Treasury receives: whatever remains of the position
-- Broker receives: nothing. The loss is bounded by position size.
+- Treasury rebalances: position stays, broker's claim revoked
+- Broker receives: nothing. Record damaged. Gate tightens.
 
 ## The data
 
@@ -210,3 +277,20 @@ The structure is real. The windows are abundant. The signal exists.
 7. **The interest as thought.** The anxiety atoms — interest-accrued,
    residue-vs-interest, candles-since-entry. Are these the right facts?
    What else does the broker feel about its own position?
+
+8. **The denomination.** The interest accrues in the lent asset. The
+   treasury measures in its primary denomination. The price per candle
+   converts between them. Is per-candle twist the right granularity?
+   Should the rate be fixed or should it breathe with volatility (ATR)?
+
+9. **Rebalancing risk.** The treasury can't lose total value, but it
+   CAN become imbalanced — too much WBTC, not enough USDC (or vice
+   versa) if many brokers enter the same direction and get stopped out.
+   Should the treasury limit directional exposure? Or does the phase
+   labeler's symmetry (buy windows ≈ sell windows) naturally balance?
+
+10. **Paper erosion as the only gate.** No separate proof curve. No
+    rolling percentile. No EV calculation. The papers survive the
+    interest or they don't. The survival rate IS the proof. Is this
+    sufficient? Or do we still need the broker's EV gate as a
+    secondary check?
