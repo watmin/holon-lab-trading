@@ -17,7 +17,6 @@ use crate::domain::treasury::{PositionReceipt, PositionState};
 use crate::programs::app::treasury_program::TreasuryHandle;
 use crate::types::enums::{Direction, Outcome};
 use crate::types::log_entry::LogEntry;
-use crate::programs::app::position_observer_program::PositionLearn;
 use crate::programs::chain::MarketPositionChain;
 use crate::encoding::encode::encode;
 use crate::encoding::thought_encoder::ThoughtAST;
@@ -70,7 +69,6 @@ fn anxiety_atoms(receipt: &PositionReceipt, current_candle: usize, current_price
 /// Returns the trained Broker when the chain source disconnects.
 pub fn broker_program(
     chain_rx: QueueReceiver<MarketPositionChain>,
-    position_learn_tx: QueueSender<PositionLearn>,
     cache: CacheHandle<ThoughtAST, Vector>,
     vm: VectorManager,
     scalar: Arc<ScalarEncoder>,
@@ -124,15 +122,6 @@ pub fn broker_program(
 
             // Record the outcome — counts and grace rate.
             broker.record_outcome(outcome);
-
-            // Position observer learns from the position facts encoded as a vector.
-            let position_bundle = ThoughtAST::Bundle(chain.position_facts.clone());
-            let position_vec = encode(&cache, &position_bundle, &vm, &scalar);
-            let optimal = crate::types::distances::Distances::new(0.01, 0.01);
-            let _ = position_learn_tx.send(PositionLearn {
-                position_thought: position_vec,
-                optimal,
-            });
 
             false // resolved — remove
         });

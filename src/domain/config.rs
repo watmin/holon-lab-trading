@@ -53,18 +53,10 @@ pub const POSITION_LENSES: &[PositionLens] = &[
 ];
 
 /// Create all position observers with their configured lenses.
-pub fn create_position_observers(dims: usize, recalib_interval: usize) -> Vec<PositionObserver> {
+pub fn create_position_observers() -> Vec<PositionObserver> {
     POSITION_LENSES
         .iter()
-        .map(|lens| {
-            PositionObserver::new(
-                *lens,
-                dims,
-                recalib_interval,
-                0.0001, // near-zero default trail — the market teaches
-                0.0001, // near-zero default stop — the market teaches
-            )
-        })
+        .map(|lens| PositionObserver::new(*lens))
         .collect()
 }
 
@@ -137,17 +129,9 @@ mod tests {
 
     #[test]
     fn test_create_position_observers() {
-        let observers = create_position_observers(4096, 500);
+        let observers = create_position_observers();
         assert_eq!(observers.len(), 2);
         assert_eq!(observers[0].lens, PositionLens::Core);
         assert_eq!(observers[1].lens, PositionLens::Full);
-    }
-
-    #[test]
-    fn test_position_observers_start_inexperienced() {
-        let observers = create_position_observers(4096, 500);
-        for obs in &observers {
-            assert!(!obs.experienced());
-        }
     }
 }

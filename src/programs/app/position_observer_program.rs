@@ -1,11 +1,9 @@
 /// position_observer_program.rs — the position observer thread body.
-/// Compiled from wat/position-observer-program.wat.
+/// Thought middleware. Receives market chains, composes with position-specific
+/// facts, sends enriched chains downstream to brokers.
 ///
-/// Receives MarketChains through N slots (one per market observer it pairs with).
-/// Per candle round, processes all N slots sequentially. Composes market thoughts
-/// with position-specific facts. Learns from distance signals through a mailbox.
-/// On shutdown it drains remaining learn signals and returns the observer.
-/// The learned state comes home.
+/// Does not learn. Does not predict distances. The broker is the accountability
+/// unit. The position observer is the lens.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -14,7 +12,6 @@ use holon::kernel::scalar::ScalarEncoder;
 use holon::kernel::vector::Vector;
 use holon::kernel::vector_manager::VectorManager;
 
-use crate::types::distances::Distances;
 use crate::domain::position_observer::PositionObserver;
 use crate::types::log_entry::LogEntry;
 use crate::domain::lens::position_lens_facts;
@@ -24,25 +21,9 @@ use crate::programs::chain::{MarketPositionChain, MarketChain};
 use crate::programs::stdlib::cache::CacheHandle;
 use crate::programs::stdlib::console::ConsoleHandle;
 use crate::encoding::scale_tracker::ScaleTracker;
-use crate::services::mailbox::MailboxReceiver;
 use crate::services::queue::{QueueReceiver, QueueSender};
 
 use crate::programs::telemetry::emit_metric;
-
-/// Trade-state update from a broker. Contains the 10 trade atoms
-/// computed from the broker's active paper. Proposal 040.
-pub struct TradeUpdate {
-    pub atoms: Vec<ThoughtAST>,
-}
-
-/// Learn signal for position observers: distance labels from broker propagation.
-/// Proposal 051: continuous reckoners only. No binary Grace/Violence label.
-/// Weight is always 1.0 — each observation counts once. The value teaches,
-/// not the magnitude of the outcome.
-pub struct PositionLearn {
-    pub position_thought: Vector,
-    pub optimal: Distances,
-}
 
 /// One slot: a (receiver, sender) pair connecting one market observer to one broker.
 /// input_rx is a QueueReceiver — the queue was created by the kernel.
@@ -57,60 +38,17 @@ pub struct PositionSlot {
 // Re-export trade atom functions for backward compatibility.
 pub use crate::vocab::exit::trade_atoms::{compute_trade_atoms, select_trade_atoms};
 
-/// Drain result: counts, errors, and raw predicted/optimal values for diagnostics.
-struct DrainResult {
-    count: usize,
-    total_trail_err: f64,
-    total_stop_err: f64,
-    total_predicted_trail: f64,
-    total_predicted_stop: f64,
-    total_optimal_trail: f64,
-    total_optimal_stop: f64,
-}
-
-/// Drain all pending position learn signals. Non-blocking.
-fn drain_position_learn(
-    learn_rx: &MailboxReceiver<PositionLearn>,
-    position_obs: &mut PositionObserver,
-) -> DrainResult {
-    let mut r = DrainResult {
-        count: 0,
-        total_trail_err: 0.0,
-        total_stop_err: 0.0,
-        total_predicted_trail: 0.0,
-        total_predicted_stop: 0.0,
-        total_optimal_trail: 0.0,
-        total_optimal_stop: 0.0,
-    };
-    while let Ok(signal) = learn_rx.try_recv() {
-        let (trail_err, stop_err, pred_trail, pred_stop, opt_trail, opt_stop) =
-            position_obs.observe_distances(
-                &signal.position_thought,
-                &signal.optimal,
-            );
-        r.total_trail_err += trail_err;
-        r.total_stop_err += stop_err;
-        r.total_predicted_trail += pred_trail;
-        r.total_predicted_stop += pred_stop;
-        r.total_optimal_trail += opt_trail;
-        r.total_optimal_stop += opt_stop;
-        r.count += 1;
-    }
-    r
-}
-
 /// Run the position observer program. Call this inside thread::spawn.
 /// Processes N slots per candle round, sequentially.
-/// Returns the trained position observer when all input slots disconnect.
+/// Returns the position observer when all input slots disconnect.
 pub fn position_observer_program(
     slots: Vec<PositionSlot>,
-    learn_rx: MailboxReceiver<PositionLearn>,
     cache: CacheHandle<ThoughtAST, Vector>,
     vm: VectorManager,
     scalar: Arc<ScalarEncoder>,
     console: ConsoleHandle,
     db_tx: QueueSender<LogEntry>,
-    mut position_obs: PositionObserver,
+    position_obs: PositionObserver,
     noise_floor: f64,
     position_idx: usize,
 ) -> PositionObserver {
@@ -129,14 +67,6 @@ pub fn position_observer_program(
         let ns = "position-observer";
         let id = format!("position:{}:{}", lens, candle_count);
         let metric_dims = format!("{{\"lens\":\"{}\"}}", lens);
-
-        // LEARN FIRST. Drain all pending signals before encoding.
-        let t0 = std::time::Instant::now();
-        let drain = drain_position_learn(&learn_rx, &mut position_obs);
-        let learn_count = drain.count;
-        let trail_err_sum = drain.total_trail_err;
-        let stop_err_sum = drain.total_stop_err;
-        let ns_drain = t0.elapsed().as_nanos() as f64;
 
         let mut ns_slot_recv: f64 = 0.0;
         let mut ns_collect_facts: f64 = 0.0;
@@ -244,20 +174,6 @@ pub fn position_observer_program(
         let ns_total = t_total.elapsed().as_nanos() as f64;
 
         // Emit telemetry.
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "drain_learn", ns_drain, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "learn_drained", learn_count as f64, "Count");
-        if learn_count > 0 {
-            let n = learn_count as f64;
-            let avg_trail_err = trail_err_sum / n;
-            let avg_stop_err = stop_err_sum / n;
-            emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "avg_trail_error", avg_trail_err, "Count");
-            emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "avg_stop_error", avg_stop_err, "Count");
-            // Raw values — resolve the unknowns
-            emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "avg_predicted_trail", drain.total_predicted_trail / n, "Count");
-            emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "avg_predicted_stop", drain.total_predicted_stop / n, "Count");
-            emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "avg_optimal_trail", drain.total_optimal_trail / n, "Count");
-            emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "avg_optimal_stop", drain.total_optimal_stop / n, "Count");
-        }
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "slot_recv", ns_slot_recv, "Nanoseconds");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "collect_facts", ns_collect_facts, "Nanoseconds");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "extract_anomaly", ns_extract_anomaly, "Nanoseconds");
@@ -278,8 +194,6 @@ pub fn position_observer_program(
                 candle: candle_count,
                 position_idx,
                 lens: format!("{}", position_obs.lens),
-                trail_experience: position_obs.trail_reckoner.experience(),
-                stop_experience: position_obs.stop_reckoner.experience(),
                 us_elapsed,
                 thought_ast: snapshot_ast.clone(),
                 fact_count: snapshot_fact_count,
@@ -289,14 +203,11 @@ pub fn position_observer_program(
         // Diagnostic every 1000 candles.
         if candle_count % 1000 == 0 {
             console.out(format!(
-                "position-{}: trail_exp={:.1} stop_exp={:.1} candles={}",
-                lens, position_obs.trail_reckoner.experience(), position_obs.stop_reckoner.experience(), candle_count,
+                "position-{}: candles={}",
+                lens, candle_count,
             ));
         }
     }
-
-    // GRACEFUL SHUTDOWN. Drain learn one last time.
-    let _ = drain_position_learn(&learn_rx, &mut position_obs);
 
     position_obs
 }

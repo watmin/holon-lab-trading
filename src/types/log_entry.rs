@@ -73,13 +73,11 @@ pub enum LogEntry {
         metric_value: f64,
         metric_unit: String,
     },
-    /// Position observer snapshot — emitted by exit observer threads every N candles.
+    /// Position observer snapshot — emitted by position observer threads every candle.
     PositionObserverSnapshot {
         candle: usize,
         position_idx: usize,
         lens: String,
-        trail_experience: f64,
-        stop_experience: f64,
         us_elapsed: u64,
         thought_ast: String,
         fact_count: usize,
