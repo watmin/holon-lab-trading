@@ -116,6 +116,7 @@ pub fn broker_program(
         broker.active_direction = Some(direction);
 
         // 2. Treasury — submit paper proposal based on market direction.
+        let t0 = std::time::Instant::now();
         let (from_asset, to_asset) = if direction == Direction::Up {
             (&chain.candle.source_asset.name, &chain.candle.target_asset.name)
         } else {
@@ -124,14 +125,15 @@ pub fn broker_program(
         if let Some(receipt) = treasury.submit_paper(from_asset, to_asset, price) {
             active_receipts.push(receipt);
         }
+        let ns_submit = t0.elapsed().as_nanos() as f64;
 
         // 3. Gate 4 — Hold/Exit decision per active paper.
-        // Query the gate reckoner with the broker's composed thought:
-        // position observer facts + anxiety atoms per receipt.
-        // If the reckoner predicts Exit with conviction, propose exit.
+        let t0 = std::time::Instant::now();
         let mut exits_to_submit: Vec<u64> = Vec::new();
+        let mut gate_encodes: f64 = 0.0;
         for receipt in &active_receipts {
             let thought_vec = encode_broker_thought(receipt, &chain.position_facts, candle_count, price, &cache, &vm, &scalar);
+            gate_encodes += 1.0;
             let pred = broker.gate_reckoner.predict(&thought_vec);
 
             // Exit = label index 1. Only act when the reckoner has experience.
@@ -141,15 +143,20 @@ pub fn broker_program(
                 exit_proposals += 1.0;
             }
         }
+        let ns_gate = t0.elapsed().as_nanos() as f64;
 
         // Submit exit proposals to treasury.
+        let t0 = std::time::Instant::now();
         for paper_id in exits_to_submit {
             if treasury.submit_exit(paper_id, price).is_some() {
                 exit_approved += 1.0;
             }
         }
+        let ns_exit_submit = t0.elapsed().as_nanos() as f64;
 
         // 4. Check active papers — discover outcomes from treasury.
+        let t0 = std::time::Instant::now();
+        let mut resolve_encodes: f64 = 0.0;
         active_receipts.retain(|receipt| {
             let state = match treasury.get_paper_state(receipt.position_id) {
                 Some(s) => s,
@@ -174,6 +181,7 @@ pub fn broker_program(
             // Gate 4 learns: this thought state led to this outcome.
             // Recompute at resolution moment — honest snapshot.
             let thought_vec = encode_broker_thought(receipt, &chain.position_facts, candle_count, price, &cache, &vm, &scalar);
+            resolve_encodes += 1.0;
 
             // Grace → Hold was right. Violence → should have exited.
             let label = match outcome {
@@ -186,15 +194,17 @@ pub fn broker_program(
             let pred = broker.gate_reckoner.predict(&thought_vec);
             let predicted_hold = pred.direction.map_or(true, |d| d.index() == 0);
             let correct = match outcome {
-                Outcome::Grace => predicted_hold,    // Grace + Hold prediction = correct
-                Outcome::Violence => !predicted_hold, // Violence + Exit prediction = correct
+                Outcome::Grace => predicted_hold,
+                Outcome::Violence => !predicted_hold,
             };
             broker.gate_reckoner.resolve(pred.conviction, correct);
 
             false // resolved — remove
         });
+        let ns_retain = t0.elapsed().as_nanos() as f64;
 
         // 5. Diagnostic anxiety bundle for snapshot.
+        let t0 = std::time::Instant::now();
         let mut all_anxiety: Vec<ThoughtAST> = Vec::new();
         for receipt in &active_receipts {
             all_anxiety.extend(anxiety_atoms(receipt, candle_count, price));
@@ -206,6 +216,7 @@ pub fn broker_program(
         let anxiety_fact_count = all_anxiety.len();
         let anxiety_bundle = ThoughtAST::Bundle(all_anxiety);
         let anxiety_edn = anxiety_bundle.to_edn();
+        let ns_anxiety_ast = t0.elapsed().as_nanos() as f64;
 
         // 6. DB snapshot every 100 candles
         if candle_count % 100 == 0 {
@@ -244,6 +255,13 @@ pub fn broker_program(
         let id = format!("broker:{}:{}", broker.slot_idx, candle_count);
         let metric_dims = format!("{{\"slot\":{}}}", broker.slot_idx);
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "total", ns_total, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "submit_paper", ns_submit, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4", ns_gate, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4_encodes", gate_encodes, "Count");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "exit_submit", ns_exit_submit, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "retain", ns_retain, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "retain_encodes", resolve_encodes, "Count");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "anxiety_ast", ns_anxiety_ast, "Nanoseconds");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "learn_grace_count", learn_grace, "Count");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "learn_violence_count", learn_violence, "Count");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "active_receipts", active_receipts.len() as f64, "Count");
