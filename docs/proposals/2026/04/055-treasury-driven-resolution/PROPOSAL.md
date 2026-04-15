@@ -273,6 +273,48 @@ In the lab: brokers never withdraw. Everything reinvests. The
 claims exist in the ledger for accounting. The withdrawal
 mechanism is a contract concern for Solana.
 
+### Proof of Grace
+
+The depositor's claim includes yield. Not a percentage of all
+assets — a percentage of the residue the pool acquired WHILE
+the depositor's capital was staked. The depositor provided
+capital from time T1 to T2. During that window, the pool
+earned X residue from proposers' Grace exits. The depositor's
+share is proportional to their deposit relative to the pool
+during that window.
+
+This IS staking. The capital enables work (proposers trading).
+The work produces yield (Grace residue). The yield distributes
+to stakers proportional to their contribution and duration.
+
+The difference from traditional staking: the yield comes from
+MEASURED trading outcomes, not from inflation or transaction
+fees. The yield is real — actual value created by proposers
+who outran their deadlines. Grace residue. Not printed tokens.
+Not fee redistribution. Actual assets moved profitably.
+
+- **Depositors** are the stakers. Provide capital. Earn passive
+  yield from the pool's half of every Grace residue.
+- **Proposers** are the validators. Do the work. Earn active
+  yield (their half of their own Grace residue) PLUS passive
+  yield on their deposited balance (same as any staker).
+- **The treasury** is the protocol. Headless. Measures outcomes.
+  Distributes yield. Enforces deadlines. The program with a
+  ledger.
+
+The small proposer who deposits $100 and produces Grace earns:
+passive yield on the $100 (from ALL proposers' Grace) PLUS
+half the residue from their OWN Grace exits. Double reward for
+participating actively. The whale who deposits $10,000,000 and
+never proposes earns only the passive yield. The game rewards
+both providing capital AND providing good thoughts. The
+proposer who does both earns both.
+
+Not proof of stake. Not proof of work. Proof of Grace. The
+yield comes from the measurement. The measurement comes from
+the market. The market decides who earns. The treasury
+distributes.
+
 If denied:
 - The paper lives. The deadline ticks. The broker holds.
 
