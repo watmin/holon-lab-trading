@@ -28,13 +28,20 @@ ante. The residue is the loot.
 ### Entry
 
 The phase labeler identifies structure. Three consecutive higher lows
-= the market is building upward. Three consecutive lower highs = the
-market is building downward. During these conditions, the broker enters
-positions.
+= the market is building upward — buy condition active. Three
+consecutive lower highs = the market is building downward — sell
+condition active. The condition persists for the duration of the
+streak. Average window: 53 candles (4.4 hours). The market is in
+an active condition 44% of the time.
 
-Each entry: the broker borrows capital from the treasury. $50 USDC to
-buy WBTC (long). Or $50 of WBTC to buy USDC (short). The swap costs
-0.35%. The clock starts.
+During the buy condition: the broker enters longs. During the sell
+condition: the broker enters shorts. The frequency of entry is the
+broker's choice — gated by its own anxiety about the cost of holding.
+
+Each entry: the broker borrows from the treasury. USDC to buy WBTC
+(long). Or WBTC to sell for USDC (short). The swap costs 0.35%.
+The interest clock starts. The broker now has a claim on a position
+inside the treasury's portfolio.
 
 ### Hold
 
@@ -51,40 +58,79 @@ No distance triggers. No reckoner predicting optimal trail or stop
 distances. No simulation sweeping 20 candidates. The entry is a bet.
 The hold costs money. The market decides.
 
+### The trigger points
+
+The phase labeler produces three states on every candle:
+
+- **Valley** — the low point. The lows are being tested.
+- **Peak** — the high point. The highs are being tested.
+- **Transition** — the candles between peak and valley. Nothing
+  to evaluate. Hold. Interest ticks.
+
+Peaks and valleys are where the machine evaluates. Transitions
+are where the machine waits. The trigger is arriving AT a peak
+or valley — not the movement between them.
+
 ### Exit (Grace)
 
-The structure breaks — lower low after higher lows (long), higher
-high after lower highs (short). The broker evaluates:
+Three conditions AND'd together. All three must be true.
 
-1. Current position value in the asset
-2. Minus principal recovery ($50)
-3. Minus accrued interest
-4. Minus exit swap fee (0.35%)
-5. = residue
+**Long exit:**
+1. Phase is valley (the lows are being tested)
+2. Market observer predicts Down (direction turning against me)
+3. Residue after interest + exit fee is positive (the swap works)
 
-If residue is positive AND substantial: exit. The broker performs the
-swap — recovers the principal, pays the interest, pays the exit fee,
-keeps the residue in the asset. The $50 returns to the treasury. The
-interest returns to the treasury. The residue is permanent. Grace.
+**Short exit:**
+1. Phase is peak (the highs are being tested)
+2. Market observer predicts Up (direction turning against me)
+3. Residue after interest + exit fee is positive (the swap works)
 
-If the swap math doesn't work — the residue minus exit fee is negative
-or zero — the exit is arithmetically impossible. Hold. The interest
-keeps ticking. Wait for the next structure break.
+All three true → exit. The broker swaps back. The treasury receives
+principal + accrued interest. The residue stays in the acquired
+asset, held by the treasury, tagged to the broker's claim. Grace.
 
-If the swap math works but the residue is thin — the reckoner decides.
-Is this worth leaving? Or will holding longer produce more? The
-reckoner learns what "worth it" looks like from the shape of the
-anxiety: residue-vs-interest ratio, candles held, market structure.
+Any one false → hold:
+- Phase is valley but market says Up → the dip is temporary. Hold.
+- Phase is valley and market says Down but residue < fees → the
+  swap is arithmetically impossible. Hold. Interest ticks.
+- Phase is transition → not an evaluation point. Hold.
+
+The exit fee is real. If the residue doesn't cover the 0.35% exit
+swap, the exit CANNOT happen. This is not a judgment call. This is
+arithmetic. The fee must be accounted for in every action.
 
 ### Exit (Violence)
 
 The interest accrues past the position value. The trade drifted or
-went adverse. The interest ate the capital. The treasury reclaims what
-remains. The broker lost. The position size ($50) bounded the loss.
-The broker learned from the loss — the thought that entered was wrong.
+went adverse. The interest ate the capital. The treasury revokes the
+broker's claim. The asset stays in the treasury — it just moved from
+one side to the other. The treasury rebalances. The broker lost its
+claim, its record takes a Violence mark, its gate tightens.
 
 No stop loss fires. No price trigger. The trade dies from the cost
 of conviction that was wrong. Natural economic death.
+
+### The position observer's new job
+
+The position observer doesn't predict distances anymore. It predicts:
+**should I exit this position at this trigger?**
+
+The three conditions are the position observer's inputs:
+
+1. The phase — from the phase labeler (already has this)
+2. The market observer's prediction — from the chain (already receives)
+3. The residue math — from the broker's accounting
+
+The position observer composes these into a thought and makes the
+call. Exit or hold. Discrete. Grace or Violence. The same algebra
+the market observer uses for direction prediction. The same reckoner
+mode (discrete, not continuous).
+
+The position observer is the exit advisor. The broker is the executor.
+The market observer is the direction advisor. The phase labeler is the
+clock. The treasury is the bank.
+
+Same entities. Same pipes. Same architecture. Different questions.
 
 ### The runner
 
@@ -123,29 +169,43 @@ labels. Same algebra.
 ## What this replaces
 
 - **Distance-based triggers** — trail and stop distances computed from
-  simulation. Gone. The structure break is the exit signal.
+  simulation. Gone. The phase trigger (peak/valley) + market observer
+  prediction + residue arithmetic is the exit signal.
 - **Continuous reckoner on position observer** — predicting optimal
-  distances. Gone. The reckoner becomes discrete: exit or hold.
+  distances. Gone. The position observer becomes a discrete predictor:
+  exit or hold at each trigger point. Same reckoner mode as the market
+  observer. Same algebra.
 - **Simulation sweep** — computing hindsight-optimal distances from
-  paper price histories. Gone. The residue-vs-interest is the measure.
-- **Paper stacking** — 8,000 papers that never resolve. Gone. Positions
-  resolve when the structure breaks (or the interest kills them).
+  paper price histories. Gone. The interest is the teacher. Papers
+  that outrun the interest are Grace. Papers that don't are Violence.
+- **Paper stacking** — 8,000 papers that never resolve. Gone. Papers
+  resolve at trigger points (peaks/valleys) when all three exit
+  conditions are met, or die when interest exceeds position value.
 - **The noise subspace debate** — whether the reckoner should see raw
   thoughts or anomalies. Irrelevant. The reckoner is discrete now.
+- **Stop loss as a price level** — gone. The interest IS the stop. The
+  cost of holding is the discipline, not an arbitrary distance.
 
 ## What this keeps
 
-- **Phase labeler** — 2.0 ATR smoothing. Rising/Falling. The structure
-  detection. This is the foundation.
-- **Market observer** — predicts direction. The direction determines
-  which side the broker enters. Unchanged.
+- **Phase labeler** — 2.0 ATR smoothing. Rising/Falling. Peaks/Valleys.
+  The structure detection AND the trigger clock. This is the foundation.
+- **Market observer** — predicts direction (Up/Down). Unchanged. Used
+  for entry conditions (which side to enter) AND exit conditions (is the
+  direction turning against my position).
+- **Position observer** — same entity, new question. Was: predict
+  distances (continuous, broken). Now: exit or hold at this trigger
+  (discrete, what we're good at). Still composes market thoughts with
+  position-specific facts. Still learns from outcomes.
 - **Broker as accountability unit** — the broker borrows, holds, returns.
   The broker tracks its own Grace/Violence. The gate controls whether
-  the broker proposes funded trades.
+  the broker proposes funded trades. Paper survival IS the proof.
 - **The accumulation model** — deploy capital, recover principal, keep
-  residue. Both directions. Constant accumulation.
+  residue. Both directions. Constant accumulation. Unchanged.
 - **ThoughtAST** — the anxiety atoms are just more facts in the bundle.
-  No new encoding mechanism.
+  No new encoding mechanism. No new AST variants.
+- **The pipes** — same CSP. Same channels. Same 30+ threads. The
+  interest accrual is one more computation per candle per position.
 
 ## The treasury as lender
 
