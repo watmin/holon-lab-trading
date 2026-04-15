@@ -16,6 +16,7 @@ use holon::kernel::vector_manager::VectorManager;
 use crate::types::candle::Candle;
 use crate::types::enums::Direction;
 use crate::types::log_entry::LogEntry;
+use crate::types::pivot::PhaseLabel;
 use crate::domain::market_observer::MarketObserver;
 use crate::domain::lens::market_lens_facts;
 use crate::encoding::encode::encode;
@@ -41,6 +42,55 @@ pub struct ObsLearn {
     pub thought: Vector,
     pub direction: Direction,
     pub weight: f64,
+}
+
+/// An unconfirmed prediction. The market observer holds these until
+/// a peak or valley confirms or denies the predicted direction.
+/// The market teaches. The observer learns from its own history.
+struct UnconfirmedPrediction {
+    anomaly: Vector,       // what the reckoner predicted on
+    direction: Direction,  // what it predicted
+    entry_price: f64,      // close at prediction time
+}
+
+/// Grade unconfirmed predictions against a peak or valley.
+/// Predictions confirmed correct learn the predicted direction.
+/// Predictions confirmed wrong learn the opposite direction.
+/// Returns the count of confirmed predictions.
+fn grade_predictions(
+    unconfirmed: &mut Vec<UnconfirmedPrediction>,
+    current_price: f64,
+    observer: &mut MarketObserver,
+    recalib_interval: usize,
+) -> usize {
+    let mut confirmed = 0;
+    unconfirmed.retain(|pred| {
+        let price_went_up = current_price > pred.entry_price;
+        let price_went_down = current_price < pred.entry_price;
+
+        let verdict = match pred.direction {
+            Direction::Up => {
+                if price_went_up { Some(Direction::Up) }       // correct
+                else if price_went_down { Some(Direction::Down) } // wrong
+                else { None }                                    // flat, hold
+            }
+            Direction::Down => {
+                if price_went_down { Some(Direction::Down) }   // correct
+                else if price_went_up { Some(Direction::Up) }  // wrong
+                else { None }                                    // flat, hold
+            }
+        };
+
+        match verdict {
+            Some(learned_direction) => {
+                observer.resolve(&pred.anomaly, learned_direction, 1.0, recalib_interval);
+                confirmed += 1;
+                false // remove — confirmed
+            }
+            None => true, // keep — not clear yet
+        }
+    });
+    confirmed
 }
 
 /// Drain all pending learn signals. Non-blocking.
@@ -74,6 +124,7 @@ pub fn market_observer_program(
     let mut candle_count = 0usize;
     let mut scales: HashMap<String, ScaleTracker> = HashMap::new();
     let lens = observer.lens;
+    let mut unconfirmed: Vec<UnconfirmedPrediction> = Vec::new();
 
     while let Ok(input) = candle_rx.recv() {
         let t_total = std::time::Instant::now();
@@ -87,8 +138,22 @@ pub fn market_observer_program(
         let id = format!("market:{}:{}", lens, candle_count);
         let metric_dims = format!("{{\"lens\":\"{}\"}}", lens);
 
-        // LEARN FIRST. Drain all pending signals before encoding.
+        // LEARN FIRST — self-grade at peaks and valleys.
+        // The market teaches. The observer learns from its own predictions.
         let t0 = std::time::Instant::now();
+        let self_graded = match input.candle.phase_label {
+            PhaseLabel::Peak | PhaseLabel::Valley => {
+                grade_predictions(
+                    &mut unconfirmed,
+                    input.candle.close,
+                    &mut observer,
+                    recalib_interval,
+                )
+            }
+            PhaseLabel::Transition => 0,
+        };
+
+        // Also drain broker learn signals (legacy — will be removed).
         drain_learn(&learn_rx, &mut observer, recalib_interval);
         let ns_drain = t0.elapsed().as_nanos() as f64;
 
@@ -120,6 +185,15 @@ pub fn market_observer_program(
         // Capture conviction before prediction is moved.
         let conviction = result.prediction.conviction;
 
+        // Record this prediction for self-grading at a future peak or valley.
+        // Use last_prediction — always set, even before the reckoner calibrates.
+        // The observer's best guess is honest at every candle.
+        unconfirmed.push(UnconfirmedPrediction {
+            anomaly: result.anomaly.clone(),
+            direction: observer.last_prediction,
+            entry_price: input.candle.close,
+        });
+
         // Send the chain — bounded(1), blocks until exit takes it.
         let t0 = std::time::Instant::now();
         let _ = result_tx.send(MarketChain {
@@ -144,6 +218,8 @@ pub fn market_observer_program(
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "observe", ns_observe, "Nanoseconds");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "send", ns_send, "Nanoseconds");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "total", ns_total, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "self_graded", self_graded as f64, "Count");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "unconfirmed", unconfirmed.len() as f64, "Count");
 
         let us_elapsed = (ns_total / 1000.0) as u64;
 
