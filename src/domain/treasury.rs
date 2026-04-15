@@ -103,13 +103,6 @@ pub struct PositionReceipt {
     pub deadline: usize,
 }
 
-/// Broker proposes an exit. Treasury validates the arithmetic.
-#[derive(Debug, Clone)]
-pub struct ExitProposal {
-    pub paper_id: u64,
-    pub current_price: f64,
-}
-
 /// Treasury's response to a resolution event.
 /// Pushed down to brokers through their pipe.
 #[derive(Debug, Clone, PartialEq)]
