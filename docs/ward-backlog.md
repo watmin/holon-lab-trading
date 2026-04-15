@@ -84,10 +84,12 @@ Computed every candle, result discarded.
 `treasury_program.rs:25, wat-vm.rs:774` — atr computed and sent
 every tick, never read by the treasury program.
 
-### 14. Hardcoded asset pair
+### 14. ~~Hardcoded asset pair~~ ✓
 **Sever**
-`broker_program.rs:84-85` — `"USDC"` / `"WBTC"` hardcoded. Should
-come from the chain or post configuration.
+**Fix:** Asset fields (`source_asset`, `target_asset`) added to enriched
+Candle, passed through from Ohlcv via IndicatorBank. Broker reads
+from `chain.candle` instead of hardcoded strings. The pair flows
+on the data, not the construction.
 
 ### 15. reference = 10_000.0 duplicated
 **Forge**

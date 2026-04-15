@@ -94,8 +94,11 @@ pub fn broker_program(
         broker.active_direction = Some(direction);
 
         // 2. Treasury — submit paper proposal based on market direction.
-        let from_asset = if direction == Direction::Up { "USDC" } else { "WBTC" };
-        let to_asset = if from_asset == "USDC" { "WBTC" } else { "USDC" };
+        let (from_asset, to_asset) = if direction == Direction::Up {
+            (&chain.candle.source_asset.name, &chain.candle.target_asset.name)
+        } else {
+            (&chain.candle.target_asset.name, &chain.candle.source_asset.name)
+        };
         if let Some(receipt) = treasury.submit_paper(from_asset, to_asset, price) {
             active_receipts.push(receipt);
         }

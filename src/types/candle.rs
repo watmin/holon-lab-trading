@@ -4,10 +4,14 @@
 // Newtypes for each indicator would be verbose noise. Price/Amount newtypes
 // guard the money boundary. Indicator fields are intermediate computation.
 
+use crate::types::ohlcv::Asset;
 use crate::types::pivot::{PhaseDirection, PhaseLabel, PhaseRecord};
 
 #[derive(Clone, Debug)]
 pub struct Candle {
+    // Identity — which asset pair this candle describes
+    pub source_asset: Asset,
+    pub target_asset: Asset,
     // Raw
     pub ts: String,
     pub open: f64,
@@ -103,6 +107,8 @@ pub struct Candle {
 impl Default for Candle {
     fn default() -> Self {
         Candle {
+            source_asset: Asset::new("USDC"),
+            target_asset: Asset::new("WBTC"),
             ts: "2024-01-01T00:00:00".into(),
             open: 42000.0,
             high: 42500.0,
@@ -205,6 +211,7 @@ mod tests {
     fn test_candle_field_count() {
         // Verify all fields exist by constructing explicitly
         let c = Candle {
+            source_asset: Asset::new("USDC"), target_asset: Asset::new("WBTC"),
             ts: String::new(),
             open: 0.0, high: 0.0, low: 0.0, close: 0.0, volume: 0.0,
             sma20: 0.0, sma50: 0.0, sma200: 0.0,

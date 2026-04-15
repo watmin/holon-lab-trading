@@ -1873,6 +1873,8 @@ impl IndicatorBank {
 
         // ── 4. Assemble the enriched Candle ──────────────────────
         Candle {
+            source_asset: raw.source_asset.clone(),
+            target_asset: raw.target_asset.clone(),
             ts: ts.clone(),
             open: o,
             high: h,
