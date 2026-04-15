@@ -1,120 +1,132 @@
 ;; bullish-momentum.wat — three rising valleys, strengthening rallies.
 ;; The classic uptrend. Higher highs, higher lows, increasing conviction.
 ;;
-;; Price action: 3700 → valley → 3850 → peak → 3780 → valley → 3920 → peak → 3840 → valley → 3980
+;; Encoding: bundled bigrams of trigrams.
+;; - Each phase → bundle of facts + deltas → encode → one vector
+;; - Trigram: 3 consecutive phases → bind+permute → one vector (one cycle)
+;; - Bigram-pair: 2 consecutive trigrams → bind → one vector (cycle-to-cycle)
+;; - Rhythm: bundle all pairs → one vector (the shape of the market)
 ;;
-;; The broker-observer sees this sequence and the reckoner learns:
-;; "this pattern produces Grace. Hold."
+;; Price action: 3700 → 3850 → 3780 → 3920 → 3840 → 3980
 
-(sequential
+;; ═══ Layer 1: Phase Records ═════════════════════════════════════════
+;; Each phase encodes its own properties + deltas. One vector each.
 
-  ;; ── Phase 0: valley at 3700 ────────────────────────────────────
-  ;; First record. No priors. Own properties only.
-  (bundle
-    (atom "phase-valley")
-    (bind (atom "rec-duration")  (log 18.0))          ; 18 candles consolidating
-    (bind (atom "rec-move")      (linear -0.005 1.0)) ; barely moved — flat pause
-    (bind (atom "rec-range")     (linear 0.008 1.0))  ; tight range
-    (bind (atom "rec-volume")    (linear 0.9 1.0)))   ; low volume
+(define phase-0 (encode (bundle                            ;; valley at 3700
+  (atom "phase-valley")
+  (bind (atom "rec-duration")  (log 18.0))
+  (bind (atom "rec-move")      (linear -0.005 1.0))
+  (bind (atom "rec-range")     (linear 0.008 1.0))
+  (bind (atom "rec-volume")    (linear 0.9 1.0)))))
 
-  ;; ── Phase 1: transition-up from 3700 → 3850 ───────────────────
-  ;; Prior bundle: the valley. Prior same: none (first transition-up).
-  (bundle
-    (atom "phase-transition-up")
-    (bind (atom "rec-duration")        (log 12.0))          ; 12 candles rising
-    (bind (atom "rec-move")            (linear 0.041 1.0))  ; +4.1% move
-    (bind (atom "rec-range")           (linear 0.045 1.0))  ; range matches move
-    (bind (atom "rec-volume")          (linear 1.4 1.0))    ; increasing volume
-    ;; prior-bundle deltas (vs valley at 3700)
-    (bind (atom "prior-duration-delta") (linear -0.33 1.0)) ; 33% shorter than the valley
-    (bind (atom "prior-move-delta")     (linear 0.046 1.0)) ; moved 4.6% more than the valley's -0.5%
-    (bind (atom "prior-volume-delta")   (linear 0.56 1.0))) ; 56% more volume than the valley
+(define phase-1 (encode (bundle                            ;; transition-up 3700→3850
+  (atom "phase-transition-up")
+  (bind (atom "rec-duration")        (log 12.0))
+  (bind (atom "rec-move")            (linear 0.041 1.0))
+  (bind (atom "rec-range")           (linear 0.045 1.0))
+  (bind (atom "rec-volume")          (linear 1.4 1.0))
+  ;; prior-bundle (vs valley)
+  (bind (atom "prior-duration-delta") (linear -0.33 1.0))
+  (bind (atom "prior-move-delta")     (linear 0.046 1.0))
+  (bind (atom "prior-volume-delta")   (linear 0.56 1.0)))))
 
-  ;; ── Phase 2: peak at 3850 ─────────────────────────────────────
-  ;; Prior bundle: transition-up. Prior same: none (first peak).
-  (bundle
-    (atom "phase-peak")
-    (bind (atom "rec-duration")        (log 15.0))
-    (bind (atom "rec-move")            (linear 0.002 1.0))  ; flat — it's a peak
-    (bind (atom "rec-range")           (linear 0.010 1.0))
-    (bind (atom "rec-volume")          (linear 1.1 1.0))
-    ;; prior-bundle deltas (vs transition-up)
-    (bind (atom "prior-duration-delta") (linear 0.25 1.0))  ; 25% longer than the rally
-    (bind (atom "prior-move-delta")     (linear -0.039 1.0)); moved 3.9% less (it's a pause)
-    (bind (atom "prior-volume-delta")   (linear -0.21 1.0))); volume dropped 21%
+(define phase-2 (encode (bundle                            ;; peak at 3850
+  (atom "phase-peak")
+  (bind (atom "rec-duration")        (log 15.0))
+  (bind (atom "rec-move")            (linear 0.002 1.0))
+  (bind (atom "rec-range")           (linear 0.010 1.0))
+  (bind (atom "rec-volume")          (linear 1.1 1.0))
+  ;; prior-bundle (vs transition-up)
+  (bind (atom "prior-duration-delta") (linear 0.25 1.0))
+  (bind (atom "prior-move-delta")     (linear -0.039 1.0))
+  (bind (atom "prior-volume-delta")   (linear -0.21 1.0)))))
 
-  ;; ── Phase 3: transition-down from 3850 → 3780 ─────────────────
-  ;; Prior bundle: peak. Prior same: none (first transition-down).
-  (bundle
-    (atom "phase-transition-down")
-    (bind (atom "rec-duration")        (log 8.0))           ; short pullback
-    (bind (atom "rec-move")            (linear -0.018 1.0)) ; -1.8% retracement
-    (bind (atom "rec-range")           (linear 0.022 1.0))
-    (bind (atom "rec-volume")          (linear 0.8 1.0))    ; declining volume on pullback
-    ;; prior-bundle deltas (vs peak)
-    (bind (atom "prior-duration-delta") (linear -0.47 1.0)) ; 47% shorter than the peak
-    (bind (atom "prior-move-delta")     (linear -0.020 1.0)); moved 2% more (downward) than peak's flat
-    (bind (atom "prior-volume-delta")   (linear -0.27 1.0))); less volume
+(define phase-3 (encode (bundle                            ;; transition-down 3850→3780
+  (atom "phase-transition-down")
+  (bind (atom "rec-duration")        (log 8.0))
+  (bind (atom "rec-move")            (linear -0.018 1.0))
+  (bind (atom "rec-range")           (linear 0.022 1.0))
+  (bind (atom "rec-volume")          (linear 0.8 1.0))
+  ;; prior-bundle (vs peak)
+  (bind (atom "prior-duration-delta") (linear -0.47 1.0))
+  (bind (atom "prior-move-delta")     (linear -0.020 1.0))
+  (bind (atom "prior-volume-delta")   (linear -0.27 1.0)))))
 
-  ;; ── Phase 4: valley at 3780 ───────────────────────────────────
-  ;; Prior bundle: transition-down. Prior same: valley at 3700.
-  ;; KEY: same-move-delta is POSITIVE — this valley is HIGHER than the last.
-  (bundle
-    (atom "phase-valley")
-    (bind (atom "rec-duration")         (log 14.0))
-    (bind (atom "rec-move")             (linear -0.003 1.0))  ; flat pause
-    (bind (atom "rec-range")            (linear 0.007 1.0))
-    (bind (atom "rec-volume")           (linear 0.85 1.0))
-    ;; prior-bundle deltas (vs transition-down)
-    (bind (atom "prior-duration-delta")  (linear 0.75 1.0))   ; 75% longer than the pullback
-    (bind (atom "prior-move-delta")      (linear 0.015 1.0))  ; moved less than the transition
-    (bind (atom "prior-volume-delta")    (linear 0.06 1.0))
-    ;; prior-same-phase deltas (vs valley at 3700)
-    (bind (atom "same-move-delta")       (linear 0.002 1.0))  ; slightly higher valley
-    (bind (atom "same-duration-delta")   (linear -0.22 1.0))  ; shorter consolidation
-    (bind (atom "same-volume-delta")     (linear -0.06 1.0))) ; similar volume
+(define phase-4 (encode (bundle                            ;; valley at 3780
+  (atom "phase-valley")
+  (bind (atom "rec-duration")         (log 14.0))
+  (bind (atom "rec-move")             (linear -0.003 1.0))
+  (bind (atom "rec-range")            (linear 0.007 1.0))
+  (bind (atom "rec-volume")           (linear 0.85 1.0))
+  ;; prior-bundle (vs transition-down)
+  (bind (atom "prior-duration-delta")  (linear 0.75 1.0))
+  (bind (atom "prior-move-delta")      (linear 0.015 1.0))
+  (bind (atom "prior-volume-delta")    (linear 0.06 1.0))
+  ;; prior-same (vs valley at 3700) — HIGHER LOW
+  (bind (atom "same-move-delta")       (linear 0.002 1.0))
+  (bind (atom "same-duration-delta")   (linear -0.22 1.0))
+  (bind (atom "same-volume-delta")     (linear -0.06 1.0)))))
 
-  ;; ── Phase 5: transition-up from 3780 → 3920 ───────────────────
-  ;; Prior bundle: valley. Prior same: transition-up 3700→3850.
-  ;; KEY: same-move-delta is POSITIVE — this rally is STRONGER.
-  (bundle
-    (atom "phase-transition-up")
-    (bind (atom "rec-duration")         (log 14.0))
-    (bind (atom "rec-move")             (linear 0.037 1.0))   ; +3.7%
-    (bind (atom "rec-range")            (linear 0.040 1.0))
-    (bind (atom "rec-volume")           (linear 1.6 1.0))     ; even more volume
-    ;; prior-bundle deltas (vs valley at 3780)
-    (bind (atom "prior-duration-delta")  (linear 0.0 1.0))    ; same duration
-    (bind (atom "prior-move-delta")      (linear 0.040 1.0))  ; moved much more than the valley
-    (bind (atom "prior-volume-delta")    (linear 0.88 1.0))   ; 88% more volume
-    ;; prior-same-phase deltas (vs transition-up 3700→3850)
-    (bind (atom "same-move-delta")       (linear -0.004 1.0)) ; slightly weaker move
-    (bind (atom "same-duration-delta")   (linear 0.17 1.0))   ; slightly longer
-    (bind (atom "same-volume-delta")     (linear 0.14 1.0)))  ; more volume — growing conviction
+(define phase-5 (encode (bundle                            ;; transition-up 3780→3920
+  (atom "phase-transition-up")
+  (bind (atom "rec-duration")         (log 14.0))
+  (bind (atom "rec-move")             (linear 0.037 1.0))
+  (bind (atom "rec-range")            (linear 0.040 1.0))
+  (bind (atom "rec-volume")           (linear 1.6 1.0))
+  ;; prior-bundle (vs valley)
+  (bind (atom "prior-duration-delta")  (linear 0.0 1.0))
+  (bind (atom "prior-move-delta")      (linear 0.040 1.0))
+  (bind (atom "prior-volume-delta")    (linear 0.88 1.0))
+  ;; prior-same (vs transition-up 3700→3850) — growing conviction
+  (bind (atom "same-move-delta")       (linear -0.004 1.0))
+  (bind (atom "same-duration-delta")   (linear 0.17 1.0))
+  (bind (atom "same-volume-delta")     (linear 0.14 1.0)))))
 
-  ;; ── Phase 6: peak at 3920 ─────────────────────────────────────
-  ;; Prior bundle: transition-up. Prior same: peak at 3850.
-  ;; KEY: same-move-delta near zero (both are flat pauses) but the
-  ;; PRICE is higher. The peak-delta is encoded in the prior-same
-  ;; relative to the peak's move property.
-  (bundle
-    (atom "phase-peak")
-    (bind (atom "rec-duration")         (log 10.0))
-    (bind (atom "rec-move")             (linear 0.001 1.0))
-    (bind (atom "rec-range")            (linear 0.009 1.0))
-    (bind (atom "rec-volume")           (linear 1.2 1.0))
-    ;; prior-bundle deltas (vs transition-up)
-    (bind (atom "prior-duration-delta")  (linear -0.29 1.0))
-    (bind (atom "prior-move-delta")      (linear -0.036 1.0))
-    (bind (atom "prior-volume-delta")    (linear -0.25 1.0))
-    ;; prior-same-phase deltas (vs peak at 3850)
-    (bind (atom "same-move-delta")       (linear -0.001 1.0)) ; both flat — similar
-    (bind (atom "same-duration-delta")   (linear -0.33 1.0))  ; shorter pause — eager
-    (bind (atom "same-volume-delta")     (linear 0.09 1.0)))) ; slightly more volume
+(define phase-6 (encode (bundle                            ;; peak at 3920
+  (atom "phase-peak")
+  (bind (atom "rec-duration")         (log 10.0))
+  (bind (atom "rec-move")             (linear 0.001 1.0))
+  (bind (atom "rec-range")            (linear 0.009 1.0))
+  (bind (atom "rec-volume")           (linear 1.2 1.0))
+  ;; prior-bundle (vs transition-up)
+  (bind (atom "prior-duration-delta")  (linear -0.29 1.0))
+  (bind (atom "prior-move-delta")      (linear -0.036 1.0))
+  (bind (atom "prior-volume-delta")    (linear -0.25 1.0))
+  ;; prior-same (vs peak at 3850) — shorter pause, eager
+  (bind (atom "same-move-delta")       (linear -0.001 1.0))
+  (bind (atom "same-duration-delta")   (linear -0.33 1.0))
+  (bind (atom "same-volume-delta")     (linear 0.09 1.0)))))
 
-;; The geometry: the Sequential encodes positional order via permutation.
-;; The pattern "valley with positive same-delta, transition-up with
-;; growing volume, peak with shorter duration" points in a specific
-;; direction on the sphere. That direction IS "bullish momentum."
-;; The scalars carry the strength. The reckoner learns: this direction
-;; at this magnitude → Grace. Hold.
+;; ═══ Layer 2: Trigrams ══════════════════════════════════════════════
+;; Sliding window of 3. Each trigram is one cycle: pause→move→pause.
+;; Internal order via bind+permute.
+
+(define tri-0 (bind (bind phase-0 (permute phase-1 1)) (permute phase-2 2)))  ;; valley→up→peak
+(define tri-1 (bind (bind phase-1 (permute phase-2 1)) (permute phase-3 2)))  ;; up→peak→down
+(define tri-2 (bind (bind phase-2 (permute phase-3 1)) (permute phase-4 2)))  ;; peak→down→valley
+(define tri-3 (bind (bind phase-3 (permute phase-4 1)) (permute phase-5 2)))  ;; down→valley→up
+(define tri-4 (bind (bind phase-4 (permute phase-5 1)) (permute phase-6 2)))  ;; valley→up→peak
+
+;; ═══ Layer 3: Bigram-Pairs ══════════════════════════════════════════
+;; "This cycle then that cycle." Ordered via bind.
+
+(define pair-0 (bind tri-0 tri-1))  ;; valley→up→peak THEN up→peak→down
+(define pair-1 (bind tri-1 tri-2))  ;; up→peak→down THEN peak→down→valley
+(define pair-2 (bind tri-2 tri-3))  ;; peak→down→valley THEN down→valley→up
+(define pair-3 (bind tri-3 tri-4))  ;; down→valley→up THEN valley→up→peak
+
+;; ═══ Layer 4: Rhythm ════════════════════════════════════════════════
+;; Bundle all pairs. One vector. One thought.
+
+(define rhythm (bundle pair-0 pair-1 pair-2 pair-3))
+
+;; pair-0 and pair-3 overlap through shared trigrams.
+;; tri-0 (valley→up→peak) and tri-4 (valley→up→peak) have the SAME shape
+;; but different scalars — the second valley is higher (same-move-delta > 0),
+;; the second rally has more volume (same-volume-delta > 0).
+;;
+;; These similar-but-not-identical trigrams produce similar-but-not-identical
+;; pairs. The bundle amplifies the common direction (bullish cycles) and
+;; preserves the drift (strengthening conviction via the deltas).
+;;
+;; The reckoner sees: this direction on the sphere → Grace. Hold.
