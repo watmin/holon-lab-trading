@@ -20,6 +20,12 @@ Issued by the treasury. Held by both treasury and broker.
 The treasury's copy is the source of truth.
 
 ```rust
+enum PaperState {
+    Active,
+    Grace { residue: f64 },
+    Violence,
+}
+
 struct Paper {
     paper_id: u64,
     owner: BrokerSlot,                // (market_idx, position_idx)
@@ -30,15 +36,49 @@ struct Paper {
     entry_price: f64,                 // exchange rate at entry
     entry_candle: usize,
     deadline: usize,                  // entry_candle + N
-    resolved: bool,
-    outcome: Option<Outcome>,         // Grace or Violence
+    state: PaperState,                // one enum, not bool + Option
 }
 ```
+
+Paper and real are distinct types. A paper always uses a fixed
+reference amount ($10,000) for percentage-based observation. A
+real position borrows actual capital from the treasury — the
+amount depends on the treasury's allocation. A real can be built
+from a paper's proven pattern, but the amounts differ.
+
+```rust
+struct RealPosition {
+    position_id: u64,
+    owner: BrokerSlot,
+    from_asset: Asset,
+    to_asset: Asset,
+    amount: f64,                      // actual capital borrowed
+    units_acquired: f64,
+    entry_price: f64,
+    entry_candle: usize,
+    deadline: usize,
+    state: PaperState,                // same state machine
+}
+```
+
+### Deadline, not interest
+
+Proposal 054 described continuous interest eroding positions.
+This proposal replaces that with a hard deadline. These are
+different mechanisms but the same game. Interest was a proxy
+for time the whole time. The deadline IS the time pressure.
+The anxiety atoms still encode urgency (candles-remaining,
+time-pressure). The mechanism is simpler. The effect is the same:
+you must produce Grace before the clock runs out.
 
 The `deadline` is computed at entry: `entry_candle + deadline_candles`.
 The `deadline_candles` comes from the treasury's configuration,
 derived from ATR at entry time. Volatile market → shorter deadline
 (things move fast, prove it fast). Calm market → longer deadline.
+
+The ATR lookback window for the deadline calculation is an
+open question for the designers — it must be specified before
+implementation.
 
 The `units_acquired`: the broker borrowed `amount` of `from_asset`,
 paid the 0.35% entry fee, and acquired this many units of `to_asset`.
@@ -72,10 +112,12 @@ struct ProposerRecord {
     papers_submitted: usize,
     papers_survived: usize,          // Grace count
     papers_failed: usize,            // Violence count
-    total_grace_residue: f64,        // sum of all Grace residues
+    total_grace_residue: f64,        // sum of all Grace residues (%)
+    total_violence_loss: f64,        // sum of all Violence losses (%)
     // Derived at query time:
     // survival_rate = survived / submitted
     // mean_residue = total_grace_residue / survived
+    // expectancy = survival_rate * mean_win - (1 - survival_rate) * mean_loss
 }
 ```
 
@@ -157,12 +199,17 @@ validates the arithmetic. The record tracks the outcome.
 If approved:
 - Treasury recovers `paper.amount` of from_asset (the principal)
 - Treasury deducts exit fee
-- Residue is split: half to the proposer, half to the treasury
-  - Proposer's half: credited to the proposer's deposit in to_asset.
-    This is the honest reward. The proposer earned it through
-    good thoughts.
-  - Treasury's half: stays in the pool's to_asset balance. The
-    pool grows. All depositors benefit proportionally.
+- Residue is split: half to the proposer, half to the treasury.
+  - Proposer's half: credited to the proposer's deposit balance.
+    This is the incentive to participate. The proposer earned it
+    through good thoughts.
+  - Treasury's half: stays in the pool. All depositors benefit
+    proportionally — their claim is the percentage of the pool
+    at deposit time. Passive depositors grow from proposers' Grace.
+  - The 50/50 split is a parameter, not a law. It can be adjusted.
+    But the principle holds: proposers must be rewarded for growing
+    the pool, and passive depositors must benefit from that growth.
+    The split is the alignment mechanism.
 - Broker's proposer record updated: `papers_survived += 1`,
   `total_grace_residue += residue`
 - Treasury notifies broker: Grace, paper_id, residue amount
@@ -226,52 +273,69 @@ The broker proposes an entry. The treasury evaluates:
 - For papers: always issue. Papers are how you build the record.
 - For real: check the predicate. Deny if unproven.
 
-```rust
-fn issue_paper(&mut self, owner: BrokerSlot, from: Asset,
-               to: Asset, amount: f64, price: f64,
-               candle: usize, is_real: bool) -> Option<u64> {
-    if is_real {
-        let record = self.proposer_records.get(&owner)?;
-        if !self.gate_predicate(record) { return None; }
-        // Check balance
-        if self.balances[&from] < amount { return None; }
-    }
+Two distinct functions. Paper and real are different things.
 
+```rust
+/// Issue a paper — always succeeds. Fixed $10,000 reference.
+/// Papers are proof of thoughts. No capital moves.
+fn issue_paper(&mut self, owner: BrokerSlot, from: Asset,
+               to: Asset, price: f64, candle: usize) -> u64 {
+    let amount = 10_000.0;  // fixed reference for percentages
     let fee = amount * self.entry_fee;
-    let net_amount = amount - fee;
-    let units = net_amount / price;
+    let units = (amount - fee) / price;
 
     let id = self.next_paper_id;
     self.next_paper_id += 1;
 
     let paper = Paper {
-        paper_id: id,
-        owner,
-        from_asset: from,
-        to_asset: to,
-        amount,
-        units_acquired: units,
-        entry_price: price,
+        paper_id: id, owner, from_asset: from, to_asset: to,
+        amount, units_acquired: units, entry_price: price,
         entry_candle: candle,
-        deadline: candle + self.deadline_candles,
-        side: if from == Asset::USDC { Side::Buy } else { Side::Sell },
-        resolved: false,
-        outcome: None,
+        deadline: candle + self.compute_deadline(candle),
+        state: PaperState::Active,
     };
 
     self.papers.insert(id, paper);
-    self.papers_by_owner.entry(owner).or_default().push(id);
     self.proposer_records.entry(owner).or_default()
         .papers_submitted += 1;
+    id
+}
 
-    // Move balance for real positions
-    if is_real {
-        *self.balances.get_mut(&from).unwrap() -= amount;
-    }
+/// Issue a real position — requires proven record and available balance.
+fn issue_real(&mut self, owner: BrokerSlot, from: Asset,
+              to: Asset, amount: f64, price: f64,
+              candle: usize) -> Option<u64> {
+    let record = self.proposer_records.get(&owner)?;
+    if !self.gate_predicate(record) { return None; }
+    if self.balances[&from] < amount { return None; }
 
+    let fee = amount * self.entry_fee;
+    let units = (amount - fee) / price;
+
+    let id = self.next_position_id;
+    self.next_position_id += 1;
+
+    *self.balances.get_mut(&from).unwrap() -= amount;
+
+    // Real positions tracked separately
+    let position = RealPosition {
+        position_id: id, owner, from_asset: from, to_asset: to,
+        amount, units_acquired: units, entry_price: price,
+        entry_candle: candle,
+        deadline: candle + self.compute_deadline(candle),
+        state: PaperState::Active,
+    };
+
+    self.real_positions.insert(id, position);
     Some(id)
 }
 ```
+
+Papers organically expire at their deadline. No cap needed —
+the deadline IS the cap. A broker submitting 100 papers per
+candle accumulates 100 × deadline_candles active papers. Each
+one expires on schedule. The treasury doesn't limit paper
+frequency. The deadline limits paper lifetime.
 
 ### 4. Notify brokers
 
