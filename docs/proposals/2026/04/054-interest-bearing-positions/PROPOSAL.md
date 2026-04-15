@@ -471,4 +471,6 @@ gate open and gate closed. Paying gas for papers during denial.
 Paying higher interest after rehabilitation. The game punishes
 inconsistency. The game rewards persistence.
 
+It hurts to lose. It pays to win.
+
 *Perseverare* — but only for those who earn it.
