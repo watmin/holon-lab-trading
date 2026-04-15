@@ -35,10 +35,16 @@ tracks actual loss. Commit `dc11506`.
 outcome, one propagate call, one position learn send. Unparseable
 weight expression killed — weight = 1.0. Commit `2bb2006`, `411b6c9`.
 
-## Open
-
-### 6. Three unused broker params
+### 6. ~~Three unused broker params~~ ✓
 **Reap, Forge**
+**Fix:** `_trade_tx` removed (wrong direction — broker owns gate 4).
+`cache` and `vm` activated (broker encodes anxiety atoms).
+Broker stripped: PropagationFacts, scalar accumulators, dollar P&L,
+distances, swap_fee — all dead. propagate() → record_outcome().
+Position observer → pure encoder (Vec<ThoughtAST> on chain).
+428 lines removed. Commit `e3cd96f`, `6964c5a`.
+
+## Open
 `broker_program.rs:47-49` — `_trade_tx`, `_cache`, `_vm`. Wired at
 construction, never used. Each consumes a resource from its pool.
 
