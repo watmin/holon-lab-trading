@@ -20,7 +20,6 @@ use crate::programs::app::treasury_program::TreasuryHandle;
 use crate::types::enums::{Direction, Outcome};
 use crate::types::log_entry::LogEntry;
 use crate::programs::app::position_observer_program::PositionLearn;
-use crate::programs::app::market_observer_program::ObsLearn;
 use crate::programs::chain::MarketPositionChain;
 use crate::encoding::thought_encoder::ThoughtAST;
 use crate::programs::stdlib::cache::CacheHandle;
@@ -42,7 +41,6 @@ fn direction_from_prediction(pred: &holon::memory::Prediction) -> Direction {
 /// Returns the trained Broker when the chain source disconnects.
 pub fn broker_program(
     chain_rx: QueueReceiver<MarketPositionChain>,
-    market_learn_tx: QueueSender<ObsLearn>,
     position_learn_tx: QueueSender<PositionLearn>,
     _trade_tx: QueueSender<crate::programs::app::position_observer_program::TradeUpdate>,
     _cache: CacheHandle<ThoughtAST, Vector>,
@@ -60,15 +58,8 @@ pub fn broker_program(
         let t_total = std::time::Instant::now();
         candle_count += 1;
         let price = chain.candle.close;
-        let mut learn_up: f64 = 0.0;
-        let mut learn_down: f64 = 0.0;
         let mut learn_grace: f64 = 0.0;
         let mut learn_violence: f64 = 0.0;
-        let mut learn_at_boundary: f64 = 0.0;
-        let mut learn_mid_phase: f64 = 0.0;
-
-        // Phase 4: detect phase boundary — small phase_duration means we just entered a new phase.
-        let near_phase_boundary = chain.candle.phase_duration <= 5;
 
         // 1. Compose: market anomaly + position anomaly
         let composed = Primitives::bundle(&[&chain.market_anomaly, &chain.position_anomaly]);
@@ -100,15 +91,6 @@ pub fn broker_program(
                     let weight = 0.01; // stop distance placeholder
                     let optimal = crate::types::distances::Distances::new(0.01, 0.01);
 
-                    // Phase 4: modulate learn weight.
-                    let phase_weight = if near_phase_boundary {
-                        learn_at_boundary += 1.0;
-                        weight * 2.0
-                    } else {
-                        learn_mid_phase += 1.0;
-                        weight
-                    };
-
                     let facts = broker.propagate(
                         &composed,
                         &chain.market_anomaly,
@@ -121,20 +103,8 @@ pub fn broker_program(
                     );
 
                     learn_violence += 1.0;
-                    // Teach market observer — direction wrong (Violence = deadline hit).
-                    let learn_direction = match facts.direction {
-                        Direction::Up => Direction::Down,
-                        Direction::Down => Direction::Up,
-                    };
-                    match learn_direction {
-                        Direction::Up => learn_up += 1.0,
-                        Direction::Down => learn_down += 1.0,
-                    }
-                    let _ = market_learn_tx.send(ObsLearn {
-                        thought: facts.market_thought,
-                        direction: learn_direction,
-                        weight: phase_weight,
-                    });
+                    // Market observer teaches itself now (backlog #1).
+                    // Position observer still learns from broker propagation.
                     let _ = position_learn_tx.send(PositionLearn {
                         position_thought: facts.position_thought,
                         optimal: facts.optimal,
@@ -150,15 +120,6 @@ pub fn broker_program(
                         0.01,
                     );
 
-                    // Phase 4: modulate learn weight.
-                    let phase_weight = if near_phase_boundary {
-                        learn_at_boundary += 1.0;
-                        weight * 2.0
-                    } else {
-                        learn_mid_phase += 1.0;
-                        weight
-                    };
-
                     let facts = broker.propagate(
                         &composed,
                         &chain.market_anomaly,
@@ -171,28 +132,8 @@ pub fn broker_program(
                     );
 
                     learn_grace += 1.0;
-                    // Teach market observer — direction correct (Grace = profitable).
-                    let direction_correct = match facts.direction {
-                        Direction::Up => price > 0.0, // Grace means profitable
-                        Direction::Down => price > 0.0,
-                    };
-                    let learn_direction = if direction_correct {
-                        facts.direction
-                    } else {
-                        match facts.direction {
-                            Direction::Up => Direction::Down,
-                            Direction::Down => Direction::Up,
-                        }
-                    };
-                    match learn_direction {
-                        Direction::Up => learn_up += 1.0,
-                        Direction::Down => learn_down += 1.0,
-                    }
-                    let _ = market_learn_tx.send(ObsLearn {
-                        thought: facts.market_thought,
-                        direction: learn_direction,
-                        weight: phase_weight,
-                    });
+                    // Market observer teaches itself now (backlog #1).
+                    // Position observer still learns from broker propagation.
                     let _ = position_learn_tx.send(PositionLearn {
                         position_thought: facts.position_thought,
                         optimal: facts.optimal,
@@ -246,12 +187,8 @@ pub fn broker_program(
         let id = format!("broker:{}:{}", broker.slot_idx, candle_count);
         let metric_dims = format!("{{\"slot\":{}}}", broker.slot_idx);
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "total", ns_total, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "learn_up_count", learn_up, "Count");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "learn_down_count", learn_down, "Count");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "learn_grace_count", learn_grace, "Count");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "learn_violence_count", learn_violence, "Count");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "learn_at_boundary", learn_at_boundary, "Count");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "learn_mid_phase", learn_mid_phase, "Count");
 
         // 7. Console diagnostic every 1000 candles
         if candle_count % 1000 == 0 {

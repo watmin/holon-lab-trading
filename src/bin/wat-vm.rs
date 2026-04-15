@@ -29,7 +29,7 @@ use enterprise::kernel::handle_pool::HandlePool;
 use enterprise::programs::app::broker_program::broker_program;
 use enterprise::programs::app::position_observer_program::{PositionLearn, PositionSlot, TradeUpdate};
 use enterprise::programs::app::position_observer_program::position_observer_program;
-use enterprise::programs::app::market_observer_program::{ObsInput, ObsLearn};
+use enterprise::programs::app::market_observer_program::ObsInput;
 use enterprise::programs::app::market_observer_program::market_observer_program;
 use enterprise::programs::app::treasury_program::{treasury_program, TreasuryEvent, TreasuryHandle, TreasuryTickSender, TreasuryResponse};
 use enterprise::programs::chain::MarketPositionChain;
@@ -103,7 +103,6 @@ struct WiredMarketObservers {
 fn wire_market_observers(
     observers: Vec<MarketObserver>,
     num_position_observers: usize,
-    learn_mailboxes: Vec<enterprise::services::mailbox::MailboxReceiver<ObsLearn>>,
     mut cache_pool: HandlePool<CacheHandle<ThoughtAST, Vector>>,
     mut console_pool: HandlePool<enterprise::programs::stdlib::console::ConsoleHandle>,
     mut db_pool: HandlePool<enterprise::services::queue::QueueSender<LogEntry>>,
@@ -119,7 +118,7 @@ fn wire_market_observers(
     let mut position_queue_rxs: Vec<Vec<enterprise::services::queue::QueueReceiver<MarketChain>>> =
         Vec::with_capacity(num_observers);
 
-    for (i, (observer, learn_rx)) in observers.into_iter().zip(learn_mailboxes).enumerate() {
+    for (i, observer) in observers.into_iter().enumerate() {
         // Candle input queue
         let (candle_tx, candle_rx) = queue_bounded::<ObsInput>(1);
         candle_txs.push(candle_tx);
@@ -155,7 +154,6 @@ fn wire_market_observers(
             market_observer_program(
                 candle_rx,
                 result_tx,
-                learn_rx,
                 obs_cache,
                 obs_vm,
                 obs_scalar,
@@ -297,7 +295,6 @@ struct WiredBrokers {
 fn wire_brokers(
     brokers: Vec<Broker>,
     output_rxs: Vec<QueueReceiver<MarketPositionChain>>,
-    market_learn_txs: Vec<Vec<QueueSender<ObsLearn>>>,
     position_learn_txs: Vec<Vec<QueueSender<PositionLearn>>>,
     trade_txs: Vec<Option<QueueSender<TradeUpdate>>>,
     treasury_handles: Vec<TreasuryHandle>,
@@ -311,16 +308,7 @@ fn wire_brokers(
     let num_brokers = brokers.len();
     let mut join_handles: Vec<std::thread::JoinHandle<Broker>> = Vec::with_capacity(num_brokers);
 
-    // Flatten the 2D learn tx vecs into per-broker assignments.
-    // market_learn_txs[mi][ei] — broker at slot mi*num_position+ei gets market_learn_txs[mi][ei]
-    // position_learn_txs[ei][mi] — broker at slot mi*num_position+ei gets position_learn_txs[ei][mi]
-    let mut market_learn_flat: Vec<Option<QueueSender<ObsLearn>>> = Vec::with_capacity(num_brokers);
-    for mi_txs in market_learn_txs {
-        for tx in mi_txs {
-            market_learn_flat.push(Some(tx));
-        }
-    }
-
+    // Flatten position_learn_txs[ei][mi] into per-broker assignments.
     let mut position_learn_flat: Vec<Option<QueueSender<PositionLearn>>> =
         (0..num_brokers).map(|_| None).collect();
     for (ei, ei_txs) in position_learn_txs.into_iter().enumerate() {
@@ -330,19 +318,13 @@ fn wire_brokers(
         }
     }
 
-    for (slot_idx, ((((broker, chain_rx), (mlt, elt)), ttx), treasury)) in brokers
+    for (slot_idx, (((broker, chain_rx), elt), (ttx, treasury))) in brokers
         .into_iter()
         .zip(output_rxs.into_iter())
-        .zip(
-            market_learn_flat
-                .into_iter()
-                .zip(position_learn_flat.into_iter()),
-        )
-        .zip(trade_txs.into_iter())
-        .zip(treasury_handles.into_iter())
+        .zip(position_learn_flat.into_iter())
+        .zip(trade_txs.into_iter().zip(treasury_handles.into_iter()))
         .enumerate()
     {
-        let market_learn_tx = mlt.unwrap_or_else(|| panic!("missing market learn tx for slot {}", slot_idx));
         let position_learn_tx = elt.unwrap_or_else(|| panic!("missing position learn tx for slot {}", slot_idx));
         let trade_tx = ttx.unwrap_or_else(|| panic!("missing trade tx for slot {}", slot_idx));
         let broker_cache = cache_pool.pop();
@@ -356,7 +338,6 @@ fn wire_brokers(
         let jh = std::thread::spawn(move || {
             broker_program(
                 chain_rx,
-                market_learn_tx,
                 position_learn_tx,
                 trade_tx,
                 broker_cache,
@@ -568,20 +549,7 @@ fn main() {
     // ─── Learn queues ──────────────────────────────────────────────────────
     // Created BEFORE observers so the mailbox receivers exist at wire time.
 
-    // Market learn queues: market_learn_txs[mi][ei], market_learn_rxs[mi] = Vec<QueueReceiver>
-    let mut market_learn_txs: Vec<Vec<QueueSender<ObsLearn>>> = Vec::with_capacity(num_market);
-    let mut market_learn_rxs: Vec<Vec<QueueReceiver<ObsLearn>>> = Vec::with_capacity(num_market);
-    for _ in 0..num_market {
-        let mut txs = Vec::with_capacity(num_position);
-        let mut rxs = Vec::with_capacity(num_position);
-        for _ in 0..num_position {
-            let (tx, rx) = queue_unbounded::<ObsLearn>();
-            txs.push(tx);
-            rxs.push(rx);
-        }
-        market_learn_txs.push(txs);
-        market_learn_rxs.push(rxs);
-    }
+    // Market observers teach themselves (backlog #1). No broker learn pipe needed.
 
     // Position learn queues: position_learn_txs[ei][mi], position_learn_rxs[ei] = Vec<QueueReceiver>
     let mut position_learn_txs: Vec<Vec<QueueSender<PositionLearn>>> = Vec::with_capacity(num_position);
@@ -597,10 +565,6 @@ fn main() {
         position_learn_txs.push(txs);
         position_learn_rxs.push(rxs);
     }
-
-    // Build mailbox receivers for market observers (fan-in from M brokers each)
-    let market_learn_mailboxes: Vec<enterprise::services::mailbox::MailboxReceiver<ObsLearn>> =
-        market_learn_rxs.into_iter().map(|rxs| mailbox(rxs)).collect();
 
     // Build mailbox receivers for position observers (fan-in from N brokers each)
     let position_learn_mailboxes: Vec<enterprise::services::mailbox::MailboxReceiver<PositionLearn>> =
@@ -633,7 +597,6 @@ fn main() {
     let wired = wire_market_observers(
         observers,
         num_position,
-        market_learn_mailboxes,
         cache_pool,
         console_pool,
         db_pool,
@@ -693,7 +656,6 @@ fn main() {
     let wired_brokers = wire_brokers(
         brokers,
         wired_position.output_rxs,
-        market_learn_txs,
         position_learn_txs,
         trade_txs_flat,
         treasury_handles,

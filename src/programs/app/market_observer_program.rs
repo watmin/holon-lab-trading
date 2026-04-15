@@ -25,7 +25,6 @@ use crate::programs::chain::MarketChain;
 use crate::programs::stdlib::cache::CacheHandle;
 use crate::programs::stdlib::console::ConsoleHandle;
 use crate::encoding::scale_tracker::ScaleTracker;
-use crate::services::mailbox::MailboxReceiver;
 use crate::services::queue::{QueueReceiver, QueueSender};
 use crate::services::topic::TopicSender;
 use crate::programs::telemetry::emit_metric;
@@ -93,25 +92,13 @@ fn grade_predictions(
     confirmed
 }
 
-/// Drain all pending learn signals. Non-blocking.
-/// Each signal resolves the observer's reckoner with reality.
-fn drain_learn(
-    learn_rx: &MailboxReceiver<ObsLearn>,
-    observer: &mut MarketObserver,
-    recalib_interval: usize,
-) {
-    while let Ok(signal) = learn_rx.try_recv() {
-        observer.resolve(&signal.thought, signal.direction, signal.weight, recalib_interval);
-    }
-}
-
 /// Run the market observer program. Call this inside thread::spawn.
-/// Output fans out to M exit observers via a topic.
+/// The observer teaches itself from the phase labeler — no broker propagation.
+/// Output fans out to M position observers via a topic.
 /// Returns the trained MarketObserver when the candle source disconnects.
 pub fn market_observer_program(
     candle_rx: QueueReceiver<ObsInput>,
     result_tx: TopicSender<MarketChain>,
-    learn_rx: MailboxReceiver<ObsLearn>,
     cache: CacheHandle<ThoughtAST, Vector>,
     vm: VectorManager,
     scalar: Arc<ScalarEncoder>,
@@ -153,8 +140,6 @@ pub fn market_observer_program(
             PhaseLabel::Transition => 0,
         };
 
-        // Also drain broker learn signals (legacy — will be removed).
-        drain_learn(&learn_rx, &mut observer, recalib_interval);
         let ns_drain = t0.elapsed().as_nanos() as f64;
 
         // Sample window size from observer's own time scale.
@@ -254,9 +239,6 @@ pub fn market_observer_program(
             ));
         }
     }
-
-    // GRACEFUL SHUTDOWN. Drain learn one last time.
-    drain_learn(&learn_rx, &mut observer, recalib_interval);
 
     // Return the observer. The experience survives.
     observer
