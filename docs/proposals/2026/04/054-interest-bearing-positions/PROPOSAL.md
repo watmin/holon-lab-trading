@@ -354,3 +354,69 @@ The structure is real. The windows are abundant. The signal exists.
     interest or they don't. The survival rate IS the proof. Is this
     sufficient? Or do we still need the broker's EV gate as a
     secondary check?
+
+## The treasury as record keeper
+
+The treasury owns the paper ledger. Not the broker. The treasury.
+
+Every paper from every broker is registered with the treasury.
+The treasury tracks: who opened it, when, at what price, how much
+interest has accrued, what the current value is, whether it resolved
+Grace or Violence. The treasury IS the book of record.
+
+The broker proposes. The treasury records. The treasury grades.
+
+This is deliberate. The broker cannot grade itself. The broker
+cannot claim "I'm profitable" without the treasury's ledger
+confirming it. The treasury has the complete picture — every
+paper from every broker, every resolution, every interest payment,
+every reclaim. The broker sees its own trades. The treasury sees
+ALL trades from ALL brokers.
+
+The gate is the treasury's decision, not the broker's. The broker
+says "I want to borrow real capital." The treasury checks the
+ledger: "your last 200 papers — 140 outran the interest, 60 didn't.
+Your paper survival rate is 70%. Your average residue after interest
+is 0.8%. Approved." Or: "your last 200 papers — 40 survived, 160
+eroded. Your paper survival rate is 20%. Denied."
+
+The paper trail is the PROTOCOL between broker and treasury. The
+broker must prove itself on paper before real capital flows. The
+treasury will not accept any broker who hasn't demonstrated paper
+Grace.
+
+### Why the treasury must own papers
+
+If the broker owns its own papers, the broker can:
+- Selectively report good papers and hide bad ones
+- Adjust the accounting to look profitable
+- Claim a survival rate it didn't earn
+
+If the treasury owns the papers:
+- Every paper is recorded at registration, not at resolution
+- The interest accrues on the treasury's clock, not the broker's
+- The resolution is computed by the treasury, not reported by the
+  broker
+- The ledger is complete, honest, and tamper-proof
+
+This matters because the system is designed to become a contract
+on Solana. When it does:
+- The treasury IS the contract. On-chain.
+- Every paper IS a transaction. The proposer pays gas to register.
+- The paper trail IS on-chain. Verifiable by anyone.
+- The proposer's survival rate IS public. The glass box.
+- The gas cost to register a paper IS the broker's skin in the
+  game. Bad papers cost gas with no return. The proposer must eat
+  the transaction cost for every paper on the book.
+- The treasury knows which proposer has what paper rate. This is
+  how trust is established. Not by reputation. Not by committee.
+  By ledger.
+
+The protocol:
+1. Broker registers paper with treasury (gas cost on-chain)
+2. Treasury records: broker ID, entry price, entry candle, direction
+3. Interest accrues per candle on the treasury's clock
+4. At trigger points: treasury evaluates the three exit conditions
+5. Grace: treasury records residue, marks the paper, credits broker
+6. Violence: treasury records reclaim, marks the paper, debits broker
+7. The ledger is the proof. The survival rate is the gate.
