@@ -23,6 +23,12 @@ paper_submitted/survived/failed/grace_residue for proof of thoughts.
 real_submitted/survived/failed/grace_residue/violence_loss for proof
 of execution. Gate reads paper stats only. Commit `2ab5640`.
 
+### 4. ~~Real position Violence returns amount, not market value~~ ✓
+**Forge**
+**Fix:** check_deadlines takes current_price. Real positions reclaim at
+market value minus exit fee. Conservation violation fixed. real_violence_loss
+tracks actual loss. Commit `dc11506`.
+
 ## Open
 
 ### 4. Real position Violence returns amount, not market value
