@@ -473,4 +473,74 @@ inconsistency. The game rewards persistence.
 
 It hurts to lose. It pays to win.
 
+## The headless treasury
+
+The treasury has no mind. The treasury is a program with a ledger.
+It does not know WHY a broker entered. It does not know the broker's
+vocabulary. It does not know the market observer's prediction. It
+does not know the phase labeler's state. It does not know the
+anxiety atoms. It knows NOTHING about the broker's reasoning.
+
+The treasury knows:
+- Who borrowed what, when
+- How much interest has accrued
+- Whether the position was returned with residue (Grace) or
+  reclaimed by erosion (Violence)
+- The survival rate of each broker's papers
+- The ledger
+
+That's it. The treasury is blind to strategy. The treasury sees
+actions and outcomes. The broker is judged for what it DID, not
+for WHY it did it.
+
+This is deliberate. This is the architecture for multiplayer.
+
+If the treasury knew the broker's reasoning — its vocabulary, its
+predictions, its confidence — the treasury would be coupled to the
+broker's implementation. Change the vocabulary → the treasury's
+evaluation changes. Add a new market observer → the treasury must
+understand it. The treasury would need to be updated every time a
+broker's strategy evolves. Complected.
+
+The headless treasury evaluates ONE thing: did the paper outrun
+the interest? Yes → Grace. No → Violence. The broker can use
+Ichimoku. The broker can use regime detection. The broker can use
+an LLM. The broker can use a coin flip. The treasury doesn't know.
+The treasury doesn't care. The ledger records. The survival rate
+judges. The gate opens or closes.
+
+In a multiplayer environment — multiple proposers, each with their
+own machine, their own vocabulary, their own strategy — the treasury
+is the NEUTRAL arbiter. It cannot favor one strategy over another
+because it cannot SEE strategies. It sees outcomes. Outcomes are
+universal. Strategies are private.
+
+This is why the treasury must own the paper ledger. The broker
+REPORTS an entry. The treasury RECORDS it. The market MOVES. The
+treasury EVALUATES the exit conditions. The broker never self-reports
+an outcome. The treasury computes the outcome from the entry record
+and the current price and the accrued interest. The outcome is
+derived from the ledger and the market, not from the broker.
+
+The treasury is:
+- Blind to strategy
+- Deaf to reasoning
+- The sole keeper of the ledger
+- The sole evaluator of outcomes
+- The sole controller of the gate
+- The sole setter of the interest rate
+
+A program. With a record. No one home.
+
+On Solana: the contract IS the headless treasury. The proposers
+submit entries as transactions. The contract records them. The
+price oracle provides the market. The contract evaluates the exit
+conditions. The contract computes Grace or Violence. The contract
+adjusts the gate. No human in the loop. No committee. No
+governance token. The measurement is the authority.
+
+Any proposer. Any strategy. Any vocabulary. One ledger. One rate.
+One gate. The headless treasury doesn't judge your thoughts. It
+judges your outcomes.
+
 *Perseverare* — but only for those who earn it.
