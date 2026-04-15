@@ -4,14 +4,14 @@
 
 ;; ═══ Layer 1: Phase Records ═════════════════════════════════════════
 
-(define phase-0 (encode (bundle
+(define phase-0 (bundle
   (atom "phase-peak")
   (bind (atom "rec-duration")  (log 10.0))
   (bind (atom "rec-move")      (linear 0.001 1.0))
   (bind (atom "rec-range")     (linear 0.008 1.0))
-  (bind (atom "rec-volume")    (linear 0.9 1.0)))))
+  (bind (atom "rec-volume")    (linear 0.9 1.0)))
 
-(define phase-1 (encode (bundle
+(define phase-1 (bundle
   (atom "phase-transition-down")
   (bind (atom "rec-duration")        (log 7.0))
   (bind (atom "rec-move")            (linear -0.013 1.0))
@@ -19,9 +19,9 @@
   (bind (atom "rec-volume")          (linear 0.7 1.0))
   (bind (atom "prior-duration-delta") (linear -0.30 1.0))
   (bind (atom "prior-move-delta")     (linear -0.014 1.0))
-  (bind (atom "prior-volume-delta")   (linear -0.22 1.0)))))
+  (bind (atom "prior-volume-delta")   (linear -0.22 1.0)))
 
-(define phase-2 (encode (bundle
+(define phase-2 (bundle
   (atom "phase-valley")
   (bind (atom "rec-duration")        (log 12.0))
   (bind (atom "rec-move")            (linear -0.002 1.0))
@@ -29,9 +29,9 @@
   (bind (atom "rec-volume")          (linear 0.6 1.0))
   (bind (atom "prior-duration-delta") (linear 0.71 1.0))
   (bind (atom "prior-move-delta")     (linear 0.011 1.0))
-  (bind (atom "prior-volume-delta")   (linear -0.14 1.0)))))
+  (bind (atom "prior-volume-delta")   (linear -0.14 1.0)))
 
-(define phase-3 (encode (bundle
+(define phase-3 (bundle
   (atom "phase-transition-up")
   (bind (atom "rec-duration")        (log 8.0))
   (bind (atom "rec-move")            (linear 0.016 1.0))
@@ -39,9 +39,9 @@
   (bind (atom "rec-volume")          (linear 0.8 1.0))
   (bind (atom "prior-duration-delta") (linear -0.33 1.0))
   (bind (atom "prior-move-delta")     (linear 0.018 1.0))
-  (bind (atom "prior-volume-delta")   (linear 0.33 1.0)))))
+  (bind (atom "prior-volume-delta")   (linear 0.33 1.0)))
 
-(define phase-4 (encode (bundle                            ;; peak — same level as phase-0
+(define phase-4 (bundle                            ;; peak — same level as phase-0
   (atom "phase-peak")
   (bind (atom "rec-duration")         (log 11.0))
   (bind (atom "rec-move")             (linear 0.002 1.0))
@@ -53,9 +53,9 @@
   ;; prior-same — virtually identical to first peak
   (bind (atom "same-move-delta")       (linear 0.001 1.0))   ;; ~zero
   (bind (atom "same-duration-delta")   (linear 0.10 1.0))    ;; ~zero
-  (bind (atom "same-volume-delta")     (linear -0.06 1.0)))));; ~zero
+  (bind (atom "same-volume-delta")     (linear -0.06 1.0))));; ~zero
 
-(define phase-5 (encode (bundle                            ;; transition-down — same as phase-1
+(define phase-5 (bundle                            ;; transition-down — same as phase-1
   (atom "phase-transition-down")
   (bind (atom "rec-duration")         (log 8.0))
   (bind (atom "rec-move")             (linear -0.015 1.0))
@@ -67,9 +67,9 @@
   ;; prior-same — same magnitude, same duration
   (bind (atom "same-move-delta")       (linear -0.002 1.0))  ;; ~zero
   (bind (atom "same-duration-delta")   (linear 0.14 1.0))    ;; ~zero
-  (bind (atom "same-volume-delta")     (linear 0.07 1.0))))) ;; ~zero
+  (bind (atom "same-volume-delta")     (linear 0.07 1.0))) ;; ~zero
 
-(define phase-6 (encode (bundle                            ;; valley — same level as phase-2
+(define phase-6 (bundle                            ;; valley — same level as phase-2
   (atom "phase-valley")
   (bind (atom "rec-duration")         (log 14.0))
   (bind (atom "rec-move")             (linear -0.001 1.0))
@@ -81,7 +81,7 @@
   ;; prior-same — same level
   (bind (atom "same-move-delta")       (linear 0.001 1.0))   ;; ~zero
   (bind (atom "same-duration-delta")   (linear 0.17 1.0))    ;; ~zero
-  (bind (atom "same-volume-delta")     (linear -0.08 1.0)))));; dying volume
+  (bind (atom "same-volume-delta")     (linear -0.08 1.0))));; dying volume
 
 ;; ═══ Layer 2: Trigrams ══════════════════════════════════════════════
 

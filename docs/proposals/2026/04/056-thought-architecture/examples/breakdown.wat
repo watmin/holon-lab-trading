@@ -6,14 +6,14 @@
 
 ;; ═══ Layer 1: Phase Records ═════════════════════════════════════════
 
-(define phase-0 (encode (bundle
+(define phase-0 (bundle
   (atom "phase-valley")
   (bind (atom "rec-duration")  (log 20.0))
   (bind (atom "rec-move")      (linear -0.004 1.0))
   (bind (atom "rec-range")     (linear 0.009 1.0))
-  (bind (atom "rec-volume")    (linear 0.8 1.0)))))
+  (bind (atom "rec-volume")    (linear 0.8 1.0)))
 
-(define phase-1 (encode (bundle
+(define phase-1 (bundle
   (atom "phase-transition-up")
   (bind (atom "rec-duration")        (log 16.0))
   (bind (atom "rec-move")            (linear 0.054 1.0))    ;; strong +5.4%
@@ -21,9 +21,9 @@
   (bind (atom "rec-volume")          (linear 1.6 1.0))
   (bind (atom "prior-duration-delta") (linear -0.20 1.0))
   (bind (atom "prior-move-delta")     (linear 0.058 1.0))
-  (bind (atom "prior-volume-delta")   (linear 1.0 1.0)))))
+  (bind (atom "prior-volume-delta")   (linear 1.0 1.0)))
 
-(define phase-2 (encode (bundle
+(define phase-2 (bundle
   (atom "phase-peak")
   (bind (atom "rec-duration")        (log 14.0))
   (bind (atom "rec-move")            (linear 0.002 1.0))
@@ -31,9 +31,9 @@
   (bind (atom "rec-volume")          (linear 1.1 1.0))
   (bind (atom "prior-duration-delta") (linear -0.13 1.0))
   (bind (atom "prior-move-delta")     (linear -0.052 1.0))
-  (bind (atom "prior-volume-delta")   (linear -0.31 1.0)))))
+  (bind (atom "prior-volume-delta")   (linear -0.31 1.0)))
 
-(define phase-3 (encode (bundle
+(define phase-3 (bundle
   (atom "phase-transition-down")
   (bind (atom "rec-duration")        (log 10.0))
   (bind (atom "rec-move")            (linear -0.031 1.0))
@@ -41,9 +41,9 @@
   (bind (atom "rec-volume")          (linear 1.3 1.0))
   (bind (atom "prior-duration-delta") (linear -0.29 1.0))
   (bind (atom "prior-move-delta")     (linear -0.033 1.0))
-  (bind (atom "prior-volume-delta")   (linear 0.18 1.0)))))
+  (bind (atom "prior-volume-delta")   (linear 0.18 1.0)))
 
-(define phase-4 (encode (bundle                            ;; valley at 3780 — HIGHER LOW
+(define phase-4 (bundle                            ;; valley at 3780 — HIGHER LOW
   (atom "phase-valley")
   (bind (atom "rec-duration")         (log 12.0))
   (bind (atom "rec-move")             (linear -0.002 1.0))
@@ -55,9 +55,9 @@
   ;; prior-same (vs valley at 3700) — support rising
   (bind (atom "same-move-delta")       (linear 0.002 1.0))   ;; higher low
   (bind (atom "same-duration-delta")   (linear -0.40 1.0))
-  (bind (atom "same-volume-delta")     (linear -0.13 1.0)))))
+  (bind (atom "same-volume-delta")     (linear -0.13 1.0)))
 
-(define phase-5 (encode (bundle                            ;; transition-up — WEAKER rally
+(define phase-5 (bundle                            ;; transition-up — WEAKER rally
   (atom "phase-transition-up")
   (bind (atom "rec-duration")         (log 14.0))
   (bind (atom "rec-move")             (linear 0.024 1.0))    ;; only +2.4% vs 5.4%
@@ -69,9 +69,9 @@
   ;; prior-same (vs first rally) — weakening
   (bind (atom "same-move-delta")       (linear -0.030 1.0))  ;; 3% WEAKER
   (bind (atom "same-duration-delta")   (linear -0.13 1.0))
-  (bind (atom "same-volume-delta")     (linear -0.31 1.0)))))
+  (bind (atom "same-volume-delta")     (linear -0.31 1.0)))
 
-(define phase-6 (encode (bundle                            ;; peak at 3870 — THE LOWER HIGH
+(define phase-6 (bundle                            ;; peak at 3870 — THE LOWER HIGH
   (atom "phase-peak")
   (bind (atom "rec-duration")         (log 18.0))            ;; lingering
   (bind (atom "rec-move")             (linear 0.001 1.0))
@@ -83,7 +83,7 @@
   ;; prior-same (vs peak at 3900) — hesitation
   (bind (atom "same-move-delta")       (linear -0.001 1.0))
   (bind (atom "same-duration-delta")   (linear 0.29 1.0))    ;; longer pause
-  (bind (atom "same-volume-delta")     (linear -0.27 1.0)))));; no buyers
+  (bind (atom "same-volume-delta")     (linear -0.27 1.0))));; no buyers
 
 ;; ═══ Layer 2: Trigrams ══════════════════════════════════════════════
 

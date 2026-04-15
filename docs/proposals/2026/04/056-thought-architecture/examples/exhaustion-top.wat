@@ -7,14 +7,14 @@
 
 ;; ═══ Layer 1: Phase Records ═════════════════════════════════════════
 
-(define phase-0 (encode (bundle                            ;; transition-up (strong rally)
+(define phase-0 (bundle                            ;; transition-up (strong rally)
   (atom "phase-transition-up")
   (bind (atom "rec-duration")  (log 20.0))
   (bind (atom "rec-move")      (linear 0.055 1.0))
   (bind (atom "rec-range")     (linear 0.058 1.0))
-  (bind (atom "rec-volume")    (linear 1.8 1.0)))))
+  (bind (atom "rec-volume")    (linear 1.8 1.0)))
 
-(define phase-1 (encode (bundle                            ;; peak (healthy)
+(define phase-1 (bundle                            ;; peak (healthy)
   (atom "phase-peak")
   (bind (atom "rec-duration")        (log 12.0))
   (bind (atom "rec-move")            (linear 0.003 1.0))
@@ -22,9 +22,9 @@
   (bind (atom "rec-volume")          (linear 1.2 1.0))
   (bind (atom "prior-duration-delta") (linear -0.40 1.0))
   (bind (atom "prior-move-delta")     (linear -0.052 1.0))
-  (bind (atom "prior-volume-delta")   (linear -0.33 1.0)))))
+  (bind (atom "prior-volume-delta")   (linear -0.33 1.0)))
 
-(define phase-2 (encode (bundle                            ;; transition-down (shallow pullback)
+(define phase-2 (bundle                            ;; transition-down (shallow pullback)
   (atom "phase-transition-down")
   (bind (atom "rec-duration")        (log 6.0))
   (bind (atom "rec-move")            (linear -0.012 1.0))
@@ -32,9 +32,9 @@
   (bind (atom "rec-volume")          (linear 0.7 1.0))
   (bind (atom "prior-duration-delta") (linear -0.50 1.0))
   (bind (atom "prior-move-delta")     (linear -0.015 1.0))
-  (bind (atom "prior-volume-delta")   (linear -0.42 1.0)))))
+  (bind (atom "prior-volume-delta")   (linear -0.42 1.0)))
 
-(define phase-3 (encode (bundle                            ;; valley (brief)
+(define phase-3 (bundle                            ;; valley (brief)
   (atom "phase-valley")
   (bind (atom "rec-duration")        (log 8.0))
   (bind (atom "rec-move")            (linear -0.002 1.0))
@@ -42,9 +42,9 @@
   (bind (atom "rec-volume")          (linear 0.6 1.0))
   (bind (atom "prior-duration-delta") (linear 0.33 1.0))
   (bind (atom "prior-move-delta")     (linear 0.010 1.0))
-  (bind (atom "prior-volume-delta")   (linear -0.14 1.0)))))
+  (bind (atom "prior-volume-delta")   (linear -0.14 1.0)))
 
-(define phase-4 (encode (bundle                            ;; transition-up (WEAKENING)
+(define phase-4 (bundle                            ;; transition-up (WEAKENING)
   (atom "phase-transition-up")
   (bind (atom "rec-duration")         (log 15.0))
   (bind (atom "rec-move")             (linear 0.028 1.0))    ;; HALF the first rally
@@ -56,9 +56,9 @@
   ;; prior-same (vs first rally) — THE SIGNAL
   (bind (atom "same-move-delta")       (linear -0.027 1.0))  ;; 2.7% weaker
   (bind (atom "same-duration-delta")   (linear -0.25 1.0))   ;; shorter
-  (bind (atom "same-volume-delta")     (linear -0.33 1.0)))));; less volume
+  (bind (atom "same-volume-delta")     (linear -0.33 1.0))));; less volume
 
-(define phase-5 (encode (bundle                            ;; peak (LINGERING)
+(define phase-5 (bundle                            ;; peak (LINGERING)
   (atom "phase-peak")
   (bind (atom "rec-duration")         (log 22.0))            ;; LONGER
   (bind (atom "rec-move")             (linear 0.001 1.0))
@@ -70,9 +70,9 @@
   ;; prior-same (vs first peak) — stalling
   (bind (atom "same-move-delta")       (linear -0.002 1.0))
   (bind (atom "same-duration-delta")   (linear 0.83 1.0))    ;; 83% longer
-  (bind (atom "same-volume-delta")     (linear -0.25 1.0)))));; drying up
+  (bind (atom "same-volume-delta")     (linear -0.25 1.0))));; drying up
 
-(define phase-6 (encode (bundle                            ;; transition-down (STRENGTHENING selloff)
+(define phase-6 (bundle                            ;; transition-down (STRENGTHENING selloff)
   (atom "phase-transition-down")
   (bind (atom "rec-duration")         (log 10.0))
   (bind (atom "rec-move")             (linear -0.032 1.0))   ;; MORE than the first pullback
@@ -84,7 +84,7 @@
   ;; prior-same (vs first pullback) — panic growing
   (bind (atom "same-move-delta")       (linear -0.020 1.0))  ;; 2% more selling
   (bind (atom "same-duration-delta")   (linear 0.67 1.0))    ;; longer
-  (bind (atom "same-volume-delta")     (linear 1.14 1.0))))) ;; DOUBLE the volume
+  (bind (atom "same-volume-delta")     (linear 1.14 1.0))) ;; DOUBLE the volume
 
 ;; ═══ Layer 2: Trigrams ══════════════════════════════════════════════
 

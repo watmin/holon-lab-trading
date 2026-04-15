@@ -12,14 +12,14 @@
 ;; ═══ Layer 1: Phase Records ═════════════════════════════════════════
 ;; Each phase encodes its own properties + deltas. One vector each.
 
-(define phase-0 (encode (bundle                            ;; valley at 3700
+(define phase-0 (bundle                            ;; valley at 3700
   (atom "phase-valley")
   (bind (atom "rec-duration")  (log 18.0))
   (bind (atom "rec-move")      (linear -0.005 1.0))
   (bind (atom "rec-range")     (linear 0.008 1.0))
-  (bind (atom "rec-volume")    (linear 0.9 1.0)))))
+  (bind (atom "rec-volume")    (linear 0.9 1.0)))
 
-(define phase-1 (encode (bundle                            ;; transition-up 3700→3850
+(define phase-1 (bundle                            ;; transition-up 3700→3850
   (atom "phase-transition-up")
   (bind (atom "rec-duration")        (log 12.0))
   (bind (atom "rec-move")            (linear 0.041 1.0))
@@ -28,9 +28,9 @@
   ;; prior-bundle (vs valley)
   (bind (atom "prior-duration-delta") (linear -0.33 1.0))
   (bind (atom "prior-move-delta")     (linear 0.046 1.0))
-  (bind (atom "prior-volume-delta")   (linear 0.56 1.0)))))
+  (bind (atom "prior-volume-delta")   (linear 0.56 1.0)))
 
-(define phase-2 (encode (bundle                            ;; peak at 3850
+(define phase-2 (bundle                            ;; peak at 3850
   (atom "phase-peak")
   (bind (atom "rec-duration")        (log 15.0))
   (bind (atom "rec-move")            (linear 0.002 1.0))
@@ -39,9 +39,9 @@
   ;; prior-bundle (vs transition-up)
   (bind (atom "prior-duration-delta") (linear 0.25 1.0))
   (bind (atom "prior-move-delta")     (linear -0.039 1.0))
-  (bind (atom "prior-volume-delta")   (linear -0.21 1.0)))))
+  (bind (atom "prior-volume-delta")   (linear -0.21 1.0)))
 
-(define phase-3 (encode (bundle                            ;; transition-down 3850→3780
+(define phase-3 (bundle                            ;; transition-down 3850→3780
   (atom "phase-transition-down")
   (bind (atom "rec-duration")        (log 8.0))
   (bind (atom "rec-move")            (linear -0.018 1.0))
@@ -50,9 +50,9 @@
   ;; prior-bundle (vs peak)
   (bind (atom "prior-duration-delta") (linear -0.47 1.0))
   (bind (atom "prior-move-delta")     (linear -0.020 1.0))
-  (bind (atom "prior-volume-delta")   (linear -0.27 1.0)))))
+  (bind (atom "prior-volume-delta")   (linear -0.27 1.0)))
 
-(define phase-4 (encode (bundle                            ;; valley at 3780
+(define phase-4 (bundle                            ;; valley at 3780
   (atom "phase-valley")
   (bind (atom "rec-duration")         (log 14.0))
   (bind (atom "rec-move")             (linear -0.003 1.0))
@@ -65,9 +65,9 @@
   ;; prior-same (vs valley at 3700) — HIGHER LOW
   (bind (atom "same-move-delta")       (linear 0.002 1.0))
   (bind (atom "same-duration-delta")   (linear -0.22 1.0))
-  (bind (atom "same-volume-delta")     (linear -0.06 1.0)))))
+  (bind (atom "same-volume-delta")     (linear -0.06 1.0)))
 
-(define phase-5 (encode (bundle                            ;; transition-up 3780→3920
+(define phase-5 (bundle                            ;; transition-up 3780→3920
   (atom "phase-transition-up")
   (bind (atom "rec-duration")         (log 14.0))
   (bind (atom "rec-move")             (linear 0.037 1.0))
@@ -80,9 +80,9 @@
   ;; prior-same (vs transition-up 3700→3850) — growing conviction
   (bind (atom "same-move-delta")       (linear -0.004 1.0))
   (bind (atom "same-duration-delta")   (linear 0.17 1.0))
-  (bind (atom "same-volume-delta")     (linear 0.14 1.0)))))
+  (bind (atom "same-volume-delta")     (linear 0.14 1.0)))
 
-(define phase-6 (encode (bundle                            ;; peak at 3920
+(define phase-6 (bundle                            ;; peak at 3920
   (atom "phase-peak")
   (bind (atom "rec-duration")         (log 10.0))
   (bind (atom "rec-move")             (linear 0.001 1.0))
@@ -95,7 +95,7 @@
   ;; prior-same (vs peak at 3850) — shorter pause, eager
   (bind (atom "same-move-delta")       (linear -0.001 1.0))
   (bind (atom "same-duration-delta")   (linear -0.33 1.0))
-  (bind (atom "same-volume-delta")     (linear 0.09 1.0)))))
+  (bind (atom "same-volume-delta")     (linear 0.09 1.0)))
 
 ;; ═══ Layer 2: Trigrams ══════════════════════════════════════════════
 ;; Sliding window of 3. Each trigram is one cycle: pause→move→pause.
