@@ -134,108 +134,176 @@ in this order. The reckoner learns this region predicts Violence.
 No rule. No boolean. The geometry encodes it as a direction with
 scalar strength.
 
-## Encoding: Chained Trigrams
+## Encoding: Bundled Bigrams of Trigrams
 
-### Why Not Sequential (Positional)
+### The Design Space
 
-`(sequential A B C)` encodes as `bundle(permute(A,0), permute(B,1), permute(C,2))`.
-Position 0, 1, 2 are fixed slots. "Peak at position 3" is a different
-thought from "peak at position 7" even if the peak is identical. The
-absolute position doesn't matter — the SHAPE matters. A pattern of
-weakening rallies at the start of the history should look the same as
-weakening rallies at the end.
+Four encoding modes exist in holon-rs:
 
-### Why Chained Trigrams
+| Mode | Order | Pattern Recognition | Problem |
+|------|-------|--------------------|---------| 
+| **Bundle** | None | Each item recoverable | "A then B" == "B then A" |
+| **Positional** | Fixed slots | Position-dependent | Same shape at different offsets = different thought |
+| **Chained** | Total ordering | Recent on surface | Same suffix + different prefix = different thought |
+| **Ngram** | Local ordering | Offset-independent | ✓ |
 
-A trigram is one full cycle: pause → move → pause.
+**Positional** (what Sequential does now) fails because "peak at
+position 3" differs from "peak at position 7." The shape should be
+recognizable regardless of when it appeared.
 
-```
-trigram = bind(bind(phase_A, permute(phase_B, 1)), permute(phase_C, 2))
-```
+**Chained** fails because different history prefixes rotate the final
+vector into different orientations. The same recent pattern with
+different early history is unrecognizable.
 
-Internal order is preserved — "valley → transition-up → peak" differs
-from "peak → transition-up → valley." The trigram IS the shape of one
-cycle.
+**Bundled ngrams** succeed: each ngram preserves local order via bind.
+The ngrams are bundled — each one equally recoverable by cosine,
+regardless of when it occurred. The same shape is recognizable at
+any offset.
 
-Trigrams are chained — each binds with the previous result:
+### Three Layers
 
-```
-chain = bind(bind(trigram_0, trigram_1), trigram_2)
-```
+**Layer 1 — Phase record.** One phase. 4-10 facts: own properties +
+prior-bundle deltas + prior-same-phase deltas. Encoded as a bundle.
+Produces one vector.
 
-The chain preserves the ORDER of cycles. The most recent trigram is on
-the surface — one unbind to peel it off. Earlier cycles are deeper.
-Natural recency bias. The reckoner doesn't decompose — it reads the
-gestalt. Different rhythms produce different vectors. Similar rhythms
-produce similar vectors.
-
-The result is one vector. One thought. One slot in the broker's
-outer bundle.
-
-### Ngram Construction
-
-From N phases, extract overlapping trigrams (windows of 3):
+**Layer 2 — Trigram.** Three consecutive phase records. One full cycle:
+pause → move → pause. Internally ordered via bind + permute.
 
 ```
-phases:   [valley, trans-up, peak, trans-down, valley, trans-up, peak]
-trigrams: [v-up-p, up-p-down, p-down-v, down-v-up, v-up-p]  (5 trigrams)
-chain:    bind(bind(bind(bind(t0, t1), t2), t3), t4)          (1 vector)
+trigram = bind(bind(encode(phase_A), permute(encode(phase_B), 1)),
+              permute(encode(phase_C), 2))
 ```
 
-Each trigram is internally ordered (bind + permute). The chain is
-ordered left to right. The output is one vector at D dimensions.
+"Valley → transition-up → peak" differs from "peak → transition-up →
+valley." The trigram IS the shape of one cycle. Produces one vector.
+
+**Layer 3 — Bigram of trigrams.** Two consecutive trigrams. "This cycle
+then that cycle." Ordered via bind.
+
+```
+pair = bind(trigram_i, trigram_i+1)
+```
+
+"Exhaustion-cycle then panic-cycle" IS a specific direction in
+hyperspace. Produces one vector.
+
+**Layer 4 — Rhythm.** All bigram-pairs bundled. Unordered. Each pair
+equally recoverable. The rhythm is the SET of all cycle-to-cycle
+progressions.
+
+```
+rhythm = bundle(pair_0, pair_1, ..., pair_N)
+```
+
+One vector. One thought. One slot in the broker's outer bundle.
+
+### Example: 9 Phases → 1 Rhythm Vector
+
+```scheme
+;; 9 phases from the labeler
+phases:   [valley, trans-up, peak, trans-down, valley, trans-up, peak, trans-down, valley]
+
+;; 7 trigrams (sliding window of 3)
+tri-0: valley → trans-up → peak         ;; the rally cycle
+tri-1: trans-up → peak → trans-down     ;; the top
+tri-2: peak → trans-down → valley       ;; the selloff cycle
+tri-3: trans-down → valley → trans-up   ;; the bottom
+tri-4: valley → trans-up → peak         ;; another rally cycle
+tri-5: trans-up → peak → trans-down     ;; another top
+tri-6: peak → trans-down → valley       ;; another selloff
+
+;; 6 bigram-pairs (sliding window of 2 trigrams)
+pair-0: bind(tri-0, tri-1)   ;; rally THEN top
+pair-1: bind(tri-1, tri-2)   ;; top THEN selloff
+pair-2: bind(tri-2, tri-3)   ;; selloff THEN bottom
+pair-3: bind(tri-3, tri-4)   ;; bottom THEN rally
+pair-4: bind(tri-4, tri-5)   ;; rally THEN top (again)
+pair-5: bind(tri-5, tri-6)   ;; top THEN selloff (again)
+
+;; The rhythm — bundle all pairs
+rhythm: bundle(pair-0, pair-1, pair-2, pair-3, pair-4, pair-5)
+```
+
+Pair-0 and pair-4 are both "rally then top." If the second rally was
+weaker (smaller scalars in the phase deltas), the two pairs point in
+similar-but-not-identical directions. They REINFORCE the common shape
+in the bundle. The scalar differences create SPREAD around that
+direction. The reckoner reads both the pattern and the drift.
+
+### Why Familiar Shapes Stay Familiar
+
+Bind is deterministic. The same two vectors always produce the same
+result. A trigram of "valley(rising) → transition-up(strong) → peak"
+produces the same vector whether it appears in January or July. A
+bigram of "rally-cycle then top-cycle" produces the same vector
+regardless of what happened before or after.
+
+The bundle preserves each pair independently. Cosine against any
+individual pair recovers it. The reckoner's discriminant learns:
+"when pair(exhaustion-cycle, panic-cycle) is present in the rhythm
+bundle, Violence follows." It doesn't matter WHEN that pair appeared
+in the history. It matters that it's THERE.
+
+Two different market histories that share the same cycle-to-cycle
+transitions produce similar rhythm vectors. That IS the recognition.
+The shape is the direction. The scalars carry the magnitude. The
+reckoner discriminates.
 
 ### Capacity
 
-Each bind is a rotation in hyperspace. The signal holds for roughly
-sqrt(D) binds before the compound rotation becomes quasi-random:
+Two separate Kanerva limits, both comfortable:
 
-| Dimensions | sqrt(D) | Trigram Budget | Time Coverage |
-|------------|---------|----------------|---------------|
-| 4,096 | 64 | 64 trigrams | ~2-3 days |
-| 10,000 | 100 | 100 trigrams | ~4-7 days |
-| 20,000 | 141 | 141 trigrams | ~1-2 weeks |
+**Inner (rhythm bundle):** each bigram-pair is one item. Budget =
+sqrt(D) pairs before interference.
 
-The budget scales with the architecture, not the data. More dims,
-longer memory. The trim is derived from `sqrt(dims)`.
+| Dimensions | sqrt(D) | Pair Budget | Time Coverage |
+|------------|---------|-------------|---------------|
+| 4,096 | 64 | 64 pairs | ~2-3 days |
+| 10,000 | 100 | 100 pairs | ~4-7 days |
+| 20,000 | 141 | 141 pairs | ~1-2 weeks |
 
-Typical phase durations are 10-50 candles. One day (288 candles)
-produces ~6-30 phases → ~4-28 trigrams. One week (2016 candles)
-produces ~40-200 phases → ~38-198 trigrams.
+Typical: 1 day → 4-28 pairs. 1 week → 38-198 pairs. At D=10,000,
+most weeks fit. Choppy markets may need trimming.
 
-At D=10,000: one week fits comfortably in most markets. Choppy
-markets with very short phases may need trimming.
+The budget scales with the architecture. More dims = longer memory.
+The trim is derived from `sqrt(dims)`, not hardcoded.
+
+**Outer (broker's thought bundle):** the rhythm is one vector.
+
+- Position facts: ~10-30 (lens dependent)
+- Extracted market facts: ~10-20 (after anomaly filtering)
+- Anxiety facts: 4
+- Phase rhythm: 1
+
+Total: ~25-55 items. Well within sqrt(D).
+
+**Bind operations inside trigrams and pairs cost ZERO capacity.**
+Bind rotates — it doesn't consume bundle slots. Only the final
+bundle of pairs counts against the Kanerva limit.
 
 ### Trim Strategy
 
-If the trigram count exceeds `sqrt(dims)`:
-1. Take the last `sqrt(dims)` trigrams from the right (most recent)
-2. Chain them left to right
-3. The oldest surviving trigram starts the chain
-4. The most recent is on the surface
+If the bigram-pair count exceeds `sqrt(dims)`:
+1. Take the last `sqrt(dims)` pairs from the right (most recent)
+2. Bundle them
+3. The oldest surviving pair is the earliest progression
+4. The most recent is the latest
 
-The trim is a safety bound. In practice, most weeks fit within budget.
-
-### Broker-Observer's Outer Bundle
-
-The outer bundle (the broker-observer's full thought) contains:
-- Position facts: ~10-30 facts (lens dependent)
-- Extracted market facts: ~10-20 (after anomaly filtering)
-- Anxiety facts: 4 (avg age, avg pressure, avg unrealized, active count)
-- Phase rhythm: 1 (the chained trigrams — one vector)
-
-Total: ~25-55 facts + 1 rhythm = ~26-56 items in the outer bundle.
-Well within Kanerva capacity.
+The trim is a safety bound. The budget scales with dims. Moving to
+20,000 dims extends the memory from ~100 to ~141 pairs without
+changing any code — just the dimension parameter.
 
 ## Migration
 
-### Phase Record Encoding (`vocab/exit/phase.rs`)
+### Phase Rhythm Encoding (`vocab/exit/phase.rs`)
 
-`phase_series_thought` changes:
+`phase_series_thought` replaced by `phase_rhythm`:
 - Walk the history computing deltas (prior-bundle and prior-same-phase)
-- Each record gets 4-10 facts (4 own + 0-3 prior-bundle + 0-3 prior-same)
-- Trim to `sqrt(dims)` items from the right
-- Return `ThoughtAST::Sequential(trimmed_items)`
+- Each record: bundle of 4-10 facts → encode → one vector
+- Sliding window of 3 records → trigram (bind + permute) → one vector
+- Sliding window of 2 trigrams → bigram-pair (bind) → one vector
+- Bundle all pairs → trim to `sqrt(dims)` from the right if needed
+- Return one `Vector` (not a ThoughtAST — the encoding is done here)
 
 ### Lens (`domain/lens.rs`)
 
