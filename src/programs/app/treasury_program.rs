@@ -40,8 +40,8 @@ fn drain_entries(
     verdicts: &mut Vec<(usize, TreasuryVerdict)>,
 ) {
     while let Ok(proposal) = entry_rx.try_recv() {
-        // Always issue a paper.
-        let paper_id = treasury.issue_paper(
+        // Always issue a paper. The receipt IS the answer.
+        let receipt = treasury.issue_paper(
             proposal.owner,
             &proposal.from_asset,
             &proposal.to_asset,
@@ -51,12 +51,12 @@ fn drain_entries(
         );
 
         // If real requested, attempt real issuance.
+        // The treasury decides the amount — the broker doesn't choose.
         if proposal.is_real {
             let _ = treasury.issue_real(
                 proposal.owner,
                 &proposal.from_asset,
                 &proposal.to_asset,
-                proposal.amount,
                 proposal.price,
                 candle,
                 deadline_candles,
@@ -68,7 +68,7 @@ fn drain_entries(
         verdicts.push((
             proposal.owner,
             TreasuryVerdict::Grace {
-                paper_id,
+                paper_id: receipt.position_id,
                 residue: 0.0,
             },
         ));

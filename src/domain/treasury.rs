@@ -80,6 +80,21 @@ pub struct ProposerRecord {
     pub total_violence_loss: f64,
 }
 
+/// What the treasury returns when it approves a position.
+/// The receipt IS the answer. The amount is on the receipt,
+/// decided by the treasury, not requested by the broker.
+#[derive(Debug, Clone)]
+pub struct PositionReceipt {
+    pub position_id: u64,
+    pub from_asset: String,
+    pub to_asset: String,
+    pub amount: f64,
+    pub units_acquired: f64,
+    pub entry_price: f64,
+    pub entry_candle: usize,
+    pub deadline: usize,
+}
+
 /// Broker proposes an exit. Treasury validates the arithmetic.
 #[derive(Debug, Clone)]
 pub struct ExitProposal {
@@ -134,6 +149,7 @@ impl Treasury {
 
     /// Issue a paper — always succeeds. Fixed $10,000 reference.
     /// Papers are proof of thoughts. No capital moves.
+    /// Returns a receipt with the paper details.
     pub fn issue_paper(
         &mut self,
         owner: usize,
@@ -142,10 +158,11 @@ impl Treasury {
         price: f64,
         candle: usize,
         deadline_candles: usize,
-    ) -> u64 {
+    ) -> PositionReceipt {
         let amount = 10_000.0;
         let fee = amount * self.entry_fee;
         let units = (amount - fee) / price;
+        let deadline = candle + deadline_candles;
 
         let id = self.next_paper_id;
         self.next_paper_id += 1;
@@ -159,7 +176,7 @@ impl Treasury {
             units_acquired: units,
             entry_price: price,
             entry_candle: candle,
-            deadline: candle + deadline_candles,
+            deadline,
             state: PositionState::Active,
         };
 
@@ -168,32 +185,47 @@ impl Treasury {
             .entry(owner)
             .or_default()
             .papers_submitted += 1;
-        id
+
+        PositionReceipt {
+            position_id: id,
+            from_asset: from_asset.to_string(),
+            to_asset: to_asset.to_string(),
+            amount,
+            units_acquired: units,
+            entry_price: price,
+            entry_candle: candle,
+            deadline,
+        }
     }
 
-    /// Issue a real position — requires proven record and available balance.
-    /// Returns None if gate predicate fails or insufficient balance.
+    /// Issue a real position. The broker does NOT choose the amount.
+    /// The treasury decides how much to lend based on the proposer's record.
+    /// Returns None if denied, Some(receipt) with the allocated amount.
     pub fn issue_real(
         &mut self,
         owner: usize,
         from_asset: &str,
         to_asset: &str,
-        amount: f64,
         price: f64,
         candle: usize,
         deadline_candles: usize,
-    ) -> Option<u64> {
+    ) -> Option<PositionReceipt> {
         let record = self.proposer_records.get(&owner)?;
         if !self.gate_predicate(record) {
             return None;
         }
-        let balance = self.balances.get(from_asset)?;
-        if *balance < amount {
+        let balance = *self.balances.get(from_asset)?;
+        if balance <= 0.0 {
             return None;
         }
 
+        // The treasury decides the amount. For now: fixed $50 per position.
+        // Later: proportional to record quality and available balance.
+        let amount = 50.0_f64.min(balance);
+
         let fee = amount * self.entry_fee;
         let units = (amount - fee) / price;
+        let deadline = candle + deadline_candles;
 
         let id = self.next_position_id;
         self.next_position_id += 1;
@@ -209,12 +241,34 @@ impl Treasury {
             units_acquired: units,
             entry_price: price,
             entry_candle: candle,
-            deadline: candle + deadline_candles,
+            deadline,
             state: PositionState::Active,
         };
 
         self.real_positions.insert(id, position);
-        Some(id)
+
+        Some(PositionReceipt {
+            position_id: id,
+            from_asset: from_asset.to_string(),
+            to_asset: to_asset.to_string(),
+            amount,
+            units_acquired: units,
+            entry_price: price,
+            entry_candle: candle,
+            deadline,
+        })
+    }
+
+    // ── Reader service ────────────────────────────────────────────────
+
+    /// Read a paper position. The broker queries, the treasury answers.
+    pub fn get_paper_position(&self, paper_id: u64) -> Option<&PaperPosition> {
+        self.papers.get(&paper_id)
+    }
+
+    /// Read a real position.
+    pub fn get_real_position(&self, position_id: u64) -> Option<&RealPosition> {
+        self.real_positions.get(&position_id)
     }
 
     /// Validate an exit proposal. Checks the paper exists, is Active,
@@ -437,7 +491,7 @@ mod tests {
     #[test]
     fn issue_paper_exists_and_record_updated() {
         let mut t = make_treasury();
-        let id = t.issue_paper(0, "USDC", "WBTC", 90_000.0, 100, 288);
+        let id = t.issue_paper(0, "USDC", "WBTC", 90_000.0, 100, 288).position_id;
 
         assert!(t.papers.contains_key(&id));
         let paper = &t.papers[&id];
@@ -453,7 +507,7 @@ mod tests {
     #[test]
     fn validate_exit_higher_price_returns_residue() {
         let mut t = make_treasury();
-        let id = t.issue_paper(0, "USDC", "WBTC", 90_000.0, 100, 288);
+        let id = t.issue_paper(0, "USDC", "WBTC", 90_000.0, 100, 288).position_id;
 
         // Price went up significantly — should have positive residue.
         let result = t.validate_exit(id, 100_000.0);
@@ -465,7 +519,7 @@ mod tests {
     #[test]
     fn validate_exit_lower_price_returns_none() {
         let mut t = make_treasury();
-        let id = t.issue_paper(0, "USDC", "WBTC", 90_000.0, 100, 288);
+        let id = t.issue_paper(0, "USDC", "WBTC", 90_000.0, 100, 288).position_id;
 
         // Price went down — no positive residue possible.
         let result = t.validate_exit(id, 80_000.0);
@@ -475,7 +529,7 @@ mod tests {
     #[test]
     fn check_deadline_after_expiry_returns_violence() {
         let mut t = make_treasury();
-        let id = t.issue_paper(0, "USDC", "WBTC", 90_000.0, 100, 288);
+        let id = t.issue_paper(0, "USDC", "WBTC", 90_000.0, 100, 288).position_id;
 
         // Current candle past deadline.
         let verdicts = t.check_deadlines(100 + 288);
@@ -493,7 +547,7 @@ mod tests {
     #[test]
     fn resolve_grace_updates_state_and_record() {
         let mut t = make_treasury();
-        let id = t.issue_paper(0, "USDC", "WBTC", 90_000.0, 100, 288);
+        let id = t.issue_paper(0, "USDC", "WBTC", 90_000.0, 100, 288).position_id;
 
         // Exit at a profitable price.
         let verdict = t.resolve_grace(id, 100_000.0);
@@ -567,7 +621,7 @@ mod tests {
         t.balances.insert("USDC".to_string(), 100_000.0);
 
         // No proposer record at all — denied.
-        let result = t.issue_real(0, "USDC", "WBTC", 1_000.0, 90_000.0, 100, 288);
+        let result = t.issue_real(0, "USDC", "WBTC", 90_000.0, 100, 288);
         assert!(result.is_none());
     }
 
@@ -588,7 +642,7 @@ mod tests {
             },
         );
 
-        let result = t.issue_real(0, "USDC", "WBTC", 1_000.0, 90_000.0, 100, 288);
+        let result = t.issue_real(0, "USDC", "WBTC", 90_000.0, 100, 288);
         assert!(result.is_none());
     }
 
@@ -610,29 +664,32 @@ mod tests {
         );
 
         let balance_before = t.balances["USDC"];
-        let amount = 5_000.0;
-        let result = t.issue_real(0, "USDC", "WBTC", amount, 90_000.0, 100, 288);
+        let result = t.issue_real(0, "USDC", "WBTC", 90_000.0, 100, 288);
         assert!(result.is_some());
 
-        // Balance decreased by the borrowed amount.
+        let receipt = result.unwrap();
+        // Treasury decided the amount ($50 or available balance, whichever smaller)
+        assert!(receipt.amount > 0.0, "Treasury should allocate something");
+        assert!(receipt.amount <= 50.0, "Treasury allocates max $50 per position");
+
+        // Balance decreased by the allocated amount.
         let balance_after = t.balances["USDC"];
         assert!(
-            (balance_after - (balance_before - amount)).abs() < 1e-10,
-            "Balance should decrease by the borrowed amount"
+            (balance_after - (balance_before - receipt.amount)).abs() < 1e-10,
+            "Balance should decrease by the allocated amount"
         );
 
         // Real position exists.
-        let pos_id = result.unwrap();
-        assert!(t.real_positions.contains_key(&pos_id));
-        let pos = &t.real_positions[&pos_id];
+        assert!(t.real_positions.contains_key(&receipt.position_id));
+        let pos = &t.real_positions[&receipt.position_id];
         assert_eq!(pos.state, PositionState::Active);
-        assert_eq!(pos.amount, amount);
+        assert_eq!(pos.amount, receipt.amount);
     }
 
     #[test]
     fn real_position_denied_insufficient_balance() {
         let mut t = make_treasury();
-        t.balances.insert("USDC".to_string(), 100.0);
+        t.balances.insert("USDC".to_string(), 0.0);
 
         t.proposer_records.insert(
             0,
@@ -646,7 +703,7 @@ mod tests {
         );
 
         // Trying to borrow more than available.
-        let result = t.issue_real(0, "USDC", "WBTC", 5_000.0, 90_000.0, 100, 288);
+        let result = t.issue_real(0, "USDC", "WBTC", 90_000.0, 100, 288);
         assert!(result.is_none());
     }
 
@@ -666,23 +723,23 @@ mod tests {
             },
         );
 
-        let amount = 5_000.0;
-        let pos_id = t
-            .issue_real(0, "USDC", "WBTC", amount, 90_000.0, 100, 288)
+        let balance_before = t.balances["USDC"];
+        let receipt = t
+            .issue_real(0, "USDC", "WBTC", 90_000.0, 100, 288)
             .unwrap();
 
         let balance_after_issue = t.balances["USDC"];
-        assert!((balance_after_issue - 95_000.0).abs() < 1e-10);
+        assert!((balance_after_issue - (balance_before - receipt.amount)).abs() < 1e-10);
 
         // Deadline expires.
         let verdicts = t.check_deadlines(100 + 288);
         assert_eq!(verdicts.len(), 1);
-        assert_eq!(verdicts[0], TreasuryVerdict::Violence { paper_id: pos_id });
+        assert_eq!(verdicts[0], TreasuryVerdict::Violence { paper_id: receipt.position_id });
 
         // Balance restored.
         let balance_after_violence = t.balances["USDC"];
         assert!(
-            (balance_after_violence - 100_000.0).abs() < 1e-10,
+            (balance_after_violence - balance_before).abs() < 1e-10,
             "Violence should return amount to balances"
         );
     }
