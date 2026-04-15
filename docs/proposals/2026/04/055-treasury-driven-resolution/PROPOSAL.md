@@ -357,25 +357,69 @@ deadline. The market does.
    swap to avoid compounding fees. But if the conditions are met,
    you get out. No ranking. No selectivity. The math decides.
 
-## Open — for debate
+## Settled — the fourth gate
 
-4. **The position observer at triggers.** The position observer
-   measures active papers during peaks and valleys. The anxiety
-   atoms (candles-remaining, time-pressure, unrealized-residue)
-   factor in. But is the position observer PREDICTING Exit/Hold?
-   Or is it just reporting facts that the three-condition check
-   consumes? The three-condition check is arithmetic. Does the
-   position observer add signal beyond the arithmetic? Or is
-   the arithmetic sufficient?
+4. **The position observer at triggers — the fourth gate.**
 
-5. **Propagation labels.** What does the position observer learn
-   from? Grace verdicts → "exit was right at this trigger."
-   Violence verdicts → "you should have exited earlier." How
-   does "hold was right" get labeled? The paper that held through
-   a trigger and later exited Grace — that hold was correct.
-   The paper that held through and later hit the deadline — that
-   hold was wrong. The label arrives later, not at the trigger.
-   Should there be a third label (Hold) alongside Exit and
-   Violence? The builder carried three labels (Buy, Sell, Hold)
-   in an earlier neural network attempt three years ago. Parked
-   for now — needs thinking.
+   Four gates, evaluated in order:
+
+   1. **Phase trigger** (valley/peak) — are we at an evaluation point?
+   2. **Market direction** — does the market predict against my position?
+   3. **Residue math** — can I exit profitably after fees?
+   4. **Position observer** — should I? Experience says Exit or Hold.
+
+   Gates 1-3 are arithmetic. They determine whether exit is
+   POSSIBLE. Gate 4 is learned. It determines whether exit is
+   WISE. Gate 4 can override gate 2 — the market observer says
+   Down, but the position observer says "I've seen this shape
+   before — hold, this is a dip, not the end."
+
+   Experience trumps simple conditions. The market observer sees
+   now. The position observer remembers.
+
+5. **Two labels: Exit and Hold.**
+
+   The position observer's discrete reckoner. Two labels. Learned
+   from outcomes. Applied at exit time to decide whether to
+   actually get out or not.
+
+   The labels arrive when the paper resolves — retroactively
+   applied to EVERY trigger the paper passed through:
+
+   - Paper exited Grace at trigger T → trigger T labeled **Exit**
+     (the exit was right)
+   - Paper held through trigger T, later exited Grace at trigger
+     T+3 → trigger T labeled **Hold** (holding was right)
+   - Paper held through trigger T, hit deadline → trigger T
+     labeled **Exit** (you should have left — holding was wrong)
+
+   The position observer learns from the full history of
+   decisions. Every trigger a paper passed through is a training
+   example. The label says: at THIS trigger, with THIS anxiety,
+   with THIS market state — was exiting or holding the right
+   call? The answer comes later. The reckoner accumulates.
+
+   The position observer's thought at each trigger:
+
+   ```scheme
+   (Bundle
+     ;; Anxiety atoms — the position's state
+     (Log "candles-remaining" 234)
+     (Linear "time-pressure" 0.35 1.0)
+     (Linear "unrealized-residue" 0.024 1.0)
+     (Log "paper-age" 147)
+
+     ;; Market atoms — what the market observer says
+     ;; (extracted from the chain, same as before)
+
+     ;; Phase atoms — what the structure looks like
+     ;; (from the phase labeler)
+   )
+   ```
+
+   The reckoner sees anxiety + market + structure. It predicts
+   Exit or Hold. The prediction is the fourth gate. If the first
+   three gates say "you can exit" and the fourth says Hold —
+   you hold. The position observer's experience overrides the
+   arithmetic. The arithmetic says possible. The experience says
+   not yet.
