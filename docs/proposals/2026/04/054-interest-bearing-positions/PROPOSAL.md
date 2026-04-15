@@ -421,7 +421,7 @@ The protocol:
 6. Violence: treasury records reclaim, marks the paper, debits broker
 7. The ledger is the proof. The survival rate is the gate.
 
-### The proposer's record
+### Earning favor
 
 The treasury keeps a registry. Each proposer (wallet, broker ID,
 whatever the identity is) maps to a struct. The struct contains
