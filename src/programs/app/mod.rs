@@ -4,3 +4,4 @@
 pub mod broker_program;
 pub mod position_observer_program;
 pub mod market_observer_program;
+pub mod treasury_program;

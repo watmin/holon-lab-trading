@@ -11,6 +11,7 @@ venv/
 
 # Runtime data (engrams, logs, historical price cache)
 data/*.parquet
+!data/btc_5m_raw.parquet
 data/*.db
 data/*.csv
 data/*.json
