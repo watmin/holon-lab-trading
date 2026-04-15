@@ -24,7 +24,7 @@ use enterprise::domain::ledger;
 use enterprise::domain::config;
 use enterprise::domain::market_observer::MarketObserver;
 use enterprise::domain::treasury::Treasury;
-use enterprise::domain::treasury::{ExitProposal, TreasuryVerdict};
+use enterprise::programs::app::treasury_program::{TreasuryRequest, TreasuryResponse};
 use enterprise::encoding::thought_encoder::ThoughtAST;
 use enterprise::kernel::handle_pool::HandlePool;
 use enterprise::programs::app::broker_program::broker_program;
@@ -32,7 +32,7 @@ use enterprise::programs::app::position_observer_program::{PositionLearn, Positi
 use enterprise::programs::app::position_observer_program::position_observer_program;
 use enterprise::programs::app::market_observer_program::{ObsInput, ObsLearn};
 use enterprise::programs::app::market_observer_program::market_observer_program;
-use enterprise::programs::app::treasury_program::{treasury_program, TreasuryTick, EntryProposal};
+use enterprise::programs::app::treasury_program::{treasury_program, TreasuryTick};
 use enterprise::programs::chain::MarketPositionChain;
 use enterprise::programs::stdlib::cache::{CacheHandle, cache};
 use enterprise::programs::stdlib::console::console;
@@ -681,44 +681,22 @@ fn main() {
     // Tick queue — candle loop sends price/atr each candle.
     let (treasury_tick_tx, treasury_tick_rx) = queue_bounded::<TreasuryTick>(1);
 
-    // Entry proposal mailbox: num_brokers queues. Brokers don't send yet — drop senders.
-    let mut entry_proposal_rxs = Vec::with_capacity(num_brokers);
-    {
-        let mut entry_proposal_txs: Vec<QueueSender<EntryProposal>> = Vec::with_capacity(num_brokers);
-        for _ in 0..num_brokers {
-            let (tx, rx) = queue_unbounded::<EntryProposal>();
-            entry_proposal_txs.push(tx);
-            entry_proposal_rxs.push(rx);
-        }
-        drop(entry_proposal_txs); // Brokers don't use them yet.
+    // Per-broker request-response pairs. The treasury is a service.
+    // Each broker gets a TreasuryHandle (request_tx + response_rx).
+    // The treasury gets the other ends (request_rx + response_tx).
+    let mut client_rxs: Vec<QueueReceiver<TreasuryRequest>> = Vec::with_capacity(num_brokers);
+    let mut client_txs: Vec<QueueSender<TreasuryResponse>> = Vec::with_capacity(num_brokers);
+    let mut _treasury_handles = Vec::with_capacity(num_brokers);
+    for _ in 0..num_brokers {
+        let (req_tx, req_rx) = queue_bounded::<TreasuryRequest>(1);
+        let (resp_tx, resp_rx) = queue_bounded::<TreasuryResponse>(1);
+        client_rxs.push(req_rx);
+        client_txs.push(resp_tx);
+        // Broker handles — drop for now, brokers don't query yet.
+        _treasury_handles.push((req_tx, resp_rx));
     }
-    let entry_mailbox_rx = mailbox(entry_proposal_rxs);
-
-    // Exit proposal mailbox: num_brokers queues. Brokers don't send yet — drop senders.
-    let mut exit_proposal_rxs = Vec::with_capacity(num_brokers);
-    {
-        let mut exit_proposal_txs: Vec<QueueSender<ExitProposal>> = Vec::with_capacity(num_brokers);
-        for _ in 0..num_brokers {
-            let (tx, rx) = queue_unbounded::<ExitProposal>();
-            exit_proposal_txs.push(tx);
-            exit_proposal_rxs.push(rx);
-        }
-        drop(exit_proposal_txs); // Brokers don't use them yet.
-    }
-    let exit_mailbox_rx = mailbox(exit_proposal_rxs);
-
-    // Per-broker verdict queues. Treasury gets senders, brokers get receivers (later).
-    let mut verdict_txs: Vec<QueueSender<TreasuryVerdict>> = Vec::with_capacity(num_brokers);
-    {
-        let mut _verdict_rxs: Vec<QueueReceiver<TreasuryVerdict>> = Vec::with_capacity(num_brokers);
-        for _ in 0..num_brokers {
-            let (tx, rx) = queue_unbounded::<TreasuryVerdict>();
-            verdict_txs.push(tx);
-            _verdict_rxs.push(rx);
-        }
-        // Drop verdict receivers — brokers will receive them in a future change.
-        drop(_verdict_rxs);
-    }
+    // Drop broker-side handles — brokers don't use them yet.
+    drop(_treasury_handles);
 
     // Spawn treasury thread.
     let treasury = Treasury::new(args.swap_fee, args.swap_fee);
@@ -726,9 +704,8 @@ fn main() {
     let treasury_handle = std::thread::spawn(move || {
         treasury_program(
             treasury_tick_rx,
-            entry_mailbox_rx,
-            exit_mailbox_rx,
-            verdict_txs,
+            client_rxs,
+            client_txs,
             treasury_console_handle,
             treasury_db_handle,
             treasury,
