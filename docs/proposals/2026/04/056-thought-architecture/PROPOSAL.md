@@ -126,51 +126,95 @@ Three valleys, each with negative `same-move-delta`:
 - Valley 2: `same-move-delta = -0.005` (slightly lower)
 - Valley 3: `same-move-delta = -0.012` (much lower)
 
-The Sequential bundles these with positional permutation. The resulting
-vector points in the direction on the sphere where "valley + negative
-same-delta" accumulates. The magnitude increases with the severity of
-the decline. The reckoner learns this region predicts Violence.
+These appear in trigrams: `(valley → trans-up → peak)` where the
+valley's `same-move-delta` is increasingly negative. The trigrams
+encode the shape. The chain preserves that the decline progressed
+in this order. The reckoner learns this region predicts Violence.
 
 No rule. No boolean. The geometry encodes it as a direction with
 scalar strength.
 
-## Capacity
+## Encoding: Chained Trigrams
 
-### Sequential Encoding
+### Why Not Sequential (Positional)
 
-`(sequential A B C)` encodes as:
+`(sequential A B C)` encodes as `bundle(permute(A,0), permute(B,1), permute(C,2))`.
+Position 0, 1, 2 are fixed slots. "Peak at position 3" is a different
+thought from "peak at position 7" even if the peak is identical. The
+absolute position doesn't matter — the SHAPE matters. A pattern of
+weakening rallies at the start of the history should look the same as
+weakening rallies at the end.
+
+### Why Chained Trigrams
+
+A trigram is one full cycle: pause → move → pause.
+
 ```
-bundle(permute(encode(A), 0), permute(encode(B), 1), permute(encode(C), 2))
+trigram = bind(bind(phase_A, permute(phase_B, 1)), permute(phase_C, 2))
 ```
 
-The entire sequence produces ONE vector. In the outer bundle (the
-broker-observer's full thought), the sequence occupies ONE slot.
-The outer bundle's Kanerva capacity (~100 for D=10,000) is not
-consumed by the sequence's internal items.
+Internal order is preserved — "valley → transition-up → peak" differs
+from "peak → transition-up → valley." The trigram IS the shape of one
+cycle.
 
-The capacity concern is INTERNAL to the Sequential. The permuted
-bundles interfere with each other as the count grows. The Kanerva
-limit applies here too — roughly sqrt(D) ≈ 100 items before the
-positional encoding degrades. With 10 facts per phase record, each
-record is one item in the Sequential. 100 phase records would push
-the limit.
+Trigrams are chained — each binds with the previous result:
 
-The phase history is already time-trimmed to one week (2016 candles).
-Typical phase durations are 10-50 candles. One week holds ~40-200
-phase records. This may exceed the Sequential's internal capacity.
+```
+chain = bind(bind(trigram_0, trigram_1), trigram_2)
+```
+
+The chain preserves the ORDER of cycles. The most recent trigram is on
+the surface — one unbind to peel it off. Earlier cycles are deeper.
+Natural recency bias. The reckoner doesn't decompose — it reads the
+gestalt. Different rhythms produce different vectors. Similar rhythms
+produce similar vectors.
+
+The result is one vector. One thought. One slot in the broker's
+outer bundle.
+
+### Ngram Construction
+
+From N phases, extract overlapping trigrams (windows of 3):
+
+```
+phases:   [valley, trans-up, peak, trans-down, valley, trans-up, peak]
+trigrams: [v-up-p, up-p-down, p-down-v, down-v-up, v-up-p]  (5 trigrams)
+chain:    bind(bind(bind(bind(t0, t1), t2), t3), t4)          (1 vector)
+```
+
+Each trigram is internally ordered (bind + permute). The chain is
+ordered left to right. The output is one vector at D dimensions.
+
+### Capacity
+
+Each bind is a rotation in hyperspace. The signal holds for roughly
+sqrt(D) binds before the compound rotation becomes quasi-random:
+
+| Dimensions | sqrt(D) | Trigram Budget | Time Coverage |
+|------------|---------|----------------|---------------|
+| 4,096 | 64 | 64 trigrams | ~2-3 days |
+| 10,000 | 100 | 100 trigrams | ~4-7 days |
+| 20,000 | 141 | 141 trigrams | ~1-2 weeks |
+
+The budget scales with the architecture, not the data. More dims,
+longer memory. The trim is derived from `sqrt(dims)`.
+
+Typical phase durations are 10-50 candles. One day (288 candles)
+produces ~6-30 phases → ~4-28 trigrams. One week (2016 candles)
+produces ~40-200 phases → ~38-198 trigrams.
+
+At D=10,000: one week fits comfortably in most markets. Choppy
+markets with very short phases may need trimming.
 
 ### Trim Strategy
 
-Trim from the left (oldest). Keep from the right (most recent).
-Each phase record is one unit — never split a record.
+If the trigram count exceeds `sqrt(dims)`:
+1. Take the last `sqrt(dims)` trigrams from the right (most recent)
+2. Chain them left to right
+3. The oldest surviving trigram starts the chain
+4. The most recent is on the surface
 
-The trim point: sqrt(D) items in the Sequential. For D=10,000,
-keep at most 100 phase records. For D=4,096, keep at most 64.
-The budget is `sqrt(dims)` — derived from the dimensionality,
-not hardcoded.
-
-In practice, one week of phases rarely exceeds 100 records. The
-trim is a safety bound, not a constant operation.
+The trim is a safety bound. In practice, most weeks fit within budget.
 
 ### Broker-Observer's Outer Bundle
 
@@ -178,9 +222,9 @@ The outer bundle (the broker-observer's full thought) contains:
 - Position facts: ~10-30 facts (lens dependent)
 - Extracted market facts: ~10-20 (after anomaly filtering)
 - Anxiety facts: 4 (avg age, avg pressure, avg unrealized, active count)
-- Phase sequence: 1 (the entire Sequential is one vector)
+- Phase rhythm: 1 (the chained trigrams — one vector)
 
-Total: ~25-55 facts + 1 sequence = ~26-56 items in the outer bundle.
+Total: ~25-55 facts + 1 rhythm = ~26-56 items in the outer bundle.
 Well within Kanerva capacity.
 
 ## Migration
