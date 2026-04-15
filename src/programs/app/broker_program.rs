@@ -84,65 +84,43 @@ pub fn broker_program(
 
         // 5. Check active papers — discover outcomes from treasury.
         active_paper_ids.retain(|&id| {
-            match treasury.get_paper_state(id) {
-                Some(PositionState::Active) => true,  // still alive
-                Some(PositionState::Violence) => {
-                    // Deadline hit. The broker discovers it by reading.
-                    let weight = 0.01; // stop distance placeholder
-                    let optimal = crate::types::distances::Distances::new(0.01, 0.01);
+            let state = match treasury.get_paper_state(id) {
+                Some(s) => s,
+                None => return false,
+            };
 
-                    let facts = broker.propagate(
-                        &composed,
-                        &chain.market_anomaly,
-                        &chain.position_raw,
-                        Outcome::Violence,
-                        weight,
-                        direction,
-                        &optimal,
-                        &scalar,
-                    );
-
+            let (outcome, weight) = match state {
+                PositionState::Active => return true,
+                PositionState::Violence => {
                     learn_violence += 1.0;
-                    // Market observer teaches itself now (backlog #1).
-                    // Position observer still learns from broker propagation.
-                    let _ = position_learn_tx.send(PositionLearn {
-                        position_thought: facts.position_thought,
-                        optimal: facts.optimal,
-                    });
-
-                    false  // remove from active list
+                    (Outcome::Violence, 0.01)
                 }
-                Some(PositionState::Grace { residue }) => {
-                    // Treasury resolved grace. Propagate the win.
-                    let weight = residue / 10_000.0; // normalize to fraction
-                    let optimal = crate::types::distances::Distances::new(
-                        weight.max(0.001).min(0.10),
-                        0.01,
-                    );
-
-                    let facts = broker.propagate(
-                        &composed,
-                        &chain.market_anomaly,
-                        &chain.position_raw,
-                        Outcome::Grace,
-                        weight,
-                        direction,
-                        &optimal,
-                        &scalar,
-                    );
-
+                PositionState::Grace { residue } => {
                     learn_grace += 1.0;
-                    // Market observer teaches itself now (backlog #1).
-                    // Position observer still learns from broker propagation.
-                    let _ = position_learn_tx.send(PositionLearn {
-                        position_thought: facts.position_thought,
-                        optimal: facts.optimal,
-                    });
-
-                    false  // remove from active list
+                    (Outcome::Grace, (residue / 10_000.0).max(0.001).min(0.10))
                 }
-                None => false,  // not found
-            }
+            };
+
+            // One propagation path. Outcome determines the label.
+            let optimal = crate::types::distances::Distances::new(weight, 0.01);
+            let facts = broker.propagate(
+                &composed,
+                &chain.market_anomaly,
+                &chain.position_raw,
+                outcome,
+                weight,
+                direction,
+                &optimal,
+                &scalar,
+            );
+
+            // Position observer learns from broker propagation.
+            let _ = position_learn_tx.send(PositionLearn {
+                position_thought: facts.position_thought,
+                optimal: facts.optimal,
+            });
+
+            false // resolved — remove from active list
         });
 
         // 6. DB snapshot every 100 candles
