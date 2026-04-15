@@ -421,55 +421,47 @@ The protocol:
 6. Violence: treasury records reclaim, marks the paper, debits broker
 7. The ledger is the proof. The survival rate is the gate.
 
-### Earning and losing favor
+### The proposer's record
 
-The broker's relationship with the treasury is dynamic. Trust is
-earned. Trust is lost. Trust must be re-earned.
+The treasury keeps a registry. Each proposer (wallet, broker ID,
+whatever the identity is) maps to a struct. The struct contains
+measurable data derived from the ledger. The treasury applies a
+predicate to the struct before lending real capital. The predicate
+returns: fund or deny.
 
-**Rising:** A new broker submits papers. The papers survive the
-interest. The survival rate climbs. The treasury opens the gate.
-Real capital flows. The interest rate drops — cheaper capital for
-proven winners. The broker enters the virtuous cycle.
+The struct is built from outcomes only. Papers submitted. Papers
+survived. Mean Grace residue. The treasury does not know WHY the
+proposer's papers survived. It knows THAT they survived. The
+struct is headless — it contains measurements, not strategy.
 
-**Falling:** The broker's recent papers erode. The survival rate
-drops below the gate threshold. The treasury closes the gate. No
-more real capital. The broker is DENIED — not killed, denied. The
-broker's existing real positions continue (the interest still
-ticks, the exit conditions still evaluate). But no NEW real capital.
+**No record → no real capital.** A proposer with no paper history
+cannot borrow. Period. The proposer must pay to build the record.
+On Solana: gas per paper transaction. In the trading lab:
+computation cost (zero for now, but the design carries it). The
+proposer INVESTS in proving themselves before the treasury risks
+its funds.
 
-**Rehabilitation:** The denied broker must keep submitting papers.
-Real cost — gas on-chain, computation off-chain. The papers run
-against real prices with real interest. The broker cannot game
-this — the treasury records every paper, the interest is the
-treasury's clock, the resolution is the treasury's math. The
-broker submits papers that prove: "I am better than I was."
+**Record meets threshold → gate opens.** The predicate checks
+the struct. Same threshold for every proposer. The treasury
+applies it equally. No preferences. No variable rates per
+identity. The struct either passes or it doesn't.
 
-The survival rate climbs again. The treasury re-opens the gate.
-Real capital flows again — but at a HIGHER interest rate than
-before. The broker must re-earn the cheap rate. Trust lost is
-expensive to rebuild. The broker that fell from Grace pays a
-penalty — not forever, but until the ledger shows sustained
-improvement.
+**Record degrades → gate closes.** The struct reflects the
+recent ledger. If recent papers erode, the struct degrades. The
+gate closes. The proposer must keep submitting papers — at their
+own cost — to rebuild. The treasury doesn't remember the fall.
+The trailing window forgets automatically. What remains is the
+current performance.
 
-The penalty decays. A broker that fell at candle 5000 and
-rehabilitated by candle 8000 and maintained Grace until candle
-20000 — the penalty fades. The ledger shows 12,000 candles of
-sustained Grace after the fall. The rate drops. Trust rebuilds.
-But slowly. The rate never drops as fast as it rose after the
-fall. The treasury remembers.
+What's IN the struct and what the predicate CHECKS are
+implementation details. For the trading lab: survival rate plus
+mean residue over a trailing window, with a minimum paper count.
+For Solana: could be more exotic — time-weighted, risk-adjusted,
+regime-partitioned. The design says: the struct exists, it's built
+from the ledger, and the treasury reads it before lending.
 
-This is the game within the game. Not just "can you outrun the
-interest?" but "can you SUSTAIN outrunning the interest?" One
-good streak opens the gate. One bad streak closes it. The broker
-that can sustain — that can play the game through regime changes,
-through drawdowns, through the phases where the market gives
-nothing — that broker earns the cheapest capital.
-
-The broker that can't sustain — the one-trick pony that worked
-in one regime and failed in the next — that broker cycles between
-gate open and gate closed. Paying gas for papers during denial.
-Paying higher interest after rehabilitation. The game punishes
-inconsistency. The game rewards persistence.
+Anyone who wants to risk the treasury's money must have risked
+their own to prove themselves.
 
 It hurts to lose. It pays to win.
 
