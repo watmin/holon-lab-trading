@@ -80,9 +80,16 @@ The ATR lookback window for the median: **2016 candles (one week)**.
 Matches the phase history window. Spans one full weekly cycle
 (Asia/London/NY sessions + weekend). Seykota: "the median
 window should span one full cycle of the dominant periodicity."
-Clamped: deadline bounded between a minimum (e.g. 50 candles)
-and maximum (e.g. 5000 candles) to prevent near-zero or
-infinite deadlines from ATR extremes.
+Clamped by trust:
+- **Untrusted** (new, unproven, recovering): max 1 day (288
+  candles). Prove yourself fast.
+- **Fully trusted** (strong record): up to 1 week (2016
+  candles). Room for runners to run.
+
+The proposer's record determines where in the [288, 2016]
+range they land. The ATR ratio adjusts within those bounds.
+The trust IS the deadline. The deadline IS the reward for
+playing well.
 
 The `units_acquired`: the broker borrowed `amount` of `from_asset`,
 paid the 0.35% entry fee, and acquired this many units of `to_asset`.
