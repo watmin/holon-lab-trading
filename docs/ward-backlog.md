@@ -31,12 +31,6 @@ tracks actual loss. Commit `dc11506`.
 
 ## Open
 
-### 4. Real position Violence returns amount, not market value
-**Forge**
-`treasury.rs:364` — `+= amount` (original borrowed). But the position
-may have lost value. The function doesn't receive current_price.
-Conservation violation — returns capital that may not exist.
-
 ### 5. Braided resolution logic in retain()
 **Sever**
 `broker_program.rs:95-205` — Violence and Grace arms are structural
