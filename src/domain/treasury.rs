@@ -330,7 +330,9 @@ impl Treasury {
 
     /// Check all active papers and real positions against the deadline.
     /// Any past deadline → Violence. Returns all verdicts.
-    pub fn check_deadlines(&mut self, current_candle: usize) -> Vec<TreasuryVerdict> {
+    /// current_price: the close price this candle — for computing
+    /// the real position's market value at reclaim time.
+    pub fn check_deadlines(&mut self, current_candle: usize, current_price: f64) -> Vec<TreasuryVerdict> {
         let mut verdicts = Vec::new();
 
         // Papers
@@ -365,13 +367,20 @@ impl Treasury {
             pos.state = PositionState::Violence;
             let owner = pos.owner;
             let from_asset = pos.from_asset.clone();
-            let amount = pos.amount;
 
-            // Move remaining value back to balances
-            *self.balances.entry(from_asset).or_insert(0.0) += amount;
+            // Return actual market value, not original amount.
+            // The position may have lost value. The treasury gets
+            // back what the asset is actually worth, minus exit fee.
+            let market_value = pos.units_acquired * current_price;
+            let exit_fee = market_value * self.exit_fee;
+            let recovered = market_value - exit_fee;
+            *self.balances.entry(from_asset).or_insert(0.0) += recovered.max(0.0);
+
+            let loss = pos.amount - recovered;
 
             let record = self.proposer_records.entry(owner).or_default();
             record.real_failed += 1;
+            record.real_violence_loss += loss.max(0.0);
 
             verdicts.push(TreasuryVerdict::Violence { position_id: id });
         }
@@ -548,7 +557,7 @@ mod tests {
         let id = t.issue_paper(0, "USDC", "WBTC", 90_000.0, 100, 288).position_id;
 
         // Current candle past deadline.
-        let verdicts = t.check_deadlines(100 + 288);
+        let verdicts = t.check_deadlines(100 + 288, 90_000.0);
         assert_eq!(verdicts.len(), 1);
         assert_eq!(verdicts[0], TreasuryVerdict::Violence { position_id: id });
 
@@ -748,15 +757,22 @@ mod tests {
         assert!((balance_after_issue - (balance_before - receipt.amount)).abs() < 1e-10);
 
         // Deadline expires.
-        let verdicts = t.check_deadlines(100 + 288);
+        let verdicts = t.check_deadlines(100 + 288, 90_000.0);
         assert_eq!(verdicts.len(), 1);
         assert_eq!(verdicts[0], TreasuryVerdict::Violence { position_id: receipt.position_id });
 
-        // Balance restored.
+        // Balance restored — but at market value minus exit fee, not original amount.
+        // Entry at 90,000: units = (50 - entry_fee) / 90,000. At same price:
+        // market_value = units * 90,000 = 50 - entry_fee. Minus exit fee.
+        // So recovered < original amount by entry_fee + exit_fee.
         let balance_after_violence = t.balances["USDC"];
+        let market_value = receipt.units_acquired * 90_000.0;
+        let exit_fee = market_value * t.exit_fee;
+        let expected_recovered = market_value - exit_fee;
         assert!(
-            (balance_after_violence - balance_before).abs() < 1e-10,
-            "Violence should return amount to balances"
+            (balance_after_violence - (balance_after_issue + expected_recovered)).abs() < 1e-6,
+            "Violence should return market value minus exit fee, got {} expected {}",
+            balance_after_violence, balance_after_issue + expected_recovered,
         );
     }
 

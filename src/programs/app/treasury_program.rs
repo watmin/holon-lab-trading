@@ -231,12 +231,12 @@ pub fn treasury_program(
 
     while let Ok(event) = event_rx.recv() {
         match event {
-            TreasuryEvent::Tick { candle, .. } => {
+            TreasuryEvent::Tick { candle, price, .. } => {
                 candle_count += 1;
                 current_candle = candle;
 
                 // Advance deadlines — the treasury's autonomous action.
-                let _ = treasury.check_deadlines(candle);
+                let _ = treasury.check_deadlines(candle, price);
 
                 // Diagnostics every 1000 candles.
                 if candle_count % 1000 == 0 {
