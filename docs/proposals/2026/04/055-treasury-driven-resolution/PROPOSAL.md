@@ -30,7 +30,6 @@ struct Paper {
     entry_price: f64,                 // exchange rate at entry
     entry_candle: usize,
     deadline: usize,                  // entry_candle + N
-    side: Side,                       // Buy or Sell
     resolved: bool,
     outcome: Option<Outcome>,         // Grace or Violence
 }
