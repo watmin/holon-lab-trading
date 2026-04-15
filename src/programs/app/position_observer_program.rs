@@ -106,7 +106,6 @@ fn drain_position_learn(
 pub fn position_observer_program(
     slots: Vec<PositionSlot>,
     learn_rx: MailboxReceiver<PositionLearn>,
-    trade_rx: MailboxReceiver<TradeUpdate>,
     cache: CacheHandle<ThoughtAST, Vector>,
     vm: VectorManager,
     scalar: Arc<ScalarEncoder>,
@@ -140,13 +139,6 @@ pub fn position_observer_program(
         let stop_err_sum = drain.total_stop_err;
         let ns_drain = t0.elapsed().as_nanos() as f64;
 
-        // Drain trade state updates — absorb current trade atoms.
-        // Latest wins: the most recent TradeUpdate replaces any prior.
-        let mut current_trade_atoms: Vec<ThoughtAST> = Vec::new();
-        while let Ok(update) = trade_rx.try_recv() {
-            current_trade_atoms = select_trade_atoms(&lens, update.atoms);
-        }
-
         let mut ns_slot_recv: f64 = 0.0;
         let mut ns_collect_facts: f64 = 0.0;
         let mut ns_extract_anomaly: f64 = 0.0;
@@ -179,7 +171,6 @@ pub fn position_observer_program(
             let t0 = std::time::Instant::now();
             if !base_facts_computed {
                 base_facts = position_lens_facts(&position_obs.lens, &chain.candle, &mut scales);
-                base_facts.extend(current_trade_atoms.clone());
                 base_facts_computed = true;
             }
             let mut slot_facts = base_facts.clone();

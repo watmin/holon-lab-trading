@@ -27,7 +27,7 @@ use enterprise::domain::treasury::Treasury;
 use enterprise::encoding::thought_encoder::ThoughtAST;
 use enterprise::kernel::handle_pool::HandlePool;
 use enterprise::programs::app::broker_program::broker_program;
-use enterprise::programs::app::position_observer_program::{PositionLearn, PositionSlot, TradeUpdate};
+use enterprise::programs::app::position_observer_program::{PositionLearn, PositionSlot};
 use enterprise::programs::app::position_observer_program::position_observer_program;
 use enterprise::programs::app::market_observer_program::ObsInput;
 use enterprise::programs::app::market_observer_program::market_observer_program;
@@ -194,7 +194,6 @@ fn wire_position_observers(
     position_observers: Vec<PositionObserver>,
     position_queue_rxs: Vec<Vec<enterprise::services::queue::QueueReceiver<MarketChain>>>,
     learn_mailboxes: Vec<enterprise::services::mailbox::MailboxReceiver<PositionLearn>>,
-    trade_mailboxes: Vec<enterprise::services::mailbox::MailboxReceiver<TradeUpdate>>,
     mut cache_pool: HandlePool<CacheHandle<ThoughtAST, Vector>>,
     mut console_pool: HandlePool<enterprise::programs::stdlib::console::ConsoleHandle>,
     mut db_pool: HandlePool<enterprise::services::queue::QueueSender<LogEntry>>,
@@ -225,7 +224,7 @@ fn wire_position_observers(
         }
     }
 
-    for (ei, ((position_obs, learn_rx), trade_rx)) in position_observers.into_iter().zip(learn_mailboxes).zip(trade_mailboxes).enumerate() {
+    for (ei, (position_obs, learn_rx)) in position_observers.into_iter().zip(learn_mailboxes).enumerate() {
         // Build N slots for this position observer
         let slot_rxs: Vec<enterprise::services::queue::QueueReceiver<MarketChain>> = transposed[ei]
             .iter_mut()
@@ -256,7 +255,6 @@ fn wire_position_observers(
             position_observer_program(
                 slots,
                 learn_rx,
-                trade_rx,
                 obs_cache,
                 obs_vm,
                 obs_scalar,
@@ -296,7 +294,6 @@ fn wire_brokers(
     brokers: Vec<Broker>,
     output_rxs: Vec<QueueReceiver<MarketPositionChain>>,
     position_learn_txs: Vec<Vec<QueueSender<PositionLearn>>>,
-    trade_txs: Vec<Option<QueueSender<TradeUpdate>>>,
     treasury_handles: Vec<TreasuryHandle>,
     mut cache_pool: HandlePool<CacheHandle<ThoughtAST, Vector>>,
     mut console_pool: HandlePool<enterprise::programs::stdlib::console::ConsoleHandle>,
@@ -318,15 +315,14 @@ fn wire_brokers(
         }
     }
 
-    for (slot_idx, (((broker, chain_rx), elt), (ttx, treasury))) in brokers
+    for (slot_idx, (((broker, chain_rx), elt), treasury)) in brokers
         .into_iter()
         .zip(output_rxs.into_iter())
         .zip(position_learn_flat.into_iter())
-        .zip(trade_txs.into_iter().zip(treasury_handles.into_iter()))
+        .zip(treasury_handles.into_iter())
         .enumerate()
     {
         let position_learn_tx = elt.unwrap_or_else(|| panic!("missing position learn tx for slot {}", slot_idx));
-        let trade_tx = ttx.unwrap_or_else(|| panic!("missing trade tx for slot {}", slot_idx));
         let broker_cache = cache_pool.pop();
         let broker_console = console_pool.pop();
         let broker_db = db_pool.pop();
@@ -339,7 +335,6 @@ fn wire_brokers(
             broker_program(
                 chain_rx,
                 position_learn_tx,
-                trade_tx,
                 broker_cache,
                 broker_vm,
                 broker_scalar,
@@ -570,27 +565,9 @@ fn main() {
     let position_learn_mailboxes: Vec<enterprise::services::mailbox::MailboxReceiver<PositionLearn>> =
         position_learn_rxs.into_iter().map(|rxs| mailbox(rxs)).collect();
 
-    // Trade-state queues: trade_txs[slot_idx] → trade_rxs[ei] (fan-in per position observer)
-    // Each broker sends trade updates to its position observer through a dedicated queue.
-    // Proposal 040: brokers send trade atoms, position observers receive through mailbox.
-    let mut trade_txs_flat: Vec<Option<QueueSender<TradeUpdate>>> =
-        (0..num_brokers).map(|_| None).collect();
-    let mut trade_rxs_per_position: Vec<Vec<QueueReceiver<TradeUpdate>>> = Vec::with_capacity(num_position);
-    for _ in 0..num_position {
-        trade_rxs_per_position.push(Vec::with_capacity(num_market));
-    }
-    for mi in 0..num_market {
-        for ei in 0..num_position {
-            let (tx, rx) = queue_unbounded::<TradeUpdate>();
-            let slot_idx = mi * num_position + ei;
-            trade_txs_flat[slot_idx] = Some(tx);
-            trade_rxs_per_position[ei].push(rx);
-        }
-    }
-
-    // Build trade mailbox receivers for position observers (fan-in from N brokers each)
-    let trade_mailboxes: Vec<enterprise::services::mailbox::MailboxReceiver<TradeUpdate>> =
-        trade_rxs_per_position.into_iter().map(|rxs| mailbox(rxs)).collect();
+    // Trade pipe removed — the broker owns anxiety atoms directly (054/055).
+    // The backward flow from broker to position observer was the wrong direction.
+    // The broker encodes anxiety, the broker owns gate 4.
 
     // ─── Market observers ──────────────────────────────────────────────────
     let observers = config::create_market_observers(dims, recalib_interval);
@@ -614,7 +591,6 @@ fn main() {
         position_observers,
         wired.position_queue_rxs,
         position_learn_mailboxes,
-        trade_mailboxes,
         position_cache_pool,
         position_console_pool,
         position_db_pool,
@@ -657,7 +633,6 @@ fn main() {
         brokers,
         wired_position.output_rxs,
         position_learn_txs,
-        trade_txs_flat,
         treasury_handles,
         broker_cache_pool,
         broker_console_pool,
