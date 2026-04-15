@@ -315,6 +315,31 @@ yield comes from the measurement. The measurement comes from
 the market. The market decides who earns. The treasury
 distributes.
 
+### The conservation invariant
+
+The treasury cannot create or destroy value. It can only move
+it between states. At any candle:
+
+```
+sum(deposited balances) + sum(in-trade value at current prices)
+= sum(all deposits ever) - sum(all fees paid) + sum(all residue earned)
+```
+
+Every entry: deposited shrinks, in-trade grows. Same total.
+Every Grace exit: in-trade shrinks, deposited grows by principal,
+residue splits to proposer deposit and pool. Same total.
+Every Violence reclaim: in-trade shrinks, deposited grows by
+whatever the position was worth. Same total minus the loss
+(which was the proposer's claim, not the treasury's value —
+the asset stayed in the treasury).
+Every fee: total shrinks by the fee amount. Fees are the only
+real cost. The fee goes to the venue (Jupiter, etc.), not to
+the treasury.
+
+The invariant is testable. Every candle, after all resolutions:
+assert that the equation holds. If it doesn't, there is a bug.
+The invariant IS the ward on the treasury.
+
 If denied:
 - The paper lives. The deadline ticks. The broker holds.
 
