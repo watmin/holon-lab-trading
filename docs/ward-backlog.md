@@ -29,13 +29,13 @@ of execution. Gate reads paper stats only. Commit `2ab5640`.
 market value minus exit fee. Conservation violation fixed. real_violence_loss
 tracks actual loss. Commit `dc11506`.
 
-## Open
-
-### 5. Braided resolution logic in retain()
+### 5. ~~Braided resolution logic in retain()~~ ✓
 **Sever**
-`broker_program.rs:95-205` — Violence and Grace arms are structural
-copies. Five concerns interleaved: discovery, phase weight, propagate,
-learn direction, dispatch. Extract a `resolve_outcome()` helper.
+**Fix:** Two duplicate arms collapsed into one path. Match extracts
+outcome, one propagate call, one position learn send. Unparseable
+weight expression killed — weight = 1.0. Commit `2bb2006`, `411b6c9`.
+
+## Open
 
 ### 6. Three unused broker params
 **Reap, Forge**
