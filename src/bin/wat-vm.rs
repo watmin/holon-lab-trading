@@ -23,6 +23,8 @@ use enterprise::domain::indicator_bank::IndicatorBank;
 use enterprise::domain::ledger;
 use enterprise::domain::config;
 use enterprise::domain::market_observer::MarketObserver;
+use enterprise::domain::treasury::Treasury;
+use enterprise::domain::treasury::{ExitProposal, TreasuryVerdict};
 use enterprise::encoding::thought_encoder::ThoughtAST;
 use enterprise::kernel::handle_pool::HandlePool;
 use enterprise::programs::app::broker_program::broker_program;
@@ -30,6 +32,7 @@ use enterprise::programs::app::position_observer_program::{PositionLearn, Positi
 use enterprise::programs::app::position_observer_program::position_observer_program;
 use enterprise::programs::app::market_observer_program::{ObsInput, ObsLearn};
 use enterprise::programs::app::market_observer_program::market_observer_program;
+use enterprise::programs::app::treasury_program::{treasury_program, TreasuryTick, EntryProposal};
 use enterprise::programs::chain::MarketPositionChain;
 use enterprise::programs::stdlib::cache::{CacheHandle, cache};
 use enterprise::programs::stdlib::console::console;
@@ -407,8 +410,8 @@ fn main() {
 
     let num_brokers = num_market * num_position;
 
-    // Console: streams + market + position + brokers + main
-    let num_console = parsed.len() + num_market + num_position + num_brokers + 1;
+    // Console: streams + market + position + brokers + treasury + main
+    let num_console = parsed.len() + num_market + num_position + num_brokers + 1 + 1;
     let (handles, console_driver) = console(num_console);
     let mut console_pool = HandlePool::new("console", handles);
 
@@ -421,6 +424,9 @@ fn main() {
         stream_handles.push(console_pool.pop());
     }
 
+    // Treasury console handle
+    let treasury_console_handle = console_pool.pop();
+
     // ─── Database ───────────────────────────────────────────────────────────
     std::fs::create_dir_all("runs").ok();
     let db_path = format!(
@@ -431,7 +437,7 @@ fn main() {
     // All wires before any work. The kernel creates all queues, builds the
     // mailbox, then spawns the database. +1 self-telemetry, +1 cache telemetry.
     let num_db_producers = num_market + num_position + num_brokers;
-    let num_db_total = num_db_producers + 1; // +1 cache telemetry
+    let num_db_total = num_db_producers + 1 + 1; // +1 cache telemetry, +1 treasury
     let mut db_txs = Vec::with_capacity(num_db_total);
     let mut db_rxs = Vec::with_capacity(num_db_total);
     for _ in 0..num_db_total {
@@ -443,6 +449,9 @@ fn main() {
 
     // Cache telemetry sender — the cache driver emits metrics through this
     let cache_telemetry_tx = db_txs.pop().unwrap();
+
+    // Treasury DB sender
+    let treasury_db_handle = db_txs.pop().unwrap();
 
     // Database gate: emit accumulated telemetry every 5 seconds.
     // The database writes its own telemetry directly — no pipe to itself.
@@ -668,6 +677,65 @@ fn main() {
         num_position,
     );
 
+    // ─── Treasury ───────────────────────────────────────────────────────────
+    // Tick queue — candle loop sends price/atr each candle.
+    let (treasury_tick_tx, treasury_tick_rx) = queue_bounded::<TreasuryTick>(1);
+
+    // Entry proposal mailbox: num_brokers queues. Brokers don't send yet — drop senders.
+    let mut entry_proposal_rxs = Vec::with_capacity(num_brokers);
+    {
+        let mut entry_proposal_txs: Vec<QueueSender<EntryProposal>> = Vec::with_capacity(num_brokers);
+        for _ in 0..num_brokers {
+            let (tx, rx) = queue_unbounded::<EntryProposal>();
+            entry_proposal_txs.push(tx);
+            entry_proposal_rxs.push(rx);
+        }
+        drop(entry_proposal_txs); // Brokers don't use them yet.
+    }
+    let entry_mailbox_rx = mailbox(entry_proposal_rxs);
+
+    // Exit proposal mailbox: num_brokers queues. Brokers don't send yet — drop senders.
+    let mut exit_proposal_rxs = Vec::with_capacity(num_brokers);
+    {
+        let mut exit_proposal_txs: Vec<QueueSender<ExitProposal>> = Vec::with_capacity(num_brokers);
+        for _ in 0..num_brokers {
+            let (tx, rx) = queue_unbounded::<ExitProposal>();
+            exit_proposal_txs.push(tx);
+            exit_proposal_rxs.push(rx);
+        }
+        drop(exit_proposal_txs); // Brokers don't use them yet.
+    }
+    let exit_mailbox_rx = mailbox(exit_proposal_rxs);
+
+    // Per-broker verdict queues. Treasury gets senders, brokers get receivers (later).
+    let mut verdict_txs: Vec<QueueSender<TreasuryVerdict>> = Vec::with_capacity(num_brokers);
+    {
+        let mut _verdict_rxs: Vec<QueueReceiver<TreasuryVerdict>> = Vec::with_capacity(num_brokers);
+        for _ in 0..num_brokers {
+            let (tx, rx) = queue_unbounded::<TreasuryVerdict>();
+            verdict_txs.push(tx);
+            _verdict_rxs.push(rx);
+        }
+        // Drop verdict receivers — brokers will receive them in a future change.
+        drop(_verdict_rxs);
+    }
+
+    // Spawn treasury thread.
+    let treasury = Treasury::new(args.swap_fee, args.swap_fee);
+    let base_deadline = 500;
+    let treasury_handle = std::thread::spawn(move || {
+        treasury_program(
+            treasury_tick_rx,
+            entry_mailbox_rx,
+            exit_mailbox_rx,
+            verdict_txs,
+            treasury_console_handle,
+            treasury_db_handle,
+            treasury,
+            base_deadline,
+        )
+    });
+
     // ─── Build pipelines ───────────────────────────────────────────────────
     let mut pipelines: Vec<Pipeline> = Vec::new();
     for (i, (source, target, path)) in parsed.into_iter().enumerate() {
@@ -714,6 +782,13 @@ fn main() {
                             encode_count,
                         });
                     }
+
+                    // Send tick to treasury
+                    let _ = treasury_tick_tx.send(TreasuryTick {
+                        candle: pipeline.count,
+                        price: candle.close,
+                        atr: candle.atr_ratio * candle.close,
+                    });
 
                     if pipeline.count % 100 == 0 {
                         let elapsed = run_start.elapsed().as_secs_f64();
@@ -812,6 +887,35 @@ fn main() {
             Err(_) => {
                 main_handle.err("broker thread panicked".to_string());
             }
+        }
+    }
+
+    // Treasury shutdown — drop tick sender, join thread.
+    drop(treasury_tick_tx);
+    match treasury_handle.join() {
+        Ok(treasury) => {
+            let total_papers: usize = treasury
+                .proposer_records
+                .values()
+                .map(|r| r.papers_submitted)
+                .sum();
+            let total_survived: usize = treasury
+                .proposer_records
+                .values()
+                .map(|r| r.papers_survived)
+                .sum();
+            let total_failed: usize = treasury
+                .proposer_records
+                .values()
+                .map(|r| r.papers_failed)
+                .sum();
+            main_handle.out(format!(
+                "treasury: papers={} survived={} failed={}",
+                total_papers, total_survived, total_failed,
+            ));
+        }
+        Err(_) => {
+            main_handle.err("treasury thread panicked".to_string());
         }
     }
 
