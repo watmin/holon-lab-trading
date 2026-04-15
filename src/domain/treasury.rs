@@ -269,6 +269,7 @@ impl Treasury {
         self.papers.get(&paper_id)
     }
 
+    // rune:reap(scaffolding) — called when the gate opens and brokers earn real capital
     /// Read a real position.
     pub fn get_real_position(&self, position_id: u64) -> Option<&RealPosition> {
         self.real_positions.get(&position_id)
