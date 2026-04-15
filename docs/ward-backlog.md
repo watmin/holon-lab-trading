@@ -3,29 +3,27 @@
 Five wards cast on 2026-04-15 after stripping the old paper system.
 Each finding must be agreed on before implementation. One at a time.
 
-## Critical — four wards converged
+## DONE
 
-### 1. Grace direction logic always true
-**Reap, Sever, Gaze, Forge**
-`broker_program.rs:175-186`
-Both match arms check `price > 0.0` — always true for BTC.
-`direction_correct` is always true. The else branch is dead.
-Grace always teaches the predicted direction unchanged.
-**Risk:** the market observer's Grace learning signal may be wrong.
+### 1. ~~Grace direction logic always true~~ ✓
+**Reap, Sever, Gaze, Forge** — four wards converged.
+**Fix:** Market observer teaches itself from phase labeler. Broken
+direction_correct logic removed. Market learn pipe stripped entirely.
+Broker no longer teaches market observer. Commit `9b1ed7a`, `2c14b0f`.
 
-## High — multiple wards
-
-### 2. paper_id lies for real positions
+### 2. ~~paper_id lies for real positions~~ ✓
 **Gaze, Forge**
-`treasury.rs:369` — `TreasuryVerdict::Violence { paper_id: id }` where
-`id` is a real position ID. The enum has no way to distinguish paper
-from real verdicts. The field name promises paper, delivers real.
+**Fix:** `paper_id` → `position_id` on TreasuryVerdict and
+TreasuryResponse. The field name says what it carries. Commit `59beb7d`.
 
-### 3. papers_failed incremented for real position Violence
+### 3. ~~papers_failed incremented for real position Violence~~ ✓
 **Gaze, Forge**
-`treasury.rs:367` — `record.papers_failed += 1` for a real position.
-The ProposerRecord conflates paper and real outcomes. Pollutes the
-gate predicate's survival rate.
+**Fix:** ProposerRecord split into paper stats and real stats.
+paper_submitted/survived/failed/grace_residue for proof of thoughts.
+real_submitted/survived/failed/grace_residue/violence_loss for proof
+of execution. Gate reads paper stats only. Commit `2ab5640`.
+
+## Open
 
 ### 4. Real position Violence returns amount, not market value
 **Forge**
