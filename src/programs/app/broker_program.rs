@@ -119,24 +119,16 @@ pub fn broker_program(
                 }
             };
 
-            // Each observation counts once.
-            let weight = 1.0;
-            let optimal = crate::types::distances::Distances::new(0.01, 0.01);
-            let facts = broker.propagate(
-                &chain.position_raw,
-                &chain.market_anomaly,
-                &chain.position_raw,
-                outcome,
-                weight,
-                direction,
-                &optimal,
-                &scalar,
-            );
+            // Record the outcome — counts and grace rate.
+            broker.record_outcome(outcome);
 
-            // Position observer learns from broker propagation.
+            // Position observer learns from the position facts encoded as a vector.
+            let position_bundle = ThoughtAST::Bundle(chain.position_facts.clone());
+            let position_vec = encode(&cache, &position_bundle, &vm, &scalar);
+            let optimal = crate::types::distances::Distances::new(0.01, 0.01);
             let _ = position_learn_tx.send(PositionLearn {
-                position_thought: facts.position_thought,
-                optimal: facts.optimal,
+                position_thought: position_vec,
+                optimal,
             });
 
             false // resolved — remove
@@ -166,11 +158,7 @@ pub fn broker_program(
                 grace_count: broker.grace_count,
                 violence_count: broker.violence_count,
                 paper_count: active_receipts.len(),
-                trail_experience: broker.trail_accum.count as f64,
-                stop_experience: broker.stop_accum.count as f64,
                 expected_value: broker.expected_value,
-                avg_grace_net: broker.avg_grace_net,
-                avg_violence_net: broker.avg_violence_net,
                 fact_count: anxiety_fact_count,
                 thought_ast: anxiety_edn.clone(),
             });

@@ -126,18 +126,13 @@ pub enum LogEntry {
         phase_history_len: usize,
     },
     /// Broker snapshot — emitted by broker threads every N candles.
-    /// Proposal 035: reckoner fields removed, accounting fields added.
     BrokerSnapshot {
         candle: usize,
         broker_slot_idx: usize,
         grace_count: usize,
         violence_count: usize,
         paper_count: usize,
-        trail_experience: f64,
-        stop_experience: f64,
         expected_value: f64,
-        avg_grace_net: f64,
-        avg_violence_net: f64,
         fact_count: usize,
         thought_ast: String,
     },

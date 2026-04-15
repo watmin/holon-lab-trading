@@ -7,7 +7,6 @@ use std::sync::Arc;
 use holon::kernel::vector::Vector;
 
 use crate::types::candle::Candle;
-use crate::types::distances::Distances;
 use crate::encoding::thought_encoder::ThoughtAST;
 
 /// What the market observer produces. What the position observer receives.
@@ -24,6 +23,8 @@ pub struct MarketChain {
 }
 
 /// What the position observer produces. What the broker receives.
+/// The position observer adds vocabulary as AST expressions.
+/// No encoding. No vectors. No distances. The broker encodes.
 pub struct MarketPositionChain {
     pub candle: Candle,
     pub window: Arc<Vec<Candle>>,
@@ -33,8 +34,5 @@ pub struct MarketPositionChain {
     pub market_ast: ThoughtAST,
     pub market_prediction: holon::memory::Prediction,
     pub market_edge: f64,
-    pub position_raw: Vector,
-    pub position_anomaly: Vector,
-    pub position_ast: ThoughtAST,
-    pub position_distances: Distances,
+    pub position_facts: Vec<ThoughtAST>,
 }

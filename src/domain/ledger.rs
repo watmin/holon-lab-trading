@@ -40,11 +40,7 @@ pub fn ledger_setup(conn: &Connection) {
             grace_count INTEGER,
             violence_count INTEGER,
             paper_count INTEGER,
-            trail_experience REAL,
-            stop_experience REAL,
             expected_value REAL,
-            avg_grace_net REAL,
-            avg_violence_net REAL,
             fact_count INTEGER,
             thought_ast TEXT
         );
@@ -107,15 +103,13 @@ pub fn ledger_insert(conn: &Connection, entry: &LogEntry) {
         }
         LogEntry::BrokerSnapshot {
             candle, broker_slot_idx, grace_count, violence_count, paper_count,
-            trail_experience, stop_experience, expected_value,
-            avg_grace_net, avg_violence_net, fact_count, thought_ast,
+            expected_value, fact_count, thought_ast,
         } => {
             conn.execute(
-                "INSERT INTO broker_snapshots VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO broker_snapshots VALUES (?,?,?,?,?,?,?,?)",
                 rusqlite::params![
                     candle, broker_slot_idx, grace_count, violence_count, paper_count,
-                    trail_experience, stop_experience, expected_value,
-                    avg_grace_net, avg_violence_net, fact_count, thought_ast
+                    expected_value, fact_count, thought_ast
                 ],
             )
             .unwrap();

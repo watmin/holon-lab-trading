@@ -28,7 +28,6 @@ use crate::services::mailbox::MailboxReceiver;
 use crate::services::queue::{QueueReceiver, QueueSender};
 
 use crate::programs::telemetry::emit_metric;
-use crate::to_f64;
 
 /// Trade-state update from a broker. Contains the 10 trade atoms
 /// computed from the broker's active paper. Proposal 040.
@@ -143,8 +142,8 @@ pub fn position_observer_program(
         let mut ns_collect_facts: f64 = 0.0;
         let mut ns_extract_anomaly: f64 = 0.0;
         let mut ns_extract_raw: f64 = 0.0;
-        let mut ns_encode_bundle: f64 = 0.0;
-        let mut ns_noise_strip: f64 = 0.0;
+        let ns_encode_bundle: f64 = 0.0;
+        let ns_noise_strip: f64 = 0.0;
         let mut ns_send: f64 = 0.0;
         let mut total_anomaly_facts: f64 = 0.0;
         let mut total_raw_facts: f64 = 0.0;
@@ -213,37 +212,15 @@ pub fn position_observer_program(
             }
             ns_extract_raw += t0.elapsed().as_nanos() as f64;
 
-            // Encode the combined bundle.
-            let t0 = std::time::Instant::now();
-            // Capture fact count from slot 0 for the snapshot — use slot_facts.len()
-            // directly instead of re-walking the AST with collect_facts().
-            let slot_fact_count = slot_facts.len();
-            let position_bundle = ThoughtAST::Bundle(slot_facts);
-
+            // Snapshot from slot 0.
             if slots_processed == 0.0 {
-                snapshot_fact_count = slot_fact_count;
-                // rune:temper(intentional) — being blind is being incapable. Full thought logging every candle.
-                snapshot_ast = position_bundle.to_edn();
+                snapshot_fact_count = slot_facts.len();
+                let snapshot_bundle = ThoughtAST::Bundle(slot_facts.clone());
+                snapshot_ast = snapshot_bundle.to_edn();
             }
 
-            let position_raw = encode(&cache, &position_bundle, &vm, &scalar);
-            ns_encode_bundle += t0.elapsed().as_nanos() as f64;
-
-            // Noise subspace learns, then strip noise — single to_f64 conversion.
-            let t0 = std::time::Instant::now();
-            let position_f64 = to_f64(&position_raw);
-            position_obs.noise_subspace.update(&position_f64);
-            let position_anomaly = Vector::from_f64(&position_obs.noise_subspace.anomalous_component(&position_f64));
-            ns_noise_strip += t0.elapsed().as_nanos() as f64;
-
-            // Distances from reckoner, or crutches if not experienced yet.
-            // Proposal 053 Variant A: reckoner queries on raw thought, not anomaly.
-            // The noise subspace still updates (above). The anomaly still computes
-            // for the chain downstream. The reckoner just stops seeing it.
-            let position_distances = position_obs.reckoner_distances(&position_raw)
-                .unwrap_or(position_obs.default_distances);
-
-            // Send MarketPositionChain downstream.
+            // Send MarketPositionChain downstream — facts only, no encoding.
+            // The broker encodes when it composes with anxiety.
             let t0 = std::time::Instant::now();
             let full = MarketPositionChain {
                 candle: chain.candle,
@@ -254,10 +231,7 @@ pub fn position_observer_program(
                 market_ast: chain.market_ast,
                 market_prediction: chain.prediction,
                 market_edge: chain.edge,
-                position_raw,
-                position_anomaly,
-                position_ast: position_bundle,
-                position_distances,
+                position_facts: slot_facts,
             };
             if slot.output_tx.send(full).is_err() {
                 break 'outer;

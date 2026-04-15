@@ -625,7 +625,7 @@ fn main() {
     }
 
     // ─── Brokers ───────────────────────────────────────────────────────────
-    let brokers = config::create_brokers(num_market, num_position, dims, args.swap_fee);
+    let brokers = config::create_brokers(num_market, num_position);
     let broker_console_pool = HandlePool::new("broker-console", broker_console_handles);
     let broker_db_pool = HandlePool::new("broker-db", broker_db_handles);
     let broker_cache_pool = HandlePool::new("broker-cache", broker_cache_handles);

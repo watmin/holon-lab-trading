@@ -5,10 +5,8 @@
 use crate::domain::broker::Broker;
 use crate::domain::position_observer::PositionObserver;
 use crate::domain::market_observer::MarketObserver;
-use crate::learning::scalar_accumulator::ScalarAccumulator;
 use crate::learning::window_sampler::WindowSampler;
-use crate::types::distances::Distances;
-use crate::types::enums::{PositionLens, MarketLens, ScalarEncoding};
+use crate::types::enums::{PositionLens, MarketLens};
 
 /// The eleven market lenses. Three schools, one observer per lens.
 /// Proposals 041+042: Dow (4), Pring (4), Wyckoff (3).
@@ -74,8 +72,6 @@ pub fn create_position_observers(dims: usize, recalib_interval: usize) -> Vec<Po
 pub fn create_brokers(
     num_market: usize,
     num_exit: usize,
-    dims: usize,
-    swap_fee: f64,
 ) -> Vec<Broker> {
     let mut brokers = Vec::with_capacity(num_market * num_exit);
     for mi in 0..num_market {
@@ -87,10 +83,6 @@ pub fn create_brokers(
                 vec![market_name, exit_name],
                 slot_idx,
                 num_exit,
-                ScalarAccumulator::new("trail-distance", ScalarEncoding::Log, dims),
-                ScalarAccumulator::new("stop-distance", ScalarEncoding::Log, dims),
-                Distances::new(0.0001, 0.0001),
-                swap_fee,
             ));
         }
     }
