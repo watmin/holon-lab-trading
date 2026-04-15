@@ -105,45 +105,66 @@ for paper in all_active_papers() {
 The asset stays in the treasury. The broker's claim is revoked.
 The proposer record is updated: `papers_failed += 1`.
 
-### 2. Grace evaluation (at trigger candles only)
+### 2. Grace exit (broker proposes, treasury validates)
 
-A trigger is a valley or peak from the phase labeler. At each
-trigger, the treasury evaluates all active papers whose exit
-conditions may be met.
+The broker makes the exit decision. Not the treasury. The treasury
+is headless — it does not know what a valley is, what the market
+observer thinks, or what the position observer recommends. The
+treasury knows arithmetic.
 
-For a long paper at a valley (the lows are being tested):
+The broker runs the four gates:
+1. Phase trigger (valley/peak) — the broker sees the phase
+2. Market direction — the broker reads its market observer
+3. Residue math — the broker estimates from its copy of the paper
+4. Position observer — the broker consults its exit advisor
+
+If all four gates say exit, the broker PROPOSES the exit:
 
 ```rust
-fn evaluate_grace_long(paper: &Paper, current_price: f64,
-                        market_prediction: Direction) -> Option<f64> {
-    // Condition 1: phase is valley — checked by caller
-    // Condition 2: market predicts Down (against the long)
-    if market_prediction != Direction::Down { return None; }
+// Broker → Treasury
+struct ExitProposal {
+    paper_id: u64,
+    current_price: f64,  // the broker's observed price
+}
+```
 
-    // Condition 3: residue after exit fee is positive
-    let current_value = paper.units_acquired * current_price;
+The treasury validates. It checks ITS OWN copy of the paper:
+
+```rust
+fn validate_exit(&self, proposal: &ExitProposal) -> Option<f64> {
+    let paper = self.papers.get(&proposal.paper_id)?;
+    if paper.resolved { return None; }
+
+    let current_value = paper.units_acquired * proposal.current_price;
     let exit_fee = current_value * self.exit_fee;
     let residue = current_value - paper.amount - exit_fee;
 
     if residue > 0.0 {
         Some(residue)
     } else {
-        None
+        None  // deny — the math doesn't work
     }
 }
 ```
 
-If Grace → the treasury:
-- Recovers `paper.amount` of from_asset (the principal)
-- Deducts exit fee
-- The residue stays in to_asset, credited to the broker
-- Notifies the broker: Grace, paper_id, residue amount
-- Updates proposer record: `papers_survived += 1`,
+The treasury does not know WHY the broker wants to exit. The
+treasury checks: is there positive residue after recovering
+principal and paying the exit fee? Yes → approve. No → deny.
+
+The broker could propose exits for any reason — phase, sentiment,
+wind speed, a coin flip. The treasury doesn't care. The treasury
+validates the arithmetic. The record tracks the outcome.
+
+If approved:
+- Treasury recovers `paper.amount` of from_asset (the principal)
+- Treasury deducts exit fee
+- Residue credited to broker's claim in the to_asset
+- Treasury notifies broker: Grace, paper_id, residue amount
+- Proposer record updated: `papers_survived += 1`,
   `total_grace_residue += residue`
 
-If not Grace → hold. The paper lives. The deadline ticks.
-
-For shorts: same logic at peaks, market predicts Up.
+If denied:
+- The paper lives. The deadline ticks. The broker holds.
 
 ### 3. Issue new papers
 
@@ -283,20 +304,32 @@ diverse behaviors.
 
 ```
 1. Treasury: deadline check → resolve Violence → notify brokers
-2. Treasury: is this candle a trigger? (phase labeler)
-3. If trigger:
-   a. Brokers evaluate active papers (compose anxiety + market)
-   b. Position observer predicts Exit/Hold per paper
-   c. Brokers propose Grace exits to treasury
-   d. Treasury validates: does the math work? → resolve Grace → notify
-4. During active phase:
-   a. Brokers propose new entries to treasury
-   b. Treasury issues papers (real if record passes, paper always)
-5. Brokers propagate verdicts to observers (learn signals)
+2. Brokers: receive verdicts (Violence notifications from step 1)
+3. Brokers: evaluate active papers (four gates: phase, market,
+   math, position observer). Propose exits to treasury.
+4. Treasury: validate exit proposals → resolve Grace → notify
+5. Brokers: receive Grace verdicts
+6. Brokers: during active phase, propose new entries to treasury
+7. Treasury: issue papers (real if record passes, paper always)
+8. Brokers: propagate all verdicts to observers (learn signals)
 ```
 
-Step 1 runs every candle. Steps 2-4 are conditional. Step 5
-runs whenever verdicts arrive.
+Step 1 runs every candle — the treasury checks deadlines. This
+is the ONLY thing the treasury does autonomously. Everything
+else is in response to broker proposals.
+
+Steps 3-4 are broker-driven. The broker decides when to propose
+exits. The treasury validates arithmetic. The broker could
+propose exits every candle or never. The treasury doesn't care
+when — it validates when asked.
+
+Step 6-7: the broker proposes entries. The treasury issues. The
+treasury checks the proposer record for real capital. Papers
+are always issued (that's how you build the record).
+
+The treasury is reactive except for step 1 (deadline enforcement).
+The broker is active — it thinks, evaluates, proposes. The
+treasury validates, records, notifies.
 
 ## The pipe changes
 
