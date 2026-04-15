@@ -89,7 +89,8 @@ pub struct PhaseState {
     pub generation: u64,
 }
 
-const PHASE_HISTORY_CAPACITY: usize = 20;
+/// One week of 5-minute candles. Phase history trims by time, not count.
+const PHASE_HISTORY_MAX_AGE: usize = 2016;
 
 impl PhaseState {
     pub fn new() -> Self {
@@ -108,7 +109,7 @@ impl PhaseState {
             open_close: 0.0,
             last_close: 0.0,
             count: 0,
-            phase_history: VecDeque::with_capacity(PHASE_HISTORY_CAPACITY),
+            phase_history: VecDeque::new(),
             generation: 0,
         }
     }
@@ -237,10 +238,15 @@ impl PhaseState {
             volume_avg: avg_volume,
         };
 
-        if self.phase_history.len() >= PHASE_HISTORY_CAPACITY {
-            self.phase_history.pop_front();
-        }
         self.phase_history.push_back(record);
+        // Trim by time — keep one week of phases
+        while let Some(front) = self.phase_history.front() {
+            if end_candle.saturating_sub(front.start_candle) > PHASE_HISTORY_MAX_AGE {
+                self.phase_history.pop_front();
+            } else {
+                break;
+            }
+        }
         self.generation += 1;
     }
 
