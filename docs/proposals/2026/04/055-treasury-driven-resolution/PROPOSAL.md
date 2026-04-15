@@ -337,28 +337,36 @@ moves slow. More patience.
 adjusts it to the regime. The proposer doesn't choose their
 deadline. The market does.
 
-## Questions
+## Settled
 
-1. **Base deadline.** What's the starting value? 500 candles
-   (~42 hours)? 1000? The simulation data shows average phase
-   window of 53 candles. The deadline should be long enough for
-   multiple phase windows — a runner needs time to run.
+1. **Base deadline.** Configurable. Starts at a reasonable value
+   (to be discovered through simulation). Proven winners earn
+   longer deadlines — the favor. The number will change as
+   winners self-elect and earn more confidence. The deadline is
+   not a magic number. It is the treasury's expression of trust.
 
-2. **Paper vs real divergence.** Paper papers have no real swap.
-   The treasury tracks them identically but doesn't move balances.
-   Should the deadline be the same for paper and real? Or should
-   paper deadlines be shorter (faster proof cycle)?
+2. **Paper vs real.** Identical treatment from the treasury.
+   Same deadlines. Same exit conditions. Same resolution logic.
+   Papers use a reference amount for percentage calculation
+   ($10,000 or $100 — the amount doesn't matter, only the
+   percentages). Reals use real capital. The treasury doesn't
+   distinguish in its logic — only in whether balances move.
 
-3. **The position observer at triggers.** The position observer
-   predicts Exit/Hold. But the treasury makes the final call
-   (the math must work). Should the position observer even be
-   consulted? Or is the three-condition check (trigger + market
-   direction + residue math) sufficient without a reckoner?
+3. **Multiple exits per candle.** If the exit conditions are met,
+   you exit. All of them. For optimization: flatten into a single
+   swap to avoid compounding fees. But if the conditions are met,
+   you get out. No ranking. No selectivity. The math decides.
 
-4. **Multiple exits per candle.** A broker has 50 active papers.
-   A trigger fires. 20 of them have positive residue. Does the
-   broker exit all 20? Or does the position observer rank them
-   and exit selectively?
+## Open — for debate
+
+4. **The position observer at triggers.** The position observer
+   measures active papers during peaks and valleys. The anxiety
+   atoms (candles-remaining, time-pressure, unrealized-residue)
+   factor in. But is the position observer PREDICTING Exit/Hold?
+   Or is it just reporting facts that the three-condition check
+   consumes? The three-condition check is arithmetic. Does the
+   position observer add signal beyond the arithmetic? Or is
+   the arithmetic sufficient?
 
 5. **Propagation labels.** What does the position observer learn
    from? Grace verdicts → "exit was right at this trigger."
@@ -367,3 +375,7 @@ deadline. The market does.
    a trigger and later exited Grace — that hold was correct.
    The paper that held through and later hit the deadline — that
    hold was wrong. The label arrives later, not at the trigger.
+   Should there be a third label (Hold) alongside Exit and
+   Violence? The builder carried three labels (Buy, Sell, Hold)
+   in an earlier neural network attempt three years ago. Parked
+   for now — needs thinking.
