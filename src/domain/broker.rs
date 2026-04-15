@@ -2,6 +2,8 @@
 /// one position observer. The broker owns the game — gate 4, anxiety
 /// atoms, exit/hold decisions. The treasury owns papers and capital.
 
+use holon::memory::{ReckConfig, Reckoner};
+
 use crate::types::enums::{Direction, Outcome};
 
 /// The accountability primitive. N x M brokers total.
@@ -22,6 +24,10 @@ pub struct Broker {
     pub expected_value: f64,
     /// Current active direction — the broker's stance. None = cold start.
     pub active_direction: Option<Direction>,
+    /// Gate 4 — Hold/Exit reckoner. Learns from anxiety atoms.
+    /// Label 0 = Hold (paper should live). Label 1 = Exit (get out).
+    /// Graded by Grace (Hold was right) or Violence (should have exited).
+    pub gate_reckoner: Reckoner,
 }
 
 impl Broker {
@@ -29,6 +35,8 @@ impl Broker {
         observer_names: Vec<String>,
         slot_idx: usize,
         position_count: usize,
+        dims: usize,
+        recalib_interval: usize,
     ) -> Self {
         assert!(position_count > 0, "broker position_count must be > 0");
         Self {
@@ -40,6 +48,12 @@ impl Broker {
             violence_count: 0,
             expected_value: 0.0,
             active_direction: None,
+            gate_reckoner: Reckoner::new(
+                &format!("gate-{}", slot_idx),
+                dims,
+                recalib_interval,
+                ReckConfig::Discrete(vec!["Hold".into(), "Exit".into()]),
+            ),
         }
     }
 
@@ -75,11 +89,16 @@ impl Broker {
 mod tests {
     use super::*;
 
+    const DIMS: usize = 4096;
+    const RECALIB: usize = 500;
+
     fn make_broker() -> Broker {
         Broker::new(
             vec!["momentum".into(), "volatility".into()],
             0,
             2,
+            DIMS,
+            RECALIB,
         )
     }
 
@@ -96,7 +115,7 @@ mod tests {
 
     #[test]
     fn test_market_position_idx() {
-        let broker = Broker::new(vec!["a".into(), "b".into()], 5, 3);
+        let broker = Broker::new(vec!["a".into(), "b".into()], 5, 3, DIMS, RECALIB);
         assert_eq!(broker.market_idx(), 1);  // 5 / 3
         assert_eq!(broker.position_idx(), 2); // 5 % 3
     }

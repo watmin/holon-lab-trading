@@ -64,6 +64,8 @@ pub fn create_position_observers() -> Vec<PositionObserver> {
 pub fn create_brokers(
     num_market: usize,
     num_exit: usize,
+    dims: usize,
+    recalib_interval: usize,
 ) -> Vec<Broker> {
     let mut brokers = Vec::with_capacity(num_market * num_exit);
     for mi in 0..num_market {
@@ -75,6 +77,8 @@ pub fn create_brokers(
                 vec![market_name, exit_name],
                 slot_idx,
                 num_exit,
+                dims,
+                recalib_interval,
             ));
         }
     }
