@@ -62,9 +62,13 @@
   (bind (atom "rsi-div-bull")    (linear 0.0 1.0))     ; no bullish divergence
   (bind (atom "rsi-div-bear")    (linear 0.0 1.0))     ; no bearish divergence
 
-  ;; Time — circular scalars
+  ;; Time — circular scalars: parts, and the composition.
+  ;; The noise subspace decides which level carries signal.
   (bind (atom "hour")            (circular 14.0 24.0))  ; 2pm UTC
   (bind (atom "day-of-week")     (circular 3.0 7.0))    ; Wednesday
+  (bind                                                  ; 2pm-on-Wednesday — unique direction
+    (bind (atom "hour") (circular 14.0 24.0))
+    (bind (atom "day-of-week") (circular 3.0 7.0)))
 
   ;; Price action
   (bind (atom "consecutive-up")  (linear 3.0 1.0))     ; 3 green candles in a row

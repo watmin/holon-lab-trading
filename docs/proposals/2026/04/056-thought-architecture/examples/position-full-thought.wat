@@ -15,9 +15,12 @@
   (bind (atom "aroon-down")      (linear 20.0 1.0))
   (bind (atom "fractal-dim")     (linear 1.4 1.0))
 
-  ;; Time — same as Core (2 facts)
+  ;; Time — parts and composition (3 facts)
   (bind (atom "hour")            (circular 14.0 24.0))
   (bind (atom "day-of-week")     (circular 3.0 7.0))
+  (bind
+    (bind (atom "hour") (circular 14.0 24.0))
+    (bind (atom "day-of-week") (circular 3.0 7.0)))
 
   ;; Phase current — what the labeler says RIGHT NOW (2 facts)
   (atom "phase-peak")                                    ; current label
@@ -43,5 +46,5 @@
   (bind (atom "market-raw") (bind (atom "stoch-k")      (linear 78.0 1.0)))
   (bind (atom "market-raw") (bind (atom "volume-accel") (linear 1.3 1.0))))
 
-;; Total: ~27 facts. The broker-observer adds anxiety (4) + sequence (1).
-;; Outer bundle: ~32 items.
+;; Total: ~28 facts. The broker-observer adds anxiety (4) + rhythm (1).
+;; Outer bundle: ~33 items.

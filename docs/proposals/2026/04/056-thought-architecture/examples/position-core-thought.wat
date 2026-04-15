@@ -18,9 +18,12 @@
   (bind (atom "aroon-down")      (linear 20.0 1.0))    ; recent low was distant
   (bind (atom "fractal-dim")     (linear 1.4 1.0))     ; moderate complexity
 
-  ;; Time — circular scalars
+  ;; Time — parts and composition
   (bind (atom "hour")            (circular 14.0 24.0))
   (bind (atom "day-of-week")     (circular 3.0 7.0))
+  (bind
+    (bind (atom "hour") (circular 14.0 24.0))
+    (bind (atom "day-of-week") (circular 3.0 7.0)))
 
   ;; ── Extracted market facts (anomaly pass) ──────────────────────
   ;; These are the market observer's facts that registered above
@@ -45,6 +48,6 @@
   (bind (atom "market-raw") (bind (atom "stoch-k")      (linear 78.0 1.0)))
   (bind (atom "market-raw") (bind (atom "volume-accel") (linear 1.3 1.0))))
 
-;; Total: ~22 facts. Well within Kanerva capacity.
-;; The broker-observer will add anxiety (4) + sequence (1 vector).
-;; Outer bundle: ~27 items.
+;; Total: ~23 facts. Well within Kanerva capacity.
+;; The broker-observer will add anxiety (4) + rhythm (1 vector).
+;; Outer bundle: ~28 items.

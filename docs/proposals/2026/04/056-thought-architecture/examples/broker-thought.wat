@@ -20,9 +20,12 @@
   (bind (atom "aroon-down")      (linear 20.0 1.0))
   (bind (atom "fractal-dim")     (linear 1.4 1.0))
 
-  ;; Time (2)
+  ;; Time — parts and composition (3)
   (bind (atom "hour")            (circular 14.0 24.0))
   (bind (atom "day-of-week")     (circular 3.0 7.0))
+  (bind
+    (bind (atom "hour") (circular 14.0 24.0))
+    (bind (atom "day-of-week") (circular 3.0 7.0)))
 
   ;; Phase current (2)
   (atom "phase-peak")
@@ -66,7 +69,7 @@
   ;; (rhythm-vector)  ;; one slot in this bundle
   )
 
-;; Outer bundle: ~30 position + 4 anxiety + 1 rhythm = ~35 items.
+;; Outer bundle: ~31 position + 4 anxiety + 1 rhythm = ~36 items.
 ;; Kanerva capacity for D=10,000 is ~100. Plenty of headroom.
 ;;
 ;; The rhythm's INTERNAL capacity (bigram-pairs in the rhythm bundle)
