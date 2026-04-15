@@ -248,12 +248,12 @@ pub fn treasury_program(
                     let total_submitted: usize = treasury
                         .proposer_records
                         .values()
-                        .map(|r| r.papers_submitted)
+                        .map(|r| r.paper_submitted)
                         .sum();
                     let total_survived: usize = treasury
                         .proposer_records
                         .values()
-                        .map(|r| r.papers_survived)
+                        .map(|r| r.paper_survived)
                         .sum();
                     console.out(format!(
                         "treasury: candle={} active={} submitted={} survived={}",

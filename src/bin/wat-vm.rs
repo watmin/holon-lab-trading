@@ -841,17 +841,17 @@ fn main() {
             let total_papers: usize = treasury
                 .proposer_records
                 .values()
-                .map(|r| r.papers_submitted)
+                .map(|r| r.paper_submitted)
                 .sum();
             let total_survived: usize = treasury
                 .proposer_records
                 .values()
-                .map(|r| r.papers_survived)
+                .map(|r| r.paper_survived)
                 .sum();
             let total_failed: usize = treasury
                 .proposer_records
                 .values()
-                .map(|r| r.papers_failed)
+                .map(|r| r.paper_failed)
                 .sum();
             main_handle.out(format!(
                 "treasury: papers={} survived={} failed={}",

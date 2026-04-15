@@ -69,15 +69,22 @@ pub struct RealPosition {
     pub state: PositionState,
 }
 
-/// The proposer's track record. The gate reads this to decide trust.
-/// Expectancy derivable at query time, not stored.
+/// The proposer's track record. The gate reads paper stats to decide trust.
+/// Real stats measure whether the trust was deserved.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ProposerRecord {
-    pub papers_submitted: usize,
-    pub papers_survived: usize,
-    pub papers_failed: usize,
-    pub total_grace_residue: f64,
-    pub total_violence_loss: f64,
+    // Paper track record — proof of thoughts
+    pub paper_submitted: usize,
+    pub paper_survived: usize,
+    pub paper_failed: usize,
+    pub paper_grace_residue: f64,
+
+    // Real track record — proof of execution
+    pub real_submitted: usize,
+    pub real_survived: usize,
+    pub real_failed: usize,
+    pub real_grace_residue: f64,
+    pub real_violence_loss: f64,
 }
 
 /// What the treasury returns when it approves a position.
@@ -185,7 +192,7 @@ impl Treasury {
         self.proposer_records
             .entry(owner)
             .or_default()
-            .papers_submitted += 1;
+            .paper_submitted += 1;
 
         PositionReceipt {
             position_id: id,
@@ -307,8 +314,8 @@ impl Treasury {
         let owner = paper.owner;
 
         let record = self.proposer_records.entry(owner).or_default();
-        record.papers_survived += 1;
-        record.total_grace_residue += residue;
+        record.paper_survived += 1;
+        record.paper_grace_residue += residue;
 
         // Check if there's a corresponding real position and handle balances.
         // Real positions are separate — find by owner and matching state.
@@ -340,7 +347,7 @@ impl Treasury {
             let owner = paper.owner;
 
             let record = self.proposer_records.entry(owner).or_default();
-            record.papers_failed += 1;
+            record.paper_failed += 1;
 
             verdicts.push(TreasuryVerdict::Violence { position_id: id });
         }
@@ -364,7 +371,7 @@ impl Treasury {
             *self.balances.entry(from_asset).or_insert(0.0) += amount;
 
             let record = self.proposer_records.entry(owner).or_default();
-            record.papers_failed += 1;
+            record.real_failed += 1;
 
             verdicts.push(TreasuryVerdict::Violence { position_id: id });
         }
@@ -373,15 +380,17 @@ impl Treasury {
     }
 
     /// Gate predicate: minimum 50 papers submitted AND survival rate > 0.5.
+    /// Gate predicate: reads PAPER stats only. Paper is proof of thoughts.
+    /// Real stats track what happens after the gate opens.
     pub fn gate_predicate(&self, record: &ProposerRecord) -> bool {
-        if record.papers_submitted < 50 {
+        if record.paper_submitted < 50 {
             return false;
         }
-        let resolved = record.papers_survived + record.papers_failed;
+        let resolved = record.paper_survived + record.paper_failed;
         if resolved == 0 {
             return false;
         }
-        let survival_rate = record.papers_survived as f64 / resolved as f64;
+        let survival_rate = record.paper_survived as f64 / resolved as f64;
         survival_rate > 0.5
     }
 
@@ -398,11 +407,15 @@ mod tests {
     #[test]
     fn proposer_record_default_is_all_zeros() {
         let record = ProposerRecord::default();
-        assert_eq!(record.papers_submitted, 0);
-        assert_eq!(record.papers_survived, 0);
-        assert_eq!(record.papers_failed, 0);
-        assert_eq!(record.total_grace_residue, 0.0);
-        assert_eq!(record.total_violence_loss, 0.0);
+        assert_eq!(record.paper_submitted, 0);
+        assert_eq!(record.paper_survived, 0);
+        assert_eq!(record.paper_failed, 0);
+        assert_eq!(record.paper_grace_residue, 0.0);
+        assert_eq!(record.real_submitted, 0);
+        assert_eq!(record.real_survived, 0);
+        assert_eq!(record.real_failed, 0);
+        assert_eq!(record.real_grace_residue, 0.0);
+        assert_eq!(record.real_violence_loss, 0.0);
     }
 
     #[test]
@@ -475,7 +488,7 @@ mod tests {
             .proposer_records
             .entry(0)
             .or_default()
-            .papers_submitted += 1;
+            .paper_submitted += 1;
 
         // Balance unchanged — papers don't move capital.
         let balance_after = treasury.balances["USDC"];
@@ -504,7 +517,7 @@ mod tests {
         assert_eq!(paper.deadline, 100 + 288);
 
         let record = t.get_record(0).unwrap();
-        assert_eq!(record.papers_submitted, 1);
+        assert_eq!(record.paper_submitted, 1);
     }
 
     #[test]
@@ -544,7 +557,7 @@ mod tests {
 
         // Record updated.
         let record = t.get_record(0).unwrap();
-        assert_eq!(record.papers_failed, 1);
+        assert_eq!(record.paper_failed, 1);
     }
 
     #[test]
@@ -572,19 +585,19 @@ mod tests {
 
         // Record updated.
         let record = t.get_record(0).unwrap();
-        assert_eq!(record.papers_survived, 1);
-        assert!(record.total_grace_residue > 0.0);
+        assert_eq!(record.paper_survived, 1);
+        assert!(record.paper_grace_residue > 0.0);
     }
 
     #[test]
     fn gate_predicate_new_proposer_denied() {
         let t = make_treasury();
         let record = ProposerRecord {
-            papers_submitted: 10,
-            papers_survived: 8,
-            papers_failed: 2,
-            total_grace_residue: 100.0,
-            total_violence_loss: 0.0,
+            paper_submitted: 10,
+            paper_survived: 8,
+            paper_failed: 2,
+            paper_grace_residue: 100.0,
+            ..Default::default()
         };
         // Less than 50 papers — denied.
         assert!(!t.gate_predicate(&record));
@@ -594,11 +607,11 @@ mod tests {
     fn gate_predicate_proven_proposer_approved() {
         let t = make_treasury();
         let record = ProposerRecord {
-            papers_submitted: 100,
-            papers_survived: 60,
-            papers_failed: 40,
-            total_grace_residue: 500.0,
-            total_violence_loss: 200.0,
+            paper_submitted: 100,
+            paper_survived: 60,
+            paper_failed: 40,
+            paper_grace_residue: 500.0,
+            ..Default::default()
         };
         // 100 papers, 60% survival — approved.
         assert!(t.gate_predicate(&record));
@@ -608,11 +621,11 @@ mod tests {
     fn gate_predicate_low_survival_denied() {
         let t = make_treasury();
         let record = ProposerRecord {
-            papers_submitted: 100,
-            papers_survived: 30,
-            papers_failed: 70,
-            total_grace_residue: 100.0,
-            total_violence_loss: 500.0,
+            paper_submitted: 100,
+            paper_survived: 30,
+            paper_failed: 70,
+            paper_grace_residue: 100.0,
+            ..Default::default()
         };
         // 100 papers but only 30% survival — denied.
         assert!(!t.gate_predicate(&record));
@@ -637,11 +650,11 @@ mod tests {
         t.proposer_records.insert(
             0,
             ProposerRecord {
-                papers_submitted: 10,
-                papers_survived: 8,
-                papers_failed: 2,
-                total_grace_residue: 50.0,
-                total_violence_loss: 0.0,
+                paper_submitted: 10,
+                paper_survived: 8,
+                paper_failed: 2,
+                paper_grace_residue: 50.0,
+                ..Default::default()
             },
         );
 
@@ -658,11 +671,11 @@ mod tests {
         t.proposer_records.insert(
             0,
             ProposerRecord {
-                papers_submitted: 100,
-                papers_survived: 60,
-                papers_failed: 40,
-                total_grace_residue: 500.0,
-                total_violence_loss: 200.0,
+                paper_submitted: 100,
+                paper_survived: 60,
+                paper_failed: 40,
+                paper_grace_residue: 500.0,
+                ..Default::default()
             },
         );
 
@@ -697,11 +710,11 @@ mod tests {
         t.proposer_records.insert(
             0,
             ProposerRecord {
-                papers_submitted: 100,
-                papers_survived: 60,
-                papers_failed: 40,
-                total_grace_residue: 500.0,
-                total_violence_loss: 200.0,
+                paper_submitted: 100,
+                paper_survived: 60,
+                paper_failed: 40,
+                paper_grace_residue: 500.0,
+                ..Default::default()
             },
         );
 
@@ -718,11 +731,11 @@ mod tests {
         t.proposer_records.insert(
             0,
             ProposerRecord {
-                papers_submitted: 100,
-                papers_survived: 60,
-                papers_failed: 40,
-                total_grace_residue: 500.0,
-                total_violence_loss: 200.0,
+                paper_submitted: 100,
+                paper_survived: 60,
+                paper_failed: 40,
+                paper_grace_residue: 500.0,
+                ..Default::default()
             },
         );
 
