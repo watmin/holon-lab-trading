@@ -35,15 +35,24 @@ fn direction_from_prediction(pred: &holon::memory::Prediction) -> Direction {
     }
 }
 
-/// Build the broker's thought AST: regime observer facts + portfolio anxiety.
+/// Build the broker's thought AST: market rhythms + regime rhythms + anxiety + time.
 /// Returns the AST so it can be encoded AND logged without recomputing.
 fn broker_thought_ast(
+    market_ast: &ThoughtAST,
     regime_facts: &[ThoughtAST],
     active_receipts: &[PositionReceipt],
     current_candle: usize,
     current_price: f64,
+    candle_hour: f64,
+    candle_day: f64,
 ) -> ThoughtAST {
-    let mut facts: Vec<ThoughtAST> = regime_facts.to_vec();
+    let mut facts: Vec<ThoughtAST> = Vec::new();
+
+    // Market rhythms — the market observer's full thought
+    facts.push(market_ast.clone());
+
+    // Regime rhythms — each one an indicator rhythm AST
+    facts.extend(regime_facts.iter().cloned());
 
     let n = active_receipts.len() as f64;
     if !active_receipts.is_empty() {
@@ -81,6 +90,16 @@ fn broker_thought_ast(
             Box::new(ThoughtAST::Log { value: n }),
         ));
     }
+
+    // Time — top-level facts, not rhythms
+    facts.push(ThoughtAST::Bind(
+        Box::new(ThoughtAST::Atom("hour".into())),
+        Box::new(ThoughtAST::Circular { value: candle_hour, period: 24.0 }),
+    ));
+    facts.push(ThoughtAST::Bind(
+        Box::new(ThoughtAST::Atom("day-of-week".into())),
+        Box::new(ThoughtAST::Circular { value: candle_day, period: 7.0 }),
+    ));
 
     ThoughtAST::Bundle(facts)
 }
@@ -131,7 +150,15 @@ pub fn broker_program(
 
         // 3. Gate 4 — one question: do I need to get out right now?
         let t0 = std::time::Instant::now();
-        let thought_ast = broker_thought_ast(&chain.regime_facts, &active_receipts, candle_count, price);
+        let thought_ast = broker_thought_ast(
+            &chain.market_ast,
+            &chain.regime_facts,
+            &active_receipts,
+            candle_count,
+            price,
+            chain.candle.hour,
+            chain.candle.day_of_week,
+        );
         let broker_thought = encode(&cache, &thought_ast, &vm, &scalar);
         let gate_pred = broker.gate_reckoner.predict(&broker_thought);
         let wants_exit = gate_pred.direction.map_or(false, |d| d.index() == 1)

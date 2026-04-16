@@ -25,6 +25,7 @@ use enterprise::domain::config;
 use enterprise::domain::market_observer::MarketObserver;
 use enterprise::domain::treasury::Treasury;
 use enterprise::encoding::thought_encoder::ThoughtAST;
+use enterprise::types::candle::Candle;
 use enterprise::kernel::handle_pool::HandlePool;
 use enterprise::programs::app::broker_program::broker_program;
 use enterprise::programs::app::regime_observer_program::RegimeSlot;
@@ -85,6 +86,9 @@ struct Pipeline {
     stream: CandleStream,
     bank: IndicatorBank,
     count: usize,
+    /// Candle window — grows up to max_window_size, then the oldest falls off.
+    candle_window: Vec<Candle>,
+    max_window_size: usize,
 }
 
 // ─── Wiring ────────────────────────────────────────────────────────────────
@@ -620,12 +624,17 @@ fn main() {
             "{}/{} stream opened: {} candles available",
             source, target, total
         ));
+        // max window: sqrt(dims)+3 = 103 candles at D=10,000.
+        // The rhythm trim caps at this — larger windows waste memory.
+        let max_window = ((dims as f64).sqrt() as usize) + 3;
         pipelines.push(Pipeline {
             source,
             target,
             stream,
             bank: IndicatorBank::new(),
             count: 0,
+            candle_window: Vec::with_capacity(max_window),
+            max_window_size: max_window,
         });
     }
 
@@ -647,8 +656,15 @@ fn main() {
                     pipeline.count += 1;
                     encode_count += 1;
 
+                    // Grow the candle window, trim to max.
+                    pipeline.candle_window.push(candle.clone());
+                    if pipeline.candle_window.len() > pipeline.max_window_size {
+                        let excess = pipeline.candle_window.len() - pipeline.max_window_size;
+                        pipeline.candle_window.drain(..excess);
+                    }
+                    let window: Arc<Vec<Candle>> = Arc::new(pipeline.candle_window.clone());
+
                     // Send candle to each observer
-                    let window = Arc::new(vec![candle.clone()]);
                     for tx in &wired.candle_txs {
                         let _ = tx.send(ObsInput {
                             candle: candle.clone(),
