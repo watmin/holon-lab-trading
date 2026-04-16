@@ -189,7 +189,15 @@ pub fn broker_program(
             chain.candle.day_of_week,
         );
         let broker_thought = encode(&cache, &thought_ast, &vm, &scalar);
-        let gate_pred = broker.gate_reckoner.predict(&broker_thought);
+
+        // Noise subspace: train on the composed thought, extract the anomaly.
+        let thought_f64 = crate::to_f64(&broker_thought);
+        broker.noise_subspace.update(&thought_f64);
+        let anomaly_f64 = broker.noise_subspace.anomalous_component(&thought_f64);
+        let anomaly = holon::kernel::vector::Vector::from_f64(&anomaly_f64);
+
+        // Gate 4 predicts from the anomaly — what's unusual about this moment.
+        let gate_pred = broker.gate_reckoner.predict(&anomaly);
         let wants_exit = gate_pred.direction.map_or(false, |d| d.index() == 1)
             && broker.gate_reckoner.experience() > 0.0;
         let ns_gate = t0.elapsed().as_nanos() as f64;
@@ -235,7 +243,7 @@ pub fn broker_program(
                 Outcome::Grace => hold_label,
                 Outcome::Violence => exit_label,
             };
-            broker.gate_reckoner.observe(&broker_thought, label, 1.0);
+            broker.gate_reckoner.observe(&anomaly, label, 1.0);
 
             // Feed the curve.
             let predicted_hold = gate_pred.direction.map_or(true, |d| d.index() == 0);

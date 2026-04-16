@@ -2,7 +2,7 @@
 /// one regime observer. The broker owns the game — gate 4, anxiety
 /// atoms, exit/hold decisions. The treasury owns papers and capital.
 
-use holon::memory::{ReckConfig, Reckoner};
+use holon::memory::{OnlineSubspace, ReckConfig, Reckoner};
 
 use crate::types::enums::{Direction, Outcome};
 
@@ -24,7 +24,11 @@ pub struct Broker {
     pub expected_value: f64,
     /// Current active direction — the broker's stance. None = cold start.
     pub active_direction: Option<Direction>,
-    /// Gate 4 — Hold/Exit reckoner. Learns from anxiety atoms.
+    /// Noise subspace — learns normal composed thoughts. The anomaly is
+    /// what the subspace can't explain. The gate reckoner predicts from
+    /// the anomaly, not the raw thought. Proposal 056.
+    pub noise_subspace: OnlineSubspace,
+    /// Gate 4 — Hold/Exit reckoner. Learns from the anomaly.
     /// Label 0 = Hold (paper should live). Label 1 = Exit (get out).
     /// Graded by Grace (Hold was right) or Violence (should have exited).
     pub gate_reckoner: Reckoner,
@@ -48,6 +52,7 @@ impl Broker {
             violence_count: 0,
             expected_value: 0.0,
             active_direction: None,
+            noise_subspace: OnlineSubspace::new(dims, 32),
             gate_reckoner: Reckoner::new(
                 &format!("gate-{}", slot_idx),
                 dims,
