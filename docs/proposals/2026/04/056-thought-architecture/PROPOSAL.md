@@ -580,6 +580,80 @@ domain struct stays `Broker`. The file stays `broker_program.rs`.
 The doc comment, the console diagnostics, and the telemetry namespace
 change to `broker-observer`.
 
+## Scalar Encoding: Thermometer
+
+The rotation-based scalar encoding (`ScalarMode::Linear`) fails for
+indicator rhythms. Small value differences produce tiny rotation angles
+that bipolar thresholding destroys. `+0.07` and `-0.07` encode to
+IDENTICAL vectors at `scale=1.0`. The sign — the direction of change —
+is invisible.
+
+**Thermometer encoding** fills dimensions proportionally to the value's
+position in a range. Value in [min, max] → first `frac * D` dimensions
+= +1, rest = -1. The cosine between two thermometer vectors is exact:
+
+```
+cosine(a, b) = 1.0 - 2.0 * |a - b| / (max - min)
+```
+
+Linear gradient. No rotation. No thresholding loss. Sign-preserving
+for symmetric ranges.
+
+Added to holon-rs as `ScalarMode::Thermometer { min, max }`. Third
+scalar mode alongside `Linear` (rotation) and `Circular` (wrapping).
+
+**Bounds come from the indicator's nature:**
+- RSI: `Thermometer { min: 0.0, max: 100.0 }` — Wilder's definition
+- Bollinger position: `Thermometer { min: 0.0, max: 1.0 }`
+- ATR ratio: `Thermometer { min: 0.0, max: 0.05 }`
+- Deltas: `Thermometer { min: -range, max: range }` — symmetric, from ScaleTracker
+
+No magic numbers. The math defines the bounds. The ScaleTracker
+learns them for deltas.
+
+## Proof
+
+### The Problem (measured)
+
+Raw rhythm cosine between uptrend and downtrend windows: **0.96**.
+Nearly identical. The shared structure (same atoms, same encoding
+operations) dominates. Without the noise subspace, rhythm encoding
+alone cannot separate market regimes.
+
+### The Solution (measured)
+
+Train an `OnlineSubspace(D=10000, k=32)` on 200 uptrend rhythm
+windows (4 indicators, 50 candles each). Test against unseen
+uptrends, downtrends, and choppy markets.
+
+```
+Residual separation:
+  uptrend (familiar):   6.29
+  downtrend (novel):    21.94   — 3.49x higher
+  chop (novel):         39.57   — 6.29x higher
+
+Anomaly cosine:
+  raw rhythm:   uptrend vs downtrend = 0.9643
+  after strip:  uptrend vs downtrend = 0.1223
+```
+
+The noise subspace learned what uptrend rhythms look like. It stripped
+the shared background (0.96 → 0.12). What survived is the deviation —
+the signal that separates regimes. Downtrend residual is 3.5x higher
+than uptrend. Chop is 6.3x higher.
+
+Four indicators. Fifty candles. One subspace. The full proposal calls
+for ~15 market + ~10 regime + ~5 portfolio indicators. More dimensions
+of variation = more for the subspace to learn from.
+
+### Test files
+
+- `tests/prove_rhythm_with_subspace.rs` — regime separation proof
+- `tests/prove_indicator_rhythm.rs` — encoding property tests
+- `tests/debug_rhythm.rs` — layer-by-layer introspection
+- `tests/debug_thermometer.rs` — thermometer gradient verification
+- `tests/debug_scalar.rs` — Linear encoding failure diagnosis
+
 ## Examples
 
 Full worked examples:
