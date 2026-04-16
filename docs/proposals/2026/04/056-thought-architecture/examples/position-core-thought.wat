@@ -11,26 +11,25 @@
 (define (position-core-thought window market-rhythms dims)
   (bundle
     ;; ── Market rhythms (passed through from market observer) ─────
-    ;; These are pre-computed rhythm vectors. One per market indicator.
-    ;; The position observer receives them, doesn't rebuild them.
+    ;; Pre-computed rhythm vectors. One per market indicator.
     ;; Anomaly filtering selects which rhythms pass through.
-    market-rhythms  ;; ~10-15 rhythm vectors
+    market-rhythms
 
     ;; ── Regime streams — the character of the market over time ───
-    (indicator-rhythm window "kama-er"        (lambda (c) c.kama-er)        dims)
-    (indicator-rhythm window "choppiness"     (lambda (c) c.choppiness)     dims)
-    (indicator-rhythm window "dfa-alpha"      (lambda (c) c.dfa-alpha)      dims)
-    (indicator-rhythm window "variance-ratio" (lambda (c) c.variance-ratio) dims)
-    (indicator-rhythm window "entropy-rate"   (lambda (c) c.entropy-rate)   dims)
-    (indicator-rhythm window "fractal-dim"    (lambda (c) c.fractal-dim)    dims)
+    (indicator-rhythm window "kama-er"        (lambda (c) (:kama-er c))        dims)
+    (indicator-rhythm window "choppiness"     (lambda (c) (:choppiness c))     dims)
+    (indicator-rhythm window "dfa-alpha"      (lambda (c) (:dfa-alpha c))      dims)
+    (indicator-rhythm window "variance-ratio" (lambda (c) (:variance-ratio c)) dims)
+    (indicator-rhythm window "entropy-rate"   (lambda (c) (:entropy-rate c))   dims)
+    (indicator-rhythm window "fractal-dim"    (lambda (c) (:fractal-dim c))    dims)
 
     ;; Directional regime — who's been winning, and how is that shifting?
-    (indicator-rhythm window "aroon-up"       (lambda (c) c.aroon-up)       dims)
-    (indicator-rhythm window "aroon-down"     (lambda (c) c.aroon-down)     dims)
+    (indicator-rhythm window "aroon-up"       (lambda (c) (:aroon-up c))       dims)
+    (indicator-rhythm window "aroon-down"     (lambda (c) (:aroon-down c))     dims)
 
     ;; Time — parts and composition
-    (indicator-rhythm window "hour"           (lambda (c) c.hour)           dims)
-    (indicator-rhythm window "day-of-week"    (lambda (c) c.day-of-week)    dims)))
+    (indicator-rhythm window "hour"           (lambda (c) (:hour c))           dims)
+    (indicator-rhythm window "day-of-week"    (lambda (c) (:day-of-week c))    dims)))
 
 ;; 10 regime rhythm vectors + ~10-15 market rhythms = ~20-25 items.
 ;; Budget at D=10,000: 100. Comfortable.

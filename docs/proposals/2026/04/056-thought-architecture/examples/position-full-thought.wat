@@ -6,33 +6,29 @@
 (define (position-full-thought window market-rhythms dims)
   (bundle
     ;; ── Market rhythms (passed through) ─────────────────────────
-    market-rhythms  ;; ~10-15 rhythm vectors
+    market-rhythms
 
     ;; ── Same 10 regime + time rhythms as Core ───────────────────
-    (indicator-rhythm window "kama-er"        (lambda (c) c.kama-er)        dims)
-    (indicator-rhythm window "choppiness"     (lambda (c) c.choppiness)     dims)
-    (indicator-rhythm window "dfa-alpha"      (lambda (c) c.dfa-alpha)      dims)
-    (indicator-rhythm window "variance-ratio" (lambda (c) c.variance-ratio) dims)
-    (indicator-rhythm window "entropy-rate"   (lambda (c) c.entropy-rate)   dims)
-    (indicator-rhythm window "fractal-dim"    (lambda (c) c.fractal-dim)    dims)
-    (indicator-rhythm window "aroon-up"       (lambda (c) c.aroon-up)       dims)
-    (indicator-rhythm window "aroon-down"     (lambda (c) c.aroon-down)     dims)
-    (indicator-rhythm window "hour"           (lambda (c) c.hour)           dims)
-    (indicator-rhythm window "day-of-week"    (lambda (c) c.day-of-week)    dims)
+    (indicator-rhythm window "kama-er"        (lambda (c) (:kama-er c))        dims)
+    (indicator-rhythm window "choppiness"     (lambda (c) (:choppiness c))     dims)
+    (indicator-rhythm window "dfa-alpha"      (lambda (c) (:dfa-alpha c))      dims)
+    (indicator-rhythm window "variance-ratio" (lambda (c) (:variance-ratio c)) dims)
+    (indicator-rhythm window "entropy-rate"   (lambda (c) (:entropy-rate c))   dims)
+    (indicator-rhythm window "fractal-dim"    (lambda (c) (:fractal-dim c))    dims)
+    (indicator-rhythm window "aroon-up"       (lambda (c) (:aroon-up c))       dims)
+    (indicator-rhythm window "aroon-down"     (lambda (c) (:aroon-down c))     dims)
+    (indicator-rhythm window "hour"           (lambda (c) (:hour c))           dims)
+    (indicator-rhythm window "day-of-week"    (lambda (c) (:day-of-week c))    dims)
 
     ;; ── Phase streams — how are the phases evolving? ────────────
-    ;; phase-duration resets at each new phase. As a stream, it shows
-    ;; "how long has the current phase been running" over time.
-    ;; Short bursts = choppy. Long steady values = trending.
     (indicator-rhythm window "phase-duration"
-      (lambda (c) (exact->inexact c.phase-duration)) dims)
+      (lambda (c) (exact->inexact (:phase-duration c))) dims)
 
-    ;; Phase summary streams — computed from phase_history at each candle.
-    ;; These change slowly — the averages shift as new phases complete.
     (indicator-rhythm window "avg-phase-duration"
-      (lambda (c) (avg-duration c.phase-history)) dims)
+      (lambda (c) (avg-duration (:phase-history c))) dims)
+
     (indicator-rhythm window "avg-phase-range"
-      (lambda (c) (avg-range c.phase-history)) dims)))
+      (lambda (c) (avg-range (:phase-history c))) dims)))
 
 ;; 13 regime+phase rhythm vectors + ~10-15 market rhythms = ~23-28 items.
 ;; Budget at D=10,000: 100. Comfortable.
@@ -47,7 +43,3 @@
 ;;
 ;; "avg-phase-range rhythm rising + choppiness rhythm rising"
 ;;   → wider swings, more chaos → volatility regime.
-;;
-;; The Full lens sees the market's structural evolution — not just
-;; the regime character (Core) but how the phase structure itself
-;; is changing over time.
