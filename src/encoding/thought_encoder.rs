@@ -19,6 +19,9 @@ pub enum ThoughtAST {
     Linear { value: f64, scale: f64 },
     Log { value: f64 },
     Circular { value: f64, period: f64 },
+    /// Thermometer — linear gradient that survives bipolar thresholding.
+    /// cosine(a, b) = 1.0 - 2.0 * |a - b| / (max - min). Proposal 056.
+    Thermometer { value: f64, min: f64, max: f64 },
     Bind(Box<ThoughtAST>, Box<ThoughtAST>),
     Bundle(Vec<ThoughtAST>),
     /// Ordered sequence — each item is permuted by its index before bundling.
@@ -37,6 +40,7 @@ impl ThoughtAST {
             ThoughtAST::Linear { value, scale } => format!("linear({},{})", value, scale),
             ThoughtAST::Log { value } => format!("log({})", value),
             ThoughtAST::Circular { value, period } => format!("circular({},{})", value, period),
+            ThoughtAST::Thermometer { value, min, max } => format!("thermometer({},{},{})", value, min, max),
             ThoughtAST::Bind(left, right) => format!("bind({}:{})", left.name(), right.name()),
             ThoughtAST::Bundle(children) => format!("bundle({})", children.len()),
             ThoughtAST::Sequential(items) => format!("sequential({})", items.len()),
@@ -60,6 +64,8 @@ impl ThoughtAST {
                 format!("(log {})", value),
             ThoughtAST::Circular { value, period } =>
                 format!("(circular {} {})", value, period),
+            ThoughtAST::Thermometer { value, min, max } =>
+                format!("(thermometer {} {} {})", value, min, max),
             ThoughtAST::Bind(left, right) =>
                 format!("(bind\n{}{}\n{}{})",
                     child_indent, left.to_edn_depth(depth + 1),
@@ -98,6 +104,11 @@ impl std::hash::Hash for ThoughtAST {
             ThoughtAST::Circular { value, period } => {
                 value.to_bits().hash(state);
                 period.to_bits().hash(state);
+            }
+            ThoughtAST::Thermometer { value, min, max } => {
+                value.to_bits().hash(state);
+                min.to_bits().hash(state);
+                max.to_bits().hash(state);
             }
             ThoughtAST::Bind(left, right) => {
                 left.hash(state);
@@ -162,6 +173,12 @@ impl ThoughtEncoder {
                 self.scalar_encoder.encode(
                     *value,
                     ScalarMode::Circular { period: *period },
+                )
+            }
+            ThoughtAST::Thermometer { value, min, max } => {
+                self.scalar_encoder.encode(
+                    *value,
+                    ScalarMode::Thermometer { min: *min, max: *max },
                 )
             }
             ThoughtAST::Bind(left, right) => {

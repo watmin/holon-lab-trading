@@ -39,6 +39,9 @@ pub fn encode(
         ThoughtAST::Circular { value, period } => {
             scalar.encode(*value, ScalarMode::Circular { period: *period })
         }
+        ThoughtAST::Thermometer { value, min, max } => {
+            scalar.encode(*value, ScalarMode::Thermometer { min: *min, max: *max })
+        }
         ThoughtAST::Bind(left, right) => {
             let l = encode(cache, left, vm, scalar);
             let r = encode(cache, right, vm, scalar);
