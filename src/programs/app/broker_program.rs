@@ -315,7 +315,8 @@ pub fn broker_program(
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4_enc_nodes", broker_enc_metrics.nodes_walked as f64, "Count");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4_enc_hits", broker_enc_metrics.cache_hits as f64, "Count");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4_enc_misses", broker_enc_metrics.cache_misses as f64, "Count");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4_enc_ns_cache_get", broker_enc_metrics.ns_cache_get as f64, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4_enc_ns_batch_get", broker_enc_metrics.ns_batch_get as f64, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4_enc_batch_rounds", broker_enc_metrics.batch_rounds as f64, "Count");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4_enc_ns_leaf", broker_enc_metrics.ns_leaf as f64, "Nanoseconds");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "snapshot", ns_snapshot, "Nanoseconds");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "exit_submit", ns_exit_submit, "Nanoseconds");

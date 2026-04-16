@@ -56,6 +56,19 @@ impl ThoughtAST {
         }
     }
 
+    /// Direct children of this node. Leaves return empty.
+    /// Used by encode() for progressive descent — the caller walks
+    /// its own tree, the cache never sees the structure.
+    pub fn children(&self) -> Vec<ThoughtAST> {
+        match self {
+            ThoughtAST::Bind(l, r) => vec![l.as_ref().clone(), r.as_ref().clone()],
+            ThoughtAST::Permute(c, _) => vec![c.as_ref().clone()],
+            ThoughtAST::Bundle(children) => children.clone(),
+            ThoughtAST::Sequential(items) => items.clone(),
+            _ => vec![], // Atom, Linear, Log, Circular, Thermometer — leaves
+        }
+    }
+
     /// Render as EDN (extensible data notation) — the thought AS lisp.
     /// Depth-aware indentation. Readable.
     pub fn to_edn(&self) -> String {

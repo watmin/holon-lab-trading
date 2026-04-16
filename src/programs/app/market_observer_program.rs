@@ -225,7 +225,8 @@ pub fn market_observer_program(
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "enc_nodes", enc_metrics.nodes_walked as f64, "Count");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "enc_hits", enc_metrics.cache_hits as f64, "Count");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "enc_misses", enc_metrics.cache_misses as f64, "Count");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "enc_ns_cache_get", enc_metrics.ns_cache_get as f64, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "enc_ns_batch_get", enc_metrics.ns_batch_get as f64, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "enc_batch_rounds", enc_metrics.batch_rounds as f64, "Count");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "enc_ns_leaf", enc_metrics.ns_leaf as f64, "Nanoseconds");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "enc_ns_cache_set", enc_metrics.ns_cache_set as f64, "Nanoseconds");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "observe", ns_observe, "Nanoseconds");

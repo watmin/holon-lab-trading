@@ -1,10 +1,17 @@
 /// encode.rs — the ONE way to turn a thought into geometry.
 ///
-/// Walks the AST top-down. Checks the cache at every node.
-/// Computes only misses. Installs everything.
-/// The cache is Redis — get/set. The computation is on the caller's thread.
+/// Progressive descent: the caller walks the AST level by level,
+/// asking the cache "which of these do you have?" at each level.
+/// Branches that hit stop. Branches that miss expand into their
+/// children for the next round. When all branches are resolved
+/// (hit or leaf), the caller computes misses locally and ships
+/// results back via batch_set.
+///
+/// The cache is a hashmap behind pipes. It never sees the tree.
+/// The caller owns the structure. The driver does hash lookups.
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 
 use holon::kernel::primitives::Primitives;
 use holon::kernel::scalar::{ScalarEncoder, ScalarMode};
@@ -21,9 +28,10 @@ pub struct EncodeMetrics {
     pub nodes_walked: u64,
     pub cache_hits: u64,
     pub cache_misses: u64,
-    pub ns_cache_get: u64,
+    pub ns_batch_get: u64,
     pub ns_leaf: u64,
     pub ns_cache_set: u64,
+    pub batch_rounds: u64,
 }
 
 thread_local! {
@@ -39,31 +47,87 @@ pub fn take_encode_metrics() -> EncodeMetrics {
     })
 }
 
-/// Encode a ThoughtAST into a Vector. Checks the cache at every node.
-/// On miss, computes locally and installs. Every form is cached.
-/// Timing accumulates in thread-local EncodeMetrics — call take_encode_metrics() after.
+/// Encode a ThoughtAST into a Vector.
+///
+/// Progressive descent: walk the AST level by level, batch_get each
+/// frontier. Hits go into the local map and stop expanding. Misses
+/// expand into their children for the next round. When all branches
+/// are resolved (hit or leaf), compute misses bottom-up locally.
+/// Ship computed results back via batch_set.
+///
+/// The caller owns the tree walk. The cache does hash lookups.
 pub fn encode(
     cache: &CacheHandle<ThoughtAST, Vector>,
     ast: &ThoughtAST,
     vm: &VectorManager,
     scalar: &ScalarEncoder,
 ) -> Vector {
+    // Phase 1: progressive descent.
+    let mut local: HashMap<ThoughtAST, Vector> = HashMap::new();
+    let mut frontier: Vec<ThoughtAST> = vec![ast.clone()];
+
+    while !frontier.is_empty() {
+        let t0 = std::time::Instant::now();
+        let results = cache.batch_get(frontier.clone()).unwrap_or_default();
+        METRICS.with(|m| {
+            let mut m = m.borrow_mut();
+            m.ns_batch_get += t0.elapsed().as_nanos() as u64;
+            m.batch_rounds += 1;
+        });
+
+        let mut next_frontier: Vec<ThoughtAST> = Vec::new();
+        for (node, result) in frontier.into_iter().zip(results) {
+            if let Some(v) = result {
+                METRICS.with(|m| m.borrow_mut().cache_hits += 1);
+                local.insert(node, v);
+            } else {
+                METRICS.with(|m| m.borrow_mut().cache_misses += 1);
+                // Miss — expand non-leaf children into next frontier.
+                // Leaves are never cached, so don't query them.
+                for child in node.children() {
+                    match &child {
+                        ThoughtAST::Atom(_)
+                        | ThoughtAST::Linear { .. }
+                        | ThoughtAST::Log { .. }
+                        | ThoughtAST::Circular { .. }
+                        | ThoughtAST::Thermometer { .. } => {}
+                        _ => { next_frontier.push(child); }
+                    }
+                }
+            }
+        }
+        frontier = next_frontier;
+    }
+
+    // Phase 2: compute misses locally — recursive, using local map.
+    let mut computed: Vec<(ThoughtAST, Vector)> = Vec::new();
+    let vec = encode_local(&local, ast, vm, scalar, &mut computed);
+
+    // Phase 3: install computed results in cache — fire and forget.
+    let t0 = std::time::Instant::now();
+    cache.batch_set(computed);
+    METRICS.with(|m| m.borrow_mut().ns_cache_set += t0.elapsed().as_nanos() as u64);
+
+    vec
+}
+
+/// Recursive local encode. Uses the pre-resolved HashMap for hits.
+/// Computes misses on this thread. Collects computed results for batch_set.
+fn encode_local(
+    local: &HashMap<ThoughtAST, Vector>,
+    ast: &ThoughtAST,
+    vm: &VectorManager,
+    scalar: &ScalarEncoder,
+    computed: &mut Vec<(ThoughtAST, Vector)>,
+) -> Vector {
     METRICS.with(|m| m.borrow_mut().nodes_walked += 1);
 
-    // Check cache for this exact form — every node, every time
-    let t0 = std::time::Instant::now();
-    let cached = cache.get(ast);
-    let ns_get = t0.elapsed().as_nanos() as u64;
-    METRICS.with(|m| m.borrow_mut().ns_cache_get += ns_get);
-
-    if let Some(v) = cached {
-        METRICS.with(|m| m.borrow_mut().cache_hits += 1);
-        return v;
+    // Check local map first — resolved hits.
+    if let Some(v) = local.get(ast) {
+        return v.clone();
     }
-    METRICS.with(|m| m.borrow_mut().cache_misses += 1);
 
-    // Miss — compute locally, walking children recursively.
-    // ns_leaf times ONLY the Primitives/scalar call, not recursive children.
+    // Miss — compute locally.
     let vec = match ast {
         ThoughtAST::Atom(name) => {
             let t0 = std::time::Instant::now();
@@ -96,15 +160,15 @@ pub fn encode(
             v
         }
         ThoughtAST::Permute(child, shift) => {
-            let v = encode(cache, child, vm, scalar);
+            let v = encode_local(local, child, vm, scalar, computed);
             let t0 = std::time::Instant::now();
             let r = Primitives::permute(&v, *shift);
             METRICS.with(|m| m.borrow_mut().ns_leaf += t0.elapsed().as_nanos() as u64);
             r
         }
         ThoughtAST::Bind(left, right) => {
-            let l = encode(cache, left, vm, scalar);
-            let r = encode(cache, right, vm, scalar);
+            let l = encode_local(local, left, vm, scalar, computed);
+            let r = encode_local(local, right, vm, scalar, computed);
             let t0 = std::time::Instant::now();
             let v = Primitives::bind(&l, &r);
             METRICS.with(|m| m.borrow_mut().ns_leaf += t0.elapsed().as_nanos() as u64);
@@ -112,7 +176,7 @@ pub fn encode(
         }
         ThoughtAST::Bundle(children) => {
             let vecs: Vec<Vector> = children.iter()
-                .map(|c| encode(cache, c, vm, scalar))
+                .map(|c| encode_local(local, c, vm, scalar, computed))
                 .collect();
             let t0 = std::time::Instant::now();
             let v = if vecs.is_empty() {
@@ -127,7 +191,7 @@ pub fn encode(
         ThoughtAST::Sequential(items) => {
             let vecs: Vec<Vector> = items.iter().enumerate()
                 .map(|(i, c)| {
-                    let v = encode(cache, c, vm, scalar);
+                    let v = encode_local(local, c, vm, scalar, computed);
                     Primitives::permute(&v, i as i32)
                 })
                 .collect();
@@ -143,11 +207,17 @@ pub fn encode(
         }
     };
 
-    // Install in cache — fire and forget
-    let t0 = std::time::Instant::now();
-    cache.set(ast.clone(), vec.clone());
-    let ns_set = t0.elapsed().as_nanos() as u64;
-    METRICS.with(|m| m.borrow_mut().ns_cache_set += ns_set);
+    // Collect intermediary forms for batch_set. Skip leaves — they're
+    // cheap to recompute (~100ns). Only cache compositions that required
+    // children to be computed first (Bind, Permute, Bundle, Sequential).
+    match ast {
+        ThoughtAST::Atom(_)
+        | ThoughtAST::Linear { .. }
+        | ThoughtAST::Log { .. }
+        | ThoughtAST::Circular { .. }
+        | ThoughtAST::Thermometer { .. } => {}
+        _ => { computed.push((ast.clone(), vec.clone())); }
+    }
 
     vec
 }
