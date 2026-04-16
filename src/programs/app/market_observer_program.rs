@@ -171,8 +171,11 @@ pub fn market_observer_program(
         ));
         let fact_count = rhythm_asts.len() as f64;
         let bundle_ast = ThoughtAST::Bundle(rhythm_asts);
-        // rune:temper(intentional) — being blind is being incapable. Full thought logging every candle.
-        let snapshot_edn = bundle_ast.to_edn();
+        // rune:temper(disabled) — rhythm ASTs are multi-MB EDN strings.
+        // Logging every candle produced 6.5GB in 312 candles. Disabled
+        // until we implement summary logging or sampled snapshots.
+        // let snapshot_edn = bundle_ast.to_edn();
+        let snapshot_edn = String::from("disabled:rhythm-ast-too-large");
         let ns_collect = t0.elapsed().as_nanos() as f64;
 
         // Encode via cache: the AST tree is walked, every node cached.

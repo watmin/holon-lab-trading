@@ -91,8 +91,11 @@ pub fn regime_observer_program(
             // Snapshot from slot 0.
             if slots_processed == 0.0 {
                 snapshot_fact_count = regime_asts.len();
-                let snapshot_bundle = ThoughtAST::Bundle(regime_asts.clone());
-                snapshot_ast = snapshot_bundle.to_edn();
+                // rune:temper(disabled) — rhythm ASTs are multi-MB EDN strings.
+                // Disabled until we implement summary logging or sampled snapshots.
+                // let snapshot_bundle = ThoughtAST::Bundle(regime_asts.clone());
+                // snapshot_ast = snapshot_bundle.to_edn();
+                snapshot_ast = String::from("disabled:rhythm-ast-too-large");
             }
 
             // Send MarketRegimeChain downstream.

@@ -193,9 +193,11 @@ pub fn broker_program(
         });
         let ns_retain = t0.elapsed().as_nanos() as f64;
 
-        // 5. Snapshot — same AST, just serialize.
+        // 5. Snapshot — AST serialization disabled for rhythm ASTs.
+        // rune:temper(disabled) — rhythm ASTs are multi-MB EDN strings.
         let t0 = std::time::Instant::now();
-        let snapshot_edn = thought_ast.to_edn();
+        // let snapshot_edn = thought_ast.to_edn();
+        let snapshot_edn = String::from("disabled:rhythm-ast-too-large");
         let ns_snapshot = t0.elapsed().as_nanos() as f64;
 
         // 6. DB snapshot every 100 candles
