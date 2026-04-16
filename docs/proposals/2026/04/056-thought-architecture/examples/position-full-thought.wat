@@ -1,50 +1,53 @@
-;; position-full-thought.wat — Full lens position observer output.
-;; Regime + time + phase current + phase scalar summaries.
-;; No sequence — the broker-observer owns that.
+;; position-full-thought.wat — Full lens position observer thought.
+;;
+;; Everything Core sees + phase awareness as streams.
+;; "How is the regime changing AND how are the phases changing?"
 
-(bundle
-  ;; ── Full lens facts: regime + time + phase (13 facts) ──────────
+(define (position-full-thought window market-rhythms dims)
+  (bundle
+    ;; ── Market rhythms (passed through) ─────────────────────────
+    market-rhythms  ;; ~10-15 rhythm vectors
 
-  ;; Regime — same as Core (8 facts)
-  (bind (atom "kama-er")         (linear 0.3 1.0))
-  (bind (atom "choppiness")      (linear 45.0 1.0))
-  (bind (atom "dfa-alpha")       (linear 0.55 1.0))
-  (bind (atom "variance-ratio")  (linear 1.05 1.0))
-  (bind (atom "entropy-rate")    (linear 0.8 1.0))
-  (bind (atom "aroon-up")        (linear 80.0 1.0))
-  (bind (atom "aroon-down")      (linear 20.0 1.0))
-  (bind (atom "fractal-dim")     (linear 1.4 1.0))
+    ;; ── Same 10 regime + time rhythms as Core ───────────────────
+    (indicator-rhythm window "kama-er"        (lambda (c) c.kama-er)        dims)
+    (indicator-rhythm window "choppiness"     (lambda (c) c.choppiness)     dims)
+    (indicator-rhythm window "dfa-alpha"      (lambda (c) c.dfa-alpha)      dims)
+    (indicator-rhythm window "variance-ratio" (lambda (c) c.variance-ratio) dims)
+    (indicator-rhythm window "entropy-rate"   (lambda (c) c.entropy-rate)   dims)
+    (indicator-rhythm window "fractal-dim"    (lambda (c) c.fractal-dim)    dims)
+    (indicator-rhythm window "aroon-up"       (lambda (c) c.aroon-up)       dims)
+    (indicator-rhythm window "aroon-down"     (lambda (c) c.aroon-down)     dims)
+    (indicator-rhythm window "hour"           (lambda (c) c.hour)           dims)
+    (indicator-rhythm window "day-of-week"    (lambda (c) c.day-of-week)    dims)
 
-  ;; Time — parts and composition (3 facts)
-  (bind (atom "hour")            (circular 14.0 24.0))
-  (bind (atom "day-of-week")     (circular 3.0 7.0))
-  (bind
-    (bind (atom "hour") (circular 14.0 24.0))
-    (bind (atom "day-of-week") (circular 3.0 7.0)))
+    ;; ── Phase streams — how are the phases evolving? ────────────
+    ;; phase-duration resets at each new phase. As a stream, it shows
+    ;; "how long has the current phase been running" over time.
+    ;; Short bursts = choppy. Long steady values = trending.
+    (indicator-rhythm window "phase-duration"
+      (lambda (c) (exact->inexact c.phase-duration)) dims)
 
-  ;; Phase current — what the labeler says RIGHT NOW (2 facts)
-  (atom "phase-peak")                                    ; current label
-  (bind (atom "phase-duration")  (log 12.0))             ; 12 candles in this phase
+    ;; Phase summary streams — computed from phase_history at each candle.
+    ;; These change slowly — the averages shift as new phases complete.
+    (indicator-rhythm window "avg-phase-duration"
+      (lambda (c) (avg-duration c.phase-history)) dims)
+    (indicator-rhythm window "avg-phase-range"
+      (lambda (c) (avg-range c.phase-history)) dims)))
 
-  ;; Phase scalar summaries — aggregate properties of the history (variable)
-  (bind (atom "avg-phase-duration") (linear 28.0 1.0))
-  (bind (atom "avg-phase-range")    (linear 0.015 1.0))
-
-  ;; ── Extracted market facts (anomaly pass) ──────────────────────
-  (bind (atom "market") (bind (atom "rsi")          (linear 0.68 1.0)))
-  (bind (atom "market") (bind (atom "bb-pos")       (linear 0.82 1.0)))
-  (bind (atom "market") (bind (atom "adx")          (linear 32.0 1.0)))
-  (bind (atom "market") (bind (atom "roc-12")       (linear 0.028 1.0)))
-  (bind (atom "market") (bind (atom "obv-slope")    (linear 0.8 1.0)))
-  (bind (atom "market") (bind (atom "hurst")        (linear 0.62 1.0)))
-  (bind (atom "market") (bind (atom "range-pos-12") (linear 0.85 1.0)))
-
-  ;; ── Extracted market facts (raw pass) ──────────────────────────
-  (bind (atom "market-raw") (bind (atom "close-sma20")  (linear 0.023 1.0)))
-  (bind (atom "market-raw") (bind (atom "rsi")          (linear 0.68 1.0)))
-  (bind (atom "market-raw") (bind (atom "macd-hist")    (linear 12.5 1.0)))
-  (bind (atom "market-raw") (bind (atom "stoch-k")      (linear 78.0 1.0)))
-  (bind (atom "market-raw") (bind (atom "volume-accel") (linear 1.3 1.0))))
-
-;; Total: ~28 facts. The broker-observer adds anxiety (4) + rhythm (1).
-;; Outer bundle: ~33 items.
+;; 13 regime+phase rhythm vectors + ~10-15 market rhythms = ~23-28 items.
+;; Budget at D=10,000: 100. Comfortable.
+;;
+;; What Full adds over Core:
+;;
+;; "phase-duration rhythm shows short-long-short-long pattern"
+;;   → alternating between brief moves and extended consolidations.
+;;
+;; "avg-phase-duration rhythm falling over time"
+;;   → phases getting shorter → market speeding up → regime change.
+;;
+;; "avg-phase-range rhythm rising + choppiness rhythm rising"
+;;   → wider swings, more chaos → volatility regime.
+;;
+;; The Full lens sees the market's structural evolution — not just
+;; the regime character (Core) but how the phase structure itself
+;; is changing over time.

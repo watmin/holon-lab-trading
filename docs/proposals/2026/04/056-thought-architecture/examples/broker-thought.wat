@@ -1,95 +1,72 @@
 ;; broker-thought.wat — the broker-observer's full composed thought.
 ;; One thought. One encode. One question: do I get out now?
 ;;
-;; Three components bundled:
-;; 1. Position observer's facts (from chain — market extraction + lens)
-;; 2. Portfolio anxiety (avg age, pressure, unrealized, active count)
-;; 3. Phase rhythm (bundled bigrams of trigrams — one vector)
-
-(bundle
-  ;; ── 1. Position observer's facts (from chain.position_facts) ───
-  ;; Pre-computed. The broker doesn't recompute. Shown as Full lens.
-
-  ;; Regime (8)
-  (bind (atom "kama-er")         (linear 0.3 1.0))
-  (bind (atom "choppiness")      (linear 45.0 1.0))
-  (bind (atom "dfa-alpha")       (linear 0.55 1.0))
-  (bind (atom "variance-ratio")  (linear 1.05 1.0))
-  (bind (atom "entropy-rate")    (linear 0.8 1.0))
-  (bind (atom "aroon-up")        (linear 80.0 1.0))
-  (bind (atom "aroon-down")      (linear 20.0 1.0))
-  (bind (atom "fractal-dim")     (linear 1.4 1.0))
-
-  ;; Time — parts and composition (3)
-  (bind (atom "hour")            (circular 14.0 24.0))
-  (bind (atom "day-of-week")     (circular 3.0 7.0))
-  (bind
-    (bind (atom "hour") (circular 14.0 24.0))
-    (bind (atom "day-of-week") (circular 3.0 7.0)))
-
-  ;; Phase current (2)
-  (atom "phase-peak")
-  (bind (atom "phase-duration")  (log 12.0))
-
-  ;; Phase scalar summaries (2)
-  (bind (atom "avg-phase-duration") (linear 28.0 1.0))
-  (bind (atom "avg-phase-range")    (linear 0.015 1.0))
-
-  ;; Extracted market facts — anomaly pass (~7)
-  (bind (atom "market") (bind (atom "rsi")          (linear 0.68 1.0)))
-  (bind (atom "market") (bind (atom "bb-pos")       (linear 0.82 1.0)))
-  (bind (atom "market") (bind (atom "adx")          (linear 32.0 1.0)))
-  (bind (atom "market") (bind (atom "roc-12")       (linear 0.028 1.0)))
-  (bind (atom "market") (bind (atom "obv-slope")    (linear 0.8 1.0)))
-  (bind (atom "market") (bind (atom "hurst")        (linear 0.62 1.0)))
-  (bind (atom "market") (bind (atom "range-pos-12") (linear 0.85 1.0)))
-
-  ;; Extracted market facts — raw pass (~5)
-  (bind (atom "market-raw") (bind (atom "close-sma20")  (linear 0.023 1.0)))
-  (bind (atom "market-raw") (bind (atom "rsi")          (linear 0.68 1.0)))
-  (bind (atom "market-raw") (bind (atom "macd-hist")    (linear 12.5 1.0)))
-  (bind (atom "market-raw") (bind (atom "stoch-k")      (linear 78.0 1.0)))
-  (bind (atom "market-raw") (bind (atom "volume-accel") (linear 1.3 1.0)))
-
-  ;; ── 2. Broker-observer's portfolio anxiety ───────────────────────
-
-  ;; Counts
-  (bind (atom "active-positions")        (log 47.0))
-
-  ;; Age distribution
-  (bind (atom "avg-paper-age")           (log 145.0))
-  (bind (atom "min-paper-age")           (log 12.0))         ;; newest paper
-  (bind (atom "max-paper-age")           (log 380.0))        ;; oldest paper
-
-  ;; Time pressure
-  (bind (atom "avg-time-pressure")       (linear 0.29 1.0))
-  (bind (atom "max-time-pressure")       (linear 0.76 1.0))  ;; closest to deadline
-
-  ;; Unrealized P&L
-  (bind (atom "avg-unrealized-residue")  (linear -0.003 1.0))
-  (bind (atom "min-unrealized-residue")  (linear -0.018 1.0));; worst paper
-  (bind (atom "max-unrealized-residue")  (linear 0.012 1.0)) ;; best paper
-
-  ;; Track record
-  (bind (atom "grace-rate")              (linear 0.0 1.0))   ;; 0% grace so far
-  (bind (atom "trade-count")             (log 230.0))        ;; experience
-
-  ;; ── 3. Phase rhythm (1 vector) ─────────────────────────────────
-  ;; The bundled bigrams of trigrams. Computed from phase_history.
-  ;; This is a pre-encoded Vector, not an AST — it bundles directly
-  ;; into the outer thought via vector addition.
-  ;;
-  ;; See: bullish-momentum.wat, exhaustion-top.wat, breakdown.wat,
-  ;;      choppy-range.wat, recovery-bottom.wat
-  ;;
-  ;; (rhythm-vector)  ;; one slot in this bundle
-  )
-
-;; Outer bundle: ~31 position + 11 anxiety + 1 rhythm = ~43 items.
-;; Kanerva capacity for D=10,000 is ~100. Plenty of headroom.
+;; Four components bundled:
+;; 1. Market indicator rhythms (from market observer, via position observer)
+;; 2. Position regime rhythms (from position observer's lens)
+;; 3. Portfolio anxiety (age spread, pressure, P&L, track record)
+;; 4. Phase rhythm (bundled bigrams of trigrams)
 ;;
-;; The rhythm's INTERNAL capacity (bigram-pairs in the rhythm bundle)
-;; is a separate sqrt(D) budget. See PROPOSAL.md.
+;; Everything is pre-computed rhythm vectors except the anxiety facts.
+
+(define (broker-thought position-chain anxiety phase-rhythm)
+  (bundle
+    ;; ── 1. Market indicator rhythms (~15 vectors) ────────────────
+    ;; Pre-computed by the market observer. Passed through the position
+    ;; observer (possibly filtered by anomaly). Each one is the evolution
+    ;; of one market indicator across the market observer's window.
+    ;; See: market-observer-thought.wat
+    position-chain.market-rhythms
+
+    ;; ── 2. Position regime rhythms (~10-13 vectors) ──────────────
+    ;; Pre-computed by the position observer. Each one is the evolution
+    ;; of one regime indicator across the position observer's window.
+    ;; See: position-core-thought.wat or position-full-thought.wat
+    position-chain.regime-rhythms
+
+    ;; ── 3. Portfolio anxiety (~11 facts) ─────────────────────────
+    ;; The broker's self-awareness. Computed from active receipts.
+    ;; These are scalars, not rhythms — the broker's portfolio state
+    ;; at this moment.
+
+    ;; Counts
+    (bind (atom "active-positions")        (log 47.0))
+
+    ;; Age distribution
+    (bind (atom "avg-paper-age")           (log 145.0))
+    (bind (atom "min-paper-age")           (log 12.0))
+    (bind (atom "max-paper-age")           (log 380.0))
+
+    ;; Time pressure
+    (bind (atom "avg-time-pressure")       (linear 0.29 1.0))
+    (bind (atom "max-time-pressure")       (linear 0.76 1.0))
+
+    ;; Unrealized P&L
+    (bind (atom "avg-unrealized-residue")  (linear -0.003 1.0))
+    (bind (atom "min-unrealized-residue")  (linear -0.018 1.0))
+    (bind (atom "max-unrealized-residue")  (linear 0.012 1.0))
+
+    ;; Track record
+    (bind (atom "grace-rate")              (linear 0.0 1.0))
+    (bind (atom "trade-count")             (log 230.0))
+
+    ;; ── 4. Phase rhythm (1 vector) ───────────────────────────────
+    ;; Bundled bigrams of trigrams from the phase history.
+    ;; See: bullish-momentum.wat, exhaustion-top.wat, etc.
+    phase-rhythm))
+
+;; Capacity at D=10,000 (budget: 100):
+;;   ~15 market rhythms
+;;   ~10-13 regime rhythms
+;;   ~11 anxiety facts
+;;   ~1 phase rhythm
+;;   ─────────────────
+;;   ~37-40 items. Well within budget.
 ;;
-;; One encode of this bundle. One cosine against the gate reckoner.
+;; Each rhythm vector (market or regime) is already encoded —
+;; it carries the full indicator evolution inside it. The broker
+;; bundles pre-computed vectors with its own anxiety scalars.
+;; One encode of the anxiety facts + one vector bundle operation.
+;;
+;; The gate reckoner cosines against this one vector.
 ;; Hold or Exit. The treasury judges the papers.
