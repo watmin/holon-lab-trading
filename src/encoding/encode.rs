@@ -4,6 +4,8 @@
 /// Computes only misses. Installs everything.
 /// The cache is Redis — get/set. The computation is on the caller's thread.
 
+use std::cell::RefCell;
+
 use holon::kernel::primitives::Primitives;
 use holon::kernel::scalar::{ScalarEncoder, ScalarMode};
 use holon::kernel::vector::Vector;
@@ -12,20 +14,56 @@ use holon::kernel::vector_manager::VectorManager;
 use crate::encoding::thought_encoder::ThoughtAST;
 use crate::programs::stdlib::cache::CacheHandle;
 
+/// Accumulated timing from one encode() call tree.
+/// Thread-local — each observer accumulates its own.
+#[derive(Clone, Debug, Default)]
+pub struct EncodeMetrics {
+    pub nodes_walked: u64,
+    pub cache_hits: u64,
+    pub cache_misses: u64,
+    pub ns_cache_get: u64,
+    pub ns_compute: u64,
+    pub ns_cache_set: u64,
+}
+
+thread_local! {
+    static METRICS: RefCell<EncodeMetrics> = RefCell::new(EncodeMetrics::default());
+}
+
+/// Reset and return the accumulated metrics. Call after encode() completes.
+pub fn take_encode_metrics() -> EncodeMetrics {
+    METRICS.with(|m| {
+        let metrics = m.borrow().clone();
+        *m.borrow_mut() = EncodeMetrics::default();
+        metrics
+    })
+}
+
 /// Encode a ThoughtAST into a Vector. Checks the cache at every node.
 /// On miss, computes locally and installs. Every form is cached.
+/// Timing accumulates in thread-local EncodeMetrics — call take_encode_metrics() after.
 pub fn encode(
     cache: &CacheHandle<ThoughtAST, Vector>,
     ast: &ThoughtAST,
     vm: &VectorManager,
     scalar: &ScalarEncoder,
 ) -> Vector {
+    METRICS.with(|m| m.borrow_mut().nodes_walked += 1);
+
     // Check cache for this exact form — every node, every time
-    if let Some(cached) = cache.get(ast) {
-        return cached;
+    let t0 = std::time::Instant::now();
+    let cached = cache.get(ast);
+    let ns_get = t0.elapsed().as_nanos() as u64;
+    METRICS.with(|m| m.borrow_mut().ns_cache_get += ns_get);
+
+    if let Some(v) = cached {
+        METRICS.with(|m| m.borrow_mut().cache_hits += 1);
+        return v;
     }
+    METRICS.with(|m| m.borrow_mut().cache_misses += 1);
 
     // Miss — compute locally, walking children recursively
+    let t0 = std::time::Instant::now();
     let vec = match ast {
         ThoughtAST::Atom(name) => {
             vm.get_vector(name)
@@ -77,8 +115,14 @@ pub fn encode(
             }
         }
     };
+    let ns_comp = t0.elapsed().as_nanos() as u64;
+    METRICS.with(|m| m.borrow_mut().ns_compute += ns_comp);
 
     // Install in cache — fire and forget
+    let t0 = std::time::Instant::now();
     cache.set(ast.clone(), vec.clone());
+    let ns_set = t0.elapsed().as_nanos() as u64;
+    METRICS.with(|m| m.borrow_mut().ns_cache_set += ns_set);
+
     vec
 }

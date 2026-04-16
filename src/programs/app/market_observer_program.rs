@@ -18,7 +18,7 @@ use crate::types::log_entry::LogEntry;
 use crate::types::pivot::PhaseLabel;
 use crate::domain::market_observer::MarketObserver;
 use crate::domain::lens::market_rhythm_specs;
-use crate::encoding::encode::encode;
+use crate::encoding::encode::{encode, take_encode_metrics};
 use crate::encoding::rhythm::build_rhythm_asts;
 use crate::encoding::thought_encoder::ThoughtAST;
 use crate::programs::chain::MarketChain;
@@ -181,6 +181,7 @@ pub fn market_observer_program(
         // Encode via cache: the AST tree is walked, every node cached.
         let t0 = std::time::Instant::now();
         let thought = encode(&cache, &bundle_ast, &vm, &scalar);
+        let enc_metrics = take_encode_metrics();
         let ns_encode = t0.elapsed().as_nanos() as f64;
 
         // Observe: noise subspace learns, anomaly extracted, reckoner predicts.
@@ -221,6 +222,12 @@ pub fn market_observer_program(
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "collect_facts", ns_collect, "Nanoseconds");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "facts_count", fact_count, "Count");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "encode", ns_encode, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "enc_nodes", enc_metrics.nodes_walked as f64, "Count");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "enc_hits", enc_metrics.cache_hits as f64, "Count");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "enc_misses", enc_metrics.cache_misses as f64, "Count");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "enc_ns_cache_get", enc_metrics.ns_cache_get as f64, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "enc_ns_compute", enc_metrics.ns_compute as f64, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "enc_ns_cache_set", enc_metrics.ns_cache_set as f64, "Nanoseconds");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "observe", ns_observe, "Nanoseconds");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "send", ns_send, "Nanoseconds");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "total", ns_total, "Nanoseconds");
