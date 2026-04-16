@@ -499,10 +499,24 @@ fn main() {
             m("evictions", stats.evictions as f64, "Count");
         }
     };
+    // children_fn: how to walk a ThoughtAST tree. The cache uses this
+    // for resolve() — walk the tree, stop at hits, return the shallowest
+    // cached ancestors. Flat nodes (Atom, scalars) have no children.
+    let children_fn: Box<dyn Fn(&ThoughtAST) -> Vec<ThoughtAST> + Send> = Box::new(|ast| {
+        use enterprise::encoding::thought_encoder::ThoughtAST;
+        match ast {
+            ThoughtAST::Bind(l, r) => vec![l.as_ref().clone(), r.as_ref().clone()],
+            ThoughtAST::Permute(c, _) => vec![c.as_ref().clone()],
+            ThoughtAST::Bundle(children) => children.clone(),
+            ThoughtAST::Sequential(items) => items.clone(),
+            _ => vec![], // Atom, Linear, Log, Circular, Thermometer — leaves
+        }
+    });
     let (cache_handles, cache_driver) = cache::<ThoughtAST, Vector>(
         "encoder",
         262144, // 256K — cache everything we can
         num_market + num_position + num_brokers,
+        children_fn,
         Box::new(cache_gate),
         Box::new(cache_emit),
     );

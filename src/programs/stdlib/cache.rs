@@ -20,6 +20,8 @@ use crate::services::queue::{self, QueueReceiver, QueueSender};
 pub struct CacheHandle<K, V> {
     get_tx: QueueSender<K>,
     get_rx: QueueReceiver<Option<V>>,
+    resolve_tx: QueueSender<K>,
+    resolve_rx: QueueReceiver<Vec<(K, V)>>,
     set_tx: QueueSender<(K, V)>,
 }
 
@@ -29,6 +31,14 @@ impl<K: Clone + Send, V: Send> CacheHandle<K, V> {
     pub fn get(&self, key: &K) -> Option<V> {
         self.get_tx.send(key.clone()).ok()?;
         self.get_rx.recv().ok()?
+    }
+
+    /// Resolve: send a tree root, get back all cached subtree hits.
+    /// The driver walks the tree using children_fn, stops at hits.
+    /// Returns the shallowest cached ancestors. One round-trip.
+    pub fn resolve(&self, root: &K) -> Option<Vec<(K, V)>> {
+        self.resolve_tx.send(root.clone()).ok()?;
+        self.resolve_rx.recv().ok()
     }
 
     /// Fire-and-forget set: send (key, value) into the shared mailbox.
@@ -92,9 +102,10 @@ pub struct CacheStats {
 /// the shutdown guarantee: senders drop → driver drains → driver exits.
 /// Call join() explicitly when you need to wait for the driver to finish.
 pub fn cache<K, V>(
-    name: &str, // the cache's identity — used for diagnostics and logging
+    name: &str,
     capacity: usize,
     num_clients: usize,
+    children_fn: Box<dyn Fn(&K) -> Vec<K> + Send>,
     can_emit: Box<dyn Fn() -> bool + Send>,
     emit: Box<dyn Fn(CacheStats) + Send>,
 ) -> (Vec<CacheHandle<K, V>>, CacheDriverHandle)
@@ -121,18 +132,29 @@ where
     let set_rx = mailbox::mailbox(set_rxs);
     let mut set_senders = set_senders.into_iter();
 
+    // Per-client resolve queues.
+    let mut resolve_rxs = Vec::with_capacity(num_clients);
+    let mut resolve_resp_txs = Vec::with_capacity(num_clients);
+
     for _ in 0..num_clients {
         // Get request queue: client sends key.
         let (req_tx, req_rx) = queue::queue_unbounded::<K>();
         // Get response queue: driver sends Option<V>.
         let (resp_tx, resp_rx) = queue::queue_unbounded::<Option<V>>();
+        // Resolve request/response queues.
+        let (res_tx, res_rx) = queue::queue_unbounded::<K>();
+        let (res_resp_tx, res_resp_rx) = queue::queue_unbounded::<Vec<(K, V)>>();
 
         get_rxs.push(req_rx);
         get_resp_txs.push(resp_tx);
+        resolve_rxs.push(res_rx);
+        resolve_resp_txs.push(res_resp_tx);
 
         handles.push(CacheHandle {
             get_tx: req_tx,
             get_rx: resp_rx,
+            resolve_tx: res_tx,
+            resolve_rx: res_resp_rx,
             set_tx: set_senders.next().unwrap(),
         });
     }
@@ -153,6 +175,8 @@ where
         let mut cache = LruCache::new(NonZeroUsize::new(capacity).unwrap());
         let alive_get_rxs: Vec<QueueReceiver<K>> = get_rxs;
         let alive_resp_txs: Vec<QueueSender<Option<V>>> = get_resp_txs;
+        let alive_resolve_rxs: Vec<QueueReceiver<K>> = resolve_rxs;
+        let alive_resolve_resp_txs: Vec<QueueSender<Vec<(K, V)>>> = resolve_resp_txs;
         let mut set_alive = true;
         let mut closed = vec![false; alive_get_rxs.len()];
 
@@ -208,7 +232,36 @@ where
             }
             stats.ns_gets += t0.elapsed().as_nanos() as u64;
 
-            // Gate check after servicing gets.
+            // Phase 2b: service ALL pending resolves.
+            for i in 0..alive_resolve_rxs.len() {
+                if closed[i] { continue; }
+                match alive_resolve_rxs[i].try_recv() {
+                    Ok(root) => {
+                        // Walk the tree using children_fn. Stop at cache hits.
+                        let mut results: Vec<(K, V)> = Vec::new();
+                        let mut stack: Vec<K> = vec![root];
+                        while let Some(node) = stack.pop() {
+                            if let Some(val) = cache.get(&node).cloned() {
+                                // Hit — return this, don't recurse deeper
+                                stats.hits += 1;
+                                results.push((node, val));
+                            } else {
+                                // Miss — recurse into children
+                                stats.misses += 1;
+                                let children = children_fn(&node);
+                                for child in children {
+                                    stack.push(child);
+                                }
+                            }
+                        }
+                        let _ = alive_resolve_resp_txs[i].send(results);
+                    }
+                    Err(crossbeam::channel::TryRecvError::Empty) => {}
+                    Err(crossbeam::channel::TryRecvError::Disconnected) => {}
+                }
+            }
+
+            // Gate check after servicing gets + resolves.
             if can_emit() {
                 stats.cache_size = cache.len();
                 emit(stats.clone());
@@ -250,6 +303,7 @@ where
             for i in 0..alive_get_rxs.len() {
                 if !closed[i] {
                     sel.recv(alive_get_rxs[i].inner());
+                    sel.recv(alive_resolve_rxs[i].inner());
                     has_ops = true;
                 }
             }
@@ -287,14 +341,14 @@ mod tests {
 
     #[test]
     fn get_returns_none_on_miss() {
-        let (handles, _driver) = cache::<String, String>("test", 16, 1, Box::new(|| true), Box::new(|_| {}));
+        let (handles, _driver) = cache::<String, String>("test", 16, 1, Box::new(|_| vec![]), Box::new(|| true), Box::new(|_| {}));
         let h = &handles[0];
         assert_eq!(h.get(&"missing".to_string()), None);
     }
 
     #[test]
     fn set_then_get_returns_some() {
-        let (handles, _driver) = cache::<String, i32>("test", 16, 1, Box::new(|| true), Box::new(|_| {}));
+        let (handles, _driver) = cache::<String, i32>("test", 16, 1, Box::new(|_| vec![]), Box::new(|| true), Box::new(|_| {}));
         let h = &handles[0];
         h.set("key".to_string(), 42);
         // Give the set a moment to propagate through the mailbox.
@@ -304,7 +358,7 @@ mod tests {
 
     #[test]
     fn multiple_clients_independent() {
-        let (handles, _driver) = cache::<String, i32>("test", 64, 3, Box::new(|| true), Box::new(|_| {}));
+        let (handles, _driver) = cache::<String, i32>("test", 64, 3, Box::new(|_| vec![]), Box::new(|| true), Box::new(|_| {}));
 
         // Each client sets and gets its own key.
         let threads: Vec<_> = handles
@@ -328,7 +382,7 @@ mod tests {
 
     #[test]
     fn eviction_at_capacity() {
-        let (handles, _driver) = cache::<i32, i32>("test", 2, 1, Box::new(|| true), Box::new(|_| {}));
+        let (handles, _driver) = cache::<i32, i32>("test", 2, 1, Box::new(|_| vec![]), Box::new(|| true), Box::new(|_| {}));
         let h = &handles[0];
 
         h.set(1, 10);
@@ -354,7 +408,7 @@ mod tests {
 
     #[test]
     fn shutdown_all_handles_dropped_driver_exits() {
-        let (handles, driver) = cache::<i32, i32>("test", 16, 2, Box::new(|| true), Box::new(|_| {}));
+        let (handles, driver) = cache::<i32, i32>("test", 16, 2, Box::new(|_| vec![]), Box::new(|| true), Box::new(|_| {}));
 
         // Drop all handles — driver should exit.
         drop(handles);
@@ -369,7 +423,7 @@ mod tests {
     #[test]
     fn shared_state_across_clients() {
         // One client sets, another client can read.
-        let (handles, _driver) = cache::<String, i32>("test", 16, 2, Box::new(|| true), Box::new(|_| {}));
+        let (handles, _driver) = cache::<String, i32>("test", 16, 2, Box::new(|_| vec![]), Box::new(|| true), Box::new(|_| {}));
         let mut iter = handles.into_iter();
         let writer = iter.next().unwrap();
         let reader = iter.next().unwrap();
