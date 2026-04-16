@@ -385,6 +385,28 @@ pub fn market_rhythm_specs(lens: &MarketLens) -> (Vec<IndicatorSpec>, Vec<Circul
     (indicators, circular)
 }
 
+/// Return indicator rhythm specs for a regime lens.
+/// Core: regime indicators + circular time.
+/// Full: Core + phase duration streams.
+pub fn regime_rhythm_specs(lens: &RegimeLens) -> (Vec<IndicatorSpec>, Vec<CircularSpec>) {
+    let circular = time_circular_specs();
+    let indicators = match lens {
+        RegimeLens::Core => {
+            regime_specs()
+        }
+        RegimeLens::Full => {
+            let mut s = regime_specs();
+            s.push(IndicatorSpec {
+                atom_name: "phase-duration",
+                extractor: |c| c.phase_duration as f64,
+                value_min: 0.0, value_max: 200.0, delta_range: 50.0,
+            });
+            s
+        }
+    };
+    (indicators, circular)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
