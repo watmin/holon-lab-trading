@@ -1,129 +1,131 @@
-# Metrics Backlog — Find the Bottleneck
+# Metrics Backlog — Every Thread, Every Computation Point
 
-## What we know
+## Threads in the System
 
-- Market observer encode: 197ms avg (Arc binary)
-- 872 AST nodes walked per encode
-- 800 cache hits, 71 misses per encode
-- ns_cache_get: 194ms total (all 872 gets)
-- ns_compute: 594ms (OVERLAPPING — includes recursive encode calls)
-- ns_cache_set: 0.2ms (negligible)
-- Cache at capacity: 262,144 entries, thrashing
+| Thread | Count | Has Timing? | Notes |
+|--------|-------|-------------|-------|
+| Main (candle loop) | 1 | NO | ticks indicators, clones window, sends to observers |
+| Market observer | 11 | PARTIAL | encode breakdown is broken (overlapping) |
+| Regime observer | 2 | YES | slot_recv, rhythm, send |
+| Broker | 22 | YES | gate4, retain, submit, snapshot |
+| Treasury | 1 | NO | processes ticks + requests, checks deadlines |
+| Cache driver | 1 | NO | LRU gets, sets, evictions. The suspect. |
+| Database driver | 1 | YES | flush_ns, rows, count |
+| Console drivers | N | NO | irrelevant |
 
-## What ns_cache_get includes (caller thread)
+## Main Thread — NO metrics
 
-`cache.get(ast)` does:
-1. `ast.clone()` — clone the ThoughtAST key to send through channel
-2. `get_tx.send(cloned_key)` — send to cache driver
-3. `get_rx.recv()` — block waiting for response
+The candle loop does per candle:
+1. `pipeline.bank.tick(&ohlcv)` — compute 90+ indicators
+2. `pipeline.candle_window.push(candle.clone())` — grow window
+3. `pipeline.candle_window.clone()` via `Arc::new(...)` — copy the window
+4. 11x `tx.send(ObsInput { candle.clone(), Arc::clone(&window) })` — send to observers
+5. `treasury_tick_sender.send_tick(...)` — send to treasury
 
-**Missing metrics on the caller:**
-- `ns_key_clone` — time to clone the AST key before sending
-- `ns_channel_wait` — time blocked on recv after send
+**Missing metrics:**
+- `ns_indicator_tick` — IndicatorBank.tick() time
+- `ns_window_clone` — Arc::new(window.clone()) time
+- `ns_observer_send` — time to send to all 11 observers (are any blocking?)
 
-## What the cache driver does (driver thread)
+## Market Observer — BROKEN encode metrics
 
-The driver loop:
-1. `try_recv` on set mailbox — drain pending installs
-2. `try_recv` on each client's get queue — service pending lookups
-3. For each get: `cache.get(&key).cloned()` — LRU hash + lookup + Vector clone on hit
-4. `resp_tx.send(result)` — send response back
+Has: total, collect_facts, encode, observe, send, drain_learn, facts_count.
+Has: enc_nodes, enc_hits, enc_misses, enc_ns_cache_get, enc_ns_compute, enc_ns_cache_set.
 
-**Missing metrics on the driver:**
-- `ns_driver_hash_lookup` — time in LRU .get() per request
-- `ns_driver_set_put` — time in LRU .put() per install
-- `ns_driver_loop_idle` — time between requests (is it spinning?)
-- `driver_queue_depth` — how many gets pending when serviced
-- `driver_sets_drained` — how many sets drained per loop iteration
+**Problem:** enc_ns_compute overlaps with enc_ns_cache_get because it wraps
+recursive encode() calls.
 
-## What ns_compute includes (BROKEN — overlapping)
+**Fix:** measure only leaf computation:
+- `enc_ns_leaf` — time in Primitives::bind/bundle/permute, scalar.encode, vm.get_vector ONLY
+- Remove enc_ns_compute (it's broken)
 
-The current timer wraps the entire match block. For Bind:
-```
+**Also missing:**
+- `enc_ns_key_clone` — time to clone the ThoughtAST key inside cache.get()
+
+To measure enc_ns_key_clone, split cache.get into two steps:
+```rust
 let t0 = now();
-let l = encode(cache, left, vm, scalar);  // RECURSIVE — includes child cache_gets
-let r = encode(cache, right, vm, scalar);  // RECURSIVE — includes child cache_gets  
-Primitives::bind(&l, &r);                  // THE ACTUAL WORK
-ns_compute += elapsed(t0);                 // counts children too
+let cloned = ast.clone();
+ns_key_clone += elapsed(t0);
+let t0 = now();
+let result = cache.get_precloned(cloned);
+ns_channel_roundtrip += elapsed(t0);
 ```
+This requires a new cache.get variant that takes an owned key.
 
-**Must fix:** measure only the leaf operation, not recursive children.
+## Cache Driver — NO metrics at all
 
-**Missing metric:**
-- `ns_leaf_compute` — ONLY the Primitives call. For Bind: just bind().
-  For Bundle: just bundle(). For Permute: just permute(). For scalars:
-  just scalar.encode() or vm.get_vector(). EXCLUDES recursive children.
+The driver is a thread that runs a tight loop. It has NO timing telemetry.
+It emits hit/miss/size counts but not:
 
-## Programs missing encode metrics
+- `ns_per_get` — how long to service one get (hash + LRU lookup + Vector clone + send response)
+- `ns_per_set` — how long to service one set (hash + LRU put + eviction)
+- `gets_serviced` — how many gets processed per loop iteration
+- `sets_drained` — how many sets drained per loop iteration
+- `get_queue_depth` — total pending gets across all clients when entering phase 2
+- `set_queue_depth` — pending sets when entering phase 1
+- `ns_idle` — time between "no work available" and "work arrives"
+- `evictions` — how many entries evicted per interval (capacity thrashing)
 
-### Broker program
-Calls `encode(&cache, &thought_ast, &vm, &scalar)` for gate4.
-The broker's AST is larger than any single market observer's — it
-bundles market rhythms + regime rhythms + portfolio rhythms + phase
-rhythm + time. No encode metrics emitted.
+## Treasury — NO timing metrics
 
-**Missing:** all encode metrics on broker's gate4 encode.
+The treasury processes ticks and requests through one mailbox.
+Every tick: check_deadlines (walks all active papers). Every
+request: handle_request (paper state lookup, issue, resolve).
 
-### Regime observer program  
-Does NOT call encode(). Builds ASTs only. No encode metrics needed.
-But clones regime_asts per slot (11 times). Clone cost unknown.
+**Missing:**
+- `ns_per_tick` — time to process one tick (check_deadlines)
+- `ns_per_request` — time to process one request
+- `ticks_processed` — count per interval
+- `requests_processed` — count per interval
+- `active_papers` — current count
+- `queue_depth` — pending events when entering recv()
 
-**Missing:** `ns_regime_ast_clone` — cost of cloning rhythm ASTs
-per slot.
+## Broker — PARTIAL
 
-## Computation points NOT measured anywhere
+Has: gate4, retain, submit_paper, exit_submit, snapshot, total.
+Does NOT have encode breakdown (the gate4 timer wraps the encode).
 
-### ThoughtAST Hash computation
-The LRU cache hashes the ThoughtAST key on every get and put.
-With Arc children, the Hash impl dereferences through Arc and
-walks the subtree. A Bind hashes both children recursively.
-A Bundle hashes all children. For a 100-pair rhythm bundle, the
-hash walks 100 pairs × 2 trigrams × 3 facts each = ~600 nodes
-PER HASH. This happens on the DRIVER thread.
+**Missing:**
+- All enc_* metrics on the broker's encode call
+- `ns_noise_subspace` — time in broker.noise_subspace.update() + anomalous_component()
+- `ns_portfolio_snapshot` — time computing the PortfolioSnapshot
 
-**Missing:** `ns_ast_hash` — time to hash one ThoughtAST key.
+## Regime Observer — OK but missing clone cost
 
-### ThoughtAST Clone for cache.get()
-`cache.get(ast)` calls `ast.clone()` to send through the channel.
-With Arc children, Bind/Permute clone is cheap (Arc increment).
-But Bundle clones the Vec of children — each child is cloned.
-The top-level Bundle(rhythms) clones ~25 rhythm ASTs. Each rhythm
-is a Bind(Atom, Bundle(pairs)) — Arc clone on the outer, but
-the inner Bundle clones the pairs Vec.
+Has: slot_recv, rhythm, send, total.
 
-**Missing:** `ns_ast_clone_for_get` — cost of cloning the AST
-key on the caller thread before sending.
+**Missing:**
+- `ns_ast_clone` — regime_asts.clone() per slot (11 clones)
 
-### Vector clone on cache hit
-`cache.get(&key).cloned()` on the driver clones the Vector value
-(10,000 i8). This is a memcpy of 10KB. 800 hits per encode =
-8MB of memcpy per candle per observer.
+## Queue Depths — NOT measured anywhere
 
-**Missing:** measured indirectly in ns_driver_hash_lookup but
-not isolated.
+Every bounded/unbounded queue in the system has a depth. If a producer
+is faster than a consumer, the queue grows. If a queue is bounded(1),
+the producer blocks.
 
-### Arc::clone vs deep clone cost
-We switched Box to Arc. Are we getting the benefit? The rhythm
-Bundle still contains a `Vec<ThoughtAST>`. Cloning the Vec clones
-each element. If the elements are Bind(Arc, Arc), each clone is
-cheap. But if they're Bundle(Vec<...>), each clone walks the Vec.
+Queues:
+- candle_tx → market observer: bounded(1). If blocked, main thread stalls.
+- market observer → regime observer: bounded(1) via topic. If blocked, market observer stalls.
+- regime observer → broker: unbounded. Can grow without bound.
+- broker → treasury: per-request response via bounded(1). If treasury is slow, broker blocks.
+- set mailbox → cache driver: unbounded. Can grow.
+- get request → cache driver: unbounded. Can grow.
+- all → database: unbounded. Can grow.
 
-**Missing:** verify Arc benefit with a simple timing test —
-clone a rhythm AST before and after Arc, compare.
+**Missing:** queue depth snapshots on all queues at regular intervals.
 
-## The question
+## Summary of Missing Metrics
 
-194ms for 872 cache gets = 223μs per get. Is that fast or slow?
+### Must add (find the bottleneck):
+1. Main thread: ns_indicator_tick, ns_window_clone, ns_observer_send
+2. Encode: fix ns_compute → ns_leaf only, add ns_key_clone
+3. Cache driver: ns_per_get, ns_per_set, get_queue_depth, set_queue_depth, evictions
+4. Treasury: ns_per_tick, ns_per_request, active_papers, queue_depth
+5. Broker: enc_* metrics on gate4 encode, ns_noise_subspace
+6. Queue depths on bounded channels (are producers blocking?)
 
-A channel send + recv roundtrip through crossbeam should be ~1μs.
-223μs is 223x slower than a bare channel roundtrip. Something
-else is happening in that 223μs. Candidates:
-
-1. AST clone before send (walks the tree)
-2. AST hash on the driver (walks the tree)  
-3. LRU eviction on the driver (capacity thrashing)
-4. Driver busy with other clients' requests (contention)
-5. Vector clone on hit response (10KB memcpy)
-
-The metrics above isolate each candidate. Add them. Measure.
-Stop guessing.
+### Nice to have:
+7. Regime observer: ns_ast_clone per slot
+8. Cache driver: ns_idle, gets_serviced per iteration
+9. Broker: ns_portfolio_snapshot
