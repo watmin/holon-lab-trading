@@ -42,51 +42,6 @@ pub fn encode_phase_current_facts(
     ]
 }
 
-/// Build a Sequential thought from the phase history.
-/// Each PhaseRecord becomes a Bundle of its attributes.
-/// Oldest to newest (the history is already chronological).
-/// Returns an empty Bundle if no history yet.
-pub fn phase_series_thought(phase_history: &[PhaseRecord]) -> ThoughtAST {
-    if phase_history.is_empty() {
-        return ThoughtAST::Bundle(vec![]);
-    }
-
-    let items: Vec<ThoughtAST> = phase_history
-        .iter()
-        .map(|record| {
-            let label_atom = phase_label_atom(record.label, record.direction);
-
-            let range = if record.close_avg > 0.0 {
-                round_to(
-                    (record.close_max - record.close_min) / record.close_avg,
-                    4,
-                )
-            } else {
-                0.0
-            };
-
-            let move_pct = if record.close_open > 0.0 {
-                round_to(
-                    (record.close_final - record.close_open) / record.close_open,
-                    4,
-                )
-            } else {
-                0.0
-            };
-
-            ThoughtAST::Bundle(vec![
-                label_atom,
-                ThoughtAST::Bind(Box::new(ThoughtAST::Atom("phase-rec-duration".into())), Box::new(ThoughtAST::Log { value: (record.duration as f64).max(1.0) })),
-                ThoughtAST::Bind(Box::new(ThoughtAST::Atom("phase-rec-range".into())), Box::new(ThoughtAST::Linear { value: range, scale: 1.0 })),
-                ThoughtAST::Bind(Box::new(ThoughtAST::Atom("phase-rec-move".into())), Box::new(ThoughtAST::Linear { value: move_pct, scale: 1.0 })),
-                ThoughtAST::Bind(Box::new(ThoughtAST::Atom("phase-rec-volume".into())), Box::new(ThoughtAST::Linear { value: round_to(record.volume_avg, 2), scale: 1.0 })),
-            ])
-        })
-        .collect();
-
-    ThoughtAST::Sequential(items)
-}
-
 /// Build a phase rhythm AST from the phase history. Proposal 056.
 ///
 /// Each phase record: own properties + prior-bundle deltas + prior-same-phase deltas.
@@ -329,69 +284,6 @@ mod tests {
                 }
             }
             _ => panic!("expected Bind for phase-duration"),
-        }
-    }
-
-    #[test]
-    fn test_phase_series_empty() {
-        let thought = phase_series_thought(&[]);
-        assert!(matches!(thought, ThoughtAST::Bundle(ref v) if v.is_empty()));
-    }
-
-    #[test]
-    fn test_phase_series_one_record() {
-        let record = PhaseRecord {
-            label: PhaseLabel::Valley,
-            direction: PhaseDirection::None,
-            start_candle: 0,
-            end_candle: 5,
-            duration: 5,
-            close_min: 100.0,
-            close_max: 105.0,
-            close_avg: 102.0,
-            close_open: 100.0,
-            close_final: 104.0,
-            volume_avg: 50.0,
-        };
-        let thought = phase_series_thought(&[record]);
-        assert!(matches!(thought, ThoughtAST::Sequential(ref items) if items.len() == 1));
-    }
-
-    #[test]
-    fn test_phase_series_multiple_records() {
-        let records = vec![
-            PhaseRecord {
-                label: PhaseLabel::Valley,
-                direction: PhaseDirection::None,
-                start_candle: 0, end_candle: 5, duration: 5,
-                close_min: 100.0, close_max: 105.0, close_avg: 102.0,
-                close_open: 100.0, close_final: 104.0, volume_avg: 50.0,
-            },
-            PhaseRecord {
-                label: PhaseLabel::Transition,
-                direction: PhaseDirection::Up,
-                start_candle: 5, end_candle: 8, duration: 3,
-                close_min: 104.0, close_max: 110.0, close_avg: 107.0,
-                close_open: 104.0, close_final: 110.0, volume_avg: 60.0,
-            },
-            PhaseRecord {
-                label: PhaseLabel::Peak,
-                direction: PhaseDirection::None,
-                start_candle: 8, end_candle: 12, duration: 4,
-                close_min: 108.0, close_max: 112.0, close_avg: 110.0,
-                close_open: 110.0, close_final: 109.0, volume_avg: 55.0,
-            },
-        ];
-        let thought = phase_series_thought(&records);
-        match thought {
-            ThoughtAST::Sequential(items) => {
-                assert_eq!(items.len(), 3);
-                // Each item is a Bundle
-                for item in &items {
-                    assert!(matches!(item, ThoughtAST::Bundle(_)));
-                }
-            }
-            _ => panic!("expected Sequential"),
         }
     }
 

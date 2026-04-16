@@ -30,32 +30,36 @@ specification served as the blueprint; the Rust is the organism. Proposals
 
 Kill switch file: `touch trader-stop`
 
-## Architecture (Proposal 007)
+## Architecture (Proposals 007, 056)
 
-Five primitives from holon-rs: atom, bind, bundle, cosine, reckoner.
+Six primitives from holon-rs: atom, bind, bundle, cosine, permute, reckoner.
+One scalar encoding: Thermometer (linear gradient, survives bipolar thresholding).
 One learning mechanism: the Reckoner (discrete or continuous readout).
+One noise filter: OnlineSubspace (strips background, reveals anomaly).
 One accountability measure: curve (conviction → accuracy).
 
 The enterprise is a tree of posts. Each post is an asset pair. The
 architecture is pair-agnostic — the binary takes an asset pool, each
 unique pair becomes a post. One pair today. Many tomorrow.
 
-**Market observers** (N per post) predict direction (Up/Down) from candle data.
-Each has a reckoner, a noise subspace, a window sampler, and a lens that
-selects which vocabulary modules it thinks about. Six lenses: momentum,
-structure, volume, regime, narrative, generalist.
+**Market observers** (N per post) predict direction (Up/Down) from indicator
+rhythms. Each thinks in movies, not snapshots — per-indicator rhythm ASTs
+built from the candle window via `indicator_rhythm`. Bundled bigrams of
+trigrams. Each has a reckoner, a noise subspace, and a window sampler.
+Eleven lenses across three schools (Dow, Pring, Wyckoff).
 
-**Position observers** (M per post) predict distances — how far to set the
-trailing stop and safety stop. Two continuous reckoners each (trail, stop).
-They compose market thoughts with their own position-specific facts through
-a lens (Core or Full). Renamed from "exit observer" in Proposal 050.
+**Regime observers** (M per post) are thought middleware. They build
+regime rhythm ASTs (kama-er, choppiness, entropy, etc.) from the candle
+window and pass them downstream with the market rhythms. Two lenses
+(Core, Full). Do not learn. Do not predict. The broker-observer is the
+accountability unit.
 
-**Brokers** (N×M per post) bind one market observer to one position observer.
-The broker IS the accountability unit. It owns paper trades and scalar
-accumulators (trail, stop). When a trade resolves, the broker propagates
-learning signals to both observers through mailbox channels. Values up,
-not effects down. Proposal 051 deleted the binary Grace/Violence reckoner —
-continuous reckoners only.
+**Broker-observers** (N×M per post) bind one market observer to one regime
+observer. The broker IS the accountability unit. It composes the full
+thought: market rhythms + regime rhythms + portfolio rhythms + phase
+rhythm + time facts. One encode. One noise subspace (strips background).
+One gate reckoner (Hold/Exit from anomaly). Papers, treasury interaction,
+exit proposals.
 
 **Post** — per-asset-pair unit. Owns all observers and brokers. Routes candles
 through the four-step loop. Proposes trades to the treasury. Uses
@@ -78,7 +82,7 @@ values against price histories. Owns its own module.
 ### The four-step loop (per candle, per post)
 
 1. **RESOLVE** — settle triggered trades, propagate outcomes to brokers → observers
-2. **COMPUTE+DISPATCH** — encode candle → market observers predict → position observers compose → brokers propose
+2. **COMPUTE+DISPATCH** — encode candle → market observers predict → regime observers compose → broker-observers propose
 3. **TICK** — 3a: parallel tick all brokers (paper trades). 3b: sequential propagate (shared observers). 3c: update triggers.
 4. **COLLECT+FUND** — treasury evaluates proposals, funds proven ones
 
@@ -128,8 +132,8 @@ the stream, writes the ledger, displays progress. It doesn't think.
 **One encoding path.** Encoding IS the thought — identical at prediction
 and resolution.
 
-**The enterprise vocabulary.** Market Observer, Position Observer, Broker,
-Post, Treasury, Enterprise, Reckoner. Not expert, exit observer, manager,
+**The enterprise vocabulary.** Market Observer, Regime Observer, Broker-Observer,
+Post, Treasury, Enterprise, Reckoner. Not expert, position observer, manager,
 desk, journal. The names carry the architecture.
 
 **Never average a distribution.** Let values breathe with the market.
