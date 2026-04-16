@@ -47,9 +47,20 @@ pub fn indicator_rhythm(
     value_max: f64,
     delta_range: f64,
 ) -> ThoughtAST {
-    if values.len() < 3 {
+    if values.len() < 4 {
         return ThoughtAST::Bundle(vec![]);
     }
+
+    // Trim input to only the candles that will survive the pair budget.
+    // budget pairs → budget+1 trigrams → budget+3 facts.
+    // Building more facts wastes AST nodes that get thrown away.
+    let budget = ((10_000 as f64).sqrt()) as usize; // rune:forge(dims) — needs dims param
+    let max_facts = budget + 3;
+    let values = if values.len() > max_facts {
+        &values[values.len() - max_facts..]
+    } else {
+        values
+    };
 
     // Step 1: each value → thermometer + delta from previous
     let facts: Vec<ThoughtAST> = values
