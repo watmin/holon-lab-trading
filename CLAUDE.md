@@ -28,7 +28,7 @@ specification served as the blueprint; the Rust is the organism. Proposals
 ./wat-vm.sh kill                           # kill switch
 ```
 
-Kill switch file: `touch trader-stop`
+Kill switch: `./wat-vm.sh kill`
 
 ## Architecture (Proposals 007, 056)
 
