@@ -6,7 +6,6 @@
 /// On shutdown it drains remaining learn signals and returns the observer.
 /// The learned state comes home.
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use holon::kernel::scalar::ScalarEncoder;
@@ -18,13 +17,13 @@ use crate::types::enums::Direction;
 use crate::types::log_entry::LogEntry;
 use crate::types::pivot::PhaseLabel;
 use crate::domain::market_observer::MarketObserver;
-use crate::domain::lens::market_lens_facts;
+use crate::domain::lens::market_rhythm_specs;
 use crate::encoding::encode::encode;
+use crate::encoding::rhythm::build_rhythm_asts;
 use crate::encoding::thought_encoder::ThoughtAST;
 use crate::programs::chain::MarketChain;
 use crate::programs::stdlib::cache::CacheHandle;
 use crate::programs::stdlib::console::ConsoleHandle;
-use crate::encoding::scale_tracker::ScaleTracker;
 use crate::services::queue::{QueueReceiver, QueueSender};
 use crate::services::topic::TopicSender;
 use crate::programs::telemetry::emit_metric;
@@ -109,7 +108,6 @@ pub fn market_observer_program(
     recalib_interval: usize,
 ) -> MarketObserver {
     let mut candle_count = 0usize;
-    let mut scales: HashMap<String, ScaleTracker> = HashMap::new();
     let lens = observer.lens;
     let mut unconfirmed: Vec<UnconfirmedPrediction> = Vec::new();
 
@@ -148,16 +146,17 @@ pub fn market_observer_program(
         let start = if full_len > ws { full_len - ws } else { 0 };
         let sliced = &input.window[start..];
 
-        // Collect facts through the lens.
+        // Build indicator rhythms through the lens — the thought IS the movie.
         let t0 = std::time::Instant::now();
-        let facts = market_lens_facts(&lens, &input.candle, &sliced, &mut scales);
-        let fact_count = facts.len() as f64;
-        let bundle_ast = ThoughtAST::Bundle(facts);
+        let (indicator_specs, circular_specs) = market_rhythm_specs(&lens);
+        let rhythm_asts = build_rhythm_asts(sliced, &indicator_specs, &circular_specs);
+        let fact_count = rhythm_asts.len() as f64;
+        let bundle_ast = ThoughtAST::Bundle(rhythm_asts);
         // rune:temper(intentional) — being blind is being incapable. Full thought logging every candle.
         let snapshot_edn = bundle_ast.to_edn();
         let ns_collect = t0.elapsed().as_nanos() as f64;
 
-        // Encode via cache: check → compute → install.
+        // Encode via cache: the AST tree is walked, every node cached.
         let t0 = std::time::Instant::now();
         let thought = encode(&cache, &bundle_ast, &vm, &scalar);
         let ns_encode = t0.elapsed().as_nanos() as f64;
