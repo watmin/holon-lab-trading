@@ -489,6 +489,90 @@ No changes needed. The record already carries duration, close_open,
 close_final, close_min, close_max, close_avg, volume_avg. The deltas
 are computed at encoding time from adjacent records, not stored.
 
+## Noise Subspace: Every Thinker Strips Its Own Background
+
+### The Principle
+
+The `OnlineSubspace` learns the manifold of normal. The anomaly is
+what the subspace cannot explain — the deviation from the background.
+The surprise fingerprint unbinds the anomaly to find which components
+drove the deviation. This is the memory layer's core contribution.
+
+With rhythm-based thoughts, the subspace learns normal rhythm
+bundles. When a rhythm bundle deviates — because some indicators
+are evolving in unusual ways — the anomaly captures the deviation.
+The subspace doesn't know about atoms or binds. It sees vectors.
+A bundle of 15 rhythms is one vector. The subspace learns the
+typical direction that vector points. When it deviates, the
+deviation IS the signal.
+
+### One Subspace Per Thinker
+
+Each thinker produces its own thought vector. Each thinker has its
+own noise subspace that learns what's normal for THAT thinker's
+specific question.
+
+**Market observer subspace:** learns normal market indicator rhythm
+bundles. "The indicators usually evolve like THIS." The anomaly:
+"today's indicator rhythms are unusual — RSI is doing something
+it doesn't normally do." The reckoner predicts from the anomaly,
+not the raw thought. It learns which deviations from normal predict
+Up vs Down.
+
+**Position observer subspace:** learns normal regime rhythm bundles.
+"The regime character usually evolves like THIS." The anomaly:
+"the regime shifted — kama-er dropped while entropy spiked." The
+position observer strips its own background. What survives is the
+regime shift, not the regime's usual state.
+
+**Broker-observer subspace:** learns normal composed thought bundles
+(market rhythms + regime rhythms + portfolio rhythms + phase rhythm).
+"My full picture usually looks like THIS." The anomaly: "something
+is unusual about the combination of market state + regime + my
+portfolio + the phase rhythm." The gate reckoner predicts Hold/Exit
+from the anomaly — what's unusual about the broker's full situation.
+
+### The Surprise Fingerprint at Each Level
+
+Because the thought is built from reversible VSA operations, the
+anomaly can be decomposed. Unbind the anomalous component against
+any indicator rhythm's atom to find that rhythm's contribution to
+the deviation.
+
+```scheme
+;; After the market observer encodes and strips noise:
+(let anomaly (anomalous-component subspace market-thought))
+
+;; Which rhythm drove the anomaly?
+(for-each indicator-name lens-indicators
+  (let rhythm-vec (unbind anomaly (atom indicator-name)))
+  (let surprise (norm rhythm-vec))
+  ;; high surprise → this indicator's rhythm is anomalous
+  )
+```
+
+The same unbinding technique from the DDoS domain. The same algebra.
+Different vocabulary. The field is a rhythm instead of a packet field.
+The surprise says "this indicator's evolution is unusual right now."
+
+### Anomaly Filtering Between Thinkers
+
+The position observer currently filters market facts by cosining
+them against the market observer's anomaly. With rhythms, this
+becomes: cosine each market rhythm vector against the market
+anomaly vector. Rhythms with high presence in the anomaly pass
+through — they are what's unusual about the market right now.
+Rhythms with low presence are the background — the noise subspace
+absorbed them.
+
+The broker-observer receives the filtered rhythms. Only the
+anomalous market rhythms arrive. The regime rhythms come with
+their own anomaly filtering (position observer's subspace). The
+broker's own subspace then strips what's normal about the
+combination. What survives all three filters is the triple
+anomaly — what's unusual about the market AND the regime AND
+the portfolio AND the phase structure, all at once.
+
 ## Naming
 
 The broker program becomes the broker-observer program. The broker
@@ -498,12 +582,13 @@ change to `broker-observer`.
 
 ## Examples
 
-Full worked examples with all scalars computed:
+Full worked examples:
 
-- [examples/market-observer-thought.wat](examples/market-observer-thought.wat) — 33 facts from momentum lens
-- [examples/position-core-thought.wat](examples/position-core-thought.wat) — Core lens: 10 regime+time facts
-- [examples/position-full-thought.wat](examples/position-full-thought.wat) — Full lens: 13 facts + phase scalars
-- [examples/broker-thought.wat](examples/broker-thought.wat) — composed thought with trimmed sequence
+- [examples/indicator-rhythm.wat](examples/indicator-rhythm.wat) — the generic function + RSI example expansion
+- [examples/market-observer-thought.wat](examples/market-observer-thought.wat) — 15 indicator rhythms via the generic function
+- [examples/position-core-thought.wat](examples/position-core-thought.wat) — 10 regime rhythms + market rhythms
+- [examples/position-full-thought.wat](examples/position-full-thought.wat) — 13 regime+phase rhythms + market rhythms
+- [examples/broker-thought.wat](examples/broker-thought.wat) — composed: market + regime + portfolio rhythms + phase rhythm
 - [examples/bullish-momentum.wat](examples/bullish-momentum.wat) — three rising valleys, strengthening rallies
 - [examples/exhaustion-top.wat](examples/exhaustion-top.wat) — weakening rallies, longer pauses
 - [examples/breakdown.wat](examples/breakdown.wat) — lower high after higher highs
