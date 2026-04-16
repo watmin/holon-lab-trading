@@ -17,6 +17,7 @@ use crate::domain::treasury::{PositionReceipt, PositionState};
 use crate::programs::app::treasury_program::TreasuryHandle;
 use crate::types::enums::{Direction, Outcome};
 use crate::types::log_entry::LogEntry;
+use crate::vocab::exit::phase::phase_rhythm_thought;
 use crate::programs::chain::MarketRegimeChain;
 use crate::encoding::encode::encode;
 use crate::encoding::thought_encoder::ThoughtAST;
@@ -41,6 +42,7 @@ fn broker_thought_ast(
     market_ast: &ThoughtAST,
     regime_facts: &[ThoughtAST],
     active_receipts: &[PositionReceipt],
+    candle_phase_history: &[crate::types::pivot::PhaseRecord],
     current_candle: usize,
     current_price: f64,
     candle_hour: f64,
@@ -90,6 +92,9 @@ fn broker_thought_ast(
             Box::new(ThoughtAST::Log { value: n }),
         ));
     }
+
+    // Phase rhythm — bundled bigrams of trigrams with structural deltas
+    facts.push(phase_rhythm_thought(&candle_phase_history));
 
     // Time — top-level facts, not rhythms
     facts.push(ThoughtAST::Bind(
@@ -154,6 +159,7 @@ pub fn broker_program(
             &chain.market_ast,
             &chain.regime_facts,
             &active_receipts,
+            &chain.candle.phase_history,
             candle_count,
             price,
             chain.candle.hour,

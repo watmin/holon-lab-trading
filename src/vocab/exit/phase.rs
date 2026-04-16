@@ -87,6 +87,121 @@ pub fn phase_series_thought(phase_history: &[PhaseRecord]) -> ThoughtAST {
     ThoughtAST::Sequential(items)
 }
 
+/// Build a phase rhythm AST from the phase history. Proposal 056.
+///
+/// Each phase record: own properties + prior-bundle deltas + prior-same-phase deltas.
+/// Thermometer encoding. Bundled bigrams of trigrams.
+/// Returns one ThoughtAST: (bind (atom "phase-rhythm") (bundle ...pairs...))
+pub fn phase_rhythm_thought(phase_history: &[PhaseRecord]) -> ThoughtAST {
+    if phase_history.len() < 4 {
+        return ThoughtAST::Bundle(vec![]);
+    }
+
+    let mut last_valley: Option<usize> = None;
+    let mut last_peak: Option<usize> = None;
+    let mut last_trans_up: Option<usize> = None;
+    let mut last_trans_down: Option<usize> = None;
+
+    fn props(r: &PhaseRecord) -> (f64, f64, f64, f64) {
+        let dur = r.duration as f64;
+        let range = if r.close_avg > 0.0 { (r.close_max - r.close_min) / r.close_avg } else { 0.0 };
+        let mv = if r.close_open > 0.0 { (r.close_final - r.close_open) / r.close_open } else { 0.0 };
+        (dur, range, mv, r.volume_avg)
+    }
+
+    fn rel(a: f64, b: f64) -> f64 {
+        if b.abs() > 0.0001 { (a - b) / b.abs() } else { 0.0 }
+    }
+
+    let records: Vec<ThoughtAST> = phase_history.iter().enumerate().map(|(i, record)| {
+        let (dur, range, mv, vol) = props(record);
+        let label = phase_label_atom(record.label, record.direction);
+
+        let mut facts = vec![
+            label,
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("rec-duration".into())),
+                Box::new(ThoughtAST::Thermometer { value: dur, min: 0.0, max: 200.0 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("rec-move".into())),
+                Box::new(ThoughtAST::Thermometer { value: mv, min: -0.1, max: 0.1 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("rec-range".into())),
+                Box::new(ThoughtAST::Thermometer { value: range, min: 0.0, max: 0.1 })),
+            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("rec-volume".into())),
+                Box::new(ThoughtAST::Thermometer { value: vol, min: 0.0, max: 10000.0 })),
+        ];
+
+        if i > 0 {
+            let (p_dur, _, p_mv, p_vol) = props(&phase_history[i - 1]);
+            facts.push(ThoughtAST::Bind(Box::new(ThoughtAST::Atom("prior-duration-delta".into())),
+                Box::new(ThoughtAST::Thermometer { value: rel(dur, p_dur), min: -2.0, max: 2.0 })));
+            facts.push(ThoughtAST::Bind(Box::new(ThoughtAST::Atom("prior-move-delta".into())),
+                Box::new(ThoughtAST::Thermometer { value: mv - p_mv, min: -0.1, max: 0.1 })));
+            facts.push(ThoughtAST::Bind(Box::new(ThoughtAST::Atom("prior-volume-delta".into())),
+                Box::new(ThoughtAST::Thermometer { value: rel(vol, p_vol), min: -2.0, max: 2.0 })));
+        }
+
+        let same_idx = match (record.label, record.direction) {
+            (PhaseLabel::Valley, _) => last_valley,
+            (PhaseLabel::Peak, _) => last_peak,
+            (PhaseLabel::Transition, PhaseDirection::Up) => last_trans_up,
+            (PhaseLabel::Transition, PhaseDirection::Down) => last_trans_down,
+            _ => None,
+        };
+        if let Some(si) = same_idx {
+            let (s_dur, _, s_mv, s_vol) = props(&phase_history[si]);
+            facts.push(ThoughtAST::Bind(Box::new(ThoughtAST::Atom("same-move-delta".into())),
+                Box::new(ThoughtAST::Thermometer { value: mv - s_mv, min: -0.1, max: 0.1 })));
+            facts.push(ThoughtAST::Bind(Box::new(ThoughtAST::Atom("same-duration-delta".into())),
+                Box::new(ThoughtAST::Thermometer { value: rel(dur, s_dur), min: -2.0, max: 2.0 })));
+            facts.push(ThoughtAST::Bind(Box::new(ThoughtAST::Atom("same-volume-delta".into())),
+                Box::new(ThoughtAST::Thermometer { value: rel(vol, s_vol), min: -2.0, max: 2.0 })));
+        }
+
+        match (record.label, record.direction) {
+            (PhaseLabel::Valley, _) => last_valley = Some(i),
+            (PhaseLabel::Peak, _) => last_peak = Some(i),
+            (PhaseLabel::Transition, PhaseDirection::Up) => last_trans_up = Some(i),
+            (PhaseLabel::Transition, PhaseDirection::Down) => last_trans_down = Some(i),
+            _ => {}
+        }
+
+        ThoughtAST::Bundle(facts)
+    }).collect();
+
+    let budget = ((10_000 as f64).sqrt()) as usize;
+    let max_records = budget + 3;
+    let records = if records.len() > max_records {
+        &records[records.len() - max_records..]
+    } else {
+        &records[..]
+    };
+
+    let trigrams: Vec<ThoughtAST> = records.windows(3).map(|w| {
+        ThoughtAST::Bind(
+            Box::new(ThoughtAST::Bind(
+                Box::new(w[0].clone()),
+                Box::new(ThoughtAST::Permute(Box::new(w[1].clone()), 1)),
+            )),
+            Box::new(ThoughtAST::Permute(Box::new(w[2].clone()), 2)),
+        )
+    }).collect();
+
+    let pairs: Vec<ThoughtAST> = trigrams.windows(2).map(|w| {
+        ThoughtAST::Bind(Box::new(w[0].clone()), Box::new(w[1].clone()))
+    }).collect();
+
+    if pairs.is_empty() {
+        return ThoughtAST::Bundle(vec![]);
+    }
+
+    let start = if pairs.len() > budget { pairs.len() - budget } else { 0 };
+    let trimmed: Vec<ThoughtAST> = pairs[start..].to_vec();
+
+    ThoughtAST::Bind(
+        Box::new(ThoughtAST::Atom("phase-rhythm".into())),
+        Box::new(ThoughtAST::Bundle(trimmed)),
+    )
+}
+
 /// Scalar summary facts computed from the phase history.
 /// Complements the Sequential's implicit geometry with explicit measurements.
 pub fn phase_scalar_facts(

@@ -30,7 +30,7 @@ use crate::vocab::market::timeframe::encode_timeframe_facts;
 // Vocab imports -- exit
 use crate::vocab::exit::regime::encode_exit_regime_facts;
 use crate::vocab::exit::time::encode_exit_time_facts;
-use crate::vocab::exit::phase::{encode_phase_current_facts, phase_series_thought, phase_scalar_facts};
+use crate::vocab::exit::phase::{encode_phase_current_facts, phase_rhythm_thought, phase_scalar_facts};
 
 // Vocab imports -- shared
 use crate::vocab::shared::time::encode_time_facts;
@@ -182,7 +182,7 @@ pub fn regime_lens_facts(lens: &RegimeLens, candle: &Candle, scales: &mut HashMa
             let mut facts = encode_exit_regime_facts(candle, scales);
             facts.extend(encode_exit_time_facts(candle));
             facts.extend(encode_phase_current_facts(candle, scales));
-            facts.push(phase_series_thought(&candle.phase_history));
+            facts.push(phase_rhythm_thought(&candle.phase_history));
             facts.extend(phase_scalar_facts(&candle.phase_history, scales));
             facts
         }
