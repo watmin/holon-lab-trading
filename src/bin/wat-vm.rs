@@ -472,7 +472,7 @@ fn main() {
     let cache_emit = {
         let tx = cache_telemetry_tx;
         let seq = std::sync::atomic::AtomicUsize::new(0);
-        move |hits: usize, misses: usize, size: usize| {
+        move |stats: enterprise::programs::stdlib::cache::CacheStats| {
             let s = seq.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             let id = format!("cache:emit:{}", s);
             let ts = std::time::SystemTime::now()
@@ -480,23 +480,23 @@ fn main() {
                 .unwrap()
                 .as_nanos() as u64;
             let dims = "{\"name\":\"encoder\"}";
-            enterprise::programs::telemetry::emit_metric(
-                &tx, "cache", &id, dims, ts, "hits", hits as f64, "Count",
-            );
-            enterprise::programs::telemetry::emit_metric(
-                &tx, "cache", &id, dims, ts, "misses", misses as f64, "Count",
-            );
-            enterprise::programs::telemetry::emit_metric(
-                &tx, "cache", &id, dims, ts, "cache_size", size as f64, "Count",
-            );
-            let hit_rate = if hits + misses > 0 {
-                hits as f64 / (hits + misses) as f64
-            } else {
-                0.0
+            let m = |name, val: f64, unit| {
+                enterprise::programs::telemetry::emit_metric(
+                    &tx, "cache", &id, dims, ts, name, val, unit,
+                );
             };
-            enterprise::programs::telemetry::emit_metric(
-                &tx, "cache", &id, dims, ts, "hit_rate", hit_rate, "Count",
-            );
+            m("hits", stats.hits as f64, "Count");
+            m("misses", stats.misses as f64, "Count");
+            m("cache_size", stats.cache_size as f64, "Count");
+            let hit_rate = if stats.hits + stats.misses > 0 {
+                stats.hits as f64 / (stats.hits + stats.misses) as f64
+            } else { 0.0 };
+            m("hit_rate", hit_rate, "Count");
+            m("ns_gets", stats.ns_gets as f64, "Nanoseconds");
+            m("ns_sets", stats.ns_sets as f64, "Nanoseconds");
+            m("gets_serviced", stats.gets_serviced as f64, "Count");
+            m("sets_drained", stats.sets_drained as f64, "Count");
+            m("evictions", stats.evictions as f64, "Count");
         }
     };
     let (cache_handles, cache_driver) = cache::<ThoughtAST, Vector>(

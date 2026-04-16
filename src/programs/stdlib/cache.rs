@@ -64,6 +64,19 @@ impl CacheDriverHandle {
 }
 
 
+/// Cache telemetry emitted through the gate pattern.
+#[derive(Clone, Debug, Default)]
+pub struct CacheStats {
+    pub hits: usize,
+    pub misses: usize,
+    pub cache_size: usize,
+    pub ns_gets: u64,
+    pub ns_sets: u64,
+    pub gets_serviced: usize,
+    pub sets_drained: usize,
+    pub evictions: usize,
+}
+
 /// Create a cache with the given capacity and number of client programs.
 ///
 /// Returns N CacheHandles (one per program) and a CacheDriverHandle.
@@ -83,7 +96,7 @@ pub fn cache<K, V>(
     capacity: usize,
     num_clients: usize,
     can_emit: Box<dyn Fn() -> bool + Send>,
-    emit: Box<dyn Fn(usize, usize, usize) + Send>,
+    emit: Box<dyn Fn(CacheStats) + Send>,
 ) -> (Vec<CacheHandle<K, V>>, CacheDriverHandle)
 where
     K: Send + Clone + Hash + Eq + 'static,
@@ -144,15 +157,20 @@ where
         let mut closed = vec![false; alive_get_rxs.len()];
 
         // Telemetry accumulators — reset after each emission.
-        let mut period_hits: usize = 0;
-        let mut period_misses: usize = 0;
+        let mut stats = CacheStats::default();
 
         loop {
             // Phase 1: drain ALL pending sets.
             if set_alive {
+                let t0 = std::time::Instant::now();
                 loop {
                     match set_rx.try_recv() {
-                        Ok((key, value)) => { cache.put(key, value); }
+                        Ok((key, value)) => {
+                            let at_cap = cache.len() == capacity;
+                            cache.put(key, value);
+                            if at_cap { stats.evictions += 1; }
+                            stats.sets_drained += 1;
+                        }
                         Err(crossbeam::channel::TryRecvError::Empty) => break,
                         Err(crossbeam::channel::TryRecvError::Disconnected) => {
                             set_alive = false;
@@ -160,10 +178,12 @@ where
                         }
                     }
                 }
+                stats.ns_sets += t0.elapsed().as_nanos() as u64;
             }
 
             // Phase 2: service ALL pending gets.
             let mut all_closed = true;
+            let t0 = std::time::Instant::now();
             for i in 0..alive_get_rxs.len() {
                 if closed[i] { continue; }
                 all_closed = false;
@@ -172,12 +192,13 @@ where
                         let result = cache.get(&key).cloned();
                         if result.is_some() {
                             hits_inner.fetch_add(1, Ordering::Relaxed);
-                            period_hits += 1;
+                            stats.hits += 1;
                         } else {
                             misses_inner.fetch_add(1, Ordering::Relaxed);
-                            period_misses += 1;
+                            stats.misses += 1;
                         }
                         let _ = alive_resp_txs[i].send(result);
+                        stats.gets_serviced += 1;
                     }
                     Err(crossbeam::channel::TryRecvError::Empty) => {}
                     Err(crossbeam::channel::TryRecvError::Disconnected) => {
@@ -185,33 +206,36 @@ where
                     }
                 }
             }
+            stats.ns_gets += t0.elapsed().as_nanos() as u64;
 
             // Gate check after servicing gets.
             if can_emit() {
-                let cache_size = cache.len();
-                emit(period_hits, period_misses, cache_size);
-                period_hits = 0;
-                period_misses = 0;
+                stats.cache_size = cache.len();
+                emit(stats.clone());
+                stats = CacheStats::default();
             }
 
             // Exit when all get clients disconnected AND sets are done.
             if all_closed && !set_alive {
-                // Emit remainder unconditionally — no gate check.
-                if period_hits > 0 || period_misses > 0 {
-                    let cache_size = cache.len();
-                    emit(period_hits, period_misses, cache_size);
+                if stats.hits > 0 || stats.misses > 0 {
+                    stats.cache_size = cache.len();
+                    emit(stats.clone());
                 }
                 break;
             }
             if all_closed {
                 // No get clients left but sets still alive — just drain sets.
                 match set_rx.recv() {
-                    Ok((key, value)) => { cache.put(key, value); }
+                    Ok((key, value)) => {
+                        let at_cap = cache.len() == capacity;
+                        cache.put(key, value);
+                        if at_cap { stats.evictions += 1; }
+                        stats.sets_drained += 1;
+                    }
                     Err(_) => {
-                        // Emit remainder on this exit path too.
-                        if period_hits > 0 || period_misses > 0 {
-                            let cache_size = cache.len();
-                            emit(period_hits, period_misses, cache_size);
+                        if stats.hits > 0 || stats.misses > 0 {
+                            stats.cache_size = cache.len();
+                            emit(stats.clone());
                         }
                         break;
                     }
@@ -234,10 +258,9 @@ where
                 has_ops = true;
             }
             if !has_ops {
-                // Emit remainder on this exit path too.
-                if period_hits > 0 || period_misses > 0 {
-                    let cache_size = cache.len();
-                    emit(period_hits, period_misses, cache_size);
+                if stats.hits > 0 || stats.misses > 0 {
+                    stats.cache_size = cache.len();
+                    emit(stats.clone());
                 }
                 break; // all channels gone between phases
             }
@@ -264,14 +287,14 @@ mod tests {
 
     #[test]
     fn get_returns_none_on_miss() {
-        let (handles, _driver) = cache::<String, String>("test", 16, 1, Box::new(|| true), Box::new(|_, _, _| {}));
+        let (handles, _driver) = cache::<String, String>("test", 16, 1, Box::new(|| true), Box::new(|_| {}));
         let h = &handles[0];
         assert_eq!(h.get(&"missing".to_string()), None);
     }
 
     #[test]
     fn set_then_get_returns_some() {
-        let (handles, _driver) = cache::<String, i32>("test", 16, 1, Box::new(|| true), Box::new(|_, _, _| {}));
+        let (handles, _driver) = cache::<String, i32>("test", 16, 1, Box::new(|| true), Box::new(|_| {}));
         let h = &handles[0];
         h.set("key".to_string(), 42);
         // Give the set a moment to propagate through the mailbox.
@@ -281,7 +304,7 @@ mod tests {
 
     #[test]
     fn multiple_clients_independent() {
-        let (handles, _driver) = cache::<String, i32>("test", 64, 3, Box::new(|| true), Box::new(|_, _, _| {}));
+        let (handles, _driver) = cache::<String, i32>("test", 64, 3, Box::new(|| true), Box::new(|_| {}));
 
         // Each client sets and gets its own key.
         let threads: Vec<_> = handles
@@ -305,7 +328,7 @@ mod tests {
 
     #[test]
     fn eviction_at_capacity() {
-        let (handles, _driver) = cache::<i32, i32>("test", 2, 1, Box::new(|| true), Box::new(|_, _, _| {}));
+        let (handles, _driver) = cache::<i32, i32>("test", 2, 1, Box::new(|| true), Box::new(|_| {}));
         let h = &handles[0];
 
         h.set(1, 10);
@@ -331,7 +354,7 @@ mod tests {
 
     #[test]
     fn shutdown_all_handles_dropped_driver_exits() {
-        let (handles, driver) = cache::<i32, i32>("test", 16, 2, Box::new(|| true), Box::new(|_, _, _| {}));
+        let (handles, driver) = cache::<i32, i32>("test", 16, 2, Box::new(|| true), Box::new(|_| {}));
 
         // Drop all handles — driver should exit.
         drop(handles);
@@ -346,7 +369,7 @@ mod tests {
     #[test]
     fn shared_state_across_clients() {
         // One client sets, another client can read.
-        let (handles, _driver) = cache::<String, i32>("test", 16, 2, Box::new(|| true), Box::new(|_, _, _| {}));
+        let (handles, _driver) = cache::<String, i32>("test", 16, 2, Box::new(|| true), Box::new(|_| {}));
         let mut iter = handles.into_iter();
         let writer = iter.next().unwrap();
         let reader = iter.next().unwrap();
