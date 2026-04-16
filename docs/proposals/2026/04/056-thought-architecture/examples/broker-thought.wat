@@ -51,12 +51,28 @@
   (bind (atom "market-raw") (bind (atom "stoch-k")      (linear 78.0 1.0)))
   (bind (atom "market-raw") (bind (atom "volume-accel") (linear 1.3 1.0)))
 
-  ;; ── 2. Broker-observer's portfolio anxiety (4) ─────────────────
+  ;; ── 2. Broker-observer's portfolio anxiety ───────────────────────
 
-  (bind (atom "avg-paper-age")           (log 145.0))
-  (bind (atom "avg-time-pressure")       (linear 0.29 1.0))
-  (bind (atom "avg-unrealized-residue")  (linear -0.003 1.0))
+  ;; Counts
   (bind (atom "active-positions")        (log 47.0))
+
+  ;; Age distribution
+  (bind (atom "avg-paper-age")           (log 145.0))
+  (bind (atom "min-paper-age")           (log 12.0))         ;; newest paper
+  (bind (atom "max-paper-age")           (log 380.0))        ;; oldest paper
+
+  ;; Time pressure
+  (bind (atom "avg-time-pressure")       (linear 0.29 1.0))
+  (bind (atom "max-time-pressure")       (linear 0.76 1.0))  ;; closest to deadline
+
+  ;; Unrealized P&L
+  (bind (atom "avg-unrealized-residue")  (linear -0.003 1.0))
+  (bind (atom "min-unrealized-residue")  (linear -0.018 1.0));; worst paper
+  (bind (atom "max-unrealized-residue")  (linear 0.012 1.0)) ;; best paper
+
+  ;; Track record
+  (bind (atom "grace-rate")              (linear 0.0 1.0))   ;; 0% grace so far
+  (bind (atom "trade-count")             (log 230.0))        ;; experience
 
   ;; ── 3. Phase rhythm (1 vector) ─────────────────────────────────
   ;; The bundled bigrams of trigrams. Computed from phase_history.
@@ -69,7 +85,7 @@
   ;; (rhythm-vector)  ;; one slot in this bundle
   )
 
-;; Outer bundle: ~31 position + 4 anxiety + 1 rhythm = ~36 items.
+;; Outer bundle: ~31 position + 11 anxiety + 1 rhythm = ~43 items.
 ;; Kanerva capacity for D=10,000 is ~100. Plenty of headroom.
 ;;
 ;; The rhythm's INTERNAL capacity (bigram-pairs in the rhythm bundle)
