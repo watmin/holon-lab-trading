@@ -1,4 +1,4 @@
-/// Lens wiring. Maps MarketLens/PositionLens to vocabulary facts.
+/// Lens wiring. Maps MarketLens/RegimeLens to vocabulary facts.
 ///
 /// Extracted from orchestration/post.rs. These are the live functions that
 /// the wat-vm programs call to wire vocab modules to observer lenses.
@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 
 use crate::types::candle::Candle;
-use crate::types::enums::{PositionLens, MarketLens};
+use crate::types::enums::{RegimeLens, MarketLens};
 use crate::encoding::scale_tracker::ScaleTracker;
 use crate::encoding::thought_encoder::ThoughtAST;
 use crate::encoding::rhythm::{IndicatorSpec, CircularSpec};
@@ -169,15 +169,15 @@ pub fn market_lens_facts(lens: &MarketLens, candle: &Candle, window: &[Candle], 
 /// The lens IS the factory. It determines what this observer sees.
 /// Core: lean — regime + time. 5 trade atoms downstream.
 /// Full: rich — regime + time + phase series. 13 trade atoms downstream.
-pub fn position_lens_facts(lens: &PositionLens, candle: &Candle, scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
+pub fn regime_lens_facts(lens: &RegimeLens, candle: &Candle, scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
     match lens {
-        PositionLens::Core => {
+        RegimeLens::Core => {
             // Lean: regime + time. The consensus minimum.
             let mut facts = encode_exit_regime_facts(candle, scales);
             facts.extend(encode_exit_time_facts(candle));
             facts
         }
-        PositionLens::Full => {
+        RegimeLens::Full => {
             // Rich: regime + time + phase. The full picture.
             let mut facts = encode_exit_regime_facts(candle, scales);
             facts.extend(encode_exit_time_facts(candle));
@@ -388,7 +388,7 @@ pub fn market_rhythm_specs(lens: &MarketLens) -> (Vec<IndicatorSpec>, Vec<Circul
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::enums::{MarketLens, PositionLens};
+    use crate::types::enums::{MarketLens, RegimeLens};
 
     #[test]
     fn test_market_lens_facts_differ_by_lens() {
@@ -436,12 +436,12 @@ mod tests {
     }
 
     #[test]
-    fn test_position_lens_facts_variants() {
+    fn test_regime_lens_facts_variants() {
         let candle = Candle::default();
         let mut scales = std::collections::HashMap::new();
 
-        let core_facts = position_lens_facts(&PositionLens::Core, &candle, &mut scales);
-        let full_facts = position_lens_facts(&PositionLens::Full, &candle, &mut scales);
+        let core_facts = regime_lens_facts(&RegimeLens::Core, &candle, &mut scales);
+        let full_facts = regime_lens_facts(&RegimeLens::Full, &candle, &mut scales);
 
         // Core: regime(8) + time(2) = 10.
         // Full: regime(8) + time(2) + phase-label(1) + phase-duration(1) + phase-series(1) = 13.

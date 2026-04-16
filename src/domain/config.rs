@@ -3,10 +3,10 @@
 /// The lenses, seeds, and parameters live here, not in the binary.
 
 use crate::domain::broker::Broker;
-use crate::domain::position_observer::PositionObserver;
+use crate::domain::regime_observer::RegimeObserver;
 use crate::domain::market_observer::MarketObserver;
 use crate::learning::window_sampler::WindowSampler;
-use crate::types::enums::{PositionLens, MarketLens};
+use crate::types::enums::{RegimeLens, MarketLens};
 
 /// The eleven market lenses. Three schools, one observer per lens.
 /// Proposals 041+042: Dow (4), Pring (4), Wyckoff (3).
@@ -47,16 +47,16 @@ pub fn create_market_observers(dims: usize, recalib_interval: usize) -> Vec<Mark
 
 /// The two position lenses. One exit observer per lens.
 /// Proposal 040: trade-state atoms, not market data.
-pub const POSITION_LENSES: &[PositionLens] = &[
-    PositionLens::Core,
-    PositionLens::Full,
+pub const POSITION_LENSES: &[RegimeLens] = &[
+    RegimeLens::Core,
+    RegimeLens::Full,
 ];
 
-/// Create all position observers with their configured lenses.
-pub fn create_position_observers() -> Vec<PositionObserver> {
+/// Create all regime observers with their configured lenses.
+pub fn create_regime_observers() -> Vec<RegimeObserver> {
     POSITION_LENSES
         .iter()
-        .map(|lens| PositionObserver::new(*lens))
+        .map(|lens| RegimeObserver::new(*lens))
         .collect()
 }
 
@@ -132,10 +132,10 @@ mod tests {
     }
 
     #[test]
-    fn test_create_position_observers() {
-        let observers = create_position_observers();
+    fn test_create_regime_observers() {
+        let observers = create_regime_observers();
         assert_eq!(observers.len(), 2);
-        assert_eq!(observers[0].lens, PositionLens::Core);
-        assert_eq!(observers[1].lens, PositionLens::Full);
+        assert_eq!(observers[0].lens, RegimeLens::Core);
+        assert_eq!(observers[1].lens, RegimeLens::Full);
     }
 }

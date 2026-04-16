@@ -93,7 +93,7 @@ fn grade_predictions(
 
 /// Run the market observer program. Call this inside thread::spawn.
 /// The observer teaches itself from the phase labeler — no broker propagation.
-/// Output fans out to M position observers via a topic.
+/// Output fans out to M regime observers via a topic.
 /// Returns the trained MarketObserver when the candle source disconnects.
 pub fn market_observer_program(
     candle_rx: QueueReceiver<ObsInput>,

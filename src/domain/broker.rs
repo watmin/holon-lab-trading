@@ -1,5 +1,5 @@
 /// broker.rs — The accountability primitive. Binds one market observer +
-/// one position observer. The broker owns the game — gate 4, anxiety
+/// one regime observer. The broker owns the game — gate 4, anxiety
 /// atoms, exit/hold decisions. The treasury owns papers and capital.
 
 use holon::memory::{ReckConfig, Reckoner};
@@ -13,7 +13,7 @@ pub struct Broker {
     /// Position in the N x M grid. THE identity.
     pub slot_idx: usize,
     /// M — needed to derive market-idx and position-idx.
-    pub position_count: usize,
+    pub regime_count: usize,
     /// Total resolved positions.
     pub trade_count: usize,
     /// Count of Grace outcomes.
@@ -34,15 +34,15 @@ impl Broker {
     pub fn new(
         observer_names: Vec<String>,
         slot_idx: usize,
-        position_count: usize,
+        regime_count: usize,
         dims: usize,
         recalib_interval: usize,
     ) -> Self {
-        assert!(position_count > 0, "broker position_count must be > 0");
+        assert!(regime_count > 0, "broker regime_count must be > 0");
         Self {
             observer_names,
             slot_idx,
-            position_count,
+            regime_count,
             trade_count: 0,
             grace_count: 0,
             violence_count: 0,
@@ -59,12 +59,12 @@ impl Broker {
 
     /// Derive market observer index from slot_idx.
     pub fn market_idx(&self) -> usize {
-        self.slot_idx / self.position_count
+        self.slot_idx / self.regime_count
     }
 
-    /// Derive position observer index from slot_idx.
-    pub fn position_idx(&self) -> usize {
-        self.slot_idx % self.position_count
+    /// Derive regime observer index from slot_idx.
+    pub fn regime_idx(&self) -> usize {
+        self.slot_idx % self.regime_count
     }
 
     /// Is the gate open? During cold start (< 50 of either outcome), always open.
@@ -106,7 +106,7 @@ mod tests {
     fn test_broker_new() {
         let broker = make_broker();
         assert_eq!(broker.slot_idx, 0);
-        assert_eq!(broker.position_count, 2);
+        assert_eq!(broker.regime_count, 2);
         assert_eq!(broker.trade_count, 0);
         assert_eq!(broker.grace_count, 0);
         assert_eq!(broker.violence_count, 0);
@@ -114,10 +114,10 @@ mod tests {
     }
 
     #[test]
-    fn test_market_position_idx() {
+    fn test_market_regime_idx() {
         let broker = Broker::new(vec!["a".into(), "b".into()], 5, 3, DIMS, RECALIB);
         assert_eq!(broker.market_idx(), 1);  // 5 / 3
-        assert_eq!(broker.position_idx(), 2); // 5 % 3
+        assert_eq!(broker.regime_idx(), 2); // 5 % 3
     }
 
     #[test]

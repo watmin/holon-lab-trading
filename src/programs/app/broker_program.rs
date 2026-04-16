@@ -1,6 +1,6 @@
 /// broker_program.rs — the broker thread body.
 ///
-/// Receives MarketPositionChains through a queue.
+/// Receives MarketRegimeChains through a queue.
 /// Submits papers to the treasury, discovers outcomes by reading.
 /// Encodes anxiety atoms from active position receipts.
 /// Gate 4: the Hold/Exit reckoner. Learns from anxiety. Proposes exits.
@@ -17,7 +17,7 @@ use crate::domain::treasury::{PositionReceipt, PositionState};
 use crate::programs::app::treasury_program::TreasuryHandle;
 use crate::types::enums::{Direction, Outcome};
 use crate::types::log_entry::LogEntry;
-use crate::programs::chain::MarketPositionChain;
+use crate::programs::chain::MarketRegimeChain;
 use crate::encoding::encode::encode;
 use crate::encoding::thought_encoder::ThoughtAST;
 use crate::programs::stdlib::cache::CacheHandle;
@@ -35,15 +35,15 @@ fn direction_from_prediction(pred: &holon::memory::Prediction) -> Direction {
     }
 }
 
-/// Build the broker's thought AST: position observer facts + portfolio anxiety.
+/// Build the broker's thought AST: regime observer facts + portfolio anxiety.
 /// Returns the AST so it can be encoded AND logged without recomputing.
 fn broker_thought_ast(
-    position_facts: &[ThoughtAST],
+    regime_facts: &[ThoughtAST],
     active_receipts: &[PositionReceipt],
     current_candle: usize,
     current_price: f64,
 ) -> ThoughtAST {
-    let mut facts: Vec<ThoughtAST> = position_facts.to_vec();
+    let mut facts: Vec<ThoughtAST> = regime_facts.to_vec();
 
     let n = active_receipts.len() as f64;
     if !active_receipts.is_empty() {
@@ -88,7 +88,7 @@ fn broker_thought_ast(
 /// Run the broker program. Call this inside thread::spawn.
 /// Returns the trained Broker when the chain source disconnects.
 pub fn broker_program(
-    chain_rx: QueueReceiver<MarketPositionChain>,
+    chain_rx: QueueReceiver<MarketRegimeChain>,
     cache: CacheHandle<ThoughtAST, Vector>,
     vm: VectorManager,
     scalar: Arc<ScalarEncoder>,
@@ -131,7 +131,7 @@ pub fn broker_program(
 
         // 3. Gate 4 — one question: do I need to get out right now?
         let t0 = std::time::Instant::now();
-        let thought_ast = broker_thought_ast(&chain.position_facts, &active_receipts, candle_count, price);
+        let thought_ast = broker_thought_ast(&chain.regime_facts, &active_receipts, candle_count, price);
         let broker_thought = encode(&cache, &thought_ast, &vm, &scalar);
         let gate_pred = broker.gate_reckoner.predict(&broker_thought);
         let wants_exit = gate_pred.direction.map_or(false, |d| d.index() == 1)
@@ -207,7 +207,7 @@ pub fn broker_program(
                 violence_count: broker.violence_count,
                 paper_count: active_receipts.len(),
                 expected_value: broker.expected_value,
-                fact_count: chain.position_facts.len(),
+                fact_count: chain.regime_facts.len(),
                 thought_ast: snapshot_edn.clone(),
             });
         }

@@ -18,14 +18,14 @@ pub struct PaperEntry {
     pub composed_thought: Vector,
     /// The raw market thought (for market observer learning).
     pub market_thought: Vector,
-    /// The position observer's own encoded facts (for position observer learning).
+    /// The regime observer's own encoded facts (for regime observer learning).
     /// Proposal 026: position learns from position_thought, not composed.
     pub position_thought: Vector,
     /// What the market observer predicted.
     pub prediction: Direction,
     /// Price when the paper was created.
     pub entry_price: Price,
-    /// Distances from the position observer at entry.
+    /// Distances from the regime observer at entry.
     pub distances: Distances,
     /// Best price in predicted direction so far.
     pub extreme: f64,

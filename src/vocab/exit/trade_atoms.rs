@@ -1,16 +1,16 @@
 /// Trade atom vocabulary — 13 atoms describing a paper trade's state.
 /// Proposal 040 + Phase 3 biography (Proposal 044).
-/// Moved from position_observer_program.rs.
+/// Moved from regime_observer_program.rs.
 
 use crate::encoding::thought_encoder::ThoughtAST;
-use crate::types::enums::PositionLens;
+use crate::types::enums::RegimeLens;
 use crate::types::pivot::{PhaseLabel, PhaseRecord};
 use crate::trades::paper_entry::PaperEntry;
 
 /// Compute trade atoms from a paper's state.
 ///
 /// Returns the full 13-atom vocabulary (10 original + 3 phase biography).
-/// The caller selects the subset based on PositionLens (Core = first 5, Full = all 13).
+/// The caller selects the subset based on RegimeLens (Core = first 5, Full = all 13).
 pub fn compute_trade_atoms(paper: &PaperEntry, current_price: f64, phase_history: &[PhaseRecord]) -> Vec<ThoughtAST> {
     let entry = paper.entry_price.0;
     let extreme = paper.extreme;
@@ -110,9 +110,9 @@ pub fn compute_trade_atoms(paper: &PaperEntry, current_price: f64, phase_history
 
 /// Select trade atoms for a given position lens.
 /// Core = first 5 (the consensus). Full = all 13 (all three voices).
-pub fn select_trade_atoms(lens: &PositionLens, all_atoms: Vec<ThoughtAST>) -> Vec<ThoughtAST> {
+pub fn select_trade_atoms(lens: &RegimeLens, all_atoms: Vec<ThoughtAST>) -> Vec<ThoughtAST> {
     match lens {
-        PositionLens::Core => all_atoms.into_iter().take(5).collect(),
-        PositionLens::Full => all_atoms,
+        RegimeLens::Core => all_atoms.into_iter().take(5).collect(),
+        RegimeLens::Full => all_atoms,
     }
 }

@@ -19,7 +19,7 @@ pub struct TreasurySettlement {
     pub amount: Amount,
     pub composed_thought: Vector,
     pub market_thought: Vector,
-    /// The position observer's own encoded facts. Proposal 026.
+    /// The regime observer's own encoded facts. Proposal 026.
     pub position_thought: Vector,
     pub prediction: Prediction,
 }

@@ -92,21 +92,21 @@ impl std::fmt::Display for MarketLens {
     }
 }
 
-/// Position observer lens — which trade-state vocabulary a position observer uses.
+/// Regime observer lens — which trade-state vocabulary a regime observer uses.
 /// Proposal 040: two lenses based on trade atoms, not market data.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum PositionLens {
+pub enum RegimeLens {
     /// 5 trade atoms — the consensus (excursion, retracement, age, peak-age, signaled).
     Core,
     /// 13 trade atoms (10 original + 3 phase biography) — all three voices plus phase context.
     Full,
 }
 
-impl std::fmt::Display for PositionLens {
+impl std::fmt::Display for RegimeLens {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PositionLens::Core => write!(f, "core"),
-            PositionLens::Full => write!(f, "full"),
+            RegimeLens::Core => write!(f, "core"),
+            RegimeLens::Full => write!(f, "full"),
         }
     }
 }
@@ -219,15 +219,15 @@ mod tests {
     }
 
     #[test]
-    fn test_position_lens_display() {
-        assert_eq!(PositionLens::Core.to_string(), "core");
-        assert_eq!(PositionLens::Full.to_string(), "full");
+    fn test_regime_lens_display() {
+        assert_eq!(RegimeLens::Core.to_string(), "core");
+        assert_eq!(RegimeLens::Full.to_string(), "full");
     }
 
     #[test]
-    fn test_position_lens_equality() {
-        assert_eq!(PositionLens::Core, PositionLens::Core);
-        assert_ne!(PositionLens::Core, PositionLens::Full);
+    fn test_regime_lens_equality() {
+        assert_eq!(RegimeLens::Core, RegimeLens::Core);
+        assert_ne!(RegimeLens::Core, RegimeLens::Full);
     }
 
     #[test]

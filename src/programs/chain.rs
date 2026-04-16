@@ -9,7 +9,7 @@ use holon::kernel::vector::Vector;
 use crate::types::candle::Candle;
 use crate::encoding::thought_encoder::ThoughtAST;
 
-/// What the market observer produces. What the position observer receives.
+/// What the market observer produces. What the regime observer receives.
 #[derive(Clone)]
 pub struct MarketChain {
     pub candle: Candle,
@@ -22,10 +22,10 @@ pub struct MarketChain {
     pub edge: f64,
 }
 
-/// What the position observer produces. What the broker receives.
-/// The position observer adds vocabulary as AST expressions.
+/// What the regime observer produces. What the broker receives.
+/// The regime observer adds vocabulary as AST expressions.
 /// No encoding. No vectors. No distances. The broker encodes.
-pub struct MarketPositionChain {
+pub struct MarketRegimeChain {
     pub candle: Candle,
     pub window: Arc<Vec<Candle>>,
     pub encode_count: usize,
@@ -34,5 +34,5 @@ pub struct MarketPositionChain {
     pub market_ast: ThoughtAST,
     pub market_prediction: holon::memory::Prediction,
     pub market_edge: f64,
-    pub position_facts: Vec<ThoughtAST>,
+    pub regime_facts: Vec<ThoughtAST>,
 }

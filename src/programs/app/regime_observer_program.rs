@@ -1,9 +1,9 @@
-/// position_observer_program.rs — the position observer thread body.
+/// regime_observer_program.rs — the regime observer thread body.
 /// Thought middleware. Receives market chains, composes with position-specific
 /// facts, sends enriched chains downstream to brokers.
 ///
 /// Does not learn. Does not predict distances. The broker is the accountability
-/// unit. The position observer is the lens.
+/// unit. The regime observer is the lens.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -12,12 +12,12 @@ use holon::kernel::scalar::ScalarEncoder;
 use holon::kernel::vector::Vector;
 use holon::kernel::vector_manager::VectorManager;
 
-use crate::domain::position_observer::PositionObserver;
+use crate::domain::regime_observer::RegimeObserver;
 use crate::types::log_entry::LogEntry;
-use crate::domain::lens::position_lens_facts;
+use crate::domain::lens::regime_lens_facts;
 use crate::encoding::encode::encode;
 use crate::encoding::thought_encoder::{collect_facts, ThoughtAST};
-use crate::programs::chain::{MarketPositionChain, MarketChain};
+use crate::programs::chain::{MarketRegimeChain, MarketChain};
 use crate::programs::stdlib::cache::CacheHandle;
 use crate::programs::stdlib::console::ConsoleHandle;
 use crate::encoding::scale_tracker::ScaleTracker;
@@ -30,31 +30,31 @@ use crate::programs::telemetry::emit_metric;
 /// The topic that fans out from the market observer writes to the queue's sender.
 /// The program doesn't know about the topic. It sees a queue.
 /// output_tx is a QueueSender — point-to-point to exactly one broker.
-pub struct PositionSlot {
+pub struct RegimeSlot {
     pub input_rx: QueueReceiver<MarketChain>,
-    pub output_tx: QueueSender<MarketPositionChain>,
+    pub output_tx: QueueSender<MarketRegimeChain>,
 }
 
 // Re-export trade atom functions for backward compatibility.
 pub use crate::vocab::exit::trade_atoms::{compute_trade_atoms, select_trade_atoms};
 
-/// Run the position observer program. Call this inside thread::spawn.
+/// Run the regime observer program. Call this inside thread::spawn.
 /// Processes N slots per candle round, sequentially.
-/// Returns the position observer when all input slots disconnect.
-pub fn position_observer_program(
-    slots: Vec<PositionSlot>,
+/// Returns the regime observer when all input slots disconnect.
+pub fn regime_observer_program(
+    slots: Vec<RegimeSlot>,
     cache: CacheHandle<ThoughtAST, Vector>,
     vm: VectorManager,
     scalar: Arc<ScalarEncoder>,
     console: ConsoleHandle,
     db_tx: QueueSender<LogEntry>,
-    position_obs: PositionObserver,
+    regime_obs: RegimeObserver,
     noise_floor: f64,
-    position_idx: usize,
-) -> PositionObserver {
+    regime_idx: usize,
+) -> RegimeObserver {
     let mut candle_count = 0usize;
     let mut scales: HashMap<String, ScaleTracker> = HashMap::new();
-    let lens = position_obs.lens;
+    let lens = regime_obs.lens;
 
     'outer: loop {
         let t_total = std::time::Instant::now();
@@ -64,8 +64,8 @@ pub fn position_observer_program(
             .as_nanos() as u64;
         candle_count += 1;
 
-        let ns = "position-observer";
-        let id = format!("position:{}:{}", lens, candle_count);
+        let ns = "regime-observer";
+        let id = format!("regime:{}:{}", lens, candle_count);
         let metric_dims = format!("{{\"lens\":\"{}\"}}", lens);
 
         let mut ns_slot_recv: f64 = 0.0;
@@ -99,7 +99,7 @@ pub fn position_observer_program(
             // then clone for subsequent slots.
             let t0 = std::time::Instant::now();
             if !base_facts_computed {
-                base_facts = position_lens_facts(&position_obs.lens, &chain.candle, &mut scales);
+                base_facts = regime_lens_facts(&regime_obs.lens, &chain.candle, &mut scales);
                 base_facts_computed = true;
             }
             let mut slot_facts = base_facts.clone();
@@ -149,10 +149,10 @@ pub fn position_observer_program(
                 snapshot_ast = snapshot_bundle.to_edn();
             }
 
-            // Send MarketPositionChain downstream — facts only, no encoding.
+            // Send MarketRegimeChain downstream — facts only, no encoding.
             // The broker encodes when it composes with anxiety.
             let t0 = std::time::Instant::now();
-            let full = MarketPositionChain {
+            let full = MarketRegimeChain {
                 candle: chain.candle,
                 window: chain.window,
                 encode_count: chain.encode_count,
@@ -161,7 +161,7 @@ pub fn position_observer_program(
                 market_ast: chain.market_ast,
                 market_prediction: chain.prediction,
                 market_edge: chain.edge,
-                position_facts: slot_facts,
+                regime_facts: slot_facts,
             };
             if slot.output_tx.send(full).is_err() {
                 break 'outer;
@@ -190,10 +190,10 @@ pub fn position_observer_program(
 
         // Snapshot every candle.
         {
-            let _ = db_tx.send(LogEntry::PositionObserverSnapshot {
+            let _ = db_tx.send(LogEntry::RegimeObserverSnapshot {
                 candle: candle_count,
-                position_idx,
-                lens: format!("{}", position_obs.lens),
+                regime_idx,
+                lens: format!("{}", regime_obs.lens),
                 us_elapsed,
                 thought_ast: snapshot_ast.clone(),
                 fact_count: snapshot_fact_count,
@@ -209,5 +209,5 @@ pub fn position_observer_program(
         }
     }
 
-    position_obs
+    regime_obs
 }

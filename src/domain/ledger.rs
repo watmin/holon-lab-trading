@@ -24,9 +24,9 @@ pub fn ledger_setup(conn: &Connection) {
             thought_ast TEXT,
             fact_count INTEGER
         );
-        CREATE TABLE IF NOT EXISTS position_observer_snapshots (
+        CREATE TABLE IF NOT EXISTS regime_observer_snapshots (
             candle INTEGER,
-            position_idx INTEGER,
+            regime_idx INTEGER,
             lens TEXT,
             us_elapsed INTEGER,
             thought_ast TEXT,
@@ -84,14 +84,14 @@ pub fn ledger_insert(conn: &Connection, entry: &LogEntry) {
             )
             .unwrap();
         }
-        LogEntry::PositionObserverSnapshot {
-            candle, position_idx, lens,
+        LogEntry::RegimeObserverSnapshot {
+            candle, regime_idx, lens,
             us_elapsed, thought_ast, fact_count,
         } => {
             conn.execute(
-                "INSERT INTO position_observer_snapshots VALUES (?,?,?,?,?,?)",
+                "INSERT INTO regime_observer_snapshots VALUES (?,?,?,?,?,?)",
                 rusqlite::params![
-                    candle, position_idx, lens,
+                    candle, regime_idx, lens,
                     us_elapsed, thought_ast, fact_count
                 ],
             )

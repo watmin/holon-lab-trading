@@ -1,5 +1,5 @@
-// vocab/exit/phase.rs — Phase data for position observers.
-// Proposal 049, Phase 2: position observer reads phase data from the Candle.
+// vocab/exit/phase.rs — Phase data for regime observers.
+// Proposal 049, Phase 2: regime observer reads phase data from the Candle.
 //
 // Three outputs:
 // 1. Current phase atoms: label binding + duration scalar
