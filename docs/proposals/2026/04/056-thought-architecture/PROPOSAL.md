@@ -18,11 +18,39 @@ Input: candle window through its lens (momentum, structure, volume, regime, etc.
 Output: thought vector, anomaly vector, raw vector, prediction (Up/Down), edge
 Learns: via its own reckoner, self-graded at peaks and valleys
 
-The market observer's thought is ~33 facts per candle — the vocabulary
-modules selected by its lens. It produces the anomaly (what the noise
-subspace cannot explain) and the raw thought. Both flow downstream.
+**Current state:** The market observer encodes ~33 facts from the
+CURRENT candle only. A photograph. The window sampler selects a
+slice of history but the vocabulary runs on one candle. The
+progression of indicators across the window is invisible.
+
+**Proposed:** The market observer thinks in indicator rhythm. The
+vocabulary runs on EACH candle in the window. Each candle produces
+a fact bundle. The candle bundles form the sequence. Trigrams of
+consecutive candle bundles → bigram-pairs → bundled rhythm. The
+same encoding as the phase rhythm, applied to indicator evolution.
+
+Each candle's facts can carry deltas relative to the previous
+candle — "RSI moved +0.06", "volume dropped -0.3". The rhythm
+encodes how the indicators evolved, not just where they are.
+
+The window sampler determines how far back the observer looks.
+The trim to sqrt(D) bigram-pairs applies. The most recent candles
+survive. The budget determines the memory depth.
+
+```
+window: [candle_t-N, ..., candle_t-1, candle_t]
+each candle → fact bundle (33 facts + deltas from previous candle)
+trigrams: sliding window of 3 candle bundles
+pairs: sliding window of 2 trigrams
+rhythm: bundle(all pairs) → one vector
+```
+
+The market observer's thought IS the rhythm of the indicators
+across its window. Not a snapshot — a movie.
 
 See: [examples/market-observer-thought.wat](examples/market-observer-thought.wat)
+(example shows current single-candle form — to be updated when
+the indicator rhythm encoding is implemented)
 
 ### Position Observer (Middleware)
 
