@@ -18,6 +18,7 @@ use crate::programs::app::treasury_program::TreasuryHandle;
 use crate::types::enums::{Direction, Outcome};
 use crate::types::log_entry::LogEntry;
 use crate::vocab::exit::phase::phase_rhythm_thought;
+use crate::encoding::rhythm::indicator_rhythm;
 use crate::programs::chain::MarketRegimeChain;
 use crate::encoding::encode::encode;
 use crate::encoding::thought_encoder::ThoughtAST;
@@ -36,15 +37,38 @@ fn direction_from_prediction(pred: &holon::memory::Prediction) -> Direction {
     }
 }
 
-/// Build the broker's thought AST: market rhythms + regime rhythms + anxiety + time.
+/// Portfolio snapshot — one per candle, pushed to the broker's internal window.
+struct PortfolioSnapshot {
+    avg_age: f64,
+    avg_tp: f64,
+    avg_unrealized: f64,
+    grace_rate: f64,
+    active_count: f64,
+}
+
+/// Build portfolio rhythm ASTs from the snapshot window.
+fn portfolio_rhythm_asts(snapshots: &[PortfolioSnapshot]) -> Vec<ThoughtAST> {
+    let extract_and_build = |name: &str, extract: fn(&PortfolioSnapshot) -> f64, min: f64, max: f64, delta_range: f64| -> ThoughtAST {
+        let values: Vec<f64> = snapshots.iter().map(extract).collect();
+        indicator_rhythm(name, &values, min, max, delta_range)
+    };
+
+    vec![
+        extract_and_build("avg-paper-age", |s| s.avg_age, 0.0, 500.0, 100.0),
+        extract_and_build("avg-time-pressure", |s| s.avg_tp, 0.0, 1.0, 0.2),
+        extract_and_build("avg-unrealized-residue", |s| s.avg_unrealized, -0.1, 0.1, 0.05),
+        extract_and_build("grace-rate", |s| s.grace_rate, 0.0, 1.0, 0.2),
+        extract_and_build("active-positions", |s| s.active_count, 0.0, 500.0, 100.0),
+    ]
+}
+
+/// Build the broker's thought AST: market rhythms + regime rhythms + portfolio rhythms + phase + time.
 /// Returns the AST so it can be encoded AND logged without recomputing.
 fn broker_thought_ast(
     market_ast: &ThoughtAST,
     regime_facts: &[ThoughtAST],
-    active_receipts: &[PositionReceipt],
+    portfolio_window: &[PortfolioSnapshot],
     candle_phase_history: &[crate::types::pivot::PhaseRecord],
-    current_candle: usize,
-    current_price: f64,
     candle_hour: f64,
     candle_day: f64,
 ) -> ThoughtAST {
@@ -56,45 +80,11 @@ fn broker_thought_ast(
     // Regime rhythms — each one an indicator rhythm AST
     facts.extend(regime_facts.iter().cloned());
 
-    let n = active_receipts.len() as f64;
-    if !active_receipts.is_empty() {
-        let avg_age: f64 = active_receipts.iter()
-            .map(|r| (current_candle.saturating_sub(r.entry_candle)) as f64)
-            .sum::<f64>() / n;
-        let avg_time_pressure: f64 = active_receipts.iter()
-            .map(|r| {
-                let total = (r.deadline.saturating_sub(r.entry_candle)) as f64;
-                let age = (current_candle.saturating_sub(r.entry_candle)) as f64;
-                if total > 0.0 { age / total } else { 1.0 }
-            })
-            .sum::<f64>() / n;
-        let avg_unrealized: f64 = active_receipts.iter()
-            .map(|r| {
-                let value = r.units_acquired * current_price;
-                (value - r.amount) / r.amount
-            })
-            .sum::<f64>() / n;
-
-        facts.push(ThoughtAST::Bind(
-            Box::new(ThoughtAST::Atom("avg-paper-age".into())),
-            Box::new(ThoughtAST::Log { value: avg_age.max(1.0) }),
-        ));
-        facts.push(ThoughtAST::Bind(
-            Box::new(ThoughtAST::Atom("avg-time-pressure".into())),
-            Box::new(ThoughtAST::Linear { value: avg_time_pressure, scale: 1.0 }),
-        ));
-        facts.push(ThoughtAST::Bind(
-            Box::new(ThoughtAST::Atom("avg-unrealized-residue".into())),
-            Box::new(ThoughtAST::Linear { value: avg_unrealized, scale: 1.0 }),
-        ));
-        facts.push(ThoughtAST::Bind(
-            Box::new(ThoughtAST::Atom("active-positions".into())),
-            Box::new(ThoughtAST::Log { value: n }),
-        ));
-    }
+    // Portfolio rhythms — the broker's own state as streams
+    facts.extend(portfolio_rhythm_asts(portfolio_window));
 
     // Phase rhythm — bundled bigrams of trigrams with structural deltas
-    facts.push(phase_rhythm_thought(&candle_phase_history));
+    facts.push(phase_rhythm_thought(candle_phase_history));
 
     // Time — top-level facts, not rhythms
     facts.push(ThoughtAST::Bind(
@@ -123,6 +113,8 @@ pub fn broker_program(
 ) -> Broker {
     let mut candle_count = 0usize;
     let mut active_receipts: Vec<PositionReceipt> = Vec::new();
+    let mut portfolio_window: Vec<PortfolioSnapshot> = Vec::new();
+    let max_portfolio_window = ((10_000 as f64).sqrt() as usize) + 3; // rune:forge(dims)
 
     // Gate 4 labels.
     let hold_label = holon::memory::Label::from_index(0);
@@ -153,15 +145,46 @@ pub fn broker_program(
         }
         let ns_submit = t0.elapsed().as_nanos() as f64;
 
+        // Compute portfolio snapshot and push to window.
+        let n = active_receipts.len() as f64;
+        let snap = PortfolioSnapshot {
+            avg_age: if n > 0.0 {
+                active_receipts.iter()
+                    .map(|r| (candle_count.saturating_sub(r.entry_candle)) as f64)
+                    .sum::<f64>() / n
+            } else { 0.0 },
+            avg_tp: if n > 0.0 {
+                active_receipts.iter()
+                    .map(|r| {
+                        let total = (r.deadline.saturating_sub(r.entry_candle)) as f64;
+                        let age = (candle_count.saturating_sub(r.entry_candle)) as f64;
+                        if total > 0.0 { age / total } else { 1.0 }
+                    })
+                    .sum::<f64>() / n
+            } else { 0.0 },
+            avg_unrealized: if n > 0.0 {
+                active_receipts.iter()
+                    .map(|r| {
+                        let value = r.units_acquired * price;
+                        (value - r.amount) / r.amount
+                    })
+                    .sum::<f64>() / n
+            } else { 0.0 },
+            grace_rate: broker.expected_value,
+            active_count: n,
+        };
+        portfolio_window.push(snap);
+        if portfolio_window.len() > max_portfolio_window {
+            portfolio_window.drain(..portfolio_window.len() - max_portfolio_window);
+        }
+
         // 3. Gate 4 — one question: do I need to get out right now?
         let t0 = std::time::Instant::now();
         let thought_ast = broker_thought_ast(
             &chain.market_ast,
             &chain.regime_facts,
-            &active_receipts,
+            &portfolio_window,
             &chain.candle.phase_history,
-            candle_count,
-            price,
             chain.candle.hour,
             chain.candle.day_of_week,
         );
