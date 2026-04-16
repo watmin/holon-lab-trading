@@ -92,13 +92,120 @@ Output: Hold/Exit decision, paper proposals, exit proposals
 Learns: gate reckoner (Hold/Exit from Grace/Violence outcomes)
 
 The broker-observer's thought is a composition:
-1. Position observer's facts (market extraction + lens facts)
-2. Portfolio anxiety (avg paper age, avg time pressure, avg unrealized residue, active count)
-3. Phase sequence (capacity-trimmed, most recent from the right)
+1. Market indicator rhythms (from the market observer — one per indicator)
+2. Position observer's lens facts (regime, time, phase current, phase scalars)
+3. Portfolio anxiety (age spread, pressure, unrealized P&L, track record)
+4. Phase rhythm (bundled bigrams of trigrams — one vector)
 
 One thought. One encode. One question: do I get out now?
 
 See: [examples/broker-thought.wat](examples/broker-thought.wat)
+
+## The Indicator Rhythm
+
+### The Problem
+
+The market observer sees one candle — a photograph. It encodes ~33
+facts from the current candle's indicators. "RSI is 0.68." It does
+not see "RSI was 0.55, 0.58, 0.62, 0.68." The progression is
+invisible. The reckoner accumulates many single-candle snapshots
+over time, but each individual thought is memoryless.
+
+### The Solution: Per-Indicator Rhythm
+
+Each indicator the lens selects gets its own rhythm vector. The
+same encoding as the phase rhythm, applied to one scalar over time.
+
+```scheme
+;; The generic function. Same for every indicator.
+
+(define (indicator-rhythm window atom-name extract-fn dims)
+  ;; Step 1: each candle → value + delta from previous
+  (let facts
+    (map-indexed (lambda (i candle)
+      (let value (extract-fn candle))
+      (if (= i 0)
+        (bind (atom atom-name) (linear value 1.0))
+        (let prev (extract-fn (nth window (- i 1))))
+        (bundle
+          (bind (atom atom-name)
+                (linear value 1.0))
+          (bind (atom (str atom-name "-delta"))
+                (linear (- value prev) 1.0)))))
+    window))
+
+  ;; Step 2: trigrams — 3 consecutive candle facts
+  (let tris (windows 3 facts (lambda (a b c)
+    (bind (bind a (permute b 1)) (permute c 2)))))
+
+  ;; Step 3: bigram-pairs — "this pattern then that"
+  (let pairs (windows 2 tris (lambda (a b)
+    (bind a b))))
+
+  ;; Step 4: trim to budget, bundle → one vector
+  (let budget (floor (sqrt dims)))
+  (bundle (take-right budget pairs)))
+```
+
+The delta IS the causality. "RSI rose 0.07 then rose 0.06" — the
+deceleration is in the scalars. "RSI positive then negative" — the
+reversal is a sign flip in the delta. The reckoner doesn't need a
+rule. The direction on the sphere where delta flips sign IS reversal.
+
+### The Market Observer's Thought
+
+```scheme
+(define (market-thought window dims)
+  (bundle
+    (indicator-rhythm window "rsi"       (lambda (c) c.rsi)       dims)
+    (indicator-rhythm window "macd-hist" (lambda (c) c.macd-hist) dims)
+    (indicator-rhythm window "bb-pos"    (lambda (c) c.bb-pos)    dims)
+    (indicator-rhythm window "adx"       (lambda (c) c.adx)       dims)
+    (indicator-rhythm window "atr-ratio" (lambda (c) c.atr-ratio) dims)
+    (indicator-rhythm window "obv-slope" (lambda (c) c.obv-slope) dims)
+    (indicator-rhythm window "hurst"     (lambda (c) c.hurst)     dims)
+    ;; ... one call per indicator the lens selects ...
+    ))
+```
+
+One call per indicator. One rhythm per indicator. One bundle of all
+rhythms. The lens determines which indicators. The window sampler
+determines how far back. The dims determine the trim budget.
+
+### Emergent Pairs
+
+Each indicator rhythm is its own vector. MACD falling while RSI
+rising → two rhythm vectors pointing in different directions. The
+outer bundle holds both. The reckoner's discriminant learns: "when
+the RSI rhythm points HERE and the MACD rhythm points THERE at the
+same time, Violence follows." The meaningful pairs emerge from the
+geometry. The noise subspace strips what doesn't matter.
+
+We don't name the combinations. The reckoner discovers them.
+
+### Coverage: Pairs → Trigrams → Candles
+
+Overlapping windows mean pairs trace back further than their count.
+100 pairs → 101 trigrams → 103 candles. Each pair shares a trigram
+with the next. Each trigram shares two candles with the next.
+
+| Pairs (budget) | Trigrams | Candles covered |
+|----------------|----------|-----------------|
+| 40 | 41 | 43 |
+| 64 | 65 | 67 |
+| 100 | 101 | 103 |
+| 141 | 142 | 144 |
+
+The window sampler selects 12 to 2016 candles (log-uniform,
+median ~155, p25 ~43, p75 ~560). At D=10,000:
+
+- Window of 43 candles → 40 pairs. Under budget. No trim.
+- Window of 155 candles → 152 pairs. Trimmed to 100 → covers last 103 candles.
+- Window of 560 candles → trimmed to 100 → covers last 103 candles.
+
+The trim determines memory depth. Larger windows than sqrt(D)+2
+candles see no benefit — the oldest candles fall off. The window
+sampler may over-select but the trim caps the actual thought.
 
 ## The Phase Sequence
 
@@ -324,14 +431,16 @@ most weeks fit. Choppy markets may need trimming.
 The budget scales with the architecture. More dims = longer memory.
 The trim is derived from `sqrt(dims)`, not hardcoded.
 
-**Outer (broker's thought bundle):** the rhythm is one vector.
+**Outer (broker's thought bundle):** each rhythm is one vector.
 
-- Position facts: ~10-30 (lens dependent)
+- Market indicator rhythms: ~10-15 (one per lens indicator)
+- Position lens facts: ~10-15
 - Extracted market facts: ~10-20 (after anomaly filtering)
-- Anxiety facts: 4
+- Anxiety facts: ~11 (age/pressure/unrealized spreads + track record)
 - Phase rhythm: 1
 
-Total: ~25-55 items. Well within sqrt(D).
+Total: ~42-62 items at D=10,000 (budget: 100). Comfortable.
+At D=4,096 (budget: 64): tight. The lens must be selective.
 
 **Bind operations inside trigrams and pairs cost ZERO capacity.**
 Bind rotates — it doesn't consume bundle slots. Only the final
