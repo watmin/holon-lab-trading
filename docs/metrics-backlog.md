@@ -2,130 +2,95 @@
 
 ## Threads in the System
 
-| Thread | Count | Has Timing? | Notes |
-|--------|-------|-------------|-------|
-| Main (candle loop) | 1 | NO | ticks indicators, clones window, sends to observers |
-| Market observer | 11 | PARTIAL | encode breakdown is broken (overlapping) |
-| Regime observer | 2 | YES | slot_recv, rhythm, send |
-| Broker | 22 | YES | gate4, retain, submit, snapshot |
-| Treasury | 1 | NO | processes ticks + requests, checks deadlines |
-| Cache driver | 1 | NO | LRU gets, sets, evictions. The suspect. |
-| Database driver | 1 | YES | flush_ns, rows, count |
-| Console drivers | N | NO | irrelevant |
+| Thread | Count | Has Timing? | Difficulty |
+|--------|-------|-------------|------------|
+| Main (candle loop) | 1 | NO | trivial — wrap existing calls |
+| Market observer | 11 | BROKEN | fix — leaf-only compute timer |
+| Regime observer | 2 | YES | done |
+| Broker | 22 | PARTIAL | trivial — add take_encode_metrics |
+| Treasury | 1 | NO | trivial — wrap event processing |
+| Cache driver | 1 | NO | medium — timing inside the closure, widen emit |
+| Database driver | 1 | YES | done |
+| Console driver | 1 | NO | irrelevant |
 
-## Main Thread — NO metrics
+## 1. Main Thread — trivial
 
-The candle loop does per candle:
-1. `pipeline.bank.tick(&ohlcv)` — compute 90+ indicators
-2. `pipeline.candle_window.push(candle.clone())` — grow window
-3. `pipeline.candle_window.clone()` via `Arc::new(...)` — copy the window
-4. 11x `tx.send(ObsInput { candle.clone(), Arc::clone(&window) })` — send to observers
-5. `treasury_tick_sender.send_tick(...)` — send to treasury
+Wrap existing calls. Emit via stream_handles or a db_tx.
 
-**Missing metrics:**
-- `ns_indicator_tick` — IndicatorBank.tick() time
-- `ns_window_clone` — Arc::new(window.clone()) time
-- `ns_observer_send` — time to send to all 11 observers (are any blocking?)
-
-## Market Observer — BROKEN encode metrics
-
-Has: total, collect_facts, encode, observe, send, drain_learn, facts_count.
-Has: enc_nodes, enc_hits, enc_misses, enc_ns_cache_get, enc_ns_compute, enc_ns_cache_set.
-
-**Problem:** enc_ns_compute overlaps with enc_ns_cache_get because it wraps
-recursive encode() calls.
-
-**Fix:** measure only leaf computation:
-- `enc_ns_leaf` — time in Primitives::bind/bundle/permute, scalar.encode, vm.get_vector ONLY
-- Remove enc_ns_compute (it's broken)
-
-**Also missing:**
-- `enc_ns_key_clone` — time to clone the ThoughtAST key inside cache.get()
-
-To measure enc_ns_key_clone, split cache.get into two steps:
-```rust
-let t0 = now();
-let cloned = ast.clone();
-ns_key_clone += elapsed(t0);
-let t0 = now();
-let result = cache.get_precloned(cloned);
-ns_channel_roundtrip += elapsed(t0);
 ```
-This requires a new cache.get variant that takes an owned key.
+ns_indicator_tick    — IndicatorBank.tick()
+ns_window_clone      — Arc::new(pipeline.candle_window.clone())
+ns_observer_send     — the loop sending to 11 observers (blocking on bounded(1)?)
+```
 
-## Cache Driver — NO metrics at all
+## 2. Market Observer Encode — fix
 
-The driver is a thread that runs a tight loop. It has NO timing telemetry.
-It emits hit/miss/size counts but not:
+Replace broken enc_ns_compute (overlapping) with enc_ns_leaf (non-overlapping).
+Time only the Primitives call, not recursive children.
 
-- `ns_per_get` — how long to service one get (hash + LRU lookup + Vector clone + send response)
-- `ns_per_set` — how long to service one set (hash + LRU put + eviction)
-- `gets_serviced` — how many gets processed per loop iteration
-- `sets_drained` — how many sets drained per loop iteration
-- `get_queue_depth` — total pending gets across all clients when entering phase 2
-- `set_queue_depth` — pending sets when entering phase 1
-- `ns_idle` — time between "no work available" and "work arrives"
-- `evictions` — how many entries evicted per interval (capacity thrashing)
+Also split ns_cache_get into:
+- `enc_ns_key_clone` — ast.clone() before send
+- `enc_ns_channel_rt` — send + recv (waiting for driver)
 
-## Treasury — NO timing metrics
+This requires splitting the `cache.get()` call in encode.rs — clone
+the key explicitly, then send the owned key. CacheHandle.get currently
+takes `&K` and clones internally. Change to take owned K, or add a
+second method.
 
-The treasury processes ticks and requests through one mailbox.
-Every tick: check_deadlines (walks all active papers). Every
-request: handle_request (paper state lookup, issue, resolve).
+## 3. Cache Driver — medium
 
-**Missing:**
-- `ns_per_tick` — time to process one tick (check_deadlines)
-- `ns_per_request` — time to process one request
-- `ticks_processed` — count per interval
-- `requests_processed` — count per interval
-- `active_papers` — current count
-- `queue_depth` — pending events when entering recv()
+The driver is an anonymous closure inside `cache()`. We control it.
+The existing `emit` callback takes `(hits, misses, cache_size)`.
+Widen it to include timing:
 
-## Broker — PARTIAL
+```
+emit(hits, misses, cache_size, ns_gets, ns_sets, evictions, get_queue_depth, set_queue_depth)
+```
 
-Has: gate4, retain, submit_paper, exit_submit, snapshot, total.
-Does NOT have encode breakdown (the gate4 timer wraps the encode).
+Inside the driver loop, accumulate:
+- `ns_gets` — total time in `cache.get(&key).cloned()` + `resp_tx.send()`
+- `ns_sets` — total time in `cache.put(key, value)`
+- `evictions` — count LRU evictions (LruCache doesn't expose this directly;
+  check if `cache.len() == capacity` before put, if so +1 eviction)
+- `get_queue_depth` — sum of `alive_get_rxs[i].len()` at start of phase 2
+- `set_queue_depth` — `set_rx.len()` at start of phase 1
 
-**Missing:**
-- All enc_* metrics on the broker's encode call
-- `ns_noise_subspace` — time in broker.noise_subspace.update() + anomalous_component()
-- `ns_portfolio_snapshot` — time computing the PortfolioSnapshot
+The emit closure at the call site in wat-vm.rs already constructs
+telemetry entries. Widen it to emit the new fields.
 
-## Regime Observer — OK but missing clone cost
+## 4. Treasury — trivial
 
-Has: slot_recv, rhythm, send, total.
+Wrap the event processing in treasury_program.rs. The recv loop
+already matches Tick vs Request.
 
-**Missing:**
-- `ns_ast_clone` — regime_asts.clone() per slot (11 clones)
+```
+ns_tick             — check_deadlines time
+ns_request          — handle_request time
+active_papers       — papers.len()
+```
 
-## Queue Depths — NOT measured anywhere
+Emit via the existing db_tx (treasury already has one).
 
-Every bounded/unbounded queue in the system has a depth. If a producer
-is faster than a consumer, the queue grows. If a queue is bounded(1),
-the producer blocks.
+## 5. Broker Encode — trivial
 
-Queues:
-- candle_tx → market observer: bounded(1). If blocked, main thread stalls.
-- market observer → regime observer: bounded(1) via topic. If blocked, market observer stalls.
-- regime observer → broker: unbounded. Can grow without bound.
-- broker → treasury: per-request response via bounded(1). If treasury is slow, broker blocks.
-- set mailbox → cache driver: unbounded. Can grow.
-- get request → cache driver: unbounded. Can grow.
-- all → database: unbounded. Can grow.
+Call `take_encode_metrics()` after the gate4 encode. Emit the
+same enc_* fields the market observer emits. Add ns_noise_subspace
+around the subspace update + anomalous_component calls.
 
-**Missing:** queue depth snapshots on all queues at regular intervals.
+## 6. Queue Depths — trivial per queue
 
-## Summary of Missing Metrics
+Crossbeam `.len()` on each queue at emit time. The main thread
+can check `candle_tx.len()` to see if observers are backed up.
+The cache driver already sees queue depths in the emit extension.
 
-### Must add (find the bottleneck):
-1. Main thread: ns_indicator_tick, ns_window_clone, ns_observer_send
-2. Encode: fix ns_compute → ns_leaf only, add ns_key_clone
-3. Cache driver: ns_per_get, ns_per_set, get_queue_depth, set_queue_depth, evictions
-4. Treasury: ns_per_tick, ns_per_request, active_papers, queue_depth
-5. Broker: enc_* metrics on gate4 encode, ns_noise_subspace
-6. Queue depths on bounded channels (are producers blocking?)
+The regime observer → broker queues are unbounded. Check their
+depth in the broker's telemetry via the chain_rx.
 
-### Nice to have:
-7. Regime observer: ns_ast_clone per slot
-8. Cache driver: ns_idle, gets_serviced per iteration
-9. Broker: ns_portfolio_snapshot
+## Order
+
+1. Fix encode leaf timer + key clone split (enables diagnosis)
+2. Cache driver timing (the prime suspect)
+3. Main thread timing (is it blocking on sends?)
+4. Treasury timing (is it slow processing?)
+5. Broker encode metrics (is the broker's encode different?)
+6. Queue depths (where is backpressure?)
