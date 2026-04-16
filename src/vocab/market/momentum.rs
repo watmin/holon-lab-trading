@@ -1,3 +1,4 @@
+use std::sync::Arc;
 // vocab/market/momentum.rs — compiled from wat/vocab/market/momentum.wat
 //
 // Trend-relative, MACD, DI. Pure function: candle in, ASTs out.
@@ -38,7 +39,7 @@ pub fn encode_momentum_facts(c: &Candle, scales: &mut HashMap<String, ScaleTrack
         scaled_linear("close-sma200", t.close_sma200, scales),
         scaled_linear("macd-hist", t.macd_hist, scales),
         scaled_linear("di-spread", t.di_spread, scales),
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("atr-ratio".into())), Box::new(ThoughtAST::Log { value: t.atr_ratio })),
+        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("atr-ratio".into())), Arc::new(ThoughtAST::Log { value: t.atr_ratio })),
     ]
 }
 

@@ -1,3 +1,4 @@
+use std::sync::Arc;
 // vocab/market/ichimoku.rs — compiled from wat/vocab/market/ichimoku.wat
 //
 // Cloud position, TK cross, distances. Pure function: candle in, ASTs out.
@@ -51,7 +52,7 @@ pub fn encode_ichimoku_facts(c: &Candle, scales: &mut HashMap<String, ScaleTrack
     let t = IchimokuThought::from_candle(c);
     vec![
         scaled_linear("cloud-position", t.cloud_position, scales),
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("cloud-thickness".into())), Box::new(ThoughtAST::Log { value: t.cloud_thickness })),
+        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("cloud-thickness".into())), Arc::new(ThoughtAST::Log { value: t.cloud_thickness })),
         scaled_linear("tk-cross-delta", t.tk_cross_delta, scales),
         scaled_linear("tk-spread", t.tk_spread, scales),
         scaled_linear("tenkan-dist", t.tenkan_dist, scales),

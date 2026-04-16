@@ -1,3 +1,4 @@
+use std::sync::Arc;
 // vocab/shared/time.rs — compiled from wat/vocab/shared/time.wat
 //
 // Temporal context. All circular scalars — the value wraps.
@@ -10,28 +11,28 @@ pub fn encode_time_facts(c: &Candle) -> Vec<ThoughtAST> {
     vec![
         // Minute: mod 60.
         ThoughtAST::Bind(
-            Box::new(ThoughtAST::Atom("minute".into())),
-            Box::new(ThoughtAST::Circular { value: round_to(c.minute, 0), period: 60.0 }),
+            Arc::new(ThoughtAST::Atom("minute".into())),
+            Arc::new(ThoughtAST::Circular { value: round_to(c.minute, 0), period: 60.0 }),
         ),
         // Hour: mod 24.
         ThoughtAST::Bind(
-            Box::new(ThoughtAST::Atom("hour".into())),
-            Box::new(ThoughtAST::Circular { value: round_to(c.hour, 0), period: 24.0 }),
+            Arc::new(ThoughtAST::Atom("hour".into())),
+            Arc::new(ThoughtAST::Circular { value: round_to(c.hour, 0), period: 24.0 }),
         ),
         // Day of week: mod 7. 0 = Monday.
         ThoughtAST::Bind(
-            Box::new(ThoughtAST::Atom("day-of-week".into())),
-            Box::new(ThoughtAST::Circular { value: round_to(c.day_of_week, 0), period: 7.0 }),
+            Arc::new(ThoughtAST::Atom("day-of-week".into())),
+            Arc::new(ThoughtAST::Circular { value: round_to(c.day_of_week, 0), period: 7.0 }),
         ),
         // Day of month: mod 31.
         ThoughtAST::Bind(
-            Box::new(ThoughtAST::Atom("day-of-month".into())),
-            Box::new(ThoughtAST::Circular { value: round_to(c.day_of_month, 0), period: 31.0 }),
+            Arc::new(ThoughtAST::Atom("day-of-month".into())),
+            Arc::new(ThoughtAST::Circular { value: round_to(c.day_of_month, 0), period: 31.0 }),
         ),
         // Month of year: mod 12. 1 = January.
         ThoughtAST::Bind(
-            Box::new(ThoughtAST::Atom("month-of-year".into())),
-            Box::new(ThoughtAST::Circular { value: round_to(c.month_of_year, 0), period: 12.0 }),
+            Arc::new(ThoughtAST::Atom("month-of-year".into())),
+            Arc::new(ThoughtAST::Circular { value: round_to(c.month_of_year, 0), period: 12.0 }),
         ),
     ]
 }

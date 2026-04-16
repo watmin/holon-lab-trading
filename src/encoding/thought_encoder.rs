@@ -7,12 +7,17 @@
 
 use std::collections::HashMap;
 
+use std::sync::Arc;
+
 use holon::kernel::primitives::Primitives;
 use holon::kernel::scalar::{ScalarEncoder, ScalarMode};
 use holon::kernel::similarity::Similarity;
 use holon::kernel::vector::Vector;
 use holon::kernel::vector_manager::VectorManager;
 
+/// The thought. The identity. The AST IS the thought.
+/// Arc on Bind/Permute children — shared nodes, not copied trees.
+/// Clone is a pointer increment for shared subtrees.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ThoughtAST {
     Atom(String),
@@ -22,11 +27,11 @@ pub enum ThoughtAST {
     /// Thermometer — linear gradient that survives bipolar thresholding.
     /// cosine(a, b) = 1.0 - 2.0 * |a - b| / (max - min). Proposal 056.
     Thermometer { value: f64, min: f64, max: f64 },
-    Bind(Box<ThoughtAST>, Box<ThoughtAST>),
+    Bind(Arc<ThoughtAST>, Arc<ThoughtAST>),
     Bundle(Vec<ThoughtAST>),
     /// Positional shift — circular permutation of dimensions by `shift` positions.
     /// Encodes position within a composition. Proposal 056.
-    Permute(Box<ThoughtAST>, i32),
+    Permute(Arc<ThoughtAST>, i32),
     /// Ordered sequence — each item is permuted by its index before bundling.
     /// Position-sensitive: [A, B] != [B, A]. Used for pivot biography.
     Sequential(Vec<ThoughtAST>),
@@ -404,18 +409,18 @@ mod tests {
     fn test_thought_ast_variants() {
         let a = ThoughtAST::Atom("rsi".into());
         let l = ThoughtAST::Bind(
-            Box::new(ThoughtAST::Atom("rsi".into())),
-            Box::new(ThoughtAST::Linear { value: 0.5, scale: 1.0 }),
+            Arc::new(ThoughtAST::Atom("rsi".into())),
+            Arc::new(ThoughtAST::Linear { value: 0.5, scale: 1.0 }),
         );
         let g = ThoughtAST::Bind(
-            Box::new(ThoughtAST::Atom("vol".into())),
-            Box::new(ThoughtAST::Log { value: 2.0 }),
+            Arc::new(ThoughtAST::Atom("vol".into())),
+            Arc::new(ThoughtAST::Log { value: 2.0 }),
         );
         let c = ThoughtAST::Bind(
-            Box::new(ThoughtAST::Atom("hour".into())),
-            Box::new(ThoughtAST::Circular { value: 14.0, period: 24.0 }),
+            Arc::new(ThoughtAST::Atom("hour".into())),
+            Arc::new(ThoughtAST::Circular { value: 14.0, period: 24.0 }),
         );
-        let b = ThoughtAST::Bind(Box::new(a.clone()), Box::new(l.clone()));
+        let b = ThoughtAST::Bind(Arc::new(a.clone()), Arc::new(l.clone()));
         let u = ThoughtAST::Bundle(vec![a, l, g, c]);
         assert!(matches!(b, ThoughtAST::Bind(_, _)));
         assert!(matches!(u, ThoughtAST::Bundle(_)));
@@ -441,8 +446,8 @@ mod tests {
     fn test_encode_bind_atom_log_produces_bound_vector() {
         let enc = make_encoder();
         let ast = ThoughtAST::Bind(
-            Box::new(ThoughtAST::Atom("vol".into())),
-            Box::new(ThoughtAST::Log { value: 100.0 }),
+            Arc::new(ThoughtAST::Atom("vol".into())),
+            Arc::new(ThoughtAST::Log { value: 100.0 }),
         );
         let v = enc.encode(&ast);
         assert_eq!(v.dimensions(), DIMS);
@@ -465,8 +470,8 @@ mod tests {
     fn test_encode_bind() {
         let enc = make_encoder();
         let ast = ThoughtAST::Bind(
-            Box::new(ThoughtAST::Atom("rsi".into())),
-            Box::new(ThoughtAST::Atom("vol".into())),
+            Arc::new(ThoughtAST::Atom("rsi".into())),
+            Arc::new(ThoughtAST::Atom("vol".into())),
         );
         let v = enc.encode(&ast);
         assert_eq!(v.dimensions(), DIMS);
@@ -477,8 +482,8 @@ mod tests {
     fn test_encode_deterministic_across_calls() {
         let enc = make_encoder();
         let ast = ThoughtAST::Bind(
-            Box::new(ThoughtAST::Atom("vol".into())),
-            Box::new(ThoughtAST::Log { value: 50.0 }),
+            Arc::new(ThoughtAST::Atom("vol".into())),
+            Arc::new(ThoughtAST::Log { value: 50.0 }),
         );
 
         let v1 = enc.encode(&ast);
@@ -494,12 +499,12 @@ mod tests {
         assert_eq!((ThoughtAST::Circular { value: 14.0, period: 24.0 }).name(), "circular(14,24)");
         // Bind(Atom, Linear) — name is bind(vol:linear(1,1))
         assert_eq!(ThoughtAST::Bind(
-            Box::new(ThoughtAST::Atom("vol".into())),
-            Box::new(ThoughtAST::Linear { value: 1.0, scale: 1.0 }),
+            Arc::new(ThoughtAST::Atom("vol".into())),
+            Arc::new(ThoughtAST::Linear { value: 1.0, scale: 1.0 }),
         ).name(), "bind(vol:linear(1,1))");
         let bind = ThoughtAST::Bind(
-            Box::new(ThoughtAST::Atom("a".into())),
-            Box::new(ThoughtAST::Atom("b".into())),
+            Arc::new(ThoughtAST::Atom("a".into())),
+            Arc::new(ThoughtAST::Atom("b".into())),
         );
         assert_eq!(bind.name(), "bind(a:b)");
         let bundle = ThoughtAST::Bundle(vec![
@@ -513,8 +518,8 @@ mod tests {
     fn test_extract_flat_self_cosine() {
         let enc = make_encoder();
         let leaf = ThoughtAST::Bind(
-                Box::new(ThoughtAST::Atom("rsi".into())),
-                Box::new(ThoughtAST::Linear { value: 0.7, scale: 1.0 }),
+                Arc::new(ThoughtAST::Atom("rsi".into())),
+                Arc::new(ThoughtAST::Linear { value: 0.7, scale: 1.0 }),
             );
         // Encode the leaf to get a vector, use it as the thought
         let leaf_vec = enc.encode(&leaf);
@@ -530,16 +535,16 @@ mod tests {
         let enc = make_encoder();
         let forms = vec![
             ThoughtAST::Bind(
-                Box::new(ThoughtAST::Atom("rsi".into())),
-                Box::new(ThoughtAST::Linear { value: 0.7, scale: 1.0 }),
+                Arc::new(ThoughtAST::Atom("rsi".into())),
+                Arc::new(ThoughtAST::Linear { value: 0.7, scale: 1.0 }),
             ),
             ThoughtAST::Bind(
-                Box::new(ThoughtAST::Atom("vol".into())),
-                Box::new(ThoughtAST::Linear { value: 1.5, scale: 1.0 }),
+                Arc::new(ThoughtAST::Atom("vol".into())),
+                Arc::new(ThoughtAST::Linear { value: 1.5, scale: 1.0 }),
             ),
             ThoughtAST::Bind(
-                Box::new(ThoughtAST::Atom("trend".into())),
-                Box::new(ThoughtAST::Linear { value: 0.3, scale: 1.0 }),
+                Arc::new(ThoughtAST::Atom("trend".into())),
+                Arc::new(ThoughtAST::Linear { value: 0.3, scale: 1.0 }),
             ),
         ];
         // Bundle all forms, then extract — each form should have non-trivial presence
@@ -558,14 +563,14 @@ mod tests {
         let enc = make_encoder();
         let forms = vec![
             ThoughtAST::Bind(
-                Box::new(ThoughtAST::Atom("rsi".into())),
-                Box::new(ThoughtAST::Linear { value: 0.7, scale: 1.0 }),
+                Arc::new(ThoughtAST::Atom("rsi".into())),
+                Arc::new(ThoughtAST::Linear { value: 0.7, scale: 1.0 }),
             ),
         ];
         // Use an unrelated vector
         let unrelated = ThoughtAST::Bind(
-            Box::new(ThoughtAST::Atom("hour".into())),
-            Box::new(ThoughtAST::Linear { value: 12.0, scale: 24.0 }),
+            Arc::new(ThoughtAST::Atom("hour".into())),
+            Arc::new(ThoughtAST::Linear { value: 12.0, scale: 24.0 }),
         );
         let unrelated_vec = enc.encode(&unrelated);
         let results = extract(&unrelated_vec, &forms, |ast| enc.encode(ast));
@@ -580,17 +585,17 @@ mod tests {
         // Extract always returns ALL forms, no filtering
         let forms = vec![
             ThoughtAST::Bind(
-                Box::new(ThoughtAST::Atom("rsi".into())),
-                Box::new(ThoughtAST::Linear { value: 0.7, scale: 1.0 }),
+                Arc::new(ThoughtAST::Atom("rsi".into())),
+                Arc::new(ThoughtAST::Linear { value: 0.7, scale: 1.0 }),
             ),
             ThoughtAST::Bind(
-                Box::new(ThoughtAST::Atom("vol".into())),
-                Box::new(ThoughtAST::Linear { value: 1.5, scale: 1.0 }),
+                Arc::new(ThoughtAST::Atom("vol".into())),
+                Arc::new(ThoughtAST::Linear { value: 1.5, scale: 1.0 }),
             ),
         ];
         let unrelated = ThoughtAST::Bind(
-            Box::new(ThoughtAST::Atom("hour".into())),
-            Box::new(ThoughtAST::Linear { value: 12.0, scale: 24.0 }),
+            Arc::new(ThoughtAST::Atom("hour".into())),
+            Arc::new(ThoughtAST::Linear { value: 12.0, scale: 24.0 }),
         );
         let unrelated_vec = enc.encode(&unrelated);
         let results = extract(&unrelated_vec, &forms, |ast| enc.encode(ast));
@@ -602,8 +607,8 @@ mod tests {
     fn test_extract_flat_bind_form() {
         let enc = make_encoder();
         let bind = ThoughtAST::Bind(
-            Box::new(ThoughtAST::Atom("rsi".into())),
-            Box::new(ThoughtAST::Atom("vol".into())),
+            Arc::new(ThoughtAST::Atom("rsi".into())),
+            Arc::new(ThoughtAST::Atom("vol".into())),
         );
         let bind_vec = enc.encode(&bind);
         let results = extract(&bind_vec, &[bind.clone()], |ast| enc.encode(ast));
@@ -623,12 +628,12 @@ mod tests {
     fn test_collect_facts_bundle() {
         let ast = ThoughtAST::Bundle(vec![
             ThoughtAST::Bind(
-                Box::new(ThoughtAST::Atom("rsi".into())),
-                Box::new(ThoughtAST::Linear { value: 0.7, scale: 1.0 }),
+                Arc::new(ThoughtAST::Atom("rsi".into())),
+                Arc::new(ThoughtAST::Linear { value: 0.7, scale: 1.0 }),
             ),
             ThoughtAST::Bind(
-                Box::new(ThoughtAST::Atom("vol".into())),
-                Box::new(ThoughtAST::Log { value: 2.0 }),
+                Arc::new(ThoughtAST::Atom("vol".into())),
+                Arc::new(ThoughtAST::Log { value: 2.0 }),
             ),
             ThoughtAST::Atom("trend".into()), // skipped
         ]);
@@ -641,17 +646,17 @@ mod tests {
         let ast = ThoughtAST::Bundle(vec![
             ThoughtAST::Bundle(vec![
                 ThoughtAST::Bind(
-                Box::new(ThoughtAST::Atom("rsi".into())),
-                Box::new(ThoughtAST::Linear { value: 0.7, scale: 1.0 }),
+                Arc::new(ThoughtAST::Atom("rsi".into())),
+                Arc::new(ThoughtAST::Linear { value: 0.7, scale: 1.0 }),
             ),
                 ThoughtAST::Bind(
-                Box::new(ThoughtAST::Atom("vol".into())),
-                Box::new(ThoughtAST::Linear { value: 1.5, scale: 1.0 }),
+                Arc::new(ThoughtAST::Atom("vol".into())),
+                Arc::new(ThoughtAST::Linear { value: 1.5, scale: 1.0 }),
             ),
             ]),
             ThoughtAST::Bind(
-            Box::new(ThoughtAST::Atom("trend".into())),
-            Box::new(ThoughtAST::Log { value: 0.03 }),
+            Arc::new(ThoughtAST::Atom("trend".into())),
+            Arc::new(ThoughtAST::Log { value: 0.03 }),
         ),
         ]);
         let facts = collect_facts(&ast);
@@ -665,8 +670,8 @@ mod tests {
     #[test]
     fn test_collect_facts_bind_is_fact() {
         let bind = ThoughtAST::Bind(
-            Box::new(ThoughtAST::Atom("a".into())),
-            Box::new(ThoughtAST::Atom("b".into())),
+            Arc::new(ThoughtAST::Atom("a".into())),
+            Arc::new(ThoughtAST::Atom("b".into())),
         );
         let ast = ThoughtAST::Bundle(vec![bind.clone(), ThoughtAST::Atom("c".into())]);
         let facts = collect_facts(&ast);

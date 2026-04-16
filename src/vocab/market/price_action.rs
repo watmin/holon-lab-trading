@@ -1,3 +1,4 @@
+use std::sync::Arc;
 // vocab/market/price_action.rs — compiled from wat/vocab/market/price-action.wat
 //
 // Candlestick anatomy, range, gaps. Pure function: candle in, ASTs out.
@@ -40,10 +41,10 @@ impl PriceActionThought {
 pub fn encode_price_action_facts(c: &Candle, scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
     let t = PriceActionThought::from_candle(c);
     vec![
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("range-ratio".into())), Box::new(ThoughtAST::Log { value: t.range_ratio })),
+        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("range-ratio".into())), Arc::new(ThoughtAST::Log { value: t.range_ratio })),
         scaled_linear("gap", t.gap, scales),
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("consecutive-up".into())), Box::new(ThoughtAST::Log { value: t.consecutive_up })),
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("consecutive-down".into())), Box::new(ThoughtAST::Log { value: t.consecutive_down })),
+        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("consecutive-up".into())), Arc::new(ThoughtAST::Log { value: t.consecutive_up })),
+        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("consecutive-down".into())), Arc::new(ThoughtAST::Log { value: t.consecutive_down })),
         scaled_linear("body-ratio-pa", t.body_ratio_pa, scales),
         scaled_linear("upper-wick", t.upper_wick, scales),
         scaled_linear("lower-wick", t.lower_wick, scales),

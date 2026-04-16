@@ -1,3 +1,4 @@
+use std::sync::Arc;
 // vocab/exit/time.rs — compiled from wat/vocab/exit/time.wat
 //
 // Temporal context for exit observers. Subset of shared/time.rs:
@@ -24,8 +25,8 @@ impl ExitTimeThought {
 pub fn encode_exit_time_facts(c: &Candle) -> Vec<ThoughtAST> {
     let t = ExitTimeThought::from_candle(c);
     vec![
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("hour".into())), Box::new(ThoughtAST::Circular { value: t.hour, period: 24.0 })),
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("day-of-week".into())), Box::new(ThoughtAST::Circular { value: t.day_of_week, period: 7.0 })),
+        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("hour".into())), Arc::new(ThoughtAST::Circular { value: t.hour, period: 24.0 })),
+        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("day-of-week".into())), Arc::new(ThoughtAST::Circular { value: t.day_of_week, period: 7.0 })),
     ]
 }
 

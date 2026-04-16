@@ -1,3 +1,4 @@
+use std::sync::Arc;
 // vocab/market/standard.rs — compiled from wat/vocab/market/standard.wat
 //
 // Universal context for all market observers. Takes the candle WINDOW
@@ -84,14 +85,14 @@ impl StandardThought {
 pub fn encode_standard_facts(candle_window: &[Candle], scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
     match StandardThought::from_window(candle_window) {
         Some(t) => vec![
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("since-rsi-extreme".into())), Box::new(ThoughtAST::Log { value: t.since_rsi_extreme })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("since-vol-spike".into())), Box::new(ThoughtAST::Log { value: t.since_vol_spike })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("since-large-move".into())), Box::new(ThoughtAST::Log { value: t.since_large_move })),
+            ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("since-rsi-extreme".into())), Arc::new(ThoughtAST::Log { value: t.since_rsi_extreme })),
+            ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("since-vol-spike".into())), Arc::new(ThoughtAST::Log { value: t.since_vol_spike })),
+            ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("since-large-move".into())), Arc::new(ThoughtAST::Log { value: t.since_large_move })),
             scaled_linear("dist-from-high", t.dist_from_high, scales),
             scaled_linear("dist-from-low", t.dist_from_low, scales),
             scaled_linear("dist-from-midpoint", t.dist_from_midpoint, scales),
             scaled_linear("dist-from-sma200", t.dist_from_sma200, scales),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("session-depth".into())), Box::new(ThoughtAST::Log { value: t.session_depth })),
+            ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("session-depth".into())), Arc::new(ThoughtAST::Log { value: t.session_depth })),
         ],
         None => Vec::new(),
     }

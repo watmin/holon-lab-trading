@@ -1,3 +1,4 @@
+use std::sync::Arc;
 // vocab/market/oscillators.rs — compiled from wat/vocab/market/oscillators.wat
 //
 // Oscillator positions as scalars. Pure function: candle in, ASTs out.
@@ -41,10 +42,10 @@ pub fn encode_oscillator_facts(c: &Candle, scales: &mut HashMap<String, ScaleTra
         scaled_linear("cci", t.cci, scales),
         scaled_linear("mfi", t.mfi, scales),
         scaled_linear("williams-r", t.williams_r, scales),
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("roc-1".into())), Box::new(ThoughtAST::Log { value: t.roc_1 })),
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("roc-3".into())), Box::new(ThoughtAST::Log { value: t.roc_3 })),
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("roc-6".into())), Box::new(ThoughtAST::Log { value: t.roc_6 })),
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("roc-12".into())), Box::new(ThoughtAST::Log { value: t.roc_12 })),
+        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("roc-1".into())), Arc::new(ThoughtAST::Log { value: t.roc_1 })),
+        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("roc-3".into())), Arc::new(ThoughtAST::Log { value: t.roc_3 })),
+        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("roc-6".into())), Arc::new(ThoughtAST::Log { value: t.roc_6 })),
+        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("roc-12".into())), Arc::new(ThoughtAST::Log { value: t.roc_12 })),
     ]
 }
 

@@ -1,3 +1,4 @@
+use std::sync::Arc;
 // vocab/exit/regime.rs — compiled from wat/vocab/exit/regime.wat
 //
 // Regime context for exit observers. Same candle fields as market/regime.rs.
@@ -42,7 +43,7 @@ pub fn encode_exit_regime_facts(c: &Candle, scales: &mut HashMap<String, ScaleTr
         scaled_linear("kama-er", t.kama_er, scales),
         scaled_linear("choppiness", t.choppiness, scales),
         scaled_linear("dfa-alpha", t.dfa_alpha, scales),
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("variance-ratio".into())), Box::new(ThoughtAST::Log { value: t.variance_ratio })),
+        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("variance-ratio".into())), Arc::new(ThoughtAST::Log { value: t.variance_ratio })),
         scaled_linear("entropy-rate", t.entropy_rate, scales),
         scaled_linear("aroon-up", t.aroon_up, scales),
         scaled_linear("aroon-down", t.aroon_down, scales),

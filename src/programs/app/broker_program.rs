@@ -88,12 +88,12 @@ fn broker_thought_ast(
 
     // Time — top-level facts, not rhythms
     facts.push(ThoughtAST::Bind(
-        Box::new(ThoughtAST::Atom("hour".into())),
-        Box::new(ThoughtAST::Circular { value: candle_hour, period: 24.0 }),
+        Arc::new(ThoughtAST::Atom("hour".into())),
+        Arc::new(ThoughtAST::Circular { value: candle_hour, period: 24.0 }),
     ));
     facts.push(ThoughtAST::Bind(
-        Box::new(ThoughtAST::Atom("day-of-week".into())),
-        Box::new(ThoughtAST::Circular { value: candle_day, period: 7.0 }),
+        Arc::new(ThoughtAST::Atom("day-of-week".into())),
+        Arc::new(ThoughtAST::Circular { value: candle_day, period: 7.0 }),
     ));
 
     ThoughtAST::Bundle(facts)

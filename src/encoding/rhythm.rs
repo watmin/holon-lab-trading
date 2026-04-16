@@ -1,3 +1,4 @@
+use std::sync::Arc;
 /// rhythm.rs — the generic indicator rhythm function.
 ///
 /// One function. Three callers: market observer, regime observer, broker-observer.
@@ -75,8 +76,8 @@ pub fn indicator_rhythm(
                 ThoughtAST::Bundle(vec![
                     v,
                     ThoughtAST::Bind(
-                        Box::new(ThoughtAST::Atom("delta".into())),
-                        Box::new(ThoughtAST::Thermometer { value: delta, min: -delta_range, max: delta_range }),
+                        Arc::new(ThoughtAST::Atom("delta".into())),
+                        Arc::new(ThoughtAST::Thermometer { value: delta, min: -delta_range, max: delta_range }),
                     ),
                 ])
             }
@@ -88,11 +89,11 @@ pub fn indicator_rhythm(
         .windows(3)
         .map(|w| {
             ThoughtAST::Bind(
-                Box::new(ThoughtAST::Bind(
-                    Box::new(w[0].clone()),
-                    Box::new(ThoughtAST::Permute(Box::new(w[1].clone()), 1)),
+                Arc::new(ThoughtAST::Bind(
+                    Arc::new(w[0].clone()),
+                    Arc::new(ThoughtAST::Permute(Arc::new(w[1].clone()), 1)),
                 )),
-                Box::new(ThoughtAST::Permute(Box::new(w[2].clone()), 2)),
+                Arc::new(ThoughtAST::Permute(Arc::new(w[2].clone()), 2)),
             )
         })
         .collect();
@@ -102,8 +103,8 @@ pub fn indicator_rhythm(
         .windows(2)
         .map(|w| {
             ThoughtAST::Bind(
-                Box::new(w[0].clone()),
-                Box::new(w[1].clone()),
+                Arc::new(w[0].clone()),
+                Arc::new(w[1].clone()),
             )
         })
         .collect();
@@ -120,8 +121,8 @@ pub fn indicator_rhythm(
 
     // Step 5: bind atom to the whole rhythm — one bind
     ThoughtAST::Bind(
-        Box::new(ThoughtAST::Atom(atom_name.into())),
-        Box::new(raw),
+        Arc::new(ThoughtAST::Atom(atom_name.into())),
+        Arc::new(raw),
     )
 }
 

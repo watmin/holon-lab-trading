@@ -38,6 +38,7 @@ impl Ctx {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
 
     const DIMS: usize = 4096;
     const RECALIB: usize = 500;
@@ -61,8 +62,8 @@ mod tests {
     fn test_ctx_deterministic() {
         let ctx = Ctx::new(DIMS, RECALIB);
         let ast = ThoughtAST::Bind(
-            Box::new(ThoughtAST::Atom("vol".into())),
-            Box::new(ThoughtAST::Log { value: 100.0 }),
+            Arc::new(ThoughtAST::Atom("vol".into())),
+            Arc::new(ThoughtAST::Log { value: 100.0 }),
         );
 
         let v1 = ctx.thought_encoder.encode(&ast);

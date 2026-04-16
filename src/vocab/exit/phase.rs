@@ -1,3 +1,4 @@
+use std::sync::Arc;
 // vocab/exit/phase.rs — Phase data for regime observers.
 // Proposal 049, Phase 2: regime observer reads phase data from the Candle.
 //
@@ -26,8 +27,8 @@ fn phase_label_atom(label: PhaseLabel, direction: PhaseDirection) -> ThoughtAST 
         },
     };
     ThoughtAST::Bind(
-        Box::new(ThoughtAST::Atom("phase".into())),
-        Box::new(ThoughtAST::Atom(label_name.into())),
+        Arc::new(ThoughtAST::Atom("phase".into())),
+        Arc::new(ThoughtAST::Atom(label_name.into())),
     )
 }
 
@@ -74,24 +75,24 @@ pub fn phase_rhythm_thought(phase_history: &[PhaseRecord]) -> ThoughtAST {
 
         let mut facts = vec![
             label,
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("rec-duration".into())),
-                Box::new(ThoughtAST::Thermometer { value: dur, min: 0.0, max: 200.0 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("rec-move".into())),
-                Box::new(ThoughtAST::Thermometer { value: mv, min: -0.1, max: 0.1 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("rec-range".into())),
-                Box::new(ThoughtAST::Thermometer { value: range, min: 0.0, max: 0.1 })),
-            ThoughtAST::Bind(Box::new(ThoughtAST::Atom("rec-volume".into())),
-                Box::new(ThoughtAST::Thermometer { value: vol, min: 0.0, max: 10000.0 })),
+            ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("rec-duration".into())),
+                Arc::new(ThoughtAST::Thermometer { value: dur, min: 0.0, max: 200.0 })),
+            ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("rec-move".into())),
+                Arc::new(ThoughtAST::Thermometer { value: mv, min: -0.1, max: 0.1 })),
+            ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("rec-range".into())),
+                Arc::new(ThoughtAST::Thermometer { value: range, min: 0.0, max: 0.1 })),
+            ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("rec-volume".into())),
+                Arc::new(ThoughtAST::Thermometer { value: vol, min: 0.0, max: 10000.0 })),
         ];
 
         if i > 0 {
             let (p_dur, _, p_mv, p_vol) = props(&phase_history[i - 1]);
-            facts.push(ThoughtAST::Bind(Box::new(ThoughtAST::Atom("prior-duration-delta".into())),
-                Box::new(ThoughtAST::Thermometer { value: rel(dur, p_dur), min: -2.0, max: 2.0 })));
-            facts.push(ThoughtAST::Bind(Box::new(ThoughtAST::Atom("prior-move-delta".into())),
-                Box::new(ThoughtAST::Thermometer { value: mv - p_mv, min: -0.1, max: 0.1 })));
-            facts.push(ThoughtAST::Bind(Box::new(ThoughtAST::Atom("prior-volume-delta".into())),
-                Box::new(ThoughtAST::Thermometer { value: rel(vol, p_vol), min: -2.0, max: 2.0 })));
+            facts.push(ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("prior-duration-delta".into())),
+                Arc::new(ThoughtAST::Thermometer { value: rel(dur, p_dur), min: -2.0, max: 2.0 })));
+            facts.push(ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("prior-move-delta".into())),
+                Arc::new(ThoughtAST::Thermometer { value: mv - p_mv, min: -0.1, max: 0.1 })));
+            facts.push(ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("prior-volume-delta".into())),
+                Arc::new(ThoughtAST::Thermometer { value: rel(vol, p_vol), min: -2.0, max: 2.0 })));
         }
 
         let same_idx = match (record.label, record.direction) {
@@ -103,12 +104,12 @@ pub fn phase_rhythm_thought(phase_history: &[PhaseRecord]) -> ThoughtAST {
         };
         if let Some(si) = same_idx {
             let (s_dur, _, s_mv, s_vol) = props(&phase_history[si]);
-            facts.push(ThoughtAST::Bind(Box::new(ThoughtAST::Atom("same-move-delta".into())),
-                Box::new(ThoughtAST::Thermometer { value: mv - s_mv, min: -0.1, max: 0.1 })));
-            facts.push(ThoughtAST::Bind(Box::new(ThoughtAST::Atom("same-duration-delta".into())),
-                Box::new(ThoughtAST::Thermometer { value: rel(dur, s_dur), min: -2.0, max: 2.0 })));
-            facts.push(ThoughtAST::Bind(Box::new(ThoughtAST::Atom("same-volume-delta".into())),
-                Box::new(ThoughtAST::Thermometer { value: rel(vol, s_vol), min: -2.0, max: 2.0 })));
+            facts.push(ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("same-move-delta".into())),
+                Arc::new(ThoughtAST::Thermometer { value: mv - s_mv, min: -0.1, max: 0.1 })));
+            facts.push(ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("same-duration-delta".into())),
+                Arc::new(ThoughtAST::Thermometer { value: rel(dur, s_dur), min: -2.0, max: 2.0 })));
+            facts.push(ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("same-volume-delta".into())),
+                Arc::new(ThoughtAST::Thermometer { value: rel(vol, s_vol), min: -2.0, max: 2.0 })));
         }
 
         match (record.label, record.direction) {
@@ -132,16 +133,16 @@ pub fn phase_rhythm_thought(phase_history: &[PhaseRecord]) -> ThoughtAST {
 
     let trigrams: Vec<ThoughtAST> = records.windows(3).map(|w| {
         ThoughtAST::Bind(
-            Box::new(ThoughtAST::Bind(
-                Box::new(w[0].clone()),
-                Box::new(ThoughtAST::Permute(Box::new(w[1].clone()), 1)),
+            Arc::new(ThoughtAST::Bind(
+                Arc::new(w[0].clone()),
+                Arc::new(ThoughtAST::Permute(Arc::new(w[1].clone()), 1)),
             )),
-            Box::new(ThoughtAST::Permute(Box::new(w[2].clone()), 2)),
+            Arc::new(ThoughtAST::Permute(Arc::new(w[2].clone()), 2)),
         )
     }).collect();
 
     let pairs: Vec<ThoughtAST> = trigrams.windows(2).map(|w| {
-        ThoughtAST::Bind(Box::new(w[0].clone()), Box::new(w[1].clone()))
+        ThoughtAST::Bind(Arc::new(w[0].clone()), Arc::new(w[1].clone()))
     }).collect();
 
     if pairs.is_empty() {
@@ -152,8 +153,8 @@ pub fn phase_rhythm_thought(phase_history: &[PhaseRecord]) -> ThoughtAST {
     let trimmed: Vec<ThoughtAST> = pairs[start..].to_vec();
 
     ThoughtAST::Bind(
-        Box::new(ThoughtAST::Atom("phase-rhythm".into())),
-        Box::new(ThoughtAST::Bundle(trimmed)),
+        Arc::new(ThoughtAST::Atom("phase-rhythm".into())),
+        Arc::new(ThoughtAST::Bundle(trimmed)),
     )
 }
 

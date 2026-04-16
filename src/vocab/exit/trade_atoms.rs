@@ -1,3 +1,4 @@
+use std::sync::Arc;
 /// Trade atom vocabulary — 13 atoms describing a paper trade's state.
 /// Proposal 040 + Phase 3 biography (Proposal 044).
 /// Moved from regime_observer_program.rs.
@@ -86,25 +87,25 @@ pub fn compute_trade_atoms(paper: &PaperEntry, current_price: f64, phase_history
 
     vec![
         // Core 5 (all three agreed)
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("exit-excursion".into())), Box::new(ThoughtAST::Log { value: excursion.max(0.0001) })),
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("exit-retracement".into())), Box::new(ThoughtAST::Linear { value: retracement, scale: 1.0 })),
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("exit-age".into())), Box::new(ThoughtAST::Log { value: age.max(1.0) })),
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("exit-peak-age".into())), Box::new(ThoughtAST::Log { value: peak_age.max(1.0) })),
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("exit-signaled".into())), Box::new(ThoughtAST::Linear { value: signaled, scale: 1.0 })),
+        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("exit-excursion".into())), Arc::new(ThoughtAST::Log { value: excursion.max(0.0001) })),
+        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("exit-retracement".into())), Arc::new(ThoughtAST::Linear { value: retracement, scale: 1.0 })),
+        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("exit-age".into())), Arc::new(ThoughtAST::Log { value: age.max(1.0) })),
+        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("exit-peak-age".into())), Arc::new(ThoughtAST::Log { value: peak_age.max(1.0) })),
+        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("exit-signaled".into())), Arc::new(ThoughtAST::Linear { value: signaled, scale: 1.0 })),
         // Seykota additions
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("exit-trail-distance".into())), Box::new(ThoughtAST::Log { value: trail_distance.max(0.0001) })),
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("exit-stop-distance".into())), Box::new(ThoughtAST::Log { value: stop_distance.max(0.0001) })),
+        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("exit-trail-distance".into())), Arc::new(ThoughtAST::Log { value: trail_distance.max(0.0001) })),
+        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("exit-stop-distance".into())), Arc::new(ThoughtAST::Log { value: stop_distance.max(0.0001) })),
         // Van Tharp additions
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("exit-r-multiple".into())), Box::new(ThoughtAST::Log { value: r_multiple.max(0.0001) })),
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("exit-heat".into())), Box::new(ThoughtAST::Linear { value: heat.min(1.0), scale: 1.0 })),
+        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("exit-r-multiple".into())), Arc::new(ThoughtAST::Log { value: r_multiple.max(0.0001) })),
+        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("exit-heat".into())), Arc::new(ThoughtAST::Linear { value: heat.min(1.0), scale: 1.0 })),
         // Wyckoff addition
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("exit-trail-cushion".into())), Box::new(ThoughtAST::Linear { value: trail_cushion, scale: 1.0 })),
+        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("exit-trail-cushion".into())), Arc::new(ThoughtAST::Linear { value: trail_cushion, scale: 1.0 })),
         // phases-since-entry
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("phases-since-entry".into())), Box::new(ThoughtAST::Log { value: phases_since_entry })),
+        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("phases-since-entry".into())), Arc::new(ThoughtAST::Log { value: phases_since_entry })),
         // phases-survived
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("phases-survived".into())), Box::new(ThoughtAST::Log { value: phases_survived })),
+        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("phases-survived".into())), Arc::new(ThoughtAST::Log { value: phases_survived })),
         // entry-vs-phase-avg
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("entry-vs-phase-avg".into())), Box::new(ThoughtAST::Linear { value: entry_vs_phase_avg, scale: 1.0 })),
+        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("entry-vs-phase-avg".into())), Arc::new(ThoughtAST::Linear { value: entry_vs_phase_avg, scale: 1.0 })),
     ]
 }
 

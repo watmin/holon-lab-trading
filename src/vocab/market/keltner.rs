@@ -1,3 +1,4 @@
+use std::sync::Arc;
 // vocab/market/keltner.rs — compiled from wat/vocab/market/keltner.wat
 //
 // Channel positions and squeeze. Pure function: candle in, ASTs out.
@@ -34,7 +35,7 @@ pub fn encode_keltner_facts(c: &Candle, scales: &mut HashMap<String, ScaleTracke
     let t = KeltnerThought::from_candle(c);
     vec![
         scaled_linear("bb-pos", t.bb_pos, scales),
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("bb-width".into())), Box::new(ThoughtAST::Log { value: t.bb_width })),
+        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("bb-width".into())), Arc::new(ThoughtAST::Log { value: t.bb_width })),
         scaled_linear("kelt-pos", t.kelt_pos, scales),
         scaled_linear("squeeze", t.squeeze, scales),
         scaled_linear("kelt-upper-dist", t.kelt_upper_dist, scales),

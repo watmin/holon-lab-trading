@@ -1,3 +1,4 @@
+use std::sync::Arc;
 // vocab/market/flow.rs — compiled from wat/vocab/market/flow.wat
 //
 // Volume and pressure. Pure function: candle in, ASTs out.
@@ -37,11 +38,11 @@ impl FlowThought {
 pub fn encode_flow_facts(c: &Candle, scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
     let t = FlowThought::from_candle(c);
     vec![
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("obv-slope".into())), Box::new(ThoughtAST::Log { value: t.obv_slope })),
+        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("obv-slope".into())), Arc::new(ThoughtAST::Log { value: t.obv_slope })),
         scaled_linear("vwap-distance", t.vwap_distance, scales),
         scaled_linear("buying-pressure", t.buying_pressure, scales),
         scaled_linear("selling-pressure", t.selling_pressure, scales),
-        ThoughtAST::Bind(Box::new(ThoughtAST::Atom("volume-ratio".into())), Box::new(ThoughtAST::Log { value: t.volume_ratio })),
+        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("volume-ratio".into())), Arc::new(ThoughtAST::Log { value: t.volume_ratio })),
         scaled_linear("body-ratio", t.body_ratio, scales),
     ]
 }
