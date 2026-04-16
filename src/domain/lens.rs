@@ -9,7 +9,7 @@ use crate::types::candle::Candle;
 use crate::types::enums::{RegimeLens, MarketLens};
 use crate::encoding::scale_tracker::ScaleTracker;
 use crate::encoding::thought_encoder::ThoughtAST;
-use crate::encoding::rhythm::{IndicatorSpec, CircularSpec};
+use crate::encoding::rhythm::IndicatorSpec;
 
 // Vocab imports -- market
 // Proposals 041+042: ichimoku, stochastic removed from all lenses.
@@ -290,18 +290,11 @@ fn fibonacci_specs() -> Vec<IndicatorSpec> {
     ]
 }
 
-fn time_circular_specs() -> Vec<CircularSpec> {
-    vec![
-        CircularSpec { atom_name: "hour", extractor: |c| c.hour, period: 24.0 },
-        CircularSpec { atom_name: "day-of-week", extractor: |c| c.day_of_week, period: 7.0 },
-    ]
-}
-
 /// Return indicator rhythm specs for a market lens.
 /// Mirrors the structure of market_lens_facts — same modules per lens.
-pub fn market_rhythm_specs(lens: &MarketLens) -> (Vec<IndicatorSpec>, Vec<CircularSpec>) {
-    let circular = time_circular_specs();
-    let indicators = match lens {
+/// Time is a top-level fact on the candle, not a rhythm.
+pub fn market_rhythm_specs(lens: &MarketLens) -> Vec<IndicatorSpec> {
+    match lens {
         MarketLens::DowTrend => {
             let mut s = momentum_specs();
             s.extend(persistence_specs());
@@ -381,16 +374,14 @@ pub fn market_rhythm_specs(lens: &MarketLens) -> (Vec<IndicatorSpec>, Vec<Circul
             s.extend(fibonacci_specs());
             s
         }
-    };
-    (indicators, circular)
+    }
 }
 
 /// Return indicator rhythm specs for a regime lens.
-/// Core: regime indicators + circular time.
-/// Full: Core + phase duration streams.
-pub fn regime_rhythm_specs(lens: &RegimeLens) -> (Vec<IndicatorSpec>, Vec<CircularSpec>) {
-    let circular = time_circular_specs();
-    let indicators = match lens {
+/// Core: regime indicators. Full: Core + phase duration.
+/// Time is a top-level fact on the candle, not a rhythm.
+pub fn regime_rhythm_specs(lens: &RegimeLens) -> Vec<IndicatorSpec> {
+    match lens {
         RegimeLens::Core => {
             regime_specs()
         }
@@ -403,8 +394,7 @@ pub fn regime_rhythm_specs(lens: &RegimeLens) -> (Vec<IndicatorSpec>, Vec<Circul
             });
             s
         }
-    };
-    (indicators, circular)
+    }
 }
 
 #[cfg(test)]

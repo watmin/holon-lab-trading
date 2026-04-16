@@ -48,7 +48,7 @@ pub fn regime_observer_program(
 ) -> RegimeObserver {
     let mut candle_count = 0usize;
     let lens = regime_obs.lens;
-    let (indicator_specs, circular_specs) = regime_rhythm_specs(&lens);
+    let specs = regime_rhythm_specs(&lens);
 
     'outer: loop {
         let t_total = std::time::Instant::now();
@@ -84,7 +84,7 @@ pub fn regime_observer_program(
             // Build regime rhythms from the candle window — once, reuse for all slots.
             let t0 = std::time::Instant::now();
             let regime_asts = regime_rhythm_asts.get_or_insert_with(|| {
-                build_rhythm_asts(&chain.window, &indicator_specs, &circular_specs)
+                build_rhythm_asts(&chain.window, &specs)
             });
             ns_rhythm += t0.elapsed().as_nanos() as f64;
 

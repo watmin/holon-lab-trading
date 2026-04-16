@@ -4,10 +4,6 @@
 /// Takes a window of values, builds trigrams, bigram-pairs, bundles them.
 /// Returns one ThoughtAST — the full tree. The encode function walks it.
 ///
-/// Two variants:
-///   indicator_rhythm  — thermometer + delta for continuous values
-///   circular_rhythm   — circular encoding, no delta, for periodic values
-///
 /// The atom wraps the WHOLE rhythm, not each candle's fact. Proposal 056.
 
 use crate::types::candle::Candle;
@@ -24,37 +20,19 @@ pub struct IndicatorSpec {
     pub delta_range: f64,
 }
 
-/// Spec for a periodic indicator. Circular encoding, no delta.
-/// Hour (period=24), day-of-week (period=7).
-pub struct CircularSpec {
-    pub atom_name: &'static str,
-    pub extractor: fn(&Candle) -> f64,
-    pub period: f64,
-}
-
 /// Build all indicator rhythm ASTs from a window of candles using specs.
-/// Returns a Vec of ThoughtAST — one per spec. The caller bundles and encodes.
+/// Returns a Vec of ThoughtAST — one per spec. The caller bundles.
 pub fn build_rhythm_asts(
     window: &[Candle],
-    indicator_specs: &[IndicatorSpec],
-    circular_specs: &[CircularSpec],
+    specs: &[IndicatorSpec],
 ) -> Vec<ThoughtAST> {
-    let mut asts = Vec::with_capacity(indicator_specs.len() + circular_specs.len());
-
-    for spec in indicator_specs {
+    specs.iter().map(|spec| {
         let values: Vec<f64> = window.iter().map(|c| (spec.extractor)(c)).collect();
-        asts.push(indicator_rhythm(
+        indicator_rhythm(
             spec.atom_name, &values,
             spec.value_min, spec.value_max, spec.delta_range,
-        ));
-    }
-
-    for spec in circular_specs {
-        let values: Vec<f64> = window.iter().map(|c| (spec.extractor)(c)).collect();
-        asts.push(circular_rhythm(spec.atom_name, &values, spec.period));
-    }
-
-    asts
+        )
+    }).collect()
 }
 
 /// Build one indicator rhythm AST from a series of values.
@@ -136,66 +114,6 @@ pub fn indicator_rhythm(
     )
 }
 
-/// Build one circular rhythm AST from a series of periodic values.
-/// Circular encoding, no delta. The wrap is handled by circular similarity.
-/// Atom wraps the final rhythm.
-pub fn circular_rhythm(
-    atom_name: &str,
-    values: &[f64],
-    period: f64,
-) -> ThoughtAST {
-    if values.len() < 3 {
-        return ThoughtAST::Bundle(vec![]);
-    }
-
-    // Step 1: each value → circular encoding, no delta
-    let facts: Vec<ThoughtAST> = values
-        .iter()
-        .map(|&val| ThoughtAST::Circular { value: val, period })
-        .collect();
-
-    // Step 2: trigrams
-    let trigrams: Vec<ThoughtAST> = facts
-        .windows(3)
-        .map(|w| {
-            ThoughtAST::Bind(
-                Box::new(ThoughtAST::Bind(
-                    Box::new(w[0].clone()),
-                    Box::new(ThoughtAST::Permute(Box::new(w[1].clone()), 1)),
-                )),
-                Box::new(ThoughtAST::Permute(Box::new(w[2].clone()), 2)),
-            )
-        })
-        .collect();
-
-    // Step 3: bigram-pairs
-    let pairs: Vec<ThoughtAST> = trigrams
-        .windows(2)
-        .map(|w| {
-            ThoughtAST::Bind(
-                Box::new(w[0].clone()),
-                Box::new(w[1].clone()),
-            )
-        })
-        .collect();
-
-    if pairs.is_empty() {
-        return ThoughtAST::Bundle(vec![]);
-    }
-
-    // Step 4: trim + bundle
-    let budget = ((10_000 as f64).sqrt()) as usize;
-    let start = if pairs.len() > budget { pairs.len() - budget } else { 0 };
-    let trimmed: Vec<ThoughtAST> = pairs[start..].to_vec();
-    let raw = ThoughtAST::Bundle(trimmed);
-
-    // Step 5: bind atom
-    ThoughtAST::Bind(
-        Box::new(ThoughtAST::Atom(atom_name.into())),
-        Box::new(raw),
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -244,7 +162,6 @@ mod tests {
         let values = vec![0.45, 0.48, 0.55, 0.62, 0.68];
         let ast = indicator_rhythm("rsi", &values, 0.0, 100.0, 10.0);
 
-        // The AST is a Bind(Atom, Bundle(...))
         match &ast {
             ThoughtAST::Bind(left, _right) => {
                 match left.as_ref() {
@@ -255,26 +172,10 @@ mod tests {
             other => panic!("expected Bind, got {:?}", other),
         }
 
-        // The EDN is readable
         let edn = ast.to_edn();
         assert!(edn.contains("rsi"), "EDN should contain atom name");
         assert!(edn.contains("thermometer"), "EDN should contain thermometer");
         assert!(edn.contains("permute"), "EDN should contain permute");
-    }
-
-    #[test]
-    fn circular_wraps_correctly() {
-        let evening = vec![22.0, 23.0, 0.0, 1.0, 2.0];
-        let afternoon = vec![14.0, 15.0, 16.0, 17.0, 18.0];
-
-        let eve = enc(&circular_rhythm("hour", &evening, 24.0));
-        let aft = enc(&circular_rhythm("hour", &afternoon, 24.0));
-
-        let self_cos = Similarity::cosine(&eve, &eve);
-        assert!((self_cos - 1.0).abs() < 1e-6, "self-cosine should be 1.0, got {}", self_cos);
-
-        let cos = Similarity::cosine(&eve, &aft);
-        assert!(cos < 0.8, "different time periods should be distinguishable, got {}", cos);
     }
 
     #[test]

@@ -148,8 +148,27 @@ pub fn market_observer_program(
 
         // Build indicator rhythms through the lens — the thought IS the movie.
         let t0 = std::time::Instant::now();
-        let (indicator_specs, circular_specs) = market_rhythm_specs(&lens);
-        let rhythm_asts = build_rhythm_asts(sliced, &indicator_specs, &circular_specs);
+        let specs = market_rhythm_specs(&lens);
+        let mut rhythm_asts = build_rhythm_asts(sliced, &specs);
+        // Time is a top-level fact — "the time is X and I'm thinking about Y"
+        rhythm_asts.push(ThoughtAST::Bind(
+            Box::new(ThoughtAST::Atom("hour".into())),
+            Box::new(ThoughtAST::Circular { value: input.candle.hour, period: 24.0 }),
+        ));
+        rhythm_asts.push(ThoughtAST::Bind(
+            Box::new(ThoughtAST::Atom("day-of-week".into())),
+            Box::new(ThoughtAST::Circular { value: input.candle.day_of_week, period: 7.0 }),
+        ));
+        rhythm_asts.push(ThoughtAST::Bind(
+            Box::new(ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("hour".into())),
+                Box::new(ThoughtAST::Circular { value: input.candle.hour, period: 24.0 }),
+            )),
+            Box::new(ThoughtAST::Bind(
+                Box::new(ThoughtAST::Atom("day-of-week".into())),
+                Box::new(ThoughtAST::Circular { value: input.candle.day_of_week, period: 7.0 }),
+            )),
+        ));
         let fact_count = rhythm_asts.len() as f64;
         let bundle_ast = ThoughtAST::Bundle(rhythm_asts);
         // rune:temper(intentional) — being blind is being incapable. Full thought logging every candle.
