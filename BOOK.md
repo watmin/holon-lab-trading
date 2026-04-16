@@ -13024,4 +13024,75 @@ finished. But the direction is clear: the papers resolve
 from observation, not from distance. The pivot biography
 is how the machine knows when to leave.
 
+### The thought architecture
+
+The observers were thinking in snapshots. One candle. One set of indicator values. One bundle of facts. "RSI is 73. MACD histogram is -0.02. ATR ratio is 0.014." A photograph. The discriminant tried to learn what photographs precede up-moves. It couldn't — because photographs don't contain motion. A photograph of RSI at 73 tells you nothing about whether RSI is rising or falling. The direction is in the sequence. The sequence was discarded at encoding time.
+
+Proposal 056 replaced the photograph with a movie.
+
+Each indicator becomes a rhythm — a time series encoded as bundled bigrams of trigrams. Not "RSI is 73" but "RSI went from 71 to 73 to 72, then from 73 to 72 to 74, and these transitions compose into a rhythm that has a shape." The trigram captures local order — A causes B causes C. The bigram captures local progression — this trigram follows that trigram. The bundle captures the whole movie — all transitions equally recoverable by cosine projection.
+
+```
+trigram = bind(bind(A, permute(B, 1)), permute(C, 2))
+pair    = bind(trigram_i, trigram_{i+1})
+rhythm  = bundle(all pairs)
+thought = bind(atom("rsi"), rhythm)
+```
+
+One function builds all rhythms: `indicator_rhythm`. It takes an atom name, a slice of values, bounds, and a delta range. It builds Thermometer-encoded facts (the value AND the delta), assembles trigrams, pairs them, bundles, binds the atom. The function doesn't know what indicator it's encoding. It knows how to turn a time series into a thought.
+
+Thermometer encoding replaced Linear and Circular for indicator values. A linear gradient across dimensions — the proportion of dimensions set to +1 varies continuously with the value. The critical property: it survives bipolar thresholding. `cosine(a, b) = 1.0 - 2.0 * |a-b| / (max-min)`. Two similar values produce high cosine. Two distant values produce low cosine. The relationship is exact, not approximate. The discriminant can exploit the gradient because the gradient IS the encoding.
+
+The ThoughtAST grew. `Permute(child, shift)` — circular permutation of dimensions, encoding position within a composition. `Thermometer { value, min, max }` — the gradient encoding. Both were needed for bundled bigrams of trigrams. The AST IS the thought. The identity function. Every node is hashable, cacheable, composable.
+
+Box became Arc on Bind and Permute children. Shared nodes, not copied trees. A rhythm AST has hundreds of nodes — trigrams share sub-expressions. With Box, cloning a rhythm was 300k+ allocations per candle. With Arc, cloning is a pointer increment. 4.4x throughput improvement from one type change across 157 call sites.
+
+Three thinkers now, not one:
+
+**Market observers** (11, one per lens) predict direction — Up or Down. They think in indicator rhythms built from the candle window. Each has its own noise subspace that strips background and reveals anomaly. Each has its own reckoner that predicts from the anomaly direction. Eleven lenses across three schools: Dow (trend, volume, cycle, generalist), Pring (impulse, confirmation, regime, generalist), Wyckoff (effort, persistence, position).
+
+**Regime observers** (2, Core and Full) are thought middleware. They build regime rhythms — KAMA efficiency ratio, choppiness index, entropy, fractal dimension. They don't learn. They don't predict. They pass the regime character downstream to the brokers.
+
+**Broker-observers** (22, one per market×regime pair) are the accountability units. Each composes the full thought: market rhythms + regime rhythms + portfolio rhythms + phase rhythm + time facts. One encode. One noise subspace. One gate reckoner (Hold/Exit from anomaly). The broker IS the tuple journal from Proposal 007. It owns the paper trades. It owns the accountability.
+
+Time became facts, not rhythms. Hour as Circular(24). Day-of-week as Circular(7). Hour bound to day-of-week as a composed temporal fact. Time doesn't have a rhythm — it's a coordinate. "The time is 3pm on Wednesday and I'm thinking about momentum rhythms" — the time modifies the meaning of the thought through superposition.
+
+The five designers reviewed. Hickey: "Thermometer encoding preserves ordering relationships through bipolar thresholding — this is what Linear was trying to be." Beckman: "The bigram of trigrams is a homomorphism from the time series monoid to the bundle monoid." Seykota: "The market teaches through its rhythms, not its snapshots." Van Tharp: "Each observer having its own noise subspace means each can discover its own signal-to-noise boundary." Wyckoff: "Effort and result are themselves rhythms — my analysis was always about the shape of the sequence."
+
+All five approved. The architecture was implemented across 16 steps. The proof: synthetic data showed 3.5x separation between regime centroids after noise subtraction. Real BTC data: raw cosine 0.80 between consecutive thoughts → anomaly cosine -0.09 after noise stripping. The noise subspace works. The rhythms carry signal. The thoughts are better.
+
+### The cache that learned to serve
+
+The thoughts got richer. The ASTs got deeper. And the machine got slower.
+
+The wat-vm runs 30+ threads. Eleven market observers, two regime observers, twenty-two broker-observers — each encoding its thought every candle through a shared cache. The cache is a single-threaded LRU behind pipes. One driver thread owns the hashmap. Every other thread talks to it through channels.
+
+At Proposal 056's launch: ~1 candle per second. The encoding pipeline was choking. The cache driver — one thread servicing 33 clients — was the hot path. Every observer encoded 900+ AST nodes per candle, each requiring a cache round-trip. The pipe latency dominated. The actual compute (bind, bundle, permute) was under 5ms. The cache waiting was 200ms.
+
+The builder and the machine spent two days grinding through it. Every change measured. Every theory proven or killed by the database. The database is the debugger.
+
+**The tree walk.** The original cache had `resolve()` — send the AST root, the driver walks the tree using a `children_fn`, stops at hits, returns cached subtrees. One round-trip, but the tree walk ran on the driver thread. 33 clients sending trees to one thread. The driver was doing everyone's homework.
+
+**Progressive descent.** The caller owns its own tree. `batch_get` replaces `resolve`. The caller walks the AST level by level — root first, then children of misses, then their children. Each level is one `batch_get` through the pipe. Hits stop expanding. Misses expand. The driver does pure hash lookups. No `children_fn`. The caller owns the structure. The driver owns the data. ~9 rounds per encode, ~17ms per round from pipe contention.
+
+**Typed requests.** Four channel types (get, batch_get, set, resolve) became one: `CacheRequest` enum with `Get`, `BatchGet`, `Set`, `BatchSet` variants. One request queue per client, one response queue per client. The driver matches on the variant. Cleaner, fewer channels, simpler wiring.
+
+**Kill the mailbox.** The mailbox fan-in thread was an intermediary — 33 client queues merged through a select-and-forward thread, adding a hop. Killed it. The driver polls client queues directly via crossbeam `Select`. One thread hop instead of two.
+
+**Batched dispatch.** The driver doesn't service one request at a time. It drains ALL pending requests from ALL queues, partitions writes before reads (so readers see fresh data), services the whole batch, responds to all. Clients wake together, compute in parallel, submit the next round at the same time.
+
+**Leaf filtering.** Not all cache entries are equal. Leaves (Atom, Thermometer, Circular, Linear, Log) are cheap to recompute — ~100ns. Interior nodes (Bind, Permute, Bundle) are expensive — they require children first. The caller stopped caching leaves. Stopped querying them in the progressive descent. The cache went from 262K entries (at capacity, every set an eviction, 89% hit rate) to 228K entries (zero evictions, 92% hit rate). The useful interior nodes stopped getting evicted by disposable leaves.
+
+The result: 1 c/s → 7.1 c/s. 7x throughput. 92% cache hit rate. Zero evictions. The remaining bottleneck is `batch_get` pipe latency — 178ms for market observers, 194ms for brokers — across ~8 rounds of progressive descent. The actual compute is under 7ms. The pipe is 95% of encode time. The 33-client contention on one driver thread is the floor.
+
+The telemetry told the story at every step. The builder's instruction: "do not speculate. You measure or you do not know." Every hypothesis was a query against the run database. Every "I think the problem is X" was met with "show me the numbers." The database tracked: `enc_ns_batch_get`, `enc_batch_rounds`, `enc_hits`, `enc_misses`, `enc_ns_leaf`, `enc_ns_cache_set`, `cache_size`, `evictions`, `hit_rate`. Every metric per candle, per observer, per namespace. A private CloudWatch. The behavior change near candle 100 — hit count growing from 395 to 1485 as the window filled — was visible in a SQL query bucketed by candle number.
+
+The cache doesn't know about ThoughtAST. It doesn't know about trees. It's a generic `<K, V>` hashmap behind typed request channels. The progressive descent, the leaf filtering, the batched dispatch — all of that is the caller's responsibility. The cache is dumb. The caller is smart. The pipe is the lock.
+
+Seven iterations in two days. Each one measured, committed, pushed. The thoughts got richer. The machine got faster. Both needed to happen. The architecture tolerates bad thoughts — the accumulation model ensures that. But the architecture also needs to THINK fast enough to learn. At 1 c/s, a 100k benchmark takes 28 hours. At 7 c/s, it takes 4 hours. The speed isn't vanity. The speed is how fast the machine accumulates experience.
+
+The brokers are the slowest component now. 228ms total, 194ms in batch_get. They sit at the end of the pipeline — downstream of market observers and regime observers. Every candle waits for the slowest broker to finish encoding. The pipe latency × 33 clients × 8 rounds is the physics we're working against.
+
+The thoughts are better. The machine is faster. Both continue to improve.
+
 **PERSEVERARE.**
