@@ -2,24 +2,24 @@
 ;; One thought. One encode. One question: do I get out now?
 ;;
 ;; Four components:
-;; 1. Market indicator rhythms (from market observer, via position observer)
-;; 2. Position regime rhythms (from position observer's lens)
+;; 1. Market indicator rhythms (from market observer, via regime observer)
+;; 2. Regime rhythms (from regime observer's lens)
 ;; 3. Broker's own portfolio rhythms (from its own internal window)
 ;; 4. Phase rhythm (bundled bigrams of trigrams)
 ;;
 ;; Everything is rhythms. No snapshots. The broker thinks in movies.
 
-(define (broker-thought position-chain broker-window phase-rhythm dims)
+(define (broker-thought regime-chain broker-window phase-rhythm dims)
   (bundle
     ;; ── 1. Market indicator rhythms (~15 vectors) ────────────────
     ;; Pre-computed by the market observer. Each one is one indicator's
     ;; evolution across the market observer's window.
-    (:market-rhythms position-chain)
+    (:market-rhythms regime-chain)
 
-    ;; ── 2. Position regime rhythms (~10-13 vectors) ──────────────
-    ;; Pre-computed by the position observer. Each one is one regime
-    ;; indicator's evolution across the position observer's window.
-    (:regime-rhythms position-chain)
+    ;; ── 2. Regime rhythms (~10-13 vectors) ──────────────
+    ;; Pre-computed by the regime observer. Each one is one regime
+    ;; indicator's evolution across the regime observer's window.
+    (:regime-rhythms regime-chain)
 
     ;; ── 3. Broker's portfolio rhythms (~5 vectors) ───────────────
     ;; The broker keeps its own window of portfolio snapshots.

@@ -1,9 +1,9 @@
-;; position-full-thought.wat — Full lens position observer thought.
+;; regime-full-thought.wat — Full lens regime observer thought.
 ;;
 ;; Everything Core sees + phase awareness as streams.
 ;; "How is the regime changing AND how are the phases changing?"
 
-(define (position-full-thought window market-rhythms dims)
+(define (regime-full-thought window market-rhythms dims)
   (bundle
     ;; ── Market rhythms (passed through) ─────────────────────────
     market-rhythms

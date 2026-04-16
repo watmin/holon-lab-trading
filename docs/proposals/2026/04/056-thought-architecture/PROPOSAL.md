@@ -52,13 +52,13 @@ See: [examples/market-observer-thought.wat](examples/market-observer-thought.wat
 (example shows current single-candle form — to be updated when
 the indicator rhythm encoding is implemented)
 
-### Position Observer (Middleware)
+### Regime Observer (Middleware)
 
 Thinks about interpretation. "Which of the market observer's facts
 are anomalous? What does the market look like through my lens?"
 
 Input: MarketChain (market thought + anomaly + raw + candle)
-Output: MarketPositionChain (market data + position-specific facts)
+Output: MarketRegimeChain (market data + regime-specific facts)
 Learns: nothing. Pure middleware. Two lenses:
 
 **Core lens**: regime facts + time facts. The consensus minimum.
@@ -70,30 +70,30 @@ scalar summaries. Sees everything Core sees plus the current phase
 state (label, direction, duration) and summary statistics of the
 phase history (avg duration, avg range).
 
-The position observer extracts from the market anomaly: for each of
+The regime observer extracts from the market anomaly: for each of
 the ~33 market facts, cosine against the anomaly vector. Facts above
 the noise floor pass through as `(bind (atom "market") fact)`. Facts
 above noise floor in the raw pass as `(bind (atom "market-raw") fact)`.
-This IS the position observer's interpretation — which market thoughts
+This IS the regime observer's interpretation — which market thoughts
 are anomalous right now.
 
-The phase sequence is NOT a position observer thought. It is a fact
+The phase sequence is NOT a regime observer thought. It is a fact
 about the market that flows on the candle. The broker-observer owns it.
 
-See: [examples/position-core-thought.wat](examples/position-core-thought.wat),
-[examples/position-full-thought.wat](examples/position-full-thought.wat)
+See: [examples/regime-core-thought.wat](examples/regime-core-thought.wat),
+[examples/regime-full-thought.wat](examples/regime-full-thought.wat)
 
 ### Broker-Observer
 
 Thinks about action. "Given what I see, do I need to get out right now?"
 
-Input: MarketPositionChain (position facts + market data + candle)
+Input: MarketRegimeChain (position facts + market data + candle)
 Output: Hold/Exit decision, paper proposals, exit proposals
 Learns: gate reckoner (Hold/Exit from Grace/Violence outcomes)
 
 The broker-observer's thought is a composition:
 1. Market indicator rhythms (from the market observer — one per indicator)
-2. Position observer's lens facts (regime, time, phase current, phase scalars)
+2. Regime observer's lens facts (regime, time, phase current, phase scalars)
 3. Portfolio anxiety (age spread, pressure, unrealized P&L, track record)
 4. Phase rhythm (bundled bigrams of trigrams — one vector)
 
@@ -434,7 +434,7 @@ The trim is derived from `sqrt(dims)`, not hardcoded.
 **Outer (broker's thought bundle):** each rhythm is one vector.
 
 - Market indicator rhythms: ~10-15 (one per lens indicator)
-- Position lens facts: ~10-15
+- Regime lens facts: ~10-15
 - Extracted market facts: ~10-20 (after anomaly filtering)
 - Anxiety facts: ~11 (age/pressure/unrealized spreads + track record)
 - Phase rhythm: 1
@@ -478,7 +478,7 @@ lens-specific interpretation facts. The sequence is not lens-specific.
 ### Broker Program (`programs/app/broker_program.rs`)
 
 `broker_thought_ast` adds the sequence:
-1. Start with position facts (from chain)
+1. Start with regime facts (from chain)
 2. Add anxiety facts (portfolio state)
 3. Add phase sequence (from `chain.candle.phase_history`, trimmed, with deltas)
 4. Encode once. Predict once.
@@ -519,10 +519,10 @@ it doesn't normally do." The reckoner predicts from the anomaly,
 not the raw thought. It learns which deviations from normal predict
 Up vs Down.
 
-**Position observer subspace:** learns normal regime rhythm bundles.
+**Regime observer subspace:** learns normal regime rhythm bundles.
 "The regime character usually evolves like THIS." The anomaly:
 "the regime shifted — kama-er dropped while entropy spiked." The
-position observer strips its own background. What survives is the
+regime observer strips its own background. What survives is the
 regime shift, not the regime's usual state.
 
 **Broker-observer subspace:** learns normal composed thought bundles
@@ -557,7 +557,7 @@ The surprise says "this indicator's evolution is unusual right now."
 
 ### Anomaly Filtering Between Thinkers
 
-The position observer currently filters market facts by cosining
+The regime observer currently filters market facts by cosining
 them against the market observer's anomaly. With rhythms, this
 becomes: cosine each market rhythm vector against the market
 anomaly vector. Rhythms with high presence in the anomaly pass
@@ -567,7 +567,7 @@ absorbed them.
 
 The broker-observer receives the filtered rhythms. Only the
 anomalous market rhythms arrive. The regime rhythms come with
-their own anomaly filtering (position observer's subspace). The
+their own anomaly filtering (regime observer's subspace). The
 broker's own subspace then strips what's normal about the
 combination. What survives all three filters is the triple
 anomaly — what's unusual about the market AND the regime AND
@@ -586,8 +586,8 @@ Full worked examples:
 
 - [examples/indicator-rhythm.wat](examples/indicator-rhythm.wat) — the generic function + RSI example expansion
 - [examples/market-observer-thought.wat](examples/market-observer-thought.wat) — 15 indicator rhythms via the generic function
-- [examples/position-core-thought.wat](examples/position-core-thought.wat) — 10 regime rhythms + market rhythms
-- [examples/position-full-thought.wat](examples/position-full-thought.wat) — 13 regime+phase rhythms + market rhythms
+- [examples/regime-core-thought.wat](examples/regime-core-thought.wat) — 10 regime rhythms + market rhythms
+- [examples/regime-full-thought.wat](examples/regime-full-thought.wat) — 13 regime+phase rhythms + market rhythms
 - [examples/broker-thought.wat](examples/broker-thought.wat) — composed: market + regime + portfolio rhythms + phase rhythm
 - [examples/bullish-momentum.wat](examples/bullish-momentum.wat) — three rising valleys, strengthening rallies
 - [examples/exhaustion-top.wat](examples/exhaustion-top.wat) — weakening rallies, longer pauses

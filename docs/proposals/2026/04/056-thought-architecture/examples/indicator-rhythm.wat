@@ -2,8 +2,8 @@
 ;; Same for every observer. The atom name and the extractor are the only
 ;; parameters. Returns one rhythm vector.
 ;;
-;; One function. Three callers: market observer, position observer Core,
-;; position observer Full. Different indicators. Same algorithm.
+;; One function. Three callers: market observer, regime observer Core,
+;; regime observer Full. Different indicators. Same algorithm.
 
 (define (indicator-rhythm window atom-name extract-fn dims)
 

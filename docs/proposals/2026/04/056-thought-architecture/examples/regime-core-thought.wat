@@ -1,6 +1,6 @@
-;; position-core-thought.wat — Core lens position observer thought.
+;; regime-core-thought.wat — Core lens regime observer thought.
 ;;
-;; The position observer is middleware. It receives market rhythms
+;; The regime observer is middleware. It receives market rhythms
 ;; from the market observer and adds its own regime rhythms.
 ;;
 ;; Core lens: regime character over time. "Is the market trending
@@ -8,7 +8,7 @@
 ;;
 ;; Same indicator-rhythm function. Different indicators.
 
-(define (position-core-thought window market-rhythms dims)
+(define (regime-core-thought window market-rhythms dims)
   (bundle
     ;; ── Market rhythms (passed through from market observer) ─────
     ;; Pre-computed rhythm vectors. One per market indicator.
@@ -34,7 +34,7 @@
 ;; 10 regime rhythm vectors + ~10-15 market rhythms = ~20-25 items.
 ;; Budget at D=10,000: 100. Comfortable.
 ;;
-;; What the position observer adds that the market observer doesn't:
+;; What the regime observer adds that the market observer doesn't:
 ;;
 ;; "kama-er rhythm falling while entropy rising"
 ;;   → efficiency dropping, disorder increasing → regime shift happening.
@@ -46,5 +46,5 @@
 ;;   → bulls losing dominance over time. Not a single reading — a progression.
 ;;
 ;; The market observer thinks about WHAT the indicators are doing.
-;; The position observer thinks about HOW the market is behaving.
+;; The regime observer thinks about HOW the market is behaving.
 ;; Different questions. Same encoding.
