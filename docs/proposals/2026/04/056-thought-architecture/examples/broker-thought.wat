@@ -7,41 +7,43 @@
 ;; 3. Broker's own portfolio rhythms (from its own internal window)
 ;; 4. Phase rhythm (bundled bigrams of trigrams)
 ;;
-;; Everything is rhythms. No snapshots. The broker thinks in movies.
+;; All rhythms have atoms factored to the outer level.
+;; Each rhythm = (bind (atom name) raw-rhythm). One atom per indicator.
 
 (define (broker-thought regime-chain broker-window phase-rhythm dims)
   (bundle
     ;; ── 1. Market indicator rhythms (~15 vectors) ────────────────
-    ;; Pre-computed by the market observer. Each one is one indicator's
-    ;; evolution across the market observer's window.
+    ;; Each one: (bind (atom "rsi") raw-rsi-rhythm), etc.
     (:market-rhythms regime-chain)
 
-    ;; ── 2. Regime rhythms (~10-13 vectors) ──────────────
-    ;; Pre-computed by the regime observer. Each one is one regime
-    ;; indicator's evolution across the regime observer's window.
+    ;; ── 2. Regime rhythms (~10-13 vectors) ───────────────────────
+    ;; Each one: (bind (atom "kama-er") raw-kama-rhythm), etc.
+    ;; Time rhythms: (bind (atom "hour") raw-circular-rhythm)
     (:regime-rhythms regime-chain)
 
     ;; ── 3. Broker's portfolio rhythms (~5 vectors) ───────────────
     ;; The broker keeps its own window of portfolio snapshots.
-    ;; Each candle it computes a snapshot from active receipts and
-    ;; pushes it. The rhythms capture how the portfolio state evolved.
+    ;; Thermometer encoding. Bounds from the data's nature.
     (indicator-rhythm broker-window "avg-paper-age"
-      (lambda (s) (:avg-age s)) dims)
+      (lambda (s) (:avg-age s))
+      0.0 500.0 100.0 dims)
     (indicator-rhythm broker-window "avg-time-pressure"
-      (lambda (s) (:avg-tp s)) dims)
+      (lambda (s) (:avg-tp s))
+      0.0 1.0 0.2 dims)
     (indicator-rhythm broker-window "avg-unrealized-residue"
-      (lambda (s) (:avg-unrealized s)) dims)
+      (lambda (s) (:avg-unrealized s))
+      -0.1 0.1 0.05 dims)
     (indicator-rhythm broker-window "grace-rate"
-      (lambda (s) (:grace-rate s)) dims)
+      (lambda (s) (:grace-rate s))
+      0.0 1.0 0.2 dims)
     (indicator-rhythm broker-window "active-positions"
-      (lambda (s) (:active-count s)) dims)
+      (lambda (s) (:active-count s))
+      0.0 500.0 100.0 dims)
 
     ;; ── 4. Phase rhythm (1 vector) ───────────────────────────────
-    ;; Bundled bigrams of trigrams from the phase history.
-    ;; See: bullish-momentum.wat, exhaustion-top.wat, etc.
     phase-rhythm))
 
-;; The broker's portfolio snapshot — pushed to broker-window each candle:
+;; The broker's portfolio snapshot — pushed each candle:
 (struct portfolio-snapshot
   avg-age avg-tp avg-unrealized grace-rate active-count)
 
@@ -53,9 +55,6 @@
 ;;   ─────────────────
 ;;   ~31-34 items. Comfortable headroom.
 ;;
-;; Compare to the snapshot approach (~37-40 with 11 scalar facts).
-;; Rhythms use fewer slots AND carry more information — the evolution,
-;; not just the current value.
-;;
-;; The gate reckoner cosines against this one vector.
-;; Hold or Exit. The treasury judges the papers.
+;; Every rhythm vector has its atom factored to the outer level.
+;; The raw rhythm inside each (bind (atom ...) ...) captures the
+;; progression without the constant atom inflating the cosine.

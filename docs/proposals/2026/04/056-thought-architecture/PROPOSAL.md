@@ -113,57 +113,75 @@ over time, but each individual thought is memoryless.
 
 ### The Solution: Per-Indicator Rhythm
 
-Each indicator the lens selects gets its own rhythm vector. The
-same encoding as the phase rhythm, applied to one scalar over time.
+Each indicator the lens selects gets its own rhythm vector. Two
+variants based on the indicator's nature:
+
+**`indicator-rhythm`** — for continuous values (RSI, ADX, ATR, etc.).
+Thermometer encoding for values. Thermometer encoding for deltas.
+The atom wraps the WHOLE rhythm, not each candle's fact (Beckman:
+factor the constant out of the per-candle encoding).
+
+**`circular-rhythm`** — for periodic values (hour, day-of-week).
+Circular encoding, no delta. The wrap from 23→0 is handled by
+circular similarity, not by computing a delta of -23.
 
 ```scheme
-;; The generic function. Same for every indicator.
-
-(define (indicator-rhythm window atom-name extract-fn dims)
-  ;; Step 1: each candle → value + delta from previous
+;; Continuous indicators: thermometer + delta
+(define (indicator-rhythm window atom-name extract-fn
+                          value-min value-max delta-range dims)
   (let facts
     (map-indexed (lambda (i candle)
       (let value (extract-fn candle))
       (if (= i 0)
-        (bind (atom atom-name) (linear value 1.0))
+        (thermometer value value-min value-max)
         (let prev (extract-fn (nth window (- i 1))))
         (bundle
-          (bind (atom atom-name)
-                (linear value 1.0))
-          (bind (atom (str atom-name "-delta"))
-                (linear (- value prev) 1.0)))))
+          (thermometer value value-min value-max)
+          (bind (atom "delta")
+                (thermometer (- value prev)
+                             (- 0 delta-range) delta-range)))))
     window))
+  ;; trigrams → bigram-pairs → trim → bundle → bind atom
+  ...
+  (bind (atom atom-name) raw-rhythm))
 
-  ;; Step 2: trigrams — 3 consecutive candle facts
-  (let tris (windows 3 facts (lambda (a b c)
-    (bind (bind a (permute b 1)) (permute c 2)))))
-
-  ;; Step 3: bigram-pairs — "this pattern then that"
-  (let pairs (windows 2 tris (lambda (a b)
-    (bind a b))))
-
-  ;; Step 4: trim to budget, bundle → one vector
-  (let budget (floor (sqrt dims)))
-  (bundle (take-right budget pairs)))
+;; Periodic indicators: circular, no delta
+(define (circular-rhythm window atom-name extract-fn period dims)
+  (let facts
+    (map (lambda (candle)
+      (circular (extract-fn candle) period))
+    window))
+  ...
+  (bind (atom atom-name) raw-rhythm))
 ```
+
+The atom appears ONCE — wrapping the final rhythm vector. Not N
+times inside the per-candle facts. Two RSI rhythms (rising vs
+falling) differ in their raw progression, not in the shared atom
+structure. The atom identifies. The raw rhythm differentiates.
 
 The delta IS the causality. "RSI rose 0.07 then rose 0.06" — the
 deceleration is in the scalars. "RSI positive then negative" — the
 reversal is a sign flip in the delta. The reckoner doesn't need a
 rule. The direction on the sphere where delta flips sign IS reversal.
 
+Bounds come from the indicator's nature — not magic numbers:
+- RSI: `thermometer 0.0 100.0` — Wilder's definition
+- Bollinger position: `thermometer 0.0 1.0` — by construction
+- Hour: `circular 24.0` — by the clock
+- Deltas: symmetric `thermometer -range +range` — from ScaleTracker
+
 ### The Market Observer's Thought
 
 ```scheme
 (define (market-thought window dims)
   (bundle
-    (indicator-rhythm window "rsi"       (lambda (c) c.rsi)       dims)
-    (indicator-rhythm window "macd-hist" (lambda (c) c.macd-hist) dims)
-    (indicator-rhythm window "bb-pos"    (lambda (c) c.bb-pos)    dims)
-    (indicator-rhythm window "adx"       (lambda (c) c.adx)       dims)
-    (indicator-rhythm window "atr-ratio" (lambda (c) c.atr-ratio) dims)
-    (indicator-rhythm window "obv-slope" (lambda (c) c.obv-slope) dims)
-    (indicator-rhythm window "hurst"     (lambda (c) c.hurst)     dims)
+    (indicator-rhythm window "rsi"       (lambda (c) (:rsi c))       0.0 100.0 10.0 dims)
+    (indicator-rhythm window "macd-hist" (lambda (c) (:macd-hist c)) -50.0 50.0 20.0 dims)
+    (indicator-rhythm window "bb-pos"    (lambda (c) (:bb-pos c))    0.0 1.0 0.2 dims)
+    (indicator-rhythm window "adx"       (lambda (c) (:adx c))       0.0 100.0 10.0 dims)
+    (indicator-rhythm window "atr-ratio" (lambda (c) (:atr-ratio c)) 0.0 0.05 0.01 dims)
+    (indicator-rhythm window "obv-slope" (lambda (c) (:obv-slope c)) -2.0 2.0 1.0 dims)
     ;; ... one call per indicator the lens selects ...
     ))
 ```
