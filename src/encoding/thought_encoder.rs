@@ -24,6 +24,9 @@ pub enum ThoughtAST {
     Thermometer { value: f64, min: f64, max: f64 },
     Bind(Box<ThoughtAST>, Box<ThoughtAST>),
     Bundle(Vec<ThoughtAST>),
+    /// Positional shift — circular permutation of dimensions by `shift` positions.
+    /// Encodes position within a composition. Proposal 056.
+    Permute(Box<ThoughtAST>, i32),
     /// Ordered sequence — each item is permuted by its index before bundling.
     /// Position-sensitive: [A, B] != [B, A]. Used for pivot biography.
     Sequential(Vec<ThoughtAST>),
@@ -43,6 +46,7 @@ impl ThoughtAST {
             ThoughtAST::Thermometer { value, min, max } => format!("thermometer({},{},{})", value, min, max),
             ThoughtAST::Bind(left, right) => format!("bind({}:{})", left.name(), right.name()),
             ThoughtAST::Bundle(children) => format!("bundle({})", children.len()),
+            ThoughtAST::Permute(child, shift) => format!("permute({},{})", child.name(), shift),
             ThoughtAST::Sequential(items) => format!("sequential({})", items.len()),
         }
     }
@@ -70,6 +74,10 @@ impl ThoughtAST {
                 format!("(bind\n{}{}\n{}{})",
                     child_indent, left.to_edn_depth(depth + 1),
                     child_indent, right.to_edn_depth(depth + 1)),
+            ThoughtAST::Permute(child, shift) =>
+                format!("(permute\n{}{}\n{}{})",
+                    child_indent, child.to_edn_depth(depth + 1),
+                    child_indent, shift),
             ThoughtAST::Bundle(children) => {
                 let inner: Vec<String> = children.iter()
                     .map(|c| format!("{}{}", child_indent, c.to_edn_depth(depth + 1)))
@@ -109,6 +117,10 @@ impl std::hash::Hash for ThoughtAST {
                 value.to_bits().hash(state);
                 min.to_bits().hash(state);
                 max.to_bits().hash(state);
+            }
+            ThoughtAST::Permute(child, shift) => {
+                child.hash(state);
+                shift.hash(state);
             }
             ThoughtAST::Bind(left, right) => {
                 left.hash(state);
@@ -180,6 +192,10 @@ impl ThoughtEncoder {
                     *value,
                     ScalarMode::Thermometer { min: *min, max: *max },
                 )
+            }
+            ThoughtAST::Permute(child, shift) => {
+                let v = self.encode(child);
+                Primitives::permute(&v, *shift)
             }
             ThoughtAST::Bind(left, right) => {
                 let l_vec = self.encode(left);
@@ -363,8 +379,13 @@ pub fn collect_facts(ast: &ThoughtAST) -> Vec<ThoughtAST> {
         ThoughtAST::Sequential(items) => {
             items.iter().flat_map(collect_facts).collect()
         }
-        ThoughtAST::Atom(_) => vec![], // name without value — not a fact
-        _ => vec![ast.clone()], // Linear, Log, Circular, Bind — factual statements
+        ThoughtAST::Atom(_) => vec![],
+        ThoughtAST::Linear { .. } => vec![ast.clone()],
+        ThoughtAST::Log { .. } => vec![ast.clone()],
+        ThoughtAST::Circular { .. } => vec![ast.clone()],
+        ThoughtAST::Thermometer { .. } => vec![ast.clone()],
+        ThoughtAST::Bind(_, _) => vec![ast.clone()],
+        ThoughtAST::Permute(_, _) => vec![ast.clone()],
     }
 }
 

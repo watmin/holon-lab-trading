@@ -42,6 +42,10 @@ pub fn encode(
         ThoughtAST::Thermometer { value, min, max } => {
             scalar.encode(*value, ScalarMode::Thermometer { min: *min, max: *max })
         }
+        ThoughtAST::Permute(child, shift) => {
+            let v = encode(cache, child, vm, scalar);
+            Primitives::permute(&v, *shift)
+        }
         ThoughtAST::Bind(left, right) => {
             let l = encode(cache, left, vm, scalar);
             let r = encode(cache, right, vm, scalar);
