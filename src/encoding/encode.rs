@@ -22,7 +22,7 @@ pub struct EncodeMetrics {
     pub cache_hits: u64,
     pub cache_misses: u64,
     pub ns_cache_get: u64,
-    pub ns_compute: u64,
+    pub ns_leaf: u64,
     pub ns_cache_set: u64,
 }
 
@@ -62,43 +62,67 @@ pub fn encode(
     }
     METRICS.with(|m| m.borrow_mut().cache_misses += 1);
 
-    // Miss — compute locally, walking children recursively
-    let t0 = std::time::Instant::now();
+    // Miss — compute locally, walking children recursively.
+    // ns_leaf times ONLY the Primitives/scalar call, not recursive children.
     let vec = match ast {
         ThoughtAST::Atom(name) => {
-            vm.get_vector(name)
+            let t0 = std::time::Instant::now();
+            let v = vm.get_vector(name);
+            METRICS.with(|m| m.borrow_mut().ns_leaf += t0.elapsed().as_nanos() as u64);
+            v
         }
         ThoughtAST::Linear { value, scale } => {
-            scalar.encode(*value, ScalarMode::Linear { scale: *scale })
+            let t0 = std::time::Instant::now();
+            let v = scalar.encode(*value, ScalarMode::Linear { scale: *scale });
+            METRICS.with(|m| m.borrow_mut().ns_leaf += t0.elapsed().as_nanos() as u64);
+            v
         }
         ThoughtAST::Log { value } => {
-            scalar.encode_log(*value)
+            let t0 = std::time::Instant::now();
+            let v = scalar.encode_log(*value);
+            METRICS.with(|m| m.borrow_mut().ns_leaf += t0.elapsed().as_nanos() as u64);
+            v
         }
         ThoughtAST::Circular { value, period } => {
-            scalar.encode(*value, ScalarMode::Circular { period: *period })
+            let t0 = std::time::Instant::now();
+            let v = scalar.encode(*value, ScalarMode::Circular { period: *period });
+            METRICS.with(|m| m.borrow_mut().ns_leaf += t0.elapsed().as_nanos() as u64);
+            v
         }
         ThoughtAST::Thermometer { value, min, max } => {
-            scalar.encode(*value, ScalarMode::Thermometer { min: *min, max: *max })
+            let t0 = std::time::Instant::now();
+            let v = scalar.encode(*value, ScalarMode::Thermometer { min: *min, max: *max });
+            METRICS.with(|m| m.borrow_mut().ns_leaf += t0.elapsed().as_nanos() as u64);
+            v
         }
         ThoughtAST::Permute(child, shift) => {
             let v = encode(cache, child, vm, scalar);
-            Primitives::permute(&v, *shift)
+            let t0 = std::time::Instant::now();
+            let r = Primitives::permute(&v, *shift);
+            METRICS.with(|m| m.borrow_mut().ns_leaf += t0.elapsed().as_nanos() as u64);
+            r
         }
         ThoughtAST::Bind(left, right) => {
             let l = encode(cache, left, vm, scalar);
             let r = encode(cache, right, vm, scalar);
-            Primitives::bind(&l, &r)
+            let t0 = std::time::Instant::now();
+            let v = Primitives::bind(&l, &r);
+            METRICS.with(|m| m.borrow_mut().ns_leaf += t0.elapsed().as_nanos() as u64);
+            v
         }
         ThoughtAST::Bundle(children) => {
             let vecs: Vec<Vector> = children.iter()
                 .map(|c| encode(cache, c, vm, scalar))
                 .collect();
-            if vecs.is_empty() {
+            let t0 = std::time::Instant::now();
+            let v = if vecs.is_empty() {
                 Vector::zeros(vm.dimensions())
             } else {
                 let refs: Vec<&Vector> = vecs.iter().collect();
                 Primitives::bundle(&refs)
-            }
+            };
+            METRICS.with(|m| m.borrow_mut().ns_leaf += t0.elapsed().as_nanos() as u64);
+            v
         }
         ThoughtAST::Sequential(items) => {
             let vecs: Vec<Vector> = items.iter().enumerate()
@@ -107,16 +131,17 @@ pub fn encode(
                     Primitives::permute(&v, i as i32)
                 })
                 .collect();
-            if vecs.is_empty() {
+            let t0 = std::time::Instant::now();
+            let v = if vecs.is_empty() {
                 Vector::zeros(vm.dimensions())
             } else {
                 let refs: Vec<&Vector> = vecs.iter().collect();
                 Primitives::bundle(&refs)
-            }
+            };
+            METRICS.with(|m| m.borrow_mut().ns_leaf += t0.elapsed().as_nanos() as u64);
+            v
         }
     };
-    let ns_comp = t0.elapsed().as_nanos() as u64;
-    METRICS.with(|m| m.borrow_mut().ns_compute += ns_comp);
 
     // Install in cache — fire and forget
     let t0 = std::time::Instant::now();

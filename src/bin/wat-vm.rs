@@ -652,19 +652,24 @@ fn main() {
         while pipeline.count < max && !STOP.load(Ordering::SeqCst) {
             match pipeline.stream.next() {
                 Some(ohlcv) => {
+                    let t_tick = std::time::Instant::now();
                     let candle = pipeline.bank.tick(&ohlcv);
+                    let ns_tick = t_tick.elapsed().as_nanos() as f64;
                     pipeline.count += 1;
                     encode_count += 1;
 
                     // Grow the candle window, trim to max.
+                    let t_win = std::time::Instant::now();
                     pipeline.candle_window.push(candle.clone());
                     if pipeline.candle_window.len() > pipeline.max_window_size {
                         let excess = pipeline.candle_window.len() - pipeline.max_window_size;
                         pipeline.candle_window.drain(..excess);
                     }
                     let window: Arc<Vec<Candle>> = Arc::new(pipeline.candle_window.clone());
+                    let ns_window = t_win.elapsed().as_nanos() as f64;
 
                     // Send candle to each observer
+                    let t_send = std::time::Instant::now();
                     for tx in &wired.candle_txs {
                         let _ = tx.send(ObsInput {
                             candle: candle.clone(),
@@ -672,6 +677,7 @@ fn main() {
                             encode_count,
                         });
                     }
+                    let ns_send = t_send.elapsed().as_nanos() as f64;
 
                     // Send tick to treasury
                     treasury_tick_sender.send_tick(
@@ -686,9 +692,10 @@ fn main() {
                         let interval_ms = last_report.elapsed().as_millis();
                         last_report = std::time::Instant::now();
                         stream_handles[i].out(format!(
-                            "{}/{} candle {}: close={:.2} {:.1}/s {:.0}ms/100",
+                            "{}/{} candle {}: close={:.2} {:.1}/s {:.0}ms/100 tick={:.1}ms win={:.1}ms send={:.1}ms",
                             pipeline.source, pipeline.target, pipeline.count,
-                            candle.close, throughput, interval_ms
+                            candle.close, throughput, interval_ms,
+                            ns_tick / 1e6, ns_window / 1e6, ns_send / 1e6,
                         ));
                     }
                 }

@@ -238,7 +238,22 @@ pub fn treasury_program(
                 current_candle = candle;
 
                 // Advance deadlines — the treasury's autonomous action.
+                let t0 = std::time::Instant::now();
                 let _ = treasury.check_deadlines(candle, price);
+                let ns_tick = t0.elapsed().as_nanos() as u64;
+
+                let _ = _db_tx.send(LogEntry::Telemetry {
+                    namespace: "treasury".into(),
+                    id: format!("treasury:tick:{}", candle_count),
+                    dimensions: "{}".into(),
+                    timestamp_ns: std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_nanos() as u64,
+                    metric_name: "ns_tick".into(),
+                    metric_value: ns_tick as f64,
+                    metric_unit: "Nanoseconds".into(),
+                });
 
                 // Diagnostics every 1000 candles.
                 if candle_count % 1000 == 0 {
@@ -265,6 +280,7 @@ pub fn treasury_program(
             }
 
             TreasuryEvent::Request { client_id, request } => {
+                let t0 = std::time::Instant::now();
                 let response = handle_request(
                     &mut treasury,
                     client_id,
@@ -275,6 +291,19 @@ pub fn treasury_program(
                 if client_id < client_txs.len() {
                     let _ = client_txs[client_id].send(response);
                 }
+                let ns_request = t0.elapsed().as_nanos() as u64;
+                let _ = _db_tx.send(LogEntry::Telemetry {
+                    namespace: "treasury".into(),
+                    id: format!("treasury:req:{}", candle_count),
+                    dimensions: "{}".into(),
+                    timestamp_ns: std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_nanos() as u64,
+                    metric_name: "ns_request".into(),
+                    metric_value: ns_request as f64,
+                    metric_unit: "Nanoseconds".into(),
+                });
             }
         }
     }

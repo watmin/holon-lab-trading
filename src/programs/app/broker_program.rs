@@ -20,7 +20,7 @@ use crate::types::log_entry::LogEntry;
 use crate::vocab::exit::phase::phase_rhythm_thought;
 use crate::encoding::rhythm::indicator_rhythm;
 use crate::programs::chain::MarketRegimeChain;
-use crate::encoding::encode::encode;
+use crate::encoding::encode::{encode, take_encode_metrics};
 use crate::encoding::thought_encoder::ThoughtAST;
 use crate::programs::stdlib::cache::CacheHandle;
 use crate::programs::stdlib::console::ConsoleHandle;
@@ -189,18 +189,24 @@ pub fn broker_program(
             chain.candle.day_of_week,
         );
         let broker_thought = encode(&cache, &thought_ast, &vm, &scalar);
+        let broker_enc_metrics = take_encode_metrics();
+        let ns_broker_encode = t0.elapsed().as_nanos() as f64;
 
         // Noise subspace: train on the composed thought, extract the anomaly.
+        let t0 = std::time::Instant::now();
         let thought_f64 = crate::to_f64(&broker_thought);
         broker.noise_subspace.update(&thought_f64);
         let anomaly_f64 = broker.noise_subspace.anomalous_component(&thought_f64);
         let anomaly = holon::kernel::vector::Vector::from_f64(&anomaly_f64);
+        let ns_noise = t0.elapsed().as_nanos() as f64;
 
         // Gate 4 predicts from the anomaly — what's unusual about this moment.
+        let t0 = std::time::Instant::now();
         let gate_pred = broker.gate_reckoner.predict(&anomaly);
         let wants_exit = gate_pred.direction.map_or(false, |d| d.index() == 1)
             && broker.gate_reckoner.experience() > 0.0;
-        let ns_gate = t0.elapsed().as_nanos() as f64;
+        let ns_predict = t0.elapsed().as_nanos() as f64;
+        let ns_gate = ns_broker_encode + ns_noise + ns_predict;
 
         // If exit: submit for all active papers. Treasury judges each one.
         let t0 = std::time::Instant::now();
@@ -303,6 +309,14 @@ pub fn broker_program(
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "total", ns_total, "Nanoseconds");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "submit_paper", ns_submit, "Nanoseconds");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4", ns_gate, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4_encode", ns_broker_encode, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4_noise", ns_noise, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4_predict", ns_predict, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4_enc_nodes", broker_enc_metrics.nodes_walked as f64, "Count");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4_enc_hits", broker_enc_metrics.cache_hits as f64, "Count");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4_enc_misses", broker_enc_metrics.cache_misses as f64, "Count");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4_enc_ns_cache_get", broker_enc_metrics.ns_cache_get as f64, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4_enc_ns_leaf", broker_enc_metrics.ns_leaf as f64, "Nanoseconds");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "snapshot", ns_snapshot, "Nanoseconds");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "exit_submit", ns_exit_submit, "Nanoseconds");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "retain", ns_retain, "Nanoseconds");
