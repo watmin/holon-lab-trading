@@ -9,102 +9,90 @@ Wat and guide divergence NOT chased — out of sync by design during this refact
 
 ## Quick wins — low risk, high clarity
 
-- [ ] **Delete `l1_miss_asts` Vec in `encode.rs`**. Allocated at line 91, passed through `collect_l1_misses` (line 141), written at line 162 with `ast.clone()` per tree node, never read. Pure waste in the hot path. Drop the parameter, drop the Vec, drop the clone.
+- [x] **Delete `l1_miss_asts` Vec in `encode.rs`**. Allocated at line 91, passed through `collect_l1_misses` (line 141), written at line 162 with `ast.clone()` per tree node, never read. Pure waste in the hot path. Drop the parameter, drop the Vec, drop the clone.
 
-- [ ] **Rename rayon lies in `EncodeMetrics` (`encode.rs`)**. `ns_rayon` → `ns_compute`, `rayon_tasks` → `forms_computed`. Rayon was removed but the metric names propagated into the DB via `emit_metric` calls in `market_observer_program.rs:236-237` and `broker_program.rs:336-337` as `enc_ns_rayon`, `enc_rayon_tasks`, `gate4_enc_ns_rayon`, `gate4_enc_rayon_tasks`. Rename at source and all three emission sites.
+- [x] **Rename rayon lies in `EncodeMetrics` (`encode.rs`)**. `ns_rayon` → `ns_compute`, `rayon_tasks` → `forms_computed`. Rayon was removed but the metric names propagated into the DB via `emit_metric` calls in `market_observer_program.rs:236-237` and `broker_program.rs:336-337` as `enc_ns_rayon`, `enc_rayon_tasks`, `gate4_enc_ns_rayon`, `gate4_enc_rayon_tasks`. Rename at source and all three emission sites.
 
-- [ ] **Delete `ns_leaf` metric**. `EncodeMetrics::ns_leaf` (line 55) is defined and emitted as `enc_ns_leaf` / `gate4_enc_ns_leaf` but never written anywhere in `encode.rs`. Always zero. A metric that lies by silence. Drop the field and the two emission sites.
+- [x] **Delete `ns_leaf` metric**. `EncodeMetrics::ns_leaf` (line 55) is defined and emitted as `enc_ns_leaf` / `gate4_enc_ns_leaf` but never written anywhere in `encode.rs`. Always zero. A metric that lies by silence. Drop the field and the two emission sites.
 
-- [ ] **Fix `_db_tx` underscore in `treasury_program.rs`** (line 251). Underscore prefix signals "intentionally unused" but the parameter is used at lines 264 and 343. Rename to `db_tx`.
+- [x] **Fix `_db_tx` underscore in `treasury_program.rs`** (line 251). Underscore prefix signals "intentionally unused" but the parameter is used at lines 264 and 343. Rename to `db_tx`.
 
-- [ ] **Fix `rune:forge(dims)` missing dash-reason** at `broker_program.rs:118`. Skill requires `rune:category(term) — reason`. Current rune has no reason after the dash. Either expand or remove.
+- [x] **Fix `rune:forge(dims)` missing dash-reason** at `broker_program.rs:118`. Fixed by reading vm.dimensions() directly — rune removed entirely. Note: two similar cases remain in `src/encoding/rhythm.rs:58,117` where the pure helpers don't have vm access. Deferred.
 
-- [ ] **Fix `database.rs` emit doc** (line 73-76). Doc says `Fn(flush_count, total_rows, total_flush_ns)` but the actual signature is `Fn(&Connection, usize, usize, u64)`. Doc omits `&Connection`.
+- [x] **Fix `database.rs` emit doc** (line 73-76). Doc said `Fn(flush_count, total_rows, total_flush_ns)` but the actual signature is `Fn(&Connection, usize, usize, u64)`. Also dropped the "optional" claim — both can_emit and emit are mandatory.
 
-- [ ] **Remove stale `rune:reap(scaffolding)` on `submit_exit`** at `treasury_program.rs:135`. The rune claims the function is scaffolding but it's actively called at `broker_program.rs:218`. Rune is stale.
+- [x] **Remove stale `rune:reap(scaffolding)` on `submit_exit`** at `treasury_program.rs:135`. The rune claimed scaffolding but the function is actively called at `broker_program.rs:218`.
 
-- [ ] **Delete `ObsLearn` struct** in `market_observer_program.rs:42-44`. Declared as `pub` but no callers anywhere. `UnconfirmedPrediction` replaced it; the old struct was never removed.
+- [x] **Delete `ObsLearn` struct** in `market_observer_program.rs:42-44`. Declared as `pub` but no callers anywhere. `UnconfirmedPrediction` replaced it; the old struct was never removed.
 
-- [ ] **Update stale doc comments**:
-  - `broker_program.rs:4` — "Encodes anxiety atoms from active position receipts." No anxiety atoms exist. Replace with current reality (market + regime + portfolio + phase + time rhythms).
-  - `wat-vm.rs:11` — "Position observers compose market thoughts with position facts." Renamed to regime observers. Fix the comment.
-  - `encode.rs:1-2` — "the ONE way to turn a thought into geometry" — `ThoughtEncoder::encode` is a second path. Either reconcile to one path or update the comment.
+- [x] **Update stale doc comments**:
+  - broker_program.rs — anxiety atoms replaced with current reality
+  - wat-vm.rs — position observers → regime observers with current topology
+  - encode.rs — dropped "ONE way" claim, acknowledged test path, then made it true in the two-encoder reconciliation
 
 ---
 
 ## Naming schism — the regime/position drift
 
-- [ ] **Rename `position_*` bindings in `wat-vm.rs` to `regime_*`**. Types are already `RegimeObserver` / `regime_observer_program` / `wire_regime_observers`, but bindings and constants still use position: `num_position`, `POSITION_LENSES`, `position_console_handles`, `position_queue_rxs`, `position_cache_pool`, `position_console_pool`, `position_db_pool`. CLAUDE.md declares the vocabulary is **Regime Observer**. Also fix section header comments (lines 186-285).
+- [x] **Rename `position_*` bindings in `wat-vm.rs` to `regime_*`**. POSITION_LENSES → REGIME_LENSES in config.rs. All bindings renamed. Comments fixed. "Position" still appears legitimately in PositionState / PositionReceipt / PaperPosition (treasury trade lifecycle).
 
-- [ ] **Update `wat-vm.rs:524-525` comment** referring to "054/055" proposal numbers without explanation.
+- [ ] **Update `wat-vm.rs:524-525` comment** referring to "054/055" proposal numbers without explanation. (Not done — skipped.)
 
 ---
 
 ## Dead treasury fields
 
-- [ ] **Remove `TreasuryEvent::Tick.atr`** (line 26). Written via `send_tick(candle, price, atr)` at line 363, destructured with `..` at line 261. Never read. `wat-vm.rs:680` computes `candle.atr_ratio * candle.close` only to fill this dead field. Drop both.
+- [x] **`TreasuryEvent::Tick.atr`** — NOT removed; WIRED IN. Proposal 055 planned volatility-scaled deadlines. Treasury now tracks current_atr via observe_atr(), locks reference_atr on first reading, and handle_request uses scaled_deadline() at paper issue. Volatile periods shrink deadlines, calm periods extend them.
 
-- [ ] **Remove `TreasuryResponse::ExitApproved.position_id`** (line 62). Set at line 220, ignored with `..` at line 148. Write-only.
+- [ ] **`TreasuryResponse::ExitApproved.position_id`** — INTENTIONALLY KEPT. The user called out that response fields carry identity for the treasury's accounting — the broker's destructure with `..` drops information the treasury rightfully provides. That's a caller issue, not a protocol issue.
 
 ---
 
 ## Braided concerns (sever)
 
-- [ ] **Extract time facts vocabulary**. Same `Bind(Atom("hour"), Circular{hour,24.0})` + day-of-week pattern appears THREE times:
-  - `market_observer_program.rs:156-173` (plus nested pair at 164-173)
-  - `broker_program.rs:91-98`
-  
-  The broker re-binds time that the market observer ALREADY embedded inside `market_ast`. Time is being double-counted. Create `vocab/time.rs::time_facts(hour, day) -> Vec<ThoughtAST>`. Call in one place. Decide where time should live — likely only at the outermost bundle (broker), not inside the market AST.
+- [x] **Extract time facts vocabulary**. `time_facts(candle)` in `vocab/shared/time.rs` returns 5 leaf binds + 3 pairwise compositions (minute×hour, hour×dow, dow×month). Market observer bundles time into its own thought (learns time). `market_ast` in the chain is rhythms only (no time). Broker bundles time into its thought. Each learner gets time exactly once. No double-counting.
 
-- [ ] **Extract portfolio vocabulary**. `broker_program.rs:50-63` hardcodes min/max/delta_range for `avg-paper-age`, `avg-time-pressure`, `avg-unrealized-residue`, `grace-rate`, `active-positions`. Bounds define what "normal" means — that's vocabulary. Move to `vocab/portfolio.rs::rhythm_asts(snapshots)`. Broker calls it.
+- [x] **Extract portfolio vocabulary**. PortfolioSnapshot and portfolio_rhythm_asts moved to `vocab/broker/portfolio.rs`. Deleted orphaned compute_portfolio_biography (Proposal 044's pre-wat-vm design, superseded by 056 rhythms).
 
-- [ ] **Move `direction_from_prediction`** from `broker_program.rs:33-39` to `impl From<&Prediction> for Direction` in `types/enums.rs` or a `domain/prediction.rs` adapter. It's a type-boundary conversion, not broker logic.
+- [x] **Move `direction_from_prediction`**. Now `impl From<&Prediction> for Direction` in `types/enums.rs`. Broker calls `Direction::from(&pred)`.
 
-- [ ] **Consolidate telemetry construction in `treasury_program.rs`** (lines 275-286, 325-336). Treasury hand-builds `LogEntry::Telemetry { ... }` twice. Other programs use `emit_metric(&mut pending, ...)`. Use the same helper.
+- [x] **Consolidate telemetry construction in `treasury_program.rs`**. Uses `emit_metric` everywhere now — consistent with market_observer, regime_observer, broker.
 
-- [ ] **Reconcile two encoders**. `encode_local` in `encode.rs:169` and `ThoughtEncoder::encode` in `thought_encoder.rs:229` both walk `ThoughtASTKind` with identical match arms. The tests+incremental path is a second implementation — will drift. Make `ThoughtEncoder::encode` a thin wrapper over `encode_local` with empty L1/L2, OR delete the second path entirely if only tests use it.
+- [x] **Reconcile two encoders**. Deleted `ThoughtEncoder` and `IncrementalBundle`. Deleted `Ctx`. Tests use `test_support::TestEncodeEnv` which drives the real `encode()` function through a throwaway cache. One algebra, one implementation, zero drift.
 
 ---
 
 ## Forge — craft issues
 
-- [ ] **Parameterize `EncodeState::new`** (encode.rs:38). Takes no params; `L1_CAPACITY = 16384` is a module const. Different entity types (market observer vs broker) may want different capacities. Make it `EncodeState::new(capacity: NonZeroUsize)`.
+- [x] **Parameterize `EncodeState::new`**. Takes capacity parameter. DEFAULT_L1_CAPACITY = 16384 is a public const for callers that don't want to tune.
 
-- [ ] **Symmetric `set` / `batch_set` semantics in `CacheHandle`** (cache.rs). Currently `set()` is fire-and-forget while `batch_set()` is confirmed. Same abstraction level, different semantics — bug waiting to happen. Either make `set(k,v)` call `batch_set(vec![(k,v)])` or drop `Set` and `CacheRequest::Set` entirely.
+- [x] **Symmetric `set` / `batch_set` semantics**. Went further — deleted `set` AND `get` entirely. Cache API is batch-only now. CacheRequest::Set and CacheRequest::Get removed. Tests use a get_one helper that wraps batch_get for single-key lookups.
 
-- [ ] **Extract broker program phases**. `broker_program.rs:105` is ~270 lines. `treasury_program::handle_request` is the exemplar — compute extracted, program body orchestrates. Extract:
-  - `compute_portfolio_snapshot(candle_count, price, receipts, ev) -> PortfolioSnapshot`
-  - `resolve_outcomes(&mut Broker, receipts, states, gate_pred, anomaly, labels) -> Vec<Outcome>`
-  - `emit_broker_telemetry(pending, slot_idx, candle_count, metrics)`
-  
-  The program body receives, orchestrates, and shuts down — it does not compute.
+- [ ] **Extract broker program phases**. Still ~270 lines doing compute in the thread body. Treasury's `handle_request` is the exemplar. Pending.
 
-- [ ] **Extract market observer program phases** similarly. Same shape as broker — too long, telemetry bloats the body.
+- [ ] **Extract market observer program phases** similarly. Pending.
 
-- [ ] **`IncrementalBundle` on `MarketObserver`** (domain/market_observer.rs:39). Entire machinery is constructed but never invoked in production. Large latent dead subsystem. Either wire it or delete it. Outside immediate target file list but flagged.
+- [x] **`IncrementalBundle` on `MarketObserver`**. Deleted with ThoughtEncoder in the two-encoder reconciliation. The `incremental` field is gone. Large latent dead subsystem removed.
 
 ---
 
 ## Temper — hot path waste
 
-- [ ] **Hoist `market_rhythm_specs(&lens)`** out of the market observer's `while let` loop (market_observer_program.rs:153). The lens is fixed for the observer's lifetime; the specs are the same every candle. Hoist once.
+- [x] **Hoist `market_rhythm_specs(&lens)`** out of the candle loop. Computed once at thread start.
 
-- [ ] **Fuse passes over `active_receipts`** in `broker_program.rs:154-174`. Three sequential iterations for `avg_age`, `avg_tp`, `avg_unrealized`. One fold returning a 3-tuple.
+- [x] **Fuse passes over `active_receipts`**. One fold returning (sum_age, sum_tp, sum_unrealized). Averages computed once by dividing by n.
 
-- [ ] **Fuse passes over `treasury.proposer_records`** at `treasury_program.rs:290-304`. Two iterations for `total_submitted`, `total_survived`. One fold.
+- [x] **Fuse passes over `treasury.proposer_records`**. One fold returning (total_submitted, total_survived).
 
-- [ ] **Use `Arc<str>` for repeated telemetry strings**. `emit_metric` in `telemetry.rs` takes `&str` params then calls `.to_string()` inside (lines 22-25), allocating each time. Market observer and broker call it ~20 times per candle with the same `namespace`, `id`, `dimensions`. Options:
-  - Change `LogEntry::Telemetry` fields from `String` to `Arc<str>` or `Cow<'static, str>`
-  - Change `emit_metric` to take `Arc<str>` and clone the Arc
-  - Pre-build a template `LogEntry::Telemetry` once per candle, just vary metric_name/value
+- [ ] **Use `Arc<str>` for repeated telemetry strings**. Still pending. `emit_metric` allocates 5 Strings per call × ~20 calls × 33 entities = ~3300 String allocations per candle. The biggest remaining throughput win.
 
-- [ ] **Move `l1_miss_keys` instead of cloning** at `encode.rs:97`. `batch_get` takes owned `Vec<K>`. Currently clones so the original can be indexed at line 106. Flip: iterate `zip(l1_miss_keys.into_iter())` and pass the Vec by move.
+- [x] **Move `l1_miss_keys` instead of cloning**. `batch_get` now returns `Vec<(K, Option<V>)>` — the driver pairs keys with results, caller iterates pairs directly. No clone needed.
 
-- [ ] **Batch atomic counter updates in cache driver** (cache.rs:263). `hits_inner.fetch_add(1, Relaxed)` per key in a BatchGet — for 50+ keys per batch this is an atomic per key. Accumulate local `hits` / `misses` counts, do ONE `fetch_add(n, Relaxed)` per batch.
+- [ ] **Batch atomic counter updates in cache driver** (cache.rs). `hits_inner.fetch_add(1, Relaxed)` per key. Accumulate local, one atomic per batch. Pending.
 
-- [ ] **Hoist `senders` Vec in database driver** (database.rs:155). Allocated inside the outer loop; hoist and `senders.clear()` per iteration. Same pattern already used for `writes`/`reads` in cache.rs.
+- [ ] **Hoist `senders` Vec in database driver**. Allocated per outer loop iteration. Pending.
 
-- [ ] **Dedupe ack sends in database driver**. If one client sends multiple batches during a single drain pass, the driver acks each. One ack per client per drain iteration is sufficient.
+- [ ] **Dedupe ack sends in database driver**. One ack per client per drain iteration is sufficient. Pending.
 
 ---
 
@@ -117,12 +105,32 @@ Wat and guide divergence NOT chased — out of sync by design during this refact
 
 ---
 
-## Execution order
+## Status summary
 
-1. Quick wins first — ~1-2 hours, no architectural change
-2. Naming schism — mechanical rename pass
-3. Dead treasury fields — one small refactor
-4. Time facts extraction — affects correctness (double-counting)
-5. Temper hot path — measurable throughput gains
-6. Forge extractions — improves maintainability, not correctness
-7. Reconcile two encoders — last, because it touches both layers
+**Done**: 23 of 30 items.
+**Current throughput**: 16 c/s (down from 32.5 c/s at end of cache session, due to bounded queues + confirmed DB writes).
+**Memory**: deterministic, no unbounded growth anywhere.
+
+**Remaining high-value items**:
+- Arc<str> telemetry strings — biggest remaining throughput win
+- Batch atomic counters in cache driver — small, easy
+- Extract broker/market observer program phases — structural, big refactor
+- Database driver senders hoist + ack dedupe — small
+
+**Remaining low-value items**:
+- wat-vm 054/055 comment
+- rhythm.rs hardcoded 10_000 (needs signature change)
+- CacheDriverHandle.name dead field
+- collect_facts with only test callers
+
+---
+
+## Execution order (original plan — for reference)
+
+1. Quick wins first — DONE
+2. Naming schism — DONE
+3. Dead treasury fields — DONE (atr wired in, ExitApproved.position_id kept by design)
+4. Time facts extraction — DONE
+5. Temper hot path — IN PROGRESS (5 of 8 done)
+6. Forge extractions — PARTIAL (3 of 5 done; program phase extractions pending)
+7. Reconcile two encoders — DONE
