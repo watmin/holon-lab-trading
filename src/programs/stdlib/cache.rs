@@ -17,15 +17,12 @@ use crate::services::queue::{self, QueueReceiver, QueueSender};
 /// Typed cache request. Carries the client index so the driver
 /// knows which response channel to use.
 enum CacheRequest<K, V> {
-    Get { client: usize, key: K },
     BatchGet { client: usize, keys: Vec<K> },
-    Set { key: K, value: V },
     BatchSet { client: usize, entries: Vec<(K, V)> },
 }
 
 /// Typed cache response. The client unwraps the variant it expects.
 enum CacheResponse<V> {
-    Get(Option<V>),
     BatchGet(Vec<Option<V>>),
     BatchSetAck,
 }
@@ -39,19 +36,6 @@ pub struct CacheHandle<K, V> {
 }
 
 impl<K: Clone + Send, V: Send> CacheHandle<K, V> {
-    /// Synchronous get: send key, block for response.
-    /// Returns None on miss or if the driver has shut down.
-    pub fn get(&self, key: &K) -> Option<V> {
-        self.req_tx.send(CacheRequest::Get {
-            client: self.client_idx,
-            key: key.clone(),
-        }).ok()?;
-        match self.resp_rx.recv().ok()? {
-            CacheResponse::Get(v) => v,
-            _ => None,
-        }
-    }
-
     /// Synchronous batch get: send keys, block for responses.
     /// Returns positional Vec<Option<V>> — caller matches to its input.
     /// One round-trip. The driver does N hash lookups.
@@ -64,11 +48,6 @@ impl<K: Clone + Send, V: Send> CacheHandle<K, V> {
             CacheResponse::BatchGet(v) => Some(v),
             _ => None,
         }
-    }
-
-    /// Fire-and-forget set.
-    pub fn set(&self, key: K, value: V) {
-        let _ = self.req_tx.send(CacheRequest::Set { key, value });
     }
 
     /// Confirmed batch set. Blocks until the driver has processed all entries.
@@ -203,7 +182,7 @@ where
                 loop {
                     match req_rxs[i].try_recv() {
                         Ok(req) => match &req {
-                            CacheRequest::Set { .. } | CacheRequest::BatchSet { .. } => writes.push(req),
+                            CacheRequest::BatchSet { .. } => writes.push(req),
                             _ => reads.push(req),
                         },
                         Err(crossbeam::channel::TryRecvError::Empty) => break,
@@ -219,12 +198,6 @@ where
             let t0 = std::time::Instant::now();
             for req in writes.drain(..) {
                 match req {
-                    CacheRequest::Set { key, value } => {
-                        let at_cap = cache.len() == capacity;
-                        cache.put(key, value);
-                        if at_cap { stats.evictions += 1; }
-                        stats.sets_drained += 1;
-                    }
                     CacheRequest::BatchSet { client, entries } => {
                         for (key, value) in entries {
                             let at_cap = cache.len() == capacity;
@@ -243,18 +216,6 @@ where
             let t0 = std::time::Instant::now();
             for req in reads.drain(..) {
                 match req {
-                    CacheRequest::Get { client, key } => {
-                        let result = cache.get(&key).cloned();
-                        if result.is_some() {
-                            hits_inner.fetch_add(1, Ordering::Relaxed);
-                            stats.hits += 1;
-                        } else {
-                            misses_inner.fetch_add(1, Ordering::Relaxed);
-                            stats.misses += 1;
-                        }
-                        let _ = resp_txs[client].send(CacheResponse::Get(result));
-                        stats.gets_serviced += 1;
-                    }
                     CacheRequest::BatchGet { client, keys } => {
                         let results: Vec<Option<V>> = keys.iter().map(|key| {
                             let result = cache.get(key).cloned();
@@ -299,23 +260,28 @@ where
 mod tests {
     use super::*;
     use std::thread;
-    use std::time::Duration;
+
+    /// Test helper: single-key lookup via batch_get.
+    fn get_one<K: Clone + Send + std::hash::Hash + Eq + 'static, V: Send + Clone + 'static>(
+        h: &CacheHandle<K, V>,
+        key: K,
+    ) -> Option<V> {
+        h.batch_get(vec![key]).and_then(|mut v| v.pop()).flatten()
+    }
 
     #[test]
     fn get_returns_none_on_miss() {
         let (handles, _driver) = cache::<String, String>("test", 16, 1, Box::new(|| true), Box::new(|_| {}));
         let h = &handles[0];
-        assert_eq!(h.get(&"missing".to_string()), None);
+        assert_eq!(get_one(h, "missing".to_string()), None);
     }
 
     #[test]
     fn set_then_get_returns_some() {
         let (handles, _driver) = cache::<String, i32>("test", 16, 1, Box::new(|| true), Box::new(|_| {}));
         let h = &handles[0];
-        h.set("key".to_string(), 42);
-        // Give the set a moment to propagate.
-        thread::sleep(Duration::from_millis(50));
-        assert_eq!(h.get(&"key".to_string()), Some(42));
+        h.batch_set(vec![("key".to_string(), 42)]);
+        assert_eq!(get_one(h, "key".to_string()), Some(42));
     }
 
     #[test]
@@ -329,9 +295,8 @@ mod tests {
                 thread::spawn(move || {
                     let key = format!("client-{}", i);
                     let value = i as i32 * 100;
-                    h.set(key.clone(), value);
-                    thread::sleep(Duration::from_millis(50));
-                    assert_eq!(h.get(&key), Some(value));
+                    h.batch_set(vec![(key.clone(), value)]);
+                    assert_eq!(get_one(&h, key.clone()), Some(value));
                 })
             })
             .collect();
@@ -346,19 +311,17 @@ mod tests {
         let (handles, _driver) = cache::<i32, i32>("test", 2, 1, Box::new(|| true), Box::new(|_| {}));
         let h = &handles[0];
 
-        h.set(1, 10);
-        h.set(2, 20);
-        thread::sleep(Duration::from_millis(50));
+        h.batch_set(vec![(1, 10)]);
+        h.batch_set(vec![(2, 20)]);
 
-        assert_eq!(h.get(&1), Some(10));
-        assert_eq!(h.get(&2), Some(20));
+        assert_eq!(get_one(h, 1), Some(10));
+        assert_eq!(get_one(h, 2), Some(20));
 
-        h.set(3, 30);
-        thread::sleep(Duration::from_millis(50));
+        h.batch_set(vec![(3, 30)]);
 
-        assert_eq!(h.get(&1), None);
-        assert_eq!(h.get(&2), Some(20));
-        assert_eq!(h.get(&3), Some(30));
+        assert_eq!(get_one(h, 1), None);
+        assert_eq!(get_one(h, 2), Some(20));
+        assert_eq!(get_one(h, 3), Some(30));
     }
 
     #[test]
@@ -375,9 +338,8 @@ mod tests {
         let writer = iter.next().unwrap();
         let reader = iter.next().unwrap();
 
-        writer.set("shared".to_string(), 99);
-        thread::sleep(Duration::from_millis(50));
-        assert_eq!(reader.get(&"shared".to_string()), Some(99));
+        writer.batch_set(vec![("shared".to_string(), 99)]);
+        assert_eq!(get_one(&reader, "shared".to_string()), Some(99));
     }
 
     #[test]
@@ -385,9 +347,7 @@ mod tests {
         let (handles, _driver) = cache::<String, i32>("test", 16, 1, Box::new(|| true), Box::new(|_| {}));
         let h = &handles[0];
 
-        h.set("a".to_string(), 1);
-        h.set("b".to_string(), 2);
-        thread::sleep(Duration::from_millis(50));
+        h.batch_set(vec![("a".to_string(), 1), ("b".to_string(), 2)]);
 
         let results = h.batch_get(vec![
             "a".to_string(),
@@ -411,10 +371,9 @@ mod tests {
             ("y".to_string(), 20),
             ("z".to_string(), 30),
         ]);
-        thread::sleep(Duration::from_millis(50));
 
-        assert_eq!(h.get(&"x".to_string()), Some(10));
-        assert_eq!(h.get(&"y".to_string()), Some(20));
-        assert_eq!(h.get(&"z".to_string()), Some(30));
+        assert_eq!(get_one(h, "x".to_string()), Some(10));
+        assert_eq!(get_one(h, "y".to_string()), Some(20));
+        assert_eq!(get_one(h, "z".to_string()), Some(30));
     }
 }
