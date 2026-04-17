@@ -113,6 +113,9 @@ pub fn database<T: Send + 'static>(
         setup(&conn);
 
         let mut pending: Vec<T> = Vec::with_capacity(batch_size);
+        // Reused each loop iteration — tracks which clients to ack.
+        // Bool per client: true if they sent during this drain pass.
+        let mut sender_flags: Vec<bool> = vec![false; num_clients];
 
         // Telemetry accumulators — reset after each emission.
         let mut flush_count: usize = 0;
@@ -153,8 +156,10 @@ pub fn database<T: Send + 'static>(
             }
             let _ = sel.ready();
 
-            // Drain all pending batches from all clients. Track who sent.
-            let mut senders: Vec<usize> = Vec::new();
+            // Drain all pending batches from all clients. Mark who sent —
+            // one flag per client, regardless of how many batches they
+            // queued in this drain pass (we ack each client at most once).
+            for flag in sender_flags.iter_mut() { *flag = false; }
             for i in 0..num_clients {
                 if closed[i] {
                     continue;
@@ -163,7 +168,7 @@ pub fn database<T: Send + 'static>(
                     match req_rxs[i].try_recv() {
                         Ok(batch) => {
                             pending.extend(batch);
-                            senders.push(i);
+                            sender_flags[i] = true;
                         }
                         Err(crossbeam::channel::TryRecvError::Empty) => break,
                         Err(crossbeam::channel::TryRecvError::Disconnected) => {
@@ -195,9 +200,14 @@ pub fn database<T: Send + 'static>(
                 }
             }
 
-            // Ack AFTER flush. Clients unblock now.
-            for sender_id in senders {
-                let _ = ack_txs[sender_id].send(());
+            // Ack AFTER flush. One ack per client per drain — multiple
+            // batches from the same client collapse to one ack, but the
+            // client has only sent one batch_send() call in-flight at a
+            // time so "one ack" is exactly what they're blocked on.
+            for i in 0..num_clients {
+                if sender_flags[i] {
+                    let _ = ack_txs[i].send(());
+                }
             }
         }
     });
