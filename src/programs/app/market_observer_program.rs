@@ -36,12 +36,6 @@ pub struct ObsInput {
     pub encode_count: usize,
 }
 
-/// Learn signal: thought vector, direction label, weight.
-pub struct ObsLearn {
-    pub thought: Vector,
-    pub direction: Direction,
-    pub weight: f64,
-}
 
 /// An unconfirmed prediction. The market observer holds these until
 /// a peak or valley confirms or denies the predicted direction.
