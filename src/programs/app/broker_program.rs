@@ -31,16 +31,6 @@ use crate::programs::stdlib::database::DatabaseHandle;
 use crate::programs::telemetry::{emit_metric, flush_metrics};
 use crate::services::queue::QueueReceiver;
 
-/// Extract Direction from a holon Prediction.
-/// Label index 0 is Up, index 1 is Down. Default to Up when no direction.
-fn direction_from_prediction(pred: &holon::memory::Prediction) -> Direction {
-    if pred.direction.map_or(true, |d| d.index() == 0) {
-        Direction::Up
-    } else {
-        Direction::Down
-    }
-}
-
 
 /// Build the broker's thought AST: market rhythms + regime rhythms + portfolio rhythms + phase + time.
 /// Returns the AST so it can be encoded AND logged without recomputing.
@@ -102,7 +92,7 @@ pub fn broker_program(
         let mut exit_approved: f64 = 0.0;
 
         // 1. Direction from market prediction
-        let direction = direction_from_prediction(&chain.market_prediction);
+        let direction = Direction::from(&chain.market_prediction);
         broker.active_direction = Some(direction);
 
         // 2. Treasury — submit paper proposal based on market direction.

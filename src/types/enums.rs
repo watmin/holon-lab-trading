@@ -14,6 +14,19 @@ pub enum Direction {
     Down,
 }
 
+/// Read a direction out of a holon prediction. Label index 0 is Up,
+/// index 1 is Down. Defaults to Up when no direction is set (the
+/// reckoner hasn't calibrated yet).
+impl From<&holon::memory::Prediction> for Direction {
+    fn from(pred: &holon::memory::Prediction) -> Self {
+        if pred.direction.map_or(true, |d| d.index() == 0) {
+            Direction::Up
+        } else {
+            Direction::Down
+        }
+    }
+}
+
 /// Accountability — used everywhere.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Outcome {
