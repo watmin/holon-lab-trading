@@ -1,12 +1,8 @@
-/// encode.rs — the production path from ThoughtAST to Vector.
+/// encode.rs — the ONLY path from ThoughtAST to Vector.
 ///
 /// Two-tier cache: L1 (per-entity LruCache, no pipe) absorbs repeated
 /// lookups across candles. L2 (shared cache program behind pipes) handles
 /// cross-entity sharing. L1 is the memo. L2 is the sharing layer.
-///
-/// See also: ThoughtEncoder::encode in thought_encoder.rs — a stateless
-/// test path used by IncrementalBundle and unit tests. Same algebra,
-/// no cache. Consolidation tracked in the ward backlog.
 ///
 /// AST keys use precomputed hashes — computed once at ThoughtAST construction.
 /// All cache lookups use u64 keys — integer hashing, nanoseconds, no tree walking.
@@ -15,6 +11,9 @@
 /// quantized scalar values in ThoughtAST nodes (round_to at emission,
 /// Hash via to_bits). Changed values produce different hashes.
 /// Stale entries are unreachable, not incorrect.
+///
+/// For tests, `test_support::test_encode` spins up a throwaway cache
+/// and drives the same pipeline. One algebra. One implementation.
 
 use std::cell::RefCell;
 use std::num::NonZeroUsize;
@@ -252,4 +251,49 @@ fn encode_local(
     }
 
     vec
+}
+
+/// Test-only support. Spins up a throwaway cache so tests can drive
+/// the real `encode()` pipeline without duplicating the algebra.
+/// One implementation. One set of match arms. Zero drift.
+#[cfg(test)]
+pub mod test_support {
+    use super::*;
+    use crate::programs::stdlib::cache::{cache, CacheDriverHandle};
+
+    /// A throwaway encoding environment for tests.
+    /// Owns the cache driver; drop this to tear it down.
+    pub struct TestEncodeEnv {
+        pub state: EncodeState,
+        pub cache: CacheHandle<u64, Vector>,
+        pub vm: VectorManager,
+        pub scalar: ScalarEncoder,
+        _driver: CacheDriverHandle,
+    }
+
+    impl TestEncodeEnv {
+        /// Construct a fresh environment at the given dimensions.
+        pub fn new(dims: usize) -> Self {
+            let (mut handles, driver) = cache::<u64, Vector>(
+                "test-encoder",
+                4096,
+                1,
+                Box::new(|| false),
+                Box::new(|_| {}),
+            );
+            let cache_handle = handles.remove(0);
+            Self {
+                state: EncodeState::new(),
+                cache: cache_handle,
+                vm: VectorManager::new(dims),
+                scalar: ScalarEncoder::new(dims),
+                _driver: driver,
+            }
+        }
+
+        /// Encode an AST through the full cached pipeline.
+        pub fn encode(&mut self, ast: &ThoughtAST) -> Vector {
+            encode(&mut self.state, &self.cache, ast, &self.vm, &self.scalar)
+        }
+    }
 }
