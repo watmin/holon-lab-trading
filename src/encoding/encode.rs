@@ -28,8 +28,9 @@ use holon::kernel::vector_manager::VectorManager;
 use crate::encoding::thought_encoder::{ThoughtAST, ThoughtASTKind};
 use crate::programs::stdlib::cache::CacheHandle;
 
-/// L1 vector cache capacity per entity.
-const L1_CAPACITY: usize = 16384;
+/// Default L1 vector cache capacity per entity. Callers pass this
+/// (or their own value) to EncodeState::new.
+pub const DEFAULT_L1_CAPACITY: usize = 16384;
 
 /// Per-entity encoding state. Created once at thread start.
 /// Owns the L1 vector cache.
@@ -38,9 +39,11 @@ pub struct EncodeState {
 }
 
 impl EncodeState {
-    pub fn new() -> Self {
+    /// Construct with the given L1 capacity. Callers that don't have
+    /// a reason to tune use DEFAULT_L1_CAPACITY.
+    pub fn new(capacity: usize) -> Self {
         Self {
-            l1_cache: LruCache::new(NonZeroUsize::new(L1_CAPACITY).unwrap()),
+            l1_cache: LruCache::new(NonZeroUsize::new(capacity).expect("capacity must be > 0")),
         }
     }
 }
@@ -283,7 +286,7 @@ pub mod test_support {
             );
             let cache_handle = handles.remove(0);
             Self {
-                state: EncodeState::new(),
+                state: EncodeState::new(DEFAULT_L1_CAPACITY),
                 cache: cache_handle,
                 vm: VectorManager::new(dims),
                 scalar: ScalarEncoder::new(dims),

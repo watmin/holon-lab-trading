@@ -23,7 +23,7 @@ use crate::vocab::broker::portfolio::{PortfolioSnapshot, portfolio_rhythm_asts};
 use crate::vocab::exit::phase::phase_rhythm_thought;
 use crate::vocab::shared::time::time_facts;
 use crate::programs::chain::MarketRegimeChain;
-use crate::encoding::encode::{encode, take_encode_metrics, EncodeState};
+use crate::encoding::encode::{encode, take_encode_metrics, EncodeState, DEFAULT_L1_CAPACITY};
 use crate::encoding::thought_encoder::{ThoughtAST, ThoughtASTKind};
 use crate::programs::stdlib::cache::CacheHandle;
 use crate::programs::stdlib::console::ConsoleHandle;
@@ -76,7 +76,7 @@ pub fn broker_program(
     let mut active_receipts: Vec<PositionReceipt> = Vec::new();
     let mut portfolio_window: Vec<PortfolioSnapshot> = Vec::new();
     let max_portfolio_window = ((vm.dimensions() as f64).sqrt() as usize) + 3;
-    let mut encode_state = EncodeState::new();
+    let mut encode_state = EncodeState::new(DEFAULT_L1_CAPACITY);
 
     // Gate 4 labels.
     let hold_label = holon::memory::Label::from_index(0);

@@ -18,7 +18,7 @@ use crate::types::log_entry::LogEntry;
 use crate::types::pivot::PhaseLabel;
 use crate::domain::market_observer::MarketObserver;
 use crate::domain::lens::market_rhythm_specs;
-use crate::encoding::encode::{encode, take_encode_metrics, EncodeState};
+use crate::encoding::encode::{encode, take_encode_metrics, EncodeState, DEFAULT_L1_CAPACITY};
 use crate::encoding::rhythm::build_rhythm_asts;
 use crate::encoding::thought_encoder::{ThoughtAST, ThoughtASTKind};
 use crate::vocab::shared::time::time_facts;
@@ -106,7 +106,7 @@ pub fn market_observer_program(
     let mut candle_count = 0usize;
     let lens = observer.lens;
     let mut unconfirmed: Vec<UnconfirmedPrediction> = Vec::new();
-    let mut encode_state = EncodeState::new();
+    let mut encode_state = EncodeState::new(DEFAULT_L1_CAPACITY);
 
     while let Ok(input) = candle_rx.recv() {
         let t_total = std::time::Instant::now();
