@@ -100,8 +100,8 @@ struct WiredMarketObservers {
     join_handles: Vec<std::thread::JoinHandle<MarketObserver>>,
     /// Topic handles — must live until shutdown
     topic_handles: Vec<enterprise::services::topic::TopicHandle>,
-    /// Regime slot receivers: position_queue_rxs[mi][ei] — market observer mi, regime observer ei
-    position_queue_rxs: Vec<Vec<enterprise::services::queue::QueueReceiver<MarketChain>>>,
+    /// Regime slot receivers: regime_queue_rxs[mi][ei] — market observer mi, regime observer ei
+    regime_queue_rxs: Vec<Vec<enterprise::services::queue::QueueReceiver<MarketChain>>>,
 }
 
 fn wire_market_observers(
@@ -119,7 +119,7 @@ fn wire_market_observers(
     let mut join_handles: Vec<std::thread::JoinHandle<MarketObserver>> =
         Vec::with_capacity(num_observers);
     let mut topic_handles = Vec::with_capacity(num_observers);
-    let mut position_queue_rxs: Vec<Vec<enterprise::services::queue::QueueReceiver<MarketChain>>> =
+    let mut regime_queue_rxs: Vec<Vec<enterprise::services::queue::QueueReceiver<MarketChain>>> =
         Vec::with_capacity(num_observers);
 
     for (i, observer) in observers.into_iter().enumerate() {
@@ -128,17 +128,17 @@ fn wire_market_observers(
         candle_txs.push(candle_tx);
 
         // Create M queues for fan-out to regime observers
-        let mut position_txs = Vec::with_capacity(num_regime_observers);
-        let mut position_rxs = Vec::with_capacity(num_regime_observers);
+        let mut regime_txs = Vec::with_capacity(num_regime_observers);
+        let mut regime_rxs = Vec::with_capacity(num_regime_observers);
         for _ in 0..num_regime_observers {
             let (tx, rx) = queue_bounded::<MarketChain>(1);
-            position_txs.push(tx);
-            position_rxs.push(rx);
+            regime_txs.push(tx);
+            regime_rxs.push(rx);
         }
-        position_queue_rxs.push(position_rxs);
+        regime_queue_rxs.push(regime_rxs);
 
         // Output topic with M consumers — fan out to regime observers
-        let (result_tx, topic_handle) = topic::<MarketChain>(1, position_txs);
+        let (result_tx, topic_handle) = topic::<MarketChain>(1, regime_txs);
         topic_handles.push(topic_handle);
 
         // Cache handle for this observer
@@ -180,23 +180,23 @@ fn wire_market_observers(
         candle_txs,
         join_handles,
         topic_handles,
-        position_queue_rxs,
+        regime_queue_rxs,
     }
 }
 
-// ─── Position observer wiring ──────────────────────────────────────────────────
+// ─── Regime observer wiring ───────────────────────────────────────────────────
 
 struct WiredRegimeObservers {
     /// Thread handles — join to get trained regime observers back
     join_handles: Vec<std::thread::JoinHandle<RegimeObserver>>,
     /// Output receivers — one per (mi, ei) slot. The broker consumes these.
-    /// Layout: flat vec of N*M, index = mi * num_position + ei
+    /// Layout: flat vec of N*M, index = mi * num_regime + ei
     output_rxs: Vec<QueueReceiver<MarketRegimeChain>>,
 }
 
 fn wire_regime_observers(
     regime_observers: Vec<RegimeObserver>,
-    position_queue_rxs: Vec<Vec<enterprise::services::queue::QueueReceiver<MarketChain>>>,
+    regime_queue_rxs: Vec<Vec<enterprise::services::queue::QueueReceiver<MarketChain>>>,
     mut cache_pool: HandlePool<CacheHandle<u64, Vector>>,
     mut console_pool: HandlePool<enterprise::programs::stdlib::console::ConsoleHandle>,
     mut db_pool: HandlePool<enterprise::programs::stdlib::database::DatabaseHandle<LogEntry>>,
@@ -204,24 +204,24 @@ fn wire_regime_observers(
     scalar: &Arc<ScalarEncoder>,
     noise_floor: f64,
 ) -> WiredRegimeObservers {
-    let num_market = position_queue_rxs.len();
-    let num_position = regime_observers.len();
+    let num_market = regime_queue_rxs.len();
+    let num_regime = regime_observers.len();
     let mut join_handles: Vec<std::thread::JoinHandle<RegimeObserver>> =
-        Vec::with_capacity(num_position);
+        Vec::with_capacity(num_regime);
 
-    // Output receivers: indexed [mi * num_position + ei]
+    // Output receivers: indexed [mi * num_regime + ei]
     // We'll fill them in slot order as we wire each regime observer.
     let mut output_rxs_by_slot: Vec<Option<QueueReceiver<MarketRegimeChain>>> =
-        (0..num_market * num_position).map(|_| None).collect();
+        (0..num_market * num_regime).map(|_| None).collect();
 
-    // Transpose: position_queue_rxs[mi][ei] → slots[ei][mi]
+    // Transpose: regime_queue_rxs[mi][ei] → slots[ei][mi]
     // We need to move receivers out, so consume the outer vec.
     let mut transposed: Vec<Vec<Option<enterprise::services::queue::QueueReceiver<MarketChain>>>> =
-        Vec::with_capacity(num_position);
-    for _ in 0..num_position {
+        Vec::with_capacity(num_regime);
+    for _ in 0..num_regime {
         transposed.push(Vec::with_capacity(num_market));
     }
-    for mi_rxs in position_queue_rxs {
+    for mi_rxs in regime_queue_rxs {
         for (ei, rx) in mi_rxs.into_iter().enumerate() {
             transposed[ei].push(Some(rx));
         }
@@ -238,7 +238,7 @@ fn wire_regime_observers(
         for (mi, rx) in slot_rxs.into_iter().enumerate() {
             // Output queue — broker consumes the receiver
             let (output_tx, output_rx) = queue_bounded(1);
-            let slot_idx = mi * num_position + ei;
+            let slot_idx = mi * num_regime + ei;
             output_rxs_by_slot[slot_idx] = Some(output_rx);
             slots.push(RegimeSlot {
                 input_rx: rx,
@@ -345,7 +345,7 @@ fn wire_brokers(
 fn main() {
     let args = Args::parse();
     let num_market = config::MARKET_LENSES.len();
-    let num_position = config::POSITION_LENSES.len();
+    let num_regime = config::REGIME_LENSES.len();
     let dims = args.dims;
     let recalib_interval = args.recalib_interval;
     let noise_floor = 5.0 / (dims as f64).sqrt();
@@ -372,10 +372,10 @@ fn main() {
         ));
     }
 
-    let num_brokers = num_market * num_position;
+    let num_brokers = num_market * num_regime;
 
-    // Console: streams + market + position + brokers + treasury + main
-    let num_console = parsed.len() + num_market + num_position + num_brokers + 1 + 1;
+    // Console: streams + market + regime + brokers + treasury + main
+    let num_console = parsed.len() + num_market + num_regime + num_brokers + 1 + 1;
     let (handles, console_driver) = console(num_console);
     let mut console_pool = HandlePool::new("console", handles);
 
@@ -400,7 +400,7 @@ fn main() {
 
     // All wires before any work. The database creates per-client handles
     // internally — no mailbox, no fan-in. +1 cache telemetry, +1 treasury.
-    let num_db_producers = num_market + num_position + num_brokers;
+    let num_db_producers = num_market + num_regime + num_brokers;
     let num_db_total = num_db_producers + 1 + 1; // +1 cache telemetry, +1 treasury
 
     // Database gate: emit accumulated telemetry every 5 seconds.
@@ -497,21 +497,21 @@ fn main() {
     let (cache_handles, cache_driver) = cache::<u64, Vector>(
         "encoder",
         262144, // 256K — L1 absorbs most reads, L2 is the sharing layer
-        num_market + num_position + num_brokers,
+        num_market + num_regime + num_brokers,
         Box::new(cache_gate),
         Box::new(cache_emit),
     );
     let mut cache_pool = HandlePool::new("cache", cache_handles);
 
     // ─── Reserve handles for regime observers and brokers ──────────────────
-    // Pop position + broker handles first so market observer wiring gets the rest.
-    let mut position_console_handles = Vec::with_capacity(num_position);
-    let mut position_cache_handles = Vec::with_capacity(num_position);
-    let mut position_db_handles = Vec::with_capacity(num_position);
-    for _ in 0..num_position {
-        position_console_handles.push(console_pool.pop());
-        position_cache_handles.push(cache_pool.pop());
-        position_db_handles.push(db_pool.pop());
+    // Pop regime + broker handles first so market observer wiring gets the rest.
+    let mut regime_console_handles = Vec::with_capacity(num_regime);
+    let mut regime_cache_handles = Vec::with_capacity(num_regime);
+    let mut regime_db_handles = Vec::with_capacity(num_regime);
+    for _ in 0..num_regime {
+        regime_console_handles.push(console_pool.pop());
+        regime_cache_handles.push(cache_pool.pop());
+        regime_db_handles.push(db_pool.pop());
     }
     let mut broker_cache_handles = Vec::with_capacity(num_brokers);
     let mut broker_console_handles = Vec::with_capacity(num_brokers);
@@ -522,14 +522,14 @@ fn main() {
         broker_db_handles.push(db_pool.pop());
     }
 
-    // Position observer does not learn. It is thought middleware.
+    // Regime observer does not learn. It is thought middleware.
     // The broker is the accountability unit. 054/055.
 
     // ─── Market observers ──────────────────────────────────────────────────
     let observers = config::create_market_observers(dims, recalib_interval);
     let wired = wire_market_observers(
         observers,
-        num_position,
+        num_regime,
         cache_pool,
         console_pool,
         db_pool,
@@ -538,17 +538,17 @@ fn main() {
         recalib_interval,
     );
 
-    // ─── Position observers ────────────────────────────────────────────────────
+    // ─── Regime observers ──────────────────────────────────────────────────────
     let regime_observers = config::create_regime_observers();
-    let position_cache_pool = HandlePool::new("position-cache", position_cache_handles);
-    let position_console_pool = HandlePool::new("position-console", position_console_handles);
-    let position_db_pool = HandlePool::new("position-db", position_db_handles);
-    let wired_position = wire_regime_observers(
+    let regime_cache_pool = HandlePool::new("regime-cache", regime_cache_handles);
+    let regime_console_pool = HandlePool::new("regime-console", regime_console_handles);
+    let regime_db_pool = HandlePool::new("regime-db", regime_db_handles);
+    let wired_regime = wire_regime_observers(
         regime_observers,
-        wired.position_queue_rxs,
-        position_cache_pool,
-        position_console_pool,
-        position_db_pool,
+        wired.regime_queue_rxs,
+        regime_cache_pool,
+        regime_console_pool,
+        regime_db_pool,
         &vm,
         &scalar,
         noise_floor,
@@ -580,13 +580,13 @@ fn main() {
     }
 
     // ─── Brokers ───────────────────────────────────────────────────────────
-    let brokers = config::create_brokers(num_market, num_position, dims, recalib_interval);
+    let brokers = config::create_brokers(num_market, num_regime, dims, recalib_interval);
     let broker_console_pool = HandlePool::new("broker-console", broker_console_handles);
     let broker_db_pool = HandlePool::new("broker-db", broker_db_handles);
     let broker_cache_pool = HandlePool::new("broker-cache", broker_cache_handles);
     let wired_brokers = wire_brokers(
         brokers,
-        wired_position.output_rxs,
+        wired_regime.output_rxs,
         treasury_handles,
         broker_cache_pool,
         broker_console_pool,
@@ -634,8 +634,8 @@ fn main() {
     }
 
     main_handle.out(format!(
-        "{}D recalib={} market={} position={} noise_floor={:.4}",
-        dims, recalib_interval, num_market, num_position, noise_floor
+        "{}D recalib={} market={} regime={} noise_floor={:.4}",
+        dims, recalib_interval, num_market, num_regime, noise_floor
     ));
 
     // ─── Per-stream loop ───────────────────────────────────────────────────
@@ -740,11 +740,11 @@ fn main() {
     drop(wired.topic_handles);
 
     // Join regime observer threads — get the trained regime observers back
-    for jh in wired_position.join_handles {
+    for jh in wired_regime.join_handles {
         match jh.join() {
             Ok(regime_obs) => {
                 main_handle.out(format!(
-                    "position-{}: done",
+                    "regime-{}: done",
                     regime_obs.lens,
                 ));
             }

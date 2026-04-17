@@ -12,7 +12,7 @@ pub struct Broker {
     pub observer_names: Vec<String>,
     /// Position in the N x M grid. THE identity.
     pub slot_idx: usize,
-    /// M — needed to derive market-idx and position-idx.
+    /// M — needed to derive market-idx and regime-idx.
     pub regime_count: usize,
     /// Total resolved positions.
     pub trade_count: usize,

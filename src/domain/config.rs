@@ -45,16 +45,17 @@ pub fn create_market_observers(dims: usize, recalib_interval: usize) -> Vec<Mark
         .collect()
 }
 
-/// The two position lenses. One exit observer per lens.
-/// Proposal 040: trade-state atoms, not market data.
-pub const POSITION_LENSES: &[RegimeLens] = &[
+/// The two regime lenses. One regime observer per lens.
+/// Regime observers are thought middleware — they build regime
+/// rhythms and pass them downstream without learning or predicting.
+pub const REGIME_LENSES: &[RegimeLens] = &[
     RegimeLens::Core,
     RegimeLens::Full,
 ];
 
 /// Create all regime observers with their configured lenses.
 pub fn create_regime_observers() -> Vec<RegimeObserver> {
-    POSITION_LENSES
+    REGIME_LENSES
         .iter()
         .map(|lens| RegimeObserver::new(*lens))
         .collect()
@@ -72,7 +73,7 @@ pub fn create_brokers(
         for ei in 0..num_exit {
             let slot_idx = mi * num_exit + ei;
             let market_name = format!("{}", MARKET_LENSES[mi]);
-            let exit_name = format!("{}", POSITION_LENSES[ei]);
+            let exit_name = format!("{}", REGIME_LENSES[ei]);
             brokers.push(Broker::new(
                 vec![market_name, exit_name],
                 slot_idx,
@@ -128,7 +129,7 @@ mod tests {
 
     #[test]
     fn test_exit_lenses_count() {
-        assert_eq!(POSITION_LENSES.len(), 2);
+        assert_eq!(REGIME_LENSES.len(), 2);
     }
 
     #[test]

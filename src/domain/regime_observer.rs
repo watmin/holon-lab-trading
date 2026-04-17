@@ -1,10 +1,11 @@
-/// regime_observer.rs — Thought middleware. Composes market thoughts with
-/// position-specific facts through a lens. Does not learn. Does not predict.
+/// regime_observer.rs — Thought middleware. Builds regime rhythms
+/// (kama-er, choppiness, entropy, etc.) through a lens and passes them
+/// downstream. Does not learn. Does not predict.
 /// Quality is measured through the BROKER's curve.
 
 use crate::types::enums::RegimeLens;
 
-/// Enriches market thoughts with position-specific facts through a lens.
+/// Builds regime rhythm ASTs through a lens.
 pub struct RegimeObserver {
     /// Which judgment vocabulary.
     pub lens: RegimeLens,
