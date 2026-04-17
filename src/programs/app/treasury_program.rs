@@ -186,6 +186,10 @@ fn handle_request(
     candle: usize,
     deadline_candles: usize,
 ) -> TreasuryResponse {
+    // Scale the deadline by current volatility. Volatile periods shrink
+    // deadlines; calm periods extend them. Returns `deadline_candles`
+    // unchanged before the first ATR reading arrives.
+    let scaled = treasury.scaled_deadline(deadline_candles);
     match request {
         TreasuryRequest::SubmitPaper {
             from_asset,
@@ -193,7 +197,7 @@ fn handle_request(
             price,
         } => {
             let receipt = treasury.issue_paper(
-                client_id, &from_asset, &to_asset, price, candle, deadline_candles,
+                client_id, &from_asset, &to_asset, price, candle, scaled,
             );
             TreasuryResponse::PaperIssued(receipt)
         }
@@ -202,7 +206,7 @@ fn handle_request(
             to_asset,
             price,
         } => match treasury.issue_real(
-            client_id, &from_asset, &to_asset, price, candle, deadline_candles,
+            client_id, &from_asset, &to_asset, price, candle, scaled,
         ) {
             Some(receipt) => TreasuryResponse::RealApproved(receipt),
             None => TreasuryResponse::RealDenied,
@@ -257,7 +261,7 @@ pub fn treasury_program(
 
     while let Ok(event) = event_rx.recv() {
         match event {
-            TreasuryEvent::Tick { candle, price, .. } => {
+            TreasuryEvent::Tick { candle, price, atr } => {
                 // Flush logs from prior candle's requests FIRST — before processing tick.
                 if !pending_logs.is_empty() {
                     db_tx.batch_send(std::mem::take(&mut pending_logs));
@@ -265,6 +269,9 @@ pub fn treasury_program(
 
                 candle_count += 1;
                 current_candle = candle;
+
+                // Record volatility — used to scale paper deadlines.
+                treasury.observe_atr(atr);
 
                 // Advance deadlines — the treasury's autonomous action.
                 let t0 = std::time::Instant::now();

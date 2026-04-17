@@ -131,6 +131,13 @@ pub struct Treasury {
     pub entry_fee: f64,
     /// Exit fee rate (e.g. 0.0035 for 0.35%).
     pub exit_fee: f64,
+    /// Latest ATR reading from the tick stream. Used to scale deadlines
+    /// at paper issue time — volatile periods shrink deadlines, calm
+    /// periods extend them. Zero until the first tick arrives.
+    pub current_atr: f64,
+    /// Reference ATR — the baseline for deadline scaling. Set from the
+    /// first non-zero ATR and held constant. deadline = base * (reference / current).
+    pub reference_atr: f64,
 }
 
 impl Treasury {
@@ -145,7 +152,29 @@ impl Treasury {
             next_position_id: 0,
             entry_fee,
             exit_fee,
+            current_atr: 0.0,
+            reference_atr: 0.0,
         }
+    }
+
+    /// Record the current ATR and lock in the reference on first non-zero reading.
+    /// Called from Tick events.
+    pub fn observe_atr(&mut self, atr: f64) {
+        self.current_atr = atr;
+        if self.reference_atr == 0.0 && atr > 0.0 {
+            self.reference_atr = atr;
+        }
+    }
+
+    /// Compute a volatility-scaled deadline. Volatile periods shrink
+    /// deadlines, calm periods extend them. Before the first ATR reading
+    /// arrives, returns base unchanged.
+    pub fn scaled_deadline(&self, base: usize) -> usize {
+        if self.current_atr == 0.0 || self.reference_atr == 0.0 {
+            return base;
+        }
+        let scale = self.reference_atr / self.current_atr;
+        (base as f64 * scale).round() as usize
     }
 
     /// Issue a paper — always succeeds. Fixed $10,000 reference.
@@ -461,6 +490,8 @@ mod tests {
             next_position_id: 0,
             entry_fee: 0.0035,
             exit_fee: 0.0035,
+            current_atr: 0.0,
+            reference_atr: 0.0,
         };
 
         let balance_before = treasury.balances["USDC"];
