@@ -221,17 +221,22 @@ where
                         // Move keys into the response paired with results —
                         // the caller gets back (key, Option<value>) pairs
                         // without needing to keep a copy of the input.
+                        let mut batch_hits = 0usize;
+                        let mut batch_misses = 0usize;
                         let results: Vec<(K, Option<V>)> = keys.into_iter().map(|key| {
                             let result = cache.get(&key).cloned();
                             if result.is_some() {
-                                hits_inner.fetch_add(1, Ordering::Relaxed);
-                                stats.hits += 1;
+                                batch_hits += 1;
                             } else {
-                                misses_inner.fetch_add(1, Ordering::Relaxed);
-                                stats.misses += 1;
+                                batch_misses += 1;
                             }
                             (key, result)
                         }).collect();
+                        // One atomic per batch, not one per key.
+                        if batch_hits > 0 { hits_inner.fetch_add(batch_hits, Ordering::Relaxed); }
+                        if batch_misses > 0 { misses_inner.fetch_add(batch_misses, Ordering::Relaxed); }
+                        stats.hits += batch_hits;
+                        stats.misses += batch_misses;
                         stats.gets_serviced += results.len();
                         let _ = resp_txs[client].send(CacheResponse::BatchGet(results));
                     }
