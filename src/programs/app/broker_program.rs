@@ -2,8 +2,10 @@
 ///
 /// Receives MarketRegimeChains through a queue.
 /// Submits papers to the treasury, discovers outcomes by reading.
-/// Encodes anxiety atoms from active position receipts.
-/// Gate 4: the Hold/Exit reckoner. Learns from anxiety. Proposes exits.
+/// Composes the full thought: market rhythms + regime rhythms +
+/// portfolio rhythms + phase rhythm + time facts.
+/// Gate 4: the Hold/Exit reckoner. Strips noise, reads the anomaly,
+/// predicts Hold or Exit.
 /// On shutdown it returns the broker. The accounting comes home.
 
 use std::sync::Arc;

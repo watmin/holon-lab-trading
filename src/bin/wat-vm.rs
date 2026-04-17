@@ -1,9 +1,10 @@
 /// wat-vm — the second heartbeat. Reads candles, enriches them, feeds observers.
 ///
 /// Candles flow to N market observers. Each observer encodes through its lens,
-/// learns the noise subspace, predicts direction. Position observers compose market
-/// thoughts with position facts. Brokers bind (market, position) pairs — they register
-/// paper trades, resolve them, and teach both observers through learn queues.
+/// learns a noise subspace, predicts direction. M regime observers are thought
+/// middleware — they build regime rhythms and pass them downstream. N×M brokers
+/// bind one market observer to one regime observer, compose the full thought,
+/// run paper trades through the treasury, and resolve outcomes.
 /// The observers come home with experience.
 
 use std::path::Path;

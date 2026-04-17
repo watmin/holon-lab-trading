@@ -1,8 +1,12 @@
-/// encode.rs — the ONE way to turn a thought into geometry.
+/// encode.rs — the production path from ThoughtAST to Vector.
 ///
 /// Two-tier cache: L1 (per-entity LruCache, no pipe) absorbs repeated
 /// lookups across candles. L2 (shared cache program behind pipes) handles
 /// cross-entity sharing. L1 is the memo. L2 is the sharing layer.
+///
+/// See also: ThoughtEncoder::encode in thought_encoder.rs — a stateless
+/// test path used by IncrementalBundle and unit tests. Same algebra,
+/// no cache. Consolidation tracked in the ward backlog.
 ///
 /// AST keys use precomputed hashes — computed once at ThoughtAST construction.
 /// All cache lookups use u64 keys — integer hashing, nanoseconds, no tree walking.
