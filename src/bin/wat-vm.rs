@@ -236,7 +236,7 @@ fn wire_regime_observers(
         let mut slots = Vec::with_capacity(num_market);
         for (mi, rx) in slot_rxs.into_iter().enumerate() {
             // Output queue — broker consumes the receiver
-            let (output_tx, output_rx) = queue_unbounded();
+            let (output_tx, output_rx) = queue_bounded(1);
             let slot_idx = mi * num_position + ei;
             output_rxs_by_slot[slot_idx] = Some(output_rx);
             slots.push(RegimeSlot {
@@ -560,7 +560,7 @@ fn main() {
     let mut event_txs = Vec::with_capacity(num_treasury_senders);
     let mut event_rxs = Vec::with_capacity(num_treasury_senders);
     for _ in 0..num_treasury_senders {
-        let (tx, rx) = queue_unbounded::<TreasuryEvent>();
+        let (tx, rx) = queue_bounded::<TreasuryEvent>(1);
         event_txs.push(tx);
         event_rxs.push(rx);
     }

@@ -75,7 +75,7 @@ pub fn console(num_producers: usize) -> (Vec<ConsoleHandle>, ConsoleDriverHandle
     let mut senders = VecDeque::with_capacity(total);
     let mut receivers = Vec::with_capacity(total);
     for _ in 0..total {
-        let (tx, rx) = queue::queue_unbounded::<ConsoleMsg>();
+        let (tx, rx) = queue::queue_bounded::<ConsoleMsg>(1);
         senders.push_back(tx);
         receivers.push(rx);
     }

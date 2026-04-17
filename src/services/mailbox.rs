@@ -58,7 +58,7 @@ pub fn mailbox<T: Send + 'static>(
     assert!(!inputs.is_empty(), "mailbox requires at least one input");
 
     // One output queue — the consumer reads from this.
-    let (out_tx, out_rx) = crate::services::queue::queue_unbounded();
+    let (out_tx, out_rx) = crate::services::queue::queue_bounded(64);
 
     // Spawn the fan-in thread — selects across N input receivers.
     std::thread::spawn(move || {

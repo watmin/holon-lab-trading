@@ -150,8 +150,8 @@ where
     let mut resp_txs = Vec::with_capacity(num_clients);
 
     for i in 0..num_clients {
-        let (req_tx, req_rx) = queue::queue_unbounded::<CacheRequest<K, V>>();
-        let (resp_tx, resp_rx) = queue::queue_unbounded::<CacheResponse<V>>();
+        let (req_tx, req_rx) = queue::queue_bounded::<CacheRequest<K, V>>(1);
+        let (resp_tx, resp_rx) = queue::queue_bounded::<CacheResponse<V>>(1);
         req_rxs.push(req_rx);
         resp_txs.push(resp_tx);
         handles.push(CacheHandle {

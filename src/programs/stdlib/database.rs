@@ -94,8 +94,8 @@ pub fn database<T: Send + 'static>(
     let mut ack_txs = Vec::with_capacity(num_clients);
 
     for _ in 0..num_clients {
-        let (req_tx, req_rx) = queue::queue_unbounded::<Vec<T>>();
-        let (ack_tx, ack_rx) = queue::queue_unbounded::<()>();
+        let (req_tx, req_rx) = queue::queue_bounded::<Vec<T>>(1);
+        let (ack_tx, ack_rx) = queue::queue_bounded::<()>(1);
         req_rxs.push(req_rx);
         ack_txs.push(ack_tx);
         handles.push(DatabaseHandle { req_tx, ack_rx });
