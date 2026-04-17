@@ -52,7 +52,6 @@ pub struct EncodeMetrics {
     pub l1_hits: u64,
     pub l1_misses: u64,
     pub ns_batch_get: u64,
-    pub ns_leaf: u64,
     pub ns_cache_set: u64,
     pub ns_compute: u64,
     pub batch_rounds: u64,

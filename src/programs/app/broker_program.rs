@@ -335,7 +335,6 @@ pub fn broker_program(
         emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "gate4_enc_l1_misses", broker_enc_metrics.l1_misses as f64, "Count");
         emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "gate4_enc_ns_compute", broker_enc_metrics.ns_compute as f64, "Nanoseconds");
         emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "gate4_enc_forms_computed", broker_enc_metrics.forms_computed as f64, "Count");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "gate4_enc_ns_leaf", broker_enc_metrics.ns_leaf as f64, "Nanoseconds");
         emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "snapshot", ns_snapshot, "Nanoseconds");
         emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "exit_submit", ns_exit_submit, "Nanoseconds");
         emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "retain", ns_retain, "Nanoseconds");
