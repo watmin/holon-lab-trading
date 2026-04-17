@@ -69,11 +69,13 @@ impl<T: Send> DatabaseHandle<T> {
 /// - `batch_size`: entries accumulated before a transaction commit.
 /// - `setup`: called once with the connection. Create tables, indices, etc.
 /// - `insert`: called per entry with the connection and the entry.
-/// - `can_emit`: optional rate gate — `Fn() -> bool`. When provided with `emit`,
-///   the driver accumulates flush stats and emits them through the closure when
-///   the gate opens. On disconnect, emits remainder unconditionally.
-/// - `emit`: optional emit closure — `Fn(flush_count, total_rows, total_flush_ns)`.
-///   The kernel wraps `emit_metric` inside this. The database stays generic.
+/// - `can_emit`: rate gate — `Fn() -> bool`. The driver accumulates flush
+///   stats and emits them through the closure when the gate opens. On
+///   disconnect, emits remainder unconditionally.
+/// - `emit`: emit closure — `Fn(&Connection, flush_count, total_rows, total_flush_ns)`.
+///   Receives the live connection so it can write telemetry directly without
+///   going back through a pipe. The kernel wraps `emit_metric` inside this.
+///   The database stays generic.
 ///
 /// Returns (Vec<DatabaseHandle>, DatabaseDriverHandle).
 /// Drop all handles to trigger shutdown — the driver flushes remaining entries and exits.
