@@ -21,6 +21,7 @@ use crate::domain::lens::market_rhythm_specs;
 use crate::encoding::encode::{encode, take_encode_metrics, EncodeState};
 use crate::encoding::rhythm::build_rhythm_asts;
 use crate::encoding::thought_encoder::{ThoughtAST, ThoughtASTKind};
+use crate::vocab::shared::time::time_facts;
 use crate::programs::chain::MarketChain;
 use crate::programs::stdlib::cache::CacheHandle;
 use crate::programs::stdlib::console::ConsoleHandle;
@@ -143,40 +144,30 @@ pub fn market_observer_program(
         let sliced = &input.window[start..];
 
         // Build indicator rhythms through the lens — the thought IS the movie.
+        // Rhythms ONLY — time is added to the market observer's own thought
+        // below, not to market_ast. This prevents double-counting when the
+        // broker composes market_ast + its own time_facts.
         let t0 = std::time::Instant::now();
         let specs = market_rhythm_specs(&lens);
-        let mut rhythm_asts = build_rhythm_asts(sliced, &specs);
-        // Time is a top-level fact — "the time is X and I'm thinking about Y"
-        rhythm_asts.push(ThoughtAST::new(ThoughtASTKind::Bind(
-            Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("hour".into()))),
-            Arc::new(ThoughtAST::new(ThoughtASTKind::Circular { value: input.candle.hour, period: 24.0 })),
-        )));
-        rhythm_asts.push(ThoughtAST::new(ThoughtASTKind::Bind(
-            Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("day-of-week".into()))),
-            Arc::new(ThoughtAST::new(ThoughtASTKind::Circular { value: input.candle.day_of_week, period: 7.0 })),
-        )));
-        rhythm_asts.push(ThoughtAST::new(ThoughtASTKind::Bind(
-            Arc::new(ThoughtAST::new(ThoughtASTKind::Bind(
-                Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("hour".into()))),
-                Arc::new(ThoughtAST::new(ThoughtASTKind::Circular { value: input.candle.hour, period: 24.0 })),
-            ))),
-            Arc::new(ThoughtAST::new(ThoughtASTKind::Bind(
-                Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("day-of-week".into()))),
-                Arc::new(ThoughtAST::new(ThoughtASTKind::Circular { value: input.candle.day_of_week, period: 7.0 })),
-            ))),
-        )));
+        let rhythm_asts = build_rhythm_asts(sliced, &specs);
         let fact_count = rhythm_asts.len() as f64;
-        let bundle_ast = ThoughtAST::new(ThoughtASTKind::Bundle(rhythm_asts));
+        // market_ast: what flows downstream — rhythms only, no time.
+        let market_ast = ThoughtAST::new(ThoughtASTKind::Bundle(rhythm_asts.clone()));
+        // market_thought: what this observer learns/predicts from —
+        // rhythms + full time vocabulary (5 leaves + 3 compositions).
+        let mut own_facts = rhythm_asts;
+        own_facts.extend(time_facts(&input.candle));
+        let market_thought = ThoughtAST::new(ThoughtASTKind::Bundle(own_facts));
         // rune:temper(disabled) — rhythm ASTs are multi-MB EDN strings.
         // Logging every candle produced 6.5GB in 312 candles. Disabled
         // until we implement summary logging or sampled snapshots.
-        // let snapshot_edn = bundle_ast.to_edn();
+        // let snapshot_edn = market_thought.to_edn();
         let snapshot_edn = String::from("disabled:rhythm-ast-too-large");
         let ns_collect = t0.elapsed().as_nanos() as f64;
 
         // Encode via cache: the AST tree is walked, every node cached.
         let t0 = std::time::Instant::now();
-        let thought = encode(&mut encode_state, &cache, &bundle_ast, &vm, &scalar);
+        let thought = encode(&mut encode_state, &cache, &market_thought, &vm, &scalar);
         let enc_metrics = take_encode_metrics();
         let ns_encode = t0.elapsed().as_nanos() as f64;
 
@@ -205,7 +196,7 @@ pub fn market_observer_program(
             encode_count: input.encode_count,
             market_raw: result.raw_thought,
             market_anomaly: result.anomaly,
-            market_ast: bundle_ast,
+            market_ast,
             prediction: result.prediction,
             edge: result.edge,
         });

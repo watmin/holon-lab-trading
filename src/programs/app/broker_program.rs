@@ -20,6 +20,7 @@ use crate::programs::app::treasury_program::TreasuryHandle;
 use crate::types::enums::{Direction, Outcome};
 use crate::types::log_entry::LogEntry;
 use crate::vocab::exit::phase::phase_rhythm_thought;
+use crate::vocab::shared::time::time_facts;
 use crate::encoding::rhythm::indicator_rhythm;
 use crate::programs::chain::MarketRegimeChain;
 use crate::encoding::encode::{encode, take_encode_metrics, EncodeState};
@@ -71,13 +72,11 @@ fn broker_thought_ast(
     market_ast: &ThoughtAST,
     regime_facts: &[ThoughtAST],
     portfolio_window: &[PortfolioSnapshot],
-    candle_phase_history: &[crate::types::pivot::PhaseRecord],
-    candle_hour: f64,
-    candle_day: f64,
+    candle: &crate::types::candle::Candle,
 ) -> ThoughtAST {
     let mut facts: Vec<ThoughtAST> = Vec::new();
 
-    // Market rhythms — the market observer's full thought
+    // Market rhythms — the market observer's rhythms, no time.
     facts.push(market_ast.clone());
 
     // Regime rhythms — each one an indicator rhythm AST
@@ -87,17 +86,10 @@ fn broker_thought_ast(
     facts.extend(portfolio_rhythm_asts(portfolio_window));
 
     // Phase rhythm — bundled bigrams of trigrams with structural deltas
-    facts.push(phase_rhythm_thought(candle_phase_history));
+    facts.push(phase_rhythm_thought(&candle.phase_history));
 
-    // Time — top-level facts, not rhythms
-    facts.push(ThoughtAST::new(ThoughtASTKind::Bind(
-        Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("hour".into()))),
-        Arc::new(ThoughtAST::new(ThoughtASTKind::Circular { value: candle_hour, period: 24.0 })),
-    )));
-    facts.push(ThoughtAST::new(ThoughtASTKind::Bind(
-        Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("day-of-week".into()))),
-        Arc::new(ThoughtAST::new(ThoughtASTKind::Circular { value: candle_day, period: 7.0 })),
-    )));
+    // Time — 5 leaf binds + 3 pairwise compositions
+    facts.extend(time_facts(candle));
 
     ThoughtAST::new(ThoughtASTKind::Bundle(facts))
 }
@@ -188,9 +180,7 @@ pub fn broker_program(
             &chain.market_ast,
             &chain.regime_facts,
             &portfolio_window,
-            &chain.candle.phase_history,
-            chain.candle.hour,
-            chain.candle.day_of_week,
+            &chain.candle,
         );
         let broker_thought = encode(&mut encode_state, &cache, &thought_ast, &vm, &scalar);
         let broker_enc_metrics = take_encode_metrics();
