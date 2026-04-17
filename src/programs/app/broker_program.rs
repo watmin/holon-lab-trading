@@ -107,31 +107,23 @@ pub fn broker_program(
         }
         let ns_submit = t0.elapsed().as_nanos() as f64;
 
-        // Compute portfolio snapshot and push to window.
+        // Compute portfolio snapshot in one pass over active_receipts.
         let n = active_receipts.len() as f64;
+        let (sum_age, sum_tp, sum_unrealized) = active_receipts.iter().fold(
+            (0.0_f64, 0.0_f64, 0.0_f64),
+            |(age_acc, tp_acc, unr_acc), r| {
+                let age = candle_count.saturating_sub(r.entry_candle) as f64;
+                let total = r.deadline.saturating_sub(r.entry_candle) as f64;
+                let tp = if total > 0.0 { age / total } else { 1.0 };
+                let value = r.units_acquired * price;
+                let unrealized = (value - r.amount) / r.amount;
+                (age_acc + age, tp_acc + tp, unr_acc + unrealized)
+            },
+        );
         let snap = PortfolioSnapshot {
-            avg_age: if n > 0.0 {
-                active_receipts.iter()
-                    .map(|r| (candle_count.saturating_sub(r.entry_candle)) as f64)
-                    .sum::<f64>() / n
-            } else { 0.0 },
-            avg_tp: if n > 0.0 {
-                active_receipts.iter()
-                    .map(|r| {
-                        let total = (r.deadline.saturating_sub(r.entry_candle)) as f64;
-                        let age = (candle_count.saturating_sub(r.entry_candle)) as f64;
-                        if total > 0.0 { age / total } else { 1.0 }
-                    })
-                    .sum::<f64>() / n
-            } else { 0.0 },
-            avg_unrealized: if n > 0.0 {
-                active_receipts.iter()
-                    .map(|r| {
-                        let value = r.units_acquired * price;
-                        (value - r.amount) / r.amount
-                    })
-                    .sum::<f64>() / n
-            } else { 0.0 },
+            avg_age:        if n > 0.0 { sum_age / n }        else { 0.0 },
+            avg_tp:         if n > 0.0 { sum_tp / n }         else { 0.0 },
+            avg_unrealized: if n > 0.0 { sum_unrealized / n } else { 0.0 },
             grace_rate: broker.expected_value,
             active_count: n,
         };
