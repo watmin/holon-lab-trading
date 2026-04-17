@@ -19,9 +19,9 @@ use crate::domain::treasury::{PositionReceipt, PositionState};
 use crate::programs::app::treasury_program::TreasuryHandle;
 use crate::types::enums::{Direction, Outcome};
 use crate::types::log_entry::LogEntry;
+use crate::vocab::broker::portfolio::{PortfolioSnapshot, portfolio_rhythm_asts};
 use crate::vocab::exit::phase::phase_rhythm_thought;
 use crate::vocab::shared::time::time_facts;
-use crate::encoding::rhythm::indicator_rhythm;
 use crate::programs::chain::MarketRegimeChain;
 use crate::encoding::encode::{encode, take_encode_metrics, EncodeState};
 use crate::encoding::thought_encoder::{ThoughtAST, ThoughtASTKind};
@@ -41,30 +41,6 @@ fn direction_from_prediction(pred: &holon::memory::Prediction) -> Direction {
     }
 }
 
-/// Portfolio snapshot — one per candle, pushed to the broker's internal window.
-struct PortfolioSnapshot {
-    avg_age: f64,
-    avg_tp: f64,
-    avg_unrealized: f64,
-    grace_rate: f64,
-    active_count: f64,
-}
-
-/// Build portfolio rhythm ASTs from the snapshot window.
-fn portfolio_rhythm_asts(snapshots: &[PortfolioSnapshot]) -> Vec<ThoughtAST> {
-    let extract_and_build = |name: &str, extract: fn(&PortfolioSnapshot) -> f64, min: f64, max: f64, delta_range: f64| -> ThoughtAST {
-        let values: Vec<f64> = snapshots.iter().map(extract).collect();
-        indicator_rhythm(name, &values, min, max, delta_range)
-    };
-
-    vec![
-        extract_and_build("avg-paper-age", |s| s.avg_age, 0.0, 500.0, 100.0),
-        extract_and_build("avg-time-pressure", |s| s.avg_tp, 0.0, 1.0, 0.2),
-        extract_and_build("avg-unrealized-residue", |s| s.avg_unrealized, -0.1, 0.1, 0.05),
-        extract_and_build("grace-rate", |s| s.grace_rate, 0.0, 1.0, 0.2),
-        extract_and_build("active-positions", |s| s.active_count, 0.0, 500.0, 100.0),
-    ]
-}
 
 /// Build the broker's thought AST: market rhythms + regime rhythms + portfolio rhythms + phase + time.
 /// Returns the AST so it can be encoded AND logged without recomputing.

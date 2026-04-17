@@ -1,162 +1,45 @@
-use std::sync::Arc;
-/// Portfolio biography vocabulary — 10 atoms describing a broker's portfolio shape.
-/// Phase 3 (Proposal 044). Moved from broker_program.rs.
+/// Portfolio vocabulary — the broker's own state as indicator rhythms.
+///
+/// 5 per-candle scalars sampled into a window, each encoded as a
+/// bundled-bigram-of-trigrams rhythm AST (Proposal 056).
+/// Supersedes Proposal 044's static biography atoms.
+///
+/// Bounds (min, max, delta_range) define what "normal" means for
+/// each scalar. The discriminant learns which rhythms carry signal.
 
-use crate::encoding::thought_encoder::{ThoughtAST, ThoughtASTKind};
-use crate::types::pivot::{PhaseDirection, PhaseLabel, PhaseRecord};
+use crate::encoding::thought_encoder::ThoughtAST;
+use crate::encoding::rhythm::indicator_rhythm;
 
-/// Compute portfolio biography atoms from broker's active papers + phase data.
-/// Returns (atoms, updated_max_papers_seen). Values up, not mutations down.
-pub fn compute_portfolio_biography(
-    papers: &std::collections::VecDeque<crate::trades::paper_entry::PaperEntry>,
-    phase_history: &[PhaseRecord],
-    max_papers_seen: usize,
-) -> (Vec<ThoughtAST>, usize) {
-    let active: Vec<&crate::trades::paper_entry::PaperEntry> = papers
-        .iter()
-        .filter(|p| !p.resolved)
-        .collect();
-    let active_count = active.len();
+/// One-candle snapshot of broker portfolio state. The broker pushes
+/// one into its window per candle; `portfolio_rhythm_asts` samples
+/// the window into rhythm ASTs.
+pub struct PortfolioSnapshot {
+    pub avg_age: f64,
+    pub avg_tp: f64,
+    pub avg_unrealized: f64,
+    pub grace_rate: f64,
+    pub active_count: f64,
+}
 
-    // Return updated max — values up, not mutations down.
-    let new_max = if active_count > max_papers_seen {
-        active_count
-    } else {
-        max_papers_seen
+/// Build portfolio rhythm ASTs from the snapshot window.
+/// Five rhythms, one per portfolio dimension. Bounds are vocabulary —
+/// they declare the expected range of each scalar.
+pub fn portfolio_rhythm_asts(snapshots: &[PortfolioSnapshot]) -> Vec<ThoughtAST> {
+    let extract_and_build = |name: &str,
+                             extract: fn(&PortfolioSnapshot) -> f64,
+                             min: f64,
+                             max: f64,
+                             delta_range: f64|
+     -> ThoughtAST {
+        let values: Vec<f64> = snapshots.iter().map(extract).collect();
+        indicator_rhythm(name, &values, min, max, delta_range)
     };
 
-    let mut atoms = Vec::with_capacity(10);
-
-    // 1. Active trade count
-    atoms.push(ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("active-trade-count".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Log { value: (active_count as f64).max(1.0) })))));
-
-    // 2. Oldest active trade's phase age (phases since its entry)
-    let oldest_phases = active
-        .iter()
-        .map(|p| {
-            phase_history
-                .iter()
-                .filter(|r| r.start_candle >= p.entry_candle)
-                .count()
-        })
-        .max()
-        .unwrap_or(0);
-    atoms.push(ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("oldest-trade-phases".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Log { value: (oldest_phases as f64).max(1.0) })))));
-
-    // 3. Newest active trade's phase age
-    let newest_phases = active
-        .iter()
-        .map(|p| {
-            phase_history
-                .iter()
-                .filter(|r| r.start_candle >= p.entry_candle)
-                .count()
-        })
-        .min()
-        .unwrap_or(0);
-    atoms.push(ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("newest-trade-phases".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Log { value: (newest_phases as f64).max(1.0) })))));
-
-    // 4. Weighted average excursion across active trades
-    let avg_excursion = if active_count > 0 {
-        active.iter().map(|p| p.excursion()).sum::<f64>() / active_count as f64
-    } else {
-        0.0
-    };
-    atoms.push(ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("portfolio-excursion".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Log { value: avg_excursion.abs().max(0.0001) })))));
-
-    // 5. Portfolio heat: active_count / max_seen
-    let heat = if new_max > 0 {
-        active_count as f64 / new_max as f64
-    } else {
-        0.0
-    };
-    atoms.push(ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("portfolio-heat".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Linear { value: heat, scale: 1.0 })))));
-
-    // Fused single pass over phase_history: collect valleys, peaks, durations,
-    // duration stats, and favorable entry records in one iteration.
-    let mut last_two_valleys: [Option<f64>; 2] = [None; 2];
-    let mut last_two_peaks: [Option<f64>; 2] = [None; 2];
-    let mut duration_sum: f64 = 0.0;
-    let mut duration_sq_sum: f64 = 0.0;
-    let mut phase_count: usize = 0;
-    let mut favorable_phases: Vec<(usize, usize)> = Vec::new();
-
-    for r in phase_history.iter() {
-        let dur = r.duration as f64;
-        duration_sum += dur;
-        duration_sq_sum += dur * dur;
-        phase_count += 1;
-
-        match r.label {
-            PhaseLabel::Valley => {
-                last_two_valleys[0] = last_two_valleys[1];
-                last_two_valleys[1] = Some(r.close_avg);
-            }
-            PhaseLabel::Peak => {
-                last_two_peaks[0] = last_two_peaks[1];
-                last_two_peaks[1] = Some(r.close_avg);
-            }
-            _ => {}
-        }
-
-        if r.label == PhaseLabel::Valley
-            || (r.label == PhaseLabel::Transition && r.direction == PhaseDirection::Up)
-        {
-            favorable_phases.push((r.start_candle, r.end_candle));
-        }
-    }
-
-    // 6. Valley trend
-    let valley_trend = match (last_two_valleys[0], last_two_valleys[1]) {
-        (Some(prev), Some(last)) if prev > 0.0 => (last - prev) / prev,
-        _ => 0.0,
-    };
-    atoms.push(ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("broker-phase-valley-trend".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Linear { value: valley_trend, scale: 1.0 })))));
-
-    // 7. Peak trend
-    let peak_trend = match (last_two_peaks[0], last_two_peaks[1]) {
-        (Some(prev), Some(last)) if prev > 0.0 => (last - prev) / prev,
-        _ => 0.0,
-    };
-    atoms.push(ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("broker-phase-peak-trend".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Linear { value: peak_trend, scale: 1.0 })))));
-
-    // 8. Regularity: CV of phase durations
-    let regularity = if phase_count >= 2 {
-        let mean = duration_sum / phase_count as f64;
-        if mean > 0.0 {
-            let variance = duration_sq_sum / phase_count as f64 - mean * mean;
-            variance.max(0.0).sqrt() / mean
-        } else {
-            0.0
-        }
-    } else {
-        0.0
-    };
-    atoms.push(ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("broker-phase-regularity".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Linear { value: regularity, scale: 1.0 })))));
-
-    // 9. Entry ratio
-    let entry_ratio = if active_count > 0 {
-        let favorable = active
-            .iter()
-            .filter(|p| {
-                favorable_phases.iter().any(|(start, end)| {
-                    p.entry_candle >= *start && p.entry_candle <= *end
-                })
-            })
-            .count();
-        favorable as f64 / active_count as f64
-    } else {
-        0.0
-    };
-    atoms.push(ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("broker-phase-entry-ratio".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Linear { value: entry_ratio, scale: 1.0 })))));
-
-    // 10. Average spacing
-    let avg_spacing = if phase_count > 0 {
-        duration_sum / phase_count as f64
-    } else {
-        1.0
-    };
-    atoms.push(ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("broker-phase-avg-spacing".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Log { value: avg_spacing.max(1.0) })))));
-
-    (atoms, new_max)
+    vec![
+        extract_and_build("avg-paper-age",          |s| s.avg_age,        0.0,  500.0, 100.0),
+        extract_and_build("avg-time-pressure",      |s| s.avg_tp,         0.0,    1.0,   0.2),
+        extract_and_build("avg-unrealized-residue", |s| s.avg_unrealized, -0.1,   0.1,   0.05),
+        extract_and_build("grace-rate",             |s| s.grace_rate,     0.0,    1.0,   0.2),
+        extract_and_build("active-positions",       |s| s.active_count,   0.0,  500.0, 100.0),
+    ]
 }
