@@ -35,13 +35,6 @@ impl<T> MailboxReceiver<T> {
     pub fn try_recv(&self) -> Result<T, TryRecvError> {
         self.0.try_recv()
     }
-
-    /// Access the underlying crossbeam receiver. Used by composing programs
-    /// (cache) that need crossbeam::Select across mailbox + queue receivers.
-    /// pub(crate) — only visible within this crate.
-    pub(crate) fn inner(&self) -> &crossbeam::channel::Receiver<T> {
-        self.0.inner()
-    }
 }
 
 /// Create a mailbox from existing queue receivers.

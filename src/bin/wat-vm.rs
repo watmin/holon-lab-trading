@@ -38,7 +38,7 @@ use enterprise::programs::stdlib::cache::{CacheHandle, cache};
 use enterprise::programs::stdlib::console::console;
 use enterprise::programs::stdlib::database::database;
 use enterprise::services::mailbox::mailbox;
-use enterprise::services::queue::{queue_bounded, queue_unbounded, QueueReceiver, QueueSender};
+use enterprise::services::queue::{queue_bounded, QueueReceiver, QueueSender};
 use enterprise::services::topic::topic;
 use enterprise::types::log_entry::LogEntry;
 use enterprise::programs::chain::MarketChain;
