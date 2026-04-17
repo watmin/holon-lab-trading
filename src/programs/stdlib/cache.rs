@@ -20,13 +20,14 @@ enum CacheRequest<K, V> {
     Get { client: usize, key: K },
     BatchGet { client: usize, keys: Vec<K> },
     Set { key: K, value: V },
-    BatchSet { entries: Vec<(K, V)> },
+    BatchSet { client: usize, entries: Vec<(K, V)> },
 }
 
 /// Typed cache response. The client unwraps the variant it expects.
 enum CacheResponse<V> {
     Get(Option<V>),
     BatchGet(Vec<Option<V>>),
+    BatchSetAck,
 }
 
 /// A program's handle to the cache. Each program gets its own.
@@ -70,10 +71,14 @@ impl<K: Clone + Send, V: Send> CacheHandle<K, V> {
         let _ = self.req_tx.send(CacheRequest::Set { key, value });
     }
 
-    /// Fire-and-forget batch set.
+    /// Confirmed batch set. Blocks until the driver has processed all entries.
     pub fn batch_set(&self, entries: Vec<(K, V)>) {
         if !entries.is_empty() {
-            let _ = self.req_tx.send(CacheRequest::BatchSet { entries });
+            let _ = self.req_tx.send(CacheRequest::BatchSet {
+                client: self.client_idx,
+                entries,
+            });
+            let _ = self.resp_rx.recv(); // block until ack
         }
     }
 }
@@ -162,16 +167,19 @@ where
     let misses_inner = Arc::clone(&misses);
 
     // The driver thread: owns the LRU, polls client queues directly.
-    // Epoll-style: drain all pending requests, batch service, respond.
+    // Select wakes us. Drain every pending request. Writes first, reads
+    // second. Respond inline. Loop.
     let thread = thread::spawn(move || {
         let mut cache = LruCache::new(NonZeroUsize::new(capacity).unwrap());
         let mut stats = CacheStats::default();
         let mut closed = vec![false; num_clients];
-        let mut batch: Vec<CacheRequest<K, V>> = Vec::new();
+
+        // Pending requests grouped by type. Reused across iterations.
+        let mut writes: Vec<CacheRequest<K, V>> = Vec::new();
+        let mut reads: Vec<CacheRequest<K, V>> = Vec::new();
 
         loop {
             // Block until at least one queue has data.
-            // select() across all live client queues.
             let mut sel = crossbeam::channel::Select::new();
             let mut has_live = false;
             for i in 0..num_clients {
@@ -187,13 +195,17 @@ where
             }
             let _ = sel.ready();
 
-            // Drain ALL pending requests from ALL queues.
-            batch.clear();
+            // Drain every pending request, grouped by type.
+            writes.clear();
+            reads.clear();
             for i in 0..num_clients {
                 if closed[i] { continue; }
                 loop {
                     match req_rxs[i].try_recv() {
-                        Ok(req) => batch.push(req),
+                        Ok(req) => match &req {
+                            CacheRequest::Set { .. } | CacheRequest::BatchSet { .. } => writes.push(req),
+                            _ => reads.push(req),
+                        },
                         Err(crossbeam::channel::TryRecvError::Empty) => break,
                         Err(crossbeam::channel::TryRecvError::Disconnected) => {
                             closed[i] = true;
@@ -203,24 +215,9 @@ where
                 }
             }
 
-            if batch.is_empty() { continue; }
-
-            // Partition: writes first, then reads.
-            // Swap writes to the front so reads see fresh data.
-            let mut write_end = 0;
-            for i in 0..batch.len() {
-                match &batch[i] {
-                    CacheRequest::Set { .. } | CacheRequest::BatchSet { .. } => {
-                        batch.swap(write_end, i);
-                        write_end += 1;
-                    }
-                    _ => {}
-                }
-            }
-
-            // Service writes.
+            // Process writes. Reads see fresh data.
             let t0 = std::time::Instant::now();
-            for req in batch.drain(..write_end) {
+            for req in writes.drain(..) {
                 match req {
                     CacheRequest::Set { key, value } => {
                         let at_cap = cache.len() == capacity;
@@ -228,22 +225,23 @@ where
                         if at_cap { stats.evictions += 1; }
                         stats.sets_drained += 1;
                     }
-                    CacheRequest::BatchSet { entries } => {
+                    CacheRequest::BatchSet { client, entries } => {
                         for (key, value) in entries {
                             let at_cap = cache.len() == capacity;
                             cache.put(key, value);
                             if at_cap { stats.evictions += 1; }
                             stats.sets_drained += 1;
                         }
+                        let _ = resp_txs[client].send(CacheResponse::BatchSetAck);
                     }
                     _ => unreachable!(),
                 }
             }
             stats.ns_sets += t0.elapsed().as_nanos() as u64;
 
-            // Service reads.
+            // Process reads.
             let t0 = std::time::Instant::now();
-            for req in batch.drain(..) {
+            for req in reads.drain(..) {
                 match req {
                     CacheRequest::Get { client, key } => {
                         let result = cache.get(&key).cloned();
@@ -272,12 +270,12 @@ where
                         stats.gets_serviced += results.len();
                         let _ = resp_txs[client].send(CacheResponse::BatchGet(results));
                     }
-                    _ => {} // writes already drained
+                    _ => {}
                 }
             }
             stats.ns_gets += t0.elapsed().as_nanos() as u64;
 
-            // Gate check after each batch.
+            // Gate check.
             if can_emit() {
                 stats.cache_size = cache.len();
                 emit(stats.clone());

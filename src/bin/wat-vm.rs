@@ -24,7 +24,6 @@ use enterprise::domain::ledger;
 use enterprise::domain::config;
 use enterprise::domain::market_observer::MarketObserver;
 use enterprise::domain::treasury::Treasury;
-use enterprise::encoding::thought_encoder::ThoughtAST;
 use enterprise::types::candle::Candle;
 use enterprise::kernel::handle_pool::HandlePool;
 use enterprise::programs::app::broker_program::broker_program;
@@ -107,7 +106,7 @@ struct WiredMarketObservers {
 fn wire_market_observers(
     observers: Vec<MarketObserver>,
     num_regime_observers: usize,
-    mut cache_pool: HandlePool<CacheHandle<ThoughtAST, Vector>>,
+    mut cache_pool: HandlePool<CacheHandle<u64, Vector>>,
     mut console_pool: HandlePool<enterprise::programs::stdlib::console::ConsoleHandle>,
     mut db_pool: HandlePool<enterprise::services::queue::QueueSender<LogEntry>>,
     vm: &VectorManager,
@@ -197,7 +196,7 @@ struct WiredRegimeObservers {
 fn wire_regime_observers(
     regime_observers: Vec<RegimeObserver>,
     position_queue_rxs: Vec<Vec<enterprise::services::queue::QueueReceiver<MarketChain>>>,
-    mut cache_pool: HandlePool<CacheHandle<ThoughtAST, Vector>>,
+    mut cache_pool: HandlePool<CacheHandle<u64, Vector>>,
     mut console_pool: HandlePool<enterprise::programs::stdlib::console::ConsoleHandle>,
     mut db_pool: HandlePool<enterprise::services::queue::QueueSender<LogEntry>>,
     vm: &VectorManager,
@@ -296,7 +295,7 @@ fn wire_brokers(
     brokers: Vec<Broker>,
     output_rxs: Vec<QueueReceiver<MarketRegimeChain>>,
     treasury_handles: Vec<TreasuryHandle>,
-    mut cache_pool: HandlePool<CacheHandle<ThoughtAST, Vector>>,
+    mut cache_pool: HandlePool<CacheHandle<u64, Vector>>,
     mut console_pool: HandlePool<enterprise::programs::stdlib::console::ConsoleHandle>,
     mut db_pool: HandlePool<enterprise::services::queue::QueueSender<LogEntry>>,
     vm: &VectorManager,
@@ -499,9 +498,9 @@ fn main() {
             m("evictions", stats.evictions as f64, "Count");
         }
     };
-    let (cache_handles, cache_driver) = cache::<ThoughtAST, Vector>(
+    let (cache_handles, cache_driver) = cache::<u64, Vector>(
         "encoder",
-        524288, // 512K — was at capacity with 256K, every set was an eviction
+        262144, // 256K — L1 absorbs most reads, L2 is the sharing layer
         num_market + num_position + num_brokers,
         Box::new(cache_gate),
         Box::new(cache_emit),

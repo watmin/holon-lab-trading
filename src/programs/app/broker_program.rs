@@ -20,7 +20,7 @@ use crate::types::log_entry::LogEntry;
 use crate::vocab::exit::phase::phase_rhythm_thought;
 use crate::encoding::rhythm::indicator_rhythm;
 use crate::programs::chain::MarketRegimeChain;
-use crate::encoding::encode::{encode, take_encode_metrics};
+use crate::encoding::encode::{encode, take_encode_metrics, EncodeState};
 use crate::encoding::thought_encoder::ThoughtAST;
 use crate::programs::stdlib::cache::CacheHandle;
 use crate::programs::stdlib::console::ConsoleHandle;
@@ -103,7 +103,7 @@ fn broker_thought_ast(
 /// Returns the trained Broker when the chain source disconnects.
 pub fn broker_program(
     chain_rx: QueueReceiver<MarketRegimeChain>,
-    cache: CacheHandle<ThoughtAST, Vector>,
+    cache: CacheHandle<u64, Vector>,
     vm: VectorManager,
     scalar: Arc<ScalarEncoder>,
     console: ConsoleHandle,
@@ -115,6 +115,7 @@ pub fn broker_program(
     let mut active_receipts: Vec<PositionReceipt> = Vec::new();
     let mut portfolio_window: Vec<PortfolioSnapshot> = Vec::new();
     let max_portfolio_window = ((10_000 as f64).sqrt() as usize) + 3; // rune:forge(dims)
+    let mut encode_state = EncodeState::new();
 
     // Gate 4 labels.
     let hold_label = holon::memory::Label::from_index(0);
@@ -188,7 +189,7 @@ pub fn broker_program(
             chain.candle.hour,
             chain.candle.day_of_week,
         );
-        let broker_thought = encode(&cache, &thought_ast, &vm, &scalar);
+        let broker_thought = encode(&mut encode_state, &cache, &thought_ast, &vm, &scalar);
         let broker_enc_metrics = take_encode_metrics();
         let ns_broker_encode = t0.elapsed().as_nanos() as f64;
 
@@ -220,47 +221,56 @@ pub fn broker_program(
         }
         let ns_exit_submit = t0.elapsed().as_nanos() as f64;
 
-        // 4. Check active papers — discover outcomes from treasury.
+        // 4. Check active papers — one batch round-trip to treasury.
         let t0 = std::time::Instant::now();
-        active_receipts.retain(|receipt| {
-            let state = match treasury.get_paper_state(receipt.position_id) {
-                Some(s) => s,
-                None => return false,
-            };
+        if !active_receipts.is_empty() {
+            let paper_ids: Vec<u64> = active_receipts.iter().map(|r| r.position_id).collect();
+            let states = treasury.batch_get_paper_states(paper_ids);
 
-            let outcome = match state {
-                PositionState::Active => return true,
-                PositionState::Violence => {
-                    learn_violence += 1.0;
-                    Outcome::Violence
-                }
-                PositionState::Grace { .. } => {
-                    learn_grace += 1.0;
-                    Outcome::Grace
-                }
-            };
+            // Build a lookup from the batch response.
+            let state_map: std::collections::HashMap<u64, Option<PositionState>> =
+                states.into_iter().collect();
 
-            // Record the outcome — counts and grace rate.
-            broker.record_outcome(outcome);
+            active_receipts.retain(|receipt| {
+                let state = match state_map.get(&receipt.position_id) {
+                    Some(Some(s)) => s,
+                    _ => return false,
+                };
 
-            // Gate 4 learns: this moment's thought led to this outcome.
-            // Grace → Hold was right. Violence → should have exited.
-            let label = match outcome {
-                Outcome::Grace => hold_label,
-                Outcome::Violence => exit_label,
-            };
-            broker.gate_reckoner.observe(&anomaly, label, 1.0);
+                let outcome = match state {
+                    PositionState::Active => return true,
+                    PositionState::Violence => {
+                        learn_violence += 1.0;
+                        Outcome::Violence
+                    }
+                    PositionState::Grace { .. } => {
+                        learn_grace += 1.0;
+                        Outcome::Grace
+                    }
+                };
 
-            // Feed the curve.
-            let predicted_hold = gate_pred.direction.map_or(true, |d| d.index() == 0);
-            let correct = match outcome {
-                Outcome::Grace => predicted_hold,
-                Outcome::Violence => !predicted_hold,
-            };
-            broker.gate_reckoner.resolve(gate_pred.conviction, correct);
+                // Record the outcome — counts and grace rate.
+                broker.record_outcome(outcome);
 
-            false // resolved — remove
-        });
+                // Gate 4 learns: this moment's thought led to this outcome.
+                // Grace → Hold was right. Violence → should have exited.
+                let label = match outcome {
+                    Outcome::Grace => hold_label,
+                    Outcome::Violence => exit_label,
+                };
+                broker.gate_reckoner.observe(&anomaly, label, 1.0);
+
+                // Feed the curve.
+                let predicted_hold = gate_pred.direction.map_or(true, |d| d.index() == 0);
+                let correct = match outcome {
+                    Outcome::Grace => predicted_hold,
+                    Outcome::Violence => !predicted_hold,
+                };
+                broker.gate_reckoner.resolve(gate_pred.conviction, correct);
+
+                false // resolved — remove
+            });
+        }
         let ns_retain = t0.elapsed().as_nanos() as f64;
 
         // 5. Snapshot — AST serialization disabled for rhythm ASTs.
@@ -317,6 +327,10 @@ pub fn broker_program(
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4_enc_misses", broker_enc_metrics.cache_misses as f64, "Count");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4_enc_ns_batch_get", broker_enc_metrics.ns_batch_get as f64, "Nanoseconds");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4_enc_batch_rounds", broker_enc_metrics.batch_rounds as f64, "Count");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4_enc_l1_hits", broker_enc_metrics.l1_hits as f64, "Count");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4_enc_l1_misses", broker_enc_metrics.l1_misses as f64, "Count");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4_enc_ns_rayon", broker_enc_metrics.ns_rayon as f64, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4_enc_rayon_tasks", broker_enc_metrics.rayon_tasks as f64, "Count");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4_enc_ns_leaf", broker_enc_metrics.ns_leaf as f64, "Nanoseconds");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "snapshot", ns_snapshot, "Nanoseconds");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "exit_submit", ns_exit_submit, "Nanoseconds");

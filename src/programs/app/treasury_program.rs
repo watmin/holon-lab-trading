@@ -47,6 +47,9 @@ pub enum TreasuryRequest {
     GetPaperState {
         paper_id: u64,
     },
+    BatchGetPaperStates {
+        paper_ids: Vec<u64>,
+    },
 }
 
 /// What the treasury sends back.
@@ -58,6 +61,7 @@ pub enum TreasuryResponse {
     ExitApproved { position_id: u64, residue: f64 },
     ExitDenied,
     PaperState { position_id: u64, state: PositionState },
+    BatchPaperStates { states: Vec<(u64, Option<PositionState>)> },
     NotFound,
 }
 
@@ -145,6 +149,18 @@ impl TreasuryHandle {
         }
     }
 
+    /// Batch query paper positions. One round-trip for all IDs.
+    pub fn batch_get_paper_states(&self, paper_ids: Vec<u64>) -> Vec<(u64, Option<PositionState>)> {
+        let _ = self.event_tx.send(TreasuryEvent::Request {
+            client_id: self.client_id,
+            request: TreasuryRequest::BatchGetPaperStates { paper_ids },
+        });
+        match self.response_rx.recv().ok() {
+            Some(TreasuryResponse::BatchPaperStates { states }) => states,
+            _ => Vec::new(),
+        }
+    }
+
     /// Query a paper position's state. Returns the state or None.
     pub fn get_paper_state(&self, paper_id: u64) -> Option<PositionState> {
         self.event_tx
@@ -212,6 +228,13 @@ fn handle_request(
                 },
                 None => TreasuryResponse::NotFound,
             }
+        }
+        TreasuryRequest::BatchGetPaperStates { paper_ids } => {
+            let states: Vec<(u64, Option<PositionState>)> = paper_ids.iter().map(|&id| {
+                let state = treasury.get_paper_position(id).map(|p| p.state.clone());
+                (id, state)
+            }).collect();
+            TreasuryResponse::BatchPaperStates { states }
         }
     }
 }

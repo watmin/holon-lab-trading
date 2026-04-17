@@ -37,7 +37,7 @@ pub use crate::vocab::exit::trade_atoms::{compute_trade_atoms, select_trade_atom
 /// Returns the regime observer when all input slots disconnect.
 pub fn regime_observer_program(
     slots: Vec<RegimeSlot>,
-    _cache: CacheHandle<ThoughtAST, Vector>,
+    _cache: CacheHandle<u64, Vector>,
     _vm: VectorManager,
     _scalar: Arc<ScalarEncoder>,
     console: ConsoleHandle,

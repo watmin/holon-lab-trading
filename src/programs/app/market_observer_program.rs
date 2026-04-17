@@ -18,7 +18,7 @@ use crate::types::log_entry::LogEntry;
 use crate::types::pivot::PhaseLabel;
 use crate::domain::market_observer::MarketObserver;
 use crate::domain::lens::market_rhythm_specs;
-use crate::encoding::encode::{encode, take_encode_metrics};
+use crate::encoding::encode::{encode, take_encode_metrics, EncodeState};
 use crate::encoding::rhythm::build_rhythm_asts;
 use crate::encoding::thought_encoder::ThoughtAST;
 use crate::programs::chain::MarketChain;
@@ -98,7 +98,7 @@ fn grade_predictions(
 pub fn market_observer_program(
     candle_rx: QueueReceiver<ObsInput>,
     result_tx: TopicSender<MarketChain>,
-    cache: CacheHandle<ThoughtAST, Vector>,
+    cache: CacheHandle<u64, Vector>,
     vm: VectorManager,
     scalar: Arc<ScalarEncoder>,
     console: ConsoleHandle,
@@ -110,6 +110,7 @@ pub fn market_observer_program(
     let mut candle_count = 0usize;
     let lens = observer.lens;
     let mut unconfirmed: Vec<UnconfirmedPrediction> = Vec::new();
+    let mut encode_state = EncodeState::new();
 
     while let Ok(input) = candle_rx.recv() {
         let t_total = std::time::Instant::now();
@@ -180,7 +181,7 @@ pub fn market_observer_program(
 
         // Encode via cache: the AST tree is walked, every node cached.
         let t0 = std::time::Instant::now();
-        let thought = encode(&cache, &bundle_ast, &vm, &scalar);
+        let thought = encode(&mut encode_state, &cache, &bundle_ast, &vm, &scalar);
         let enc_metrics = take_encode_metrics();
         let ns_encode = t0.elapsed().as_nanos() as f64;
 
@@ -227,6 +228,10 @@ pub fn market_observer_program(
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "enc_misses", enc_metrics.cache_misses as f64, "Count");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "enc_ns_batch_get", enc_metrics.ns_batch_get as f64, "Nanoseconds");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "enc_batch_rounds", enc_metrics.batch_rounds as f64, "Count");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "enc_l1_hits", enc_metrics.l1_hits as f64, "Count");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "enc_l1_misses", enc_metrics.l1_misses as f64, "Count");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "enc_ns_rayon", enc_metrics.ns_rayon as f64, "Nanoseconds");
+        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "enc_rayon_tasks", enc_metrics.rayon_tasks as f64, "Count");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "enc_ns_leaf", enc_metrics.ns_leaf as f64, "Nanoseconds");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "enc_ns_cache_set", enc_metrics.ns_cache_set as f64, "Nanoseconds");
         emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "observe", ns_observe, "Nanoseconds");
