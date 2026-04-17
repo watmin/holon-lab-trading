@@ -107,6 +107,8 @@ pub fn market_observer_program(
     let lens = observer.lens;
     let mut unconfirmed: Vec<UnconfirmedPrediction> = Vec::new();
     let mut encode_state = EncodeState::new(DEFAULT_L1_CAPACITY);
+    // Lens is fixed for the observer's lifetime; specs never change.
+    let specs = market_rhythm_specs(&lens);
 
     while let Ok(input) = candle_rx.recv() {
         let t_total = std::time::Instant::now();
@@ -148,7 +150,6 @@ pub fn market_observer_program(
         // below, not to market_ast. This prevents double-counting when the
         // broker composes market_ast + its own time_facts.
         let t0 = std::time::Instant::now();
-        let specs = market_rhythm_specs(&lens);
         let rhythm_asts = build_rhythm_asts(sliced, &specs);
         let fact_count = rhythm_asts.len() as f64;
         // market_ast: what flows downstream — rhythms only, no time.
