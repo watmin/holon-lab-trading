@@ -108,7 +108,7 @@ fn wire_market_observers(
     num_regime_observers: usize,
     mut cache_pool: HandlePool<CacheHandle<u64, Vector>>,
     mut console_pool: HandlePool<enterprise::programs::stdlib::console::ConsoleHandle>,
-    mut db_pool: HandlePool<enterprise::services::queue::QueueSender<LogEntry>>,
+    mut db_pool: HandlePool<enterprise::programs::stdlib::database::DatabaseHandle<LogEntry>>,
     vm: &VectorManager,
     scalar: &Arc<ScalarEncoder>,
     recalib_interval: usize,
@@ -198,7 +198,7 @@ fn wire_regime_observers(
     position_queue_rxs: Vec<Vec<enterprise::services::queue::QueueReceiver<MarketChain>>>,
     mut cache_pool: HandlePool<CacheHandle<u64, Vector>>,
     mut console_pool: HandlePool<enterprise::programs::stdlib::console::ConsoleHandle>,
-    mut db_pool: HandlePool<enterprise::services::queue::QueueSender<LogEntry>>,
+    mut db_pool: HandlePool<enterprise::programs::stdlib::database::DatabaseHandle<LogEntry>>,
     vm: &VectorManager,
     scalar: &Arc<ScalarEncoder>,
     noise_floor: f64,
@@ -297,7 +297,7 @@ fn wire_brokers(
     treasury_handles: Vec<TreasuryHandle>,
     mut cache_pool: HandlePool<CacheHandle<u64, Vector>>,
     mut console_pool: HandlePool<enterprise::programs::stdlib::console::ConsoleHandle>,
-    mut db_pool: HandlePool<enterprise::services::queue::QueueSender<LogEntry>>,
+    mut db_pool: HandlePool<enterprise::programs::stdlib::database::DatabaseHandle<LogEntry>>,
     vm: &VectorManager,
     scalar: &Arc<ScalarEncoder>,
 ) -> WiredBrokers {
@@ -397,28 +397,14 @@ fn main() {
         chrono::Local::now().format("%Y%m%d_%H%M%S")
     );
 
-    // All wires before any work. The kernel creates all queues, builds the
-    // mailbox, then spawns the database. +1 self-telemetry, +1 cache telemetry.
+    // All wires before any work. The database creates per-client handles
+    // internally — no mailbox, no fan-in. +1 cache telemetry, +1 treasury.
     let num_db_producers = num_market + num_position + num_brokers;
     let num_db_total = num_db_producers + 1 + 1; // +1 cache telemetry, +1 treasury
-    let mut db_txs = Vec::with_capacity(num_db_total);
-    let mut db_rxs = Vec::with_capacity(num_db_total);
-    for _ in 0..num_db_total {
-        let (tx, rx) = queue_unbounded::<LogEntry>();
-        db_txs.push(tx);
-        db_rxs.push(rx);
-    }
-    let db_mailbox_rx = mailbox(db_rxs);
-
-    // Cache telemetry sender — the cache driver emits metrics through this
-    let cache_telemetry_tx = db_txs.pop().unwrap();
-
-    // Treasury DB sender
-    let treasury_db_handle = db_txs.pop().unwrap();
 
     // Database gate: emit accumulated telemetry every 5 seconds.
     // The database writes its own telemetry directly — no pipe to itself.
-    // A self-pipe through the mailbox creates a circular dependency (deadlock).
+    // A self-pipe creates a circular dependency (deadlock).
     let db_gate = enterprise::programs::telemetry::make_rate_gate(
         std::time::Duration::from_secs(5),
     );
@@ -444,9 +430,9 @@ fn main() {
             }
         }
     };
-    let db_driver = database::<LogEntry>(
+    let (mut db_handles, db_driver) = database::<LogEntry>(
         &db_path,
-        db_mailbox_rx,
+        num_db_total,
         100,
         ledger::ledger_setup,
         ledger::ledger_insert,
@@ -454,7 +440,14 @@ fn main() {
         Box::new(db_emit),
     );
 
-    let mut db_pool = HandlePool::new("db", db_txs);
+    // Pop special handles first — from the end, same as before.
+    // Cache telemetry handle — the cache driver emits metrics through this
+    let cache_telemetry_tx = db_handles.pop().unwrap();
+
+    // Treasury DB handle
+    let treasury_db_handle = db_handles.pop().unwrap();
+
+    let mut db_pool = HandlePool::new("db", db_handles);
 
     main_handle.out(format!("db: {}", db_path));
 
@@ -479,23 +472,25 @@ fn main() {
                 .unwrap()
                 .as_nanos() as u64;
             let dims = "{\"name\":\"encoder\"}";
-            let m = |name, val: f64, unit| {
+            let mut pending = Vec::new();
+            let m = |pending: &mut Vec<LogEntry>, name, val: f64, unit| {
                 enterprise::programs::telemetry::emit_metric(
-                    &tx, "cache", &id, dims, ts, name, val, unit,
+                    pending, "cache", &id, dims, ts, name, val, unit,
                 );
             };
-            m("hits", stats.hits as f64, "Count");
-            m("misses", stats.misses as f64, "Count");
-            m("cache_size", stats.cache_size as f64, "Count");
+            m(&mut pending, "hits", stats.hits as f64, "Count");
+            m(&mut pending, "misses", stats.misses as f64, "Count");
+            m(&mut pending, "cache_size", stats.cache_size as f64, "Count");
             let hit_rate = if stats.hits + stats.misses > 0 {
                 stats.hits as f64 / (stats.hits + stats.misses) as f64
             } else { 0.0 };
-            m("hit_rate", hit_rate, "Count");
-            m("ns_gets", stats.ns_gets as f64, "Nanoseconds");
-            m("ns_sets", stats.ns_sets as f64, "Nanoseconds");
-            m("gets_serviced", stats.gets_serviced as f64, "Count");
-            m("sets_drained", stats.sets_drained as f64, "Count");
-            m("evictions", stats.evictions as f64, "Count");
+            m(&mut pending, "hit_rate", hit_rate, "Count");
+            m(&mut pending, "ns_gets", stats.ns_gets as f64, "Nanoseconds");
+            m(&mut pending, "ns_sets", stats.ns_sets as f64, "Nanoseconds");
+            m(&mut pending, "gets_serviced", stats.gets_serviced as f64, "Count");
+            m(&mut pending, "sets_drained", stats.sets_drained as f64, "Count");
+            m(&mut pending, "evictions", stats.evictions as f64, "Count");
+            enterprise::programs::telemetry::flush_metrics(&tx, &mut pending);
         }
     };
     let (cache_handles, cache_driver) = cache::<u64, Vector>(

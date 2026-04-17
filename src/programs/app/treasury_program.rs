@@ -12,6 +12,7 @@
 
 use crate::domain::treasury::{PositionReceipt, PositionState, Treasury};
 use crate::programs::stdlib::console::ConsoleHandle;
+use crate::programs::stdlib::database::DatabaseHandle;
 use crate::services::mailbox::MailboxReceiver;
 use crate::services::queue::{QueueReceiver, QueueSender};
 use crate::types::log_entry::LogEntry;
@@ -247,7 +248,7 @@ pub fn treasury_program(
     event_rx: MailboxReceiver<TreasuryEvent>,
     client_txs: Vec<QueueSender<TreasuryResponse>>,
     console: ConsoleHandle,
-    _db_tx: QueueSender<LogEntry>,
+    _db_tx: DatabaseHandle<LogEntry>,
     mut treasury: Treasury,
     base_deadline: usize,
 ) -> Treasury {
@@ -265,7 +266,7 @@ pub fn treasury_program(
                 let _ = treasury.check_deadlines(candle, price);
                 let ns_tick = t0.elapsed().as_nanos() as u64;
 
-                let _ = _db_tx.send(LogEntry::Telemetry {
+                _db_tx.send(LogEntry::Telemetry {
                     namespace: "treasury".into(),
                     id: format!("treasury:tick:{}", candle_count),
                     dimensions: "{}".into(),
@@ -315,7 +316,7 @@ pub fn treasury_program(
                     let _ = client_txs[client_id].send(response);
                 }
                 let ns_request = t0.elapsed().as_nanos() as u64;
-                let _ = _db_tx.send(LogEntry::Telemetry {
+                _db_tx.send(LogEntry::Telemetry {
                     namespace: "treasury".into(),
                     id: format!("treasury:req:{}", candle_count),
                     dimensions: "{}".into(),

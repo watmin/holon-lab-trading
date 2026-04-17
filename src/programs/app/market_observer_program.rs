@@ -24,9 +24,10 @@ use crate::encoding::thought_encoder::{ThoughtAST, ThoughtASTKind};
 use crate::programs::chain::MarketChain;
 use crate::programs::stdlib::cache::CacheHandle;
 use crate::programs::stdlib::console::ConsoleHandle;
-use crate::services::queue::{QueueReceiver, QueueSender};
+use crate::programs::stdlib::database::DatabaseHandle;
+use crate::services::queue::QueueReceiver;
 use crate::services::topic::TopicSender;
-use crate::programs::telemetry::emit_metric;
+use crate::programs::telemetry::{emit_metric, flush_metrics};
 
 /// Input to the observer: enriched candle, window snapshot, encode count.
 pub struct ObsInput {
@@ -102,7 +103,7 @@ pub fn market_observer_program(
     vm: VectorManager,
     scalar: Arc<ScalarEncoder>,
     console: ConsoleHandle,
-    db_tx: QueueSender<LogEntry>,
+    db_tx: DatabaseHandle<LogEntry>,
     mut observer: MarketObserver,
     observer_idx: usize,
     recalib_interval: usize,
@@ -218,49 +219,52 @@ pub fn market_observer_program(
 
         let ns_total = t_total.elapsed().as_nanos() as f64;
 
-        // Emit telemetry.
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "drain_learn", ns_drain, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "collect_facts", ns_collect, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "facts_count", fact_count, "Count");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "encode", ns_encode, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "enc_nodes", enc_metrics.nodes_walked as f64, "Count");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "enc_hits", enc_metrics.cache_hits as f64, "Count");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "enc_misses", enc_metrics.cache_misses as f64, "Count");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "enc_ns_batch_get", enc_metrics.ns_batch_get as f64, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "enc_batch_rounds", enc_metrics.batch_rounds as f64, "Count");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "enc_l1_hits", enc_metrics.l1_hits as f64, "Count");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "enc_l1_misses", enc_metrics.l1_misses as f64, "Count");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "enc_ns_rayon", enc_metrics.ns_rayon as f64, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "enc_rayon_tasks", enc_metrics.rayon_tasks as f64, "Count");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "enc_ns_leaf", enc_metrics.ns_leaf as f64, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "enc_ns_cache_set", enc_metrics.ns_cache_set as f64, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "observe", ns_observe, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "send", ns_send, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "total", ns_total, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "self_graded", self_graded as f64, "Count");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "unconfirmed", unconfirmed.len() as f64, "Count");
+        // Collect all log entries into a pending vec, flush once.
+        let mut pending = Vec::new();
+
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "drain_learn", ns_drain, "Nanoseconds");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "collect_facts", ns_collect, "Nanoseconds");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "facts_count", fact_count, "Count");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "encode", ns_encode, "Nanoseconds");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "enc_nodes", enc_metrics.nodes_walked as f64, "Count");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "enc_hits", enc_metrics.cache_hits as f64, "Count");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "enc_misses", enc_metrics.cache_misses as f64, "Count");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "enc_ns_batch_get", enc_metrics.ns_batch_get as f64, "Nanoseconds");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "enc_batch_rounds", enc_metrics.batch_rounds as f64, "Count");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "enc_l1_hits", enc_metrics.l1_hits as f64, "Count");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "enc_l1_misses", enc_metrics.l1_misses as f64, "Count");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "enc_ns_rayon", enc_metrics.ns_rayon as f64, "Nanoseconds");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "enc_rayon_tasks", enc_metrics.rayon_tasks as f64, "Count");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "enc_ns_leaf", enc_metrics.ns_leaf as f64, "Nanoseconds");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "enc_ns_cache_set", enc_metrics.ns_cache_set as f64, "Nanoseconds");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "observe", ns_observe, "Nanoseconds");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "send", ns_send, "Nanoseconds");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "total", ns_total, "Nanoseconds");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "self_graded", self_graded as f64, "Count");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "unconfirmed", unconfirmed.len() as f64, "Count");
 
         let us_elapsed = (ns_total / 1000.0) as u64;
 
         // Snapshot every candle.
-        {
-            let _ = db_tx.send(LogEntry::ObserverSnapshot {
-                candle: candle_count,
-                observer_idx,
-                lens: format!("{}", lens),
-                disc_strength: observer.reckoner.last_disc_strength(),
-                conviction,
-                experience: observer.experience(),
-                resolved: observer.resolved,
-                recalib_count: observer.reckoner.recalib_count(),
-                recalib_wins: observer.recalib_wins,
-                recalib_total: observer.recalib_total,
-                last_prediction: format!("{:?}", observer.last_prediction),
-                us_elapsed,
-                thought_ast: snapshot_edn.clone(),
-                fact_count: fact_count as usize,
-            });
-        }
+        pending.push(LogEntry::ObserverSnapshot {
+            candle: candle_count,
+            observer_idx,
+            lens: format!("{}", lens),
+            disc_strength: observer.reckoner.last_disc_strength(),
+            conviction,
+            experience: observer.experience(),
+            resolved: observer.resolved,
+            recalib_count: observer.reckoner.recalib_count(),
+            recalib_wins: observer.recalib_wins,
+            recalib_total: observer.recalib_total,
+            last_prediction: format!("{:?}", observer.last_prediction),
+            us_elapsed,
+            thought_ast: snapshot_edn.clone(),
+            fact_count: fact_count as usize,
+        });
+
+        // One batch send per candle.
+        flush_metrics(&db_tx, &mut pending);
 
         // Diagnostic every 1000 candles — to console.
         if candle_count % 1000 == 0 {

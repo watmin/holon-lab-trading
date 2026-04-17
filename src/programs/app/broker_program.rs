@@ -24,8 +24,9 @@ use crate::encoding::encode::{encode, take_encode_metrics, EncodeState};
 use crate::encoding::thought_encoder::{ThoughtAST, ThoughtASTKind};
 use crate::programs::stdlib::cache::CacheHandle;
 use crate::programs::stdlib::console::ConsoleHandle;
-use crate::programs::telemetry::emit_metric;
-use crate::services::queue::{QueueReceiver, QueueSender};
+use crate::programs::stdlib::database::DatabaseHandle;
+use crate::programs::telemetry::{emit_metric, flush_metrics};
+use crate::services::queue::QueueReceiver;
 
 /// Extract Direction from a holon Prediction.
 /// Label index 0 is Up, index 1 is Down. Default to Up when no direction.
@@ -107,7 +108,7 @@ pub fn broker_program(
     vm: VectorManager,
     scalar: Arc<ScalarEncoder>,
     console: ConsoleHandle,
-    db_tx: QueueSender<LogEntry>,
+    db_tx: DatabaseHandle<LogEntry>,
     mut broker: Broker,
     treasury: TreasuryHandle,
 ) -> Broker {
@@ -280,9 +281,12 @@ pub fn broker_program(
         let snapshot_edn = String::from("disabled:rhythm-ast-too-large");
         let ns_snapshot = t0.elapsed().as_nanos() as f64;
 
+        // Collect all log entries into a pending vec, flush once.
+        let mut pending = Vec::new();
+
         // 6. DB snapshot every 100 candles
         if candle_count % 100 == 0 {
-            let _ = db_tx.send(LogEntry::BrokerSnapshot {
+            pending.push(LogEntry::BrokerSnapshot {
                 candle: candle_count,
                 broker_slot_idx: broker.slot_idx,
                 grace_count: broker.grace_count,
@@ -296,7 +300,7 @@ pub fn broker_program(
 
         // Phase snapshot — every candle, only slot 0.
         if broker.slot_idx == 0 {
-            let _ = db_tx.send(LogEntry::PhaseSnapshot {
+            pending.push(LogEntry::PhaseSnapshot {
                 candle: candle_count,
                 close: price,
                 phase_label: chain.candle.phase_label.to_string(),
@@ -316,32 +320,35 @@ pub fn broker_program(
         let ns = "broker";
         let id = format!("broker:{}:{}", broker.slot_idx, candle_count);
         let metric_dims = format!("{{\"slot\":{}}}", broker.slot_idx);
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "total", ns_total, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "submit_paper", ns_submit, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4", ns_gate, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4_encode", ns_broker_encode, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4_noise", ns_noise, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4_predict", ns_predict, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4_enc_nodes", broker_enc_metrics.nodes_walked as f64, "Count");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4_enc_hits", broker_enc_metrics.cache_hits as f64, "Count");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4_enc_misses", broker_enc_metrics.cache_misses as f64, "Count");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4_enc_ns_batch_get", broker_enc_metrics.ns_batch_get as f64, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4_enc_batch_rounds", broker_enc_metrics.batch_rounds as f64, "Count");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4_enc_l1_hits", broker_enc_metrics.l1_hits as f64, "Count");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4_enc_l1_misses", broker_enc_metrics.l1_misses as f64, "Count");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4_enc_ns_rayon", broker_enc_metrics.ns_rayon as f64, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4_enc_rayon_tasks", broker_enc_metrics.rayon_tasks as f64, "Count");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate4_enc_ns_leaf", broker_enc_metrics.ns_leaf as f64, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "snapshot", ns_snapshot, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "exit_submit", ns_exit_submit, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "retain", ns_retain, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "wants_exit", if wants_exit { 1.0 } else { 0.0 }, "Count");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "learn_grace_count", learn_grace, "Count");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "learn_violence_count", learn_violence, "Count");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "active_receipts", active_receipts.len() as f64, "Count");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "exit_proposals", exit_proposals, "Count");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "exit_approved", exit_approved, "Count");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "gate_experience", broker.gate_reckoner.experience(), "Count");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "total", ns_total, "Nanoseconds");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "submit_paper", ns_submit, "Nanoseconds");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "gate4", ns_gate, "Nanoseconds");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "gate4_encode", ns_broker_encode, "Nanoseconds");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "gate4_noise", ns_noise, "Nanoseconds");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "gate4_predict", ns_predict, "Nanoseconds");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "gate4_enc_nodes", broker_enc_metrics.nodes_walked as f64, "Count");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "gate4_enc_hits", broker_enc_metrics.cache_hits as f64, "Count");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "gate4_enc_misses", broker_enc_metrics.cache_misses as f64, "Count");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "gate4_enc_ns_batch_get", broker_enc_metrics.ns_batch_get as f64, "Nanoseconds");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "gate4_enc_batch_rounds", broker_enc_metrics.batch_rounds as f64, "Count");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "gate4_enc_l1_hits", broker_enc_metrics.l1_hits as f64, "Count");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "gate4_enc_l1_misses", broker_enc_metrics.l1_misses as f64, "Count");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "gate4_enc_ns_rayon", broker_enc_metrics.ns_rayon as f64, "Nanoseconds");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "gate4_enc_rayon_tasks", broker_enc_metrics.rayon_tasks as f64, "Count");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "gate4_enc_ns_leaf", broker_enc_metrics.ns_leaf as f64, "Nanoseconds");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "snapshot", ns_snapshot, "Nanoseconds");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "exit_submit", ns_exit_submit, "Nanoseconds");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "retain", ns_retain, "Nanoseconds");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "wants_exit", if wants_exit { 1.0 } else { 0.0 }, "Count");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "learn_grace_count", learn_grace, "Count");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "learn_violence_count", learn_violence, "Count");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "active_receipts", active_receipts.len() as f64, "Count");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "exit_proposals", exit_proposals, "Count");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "exit_approved", exit_approved, "Count");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "gate_experience", broker.gate_reckoner.experience(), "Count");
+
+        // One batch send per candle.
+        flush_metrics(&db_tx, &mut pending);
 
         // Console diagnostic every 1000 candles
         if candle_count % 1000 == 0 {

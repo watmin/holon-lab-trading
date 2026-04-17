@@ -19,14 +19,15 @@ use crate::encoding::thought_encoder::ThoughtAST;
 use crate::programs::chain::{MarketRegimeChain, MarketChain};
 use crate::programs::stdlib::cache::CacheHandle;
 use crate::programs::stdlib::console::ConsoleHandle;
-use crate::services::queue::{QueueReceiver, QueueSender};
+use crate::programs::stdlib::database::DatabaseHandle;
+use crate::services::queue::QueueReceiver;
 
-use crate::programs::telemetry::emit_metric;
+use crate::programs::telemetry::{emit_metric, flush_metrics};
 
 /// One slot: a (receiver, sender) pair connecting one market observer to one broker.
 pub struct RegimeSlot {
     pub input_rx: QueueReceiver<MarketChain>,
-    pub output_tx: QueueSender<MarketRegimeChain>,
+    pub output_tx: crate::services::queue::QueueSender<MarketRegimeChain>,
 }
 
 // Re-export trade atom functions for backward compatibility.
@@ -41,7 +42,7 @@ pub fn regime_observer_program(
     _vm: VectorManager,
     _scalar: Arc<ScalarEncoder>,
     console: ConsoleHandle,
-    db_tx: QueueSender<LogEntry>,
+    db_tx: DatabaseHandle<LogEntry>,
     regime_obs: RegimeObserver,
     _noise_floor: f64,
     regime_idx: usize,
@@ -123,26 +124,29 @@ pub fn regime_observer_program(
 
         let ns_total = t_total.elapsed().as_nanos() as f64;
 
-        // Emit telemetry.
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "slot_recv", ns_slot_recv, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "rhythm", ns_rhythm, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "send", ns_send, "Nanoseconds");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "slots_count", slots_processed, "Count");
-        emit_metric(&db_tx, ns, &id, &metric_dims, batch_ts, "total", ns_total, "Nanoseconds");
+        // Collect all log entries into a pending vec, flush once.
+        let mut pending = Vec::new();
+
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "slot_recv", ns_slot_recv, "Nanoseconds");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "rhythm", ns_rhythm, "Nanoseconds");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "send", ns_send, "Nanoseconds");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "slots_count", slots_processed, "Count");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "total", ns_total, "Nanoseconds");
 
         let us_elapsed = (ns_total / 1000.0) as u64;
 
         // Snapshot every candle.
-        {
-            let _ = db_tx.send(LogEntry::RegimeObserverSnapshot {
-                candle: candle_count,
-                regime_idx,
-                lens: format!("{}", regime_obs.lens),
-                us_elapsed,
-                thought_ast: snapshot_ast.clone(),
-                fact_count: snapshot_fact_count,
-            });
-        }
+        pending.push(LogEntry::RegimeObserverSnapshot {
+            candle: candle_count,
+            regime_idx,
+            lens: format!("{}", regime_obs.lens),
+            us_elapsed,
+            thought_ast: snapshot_ast.clone(),
+            fact_count: snapshot_fact_count,
+        });
+
+        // One batch send per candle.
+        flush_metrics(&db_tx, &mut pending);
 
         // Diagnostic every 1000 candles.
         if candle_count % 1000 == 0 {

@@ -4,11 +4,12 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use crate::types::log_entry::LogEntry;
-use crate::services::queue::QueueSender;
+use crate::programs::stdlib::database::DatabaseHandle;
 
-/// Emit a single CloudWatch-style metric to the DB queue.
+/// Push a single CloudWatch-style metric into a pending Vec.
+/// The caller flushes the Vec to the database handle at the end of the candle loop.
 pub fn emit_metric(
-    db_tx: &QueueSender<LogEntry>,
+    pending: &mut Vec<LogEntry>,
     namespace: &str,
     id: &str,
     dimensions: &str,
@@ -17,7 +18,7 @@ pub fn emit_metric(
     metric_value: f64,
     metric_unit: &str,
 ) {
-    let _ = db_tx.send(LogEntry::Telemetry {
+    pending.push(LogEntry::Telemetry {
         namespace: namespace.to_string(),
         id: id.to_string(),
         dimensions: dimensions.to_string(),
@@ -26,6 +27,13 @@ pub fn emit_metric(
         metric_value,
         metric_unit: metric_unit.to_string(),
     });
+}
+
+/// Flush pending log entries to the database handle as one batch.
+pub fn flush_metrics(db: &DatabaseHandle<LogEntry>, pending: &mut Vec<LogEntry>) {
+    if !pending.is_empty() {
+        db.batch_send(pending.drain(..).collect());
+    }
 }
 
 /// Create a rate gate that opens every `interval`.

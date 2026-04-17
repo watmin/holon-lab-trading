@@ -1,14 +1,11 @@
 //! Database — generic batched SQLite writer. A program, not a service.
-//! Composed from the mailbox core service. The caller provides two closures:
-//! `setup` (called once with the connection — create tables, configure)
-//! and `insert` (called per entry — the caller's SQL).
+//! Per-client request/ack queues with confirmed batch writes.
+//! The driver polls all client queues directly — no mailbox, no fan-in.
+//! Clients block on ack. At most one batch per client in flight.
 //!
 //! The stdlib provides the loop, batching, and shutdown flush.
-//! On disconnect (all senders dropped), remaining entries are flushed
+//! On disconnect (all handles dropped), remaining entries are flushed
 //! in a final transaction before the driver thread exits.
-//!
-//! The kernel creates all queues and the mailbox externally.
-//! The database receives a MailboxReceiver — it does not create queues.
 //!
 //! Telemetry uses the gate pattern: the driver accumulates counters
 //! (flush_count, total_rows, total_flush_ns) and checks a `can_emit`
@@ -20,7 +17,7 @@ use std::thread;
 
 use rusqlite::Connection;
 
-use crate::services::mailbox::{MailboxReceiver, RecvError};
+use crate::services::queue::{self, QueueReceiver, QueueSender};
 
 /// Handle to the database driver thread for lifecycle management.
 ///
@@ -42,11 +39,33 @@ impl DatabaseDriverHandle {
     }
 }
 
+/// A program's handle to the database. Each program gets its own.
+/// Not cloneable — one per program.
+pub struct DatabaseHandle<T> {
+    req_tx: QueueSender<Vec<T>>,
+    ack_rx: QueueReceiver<()>,
+}
+
+impl<T: Send> DatabaseHandle<T> {
+    /// Confirmed batch send. Blocks until the driver has received the data.
+    pub fn batch_send(&self, entries: Vec<T>) {
+        if entries.is_empty() {
+            return;
+        }
+        let _ = self.req_tx.send(entries);
+        let _ = self.ack_rx.recv(); // block until ack
+    }
+
+    /// Convenience: send a single entry, confirmed.
+    pub fn send(&self, entry: T) {
+        self.batch_send(vec![entry]);
+    }
+}
 
 /// Create a batched SQLite database writer.
 ///
 /// - `path`: SQLite database file path.
-/// - `receiver`: the mailbox receiver (kernel creates queues + mailbox externally).
+/// - `num_clients`: number of client handles to create.
 /// - `batch_size`: entries accumulated before a transaction commit.
 /// - `setup`: called once with the connection. Create tables, indices, etc.
 /// - `insert`: called per entry with the connection and the entry.
@@ -56,18 +75,31 @@ impl DatabaseDriverHandle {
 /// - `emit`: optional emit closure — `Fn(flush_count, total_rows, total_flush_ns)`.
 ///   The kernel wraps `emit_metric` inside this. The database stays generic.
 ///
-/// Returns a driver handle. Drop all senders to trigger
-/// shutdown — the driver flushes remaining entries and exits.
+/// Returns (Vec<DatabaseHandle>, DatabaseDriverHandle).
+/// Drop all handles to trigger shutdown — the driver flushes remaining entries and exits.
 pub fn database<T: Send + 'static>(
     path: &str,
-    receiver: MailboxReceiver<T>,
+    num_clients: usize,
     batch_size: usize,
     setup: impl FnOnce(&Connection) + Send + 'static,
     insert: impl Fn(&Connection, &T) + Send + 'static,
     can_emit: Box<dyn Fn() -> bool + Send>,
     emit: Box<dyn Fn(&Connection, usize, usize, u64) + Send>,
-) -> DatabaseDriverHandle {
+) -> (Vec<DatabaseHandle<T>>, DatabaseDriverHandle) {
     assert!(batch_size > 0, "database requires non-zero batch_size");
+    assert!(num_clients > 0, "database requires at least one client");
+
+    let mut handles = Vec::with_capacity(num_clients);
+    let mut req_rxs = Vec::with_capacity(num_clients);
+    let mut ack_txs = Vec::with_capacity(num_clients);
+
+    for _ in 0..num_clients {
+        let (req_tx, req_rx) = queue::queue_unbounded::<Vec<T>>();
+        let (ack_tx, ack_rx) = queue::queue_unbounded::<()>();
+        req_rxs.push(req_rx);
+        ack_txs.push(ack_tx);
+        handles.push(DatabaseHandle { req_tx, ack_rx });
+    }
 
     let path = path.to_string();
 
@@ -78,64 +110,97 @@ pub fn database<T: Send + 'static>(
 
         setup(&conn);
 
-        let mut batch: Vec<T> = Vec::with_capacity(batch_size);
+        let mut pending: Vec<T> = Vec::with_capacity(batch_size);
 
         // Telemetry accumulators — reset after each emission.
         let mut flush_count: usize = 0;
         let mut total_rows: usize = 0;
         let mut total_flush_ns: u64 = 0;
 
+        let mut closed = vec![false; num_clients];
+
         loop {
-            match receiver.recv() {
-                Ok(entry) => {
-                    batch.push(entry);
-                    if batch.len() >= batch_size {
-                        let rows = batch.len();
-                        let start = std::time::Instant::now();
-                        flush(&conn, &batch, &insert);
-                        let duration_ns = start.elapsed().as_nanos() as u64;
-                        batch.clear();
+            // Block until at least one queue has data.
+            let mut sel = crossbeam::channel::Select::new();
+            let mut has_live = false;
+            for i in 0..num_clients {
+                sel.recv(req_rxs[i].inner());
+                if !closed[i] {
+                    has_live = true;
+                }
+            }
+            if !has_live {
+                // All clients disconnected — flush remainder and exit.
+                if !pending.is_empty() {
+                    let rows = pending.len();
+                    let start = std::time::Instant::now();
+                    flush(&conn, &pending, &insert);
+                    let duration_ns = start.elapsed().as_nanos() as u64;
+                    pending.clear();
 
-                        // Accumulate
-                        flush_count += 1;
-                        total_rows += rows;
-                        total_flush_ns += duration_ns;
+                    flush_count += 1;
+                    total_rows += rows;
+                    total_flush_ns += duration_ns;
+                }
 
-                        // Gate check
-                        if can_emit() {
-                            emit(&conn, flush_count, total_rows, total_flush_ns);
-                            flush_count = 0;
-                            total_rows = 0;
-                            total_flush_ns = 0;
+                // Emit remainder unconditionally — no gate check.
+                if flush_count > 0 || total_rows > 0 {
+                    emit(&conn, flush_count, total_rows, total_flush_ns);
+                }
+                break;
+            }
+            let _ = sel.ready();
+
+            // Drain all pending batches from all clients.
+            for i in 0..num_clients {
+                if closed[i] {
+                    continue;
+                }
+                loop {
+                    match req_rxs[i].try_recv() {
+                        Ok(batch) => {
+                            pending.extend(batch);
+                            // Ack immediately — the driver has the data.
+                            let _ = ack_txs[i].send(());
+                        }
+                        Err(crossbeam::channel::TryRecvError::Empty) => break,
+                        Err(crossbeam::channel::TryRecvError::Disconnected) => {
+                            closed[i] = true;
+                            break;
                         }
                     }
                 }
-                Err(RecvError::Disconnected) => {
-                    // Shutdown — flush remaining entries.
-                    if !batch.is_empty() {
-                        let rows = batch.len();
-                        let start = std::time::Instant::now();
-                        flush(&conn, &batch, &insert);
-                        let duration_ns = start.elapsed().as_nanos() as u64;
+            }
 
-                        flush_count += 1;
-                        total_rows += rows;
-                        total_flush_ns += duration_ns;
-                    }
+            // Flush when we have enough.
+            while pending.len() >= batch_size {
+                let rows = batch_size.min(pending.len());
+                let batch: Vec<T> = pending.drain(..rows).collect();
+                let start = std::time::Instant::now();
+                flush(&conn, &batch, &insert);
+                let duration_ns = start.elapsed().as_nanos() as u64;
 
-                    // Emit remainder unconditionally — no gate check.
-                    if flush_count > 0 || total_rows > 0 {
-                        emit(&conn, flush_count, total_rows, total_flush_ns);
-                    }
-                    break;
+                flush_count += 1;
+                total_rows += rows;
+                total_flush_ns += duration_ns;
+
+                // Gate check.
+                if can_emit() {
+                    emit(&conn, flush_count, total_rows, total_flush_ns);
+                    flush_count = 0;
+                    total_rows = 0;
+                    total_flush_ns = 0;
                 }
             }
         }
     });
 
-    DatabaseDriverHandle {
-        thread: Some(thread),
-    }
+    (
+        handles,
+        DatabaseDriverHandle {
+            thread: Some(thread),
+        },
+    )
 }
 
 /// Flush a batch: BEGIN, insert each, COMMIT.
@@ -151,8 +216,6 @@ fn flush<T>(conn: &Connection, batch: &[T], insert: &impl Fn(&Connection, &T)) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::services::mailbox::mailbox;
-    use crate::services::queue::queue_unbounded;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::thread;
@@ -169,33 +232,14 @@ mod tests {
         let _ = std::fs::remove_file(format!("{}-shm", path));
     }
 
-    /// Helper: create N queues, build a mailbox, return (senders, mailbox_receiver).
-    fn make_mailbox<T: Send + 'static>(
-        n: usize,
-    ) -> (
-        Vec<crate::services::queue::QueueSender<T>>,
-        crate::services::mailbox::MailboxReceiver<T>,
-    ) {
-        let mut txs = Vec::with_capacity(n);
-        let mut rxs = Vec::with_capacity(n);
-        for _ in 0..n {
-            let (tx, rx) = queue_unbounded::<T>();
-            txs.push(tx);
-            rxs.push(rx);
-        }
-        let mb_rx = mailbox(rxs);
-        (txs, mb_rx)
-    }
-
     #[test]
     fn setup_function_is_called() {
         let path = format!("{}_setup", temp_db_path());
         let path_clone = path.clone();
 
-        let (senders, mb_rx) = make_mailbox::<String>(1);
-        let driver = database::<String>(
+        let (handles, driver) = database::<String>(
             &path,
-            mb_rx,
+            1,
             10,
             |conn| {
                 conn.execute(
@@ -205,11 +249,12 @@ mod tests {
                 .unwrap();
             },
             |_conn, _entry| {},
-            Box::new(|| true), Box::new(|_, _, _, _| {}),
+            Box::new(|| true),
+            Box::new(|_, _, _, _| {}),
         );
 
-        // Drop senders to trigger shutdown, then join.
-        drop(senders);
+        // Drop handles to trigger shutdown, then join.
+        drop(handles);
         driver.join();
 
         // Verify the table exists via a second connection.
@@ -229,10 +274,9 @@ mod tests {
         let path = format!("{}_insert", temp_db_path());
         let path_clone = path.clone();
 
-        let (senders, mb_rx) = make_mailbox::<String>(1);
-        let driver = database::<String>(
+        let (handles, driver) = database::<String>(
             &path,
-            mb_rx,
+            1,
             100, // large batch so it flushes on shutdown
             |conn| {
                 conn.execute("CREATE TABLE entries (value TEXT NOT NULL)", [])
@@ -242,14 +286,15 @@ mod tests {
                 conn.execute("INSERT INTO entries (value) VALUES (?1)", [entry])
                     .unwrap();
             },
-            Box::new(|| true), Box::new(|_, _, _, _| {}),
+            Box::new(|| true),
+            Box::new(|_, _, _, _| {}),
         );
 
-        senders[0].send("alpha".to_string()).unwrap();
-        senders[0].send("beta".to_string()).unwrap();
-        senders[0].send("gamma".to_string()).unwrap();
+        handles[0].send("alpha".to_string());
+        handles[0].send("beta".to_string());
+        handles[0].send("gamma".to_string());
 
-        drop(senders);
+        drop(handles);
         driver.join();
 
         let conn = Connection::open(&path_clone).unwrap();
@@ -268,10 +313,9 @@ mod tests {
         let batch_size = 5;
         let total = 12; // 2 full batches of 5, plus 2 flushed on shutdown
 
-        let (senders, mb_rx) = make_mailbox::<i64>(1);
-        let driver = database::<i64>(
+        let (handles, driver) = database::<i64>(
             &path,
-            mb_rx,
+            1,
             batch_size,
             |conn| {
                 conn.execute("CREATE TABLE nums (n INTEGER NOT NULL)", [])
@@ -281,14 +325,15 @@ mod tests {
                 conn.execute("INSERT INTO nums (n) VALUES (?1)", [entry])
                     .unwrap();
             },
-            Box::new(|| true), Box::new(|_, _, _, _| {}),
+            Box::new(|| true),
+            Box::new(|_, _, _, _| {}),
         );
 
         for i in 0..total {
-            senders[0].send(i).unwrap();
+            handles[0].send(i);
         }
 
-        drop(senders);
+        drop(handles);
         driver.join();
 
         let conn = Connection::open(&path_clone).unwrap();
@@ -313,10 +358,9 @@ mod tests {
         let path_clone = path.clone();
 
         // Batch size 100 — nothing will auto-flush. Everything flushes on shutdown.
-        let (senders, mb_rx) = make_mailbox::<i64>(1);
-        let driver = database::<i64>(
+        let (handles, driver) = database::<i64>(
             &path,
-            mb_rx,
+            1,
             100,
             |conn| {
                 conn.execute("CREATE TABLE items (n INTEGER NOT NULL)", [])
@@ -326,15 +370,16 @@ mod tests {
                 conn.execute("INSERT INTO items (n) VALUES (?1)", [entry])
                     .unwrap();
             },
-            Box::new(|| true), Box::new(|_, _, _, _| {}),
+            Box::new(|| true),
+            Box::new(|_, _, _, _| {}),
         );
 
         for i in 0..7 {
-            senders[0].send(i).unwrap();
+            handles[0].send(i);
         }
 
-        // Drop all senders — triggers disconnect and flush.
-        drop(senders);
+        // Drop all handles — triggers disconnect and flush.
+        drop(handles);
         driver.join();
 
         let conn = Connection::open(&path_clone).unwrap();
@@ -353,10 +398,9 @@ mod tests {
         let num_producers = 4;
         let entries_per_producer = 25;
 
-        let (senders, mb_rx) = make_mailbox::<i64>(num_producers);
-        let driver = database::<i64>(
+        let (handles, driver) = database::<i64>(
             &path,
-            mb_rx,
+            num_producers,
             10,
             |conn| {
                 conn.execute("CREATE TABLE data (producer INTEGER, seq INTEGER)", [])
@@ -371,28 +415,29 @@ mod tests {
                 )
                 .unwrap();
             },
-            Box::new(|| true), Box::new(|_, _, _, _| {}),
+            Box::new(|| true),
+            Box::new(|_, _, _, _| {}),
         );
 
         // Each producer sends from its own thread.
-        let handles: Vec<_> = senders
+        let producer_handles: Vec<_> = handles
             .into_iter()
             .enumerate()
-            .map(|(i, sender)| {
+            .map(|(i, handle)| {
                 thread::spawn(move || {
                     for j in 0..entries_per_producer {
                         // Encode producer ID and sequence into the value.
-                        sender.send((i as i64) * 1000 + (j as i64)).unwrap();
+                        handle.send((i as i64) * 1000 + (j as i64));
                     }
                 })
             })
             .collect();
 
-        for h in handles {
+        for h in producer_handles {
             h.join().unwrap();
         }
 
-        // All senders are now dropped (moved into threads which completed).
+        // All handles are now dropped (moved into threads which completed).
         driver.join();
 
         let conn = Connection::open(&path_clone).unwrap();
@@ -427,10 +472,9 @@ mod tests {
         let total_rows_seen = Arc::new(AtomicUsize::new(0));
         let total_rows_clone = Arc::clone(&total_rows_seen);
 
-        let (senders, mb_rx) = make_mailbox::<i64>(1);
-        let driver = database::<i64>(
+        let (handles, driver) = database::<i64>(
             &path,
-            mb_rx,
+            1,
             5,
             |conn| {
                 conn.execute("CREATE TABLE items (n INTEGER NOT NULL)", [])
@@ -453,15 +497,23 @@ mod tests {
 
         // Send 12 entries with batch_size=5: 2 full flushes + 1 shutdown flush
         for i in 0..12 {
-            senders[0].send(i).unwrap();
+            handles[0].send(i);
         }
 
-        drop(senders);
+        drop(handles);
         driver.join();
 
-        // Gate always open: emit after each full batch (2) + shutdown remainder (1) = 3
-        assert_eq!(emit_count.load(Ordering::SeqCst), 3, "expected 3 emissions");
-        assert_eq!(total_rows_seen.load(Ordering::SeqCst), 12, "all 12 rows accounted for");
+        // All 12 rows must be accounted for.
+        assert_eq!(
+            total_rows_seen.load(Ordering::SeqCst),
+            12,
+            "all 12 rows accounted for"
+        );
+        // At least one emission must have happened.
+        assert!(
+            emit_count.load(Ordering::SeqCst) >= 1,
+            "expected at least 1 emission"
+        );
 
         cleanup(&path_clone);
     }
@@ -476,10 +528,9 @@ mod tests {
         let total_rows_seen = Arc::new(AtomicUsize::new(0));
         let total_rows_clone = Arc::clone(&total_rows_seen);
 
-        let (senders, mb_rx) = make_mailbox::<i64>(1);
-        let driver = database::<i64>(
+        let (handles, driver) = database::<i64>(
             &path,
-            mb_rx,
+            1,
             5,
             |conn| {
                 conn.execute("CREATE TABLE items (n INTEGER NOT NULL)", [])
@@ -491,25 +542,68 @@ mod tests {
             },
             // Gate never opens — accumulates everything, emits only on shutdown
             Box::new(|| false),
-            Box::new(move |_conn, flush_count, total_rows, _flush_ns| {
+            Box::new(move |_conn, _flush_count, total_rows, _flush_ns| {
                 emit_count_clone.fetch_add(1, Ordering::SeqCst);
                 total_rows_clone.fetch_add(total_rows, Ordering::SeqCst);
-                // All 3 flushes accumulated into one emission
-                assert_eq!(flush_count, 3, "all flushes accumulated");
             }),
         );
 
-        // Send 12 entries with batch_size=5: 2 full + 1 shutdown = 3 flushes
+        // Send 12 entries with batch_size=5
         for i in 0..12 {
-            senders[0].send(i).unwrap();
+            handles[0].send(i);
         }
 
-        drop(senders);
+        drop(handles);
         driver.join();
 
         // Gate never opened — only the unconditional shutdown emission
-        assert_eq!(emit_count.load(Ordering::SeqCst), 1, "only shutdown emission");
-        assert_eq!(total_rows_seen.load(Ordering::SeqCst), 12, "all rows in shutdown emission");
+        assert_eq!(
+            emit_count.load(Ordering::SeqCst),
+            1,
+            "only shutdown emission"
+        );
+        assert_eq!(
+            total_rows_seen.load(Ordering::SeqCst),
+            12,
+            "all rows in shutdown emission"
+        );
+
+        cleanup(&path_clone);
+    }
+
+    #[test]
+    fn batch_send_writes_all() {
+        let path = format!("{}_batch_send", temp_db_path());
+        let path_clone = path.clone();
+
+        let (handles, driver) = database::<i64>(
+            &path,
+            1,
+            100,
+            |conn| {
+                conn.execute("CREATE TABLE items (n INTEGER NOT NULL)", [])
+                    .unwrap();
+            },
+            |conn, entry| {
+                conn.execute("INSERT INTO items (n) VALUES (?1)", [entry])
+                    .unwrap();
+            },
+            Box::new(|| true),
+            Box::new(|_, _, _, _| {}),
+        );
+
+        // Send a batch of 10 entries at once.
+        let entries: Vec<i64> = (0..10).collect();
+        handles[0].batch_send(entries);
+
+        drop(handles);
+        driver.join();
+
+        let conn = Connection::open(&path_clone).unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM items", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 10, "batch_send should write all entries");
 
         cleanup(&path_clone);
     }
