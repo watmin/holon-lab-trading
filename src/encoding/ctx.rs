@@ -9,6 +9,8 @@ use holon::kernel::vector_manager::VectorManager;
 use crate::encoding::thought_encoder::ThoughtEncoder;
 #[cfg(test)]
 use crate::encoding::thought_encoder::ThoughtAST;
+#[cfg(test)]
+use crate::encoding::thought_encoder::ThoughtASTKind;
 
 /// The immutable world context. Three fields, nothing else.
 pub struct Ctx {
@@ -53,7 +55,7 @@ mod tests {
     #[test]
     fn test_ctx_encode_through_thought_encoder() {
         let ctx = Ctx::new(DIMS, RECALIB);
-        let ast = ThoughtAST::Atom("test".into());
+        let ast = ThoughtAST::new(ThoughtASTKind::Atom("test".into()));
         let v = ctx.thought_encoder.encode(&ast);
         assert_eq!(v.dimensions(), DIMS);
     }
@@ -61,10 +63,10 @@ mod tests {
     #[test]
     fn test_ctx_deterministic() {
         let ctx = Ctx::new(DIMS, RECALIB);
-        let ast = ThoughtAST::Bind(
-            Arc::new(ThoughtAST::Atom("vol".into())),
-            Arc::new(ThoughtAST::Log { value: 100.0 }),
-        );
+        let ast = ThoughtAST::new(ThoughtASTKind::Bind(
+            Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("vol".into()))),
+            Arc::new(ThoughtAST::new(ThoughtASTKind::Log { value: 100.0 })),
+        ));
 
         let v1 = ctx.thought_encoder.encode(&ast);
         let v2 = ctx.thought_encoder.encode(&ast);

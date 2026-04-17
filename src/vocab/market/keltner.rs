@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use std::collections::HashMap;
 use crate::types::candle::Candle;
-use crate::encoding::thought_encoder::{ThoughtAST, round_to};
+use crate::encoding::thought_encoder::{ThoughtAST, ThoughtASTKind, round_to};
 use crate::encoding::scale_tracker::{ScaleTracker, scaled_linear};
 
 pub struct KeltnerThought {
@@ -35,7 +35,7 @@ pub fn encode_keltner_facts(c: &Candle, scales: &mut HashMap<String, ScaleTracke
     let t = KeltnerThought::from_candle(c);
     vec![
         scaled_linear("bb-pos", t.bb_pos, scales),
-        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("bb-width".into())), Arc::new(ThoughtAST::Log { value: t.bb_width })),
+        ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("bb-width".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Log { value: t.bb_width })))),
         scaled_linear("kelt-pos", t.kelt_pos, scales),
         scaled_linear("squeeze", t.squeeze, scales),
         scaled_linear("kelt-upper-dist", t.kelt_upper_dist, scales),
@@ -60,10 +60,10 @@ mod tests {
         let c = Candle::default();
         let mut scales = HashMap::new();
         let facts = encode_keltner_facts(&c, &mut scales);
-        match &facts[3] {
-            ThoughtAST::Bind(left, right) => {
-                match (left.as_ref(), right.as_ref()) {
-                    (ThoughtAST::Atom(name), ThoughtAST::Linear { value, .. }) => {
+        match &facts[3].kind {
+            ThoughtASTKind::Bind(left, right) => {
+                match (&left.kind, &right.kind) {
+                    (ThoughtASTKind::Atom(name), ThoughtASTKind::Linear { value, .. }) => {
                         assert_eq!(name, "squeeze");
                         assert_eq!(*value, 0.95);
                     }

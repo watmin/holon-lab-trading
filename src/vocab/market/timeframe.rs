@@ -55,6 +55,7 @@ pub fn encode_timeframe_facts(c: &Candle, scales: &mut HashMap<String, ScaleTrac
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::encoding::thought_encoder::ThoughtASTKind;
 
     #[test]
     fn test_encode_timeframe_facts_nonempty() {
@@ -69,10 +70,10 @@ mod tests {
         let c = Candle::default();
         let mut scales = HashMap::new();
         let facts = encode_timeframe_facts(&c, &mut scales);
-        match &facts[4] {
-            ThoughtAST::Bind(left, right) => {
-                match (left.as_ref(), right.as_ref()) {
-                    (ThoughtAST::Atom(name), ThoughtAST::Linear { value, .. }) => {
+        match &facts[4].kind {
+            ThoughtASTKind::Bind(left, right) => {
+                match (&left.kind, &right.kind) {
+                    (ThoughtASTKind::Atom(name), ThoughtASTKind::Linear { value, .. }) => {
                         assert_eq!(name, "tf-agreement");
                         assert_eq!(*value, 0.67);
                     }

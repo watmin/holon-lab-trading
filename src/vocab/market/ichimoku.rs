@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use std::collections::HashMap;
 use crate::types::candle::Candle;
-use crate::encoding::thought_encoder::{ThoughtAST, round_to};
+use crate::encoding::thought_encoder::{ThoughtAST, ThoughtASTKind, round_to};
 use crate::encoding::scale_tracker::{ScaleTracker, scaled_linear};
 
 fn clamp(v: f64, lo: f64, hi: f64) -> f64 {
@@ -52,7 +52,7 @@ pub fn encode_ichimoku_facts(c: &Candle, scales: &mut HashMap<String, ScaleTrack
     let t = IchimokuThought::from_candle(c);
     vec![
         scaled_linear("cloud-position", t.cloud_position, scales),
-        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("cloud-thickness".into())), Arc::new(ThoughtAST::Log { value: t.cloud_thickness })),
+        ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("cloud-thickness".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Log { value: t.cloud_thickness })))),
         scaled_linear("tk-cross-delta", t.tk_cross_delta, scales),
         scaled_linear("tk-spread", t.tk_spread, scales),
         scaled_linear("tenkan-dist", t.tenkan_dist, scales),
@@ -77,10 +77,10 @@ mod tests {
         let c = Candle::default();
         let mut scales = HashMap::new();
         let facts = encode_ichimoku_facts(&c, &mut scales);
-        match &facts[0] {
-            ThoughtAST::Bind(left, right) => {
-                match (left.as_ref(), right.as_ref()) {
-                    (ThoughtAST::Atom(name), ThoughtAST::Linear { value, .. }) => {
+        match &facts[0].kind {
+            ThoughtASTKind::Bind(left, right) => {
+                match (&left.kind, &right.kind) {
+                    (ThoughtASTKind::Atom(name), ThoughtASTKind::Linear { value, .. }) => {
                         assert_eq!(name, "cloud-position");
                         // close=42200, cloud_mid=41900, cloud_width=200
                         // (42200 - 41900) / 200 = 1.5 -> clamped to 1.0

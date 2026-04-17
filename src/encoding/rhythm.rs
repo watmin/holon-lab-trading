@@ -8,7 +8,7 @@ use std::sync::Arc;
 /// The atom wraps the WHOLE rhythm, not each candle's fact. Proposal 056.
 
 use crate::types::candle::Candle;
-use crate::encoding::thought_encoder::ThoughtAST;
+use crate::encoding::thought_encoder::{ThoughtAST, ThoughtASTKind};
 
 /// Spec for a continuous indicator. The lens returns a list of these.
 /// The extractor pulls one f64 from a Candle. The bounds are from the
@@ -49,7 +49,7 @@ pub fn indicator_rhythm(
     delta_range: f64,
 ) -> ThoughtAST {
     if values.len() < 4 {
-        return ThoughtAST::Bundle(vec![]);
+        return ThoughtAST::new(ThoughtASTKind::Bundle(vec![]));
     }
 
     // Trim input to only the candles that will survive the pair budget.
@@ -68,18 +68,18 @@ pub fn indicator_rhythm(
         .iter()
         .enumerate()
         .map(|(i, &val)| {
-            let v = ThoughtAST::Thermometer { value: val, min: value_min, max: value_max };
+            let v = ThoughtAST::new(ThoughtASTKind::Thermometer { value: val, min: value_min, max: value_max });
             if i == 0 {
                 v
             } else {
                 let delta = val - values[i - 1];
-                ThoughtAST::Bundle(vec![
+                ThoughtAST::new(ThoughtASTKind::Bundle(vec![
                     v,
-                    ThoughtAST::Bind(
-                        Arc::new(ThoughtAST::Atom("delta".into())),
-                        Arc::new(ThoughtAST::Thermometer { value: delta, min: -delta_range, max: delta_range }),
-                    ),
-                ])
+                    ThoughtAST::new(ThoughtASTKind::Bind(
+                        Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("delta".into()))),
+                        Arc::new(ThoughtAST::new(ThoughtASTKind::Thermometer { value: delta, min: -delta_range, max: delta_range })),
+                    )),
+                ]))
             }
         })
         .collect();
@@ -88,13 +88,13 @@ pub fn indicator_rhythm(
     let trigrams: Vec<ThoughtAST> = facts
         .windows(3)
         .map(|w| {
-            ThoughtAST::Bind(
-                Arc::new(ThoughtAST::Bind(
+            ThoughtAST::new(ThoughtASTKind::Bind(
+                Arc::new(ThoughtAST::new(ThoughtASTKind::Bind(
                     Arc::new(w[0].clone()),
-                    Arc::new(ThoughtAST::Permute(Arc::new(w[1].clone()), 1)),
-                )),
-                Arc::new(ThoughtAST::Permute(Arc::new(w[2].clone()), 2)),
-            )
+                    Arc::new(ThoughtAST::new(ThoughtASTKind::Permute(Arc::new(w[1].clone()), 1))),
+                ))),
+                Arc::new(ThoughtAST::new(ThoughtASTKind::Permute(Arc::new(w[2].clone()), 2))),
+            ))
         })
         .collect();
 
@@ -102,28 +102,28 @@ pub fn indicator_rhythm(
     let pairs: Vec<ThoughtAST> = trigrams
         .windows(2)
         .map(|w| {
-            ThoughtAST::Bind(
+            ThoughtAST::new(ThoughtASTKind::Bind(
                 Arc::new(w[0].clone()),
                 Arc::new(w[1].clone()),
-            )
+            ))
         })
         .collect();
 
     if pairs.is_empty() {
-        return ThoughtAST::Bundle(vec![]);
+        return ThoughtAST::new(ThoughtASTKind::Bundle(vec![]));
     }
 
     // Step 4: trim to capacity, bundle
     let budget = ((10_000 as f64).sqrt()) as usize; // rune:forge(dims) — needs dims param when available
     let start = if pairs.len() > budget { pairs.len() - budget } else { 0 };
     let trimmed: Vec<ThoughtAST> = pairs[start..].to_vec();
-    let raw = ThoughtAST::Bundle(trimmed);
+    let raw = ThoughtAST::new(ThoughtASTKind::Bundle(trimmed));
 
     // Step 5: bind atom to the whole rhythm — one bind
-    ThoughtAST::Bind(
-        Arc::new(ThoughtAST::Atom(atom_name.into())),
+    ThoughtAST::new(ThoughtASTKind::Bind(
+        Arc::new(ThoughtAST::new(ThoughtASTKind::Atom(atom_name.into()))),
         Arc::new(raw),
-    )
+    ))
 }
 
 #[cfg(test)]
@@ -174,10 +174,10 @@ mod tests {
         let values = vec![0.45, 0.48, 0.55, 0.62, 0.68];
         let ast = indicator_rhythm("rsi", &values, 0.0, 100.0, 10.0);
 
-        match &ast {
-            ThoughtAST::Bind(left, _right) => {
-                match left.as_ref() {
-                    ThoughtAST::Atom(name) => assert_eq!(name, "rsi"),
+        match &ast.kind {
+            ThoughtASTKind::Bind(left, _right) => {
+                match &left.kind {
+                    ThoughtASTKind::Atom(name) => assert_eq!(name, "rsi"),
                     other => panic!("expected Atom, got {:?}", other),
                 }
             }
@@ -194,8 +194,8 @@ mod tests {
     fn too_few_values_returns_empty_bundle() {
         let values = vec![0.5, 0.6];
         let ast = indicator_rhythm("rsi", &values, 0.0, 100.0, 10.0);
-        match ast {
-            ThoughtAST::Bundle(v) => assert!(v.is_empty()),
+        match &ast.kind {
+            ThoughtASTKind::Bundle(v) => assert!(v.is_empty()),
             _ => panic!("expected empty Bundle"),
         }
     }

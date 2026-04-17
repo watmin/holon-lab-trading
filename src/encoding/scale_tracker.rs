@@ -9,7 +9,7 @@ use std::sync::Arc;
 /// Proposal 033. The machine starts ignorant and learns. Always.
 
 use std::collections::HashMap;
-use crate::encoding::thought_encoder::{round_to, ThoughtAST};
+use crate::encoding::thought_encoder::{round_to, ThoughtAST, ThoughtASTKind};
 
 /// Named constant — the coverage multiplier. 2.0 ≈ 89% coverage
 /// for a roughly Gaussian distribution. Documented as approximate.
@@ -54,10 +54,10 @@ pub fn scaled_linear(
         .or_insert_with(ScaleTracker::new);
     tracker.update(value);
     let s = tracker.scale();
-    ThoughtAST::Bind(
-        Arc::new(ThoughtAST::Atom(name.into())),
-        Arc::new(ThoughtAST::Linear { value: round_to(value, 2), scale: s }),
-    )
+    ThoughtAST::new(ThoughtASTKind::Bind(
+        Arc::new(ThoughtAST::new(ThoughtASTKind::Atom(name.into()))),
+        Arc::new(ThoughtAST::new(ThoughtASTKind::Linear { value: round_to(value, 2), scale: s })),
+    ))
 }
 
 #[cfg(test)]
@@ -101,10 +101,10 @@ mod tests {
         // First call: tracker starts at zero
         let ast = scaled_linear("test-atom", 0.5, &mut scales);
         // scaled_linear now returns Bind(Atom("test-atom"), Linear { value, scale })
-        match ast {
-            ThoughtAST::Bind(ref left, ref right) => {
-                match (left.as_ref(), right.as_ref()) {
-                    (ThoughtAST::Atom(name), ThoughtAST::Linear { value, scale }) => {
+        match &ast.kind {
+            ThoughtASTKind::Bind(ref left, ref right) => {
+                match (&left.kind, &right.kind) {
+                    (ThoughtASTKind::Atom(name), ThoughtASTKind::Linear { value, scale }) => {
                         assert_eq!(name, "test-atom");
                         assert_eq!(*value, 0.5);
                         assert_eq!(*scale, 0.01);

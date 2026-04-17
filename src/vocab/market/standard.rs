@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use std::collections::HashMap;
 use crate::types::candle::Candle;
-use crate::encoding::thought_encoder::{ThoughtAST, round_to};
+use crate::encoding::thought_encoder::{ThoughtAST, ThoughtASTKind, round_to};
 use crate::encoding::scale_tracker::{ScaleTracker, scaled_linear};
 
 pub struct StandardThought {
@@ -85,14 +85,14 @@ impl StandardThought {
 pub fn encode_standard_facts(candle_window: &[Candle], scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
     match StandardThought::from_window(candle_window) {
         Some(t) => vec![
-            ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("since-rsi-extreme".into())), Arc::new(ThoughtAST::Log { value: t.since_rsi_extreme })),
-            ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("since-vol-spike".into())), Arc::new(ThoughtAST::Log { value: t.since_vol_spike })),
-            ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("since-large-move".into())), Arc::new(ThoughtAST::Log { value: t.since_large_move })),
+            ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("since-rsi-extreme".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Log { value: t.since_rsi_extreme })))),
+            ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("since-vol-spike".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Log { value: t.since_vol_spike })))),
+            ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("since-large-move".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Log { value: t.since_large_move })))),
             scaled_linear("dist-from-high", t.dist_from_high, scales),
             scaled_linear("dist-from-low", t.dist_from_low, scales),
             scaled_linear("dist-from-midpoint", t.dist_from_midpoint, scales),
             scaled_linear("dist-from-sma200", t.dist_from_sma200, scales),
-            ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("session-depth".into())), Arc::new(ThoughtAST::Log { value: t.session_depth })),
+            ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("session-depth".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Log { value: t.session_depth })))),
         ],
         None => Vec::new(),
     }
@@ -122,10 +122,10 @@ mod tests {
         let window = vec![Candle::default()];
         let mut scales = HashMap::new();
         let facts = encode_standard_facts(&window, &mut scales);
-        match &facts[3] {
-            ThoughtAST::Bind(left, right) => {
-                match (left.as_ref(), right.as_ref()) {
-                    (ThoughtAST::Atom(name), ThoughtAST::Linear { value, .. }) => {
+        match &facts[3].kind {
+            ThoughtASTKind::Bind(left, right) => {
+                match (&left.kind, &right.kind) {
+                    (ThoughtASTKind::Atom(name), ThoughtASTKind::Linear { value, .. }) => {
                         assert_eq!(name, "dist-from-high");
                         // (42200 - 42500) / 42200 = -300/42200 ~ -0.00711
                         assert!(*value < 0.0);
@@ -150,10 +150,10 @@ mod tests {
         assert_eq!(facts.len(), 8);
 
         // since-rsi-extreme should be 2.0 (last_rsi_extreme_idx=0, n=2, 2-0=2)
-        match &facts[0] {
-            ThoughtAST::Bind(left, right) => {
-                match (left.as_ref(), right.as_ref()) {
-                    (ThoughtAST::Atom(name), ThoughtAST::Log { value }) => {
+        match &facts[0].kind {
+            ThoughtASTKind::Bind(left, right) => {
+                match (&left.kind, &right.kind) {
+                    (ThoughtASTKind::Atom(name), ThoughtASTKind::Log { value }) => {
                         assert_eq!(name, "since-rsi-extreme");
                         assert_eq!(*value, 2.0);
                     }

@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use std::collections::HashMap;
 use crate::types::candle::Candle;
-use crate::encoding::thought_encoder::{ThoughtAST, round_to};
+use crate::encoding::thought_encoder::{ThoughtAST, ThoughtASTKind, round_to};
 use crate::encoding::scale_tracker::{ScaleTracker, scaled_linear};
 
 pub struct PriceActionThought {
@@ -41,10 +41,10 @@ impl PriceActionThought {
 pub fn encode_price_action_facts(c: &Candle, scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
     let t = PriceActionThought::from_candle(c);
     vec![
-        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("range-ratio".into())), Arc::new(ThoughtAST::Log { value: t.range_ratio })),
+        ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("range-ratio".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Log { value: t.range_ratio })))),
         scaled_linear("gap", t.gap, scales),
-        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("consecutive-up".into())), Arc::new(ThoughtAST::Log { value: t.consecutive_up })),
-        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("consecutive-down".into())), Arc::new(ThoughtAST::Log { value: t.consecutive_down })),
+        ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("consecutive-up".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Log { value: t.consecutive_up })))),
+        ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("consecutive-down".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Log { value: t.consecutive_down })))),
         scaled_linear("body-ratio-pa", t.body_ratio_pa, scales),
         scaled_linear("upper-wick", t.upper_wick, scales),
         scaled_linear("lower-wick", t.lower_wick, scales),
@@ -68,10 +68,10 @@ mod tests {
         let c = Candle::default();
         let mut scales = HashMap::new();
         let facts = encode_price_action_facts(&c, &mut scales);
-        match &facts[4] {
-            ThoughtAST::Bind(left, right) => {
-                match (left.as_ref(), right.as_ref()) {
-                    (ThoughtAST::Atom(name), ThoughtAST::Linear { value, .. }) => {
+        match &facts[4].kind {
+            ThoughtASTKind::Bind(left, right) => {
+                match (&left.kind, &right.kind) {
+                    (ThoughtASTKind::Atom(name), ThoughtASTKind::Linear { value, .. }) => {
                         assert_eq!(name, "body-ratio-pa");
                         // |42200 - 42000| / (42500 - 41500) = 200/1000 = 0.2
                         assert!((value - 0.2).abs() < 1e-9);

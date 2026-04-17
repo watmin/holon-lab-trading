@@ -21,7 +21,7 @@ use crate::vocab::exit::phase::phase_rhythm_thought;
 use crate::encoding::rhythm::indicator_rhythm;
 use crate::programs::chain::MarketRegimeChain;
 use crate::encoding::encode::{encode, take_encode_metrics, EncodeState};
-use crate::encoding::thought_encoder::ThoughtAST;
+use crate::encoding::thought_encoder::{ThoughtAST, ThoughtASTKind};
 use crate::programs::stdlib::cache::CacheHandle;
 use crate::programs::stdlib::console::ConsoleHandle;
 use crate::programs::telemetry::emit_metric;
@@ -87,16 +87,16 @@ fn broker_thought_ast(
     facts.push(phase_rhythm_thought(candle_phase_history));
 
     // Time — top-level facts, not rhythms
-    facts.push(ThoughtAST::Bind(
-        Arc::new(ThoughtAST::Atom("hour".into())),
-        Arc::new(ThoughtAST::Circular { value: candle_hour, period: 24.0 }),
-    ));
-    facts.push(ThoughtAST::Bind(
-        Arc::new(ThoughtAST::Atom("day-of-week".into())),
-        Arc::new(ThoughtAST::Circular { value: candle_day, period: 7.0 }),
-    ));
+    facts.push(ThoughtAST::new(ThoughtASTKind::Bind(
+        Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("hour".into()))),
+        Arc::new(ThoughtAST::new(ThoughtASTKind::Circular { value: candle_hour, period: 24.0 })),
+    )));
+    facts.push(ThoughtAST::new(ThoughtASTKind::Bind(
+        Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("day-of-week".into()))),
+        Arc::new(ThoughtAST::new(ThoughtASTKind::Circular { value: candle_day, period: 7.0 })),
+    )));
 
-    ThoughtAST::Bundle(facts)
+    ThoughtAST::new(ThoughtASTKind::Bundle(facts))
 }
 
 /// Run the broker program. Call this inside thread::spawn.

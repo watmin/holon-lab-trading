@@ -6,7 +6,7 @@ use std::sync::Arc;
 // atoms: hour, day-of-week
 
 use crate::types::candle::Candle;
-use crate::encoding::thought_encoder::{ThoughtAST, round_to};
+use crate::encoding::thought_encoder::{ThoughtAST, ThoughtASTKind, round_to};
 
 pub struct ExitTimeThought {
     pub hour: f64,
@@ -25,8 +25,8 @@ impl ExitTimeThought {
 pub fn encode_exit_time_facts(c: &Candle) -> Vec<ThoughtAST> {
     let t = ExitTimeThought::from_candle(c);
     vec![
-        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("hour".into())), Arc::new(ThoughtAST::Circular { value: t.hour, period: 24.0 })),
-        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("day-of-week".into())), Arc::new(ThoughtAST::Circular { value: t.day_of_week, period: 7.0 })),
+        ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("hour".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Circular { value: t.hour, period: 24.0 })))),
+        ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("day-of-week".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Circular { value: t.day_of_week, period: 7.0 })))),
     ]
 }
 
@@ -45,10 +45,10 @@ mod tests {
     fn test_hour_circular() {
         let c = Candle::default();
         let facts = encode_exit_time_facts(&c);
-        match &facts[0] {
-            ThoughtAST::Bind(left, right) => {
-                match (left.as_ref(), right.as_ref()) {
-                    (ThoughtAST::Atom(name), ThoughtAST::Circular { value, period }) => {
+        match &facts[0].kind {
+            ThoughtASTKind::Bind(left, right) => {
+                match (&left.kind, &right.kind) {
+                    (ThoughtASTKind::Atom(name), ThoughtASTKind::Circular { value, period }) => {
                         assert_eq!(name, "hour");
                         assert_eq!(*value, 14.0);
                         assert_eq!(*period, 24.0);
@@ -64,10 +64,10 @@ mod tests {
     fn test_day_of_week_circular() {
         let c = Candle::default();
         let facts = encode_exit_time_facts(&c);
-        match &facts[1] {
-            ThoughtAST::Bind(left, right) => {
-                match (left.as_ref(), right.as_ref()) {
-                    (ThoughtAST::Atom(name), ThoughtAST::Circular { period, .. }) => {
+        match &facts[1].kind {
+            ThoughtASTKind::Bind(left, right) => {
+                match (&left.kind, &right.kind) {
+                    (ThoughtASTKind::Atom(name), ThoughtASTKind::Circular { period, .. }) => {
                         assert_eq!(name, "day-of-week");
                         assert_eq!(*period, 7.0);
                     }

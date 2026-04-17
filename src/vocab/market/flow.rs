@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use std::collections::HashMap;
 use crate::types::candle::Candle;
-use crate::encoding::thought_encoder::{ThoughtAST, round_to};
+use crate::encoding::thought_encoder::{ThoughtAST, ThoughtASTKind, round_to};
 use crate::encoding::scale_tracker::{ScaleTracker, scaled_linear};
 
 pub struct FlowThought {
@@ -38,11 +38,11 @@ impl FlowThought {
 pub fn encode_flow_facts(c: &Candle, scales: &mut HashMap<String, ScaleTracker>) -> Vec<ThoughtAST> {
     let t = FlowThought::from_candle(c);
     vec![
-        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("obv-slope".into())), Arc::new(ThoughtAST::Log { value: t.obv_slope })),
+        ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("obv-slope".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Log { value: t.obv_slope })))),
         scaled_linear("vwap-distance", t.vwap_distance, scales),
         scaled_linear("buying-pressure", t.buying_pressure, scales),
         scaled_linear("selling-pressure", t.selling_pressure, scales),
-        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("volume-ratio".into())), Arc::new(ThoughtAST::Log { value: t.volume_ratio })),
+        ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("volume-ratio".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Log { value: t.volume_ratio })))),
         scaled_linear("body-ratio", t.body_ratio, scales),
     ]
 }
@@ -64,10 +64,10 @@ mod tests {
         let c = Candle::default();
         let mut scales = HashMap::new();
         let facts = encode_flow_facts(&c, &mut scales);
-        match &facts[2] {
-            ThoughtAST::Bind(left, right) => {
-                match (left.as_ref(), right.as_ref()) {
-                    (ThoughtAST::Atom(name), ThoughtAST::Linear { value, .. }) => {
+        match &facts[2].kind {
+            ThoughtASTKind::Bind(left, right) => {
+                match (&left.kind, &right.kind) {
+                    (ThoughtASTKind::Atom(name), ThoughtASTKind::Linear { value, .. }) => {
                         assert_eq!(name, "buying-pressure");
                         // (42200 - 41500) / (42500 - 41500) = 700/1000 = 0.7
                         assert!((value - 0.7).abs() < 1e-9);

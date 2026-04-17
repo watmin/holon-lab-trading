@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use std::collections::HashMap;
 use crate::types::candle::Candle;
-use crate::encoding::thought_encoder::{ThoughtAST, round_to};
+use crate::encoding::thought_encoder::{ThoughtAST, ThoughtASTKind, round_to};
 use crate::encoding::scale_tracker::{ScaleTracker, scaled_linear};
 
 pub struct OscillatorsThought {
@@ -42,10 +42,10 @@ pub fn encode_oscillator_facts(c: &Candle, scales: &mut HashMap<String, ScaleTra
         scaled_linear("cci", t.cci, scales),
         scaled_linear("mfi", t.mfi, scales),
         scaled_linear("williams-r", t.williams_r, scales),
-        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("roc-1".into())), Arc::new(ThoughtAST::Log { value: t.roc_1 })),
-        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("roc-3".into())), Arc::new(ThoughtAST::Log { value: t.roc_3 })),
-        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("roc-6".into())), Arc::new(ThoughtAST::Log { value: t.roc_6 })),
-        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("roc-12".into())), Arc::new(ThoughtAST::Log { value: t.roc_12 })),
+        ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("roc-1".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Log { value: t.roc_1 })))),
+        ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("roc-3".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Log { value: t.roc_3 })))),
+        ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("roc-6".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Log { value: t.roc_6 })))),
+        ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("roc-12".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Log { value: t.roc_12 })))),
     ]
 }
 
@@ -67,10 +67,10 @@ mod tests {
         let mut scales = HashMap::new();
         let facts = encode_oscillator_facts(&c, &mut scales);
         // scaled_linear returns Bind(Atom("rsi"), Linear{value, scale})
-        match &facts[0] {
-            ThoughtAST::Bind(left, right) => {
-                match (left.as_ref(), right.as_ref()) {
-                    (ThoughtAST::Atom(name), ThoughtAST::Linear { value, .. }) => {
+        match &facts[0].kind {
+            ThoughtASTKind::Bind(left, right) => {
+                match (&left.kind, &right.kind) {
+                    (ThoughtASTKind::Atom(name), ThoughtASTKind::Linear { value, .. }) => {
                         assert_eq!(name, "rsi");
                         assert_eq!(*value, 55.0);
                     }

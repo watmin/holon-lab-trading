@@ -20,7 +20,7 @@ use crate::domain::market_observer::MarketObserver;
 use crate::domain::lens::market_rhythm_specs;
 use crate::encoding::encode::{encode, take_encode_metrics, EncodeState};
 use crate::encoding::rhythm::build_rhythm_asts;
-use crate::encoding::thought_encoder::ThoughtAST;
+use crate::encoding::thought_encoder::{ThoughtAST, ThoughtASTKind};
 use crate::programs::chain::MarketChain;
 use crate::programs::stdlib::cache::CacheHandle;
 use crate::programs::stdlib::console::ConsoleHandle;
@@ -152,26 +152,26 @@ pub fn market_observer_program(
         let specs = market_rhythm_specs(&lens);
         let mut rhythm_asts = build_rhythm_asts(sliced, &specs);
         // Time is a top-level fact — "the time is X and I'm thinking about Y"
-        rhythm_asts.push(ThoughtAST::Bind(
-            Arc::new(ThoughtAST::Atom("hour".into())),
-            Arc::new(ThoughtAST::Circular { value: input.candle.hour, period: 24.0 }),
-        ));
-        rhythm_asts.push(ThoughtAST::Bind(
-            Arc::new(ThoughtAST::Atom("day-of-week".into())),
-            Arc::new(ThoughtAST::Circular { value: input.candle.day_of_week, period: 7.0 }),
-        ));
-        rhythm_asts.push(ThoughtAST::Bind(
-            Arc::new(ThoughtAST::Bind(
-                Arc::new(ThoughtAST::Atom("hour".into())),
-                Arc::new(ThoughtAST::Circular { value: input.candle.hour, period: 24.0 }),
-            )),
-            Arc::new(ThoughtAST::Bind(
-                Arc::new(ThoughtAST::Atom("day-of-week".into())),
-                Arc::new(ThoughtAST::Circular { value: input.candle.day_of_week, period: 7.0 }),
-            )),
-        ));
+        rhythm_asts.push(ThoughtAST::new(ThoughtASTKind::Bind(
+            Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("hour".into()))),
+            Arc::new(ThoughtAST::new(ThoughtASTKind::Circular { value: input.candle.hour, period: 24.0 })),
+        )));
+        rhythm_asts.push(ThoughtAST::new(ThoughtASTKind::Bind(
+            Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("day-of-week".into()))),
+            Arc::new(ThoughtAST::new(ThoughtASTKind::Circular { value: input.candle.day_of_week, period: 7.0 })),
+        )));
+        rhythm_asts.push(ThoughtAST::new(ThoughtASTKind::Bind(
+            Arc::new(ThoughtAST::new(ThoughtASTKind::Bind(
+                Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("hour".into()))),
+                Arc::new(ThoughtAST::new(ThoughtASTKind::Circular { value: input.candle.hour, period: 24.0 })),
+            ))),
+            Arc::new(ThoughtAST::new(ThoughtASTKind::Bind(
+                Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("day-of-week".into()))),
+                Arc::new(ThoughtAST::new(ThoughtASTKind::Circular { value: input.candle.day_of_week, period: 7.0 })),
+            ))),
+        )));
         let fact_count = rhythm_asts.len() as f64;
-        let bundle_ast = ThoughtAST::Bundle(rhythm_asts);
+        let bundle_ast = ThoughtAST::new(ThoughtASTKind::Bundle(rhythm_asts));
         // rune:temper(disabled) — rhythm ASTs are multi-MB EDN strings.
         // Logging every candle produced 6.5GB in 312 candles. Disabled
         // until we implement summary logging or sampled snapshots.

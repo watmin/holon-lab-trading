@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use std::collections::HashMap;
 use crate::types::candle::Candle;
-use crate::encoding::thought_encoder::{ThoughtAST, round_to};
+use crate::encoding::thought_encoder::{ThoughtAST, ThoughtASTKind, round_to};
 use crate::encoding::scale_tracker::{ScaleTracker, scaled_linear};
 
 pub struct MomentumThought {
@@ -39,7 +39,7 @@ pub fn encode_momentum_facts(c: &Candle, scales: &mut HashMap<String, ScaleTrack
         scaled_linear("close-sma200", t.close_sma200, scales),
         scaled_linear("macd-hist", t.macd_hist, scales),
         scaled_linear("di-spread", t.di_spread, scales),
-        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("atr-ratio".into())), Arc::new(ThoughtAST::Log { value: t.atr_ratio })),
+        ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("atr-ratio".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Log { value: t.atr_ratio })))),
     ]
 }
 
@@ -60,10 +60,10 @@ mod tests {
         let c = Candle::default();
         let mut scales = HashMap::new();
         let facts = encode_momentum_facts(&c, &mut scales);
-        match &facts[4] {
-            ThoughtAST::Bind(left, right) => {
-                match (left.as_ref(), right.as_ref()) {
-                    (ThoughtAST::Atom(name), ThoughtAST::Linear { value, .. }) => {
+        match &facts[4].kind {
+            ThoughtASTKind::Bind(left, right) => {
+                match (&left.kind, &right.kind) {
+                    (ThoughtASTKind::Atom(name), ThoughtASTKind::Linear { value, .. }) => {
                         assert_eq!(name, "di-spread");
                         // (25 - 20) / 100 = 0.05
                         assert!((value - 0.05).abs() < 1e-9);

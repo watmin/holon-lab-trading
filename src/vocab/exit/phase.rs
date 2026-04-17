@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::collections::HashMap;
 use crate::types::candle::Candle;
 use crate::types::pivot::{PhaseDirection, PhaseLabel, PhaseRecord};
-use crate::encoding::thought_encoder::{ThoughtAST, round_to};
+use crate::encoding::thought_encoder::{ThoughtAST, ThoughtASTKind, round_to};
 use crate::encoding::scale_tracker::{ScaleTracker, scaled_linear};
 
 /// Build a Bind(phase, <label>) atom from a PhaseLabel + PhaseDirection.
@@ -26,10 +26,10 @@ fn phase_label_atom(label: PhaseLabel, direction: PhaseDirection) -> ThoughtAST 
             PhaseDirection::None => "transition",
         },
     };
-    ThoughtAST::Bind(
-        Arc::new(ThoughtAST::Atom("phase".into())),
-        Arc::new(ThoughtAST::Atom(label_name.into())),
-    )
+    ThoughtAST::new(ThoughtASTKind::Bind(
+        Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("phase".into()))),
+        Arc::new(ThoughtAST::new(ThoughtASTKind::Atom(label_name.into()))),
+    ))
 }
 
 /// Current phase atoms: the label binding + phase duration as a linear scalar.
@@ -50,7 +50,7 @@ pub fn encode_phase_current_facts(
 /// Returns one ThoughtAST: (bind (atom "phase-rhythm") (bundle ...pairs...))
 pub fn phase_rhythm_thought(phase_history: &[PhaseRecord]) -> ThoughtAST {
     if phase_history.len() < 4 {
-        return ThoughtAST::Bundle(vec![]);
+        return ThoughtAST::new(ThoughtASTKind::Bundle(vec![]));
     }
 
     let mut last_valley: Option<usize> = None;
@@ -75,24 +75,24 @@ pub fn phase_rhythm_thought(phase_history: &[PhaseRecord]) -> ThoughtAST {
 
         let mut facts = vec![
             label,
-            ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("rec-duration".into())),
-                Arc::new(ThoughtAST::Thermometer { value: dur, min: 0.0, max: 200.0 })),
-            ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("rec-move".into())),
-                Arc::new(ThoughtAST::Thermometer { value: mv, min: -0.1, max: 0.1 })),
-            ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("rec-range".into())),
-                Arc::new(ThoughtAST::Thermometer { value: range, min: 0.0, max: 0.1 })),
-            ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("rec-volume".into())),
-                Arc::new(ThoughtAST::Thermometer { value: vol, min: 0.0, max: 10000.0 })),
+            ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("rec-duration".into()))),
+                Arc::new(ThoughtAST::new(ThoughtASTKind::Thermometer { value: dur, min: 0.0, max: 200.0 })))),
+            ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("rec-move".into()))),
+                Arc::new(ThoughtAST::new(ThoughtASTKind::Thermometer { value: mv, min: -0.1, max: 0.1 })))),
+            ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("rec-range".into()))),
+                Arc::new(ThoughtAST::new(ThoughtASTKind::Thermometer { value: range, min: 0.0, max: 0.1 })))),
+            ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("rec-volume".into()))),
+                Arc::new(ThoughtAST::new(ThoughtASTKind::Thermometer { value: vol, min: 0.0, max: 10000.0 })))),
         ];
 
         if i > 0 {
             let (p_dur, _, p_mv, p_vol) = props(&phase_history[i - 1]);
-            facts.push(ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("prior-duration-delta".into())),
-                Arc::new(ThoughtAST::Thermometer { value: rel(dur, p_dur), min: -2.0, max: 2.0 })));
-            facts.push(ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("prior-move-delta".into())),
-                Arc::new(ThoughtAST::Thermometer { value: mv - p_mv, min: -0.1, max: 0.1 })));
-            facts.push(ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("prior-volume-delta".into())),
-                Arc::new(ThoughtAST::Thermometer { value: rel(vol, p_vol), min: -2.0, max: 2.0 })));
+            facts.push(ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("prior-duration-delta".into()))),
+                Arc::new(ThoughtAST::new(ThoughtASTKind::Thermometer { value: rel(dur, p_dur), min: -2.0, max: 2.0 })))));
+            facts.push(ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("prior-move-delta".into()))),
+                Arc::new(ThoughtAST::new(ThoughtASTKind::Thermometer { value: mv - p_mv, min: -0.1, max: 0.1 })))));
+            facts.push(ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("prior-volume-delta".into()))),
+                Arc::new(ThoughtAST::new(ThoughtASTKind::Thermometer { value: rel(vol, p_vol), min: -2.0, max: 2.0 })))));
         }
 
         let same_idx = match (record.label, record.direction) {
@@ -104,12 +104,12 @@ pub fn phase_rhythm_thought(phase_history: &[PhaseRecord]) -> ThoughtAST {
         };
         if let Some(si) = same_idx {
             let (s_dur, _, s_mv, s_vol) = props(&phase_history[si]);
-            facts.push(ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("same-move-delta".into())),
-                Arc::new(ThoughtAST::Thermometer { value: mv - s_mv, min: -0.1, max: 0.1 })));
-            facts.push(ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("same-duration-delta".into())),
-                Arc::new(ThoughtAST::Thermometer { value: rel(dur, s_dur), min: -2.0, max: 2.0 })));
-            facts.push(ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("same-volume-delta".into())),
-                Arc::new(ThoughtAST::Thermometer { value: rel(vol, s_vol), min: -2.0, max: 2.0 })));
+            facts.push(ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("same-move-delta".into()))),
+                Arc::new(ThoughtAST::new(ThoughtASTKind::Thermometer { value: mv - s_mv, min: -0.1, max: 0.1 })))));
+            facts.push(ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("same-duration-delta".into()))),
+                Arc::new(ThoughtAST::new(ThoughtASTKind::Thermometer { value: rel(dur, s_dur), min: -2.0, max: 2.0 })))));
+            facts.push(ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("same-volume-delta".into()))),
+                Arc::new(ThoughtAST::new(ThoughtASTKind::Thermometer { value: rel(vol, s_vol), min: -2.0, max: 2.0 })))));
         }
 
         match (record.label, record.direction) {
@@ -120,7 +120,7 @@ pub fn phase_rhythm_thought(phase_history: &[PhaseRecord]) -> ThoughtAST {
             _ => {}
         }
 
-        ThoughtAST::Bundle(facts)
+        ThoughtAST::new(ThoughtASTKind::Bundle(facts))
     }).collect();
 
     let budget = ((10_000 as f64).sqrt()) as usize;
@@ -132,30 +132,30 @@ pub fn phase_rhythm_thought(phase_history: &[PhaseRecord]) -> ThoughtAST {
     };
 
     let trigrams: Vec<ThoughtAST> = records.windows(3).map(|w| {
-        ThoughtAST::Bind(
-            Arc::new(ThoughtAST::Bind(
+        ThoughtAST::new(ThoughtASTKind::Bind(
+            Arc::new(ThoughtAST::new(ThoughtASTKind::Bind(
                 Arc::new(w[0].clone()),
-                Arc::new(ThoughtAST::Permute(Arc::new(w[1].clone()), 1)),
-            )),
-            Arc::new(ThoughtAST::Permute(Arc::new(w[2].clone()), 2)),
-        )
+                Arc::new(ThoughtAST::new(ThoughtASTKind::Permute(Arc::new(w[1].clone()), 1))),
+            ))),
+            Arc::new(ThoughtAST::new(ThoughtASTKind::Permute(Arc::new(w[2].clone()), 2))),
+        ))
     }).collect();
 
     let pairs: Vec<ThoughtAST> = trigrams.windows(2).map(|w| {
-        ThoughtAST::Bind(Arc::new(w[0].clone()), Arc::new(w[1].clone()))
+        ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(w[0].clone()), Arc::new(w[1].clone())))
     }).collect();
 
     if pairs.is_empty() {
-        return ThoughtAST::Bundle(vec![]);
+        return ThoughtAST::new(ThoughtASTKind::Bundle(vec![]));
     }
 
     let start = if pairs.len() > budget { pairs.len() - budget } else { 0 };
     let trimmed: Vec<ThoughtAST> = pairs[start..].to_vec();
 
-    ThoughtAST::Bind(
-        Arc::new(ThoughtAST::Atom("phase-rhythm".into())),
-        Arc::new(ThoughtAST::Bundle(trimmed)),
-    )
+    ThoughtAST::new(ThoughtASTKind::Bind(
+        Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("phase-rhythm".into()))),
+        Arc::new(ThoughtAST::new(ThoughtASTKind::Bundle(trimmed))),
+    ))
 }
 
 /// Scalar summary facts computed from the phase history.
@@ -224,10 +224,10 @@ mod tests {
     #[test]
     fn test_phase_label_atom_valley() {
         let atom = phase_label_atom(PhaseLabel::Valley, PhaseDirection::None);
-        match atom {
-            ThoughtAST::Bind(left, right) => {
-                assert_eq!(*left, ThoughtAST::Atom("phase".into()));
-                assert_eq!(*right, ThoughtAST::Atom("valley".into()));
+        match &atom.kind {
+            ThoughtASTKind::Bind(left, right) => {
+                assert_eq!(left.kind, ThoughtASTKind::Atom("phase".into()));
+                assert_eq!(right.kind, ThoughtASTKind::Atom("valley".into()));
             }
             _ => panic!("expected Bind"),
         }
@@ -236,9 +236,9 @@ mod tests {
     #[test]
     fn test_phase_label_atom_peak() {
         let atom = phase_label_atom(PhaseLabel::Peak, PhaseDirection::None);
-        match atom {
-            ThoughtAST::Bind(_, right) => {
-                assert_eq!(*right, ThoughtAST::Atom("peak".into()));
+        match &atom.kind {
+            ThoughtASTKind::Bind(_, right) => {
+                assert_eq!(right.kind, ThoughtASTKind::Atom("peak".into()));
             }
             _ => panic!("expected Bind"),
         }
@@ -247,9 +247,9 @@ mod tests {
     #[test]
     fn test_phase_label_atom_transition_up() {
         let atom = phase_label_atom(PhaseLabel::Transition, PhaseDirection::Up);
-        match atom {
-            ThoughtAST::Bind(_, right) => {
-                assert_eq!(*right, ThoughtAST::Atom("transition-up".into()));
+        match &atom.kind {
+            ThoughtASTKind::Bind(_, right) => {
+                assert_eq!(right.kind, ThoughtASTKind::Atom("transition-up".into()));
             }
             _ => panic!("expected Bind"),
         }
@@ -258,9 +258,9 @@ mod tests {
     #[test]
     fn test_phase_label_atom_transition_down() {
         let atom = phase_label_atom(PhaseLabel::Transition, PhaseDirection::Down);
-        match atom {
-            ThoughtAST::Bind(_, right) => {
-                assert_eq!(*right, ThoughtAST::Atom("transition-down".into()));
+        match &atom.kind {
+            ThoughtASTKind::Bind(_, right) => {
+                assert_eq!(right.kind, ThoughtASTKind::Atom("transition-down".into()));
             }
             _ => panic!("expected Bind"),
         }
@@ -273,12 +273,12 @@ mod tests {
         let facts = encode_phase_current_facts(&c, &mut scales);
         assert_eq!(facts.len(), 2);
         // First is the label binding
-        assert!(matches!(&facts[0], ThoughtAST::Bind(_, _)));
+        assert!(matches!(&facts[0].kind, ThoughtASTKind::Bind(_, _)));
         // Second is the duration (Bind(Atom("phase-duration"), Linear{..}))
-        match &facts[1] {
-            ThoughtAST::Bind(left, right) => {
-                match (left.as_ref(), right.as_ref()) {
-                    (ThoughtAST::Atom(name), ThoughtAST::Linear { .. }) => {
+        match &facts[1].kind {
+            ThoughtASTKind::Bind(left, right) => {
+                match (&left.kind, &right.kind) {
+                    (ThoughtASTKind::Atom(name), ThoughtASTKind::Linear { .. }) => {
                         assert_eq!(name, "phase-duration");
                     }
                     _ => panic!("expected Bind(Atom, Linear)"),
@@ -333,9 +333,9 @@ mod tests {
         assert!(!facts.is_empty());
         // Extract atom names from Bind(Atom(name), _) nodes
         let names: Vec<String> = facts.iter().map(|f| {
-            match f {
-                ThoughtAST::Bind(left, _) => match left.as_ref() {
-                    ThoughtAST::Atom(name) => name.clone(),
+            match &f.kind {
+                ThoughtASTKind::Bind(left, _) => match &left.kind {
+                    ThoughtASTKind::Atom(name) => name.clone(),
                     _ => f.name(),
                 },
                 _ => f.name(),

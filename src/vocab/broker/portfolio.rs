@@ -2,7 +2,7 @@ use std::sync::Arc;
 /// Portfolio biography vocabulary — 10 atoms describing a broker's portfolio shape.
 /// Phase 3 (Proposal 044). Moved from broker_program.rs.
 
-use crate::encoding::thought_encoder::ThoughtAST;
+use crate::encoding::thought_encoder::{ThoughtAST, ThoughtASTKind};
 use crate::types::pivot::{PhaseDirection, PhaseLabel, PhaseRecord};
 
 /// Compute portfolio biography atoms from broker's active papers + phase data.
@@ -28,7 +28,7 @@ pub fn compute_portfolio_biography(
     let mut atoms = Vec::with_capacity(10);
 
     // 1. Active trade count
-    atoms.push(ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("active-trade-count".into())), Arc::new(ThoughtAST::Log { value: (active_count as f64).max(1.0) })));
+    atoms.push(ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("active-trade-count".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Log { value: (active_count as f64).max(1.0) })))));
 
     // 2. Oldest active trade's phase age (phases since its entry)
     let oldest_phases = active
@@ -41,7 +41,7 @@ pub fn compute_portfolio_biography(
         })
         .max()
         .unwrap_or(0);
-    atoms.push(ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("oldest-trade-phases".into())), Arc::new(ThoughtAST::Log { value: (oldest_phases as f64).max(1.0) })));
+    atoms.push(ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("oldest-trade-phases".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Log { value: (oldest_phases as f64).max(1.0) })))));
 
     // 3. Newest active trade's phase age
     let newest_phases = active
@@ -54,7 +54,7 @@ pub fn compute_portfolio_biography(
         })
         .min()
         .unwrap_or(0);
-    atoms.push(ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("newest-trade-phases".into())), Arc::new(ThoughtAST::Log { value: (newest_phases as f64).max(1.0) })));
+    atoms.push(ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("newest-trade-phases".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Log { value: (newest_phases as f64).max(1.0) })))));
 
     // 4. Weighted average excursion across active trades
     let avg_excursion = if active_count > 0 {
@@ -62,7 +62,7 @@ pub fn compute_portfolio_biography(
     } else {
         0.0
     };
-    atoms.push(ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("portfolio-excursion".into())), Arc::new(ThoughtAST::Log { value: avg_excursion.abs().max(0.0001) })));
+    atoms.push(ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("portfolio-excursion".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Log { value: avg_excursion.abs().max(0.0001) })))));
 
     // 5. Portfolio heat: active_count / max_seen
     let heat = if new_max > 0 {
@@ -70,7 +70,7 @@ pub fn compute_portfolio_biography(
     } else {
         0.0
     };
-    atoms.push(ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("portfolio-heat".into())), Arc::new(ThoughtAST::Linear { value: heat, scale: 1.0 })));
+    atoms.push(ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("portfolio-heat".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Linear { value: heat, scale: 1.0 })))));
 
     // Fused single pass over phase_history: collect valleys, peaks, durations,
     // duration stats, and favorable entry records in one iteration.
@@ -111,14 +111,14 @@ pub fn compute_portfolio_biography(
         (Some(prev), Some(last)) if prev > 0.0 => (last - prev) / prev,
         _ => 0.0,
     };
-    atoms.push(ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("broker-phase-valley-trend".into())), Arc::new(ThoughtAST::Linear { value: valley_trend, scale: 1.0 })));
+    atoms.push(ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("broker-phase-valley-trend".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Linear { value: valley_trend, scale: 1.0 })))));
 
     // 7. Peak trend
     let peak_trend = match (last_two_peaks[0], last_two_peaks[1]) {
         (Some(prev), Some(last)) if prev > 0.0 => (last - prev) / prev,
         _ => 0.0,
     };
-    atoms.push(ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("broker-phase-peak-trend".into())), Arc::new(ThoughtAST::Linear { value: peak_trend, scale: 1.0 })));
+    atoms.push(ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("broker-phase-peak-trend".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Linear { value: peak_trend, scale: 1.0 })))));
 
     // 8. Regularity: CV of phase durations
     let regularity = if phase_count >= 2 {
@@ -132,7 +132,7 @@ pub fn compute_portfolio_biography(
     } else {
         0.0
     };
-    atoms.push(ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("broker-phase-regularity".into())), Arc::new(ThoughtAST::Linear { value: regularity, scale: 1.0 })));
+    atoms.push(ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("broker-phase-regularity".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Linear { value: regularity, scale: 1.0 })))));
 
     // 9. Entry ratio
     let entry_ratio = if active_count > 0 {
@@ -148,7 +148,7 @@ pub fn compute_portfolio_biography(
     } else {
         0.0
     };
-    atoms.push(ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("broker-phase-entry-ratio".into())), Arc::new(ThoughtAST::Linear { value: entry_ratio, scale: 1.0 })));
+    atoms.push(ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("broker-phase-entry-ratio".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Linear { value: entry_ratio, scale: 1.0 })))));
 
     // 10. Average spacing
     let avg_spacing = if phase_count > 0 {
@@ -156,7 +156,7 @@ pub fn compute_portfolio_biography(
     } else {
         1.0
     };
-    atoms.push(ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("broker-phase-avg-spacing".into())), Arc::new(ThoughtAST::Log { value: avg_spacing.max(1.0) })));
+    atoms.push(ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("broker-phase-avg-spacing".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Log { value: avg_spacing.max(1.0) })))));
 
     (atoms, new_max)
 }

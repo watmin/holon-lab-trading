@@ -53,6 +53,7 @@ pub fn encode_fibonacci_facts(c: &Candle, scales: &mut HashMap<String, ScaleTrac
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::encoding::thought_encoder::ThoughtASTKind;
 
     #[test]
     fn test_encode_fibonacci_facts_nonempty() {
@@ -67,10 +68,10 @@ mod tests {
         let c = Candle::default();
         let mut scales = HashMap::new();
         let facts = encode_fibonacci_facts(&c, &mut scales);
-        match &facts[5] {
-            ThoughtAST::Bind(left, right) => {
-                match (left.as_ref(), right.as_ref()) {
-                    (ThoughtAST::Atom(name), ThoughtAST::Linear { value, .. }) => {
+        match &facts[5].kind {
+            ThoughtASTKind::Bind(left, right) => {
+                match (&left.kind, &right.kind) {
+                    (ThoughtASTKind::Atom(name), ThoughtASTKind::Linear { value, .. }) => {
                         assert_eq!(name, "fib-dist-500");
                         // range_pos_48 = 0.6, so 0.6 - 0.5 = 0.1
                         assert!((value - 0.1).abs() < 1e-9);

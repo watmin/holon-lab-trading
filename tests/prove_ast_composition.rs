@@ -5,7 +5,7 @@
 /// If the EDN is wrong, the thought is wrong.
 
 use enterprise::encoding::rhythm::indicator_rhythm;
-use enterprise::encoding::thought_encoder::ThoughtAST;
+use enterprise::encoding::thought_encoder::ThoughtASTKind;
 
 /// Helper: count occurrences of a substring in the EDN.
 fn count(edn: &str, needle: &str) -> usize {
@@ -102,19 +102,19 @@ fn atom_wraps_the_whole_rhythm() {
     let ast = indicator_rhythm("my-indicator", &[1.0, 2.0, 3.0, 4.0, 5.0], 0.0, 10.0, 5.0);
 
     // The outermost node must be Bind(Atom("my-indicator"), Bundle(...))
-    match &ast {
-        ThoughtAST::Bind(left, right) => {
-            match left.as_ref() {
-                ThoughtAST::Atom(name) => assert_eq!(name, "my-indicator"),
+    match &ast.kind {
+        ThoughtASTKind::Bind(left, right) => {
+            match &left.kind {
+                ThoughtASTKind::Atom(name) => assert_eq!(name, "my-indicator"),
                 other => panic!("expected Atom at top-left, got {:?}", other),
             }
-            match right.as_ref() {
-                ThoughtAST::Bundle(pairs) => {
+            match &right.kind {
+                ThoughtASTKind::Bundle(pairs) => {
                     assert!(!pairs.is_empty(), "rhythm should have at least one pair");
                     // Each pair should be a Bind(trigram, trigram)
                     for (i, pair) in pairs.iter().enumerate() {
-                        match pair {
-                            ThoughtAST::Bind(_, _) => {} // correct
+                        match &pair.kind {
+                            ThoughtASTKind::Bind(_, _) => {} // correct
                             other => panic!("pair[{}] should be Bind, got {:?}", i, other),
                         }
                     }
@@ -133,20 +133,20 @@ fn trigram_has_correct_permute_positions() {
     // Navigate: Bind(Atom, Bundle([pair0, pair1]))
     // pair0 = Bind(trigram0, trigram1)
     // trigram0 = Bind(Bind(fact0, Permute(fact1, 1)), Permute(fact2, 2))
-    if let ThoughtAST::Bind(_, right) = &ast {
-        if let ThoughtAST::Bundle(pairs) = right.as_ref() {
-            if let ThoughtAST::Bind(tri0, _tri1) = &pairs[0] {
+    if let ThoughtASTKind::Bind(_, right) = &ast.kind {
+        if let ThoughtASTKind::Bundle(pairs) = &right.kind {
+            if let ThoughtASTKind::Bind(tri0, _tri1) = &pairs[0].kind {
                 // tri0 = Bind(Bind(fact0, Permute(fact1, 1)), Permute(fact2, 2))
-                if let ThoughtAST::Bind(inner, perm2) = tri0.as_ref() {
+                if let ThoughtASTKind::Bind(inner, perm2) = &tri0.kind {
                     // perm2 should be Permute(_, 2)
-                    match perm2.as_ref() {
-                        ThoughtAST::Permute(_, 2) => {} // correct
+                    match &perm2.kind {
+                        ThoughtASTKind::Permute(_, 2) => {} // correct
                         other => panic!("expected Permute(_, 2), got {:?}", other),
                     }
                     // inner = Bind(fact0, Permute(fact1, 1))
-                    if let ThoughtAST::Bind(_fact0, perm1) = inner.as_ref() {
-                        match perm1.as_ref() {
-                            ThoughtAST::Permute(_, 1) => {} // correct
+                    if let ThoughtASTKind::Bind(_fact0, perm1) = &inner.kind {
+                        match &perm1.kind {
+                            ThoughtASTKind::Permute(_, 1) => {} // correct
                             other => panic!("expected Permute(_, 1), got {:?}", other),
                         }
                     } else {
@@ -171,22 +171,22 @@ fn empty_for_too_few_values() {
 
     // 0-2 values: empty bundle (not enough for a trigram)
     for (n, ast) in [(0, ast0), (1, ast1), (2, ast2)] {
-        match ast {
-            ThoughtAST::Bundle(v) => assert!(v.is_empty(), "{} values should be empty", n),
+        match &ast.kind {
+            ThoughtASTKind::Bundle(v) => assert!(v.is_empty(), "{} values should be empty", n),
             _ => panic!("{} values should be empty Bundle", n),
         }
     }
 
     // 3 values: 1 trigram, 0 pairs → empty bundle
-    match ast3 {
-        ThoughtAST::Bundle(v) => assert!(v.is_empty(), "3 values = 1 trigram = 0 pairs = empty"),
+    match &ast3.kind {
+        ThoughtASTKind::Bundle(v) => assert!(v.is_empty(), "3 values = 1 trigram = 0 pairs = empty"),
         _ => panic!("3 values should be empty Bundle"),
     }
 
     // 4 values: 2 trigrams, 1 pair → non-empty
     let ast4 = indicator_rhythm("x", &[1.0, 2.0, 3.0, 4.0], 0.0, 1.0, 0.1);
-    match ast4 {
-        ThoughtAST::Bind(_, _) => {} // has content
+    match &ast4.kind {
+        ThoughtASTKind::Bind(_, _) => {} // has content
         _ => panic!("4 values should produce a Bind(Atom, Bundle)"),
     }
 }

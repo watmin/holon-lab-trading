@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use std::collections::HashMap;
 use crate::types::candle::Candle;
-use crate::encoding::thought_encoder::{ThoughtAST, round_to};
+use crate::encoding::thought_encoder::{ThoughtAST, ThoughtASTKind, round_to};
 use crate::encoding::scale_tracker::{ScaleTracker, scaled_linear};
 
 pub struct RegimeThought {
@@ -42,7 +42,7 @@ pub fn encode_regime_facts(c: &Candle, scales: &mut HashMap<String, ScaleTracker
         scaled_linear("kama-er", t.kama_er, scales),
         scaled_linear("choppiness", t.choppiness, scales),
         scaled_linear("dfa-alpha", t.dfa_alpha, scales),
-        ThoughtAST::Bind(Arc::new(ThoughtAST::Atom("variance-ratio".into())), Arc::new(ThoughtAST::Log { value: t.variance_ratio })),
+        ThoughtAST::new(ThoughtASTKind::Bind(Arc::new(ThoughtAST::new(ThoughtASTKind::Atom("variance-ratio".into()))), Arc::new(ThoughtAST::new(ThoughtASTKind::Log { value: t.variance_ratio })))),
         scaled_linear("entropy-rate", t.entropy_rate, scales),
         scaled_linear("aroon-up", t.aroon_up, scales),
         scaled_linear("aroon-down", t.aroon_down, scales),
@@ -67,10 +67,10 @@ mod tests {
         let c = Candle::default();
         let mut scales = HashMap::new();
         let facts = encode_regime_facts(&c, &mut scales);
-        match &facts[3] {
-            ThoughtAST::Bind(left, right) => {
-                match (left.as_ref(), right.as_ref()) {
-                    (ThoughtAST::Atom(name), ThoughtAST::Log { value }) => {
+        match &facts[3].kind {
+            ThoughtASTKind::Bind(left, right) => {
+                match (&left.kind, &right.kind) {
+                    (ThoughtASTKind::Atom(name), ThoughtASTKind::Log { value }) => {
                         assert_eq!(name, "variance-ratio");
                         assert_eq!(*value, 1.05);
                     }
