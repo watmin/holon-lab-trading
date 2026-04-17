@@ -88,8 +88,7 @@ pub fn encode(
 ) -> Vector {
     // Phase 1: walk the tree, collect L1 misses for L2 lookup.
     let mut l1_miss_keys: Vec<u64> = Vec::new();
-    let mut l1_miss_asts: Vec<ThoughtAST> = Vec::new();
-    collect_l1_misses(ast, &mut state.l1_cache, &mut l1_miss_keys, &mut l1_miss_asts);
+    collect_l1_misses(ast, &mut state.l1_cache, &mut l1_miss_keys);
 
     // Phase 2: batch_get L2 for L1 misses. Populate L1 from L2 hits.
     if !l1_miss_keys.is_empty() {
@@ -138,7 +137,6 @@ fn collect_l1_misses(
     ast: &ThoughtAST,
     l1_cache: &mut LruCache<u64, Vector>,
     miss_keys: &mut Vec<u64>,
-    miss_asts: &mut Vec<ThoughtAST>,
 ) {
     // Skip leaves — never cached.
     match &ast.kind {
@@ -159,9 +157,8 @@ fn collect_l1_misses(
     METRICS.with(|m| m.borrow_mut().l1_misses += 1);
 
     miss_keys.push(key);
-    miss_asts.push(ast.clone());
     for child in ast.children() {
-        collect_l1_misses(&child, l1_cache, miss_keys, miss_asts);
+        collect_l1_misses(&child, l1_cache, miss_keys);
     }
 }
 
