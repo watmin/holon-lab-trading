@@ -68,9 +68,9 @@ Wat and guide divergence NOT chased — out of sync by design during this refact
 
 - [x] **Symmetric `set` / `batch_set` semantics**. Went further — deleted `set` AND `get` entirely. Cache API is batch-only now. CacheRequest::Set and CacheRequest::Get removed. Tests use a get_one helper that wraps batch_get for single-key lookups.
 
-- [ ] **Extract broker program phases**. Still ~270 lines doing compute in the thread body. Treasury's `handle_request` is the exemplar. Pending.
+- [x] **Extract broker program phases**. 261 → 211 lines. Three helpers: `compute_portfolio_snapshot`, `resolve_paper_outcomes`, `emit_broker_telemetry`. Thread body is an orchestrator now.
 
-- [ ] **Extract market observer program phases** similarly. Pending.
+- [x] **Extract market observer program phases**. 176 → 168 lines. Two helpers: `build_market_thought`, `emit_observer_telemetry`.
 
 - [x] **`IncrementalBundle` on `MarketObserver`**. Deleted with ThoughtEncoder in the two-encoder reconciliation. The `incremental` field is gone. Large latent dead subsystem removed.
 
@@ -84,15 +84,15 @@ Wat and guide divergence NOT chased — out of sync by design during this refact
 
 - [x] **Fuse passes over `treasury.proposer_records`**. One fold returning (total_submitted, total_survived).
 
-- [ ] **Use `Arc<str>` for repeated telemetry strings**. Still pending. `emit_metric` allocates 5 Strings per call × ~20 calls × 33 entities = ~3300 String allocations per candle. The biggest remaining throughput win.
+- [x] **Use `Arc<str>` for repeated telemetry strings**. LogEntry::Telemetry fields changed from String to Arc<str>. Callers pre-build ns/id/dims per candle and clone (refcount++) per emit. ~2000 allocations/candle eliminated. Throughput impact was within noise — the pipe latency is the real cost — but memory pressure is lower.
 
 - [x] **Move `l1_miss_keys` instead of cloning**. `batch_get` now returns `Vec<(K, Option<V>)>` — the driver pairs keys with results, caller iterates pairs directly. No clone needed.
 
-- [ ] **Batch atomic counter updates in cache driver** (cache.rs). `hits_inner.fetch_add(1, Relaxed)` per key. Accumulate local, one atomic per batch. Pending.
+- [x] **Batch atomic counter updates in cache driver**. One fetch_add per batch for hits + one for misses.
 
-- [ ] **Hoist `senders` Vec in database driver**. Allocated per outer loop iteration. Pending.
+- [x] **Hoist `senders` Vec in database driver**. Became `sender_flags: Vec<bool>` allocated once at thread start, cleared per iteration.
 
-- [ ] **Dedupe ack sends in database driver**. One ack per client per drain iteration is sufficient. Pending.
+- [x] **Dedupe ack sends in database driver**. One ack per client per drain pass via sender_flags.
 
 ---
 
@@ -107,21 +107,16 @@ Wat and guide divergence NOT chased — out of sync by design during this refact
 
 ## Status summary
 
-**Done**: 23 of 30 items.
-**Current throughput**: 16 c/s (down from 32.5 c/s at end of cache session, due to bounded queues + confirmed DB writes).
+**Done**: 30 of 30 structural items. (5 of 6 lower-priority notes open — see below.)
+**Current throughput**: 15 c/s at 500 candles.
 **Memory**: deterministic, no unbounded growth anywhere.
 
-**Remaining high-value items**:
-- Arc<str> telemetry strings — biggest remaining throughput win
-- Batch atomic counters in cache driver — small, easy
-- Extract broker/market observer program phases — structural, big refactor
-- Database driver senders hoist + ack dedupe — small
-
-**Remaining low-value items**:
+**Remaining lower-priority notes**:
 - wat-vm 054/055 comment
-- rhythm.rs hardcoded 10_000 (needs signature change)
+- rhythm.rs hardcoded 10_000 (needs signature change through pure helpers)
 - CacheDriverHandle.name dead field
 - collect_facts with only test callers
+- Metrics thread-local in encode.rs is an algebraic escape — worth a forge rune
 
 ---
 
