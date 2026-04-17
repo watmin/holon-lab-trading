@@ -254,10 +254,16 @@ pub fn treasury_program(
 ) -> Treasury {
     let mut candle_count = 0usize;
     let mut current_candle = 0usize;
+    let mut pending_logs: Vec<LogEntry> = Vec::new();
 
     while let Ok(event) = event_rx.recv() {
         match event {
             TreasuryEvent::Tick { candle, price, .. } => {
+                // Flush logs from prior candle's requests FIRST — before processing tick.
+                if !pending_logs.is_empty() {
+                    _db_tx.batch_send(std::mem::take(&mut pending_logs));
+                }
+
                 candle_count += 1;
                 current_candle = candle;
 
@@ -266,7 +272,7 @@ pub fn treasury_program(
                 let _ = treasury.check_deadlines(candle, price);
                 let ns_tick = t0.elapsed().as_nanos() as u64;
 
-                _db_tx.send(LogEntry::Telemetry {
+                pending_logs.push(LogEntry::Telemetry {
                     namespace: "treasury".into(),
                     id: format!("treasury:tick:{}", candle_count),
                     dimensions: "{}".into(),
@@ -316,7 +322,7 @@ pub fn treasury_program(
                     let _ = client_txs[client_id].send(response);
                 }
                 let ns_request = t0.elapsed().as_nanos() as u64;
-                _db_tx.send(LogEntry::Telemetry {
+                pending_logs.push(LogEntry::Telemetry {
                     namespace: "treasury".into(),
                     id: format!("treasury:req:{}", candle_count),
                     dimensions: "{}".into(),
@@ -330,6 +336,11 @@ pub fn treasury_program(
                 });
             }
         }
+    }
+
+    // Flush remaining on shutdown.
+    if !pending_logs.is_empty() {
+        _db_tx.batch_send(pending_logs);
     }
 
     // The state comes home.
