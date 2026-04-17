@@ -248,7 +248,7 @@ pub fn treasury_program(
     event_rx: MailboxReceiver<TreasuryEvent>,
     client_txs: Vec<QueueSender<TreasuryResponse>>,
     console: ConsoleHandle,
-    _db_tx: DatabaseHandle<LogEntry>,
+    db_tx: DatabaseHandle<LogEntry>,
     mut treasury: Treasury,
     base_deadline: usize,
 ) -> Treasury {
@@ -261,7 +261,7 @@ pub fn treasury_program(
             TreasuryEvent::Tick { candle, price, .. } => {
                 // Flush logs from prior candle's requests FIRST — before processing tick.
                 if !pending_logs.is_empty() {
-                    _db_tx.batch_send(std::mem::take(&mut pending_logs));
+                    db_tx.batch_send(std::mem::take(&mut pending_logs));
                 }
 
                 candle_count += 1;
@@ -340,7 +340,7 @@ pub fn treasury_program(
 
     // Flush remaining on shutdown.
     if !pending_logs.is_empty() {
-        _db_tx.batch_send(pending_logs);
+        db_tx.batch_send(pending_logs);
     }
 
     // The state comes home.
