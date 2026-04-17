@@ -115,7 +115,7 @@ pub fn broker_program(
     let mut candle_count = 0usize;
     let mut active_receipts: Vec<PositionReceipt> = Vec::new();
     let mut portfolio_window: Vec<PortfolioSnapshot> = Vec::new();
-    let max_portfolio_window = ((10_000 as f64).sqrt() as usize) + 3; // rune:forge(dims)
+    let max_portfolio_window = ((vm.dimensions() as f64).sqrt() as usize) + 3;
     let mut encode_state = EncodeState::new();
 
     // Gate 4 labels.
