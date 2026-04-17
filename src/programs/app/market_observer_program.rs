@@ -87,6 +87,85 @@ fn grade_predictions(
     confirmed
 }
 
+/// Output of `build_market_thought` — both the chain-bound AST (rhythms only,
+/// flows downstream) and the observer's own encoding thought (rhythms + time).
+struct MarketThought {
+    pub chain_ast: ThoughtAST,   // what flows downstream — rhythms only
+    pub own_thought: ThoughtAST, // what the observer encodes — rhythms + time
+    pub fact_count: f64,
+}
+
+/// Build indicator rhythms through the lens — the thought IS the movie.
+/// Rhythms ONLY — time is added to the market observer's own thought,
+/// not to chain_ast. This prevents double-counting when the broker
+/// composes chain_ast + its own time_facts.
+fn build_market_thought(
+    sliced_window: &[crate::types::candle::Candle],
+    specs: &[crate::encoding::rhythm::IndicatorSpec],
+    candle: &crate::types::candle::Candle,
+) -> MarketThought {
+    let rhythm_asts = build_rhythm_asts(sliced_window, specs);
+    let fact_count = rhythm_asts.len() as f64;
+    // chain_ast: what flows downstream — rhythms only, no time.
+    let chain_ast = ThoughtAST::new(ThoughtASTKind::Bundle(rhythm_asts.clone()));
+    // own_thought: what this observer learns/predicts from —
+    // rhythms + full time vocabulary (5 leaves + 3 compositions).
+    let mut own_facts = rhythm_asts;
+    own_facts.extend(time_facts(candle));
+    let own_thought = ThoughtAST::new(ThoughtASTKind::Bundle(own_facts));
+    MarketThought {
+        chain_ast,
+        own_thought,
+        fact_count,
+    }
+}
+
+/// Per-candle metrics collected in the observer loop.
+/// Bundled so `emit_observer_telemetry` has one structured argument.
+struct ObserverCandleMetrics {
+    pub ns_drain: f64,
+    pub ns_collect: f64,
+    pub ns_encode: f64,
+    pub ns_observe: f64,
+    pub ns_send: f64,
+    pub ns_total: f64,
+    pub facts_count: f64,
+    pub self_graded: usize,
+    pub unconfirmed_count: usize,
+    pub enc_metrics: crate::encoding::encode::EncodeMetrics,
+}
+
+/// Push all per-candle telemetry log entries onto `pending`.
+/// Preserves the exact metric names emitted by the observer loop.
+fn emit_observer_telemetry(
+    pending: &mut Vec<crate::types::log_entry::LogEntry>,
+    ns: std::sync::Arc<str>,
+    id: std::sync::Arc<str>,
+    dims: std::sync::Arc<str>,
+    batch_ts: u64,
+    m: &ObserverCandleMetrics,
+) {
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "drain_learn", m.ns_drain, "Nanoseconds");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "collect_facts", m.ns_collect, "Nanoseconds");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "facts_count", m.facts_count, "Count");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "encode", m.ns_encode, "Nanoseconds");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "enc_nodes", m.enc_metrics.nodes_walked as f64, "Count");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "enc_hits", m.enc_metrics.cache_hits as f64, "Count");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "enc_misses", m.enc_metrics.cache_misses as f64, "Count");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "enc_ns_batch_get", m.enc_metrics.ns_batch_get as f64, "Nanoseconds");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "enc_batch_rounds", m.enc_metrics.batch_rounds as f64, "Count");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "enc_l1_hits", m.enc_metrics.l1_hits as f64, "Count");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "enc_l1_misses", m.enc_metrics.l1_misses as f64, "Count");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "enc_ns_compute", m.enc_metrics.ns_compute as f64, "Nanoseconds");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "enc_forms_computed", m.enc_metrics.forms_computed as f64, "Count");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "enc_ns_cache_set", m.enc_metrics.ns_cache_set as f64, "Nanoseconds");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "observe", m.ns_observe, "Nanoseconds");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "send", m.ns_send, "Nanoseconds");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "total", m.ns_total, "Nanoseconds");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "self_graded", m.self_graded as f64, "Count");
+    emit_metric(pending, ns, id, dims, batch_ts, "unconfirmed", m.unconfirmed_count as f64, "Count");
+}
+
 /// Run the market observer program. Call this inside thread::spawn.
 /// The observer teaches itself from the phase labeler — no broker propagation.
 /// Output fans out to M regime observers via a topic.
@@ -147,19 +226,11 @@ pub fn market_observer_program(
         let sliced = &input.window[start..];
 
         // Build indicator rhythms through the lens — the thought IS the movie.
-        // Rhythms ONLY — time is added to the market observer's own thought
-        // below, not to market_ast. This prevents double-counting when the
-        // broker composes market_ast + its own time_facts.
         let t0 = std::time::Instant::now();
-        let rhythm_asts = build_rhythm_asts(sliced, &specs);
-        let fact_count = rhythm_asts.len() as f64;
-        // market_ast: what flows downstream — rhythms only, no time.
-        let market_ast = ThoughtAST::new(ThoughtASTKind::Bundle(rhythm_asts.clone()));
-        // market_thought: what this observer learns/predicts from —
-        // rhythms + full time vocabulary (5 leaves + 3 compositions).
-        let mut own_facts = rhythm_asts;
-        own_facts.extend(time_facts(&input.candle));
-        let market_thought = ThoughtAST::new(ThoughtASTKind::Bundle(own_facts));
+        let built = build_market_thought(sliced, &specs, &input.candle);
+        let market_ast = built.chain_ast;
+        let market_thought = built.own_thought;
+        let fact_count = built.fact_count;
         // rune:temper(disabled) — rhythm ASTs are multi-MB EDN strings.
         // Logging every candle produced 6.5GB in 312 candles. Disabled
         // until we implement summary logging or sampled snapshots.
@@ -209,25 +280,25 @@ pub fn market_observer_program(
         // Collect all log entries into a pending vec, flush once.
         let mut pending = Vec::new();
 
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "drain_learn", ns_drain, "Nanoseconds");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "collect_facts", ns_collect, "Nanoseconds");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "facts_count", fact_count, "Count");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "encode", ns_encode, "Nanoseconds");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "enc_nodes", enc_metrics.nodes_walked as f64, "Count");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "enc_hits", enc_metrics.cache_hits as f64, "Count");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "enc_misses", enc_metrics.cache_misses as f64, "Count");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "enc_ns_batch_get", enc_metrics.ns_batch_get as f64, "Nanoseconds");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "enc_batch_rounds", enc_metrics.batch_rounds as f64, "Count");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "enc_l1_hits", enc_metrics.l1_hits as f64, "Count");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "enc_l1_misses", enc_metrics.l1_misses as f64, "Count");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "enc_ns_compute", enc_metrics.ns_compute as f64, "Nanoseconds");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "enc_forms_computed", enc_metrics.forms_computed as f64, "Count");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "enc_ns_cache_set", enc_metrics.ns_cache_set as f64, "Nanoseconds");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "observe", ns_observe, "Nanoseconds");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "send", ns_send, "Nanoseconds");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "total", ns_total, "Nanoseconds");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "self_graded", self_graded as f64, "Count");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "unconfirmed", unconfirmed.len() as f64, "Count");
+        emit_observer_telemetry(
+            &mut pending,
+            ns,
+            id,
+            metric_dims,
+            batch_ts,
+            &ObserverCandleMetrics {
+                ns_drain,
+                ns_collect,
+                ns_encode,
+                ns_observe,
+                ns_send,
+                ns_total,
+                facts_count: fact_count,
+                self_graded,
+                unconfirmed_count: unconfirmed.len(),
+                enc_metrics,
+            },
+        );
 
         let us_elapsed = (ns_total / 1000.0) as u64;
 

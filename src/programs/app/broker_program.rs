@@ -60,6 +60,168 @@ fn broker_thought_ast(
     ThoughtAST::new(ThoughtASTKind::Bundle(facts))
 }
 
+/// Compute the portfolio snapshot by folding over active receipts in one pass.
+/// Pure function — no I/O, no mutation of inputs.
+fn compute_portfolio_snapshot(
+    candle_count: usize,
+    price: f64,
+    active_receipts: &[PositionReceipt],
+    expected_value: f64,
+) -> PortfolioSnapshot {
+    let n = active_receipts.len() as f64;
+    let (sum_age, sum_tp, sum_unrealized) = active_receipts.iter().fold(
+        (0.0_f64, 0.0_f64, 0.0_f64),
+        |(age_acc, tp_acc, unr_acc), r| {
+            let age = candle_count.saturating_sub(r.entry_candle) as f64;
+            let total = r.deadline.saturating_sub(r.entry_candle) as f64;
+            let tp = if total > 0.0 { age / total } else { 1.0 };
+            let value = r.units_acquired * price;
+            let unrealized = (value - r.amount) / r.amount;
+            (age_acc + age, tp_acc + tp, unr_acc + unrealized)
+        },
+    );
+    PortfolioSnapshot {
+        avg_age:        if n > 0.0 { sum_age / n }        else { 0.0 },
+        avg_tp:         if n > 0.0 { sum_tp / n }         else { 0.0 },
+        avg_unrealized: if n > 0.0 { sum_unrealized / n } else { 0.0 },
+        grace_rate: expected_value,
+        active_count: n,
+    }
+}
+
+/// Counts accumulated while resolving paper outcomes in a single candle.
+pub struct PaperResolutionCounts {
+    pub learn_grace: f64,
+    pub learn_violence: f64,
+    pub exit_proposals: f64,
+    pub exit_approved: f64,
+}
+
+/// Resolve paper outcomes: check each active receipt against its treasury state,
+/// update the broker (outcome counts, reckoner observations, curve feedback),
+/// and submit exits to the treasury when Gate 4 asks to leave.
+///
+/// Mutates `broker` and `active_receipts` (removes resolved papers).
+/// Returns the counts the caller records for telemetry.
+fn resolve_paper_outcomes(
+    broker: &mut Broker,
+    active_receipts: &mut Vec<PositionReceipt>,
+    state_map: std::collections::HashMap<u64, Option<PositionState>>,
+    gate_pred: &holon::memory::Prediction,
+    anomaly: &holon::kernel::vector::Vector,
+    hold_label: &holon::memory::Label,
+    exit_label: &holon::memory::Label,
+    treasury: &TreasuryHandle,
+    price: f64,
+) -> PaperResolutionCounts {
+    let mut counts = PaperResolutionCounts {
+        learn_grace: 0.0,
+        learn_violence: 0.0,
+        exit_proposals: 0.0,
+        exit_approved: 0.0,
+    };
+    let _ = (treasury, price); // exit submission is handled by caller before this stage
+
+    active_receipts.retain(|receipt| {
+        let state = match state_map.get(&receipt.position_id) {
+            Some(Some(s)) => s,
+            _ => return false,
+        };
+
+        let outcome = match state {
+            PositionState::Active => return true,
+            PositionState::Violence => {
+                counts.learn_violence += 1.0;
+                Outcome::Violence
+            }
+            PositionState::Grace { .. } => {
+                counts.learn_grace += 1.0;
+                Outcome::Grace
+            }
+        };
+
+        // Record the outcome — counts and grace rate.
+        broker.record_outcome(outcome);
+
+        // Gate 4 learns: this moment's thought led to this outcome.
+        // Grace → Hold was right. Violence → should have exited.
+        let label = match outcome {
+            Outcome::Grace => *hold_label,
+            Outcome::Violence => *exit_label,
+        };
+        broker.gate_reckoner.observe(anomaly, label, 1.0);
+
+        // Feed the curve.
+        let predicted_hold = gate_pred.direction.map_or(true, |d| d.index() == 0);
+        let correct = match outcome {
+            Outcome::Grace => predicted_hold,
+            Outcome::Violence => !predicted_hold,
+        };
+        broker.gate_reckoner.resolve(gate_pred.conviction, correct);
+
+        false // resolved — remove
+    });
+
+    counts
+}
+
+/// Per-candle broker metrics gathered for telemetry emission.
+pub struct BrokerCandleMetrics {
+    pub ns_submit: f64,
+    pub ns_retain: f64,
+    pub ns_noise: f64,
+    pub ns_predict: f64,
+    pub ns_gate4: f64,
+    pub ns_encode: f64,
+    pub ns_snapshot: f64,
+    pub ns_exit_submit: f64,
+    pub ns_total: f64,
+    pub gate_experience: f64,
+    pub active_receipts_count: usize,
+    pub conviction: f64,
+    pub enc_metrics: crate::encoding::encode::EncodeMetrics,
+    pub counts: PaperResolutionCounts,
+    pub wants_exit: bool,
+}
+
+/// Emit all broker telemetry metrics for one candle.
+/// Appends to `pending`; caller flushes.
+fn emit_broker_telemetry(
+    pending: &mut Vec<LogEntry>,
+    ns: Arc<str>,
+    id: Arc<str>,
+    dims: Arc<str>,
+    batch_ts: u64,
+    m: &BrokerCandleMetrics,
+) {
+    let _ = m.conviction; // reserved for future gate4_conviction metric
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "total", m.ns_total, "Nanoseconds");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "submit_paper", m.ns_submit, "Nanoseconds");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "gate4", m.ns_gate4, "Nanoseconds");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "gate4_encode", m.ns_encode, "Nanoseconds");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "gate4_noise", m.ns_noise, "Nanoseconds");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "gate4_predict", m.ns_predict, "Nanoseconds");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "gate4_enc_nodes", m.enc_metrics.nodes_walked as f64, "Count");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "gate4_enc_hits", m.enc_metrics.cache_hits as f64, "Count");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "gate4_enc_misses", m.enc_metrics.cache_misses as f64, "Count");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "gate4_enc_ns_batch_get", m.enc_metrics.ns_batch_get as f64, "Nanoseconds");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "gate4_enc_batch_rounds", m.enc_metrics.batch_rounds as f64, "Count");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "gate4_enc_l1_hits", m.enc_metrics.l1_hits as f64, "Count");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "gate4_enc_l1_misses", m.enc_metrics.l1_misses as f64, "Count");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "gate4_enc_ns_compute", m.enc_metrics.ns_compute as f64, "Nanoseconds");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "gate4_enc_forms_computed", m.enc_metrics.forms_computed as f64, "Count");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "snapshot", m.ns_snapshot, "Nanoseconds");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "exit_submit", m.ns_exit_submit, "Nanoseconds");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "retain", m.ns_retain, "Nanoseconds");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "wants_exit", if m.wants_exit { 1.0 } else { 0.0 }, "Count");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "learn_grace_count", m.counts.learn_grace, "Count");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "learn_violence_count", m.counts.learn_violence, "Count");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "active_receipts", m.active_receipts_count as f64, "Count");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "exit_proposals", m.counts.exit_proposals, "Count");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "exit_approved", m.counts.exit_approved, "Count");
+    emit_metric(pending, ns.clone(), id.clone(), dims.clone(), batch_ts, "gate_experience", m.gate_experience, "Count");
+}
+
 /// Run the broker program. Call this inside thread::spawn.
 /// Returns the trained Broker when the chain source disconnects.
 pub fn broker_program(
@@ -86,10 +248,6 @@ pub fn broker_program(
         let t_total = std::time::Instant::now();
         candle_count += 1;
         let price = chain.candle.close;
-        let mut learn_grace: f64 = 0.0;
-        let mut learn_violence: f64 = 0.0;
-        let mut exit_proposals: f64 = 0.0;
-        let mut exit_approved: f64 = 0.0;
 
         // 1. Direction from market prediction
         let direction = Direction::from(&chain.market_prediction);
@@ -108,25 +266,7 @@ pub fn broker_program(
         let ns_submit = t0.elapsed().as_nanos() as f64;
 
         // Compute portfolio snapshot in one pass over active_receipts.
-        let n = active_receipts.len() as f64;
-        let (sum_age, sum_tp, sum_unrealized) = active_receipts.iter().fold(
-            (0.0_f64, 0.0_f64, 0.0_f64),
-            |(age_acc, tp_acc, unr_acc), r| {
-                let age = candle_count.saturating_sub(r.entry_candle) as f64;
-                let total = r.deadline.saturating_sub(r.entry_candle) as f64;
-                let tp = if total > 0.0 { age / total } else { 1.0 };
-                let value = r.units_acquired * price;
-                let unrealized = (value - r.amount) / r.amount;
-                (age_acc + age, tp_acc + tp, unr_acc + unrealized)
-            },
-        );
-        let snap = PortfolioSnapshot {
-            avg_age:        if n > 0.0 { sum_age / n }        else { 0.0 },
-            avg_tp:         if n > 0.0 { sum_tp / n }         else { 0.0 },
-            avg_unrealized: if n > 0.0 { sum_unrealized / n } else { 0.0 },
-            grace_rate: broker.expected_value,
-            active_count: n,
-        };
+        let snap = compute_portfolio_snapshot(candle_count, price, &active_receipts, broker.expected_value);
         portfolio_window.push(snap);
         if portfolio_window.len() > max_portfolio_window {
             portfolio_window.drain(..portfolio_window.len() - max_portfolio_window);
@@ -162,6 +302,8 @@ pub fn broker_program(
 
         // If exit: submit for all active papers. Treasury judges each one.
         let t0 = std::time::Instant::now();
+        let mut exit_proposals: f64 = 0.0;
+        let mut exit_approved: f64 = 0.0;
         if wants_exit {
             for receipt in &active_receipts {
                 exit_proposals += 1.0;
@@ -174,53 +316,30 @@ pub fn broker_program(
 
         // 4. Check active papers — one batch round-trip to treasury.
         let t0 = std::time::Instant::now();
+        let mut counts = PaperResolutionCounts {
+            learn_grace: 0.0,
+            learn_violence: 0.0,
+            exit_proposals,
+            exit_approved,
+        };
         if !active_receipts.is_empty() {
             let paper_ids: Vec<u64> = active_receipts.iter().map(|r| r.position_id).collect();
             let states = treasury.batch_get_paper_states(paper_ids);
-
-            // Build a lookup from the batch response.
             let state_map: std::collections::HashMap<u64, Option<PositionState>> =
                 states.into_iter().collect();
-
-            active_receipts.retain(|receipt| {
-                let state = match state_map.get(&receipt.position_id) {
-                    Some(Some(s)) => s,
-                    _ => return false,
-                };
-
-                let outcome = match state {
-                    PositionState::Active => return true,
-                    PositionState::Violence => {
-                        learn_violence += 1.0;
-                        Outcome::Violence
-                    }
-                    PositionState::Grace { .. } => {
-                        learn_grace += 1.0;
-                        Outcome::Grace
-                    }
-                };
-
-                // Record the outcome — counts and grace rate.
-                broker.record_outcome(outcome);
-
-                // Gate 4 learns: this moment's thought led to this outcome.
-                // Grace → Hold was right. Violence → should have exited.
-                let label = match outcome {
-                    Outcome::Grace => hold_label,
-                    Outcome::Violence => exit_label,
-                };
-                broker.gate_reckoner.observe(&anomaly, label, 1.0);
-
-                // Feed the curve.
-                let predicted_hold = gate_pred.direction.map_or(true, |d| d.index() == 0);
-                let correct = match outcome {
-                    Outcome::Grace => predicted_hold,
-                    Outcome::Violence => !predicted_hold,
-                };
-                broker.gate_reckoner.resolve(gate_pred.conviction, correct);
-
-                false // resolved — remove
-            });
+            let resolved = resolve_paper_outcomes(
+                &mut broker,
+                &mut active_receipts,
+                state_map,
+                &gate_pred,
+                &anomaly,
+                &hold_label,
+                &exit_label,
+                &treasury,
+                price,
+            );
+            counts.learn_grace = resolved.learn_grace;
+            counts.learn_violence = resolved.learn_violence;
         }
         let ns_retain = t0.elapsed().as_nanos() as f64;
 
@@ -271,31 +390,24 @@ pub fn broker_program(
         let ns: Arc<str> = Arc::from("broker");
         let id: Arc<str> = Arc::from(format!("broker:{}:{}", broker.slot_idx, candle_count));
         let metric_dims: Arc<str> = Arc::from(format!("{{\"slot\":{}}}", broker.slot_idx));
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "total", ns_total, "Nanoseconds");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "submit_paper", ns_submit, "Nanoseconds");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "gate4", ns_gate, "Nanoseconds");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "gate4_encode", ns_broker_encode, "Nanoseconds");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "gate4_noise", ns_noise, "Nanoseconds");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "gate4_predict", ns_predict, "Nanoseconds");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "gate4_enc_nodes", broker_enc_metrics.nodes_walked as f64, "Count");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "gate4_enc_hits", broker_enc_metrics.cache_hits as f64, "Count");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "gate4_enc_misses", broker_enc_metrics.cache_misses as f64, "Count");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "gate4_enc_ns_batch_get", broker_enc_metrics.ns_batch_get as f64, "Nanoseconds");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "gate4_enc_batch_rounds", broker_enc_metrics.batch_rounds as f64, "Count");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "gate4_enc_l1_hits", broker_enc_metrics.l1_hits as f64, "Count");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "gate4_enc_l1_misses", broker_enc_metrics.l1_misses as f64, "Count");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "gate4_enc_ns_compute", broker_enc_metrics.ns_compute as f64, "Nanoseconds");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "gate4_enc_forms_computed", broker_enc_metrics.forms_computed as f64, "Count");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "snapshot", ns_snapshot, "Nanoseconds");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "exit_submit", ns_exit_submit, "Nanoseconds");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "retain", ns_retain, "Nanoseconds");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "wants_exit", if wants_exit { 1.0 } else { 0.0 }, "Count");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "learn_grace_count", learn_grace, "Count");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "learn_violence_count", learn_violence, "Count");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "active_receipts", active_receipts.len() as f64, "Count");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "exit_proposals", exit_proposals, "Count");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "exit_approved", exit_approved, "Count");
-        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "gate_experience", broker.gate_reckoner.experience(), "Count");
+        let metrics = BrokerCandleMetrics {
+            ns_submit,
+            ns_retain,
+            ns_noise,
+            ns_predict,
+            ns_gate4: ns_gate,
+            ns_encode: ns_broker_encode,
+            ns_snapshot,
+            ns_exit_submit,
+            ns_total,
+            gate_experience: broker.gate_reckoner.experience(),
+            active_receipts_count: active_receipts.len(),
+            conviction: gate_pred.conviction,
+            enc_metrics: broker_enc_metrics,
+            counts,
+            wants_exit,
+        };
+        emit_broker_telemetry(&mut pending, ns, id, metric_dims, batch_ts, &metrics);
 
         // One batch send per candle.
         flush_metrics(&db_tx, &mut pending);
