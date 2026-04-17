@@ -59,9 +59,10 @@ pub fn regime_observer_program(
             .as_nanos() as u64;
         candle_count += 1;
 
-        let ns = "regime-observer";
-        let id = format!("regime:{}:{}", lens, candle_count);
-        let metric_dims = format!("{{\"lens\":\"{}\"}}", lens);
+        // Per-candle Arc<str> — built once, cloned (refcount++) for each emit.
+        let ns: Arc<str> = Arc::from("regime-observer");
+        let id: Arc<str> = Arc::from(format!("regime:{}:{}", lens, candle_count));
+        let metric_dims: Arc<str> = Arc::from(format!("{{\"lens\":\"{}\"}}", lens));
 
         let mut ns_slot_recv: f64 = 0.0;
         let mut ns_rhythm: f64 = 0.0;
@@ -127,11 +128,11 @@ pub fn regime_observer_program(
         // Collect all log entries into a pending vec, flush once.
         let mut pending = Vec::new();
 
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "slot_recv", ns_slot_recv, "Nanoseconds");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "rhythm", ns_rhythm, "Nanoseconds");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "send", ns_send, "Nanoseconds");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "slots_count", slots_processed, "Count");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "total", ns_total, "Nanoseconds");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "slot_recv", ns_slot_recv, "Nanoseconds");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "rhythm", ns_rhythm, "Nanoseconds");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "send", ns_send, "Nanoseconds");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "slots_count", slots_processed, "Count");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "total", ns_total, "Nanoseconds");
 
         let us_elapsed = (ns_total / 1000.0) as u64;
 

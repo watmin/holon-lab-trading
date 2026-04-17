@@ -118,9 +118,10 @@ pub fn market_observer_program(
             .as_nanos() as u64;
         candle_count += 1;
 
-        let ns = "market-observer";
-        let id = format!("market:{}:{}", lens, candle_count);
-        let metric_dims = format!("{{\"lens\":\"{}\"}}", lens);
+        // Per-candle Arc<str> — built once, cloned (refcount++) for each emit.
+        let ns: Arc<str> = Arc::from("market-observer");
+        let id: Arc<str> = Arc::from(format!("market:{}:{}", lens, candle_count));
+        let metric_dims: Arc<str> = Arc::from(format!("{{\"lens\":\"{}\"}}", lens));
 
         // LEARN FIRST — self-grade at peaks and valleys.
         // The market teaches. The observer learns from its own predictions.
@@ -208,25 +209,25 @@ pub fn market_observer_program(
         // Collect all log entries into a pending vec, flush once.
         let mut pending = Vec::new();
 
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "drain_learn", ns_drain, "Nanoseconds");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "collect_facts", ns_collect, "Nanoseconds");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "facts_count", fact_count, "Count");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "encode", ns_encode, "Nanoseconds");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "enc_nodes", enc_metrics.nodes_walked as f64, "Count");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "enc_hits", enc_metrics.cache_hits as f64, "Count");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "enc_misses", enc_metrics.cache_misses as f64, "Count");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "enc_ns_batch_get", enc_metrics.ns_batch_get as f64, "Nanoseconds");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "enc_batch_rounds", enc_metrics.batch_rounds as f64, "Count");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "enc_l1_hits", enc_metrics.l1_hits as f64, "Count");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "enc_l1_misses", enc_metrics.l1_misses as f64, "Count");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "enc_ns_compute", enc_metrics.ns_compute as f64, "Nanoseconds");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "enc_forms_computed", enc_metrics.forms_computed as f64, "Count");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "enc_ns_cache_set", enc_metrics.ns_cache_set as f64, "Nanoseconds");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "observe", ns_observe, "Nanoseconds");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "send", ns_send, "Nanoseconds");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "total", ns_total, "Nanoseconds");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "self_graded", self_graded as f64, "Count");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "unconfirmed", unconfirmed.len() as f64, "Count");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "drain_learn", ns_drain, "Nanoseconds");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "collect_facts", ns_collect, "Nanoseconds");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "facts_count", fact_count, "Count");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "encode", ns_encode, "Nanoseconds");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "enc_nodes", enc_metrics.nodes_walked as f64, "Count");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "enc_hits", enc_metrics.cache_hits as f64, "Count");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "enc_misses", enc_metrics.cache_misses as f64, "Count");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "enc_ns_batch_get", enc_metrics.ns_batch_get as f64, "Nanoseconds");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "enc_batch_rounds", enc_metrics.batch_rounds as f64, "Count");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "enc_l1_hits", enc_metrics.l1_hits as f64, "Count");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "enc_l1_misses", enc_metrics.l1_misses as f64, "Count");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "enc_ns_compute", enc_metrics.ns_compute as f64, "Nanoseconds");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "enc_forms_computed", enc_metrics.forms_computed as f64, "Count");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "enc_ns_cache_set", enc_metrics.ns_cache_set as f64, "Nanoseconds");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "observe", ns_observe, "Nanoseconds");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "send", ns_send, "Nanoseconds");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "total", ns_total, "Nanoseconds");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "self_graded", self_graded as f64, "Count");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "unconfirmed", unconfirmed.len() as f64, "Count");
 
         let us_elapsed = (ns_total / 1000.0) as u64;
 

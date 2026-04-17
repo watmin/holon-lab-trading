@@ -260,6 +260,10 @@ pub fn treasury_program(
     let mut current_candle = 0usize;
     let mut pending_logs: Vec<LogEntry> = Vec::new();
 
+    // Constants for telemetry emission — built once, cloned per emit.
+    let ns_treasury: std::sync::Arc<str> = std::sync::Arc::from("treasury");
+    let empty_dims: std::sync::Arc<str> = std::sync::Arc::from("{}");
+
     while let Ok(event) = event_rx.recv() {
         match event {
             TreasuryEvent::Tick { candle, price, atr } => {
@@ -283,8 +287,8 @@ pub fn treasury_program(
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap()
                     .as_nanos() as u64;
-                let id = format!("treasury:tick:{}", candle_count);
-                emit_metric(&mut pending_logs, "treasury", &id, "{}", ts, "ns_tick", ns_tick as f64, "Nanoseconds");
+                let id: std::sync::Arc<str> = std::sync::Arc::from(format!("treasury:tick:{}", candle_count));
+                emit_metric(&mut pending_logs, ns_treasury.clone(), id, empty_dims.clone(), ts, "ns_tick", ns_tick as f64, "Nanoseconds");
 
                 // Diagnostics every 1000 candles.
                 if candle_count % 1000 == 0 {
@@ -321,8 +325,8 @@ pub fn treasury_program(
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap()
                     .as_nanos() as u64;
-                let id = format!("treasury:req:{}", candle_count);
-                emit_metric(&mut pending_logs, "treasury", &id, "{}", ts, "ns_request", ns_request as f64, "Nanoseconds");
+                let id: std::sync::Arc<str> = std::sync::Arc::from(format!("treasury:req:{}", candle_count));
+                emit_metric(&mut pending_logs, ns_treasury.clone(), id, empty_dims.clone(), ts, "ns_request", ns_request as f64, "Nanoseconds");
             }
         }
     }

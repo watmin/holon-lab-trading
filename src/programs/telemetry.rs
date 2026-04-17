@@ -1,31 +1,36 @@
 /// Telemetry helpers. Shared by all programs that emit metrics.
 
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::types::log_entry::LogEntry;
 use crate::programs::stdlib::database::DatabaseHandle;
 
 /// Push a single CloudWatch-style metric into a pending Vec.
-/// The caller flushes the Vec to the database handle at the end of the candle loop.
+///
+/// The Arc<str> arguments for namespace/id/dimensions are typically
+/// built once per candle and cloned (refcount++) for each emit_metric
+/// call. Only metric_name and metric_unit are usually string literals
+/// — `.into()` on a `&'static str` produces a fresh Arc, but string
+/// literals are cheap enough that the caller isn't expected to cache.
 pub fn emit_metric(
     pending: &mut Vec<LogEntry>,
-    namespace: &str,
-    id: &str,
-    dimensions: &str,
+    namespace: Arc<str>,
+    id: Arc<str>,
+    dimensions: Arc<str>,
     timestamp_ns: u64,
-    metric_name: &str,
+    metric_name: &'static str,
     metric_value: f64,
-    metric_unit: &str,
+    metric_unit: &'static str,
 ) {
     pending.push(LogEntry::Telemetry {
-        namespace: namespace.to_string(),
-        id: id.to_string(),
-        dimensions: dimensions.to_string(),
+        namespace,
+        id,
+        dimensions,
         timestamp_ns,
-        metric_name: metric_name.to_string(),
+        metric_name: Arc::from(metric_name),
         metric_value,
-        metric_unit: metric_unit.to_string(),
+        metric_unit: Arc::from(metric_unit),
     });
 }
 

@@ -2,6 +2,8 @@
 ///
 /// Seven variants. The enterprise's output stream.
 
+use std::sync::Arc;
+
 use crate::types::distances::Distances;
 use crate::types::enums::{Outcome, Prediction};
 use crate::types::newtypes::{Amount, TradeId};
@@ -64,14 +66,16 @@ pub enum LogEntry {
         num_active_trades: usize,
     },
     /// Telemetry — CloudWatch-style metrics. One row per metric per candle.
+    /// Fields are Arc<str> so the caller can pre-build namespace/id/dims
+    /// once per candle and clone (refcount++) for each metric emit.
     Telemetry {
-        namespace: String,
-        id: String,
-        dimensions: String,
+        namespace: Arc<str>,
+        id: Arc<str>,
+        dimensions: Arc<str>,
         timestamp_ns: u64,
-        metric_name: String,
+        metric_name: Arc<str>,
         metric_value: f64,
-        metric_unit: String,
+        metric_unit: Arc<str>,
     },
     /// Regime observer snapshot — emitted by regime observer threads every candle.
     RegimeObserverSnapshot {

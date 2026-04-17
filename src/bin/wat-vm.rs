@@ -465,18 +465,19 @@ fn main() {
     let cache_emit = {
         let tx = cache_telemetry_tx;
         let seq = std::sync::atomic::AtomicUsize::new(0);
+        let ns_cache: std::sync::Arc<str> = std::sync::Arc::from("cache");
+        let dims_cache: std::sync::Arc<str> = std::sync::Arc::from("{\"name\":\"encoder\"}");
         move |stats: enterprise::programs::stdlib::cache::CacheStats| {
             let s = seq.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            let id = format!("cache:emit:{}", s);
+            let id: std::sync::Arc<str> = std::sync::Arc::from(format!("cache:emit:{}", s));
             let ts = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_nanos() as u64;
-            let dims = "{\"name\":\"encoder\"}";
             let mut pending = Vec::new();
             let m = |pending: &mut Vec<LogEntry>, name, val: f64, unit| {
                 enterprise::programs::telemetry::emit_metric(
-                    pending, "cache", &id, dims, ts, name, val, unit,
+                    pending, ns_cache.clone(), id.clone(), dims_cache.clone(), ts, name, val, unit,
                 );
             };
             m(&mut pending, "hits", stats.hits as f64, "Count");

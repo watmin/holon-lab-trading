@@ -267,34 +267,35 @@ pub fn broker_program(
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_nanos() as u64;
-        let ns = "broker";
-        let id = format!("broker:{}:{}", broker.slot_idx, candle_count);
-        let metric_dims = format!("{{\"slot\":{}}}", broker.slot_idx);
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "total", ns_total, "Nanoseconds");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "submit_paper", ns_submit, "Nanoseconds");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "gate4", ns_gate, "Nanoseconds");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "gate4_encode", ns_broker_encode, "Nanoseconds");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "gate4_noise", ns_noise, "Nanoseconds");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "gate4_predict", ns_predict, "Nanoseconds");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "gate4_enc_nodes", broker_enc_metrics.nodes_walked as f64, "Count");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "gate4_enc_hits", broker_enc_metrics.cache_hits as f64, "Count");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "gate4_enc_misses", broker_enc_metrics.cache_misses as f64, "Count");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "gate4_enc_ns_batch_get", broker_enc_metrics.ns_batch_get as f64, "Nanoseconds");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "gate4_enc_batch_rounds", broker_enc_metrics.batch_rounds as f64, "Count");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "gate4_enc_l1_hits", broker_enc_metrics.l1_hits as f64, "Count");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "gate4_enc_l1_misses", broker_enc_metrics.l1_misses as f64, "Count");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "gate4_enc_ns_compute", broker_enc_metrics.ns_compute as f64, "Nanoseconds");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "gate4_enc_forms_computed", broker_enc_metrics.forms_computed as f64, "Count");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "snapshot", ns_snapshot, "Nanoseconds");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "exit_submit", ns_exit_submit, "Nanoseconds");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "retain", ns_retain, "Nanoseconds");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "wants_exit", if wants_exit { 1.0 } else { 0.0 }, "Count");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "learn_grace_count", learn_grace, "Count");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "learn_violence_count", learn_violence, "Count");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "active_receipts", active_receipts.len() as f64, "Count");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "exit_proposals", exit_proposals, "Count");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "exit_approved", exit_approved, "Count");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "gate_experience", broker.gate_reckoner.experience(), "Count");
+        // Per-candle Arc<str> — built once, cloned (refcount++) for each emit.
+        let ns: Arc<str> = Arc::from("broker");
+        let id: Arc<str> = Arc::from(format!("broker:{}:{}", broker.slot_idx, candle_count));
+        let metric_dims: Arc<str> = Arc::from(format!("{{\"slot\":{}}}", broker.slot_idx));
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "total", ns_total, "Nanoseconds");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "submit_paper", ns_submit, "Nanoseconds");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "gate4", ns_gate, "Nanoseconds");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "gate4_encode", ns_broker_encode, "Nanoseconds");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "gate4_noise", ns_noise, "Nanoseconds");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "gate4_predict", ns_predict, "Nanoseconds");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "gate4_enc_nodes", broker_enc_metrics.nodes_walked as f64, "Count");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "gate4_enc_hits", broker_enc_metrics.cache_hits as f64, "Count");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "gate4_enc_misses", broker_enc_metrics.cache_misses as f64, "Count");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "gate4_enc_ns_batch_get", broker_enc_metrics.ns_batch_get as f64, "Nanoseconds");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "gate4_enc_batch_rounds", broker_enc_metrics.batch_rounds as f64, "Count");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "gate4_enc_l1_hits", broker_enc_metrics.l1_hits as f64, "Count");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "gate4_enc_l1_misses", broker_enc_metrics.l1_misses as f64, "Count");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "gate4_enc_ns_compute", broker_enc_metrics.ns_compute as f64, "Nanoseconds");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "gate4_enc_forms_computed", broker_enc_metrics.forms_computed as f64, "Count");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "snapshot", ns_snapshot, "Nanoseconds");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "exit_submit", ns_exit_submit, "Nanoseconds");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "retain", ns_retain, "Nanoseconds");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "wants_exit", if wants_exit { 1.0 } else { 0.0 }, "Count");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "learn_grace_count", learn_grace, "Count");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "learn_violence_count", learn_violence, "Count");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "active_receipts", active_receipts.len() as f64, "Count");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "exit_proposals", exit_proposals, "Count");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "exit_approved", exit_approved, "Count");
+        emit_metric(&mut pending, ns.clone(), id.clone(), metric_dims.clone(), batch_ts, "gate_experience", broker.gate_reckoner.experience(), "Count");
 
         // One batch send per candle.
         flush_metrics(&db_tx, &mut pending);
