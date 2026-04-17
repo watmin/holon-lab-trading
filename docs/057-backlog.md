@@ -1,44 +1,39 @@
-# 057 Implementation Backlog — L1/L2 Cache + Rayon
+# 057 Backlog — Remaining Work
 
-## Dependencies
+## Done
 
-- [ ] Add `rayon` to Cargo.toml
-- [ ] Add `lru` already present (used by L2)
+- [x] L1 per-entity LruCache (16K) — absorbs repeated lookups
+- [x] L2 shared cache with u64 keys — no recursive hashing
+- [x] Precomputed hash on ThoughtAST struct — O(1) cache lookups
+- [x] Confirmed batch_set — backpressure, no queue growth
+- [x] Batch treasury get_paper_states — 157 round-trips → 1
+- [x] Grouped driver loop — writes/reads Vecs, no partition swap
+- [x] Rayon tried and removed — overhead exceeded benefit at this granularity
 
-## encode.rs — the core change
+## Current: 18 c/s at 500 candles, degrades to 14.7 c/s at 2750
 
-- [ ] Add `l1: &mut LruCache<ThoughtAST, Vector>` parameter to `encode()`
-- [ ] Progressive descent checks L1 before adding to L2 batch
-- [ ] L2 hits inserted into L1
-- [ ] L2 misses computed in `rayon::scope` — pass `&l1` as read-only ref
-- [ ] Rayon tasks: recursive `compute_subtree(ast, &l1, vm, scalar) -> Vector`
-  - Check L1 (read-only). Hit → return clone.
-  - Miss → compute via Primitives. Return value up.
-  - Bundle/Sequential children use `rayon::join` or `par_iter` for parallel fan-out.
-- [ ] After scope: insert all computed results into L1
-- [ ] batch_set all computed results to L2
-- [ ] Document AST-as-value invariant (Beckman condition #1)
+## Next: DB writer backpressure
 
-## EncodeMetrics — new counters
+The database writer receives LogEntries through unbounded queues.
+33 entities × ~20 metrics per candle = ~12K entries/sec at 18 c/s.
+The writer flushes ~10K rows/sec. It falls behind. Queues grow
+without bound. Memory grows. Swap at ~6000 candles.
 
-- [ ] `l1_hits: u64`
-- [ ] `l1_misses: u64`
-- [ ] `rayon_tasks: u64`
+Fix: batch + confirmed write. Same pattern as cache batch_set.
+- Entity collects its ~20 metrics into a Vec<LogEntry>
+- Sends one batch message to the DB writer
+- Blocks until the writer acks
+- No queue growth. Backpressure is honest.
 
-## Program files — L1 creation
+## Next: RSS tracking
 
-- [ ] `market_observer_program.rs` — create `LruCache::new(2048)` at thread start, pass to `encode()` each candle
-- [ ] `broker_program.rs` — same
-- [ ] `regime_observer_program.rs` — check if it calls encode (it may not — middleware)
+Add VmRSS metric to the main thread candle loop.
+Read `/proc/self/status` once per candle. Emit as telemetry.
+This is how we detect memory growth — from data, not speculation.
 
-## Telemetry emission
+## Next: Treasury paper cleanup
 
-- [ ] Market observer: emit `enc_l1_hits`, `enc_l1_misses`, `enc_rayon_tasks`
-- [ ] Broker: emit `gate4_enc_l1_hits`, `gate4_enc_l1_misses`, `gate4_enc_rayon_tasks`
-
-## Verification
-
-- [ ] `cargo test --lib` — 283 tests pass
-- [ ] `./wat-vm.sh smoke 500` — compare to 7.1 c/s baseline
-- [ ] Query DB: L1 hit rate, L2 traffic reduction, entity CPU utilization
-- [ ] Memory check: actual RSS vs estimate (~660MB for 33 × 2048 entries)
+`treasury.papers: HashMap<u64, PaperPosition>` never removes entries.
+Papers accumulate forever. Not the swap cause (small) but dishonest.
+Resolved papers (Grace/Violence) should be removed after outcome
+is recorded.
