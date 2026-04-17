@@ -98,16 +98,16 @@ pub fn encode(
     // Phase 2: batch_get L2 for L1 misses. Populate L1 from L2 hits.
     if !l1_miss_keys.is_empty() {
         let t0 = std::time::Instant::now();
-        let l2_results = l2_cache.batch_get(l1_miss_keys.clone()).unwrap_or_default();
+        let l2_results = l2_cache.batch_get(l1_miss_keys).unwrap_or_default();
         METRICS.with(|m| {
             let mut m = m.borrow_mut();
             m.ns_batch_get += t0.elapsed().as_nanos() as u64;
             m.batch_rounds += 1;
         });
-        for (i, result) in l2_results.into_iter().enumerate() {
+        for (key, result) in l2_results {
             if let Some(v) = result {
                 METRICS.with(|m| m.borrow_mut().cache_hits += 1);
-                state.l1_cache.put(l1_miss_keys[i], v);
+                state.l1_cache.put(key, v);
             } else {
                 METRICS.with(|m| m.borrow_mut().cache_misses += 1);
             }

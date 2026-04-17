@@ -22,8 +22,8 @@ enum CacheRequest<K, V> {
 }
 
 /// Typed cache response. The client unwraps the variant it expects.
-enum CacheResponse<V> {
-    BatchGet(Vec<Option<V>>),
+enum CacheResponse<K, V> {
+    BatchGet(Vec<(K, Option<V>)>),
     BatchSetAck,
 }
 
@@ -32,14 +32,15 @@ enum CacheResponse<V> {
 pub struct CacheHandle<K, V> {
     client_idx: usize,
     req_tx: QueueSender<CacheRequest<K, V>>,
-    resp_rx: QueueReceiver<CacheResponse<V>>,
+    resp_rx: QueueReceiver<CacheResponse<K, V>>,
 }
 
 impl<K: Clone + Send, V: Send> CacheHandle<K, V> {
     /// Synchronous batch get: send keys, block for responses.
-    /// Returns positional Vec<Option<V>> — caller matches to its input.
-    /// One round-trip. The driver does N hash lookups.
-    pub fn batch_get(&self, keys: Vec<K>) -> Option<Vec<Option<V>>> {
+    /// Returns Vec<(K, Option<V>)> — the driver pairs each key with its
+    /// lookup result so the caller doesn't need to keep a copy of the
+    /// input keys. One round-trip. The driver does N hash lookups.
+    pub fn batch_get(&self, keys: Vec<K>) -> Option<Vec<(K, Option<V>)>> {
         self.req_tx.send(CacheRequest::BatchGet {
             client: self.client_idx,
             keys,
@@ -130,7 +131,7 @@ where
 
     for i in 0..num_clients {
         let (req_tx, req_rx) = queue::queue_bounded::<CacheRequest<K, V>>(1);
-        let (resp_tx, resp_rx) = queue::queue_bounded::<CacheResponse<V>>(1);
+        let (resp_tx, resp_rx) = queue::queue_bounded::<CacheResponse<K, V>>(1);
         req_rxs.push(req_rx);
         resp_txs.push(resp_tx);
         handles.push(CacheHandle {
@@ -217,8 +218,11 @@ where
             for req in reads.drain(..) {
                 match req {
                     CacheRequest::BatchGet { client, keys } => {
-                        let results: Vec<Option<V>> = keys.iter().map(|key| {
-                            let result = cache.get(key).cloned();
+                        // Move keys into the response paired with results —
+                        // the caller gets back (key, Option<value>) pairs
+                        // without needing to keep a copy of the input.
+                        let results: Vec<(K, Option<V>)> = keys.into_iter().map(|key| {
+                            let result = cache.get(&key).cloned();
                             if result.is_some() {
                                 hits_inner.fetch_add(1, Ordering::Relaxed);
                                 stats.hits += 1;
@@ -226,7 +230,7 @@ where
                                 misses_inner.fetch_add(1, Ordering::Relaxed);
                                 stats.misses += 1;
                             }
-                            result
+                            (key, result)
                         }).collect();
                         stats.gets_serviced += results.len();
                         let _ = resp_txs[client].send(CacheResponse::BatchGet(results));
@@ -266,7 +270,7 @@ mod tests {
         h: &CacheHandle<K, V>,
         key: K,
     ) -> Option<V> {
-        h.batch_get(vec![key]).and_then(|mut v| v.pop()).flatten()
+        h.batch_get(vec![key]).and_then(|mut v| v.pop()).and_then(|(_, value)| value)
     }
 
     #[test]
@@ -356,9 +360,12 @@ mod tests {
         ]).unwrap();
 
         assert_eq!(results.len(), 3);
-        assert_eq!(results[0], Some(1));
-        assert_eq!(results[1], None);
-        assert_eq!(results[2], Some(2));
+        assert_eq!(results[0].0, "a");
+        assert_eq!(results[0].1, Some(1));
+        assert_eq!(results[1].0, "missing");
+        assert_eq!(results[1].1, None);
+        assert_eq!(results[2].0, "b");
+        assert_eq!(results[2].1, Some(2));
     }
 
     #[test]
