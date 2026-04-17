@@ -130,15 +130,13 @@ pub fn indicator_rhythm(
 mod tests {
     use super::*;
     use holon::kernel::similarity::Similarity;
-    use holon::kernel::vector_manager::VectorManager;
-    use crate::encoding::thought_encoder::ThoughtEncoder;
+    use crate::encoding::encode::test_support::TestEncodeEnv;
 
     const DIMS: usize = 10_000;
 
     fn enc(ast: &ThoughtAST) -> holon::kernel::vector::Vector {
-        let vm = VectorManager::new(DIMS);
-        let encoder = ThoughtEncoder::new(vm);
-        encoder.encode(ast)
+        let mut env = TestEncodeEnv::new(DIMS);
+        env.encode(ast)
     }
 
     #[test]
