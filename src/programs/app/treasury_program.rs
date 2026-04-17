@@ -132,7 +132,6 @@ impl TreasuryHandle {
         }
     }
 
-    // rune:reap(scaffolding) — called when broker runs four gates and proposes Grace exit
     /// Submit an exit. Returns Some(residue) if approved, None if denied.
     pub fn submit_exit(&self, paper_id: u64, current_price: f64) -> Option<f64> {
         self.event_tx
