@@ -151,7 +151,8 @@ pub fn database<T: Send + 'static>(
             }
             let _ = sel.ready();
 
-            // Drain all pending batches from all clients.
+            // Drain all pending batches from all clients. Track who sent.
+            let mut senders: Vec<usize> = Vec::new();
             for i in 0..num_clients {
                 if closed[i] {
                     continue;
@@ -160,8 +161,7 @@ pub fn database<T: Send + 'static>(
                     match req_rxs[i].try_recv() {
                         Ok(batch) => {
                             pending.extend(batch);
-                            // Ack immediately — the driver has the data.
-                            let _ = ack_txs[i].send(());
+                            senders.push(i);
                         }
                         Err(crossbeam::channel::TryRecvError::Empty) => break,
                         Err(crossbeam::channel::TryRecvError::Disconnected) => {
@@ -172,13 +172,13 @@ pub fn database<T: Send + 'static>(
                 }
             }
 
-            // Flush when we have enough.
-            while pending.len() >= batch_size {
-                let rows = batch_size.min(pending.len());
-                let batch: Vec<T> = pending.drain(..rows).collect();
+            // Flush everything we received.
+            if !pending.is_empty() {
+                let rows = pending.len();
                 let start = std::time::Instant::now();
-                flush(&conn, &batch, &insert);
+                flush(&conn, &pending, &insert);
                 let duration_ns = start.elapsed().as_nanos() as u64;
+                pending.clear();
 
                 flush_count += 1;
                 total_rows += rows;
@@ -191,6 +191,11 @@ pub fn database<T: Send + 'static>(
                     total_rows = 0;
                     total_flush_ns = 0;
                 }
+            }
+
+            // Ack AFTER flush. Clients unblock now.
+            for sender_id in senders {
+                let _ = ack_txs[sender_id].send(());
             }
         }
     });
