@@ -293,16 +293,10 @@ pub fn treasury_program(
                         .values()
                         .filter(|p| p.state == PositionState::Active)
                         .count();
-                    let total_submitted: usize = treasury
+                    let (total_submitted, total_survived): (usize, usize) = treasury
                         .proposer_records
                         .values()
-                        .map(|r| r.paper_submitted)
-                        .sum();
-                    let total_survived: usize = treasury
-                        .proposer_records
-                        .values()
-                        .map(|r| r.paper_survived)
-                        .sum();
+                        .fold((0, 0), |(sub, sur), r| (sub + r.paper_submitted, sur + r.paper_survived));
                     console.out(format!(
                         "treasury: candle={} active={} submitted={} survived={}",
                         candle, active_papers, total_submitted, total_survived,
