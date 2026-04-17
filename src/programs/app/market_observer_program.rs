@@ -233,8 +233,8 @@ pub fn market_observer_program(
         emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "enc_batch_rounds", enc_metrics.batch_rounds as f64, "Count");
         emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "enc_l1_hits", enc_metrics.l1_hits as f64, "Count");
         emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "enc_l1_misses", enc_metrics.l1_misses as f64, "Count");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "enc_ns_rayon", enc_metrics.ns_rayon as f64, "Nanoseconds");
-        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "enc_rayon_tasks", enc_metrics.rayon_tasks as f64, "Count");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "enc_ns_compute", enc_metrics.ns_compute as f64, "Nanoseconds");
+        emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "enc_forms_computed", enc_metrics.forms_computed as f64, "Count");
         emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "enc_ns_leaf", enc_metrics.ns_leaf as f64, "Nanoseconds");
         emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "enc_ns_cache_set", enc_metrics.ns_cache_set as f64, "Nanoseconds");
         emit_metric(&mut pending, ns, &id, &metric_dims, batch_ts, "observe", ns_observe, "Nanoseconds");

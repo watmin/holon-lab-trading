@@ -54,9 +54,9 @@ pub struct EncodeMetrics {
     pub ns_batch_get: u64,
     pub ns_leaf: u64,
     pub ns_cache_set: u64,
-    pub ns_rayon: u64,
+    pub ns_compute: u64,
     pub batch_rounds: u64,
-    pub rayon_tasks: u64,
+    pub forms_computed: u64,
 }
 
 thread_local! {
@@ -115,8 +115,8 @@ pub fn encode(
     let vec = encode_local(ast, &mut state.l1_cache, vm, scalar, &mut computed);
     METRICS.with(|m| {
         let mut m = m.borrow_mut();
-        m.ns_rayon += t0.elapsed().as_nanos() as u64;
-        m.rayon_tasks += computed.len() as u64;
+        m.ns_compute += t0.elapsed().as_nanos() as u64;
+        m.forms_computed += computed.len() as u64;
     });
 
     // Phase 4: install computed results into L1 and confirmed batch_set to L2.
