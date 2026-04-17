@@ -13,6 +13,7 @@
 use crate::domain::treasury::{PositionReceipt, PositionState, Treasury};
 use crate::programs::stdlib::console::ConsoleHandle;
 use crate::programs::stdlib::database::DatabaseHandle;
+use crate::programs::telemetry::emit_metric;
 use crate::services::mailbox::MailboxReceiver;
 use crate::services::queue::{QueueReceiver, QueueSender};
 use crate::types::log_entry::LogEntry;
@@ -278,18 +279,12 @@ pub fn treasury_program(
                 let _ = treasury.check_deadlines(candle, price);
                 let ns_tick = t0.elapsed().as_nanos() as u64;
 
-                pending_logs.push(LogEntry::Telemetry {
-                    namespace: "treasury".into(),
-                    id: format!("treasury:tick:{}", candle_count),
-                    dimensions: "{}".into(),
-                    timestamp_ns: std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap()
-                        .as_nanos() as u64,
-                    metric_name: "ns_tick".into(),
-                    metric_value: ns_tick as f64,
-                    metric_unit: "Nanoseconds".into(),
-                });
+                let ts = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos() as u64;
+                let id = format!("treasury:tick:{}", candle_count);
+                emit_metric(&mut pending_logs, "treasury", &id, "{}", ts, "ns_tick", ns_tick as f64, "Nanoseconds");
 
                 // Diagnostics every 1000 candles.
                 if candle_count % 1000 == 0 {
@@ -328,18 +323,12 @@ pub fn treasury_program(
                     let _ = client_txs[client_id].send(response);
                 }
                 let ns_request = t0.elapsed().as_nanos() as u64;
-                pending_logs.push(LogEntry::Telemetry {
-                    namespace: "treasury".into(),
-                    id: format!("treasury:req:{}", candle_count),
-                    dimensions: "{}".into(),
-                    timestamp_ns: std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap()
-                        .as_nanos() as u64,
-                    metric_name: "ns_request".into(),
-                    metric_value: ns_request as f64,
-                    metric_unit: "Nanoseconds".into(),
-                });
+                let ts = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos() as u64;
+                let id = format!("treasury:req:{}", candle_count);
+                emit_metric(&mut pending_logs, "treasury", &id, "{}", ts, "ns_request", ns_request as f64, "Nanoseconds");
             }
         }
     }
