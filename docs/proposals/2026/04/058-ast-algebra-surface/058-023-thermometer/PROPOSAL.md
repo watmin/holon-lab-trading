@@ -26,7 +26,39 @@ Thermometer(value, min, max)[i] = +1 if i < (d · t)
 
 Where `t` is clamped to `[0, 1]` if `value` falls outside `[min, max]`.
 
-Key properties:
+### Canonical layout (load-bearing for distributed consensus)
+
+The "which dimensions are `+1`" question has ONE canonical answer across all conforming implementations:
+
+**Given dimension `d`, let `N = round(d · clamp((value − min) / (max − min), 0, 1))`. Then:**
+- **Dimensions `0..N` (the first `N`) are `+1`.**
+- **Dimensions `N..d` (the remaining `d − N`) are `-1`.**
+- **Value `≤ min`** → all dimensions `-1` (N = 0).
+- **Value `≥ max`** → all dimensions `+1` (N = d).
+
+This rule is bit-identical across nodes. Two independent wat-vm implementations running at the same `d` produce the same `Vec<i8>` for the same `(Thermometer v mn mx)` call. Downstream cosine, hash, signing, engram transmission — all rely on this layout being stable.
+
+This is the layout `holon-rs` implements (see `src/kernel/scalar.rs` `encode_thermometer`); the trading lab has run against it across 652k candles at `d=10,000` and multiple production lab runs. The geometry is proven empirically: discriminants learn across the linear gradient; reckoners distinguish close values via cosine; Blend over Thermometers produces the expected weighted interpolation.
+
+Implementations MUST follow this rule to remain canonical. Alternative layouts (permuted, interleaved, hash-seeded) break the distributed-verifiability contract.
+
+### Cosine property
+
+The layout above gives exact linear cosine geometry:
+
+```
+cosine(Thermometer(a, min, max), Thermometer(b, min, max))
+  = 1 - 2 · |a - b| / (max - min)
+```
+
+- `a = b` → cosine 1.0 (same vector)
+- `|a − b| = (max − min) / 2` → cosine 0.0 (orthogonal-in-sign-count)
+- `a = min`, `b = max` → cosine −1.0 (opposites)
+
+This linear relationship between value distance and vector similarity is what makes downstream learning tractable. A reckoner learning a discriminant direction over Thermometer-encoded scalars learns a direction that corresponds to a threshold in scalar-space.
+
+### Other key properties
+
 - **Monotonic gradient.** The cumulative sum rises linearly from `0` (at `t = 0`) to `d` (at `t = 1`). This gradient structure is what makes Blend-between-thermometers produce meaningful similarity between nearby values.
 - **Deterministic.** Same `(value, min, max, d)` always produces the same vector. No codebook needed.
 - **Similarity-smooth.** `Thermometer(50, 0, 100)` and `Thermometer(52, 0, 100)` differ in only a few dimensions — their cosine similarity is close to 1. `Thermometer(10, 0, 100)` and `Thermometer(90, 0, 100)` differ in most dimensions — cosine close to 0. The similarity between vectors DIRECTLY reflects numeric distance of the encoded values.
