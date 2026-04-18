@@ -1285,28 +1285,7 @@ Language core is therefore **required for the project to ship**, not "nice to ha
 
 ### The three layers, one naming discipline
 
-All three layers — language core, algebra core, stdlib (project and user) — use the same keyword-path naming convention:
-
-```
-:wat/lang/defn              ; language core primitive
-:wat/lang/lambda
-:wat/lang/if
-
-:wat/algebra/Atom           ; algebra core primitive
-:wat/algebra/Bind
-:wat/algebra/Bundle
-
-:wat/std/Subtract           ; project stdlib
-:wat/std/HashMap
-:wat/std/Vec
-
-:alice/math/clamp           ; user extension
-:bob/trading/position
-```
-
-No namespace mechanism; just naming discipline. Anyone can claim any prefix; collisions are prevented by discipline and culture, not by the language.
-
-Userland gets namespaces **for free** because keywords allow any characters and slashes are just characters.
+All three layers — language core, algebra core, stdlib (project and user) — use the same keyword-path naming convention (`:wat/lang/...`, `:wat/algebra/...`, `:wat/std/...`, `:user/...`). No namespace mechanism; just naming discipline. See `## Naming Discipline — Keyword Paths, No Mechanism` for the canonical policy.
 
 ### Executable semantics — functions run, holons are realized on demand
 
@@ -1402,6 +1381,87 @@ wat/std/holons.wat (or similar)
       existing core variants.
       No Rust changes required to add a stdlib function.
 ```
+
+---
+
+## Naming Discipline — Keyword Paths, No Mechanism
+
+**The wat language does NOT have a namespace mechanism.** No `declare-namespace`, no aliasing, no `import`, no `require`, no `use`, no `from`. Slashes in keyword names are just characters; `:wat/std/circular-cos-basis` is a single keyword whose name is `wat/std/circular-cos-basis`. The hash function sees the whole string. No structural meaning is attached to the slash beyond naming convention.
+
+This section is the **single canonical statement** of the naming policy. Other FOUNDATION sections reference it; proposals cite it; sub-proposals' example signatures use it without restating the policy.
+
+### The discipline
+
+All four naming positions in the language — language core, algebra core, stdlib (project and user), and Atom literal keywords — use the same keyword-path convention:
+
+```
+:wat/lang/define            ; language core primitive
+:wat/lang/lambda
+:wat/lang/if
+
+:wat/algebra/Atom           ; algebra core primitive
+:wat/algebra/Bind
+:wat/algebra/Bundle
+
+:wat/std/Subtract           ; project stdlib
+:wat/std/HashMap
+:wat/std/Vec
+
+:wat/std/circular-cos-basis ; reserved stdlib atom literal
+:wat/std/circular-sin-basis
+
+:alice/math/clamp           ; user extension — function
+:project/market/Candle      ; user extension — type
+:bob/vocab/Unbind           ; user extension — macro
+:trading/rsi-extreme        ; user extension — atom literal
+```
+
+Anyone can claim any prefix. Collisions are prevented by **discipline and culture, not by the language.**
+
+### What this means
+
+- **Types use the same discipline** — `:project/market/Candle`, `:alice/types/Price`.
+- **Macros use the same discipline** — `:wat/std/Subtract`, `:my/vocab/Unbind`.
+- **Atoms use the same discipline** — `(Atom :wat/std/circular-cos-basis)`, `(Atom :my-app/thing)`.
+- **There is no escape hatch.** This is the policy across every naming position in the language.
+
+Userland gets namespaces **for free** because keywords allow any characters and slashes are just characters. No new grammar, no declaration form, no import graph. You pick a distinctive prefix and that prefix is yours until someone else claims it.
+
+### What this is NOT
+
+- **NOT Clojure's `(ns ...)` form** with `:require`, `:refer`, `:as` aliasing.
+- **NOT Rust's `mod`** with `use`, `pub use`, or `crate::path` resolution.
+- **NOT Python's `import x as y`** — no short-name binding.
+- **NOT any declare-before-use system.** Names carry their full path literally at every reference.
+
+### Collision detection at startup
+
+Because Model A loads every function at startup (see *The Algebra Is Immutable*), name collisions are detected during loading. Two competing definitions of `:alice/math/clamp` produce a **startup-time name collision that halts the wat-vm.** There is no "last one wins" semantics, no shadowing, no partial state. Either every loaded name is unique, or the wat-vm refuses to start.
+
+This makes the discipline enforceable in practice: conflicts fail loudly and early, not silently at runtime. Two teams working on the same codebase who both claimed `:shared/helper` discover the collision at the first `./wat-vm.sh smoke`, not in production.
+
+### Reserved prefixes
+
+The project stdlib reserves three prefixes as conventions:
+
+- `:wat/lang/...` — language core primitives (`define`, `lambda`, `if`, `defmacro`, `load`, …)
+- `:wat/algebra/...` — algebra core primitives (`Atom`, `Bind`, `Bundle`, `Blend`, …)
+- `:wat/std/...` — project stdlib (`Subtract`, `HashMap`, `Chain`, circular basis atoms, …)
+
+User code **should not** claim prefixes starting with `:wat/`. The language does not forbid it, but future algebra additions may land in those prefixes and would produce startup-time collisions. User code uses its own distinctive prefixes — `:alice/...`, `:project/market/...`, `:my-app/...` — or short bare keywords (`:rsi`, `:portfolio`) where collision isn't a concern. The choice of how distinctive to be is the user's cost/benefit call.
+
+### Type-tagged hashing keeps literal types distinct
+
+Because keywords are a first-class literal type alongside strings, integers, floats, and booleans (see 058-001 typed atoms), there is no collision risk between `(Atom 0)` (integer) and `(Atom :pos/0)` (keyword) — they hash with different type tags and produce different vectors. Collision between different keyword names (`:foo` vs `:bar`) is the user's responsibility — pick distinctive names.
+
+### Why this choice
+
+- **Matches cryptographic hash identity.** The full name is part of the hash (see *The Algebra Is Immutable*). Aliasing a name to a different one would break identity for downstream hashes that reference it by its full path.
+- **Matches Model A static loading.** Everything resolves at startup; one-name-one-definition keeps resolution trivial.
+- **Matches Rust's host-first honesty.** Rust does not let you redefine what a fully-qualified path means; wat doesn't either.
+- **Keeps the language surface small.** No new grammar for namespace declarations, no resolution rules, no import graph, no binding scope for short names.
+
+The cost is verbosity (every reference carries its full path). The benefit is no name-resolution confusion ever — the hash sees what you wrote, and what you wrote is what ships.
 
 ---
 
@@ -1984,11 +2044,7 @@ These are TRULY symbolic — "the cos basis vector" has no natural integer or st
 
 Vec position atoms are NOT in this category. Position 0 IS the integer 0. Use `(Atom 0)`, not `(Atom :pos/0)`.
 
-**About slashes in keyword names.** The wat language does NOT have a namespace mechanism — no declare-namespace, no aliasing, no import/require. Slashes in keyword names are just characters; `:wat/std/circular-cos-basis` is a single keyword with the name `wat/std/circular-cos-basis`. The hash function sees the whole string. No structural meaning is attached to the slash beyond naming convention.
-
-The stdlib uses the `:wat/std/...` prefix as convention to make its reserved atoms distinctive and unlikely to collide with user atoms. User code is free to use its own distinctive prefixes (`:my-app/thing`, `:trading/rsi-extreme`) or short bare keywords (`:rsi`) where collision isn't a concern.
-
-Because keywords are a first-class literal type alongside strings, integers, floats, and booleans, there is no collision risk between `(Atom 0)` and `(Atom :pos/0)` — they hash with different type tags and produce different vectors. Collision between different keyword names (`:foo` vs `:bar`) is the user's responsibility — pick distinctive names.
+**About slashes in keyword names.** Slashes are literal characters; `:wat/std/circular-cos-basis` is a single keyword. The stdlib uses `:wat/std/...` as a reserved prefix. User code uses its own distinctive prefixes or short bare keywords. See `## Naming Discipline — Keyword Paths, No Mechanism` for the canonical policy — the no-namespace-mechanism claim, collision detection at startup, reserved prefixes, and the type-tag hash that keeps `(Atom 0)` (integer) distinct from `(Atom :pos/0)` (keyword) live there.
 
 ### Usage Examples
 
@@ -2294,6 +2350,7 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 | 2026-04-18 | **Type system bundle: Rust primitives + subtype hierarchy + variance rules + `:is-a` for `deftype`.** Resolves Beckman's finding #5 (variance silence) and incorporates several polish decisions. (1) Drop abstract `:Scalar`/`:Int`/`:Bool`/`:Null` in favor of Rust primitives (`:i8`..`:i128`, `:u8`..`:u128`, `:isize`, `:usize`, `:f32`, `:f64`, `:bool`, `:char`, `:&str`, `:String`, `:()`). Honest mapping to Rust; no abstraction layer. (2) Function signatures now use `->` before the return type INSIDE the form: `(define (name [arg : Type] -> :ReturnType) body)` — matches Rust's `fn name(args) -> ReturnType`. No more dangling `: Type` outside the form. (3) Built-in subtype hierarchy stated explicitly: every specific HolonAST node kind `:is-a :Holon` (Bundle, Bind, Permute, Thermometer, Blend, Orthogonalize, Resonance, ConditionalBind, Cleanup, and Atom). Rust primitive types have NO built-in subtyping — explicit coercion required, matches Rust. (4) Variance rules: `(:List :T)` covariant in T, `(:Function args... -> return)` contravariant in args and covariant in return. Liskov-safe substitution. (5) `deftype` extended with `:is-a` keyword: `(deftype :MyType :is-a :OtherType)` declares a new type that is a SUBTYPE of the parent — substitutable via is-a. Distinct from `(deftype :MyType :OtherType)` (structural alias — same type) and `(newtype :MyType :OtherType)` (nominal wrapper — distinct, not a subtype). Three semantics, clear naming. (6) `defmacro` uses the SAME signature syntax as `define` and `lambda`: every parameter typed `: AST`, return `-> :AST`. Per the user's correction — omission is easy, not simple; one signature syntax across all three definition forms is simpler than introducing a special implicit-types rule just for macros. Type-correctness of the expansion is enforced by type-checking the expanded form at startup. All 058 sub-proposals swept to use the Rust primitive types and `->` signature syntax. | 058 |
 | 2026-04-18 | **FOUNDATION split into load-bearing + VISION.md (Phase 1).** Hickey queue item resolved. FOUNDATION carried speculative/aspirational framings interleaved with load-bearing contracts; reviewers could not cleanly tell what they were being asked to accept. Phase 1 wholesale-moves four clearly-speculative sections into VISION.md: (1) "The Location IS the Program" — metaprogramming framing, query-as-address, semantic-search = exact-lookup; (2) "Reader — Did You Just Prove an Infinity?" — fourth-wall break, holographic reframing, NP-hard framing; (3) "Reader — Are You Starting To See It?" — clouds waking up, distributed cognition substrate; (4) "About How This Got Built" — lineage (Linux + Clojure + MAP VSA), datamancer framing, teachers-who-shaped-the-builder. FOUNDATION preamble updated to declare scope and cross-reference VISION. Content preserved verbatim; nothing lost. Phase 2 (follow-up commit) will do surgical trims of MIXED subsections — VM framing in Recursive Composition, discriminant-guided program synthesis in Programs ARE Holons, self-reference-without-paradox in Vector Side, L3/L4 engram speculation + five-tier hierarchy in Engram Caches, cognitive-architecture framing in Cache Is Working Memory. | 058 |
 | 2026-04-18 | **FOUNDATION split (Phase 2) — surgical trims of MIXED subsections.** Six speculative subsections moved from FOUNDATION to VISION: (1) Recursive Composition's "The VM framing" — holon-stack-as-call-stack, Turing-completeness-via-composition. (2) Programs ARE Holons: "Programs generated from learned directions" block, "Kanerva's challenge, fully answered", "What this makes the wat machine" (homoiconic-at-10k-dimensions), "The recursion closes" (self-improvement through program synthesis). (3) Vector Side's "Discriminant-guided program synthesis" + "Self-reference without paradox". (4) Cache Is Working Memory's "The cache is part of the thinking" + "Why this matters for the foundation" (cognitive-architecture framing). (5) Engram Caches's "The engram LRU" + "Prefetching via eigenvalue pre-filter" (L3/L4 implementation speculation). (6) Engram Caches's "The complete memory hierarchy" (five-tier framing) + "Deployment: five knobs now" (includes unbuilt L3 engram knob). Load-bearing claims preserved in FOUNDATION at each cut: engrams-are-holons, cache-is-working-memory (L1/L2 contract, deployment parameters), programs-are-holons, Implications-for-the-algebra, Why-this-matters-for-058. FOUNDATION shrinks 2508 → 2337 lines (−171). VISION grows 332 → 514 lines (+182 for the moved content). Content preserved verbatim; nothing lost. | 058 |
+| 2026-04-18 | **Naming Discipline consolidation.** Hickey queue item resolved. The no-namespace-mechanism policy was stated load-bearing in TWO places — `### The three layers, one naming discipline` (inside "Two Cores") and `**About slashes in keyword names.**` (inside "Atom Literal Types") — with slightly different framings that a reviewer had to reconcile. New top-level section `## Naming Discipline — Keyword Paths, No Mechanism` inserted between "Where Each Lives" and "Criterion for Core Forms" as the **single canonical statement** of the policy. It now covers: the no-mechanism claim; the keyword-path convention for all four naming positions (language core, algebra core, stdlib, user); what this is NOT (explicitly: not Clojure `ns`, not Rust `mod use`, not Python `import as`, not any declare-before-use system); collision detection at startup loads (Model A); reserved prefixes `:wat/lang/...`, `:wat/algebra/...`, `:wat/std/...`; type-tagged hashing keeping `(Atom 0)` distinct from `(Atom :pos/0)`; and why this choice (matches hash identity, matches static loading, matches Rust, keeps language surface small). The two former policy sites collapse to one-sentence pointers at the new canonical section. Other scattered usage references (`:alice/math/clamp` in examples, etc.) remain — they demonstrate the policy without restating it. | 058 |
 
 ---
 
