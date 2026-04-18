@@ -18,20 +18,53 @@ A **keyword-path-based type system** for the wat language, providing:
 
 ### Built-in types
 
+The type system has two tiers of built-ins: **algebraic types** (abstractions over VSA roles) and **Rust primitive types** (direct mappings to Rust's concrete types).
+
+**Algebraic types** (keyword names for VSA roles):
+
 ```
-:Thought     — any ThoughtAST node
-:Atom        — specifically an Atom node (read literal via atom-value)
-:Scalar      — f64 literal (Blend weights, arithmetic)
-:Int         — integer (Permute steps, nth indices)
-:String      — raw string literal (not yet an Atom)
-:Bool        — true / false
+:Thought         — any ThoughtAST node
+:Atom            — an Atom node specifically (read literal via atom-value)
+:Bundle          — a Bundle node (:is-a :Thought)
+:Bind            — a Bind node (:is-a :Thought)
+:Permute         — a Permute node (:is-a :Thought)
+:Thermometer     — a Thermometer node (:is-a :Thought)
+:Blend           — a Blend node (:is-a :Thought)
+:Orthogonalize   — an Orthogonalize node (:is-a :Thought)
+:Resonance       — a Resonance node (:is-a :Thought)
+:ConditionalBind — a ConditionalBind node (:is-a :Thought)
+:Cleanup         — a Cleanup node (:is-a :Thought)
+:Vector          — a raw encoded ternary vector in `{-1, 0, +1}^d` (post-encode form; see FOUNDATION's "Output Space")
+:AST             — a parsed source AST (for macro parameters; see 058-031-defmacro)
+```
+
+**Rust primitive types** (mapped directly to Rust):
+
+```
+;; Integers — Rust's standard integer types:
+:i8  :i16  :i32  :i64  :i128  :isize
+:u8  :u16  :u32  :u64  :u128  :usize
+
+;; Floating point:
+:f32  :f64
+
+;; Other primitives:
+:bool        — true / false
+:char        — Unicode scalar value
+:&str        — string slice
+:String      — owned string
+:()          — unit (nothing)
+```
+
+**Meta types:**
+
+```
 :Keyword     — keyword literal (e.g., :foo, :foo/bar/baz)
-:Null        — the null literal
-:List        — homogeneous list (requires parameter: (:List :Thought))
-:Vector      — raw encoded ternary vector in `{-1, 0, +1}^d` (post-encode, for low-level stdlib; see FOUNDATION's "Output Space" section)
-:Function    — typed function (parameterized: (:Function [args] return))
+:Type        — a type-name value (types as first-class keywords)
 :Any         — escape hatch; disables static checking for this position
 ```
+
+No `:Scalar` / `:Int` / `:Bool` / `:Null` abstractions. Use the concrete Rust types directly. Blend's weights are `:f64`. Permute's step count is `:i32` or `:usize`. `nth`'s index is `:usize`. Booleans are `:bool`. The unit value is `:()`.
 
 ### Parametric types
 
@@ -39,14 +72,24 @@ Parametric types are expressed as keyword-heads with type arguments:
 
 ```scheme
 (:List :Thought)                 ; list of thoughts
-(:List :Scalar)                  ; list of scalars
+(:List :f64)                     ; list of f64 values
 (:List (:List :Thought))         ; list of lists of thoughts
-(:Function [:Thought :Thought] :Thought)  ; binary thought → thought
-(:Function [:Scalar] :Scalar)    ; unary scalar → scalar
-(:Function [:Atom] :Thought)     ; atom → thought
+(:Vec :u8)                       ; Rust Vec<u8> — byte buffer
+(:Option :Thought)               ; Option<Thought>
+(:Result :Thought :Error)        ; Result<Thought, Error>
+(:Arc :Thought)                  ; Arc<Thought>
 ```
 
-Function types have two parameters: a vector of argument types and a return type.
+Function types use the `->` separator:
+
+```scheme
+(:Function :Thought :Thought -> :Thought)             ; binary Thought → Thought
+(:Function :f64 -> :f64)                              ; unary f64 → f64
+(:Function :Atom -> :Thought)                         ; Atom → Thought
+(:Function :Thought :Thought :f64 :f64 -> :Thought)   ; Blend's type
+```
+
+All arguments appear on the left of `->`; the return type is on the right. Single parenthesized form; no dangling return type.
 
 ### User-definable types
 
@@ -55,43 +98,120 @@ Users declare types using the compile-time forms `struct`, `enum`, `newtype`, an
 ```scheme
 ;; Structs — named product types with typed fields.
 (struct :project/market/Candle
-  [open   : Scalar]
-  [high   : Scalar]
-  [low    : Scalar]
-  [close  : Scalar]
-  [volume : Scalar])
+  [open   : f64]
+  [high   : f64]
+  [low    : f64]
+  [close  : f64]
+  [volume : f64])
 
 ;; Enums — coproduct types with optional tagged variants.
 (enum :project/trading/Direction :long :short)
 
 (enum :project/market/Event
   (candle  [asset : Atom] [candle : :project/market/Candle])
-  (deposit [asset : Atom] [amount : Scalar]))
+  (deposit [asset : Atom] [amount : f64]))
 
 ;; Newtypes — nominal aliases with distinct identity.
-(newtype :project/trading/TradeId :Int)
-(newtype :project/trading/Price   :Scalar)
+;; Not a subtype of the wrapped type — nominal distinction.
+(newtype :project/trading/TradeId :usize)
+(newtype :project/trading/Price   :f64)
 
 ;; Deftypes — structural aliases; shorthand for existing type shapes.
-(deftype :alice/types/Price :Scalar)
-(deftype :wat/std/Option<:T> (:Union :Null :T))
+(deftype :alice/types/Amount :f64)
+(deftype :wat/std/Option<:T> (:Union :() :T))
+
+;; Deftype with :is-a — declares a new type that IS a subtype of the other.
+;; Every value of :ChildType is substitutable where :ParentType is expected.
+(deftype :alice/types/AtomicValue :is-a :Atom)
+(deftype :project/market/BullishCandle :is-a :project/market/Candle)
 ```
 
 All four forms use keyword-path names for namespacing (discipline, not mechanism). They are materialized into the Rust-backed wat-vm binary at build time; they cannot be redefined at runtime.
 
-### Type annotations on `define` and `lambda`
+**Three distinct semantics for naming a new type:**
 
-From 058-028-define and 058-029-lambda, type annotations are required:
+| Form | Semantics | Substitutable where original is expected? |
+|---|---|---|
+| `(deftype :A :B)` | Structural alias — `:A` and `:B` are the same type | Yes (they ARE the same) |
+| `(deftype :A :is-a :B)` | Subtype declaration — `:A` is a new type, narrower than `:B` | Yes (via `:is-a`) |
+| `(newtype :A :B)` | Nominal wrapper — `:A` has distinct identity; is NOT a subtype of `:B` | No (explicit conversion required) |
 
-```scheme
-(define (:my/ns/amplify [x : Thought] [y : Thought] [s : Scalar]) : Thought
-  (Blend x y 1 s))
+Users pick based on what they mean: identical (`deftype` alias), substitutable (`deftype :is-a`), or distinct (`newtype`).
 
-(lambda ([t : Thought]) : Thought
-  (Permute t 1))
+### Subtype Hierarchy
+
+The type system has built-in subtype facts (stated as type-system knowledge; users don't write them):
+
+```
+:Atom            :is-a :Thought
+:Bundle          :is-a :Thought
+:Bind            :is-a :Thought
+:Permute         :is-a :Thought
+:Thermometer     :is-a :Thought
+:Blend           :is-a :Thought
+:Orthogonalize   :is-a :Thought
+:Resonance       :is-a :Thought
+:ConditionalBind :is-a :Thought
+:Cleanup         :is-a :Thought
 ```
 
-Each parameter uses `[name : Type]` with spaces around the colon. The return type follows as `: Type` after the parameter list. The body must produce a value of the return type, checked at startup.
+Every specific ThoughtAST node kind **is a Thought**. A parameter typed as `:Thought` accepts any of these.
+
+**No built-in subtyping between the Rust primitive types.** `:i32` is NOT a subtype of `:i64`; `:f32` is NOT a subtype of `:f64`. Matches Rust's strictness — explicit coercion required (e.g., `(as-f64 int-value)`). Prevents silent precision loss.
+
+### Variance Rules
+
+For parametric types, the type system has built-in variance rules (also stated as type-system knowledge):
+
+**`(:List :T)` — covariant in T.**
+
+If `:A :is-a :B`, then `(:List :A) :is-a (:List :B)`. Example: `(:List :Atom) :is-a (:List :Thought)` because every Atom is a Thought.
+
+Intuition: a list of subtypes is always usable where a list of supertypes is expected (the elements are already the right kind).
+
+**`(:Function args... -> return)` — contravariant in args, covariant in return.**
+
+If `:A :is-a :B` and `:C :is-a :D`, then:
+- `(:Function :B -> :C) :is-a (:Function :A -> :D)`
+- Reads: "Function accepting a wider argument and returning a narrower result is substitutable where Function accepting a narrower argument and returning a wider result is expected."
+
+Liskov intuition:
+- **Accept more (broader input)** — safe, caller's narrower input still fits
+- **Return less (narrower output)** — safe, caller's wider-expected output is satisfied
+
+Example: `(:Function :Thought -> :Atom) :is-a (:Function :Atom -> :Thought)`:
+- The function on the left accepts any Thought (broader than Atom) and returns an Atom (narrower than Thought)
+- Substitutable for a function expected to accept an Atom and return a Thought
+
+**Other parametric types** (`:Vec`, `:Arc`, `:Option`, `:Result`) — same pattern as their Rust analogs. `:Vec<:T>` covariant, `:Option<:T>` covariant, `:Result<:T :E>` covariant in both, `:Arc<:T>` covariant.
+
+**User parametric types** (future; not in scope for 058) would declare variance in their type parameter declarations. For 058, variance is hardcoded for built-in parametric types.
+
+### Type annotations on `define` and `lambda`
+
+From 058-028-define and 058-029-lambda, type annotations are required. The return type goes INSIDE the signature parens using `->`:
+
+```scheme
+(define (:my/ns/amplify [x : Thought] [y : Thought] [s : f64] -> :Thought)
+  (Blend x y 1 s))
+
+(lambda ([t : Thought] -> :Thought)
+  (Permute t 1))
+
+;; Matches Rust's fn name(args) -> ReturnType:
+;;   fn amplify(x: Thought, y: Thought, s: f64) -> Thought { ... }
+```
+
+Each parameter uses `[name : Type]` with spaces around the colon. The return type follows `->` at the end of the signature (all inside one set of parens). No dangling `: Type` outside the form. The body must produce a value of the return type, checked at startup.
+
+**Macros use the same shape but with implicit `:AST` everywhere** (per 058-031-defmacro Approach 1):
+
+```scheme
+(defmacro :wat/std/Subtract (x y)
+  `(Blend ,x ,y 1 -1))
+;; parameters implicitly :AST; return implicitly :AST.
+;; type-correctness of the expansion is enforced by type-checking the expanded form.
+```
 
 ## Why This Earns Language-Core Status
 

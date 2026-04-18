@@ -7,14 +7,14 @@
 
 ## The Candidate
 
-A wat stdlib function that expresses "these thoughts happen simultaneously, at the same moment, with no ordering among them":
+A wat stdlib macro (per 058-031-defmacro) that expresses "these thoughts happen simultaneously, at the same moment, with no ordering among them":
 
 ```scheme
-(define (Concurrent thoughts)
-  (Bundle thoughts))
+(defmacro Concurrent (xs)
+  `(Bundle ,xs))
 ```
 
-Identical expansion to `Bundle`, identical vector output. The ONLY difference is the name.
+Identical expansion to `Bundle`, identical vector output. The ONLY difference is the name at source level — expansion happens at parse time, so `hash(AST)` sees only the canonical `(Bundle ...)` form.
 
 ### Semantics
 
@@ -24,7 +24,7 @@ Bundle is the core superposition primitive — commutative, order-insensitive, e
 
 Under FOUNDATION's stdlib criterion, a named form earns its place if:
 
-1. **Its expansion uses only existing core forms.** Bundle is core. Expansion is `(Bundle thoughts)` verbatim. Criterion satisfied.
+1. **Its expansion uses only existing core forms.** Bundle is core. Expansion is `(Bundle xs)` verbatim. Criterion satisfied.
 
 2. **It reduces ambiguity for readers.** A vocab module that says `(Concurrent [price-rising rsi-extended volume-thin])` communicates "these three observations are about the SAME moment." A Bundle call with the same arguments communicates "these three things are summed together, semantics up to reader." The named form asserts temporal co-occurrence as the reason for bundling.
 
@@ -56,11 +56,11 @@ Holon's Python and Rust libraries expose Concurrent as a named operation alongsi
 **4. The expansion is trivial — the name is the cost.**
 
 ```scheme
-(define (Concurrent thoughts)
-  (Bundle thoughts))
+(defmacro Concurrent (xs)
+  `(Bundle ,xs))
 ```
 
-One line. No implementation risk, no perf cost, no cache complication (see Arguments Against #2 for nuance). The cost is just "a name exists in stdlib."
+One line. No implementation risk, no perf cost, no cache complication (parse-time expansion eliminates the cache-key concern raised in earlier drafts — see Arguments Against #2). The cost is just "a name exists in stdlib."
 
 ## Arguments Against
 
@@ -72,15 +72,9 @@ One line. No implementation risk, no perf cost, no cache complication (see Argum
 
 The Hickey-ian test: does the name communicate something the expansion does not? Yes — Concurrent asserts temporal co-occurrence as the intent. Bundle is neutral about intent. The stdlib form names the intent.
 
-**2. Cache key duplication.**
+**2. Cache key duplication — RESOLVED by parse-time expansion.**
 
-`(Concurrent xs)` and `(Bundle xs)` produce identical vectors but have different AST shapes. The L1 thought cache keys on AST, so each gets a distinct cache entry that happens to share the same vector.
-
-This is a minor inefficiency (duplicate storage of the same vector under two cache keys). Mitigations:
-- Canonicalize at parse time: expand `Concurrent` to `Bundle` eagerly, lose the name in the AST but share cache entries.
-- Preserve the name for AST-walking, accept the duplicate cache. Memory cost is one extra vector per concurrent-vs-bundle pair, bounded by usage.
-
-The cache efficiency decision is tooling-level, not algebraic. Either works.
+Under the original `(define ...)` framing, `(Concurrent xs)` and `(Bundle xs)` would have different AST shapes and thus different cache keys. With `defmacro` (058-031), expansion runs at parse time: the `Concurrent` invocation is rewritten to `(Bundle xs)` BEFORE any hashing or caching occurs. One cache entry; one hash. Finding #4 (alias hash collision) from the designer review is resolved.
 
 **3. Proliferation risk.**
 
@@ -127,23 +121,25 @@ Yes — `(Bundle xs)`. The stdlib form asserts reader intent.
 
 ## Implementation Scope
 
-**Zero Rust changes.** Pure wat.
+**Zero Rust changes beyond 058-031-defmacro's macro-expansion pass.** Pure wat.
 
-**wat stdlib addition** — one line:
+**wat stdlib addition** — one macro, registered at parse time:
 
 ```scheme
 ;; wat/std/sequences.wat (or similar)
-(define (Concurrent thoughts)
-  (Bundle thoughts))
+(defmacro Concurrent (xs)
+  `(Bundle ,xs))
 ```
+
+Registration is parse-time (per 058-031-defmacro): the macro is loaded during the startup expansion pass, and every `(Concurrent ...)` invocation in source is rewritten to `(Bundle ...)` before hashing.
 
 ## Questions for Designers
 
-1. **Synonym policy.** If `Concurrent` is accepted, are `Simultaneous`, `Parallel`, `Together`, etc. DOCUMENTATION ALIASES (multiple names resolve to the same stdlib function) or REJECTED (only one canonical name)? This proposal leans toward rejected — one canonical name keeps the vocabulary lean.
+1. **Synonym policy.** If `Concurrent` is accepted, are `Simultaneous`, `Parallel`, `Together`, etc. DOCUMENTATION ALIASES (multiple macros resolve to the same expansion) or REJECTED (only one canonical name)? This proposal leans toward rejected — one canonical name keeps the vocabulary lean.
 
-2. **Should Bundle be reserved for primitive use and everything else go through named aliases?** An alternative style: vocab modules NEVER call `Bundle` directly, they always go through `Concurrent`, `Set`, `Pattern`, etc. Bundle is the primitive, the named forms are the surface. Pros: clear layer separation. Cons: requires a proliferation of names to cover all intents.
+2. **Should Bundle be reserved for primitive use and everything else go through named macros?** An alternative style: vocab modules NEVER call `Bundle` directly, they always go through `Concurrent`, `Set`, `Pattern`, etc. Bundle is the primitive, the named macros are the surface. Pros: clear layer separation. Cons: requires a proliferation of names to cover all intents.
 
-3. **Cache canonicalization.** Should `Concurrent` and `Bundle` share cache entries (eager expansion, canonical AST) or have separate cache entries (preserve the semantic name)? This mirrors the same decision for Linear/Log/Circular in 058-008/017/018.
+3. **Cache canonicalization — resolved.** Parse-time expansion (058-031-defmacro) means `Concurrent` and `Bundle` invocations collapse to the same canonical AST before hashing; they share one cache entry automatically. No tooling decision needed.
 
 4. **Dependency on Set and Sequential.** This proposal groups Concurrent with other "list-operating Bundle wrappers." If Set (058-027) is rejected, Concurrent might want to absorb that role. If Sequential (058-009) stays as its current variant, the trio is less symmetric. These three should resolve together.
 

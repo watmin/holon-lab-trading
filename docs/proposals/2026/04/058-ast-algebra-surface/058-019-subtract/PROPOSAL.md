@@ -5,19 +5,20 @@
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
 **Depends on:** 058-002-blend
-**Companion proposals:** 058-015-amplify, 058-020-flip, 058-004-difference (shares expansion)
+**Companion proposals:** 058-015-amplify, 058-020-flip. (058-004-difference is REJECTED; Subtract is the canonical delta macro.)
 
 ## The Candidate
 
-A wat stdlib function that linearly removes `y`'s contribution from `x`:
+A wat stdlib macro (per 058-031-defmacro) that linearly removes `y`'s contribution from `x`:
 
 ```scheme
-(define (Subtract x y)
-  (Blend x y 1 -1))
-;; Expands to: threshold(1·x + (-1)·y) — linearly subtract y from x
+(defmacro Subtract (x y)
+  `(Blend ,x ,y 1 -1))
+;; Expands at parse time to: (Blend x y 1 -1)
+;; which computes: threshold(1·x + (-1)·y) — linearly subtract y from x
 ```
 
-A Blend call with literal weights `(1, -1)`. Identical math to `Difference(a, b)` (058-004) — the only distinction is reader intent.
+A Blend call with literal weights `(1, -1)`. Expansion happens at parse time, so `hash(AST)` sees only the canonical `Blend` form — `hash((Subtract x y)) = hash((Blend x y 1 -1))`.
 
 ### Semantics
 
@@ -46,12 +47,9 @@ Vocab modules that want to cleanse an observation of a known pattern use subtrac
 
 Reading as "strip, detrend, extract" is immediate. Reading as `Blend(..., 1, -1)` forces mechanical decoding.
 
-**2. Imperative framing complements Difference's noun framing.**
+**2. Imperative framing (Difference is REJECTED).**
 
-- `Subtract(x, y)`: "remove y from x" — imperative, emphasizes the action
-- `Difference(a, b)`: "the delta from b to a" — noun, emphasizes the result
-
-Same math. Two names for two reader contexts. Discussed in detail in 058-004's Argument Against #1.
+Historical context: 058-004 proposed `Difference(a, b)` as a noun-framed stdlib alias with the same expansion as Subtract. Designer review rejected 058-004; Subtract is the sole canonical delta macro. Subtract reads as "remove y from x" — imperative, emphasizes the action. No parallel noun-framed form survives.
 
 **3. Aligns with holon-rs library surface.**
 
@@ -63,20 +61,9 @@ Amplify (variable `s`), Subtract (`s = -1`), Flip (`s = -2`) form the linear-Ble
 
 ## Arguments Against
 
-**1. Redundant with Difference (058-004).**
+**1. Redundancy with Difference — RESOLVED.**
 
-Identical expansion. Identical math. Two names for one operation.
-
-Case for keeping both:
-- Different reader intents (imperative vs noun)
-- Different grammatical usage in vocab code
-- Minimal cost (one-line stdlib, well-understood overlap)
-
-Case for keeping one:
-- Hickey's simplicity: one form per operation
-- Avoiding alias proliferation
-
-Resolution: both are accepted. The cost of the overlap is small; the clarity gain of having both in reader's vocabulary is concrete.
+058-004-difference originally proposed a noun-framed alias with identical expansion. Designer review rejected it; Subtract is the sole delta macro. No redundancy remains.
 
 **2. `Subtract` may be confused with scalar arithmetic.**
 
@@ -104,11 +91,10 @@ Could argue `Subtract` is such a basic operation that it should be core. But:
 | Form | Class | Weights | Semantic |
 |---|---|---|---|
 | `Blend(x, y, w1, w2)` | CORE | arbitrary | Generic weighted sum |
-| `Subtract(x, y)` | STDLIB (this) | `(1, -1)` | Remove y linearly from x |
-| `Difference(a, b)` | STDLIB (058-004) | `(1, -1)` | Delta from b to a |
-| `Amplify(x, y, -1)` | STDLIB (058-015) | `(1, -1)` | Special case: s = -1 |
+| `Subtract(x, y)` | STDLIB macro (this) | `(1, -1)` | Remove y linearly from x |
+| `Amplify(x, y, -1)` | STDLIB macro (058-015) | `(1, -1)` | Special case: s = -1 |
 
-`Subtract`, `Difference`, and `Amplify(_, _, -1)` are mechanically identical. Three names, three reader intents.
+`Subtract` and `Amplify(_, _, -1)` are mechanically identical. Both collapse to the same parse-time expansion `(Blend x y 1 -1)`, so they share a hash — the alias-collision concern from Beckman's finding #4 does not apply. 058-004-difference is REJECTED.
 
 ## Algebraic Question
 
@@ -128,26 +114,28 @@ Simple. One-line stdlib.
 
 Is anything complected?
 
-The tri-name overlap (Subtract, Difference, Amplify at -1) is the only complection concern. Mitigated by documentation of reader intents.
+The overlap with `Amplify(-1)` is the only complection concern. Mitigated by parse-time expansion (both collapse to the same canonical `Blend` form) and name-precedence convention (use the most specific name that applies).
 
 Could existing forms express it?
 
-Yes — `(Blend x y 1 -1)` or `(Difference x y)` or `(Amplify x y -1)`. Named form earns its place via the imperative-removal reader intent.
+Yes — `(Blend x y 1 -1)` or `(Amplify x y -1)`. Named form earns its place via the imperative-removal reader intent.
 
 ## Implementation Scope
 
-**Zero Rust changes.** Pure wat.
+**Zero Rust changes beyond 058-031-defmacro's macro-expansion pass.** Pure wat.
 
 **wat stdlib addition** — `wat/std/blends.wat`:
 
 ```scheme
-(define (Subtract x y)
-  (Blend x y 1 -1))
+(defmacro Subtract (x y)
+  `(Blend ,x ,y 1 -1))
 ```
+
+Registered at parse time (per 058-031-defmacro): every `(Subtract x y)` invocation is rewritten to `(Blend x y 1 -1)` before hashing.
 
 ## Questions for Designers
 
-1. **Subtract vs Difference: keep both or unify?** Same math. Different reader intents. This proposal keeps both. Alternative: pick one, deprecate the other. Recommendation: keep both; the cost is trivial and the clarity gain is real.
+1. **Subtract vs Difference — resolved.** 058-004-difference is REJECTED; Subtract is the sole canonical delta macro. No further decision needed.
 
 2. **Naming: `Subtract` or `Remove`?** "Subtract" has mathematical connotations; "Remove" has more direct intent ("remove the noise"). Recommendation: keep `Subtract` — aligns with holon-rs's `subtract` function; readers recognize it.
 

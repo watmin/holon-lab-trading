@@ -1,7 +1,7 @@
 # 058-027: `Set` — Stdlib Unordered-Collection Constructor
 
 **Scope:** algebra
-**Class:** STDLIB (alias for Bundle with data-structure intent)
+**Class:** STDLIB (macro alias for Bundle with data-structure intent)
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
 **Depends on:** Bundle (CORE, 058-003 for signature)
@@ -9,14 +9,14 @@
 
 ## The Candidate
 
-A wat stdlib function that constructs an encoded unordered collection from a list of thoughts:
+A wat stdlib macro (per 058-031-defmacro) that constructs an encoded unordered collection from a list of thoughts:
 
 ```scheme
-(define (Set thoughts)
-  (Bundle thoughts))
+(defmacro Set (xs)
+  `(Bundle ,xs))
 ```
 
-Identical expansion to `Bundle` and to `Concurrent` (058-010). The only distinction is reader intent: `Set` communicates "data-structure: unordered collection," while `Bundle` communicates "superposition primitive" and `Concurrent` communicates "temporal co-occurrence."
+Identical expansion to `Bundle` and to `Concurrent` (058-010, also a macro). The only distinction is reader intent at source: `Set` communicates "data-structure: unordered collection," while `Bundle` communicates "superposition primitive" and `Concurrent` communicates "temporal co-occurrence." All three collapse to the same canonical AST after parse-time expansion, so `hash((Set xs)) = hash((Concurrent xs)) = hash((Bundle xs))` — no alias collision.
 
 ### Semantics
 
@@ -133,12 +133,12 @@ Mitigation:
 | Form | Class | Expansion | Reader intent |
 |---|---|---|---|
 | `Bundle(xs)` | CORE | threshold(Σ xs[i]) | Primitive superposition |
-| `Concurrent(xs)` | STDLIB (058-010) | `Bundle(xs)` | Temporal co-occurrence |
-| `Set(xs)` | STDLIB (this) | `Bundle(xs)` | Data-structure: unordered collection |
-| `Array(ts)` | STDLIB (058-026) | `Sequential(ts)` | Data-structure: indexed list |
+| `Concurrent(xs)` | STDLIB macro (058-010) | `Bundle(xs)` | Temporal co-occurrence |
+| `Set(xs)` | STDLIB macro (this) | `Bundle(xs)` | Data-structure: unordered collection |
+| `Array(ts)` | STDLIB macro (058-026) | `Sequential(ts)` | Data-structure: indexed list |
 | `Map(kvs)` | STDLIB (058-016) | `Bundle(Bind(k,v) for each kv)` | Data-structure: dictionary |
 
-Three Bundle-aliases, one Sequential-alias, one Bind-over-Bundle composition. Five stdlib forms for the common data-structure vocabulary.
+Three Bundle-aliases (two macros + the core primitive), one Sequential-alias macro, one Bind-over-Bundle composition. Five stdlib forms for the common data-structure vocabulary, collapsing to two canonical expansions after parse-time macro expansion.
 
 ## Algebraic Question
 
@@ -166,19 +166,21 @@ Yes — `(Bundle xs)`. Named form earns its place via data-structure reader inte
 
 ## Implementation Scope
 
-**Zero Rust changes.** Pure wat.
+**Zero Rust changes beyond 058-031-defmacro's macro-expansion pass.** Pure wat.
 
 **wat stdlib addition** — `wat/std/structures.wat`:
 
 ```scheme
-(define (Set thoughts)
-  (Bundle thoughts))
+(defmacro Set (xs)
+  `(Bundle ,xs))
 ```
+
+Registered at parse time (per 058-031-defmacro): every `(Set xs)` invocation is rewritten to `(Bundle xs)` before hashing.
 
 Optional userland helper (not part of this proposal):
 
 ```scheme
-;; userland: threshold-based membership test
+;; userland: threshold-based membership test — regular function, not a macro
 (define (contains? set-thought candidate threshold)
   (> (cosine-similarity set-thought candidate) threshold))
 ```
@@ -198,7 +200,7 @@ Optional userland helper (not part of this proposal):
 6. **Set operations (union, intersection).** In classical set theory, `A ∪ B`, `A ∩ B`, `A \ B` are primary operations. For Bundle-encoded sets:
    - Union: `(Set (concat A B))` or `(Bundle [A B])` — works cleanly
    - Intersection: `(Resonance A B)` — keeps dimensions where both sets align (per 058-006)
-   - Difference: `(Orthogonalize A B)` or `(Subtract A B)` — removes B's contribution from A
+   - Difference: `(Orthogonalize A B)` or `(Subtract A B)` (058-019) — removes B's contribution from A
    Worth noting as future stdlib idioms but out of scope for this proposal.
 
 7. **Empty set.** `(Set [])` produces an empty Bundle — all-zeros or undefined vector. Document as degenerate case; callers should check for empty before encoding.

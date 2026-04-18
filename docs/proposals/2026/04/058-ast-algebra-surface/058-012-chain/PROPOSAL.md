@@ -8,14 +8,14 @@
 
 ## The Candidate
 
-A wat stdlib function that encodes a LIST of events as pairwise transitions:
+A wat stdlib macro (per 058-031-defmacro) that encodes a LIST of events as pairwise transitions:
 
 ```scheme
-(define (Chain thoughts)
-  (Bundle (pairwise-map Then thoughts)))
+(defmacro Chain (thoughts)
+  `(Bundle (pairwise-map Then ,thoughts)))
 ```
 
-Where `pairwise-map` produces `(Then thoughts[0] thoughts[1])`, `(Then thoughts[1] thoughts[2])`, `(Then thoughts[2] thoughts[3])`, ... — a sliding window of Thens across adjacent pairs.
+Where `pairwise-map` produces `(Then thoughts[0] thoughts[1])`, `(Then thoughts[1] thoughts[2])`, `(Then thoughts[2] thoughts[3])`, ... — a sliding window of Thens across adjacent pairs. Because `Then` (058-011) is itself a macro, the expansion recurses at parse time: the emitted `(Then a b)` nodes are rewritten to `(Bundle (list a (Permute b 1)))` in the same pass, so only algebra-core operations survive into the hashed AST.
 
 ### Semantics
 
@@ -88,11 +88,11 @@ Chain and Sequential are both "encode a list of things in some order-aware way."
 If Then (058-011) is rejected, Chain must re-express directly:
 
 ```scheme
-(define (Chain thoughts)
-  (Bundle
-    (pairwise-map
-      (lambda (a b) (Bundle (list a (Permute b 1))))
-      thoughts)))
+(defmacro Chain (thoughts)
+  `(Bundle
+     (pairwise-map
+       (lambda (a b) (Bundle (list a (Permute b 1))))
+       ,thoughts)))
 ```
 
 Works, but loses the readable Then layer. Then's presence makes Chain readable; without Then, Chain's expansion is cluttered.
@@ -163,17 +163,17 @@ Yes — `(Bundle (pairwise-map Then xs))`, or if Then is rejected, the expanded 
 
 ## Implementation Scope
 
-**Zero Rust changes.** Pure wat.
+**Zero Rust changes beyond 058-031-defmacro's macro-expansion pass.** Pure wat.
 
-**wat stdlib addition** — one line (given Then and pairwise-map exist):
+**wat stdlib addition** — one macro, registered at parse time (given Then is registered and `pairwise-map` exists):
 
 ```scheme
 ;; wat/std/sequences.wat (or similar)
-(define (Chain thoughts)
-  (Bundle (pairwise-map Then thoughts)))
+(defmacro Chain (thoughts)
+  `(Bundle (pairwise-map Then ,thoughts)))
 ```
 
-If pairwise-map doesn't exist:
+`pairwise-map` itself is a list combinator, not an AST-rewriting macro — it is a regular stdlib function used inside the macro expansion. If it doesn't exist yet:
 
 ```scheme
 (define (pairwise-map f xs)
@@ -182,9 +182,11 @@ If pairwise-map doesn't exist:
       (cons (f (first xs) (second xs))
             (pairwise-map f (rest xs)))))
 
-(define (Chain thoughts)
-  (Bundle (pairwise-map Then thoughts)))
+(defmacro Chain (thoughts)
+  `(Bundle (pairwise-map Then ,thoughts)))
 ```
+
+The macro is registered at parse time (per 058-031-defmacro); every `(Chain ...)` invocation is rewritten to the pairwise-Bundle form before hashing. Nested `(Then ...)` forms in the expansion are themselves expanded in the same pass.
 
 ## Questions for Designers
 

@@ -1689,6 +1689,10 @@ The language core from 058 and this FOUNDATION polish pass:
 - `deftype` — structural alias; aliases for existing type shapes
 - `load-types` — cryptographically-gateable bring-in of type declarations at startup
 
+**Syntactic transformation form (runs at parse time):**
+
+- `defmacro` — compile-time macro that rewrites source forms BEFORE hashing, signing, or type-checking. Used for stdlib aliases that expand to canonical core compositions. Resolves the "two names, same vector, different hashes" contradiction by ensuring only one AST shape survives the expansion pass.
+
 Plus the syntactic feature pervading all of the above:
 
 - **Type annotations** (`:Thought`, `:Atom`, `:Scalar`, `:Int`, `:Bool`, `:List`, `:Function`, keyword-path user types) — required on `define` and `lambda` signatures; carried on `struct`/`enum`/`newtype`/`deftype` field declarations.
@@ -1699,12 +1703,27 @@ Language core is minimal on purpose: just enough to write stdlib, define functio
 
 ### All loading happens at startup
 
-The Rust runtime hosting the wat-vm imposes a static-first model: all code (types AND functions) loads at startup, before the main event loop begins. Nothing new enters the system after startup.
+The Rust runtime hosting the wat-vm imposes a static-first model: all code (types AND functions AND macros) loads at startup, before the main event loop begins. Nothing new enters the system after startup.
 
 - `struct`, `enum`, `newtype`, `deftype` are **type declarations**. The build pipeline extracts them from wat files, generates Rust code, compiles the binary.
 - `load-types "path/to/file.wat"` is the type loader — reads a file, parses type declarations, feeds them to the build. Verification modes (`(md5 ...)`, `(signed ...)`) run at build/startup.
 - `define`, `lambda` are **function definitions**. They register at startup into the symbol table.
 - `load "path/to/file.wat"` is the function loader — reads a file, parses `define`s, registers them. Same verification modes.
+- `defmacro` declarations are **compile-time macros**. They register during the parse phase. Before any hashing, signing, or type-checking, a macro-expansion pass walks every source AST and substitutes macro invocations with their expansions.
+
+### Startup pipeline (ordered)
+
+1. Parse all wat files (source → untyped AST, macro calls intact).
+2. **Macro expansion pass** — for every macro invocation, invoke the macro's body with argument ASTs, substitute the expansion, repeat until fixpoint. After this pass, no alias-macro call sites remain; only canonical forms.
+3. Resolve symbols (function names, type names).
+4. Type-check `define`/`lambda` bodies against the type environment.
+5. Compute hashes of the fully-expanded AST.
+6. Verify cryptographic signatures on expected entries.
+7. Register verified `define`s into the static symbol table.
+8. Freeze symbol table, type environment, and macro registry.
+9. Enter main loop.
+
+**Hash identity is on the expanded AST.** Two source files that differ only in macro aliases (`Concurrent` vs `Bundle`, `Subtract` vs `Blend(_, _, 1, -1)`) expand to the same canonical AST and produce the same hash. Source-level clarity is preserved for readers; identity at the algebra level is uniformized.
 
 **Nothing redefines after startup.** A struct is what its source declares. A function is what its source defines. Name collisions are caught at startup and halt the wat-vm; runtime never sees partial state.
 
@@ -2394,6 +2413,8 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 | 2026-04-18 | **Constrained eval at runtime.** Despite static loading, `eval` remains a first-class runtime primitive, but typed and constrained: an AST is evaluatable at runtime if every function called resolves to the static symbol table and every type used exists in the static type universe, with argument types matching signatures. Unknown symbols or type mismatches error before execution. This yields a safe `eval` — attackers cannot invoke arbitrary code, only functions the operator explicitly loaded at startup. Lambdas remain first-class runtime values (closures over the static environment). Distributed code delivery becomes managed-restart: signed wat files enter the startup manifest; the wat-vm restarts to include them; continues operation. Trust boundary is the startup phase, not per-call. | 058 |
 | 2026-04-18 | **The Output Space — Ternary by Default, Continuous When Needed.** Added in response to Beckman's review findings on Bundle non-associativity and Orthogonalize's orthogonality claim. The algebra operates over `{-1, 0, +1}^d`, not `{-1, +1}^d`. `threshold(0) = 0`. This is load-bearing: it makes Bundle associative (required for Chain/Ngram/Sequential composition at depth) and Orthogonalize's orthogonality claim EXACT (degenerate `X = Y` produces all-zero, dotted with Y = 0). Zero is a first-class "no information here" signal that propagates through Bind (0 · b = 0), Bundle (contributes 0 to sum), and cosine similarity (contributes 0 to dot and norm). Resonance is NOT "the first" ternary form — the algebra was always ternary; Resonance is the first form that produces zeros by selection rather than by arithmetic cancellation. Continuous floats remain available for operations that need magnitude (accumulators, subspace residuals); thresholding is chosen per operation, not globally mandated. Bind's self-inverse property holds exactly at non-zero positions; at zero positions decode returns zero (correctly — no binding signal was there). 058-003 (Bundle), 058-005 (Orthogonalize), 058-006 (Resonance) updated to reflect the clarification. | 058 |
 | 2026-04-18 | **Capacity as the universal measurement budget.** Replaced the "Bind's self-inverse weakens on ternary" subsection — which framed partial recovery as a defect — with the correct framing: every recovery in the algebra is a similarity measurement, bounded uniformly by Kanerva's capacity formula. Bundle crosstalk, sparse-key Bind decode, cascading composition noise, and Orthogonalize's post-threshold residual ALL consume from the same ~100-items-per-frame budget at d=10,000. They are not separate algebraic phenomena; they are one substrate property (signal-to-noise at high dimension, measured by cosine). This dissolves Beckman's finding #3 entirely — not a "weakening," a capacity expenditure — and unifies the treatment of findings #1, #2, #3 under one framing: the algebra is similarity-measured, not elementwise-exact, and its laws hold under similarity-above-noise. Added "Capacity is the universal measurement budget" subsection; operation-by-operation summary updated with density column. | 058 |
+| 2026-04-18 | **`defmacro` added to Language Core; stdlib aliases become macros.** Resolves Beckman's finding #4 (alias hash-collision). `defmacro` is a compile-time form that registers parse-time syntactic rewrites. The startup pipeline now runs a macro-expansion pass BEFORE hashing, signing, and type-checking. Stdlib aliases like `Concurrent`, `Set`, `Subtract`, `Flip`, `Then`, `Chain`, `Analogy` become macros that expand to canonical core compositions (Bundle, Bind, Blend, Permute). After expansion, `hash(AST) IS identity` holds as an invariant — two source files differing only in macro aliases produce the same expanded AST and the same hash. Source-level reader clarity is preserved; algebra-level identity is uniformized. Language Core grows from 8 to 9 forms (adds `defmacro`). Also resolved: drop `Difference` from 058-004, keep `Subtract` (058-019) as the canonical `Blend(_, _, 1, -1)` idiom — one name per operation. | 058 |
+| 2026-04-18 | **Type system bundle: Rust primitives + subtype hierarchy + variance rules + `:is-a` for `deftype`.** Resolves Beckman's finding #5 (variance silence) and incorporates several polish decisions. (1) Drop abstract `:Scalar`/`:Int`/`:Bool`/`:Null` in favor of Rust primitives (`:i8`..`:i128`, `:u8`..`:u128`, `:isize`, `:usize`, `:f32`, `:f64`, `:bool`, `:char`, `:&str`, `:String`, `:()`). Honest mapping to Rust; no abstraction layer. (2) Function signatures now use `->` before the return type INSIDE the form: `(define (name [arg : Type] -> :ReturnType) body)` — matches Rust's `fn name(args) -> ReturnType`. No more dangling `: Type` outside the form. (3) Built-in subtype hierarchy stated explicitly: every specific ThoughtAST node kind `:is-a :Thought` (Bundle, Bind, Permute, Thermometer, Blend, Orthogonalize, Resonance, ConditionalBind, Cleanup, and Atom). Rust primitive types have NO built-in subtyping — explicit coercion required, matches Rust. (4) Variance rules: `(:List :T)` covariant in T, `(:Function args... -> return)` contravariant in args and covariant in return. Liskov-safe substitution. (5) `deftype` extended with `:is-a` keyword: `(deftype :MyType :is-a :OtherType)` declares a new type that is a SUBTYPE of the parent — substitutable via is-a. Distinct from `(deftype :MyType :OtherType)` (structural alias — same type) and `(newtype :MyType :OtherType)` (nominal wrapper — distinct, not a subtype). Three semantics, clear naming. (6) `defmacro` (per 058-031) uses Approach 1: parameters implicitly `:AST`, return implicitly `:AST`. Type-correctness enforced on the expanded form at startup verification. All 058 sub-proposals swept to use the Rust primitive types and `->` signature syntax. | 058 |
 
 ---
 

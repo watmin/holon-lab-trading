@@ -13,7 +13,7 @@ The current `ThoughtAST` enum has a `Circular(low_atom, high_atom, value, scale)
 
 Circular is structurally identical to Linear (058-008) and Log (058-017): `Blend(Thermometer(low), Thermometer(high), w_low, w_high)` where the weights are scalar functions of the value. The only difference is the weight function — Circular uses trigonometric functions to capture WRAP-AROUND semantics.
 
-With Blend as a pivotal core form (058-002) — and specifically Option B (two INDEPENDENT weights rather than a constrained weight pair) — `Circular` becomes a stdlib function. This proposal reclassifies it accordingly.
+With Blend as a pivotal core form (058-002) — and specifically Option B (two INDEPENDENT weights rather than a constrained weight pair) — `Circular` becomes a stdlib macro (per 058-031-defmacro). This proposal reclassifies it accordingly.
 
 ## The Reframing
 
@@ -24,18 +24,18 @@ With Blend as a pivotal core form (058-002) — and specifically Option B (two I
 ### Stdlib definition
 
 ```scheme
-(define (Circular low-atom high-atom value scale)
-  (let* ((period (first scale))
-         (angle (* 2 pi (/ value period)))
-         (w-low (cos angle))                                   ; circular weighting
-         (w-high (sin angle)))
-    (Blend (Thermometer low-atom dim)
-           (Thermometer high-atom dim)
-           w-low
-           w-high)))
+(defmacro Circular (low-atom high-atom value scale)
+  `(let* ((period (first ,scale))
+          (angle (* 2 pi (/ ,value period)))
+          (w-low (cos angle))                                  ; circular weighting
+          (w-high (sin angle)))
+     (Blend (Thermometer ,low-atom dim)
+            (Thermometer ,high-atom dim)
+            w-low
+            w-high)))
 ```
 
-`angle` maps `value` to a position on the unit circle. `cos angle` and `sin angle` are the weights — they span a full period as `value` cycles, and they can be NEGATIVE (unlike Linear's `1-t, t` or Log's log-scaled weights which are both non-negative).
+`angle` maps `value` to a position on the unit circle. `cos angle` and `sin angle` are the weights — they span a full period as `value` cycles, and they can be NEGATIVE (unlike Linear's `1-t, t` or Log's log-scaled weights which are both non-negative). Expansion happens at parse time (per 058-031-defmacro), so `hash(AST)` sees only the canonical `(let* ... (Blend (Thermometer ...) (Thermometer ...) w-low w-high))` form — no `Circular` call node survives into the hashed AST.
 
 ## Why Stdlib Earns the Name
 
@@ -126,16 +126,18 @@ pub enum ThoughtAST {
 }
 ```
 
-Delete the Circular encoder match arm (~15-20 lines).
+Delete the Circular encoder match arm (~15-20 lines). Macro expansion is handled by 058-031-defmacro's parse-time pass; no per-macro Rust is needed here.
 
 **wat stdlib addition** — `wat/std/scalars.wat`:
 
 ```scheme
-(define (Circular low high value scale)
-  (let* ((period (first scale))
-         (angle (* 2 pi (/ value period))))
-    (Blend (Thermometer low dim) (Thermometer high dim) (cos angle) (sin angle))))
+(defmacro Circular (low high value scale)
+  `(let* ((period (first ,scale))
+          (angle (* 2 pi (/ ,value period))))
+     (Blend (Thermometer ,low dim) (Thermometer ,high dim) (cos angle) (sin angle))))
 ```
+
+Registered at parse time (per 058-031-defmacro): every `(Circular ...)` invocation is rewritten to the canonical `let* + Blend-over-Thermometers` form before hashing.
 
 ## Questions for Designers
 

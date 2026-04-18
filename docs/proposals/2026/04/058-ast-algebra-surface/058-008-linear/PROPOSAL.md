@@ -13,7 +13,7 @@ The current `ThoughtAST` enum has a `Linear(low_atom, high_atom, value, scale)` 
 
 It is not a primitive algebraic operation. It is a scalar-to-vector conversion that expresses a position along a one-dimensional range by blending two endpoint anchors. That is exactly the shape of a Blend call with scalar-derived weights.
 
-With Blend as a pivotal core form (058-002), `Linear` becomes a stdlib function. This proposal reclassifies it accordingly.
+With Blend as a pivotal core form (058-002), `Linear` becomes a stdlib macro (per 058-031-defmacro). This proposal reclassifies it accordingly.
 
 Parallel proposals 058-017-log and 058-018-circular apply the same reframing to the Log and Circular scalar encoders, which are structurally identical except for the weight-computing function.
 
@@ -26,19 +26,19 @@ Parallel proposals 058-017-log and 058-018-circular apply the same reframing to 
 ### Stdlib definition
 
 ```scheme
-(define (Linear low-atom high-atom value scale)
-  (let* ((min (first scale))
-         (max (second scale))
-         (t (/ (- value min) (- max min)))                     ; normalize to [0,1]
-         (w-low (- 1 t))
-         (w-high t))
-    (Blend (Thermometer low-atom dim)
-           (Thermometer high-atom dim)
-           w-low
-           w-high)))
+(defmacro Linear (low-atom high-atom value scale)
+  `(let* ((min (first ,scale))
+          (max (second ,scale))
+          (t (/ (- ,value min) (- max min)))                    ; normalize to [0,1]
+          (w-low (- 1 t))
+          (w-high t))
+     (Blend (Thermometer ,low-atom dim)
+            (Thermometer ,high-atom dim)
+            w-low
+            w-high)))
 ```
 
-`t` is the linear-normalized position of `value` in the range `[min, max]`. `w-low` weights the low anchor; `w-high` weights the high anchor. Their sum is always 1 (a partition-of-unity linear interpolation).
+`t` is the linear-normalized position of `value` in the range `[min, max]`. `w-low` weights the low anchor; `w-high` weights the high anchor. Their sum is always 1 (a partition-of-unity linear interpolation). Expansion happens at parse time (per 058-031-defmacro), so `hash(AST)` sees only the canonical `(let* ... (Blend (Thermometer ...) (Thermometer ...) w-low w-high))` form — no `Linear` call node survives into the hashed AST.
 
 ## Why Stdlib Earns the Name
 
@@ -54,11 +54,11 @@ Linear uses `w_low(value) = 1 - t` and `w_high(value) = t` for `t = (value - min
 
 **2. The stdlib form makes the weight computation explicit.**
 
-As a CORE variant, the weight computation is hidden inside the Rust encoder dispatch. As a stdlib form, it is visible in the wat source — users can read, understand, and extend.
+As a CORE variant, the weight computation is hidden inside the Rust encoder dispatch. As a stdlib macro, it is visible in the wat source — users can read, understand, and extend.
 
 **3. New linear-style encoders become trivial stdlib additions.**
 
-Clipped-linear (saturates outside `[min, max]`), piecewise-linear (multiple breakpoints), offset-linear, etc. — all become wat functions rather than ThoughtAST variants. The algebra stays closed; extension happens in the library.
+Clipped-linear (saturates outside `[min, max]`), piecewise-linear (multiple breakpoints), offset-linear, etc. — all become wat macros rather than ThoughtAST variants. The algebra stays closed; extension happens in the library.
 
 ## Arguments Against
 
@@ -66,19 +66,17 @@ Clipped-linear (saturates outside `[min, max]`), piecewise-linear (multiple brea
 
 Current implementation pattern-matches on the `Linear` variant and dispatches to a specialized encoder. Stdlib expansion requires Blend evaluation with runtime-computed weights, which adds one indirection.
 
-**Mitigation:** the overhead is a single match arm vs. a stdlib function call. The vector-level work (Thermometer encoding + Blend) dominates. Dispatch cost is noise.
+**Mitigation:** the overhead is a single match arm vs. the expanded `let* + Blend` form. The vector-level work (Thermometer encoding + Blend) dominates. Dispatch cost is noise.
 
-**2. Cache key shape changes.**
+**2. Cache key shape changes — resolved by parse-time expansion.**
 
-Currently `Linear(low, high, value, scale)` is one AST node. The reframing makes it a stdlib call that expands to `Blend(Thermometer(...), Thermometer(...), w_low, w_high)` with computed weights.
-
-**Mitigation:** cache keys can be on the stdlib form (preserve name, add cache entry) OR on the expanded form (canonical, shared with identical Blend calls elsewhere). Either works. Consistency with other reframings (058-017, 058-018, 058-009) is the main criterion.
+Currently `Linear(low, high, value, scale)` is one AST node. Under `defmacro` (058-031), the `Linear` call is rewritten at parse time to the canonical `(let* ... (Blend (Thermometer ...) (Thermometer ...) w-low w-high))` form BEFORE any hashing or caching occurs. One cache entry; one hash; no alias-collision with other Blend-based encoders that share the expanded shape.
 
 **3. Loss of semantic name in AST walks.**
 
-Eager expansion loses the `Linear` label in AST inspection. Preserving the stdlib form in AST keeps the label visible.
+Because expansion is parse-time, the `Linear` label is consumed before the hashed AST exists. Tooling that walks the hashed AST sees the canonical `let* + Blend` form, not the source-level `Linear` name.
 
-**Mitigation:** preserve stdlib forms in AST; expand only during vector computation. Consistent with recommendations for Linear/Log/Circular/Concurrent/Sequential.
+**Mitigation:** source-level tools (formatters, IDE displays, error messages) can preserve the pre-expansion form via source maps. This is a standard Lisp-macro tooling concern; the trade-off is accepted for hash canonicalization. Consistent with the treatment of Log/Circular/Concurrent/Sequential macro reframings.
 
 **4. Dependency on Blend passing.**
 
@@ -132,17 +130,19 @@ pub enum ThoughtAST {
 }
 ```
 
-Delete the Linear encoder match arm (~15-20 lines including tests).
+Delete the Linear encoder match arm (~15-20 lines including tests). Macro expansion is handled by 058-031-defmacro's parse-time pass; no per-macro Rust is needed here.
 
 **wat stdlib addition** — `wat/std/scalars.wat`:
 
 ```scheme
-(define (Linear low high value scale)
-  (let* ((min (first scale))
-         (max (second scale))
-         (t (/ (- value min) (- max min))))
-    (Blend (Thermometer low dim) (Thermometer high dim) (- 1 t) t)))
+(defmacro Linear (low high value scale)
+  `(let* ((min (first ,scale))
+          (max (second ,scale))
+          (t (/ (- ,value min) (- max min))))
+     (Blend (Thermometer ,low dim) (Thermometer ,high dim) (- 1 t) t)))
 ```
+
+Registered at parse time (per 058-031-defmacro): every `(Linear ...)` invocation is rewritten to the canonical `let* + Blend-over-Thermometers` form before hashing.
 
 ## Questions for Designers
 

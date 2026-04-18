@@ -13,7 +13,7 @@ The current `ThoughtAST` enum has a `Log(low_atom, high_atom, value, scale)` var
 
 Log is structurally identical to Linear (058-008). The only difference is the normalization function — Log uses log-space interpolation, Linear uses linear-space. The algebraic operation is the same: weighted blend of two anchors.
 
-With Blend as a pivotal core form (058-002), `Log` becomes a stdlib function. This proposal reclassifies it accordingly.
+With Blend as a pivotal core form (058-002), `Log` becomes a stdlib macro (per 058-031-defmacro). This proposal reclassifies it accordingly.
 
 ## The Reframing
 
@@ -24,20 +24,20 @@ With Blend as a pivotal core form (058-002), `Log` becomes a stdlib function. Th
 ### Stdlib definition
 
 ```scheme
-(define (Log low-atom high-atom value scale)
-  (let* ((min (first scale))
-         (max (second scale))
-         (t (/ (- (log value) (log min))
-               (- (log max) (log min))))                       ; log-normalize to [0,1]
-         (w-low (- 1 t))
-         (w-high t))
-    (Blend (Thermometer low-atom dim)
-           (Thermometer high-atom dim)
-           w-low
-           w-high)))
+(defmacro Log (low-atom high-atom value scale)
+  `(let* ((min (first ,scale))
+          (max (second ,scale))
+          (t (/ (- (log ,value) (log min))
+                (- (log max) (log min))))                      ; log-normalize to [0,1]
+          (w-low (- 1 t))
+          (w-high t))
+     (Blend (Thermometer ,low-atom dim)
+            (Thermometer ,high-atom dim)
+            w-low
+            w-high)))
 ```
 
-Identical skeleton to Linear. The only difference is `t`'s computation: Linear uses `(value - min) / (max - min)`, Log uses `(log value - log min) / (log max - log min)`. Everything downstream is the same.
+Identical skeleton to Linear. The only difference is `t`'s computation: Linear uses `(value - min) / (max - min)`, Log uses `(log value - log min) / (log max - log min)`. Everything downstream is the same. Expansion happens at parse time (per 058-031-defmacro), so `hash(AST)` sees only the canonical `(let* ... (Blend (Thermometer ...) (Thermometer ...) w-low w-high))` form — no `Log` call node survives into the hashed AST.
 
 ## Why Stdlib Earns the Name
 
@@ -105,7 +105,7 @@ No. Log is a Blend specialization with a log-space weight function. Stdlib.
 
 Is this simple or easy?
 
-Simple. One CORE variant becomes one stdlib function. The log-scale normalization is pure arithmetic, clearly separated from the vector operation.
+Simple. One CORE variant becomes one stdlib macro. The log-scale normalization is pure arithmetic, clearly separated from the vector operation.
 
 Is anything complected?
 
@@ -125,18 +125,20 @@ pub enum ThoughtAST {
 }
 ```
 
-Delete the Log encoder match arm (~15-20 lines).
+Delete the Log encoder match arm (~15-20 lines). Macro expansion is handled by 058-031-defmacro's parse-time pass; no per-macro Rust is needed here.
 
 **wat stdlib addition** — `wat/std/scalars.wat`:
 
 ```scheme
-(define (Log low high value scale)
-  (let* ((min (first scale))
-         (max (second scale))
-         (t (/ (- (log value) (log min))
-               (- (log max) (log min)))))
-    (Blend (Thermometer low dim) (Thermometer high dim) (- 1 t) t)))
+(defmacro Log (low high value scale)
+  `(let* ((min (first ,scale))
+          (max (second ,scale))
+          (t (/ (- (log ,value) (log min))
+                (- (log max) (log min)))))
+     (Blend (Thermometer ,low dim) (Thermometer ,high dim) (- 1 t) t)))
 ```
+
+Registered at parse time (per 058-031-defmacro): every `(Log ...)` invocation is rewritten to the canonical `let* + Blend-over-Thermometers` form before hashing.
 
 ## Questions for Designers
 

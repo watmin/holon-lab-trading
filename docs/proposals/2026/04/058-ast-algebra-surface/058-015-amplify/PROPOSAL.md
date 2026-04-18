@@ -9,15 +9,16 @@
 
 ## The Candidate
 
-A wat stdlib function that scales the contribution of `y` in a blend with `x`:
+A wat stdlib macro (per 058-031-defmacro) that scales the contribution of `y` in a blend with `x`:
 
 ```scheme
-(define (Amplify x y s)
-  (Blend x y 1 s))
-;; Expands to: threshold(1·x + s·y) — boost component y in x by factor s
+(defmacro Amplify (x y s)
+  `(Blend ,x ,y 1 ,s))
+;; Expands at parse time to: (Blend x y 1 s)
+;; which computes: threshold(1·x + s·y) — boost component y in x by factor s
 ```
 
-A Blend call with literal weights `(1, s)`. The first weight stays at 1 (anchor `x` at unit emphasis); the second is a user-supplied scalar `s` (control the relative weight of `y`).
+A Blend call with literal weights `(1, s)`. The first weight stays at 1 (anchor `x` at unit emphasis); the second is a user-supplied scalar `s` (control the relative weight of `y`). Expansion happens at parse time, so `hash(AST)` sees only the canonical `Blend` form.
 
 ### Semantics
 
@@ -77,8 +78,8 @@ Different idioms, same underlying primitive.
 **1. Trivial expansion.**
 
 ```scheme
-(define (Amplify x y s)
-  (Blend x y 1 s))
+(defmacro Amplify (x y s)
+  `(Blend ,x ,y 1 ,s))
 ```
 
 One-line expansion. Three tokens replaced by three tokens (`Amplify x y s` ≈ `Blend x y 1 s`). Is the name earning its place for a one-token "savings"?
@@ -115,7 +116,7 @@ Or make Bundle variadic with weights:
 
 `(Amplify x y s)` and `(Blend x y 1 s)` are mechanically identical. The named form is sugar. Does sugar earn its place?
 
-**Counter:** same argument as Difference (058-004) vs Blend(1, -1). FOUNDATION's stdlib criterion explicitly admits reader clarity as justification for a name. Amplify passes that criterion.
+**Counter:** same argument as Subtract (058-019) vs Blend(1, -1). FOUNDATION's stdlib criterion explicitly admits reader clarity as justification for a name. Amplify passes that criterion.
 
 ## Comparison
 
@@ -123,12 +124,11 @@ Or make Bundle variadic with weights:
 |---|---|---|---|
 | `Blend(x, y, w1, w2)` | CORE | arbitrary literals | Generic weighted sum |
 | `Amplify(x, y, s)` | STDLIB (this) | `(1, s)` | Scale y's emphasis by factor s |
-| `Subtract(x, y)` | STDLIB (058-019) | `(1, -1)` | Remove y linearly from x |
-| `Flip(x, y)` | STDLIB (058-020) | `(1, -2)` | Invert y's contribution |
+| `Subtract(x, y)` | STDLIB macro (058-019) | `(1, -1)` | Remove y linearly from x |
+| `Flip(x, y)` | STDLIB macro (058-020) | `(1, -2)` | Invert y's contribution |
 | `Bundle([x, y])` | CORE | `(1, 1)` | Equal superposition |
-| `Difference(a, b)` | STDLIB (058-004) | `(1, -1)` | Delta from b to a |
 
-Amplify is the parameterized form; Subtract, Flip, and Bundle-of-pair are specific values. Difference and Subtract share weights but differ in reader intent.
+Amplify is the parameterized macro; Subtract and Flip are specific-weight macros; Bundle-of-pair is the core form at `(1, 1)`. 058-004-difference is REJECTED; Subtract is the canonical delta macro.
 
 ## Algebraic Question
 
@@ -156,14 +156,16 @@ Yes — `(Blend x y 1 s)`. Named form earns its place via reader clarity.
 
 ## Implementation Scope
 
-**Zero Rust changes.** Pure wat.
+**Zero Rust changes beyond 058-031-defmacro's macro-expansion pass.** Pure wat.
 
 **wat stdlib addition** — `wat/std/blends.wat`:
 
 ```scheme
-(define (Amplify x y s)
-  (Blend x y 1 s))
+(defmacro Amplify (x y s)
+  `(Blend ,x ,y 1 ,s))
 ```
+
+Registered at parse time (per 058-031-defmacro): every `(Amplify x y s)` invocation is rewritten to `(Blend x y 1 s)` before hashing.
 
 ## Questions for Designers
 
@@ -171,7 +173,7 @@ Yes — `(Blend x y 1 s)`. Named form earns its place via reader clarity.
 
 2. **Negative `s` overlap with Subtract / Flip.** `(Amplify x y -1)` ≡ `(Subtract x y)`, `(Amplify x y -2)` ≡ `(Flip x y)`. Recommendation: freely allow overlap; stylistic preference picks the most specific name.
 
-3. **Attenuation variant?** Some applications want "reduce `y`'s contribution" specifically (`0 < s < 1`). Could be a named variant `Attenuate` for clarity. Recommendation: no — avoid further proliferation. `(Amplify x y 0.5)` suffices; if users want a name for attenuation they can define their own stdlib alias.
+3. **Attenuation variant?** Some applications want "reduce `y`'s contribution" specifically (`0 < s < 1`). Could be a named variant `Attenuate` for clarity. Recommendation: no — avoid further proliferation. `(Amplify x y 0.5)` suffices; if users want a name for attenuation they can define their own stdlib macro.
 
 4. **Dependency on Blend.** If 058-002 rejects, Amplify cannot exist. Resolution order: Blend first.
 

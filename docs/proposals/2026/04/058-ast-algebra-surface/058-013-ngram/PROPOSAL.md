@@ -8,18 +8,19 @@
 
 ## The Candidate
 
-A wat stdlib function that encodes `n`-wise adjacency windows over a list of thoughts:
+A wat stdlib macro (per 058-031-defmacro) that encodes `n`-wise adjacency windows over a list of thoughts:
 
 ```scheme
-(define (Ngram n thoughts)
-  (Bundle (n-wise-map encode-window n thoughts)))
+(defmacro Ngram (n thoughts)
+  `(Bundle (n-wise-map encode-window ,n ,thoughts)))
 ```
 
-Where `n-wise-map` slides a window of size `n` across `thoughts`, and `encode-window` encodes each window as a permutation-ordered Bundle (Sequential, specialized).
+Where `n-wise-map` is a regular stdlib function (not a macro) that slides a window of size `n` across `thoughts`, and `encode-window` encodes each window as a permutation-ordered Bundle (Sequential, specialized). The macro quasiquotes the call; `,n` and `,thoughts` splice in the argument ASTs.
 
 ### More concretely
 
 ```scheme
+;; list-combinator helpers (regular stdlib functions, not macros)
 (define (encode-window window)
   (Bundle
     (map-with-index (lambda (t i) (Permute t i)) window)))
@@ -29,9 +30,12 @@ Where `n-wise-map` slides a window of size `n` across `thoughts`, and `encode-wi
   ;; until the sliding window exhausts xs
   ...)
 
-(define (Ngram n thoughts)
-  (Bundle (n-wise-map encode-window n thoughts)))
+;; the macro itself — expands at parse time
+(defmacro Ngram (n thoughts)
+  `(Bundle (n-wise-map encode-window ,n ,thoughts)))
 ```
+
+The window-slicing combinator (`n-wise-map`) is a runtime list operation used inside the expansion — it is not itself a macro. The `Ngram` macro simply emits the canonical Bundle-over-n-wise-map call; Bundle, Permute, and the helpers do the actual work.
 
 ### Special cases
 
@@ -111,18 +115,18 @@ The proposal encodes each window as a Sequential-like position-permuted bundle, 
 **Mitigation:** simplify the definition:
 
 ```scheme
-(define (Ngram n thoughts)
-  (Bundle (n-wise-map (lambda (window) (Sequential window)) n thoughts)))
+(defmacro Ngram (n thoughts)
+  `(Bundle (n-wise-map (lambda (window) (Sequential window)) ,n ,thoughts)))
 ```
 
-Or, even more concise (once Sequential is stdlib per 058-009):
+Or, even more concise (once Sequential is a parse-time macro per 058-009):
 
 ```scheme
-(define (Ngram n thoughts)
-  (Bundle (map Sequential (n-wise-split n thoughts))))
+(defmacro Ngram (n thoughts)
+  `(Bundle (map Sequential (n-wise-split ,n ,thoughts))))
 ```
 
-Where `n-wise-split` produces the list of windows. Cleaner composition.
+Where `n-wise-split` produces the list of windows. Cleaner composition. Note that `Sequential` in the expansion is itself a macro — it is expanded in the same parse-time pass once `Ngram` is expanded.
 
 ## Comparison
 
@@ -162,24 +166,26 @@ Yes, once the sliding-window combinator is available. Pure composition.
 
 ## Implementation Scope
 
-**Zero Rust changes.** Pure wat.
+**Zero Rust changes beyond 058-031-defmacro's macro-expansion pass.** Pure wat.
 
 **wat stdlib additions:**
 
 ```scheme
 ;; wat/std/sequences.wat
 
+;; list combinator — regular stdlib function, not a macro
 (define (n-wise-split n xs)
   (if (< (length xs) n)
       '()
       (cons (take n xs)
             (n-wise-split n (rest xs)))))
 
-(define (Ngram n thoughts)
-  (Bundle (map Sequential (n-wise-split n thoughts))))
+;; the macro itself — registered at parse time
+(defmacro Ngram (n thoughts)
+  `(Bundle (map Sequential (n-wise-split ,n ,thoughts))))
 ```
 
-Depends on `take`, `length`, `map`, `rest` being available in the wat stdlib (standard list combinators).
+Depends on `take`, `length`, `map`, `rest` being available in the wat stdlib (standard list combinators). `Ngram` is registered at parse time (per 058-031-defmacro); every `(Ngram n xs)` invocation is rewritten to the canonical Bundle-of-Sequentials form before hashing, with `Sequential` itself further expanded by the same pass.
 
 ## Questions for Designers
 

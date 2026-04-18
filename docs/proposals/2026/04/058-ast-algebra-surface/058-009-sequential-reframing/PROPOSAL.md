@@ -9,32 +9,32 @@
 
 The current `ThoughtAST` enum has a `Sequential(Vec<ThoughtAST>)` variant. FOUNDATION's audit lists it as "CORE (grandfathered)" — acknowledging that it is expressible via existing primitives (Bundle + Permute) but has been preserved for historical reasons.
 
-This proposal argues that the grandfathering should end. `Sequential` should be a pure stdlib function expanding to a specific Bundle-over-Permute composition, with NO corresponding ThoughtAST variant.
+This proposal argues that the grandfathering should end. `Sequential` should be a pure stdlib macro (per 058-031-defmacro) expanding to a specific Bundle-over-Permute composition, with NO corresponding ThoughtAST variant.
 
 ## The Reframing
 
 `Sequential(list-of-thoughts)` is position-encoded bundling: each thought `t_i` at position `i` is permuted by `i` steps, and the permuted thoughts are bundled.
 
 ```scheme
-(define (Sequential thoughts)
-  (Bundle
-    (map-with-index
-      (lambda (t i) (Permute t i))
-      thoughts)))
+(defmacro Sequential (thoughts)
+  `(Bundle
+     (map-with-index
+       (lambda (t i) (Permute t i))
+       ,thoughts)))
 ```
 
-Or, written with explicit index iteration:
+Or, thought of with explicit index iteration:
 
 ```scheme
-(define (Sequential thoughts)
-  (Bundle
-    (list (Permute (nth thoughts 0) 0)
-          (Permute (nth thoughts 1) 1)
-          (Permute (nth thoughts 2) 2)
-          ...)))
+;; conceptual unrolling of the emitted expansion for a known-length list:
+(Bundle
+  (list (Permute (nth thoughts 0) 0)
+        (Permute (nth thoughts 1) 1)
+        (Permute (nth thoughts 2) 2)
+        ...))
 ```
 
-Where `(Permute t 0)` is a no-op (identity permutation), so the first element passes through unchanged; the second is permuted once; the third twice; and so on.
+Where `(Permute t 0)` is a no-op (identity permutation), so the first element passes through unchanged; the second is permuted once; the third twice; and so on. `map-with-index` is a regular runtime stdlib function, not a macro — it iterates the list at vector-evaluation time inside the expanded form. The `Sequential` macro itself only emits the canonical `(Bundle (map-with-index ...))` shape.
 
 ### Semantics
 
@@ -56,15 +56,15 @@ The grandfathering was historical courtesy, not principled classification. Remov
 
 **3. The stdlib form is more useful than the variant.**
 
-As a stdlib function, Sequential is visible in the wat source, inspectable, extensible:
+As a stdlib macro, Sequential is visible in the wat source, inspectable, extensible:
 
 ```scheme
-;; user can define variants:
-(define (ReverseSequential thoughts)
-  (Sequential (reverse thoughts)))
+;; user can define related macros:
+(defmacro ReverseSequential (thoughts)
+  `(Sequential (reverse ,thoughts)))
 
-(define (SequentialFromN start thoughts)
-  (Bundle (map-with-index (lambda (t i) (Permute t (+ i start))) thoughts)))
+(defmacro SequentialFromN (start thoughts)
+  `(Bundle (map-with-index (lambda (t i) (Permute t (+ i ,start))) ,thoughts)))
 ```
 
 As a variant, Sequential's behavior is hidden in Rust encoder dispatch. Users can't trivially produce related forms without compiling new Rust.
@@ -81,20 +81,20 @@ Currently `Sequential(thoughts)` dispatches to a specialized Rust encoder that c
 
 **Mitigation:**
 - The intermediate list has `O(k)` entries for `k` thoughts (not `O(d)` — each entry is a small ThoughtAST, not a vector). The overhead is bounded.
-- The ACTUAL vector-level work is identical: for each of `k` thoughts, encode, permute by `i`, accumulate into running sum, threshold at end. Whether this is driven by one specialized encoder or by stdlib-invoked primitives, the vector ops are the same.
-- Stdlib-invoked Bundle can cache each permuted thought independently. Specialized Sequential encodes everything in one shot and caches only the final result. The stdlib version has FINER-GRAINED cache — better reuse when two Sequentials share sub-sequences.
+- The ACTUAL vector-level work is identical: for each of `k` thoughts, encode, permute by `i`, accumulate into running sum, threshold at end. Whether this is driven by one specialized encoder or by macro-emitted primitives, the vector ops are the same.
+- Macro-emitted Bundle can cache each permuted thought independently. Specialized Sequential encodes everything in one shot and caches only the final result. The macro version has FINER-GRAINED cache — better reuse when two Sequentials share sub-sequences.
 
-**2. Loss of semantic name in AST.**
+**2. Loss of semantic name in AST — resolved by parse-time expansion.**
 
-A `Sequential([a, b, c])` AST node clearly reads as "this is a sequence." After reframing, the AST shape is `Bundle([Permute(a, 0), Permute(b, 1), Permute(c, 2)])`. Reader must recognize the pattern.
+A `Sequential([a, b, c])` AST node clearly reads as "this is a sequence." Under `defmacro`, the parse-time expansion replaces the `Sequential` node with the canonical `Bundle(map-with-index ...)` form BEFORE hashing. The hashed AST sees only the canonical shape — this is the intended behavior; it means `hash((Sequential xs)) = hash((Bundle (map-with-index ... xs)))`, closing finding #4 for this alias alongside the others.
 
-**Mitigation:** if stdlib forms are preserved in the AST (per 058-008 Question 2), the `Sequential(...)` form stays visible. Expansion happens only during vector computation. Same argument as Linear/Log/Circular.
+**Mitigation:** source-level tooling (formatters, error messages) preserves the pre-expansion `Sequential(...)` form via source maps. This is a standard Lisp-macro tooling concern. Consistent with the treatment of Linear/Log/Circular/Concurrent macro reframings.
 
 **3. Grandfathering exists for a reason.**
 
 Historical code, tests, and examples use `Sequential` as a variant. Removing it is a breaking change to the Rust enum.
 
-**Mitigation:** migration is mechanical — replace variant pattern matches with stdlib function calls. Any existing `wat` code that uses `Sequential` as a stdlib form already keeps working (the name just resolves to the stdlib function instead of a variant match). Rust code that constructs `ThoughtAST::Sequential(...)` directly must change to construct the expanded Bundle/Permute form, OR invoke the stdlib via the wat interpreter.
+**Mitigation:** migration is mechanical — replace variant pattern matches with macro expansions at parse time. Any existing `wat` code that writes `(Sequential ...)` keeps working (the name just resolves to the macro at parse time instead of a variant match at eval time). Rust code that constructs `ThoughtAST::Sequential(...)` directly must change to construct the expanded Bundle/Permute form, OR route the construction through the wat macro-expansion pass.
 
 ## Comparison to Related Reframings
 
@@ -144,19 +144,21 @@ pub enum ThoughtAST {
 
 Delete the Sequential encoder match arm (~15-20 lines including tests).
 
-**wat stdlib addition** — one function, ~5 lines:
+**wat stdlib addition** — one macro, ~5 lines:
 
 ```scheme
 ;; wat/std/sequences.wat (or equivalent)
-(define (Sequential thoughts)
-  (Bundle
-    (map-with-index (lambda (t i) (Permute t i)) thoughts)))
+(defmacro Sequential (thoughts)
+  `(Bundle
+     (map-with-index (lambda (t i) (Permute t i)) ,thoughts)))
 ```
+
+Registered at parse time (per 058-031-defmacro): every `(Sequential ...)` invocation is rewritten to the canonical `(Bundle (map-with-index ...))` form before hashing. `map-with-index` itself remains a regular runtime list combinator, not a macro.
 
 **Other stdlib forms that currently delegate to Sequential variant:**
 
-- `Chain`, `Ngram`, `Concurrent`, and similar list-operating stdlib forms that internally call Sequential (if any exist in current wat) remain unchanged — they now invoke the stdlib Sequential rather than the variant, but the call site looks the same.
-- `Array` (if it uses Sequential internally for indexed encoding) keeps working transparently.
+- `Chain`, `Ngram`, `Concurrent`, and similar list-operating stdlib macros that internally call Sequential (per 058-010, 058-012, 058-013) remain unchanged — they emit `(Sequential ...)` in their expansions, which in turn expands in the same parse-time pass to the canonical Bundle-over-Permute form.
+- `Array` (058-026) uses Sequential internally for indexed encoding and keeps working transparently — its macro expansion emits `(Sequential ts)`, which is further expanded by the same pass.
 
 ## Questions for Designers
 

@@ -1,21 +1,21 @@
 # 058-024: `Unbind` — Decode Alias for Bind
 
 **Scope:** algebra
-**Class:** STDLIB (named alias for Bind)
+**Class:** STDLIB (named macro alias for Bind)
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
 **Depends on:** 058-021-bind (pivotal — Unbind is an alias for Bind)
 
 ## The Candidate
 
-A wat stdlib function that represents the INVERSE of a Bind operation — the decode direction of role-filler binding:
+A wat stdlib macro (per 058-031-defmacro) that represents the INVERSE of a Bind operation — the decode direction of role-filler binding:
 
 ```scheme
-(define (Unbind composite role-or-filler)
-  (Bind composite role-or-filler))
+(defmacro Unbind (c k)
+  `(Bind ,c ,k))
 ```
 
-Identical math to Bind. The ONLY distinction is reader intent: Unbind communicates "I am decoding, extracting, recovering" rather than "I am binding, composing, encoding."
+Identical math to Bind. The ONLY distinction is reader intent at source: Unbind communicates "I am decoding, extracting, recovering" rather than "I am binding, composing, encoding." Expansion happens at parse time, so `hash((Unbind c k)) = hash((Bind c k))` — the alias-collision concern from Beckman's finding #4 does not apply.
 
 ### Semantics
 
@@ -112,21 +112,19 @@ Proliferation risk. Every primitive with a "decode" interpretation gets a decode
 
 **Counter:** Unbind is the specific case where the inverse is non-obvious in reader context. `Permute(v, -k)` is self-documenting — the negative step IS the decode. `Anti-Bundle` doesn't exist because Bundle is not reversible. Unbind is the unique case where the operation and its inverse share a name but not a reader context.
 
-**3. Cache key concerns.**
+**3. Cache key concerns — RESOLVED by parse-time expansion.**
 
-`(Bind a b)` and `(Unbind a b)` produce the same vector but have different AST shapes. Two cache entries for one vector. Minor memory inefficiency.
-
-**Mitigation:** canonicalize at parse time (Unbind expands to Bind, shares cache), OR preserve the name for AST clarity (accept the duplicate cache). Tooling decision.
+Under the original `(define ...)` framing, `(Bind a b)` and `(Unbind a b)` would have different AST shapes and thus different cache keys. With `defmacro` (058-031), expansion runs at parse time: the `Unbind` invocation is rewritten to `(Bind c k)` BEFORE any hashing or caching occurs. One cache entry; one hash. Finding #4 (alias hash collision) from the designer review is resolved.
 
 ## Comparison
 
 | Form | Class | Operation | Reader intent |
 |---|---|---|---|
 | `Bind(a, b)` | CORE (058-021) | `a[i] * b[i]` | Encode: compose role and filler |
-| `Unbind(c, k)` | STDLIB (this) | `c[i] * k[i]` (same math) | Decode: recover filler from composite by key |
+| `Unbind(c, k)` | STDLIB macro (this) | `c[i] * k[i]` (same math, expanded at parse time) | Decode: recover filler from composite by key |
 | `Permute(v, k)` | CORE (058-022) | cyclic shift by `k` | Encode or decode (k sign indicates direction) |
 
-Unbind is the only stdlib alias for a core operation where the reader intent is context-dependent.
+Unbind is the only stdlib macro alias for a core operation where the reader intent is context-dependent.
 
 ## Algebraic Question
 
@@ -146,28 +144,30 @@ Simple. One-line stdlib alias.
 
 Is anything complected?
 
-The two-names-one-operation issue. Mitigated by reader-context argument.
+The two-names-one-operation issue. Mitigated by reader-context argument AND parse-time expansion (the two names collapse to one canonical AST before hashing).
 
 Could existing forms express it?
 
-Yes — `(Bind c k)`. Named form for reader clarity.
+Yes — `(Bind c k)`. Named macro earns its place via reader clarity; the source form `Unbind` disappears after parse-time expansion.
 
 ## Implementation Scope
 
-**Zero Rust changes.** Pure wat.
+**Zero Rust changes beyond 058-031-defmacro's macro-expansion pass.** Pure wat.
 
 **wat stdlib addition** — `wat/std/decode.wat` or `wat/std/bind.wat`:
 
 ```scheme
-(define (Unbind composite role-or-filler)
-  (Bind composite role-or-filler))
+(defmacro Unbind (c k)
+  `(Bind ,c ,k))
 ```
+
+Registered at parse time (per 058-031-defmacro): every `(Unbind c k)` invocation is rewritten to `(Bind c k)` before hashing.
 
 ## Questions for Designers
 
 1. **Accept the alias or reject it?** The operation is mathematically Bind. This proposal argues the reader-intent distinction earns the alias. Alternative: document that "unbind is Bind" and have vocab code always call Bind. Recommendation: accept Unbind; the clarity gain is load-bearing for accessor stdlib forms like `get`.
 
-2. **Cache canonicalization.** Same issue as Linear/Log/Circular from 058-008+. Preserve stdlib form in AST (separate cache, semantic name visible) or eagerly expand (canonical cache, lose name). Consistency across all stdlib aliases is key.
+2. **Cache canonicalization — resolved.** Parse-time expansion (058-031-defmacro) means `Unbind` and `Bind` invocations collapse to the same canonical AST before hashing; they share one cache entry automatically. Same resolution applies uniformly to all stdlib macro aliases (Linear/Log/Circular/Concurrent/Set/etc.).
 
 3. **Zero-aware decode future.** Per FOUNDATION's "Output Space" section, the algebra's default output is ternary; Bind is self-inverse on non-zero positions. If future work introduces a decode variant that handles zero positions of the key differently (e.g., treating zero as "don't project" vs. "project and zero out"), Unbind may diverge from Bind. Is this proposal reserving the name for that future, or strictly an alias today?
 

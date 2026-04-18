@@ -9,15 +9,16 @@
 
 ## The Candidate
 
-A wat stdlib function that inverts `y`'s contribution in a blend with `x`:
+A wat stdlib macro (per 058-031-defmacro) that inverts `y`'s contribution in a blend with `x`:
 
 ```scheme
-(define (Flip x y)
-  (Blend x y 1 -2))
-;; Expands to: threshold(1·x + (-2)·y) — inverts y's sign contribution, double weighted
+(defmacro Flip (x y)
+  `(Blend ,x ,y 1 -2))
+;; Expands at parse time to: (Blend x y 1 -2)
+;; which computes: threshold(1·x + (-2)·y) — inverts y's sign contribution, double weighted
 ```
 
-A Blend call with literal weights `(1, -2)`. Unlike Subtract (weight `-1`), Flip uses weight `-2` — enough to OVERPOWER `x` on dimensions where `y` agrees, effectively flipping the sign.
+A Blend call with literal weights `(1, -2)`. Unlike Subtract (weight `-1`), Flip uses weight `-2` — enough to OVERPOWER `x` on dimensions where `y` agrees, effectively flipping the sign. Expansion happens at parse time, so `hash(AST)` sees only the canonical `Blend` form.
 
 ### Semantics
 
@@ -117,9 +118,9 @@ Flip's use cases (adversarial contexts, counter-patterns) are narrower than Subt
 | Form | Class | Weights | Semantic |
 |---|---|---|---|
 | `Blend(x, y, w1, w2)` | CORE | arbitrary | Generic weighted sum |
-| `Amplify(x, y, s)` | STDLIB (058-015) | `(1, s)` | Parameterized emphasis |
-| `Subtract(x, y)` | STDLIB (058-019) | `(1, -1)` | Linear removal |
-| `Flip(x, y)` | STDLIB (this) | `(1, -2)` | Linear inversion |
+| `Amplify(x, y, s)` | STDLIB macro (058-015) | `(1, s)` | Parameterized emphasis |
+| `Subtract(x, y)` | STDLIB macro (058-019) | `(1, -1)` | Linear removal |
+| `Flip(x, y)` | STDLIB macro (this) | `(1, -2)` | Linear inversion |
 | `Orthogonalize(x, y)` | CORE (058-005) | `(1, computed)` | Project-remove direction |
 
 Flip is the specific `-2` case; Amplify is the parameterized form; Subtract is the specific `-1` case; Orthogonalize is the COMPUTED-weight case (can't be Blend-expressed).
@@ -150,14 +151,16 @@ Yes — `(Blend x y 1 -2)`. Named form earns its place via the inversion-intent 
 
 ## Implementation Scope
 
-**Zero Rust changes.** Pure wat.
+**Zero Rust changes beyond 058-031-defmacro's macro-expansion pass.** Pure wat.
 
 **wat stdlib addition** — `wat/std/blends.wat`:
 
 ```scheme
-(define (Flip x y)
-  (Blend x y 1 -2))
+(defmacro Flip (x y)
+  `(Blend ,x ,y 1 -2))
 ```
+
+Registered at parse time (per 058-031-defmacro): every `(Flip x y)` invocation is rewritten to `(Blend x y 1 -2)` before hashing.
 
 ## Questions for Designers
 

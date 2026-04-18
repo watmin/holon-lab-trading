@@ -7,14 +7,14 @@
 
 ## The Candidate
 
-A wat stdlib function that encodes "a, then b" — a DIRECTED binary sequence:
+A wat stdlib macro (per 058-031-defmacro) that encodes "a, then b" — a DIRECTED binary sequence:
 
 ```scheme
-(define (Then a b)
-  (Bundle (list a (Permute b 1))))
+(defmacro Then (a b)
+  `(Bundle (list ,a (Permute ,b 1))))
 ```
 
-The first thought passes through unchanged; the second is permuted by one step. The bundled result is a vector whose structure encodes "a comes first, b comes after." The permutation makes `(Then a b)` categorically distinct from `(Then b a)` — order matters.
+The first thought passes through unchanged; the second is permuted by one step. The bundled result is a vector whose structure encodes "a comes first, b comes after." The permutation makes `(Then a b)` categorically distinct from `(Then b a)` — order matters. Expansion happens at parse time, so `hash(AST)` sees only the canonical Bundle-over-Permute form.
 
 ### Semantics
 
@@ -46,11 +46,11 @@ Chain is "a, then b, then c, then d" — a walk of Then operations over a list. 
 Having a named Then lets Chain and Ngram write:
 
 ```scheme
-(define (Chain thoughts)
-  (Bundle (pairwise-map Then thoughts)))
+(defmacro Chain (thoughts)
+  `(Bundle (pairwise-map Then ,thoughts)))
 ```
 
-Rather than inlining the permutation logic in each.
+Rather than inlining the permutation logic in each. Because `Then` is itself a macro, the expansion recurses — nested macros expand in turn until only algebra-core operations remain.
 
 **3. Permute parameter makes temporal directionality explicit.**
 
@@ -130,15 +130,17 @@ Yes — `(Bundle (list a (Permute b 1)))`. Named form is for reader clarity.
 
 ## Implementation Scope
 
-**Zero Rust changes.** Pure wat.
+**Zero Rust changes beyond 058-031-defmacro's macro-expansion pass.** Pure wat.
 
-**wat stdlib addition** — one line:
+**wat stdlib addition** — one macro, registered at parse time:
 
 ```scheme
 ;; wat/std/sequences.wat (or similar)
-(define (Then a b)
-  (Bundle (list a (Permute b 1))))
+(defmacro Then (a b)
+  `(Bundle (list ,a (Permute ,b 1))))
 ```
+
+Registration is parse-time (per 058-031-defmacro): every `(Then ...)` invocation is rewritten to the canonical Bundle-over-Permute form before hashing.
 
 ## Questions for Designers
 

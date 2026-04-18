@@ -1,7 +1,7 @@
 # 058-026: `Array` — Stdlib Indexed-List Constructor
 
 **Scope:** algebra
-**Class:** STDLIB (alias for Sequential with data-structure intent)
+**Class:** STDLIB (macro alias for Sequential with data-structure intent)
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
 **Depends on:** 058-009-sequential-reframing, 058-022-permute, 058-025-cleanup
@@ -9,14 +9,14 @@
 
 ## The Candidate
 
-A wat stdlib function that constructs an encoded indexed list from a list of thoughts:
+A wat stdlib macro (per 058-031-defmacro) that constructs an encoded indexed list from a list of thoughts:
 
 ```scheme
-(define (Array thoughts)
-  (Sequential thoughts))
+(defmacro Array (ts)
+  `(Sequential ,ts))
 ```
 
-Identical expansion to `Sequential` (058-009). The only distinction is reader intent: `Array` communicates "data-structure: ordered indexed list," while `Sequential` communicates "positional encoding of a temporal or ordered sequence."
+Identical expansion to `Sequential` (058-009, which is itself a macro). The only distinction is reader intent: `Array` communicates "data-structure: ordered indexed list," while `Sequential` communicates "positional encoding of a temporal or ordered sequence." Both expand at parse time; `hash((Array ts)) = hash((Sequential ts))` — no alias collision.
 
 ### Semantics
 
@@ -117,14 +117,14 @@ Where does the proliferation stop?
 
 | Form | Class | Expansion | Reader intent |
 |---|---|---|---|
-| `Sequential(ts)` | STDLIB (058-009) | Bundle of index-permuted items | Temporal/ordered sequence |
-| `Array(ts)` | STDLIB (this) | `Sequential(ts)` | Data-structure: indexed list |
+| `Sequential(ts)` | STDLIB macro (058-009) | Bundle of index-permuted items | Temporal/ordered sequence |
+| `Array(ts)` | STDLIB macro (this) | `Sequential(ts)` → Bundle of index-permuted items | Data-structure: indexed list |
 | `nth(a, i, cb)` | STDLIB helper (this) | cleanup(Permute(a, -i), cb) | Array accessor |
 | `nth-raw(a, i)` | STDLIB helper (this) | Permute(a, -i) | Raw Array accessor |
-| `Concurrent(ts)` | STDLIB (058-010) | Bundle(ts) | Temporal co-occurrence |
-| `Set(ts)` | STDLIB (058-027) | Bundle(ts) | Data-structure: unordered collection |
+| `Concurrent(ts)` | STDLIB macro (058-010) | Bundle(ts) | Temporal co-occurrence |
+| `Set(ts)` | STDLIB macro (058-027) | Bundle(ts) | Data-structure: unordered collection |
 
-Array and Sequential share an expansion; Concurrent and Set share an expansion. Four data-structure-ish stdlib forms, two underlying encodings, distinguished by reader intent.
+Array and Sequential share a parse-time expansion; Concurrent and Set share a parse-time expansion. Four data-structure-ish stdlib macros, two underlying encodings, distinguished by reader intent at source. All collapse to canonical core forms in the hashed AST.
 
 ## Algebraic Question
 
@@ -152,20 +152,24 @@ Yes — directly via Sequential. Named form earns its place via data-structure r
 
 ## Implementation Scope
 
-**Zero Rust changes.** Pure wat.
+**Zero Rust changes beyond 058-031-defmacro's macro-expansion pass.** Pure wat.
 
 **wat stdlib addition** — `wat/std/structures.wat`:
 
 ```scheme
-(define (Array thoughts)
-  (Sequential thoughts))
+;; the Array macro — parse-time alias for Sequential
+(defmacro Array (ts)
+  `(Sequential ,ts))
 
+;; accessor helpers — regular stdlib functions, not macros
 (define (nth array-thought index candidates)
   (cleanup (Permute array-thought (- 0 index)) candidates))
 
 (define (nth-raw array-thought index)
   (Permute array-thought (- 0 index)))
 ```
+
+`Array` is registered at parse time (per 058-031-defmacro); every `(Array ts)` is rewritten to `(Sequential ts)`, which in turn expands (also as a macro, per 058-009) to the canonical Bundle-over-Permute form. The `nth` and `nth-raw` accessors are regular runtime functions — they do not need macro semantics because they operate on already-encoded thought vectors.
 
 ## Questions for Designers
 
