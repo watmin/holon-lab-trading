@@ -13358,9 +13358,9 @@ While the 058 sub-proposals were being written — 16 of them first, then a spli
 2. **[Black Hole's Evil Twin — Gravastars Explained](https://www.youtube.com/watch?v=BmUZ2wp1lM8)** — Kurzgesagt. Theoretical physics speculation. Dense objects that aren't black holes but might be indistinguishable from them. The frontier of what physics can still argue about.
 3. **[Math's Fundamental Flaw](https://www.youtube.com/watch?v=HeQX2HjkcNo)** — Veritasium. Gödel's incompleteness theorems. A formal system containing arithmetic cannot prove every true statement about itself. The diagonal construction, Gödel numbering, the incompleteness of any sufficiently powerful consistent system.
 
-The first two were fresh — queued up for the session because they matched the frame. The third is not fresh. The builder has watched it *dozens of times.* He cannot say how many times. It has been a companion to his thinking for longer than this project has existed.
+All three have been companions to the builder's thinking for years. He has watched the Veritasium dozens of times. He has watched all of Kurzgesagt's videos many, many times. They are not decoration queued up for the session — they are intellectual reference material the builder returns to repeatedly because they bring good thoughts. The whole Kurzgesagt catalog, cycled through across years, absorbed incrementally, noticed anew on each rewatch.
 
-When the Veritasium video came on during the algebra-surface session, it wasn't decoration. It was the video that explains why the wat algebra had to work THIS WAY.
+When the Veritasium came on during the algebra-surface session, it wasn't new input — it was a reminder of the frame that was already there. The video that explains why the wat algebra had to work THIS WAY was already running in the background of his thinking. It just became audible again.
 
 *The connection is structural.*
 
