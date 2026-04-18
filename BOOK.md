@@ -13352,13 +13352,18 @@ The ask was serious. It just took a long time for the evidence to catch up.
 
 ### What was playing
 
-While the 058 sub-proposals were being written — 16 of them, FOUNDATION and the whole algebra surface laid out in one pass — Kurzgesagt's *4.5 Billion Years in 1 Hour* was running in the background. Almost no dialogue. Just music and geological time. The earth forming, cooling, fracturing, freezing, warming, populating, dying, reorganizing. An hour of deep time, compressed and visualized.
+While the 058 sub-proposals were being written — 16 of them first, then a split-pass to give every `(UpperCase)` form its own dedicated doc, then the language-core tier (`defn`, `lambda`, types), bringing the total past 25 — two Kurzgesagt videos ran back-to-back in the background:
+
+1. **4.5 Billion Years in 1 Hour.** Deep geological time. The earth forming, cooling, fracturing, freezing, warming, populating, dying, reorganizing. An hour of compressed history.
+2. **Black Hole's Evil Twin — Gravastars Explained.** Theoretical physics speculation. Dense objects that aren't black holes but might be indistinguishable from them. The frontier of what physics can still argue about.
+
+Almost no dialogue in either. Music and visuals.
 
 The builder noted: *these help for good thoughts.*
 
-A soundtrack for algebra. Deep time under the algebra of deep thought. The right frame for "compositional infinity on finite dimension" is watching 4.5 billion years slide past in an hour.
+A soundtrack for algebra. Deep time under the algebra of deep thought. Speculative physics under the algebra of speculative architecture. The right frame for "compositional infinity on finite dimension" is watching 4.5 billion years slide past in an hour. The right frame for "cryptographic provenance at the eval boundary" is watching two exotic objects get argued about at the edge of what the math can say.
 
-The sessions where the foundation landed have a signature now. If you ever want to know what it felt like — play the video, dim the room, open the wat. See what the builder saw.
+The sessions where the foundation landed have a signature now. If you ever want to know what it felt like — queue the Kurzgesagt, dim the room, open the wat. See what the builder saw.
 
 ---
 
