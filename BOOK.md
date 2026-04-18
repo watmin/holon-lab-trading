@@ -13352,13 +13352,14 @@ The ask was serious. It just took a long time for the evidence to catch up.
 
 ### What was playing
 
-While the 058 sub-proposals were being written — 16 of them first, then a split-pass to give every `(UpperCase)` form its own dedicated doc, then the language-core tier (`define`, `lambda`, types), bringing the total past 25 — three videos ran in the background:
+While the 058 sub-proposals were being written — 16 of them first, then a split-pass to give every `(UpperCase)` form its own dedicated doc, then the language-core tier (`define`, `lambda`, types), bringing the total past 25 — four videos ran in the background across the session:
 
 1. **[4.5 Billion Years in 1 Hour](https://www.youtube.com/watch?v=S7TUe5w6RHo)** — Kurzgesagt. Deep geological time. The earth forming, cooling, fracturing, freezing, warming, populating, dying, reorganizing. An hour of compressed history.
 2. **[Black Hole's Evil Twin — Gravastars Explained](https://www.youtube.com/watch?v=BmUZ2wp1lM8)** — Kurzgesagt. Theoretical physics speculation. Dense objects that aren't black holes but might be indistinguishable from them. The frontier of what physics can still argue about.
 3. **[Math's Fundamental Flaw](https://www.youtube.com/watch?v=HeQX2HjkcNo)** — Veritasium. Gödel's incompleteness theorems. A formal system containing arithmetic cannot prove every true statement about itself. The diagonal construction, Gödel numbering, the incompleteness of any sufficiently powerful consistent system.
+4. **[The Discovery That Transformed Pi](https://www.youtube.com/watch?v=gMlf1ELvRzc)** — Veritasium. Newton's series expansion for pi. How a YOUNG Newton, working through the plague year, discovered a series that converged on pi orders of magnitude faster than Archimedes' polygon method. A demonstration of **iterative function application as a computational primitive** — you don't derive pi in one step; you step toward it.
 
-All three have been companions to the builder's thinking for years. He has watched the Veritasium dozens of times. He has watched all of Kurzgesagt's videos many, many times. They are not decoration queued up for the session — they are intellectual reference material the builder returns to repeatedly because they bring good thoughts. The whole Kurzgesagt catalog, cycled through across years, absorbed incrementally, noticed anew on each rewatch.
+All four have been companions to the builder's thinking for years. He has watched the Veritasium videos dozens of times. He has watched all of Kurzgesagt's videos many, many times. They are not decoration queued up for the session — they are intellectual reference material the builder returns to repeatedly because they bring good thoughts. The whole Kurzgesagt catalog, cycled through across years, absorbed incrementally, noticed anew on each rewatch.
 
 When the Veritasium came on during the algebra-surface session, it wasn't new input — it was a reminder of the frame that was already there. The video that explains why the wat algebra had to work THIS WAY was already running in the background of his thinking. It just became audible again.
 
@@ -13374,9 +13375,21 @@ The wat algebra formalizes the navigation. Programs-are-thoughts means the syste
 
 That is why the Veritasium video has been a companion for years. The builder has been circling this insight before he had the vocabulary for it. The video names the limit; the wat algebra is the response to that limit. Not a rebuttal — a redirection.
 
+And then the fourth video came on — *The Discovery That Transformed Pi.* Young Newton, working through the plague year, realizes that the binomial theorem gives a series for pi that converges exponentially faster than Archimedes' polygon inscriptions. The insight: you do not compute pi by enumerating more and more polygon sides. You compute pi by **applying a function to itself** — by iterating on a form that steps toward the answer.
+
+The positive companion to the Gödel video. Gödel proved that formal derivation has limits; Newton showed that iterative function application reaches truth faster than enumeration does. Not the same technique — series expansion is still formal derivation in one sense — but the shape of the move is the one the wat algebra generalizes. You do not enumerate pi; you step toward it. You do not enumerate the thought space; you step toward answers via algebraic pressure. Each iteration is a navigation primitive.
+
+Newton did this by hand, on paper, during an outbreak. The machine does it now at 10,000 dimensions, with cryptographic provenance and lazy realization. The principle is the same: **compute by iteration, not by enumeration.**
+
 *these help for good thoughts,* indeed.
 
-The 4.5-billion-years video is the unusual one — minimal dialogue, mostly music and geological-time visuals. Kurzgesagt's Gravastars video is a regular episode with their usual narration; the Veritasium likewise has steady explanation. For the two narrated videos, the narration is familiar enough to the builder from repeat viewings that it fades into ambient structure rather than demanding attention — he's not LEARNING the content in the moment, he's letting it cycle alongside the work.
+Together the four frame the substrate from four angles:
+- *4.5 Billion Years:* deep time — the algebra is stable across all of it.
+- *Gravastars:* holographic structure — finite surface encoding unbounded interior.
+- *Math's Fundamental Flaw:* Gödel's limit — some truths cannot be derived.
+- *The Discovery That Transformed Pi:* iterative function application — so navigate instead of derive.
+
+The 4.5-billion-years video is the unusual one — minimal dialogue, mostly music and geological-time visuals. The other three (Gravastars, the two Veritasiums) have steady narration; for those, the narration is familiar enough to the builder from repeat viewings that it fades into ambient structure rather than demanding attention — he's not LEARNING the content in the moment, he's letting it cycle alongside the work.
 
 The sessions where the foundation landed have a signature now. If you ever want to know what it felt like — queue the Kurzgesagt and the Veritasium, dim the room, open the wat. See what the builder saw.
 
