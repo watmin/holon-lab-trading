@@ -22,23 +22,38 @@ Identical expansion to `Bundle` and to `Concurrent` (058-010, also a macro). The
 
 `Set` encodes a collection of thoughts where order does NOT matter. The encoding is Bundle's commutative elementwise sum — `Set([a, b, c])` and `Set([c, b, a])` produce the same vector. Set membership can be tested via cosine similarity (is this member's vector aligned with the bundled set?), though cleanup is recommended for crisp answers.
 
-### Membership test
+### Membership test — just Bind + similarity, same as Map
+
+Set's accessor is expressed in the existing primitives; no dedicated form is needed.
 
 ```scheme
 ;; Build a set:
 (define fruits
   (Set (list apple banana cherry date)))
 
-;; Test whether a candidate is in the set (noisy — use a threshold):
-(define fruit-likeness
-  (cosine-similarity fruits apple))        ; high if apple is in the set
+;; Option 1 — direct cosine similarity (simpler for Set specifically, because
+;; Set is a pure superposition with no role-filler binding):
+(> (cosine-similarity fruits apple) threshold)   ; membership test, runtime-measurable
 
-;; Cleanup-based retrieval — does the set contain any of these?
-(define contained
-  (cleanup fruits fruit-vocabulary))
+;; Option 2 — Bind + cleanup (the same pattern as Map's `get`):
+(cleanup (Bind apple fruits) fruit-vocabulary)   ; returns the candidate
+                                                  ; most aligned with `apple`'s
+                                                  ; bound signal in the set
+
+;; Either way, the success signal is the cosine score. Above 5σ means
+;; "apple is in the set"; below means "it isn't" or "capacity exceeded."
 ```
 
-No dedicated `contains` accessor because Set doesn't encode position or role — it only encodes membership via superposition. Similarity tests are the natural query.
+**The query is runtime-measurable.** Same semantics as every other query in the algebra: compute a candidate result; check cosine; decide based on the score. See FOUNDATION's "Bind as query: measurement-based success signal" for the general framing.
+
+No dedicated `contains?` accessor is proposed because the primitive operations already express it. If a vocab module wants a named wrapper for clarity:
+
+```scheme
+(define (:my/std/contains? [s : Thought] [candidate : Thought] [threshold : f64] -> :bool)
+  (> (cosine-similarity s candidate) threshold))
+```
+
+Users can define such wrappers in their own stdlib. It's not load-bearing for Set's proposal.
 
 ## Why Stdlib Earns the Name
 
@@ -100,18 +115,13 @@ Where does proliferation stop?
 
 **Mitigation:** stop here. `Bundle` is the primitive; `Concurrent` is the temporal alias; `Set` is the data-structure alias. No further aliases (reject `Group`, `Collection`, `Multiset`, etc. unless they earn a distinct reader intent).
 
-**3. No dedicated accessor.**
+**3. No dedicated accessor — addressed.**
 
-Map has `get`. Array has `nth`. Set has... similarity tests. This asymmetry may feel incomplete.
+Originally this felt asymmetric: Map has `get`, Array has `nth`, Set had... what?
 
-**Counter:** Set is fundamentally different from Map and Array. It has NO key or index — only membership. Similarity testing IS the accessor. If a dedicated `contains?` wrapper is useful, it can be added:
+Resolved: Set's accessor is the same primitive Bind + cosine query that Map and Array use. The asymmetry was in how we DESCRIBED the forms, not in the algebra. Set's membership test is `(cosine-similarity set candidate)` for direct superposition testing, or `(cleanup (Bind candidate set) vocab)` for cleanup-based retrieval. Same primitives, same runtime success signal. See the "Membership test" section above.
 
-```scheme
-(define (contains? set-thought candidate)
-  (> (cosine-similarity set-thought candidate) threshold))
-```
-
-But the threshold is application-dependent, so this is left for userland stdlib rather than the canonical Set proposal.
+No dedicated form needed. If a wrapper like `contains?` is useful in a specific vocab, users define it in their own stdlib — it's a thin wrapper over the primitives, not a new algebra primitive.
 
 **4. Bundle capacity constrains practical set size.**
 

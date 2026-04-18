@@ -24,9 +24,13 @@ A new core variant that removes a component's geometric direction from a vector:
 (Orthogonalize x y)
 ```
 
-Semantically: given vectors `x` and `y`, produce a new vector that is `x` with `y`'s direction projected out. The result is **orthogonal to `y`** — exactly so under the algebra's ternary output space (FOUNDATION's "Output Space" section). Where the subtraction `X - projY(X)` produces zero at a dimension, `threshold(0) = 0` preserves that zero, so the result contributes nothing at those positions. `result · Y = 0` exactly, not "up to threshold noise."
+Semantically: given vectors `x` and `y`, produce a new vector that is `x` with `y`'s direction projected out. The result is **orthogonal to `y` under similarity measurement** — the algebra's primary evaluation framework (see FOUNDATION's "Algebraic laws under similarity measurement").
 
-A note on the edge case `X = Y`: the projection coefficient is 1, `X - Y = [0, 0, ..., 0]`, `threshold` maps to all zeros, and the all-zero result has dot product 0 with any vector — including `Y`. Orthogonality holds.
+**Exact elementwise orthogonality holds for the degenerate case `X = Y`:** the projection coefficient is 1, `X - Y = [0, 0, ..., 0]`, threshold preserves the all-zero vector (`threshold(0) = 0` per FOUNDATION's ternary rule), and the all-zero result has dot product 0 with any vector — including `Y`. This case resolves cleanly.
+
+**For general X, Y, elementwise orthogonality is approximate.** When the projection coefficient `(X·Y)/(Y·Y)` is fractional, `X - coeff·Y` produces non-integer components. Thresholding to `{-1, 0, +1}` rounds these back to sign values, reintroducing correlation with `Y`. Concrete counter-example at d=4: `X = [+1, +1, +1, -1]`, `Y = [+1, +1, +1, +1]`, coefficient = 0.5, `X - 0.5·Y = [+0.5, +0.5, +0.5, -1.5]`, threshold → `[+1, +1, +1, -1] = X`, dot with `Y` = 2 (not 0).
+
+At high d with typical operands, `cosine(Orthogonalize(X, Y), Y)` falls below the 5σ noise threshold — downstream similarity-based consumers (Cleanup, cosine queries, discriminant tests) treat the result as orthogonal to `Y` under the algebra's measurement framework. The elementwise counter-example is a capacity expenditure: the projection-and-threshold step costs a fraction of the per-frame budget, same as Bundle crosstalk, sparse-key decoding, cascading compositions. Within budget, similarity-orthogonality holds; beyond budget, the similarity score tells you honestly that the operation didn't clear the noise floor.
 
 ### Operation
 

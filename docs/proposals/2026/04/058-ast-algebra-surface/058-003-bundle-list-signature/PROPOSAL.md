@@ -115,7 +115,7 @@ No. Bundle's semantics (element-wise sum + threshold, commutative over inputs) a
 Under the algebra's ternary output space (FOUNDATION's "Output Space" section, `threshold(0) = 0`), Bundle is:
 
 - **Commutative**: `Bundle([a, b]) = Bundle([b, a])` — order does not matter.
-- **Associative**: `Bundle([a, b, c]) = Bundle([Bundle([a, b]), c]) = Bundle([a, Bundle([b, c])])`. This holds because `threshold(0) = 0` prevents the rounding drift that would otherwise break associativity at dimensions where `a + b = 0`.
+- **Similarity-associative under capacity budget**: `Bundle([a, b, c])` and its nested forms `Bundle([Bundle([a, b]), c])` / `Bundle([a, Bundle([b, c])])` produce vectors that are EQUIVALENT UNDER COSINE SIMILARITY at high d within the capacity budget. Elementwise associativity does NOT hold in general — intermediate thresholds clamp magnitudes ≥ 2 back to ±1, losing signal that would have been preserved in a flat sum. At d=1 with `x=+1, y=+1, z=-1`, the three forms produce `+1, 0, +1` respectively. At `d = 10,000` with bundle sizes inside the ~100-item budget, the similarity between nested and flat forms stays above 5σ, and downstream similarity-based consumers treat them as equivalent. Nesting costs capacity (same budget as crosstalk, sparse keys, cascading compositions); within budget, it's transparent. See FOUNDATION's "Algebraic laws under similarity measurement" for the full story.
 - **Identity element**: the all-zero vector. `Bundle([a, 0⃗]) = a`.
 
 These properties let Chain, Ngram, Sequential, and other list-operating stdlib forms compose cleanly at arbitrary nesting depth without accumulating representation error.

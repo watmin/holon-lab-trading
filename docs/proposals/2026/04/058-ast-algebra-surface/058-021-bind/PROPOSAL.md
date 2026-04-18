@@ -25,23 +25,36 @@ Bind(a, b)[i] = a[i] * b[i]
 
 Elementwise multiplication. In MAP VSA (Multiply-Add-Permute, Gayler 2003), this is the canonical binding operation. For dense-bipolar `{-1, +1}` inputs, it is equivalent to XNOR — the result is `+1` where `a` and `b` agree in sign, `-1` where they differ. When either input carries a zero at dimension `i`, Bind inherits that zero (`0 * x = 0`) — the "no information here" signal propagates through.
 
-### Key property: self-inverse under similarity measurement
+### Bind has two roles: encoding and querying
 
-The elementwise identity:
+**Encoding (symmetric):** `(Bind role filler)` composes a role-filler pair. Both arguments are treated equivalently; the product is a new vector carrying the pairing.
+
+**Querying (asymmetric):** `(Bind key bundle)` asks "what is bound to `key` inside `bundle`?" The product is a noisy vector that — when compared against candidate values via cosine similarity — answers the query.
+
+### The query's outcome is runtime-measurable
+
+After computing `(Bind key bundle)`, the caller checks cosine similarity of the result against candidate values:
+
+- **Above 5σ** — query RESOLVED. The key was bound in the bundle with high confidence; the recovered value is the candidate with the highest similarity.
+- **Below 5σ** — query FAILED. Either the key wasn't present, the bundle exceeded capacity, or crosstalk from other bindings masked the signal.
+
+This is observable. The machine runs the Bind, measures cosine, and knows whether the query worked. No hidden failures — they surface as similarity below threshold, at runtime, at the call site.
+
+Elementwise, `Bind(Bind(a, b), b)[i] = a[i] · b[i]²`. For dense-bipolar keys, `b[i]² = 1` at every position, so recovery is elementwise exact. For sparse or mixed keys, `b[i]² ∈ {0, 1}`, so recovery loses signal at zero positions — and the similarity test reports the degradation proportionally. Crowded bundles cost additional budget through crosstalk; the similarity test reports that too.
+
+This is the substrate at work. Bind is the query primitive; cosine similarity is the success signal; Kanerva capacity is the budget. Every query yields not just a value but a CONFIDENCE, and downstream code can act on confidence directly.
+
+### Self-inverse as a claim in the similarity frame
+
+The classical MAP VSA identity `Bind(Bind(a, b), b) = a` holds elementwise only for the special case of dense-bipolar inputs (which is the usual VSA regime). In the general algebra, the identity is similarity-measured:
 
 ```
-Bind(Bind(a, b), b)[i] = a[i] · b[i]²
-                       = a[i]    wherever b[i] ∈ {-1, +1}
-                       = 0       wherever b[i] = 0
+cosine(Bind(Bind(a, b), b), a) ≥ 5σ    within the capacity budget
 ```
 
-**For dense-bipolar keys** (vectors produced by `Atom` or `Thermometer`, all `±1`): exact recovery elementwise. `cos(Bind(Bind(a,b), b), a) = 1`.
+Dense keys give cosine ≈ 1. Sparse keys give cosine proportional to the non-zero fraction. Bundled contexts give cosine that decays with crosstalk. Whatever the regime, the measurement tells you whether the identity holds CLOSELY ENOUGH for the downstream similarity test to succeed.
 
-**For sparse keys**: the recovered vector has `a[i]` at non-zero positions and `0` at zero positions. Under cosine similarity, this recovers proportionally to the non-zero fraction. At `d = 10,000`, reasonable sparsity still places the recovered vector well above the 5σ noise threshold — decode succeeds under the algebra's similarity-measured recovery framework.
-
-This is not a weakening; it is **capacity consumption** in the same budget as Bundle crosstalk (see FOUNDATION's "Capacity is the universal measurement budget" section). Sparse keys spend more of the frame's ~100-item budget per decode; dense keys spend less. The substrate is similarity-measured throughout; exact elementwise equality was never the recovery criterion — similarity-above-noise was.
-
-This reversibility is the foundational mechanism for STRUCTURE-PRESERVING encoding. A role `r` bound to a filler `f` produces `Bind(r, f)`. Given the composite and the role, the filler is recovered via `Bind(composite, r) = f` — exactly at dimensions where `r` carries signal, contributing zero where it doesn't, and the similarity test reads the result uniformly.
+This is not a weakening of Bind. It is honest about what the substrate actually provides: a runtime-measured query primitive whose success signal is intrinsic to every call. Role-filler encoding and decoding work exactly this way — the encoding composes, the decoding queries, and the similarity test tells you if it worked.
 
 ### AST shape (already exists)
 

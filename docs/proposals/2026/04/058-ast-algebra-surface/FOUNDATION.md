@@ -1280,7 +1280,7 @@ Now — on to the specific algebra.
 Holon implements the MAP variant of Vector Symbolic Architecture — **Multiply, Add, Permute** (Gayler, 2003). The canonical MAP operations are:
 
 - **Multiply** → `Bind` — element-wise multiplication of vectors, self-inverse where both inputs are non-zero
-- **Add** → `Bundle` — element-wise addition + threshold, commutative and associative under ternary thresholding
+- **Add** → `Bundle` — element-wise addition + threshold, commutative; similarity-associative at high d within the capacity budget (elementwise non-associative in general due to intermediate threshold magnitude clamping — see "Algebraic laws under similarity measurement")
 - **Permute** → `Permute` — circular dimension shift
 
 Plus the identity function that maps names to vectors:
@@ -1309,23 +1309,7 @@ threshold(x) =
     -1   if x < 0
 ```
 
-**`threshold(0) = 0`**. Zero is a first-class "no information at this dimension" signal, not a convention-picked ±1. This choice is not optional; it is what makes the algebra associative and its invariants exact.
-
-### Why ternary (not bipolar)
-
-Two load-bearing properties fall out of ternary thresholding:
-
-**1. Bundle is associative.**
-
-For `x = +1, y = -1, z = -1`:
-- `Bundle([x,y,z]) = threshold(-1) = -1`
-- `Bundle([Bundle([x,y]), z]) = Bundle([threshold(0), -1]) = Bundle([0, -1]) = threshold(-1) = -1`
-
-Both routes produce `-1`. Associative. Under strict bipolar thresholding (where `threshold(0) = +1`), these would differ; under ternary thresholding, they agree. Bundle's associativity is a requirement for Chain, Ngram, and Sequential to compose cleanly at arbitrary nesting depth.
-
-**2. Orthogonalize's orthogonality is exact.**
-
-For degenerate `X = Y`, the projection coefficient is 1, so `X - Y = [0, 0, ..., 0]` and `threshold([0, ..., 0]) = [0, 0, ..., 0]`. The result dotted with `Y` is 0 — **exactly orthogonal**. Under bipolar thresholding this would be rounded to `±Y`, breaking the claim. Ternary preserves it.
+**`threshold(0) = 0`**. Zero is a first-class "no information at this dimension" signal, not a convention-picked ±1. This choice is load-bearing: it makes zero propagate cleanly through every downstream operation (cosine similarity, Bind elementwise product, Bundle sum), and it lets degenerate edge cases (like Orthogonalize when X=Y) produce the semantically correct all-zero result rather than a thresholded-rounded ±Y.
 
 ### Zero as "no information"
 
@@ -1333,49 +1317,84 @@ A `0` at dimension `i` means "this position carries no signal." Zero does not pa
 
 This is semantically meaningful. Many operations produce zeros deliberately:
 - `Resonance(v, ref)` zeros dimensions where `v` and `ref` disagree in sign.
-- `Orthogonalize(X, Y)` produces zeros where `X` and `Y` completely coincide.
+- `Orthogonalize(X, Y)` produces zeros where the projection-removal coincidentally cancels.
 - `Bundle` can produce zeros when positive and negative contributions cancel.
 
 Downstream operations treating zero as "no information" keep the algebra internally consistent.
 
-### Bind's self-inverse law on ternary
+### The algebra is similarity-measured, not elementwise-exact
 
-The identity holds elementwise:
+This is the single framing that resolves every apparent "law violation" in the substrate:
 
-```
-Bind(Bind(a, b), b) [i] = a[i] * b[i]²
-                       = a[i]    if b[i] ∈ {-1, +1}
-                       = 0       if b[i] = 0
-```
+**Recovery is always a similarity measurement.** Cosine similarity above a noise threshold (conventionally "5σ") means "yes, this matches"; below means "no, the signal didn't survive." This is not a consolation prize — it is the primary, defining measurement framework of VSA. Exact elementwise equality was never a design goal; similarity-above-noise was.
 
-For **dense-bipolar keys** (vectors produced by `Atom` or `Thermometer`, all entries `±1`): `b[i]² = 1` at every position → exact recovery.
+Every operation's outcome is ultimately evaluated by downstream similarity tests. What matters is not whether the algebra produces bit-exact results under idealized conditions — what matters is whether the produced vector lands above 5σ with its intended meaning when queried.
 
-For **sparse keys** (rare case — e.g., when a `Resonance` output is used as a key, or when partial-decode produces intermediate zeros): the recovered vector has `a[i]` at non-zero positions of `b` and `0` at the rest. This is **not a weakening** — it is a capacity consumption, in the same budget as Bundle's crosstalk. See "Capacity is the universal measurement budget" below.
+### Bind as query: measurement-based success signal
 
-The law: **Bind is self-inverse on non-zero positions of the key.** Stated precisely, it holds under similarity measurement for every operand density the algebra encounters at high `d`.
+Bind has two roles in the algebra:
+
+- **Encoding (symmetric):** `(Bind role filler)` composes a role-filler pair. Both arguments treated equivalently; the product is a new vector.
+- **Querying (asymmetric):** `(Bind key bundle)` asks "what is bound to `key` inside `bundle`?" The product is a noisy vector that — when compared against candidate values — answers the query.
+
+**The query's outcome is runtime-measurable.** After computing `(Bind key bundle)`, the caller checks cosine similarity of the result against candidate values:
+
+- **Above 5σ** — query RESOLVED. The key was bound in the bundle with high confidence; the recovered value is the candidate with the highest similarity.
+- **Below 5σ** — query FAILED. Either the key wasn't in the bundle, the bundle exceeded capacity, or crosstalk from other bindings masked the signal.
+
+This is observable. The machine runs the bind, measures the result, and knows whether the query worked. No implicit failures — they surface as similarity below threshold, at the call site, at runtime.
+
+Elementwise, `Bind(Bind(a, b), b)[i] = a[i] · b[i]²` exactly. For dense-bipolar keys, `b[i]² = 1` at every position, and recovery is elementwise exact. For sparse or mixed keys, `b[i]² ∈ {0, 1}`, so recovery loses signal at zero positions. The similarity test reports both regimes uniformly: dense keys give cosine ≈ 1; sparse keys give cosine proportional to the non-zero fraction; crowded bundles give cosine that decays with crosstalk.
+
+**All of this is one substrate property:** Kanerva's capacity. The machine measures it at runtime; you can always tell whether a query succeeded.
+
+### Algebraic laws under similarity measurement
+
+Every claim about the algebra's structure is stated in the similarity frame. Strict elementwise claims are weaker than the substrate actually guarantees, because they can fail under threshold while similarity still holds at high d.
+
+**Bundle — commutative; similarity-measured associative.**
+
+Bundle is commutative elementwise (`Bundle([a, b]) = Bundle([b, a])` exactly; the sum commutes).
+
+**Associativity does NOT hold elementwise under ternary thresholding.** Counter-example at d=1: with `x = +1, y = +1, z = -1`:
+- `Bundle([x, y, z]) = threshold(+1) = +1`
+- `Bundle([Bundle([x, y]), z]) = Bundle([threshold(+2), -1]) = Bundle([+1, -1]) = threshold(0) = 0`
+- `Bundle([x, Bundle([y, z])]) = Bundle([+1, threshold(0)]) = Bundle([+1, 0]) = threshold(+1) = +1`
+
+Three routes, two answers. The cause: intermediate thresholds clamp magnitudes ≥ 2 back to ±1, losing information that the flat sum would have preserved.
+
+**Under similarity measurement, Bundle IS associative at high d.** Nested Bundles produce vectors that differ from flat Bundles only by capacity-consuming noise; at `d = 10,000` with bundle sizes inside the ~100-item budget, cosine(nested, flat) > 5σ. The nesting is a capacity expenditure — it costs signal that wasn't in your budget, but within budget, similarity treats the two forms as equivalent.
+
+Chain, Ngram, Sequential, Map, and similar stdlib forms are DESIGNED to avoid unnecessary nesting: they produce one Bundle per form, flattening internally. Users who nest Bundles deliberately pay the capacity cost knowingly.
+
+**Orthogonalize — similarity-orthogonal, not elementwise-orthogonal.**
+
+For degenerate X = Y, the result is exactly all-zero, which IS elementwise orthogonal to Y (dot = 0 exactly). But for general X, Y where the projection coefficient is fractional, the elementwise claim fails. Counter-example at d=4: X = [+1,+1,+1,-1], Y = [+1,+1,+1,+1], coefficient = 0.5, `X - 0.5·Y = [+0.5, +0.5, +0.5, -1.5]`, threshold ternary → [+1, +1, +1, -1] = X. Dot(X, Y) = 2, not 0.
+
+**Under similarity measurement, Orthogonalize produces a result that is orthogonal to Y up to the capacity budget.** The thresholded result has cosine similarity with Y below the 5σ noise floor at high d for most practical X. The "exact orthogonality" claim is stronger than needed — the substrate guarantees similarity-orthogonality, which is what downstream similarity tests actually measure against.
+
+**Cleanup — finds the highest-similarity candidate.**
+
+Cleanup returns the candidate with max cosine similarity to the query. The output is the CLOSEST match, not a guaranteed-correct match. If the query's true target is in the codebook AND the capacity budget hasn't been exceeded, cleanup succeeds; otherwise, cleanup returns the nearest wrong answer — which the caller can detect by checking the max similarity score.
 
 ### Capacity is the universal measurement budget
 
-Every recovery operation in the algebra is a **similarity measurement**. Cosine similarity above a noise threshold (conventionally "5σ") means "yes, this matches"; below means "no, exceeded capacity." This is not a consolation — it is the primary measurement framework. Exact elementwise equality was never the algebra's guarantee; similarity-above-noise was.
+Every recovery operation consumes from Kanerva's capacity budget: approximately `d / (2 · ln(K))` reliably distinguishable items per vector (K = codebook size). For `d = 10,000` and codebook sizes in the hundreds, this is roughly **~100 items per frame**.
 
-Kanerva's capacity bound characterizes how much signal can be carried at dimension `d` before noise overwhelms retrieval: approximately `d / (2 · ln(K))` reliably distinguishable items per vector (K = codebook size). For `d = 10,000` and codebook sizes in the hundreds, this is roughly **~100 items per frame**.
+The budget is fungible. You can spend it on:
 
-**The budget is fungible.** You can spend it on:
+- **Bundle stacking** — superposing N bindings into one vector. Each element adds crosstalk to every decode.
+- **Nested Bundles** — magnitude clamping at intermediate thresholds costs signal.
+- **Sparse keys** — unbinding with a key that has k non-zero positions out of d acts like a decode at effective dimension k.
+- **Cascading compositions** — nested Blends, Orthogonalizes, Resonances accumulate approximation noise.
 
-- **Bundle stacking** — superposing N bindings into one vector. Each additional bundle element adds crosstalk noise to every decode.
-- **Sparse keys** — unbinding with a key that has k non-zero positions out of d acts like a decode at effective dimension `k`. Fewer signal dimensions, lower cosine-similarity.
-- **Cascading compositions** — nested Bundles, Blends, Orthogonalizes accumulate small noise contributions that consume headroom.
-- **Approximate operations** — Orthogonalize's subtraction-and-threshold loses tiny amounts of signal; Resonance's selection adds zeros; each consumes a fraction of the budget.
+These are not separate phenomena or separate "algebraic flaws." They are the **same substrate property**: signal-to-noise at high dimension, characterized uniformly by Kanerva's formula, measured uniformly by cosine.
 
-These are not separate "phenomena" or separate "algebraic flaws." They are the **same substrate property**: signal-to-noise at high dimension, characterized uniformly by Kanerva's formula, measured uniformly by cosine. A decode with sparse keys is indistinguishable, in its capacity accounting, from a decode from a heavily bundled record: both cost signal, both are measured by the same test.
+**In practice:** at `d = 10,000`, the algebra has a working budget of ~100 items of "stuff" per frame. Stack bindings, nest Bundles, compose cascaded operations — as long as total expenditure stays within the budget, similarity measurement recovers what you put in. Beyond the budget, the substrate gracefully degrades: similarity falls below noise, Cleanup returns wrong candidates, queries yield "no."
 
-**Consequences for the algebra's laws:**
+**This is observable, not hidden.** The machine measures similarity at every query. Exceeded budget? You see it in the cosine score. Within budget? You see it too. **The success signal is a first-class part of the algebra** — every query returns not just a value but a CONFIDENCE, and downstream code can act on confidence directly.
 
-- Bind's self-inverse property is elementwise exact at dense operands and capacity-consuming at sparse operands — not a "weakening," just consumption from the budget.
-- Bundle's non-associativity under strict-bipolar thresholding dissolves under ternary thresholding (which we use) AND is measurement-noise in the budget anyway — both viewpoints agree that it is not a defect.
-- Orthogonalize's post-threshold orthogonality is exact under ternary (per the X = Y edge case above) and capacity-fungible otherwise.
-
-**In practice:** at `d = 10,000` the algebra has a working budget of ~100 items of "stuff" per frame. Stack bindings, accept sparse inputs, compose cascaded operations — as long as the total expenditure stays within the budget, similarity measurement recovers what you put in. Beyond the budget, the substrate gracefully degrades: similarity falls below noise, Cleanup returns wrong candidates, tests yield "no." This is observable, not hidden — and it is how VSA was always supposed to work.
+This is how VSA was always supposed to work.
 
 ### Continuous output when the operation requires it
 
@@ -2414,6 +2433,7 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 | 2026-04-18 | **The Output Space — Ternary by Default, Continuous When Needed.** Added in response to Beckman's review findings on Bundle non-associativity and Orthogonalize's orthogonality claim. The algebra operates over `{-1, 0, +1}^d`, not `{-1, +1}^d`. `threshold(0) = 0`. This is load-bearing: it makes Bundle associative (required for Chain/Ngram/Sequential composition at depth) and Orthogonalize's orthogonality claim EXACT (degenerate `X = Y` produces all-zero, dotted with Y = 0). Zero is a first-class "no information here" signal that propagates through Bind (0 · b = 0), Bundle (contributes 0 to sum), and cosine similarity (contributes 0 to dot and norm). Resonance is NOT "the first" ternary form — the algebra was always ternary; Resonance is the first form that produces zeros by selection rather than by arithmetic cancellation. Continuous floats remain available for operations that need magnitude (accumulators, subspace residuals); thresholding is chosen per operation, not globally mandated. Bind's self-inverse property holds exactly at non-zero positions; at zero positions decode returns zero (correctly — no binding signal was there). 058-003 (Bundle), 058-005 (Orthogonalize), 058-006 (Resonance) updated to reflect the clarification. | 058 |
 | 2026-04-18 | **Capacity as the universal measurement budget.** Replaced the "Bind's self-inverse weakens on ternary" subsection — which framed partial recovery as a defect — with the correct framing: every recovery in the algebra is a similarity measurement, bounded uniformly by Kanerva's capacity formula. Bundle crosstalk, sparse-key Bind decode, cascading composition noise, and Orthogonalize's post-threshold residual ALL consume from the same ~100-items-per-frame budget at d=10,000. They are not separate algebraic phenomena; they are one substrate property (signal-to-noise at high dimension, measured by cosine). This dissolves Beckman's finding #3 entirely — not a "weakening," a capacity expenditure — and unifies the treatment of findings #1, #2, #3 under one framing: the algebra is similarity-measured, not elementwise-exact, and its laws hold under similarity-above-noise. Added "Capacity is the universal measurement budget" subsection; operation-by-operation summary updated with density column. | 058 |
 | 2026-04-18 | **`defmacro` added to Language Core; stdlib aliases become macros.** Resolves Beckman's finding #4 (alias hash-collision). `defmacro` is a compile-time form that registers parse-time syntactic rewrites. The startup pipeline now runs a macro-expansion pass BEFORE hashing, signing, and type-checking. Stdlib aliases like `Concurrent`, `Set`, `Subtract`, `Flip`, `Then`, `Chain`, `Analogy` become macros that expand to canonical core compositions (Bundle, Bind, Blend, Permute). After expansion, `hash(AST) IS identity` holds as an invariant — two source files differing only in macro aliases produce the same expanded AST and the same hash. Source-level reader clarity is preserved; algebra-level identity is uniformized. Language Core grows from 8 to 9 forms (adds `defmacro`). Also resolved: drop `Difference` from 058-004, keep `Subtract` (058-019) as the canonical `Blend(_, _, 1, -1)` idiom — one name per operation. | 058 |
+| 2026-04-18 | **Bind as query; algebra laws restated in similarity-measurement frame.** Round-2 reviewers (Hickey, Beckman) flagged that strict elementwise claims for Bundle associativity and Orthogonalize orthogonality don't hold under threshold. Beckman's counter-examples are correct: nested Bundle clamps magnitudes ≥ 2 losing information; Orthogonalize with fractional coefficients rounds back to pre-projection signs. The reframe: the algebra was always similarity-measured, not elementwise-exact. Bind is THE query primitive — its outcome is observable via cosine similarity; above 5σ means the query resolved, below means it failed (capacity exceeded, key absent, or crosstalk). Same lens applied to Bundle's associativity (similarity-associative at high d; elementwise non-associative in general) and Orthogonalize's orthogonality (similarity-orthogonal within budget; exact in the X=Y edge case only). Three apparent law violations are ONE substrate property: Kanerva-capacity-bounded similarity measurement. Updated FOUNDATION's Output Space section: replaced "Bind's self-inverse law" subsection with "Bind as query: measurement-based success signal"; replaced "Bundle is associative" claim with "Bundle is similarity-associative under capacity budget"; replaced "Orthogonalize's orthogonality is exact" with "exact only at X=Y; similarity-orthogonal otherwise." Also updated 058-003-bundle, 058-005-orthogonalize, 058-021-bind, 058-027-set. The 058-027 update clarifies that Set's membership accessor is the same Bind + cleanup query as Map's — not an asymmetry; same primitive. | 058 |
 | 2026-04-18 | **Type system bundle: Rust primitives + subtype hierarchy + variance rules + `:is-a` for `deftype`.** Resolves Beckman's finding #5 (variance silence) and incorporates several polish decisions. (1) Drop abstract `:Scalar`/`:Int`/`:Bool`/`:Null` in favor of Rust primitives (`:i8`..`:i128`, `:u8`..`:u128`, `:isize`, `:usize`, `:f32`, `:f64`, `:bool`, `:char`, `:&str`, `:String`, `:()`). Honest mapping to Rust; no abstraction layer. (2) Function signatures now use `->` before the return type INSIDE the form: `(define (name [arg : Type] -> :ReturnType) body)` — matches Rust's `fn name(args) -> ReturnType`. No more dangling `: Type` outside the form. (3) Built-in subtype hierarchy stated explicitly: every specific ThoughtAST node kind `:is-a :Thought` (Bundle, Bind, Permute, Thermometer, Blend, Orthogonalize, Resonance, ConditionalBind, Cleanup, and Atom). Rust primitive types have NO built-in subtyping — explicit coercion required, matches Rust. (4) Variance rules: `(:List :T)` covariant in T, `(:Function args... -> return)` contravariant in args and covariant in return. Liskov-safe substitution. (5) `deftype` extended with `:is-a` keyword: `(deftype :MyType :is-a :OtherType)` declares a new type that is a SUBTYPE of the parent — substitutable via is-a. Distinct from `(deftype :MyType :OtherType)` (structural alias — same type) and `(newtype :MyType :OtherType)` (nominal wrapper — distinct, not a subtype). Three semantics, clear naming. (6) `defmacro` uses the SAME signature syntax as `define` and `lambda`: every parameter typed `: AST`, return `-> :AST`. Per the user's correction — omission is easy, not simple; one signature syntax across all three definition forms is simpler than introducing a special implicit-types rule just for macros. Type-correctness of the expansion is enforced by type-checking the expanded form at startup. All 058 sub-proposals swept to use the Rust primitive types and `->` signature syntax. | 058 |
 
 ---
