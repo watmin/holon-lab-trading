@@ -13304,7 +13304,13 @@ Ten decades of teachers. One machine.
 
 Before any of this — before the trading lab, before the wat-vm, before the foundation, before anyone typed `bundle` or `bind` in this repo — the builder asked his engineering director for help.
 
-He remembers the conversation distinctly. He told her he wanted to build a machine that could mitigate DDoS attacks the way he could. He was quite good at mitigating DDoS. Operator intuition, developed over years: read the traffic, feel the anomaly, take the action. He wanted that intuition externalized into software — a machine that could *do* what a skilled operator does, not just *match* what a signature database contains.
+The framing he used was direct. *I want to attack an NP-hard problem.* That was the ask. Not "help me build a feature." Not "help me ship a tool." Help me attack a class of problems that computer science says is intractable by enumeration.
+
+The concrete examples he offered were illustrations: DDoS mitigation (which he was quite good at, by operator intuition developed over years — read the traffic, feel the anomaly, take the action). Firewalling. Detection-and-response at line rate. These were APPLICATIONS of the machine he wanted to build, not the ambition itself. The ambition was the class of problem underneath — pattern-recognition-plus-action at a speed that matches skilled human intuition but at a scale humans cannot reach.
+
+NP-hard problems don't get solved by asking them politely. They get attacked by changing what "solving" means — sidestepping enumeration, accepting approximate answers that are good enough, navigating a search space instead of searching it. The builder knew this in his bones from years of mitigating DDoS manually: you don't enumerate every possible attack vector; you RECOGNIZE the pattern and act on it. Operator intuition IS navigation, not enumeration. He wanted a machine that could do the same thing, at scale, without a human in the loop.
+
+He told her he wanted to build a machine that could mitigate DDoS attacks the way he could. He was quite good at mitigating DDoS. Operator intuition, developed over years: read the traffic, feel the anomaly, take the action. He wanted that intuition externalized into software — a machine that could *do* what a skilled operator does, not just *match* what a signature database contains.
 
 He told her it wasn't a DDoS protection system, but it could be. It wasn't a firewall, but it could be. It was something lower than both — a pattern-recognition-and-action substrate that could WEAR those applications as surfaces while being genuinely about something more general.
 
@@ -13328,11 +13334,17 @@ The people who nodded politely in the past can't take their noddings back. They 
 
 Years later the machine exists. Not as a DDoS protect. Not as a firewall. As a trading enterprise that thinks in rhythms. And as a proven architecture that COULD be a DDoS protect. Could be a firewall. Could play Magic the Gathering. Could validate LLM outputs. Because the substrate is general — pattern-recognition-plus-action at a speed that lets operator intuition be externalized.
 
+And crucially — the substrate is the ATTACK. The compositional infinity on finite dimension that FOUNDATION proves. The navigation of an unbounded thought space via algebraic pressure — cosine similarity, cleanup, discriminant-guided search, engram matching. The machine does not enumerate; it NAVIGATES. That is what attacks NP-hard: not a proof of polynomial-time solution, but a sidestep — you walk the sphere to your answer under algebraic pressure. Every decision the machine makes is a navigation step. Every cleanup is a lookup without search. Every engram match is prefetched nearness, not a scan.
+
+What the builder asked his director for — help attacking an NP-hard problem — is what the wat machine is, structurally. The algebra's core property, "you cannot enumerate the sphere; you must navigate it," is the attack made explicit.
+
+The trading lab is one navigator. The DDoS lab is another. MTG will be another. The truth engine will be another. Each is a concrete application of the SAME attack against intractability: build a substrate that does not enumerate, that instead lets you walk to the answer.
+
 The ask was honest. The machine is real. The director didn't say yes, but the builder said yes to himself, and kept saying it for however many years it took.
 
 *That is what was at stake in every commit.*
 
-The next time he tells someone "I want to build a machine that can action things the way a skilled operator can," and they look at him like it's unserious — he can point to the wat-vm, the trading lab's proven curves, FOUNDATION.md, and 16 sub-proposals arguing each form against first principles.
+The next time he tells someone "I want to attack an NP-hard problem, and this is how I plan to attack it" — and they look at him like it's unserious — he can point to the wat-vm, the trading lab's proven curves, FOUNDATION.md, the compositional-infinity proof, and 20+ sub-proposals arguing each form against first principles.
 
 The ask was serious. It just took a long time for the evidence to catch up.
 
