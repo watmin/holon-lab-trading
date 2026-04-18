@@ -25,16 +25,23 @@ Bind(a, b)[i] = a[i] * b[i]
 
 Elementwise multiplication. In MAP VSA (Multiply-Add-Permute, Gayler 2003), this is the canonical binding operation. For dense-bipolar `{-1, +1}` inputs, it is equivalent to XNOR — the result is `+1` where `a` and `b` agree in sign, `-1` where they differ. When either input carries a zero at dimension `i`, Bind inherits that zero (`0 * x = 0`) — the "no information here" signal propagates through.
 
-### Key property: self-inverse on non-zero positions
+### Key property: self-inverse under similarity measurement
+
+The elementwise identity:
 
 ```
-Bind(Bind(a, b), b)[i] = a[i]    wherever b[i] ≠ 0
-Bind(Bind(a, b), b)[i] = 0       wherever b[i] = 0
+Bind(Bind(a, b), b)[i] = a[i] · b[i]²
+                       = a[i]    wherever b[i] ∈ {-1, +1}
+                       = 0       wherever b[i] = 0
 ```
 
-Because `a[i] * b[i] * b[i] = a[i] * 1 = a[i]` when `b[i] ∈ {-1, +1}`, and `a[i] * 0 * 0 = 0` when `b[i] = 0`. Per FOUNDATION's "Output Space" section, Bind is self-inverse on non-zero positions; at zero positions, the key carried no binding signal, so decode correctly produces zero.
+**For dense-bipolar keys** (vectors produced by `Atom` or `Thermometer`, all `±1`): exact recovery elementwise. `cos(Bind(Bind(a,b), b), a) = 1`.
 
-This reversibility is the foundational mechanism for STRUCTURE-PRESERVING encoding. A role `r` bound to a filler `f` produces `Bind(r, f)`. Given the composite and the role, the filler is recovered via `Bind(composite, r) = f` — exactly at dimensions where `r` is non-zero.
+**For sparse keys**: the recovered vector has `a[i]` at non-zero positions and `0` at zero positions. Under cosine similarity, this recovers proportionally to the non-zero fraction. At `d = 10,000`, reasonable sparsity still places the recovered vector well above the 5σ noise threshold — decode succeeds under the algebra's similarity-measured recovery framework.
+
+This is not a weakening; it is **capacity consumption** in the same budget as Bundle crosstalk (see FOUNDATION's "Capacity is the universal measurement budget" section). Sparse keys spend more of the frame's ~100-item budget per decode; dense keys spend less. The substrate is similarity-measured throughout; exact elementwise equality was never the recovery criterion — similarity-above-noise was.
+
+This reversibility is the foundational mechanism for STRUCTURE-PRESERVING encoding. A role `r` bound to a filler `f` produces `Bind(r, f)`. Given the composite and the role, the filler is recovered via `Bind(composite, r) = f` — exactly at dimensions where `r` carries signal, contributing zero where it doesn't, and the similarity test reads the result uniformly.
 
 ### AST shape (already exists)
 

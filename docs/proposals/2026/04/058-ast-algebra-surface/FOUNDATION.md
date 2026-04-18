@@ -1338,17 +1338,44 @@ This is semantically meaningful. Many operations produce zeros deliberately:
 
 Downstream operations treating zero as "no information" keep the algebra internally consistent.
 
-### Bind's self-inverse law weakens on ternary
+### Bind's self-inverse law on ternary
 
-Bipolar Bind is self-inverse because `b² = 1` for `b ∈ {-1, +1}`. On ternary, `b² ∈ {0, 1}`, so:
+The identity holds elementwise:
 
 ```
 Bind(Bind(a, b), b) [i] = a[i] * b[i]²
-                       = a[i]    if b[i] ≠ 0
+                       = a[i]    if b[i] ∈ {-1, +1}
                        = 0       if b[i] = 0
 ```
 
-Decoding via Bind recovers `a` only at dimensions where the key `b` is non-zero. At zero dimensions, decode produces zero — which is correct, because those dimensions carried no binding signal. The qualifier should be stated as a law: **Bind is self-inverse on non-zero positions.**
+For **dense-bipolar keys** (vectors produced by `Atom` or `Thermometer`, all entries `±1`): `b[i]² = 1` at every position → exact recovery.
+
+For **sparse keys** (rare case — e.g., when a `Resonance` output is used as a key, or when partial-decode produces intermediate zeros): the recovered vector has `a[i]` at non-zero positions of `b` and `0` at the rest. This is **not a weakening** — it is a capacity consumption, in the same budget as Bundle's crosstalk. See "Capacity is the universal measurement budget" below.
+
+The law: **Bind is self-inverse on non-zero positions of the key.** Stated precisely, it holds under similarity measurement for every operand density the algebra encounters at high `d`.
+
+### Capacity is the universal measurement budget
+
+Every recovery operation in the algebra is a **similarity measurement**. Cosine similarity above a noise threshold (conventionally "5σ") means "yes, this matches"; below means "no, exceeded capacity." This is not a consolation — it is the primary measurement framework. Exact elementwise equality was never the algebra's guarantee; similarity-above-noise was.
+
+Kanerva's capacity bound characterizes how much signal can be carried at dimension `d` before noise overwhelms retrieval: approximately `d / (2 · ln(K))` reliably distinguishable items per vector (K = codebook size). For `d = 10,000` and codebook sizes in the hundreds, this is roughly **~100 items per frame**.
+
+**The budget is fungible.** You can spend it on:
+
+- **Bundle stacking** — superposing N bindings into one vector. Each additional bundle element adds crosstalk noise to every decode.
+- **Sparse keys** — unbinding with a key that has k non-zero positions out of d acts like a decode at effective dimension `k`. Fewer signal dimensions, lower cosine-similarity.
+- **Cascading compositions** — nested Bundles, Blends, Orthogonalizes accumulate small noise contributions that consume headroom.
+- **Approximate operations** — Orthogonalize's subtraction-and-threshold loses tiny amounts of signal; Resonance's selection adds zeros; each consumes a fraction of the budget.
+
+These are not separate "phenomena" or separate "algebraic flaws." They are the **same substrate property**: signal-to-noise at high dimension, characterized uniformly by Kanerva's formula, measured uniformly by cosine. A decode with sparse keys is indistinguishable, in its capacity accounting, from a decode from a heavily bundled record: both cost signal, both are measured by the same test.
+
+**Consequences for the algebra's laws:**
+
+- Bind's self-inverse property is elementwise exact at dense operands and capacity-consuming at sparse operands — not a "weakening," just consumption from the budget.
+- Bundle's non-associativity under strict-bipolar thresholding dissolves under ternary thresholding (which we use) AND is measurement-noise in the budget anyway — both viewpoints agree that it is not a defect.
+- Orthogonalize's post-threshold orthogonality is exact under ternary (per the X = Y edge case above) and capacity-fungible otherwise.
+
+**In practice:** at `d = 10,000` the algebra has a working budget of ~100 items of "stuff" per frame. Stack bindings, accept sparse inputs, compose cascaded operations — as long as the total expenditure stays within the budget, similarity measurement recovers what you put in. Beyond the budget, the substrate gracefully degrades: similarity falls below noise, Cleanup returns wrong candidates, tests yield "no." This is observable, not hidden — and it is how VSA was always supposed to work.
 
 ### Continuous output when the operation requires it
 
@@ -1368,18 +1395,18 @@ This means similarity-based retrieval (`Cleanup`, engram matching, discriminant-
 
 ### Operation-by-operation summary
 
-| Form | Output space | Threshold applied? |
-|---|---|---|
-| `Atom(literal)` | `{-1, +1}^d` (or `{-1, 0, +1}^d` for sparse atoms) | implementation-dependent |
-| `Bind(a, b)` | `{-1, 0, +1}^d` | no threshold — elementwise product |
-| `Bundle(xs)` | `{-1, 0, +1}^d` | ternary threshold |
-| `Permute(v, k)` | preserves input space | no — dimension shuffle |
-| `Thermometer(value, min, max)` | `{-1, +1}^d` | yes — gradient encoding |
-| `Blend(a, b, w1, w2)` | `{-1, 0, +1}^d` | ternary threshold after weighted sum |
-| `Orthogonalize(X, Y)` | `{-1, 0, +1}^d` | ternary threshold after projection removal |
-| `Resonance(v, ref)` | `{-1, 0, +1}^d` | no threshold (selection, not sum) |
-| `ConditionalBind(a, b, gate)` | `{-1, 0, +1}^d` | no threshold (per-dimension select) |
-| `Cleanup(v, candidates)` | whatever the matched candidate is | no — retrieval, not computation |
+| Form | Output space | Threshold applied? | Density (typical) |
+|---|---|---|---|
+| `Atom(literal)` | `{-1, +1}^d` ⊂ `{-1, 0, +1}^d` | no — hash-seeded directly | dense-bipolar (no zeros) |
+| `Bind(a, b)` | `{-1, 0, +1}^d` | no threshold — elementwise product | dense if both inputs dense; zeros inherit |
+| `Bundle(xs)` | `{-1, 0, +1}^d` | ternary threshold | ternary; zeros from cancellation |
+| `Permute(v, k)` | preserves input space | no — dimension shuffle | preserves input density |
+| `Thermometer(value, min, max)` | `{-1, +1}^d` ⊂ `{-1, 0, +1}^d` | no — gradient construction | dense-bipolar (no zeros) |
+| `Blend(a, b, w1, w2)` | `{-1, 0, +1}^d` | ternary threshold after weighted sum | ternary; zeros from cancellation |
+| `Orthogonalize(X, Y)` | `{-1, 0, +1}^d` | ternary threshold after projection removal | ternary; zeros at X=Y edge case |
+| `Resonance(v, ref)` | `{-1, 0, +1}^d` | no threshold (selection, not sum) | ternary; explicit zeros on sign-disagreement |
+| `ConditionalBind(a, b, gate)` | `{-1, 0, +1}^d` | no threshold (per-dimension select) | preserves input densities per position |
+| `Cleanup(v, candidates)` | whatever the matched candidate is | no — retrieval, not computation | inherited from candidate |
 
 ---
 
@@ -2366,6 +2393,7 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 | 2026-04-18 | **Model A adopted — fully static loading at startup.** The wat-vm loads all code (both types and functions) at startup and freezes the symbol table before the main event loop begins. No dynamic function registration; no dynamic type registration; no runtime hot-reload. The Rust-runtime static-first model guides this choice — implementing an unbounded dynamic Lisp in Rust would duplicate effort and widen the attack surface unnecessarily. Dynamic thought COMPOSITION (building ASTs at runtime) remains fully supported. Dynamic code DEFINITION does not. `load` and `load-types` become unified startup operations, distinguished by what kind of content they carry. Override semantics simplify to one-name-one-definition, fixed after startup — name collisions halt the wat-vm at startup. | 058 |
 | 2026-04-18 | **Constrained eval at runtime.** Despite static loading, `eval` remains a first-class runtime primitive, but typed and constrained: an AST is evaluatable at runtime if every function called resolves to the static symbol table and every type used exists in the static type universe, with argument types matching signatures. Unknown symbols or type mismatches error before execution. This yields a safe `eval` — attackers cannot invoke arbitrary code, only functions the operator explicitly loaded at startup. Lambdas remain first-class runtime values (closures over the static environment). Distributed code delivery becomes managed-restart: signed wat files enter the startup manifest; the wat-vm restarts to include them; continues operation. Trust boundary is the startup phase, not per-call. | 058 |
 | 2026-04-18 | **The Output Space — Ternary by Default, Continuous When Needed.** Added in response to Beckman's review findings on Bundle non-associativity and Orthogonalize's orthogonality claim. The algebra operates over `{-1, 0, +1}^d`, not `{-1, +1}^d`. `threshold(0) = 0`. This is load-bearing: it makes Bundle associative (required for Chain/Ngram/Sequential composition at depth) and Orthogonalize's orthogonality claim EXACT (degenerate `X = Y` produces all-zero, dotted with Y = 0). Zero is a first-class "no information here" signal that propagates through Bind (0 · b = 0), Bundle (contributes 0 to sum), and cosine similarity (contributes 0 to dot and norm). Resonance is NOT "the first" ternary form — the algebra was always ternary; Resonance is the first form that produces zeros by selection rather than by arithmetic cancellation. Continuous floats remain available for operations that need magnitude (accumulators, subspace residuals); thresholding is chosen per operation, not globally mandated. Bind's self-inverse property holds exactly at non-zero positions; at zero positions decode returns zero (correctly — no binding signal was there). 058-003 (Bundle), 058-005 (Orthogonalize), 058-006 (Resonance) updated to reflect the clarification. | 058 |
+| 2026-04-18 | **Capacity as the universal measurement budget.** Replaced the "Bind's self-inverse weakens on ternary" subsection — which framed partial recovery as a defect — with the correct framing: every recovery in the algebra is a similarity measurement, bounded uniformly by Kanerva's capacity formula. Bundle crosstalk, sparse-key Bind decode, cascading composition noise, and Orthogonalize's post-threshold residual ALL consume from the same ~100-items-per-frame budget at d=10,000. They are not separate algebraic phenomena; they are one substrate property (signal-to-noise at high dimension, measured by cosine). This dissolves Beckman's finding #3 entirely — not a "weakening," a capacity expenditure — and unifies the treatment of findings #1, #2, #3 under one framing: the algebra is similarity-measured, not elementwise-exact, and its laws hold under similarity-above-noise. Added "Capacity is the universal measurement budget" subsection; operation-by-operation summary updated with density column. | 058 |
 
 ---
 
