@@ -96,7 +96,7 @@ Circular is the only one with potentially negative weights — the signature tes
 
 Does Circular compose with the existing algebra?
 
-Yes. Output is a bipolar vector (Blend with negative weights still produces bipolar via threshold). All downstream operations work.
+Yes. Output is a vector in the ternary output space `{-1, 0, +1}^d` (Blend with negative weights still produces a ternary vector via threshold; see FOUNDATION's "Output Space" section). All downstream operations work.
 
 Is it a distinct source category?
 

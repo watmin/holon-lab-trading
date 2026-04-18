@@ -108,7 +108,7 @@ Then sits at the center of the temporal stdlib — the binary atom. Chain, Ngram
 
 Does Then compose with the existing algebra?
 
-Yes. Output is a bipolar vector (Bundle's threshold of Bundle of a permuted-bipolar), same dimensional space. All downstream operations work.
+Yes. Output is a vector in the ternary output space `{-1, 0, +1}^d` (Bundle's threshold of a permuted input; see FOUNDATION's "Output Space" section), same dimensional space. All downstream operations work.
 
 Is it a distinct source category?
 

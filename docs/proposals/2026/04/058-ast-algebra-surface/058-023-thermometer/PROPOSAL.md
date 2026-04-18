@@ -7,7 +7,7 @@
 
 ## The Candidate
 
-`Thermometer` is the scalar-gradient primitive — it produces a bipolar vector whose dimensions encode a monotonic gradient along a direction seeded by an atom.
+`Thermometer` is the scalar-gradient primitive — it produces a dense-bipolar vector (in the algebra's ternary output space `{-1, 0, +1}^d` with no zeros by construction) whose dimensions encode a monotonic gradient along a direction seeded by an atom. See FOUNDATION's "Output Space" section.
 
 ```scheme
 (Thermometer atom dim)
@@ -17,7 +17,7 @@ One atom argument (the anchor identity) and one dimension count (the vector widt
 
 ### Operation
 
-Given an atom `a` and a dimension count `d`, Thermometer produces a bipolar vector `v ∈ {-1, +1}^d` where some fixed-from-the-atom's-seed pattern specifies the "gradient" — the direction of increasing magnitude.
+Given an atom `a` and a dimension count `d`, Thermometer produces a dense-bipolar vector `v` (within the algebra's ternary output space, but with no zeros by construction) where some fixed-from-the-atom's-seed pattern specifies the "gradient" — the direction of increasing magnitude.
 
 Concretely, Thermometer typically produces:
 
@@ -45,7 +45,7 @@ One atom + one dim. Present in current `ThoughtAST`.
 
 **1. Thermometer cannot be expressed in Bind + Bundle + Permute + Atom alone.**
 
-Atom produces a pseudo-random bipolar vector (hash-seeded). Bind, Bundle, Permute are combination primitives that don't introduce gradient structure. None of them produce a vector with MONOTONIC structure — a cumulative direction from "low" to "high."
+Atom produces a pseudo-random dense-bipolar vector (hash-seeded). Bind, Bundle, Permute are combination primitives that don't introduce gradient structure. None of them produce a vector with MONOTONIC structure — a cumulative direction from "low" to "high."
 
 Thermometer's gradient IS the new algebraic content. It is the primitive that introduces continuous-value encoding into an otherwise discrete algebra.
 
@@ -60,17 +60,17 @@ The decomposition in FOUNDATION:
 
 Thermometer is the only one of these that cannot be decomposed further. It is algebraically primitive.
 
-**3. Thermometer introduces magnitude semantics to a bipolar algebra.**
+**3. Thermometer introduces magnitude semantics to a ternary algebra.**
 
-In pure bipolar `{-1, +1}^d` vector spaces, every vector has the same L2 magnitude (√d). Thermometer encodes "position along a direction" as a fraction of dimensions in one state vs. the other — effectively projecting a continuous value onto a discrete bipolar substrate.
+In the algebra's ternary output space `{-1, 0, +1}^d`, dense-bipolar vectors have L2 magnitude √d. Thermometer encodes "position along a direction" as a fraction of dimensions in one state vs. the other — effectively projecting a continuous value onto the dense-bipolar sub-lattice of the ternary substrate.
 
-This projection is the bridge between continuous-value scalar encoding and the bipolar discrete algebra. Without Thermometer, there is no bridge.
+This projection is the bridge between continuous-value scalar encoding and the discrete algebra. Without Thermometer, there is no bridge.
 
 **4. Thermometer's output survives thresholding.**
 
-A key property: a Thermometer vector is already bipolar `{-1, +1}`, so threshold operations downstream preserve it. This makes Thermometer THE natural anchor for Blend's output (which is thresholded).
+A key property: a Thermometer vector is dense-bipolar `{-1, +1}` (no zeros by construction), so threshold operations downstream preserve it. This makes Thermometer THE natural anchor for Blend's output (which is thresholded into `{-1, 0, +1}^d` per FOUNDATION's "Output Space" section).
 
-Compare: if we tried to use an "analog gradient" vector as the Blend anchor (all values in `[-1, +1]` not just `{-1, +1}`), Blend's threshold would destroy the gradient's subtlety. Thermometer's discrete-gradient form is specifically designed to survive thresholding — that is its algebraic virtue.
+Compare: if we tried to use an "analog gradient" vector as the Blend anchor (all values in `[-1, +1]` not just `{-1, +1}`), Blend's ternary threshold would destroy the gradient's subtlety. Thermometer's discrete-gradient form is specifically designed to survive thresholding — that is its algebraic virtue.
 
 ## Arguments For Core Status
 
@@ -101,8 +101,8 @@ None of these provide simpler expression. Thermometer IS the primitive.
 
 | Primitive | Output shape | Gradient? | Role |
 |---|---|---|---|
-| `Atom(literal)` | hash-seeded bipolar | NO (pseudo-random) | Literal encoding |
-| `Thermometer(atom, dim)` | seeded bipolar GRADIENT | YES (monotonic) | Scalar gradient anchor |
+| `Atom(literal)` | hash-seeded dense-bipolar | NO (pseudo-random) | Literal encoding |
+| `Thermometer(atom, dim)` | seeded dense-bipolar GRADIENT | YES (monotonic) | Scalar gradient anchor |
 | `Bind(a, b)` | product of operands | N/A (combinator) | Reversible combination |
 | `Bundle(xs)` | threshold(sum) | N/A (combinator) | Superposition |
 | `Permute(v, k)` | dimension shuffle | N/A (combinator) | Positional distinction |
@@ -113,11 +113,11 @@ Thermometer is the only CORE primitive with gradient structure. Atom is the only
 
 Does Thermometer compose with the existing algebra?
 
-Yes. Output is bipolar; Blend, Bind, Bundle, Permute all accept it without modification.
+Yes. Output is dense-bipolar within the ternary output space `{-1, 0, +1}^d`; Blend, Bind, Bundle, Permute all accept it without modification.
 
 Is it a distinct source category?
 
-Yes. "Gradient-encoded bipolar vector" is categorically unique.
+Yes. "Gradient-encoded dense-bipolar vector" is categorically unique.
 
 ## Simplicity Question
 
@@ -161,6 +161,6 @@ The `atom_to_fractional_position` function is the convention that maps atoms to 
 
 5. **Relationship to Atom.** Can `Atom(:something)` and `Thermometer(:something, 4096)` produce DIFFERENT vectors? Yes — Atom is pseudo-random, Thermometer is monotonic gradient. But they share the same SEED. Document that an atom deterministically produces both its own "pure" vector (via Atom) and a range of derived vectors (via Thermometer, Permute, etc.) — all from the same seed.
 
-6. **Bipolar-only vs. ternary.** Thermometer produces bipolar `{-1, +1}` output. A ternary version (+1 / 0 / -1, where 0 is "middle/uncertain") is plausible but not currently in the algebra. Keep Thermometer strictly bipolar per its current definition; ternary extensions would be separate proposals.
+6. **Dense-bipolar vs. general ternary output.** Per FOUNDATION's "Output Space" section, the algebra's output space is ternary `{-1, 0, +1}^d`. Thermometer by construction produces a **dense-bipolar** vector (no zeros), which is a subset of the ternary space. A variant that actively uses `0` for "middle/uncertain" is plausible but would be a different primitive; keep Thermometer's current definition and propose any zero-bearing gradient separately.
 
 7. **dim argument.** The `dim` argument makes the output width explicit. Should Thermometer be made dim-implicit (derive dim from context/configuration)? Recommendation: keep explicit — matches other primitives that take explicit widths.

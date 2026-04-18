@@ -132,7 +132,7 @@ Map is the data-structure-constructor tier; get is its accessor helper.
 
 Does Map compose with the existing algebra?
 
-Yes. Output is a bipolar vector (Bundle of Binds of bipolars). All downstream operations work.
+Yes. Output is a vector in the ternary output space `{-1, 0, +1}^d` (Bundle of Binds of ternary inputs; see FOUNDATION's "Output Space" section). All downstream operations work.
 
 Is it a distinct source category?
 

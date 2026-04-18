@@ -15,7 +15,7 @@ Generalize `Atom` to accept typed literals — not only strings, but integers, f
 (Atom "foo")           ; string only — current signature
 ```
 
-The current `Atom` signature in holon-rs accepts a string. The VectorManager hashes that string to produce a deterministic bipolar vector.
+The current `Atom` signature in holon-rs accepts a string. The VectorManager hashes that string to produce a deterministic vector in the algebra's ternary output space `{-1, 0, +1}^d` (see FOUNDATION's "Output Space" section). In practice, Atom's seeded projection is dense bipolar — zeros arise from downstream arithmetic, not from Atom itself.
 
 ### Proposed
 
@@ -28,7 +28,7 @@ The current `Atom` signature in holon-rs accepts a string. The VectorManager has
 (Atom null)           ; null/none literal
 ```
 
-All produce deterministic bipolar vectors via a **type-aware hash** — the literal's type tag is included in the hash input, so different types with similar-looking values yield different vectors:
+All produce deterministic dense-bipolar vectors in the ternary output space `{-1, 0, +1}^d` via a **type-aware hash** — the literal's type tag is included in the hash input, so different types with similar-looking values yield different vectors:
 
 ```
 (Atom 1)    ≠  (Atom "1")   ≠  (Atom 1.0)   ≠  (Atom :pos/1)
@@ -53,7 +53,7 @@ The generalization removes the workarounds. `(Atom 0)` is the integer zero. `(At
 The VectorManager's hash function accepts a tagged literal:
 
 ```
-hash(type_tag, bytes(literal)) → seed → bipolar vector
+hash(type_tag, bytes(literal)) → seed → dense-bipolar vector in {-1, 0, +1}^d
 ```
 
 Where `type_tag` is one of:
@@ -70,7 +70,7 @@ Inclusion of the type tag in the hash input ensures different types with similar
 
 Does this generalization compose with the existing algebra?
 
-Yes — trivially. `Atom` produces a bipolar vector regardless of the literal's type. All downstream operations (`Bind`, `Bundle`, `Permute`, `cosine`, `encode`) operate on the produced vector identically. The generalization widens the hash domain; nothing else changes.
+Yes — trivially. `Atom` produces a vector in the ternary output space `{-1, 0, +1}^d` (dense-bipolar in practice) regardless of the literal's type. All downstream operations (`Bind`, `Bundle`, `Permute`, `cosine`, `encode`) operate on the produced vector identically. The generalization widens the hash domain; nothing else changes.
 
 Does it introduce a new algebraic operation?
 
@@ -147,4 +147,4 @@ Returns the literal from the AST node. Type-preserving.
 
 5. **Backward compatibility.** Existing code uses `(Atom "string")` exclusively. The generalization is additive — all existing atoms remain valid. Is there any need to migrate existing string atoms to other types (e.g., atoms that represent integers-as-strings), or is the expectation that existing code continues to work unchanged while new code uses the right type?
 
-6. **Type erasure on the vector side.** The vector is bipolar regardless of the literal's type. If someone has ONLY a vector (no AST), they cannot recover the literal's type from the vector — cleanup against a codebook returns a candidate AST node, from which the literal (with type) can be read. Is this the right model, or should the type be recoverable from the vector somehow (seems impossible with deterministic hashing)?
+6. **Type erasure on the vector side.** The vector lives in the ternary output space `{-1, 0, +1}^d` regardless of the literal's type. If someone has ONLY a vector (no AST), they cannot recover the literal's type from the vector — cleanup against a codebook returns a candidate AST node, from which the literal (with type) can be read. Is this the right model, or should the type be recoverable from the vector somehow (seems impossible with deterministic hashing)?

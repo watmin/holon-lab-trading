@@ -69,7 +69,7 @@ Chain is superior for invariance to starting offset — a chain `[a, b, c]` and 
 
 **3. Dimensionality efficient.**
 
-Each transition is one bundled item. For a chain of length `n`, Chain produces `n-1` Then-bundled transitions, then bundles them together. The full Chain is a bundle of `n-1` elements. Fits within bipolar vector capacity for reasonable `n` (the capacity limit of Bundle is ~d/2 before similarity breaks down).
+Each transition is one bundled item. For a chain of length `n`, Chain produces `n-1` Then-bundled transitions, then bundles them together. The full Chain is a bundle of `n-1` elements. Fits within ternary vector capacity for reasonable `n` (the capacity limit of Bundle is ~d/2 before similarity breaks down).
 
 **4. Composes with Ngram (058-013).**
 
@@ -141,7 +141,7 @@ Chain sits between Sequential (stricter, position-based) and Ngram (more general
 
 Does Chain compose with the existing algebra?
 
-Yes. Output is a bipolar vector (Bundle of Bundles of bipolar Permutes, thresholded). Same dimensional space. All downstream operations unchanged.
+Yes. Output is a vector in the ternary output space `{-1, 0, +1}^d` (Bundle of Bundles of Permutes, thresholded; see FOUNDATION's "Output Space" section). Same dimensional space. All downstream operations unchanged.
 
 Is it a distinct source category?
 

@@ -28,7 +28,7 @@ A **keyword-path-based type system** for the wat language, providing:
 :Keyword     — keyword literal (e.g., :foo, :foo/bar/baz)
 :Null        — the null literal
 :List        — homogeneous list (requires parameter: (:List :Thought))
-:Vector      — raw encoded bipolar vector (post-encode, for low-level stdlib)
+:Vector      — raw encoded ternary vector in `{-1, 0, +1}^d` (post-encode, for low-level stdlib; see FOUNDATION's "Output Space" section)
 :Function    — typed function (parameterized: (:Function [args] return))
 :Any         — escape hatch; disables static checking for this position
 ```

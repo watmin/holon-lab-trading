@@ -17,23 +17,24 @@ Two thought arguments. No scalar parameters.
 
 ### Operation
 
-For bipolar vectors `a, b ∈ {-1, +1}^d`:
+For vectors `a, b` in the algebra's ternary output space `{-1, 0, +1}^d` (see FOUNDATION's "Output Space" section):
 
 ```
 Bind(a, b)[i] = a[i] * b[i]
 ```
 
-Elementwise multiplication. In MAP VSA (Multiply-Add-Permute, Gayler 2003), this is the canonical binding operation. For `{-1, +1}` inputs, it is equivalent to XNOR — the result is `+1` where `a` and `b` agree in sign, `-1` where they differ.
+Elementwise multiplication. In MAP VSA (Multiply-Add-Permute, Gayler 2003), this is the canonical binding operation. For dense-bipolar `{-1, +1}` inputs, it is equivalent to XNOR — the result is `+1` where `a` and `b` agree in sign, `-1` where they differ. When either input carries a zero at dimension `i`, Bind inherits that zero (`0 * x = 0`) — the "no information here" signal propagates through.
 
-### Key property: reversibility
+### Key property: self-inverse on non-zero positions
 
 ```
-Bind(Bind(a, b), b) = a      (binding is its own inverse when composed with b)
+Bind(Bind(a, b), b)[i] = a[i]    wherever b[i] ≠ 0
+Bind(Bind(a, b), b)[i] = 0       wherever b[i] = 0
 ```
 
-Because `a * b * b = a * 1 = a` for `b ∈ {-1, +1}` (each `b[i]` squared is `+1`).
+Because `a[i] * b[i] * b[i] = a[i] * 1 = a[i]` when `b[i] ∈ {-1, +1}`, and `a[i] * 0 * 0 = 0` when `b[i] = 0`. Per FOUNDATION's "Output Space" section, Bind is self-inverse on non-zero positions; at zero positions, the key carried no binding signal, so decode correctly produces zero.
 
-This reversibility is the foundational mechanism for STRUCTURE-PRESERVING encoding. A role `r` bound to a filler `f` produces `Bind(r, f)`. Given the composite and the role, the filler is recovered via `Bind(composite, r) = f`.
+This reversibility is the foundational mechanism for STRUCTURE-PRESERVING encoding. A role `r` bound to a filler `f` produces `Bind(r, f)`. Given the composite and the role, the filler is recovered via `Bind(composite, r) = f` — exactly at dimensions where `r` is non-zero.
 
 ### AST shape (already exists)
 
@@ -54,7 +55,7 @@ Bundle is elementwise sum (with threshold). Permute is dimension shuffle. Atom i
 
 **2. Bind's reversibility is unique in the algebra.**
 
-Only Bind has the property that `Bind(Bind(a, b), b) = a`. Bundle is LOSSY (the threshold collapses information). Permute is reversible but doesn't COMBINE two vectors into one. Orthogonalize (058-005) removes direction, not reversibly. Bind is the unique combine-and-invert primitive.
+Only Bind has the property that `Bind(Bind(a, b), b) = a` (on non-zero positions of `b`). Bundle is LOSSY (the threshold collapses information). Permute is reversible but doesn't COMBINE two vectors into one. Orthogonalize (058-005) removes direction, not reversibly. Bind is the unique combine-and-invert primitive.
 
 **3. Role-filler binding is the structural mechanism.**
 
@@ -88,7 +89,7 @@ Without Bind as core, the stdlib collapses.
 
 **3. Efficient implementation.**
 
-Elementwise multiplication is O(d), cache-friendly, SIMD-friendly. For bipolar `{-1, +1}` vectors represented as bits, Bind is XNOR — even faster.
+Elementwise multiplication is O(d), cache-friendly, SIMD-friendly. For dense-bipolar `{-1, +1}` vectors represented as bits, Bind is XNOR — even faster. (Zero-aware ternary storage uses a small additional mask; see the implementation notes.)
 
 ## Arguments Against Removing or Reframing
 
@@ -104,7 +105,7 @@ None of these are currently in the algebra. Bind IS the primitive. No reframing 
 
 | Primitive | Operation | Reversibility | Role |
 |---|---|---|---|
-| `Bind(a, b)` | `a[i] * b[i]` | `Bind(Bind(a, b), b) = a` | Structure binding |
+| `Bind(a, b)` | `a[i] * b[i]` | `Bind(Bind(a, b), b) = a` on non-zero positions | Structure binding |
 | `Bundle(xs)` | `threshold(Σ xs[i])` | NOT reversible | Superposition |
 | `Permute(v, k)` | dimension shuffle | inverse exists | Positional distinction |
 | `Atom(literal)` | hash-to-vector | N/A (primitive) | Literal encoding |
@@ -150,16 +151,16 @@ pub fn bind(a: &Vector, b: &Vector) -> Vector {
 }
 ```
 
-For bit-packed bipolar: XNOR of the bitmasks. SIMD-optimized in current holon-rs.
+For bit-packed dense-bipolar inputs: XNOR of the bitmasks. SIMD-optimized in current holon-rs. Zero-aware ternary storage uses an additional "has-value" mask; Bind of ternary is multiplication of value masks ANDed with intersection of has-value masks.
 
 ## Questions for Designers
 
 1. **Is this proposal needed?** Bind's core status is universally accepted. This document exists for leaves-to-root completeness (every UpperCase form gets a doc) rather than because the question is open. Is that the right use of a proposal, or is an "already core" audit entry sufficient?
 
-2. **Reversibility formalism.** `Bind(Bind(a, b), b) = a` holds for bipolar `{-1, +1}` — specifically because `b[i] * b[i] = 1`. For ternary `{-1, 0, +1}` vectors (as produced by Resonance, 058-006), this identity weakens: `b[i] = 0` loses information. Should Bind's documentation formalize the bipolar-only reversibility, or address ternary inputs separately?
+2. **Reversibility formalism.** Per FOUNDATION's "Output Space" section, Bind is **self-inverse on non-zero positions** of the key. `Bind(Bind(a, b), b)[i] = a[i]` wherever `b[i] ≠ 0`, and `= 0` wherever `b[i] = 0`. This is the load-bearing law. Resolved.
 
-3. **Relationship to Unbind (058-024).** Bind's inverse is conventionally named `Unbind`. But `Unbind(c, b) = Bind(c, b)` for bipolar (binding is self-inverse). Is Unbind a distinct primitive or an alias? Recommendation: keep Unbind as a named stdlib alias even though it equals Bind — documents the "decode" intent.
+3. **Relationship to Unbind (058-024).** Bind's inverse is conventionally named `Unbind`. `Unbind(c, b) = Bind(c, b)` since Bind is self-inverse on non-zero positions (per FOUNDATION's "Output Space"); the decode uses the same operation. Is Unbind a distinct primitive or an alias? Recommendation: keep Unbind as a named stdlib alias even though it equals Bind — documents the "decode" intent.
 
-4. **Normalization of output.** Bind for bipolar `{-1, +1}` inputs produces bipolar `{-1, +1}` output (product of ±1s). No threshold needed. For non-bipolar inputs (if ever), threshold may be required. Document the bipolar assumption.
+4. **Normalization of output.** Bind for dense-bipolar inputs produces dense-bipolar output (product of ±1s). For ternary inputs with zeros, Bind inherits the zeros — no threshold needed because elementwise multiplication stays inside `{-1, 0, +1}^d`. Document per FOUNDATION's "Output Space" section.
 
 5. **Naming convention.** Some VSA literature uses `⊛` (circle-asterisk), `*`, or `mult`. Holon uses `bind`. Confirm the wat name is `Bind` (PascalCase per convention).

@@ -124,7 +124,7 @@ Analogy builds directly on Bundle and Difference — a two-level stdlib composit
 
 Does Analogy compose with the existing algebra?
 
-Yes — output is a bipolar vector (Bundle of two bipolar vectors, thresholded). Composes cleanly with cleanup, similarity, further bundling.
+Yes — output is a vector in the ternary output space `{-1, 0, +1}^d` (Bundle of two ternary inputs, thresholded; see FOUNDATION's "Output Space" section). Composes cleanly with cleanup, similarity, further bundling.
 
 Is it a distinct source category?
 

@@ -19,13 +19,14 @@ Identical math to Bind. The ONLY distinction is reader intent: Unbind communicat
 
 ### Semantics
 
-For bipolar vectors, Bind is self-inverse:
+Per FOUNDATION's "Output Space" section, Bind is self-inverse on non-zero positions:
 
 ```
-Bind(Bind(role, filler), role) = filler       ; decode the filler from the composite
+Bind(Bind(role, filler), role)[i] = filler[i]   wherever role[i] ≠ 0
+Bind(Bind(role, filler), role)[i] = 0           wherever role[i] = 0
 ```
 
-So the "unbind" operation is literally another Bind call. The stdlib form `Unbind` names this decode usage explicitly.
+So the "unbind" operation is literally another Bind call. The stdlib form `Unbind` names this decode usage explicitly. Zero positions in the role mean "the role carried no signal at dimension `i`," and decode correctly returns `0` there.
 
 Typical usage:
 
@@ -57,7 +58,7 @@ Both criteria met.
 
 **1. The self-inverse identity is implementation detail, not reader intent.**
 
-The fact that `Bind` is its own inverse for bipolar vectors is a mathematical property. It does NOT mean that encoding and decoding should share a name in vocab code. The two contexts are different:
+The fact that `Bind` is its own inverse (on non-zero positions, per FOUNDATION's "Output Space" section) is a mathematical property. It does NOT mean that encoding and decoding should share a name in vocab code. The two contexts are different:
 
 - Encoding: taking two DISTINCT pieces of information (role, filler) and producing their BOUND composite.
 - Decoding: taking a composite and a KEY and producing the noisy-but-recoverable BOUND filler.
@@ -82,11 +83,9 @@ Versus:
 
 The first reads as "to get from a map, unbind the key and clean up." The second reads as "to get, bind the key to the map?" — which is backwards from the intent.
 
-**3. Non-bipolar future-proofing.**
+**3. Zero-aware decode future-proofing.**
 
-If the algebra ever admits non-bipolar or ternary vectors where Bind is NOT self-inverse, Unbind becomes a distinct operation that requires an actual inverse algorithm. Having the name in stdlib from the start reserves the semantic space.
-
-For Resonance's ternary outputs (058-006): `Bind(Resonance(v, ref), ref)` may not recover `v` cleanly because Resonance's zeros don't survive the second Bind as originally. If there are use cases for "decode after Resonance" that need a true inverse, Unbind becomes the place to implement it.
+Per FOUNDATION's "Output Space" section, the algebra's output space is ternary; Bind is self-inverse **on non-zero positions**. For Resonance's outputs (058-006), `Bind(Resonance(v, ref), ref)` recovers `v` only where `ref` is non-zero; zero positions stay zero. If there are use cases for "decode after Resonance" that want richer handling of the zero positions (e.g., mass-preserving completion, cleanup over the non-zero support), Unbind is the natural name to carry that behavior when it's introduced. Having the name in stdlib from the start reserves the semantic space.
 
 **4. Distinct VSA literature convention.**
 
@@ -96,13 +95,13 @@ Following convention reduces translation friction for readers coming from VSA ba
 
 ## Arguments Against
 
-**1. Two names for one operation (at bipolar input).**
+**1. Two names for one operation (within today's semantics).**
 
-`(Unbind c k) = (Bind c k)` for bipolar vectors. Mathematically identical. Having two names for one operation is classic complection by redundancy.
+`(Unbind c k) = (Bind c k)` per FOUNDATION's "Output Space" section — Bind is self-inverse on non-zero positions, so the encode and decode directions share a formula. Having two names for one operation is classic complection by redundancy.
 
-**Counter:** the identity holds for bipolar SPECIFICALLY. If bipolar is the only input regime, having two names IS complection. But:
+**Counter:** the identity is a property of today's definition. Even now:
 - Reader intent carries real information (encode vs. decode).
-- Non-bipolar inputs may need different behavior.
+- Future zero-aware decode variants may need different behavior at zero positions of the key.
 - VSA literature maintains the distinction.
 
 The redundancy is accepted; the clarity gain exceeds the redundancy cost.
@@ -170,10 +169,10 @@ Yes — `(Bind c k)`. Named form for reader clarity.
 
 2. **Cache canonicalization.** Same issue as Linear/Log/Circular from 058-008+. Preserve stdlib form in AST (separate cache, semantic name visible) or eagerly expand (canonical cache, lose name). Consistency across all stdlib aliases is key.
 
-3. **Non-bipolar future.** If Resonance (058-006) or other forms produce ternary/non-bipolar outputs, Unbind may need a NEW implementation separate from Bind. Is this proposal reserving the name for that future, or strictly a bipolar alias?
+3. **Zero-aware decode future.** Per FOUNDATION's "Output Space" section, the algebra's default output is ternary; Bind is self-inverse on non-zero positions. If future work introduces a decode variant that handles zero positions of the key differently (e.g., treating zero as "don't project" vs. "project and zero out"), Unbind may diverge from Bind. Is this proposal reserving the name for that future, or strictly an alias today?
 
 4. **Naming within accessor stdlib forms.** `get`, `nth`, and any `lookup`-style accessors use Unbind internally. Is the word "Unbind" consistently usable in all their definitions, or does the argument-order convention (composite first vs. key first) vary?
 
-5. **Dependency on 058-021-bind.** If Bind is in some unexpected way modified (e.g., non-bipolar input support), Unbind's alias relationship may change. Confirm Bind's signature and semantics in 058-021 before finalizing Unbind.
+5. **Dependency on 058-021-bind.** If Bind's semantics are modified (e.g., a zero-aware decode variant is added), Unbind's alias relationship may change. Confirm Bind's signature and semantics in 058-021 before finalizing Unbind.
 
 6. **Is "Unbind" the right name?** Alternatives: `Probe`, `Decode`, `Extract`, `Recover`. "Unbind" is convention in VSA literature. Recommendation: keep "Unbind" for convention match; document clearly.

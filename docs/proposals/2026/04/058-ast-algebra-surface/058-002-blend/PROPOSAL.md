@@ -14,7 +14,7 @@ A new core variant that introduces scalar-weighted vector addition — an operat
 (Blend a b w1 w2)
 ```
 
-Semantically: `threshold(w1 × a + w2 × b)` where `a` and `b` are bipolar vectors and `w1`, `w2` are arbitrary real-valued scalar weights (positive, negative, or fractional).
+Semantically: `threshold(w1 × a + w2 × b)` where `a` and `b` are vectors in the algebra's ternary output space `{-1, 0, +1}^d` and `w1`, `w2` are arbitrary real-valued scalar weights (positive, negative, or fractional). See FOUNDATION's "Output Space" section for the ternary convention (`threshold(0) = 0`).
 
 ### Encoding Rule
 
@@ -22,7 +22,7 @@ Semantically: `threshold(w1 × a + w2 × b)` where `a` and `b` are bipolar vecto
 encode(Blend(a, b, w1, w2)) → threshold(w1 * encode(a) + w2 * encode(b))
 ```
 
-Element-wise scalar multiplication, element-wise addition, threshold to bipolar. Classical MAP output format (in `{-1, 0, 1}` for bipolar-compliant deployments).
+Element-wise scalar multiplication, element-wise addition, threshold into the ternary output space `{-1, 0, +1}^d`. Zeros arise where the weighted sum exactly cancels (`threshold(0) = 0`) — this is the algebra's "no information at this dimension" signal, not a degenerate case.
 
 ### AST Shape
 
@@ -97,9 +97,9 @@ Currently `Linear` and `Circular` each encode their own scalar-weighted-add logi
 
 Taking Blend + Thermometer as the only scalar primitives (plus the MAP canonical set Atom/Bind/Bundle/Permute) appears to be a complete algebra for scalar encoding — Linear interpolation, logarithmic interpolation, cyclical rotation, thermometer gradient, amplification, subtraction. No new primitive has appeared in subsequent sub-proposals that the current set cannot express. This suggests Blend completes the scalar-primitive set alongside Thermometer.
 
-**5. Bipolar output is preserved.**
+**5. Ternary output is preserved.**
 
-The threshold step maps `(w1·a + w2·b)` back to bipolar values. The output has the same type as inputs. Downstream operations (`Bind`, `Bundle`, `cosine`) work without change. Blend is a value-preserving operation within the MAP type system.
+The threshold step maps `(w1·a + w2·b)` into `{-1, 0, +1}^d` — the algebra's ternary output space. The output has the same type as inputs. Downstream operations (`Bind`, `Bundle`, `cosine`) work without change. Blend is a value-preserving operation within the MAP type system.
 
 ## Arguments Against
 
@@ -141,7 +141,7 @@ Without Blend (or scale), Linear and Circular cannot be expressed as stdlib comp
 |---|---|---|
 | Arity | Variadic (list) | Binary (2 vectors + 2 scalars) |
 | Weighting | Implicit, all +1 | Explicit, arbitrary reals |
-| Output | Bipolar (thresholded sum) | Bipolar (thresholded weighted sum) |
+| Output | Ternary `{-1, 0, +1}^d` (thresholded sum) | Ternary `{-1, 0, +1}^d` (thresholded weighted sum) |
 | Captures Linear? | No | Yes |
 | Captures Circular? | No | Yes |
 | Captures Amplify? | No | Yes |
@@ -154,7 +154,7 @@ Blend is genuinely new — it adds a dimension of expressiveness (scalar weights
 
 Does `Blend` compose with the existing algebra?
 
-Yes. Inputs are bipolar vectors. Output is bipolar vector. Downstream operations (`Bind`, `Bundle`, `Permute`, `cosine`) work without modification. The bipolar type closes.
+Yes. Inputs and output live in the ternary output space `{-1, 0, +1}^d`. Downstream operations (`Bind`, `Bundle`, `Permute`, `cosine`) work without modification. The ternary type closes.
 
 Does it introduce a distinct source category?
 
@@ -185,13 +185,13 @@ pub fn blend_weighted(a: &Vector, b: &Vector, w1: f64, w2: f64) -> Vector {
     a.iter().zip(b.iter())
         .map(|(av, bv)| {
             let sum = w1 * (*av as f64) + w2 * (*bv as f64);
-            threshold_bipolar(sum)
+            threshold_ternary(sum)
         })
         .collect()
 }
 ```
 
-Parameters: two bipolar vectors (reference, no copy), two `f64` weights. Output: new bipolar vector.
+Parameters: two ternary vectors in `{-1, 0, +1}^d` (reference, no copy), two `f64` weights. Output: new ternary vector in `{-1, 0, +1}^d`.
 
 **Existing `blend(a, b, α)` becomes a thin wrapper:**
 

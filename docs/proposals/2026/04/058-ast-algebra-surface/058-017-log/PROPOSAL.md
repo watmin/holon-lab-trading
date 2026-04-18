@@ -95,7 +95,7 @@ All three share the Blend-of-two-Thermometers skeleton. Only the weight computat
 
 Does Log compose with the existing algebra?
 
-Yes. Output is a bipolar vector. All downstream operations work. Same as Linear.
+Yes. Output is a vector in the ternary output space `{-1, 0, +1}^d` (see FOUNDATION's "Output Space" section). All downstream operations work. Same as Linear.
 
 Is it a distinct source category?
 

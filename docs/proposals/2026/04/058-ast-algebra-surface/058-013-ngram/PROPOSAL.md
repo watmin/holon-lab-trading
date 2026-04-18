@@ -140,7 +140,7 @@ Ngram is the generalized form; Concurrent, Then, Chain, and Sequential are speci
 
 Does Ngram compose with the existing algebra?
 
-Yes. Output is a bipolar vector (Bundle of Bundles of Permutes). Same dimensional space.
+Yes. Output is a vector in the ternary output space `{-1, 0, +1}^d` (Bundle of Bundles of Permutes; see FOUNDATION's "Output Space" section). Same dimensional space.
 
 Is it a distinct source category?
 

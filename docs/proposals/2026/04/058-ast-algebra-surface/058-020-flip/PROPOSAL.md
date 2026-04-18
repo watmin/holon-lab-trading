@@ -27,7 +27,7 @@ This is one of the three classical "negation" modes in VSA. FOUNDATION originall
 
 ## Example
 
-With `d = 5`, for bipolar `{-1, +1}`:
+With `d = 5`, for dense-bipolar ternary inputs (all entries in `{-1, +1}`, no zeros in this example):
 
 ```
 x      = [+1, -1, +1, -1, +1]
@@ -98,7 +98,7 @@ Why -2 and not -3 or -1.5? The specific value `-2` is chosen because:
 
 So `-2` is the MINIMUM inversion weight. Not arbitrary, but the convention is worth naming explicitly.
 
-**Mitigation:** document the weight's derivation — "Flip uses `-2` as the minimum inversion weight for bipolar vectors; this is the conventional value."
+**Mitigation:** document the weight's derivation — "Flip uses `-2` as the minimum inversion weight for dense-bipolar inputs; this is the conventional value. For ternary inputs with zero entries, those positions contribute nothing to the weighted sum and threshold to `0` per FOUNDATION's 'Output Space' section."
 
 **3. Overlap with `Amplify(x, y, -2)`.**
 

@@ -21,7 +21,7 @@ Two arguments: a vector (typically from Unbind or Analogy or other decode operat
 Cleanup(v, candidates) = argmax_{c in candidates} similarity(v, c)
 ```
 
-Where `similarity` is typically cosine similarity (dot product of normalized vectors) or Hamming distance (for bipolar). The specific similarity metric is an implementation choice; the algebraic role is "retrieve the closest candidate."
+Where `similarity` is typically cosine similarity (dot product of normalized vectors) or Hamming distance (for dense-bipolar vectors). The specific similarity metric is an implementation choice; the algebraic role is "retrieve the closest candidate." Per FOUNDATION's "Output Space" section, cosine similarity naturally handles ternary inputs — zero positions contribute zero to the dot product.
 
 ### Why it is needed
 
@@ -171,7 +171,7 @@ For large codebooks, eigen-prefiltering and engram-library acceleration are used
 
 4. **Return type.** Cleanup returns THE best match, or a ranked list, or match-with-score. Different variants in different contexts. Should there be multiple Cleanup forms (`Cleanup`, `CleanupRanked`, `CleanupWithScore`), or one with an options parameter? Recommendation: one primitive returns the match; stdlib `CleanupRanked` and similar are extensions.
 
-5. **Similarity metric convention.** Cosine similarity vs. Hamming distance vs. Euclidean distance. The conventional choice is cosine for continuous bipolar, Hamming for bitwise bipolar. Document the convention; stdlib may expose named-alternative cleanups (e.g., `HammingCleanup`) if needed.
+5. **Similarity metric convention.** Cosine similarity vs. Hamming distance vs. Euclidean distance. The conventional choice is cosine for continuous ternary, Hamming for bitwise dense-bipolar. Document the convention; stdlib may expose named-alternative cleanups (e.g., `HammingCleanup`) if needed. (Cosine handles ternary inputs cleanly per FOUNDATION's "Output Space" section.)
 
 6. **Codebook preprocessing.** Cleanup's performance scales with codebook size. For large codebooks (>10k candidates), eigenvalue-prefiltering (challenge 018) is used. Should this preprocessing be part of the Cleanup contract (always happen), or opt-in? Design choice; likely opt-in via engram libraries.
 

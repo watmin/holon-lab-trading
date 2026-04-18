@@ -18,7 +18,7 @@ Semantically: at each dimension `i`, if `gate[i]` is "on" (positive), produce `b
 
 ### Operation (per-dimension)
 
-For bipolar `a, b, gate ∈ {-1, +1}^d`:
+For vectors `a, b, gate` in the algebra's ternary output space `{-1, 0, +1}^d` (typically dense-bipolar; see FOUNDATION's "Output Space" section):
 
 ```
 ConditionalBind(a, b, gate)[i] = a[i] * b[i]  if gate[i] > 0
@@ -166,7 +166,7 @@ ConditionalBind is the only core form that takes an EXPLICIT per-dimension contr
 
 Does ConditionalBind compose with the existing algebra?
 
-Yes. Input is three bipolar vectors; output is a bipolar vector (bind and pass-through both produce `±1` from bipolar inputs). All downstream operations work unchanged.
+Yes. Inputs and output live in the ternary output space `{-1, 0, +1}^d`. Bind and pass-through both preserve the ternary alphabet (bind of two non-zero ternary inputs produces `±1`; zero inputs inherit zero per FOUNDATION's "Output Space" section). All downstream operations work unchanged.
 
 Is it a distinct source category?
 
@@ -215,7 +215,7 @@ Encoder evaluates all three arguments, then applies the per-dimension rule.
 
 1. **Is functional update at this granularity the right level?** ConditionalBind enables "update one role's binding in a bundled structure." Is this the kind of operation the algebra should expose, or is it too close to imperative thinking?
 
-2. **Gate semantics: sign-based or magnitude-based?** Convention in this proposal: `gate[i] > 0` triggers bind. Alternatives: `gate[i] == +1` (strict), or `|gate[i]| > threshold`. Strict sign-based is simplest; consistent with bipolar vector conventions.
+2. **Gate semantics: sign-based or magnitude-based?** Convention in this proposal: `gate[i] > 0` triggers bind. Alternatives: `gate[i] == +1` (strict), or `|gate[i]| > threshold`. Strict sign-based is simplest; consistent with ternary vector conventions (zero in the gate means "no signal here," which falls into the `≤ 0` pass-through branch).
 
 3. **Should `Select(x, y, gate)` be the more general primitive instead?** `Select` is lower-level ("choose x or y per dimension"); ConditionalBind is higher-level idiom. Case for Select: more primitive, enables more derived operations. Case for ConditionalBind: captures the common case (update via bind) without requiring composition. Which belongs in core?
 

@@ -103,7 +103,7 @@ None of these provide simpler expression. Permute IS the primitive.
 
 | Primitive | Operation | Inverse | Role |
 |---|---|---|---|
-| `Bind(a, b)` | `a[i] * b[i]` | self-inverse (bipolar) | Structure binding |
+| `Bind(a, b)` | `a[i] * b[i]` | self-inverse on non-zero positions | Structure binding |
 | `Bundle(xs)` | `threshold(Σ xs[i])` | NOT invertible | Superposition |
 | `Permute(v, k)` | dimension shuffle by `k` steps | `Permute(_, -k)` | Positional distinction |
 | `Atom(literal)` | hash-to-vector | N/A | Literal encoding |
