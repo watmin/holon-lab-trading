@@ -1,6 +1,6 @@
 # 058 — Index & Reading Guide for Designers
 
-**Purpose:** orient a first-time reviewer to the 058 batch. 30 sub-proposals, FOUNDATION, plus implementation and example docs. This index gives suggested reading order, dependency graph, and pivotal-proposal highlights.
+**Purpose:** orient a first-time reviewer to the 058 batch. 32 sub-proposals, FOUNDATION, plus implementation and example docs. This index gives suggested reading order, dependency graph, and pivotal-proposal highlights.
 
 **If you read nothing else:** start with FOUNDATION.md. It locks the criteria that every sub-proposal argues against.
 
@@ -13,10 +13,10 @@
 - `RUST-INTERPRETATION.md` — practical guide for implementing the wat-vm in Rust under Model A
 - `HYPOTHETICAL-CANDLE-DESCRIBERS.wat` — worked example demonstrating programs-as-holons
 
-**Sub-proposals** (30 total, each argues one form):
+**Sub-proposals** (32 total, each argues one form):
 - Algebra core: 10 forms (primitive operations on holon vectors)
 - Algebra stdlib: 17 forms (named compositions over algebra core)
-- Language core: 3 forms (definition primitives that make stdlib writable)
+- Language core: 5 forms (definition primitives + macros that make stdlib writable)
 
 ---
 
@@ -44,12 +44,14 @@ These three are load-bearing; the rest depend on their resolution:
 
 7. **058-030-types** — the type system for language core. Required before `define` (058-028) and `lambda` (058-029) can have typed signatures.
 
-### Phase 3 — Language core (20 min)
+### Phase 3 — Language core (25 min)
 
 With types decided, language core slots in:
 
 8. **058-028-define** — typed named function registration at startup.
 9. **058-029-lambda** — typed anonymous functions (runtime values, not symbol-table entries).
+9a. **058-031-defmacro** — compile-time syntactic expansion with Racket-style sets-of-scopes hygiene. Resolves Beckman's finding #4 (alias hash collision) by rewriting stdlib aliases to their canonical form at parse time before hashing.
+9b. **058-032-typed-macros** — follow-up to 058-031 that adds `:AST<T>` and macro-authoring-time type checking. Opt-in; sharpens error locality.
 
 ### Phase 4 — Algebra core primitives (affirmations mostly — 20 min)
 
@@ -187,6 +189,7 @@ Shows which proposals must resolve before which others. Arrows flow from prerequ
 
    058-030 (types) ──> 058-028 (define)
                    ──> 058-029 (lambda)
+                   ──> 058-031 (defmacro) ──> 058-032 (typed-macros)
                    ──> also: struct, enum, newtype, typealias (compile-time)
                    ──> also: load, load-types (FOUNDATION-integrated)
 ```
@@ -231,6 +234,8 @@ Shows which proposals must resolve before which others. Arrows flow from prerequ
 | 028 | define | LANG CORE | new | Typed named function registration |
 | 029 | lambda | LANG CORE | new | Typed anonymous functions with closures |
 | 030 | types | LANG CORE | new | Type system, keyword-path user types |
+| 031 | defmacro | LANG CORE | new | Compile-time syntactic expansion + Racket-style hygiene |
+| 032 | typed-macros | LANG CORE | new | `:AST<T>` + macro-authoring-time type checking (extends 031) |
 
 ---
 

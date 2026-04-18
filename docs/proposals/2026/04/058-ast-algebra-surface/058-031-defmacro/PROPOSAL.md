@@ -339,18 +339,15 @@ FOUNDATION's distributed-verifiability claim assumes two nodes producing the sam
 
 **Version gate in the algebra header.** The wat-vm's startup manifest includes an `algebra-version: "v1.2"` tag. Loading a file signed under a different algebra version requires explicit opt-in (or explicit upgrade path). This is standard cryptographic-protocol versioning, not novel to wat.
 
-## Typed Macros — Deferred
+## Typed Macros — Resolved in 058-032
 
 Fully typed macros (the macro author's code is type-checked at macro-authoring time, not only at expansion time) is the Racket `define-syntax-parse` / `syntax/parse` model. It's more powerful than 058-031's current "check types after expansion" — it catches ill-typed macros before they're ever instantiated.
 
-Implementing typed macros requires:
-- A type system for macro parameters beyond `:AST` (e.g., `:AST<:f64>` for "an AST expression whose value type is `:f64`")
-- A type checker that traverses the macro body and verifies the output would be well-typed given the input types
-- Elaboration: macro parameters become typed bindings; references in the body type-check against them
+**058-031 ships with expansion-time type checking.** That is enough: every ill-typed expansion fails the type check, so no incorrect program ever runs. The cost is error location quality — a mistake in a macro call surfaces at the expanded form, not at the call site.
 
-This is out of scope for 058-031. The current proposal checks expansions, which catches all errors but with worse location information. Future proposal can add macro-time type checking as an optimization + ergonomic improvement.
+**058-032 — Typed Macros — lands the macro-authoring-time check.** It extends the type grammar with `:AST<T>` (a parametric type: "an AST expression producing a value of type `T`"), types every parameter, and verifies the macro body at definition time under the resulting type environment. Errors surface at the macro invocation with origin tracking that names the parameter.
 
-**Stated position:** deferred. 058-031 ships with expansion-time type checking. Typed macros are a future proposal.
+**Stated position:** ship 058-031 with expansion-time type checking. 058-032 is the follow-up that sharpens error locality by pushing the check earlier. The two proposals are additive; no behavioral change for untyped macros.
 
 ## Arguments For
 
