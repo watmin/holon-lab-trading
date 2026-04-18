@@ -415,9 +415,55 @@ The wat machine can RUN programs, OBSERVE which produce Grace, LEARN the discrim
 
 ---
 
-## The Cache as Cognitive Substrate
+## The Cache as Cognitive Substrate — One Application's Story
 
-The VectorManager cache is not just an optimization to avoid recomputing `encode(ast)`. Under the foundational principle — AST primary, vector is its projection — **a cache entry is a compiled holon.** FOUNDATION states this as a contract. VISION argues why it matters as cognitive architecture.
+FOUNDATION states the load-bearing claim narrowly: `encode(ast)` is deterministic, so memoization is sound, and the stdlib ships a generic cache program. Whether an application uses caching, how many tiers, what eviction policy — all userland.
+
+VISION picks up the specific cache architecture the trading lab's wat-vm chose — the two-tier L1/L2 design from Proposal 057 — and argues why that design, for that application, is worth understanding as cognitive architecture rather than as a bolt-on performance feature.
+
+### One application's choice: the L1/L2 tiering
+
+The trading lab's wat-vm built a two-tier cache:
+
+```
+L1 — per-thread cache
+  Hot, no pipe latency, per-thread (no contention)
+  Small capacity — the thread's "active working set"
+
+L2 — shared cache
+  Warm, accessed through the cache service's pipe
+  Shared across all threads
+  Larger capacity — the system's "recent holons"
+
+Disk — engrams, run DB
+  Cold, persisted learned holons and trained subspaces
+  Separate from the cache hierarchy
+  Long-term memory
+```
+
+Working memory (L1), short-term memory (L2), long-term memory (disk). Each layer is a holon store at a different access cost. The machine reaches for the cheapest layer first and escalates as needed.
+
+When `encode(ast)` is called:
+
+```
+1. Check L1 — if hit, return vector instantly
+2. Check L2 — if hit, return vector, promote to L1
+3. Miss both — compute vector via tree-walk, install in L1 (and L2)
+```
+
+Cache sizing is a deployment choice:
+- **L1 size** — how many hot holons per thread. Larger L1 = more per-thread memory, more L1 hits, faster hot-path ops.
+- **L2 size** — shared working set across threads. Larger L2 = broader coverage of the holon space, fewer misses, more memory overall.
+- **L2 eviction policy** — LRU, LFU, or application-specific (e.g., "never evict leaf atoms because they're cheap to recompute anyway").
+
+Different applications pick different combinations:
+
+- **DDoS line-rate filter:** small d, maybe no cache at all, or a tiny L1 only — line-rate throughput needs every cycle; cache contention is worse than recomputation.
+- **Trading analysis (this lab):** large d, large L1, large L2 — rich per-frame expressiveness, substantial working memory per observer, broad coverage of recently-seen market holons.
+- **Memory-constrained embedded:** minimal d, minimal cache, accept recomputation — trade memory for compute.
+- **Batch research:** moderate d, small L1, massive L2 — focus memory on the shared cache that a batch pipeline benefits from.
+
+The same algebra runs at all these profiles. The kernel doesn't know or care. The application's cache program (or absence of one) is the difference.
 
 ### The cache is part of the thinking, not separate from it
 
@@ -434,9 +480,9 @@ The 1 c/s → 7.1 c/s grind in 057 wasn't just a performance optimization. It wa
 
 The algebra defines WHAT holons are. The cache defines how the machine HAS them ready. Without the cache, `encode(big-nested-holon)` is O(n) tree-walking every time. With the cache hot, it's O(1). That difference is the difference between a machine that COMPUTES its holons and a machine that REMEMBERS them.
 
-A thinking system that has to recompute its own holons from scratch each time cannot think fast enough to be useful. The cache architecture is therefore part of what makes the wat machine cognitive — **not a bolt-on performance feature, but part of the cognitive substrate.**
+A thinking system that has to recompute its own holons from scratch each time cannot think fast enough to be useful. For an application that does this kind of thinking (the trading lab), the cache is part of the cognitive substrate — **not a bolt-on performance feature**. For applications that don't need this kind of thinking (a line-rate packet filter, a simple batch transform), no cache is needed; the algebra runs the same.
 
-Proposal 057 established the two-tier cache mechanism. FOUNDATION states it as load-bearing architecture. VISION elevates it to its aspirational role: the working memory of the hyperdimensional machine.
+Proposal 057 established the two-tier cache mechanism for the trading lab. FOUNDATION states the general claim (memoization is sound; stdlib ships a generic cache). VISION elevates the trading lab's specific tiering to its aspirational role: the working memory of one hyperdimensional machine, where the right tiering was load-bearing for the application's cognitive pace.
 
 ---
 

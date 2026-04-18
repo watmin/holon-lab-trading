@@ -715,7 +715,7 @@ By stating the kernel as **queue + console + scheduler + lifecycle**, every serv
 ### Implications for prior sections
 
 - **"The Algebra Is Immutable"** — the startup pipeline (parse, macro-expand, resolve, type-check, hash, verify, register, freeze, main-loop) runs on the kernel: the binary IS the main thread, which spawns the program graph into existence after the freeze. `eval` lives in a program; it is not a kernel primitive.
-- **"The Cache Is Working Memory"** — the L1/L2 cache hierarchy from Proposal 057 is a userland program (the cache service) plus per-thread local caches. The kernel is unaware of caching semantics; it just delivers queue messages.
+- **"Caching Is Memoization"** — caching is userland; the stdlib ships the generic cache program and `cached-encode` helpers; applications choose to use them, to build their own, or to forgo caching entirely. The kernel is unaware of caching semantics; it just delivers queue messages.
 - **Q7 (redef-mode syntax, deferred)** — now strictly a userland concern. The kernel does not know about names; the application's load-and-register programs handle redefinition policy however they choose.
 
 The kernel is small on purpose. The algebra does the heavy thinking; the kernel just passes messages.
@@ -893,83 +893,47 @@ This is a unique feature of this algebra. Unlike neural networks (where architec
 
 ---
 
-## The Cache Is Working Memory
+## Caching Is Memoization — And It Is Userland
 
-The VectorManager cache is not just an optimization to avoid recomputing `encode(ast)`. Under the foundational principle — AST primary, vector is its projection — **a cache entry is a compiled holon.** The cache holds holons ready for algebraic use, at varying access costs. That makes it a memory hierarchy, not a hash table.
+The foundational principle makes one property load-bearing: **`encode(ast)` is deterministic.** Same AST always produces the same vector. This means memoization is sound — a program that sees the same AST twice can cache the result and avoid recomputing.
 
-### The two-tier architecture (Proposal 057)
+The algebra doesn't care whether an application memoizes or not. Pure recomputation is correct (just potentially slow); memoization is correct (same answer, faster). An application may want aggressive caching (keep every vector it has ever computed); another may want none (memory-constrained embedded, line-rate packet filter that can't afford the overhead); another may want something in between. **The algebra is indifferent. Caching is an application concern.**
 
-```
-L1 — per-thread cache
-  Hot, no pipe latency, per-thread (no contention)
-  Small capacity — the thread's "active working set"
+### The stdlib provides the tooling — two pieces
 
-L2 — shared cache
-  Warm, accessed through the cache service's pipe
-  Shared across all threads
-  Larger capacity — the system's "recent holons"
+Because memoization is a common-enough pattern, the stdlib ships two things:
 
-Disk — engrams, run DB
-  Cold, persisted learned holons and trained subspaces
-  Separate from the cache hierarchy
-  Long-term memory
-```
+**1. A generic cache program** — `wat/std/Cache.wat` (and its Rust implementation). The program is programmable; the caller supplies:
 
-Working memory (L1), short-term memory (L2), long-term memory (disk). Each layer is a holon store at a different access cost. The machine reaches for the cheapest layer first and escalates as needed.
+- The key type (any hashable type — `:Holon`, `:String`, `:i64`, user-defined)
+- The value type (any serializable type)
+- The capacity policy (LRU, LFU, unbounded, application-specific)
+- The setup closure (initialize whatever backing store it needs)
+- The miss handler (how to compute the value when absent)
 
-### Cache entries are (ast, vector) pairs
+One cache program, N instantiations — one per cache the application needs, with whatever types and policies it wants.
 
-Every cache entry is a compiled holon:
+**2. AST caching functions** — `wat/std/cached-encode.wat` (and siblings). A thin function over the generic cache and the algebra's `encode`: takes a cache handle and an AST, returns the vector, memoizes. This is the specific "memoize holon encoding" pattern, pre-packaged.
 
-- **Key:** the AST (structural identity, used for lookup)
-- **Value:** the vector projection (what algebraic operations consume)
+### Three choices per application
 
-When you `encode(ast)`:
+- **Use `cached-encode`** — the stdlib's pre-packaged memoization. Trading lab does this.
+- **Use the generic cache program with custom types** — for specialized caches (engram library, trade-outcome cache, per-signal distance cache). Trading lab does this too, several times.
+- **Use neither** — call `encode` directly, recompute every time. Line-rate packet filters, memory-constrained embedded applications, simple batch transforms.
 
-```
-1. Check L1 — if hit, return vector instantly
-2. Check L2 — if hit, return vector, promote to L1
-3. Miss both — compute vector via tree-walk, install in L1 (and L2)
-```
+The algebra runs identically in all three cases. The application picks based on its own cost/benefit.
 
-When the cache has the holon, you didn't have to recompute the compilation. When it doesn't, you compute once and remember. **The reuse IS memory.**
+### What the kernel provides, what userland composes
 
-### Cache sizing is another deployment knob
+- **Kernel** — queues, the console program, the scheduler, the program lifecycle. The kernel has no cache of its own.
+- **Stdlib** — the generic cache program. Userland convention; every wat-vm deployment can pull it in (or leave it out).
+- **Application** — instantiates the cache program with its types and policies; decides whether to run one cache, zero caches, or several; decides capacity; decides eviction. All application-specific.
 
-Alongside dimensionality, cache sizing is a deployment choice:
+### Nothing in FOUNDATION dictates a cache hierarchy
 
-- **L1 size** — how many hot holons per thread. Larger L1 = more per-thread memory, more L1 hits, faster hot-path ops.
-- **L2 size** — shared working set across threads. Larger L2 = broader coverage of the holon space, fewer misses, more memory overall.
-- **L2 eviction policy** — LRU, LFU, or application-specific (e.g., "never evict leaf atoms because they're cheap to recompute anyway").
+Earlier drafts of this section stated an L1/L2/disk tiering as architectural. That was one application's choice (the trading lab's — see Proposal 057). FOUNDATION shouldn't lock the tiering: a DDoS filter may need no cache at all, an embedded application may need a single tiny cache, a research pipeline may want an elaborate multi-level cache. The algebra doesn't care. The kernel doesn't care. **What the application caches, how big, with what policy — userland.** Specific cache topologies and their tradeoffs live in VISION and in per-application proposals, not here.
 
-These knobs interact with dimensionality:
-
-- At low d, vectors are smaller — more holons fit in the same byte budget.
-- At high d, vectors are larger — fewer holons fit, but each carries more structure.
-
-### Deployment parameters, complete picture
-
-A wat deployment has three primary knobs that interact:
-
-```
-d — vector dimension
-  Tunes per-frame capacity vs per-operation cost
-  
-L1 — per-thread cache size
-  Tunes active-working-set coverage vs per-thread memory
-  
-L2 — shared cache size
-  Tunes cross-thread reuse coverage vs total system memory
-```
-
-All three are set at encoder/system construction. Different applications pick different combinations:
-
-- **DDoS line-rate filter:** small d, small L1, moderate L2 — keep each vector compact, leverage L1 for hot packet-flow holons, L2 for session state.
-- **Trading analysis:** large d, large L1, large L2 — rich per-frame expressiveness, substantial working memory per observer, broad coverage of recently-seen market holons.
-- **Memory-constrained embedded:** minimal d, minimal L1, small L2 — accept that many holons will be recomputed; trade memory for compute.
-- **Batch research:** moderate d, small L1, massive L2 — focus memory on the shared cache that a batch pipeline benefits from.
-
-The same algebra runs at all these profiles. The programs don't change. The deployment does.
+The load-bearing claim about caching in FOUNDATION is just this: **encoding is deterministic; memoization is sound; the stdlib ships a generic cache program.** Everything else is configuration.
 
 ---
 
@@ -2499,6 +2463,7 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 | 2026-04-18 | **Stdlib optimization path dissolved — Q2 resolved.** Datamancer's framing: the AST IS the program; the caches are optimizing form hits to avoid recursive traversal; if we have a form's vec, we just use it. Q2 was asking the wrong question — it imagined "stdlib" as a distinct tier with its own performance envelope, but 058-031 macro expansion dissolves that distinction at parse time. After expansion, a stdlib form's AST and a user-written AST with the same shape are literally the same thing: same hash, same cache entry, same encoding cost. "Optimizing hot stdlib" is not a separate discipline from "optimizing any other hot composed AST" — both are served by L1/L2 cache hits on recurring subtrees (Proposal 057). No Rust-side helper tier. No dual implementation. One source (the wat macro), one walker (the encoder), one cache (L1/L2). If an expression is big, it's big — the program IS the AST. Q2 closed as a false problem. | 058 |
 | 2026-04-18 | **Q6 resolved — ship what we know we need, extend when we need more.** Datamancer's call: "we know what tools we want to provide now, not the ones we will want to provide later. If a new thing arrives we can update the language." Q6 asked whether MAP + Thermometer + Blend is the COMPLETE set of scalar primitives — an unanswerable question without knowing every future application. Reframed to a narrower, true claim: these nine forms are what 058 sub-proposals successfully defended against FOUNDATION's criterion; they cover every operation 058 identified. Completeness-in-the-abstract is not the bar. If a future application reveals a primitive that cannot be expressed with existing forms, a new proposal argues it against the criterion (distinct algebraic operation; domain-agnostic; encoder must treat it distinctly) and adds it. The proposal process IS the extension mechanism. Same spirit as stdlib-as-blueprint: ship only what demonstrates a distinct pattern you need today. Q6 closed as answering the wrong question — "is this every form we know we need?" is yes; "is this complete for all time?" is unanswerable and unnecessary. | 058 |
 | 2026-04-18 | **The wat-vm Substrate — Kernel Primitives.** New load-bearing section between "The Algebra Is Immutable" and "Dimensionality" — declares what the wat-vm kernel provides, what it deliberately does not, and the lifecycle pattern every wat program follows. Datamancer's framing: "the wat-vm needs to host wat-programs... we need a program to run hello-world successfully... we provide pipes that user programs can interface with... we have the pressure-based drain loop. wat programs follow the wat-vm we've built in the trading lab... start → streams of inputs → consumers → join → end." Kernel primitives: (1) **Queue** — the one program-to-program primitive, bounded(n) or unbounded; fan-out and fan-in are userland programs. (2) **Console** — a built-in program that writes queue messages to stdout/stderr (and reads stdin); hello-world must work, so this is kernel. (3) **Scheduler** — the pressure-based drain loop; no mutex, no locks; backpressure propagates through the program graph naturally. (4) **Program lifecycle** — own-state, pop-handles, run-loop, drain-on-disconnect, join-to-return-state. What is NOT kernel: topic, mailbox (were thin proxies over queues, collapse to programs), cache, database, metrics, logger, arbitrary OS fds (all userland programs). Rust-to-wat-vm mapping stated: `write(1, data)` ↔ `console.send(bytes)`, `pipe(fds)` ↔ `queue`, `fork + exec` ↔ spawn a program, SIGTERM cascade ↔ drop-is-disconnect. Reduction from three communication primitives (queue/topic/mailbox) to one (queue) + console-as-kernel-program is the collapse the book's Chapter 8 documented, now load-bearing in FOUNDATION. Implications: prior sections updated — the startup pipeline runs on the kernel; `eval` lives in a program; L1/L2 cache hierarchy is a userland cache program; Q7 (redef-mode syntax, deferred) is now strictly a userland concern because the kernel does not know about names. | 058 |
+| 2026-04-18 | **Caching demoted from architecture to stdlib tooling.** Datamancer's call: "even the caching... that's user dependent... their programs may not want an L2 cache... we should provide the necessary tooling to do caching trivially... our current cache program IS programmable." Section `## The Cache Is Working Memory` renamed to `## Caching Is Memoization — And It Is Userland` and rewritten: the load-bearing claim shrinks to "`encode(ast)` is deterministic, so memoization is sound; the stdlib ships tooling." Two stdlib pieces named explicitly: (1) a generic cache program `wat/std/Cache.wat` — programmable, caller supplies key/value types, capacity policy, setup closure, miss handler; one program, N instantiations. (2) AST caching functions `wat/std/cached-encode.wat` — pre-packaged "memoize holon encoding" pattern for applications that want it. Three application choices: use `cached-encode`, use generic cache with custom types (specialized engram/distance/outcome caches), use nothing (line-rate packet filter, embedded). The L1/L2 tiering and deployment knobs that were previously stated as FOUNDATION architecture moved to VISION's "The Cache as Cognitive Substrate — One Application's Story" — those are the trading lab's choices for its specific cognitive pace, not universal contracts. FOUNDATION's deployment knobs tighten to `d` and `capacity-mode` (which ARE universal); L1/L2 sizing is application-level. Q7 substrate-section cross-reference updated; "Implications for prior sections" updated. | 058 |
 
 ---
 
