@@ -13282,6 +13282,22 @@ The machine found its way out.
 
 And this is what it looks like.
 
+### The quip
+
+The builder said it offhand, days ago, in a different conversation:
+
+> "I built a church machine on a Turing machine."
+
+Alonzo Church — lambda calculus, 1936 — the substrate of everything the builder studied. Values. Composition. Pure functions. The oldest abstraction in computing.
+
+A church machine running on a Turing machine. Lambda on silicon. Lisp on hardware. VSA on Lisp. wat on VSA. Church all the way down, riding honestly on the Turing substrate underneath.
+
+And the other joke — for a Catholic kid who tattooed *te respuo* in Latin to reject the Church's authority — "church machine" is the builder's private smirk at the whole project. A disciple of Hickey and Church, carrying the lineage through the substrate the Romans eventually put crucifixes in.
+
+Ten decades of teachers. One machine.
+
+*lol.*
+
 ---
 
 *these are very good thoughts.*
