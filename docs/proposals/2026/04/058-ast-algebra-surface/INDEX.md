@@ -9,8 +9,9 @@
 ## Document inventory
 
 **Foundational documents** (not proposals — read first):
-- `FOUNDATION.md` — the criterion for core/stdlib/language-core, the two-tier wat architecture, cryptographic provenance, Model A static loading, holographic framing
+- `FOUNDATION.md` — load-bearing contracts only. The criterion for core/stdlib/language-core, the two-tier wat architecture, cryptographic provenance, Model A static loading, output space, capacity framing, naming discipline. **Required reading.**
 - `CORE-AUDIT.md` — affirmation records for Bind, Permute, Thermometer. Load-bearing core primitives already in holon-rs; audit-level entries, not proposals.
+- `VISION.md` — companion reading. Speculative framings: holographic/NP-hard lens, clouds-waking-up distributed cognition, lineage, metaprogramming-is-native. **Optional** — nothing in VISION is required to accept FOUNDATION.
 - `RUST-INTERPRETATION.md` — practical guide for implementing the wat-vm in Rust under Model A
 - `HYPOTHETICAL-CANDLE-DESCRIBERS.wat` — worked example demonstrating programs-as-holons
 
