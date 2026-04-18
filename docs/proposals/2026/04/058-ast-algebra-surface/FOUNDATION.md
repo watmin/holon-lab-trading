@@ -763,11 +763,11 @@ The kernel primitives are exposed to wat programs as lowercase keyword-path func
     (:wat/kernel/join handle)))
 ```
 
-**The `main` convention.** `main` is a **reserved bare name** — the kernel's entry point. When the wat-vm starts, it invokes `main`. The user declares it by that name; no keyword-path prefix; no startup manifest pointing at some function. This is the same convention C and Rust use: one `main` per program, declared by the user, called by the runtime.
+**The `main` convention.** `main` is a bare name the **kernel looks for at startup**. The user declares it via `(define (main -> :()) ...)` — no keyword-path prefix needed; the user's definition fills the kernel's entry-point slot. This is the same convention C and Rust use: one `main` per program, declared by the user, called by the runtime.
 
-Two `main` declarations across loaded files produce a startup name collision and halt the wat-vm (same rule as any other name collision — one name, one definition; see *The Symbol Table After Startup*). Zero `main` declarations also halt: a wat program needs an entry point.
+`main` is a special case under the dual-tier model (see `## Naming Discipline — Keyword Paths, No Mechanism`): unlike other `:wat/...` names which have a protected full path AND a shadowable bare alias, `main` is **bare-only**. The kernel doesn't provide an implementation; it reserves the bare name as the entry-point slot. The user fills the slot.
 
-Reserved bare names are a narrow exception to the keyword-path naming discipline. The entry-point convention doesn't need a namespace because there is exactly one entry point per program and the kernel reserves the name. Other such reserved names may emerge over time (hypothetically: `shutdown-handler`, `on-signal`), each argued case-by-case; the default is still keyword-path discipline.
+Two `main` declarations across loaded files produce a startup name collision and halt the wat-vm (same rule as any other name collision). Zero `main` declarations also halt: a wat program needs an entry point. Hypothetical future kernel slots (e.g., `shutdown-handler`, `on-signal`) would follow the same pattern: bare reserved name, user fills the slot.
 
 **A program with the canonical lifecycle — observer-style:**
 
@@ -1662,15 +1662,91 @@ Because Model A loads every function at startup (see *The Algebra Is Immutable*)
 
 This makes the discipline enforceable in practice: conflicts fail loudly and early, not silently at runtime. Two teams working on the same codebase who both claimed `:shared/helper` discover the collision at the first `./wat-vm.sh smoke`, not in production.
 
-### Reserved prefixes
+### Reserved prefixes — protected
 
-The project stdlib reserves three prefixes as conventions:
+The project reserves four prefixes, and they are **protected at startup** — users cannot define anything at these paths. Attempting `(define (:wat/kernel/my-func ...) ...)` or `(defmacro (:wat/std/MyAlias ...) ...)` halts the wat-vm with a startup error.
 
 - `:wat/lang/...` — language core primitives (`define`, `lambda`, `if`, `defmacro`, `load`, …)
+- `:wat/kernel/...` — wat-vm kernel primitives (`make-bounded-queue`, `spawn`, `send`, `recv`, `console-out`, …)
 - `:wat/algebra/...` — algebra core primitives (`Atom`, `Bind`, `Bundle`, `Blend`, …)
-- `:wat/std/...` — project stdlib (`Subtract`, `HashMap`, `Chain`, circular basis atoms, …)
+- `:wat/std/...` — project stdlib (`Subtract`, `HashMap`, `Chain`, `LocalCache`, circular basis atoms, `:wat/std/program/Cache`, …)
 
-User code **should not** claim prefixes starting with `:wat/`. The language does not forbid it, but future algebra additions may land in those prefixes and would produce startup-time collisions. User code uses its own distinctive prefixes — `:alice/...`, `:project/market/...`, `:my-app/...` — or short bare keywords (`:rsi`, `:portfolio`) where collision isn't a concern. The choice of how distinctive to be is the user's cost/benefit call.
+User code uses its own distinctive prefixes — `:alice/...`, `:project/market/...`, `:my-app/...` — or short bare keywords (`:rsi`, `:portfolio`) where collision isn't a concern. The choice of how distinctive to be is the user's cost/benefit call. The `:wat/...` prefix is the only one the language forbids users from claiming.
+
+### Bare aliases — convenience without sacrifice
+
+Every form the wat-vm provides at a `:wat/...` path is **also** registered in the symbol table under its **bare name**. Users get both:
+
+```
+:wat/kernel/make-bounded-queue    (protected; always the kernel)
+make-bounded-queue                 (alias; shadowable)
+
+:wat/std/Subtract                  (protected; always the stdlib)
+Subtract                           (alias; shadowable)
+
+:wat/algebra/Bind                  (protected; always the algebra primitive)
+Bind                               (alias; shadowable)
+
+:wat/lang/define                   (protected; always the language-core form)
+define                             (alias; shadowable)
+```
+
+At a call site, the parser resolves bare names against the symbol table. The user's own defined names (with matching bare names) win over the kernel's aliases. The full path is always available, unambiguous, always the kernel's.
+
+```scheme
+;; Default: the bare alias resolves to the stdlib
+(Subtract a b)                     ;; → (:wat/std/Subtract a b)
+
+;; User shadows the alias in their own code
+(define (Subtract x y) (- x y))    ;; user's integer subtract
+
+(Subtract 5 3)                     ;; → 2 (user's version wins)
+
+;; The full path still resolves to the stdlib, always
+(:wat/std/Subtract a b)            ;; → (Blend a b 1 -1) after expansion
+```
+
+**Why bare aliases exist:** convenience. Users shouldn't have to type `:wat/kernel/make-bounded-queue` every time they create a queue. The bare alias lets them write `make-bounded-queue`. The full path remains the authoritative identity for cryptographic hashing, signing, and distributed verification.
+
+**Why bare aliases are shadowable:** users may have their own concept that shares a short name. A DDoS lab might define `Subtract` to mean "remove this IP from the block list." Under bare-alias shadowing, they can — without losing access to the stdlib's holon `Subtract` via its full path. No namespace gymnastics, no alias-import directives; the user just writes their function and the shadowing happens by symbol-table precedence.
+
+**Hash identity is on the FULL path, always.** When a wat program is hashed, signed, or transmitted, the canonical AST uses full keyword paths. Bare aliases are a call-site convenience, not an identity claim. Two files that invoke `Subtract` resolve to different full paths if the files have different shadowings — but the resolved ASTs (after name resolution) hash deterministically.
+
+**The protection and the shadowing are complementary.** `:wat/...` paths are permanently reserved (no user accident or malicious load can replace them). Bare aliases are permanently shadowable (users always have the option to repurpose a short name without fighting the language). Best of both.
+
+### Shadowing also works at lexical scope
+
+Bare-alias shadowing is not special — it's ordinary lexical scoping applied to the outermost (symbol-table) scope. Any inner scope — `let`, `lambda` parameters, `match` pattern bindings, `cond` bindings — shadows any name in the enclosing scope, including bare kernel/stdlib aliases:
+
+```scheme
+(let ((recv "bad-idea"))
+  recv)                              ;; → "bad-idea"  (the let binding wins)
+
+;; Inside the let, the kernel's `recv` is unreachable by its bare name.
+;; The full path is always reachable:
+(let ((recv "bad-idea"))
+  (:wat/kernel/recv some-receiver))  ;; → kernel recv, unaffected
+```
+
+Function parameters shadow too:
+
+```scheme
+(define (process (recv :f64) -> :f64)
+  (+ recv 1))                        ;; `recv` is the parameter here
+                                      ;; NOT the kernel's queue recv
+```
+
+The symbol table's bare-alias entries are the **outermost** scope. Any inner binding pre-empts them, and the full `:wat/...` path is always available when the user needs to reach past the shadow. Same pattern Clojure uses — `clojure.core/recv` would always be reachable even if a local `recv` was bound.
+
+This is **not a rule to remember.** It is what lexical scoping always does in a Lisp. Naming the behavior explicitly here is for readers who might worry that bare kernel aliases are "protected" from local shadowing — they are not; they are shadowable by any enclosing scope, same as any other outer binding. The protection is on the FULL PATH, not the bare alias.
+
+### How this relates to `:allow-redef`
+
+The `### Redefinition mode — opt-in startup knob` subsection covers collision behavior for user-defined names. The interaction with bare aliases is explicit:
+
+- **`:wat/...` paths are protected in BOTH modes.** `:strict` and `:allow-redef` agree: you cannot redefine anything at `:wat/lang/`, `:wat/kernel/`, `:wat/algebra/`, or `:wat/std/`. Attempt = halt.
+- **Bare aliases are shadowed, not redefined.** When a user defines `(define (Subtract ...) ...)`, they are NOT redefining `:wat/std/Subtract` — that stays intact. They are adding a user-owned entry to the symbol table that also happens to carry the bare name `Subtract`. Precedence resolves the bare name to the user's version. The kernel's alias remains in the table; the full path still reaches it.
+- **`:allow-redef` only matters for user-path collisions.** Two files both defining `:alice/math/clamp` with different bodies: that's a user-path collision. `:strict` halts; `:allow-redef` permits with logging. Bare-alias shadowing is not a collision; it's the designed resolution behavior.
 
 ### Type-tagged hashing keeps literal types distinct
 
@@ -2582,6 +2658,7 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 | 2026-04-18 | **Stdlib directory split — `wat/std/` for macros/functions/data-structures, `wat/std/program/` for programs.** Datamancer caught the dishonesty: "`wat/std/Cache.wat` — dishonest name ... `wat/std/program/Cache.wat`." The bare `wat/std/` path suggests a macro or simple function, but the cache program is a spawnable wat-vm program with lifecycle, owned state behind a queue boundary. Moving programs under `wat/std/program/` reflects the substrate distinction: things that COMPILE into AST or run as function calls live in `wat/std/`; things that RUN as independent wat-vm programs live in `wat/std/program/`. The convention is purely directory organization, not a parser mechanism — keyword path still equals file path (`:wat/std/program/Cache` ↔ `wat/std/program/Cache.wat`). Users get the same convention for their own code: `wat/alice/math/clamp.wat` for a function, `wat/alice/program/ClampServer.wat` for a program. The `program/` segment is an honest name — it tells the reader what kind of artifact is at that path. "Where Each Lives" updated; Caching section references updated. Same discipline as the Linux `bin/` vs `lib/` split: path segment = artifact kind. | 058 |
 | 2026-04-18 | **Kernel primitives expressed in wat syntax.** Datamancer's question: "how do we express the creation of pipes/queues?... same questions for threaded programs." New subsection `### Kernel primitives in wat syntax` inside `## The wat-vm Substrate`. Six lowercase kernel functions under the `:wat/kernel/...` prefix: `make-bounded-queue`, `make-unbounded-queue`, `send`, `recv`, `try-recv`, `drop`, `spawn`, `join`, plus console handles `console-out`, `console-err`, `console-in`. All lowercase because they EXECUTE at wat runtime (per the two-tier distinction — UpperCase builds ASTs, lowercase runs Rust). Keyword-path discipline applied: kernel primitives are not host-Lisp inherited; they are wat-vm specific, so they carry keyword paths. No separate `spawn-thread` vs `spawn-program` — a program is just a function that runs on its own thread via `spawn`; same Rust primitive underneath. Hello-world and observer-style lifecycle examples included to show the full pattern (make-queue → spawn → send/recv loop → drop-on-shutdown → join for state). Six primitives enough to express any wat-vm program graph. | 058 |
 | 2026-04-18 | **`main` as reserved bare-name entry point + Q7 resolved by analogy.** Datamancer caught the hello-world example's dishonesty: `(:my/app/main -> :())` was prefixed, but main shouldn't need a namespace. The kernel's entry point is a convention: the user writes `(define (main -> :()) ...)` and the wat-vm invokes it at startup. One `main` per program (collision halts); zero `main` also halts. `main` is a reserved bare name — a narrow exception to keyword-path discipline; the exception is justified because there is exactly one entry point per program and the kernel reserves the name. This resolves Q7 (`:allow-redef` expression syntax) by analogy: the user doesn't declare a special syntax for "this redefines an existing name"; they just USE the name. If `redef-mode=:allow-redef` is set at wat-vm startup, later-loaded definitions with colliding names replace earlier ones, and each replacement is logged. No per-file pragma, no `(redefines ...)` form, no manifest directive — system-wide opt-in via flag + declaration simply by name re-use. Same shape as `main`: reserved/conventional at the kernel level, bare-name at the user level. Hello-world example and observer-startup example updated to use bare `main`. Q7 marked RESOLVED. | 058 |
+| 2026-04-18 | **Bare aliases — dual-tier symbol table for kernel/algebra/language-core/stdlib forms.** Datamancer's explicit statement: "(make-bounded-queue ...) IS an alias for (:wat/kernel/make-bounded-queue ...). We inject our core and std into the symbol table... users can steal those names if they want... the :wat/kernel/ is protected as are the other wat-provided forms." Follow-up: "this shadowing... is in the env.. too.. (let ((recv \"bad-idea\")) recv) in that scope... recv is redefined." New subsections in `## Naming Discipline — Keyword Paths, No Mechanism`: `### Reserved prefixes — protected` (expanded to name the four protected prefixes: `:wat/lang/`, `:wat/kernel/`, `:wat/algebra/`, `:wat/std/` — all refuse user `define`/`defmacro` at startup), `### Bare aliases — convenience without sacrifice` (every kernel/algebra/language-core/stdlib form is registered under BOTH its full keyword path AND its bare name; full path is protected, bare alias is shadowable; user `(define (Subtract ...) ...)` shadows the bare alias in their code without touching `:wat/std/Subtract` which remains reachable via the full path), `### Shadowing also works at lexical scope` (any inner binding — `let`, `lambda` parameter, `match` pattern — shadows an outer name including bare kernel aliases; the full `:wat/...` path remains reachable regardless; same pattern Clojure uses). `### How this relates to :allow-redef` clarifies: `:wat/...` paths are protected in both `:strict` and `:allow-redef`; bare-alias shadowing is not a collision but the designed resolution behavior. `main` reframed under the model: unlike other `:wat/...` names (protected path + shadowable alias), `main` is bare-only — the kernel reserves the bare name as an entry-point slot that the user fills. Examples added to show the dual tier plus lexical shadowing. Hash identity is on the full path always; bare aliases are call-site convenience, not identity claims. This is the Clojure `clojure.core/map` vs `map` pattern adapted to wat's keyword-path discipline, plus ordinary lexical scoping of the Lisp host. | 058 |
 
 ---
 
