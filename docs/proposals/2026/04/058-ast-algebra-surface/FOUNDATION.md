@@ -166,6 +166,131 @@ Under the foundational principle (AST primary, vector projection), depth is free
 
 ---
 
+## Programs ARE Thoughts
+
+A wat program is an AST. An AST is a thought. A thought has a vector projection. Therefore: **a program has a vector projection.**
+
+```scheme
+(defn hello-world [name]
+  (join " " (list (Atom "Hello,") name (Atom "!"))))
+```
+
+This function definition is an AST — composed from existing core primitives (`Atom`, `Bind`, `Bundle`, and whatever specific program-form variants get added). It encodes to a deterministic 10k vector. That vector IS `hello-world`. Not a description of it. Not a serialization. The function.
+
+### Evaluation is AST walking
+
+Given a program AST, EXECUTE it by walking the tree with evaluation semantics. Function definitions bind a name to a closure (which is itself an AST). Function applications evaluate arguments, substitute formals, walk the body. Conditionals evaluate the test and walk the chosen branch. Literal atoms return their literal value (read from the AST node — no cleanup).
+
+The VECTOR form exists for algebraic operations on programs — comparison, storage, similarity search, learning. The AST is where execution happens.
+
+### What this enables
+
+**Programs as first-class values:**
+
+```scheme
+(def f hello-world)
+(eval f (list (Atom "watmin")))       ; → "Hello, watmin !"
+```
+
+**Programs in data structures:**
+
+```scheme
+(def programs
+  (Map (list
+    (list (Atom "greeting")   hello-world)
+    (list (Atom "farewell")   goodbye-function)
+    (list (Atom "risk-check") risk-function))))
+
+(eval (get programs (Atom "risk-check")) portfolio-state)
+```
+
+**Programs compared geometrically:**
+
+```scheme
+(cosine (encode program-a) (encode program-b))
+;; two programs with similar structure have similar vectors
+;; the reckoner can learn which program-shapes produce Grace
+```
+
+**Programs found via engram matching:**
+
+```scheme
+;; An engram library of known-good programs:
+(library-add! "compute-trail" compute-trail-ast)
+(library-add! "compute-stop"  compute-stop-ast)
+
+;; A new situation arrives. Match it against the library:
+(match-library current-situation-thought)
+;; → the closest known program, via cosine
+```
+
+**Programs generated from learned directions:**
+
+```scheme
+;; The reckoner learns a discriminant over program-thoughts
+;; where the label is "produces Grace" or "produces Violence."
+;; Decode the discriminant against candidate program ASTs
+;; (cleanup against known program shapes) to get:
+;;   "the program-shape that most strongly predicts Grace"
+;; 
+;; This is discriminant-guided program synthesis.
+;; The machine writes programs that the machine evaluates.
+```
+
+### Kanerva's challenge, fully answered
+
+Carin Meier cited Kanerva's suggestion that one could build a Lisp from hyperdimensional vectors. The full answer:
+
+- Not "build a Lisp OUT OF vectors."
+- Instead: **"build a Lisp whose ASTs project to canonical vectors."**
+- The Lisp stays a Lisp. Programs are ASTs. ASTs walk for execution.
+- The vector is the portable, comparable, learnable form.
+- Code is data. Data has literals. Literals live on AST nodes. Programs have vectors. The machine processes all of it the same way.
+
+### What this makes the wat machine
+
+A wat program and a wat data structure are the same kind of thing:
+
+- Both are ASTs
+- Both encode to vectors
+- Both can be stored in Maps, Arrays, or other wat thoughts
+- Both can be retrieved by AST walking
+- Both can be compared by cosine
+- Both can be learned about by the reckoner
+
+The machine does not distinguish "code" from "data" at its core. It processes thoughts. Thoughts are whatever we encode them to be. The machine that learns from candle data can learn from programs. The machine that generates predictions can generate programs.
+
+This is what it means to say the wat machine is **homoiconic at 10,000 dimensions**.
+
+### The recursion closes
+
+- The wat machine processes thoughts.
+- Programs are thoughts.
+- The machine learns which thoughts (programs) produce Grace.
+- The machine can generate new programs from what it learned.
+- Those programs are thoughts the machine can process.
+- The machine learns from programs it generated.
+
+**Self-improvement is discriminant-guided program synthesis in hyperdimensional space.** Not gradient descent. Not backpropagation. A reckoner that learns program-shapes, a cleanup operation that materializes candidates, an evaluator that executes them. The machine writes its own replacements.
+
+### Implications for the algebra
+
+All existing core forms participate in program expression:
+
+- `Atom` — names, literal values, keyword identifiers
+- `Bind` — function application (role-filler), argument binding, name-to-value
+- `Bundle` — sequential statements within a frame, unordered collections
+- `Permute` — positional encoding
+- `Sequential` (stdlib) — explicit ordered execution (evaluate left to right)
+- `Thermometer`, `Blend` — scalar value expression
+- `Map`, `Array` (stdlib) — data structures used by programs
+
+Specific program-form AST variants (`Defn`, `If`, `Let`, `App`, etc.) are open questions for future proposals — they may become core variants if they need distinct evaluation semantics, or stdlib compositions if they can be expressed with existing forms.
+
+The FOUNDATION claim here is minimal: **programs CAN be expressed using the existing primitives, and the existing primitives are sufficient to compose arbitrary program shapes.** Specialized variants for ergonomics or evaluation performance are future decisions.
+
+---
+
 ## The Foundation: MAP VSA
 
 Holon implements the MAP variant of Vector Symbolic Architecture — **Multiply, Add, Permute** (Gayler, 2003). The canonical MAP operations are:
@@ -722,6 +847,7 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 | 2026-04-17 | **Recursive Composition section added.** Capacity bounded per frame (~100 items at 10k dims), unbounded in depth. Compositions nest: `encode(frame-with-nested-frame)` preserves inner structure through orthogonal bind. `deep-get` walks arbitrary depth with no noise accumulation. The thought machine is Turing-complete via unbounded composition depth within a fixed vector dimensionality — memory IS the composition. | 058 |
 | 2026-04-17 | **Reserved atoms via `:wat/std` keyword namespace.** Stdlib forms that need fixed reference atoms (Circular's cos/sin basis, Array's position atoms) use namespaced keyword literals rather than special machinery. The typed-atom generalization already accepts keywords — namespaced keywords inherit determinism and uniqueness from the type-aware hash. No "reserved vector registry" needed. | 058 |
 | 2026-04-17 | **Atom literal type refinement.** `(Atom 0)` is a concrete integer atom, not a keyword. Array positions use concrete integers — position 0 IS the integer 0. Keywords like `:wat/std/circular-cos-basis` are reserved for TRULY symbolic references (names with no natural concrete form). Use the literal type that matches the semantic, not a keyword that wraps it. The type-aware hash keeps `(Atom 0)`, `(Atom "0")`, and `(Atom :pos/0)` all distinct. | 058 |
+| 2026-04-17 | **Programs ARE Thoughts section added.** A wat program is an AST; ASTs encode to vectors; therefore programs have vector projections. Evaluation is AST-walking. Programs can be stored in data structures, compared geometrically, retrieved from engram libraries, and generated from learned discriminants. Self-improvement becomes discriminant-guided program synthesis in hyperdimensional space. The wat machine is homoiconic at 10,000 dimensions. Kanerva's "build a Lisp from hyperdimensional vectors" challenge fully answered. | 058 |
 
 ---
 
