@@ -8,15 +8,25 @@
 
 ## The core insight
 
-wat already has the CSP primitives in LANGUAGE.md:
+wat's CSP primitives, minimal set:
 
 - `(make-pipe :capacity N :carries Type)` → `(tx, rx)` pair
 - `(send tx value)`, `(recv rx)`, `(try-recv rx)`, `(select pipes)`
-- `(make-topic [tx1 tx2 tx3])` → fan-out (1 → N)
 - `(spawn fn)` → thread handle
 - `(join handles)` → wait for threads
 
-These are **values**. Pipes are values. Topics are values. Processes are functions. The wat-vm provides primitives; users compose.
+Six forms. One concurrency primitive (pipe), one execution primitive (thread).
+
+### Topic and mailbox are dead
+
+`make-topic` (1→N fan-out) and mailbox primitives were in the earlier design but got engineered out of use. In practice, people reach for the pipe directly:
+
+- **Topic** = `(for-each (lambda (tx) (send tx value)) txs)`. The fan-out is just iteration over an explicit list of `tx` ends. Three tokens saved by having `(send topic value)`; not worth a dedicated primitive.
+- **Mailbox** = `(make-pipe :capacity :unbounded :carries T)`. Async owned queue with the receiving process holding the `rx`. Same semantics, no new vocabulary.
+
+One primitive per concept. Pipe covers all point-to-point and fan-in/fan-out patterns via composition. Topic and mailbox live as userland idioms if someone wants named wrappers — `(defn topic-fanout ...)` in their own code — but they don't need to be substrate primitives.
+
+These are **values**. Pipes are values. Processes are functions. The wat-vm provides the minimal CSP set; users compose.
 
 Combined with everything we're designing in 058 (types, macros, `define`/`lambda`, cryptographic provenance, static loading), a wat program can express:
 
@@ -58,8 +68,8 @@ The enterprise topology, expressed directly in wat:
      ((broker-tx broker-rx) (make-pipe :capacity 100 :carries :Proposal))
      ((trade-tx  trade-rx)  (make-pipe :capacity 10  :carries :FundedTrade))
 
-     ;; Fan-out — one input, many observers
-     (candle-topic (make-topic (list mobs-tx regime-tx)))
+     ;; The candle fan-out ends — just the list; send iterates.
+     (candle-fanout (list mobs-tx regime-tx))
 
      ;; Spawn observers
      (market-handles
@@ -75,9 +85,11 @@ The enterprise topology, expressed directly in wat:
      ;; Broker wires observer outputs and feeds treasury
      (broker-handle   (spawn (lambda () (broker-observer mobs-rx regime-rx broker-tx)))))
 
-    ;; Main loop — feed candles into the topic (which fans out)
+    ;; Main loop — feed each candle into every observer pipe (fan-out is iteration)
     (for-each (lambda ([c : :Candle] -> :())
-                (send candle-topic c))
+                (for-each (lambda ([tx : :Sender] -> :())
+                            (send tx c))
+                          candle-fanout))
               market-stream)
 
     ;; Wait for workers to drain
@@ -134,17 +146,13 @@ Erlang's "let it crash" philosophy vs. Go's panic semantics. If a process dies:
 
 Worth pondering but not blocking.
 
-### 5. Topic syntax polish
-
-Current: `(make-topic (list tx1 tx2 tx3))`. Could be: `(topic tx1 tx2 tx3)` as a macro that wraps the list for you. Minor sugar; probably worth it.
-
-### 6. Program-level cryptographic identity
+### 5. Program-level cryptographic identity
 
 A whole enterprise program — all types, all functions, all spawns, all pipes — hashes to one identity. If a node receives "run this topology" over the network, the signature authenticates the ENTIRE system, not individual components.
 
 This is a big deal for distributed deployment: one signed program = one authorized system architecture running at the receiver.
 
-### 7. Declarative topology vs. imperative
+### 6. Declarative topology vs. imperative
 
 The example above is imperative: `let` bindings create pipes, `spawn` creates processes, wiring happens through variable references.
 
