@@ -12,11 +12,13 @@
 `defmacro` is a **compile-time language-core form** that registers a syntactic transformation. Unlike `define`, which creates a runtime function, `defmacro` defines a rewriter: it takes a source-level form and returns its canonical replacement BEFORE any evaluation, hashing, caching, or signing occurs.
 
 ```scheme
-(defmacro (:namespace/macro-name (arg1 :AST) (arg2 :AST) ... -> :AST)
+(defmacro (:namespace/macro-name (arg1 :AST<T1>) (arg2 :AST<T2>) ... -> :AST<R>)
   body-expression)
 ```
 
 The body is a Lisp expression that evaluates AT PARSE TIME to produce a new AST. The resulting AST replaces the invocation.
+
+Every macro parameter carries a concrete value type `T` via the `:AST<T>` wrapper (per 058-032). `T` is the value type the argument expression must produce — `:Holon`, `:f64`, `:List<Holon>`, etc. Bare `:AST` without `<T>` is not a valid parameter type; the language enforces the same discipline on macros as on every other typed position.
 
 ## Why This Form Exists
 
@@ -71,10 +73,10 @@ All three have the same hash. `hash(AST) IS identity` holds. The reader clarity 
 
 ## Shape
 
-`defmacro` uses the **same signature syntax as `define` and `lambda`** — every parameter typed `: AST`, return type `-> :AST`. One consistent signature form across all three definition primitives. Omission would be easier (less to write) but not simpler (introduces a special rule for macros that differs from define/lambda).
+`defmacro` uses the **same signature syntax as `define` and `lambda`** — every parameter typed with a concrete value type, return type explicit. One consistent signature form across all three definition primitives. Macros use `:AST<T>` (per 058-032) rather than bare `:T` because the parameter arrives unevaluated at parse time; `T` still commits to the evaluation type.
 
 ```scheme
-(defmacro (:namespace/macro-name (param1 :AST) (param2 :AST) ... -> :AST)
+(defmacro (:namespace/macro-name (param1 :AST<T1>) (param2 :AST<T2>) ... -> :AST<R>)
   expansion-body)
 ```
 
@@ -90,7 +92,7 @@ The `expansion-body` is a Lisp expression. It can use:
 **Pure alias — Concurrent:**
 
 ```scheme
-(defmacro (:wat/std/Concurrent (xs :AST) -> :AST)
+(defmacro (:wat/std/Concurrent (xs :AST<List<Holon>>) -> :AST<Holon>)
   `(Bundle ,xs))
 
 ;; User writes:
@@ -103,7 +105,7 @@ The `expansion-body` is a Lisp expression. It can use:
 **Transforming — Subtract:**
 
 ```scheme
-(defmacro (:wat/std/Subtract (x :AST) (y :AST) -> :AST)
+(defmacro (:wat/std/Subtract (x :AST<Holon>) (y :AST<Holon>) -> :AST<Holon>)
   `(Blend ,x ,y 1 -1))
 
 ;; User writes:
@@ -116,7 +118,7 @@ The `expansion-body` is a Lisp expression. It can use:
 **Parameterized — Amplify:**
 
 ```scheme
-(defmacro (:wat/std/Amplify (x :AST) (y :AST) (s :AST) -> :AST)
+(defmacro (:wat/std/Amplify (x :AST<Holon>) (y :AST<Holon>) (s :AST<f64>) -> :AST<Holon>)
   `(Blend ,x ,y 1 ,s))
 
 ;; User writes:
@@ -129,7 +131,7 @@ The `expansion-body` is a Lisp expression. It can use:
 **Higher-order expansion — Chain:**
 
 ```scheme
-(defmacro (:wat/std/Chain (holons :AST) -> :AST)
+(defmacro (:wat/std/Chain (holons :AST<List<Holon>>) -> :AST<Holon>)
   `(Bundle (pairwise-map Then ,holons)))
 
 ;; User writes:
@@ -245,7 +247,7 @@ Matthew Flatt's 2016 paper — *"Binding as Sets of Scopes"* — is the referenc
 
 ```scheme
 ;; Macro introduces `tmp`:
-(defmacro (swap-thoughts (a :AST) (b :AST) -> :AST)
+(defmacro (swap-thoughts (a :AST<Holon>) (b :AST<Holon>) -> :AST<Holon>)
   `(let ((tmp ,a))          ; `tmp` here has macro-scope M
      (set! ,a ,b)
      (set! ,b tmp)))
@@ -339,15 +341,18 @@ FOUNDATION's distributed-verifiability claim assumes two nodes producing the sam
 
 **Version gate in the algebra header.** The wat-vm's startup manifest includes an `algebra-version: "v1.2"` tag. Loading a file signed under a different algebra version requires explicit opt-in (or explicit upgrade path). This is standard cryptographic-protocol versioning, not novel to wat.
 
-## Typed Macros — Resolved in 058-032
+## Typed Macros — Completed in 058-032
 
-Fully typed macros (the macro author's code is type-checked at macro-authoring time, not only at expansion time) is the Racket `define-syntax-parse` / `syntax/parse` model. It's more powerful than 058-031's current "check types after expansion" — it catches ill-typed macros before they're ever instantiated.
+058-031 alone is an INCOMPLETE type story. Parameters were drafted as `:AST` — a placeholder that said "some parsed expression" without committing to its evaluation type. That placeholder is dishonest: every other typed position in the language carries a concrete type commitment (058-030 bans `:Any` for exactly this reason). A macro parameter is no exception.
 
-**058-031 ships with expansion-time type checking.** That is enough: every ill-typed expansion fails the type check, so no incorrect program ever runs. The cost is error location quality — a mistake in a macro call surfaces at the expanded form, not at the call site.
+**058-032 completes the type story.** It adds `:AST<T>` to the type grammar, mandates it for every macro parameter, and runs a type check at macro-definition time under a type environment where each parameter is bound to its declared `T`. Bare `:AST` without `<T>` is retired as a parameter type. Errors surface at the macro invocation, naming the parameter that failed.
 
-**058-032 — Typed Macros — lands the macro-authoring-time check.** It extends the type grammar with `:AST<T>` (a parametric type: "an AST expression producing a value of type `T`"), types every parameter, and verifies the macro body at definition time under the resulting type environment. Errors surface at the macro invocation with origin tracking that names the parameter.
+058-031 and 058-032 read as one design:
 
-**Stated position:** ship 058-031 with expansion-time type checking. 058-032 is the follow-up that sharpens error locality by pushing the check earlier. The two proposals are additive; no behavioral change for untyped macros.
+- 058-031 ships the mechanism — parse-time rewriting, hygiene, origin tracking.
+- 058-032 ships the types — concrete parameter types, macro-definition-time check, call-site check.
+
+Neither stands alone. 058-031's `:AST<T>` examples above reflect the typed discipline that 058-032 mandates; they ship typed from day one, not as a retrofit.
 
 ## Arguments For
 
@@ -479,7 +484,7 @@ Once `defmacro` lands, the stdlib alias proposals get rewritten from `(define ..
 
 2. **Recursion.** Can a macro invoke itself? Yes (standard). Expansion limit (e.g., 1000 recursive rewrites) prevents infinite loops at expansion time.
 
-3. **Typed macros.** Should macro parameters have types? Recommendation: yes — every parameter is explicitly typed `: AST`, and the return is explicitly `-> :AST`. One consistent signature syntax across `define`, `lambda`, and `defmacro` (omission would be easier but not simpler). Semantic type checking of the expansion body still happens after expansion — the signature annotations document the parse-time contract.
+3. **Typed macros.** Resolved in 058-032. Every macro parameter is `:AST<T>` with a concrete value type — same discipline as every other typed position in the language. Bare `:AST` without `<T>` is retired, matching 058-030's no-`:Any` rule. Macro-definition-time type checking runs before expansion; call-site checking names the parameter by its declared type.
 
 4. **Introspection.** Should userland code be able to see what a macro call expands to? Useful for debugging. Recommendation: yes, via `(macroexpand form)` — returns the fully-expanded AST without evaluation. Classical Lisp feature.
 

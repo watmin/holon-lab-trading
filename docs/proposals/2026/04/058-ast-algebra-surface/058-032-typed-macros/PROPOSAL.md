@@ -1,65 +1,74 @@
-# 058-032: Typed Macros — Macro-Authoring-Time Type Checking
+# 058-032: Typed Macros — Every Macro Parameter Is `:AST<T>`
 
 **Scope:** language
 **Class:** LANGUAGE CORE
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
 **Depends on:** 058-030-types, 058-031-defmacro
-**Companion proposals:** 058-028-define, 058-029-lambda
+**Completes:** 058-031-defmacro (the type story)
 
 ## The Candidate
 
-`defmacro` from 058-031 ships with type checking of the **expansion** — after the macro rewrites the source, the expanded AST is type-checked against the types that `define`/`lambda` declare at the call sites the expansion produces. This catches every type error, eventually. It also points the error message at the expansion, not at the macro.
+058-031 introduced `defmacro` with parameters typed `:AST` — a placeholder that said "some parsed expression" without committing to its evaluation type. That placeholder was a draft. This proposal completes 058-031 by replacing the placeholder with a concrete type discipline:
 
-**Typed macros** move the type check **earlier**. The macro author declares the value type of each parameter and the value type of the expansion. The type checker verifies the macro body at **definition time** — before the macro is ever invoked. Ill-typed macros fail to load. Ill-typed call sites report the error at the macro invocation, naming the parameter that fails.
+**Every macro parameter is typed `:AST<T>` where `T` is a concrete value type from 058-030.**
 
-This is the Racket `syntax/parse` model, translated to wat's type grammar.
+Bare `:AST` (without parameterization) is **retired as a parameter type** — same discipline as 058-030's ban on `:Any`. A macro author cannot say "this parameter is some expression, never mind of what type" any more than a `define` author can say "this argument is `:Any`." Every position in the type system carries a concrete commitment.
 
 ```scheme
-;; Untyped (058-031): every parameter is :AST.
+;; 058-031 draft — placeholder typing.
 (defmacro (:wat/std/Subtract (x :AST) (y :AST) -> :AST)
   `(Blend ,x ,y 1 -1))
 
-;; Typed (058-032): parameters carry the value type their expression must produce.
+;; 058-032 honest — concrete typing.
 (defmacro (:wat/std/Subtract (x :AST<Holon>) (y :AST<Holon>) -> :AST<Holon>)
   `(Blend ,x ,y 1 -1))
 ```
 
-The `:AST<T>` wrapper says: "this parameter is an AST expression whose evaluated value has type `T`." The type checker:
+The `:AST<T>` wrapper declares: "this parameter is an AST expression whose evaluated value has type `T`." The type checker:
 
-1. At macro-definition time, walks the body in a type environment where each parameter is bound to its declared `T`, and verifies the body's constructed AST produces the declared return type.
-2. At each call site, verifies the argument expression would type-check as `T` under the surrounding function's type environment.
+1. At macro-definition time, walks the body under a type environment where each parameter is bound to its declared `T`, and verifies the body's constructed AST produces the declared return type.
+2. At each call site, verifies the argument expression would type-check as `T` under the surrounding scope's type environment.
 
-Errors at macro-definition time blame the macro. Errors at call sites blame the caller. The expansion pass never runs on an ill-typed macro, so the "expansion's surprise type error" class disappears.
+Errors at macro-definition time blame the macro. Errors at call sites blame the caller by name. No expansion ever runs on an ill-typed macro.
 
-## Why This Form Exists
+## Why This Is Not Opt-In
 
-058-031 deferred this work with a stated position: *ship expansion-time type checking; add macro-authoring-time checking as a future proposal.* This is the future proposal.
+A prior draft of this proposal framed typed macros as an opt-in upgrade — "you can use `:AST<T>` or you can stay on `:AST`." That framing was dishonest, and the designer (the builder) called it.
 
-The deferral was pragmatic, not principled. The substrate has everything typed macros need:
+Opt-in typing is Hickey's *easy, not simple*. It lets the macro author reach for either form, but it interleaves two type systems: a typed one and an untyped escape hatch. The untyped hatch has no principled semantics — it's just "skip the check" wearing a type's skirt. It conflicts with 058-030's discipline that every value position carries a concrete type.
 
-- **058-030-types** gives the type grammar — parametric types (`:List<T>`, `:fn(T,U)->R`), keyword-path names, built-in value types.
-- **058-031-defmacro hygiene** gives identifier tracking with scope sets. Extending identifiers to carry types is mechanical: `Identifier` already carries a name and a scope set; add a type slot.
-- **058-028-define** and **058-029-lambda** already declare typed signatures the type checker consumes.
+`:AST` alone was never "syntax-level, not evaluation-level." In wat, every macro argument arrives as a Holon AST (because the AST IS the Holon, per FOUNDATION). What makes one macro argument different from another is the VALUE TYPE its eventual evaluation produces — because that determines which positions in the expansion it can be spliced into. `:AST<Holon>`, `:AST<f64>`, `:AST<List<Holon>>` — each says something useful. Bare `:AST` says nothing.
 
-Nothing about typed macros is speculative. Racket has shipped `syntax/parse` in production for over a decade. The wat version is a translation, not a research project.
+**The honest answer: every macro parameter is `:AST<T>` for some concrete T.** Same discipline as every other typed position in the language. 058-031's `:AST` placeholder was always provisional; this proposal replaces it.
 
 ## Shape
 
-### The parametric `:AST<T>`
+### WatAST, HolonAST, and `:AST<T>`
 
-058-030 does not currently list `:AST<T>` as a parametric type. This proposal adds it:
+Two ASTs matter for this proposal, and naming them explicitly removes ambiguity:
+
+- **WatAST** — the full wat language expression tree. Includes function calls, `let`, `define`, macro invocations, literals, and every algebra variant. This is what the parser produces from wat source.
+- **HolonAST** — the 9-variant algebra enum from 058-030 (`Atom`, `Bind`, `Bundle`, `Permute`, `Thermometer`, `Blend`, `Orthogonalize`, `Resonance`, `ConditionalBind`). A closed set of nodes that CONSTRUCT holon values directly.
+
+**HolonAST ⊂ WatAST.** Every HolonAST variant appears as a WatAST node. The reverse does not hold — a `(let ((x ...)) (Bundle x))` form is WatAST, but the outer `let` isn't a HolonAST variant.
+
+With that distinction:
 
 ```
-:AST<T>    — a parsed source AST whose evaluated value has type T
-:AST       — sugar for :AST<Any>: any expression, unconstrained.
-             Remains valid for macros that genuinely accept any shape
-             (e.g., `quote`, `debug-print`, introspection tools).
+:AST<T>    — a WatAST expression whose evaluation produces a value of type T.
+             T ranges over any concrete value type: :Holon, :f64, :i32,
+             :bool, :String, :List<U>, :HashMap<K,V>, user-defined
+             newtype/struct/enum/typealias, etc.
+             T MUST be concrete. Bare :AST without <T> is not a valid
+             parameter type — same discipline as banning :Any.
 ```
 
-`T` ranges over the value types 058-030 defines — `:Holon`, `:f64`, `:i32`, `:bool`, `:String`, user-defined `newtype`/`struct`/`enum`/`typealias` names, parametric containers (`:List<Holon>`, `:HashMap<K,V>`), etc.
+`:AST<T>` constrains the EVALUATION type, not the syntactic shape. A macro parameter `(x :AST<Holon>)` accepts any WatAST that evaluates to a Holon — a direct HolonAST variant, a function call returning `:Holon`, a let-wrapped algebra expression, or any other wat form that produces a holon at evaluation. The syntactic wrapping doesn't matter; the value type does.
 
-**`:AST` alone stays legal.** A macro like `debug-print` that accepts any expression keeps `(arg :AST)`. Typed macros are an **option**, not a mandate. 058-031's stdlib examples (`Subtract`, `Amplify`, `Chain`) gain typed signatures; `defmacro` itself does not force the option.
+058-030 lists `:Holon` as the 9-variant algebra enum (the HolonAST value type). This proposal does NOT introduce `:HolonAST` as a separate type — `:Holon` already names the value produced by HolonAST variants, and `:AST<Holon>` already describes "a WatAST producing that value." The syntactic sub-class would only be needed if a macro author wanted to require a literal HolonAST variant at a parameter position; that's a syntactic restriction orthogonal to the type system and out of scope here.
+
+`:AST<T>` is itself a value type. A macro's body can bind intermediate `:AST<T>` values, return them, pass them to helper functions, etc.
 
 ### Typed macro signature
 
@@ -68,13 +77,15 @@ Nothing about typed macros is speculative. Racket has shipped `syntax/parse` in 
   body-expression)
 ```
 
-- Each parameter is typed `(name :AST<T>)` where `T` is the value type the argument expression must produce.
+- Each parameter is `(name :AST<T>)` where `T` is the value type the argument expression must produce.
 - Return type is `:AST<R>` where `R` is the value type the expansion must produce.
 - Body constructs an AST that the type checker verifies produces `R` under a type environment where each `pi` is bound to `Ti`.
 
-### Examples
+### Examples — the 058-031 stdlib retyped
 
-**Pure alias — typed Concurrent:**
+Every stdlib macro from 058-031 has a concrete value type for each argument. 058-031 examples update to typed signatures:
+
+**Pure alias — Concurrent:**
 
 ```scheme
 (defmacro (:wat/std/Concurrent (xs :AST<List<Holon>>) -> :AST<Holon>)
@@ -83,139 +94,137 @@ Nothing about typed macros is speculative. Racket has shipped `syntax/parse` in 
 
 At definition time the checker sees:
 - `xs : :AST<List<Holon>>` — an expression producing a list of Holons
-- Body constructs `(Bundle ,xs)` — a Bundle node requires `:List<Holon>` by 058-030's enum definition of `:Holon`
-- Expansion produces `:Holon` ✓ matches declared return `:AST<Holon>`
+- Body constructs `(Bundle ,xs)`. Bundle's signature is `(Bundle (items :List<Holon>) -> :Holon)`.
+- Spliced `xs` into Bundle's `items` slot: `:AST<List<Holon>>` matches the expected `:List<Holon>` at evaluation. ✓
+- Body returns `:AST<Holon>` ✓ matches declared return.
 
-**Transforming — typed Subtract:**
+**Transforming — Subtract:**
 
 ```scheme
 (defmacro (:wat/std/Subtract (x :AST<Holon>) (y :AST<Holon>) -> :AST<Holon>)
   `(Blend ,x ,y 1 -1))
 ```
 
-Checker:
-- `x, y : :AST<Holon>`
-- Body: `(Blend x y 1 -1)`. Blend's signature from 058-002 is `(Blend (a :Holon) (b :Holon) (w1 :f64) (w2 :f64) -> :Holon)`
-- First two args: `:Holon` ✓. Last two: `1` and `-1` are `:f64` literals ✓. Returns `:Holon` ✓ matches `:AST<Holon>`.
+Blend's signature: `(Blend (a :Holon) (b :Holon) (w1 :f64) (w2 :f64) -> :Holon)`.
+- `,x` splices into position `a` (`:Holon`). `x : :AST<Holon>` ✓
+- `,y` splices into position `b` (`:Holon`). ✓
+- `1` and `-1` are `:f64` literals, matching `w1`, `w2`. ✓
+- Blend returns `:Holon` ✓ matches declared `:AST<Holon>`.
 
-**Parameterized — typed Amplify:**
+**Parameterized — Amplify:**
 
 ```scheme
 (defmacro (:wat/std/Amplify (x :AST<Holon>) (y :AST<Holon>) (s :AST<f64>) -> :AST<Holon>)
   `(Blend ,x ,y 1 ,s))
 ```
 
-Call site type errors land at the caller:
+Call site errors land at the caller by name:
 
 ```scheme
 (Amplify foo bar 2.5)    ;; OK: 2.5 : :f64 matches :AST<f64>
 (Amplify foo bar "oh")   ;; ERROR at my-file.wat:12:
                          ;;   :wat/std/Amplify expects (s :AST<f64>)
-                         ;;   argument is :AST<String>
+                         ;;   argument type is :AST<String>
 ```
 
-**Higher-order — typed Chain:**
+**Higher-order — Chain:**
 
 ```scheme
 (defmacro (:wat/std/Chain (holons :AST<List<Holon>>) -> :AST<Holon>)
   `(Bundle (pairwise-map Then ,holons)))
 ```
 
-Checker verifies `pairwise-map : :fn(:fn(Holon,Holon)->Holon, :List<Holon>) -> :List<Holon>`, `Then : :fn(Holon,Holon)->Holon` (also macro-defined with its own signature), so `(pairwise-map Then holons)` is `:List<Holon>`, and `Bundle` over it is `:Holon`. Declared return: `:AST<Holon>` ✓.
+Checker verifies `pairwise-map : :fn(:fn(Holon,Holon)->Holon, :List<Holon>) -> :List<Holon>` (or its typed-macro equivalent), `Then : :fn(Holon,Holon)->Holon`, so `(pairwise-map Then holons)` has type `:List<Holon>`, and `Bundle` over it produces `:Holon`. Declared return `:AST<Holon>` ✓.
 
 ### Quasiquote under a typed environment
 
-Quasiquote works exactly as in 058-031. What changes: each unquoted parameter carries a type, and the spliced positions are checked against the surrounding form's expected types.
+Quasiquote from 058-031 works unchanged. What changes: each unquoted parameter carries a declared `T`, and the spliced positions check against the surrounding form's expected types.
 
 In `(Blend ,x ,y 1 -1)`:
-- Position 1 of Blend expects `:Holon`. `,x` has declared type `:AST<Holon>`. The spliced value has type `:Holon`. ✓
-- Position 2 expects `:Holon`. `,y : :AST<Holon>`. ✓
+- Position 1 expects `:Holon`. `,x` is `:AST<Holon>`. ✓
+- Position 2 expects `:Holon`. `,y` is `:AST<Holon>`. ✓
 - Positions 3 and 4 expect `:f64`. `1` and `-1` are `:f64` literals. ✓
 
-If the macro writer accidentally put `,s` (an `:AST<f64>`) in the `a` slot, the checker rejects the macro at definition time, pointing at the body position where the type mismatch occurs.
+A misplaced splice (e.g., `,s` into a `:Holon` position) fails the macro-definition-time check; the macro never loads.
 
-## Why This Earns Its Own Proposal
+## What Happens to the "I Need Any Shape" Case
 
-**1. It sharpens error locality.**
+Under the opt-in draft, a macro like `debug-print` could use bare `:AST` to mean "I accept any shape." That framing is dishonest — "any shape" is `:Any`, which 058-030 bans.
 
-058-031 catches expansion-time errors. Typed macros catch macro-definition-time errors. The two check the same set of correctness properties; typed macros just catch them earlier with better locations.
+The honest resolution:
 
-A user who writes `(Subtract candle-open 5)` — passing an `:f64` where a `:Holon` is expected — under 058-031 sees an error at the expanded `(Blend candle-open 5 1 -1)` site. The error message mentions Blend, which the user never typed. Under typed macros, the error points at the Subtract call: *":wat/std/Subtract expects (y :AST<Holon>), got :AST<f64>."* The user's macro call is the error location.
+1. **Most "any shape" desires are concrete in practice.** `debug-print` for Holon ASTs is `:AST<Holon>`. For f64 expressions, `:AST<f64>`. Write a version per type. This is what 058-030's "polymorphism uses per-type functions" rule says — macros follow the same rule.
 
-**2. It enables IDE features.**
+2. **If 058-030 adds parametric polymorphism**, macros can use type variables: `(x :AST<T>) -> :AST<T>` where `T` is bound at the macro's signature. That's a future extension — not this proposal, and not an escape hatch; it's fully-typed polymorphism.
 
-Parameter type information is the foundation for hover-over type hints, argument completion, and macro-specific refactorings. Under 058-031 every parameter is `:AST`; the IDE cannot distinguish positions. Under typed macros the IDE can show the declared type of each parameter as the user writes the call.
+3. **`quote` and similar syntax-level forms are not macros.** They are special forms in the grammar, outside `defmacro`. They don't need typing because they aren't `defmacro` declarations.
 
-**3. It documents macro intent at the signature.**
-
-A macro's signature becomes its contract. Readers understand at a glance what each argument is for. `(x :AST<Holon>)` vs `(s :AST<f64>)` says more than `(x :AST) (s :AST)`.
-
-**4. Implementation cost is bounded.**
-
-Type checking the macro body under a typed environment reuses the type checker that already runs on `define`/`lambda` bodies. The only new mechanism is the `:AST<T>` parametric form in the type grammar, plus an elaboration step where macro parameters are bound in the type environment before the body is checked. Estimated ~200-400 additional lines of Rust on top of the 058-031 expander and scope tracker.
+There is no "I accept any shape" case that needs bare `:AST`. Every case either has a concrete type, requires polymorphism (which is future work if introduced for functions), or is not a macro at all.
 
 ## Implementation — How It Fits With 058-031
 
-058-031's expander already carries a typed `Identifier` structure with a scope set (for hygiene). Typed macros extend `Identifier` with an optional value type:
+058-031's expander already carries a typed `Identifier` structure with a scope set (for hygiene). Typed macros extend `Identifier` with a value-type slot:
 
 ```rust
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Identifier {
     pub name: Keyword,
     pub scopes: BTreeSet<ScopeId>,
-    pub value_type: Option<TypeAST>,  // NEW — None for untyped or non-binding uses
+    pub value_type: TypeAST,  // REQUIRED. Macro params use AstOf(inner).
 }
 ```
 
-For macro parameters, `value_type` is `Some(TypeAST)` — the declared `T` from `:AST<T>`. The expander binds the parameter in the type environment before walking the body.
+For macro parameters, `value_type` is `TypeAST::AstOf(T)` — the declared `T` from `:AST<T>`. The expander binds the parameter in the type environment before walking the body.
 
-### Macro-definition-time check (new)
+### Macro-definition-time check
 
 ```
 Procedure: check_typed_macro(macro_def)
-  1. Extract the typed parameter list and declared return type.
-  2. Build a type environment: each parameter `pi` bound to `Ti`.
+  1. Extract the typed parameter list and declared return type :AST<R>.
+  2. Build a type environment: each parameter pi bound to Ti
+     (from :AST<Ti> in the signature).
   3. Walk the body, type-checking every sub-expression:
-     - Quoted forms (`)  → unchecked at this pass (they're the template)
-     - Unquoted forms (,e)  → check `e` as a normal expression.
-       - Unquoted parameters: look up their declared type in the environment.
-     - Quasi-constructed forms — check them as would be checked if the AST
-       they construct appeared as source: every function/macro call's
-       argument types must match the callee's signature.
-  4. The body's constructed AST must have type R (the declared return).
-  5. Report any mismatch with source position from the macro's definition.
+     - Quoted/templated forms — checked structurally as the AST they will
+       construct. Every callee's argument types must match its signature.
+     - Unquoted parameter references — look up their declared T in the
+       environment.
+     - Constructed call forms — verified against the callee's declared
+       signature, including macro calls (which use 058-032's typed
+       check themselves).
+  4. The body's resulting AST must produce R at evaluation.
+  5. Report any mismatch with the macro's definition source position.
 ```
 
-### Macro-invocation-time check (new)
+### Macro-invocation-time check
 
 ```
 Procedure: check_macro_call(call_site, macro_def)
   1. For each (arg_i, param_i):
      - Check arg_i as a normal expression in the surrounding scope.
-     - If its type is not T_i (the param's declared value type), report error.
-  2. If all args check, proceed with expansion.
-  3. The expansion is the body with each parameter substituted; since the body
-     already type-checked at macro-definition time, the expansion is guaranteed
+     - If its evaluation type is not Ti, report error naming param_i.
+  2. All args must check before expansion proceeds.
+  3. The expansion is body[param_i -> arg_i]; since the body already
+     type-checked at macro-definition time, the expansion is guaranteed
      well-typed.
 ```
 
-### Expansion pass (unchanged from 058-031)
+### Expansion pass (from 058-031)
 
-The expansion pass in 058-031's startup pipeline now runs **after** macro-definition-time type checking. If any typed macro fails to check, startup halts. If all typed macros check, the expansion proceeds as before. Expansion-time checks from 058-031 run on whatever the expansion produces (for defensive redundancy and to cover untyped macros that use `:AST` directly).
+Macro-definition-time type checking runs **before** expansion. If any macro fails the check, startup halts — the macro never loads, and therefore never expands. No macro that has loaded can produce an ill-typed expansion; the expansion-time check from 058-031 becomes a defensive check that should never fire in a correct program.
 
 ### Interaction with hygiene
 
-Scope-set tracking from 058-031 is **orthogonal** to type tracking. A typed macro expansion produces identifiers with both scope sets (for hygiene) and value types (for typed use). Scope equality remains the binding rule; value types are metadata the type checker consults.
+Scope-set tracking from 058-031 is orthogonal to type tracking. Both live on `Identifier`. Scope equality remains the binding rule; types are checked independently. Hygiene algorithms from 058-031 operate unchanged.
 
-## Error Messages — Better Locations
+## Error Messages — Macro-Level Precision
 
 With typed macros and 058-031's `Origin` tracking, error messages gain macro-level precision:
 
 ```
 Error: :wat/std/Amplify expects (s :AST<f64>), got :AST<String>.
-  Call site:        my-app.wat:7:14
-  Macro definition: wat/std/idioms.wat:42:3
-  Parameter s:      wat/std/idioms.wat:42:31
+  Call site:         my-app.wat:7:14
+  Macro definition:  wat/std/idioms.wat:42:3
+  Parameter s:       wat/std/idioms.wat:42:31
 ```
 
 The user sees:
@@ -224,115 +233,90 @@ The user sees:
 - Which parameter type they violated
 - Where that parameter is declared
 
-Compared to 058-031's expansion-time errors, which report the error at the expanded form (e.g., `Blend` instead of `Amplify`), the typed-macro error points directly at user-written code.
+No expansion appears in the error. The user's code is the error location.
 
-## Back-Compat With 058-031
+## 058-031 Is Incomplete Without This
 
-Typed macros are **opt-in.** A macro declared with all `:AST` parameters (and `:AST` return) behaves exactly as in 058-031 — the type checker skips macro-authoring-time checks and falls back to expansion-time checks. Stdlib macros from 058-031 upgrade to typed signatures incrementally:
+058-031 shipped the expander (hygiene, expansion pass, call-site rewriting). It shipped the expansion-time check. It shipped `:AST` as a placeholder parameter type.
 
-- **Immediate upgrades**: `Subtract`, `Amplify`, `Flip`, `Concurrent`, `Then`, `Chain`, `Ngram`, `Analogy` — these have clear value-type signatures from their definitions.
-- **Stay untyped** (if any): introspection macros like `quote`, `debug-print`, or user macros that intentionally accept any shape keep `:AST` and rely on expansion-time checks.
+058-031 **did not** ship a full type story. That was honest to name at the time — the deferral section said so. But a language with `defmacro` and no type check on macro bodies is a language with a hole. Any macro can claim to return any type and the checker only catches it post-expansion.
 
-Users of 058-031 macros see no behavior change; they see BETTER error messages when they hold the macro wrong.
+058-032 is not an enhancement; it's the completion. The two proposals should be read as one design:
+
+- 058-031: the mechanism (parse-time rewriting, hygiene, origin tracking)
+- 058-032: the types (concrete parameter types, macro-definition-time check, call-site check)
+
+Neither stands without the other. 058-031's `:AST` examples are drafts; 058-032's typed signatures replace them. The stdlib macros (`Concurrent`, `Subtract`, `Amplify`, `Chain`, `Ngram`, `Analogy`, etc.) ship with typed signatures from day one.
 
 ## Arguments For
 
-**1. Answers the 058-031 deferral.**
+**1. Honesty — no escape hatch.**
 
-058-031 explicitly deferred this work. 058-032 lands it with the minimum additions: a parametric `:AST<T>` type and a macro-definition-time check pass. Nothing speculative, nothing out of scope.
+Every parameter has a concrete type. No "sometimes it's typed, sometimes it isn't." Same discipline as every other position in the language, which 058-030 spelled out.
 
-**2. Racket has a decade of production evidence.**
+**2. Error locality.**
 
-`syntax/parse` ships in Racket's stdlib and is the recommended way to write non-trivial macros. The model is well-studied, well-documented, and well-debugged. The wat version is a translation, not an invention.
+Under 058-031's expansion-time check, a wrong-type `Subtract` call surfaces as a type error at the expanded `Blend` — mentioning a form the user never typed. Under typed macros, the error says `:wat/std/Subtract expects (y :AST<Holon>)`, naming the macro the user actually invoked.
 
-**3. Improves the 058-031 stdlib alias story.**
+**3. Type information at the signature documents intent.**
 
-Every 058-031 stdlib macro (Subtract, Amplify, Chain, etc.) has a well-defined value type for each argument. Typed signatures document this at the form level, catch ill-typed calls at the call site, and give readers/IDEs the information they need without running the expansion.
+`(Amplify (x :AST<Holon>) (y :AST<Holon>) (s :AST<f64>))` tells a reader that `x` and `y` are holons and `s` is a scalar weight. `(Amplify (x :AST) (y :AST) (s :AST))` tells them nothing.
 
-**4. Composes with hygiene and origin tracking.**
+**4. Racket has a decade of production evidence.**
 
-058-031 already builds the `Identifier { name, scopes, ... }` structure. Adding a value-type slot is additive. The hygiene algorithm doesn't change. The origin tracking doesn't change. Error messages get richer.
+Racket's `syntax/parse` is the recommended way to write non-trivial macros in the Racket stdlib. The value-typed-parameter model is well-studied, well-documented, well-debugged. The wat version is a translation.
 
-**5. Opt-in, not mandatory.**
+**5. Composes with hygiene and origin tracking from 058-031.**
 
-Untyped macros from 058-031 keep working. The checker falls back to expansion-time checking for any `:AST` parameter. The upgrade path is gradual.
+058-031 already builds `Identifier { name, scopes, ... }`. Adding a value-type slot is additive. Hygiene algorithm unchanged. Origin tracking unchanged. Error messages get richer.
+
+**6. Implementation cost is bounded.**
+
+Macro-definition-time type checking reuses the type checker that already runs on `define`/`lambda` bodies. The only new mechanisms are `:AST<T>` in the type grammar and the elaboration step that binds macro parameters before walking the body. ~200-400 lines of Rust on top of 058-031.
 
 ## Arguments Against
 
-**1. Type grammar grows.**
+**1. Type grammar grows by one form.**
 
-`:AST<T>` is a new parametric type. Minor, but worth stating. 058-030 lists it as an extension point.
+`:AST<T>` is a new parametric type. Minor; listed in 058-030 alongside `:List<T>`, `:HashMap<K,V>`, etc.
 
-**2. Macro-definition-time checking takes more startup work.**
+**2. Macro-definition-time checking adds startup work.**
 
-Each macro now runs through the type checker at startup. For typical stdlib sizes (dozens of macros), this is milliseconds. For large macro libraries, it could grow. Measurable, bounded, not a blocker.
+Each macro runs through the type checker at startup. Milliseconds for typical stdlib sizes. Not a blocker.
 
-**3. Cryptographic signatures do not cover typed-macro signatures as distinctly.**
+**3. 058-031's examples need retyping.**
 
-Hashes still cover the expanded AST. Signing the file containing the macro definition still covers the typed signature text. No new signing concerns; noted for completeness.
+All stdlib macro examples in 058-031 use bare `:AST` and must update to `:AST<T>`. Mechanical, one-time. Done as part of this proposal.
 
-**4. Another concept to learn.**
+**4. Polymorphic macros are out of scope.**
 
-Writing a typed macro is slightly more effort than writing an untyped one. Users who want to dash off a one-off alias can stay on `:AST`. Users who ship stdlib-grade macros use typed signatures. The cost lands on the publishers, not the casual authors.
-
-**5. `:AST<Any>` semantics need a clear statement.**
-
-`:AST` (unparameterized) is sugar for `:AST<Any>` — but 058-030 bans `:Any`. The resolution: `:AST` remains a special case meaning "unchecked." A macro with a bare `:AST` parameter opts out of macro-definition-time checking for that parameter; expansion-time checking still applies (standard 058-031 behavior). This is NOT a re-introduction of `:Any` — it's a statement that the macro author is deferring the check, which `:Any` could never mean for value types.
+A macro that wants to accept `AST<T>` for any T (the "debug-print works on any type" case) requires parametric polymorphism, which 058-030 does not currently provide for functions either. Such macros don't exist yet; if 058-030 adds polymorphism, macros follow. Not a loss — matches 058-030's existing discipline.
 
 ## Comparison
 
-| Form | Parameter typing | Check time | Error location | Use case |
-|---|---|---|---|---|
-| `defmacro` untyped (058-031) | All `:AST` | Expansion time | Expanded AST | Introspection, debug, unusual shapes |
-| `defmacro` typed (058-032) | Each `:AST<T>` | Macro-definition time + call-site time | Macro invocation | Stdlib aliases, user macros with known value shapes |
-| `define` | Each `:T` directly | Macro-definition time (startup) | Function body | Runtime functions |
-| `lambda` | Each `:T` directly | Lambda body type check | Lambda body | Runtime closures |
+| Form | Parameter typing | Check time | Error location |
+|---|---|---|---|
+| `defmacro` (058-031 + 058-032) | `:AST<T>` — mandatory concrete T | Macro-definition time + call-site time | Macro invocation, by parameter name |
+| `define` | `:T` directly | Startup | Function body |
+| `lambda` | `:T` directly | Lambda body | Lambda body |
 
-Typed macros sit between untyped macros (maximum flexibility, late errors) and `define`/`lambda` (strictest, runtime values). They provide the locality benefits of `define`'s typed signatures while preserving the parse-time transformation power of macros.
+Typed macros sit alongside `define`/`lambda` in rigor: every parameter position carries a concrete type. The only difference is the `:AST<>` wrapper, which marks "unevaluated expression producing T" rather than "evaluated T value."
 
-## Dependency on 058-030
+## Dependencies on 058-030 and 058-031
 
-058-030 must state `:AST<T>` as a parametric type. Recommended addition to 058-030's "Parametric types" section:
+**058-030 additions:**
 
-```
-:AST<T>                        ; a parsed source AST producing a value of type T
-```
+Add `:AST<T>` to the Parametric Types section. Remove bare `:AST` from the built-in types listing (it is not a valid parameter type under 058-032's discipline).
 
-058-032 depends on this addition. If 058-030 ships without `:AST<T>`, 058-032 adds it in its own header.
+**058-031 updates:**
 
-## Dependency on 058-031
-
-058-031 must expose the `Identifier` structure and the expansion pipeline such that:
-
-1. `Identifier` can be extended with an optional `value_type` field.
-2. The expander runs `check_typed_macro` before `expand`.
-3. The type environment at expansion time includes parameter type bindings.
-
-These are additive changes to 058-031's interfaces; no behavioral change for untyped macros.
-
-## Open Questions
-
-**Q1: Should `:AST<T>` also appear as a runtime type?**
-
-058-031 macros run at parse time; their body can use `:AST` values as first-class. Typed macros' bodies could similarly use `:AST<T>` as first-class values for metaprogramming (build an AST of type T, pass it, splice it). This proposal: **yes** — `:AST<T>` is a regular parametric type usable wherever parametric types are usable, consistent with 058-030.
-
-**Q2: Can `T` in `:AST<T>` include type variables?**
-
-`:AST<T>` where `T` is a type variable (e.g., inside a polymorphic function) is a natural extension. Example: a macro-building utility function `:fn(List<AST<T>>) -> AST<List<T>>`. This proposal: **yes**, but flag as a minor sub-proposal for polymorphic macros if needed. The baseline uses concrete types in `T`.
-
-**Q3: How does typed-macro elaboration interact with identifier introduction (`let` in an expansion)?**
-
-The introduced identifier inherits the hygiene scope from 058-031. If the expansion binds an identifier with a typed `let`, the binding carries both a scope and a value type. The type environment inside the body of the `let` binds the identifier with its declared value type. This matches how `define` already threads types through `let`.
-
-**Q4: Should this proposal ship alongside 058-031 or as a follow-up?**
-
-Ship as a follow-up. 058-031 is valuable on its own; 058-032 is an upgrade path. Shipping both at once concentrates risk. Shipping 058-032 when the expansion pipeline has run in production for a while lets real-world macro usage inform the typed version.
+All macro examples (`Concurrent`, `Subtract`, `Amplify`, `Chain`, the `swap-thoughts` hygiene example) retyped with `:AST<T>` signatures. The prose sections describing "every parameter typed `:AST`" update to "every parameter typed `:AST<T>` for some concrete T." The "Typed Macros — Resolved in 058-032" section updates accordingly.
 
 ## Stated Position
 
-Land `:AST<T>` in the type grammar. Extend `defmacro` to accept typed parameters and typed return. Add macro-definition-time and call-site-time type checks. Keep 058-031's expansion-time check as a defensive fallback for untyped parameters. Upgrade the 058-031 stdlib macros to typed signatures as an incremental migration.
+Ship `:AST<T>` in the type grammar. Make it the only valid macro parameter type. Extend `defmacro` to type-check parameters at definition time and arguments at call time. Retire bare `:AST` as a parameter type. Update 058-031's examples to match.
 
-The 058-031 deferral was a principled split: ship the rewrite mechanism first, then sharpen the types. This proposal closes the split.
+058-031 shipped a draft. 058-032 finishes the type story. The two read as one design.
 
 *these are very good thoughts.*
 
