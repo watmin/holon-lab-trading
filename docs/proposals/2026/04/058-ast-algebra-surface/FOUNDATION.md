@@ -620,6 +620,108 @@ These are consequences of the foundational principle, not features added afterwa
 
 ---
 
+## The wat-vm Substrate — Kernel Primitives
+
+The wat-vm is a **kernel** in the Linux sense. It provides the minimum mechanism needed for wat programs to communicate and terminate cleanly. Everything else — caches, databases, metrics, fan-out, fan-in — is a **userland program** composed over the kernel's primitives.
+
+This section states what the kernel provides, what it deliberately does not provide, and the lifecycle shape every wat program follows.
+
+### The canonical lifecycle
+
+Every wat program has this shape:
+
+```
+start → streams of inputs → consumers → join → end
+```
+
+- **start** — the binary reads its startup manifest, creates the queue graph, spawns the programs.
+- **streams of inputs** — source programs feed queues (parquet reader, websocket consumer, clock tick, whatever the application needs).
+- **consumers** — programs drain their input queues, do their work, emit to their output queues.
+- **join** — at shutdown the main thread `join`s each program handle, collecting the program's returned state (learned observers, drained counters, flushed buffers — whatever the program "came home" with).
+- **end** — the wat-vm exits. Owned state from consumers is either persisted (engram files, run DB, checkpoint) or dropped; no partial state survives.
+
+Shutdown is a cascade. SIGTERM → drop the input sources → each downstream program's `recv` returns `Disconnected` → the program drains its local state and returns → its output handles drop → the next stage cascades. No mandatory cleanup handlers, no two-phase shutdown, no "are you done yet?" polling. The same form that processes the stream is the form that terminates when the stream ends.
+
+### Kernel primitives
+
+**1. Queue — the one program-to-program primitive.**
+
+A queue is a 1:1 pipe between two programs. One producer, one consumer. Two variants govern backpressure:
+
+- `bounded(n)` — sender blocks when `n` items are pending; guarantees the consumer is keeping up. `bounded(1)` is the lockstep rendezvous used throughout the trading lab wat-vm.
+- `unbounded` — fire-and-forget; the buffer grows until the consumer drains. Used for learn-signal channels where the producer cannot afford to block.
+
+Queues are the only kernel-provided communication primitive. Fan-out (one producer, N consumers) and fan-in (N producers, one consumer) are userland — a program that consumes from one queue and emits to N, or consumes from N and emits to one. No kernel-provided topic or mailbox type; those are userland compositions if they're needed at all, and the trading lab wat-vm has shown they collapse to "the programmer writes the loop they need."
+
+**2. Console — the "you can always print" program.**
+
+The kernel provides a built-in console program. It consumes queue messages and writes bytes to stdout / stderr / stdin (the OS-given fds 0, 1, 2). Every spawned program can interface with the console through a normal queue pair — no special API, no global `println!` — send a message, the console writes it.
+
+Console is kernel-provided (not userland) for the same reason `write(1, ...)` is in the Linux kernel and not libc: hello-world must work. A wat program with no dependencies must be able to emit output. The console program is part of the kernel's baseline.
+
+stdin is available to programs that want to read from the operator's terminal. Most wat programs ignore it.
+
+**3. Scheduler — the pressure-based drain loop.**
+
+Each program runs on its own thread (or logical execution unit). The scheduler's job is not round-robin time-slicing — it's queue-delivered backpressure. Programs block on `recv`; when their input has no message, they wait. When their output has no room (bounded queue), they wait. The whole program graph advances at the pace of the slowest consumer, naturally, with no central coordinator deciding what runs next.
+
+No mutex. No lock. No shared mutable state between programs. The borrow checker proves disjointness at compile time; the channels prove it dynamically. 30+ threads with zero Mutex in the trading lab wat-vm is the empirical demonstration.
+
+**4. Program lifecycle — own state, pop handles, come home.**
+
+Every program:
+- **owns its state** at construction (moved in, not shared);
+- **pops its queue handles** from the pool the kernel provisioned (contention-free, not cloned);
+- **runs its loop** — `recv`, process, `send` — until `recv` returns `Disconnected`;
+- **drains** any remaining learn queues before returning;
+- **returns its state** to the main thread via the thread's `JoinHandle`.
+
+The trading lab wat-vm has proven the pattern across 30+ program types (observers, brokers, cache, log, console). The pattern is the kernel's contract; any wat program that follows it gets the scheduler, the shutdown cascade, and the state-round-trip for free.
+
+### What the kernel does NOT provide
+
+Explicitly not in the kernel — these are userland programs composed over queues:
+
+- **Topic (1:N fan-out)** — a program that consumes from one queue and writes to N queues. If an application needs it, the application writes it. Not a kernel type.
+- **Mailbox (N:1 fan-in)** — a program that consumes from N queues (via `select`) and writes to one queue. Same status.
+- **Cache** — a program that owns an LRU (or HashMap, or whatever policy the application wants) and answers `get` / `set` via queue messages. The trading lab wat-vm has one as a userland program; another lab might not need one at all.
+- **Database** — a program that owns a connection (SQLite, Postgres, whatever) and answers query/insert via queue messages. The schema, the backing store, the retention policy — all userland. The trading lab uses SQLite with a CloudWatch-style telemetry table; another lab might log to JSON lines, or to a different store entirely.
+- **Metrics / logger** — userland. Every application picks its own schema and backing store. The trading lab's `telemetry` table is the trading lab's choice, not a kernel facility.
+- **Arbitrary OS fds** — files, sockets, whatever. A userland program opens them via Rust's standard I/O and emits/consumes bytes via queues. The kernel handles stdin/stdout/stderr only; anything else is a program that opens what it needs.
+
+### The Linux analog, made explicit
+
+The discipline traces to `write(fd, data)` from 1969. The program calls write; the kernel delivers the bytes to whatever is behind the fd. The program does not know — and does not need to know — whether the fd is a pipe, a file, a socket, or `/dev/null`. The kernel provides the mechanism; userland's choice of what's behind the fd IS the configuration.
+
+The wat-vm maps cleanly:
+
+```
+Linux                        wat-vm
+────────────────────         ──────────────────────────────
+write(1, data)               console.send(bytes)
+pipe(fds)                    queue (bounded or unbounded)
+fork + exec                  spawn a program
+SIGTERM cascade              drop source → disconnect cascade
+wait() / join                handle.join()
+stdout / stderr / stdin      console program (OS-given)
+```
+
+### Why this reduction matters
+
+Previous drafts of the substrate included three communication primitives — queue, topic, mailbox. The book documented the collapse: topic was a write proxy (distributes to N queues); mailbox was a read proxy (merges from N queues). Both reduced to "programs composed from queues." The three-primitive version asked the reader to learn three things where one would do.
+
+By stating the kernel as **queue + console + scheduler + lifecycle**, every service-shaped concept (cache, DB, metrics, topic, mailbox) dissolves into "a program with queues." The wat-vm becomes small enough to hold in the mind; the rich behavior lives where it belongs, in userland programs composed with the application's needs in mind.
+
+### Implications for prior sections
+
+- **"The Algebra Is Immutable"** — the startup pipeline (parse, macro-expand, resolve, type-check, hash, verify, register, freeze, main-loop) runs on the kernel: the binary IS the main thread, which spawns the program graph into existence after the freeze. `eval` lives in a program; it is not a kernel primitive.
+- **"The Cache Is Working Memory"** — the L1/L2 cache hierarchy from Proposal 057 is a userland program (the cache service) plus per-thread local caches. The kernel is unaware of caching semantics; it just delivers queue messages.
+- **Q7 (redef-mode syntax, deferred)** — now strictly a userland concern. The kernel does not know about names; the application's load-and-register programs handle redefinition policy however they choose.
+
+The kernel is small on purpose. The algebra does the heavy thinking; the kernel just passes messages.
+
+---
+
 ## Dimensionality — The User's Knob
 
 The capacity bound from "Recursive Composition" scales with vector dimension. Per Kanerva, items reliably bundled into a single vector ≈ `d / (2 · ln(K))` where K is the codebook size. This gives users a deployment-time choice.
@@ -2396,6 +2498,7 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 | 2026-04-18 | **Stdlib location resolved: one file per form.** Datamancer's call on FOUNDATION Open Question #1 — "feels honest." Each stdlib macro (or helper) lives at `wat/std/<Name>.wat`; the keyword path `:wat/std/<Name>` is the file path under `wat/`. No multi-form aggregate file, no manifest of exports to maintain. Cryptographic identity is per-file: signing `wat/std/Subtract.wat` signs exactly that form's body; editing Chain doesn't move Subtract's hash. Growth is additive (new form = new file, no edits elsewhere). `ls wat/std/` IS the stdlib inventory. User code follows the same discipline — `:alice/math/clamp` at `wat/alice/math/clamp.wat`. The Rust wat-vm binary compiles each in via per-file `(load ...)` calls in its startup manifest; cross-project distribution is a tarball of `wat/` directories with signatures per file. "Where Each Lives" updated to list every stdlib form at its own path. Same pattern as 058 itself (one proposal per directory). Matches the keyword-path naming discipline consolidated earlier: file-path and keyword-path are the same identifier. | 058 |
 | 2026-04-18 | **Stdlib optimization path dissolved — Q2 resolved.** Datamancer's framing: the AST IS the program; the caches are optimizing form hits to avoid recursive traversal; if we have a form's vec, we just use it. Q2 was asking the wrong question — it imagined "stdlib" as a distinct tier with its own performance envelope, but 058-031 macro expansion dissolves that distinction at parse time. After expansion, a stdlib form's AST and a user-written AST with the same shape are literally the same thing: same hash, same cache entry, same encoding cost. "Optimizing hot stdlib" is not a separate discipline from "optimizing any other hot composed AST" — both are served by L1/L2 cache hits on recurring subtrees (Proposal 057). No Rust-side helper tier. No dual implementation. One source (the wat macro), one walker (the encoder), one cache (L1/L2). If an expression is big, it's big — the program IS the AST. Q2 closed as a false problem. | 058 |
 | 2026-04-18 | **Q6 resolved — ship what we know we need, extend when we need more.** Datamancer's call: "we know what tools we want to provide now, not the ones we will want to provide later. If a new thing arrives we can update the language." Q6 asked whether MAP + Thermometer + Blend is the COMPLETE set of scalar primitives — an unanswerable question without knowing every future application. Reframed to a narrower, true claim: these nine forms are what 058 sub-proposals successfully defended against FOUNDATION's criterion; they cover every operation 058 identified. Completeness-in-the-abstract is not the bar. If a future application reveals a primitive that cannot be expressed with existing forms, a new proposal argues it against the criterion (distinct algebraic operation; domain-agnostic; encoder must treat it distinctly) and adds it. The proposal process IS the extension mechanism. Same spirit as stdlib-as-blueprint: ship only what demonstrates a distinct pattern you need today. Q6 closed as answering the wrong question — "is this every form we know we need?" is yes; "is this complete for all time?" is unanswerable and unnecessary. | 058 |
+| 2026-04-18 | **The wat-vm Substrate — Kernel Primitives.** New load-bearing section between "The Algebra Is Immutable" and "Dimensionality" — declares what the wat-vm kernel provides, what it deliberately does not, and the lifecycle pattern every wat program follows. Datamancer's framing: "the wat-vm needs to host wat-programs... we need a program to run hello-world successfully... we provide pipes that user programs can interface with... we have the pressure-based drain loop. wat programs follow the wat-vm we've built in the trading lab... start → streams of inputs → consumers → join → end." Kernel primitives: (1) **Queue** — the one program-to-program primitive, bounded(n) or unbounded; fan-out and fan-in are userland programs. (2) **Console** — a built-in program that writes queue messages to stdout/stderr (and reads stdin); hello-world must work, so this is kernel. (3) **Scheduler** — the pressure-based drain loop; no mutex, no locks; backpressure propagates through the program graph naturally. (4) **Program lifecycle** — own-state, pop-handles, run-loop, drain-on-disconnect, join-to-return-state. What is NOT kernel: topic, mailbox (were thin proxies over queues, collapse to programs), cache, database, metrics, logger, arbitrary OS fds (all userland programs). Rust-to-wat-vm mapping stated: `write(1, data)` ↔ `console.send(bytes)`, `pipe(fds)` ↔ `queue`, `fork + exec` ↔ spawn a program, SIGTERM cascade ↔ drop-is-disconnect. Reduction from three communication primitives (queue/topic/mailbox) to one (queue) + console-as-kernel-program is the collapse the book's Chapter 8 documented, now load-bearing in FOUNDATION. Implications: prior sections updated — the startup pipeline runs on the kernel; `eval` lives in a program; L1/L2 cache hierarchy is a userland cache program; Q7 (redef-mode syntax, deferred) is now strictly a userland concern because the kernel does not know about names. | 058 |
 
 ---
 
