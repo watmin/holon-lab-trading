@@ -1,6 +1,6 @@
 # 058 — Index & Reading Guide for Designers
 
-**Purpose:** orient a first-time reviewer to the 058 batch. 32 sub-proposals, FOUNDATION, plus implementation and example docs. This index gives suggested reading order, dependency graph, and pivotal-proposal highlights.
+**Purpose:** orient a first-time reviewer to the 058 batch. 29 sub-proposals, FOUNDATION, a core-primitive audit, plus implementation and example docs. This index gives suggested reading order, dependency graph, and pivotal-proposal highlights.
 
 **If you read nothing else:** start with FOUNDATION.md. It locks the criteria that every sub-proposal argues against.
 
@@ -10,13 +10,17 @@
 
 **Foundational documents** (not proposals — read first):
 - `FOUNDATION.md` — the criterion for core/stdlib/language-core, the two-tier wat architecture, cryptographic provenance, Model A static loading, holographic framing
+- `CORE-AUDIT.md` — affirmation records for Bind, Permute, Thermometer. Load-bearing core primitives already in holon-rs; audit-level entries, not proposals.
 - `RUST-INTERPRETATION.md` — practical guide for implementing the wat-vm in Rust under Model A
 - `HYPOTHETICAL-CANDLE-DESCRIBERS.wat` — worked example demonstrating programs-as-holons
 
-**Sub-proposals** (32 total, each argues one form):
-- Algebra core: 10 forms (primitive operations on holon vectors)
+**Sub-proposals** (29 total, each argues one form):
+- Algebra core: 7 new or reframed forms (primitive operations on holon vectors)
 - Algebra stdlib: 17 forms (named compositions over algebra core)
 - Language core: 5 forms (definition primitives + macros that make stdlib writable)
+
+**Audited affirmations** (3 primitives — see CORE-AUDIT.md):
+- `Bind`, `Permute`, `Thermometer` — existing holon-rs primitives; core status not in debate.
 
 ---
 
@@ -53,15 +57,15 @@ With types decided, language core slots in:
 9a. **058-031-defmacro** — compile-time syntactic expansion with Racket-style sets-of-scopes hygiene. Resolves Beckman's finding #4 (alias hash collision) by rewriting stdlib aliases to their canonical form at parse time before hashing.
 9b. **058-032-typed-macros** — follow-up to 058-031 that adds `:AST<T>` and macro-authoring-time type checking. Opt-in; sharpens error locality.
 
-### Phase 4 — Algebra core primitives (affirmations mostly — 20 min)
+### Phase 4 — Algebra core primitives (affirmations — 15 min)
 
-These are existing wat/holon-rs primitives receiving dedicated proposals for leaves-to-root coverage:
+Existing holon-rs primitives; core status is settled. Consult `CORE-AUDIT.md` for the short reference entries (operation, canonical form, MAP/VSA role, downstream conventions). No designer questions remain on any of these:
 
-10. **058-021-bind** — affirms Bind as core.
-11. **058-003-bundle-list-signature** — affirms Bundle as core with list signature.
-12. **058-022-permute** — affirms Permute as core.
-13. **058-023-thermometer** — affirms Thermometer as core.
-14. **058-025-cleanup** — **REJECTED.** The AST-primary framing dissolves Cleanup; retrieval is presence measurement (cosine + noise floor), not argmax-over-codebook. Kept as audit record.
+10. **`CORE-AUDIT.md` / Bind** — elementwise reversible combination (MAP's "M").
+11. **058-003-bundle-list-signature** — affirms Bundle as core with list signature. (Substantively locks the list convention; not a pure affirmation.)
+12. **`CORE-AUDIT.md` / Permute** — dimension-shuffle primitive with cyclic-shift canonical form (MAP's "P").
+13. **`CORE-AUDIT.md` / Thermometer** — scalar-to-vector gradient primitive with canonical layout for distributed consensus.
+14. **058-025-cleanup** — **REJECTED.** AST-primary framing dissolves Cleanup; retrieval is presence measurement (cosine + noise floor), not argmax-over-codebook. Kept as audit record of the rejection.
 
 ### Phase 5 — Algebra core new forms (20 min)
 
@@ -128,9 +132,9 @@ Shows which proposals must resolve before which others. Arrows flow from prerequ
    +----------+-----------+                   |
    |          |           |                   |
    v          v           v                   |
- 058-001   058-002     058-021/022/023       058-030
+ 058-001   058-002     CORE-AUDIT.md         058-030
  Atom      Blend       Bind/Permute/Therm    types
- typed     PIVOTAL     (affirmations)        PIVOTAL
+ typed     PIVOTAL     (audited)             PIVOTAL
                                               |
                                               v
                                            058-028  058-029
@@ -146,8 +150,9 @@ Shows which proposals must resolve before which others. Arrows flow from prerequ
        │                       │
        v                       v
    058-003 (Bundle sig)     058-005 (Orthogonalize)
-   058-021/022/023 (affirm) 058-006 (Resonance)
-   [058-025 REJECTED]       058-007 (ConditionalBind)
+   CORE-AUDIT.md            058-006 (Resonance)
+   (Bind/Permute/Therm)     058-007 (ConditionalBind)
+   [058-025 REJECTED]
 
 
  Stdlib cascades downstream of Blend:
@@ -157,13 +162,13 @@ Shows which proposals must resolve before which others. Arrows flow from prerequ
                    ├─> 058-019 (Subtract)
                    ├─> 058-020 (Flip)
                    ├─> 058-008 (Linear) ──┐
-                   ├─> 058-017 (Log)      ├─> all need Thermometer 058-023
+                   ├─> 058-017 (Log)      ├─> all need Thermometer (audited, CORE-AUDIT.md)
                    └─> 058-018 (Circular) ┘
 
    [058-010 Concurrent REJECTED — redundant with Bundle]
                          ──> 058-027 (HashSet)
 
-   058-022 (Permute) ──> 058-009 (Sequential reframing)
+   Permute (audited, CORE-AUDIT.md) ──> 058-009 (Sequential reframing)
                       ──> [058-011 Then REJECTED] 058-012 (Chain inlines binary Sequential) ──> 058-013 (Ngram)
                       ──> 058-026 (Vec) [integer-keyed HashMap]
 
@@ -224,9 +229,9 @@ Shows which proposals must resolve before which others. Arrows flow from prerequ
 | 018 | Circular | STDLIB | reframing | Same skeleton, sin/cos weights — tests Blend Option B |
 | 019 | Subtract | STDLIB | new | `Blend(x, y, 1, -1)`, removal framing |
 | 020 | Flip | STDLIB | new | `Blend(x, y, 1, -2)`, linear inversion |
-| 021 | Bind | CORE | affirmation | Existing primitive, MAP's "M" |
-| 022 | Permute | CORE | affirmation | Existing primitive, MAP's "P" |
-| 023 | Thermometer | CORE | affirmation | Scalar-gradient primitive |
+| 021 | Bind | CORE | audited | See `CORE-AUDIT.md`. Existing primitive, MAP's "M" |
+| 022 | Permute | CORE | audited | See `CORE-AUDIT.md`. Existing primitive, MAP's "P" |
+| 023 | Thermometer | CORE | audited | See `CORE-AUDIT.md`. Scalar-gradient primitive with canonical layout |
 | 024 | Unbind | REJECTED | — | Identity alias for Bind; no new pattern; userland macro |
 | 025 | Cleanup | REJECTED | — | Dissolved by AST-primary framing; retrieval is presence measurement, not argmax-over-codebook |
 | 026 | Vec | STDLIB | new | Integer-keyed HashMap; Rust Vec backing |

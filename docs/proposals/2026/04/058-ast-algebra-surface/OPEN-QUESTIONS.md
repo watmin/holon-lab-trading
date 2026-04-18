@@ -1,6 +1,6 @@
 # 058 — Consolidated Open Questions for Designers
 
-**Purpose:** single-scan sheet of every designer-facing question across the 30 sub-proposals. Each question preserved verbatim with its source proposal noted.
+**Purpose:** single-scan sheet of every designer-facing question across the 29 sub-proposals. Each question preserved verbatim with its source proposal noted. Audited primitives (Bind, Permute, Thermometer) have no open questions — see `CORE-AUDIT.md`.
 
 **Generated from:** sub-proposals' "Questions for Designers" sections.
 
@@ -313,51 +313,9 @@ Over-naming risk, but this is the most common use case. Worth a second named for
 
 ---
 
-## 058-021: Bind
+## 058-021, 058-022, 058-023 — Audited in CORE-AUDIT.md
 
-1. **Is this proposal needed?** Bind's core status is universally accepted. This document exists for leaves-to-root completeness (every UpperCase form gets a doc) rather than because the question is open. Is that the right use of a proposal, or is an "already core" audit entry sufficient?
-
-2. **Reversibility formalism.** `Bind(Bind(a, b), b) = a` holds for bipolar `{-1, +1}` — specifically because `b[i] * b[i] = 1`. For ternary `{-1, 0, +1}` vectors (as produced by Resonance, 058-006), this identity weakens: `b[i] = 0` loses information. Should Bind's documentation formalize the bipolar-only reversibility, or address ternary inputs separately?
-
-3. **Relationship to Unbind (058-024).** Bind's inverse is conventionally named `Unbind`. But `Unbind(c, b) = Bind(c, b)` for bipolar (binding is self-inverse). Is Unbind a distinct primitive or an alias? Recommendation: keep Unbind as a named stdlib alias even though it equals Bind — documents the "decode" intent.
-
-4. **Normalization of output.** Bind for bipolar `{-1, +1}` inputs produces bipolar `{-1, +1}` output (product of ±1s). No threshold needed. For non-bipolar inputs (if ever), threshold may be required. Document the bipolar assumption.
-
-5. **Naming convention.** Some VSA literature uses `⊛` (circle-asterisk), `*`, or `mult`. Holon uses `bind`. Confirm the wat name is `Bind` (PascalCase per convention).
-
----
-
-## 058-022: Permute
-
-1. **Is this proposal needed?** Permute's core status is universally accepted. This document exists for leaves-to-root completeness. Is the "already core, affirmation" proposal category the right framing, or is an audit-level entry sufficient?
-
-2. **Permutation choice.** Cyclic shift is conventional. Other permutations (bit-reversal, random-fixed) have different decorrelation properties. Should wat specify the convention, or leave it to the holon-rs implementation? Recommendation: cyclic-shift is the canonical default; document and standardize.
-
-3. **Negative and large step values.** `Permute(v, 1000000)` should normalize modulo `d`. Document the modular-reduction behavior. Negative steps give the inverse; very-positive steps wrap.
-
-4. **Permutation orders other than cyclic.** Some VSA work uses "permutation by a random permutation" (a fixed shuffle chosen from a seed). This is strictly more entropy-per-step but computationally identical once the permutation is cached. Is this worth exposing as a variant, or is cyclic-shift sufficient?
-
-5. **Relationship to `Sequential`, `Array`, `nth`.** Permute's invertibility underpins all three. If Permute were changed (e.g., to a non-invertible hash-shuffle), those stdlib forms would break. Confirm invertibility is a hard requirement, not a convention.
-
-6. **Step-count naming.** The parameter is `k` (step count) — not an angle, not a permutation, not a seed. Should wat use a more descriptive name (`step`, `shift`, `rotation`)? Matching holon-rs's `permute(v, k)` signature is the straightforward choice.
-
----
-
-## 058-023: Thermometer
-
-1. **Is this proposal needed?** Thermometer's core status is universally accepted. This document exists for leaves-to-root completeness. Audit-level entry vs. full proposal — which is the right framing?
-
-2. **Atom-to-position mapping convention.** How exactly does an atom determine its Thermometer's transition point? The specific mapping affects interop — all consumers must use the same convention for the same atom to produce the same gradient. Document the canonical mapping.
-
-3. **Gradient direction.** This proposal assumes "+1s below threshold, -1s above" (positive gradient). Could also be the reverse. The specific choice is a convention; document it.
-
-4. **Single threshold vs. continuous gradient.** The implementation above produces a SINGLE transition (below: +1, above: -1). An alternative is a SMOOTHER gradient (e.g., +1 for some dimensions, -1 for others, distributed according to a function of position). Smoother gradients might produce richer Blend outputs. Design choice; single-threshold is simpler and conventional.
-
-5. **Relationship to Atom.** Can `Atom(:something)` and `Thermometer(:something, 4096)` produce DIFFERENT vectors? Yes — Atom is pseudo-random, Thermometer is monotonic gradient. But they share the same SEED. Document that an atom deterministically produces both its own "pure" vector (via Atom) and a range of derived vectors (via Thermometer, Permute, etc.) — all from the same seed.
-
-6. **Bipolar-only vs. ternary.** Thermometer produces bipolar `{-1, +1}` output. A ternary version (+1 / 0 / -1, where 0 is "middle/uncertain") is plausible but not currently in the algebra. Keep Thermometer strictly bipolar per its current definition; ternary extensions would be separate proposals.
-
-7. **dim argument.** The `dim` argument makes the output width explicit. Should Thermometer be made dim-implicit (derive dim from context/configuration)? Recommendation: keep explicit — matches other primitives that take explicit widths.
+Bind, Permute, and Thermometer are affirmed core primitives already present in holon-rs. The affirmation proposals had no open designer-facing questions — every entry was self-answering ("Is this proposal needed? … or is an audit entry sufficient?"). All three have been collapsed into `CORE-AUDIT.md`, which records operation, canonical form, MAP/VSA role, and downstream conventions. No open questions remain.
 
 ---
 
