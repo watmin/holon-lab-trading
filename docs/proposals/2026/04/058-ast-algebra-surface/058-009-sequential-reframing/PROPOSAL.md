@@ -71,7 +71,7 @@ As a variant, Sequential's behavior is hidden in Rust encoder dispatch. Users ca
 
 **4. Removing the variant shrinks the AST.**
 
-One less variant to pattern-match, one less cache-key discriminator, one less case for AST-walking code. Small win but real — and consistent with the direction of 058-008-scalar-encoder-reframings (reduce variants, grow stdlib).
+One less variant to pattern-match, one less cache-key discriminator, one less case for AST-walking code. Small win but real — and consistent with the direction of the scalar-encoder reframings in 058-008/017/018 (reduce variants, grow stdlib).
 
 ## Arguments Against
 
@@ -166,6 +166,6 @@ Delete the Sequential encoder match arm (~15-20 lines including tests).
 
 3. **Should the AST preserve `Sequential` as a semantic name?** As with Linear/Log/Circular, preserving stdlib forms in AST walks keeps semantics visible. Cache keys can be on the stdlib form or on the expanded form. Decision should be consistent across all reframings.
 
-4. **Relationship to `Array` (058-016).** Array is also an indexed list-of-thoughts form. Does Array's expansion internally rely on Sequential, or does Array have its own independent expansion? If Array uses Sequential, making Sequential stdlib is prerequisite for Array's stdlib form.
+4. **Relationship to `Array` (058-026).** Array is also an indexed list-of-thoughts form. Does Array's expansion internally rely on Sequential, or does Array have its own independent expansion? If Array uses Sequential, making Sequential stdlib is prerequisite for Array's stdlib form.
 
 5. **Historical note: why was Sequential grandfathered?** Understanding why it was kept as a variant originally (perf? clarity?) helps decide if this reframing is the right call or if there's a forgotten reason for the special case. If the reason was just "we had it before we had Permute as a clean variant," grandfathering can end cleanly.

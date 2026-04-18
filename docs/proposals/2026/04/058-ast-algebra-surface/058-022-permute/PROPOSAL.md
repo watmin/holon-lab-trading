@@ -69,7 +69,7 @@ MAP VSA = Multiply (Bind), Add (Bundle), Permute. Permute is one of the three ir
 - `Then(a, b)` (058-011) uses `Permute b 1` to mark "b comes after a."
 - `Chain(xs)` (058-012) composes over Thens, so indirectly over Permutes.
 - `Ngram(n, xs)` (058-013) slides Sequential-encoded windows.
-- `Array(xs)` (058-016) is Sequential, transitively Permute.
+- `Array(xs)` (058-026) is Sequential, transitively Permute.
 - `nth(array, i)` accessor inverts positional Permute.
 
 Without Permute, the entire temporal/positional stdlib collapses.

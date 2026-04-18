@@ -5,7 +5,7 @@
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
 **Depends on:** 058-001-atom-typed-literals (for atom literal types)
-**Companion proposals:** 058-028-defn, 058-029-lambda (both require this)
+**Companion proposals:** 058-028-define, 058-029-lambda
 
 ## The Candidate
 
@@ -13,8 +13,8 @@ A **keyword-path-based type system** for the wat language, providing:
 
 1. A small set of **built-in types** for the primitives the algebra exposes.
 2. A **parametric type constructor** for containers (lists of T, functions from T to U).
-3. **User-definable types** via keyword-path naming discipline (`:alice/types/Price`).
-4. **Static type checking** at evaluator load time — signatures of `defn` and call sites must match before execution.
+3. **User-definable types** via keyword-path naming discipline (`:my/namespace/MyType`), through the compile-time forms `struct`, `enum`, `newtype`, and `deftype`.
+4. **Static type checking** at wat-vm startup — signatures of `define` and call sites must match before the main loop runs.
 
 ### Built-in types
 
@@ -25,11 +25,11 @@ A **keyword-path-based type system** for the wat language, providing:
 :Int         — integer (Permute steps, nth indices)
 :String      — raw string literal (not yet an Atom)
 :Bool        — true / false
-:Keyword     — keyword literal (e.g., :foo, :bar/baz)
+:Keyword     — keyword literal (e.g., :foo, :foo/bar/baz)
 :Null        — the null literal
-:List        — homogeneous list (requires parameter: :List<:Thought>)
+:List        — homogeneous list (requires parameter: (:List :Thought))
 :Vector      — raw encoded bipolar vector (post-encode, for low-level stdlib)
-:Function    — typed function (parameterized: :Function<params, return>)
+:Function    — typed function (parameterized: (:Function [args] return))
 :Any         — escape hatch; disables static checking for this position
 ```
 
@@ -48,125 +48,145 @@ Parametric types are expressed as keyword-heads with type arguments:
 
 Function types have two parameters: a vector of argument types and a return type.
 
-### User-defined types
+### User-definable types
 
-Users declare types in their namespaces with the same keyword-path convention as functions:
+Users declare types using the compile-time forms `struct`, `enum`, `newtype`, and `deftype` — all with keyword-path names and typed fields. Types register into the static type universe at startup (BEFORE the main loop runs) and are frozen thereafter.
 
 ```scheme
+;; Structs — named product types with typed fields.
+(struct :project/market/Candle
+  [open   : Scalar]
+  [high   : Scalar]
+  [low    : Scalar]
+  [close  : Scalar]
+  [volume : Scalar])
+
+;; Enums — coproduct types with optional tagged variants.
+(enum :project/trading/Direction :long :short)
+
+(enum :project/market/Event
+  (candle  [asset : Atom] [candle : :project/market/Candle])
+  (deposit [asset : Atom] [amount : Scalar]))
+
+;; Newtypes — nominal aliases with distinct identity.
+(newtype :project/trading/TradeId :Int)
+(newtype :project/trading/Price   :Scalar)
+
+;; Deftypes — structural aliases; shorthand for existing type shapes.
 (deftype :alice/types/Price :Scalar)
-;; alias: :alice/types/Price is an :Scalar
-
-(deftype :project/market/Candle
-  (:Map [[:open :Scalar]
-         [:high :Scalar]
-         [:low :Scalar]
-         [:close :Scalar]
-         [:volume :Scalar]]))
-;; structural alias: :project/market/Candle is a Map with these typed fields
-
-(deftype :wat/std/Option<:T>
-  (:Union :Null :T))
-;; parametric alias: Option<T> is either Null or T
+(deftype :wat/std/Option<:T> (:Union :Null :T))
 ```
 
-`deftype` is a language-core form companion to `defn`. It registers a type name in the type environment. Types are values (keyword paths), so they can be passed, stored, inspected.
+All four forms use keyword-path names for namespacing (discipline, not mechanism). They are materialized into the Rust-backed wat-vm binary at build time; they cannot be redefined at runtime.
 
-### Type annotations on `defn` and `lambda`
+### Type annotations on `define` and `lambda`
 
-From 058-028-defn and 058-029-lambda:
+From 058-028-define and 058-029-lambda, type annotations are required:
 
 ```scheme
-(defn :my/ns/amplify [[x :Thought] [y :Thought] [s :Scalar]] :Thought
+(define (:my/ns/amplify [x : Thought] [y : Thought] [s : Scalar]) : Thought
   (Blend x y 1 s))
 
-(lambda [[t :Thought]] :Thought
+(lambda ([t : Thought]) : Thought
   (Permute t 1))
 ```
 
-Each parameter gets `[name :Type]`. The return type follows the parameter vector. The body must produce a value of the return type.
+Each parameter uses `[name : Type]` with spaces around the colon. The return type follows as `: Type` after the parameter list. The body must produce a value of the return type, checked at startup.
 
 ## Why This Earns Language-Core Status
 
-**1. The Rust evaluator requires types for correct dispatch.**
+**1. The Rust-backed wat-vm requires types for startup verification.**
 
-When the evaluator sees `(Blend x y 1 -1)`, it needs to know:
+Under Model A (fully static loading), the wat-vm verifies all code at startup before the main loop runs. When the verifier processes a `define`, it needs to know:
 
-- Is `x` a Thought or a Scalar?
-- Is `y` a Thought?
-- Are the third and fourth arguments scalars?
+- What kind of value each argument is (Thought? Scalar? Integer? List?)
+- What kind of value the function returns
+- Whether the body produces a value of the declared return type
 
-Without types, every call becomes a runtime type probe. With types, the signature is known statically — the evaluator dispatches directly.
+Without type annotations, the verifier would need to either infer types at every call site (slower, more fragile) or defer all type checks to runtime (undermines the static-verification guarantee).
+
+With type annotations, verification is deterministic, complete, and happens once at startup. Runtime dispatch is a simple argument-type check against the known signature.
 
 **2. Signatures are part of cryptographic provenance.**
 
-Per FOUNDATION's "Cryptographic provenance" section, ASTs are signed. A `defn`'s signature (parameter types + return type) is part of its EDN. Tampering with either signature or body breaks the hash. A signed function can be TRUSTED not just in its body but in its CONTRACT — a call site that matches the parameter types will get a return value of the declared return type.
+Per FOUNDATION's "Cryptographic provenance" section, ASTs are signed. A `define`'s signature (parameter types + return type) is part of its EDN. Tampering with either signature or body breaks the hash. A signed function can be TRUSTED not just in its body but in its CONTRACT — a call site that matches the parameter types will get a return value of the declared return type.
 
 **3. Types enable static verification of stdlib compositions.**
 
 ```scheme
-(defn :wat/std/Chain [[thoughts (:List :Thought)]] :Thought
+(define (:wat/std/Chain [thoughts : (:List :Thought)]) : Thought
   (Bundle (pairwise-map :wat/std/Then thoughts)))
 ```
 
-The evaluator can verify:
+The startup verifier can check:
 - `thoughts` has type `(:List :Thought)`
-- `pairwise-map` returns `(:List :Thought)` given `:wat/std/Then` (a Function<[:Thought, :Thought], :Thought>) and a `(:List :Thought)`
+- `pairwise-map` returns `(:List :Thought)` given `:wat/std/Then` (a `(:Function [:Thought :Thought] :Thought)`) and a `(:List :Thought)`
 - `Bundle` takes `(:List :Thought)` and returns `:Thought`
 - Body returns `:Thought`, matching the declared return
 
-Without types, these checks defer to runtime or never happen. With types, stdlib correctness is mechanically verifiable.
+Without types, these checks defer to runtime or never happen. With types, stdlib correctness is mechanically verifiable at startup.
 
 **4. Extension via user-defined types.**
 
-Users author their own types with the same naming discipline as functions. `:alice/types/Price`, `:project/market/Candle`. The type system is open — any user can add types, and collisions are prevented by the keyword-path discipline (same as functions).
+Users author their own types with the same naming discipline as functions. `:alice/types/Price`, `:project/market/Candle`. The type system is open — any user can add types, and collisions are prevented by the keyword-path discipline plus startup verification (two structs with the same keyword-path name in the compile-time sources is a build error).
 
-This matters for vocab modules. A trading vocab module defines `:project/market/Candle` as a typed Map; downstream stdlib operates on `:project/market/Candle` typed parameters and get type-checked composition.
+User types are usable anywhere built-in types are used:
+
+```scheme
+(define (:my/trading/analyze [c : :project/market/Candle]) : Thought
+  (Sequential
+    (list (Thermometer (:close c) 0 100)
+          (Thermometer (:volume c) 0 10000))))
+```
 
 ## Arguments For
 
 **1. Small, well-scoped type set.**
 
-The built-in types correspond to the algebra's actual kinds. There is no speculative hierarchy — just the types the primitives actually produce and consume. `:Thought`, `:Atom`, `:Scalar`, `:Int`, `:String`, `:Bool`, `:Keyword`, `:Null`, `:List`, `:Vector`, `:Function`, `:Any` — twelve built-ins, each corresponding to a concrete runtime kind.
+The built-in types correspond to the algebra's actual kinds. There is no speculative hierarchy — just the types the primitives actually produce and consume. Twelve built-ins, each corresponding to a concrete runtime kind.
 
 **2. Keyword-path types match the naming discipline.**
 
-Just as functions are keywords (`:wat/std/Difference`), types are keywords (`:wat/types/Thought`, `:alice/types/Price`). Same naming mechanism, same namespace discipline. Users learn one convention, use it everywhere.
+Just as functions are keywords (`:wat/std/Difference`), user types are keywords (`:alice/types/Price`, `:project/market/Candle`). Same naming mechanism, same namespace discipline. Users learn one convention, use it everywhere.
 
-In shorthand (within the built-in types' namespace), the prefix is often implicit: `:Thought` is shorthand for `:wat/types/Thought` when the context makes it unambiguous.
+Built-in types use shorthand within their own namespace: `:Thought` is shorthand for `:wat/types/Thought` when context makes it unambiguous.
 
 **3. Parametric types handle the essential cases.**
 
-Generics (`:List<T>`, `:Function<args, return>`) cover the recurring need for higher-order stdlib and container operations. More elaborate generics (variance, bounds, existentials) are out of scope — the target is "enough type system to dispatch correctly," not a full algebraic type theory.
+Generics (`(:List :T)`, `(:Function [args] return)`) cover the recurring need for higher-order stdlib and container operations. More elaborate generics (variance, bounds, existentials) are out of scope — the target is "enough type system to dispatch correctly," not a full algebraic type theory.
 
-**4. Structural typing for user types.**
+**4. Structural typing for structural aliases; nominal for struct/enum/newtype.**
 
-`(deftype :Candle (:Map [[:open :Scalar] ...]))` is a structural alias, not a nominal type. Any Map with the declared fields of the declared types satisfies the alias. This matches VSA's bundle-based data structures — "what" you have matters, not "where it came from."
+- `(deftype :Candle (:Map [[:open :Scalar] ...]))` is a structural alias, not a nominal type. Any Map with the declared fields of the declared types satisfies the alias. Useful for "some shape that I'm naming."
+- `(struct :project/market/Candle ...)` is nominal. A value is a Candle if and only if it was constructed as one. Distinct from other structs with identical fields.
+- `(enum :Direction ...)` is nominal. Only values constructed via the enum's constructors inhabit the type.
+- `(newtype :TradeId :Int)` is nominal. A `:TradeId` is NOT a `:Int` even though they share representation.
 
-This lets vocab modules declare data shapes without requiring inheritance hierarchies or factory functions.
+This matches how VSA-based data structures are used — nominal types protect semantics; structural aliases provide shorthand.
 
 ## Arguments Against
 
-**1. Any type system adds complexity to the evaluator.**
+**1. Any type system adds complexity to the wat-vm.**
 
-Without types, the evaluator is simpler: parse, evaluate, run. With types, the evaluator needs:
+Without types, the verifier is simpler. With types, the wat-vm needs:
 - Type environment (table of known types)
 - Type inference (for literals and expression results)
 - Type checking (signature vs. call-site matching)
 - Generic resolution (for parametric types)
 
-**Counter:** the complexity pays for itself — errors caught before execution, dispatch without probing, signatures that can be signed. The simpler untyped evaluator is faster to implement but fragile in operation. Rust's eval contract NEEDS types; this is not optional.
+**Counter:** the complexity pays for itself — errors caught at startup instead of runtime, dispatch without probing, signatures that can be signed. The simpler untyped verifier is faster to implement but fragile in operation. Model A NEEDS types; this is not optional.
 
-**2. Structural typing vs. nominal typing choice.**
+**2. Structural typing vs. nominal typing — mixed policy.**
 
-This proposal uses structural typing: `:Candle` is "any Map with these fields," not "a value explicitly tagged as :Candle." Nominal typing (Java-style classes with unique identities) is stricter but more ceremonial.
+Having `struct` be nominal but `deftype` be structural may confuse readers. Why the asymmetry?
 
-**Counter:** structural matches the algebra. Values are their structure. A `(Map [[:open 1] ...])` IS a `:Candle` if it has the right fields, regardless of how it was constructed. Rejecting structural matches would require tagging each Map with an explicit `:Candle` marker — ceremony without clear benefit.
+**Counter:** nominal identity matters for struct/enum/newtype — they're new types with their own semantics. Structural matching matters for `deftype` — it's a NAME for an EXISTING shape. The two tools serve different needs and the asymmetry is deliberate.
 
 **3. Type inference scope.**
 
-This proposal REQUIRES explicit types on `defn` and `lambda` parameters. Some languages infer these from usage. Scheme and Clojure are traditionally untyped; Haskell and F# infer aggressively; Rust infers locally.
+This proposal REQUIRES explicit types on `define` and `lambda` parameters. Some languages infer these from usage. Scheme and Clojure are traditionally untyped; Haskell and F# infer aggressively; Rust infers locally.
 
-**Counter:** explicit types on function boundaries are the Rust-eval contract. Local inference (within function bodies, for intermediate values) IS supported — the evaluator can infer that `(Blend a b 1 -1)` returns `:Thought` from Blend's signature. Function boundary types are required; internal types are derived. This matches Rust's approach.
+**Counter:** explicit types on function boundaries are the Model A contract. Local inference (within function bodies, for intermediate values) IS supported — the verifier can infer that `(Blend a b 1 -1)` returns `:Thought` from Blend's signature. Function boundary types are required; internal types are derived. This matches Rust's approach.
 
 **4. Generics complexity.**
 
@@ -180,32 +200,32 @@ Parametric types need generic resolution: when `map` receives a `(:List :Thought
 
 **Counter:** document `:Any` as a last resort. Prefer concrete types where possible. Audit usage in stdlib.
 
-## Type Checking Semantics
+## Type Checking Semantics (Model A)
 
-### Static check at defn registration
+### Static check at startup
 
-When a `defn` is registered:
+When the wat-vm boots, it processes all loaded files in order. For each `define`:
 
-1. Parse the parameter list — each must be `[name :Type]`
-2. Parse the return type — must be a well-formed type
+1. Parse the parameter list — each must be `[name : Type]`
+2. Parse the return type — must be a well-formed type in the type environment
 3. Type-check the body — every sub-expression must produce a type compatible with its usage
 4. Verify the body's final expression matches the declared return type
 
-Errors at this stage prevent registration. The function does not enter the symbol table.
+Errors at this stage prevent the wat-vm from starting. No partial-state recovery.
 
 ### Dynamic check at call site (fast path)
 
-When a call site is evaluated:
+When a call site is evaluated at runtime:
 
-1. Look up the function by name
+1. Look up the function by name in the static symbol table
 2. Each argument's type must be a subtype/alias of the corresponding parameter type
 3. If match, bind parameters, evaluate body, return result
 
-If types matched at defn registration, the body is guaranteed to return the declared type — no per-call return check needed.
+If types matched at startup verification, the body is guaranteed to return the declared type — no per-call return check needed. The argument-type check at the call site guards against user data misuse (e.g., a `:Scalar` passed where a `:Thought` is expected).
 
 ### Primitive dispatch
 
-Primitives like `Bundle` are built into the evaluator with their signatures hardcoded:
+Primitives like `Bundle` are built into the wat-vm with their signatures hardcoded:
 
 ```
 Bundle: (:List :Thought) -> :Thought
@@ -213,14 +233,24 @@ Bind: :Thought :Thought -> :Thought
 Blend: :Thought :Thought :Scalar :Scalar -> :Thought
 Permute: :Thought :Int -> :Thought
 Atom: :Any -> :Atom          ; :Any accommodates typed literals
-Thermometer: :Atom :Int -> :Thought
+Thermometer: :Scalar :Scalar :Scalar -> :Thought
 ```
 
-Stdlib defn's compose these primitives; their types derive from the primitives' signatures via substitution.
+Stdlib `define`s compose these primitives; their types derive from the primitives' signatures via substitution.
+
+### Constrained eval
+
+Per FOUNDATION's "Constrained eval at runtime," `eval` can evaluate a dynamically-constructed AST as long as every function and type referenced is in the static universe. The type checker runs on the AST before execution:
+
+- Every keyword-path reference must resolve to a known function or type.
+- Every argument's type must match the called function's signature.
+- Failures error before any body executes.
+
+This gives safe runtime evaluation over a fixed, verified type/function universe.
 
 ## Implementation Scope
 
-**holon-rs changes:**
+**wat-vm changes:**
 
 Add type AST:
 
@@ -232,12 +262,20 @@ pub enum TypeAST {
 }
 ```
 
-Type environment:
+Type environment (frozen after startup):
 
 ```rust
 pub struct TypeEnv {
     builtins: HashMap<Keyword, TypeDef>,     // :Thought, :Atom, etc.
-    aliases: HashMap<Keyword, TypeAST>,      // user-defined via deftype
+    user_types: HashMap<Keyword, TypeDef>,   // struct, enum, newtype, deftype registrations
+}
+
+pub enum TypeDef {
+    Builtin(BuiltinType),
+    Struct(StructDef),
+    Enum(EnumDef),
+    Newtype(NewtypeDef),
+    Alias(AliasDef),            // deftype
 }
 ```
 
@@ -250,16 +288,16 @@ pub fn check_subtype(actual: &TypeAST, expected: &TypeAST, env: &TypeEnv) -> Res
     // Parametric types unify per argument
 }
 
-pub fn infer_expr(expr: &WatAST, env: &TypeEnv, locals: &Locals) -> Result<TypeAST, TypeError> {
+pub fn infer_expr(expr: &WatAST, env: &TypeEnv, locals: &Locals, table: &SymbolTable) -> Result<TypeAST, TypeError> {
     match expr {
-        WatAST::Atom(_) => Ok(TypeAST::Named(":Atom".into())),
+        WatAST::Literal(lit) => Ok(literal_type(lit)),
         WatAST::Call { name, args } => {
-            let defn = env.lookup(name)?;
-            for (arg, param_type) in args.iter().zip(&defn.params) {
-                let arg_type = infer_expr(arg, env, locals)?;
-                check_subtype(&arg_type, &param_type.1, env)?;
+            let f = table.lookup(name).ok_or(TypeError::UnknownFunction(name.clone()))?;
+            for (arg, param) in args.iter().zip(&f.params) {
+                let arg_type = infer_expr(arg, env, locals, table)?;
+                check_subtype(&arg_type, &param.1, env)?;
             }
-            Ok(defn.return_type.clone())
+            Ok(f.return_type.clone())
         },
         // ... other AST variants
     }
@@ -270,31 +308,21 @@ Estimated ~500-800 lines of Rust for:
 - TypeAST parsing / serialization
 - TypeEnv with builtins
 - Subtype checking with generic unification
-- Static verification of defn bodies
+- Static verification of `define` bodies at startup
 - Runtime dispatch with type guard on arguments
+- Type-checking for constrained eval
 
-**wat stdlib:**
+**`struct`, `enum`, `newtype`, `deftype` forms:**
 
-Types themselves need no wat code — they're language primitives. Every stdlib `defn` uses types in its signature. Examples already in 058-004 through 058-027.
-
-**`deftype` form:**
-
-New language-core form for user type aliases:
-
-```scheme
-(deftype :alice/types/Price :Scalar)
-(deftype :project/market/Candle (:Map [[:open :Scalar] [:high :Scalar] ...]))
-```
-
-Registers the type in TypeEnv as an alias. Adds ~50 lines to the evaluator.
+New language-core forms (alongside `define` and `lambda`), all compile-time-registering. Build pipeline extracts them from wat files loaded via `(load-types ...)`, generates Rust code, compiles. See FOUNDATION's "All loading happens at startup" section for the pipeline description.
 
 ## Questions for Designers
 
 1. **Generics scope.** Is `(:Function [args] return)` and `(:List :T)` sufficient, or do we need variance, bounds (`T extends :Thought`), or existentials? Recommendation: start minimal — just List and Function parametrics. Add more if stdlib needs emerge.
 
-2. **Type inference strength.** Parameter types on defn/lambda are required. Should all intermediate expressions be inferred, or should `let` support optional type annotations? Recommendation: infer intermediates; allow optional `[let [x :Thought (Blend a b 1 -1)]]` for explicit annotation when helpful.
+2. **Type inference strength.** Parameter types on `define`/`lambda` are required. Should all intermediate expressions be inferred, or should `let` support optional type annotations? Recommendation: infer intermediates; allow optional `[let [[x : Thought] (Blend a b 1 -1)]]` for explicit annotation when helpful.
 
-3. **Nominal vs. structural typing.** Proposal uses structural (a Map with the right fields IS a Candle). Should we offer nominal as an option (`(deftype :Candle :nominal (:Map ...))` that requires explicit tagging)? Recommendation: structural only, at first. Nominal can be added later if demand emerges.
+3. **Nominal vs. structural typing.** Proposal uses nominal for struct/enum/newtype and structural for deftype. Is this the right split? Recommendation: yes — nominal protects semantics, structural provides shorthand.
 
 4. **:Any usage.** Document as last resort. Should it be restricted (only in specific primitive positions) or freely available? Recommendation: freely available, but linters flag its use.
 
@@ -306,6 +334,8 @@ Registers the type in TypeEnv as an alias. Adds ~50 lines to the evaluator.
 
 8. **Subtype hierarchy.** Is `:Atom` a subtype of `:Thought` (atoms ARE thoughts in the ThoughtAST)? Recommendation: yes — every Atom is a Thought. A parameter `:Thought` accepts an Atom value. Document the subtype relationships.
 
-9. **Dependency ordering.** Types depend on nothing; defn and lambda depend on types. Resolution order: 058-030 (types) first, then 058-028 (defn) and 058-029 (lambda).
+9. **Dependency ordering.** Types depend on nothing; `define` and `lambda` depend on types. Resolution order: 058-030 (types) first, then 058-028 (define) and 058-029 (lambda).
 
 10. **First-class types.** Types as keyword values can be passed around. Does this enable type-reflecting code? Probably, though not the focus of this proposal. Example: `(type-of x)` returns the keyword `:Thought`. Useful for introspection but out of scope for language core.
+
+11. **Keyword-path in type names with generic parameters.** `(deftype :wat/std/Option<:T> (:Union :Null :T))` uses a `<>`-style generic parameter. Is this the right syntax, or should generic parameters be expressed differently? Recommendation: `<>` is readable; keep it. Alternative: explicit parameter list like `(deftype (:wat/std/Option :T) (:Union :Null :T))` — more Lispy but less visually distinct. Pick one, document.

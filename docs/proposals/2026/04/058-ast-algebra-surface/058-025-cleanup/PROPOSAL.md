@@ -57,8 +57,8 @@ Without Cleanup, decode operations return UNGROUNDED NOISE — vectors that are 
 
 **3. Every nontrivial VSA retrieval relies on Cleanup.**
 
-- Dictionary lookup (`get` in 058-016): Unbind + Cleanup
-- Array indexing (`nth` in 058-016): Permute + Cleanup
+- Dictionary lookup (`get` in 058-016-map): Unbind + Cleanup
+- Array indexing (`nth` in 058-026-array): Permute + Cleanup
 - Analogy completion (058-014): `Bundle(...)` + Cleanup
 - Anomaly classification: noise vector compared to prototype library via Cleanup
 - Engram matching: incoming pattern compared to learned engrams via Cleanup

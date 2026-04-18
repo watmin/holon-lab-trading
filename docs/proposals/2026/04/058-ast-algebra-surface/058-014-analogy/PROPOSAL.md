@@ -4,7 +4,7 @@
 **Class:** STDLIB
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
-**Depends on:** 058-004-difference (or 058-015-blend-idioms' `Subtract`) — the named delta form
+**Depends on:** 058-004-difference (or 058-019-subtract) — the named delta form
 
 ## The Candidate
 
@@ -160,7 +160,7 @@ Depends on `Bundle` (core), `Difference` (stdlib, 058-004).
 
 ## Questions for Designers
 
-1. **Dependency on 058-004's delta name.** This proposal uses `Difference`. If 058-015 names it `Subtract` instead, the expansion changes to `(Subtract b a)` or `(Blend b a 1 -1)` direct. The resolution should be consistent — one delta name in stdlib, used by Analogy.
+1. **Dependency on 058-004's delta name.** This proposal uses `Difference`. If 058-019 names it `Subtract` instead, the expansion changes to `(Subtract b a)` or `(Blend b a 1 -1)` direct. The resolution should be consistent — one delta name in stdlib, used by Analogy.
 
 2. **Argument order convention.** The standard `(a, b, c)` is "a is to b as c is to ?". Could alternatively be `(a, b, c, d)` returning a cleanup match, or `(from, to, apply-to)` with keyword-ish naming. Recommendation: stick with the three-term positional form, document clearly.
 

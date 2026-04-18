@@ -10,8 +10,8 @@
 
 FOUNDATION.md originally listed `Negate(x, y, mode)` as a core candidate with three modes: subtract, orthogonalize, flip. During sub-proposal review, the three modes separate into different classifications:
 
-- **Subtract mode** — `threshold(x - y)` — is algebraically identical to `Blend(x, y, 1, -1)`. Reclassified as a stdlib idiom (see 058-015-blend-idioms and 058-004-difference).
-- **Flip mode** — `threshold(x - 2y)` — inverts `y`'s contribution in a superposition. Algebraically identical to `Blend(x, y, 1, -2)`. Reclassified as a stdlib idiom (see 058-015-blend-idioms).
+- **Subtract mode** — `threshold(x - y)` — is algebraically identical to `Blend(x, y, 1, -1)`. Reclassified as a stdlib idiom (see 058-019-subtract and 058-004-difference).
+- **Flip mode** — `threshold(x - 2y)` — inverts `y`'s contribution in a superposition. Algebraically identical to `Blend(x, y, 1, -2)`. Reclassified as a stdlib idiom (see 058-020-flip).
 - **Orthogonalize mode** — `X - ((X·Y)/(Y·Y))·Y` — geometric projection removal. Requires a SCALAR WEIGHT COMPUTED FROM THE INPUTS.
 
 The first two modes dissolve into Blend idioms. The third is the genuinely new operation. This sub-proposal therefore renames from `Negate` to `Orthogonalize` and focuses on the projection-removal operation specifically.
@@ -199,4 +199,4 @@ Encoder dispatches to `orthogonalize(encode(x), encode(y))`.
 
 4. **Handling of zero-magnitude y.** If `y` is the zero vector, `Y·Y = 0` and the projection coefficient is undefined. The implementation must handle this edge case — probably by returning `x` unchanged (nothing to project out). Should this be explicit in the semantics?
 
-5. **Classification reconsideration.** This sub-proposal NARROWED the original Negate proposal to just the orthogonalize mode. Subtract mode and flip mode went to 058-015-blend-idioms. Is this the right split, or should Negate have been preserved as a single multi-mode core form?
+5. **Classification reconsideration.** This sub-proposal NARROWED the original Negate proposal to just the orthogonalize mode. Subtract mode went to 058-019-subtract, flip mode went to 058-020-flip. Is this the right split, or should Negate have been preserved as a single multi-mode core form?

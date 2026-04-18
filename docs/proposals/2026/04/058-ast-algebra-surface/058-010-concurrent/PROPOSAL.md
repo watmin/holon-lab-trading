@@ -97,9 +97,9 @@ The question then is: which word? `Concurrent` matches holon's precedent and rea
 | `Bundle(xs)` | CORE | Generic superposition | primitive |
 | `Concurrent(xs)` | STDLIB (this) | Co-occurrence | `(Bundle xs)` |
 | `Sequential(xs)` | STDLIB (per 058-009) | Ordered composition | Bundle of Permutes |
-| `Set(xs)` | STDLIB (per 058-016) | Unordered collection | `(Bundle xs)` |
+| `Set(xs)` | STDLIB (per 058-027) | Unordered collection | `(Bundle xs)` |
 
-`Concurrent` and `Set` also both expand to Bundle. See 058-016 for Set's distinction — Set is a collection type (data structure), Concurrent is a temporal assertion. Different reader intent, same expansion.
+`Concurrent` and `Set` also both expand to Bundle. See 058-027 for Set's distinction — Set is a collection type (data structure), Concurrent is a temporal assertion. Different reader intent, same expansion.
 
 ## Algebraic Question
 
@@ -143,8 +143,8 @@ Yes — `(Bundle xs)`. The stdlib form asserts reader intent.
 
 2. **Should Bundle be reserved for primitive use and everything else go through named aliases?** An alternative style: vocab modules NEVER call `Bundle` directly, they always go through `Concurrent`, `Set`, `Pattern`, etc. Bundle is the primitive, the named forms are the surface. Pros: clear layer separation. Cons: requires a proliferation of names to cover all intents.
 
-3. **Cache canonicalization.** Should `Concurrent` and `Bundle` share cache entries (eager expansion, canonical AST) or have separate cache entries (preserve the semantic name)? This mirrors the same decision for Linear/Log/Circular in 058-008.
+3. **Cache canonicalization.** Should `Concurrent` and `Bundle` share cache entries (eager expansion, canonical AST) or have separate cache entries (preserve the semantic name)? This mirrors the same decision for Linear/Log/Circular in 058-008/017/018.
 
-4. **Dependency on Set and Sequential.** This proposal groups Concurrent with other "list-operating Bundle wrappers." If Set (058-016) is rejected, Concurrent might want to absorb that role. If Sequential (058-009) stays as its current variant, the trio is less symmetric. These three should resolve together.
+4. **Dependency on Set and Sequential.** This proposal groups Concurrent with other "list-operating Bundle wrappers." If Set (058-027) is rejected, Concurrent might want to absorb that role. If Sequential (058-009) stays as its current variant, the trio is less symmetric. These three should resolve together.
 
 5. **Is "Concurrent" the right word?** In programming contexts, "concurrent" often implies parallelism, interleaving, or race conditions. In the temporal semantics used here, it means "at the same time." Could be confusing for readers with systems programming backgrounds. Alternatives: `Simultaneous`, `SameMoment`, `Coincident`. Recommendation: accept `Concurrent` (matches holon precedent, short, readable) and explicitly document the meaning.

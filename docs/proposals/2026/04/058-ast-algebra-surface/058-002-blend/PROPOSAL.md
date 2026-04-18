@@ -69,7 +69,7 @@ Blend(a, b, w1, w2) = threshold(w1·a + w2·b)
 
 This also captures:
 - `Amplify(x, y, s)` → `(Blend x y 1 s)` — boost component
-- `Subtract(x, y)` → `(Blend x y 1 -1)` — the "subtract" mode of Negate (see 058-005-negate)
+- `Subtract(x, y)` → `(Blend x y 1 -1)` — stdlib Blend idiom (see 058-019-subtract; historically one of three modes of a unified `Negate` form)
 
 One primitive. Five use cases covered. FOUNDATION's stdlib section uses this form throughout.
 
@@ -91,7 +91,7 @@ Currently `Linear` and `Circular` each encode their own scalar-weighted-add logi
 
 **3. It composes naturally with existing stdlib idioms.**
 
-`Amplify`, `Subtract`, and the subtract-mode of `Negate` all reduce to `(Blend a b 1 s)` with specific weights. These become one-line stdlib definitions over `Blend` (see 058-015-blend-idioms).
+`Amplify`, `Subtract`, and what was historically the subtract-mode of `Negate` all reduce to `(Blend a b 1 s)` with specific weights. These become one-line stdlib definitions over `Blend` (see 058-015-amplify, 058-019-subtract, 058-020-flip).
 
 **4. The algebra closes.**
 
@@ -242,21 +242,21 @@ If `Blend` is promoted, the following FOUNDATION refinements follow:
 
 3. **`Log` remains grandfathered stdlib** (already classified — expands via Linear/Thermometer).
 
-4. **`Amplify` becomes stdlib** (see 058-015-blend-idioms):
+4. **`Amplify` becomes stdlib** (see 058-015-amplify):
    ```scheme
    (define (Amplify x y s)
      (Blend x y 1 s))
    ```
 
-5. **`Subtract` enters as stdlib** (see 058-015-blend-idioms, also see Negate's subtract mode):
+5. **`Subtract` enters as stdlib** (see 058-019-subtract — historically Negate's subtract mode):
    ```scheme
    (define (Subtract x y)
      (Blend x y 1 -1))
    ```
 
-6. **`Negate` narrows to orthogonalize + flip modes** (see 058-005-negate) — subtract mode becomes the `Subtract` stdlib idiom.
+6. **`Negate` is split** — the orthogonalize mode becomes its own CORE form (see 058-005-orthogonalize), while subtract/flip modes become stdlib Blend idioms (see 058-019-subtract, 058-020-flip).
 
-If `Blend` is REJECTED, the downstream effects do not apply: Linear/Circular remain core; Amplify remains core or gets its own proposal; Subtract does not exist; Negate retains all three modes.
+If `Blend` is REJECTED, the downstream effects do not apply: Linear/Circular remain core; Amplify remains core or gets its own proposal; Subtract does not exist; the historical three-mode Negate would have had to remain unified as one form.
 
 ## Questions for Designers
 

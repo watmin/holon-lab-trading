@@ -66,7 +66,7 @@ Readers navigating between these contexts benefit from a name per context. Encod
 
 **2. It makes accessor stdlib forms readable.**
 
-From 058-016-data-structures:
+From 058-016-map:
 
 ```scheme
 (define (get map-thought key candidates)

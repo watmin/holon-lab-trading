@@ -87,7 +87,7 @@ Stdlib idioms compose with each other naturally.
 
 **1. Potential redundancy with `Subtract`.**
 
-058-015-blend-idioms proposes `Subtract(x, y) = Blend(x, y, 1, -1)`. That is the SAME expansion as `Difference(a, b)`. Two names for the identical operation.
+058-019-subtract proposes `Subtract(x, y) = Blend(x, y, 1, -1)`. That is the SAME expansion as `Difference(a, b)`. Two names for the identical operation.
 
 Should both exist, or should they unify into one name?
 
