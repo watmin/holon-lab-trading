@@ -202,6 +202,156 @@ Types are checked on the EXPANDED form. A macro's body can produce ill-typed AST
 
 Alternative: check types during macro authoring (requires macro parameters to be typed and the macro body to be typed). This is more sophisticated — closer to typed macros in Racket or template Haskell. Out of scope for this proposal; minimal version checks the expanded form.
 
+## Hygiene — Racket's Sets-of-Scopes Model
+
+Macro expansion must be **safe by construction.** A macro author cannot introduce a capture bug — variable-capture-free hygiene is a language guarantee, not a discipline.
+
+### The model
+
+Every identifier in the AST carries a **set of scopes** (Flatt, 2016 — the modern Racket expander model). Two identifiers are "the same" if and only if they have the same name AND the same scope set. When a macro introduces a new identifier (a `let`-bound variable in its expansion, say), the expander attaches a fresh scope to that identifier. User-supplied identifiers keep their original scopes. Name collision between macro-introduced and user-supplied identifiers becomes impossible because their scope sets differ.
+
+### Data model
+
+```rust
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct ScopeId(u64);                      // fresh integer per macro invocation
+
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct Identifier {
+    pub name: Keyword,                        // e.g., `tmp`, `let`, `my/fn`
+    pub scopes: BTreeSet<ScopeId>,            // the scope set
+}
+
+pub enum WatAST {
+    Ref(Identifier),                          // a bare identifier (reference)
+    Call(Identifier, Vec<WatAST>),            // function/macro call
+    Let(Vec<(Identifier, WatAST)>, Vec<WatAST>),  // binding form
+    // ... other nodes carry Identifier not raw strings
+}
+```
+
+Every node that holds a name holds an `Identifier` — not a bare string. Every `Identifier` carries its scope set.
+
+### The algorithm
+
+1. **At macro invocation**, the expander generates a fresh `ScopeId` (the **macro scope**).
+2. The macro's template is walked. Any identifier in the template that **originates from the macro's own source** has the macro scope added to its scope set. Identifiers that came from the macro's **arguments** (user-supplied) retain their original scope sets.
+3. Binding forms (`let`, `lambda`, `define`) in the expanded code attach the macro scope to the identifier they bind AND to all references to that identifier within their body scope. Correct binder resolution follows from scope-set equality.
+4. **Reference resolution** looks up bindings by `(name, scope_set)` pairs. The same name with different scope sets resolves to different bindings (or is an unbound reference error).
+
+Matthew Flatt's 2016 paper — *"Binding as Sets of Scopes"* — is the reference implementation model. Racket uses it in production.
+
+### Why it works
+
+```scheme
+;; Macro introduces `tmp`:
+(defmacro (swap-thoughts (a :AST) (b :AST) -> :AST)
+  `(let ((tmp ,a))          ; `tmp` here has macro-scope M
+     (set! ,a ,b)
+     (set! ,b tmp)))
+
+;; User writes:
+(let ((tmp :my-thought))    ; `tmp` here has user-scope U (outer lexical scope)
+  (swap-thoughts tmp other-var))
+
+;; After expansion:
+(let ((tmp[U] :my-thought))                 ; user's tmp retains U
+  (let ((tmp[M] tmp[U]))                    ; macro's tmp gets M; references user's U
+    (set! tmp[U] other-var)                 ; user's tmp — resolved via U
+    (set! other-var tmp[M])))               ; macro's tmp — resolved via M
+```
+
+`tmp[U]` and `tmp[M]` are DIFFERENT identifiers even though both print as `tmp`. The expander's internal representation distinguishes them. Capture is structurally impossible.
+
+### Why NOT Clojure's `#`-gensym
+
+Clojure's `name#` auto-gensym rule is simpler to implement but leaves a foot-gun: if the author forgets to add `#` to an introduced binding, capture silently occurs. Racket's sets-of-scopes model removes the foot-gun — the author writes natural code and the expander guarantees safety.
+
+**For wat, correct-by-construction beats one-rule-to-remember.** The Rust implementation carries a `BTreeSet<ScopeId>` on every `Identifier`. Scope-set operations are cheap (small set union, equality check). The expander allocates scope IDs as fresh integers. Macros cannot introduce capture bugs, at all, ever.
+
+### Implementation cost estimate
+
+~300-500 additional lines on top of the basic macro expander:
+- `Identifier` type with scope-set field (~30 lines)
+- Scope generator (monotonic `u64` counter, ~20 lines)
+- Template walker that tracks "came from macro source" vs "came from macro argument" (~100 lines)
+- Binding-form handlers that attach scopes during let/lambda/define expansion (~100 lines)
+- Reference resolver using (name, scope-set) (~50 lines)
+- Tests + error reporting (~100-200 lines)
+
+Matches holon-rs's engineering rigor elsewhere. Rust's type system helps — scope sets are a data type with `#[derive(PartialEq, Eq, Hash)]`; the expander passes them around without indirection.
+
+## Debugging — Source Positions Carried on Scope-Tracked Identifiers
+
+Since every `Identifier` carries a scope set, and scope IDs are allocated fresh per macro invocation, the expander knows the **origin** of every identifier in an expanded AST. Error messages and stack traces can point at:
+
+- The macro invocation (the call site the user wrote)
+- The macro definition (the template that introduced the identifier)
+- The chain of expansions (for nested macros)
+
+```rust
+pub struct ScopeInfo {
+    pub id: ScopeId,
+    pub origin: Origin,                       // Macro invocation site + source position
+}
+
+pub enum Origin {
+    MacroInvocation {
+        macro_name: Keyword,
+        invocation_site: SourcePosition,      // where the user wrote the macro call
+        macro_definition: SourcePosition,     // where the macro was defined
+    },
+    UserCode {
+        source_position: SourcePosition,      // where the user wrote this code directly
+    },
+}
+```
+
+A runtime error in `(Blend x y 1 -1)` (from a `(Subtract x y)` macro invocation) can produce an error message:
+
+```
+Error: type mismatch at Blend's third argument
+  Location: (Blend x y 1 -1)
+  From macro: Subtract
+    Defined at: wat/std/idioms.wat:42
+    Invoked at: my-app.wat:7
+```
+
+The user sees the Subtract they wrote AND the Blend expansion AND the macro's definition. Debugging is source-map-complete by virtue of the hygiene infrastructure — we built the scope-tracking data; surfacing it in error messages is a small additional cost.
+
+Full implementation: ~100 extra lines across the expander and error reporting. Source positions are already tracked by the parser; extending them into Origin is mechanical.
+
+## Provenance — Macro-Set Versioning and Distributed Consensus
+
+FOUNDATION's distributed-verifiability claim assumes two nodes producing the same AST produce the same hash. With `defmacro`, the "same AST" depends on the macro set running on each node.
+
+**Lock the project stdlib macro set as part of the algebra version.** Specifically:
+
+1. **Project stdlib macros** (Chain, Ngram, Analogy, Subtract, Amplify, Flip, Log, Circular, HashMap, Vec, HashSet) are defined in `wat/std/*.wat` files shipped with the algebra release. The content-addressed symbol table is seeded with these macros at wat-vm startup. Two nodes running **the same algebra version** have **bit-identical stdlib macros** — guaranteed by versioning, not by coincidence.
+
+2. **User macros** (`:my/vocab/*`) are expanded locally. Their expansions produce hashes that are VALID LOCALLY. A receiving node that wants to verify a hash produced by a user macro must either:
+   - Receive the user macro's definition alongside (and expand it the same way), OR
+   - Receive the **pre-expanded AST** (the hash's source) directly, bypassing the user macro
+
+3. **Distributed consensus operates on the expanded AST**, not on the source + macro-set pair. Nodes ship ASTs, not source-with-macros. Source is a convenience for authoring; ASTs are the ground truth for verification.
+
+4. **Macro-set upgrades are coordinated events**, like algebra-version upgrades. A node running algebra v1.2 with stdlib-macros v1.2 cannot verify hashes produced by a node running v1.3 if the stdlib macros changed. This is the honest cost of defmacro's parse-time rewriting. Document it; don't pretend it's invisible.
+
+**Version gate in the algebra header.** The wat-vm's startup manifest includes an `algebra-version: "v1.2"` tag. Loading a file signed under a different algebra version requires explicit opt-in (or explicit upgrade path). This is standard cryptographic-protocol versioning, not novel to wat.
+
+## Typed Macros — Deferred
+
+Fully typed macros (the macro author's code is type-checked at macro-authoring time, not only at expansion time) is the Racket `define-syntax-parse` / `syntax/parse` model. It's more powerful than 058-031's current "check types after expansion" — it catches ill-typed macros before they're ever instantiated.
+
+Implementing typed macros requires:
+- A type system for macro parameters beyond `:AST` (e.g., `:AST<:f64>` for "an AST expression whose value type is `:f64`")
+- A type checker that traverses the macro body and verifies the output would be well-typed given the input types
+- Elaboration: macro parameters become typed bindings; references in the body type-check against them
+
+This is out of scope for 058-031. The current proposal checks expansions, which catches all errors but with worse location information. Future proposal can add macro-time type checking as an optimization + ergonomic improvement.
+
+**Stated position:** deferred. 058-031 ships with expansion-time type checking. Typed macros are a future proposal.
+
 ## Arguments For
 
 **1. Resolves #4 without compromising reader clarity.**
