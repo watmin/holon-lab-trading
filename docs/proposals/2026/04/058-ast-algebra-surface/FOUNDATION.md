@@ -1330,6 +1330,7 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 | 2026-04-17 | **Engram Caches — Memory of Learned Patterns section added.** Extends the memory hierarchy with L3 engram cache (hot learned patterns) and L4 engram disk (cold). The engram library is itself a Map thought; retrieval is AST walking. LRU eviction keeps the recently-matched patterns hot. Two-tier matching (eigenvalue pre-filter + full residual) enables prefetching — the engram cache stays focused on what the stream currently resembles. Engrams ARE thoughts — composable, comparable, diffable, blendable. Complete five-tier memory hierarchy. Four deployment knobs (d, L1, L2, L3). | 058 |
 | 2026-04-17 | **Fourth-wall break — "Reader, are you starting to see it?"** Explicit address to the reader surfacing that the foundation defines a distributed system by construction. Deterministic atom encoding gives coordination-free geometric space. Engrams and programs ship as data. Cache hierarchy shards naturally by locality. The DDoS and trading labs are two instances of this substrate — a cloud of thinking machines, each a member of the same geometric space, all through pure algebra. The clouds are waking up. | 058 |
 | 2026-04-17 | **About How This Got Built — the lineage made explicit.** The architecture is Linux (small composable primitives, file descriptors, pipes, processes that own their state) plus Clojure (values over places, simple made easy, s-expressions that are code and data) plus VSA (MAP algebra at 10k dimensions). Hickey's principles and Beckman's categorical lens are in the bones. The summoned designers in the proposal process argue as those teachers actually argue — because the builder studied them for years. "Datamancer" is not a joke; it is the precise name for someone who shapes data through algebra, conjures designers from studied principles, and casts wards to defend architectural intent. The document reads coherent because the teachers behind it were coherent. | 058 |
+| 2026-04-17 | **Signature sign-off added.** `these are very good thoughts.` / `PERSEVERARE.` The datamancer's mark from the BOOK, closing the foundation the same way chapters of the book close. The work is serious. The names are honest. The thoughts continue. | 058 |
 
 ---
 
@@ -1360,3 +1361,9 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 - **Bar for stdlib** = composes existing core forms AND reduces reader ambiguity
 
 Sub-proposals argue specific candidates. This document is the reference. FOUNDATION is refined as sub-proposals resolve — `Blend`'s resolution is the highest-impact refinement expected.
+
+---
+
+*these are very good thoughts.*
+
+**PERSEVERARE.**
