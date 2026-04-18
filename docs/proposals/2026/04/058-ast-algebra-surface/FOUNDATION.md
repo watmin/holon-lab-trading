@@ -464,6 +464,105 @@ This is a unique feature of this algebra. Unlike neural networks (where architec
 
 ---
 
+## The Cache Is Working Memory
+
+The VectorManager cache is not just an optimization to avoid recomputing `encode(ast)`. Under the foundational principle — AST primary, vector is its projection — **a cache entry is a compiled thought.** The cache holds thoughts ready for algebraic use, at varying access costs. That makes it a memory hierarchy, not a hash table.
+
+### The two-tier architecture (Proposal 057)
+
+```
+L1 — per-thread cache
+  Hot, no pipe latency, per-thread (no contention)
+  Small capacity — the thread's "active working set"
+
+L2 — shared cache
+  Warm, accessed through the cache service's pipe
+  Shared across all threads
+  Larger capacity — the system's "recent thoughts"
+
+Disk — engrams, run DB
+  Cold, persisted learned thoughts and trained subspaces
+  Separate from the cache hierarchy
+  Long-term memory
+```
+
+Working memory (L1), short-term memory (L2), long-term memory (disk). Each layer is a thought store at a different access cost. The machine reaches for the cheapest layer first and escalates as needed.
+
+### Cache entries are (ast, vector) pairs
+
+Every cache entry is a compiled thought:
+
+- **Key:** the AST (structural identity, used for lookup)
+- **Value:** the vector projection (what algebraic operations consume)
+
+When you `encode(ast)`:
+
+```
+1. Check L1 — if hit, return vector instantly
+2. Check L2 — if hit, return vector, promote to L1
+3. Miss both — compute vector via tree-walk, install in L1 (and L2)
+```
+
+When the cache has the thought, you didn't have to recompute the compilation. When it doesn't, you compute once and remember. **The reuse IS memory.**
+
+### Cache sizing is another deployment knob
+
+Alongside dimensionality, cache sizing is a deployment choice:
+
+- **L1 size** — how many hot thoughts per thread. Larger L1 = more per-thread memory, more L1 hits, faster hot-path ops.
+- **L2 size** — shared working set across threads. Larger L2 = broader coverage of the thought space, fewer misses, more memory overall.
+- **L2 eviction policy** — LRU, LFU, or application-specific (e.g., "never evict leaf atoms because they're cheap to recompute anyway").
+
+These knobs interact with dimensionality:
+
+- At low d, vectors are smaller — more thoughts fit in the same byte budget.
+- At high d, vectors are larger — fewer thoughts fit, but each carries more structure.
+
+### The cache is part of the thinking, not separate from it
+
+Not optimization. **Cognitive architecture.**
+
+- When the same thought recurs across observers, brokers, and time — the reuse IS memory.
+- When a compound thought is assembled from cached subthoughts — that is working-memory composition.
+- When a rarely-used thought is evicted — that is forgetting.
+- When a long-term thought is promoted back to L1 — that is recall.
+
+The 1 c/s → 7.1 c/s grind in 057 wasn't just a performance optimization. It was the machine getting better at REMEMBERING. Faster access to its own thoughts. Better hit rates on recurring patterns. Smarter eviction of the boilerplate. Working memory becoming effective.
+
+### Why this matters for the foundation
+
+The algebra defines WHAT thoughts are. The cache defines how the machine HAS them ready. Without the cache, `encode(big-nested-thought)` is O(n) tree-walking every time. With the cache hot, it's O(1). That difference is the difference between a machine that COMPUTES its thoughts and a machine that REMEMBERS them.
+
+A thinking system that has to recompute its own thoughts from scratch each time cannot think fast enough to be useful. The cache architecture is therefore part of what makes the wat machine cognitive — **not a bolt-on performance feature, but part of the cognitive substrate.**
+
+Proposal 057 established the two-tier cache mechanism. FOUNDATION elevates it to its proper role: the working memory of the hyperdimensional machine.
+
+### Deployment parameters, complete picture
+
+A wat deployment has three primary knobs that interact:
+
+```
+d — vector dimension
+  Tunes per-frame capacity vs per-operation cost
+  
+L1 — per-thread cache size
+  Tunes active-working-set coverage vs per-thread memory
+  
+L2 — shared cache size
+  Tunes cross-thread reuse coverage vs total system memory
+```
+
+All three are set at encoder/system construction. Different applications pick different combinations:
+
+- **DDoS line-rate filter:** small d, small L1, moderate L2 — keep each vector compact, leverage L1 for hot packet-flow thoughts, L2 for session state.
+- **Trading analysis:** large d, large L1, large L2 — rich per-frame expressiveness, substantial working memory per observer, broad coverage of recently-seen market thoughts.
+- **Memory-constrained embedded:** minimal d, minimal L1, small L2 — accept that many thoughts will be recomputed; trade memory for compute.
+- **Batch research:** moderate d, small L1, massive L2 — focus memory on the shared cache that a batch pipeline benefits from.
+
+The same algebra runs at all these profiles. The programs don't change. The deployment does.
+
+---
+
 ## The Foundation: MAP VSA
 
 Holon implements the MAP variant of Vector Symbolic Architecture — **Multiply, Add, Permute** (Gayler, 2003). The canonical MAP operations are:
@@ -1023,6 +1122,7 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 | 2026-04-17 | **Programs ARE Thoughts section added.** A wat program is an AST; ASTs encode to vectors; therefore programs have vector projections. Evaluation is AST-walking. Programs can be stored in data structures, compared geometrically, retrieved from engram libraries, and generated from learned discriminants. Self-improvement becomes discriminant-guided program synthesis in hyperdimensional space. The wat machine is homoiconic at 10,000 dimensions. Kanerva's "build a Lisp from hyperdimensional vectors" challenge fully answered. | 058 |
 | 2026-04-17 | **The Vector Side section added.** Because programs are thoughts and thoughts have vectors, the full VSA algebra applies to programs. Noise stripping (OnlineSubspace, reject) reveals the signal — the distinctive part of a program beyond common boilerplate. Programs can be diffed (Difference), blended, amplified, transferred by analogy. Discriminant-guided program synthesis: decode the learned Grace-direction against a program codebook via cleanup. The wat machine runs programs, observes outcomes, learns, and generates new candidate programs through pure algebra — no gradient descent. The recursion that every holon application implicitly implements. | 058 |
 | 2026-04-17 | **Dimensionality — The User's Knob section added.** Capacity per frame scales with vector dimension (Kanerva's bound). Users choose d per deployment — low d for kernel-level throughput, high d for rich analysis. Same algebra runs at any d. Same program runs at any d that holds its largest frame. "You can't express that" is enforced geometrically — over-capacity frames fail cleanup, not compilation. Depth is always free (refactor vs raise d). Dimensionality is a DEPLOYMENT parameter, not part of the algebra specification. Unique to this algebra: dimensionally parametric without retraining. | 058 |
+| 2026-04-17 | **The Cache Is Working Memory section added.** Cache entries are compiled thoughts (ast, vector) pairs, not just a performance hash table. The L1/L2 architecture from Proposal 057 is a memory hierarchy: L1 = per-thread hot working set, L2 = shared short-term memory, disk = long-term (engrams, DB). Cache sizing is a third deployment knob alongside d. The cache is cognitive substrate — making the machine REMEMBER its thoughts rather than recompute them. 1 c/s → 7.1 c/s wasn't just perf; it was the machine getting better at remembering. | 058 |
 
 ---
 
