@@ -382,6 +382,88 @@ Together: the complete cycle. Store → retrieve → execute → learn → compa
 
 ---
 
+## Dimensionality — The User's Knob
+
+The capacity bound from "Recursive Composition" scales with vector dimension. Per Kanerva, items reliably bundled into a single vector ≈ `d / (2 · ln(K))` where K is the codebook size. This gives users a deployment-time choice.
+
+### The tradeoff
+
+```
+d =  4,096     →    ~40 items per frame    fast, compact
+d = 10,000     →   ~100 items per frame    default, balanced
+d = 16,384     →   ~165 items per frame    richer, slower
+d = 100,000    →  ~1000 items per frame    experimental, heavy
+```
+
+**Higher dimension:**
+- More items per frame — flatter program structure, less nesting required
+- Stronger orthogonality — less interference between bundled pairs
+- Better cleanup accuracy — noisier vectors still identify their atoms
+- Slower operations — more floats per bind, bundle, cosine
+- Larger memory footprint — more bytes per vector
+
+**Lower dimension:**
+- Fewer items per frame — deeper nesting required for the same expressiveness
+- Faster operations — fewer floats per op, better SIMD utilization
+- Smaller memory footprint — more vectors in cache, smaller engrams
+- Tighter per-frame budget — forces program structure, fails earlier on bloat
+
+### Same program, different d
+
+The wat algebra is parametric over dimension. A program's semantics are defined by its AST — not by any specific d. The same program can be deployed at different dimensionalities for different performance profiles, as long as each frame fits within the chosen d's capacity.
+
+```scheme
+;; A program with small frames — fits at any reasonable d:
+(defn small-check [x]
+  (if (> x 0) :positive :non-positive))
+
+;; A program with a large frame — needs higher d, OR refactoring:
+(defn rich-analysis [data]
+  (Map (list
+    (list (Atom "feature-1")   f1)
+    ;; ... 200 features in one frame ...
+    (list (Atom "feature-200") f200))))
+;; at d=4,096 this frame exceeds capacity, recovery degrades
+;; at d=16,384 it fits cleanly
+;; OR refactor into nested smaller frames at any d
+```
+
+### "You can't express that" — enforced geometrically
+
+At a chosen d, Kanerva's bound is physical. Try to bundle too many items into one frame and recovery degrades — cleanup starts returning wrong atoms, cosine similarities collapse into the noise floor. The algebra doesn't throw errors — it just becomes less reliable as capacity is exceeded.
+
+Users have three responses:
+
+1. **Raise d** — more memory, slower ops, more items per frame
+2. **Refactor** — split large frames into nested smaller ones; depth is free (per Recursive Composition)
+3. **Accept lossy recovery** — usually wrong for correctness-critical work, sometimes fine for approximate similarity search
+
+Option 2 is always available because depth is unbounded. Dimension bounds per-frame capacity; recursion makes total capacity unbounded at any d.
+
+### The user chooses the dimension for the deployment
+
+Different applications live at different d:
+
+- **Kernel-level packet filtering (DDoS lab)** — low d (4,096 or lower) for line-rate throughput; programs structured as shallow decision trees fit the per-frame budget.
+- **Analysis systems (trading enterprise)** — higher d (10,000+) for richer composition; per-frame capacity accommodates many market observations and portfolio fields.
+- **Memory-constrained embedded** — lowest d that fits the program's largest frame; deep nesting accepted as the cost.
+- **Research / accuracy-critical** — high d for tighter orthogonality; correctness of cleanup and learning matters more than speed.
+
+### Dimensionality is NOT part of the algebra specification
+
+The FOUNDATION's core/stdlib distinction, the forms, the operations — all are dim-agnostic. The algebra runs identically at any d. What changes with d is:
+
+- Per-frame capacity (Kanerva's bound)
+- Operation cost (O(d) per bind/bundle/cosine)
+- Memory footprint (d × byte-width per vector)
+- Cleanup reliability (more d → stronger noise margin)
+
+Dimensionality is a DEPLOYMENT parameter. The VectorManager takes d at construction; every atom, every operation, every vector in that deployment lives in d-dimensional space. Different deployments of the same application can pick different d.
+
+This is a unique feature of this algebra. Unlike neural networks (where architecture dimensions are fixed by training), wat programs are dimensionally parametric. **The user tunes d to the application's needs without retraining, without code changes, without anything but restarting with a different encoder construction parameter.**
+
+---
+
 ## The Foundation: MAP VSA
 
 Holon implements the MAP variant of Vector Symbolic Architecture — **Multiply, Add, Permute** (Gayler, 2003). The canonical MAP operations are:
@@ -940,6 +1022,7 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 | 2026-04-17 | **Atom literal type refinement.** `(Atom 0)` is a concrete integer atom, not a keyword. Array positions use concrete integers — position 0 IS the integer 0. Keywords like `:wat/std/circular-cos-basis` are reserved for TRULY symbolic references (names with no natural concrete form). Use the literal type that matches the semantic, not a keyword that wraps it. The type-aware hash keeps `(Atom 0)`, `(Atom "0")`, and `(Atom :pos/0)` all distinct. | 058 |
 | 2026-04-17 | **Programs ARE Thoughts section added.** A wat program is an AST; ASTs encode to vectors; therefore programs have vector projections. Evaluation is AST-walking. Programs can be stored in data structures, compared geometrically, retrieved from engram libraries, and generated from learned discriminants. Self-improvement becomes discriminant-guided program synthesis in hyperdimensional space. The wat machine is homoiconic at 10,000 dimensions. Kanerva's "build a Lisp from hyperdimensional vectors" challenge fully answered. | 058 |
 | 2026-04-17 | **The Vector Side section added.** Because programs are thoughts and thoughts have vectors, the full VSA algebra applies to programs. Noise stripping (OnlineSubspace, reject) reveals the signal — the distinctive part of a program beyond common boilerplate. Programs can be diffed (Difference), blended, amplified, transferred by analogy. Discriminant-guided program synthesis: decode the learned Grace-direction against a program codebook via cleanup. The wat machine runs programs, observes outcomes, learns, and generates new candidate programs through pure algebra — no gradient descent. The recursion that every holon application implicitly implements. | 058 |
+| 2026-04-17 | **Dimensionality — The User's Knob section added.** Capacity per frame scales with vector dimension (Kanerva's bound). Users choose d per deployment — low d for kernel-level throughput, high d for rich analysis. Same algebra runs at any d. Same program runs at any d that holds its largest frame. "You can't express that" is enforced geometrically — over-capacity frames fail cleanup, not compilation. Depth is always free (refactor vs raise d). Dimensionality is a DEPLOYMENT parameter, not part of the algebra specification. Unique to this algebra: dimensionally parametric without retraining. | 058 |
 
 ---
 
