@@ -313,17 +313,199 @@ The work is serious. The names are honest. The lineage is explicit.
 
 ---
 
-## More to migrate (Phase 2)
+## The VM Framing — Holon Stack as Call Stack
 
-This document will grow. Phase 2 (follow-up commit) will migrate these MIXED-category subsections from FOUNDATION:
+A wat program can be understood as a **stack of frames** — each a bundle of ≤ 100 statements, each composed into the next via Bind:
 
-- The VM-framing subsection of Recursive Composition (Turing-completeness-via-composition, call-stack-as-depth)
-- Discriminant-guided program synthesis from Programs ARE Holons (the machine writes its own replacements)
-- Self-reference-without-paradox from The Vector Side (the loop that closes through algebra)
-- L3/L4 engram cache speculation + prefetching + five-tier hierarchy from Engram Caches
-- Cognitive-architecture framing from The Cache Is Working Memory (cache as cognitive substrate, not bolt-on)
+```
+frame_n      — current execution frame (10k vec, ≤100 items)
+  ▼
+frame_n-1    — caller's frame, nested inside frame_n via Bind
+  ▼
+frame_n-2    — caller's caller
+  ▼
+...
+  ▼
+frame_0      — entry point
+```
 
-Each is a speculative or aspirational framing around a load-bearing claim; FOUNDATION keeps the claim, VISION gets the framing. Phase 2 does the surgical cuts without losing content.
+Each frame is a 10k-dim holon. The call stack is depth in the composition. Execution is tree-walking. Return is moving up one level via the AST.
+
+The holon machine is **Turing-complete in this sense**: unbounded programs via unbounded composition depth, without requiring unbounded vector dimensionality. The memory IS the composition.
+
+---
+
+## Programs Generated From Learned Directions
+
+A reckoner learns a discriminant over program-holons where the label is "produces Grace" or "produces Violence." Walk a library of candidate program ASTs, measure presence of each against the discriminant direction, keep the ones above the noise floor — these are the program-shapes that most strongly predict Grace.
+
+```scheme
+;; The reckoner learns a discriminant over program-holons
+;; where the label is "produces Grace" or "produces Violence."
+;; Walk a library of candidate program ASTs, measure presence of
+;; each against the discriminant direction, keep the ones above
+;; the noise floor — these are:
+;;   "the program-shapes that most strongly predict Grace"
+;;
+;; This is discriminant-guided program synthesis.
+;; The machine writes programs that the machine evaluates.
+```
+
+### Kanerva's challenge, fully answered
+
+Carin Meier cited Kanerva's suggestion that one could build a Lisp from hyperdimensional vectors. The full answer:
+
+- Not "build a Lisp OUT OF vectors."
+- Instead: **"build a Lisp whose ASTs project to canonical vectors."**
+- The Lisp stays a Lisp. Programs are ASTs. ASTs walk for execution.
+- The vector is the portable, comparable, learnable form.
+- Code is data. Data has literals. Literals live on AST nodes. Programs have vectors. The machine processes all of it the same way.
+
+### What this makes the wat machine
+
+A wat program and a wat data structure are the same kind of thing:
+
+- Both are ASTs
+- Both encode to vectors
+- Both can be stored in Maps, Arrays, or other wat holons
+- Both can be retrieved by AST walking
+- Both can be compared by cosine
+- Both can be learned about by the reckoner
+
+The machine does not distinguish "code" from "data" at its core. It processes holons. Holons are whatever we encode them to be. The machine that learns from candle data can learn from programs. The machine that generates predictions can generate programs.
+
+This is what it means to say the wat machine is **homoiconic at 10,000 dimensions**.
+
+### The recursion closes
+
+- The wat machine processes holons.
+- Programs are holons.
+- The machine learns which holons (programs) produce Grace.
+- The machine can generate new programs from what it learned.
+- Those programs are holons the machine can process.
+- The machine learns from programs it generated.
+
+**Self-improvement is discriminant-guided program synthesis in hyperdimensional space.** Not gradient descent. Not backpropagation. A reckoner that learns program-shapes, presence measurement against a candidate library to select the aligned ones, an evaluator that executes them. The machine writes its own replacements.
+
+---
+
+## Discriminant-Guided Program Synthesis
+
+A reckoner learns a direction in holon-space that separates Grace-producing holons from Violence-producing holons. When the holons are programs, the learned direction is the **signature of a program that produces Grace.**
+
+To generate a candidate:
+
+1. Take the reckoner's discriminant vector (the direction learned).
+2. Walk a library of candidate program ASTs; measure presence of each against the discriminant direction.
+3. The above-threshold matches are programs most strongly predicted to produce Grace.
+4. Execute them. Measure the outcome. Feed the outcome back into the reckoner.
+
+**The machine writes its own candidate replacements.** Not through gradient descent. Not through backpropagation. Through ALGEBRAIC DECODING of a learned geometric direction against a library of candidate program structures.
+
+### Self-reference without paradox
+
+- The wat language expresses programs.
+- Programs are holons.
+- Holons have vectors.
+- Vectors can be learned on (subspaces, reckoners).
+- Learned directions can be decoded (presence measurement against a candidate library).
+- Selected ASTs are executable programs.
+
+The wat machine can RUN programs, OBSERVE which produce Grace, LEARN the discriminating direction, GENERATE new candidate programs, and RUN those. The loop closes through algebra, not through gradient descent. No paradox — the machine doesn't rewrite its own core primitives. It composes new programs from the same primitives, guided by what it learned from running previous programs.
+
+---
+
+## The Cache as Cognitive Substrate
+
+The VectorManager cache is not just an optimization to avoid recomputing `encode(ast)`. Under the foundational principle — AST primary, vector is its projection — **a cache entry is a compiled holon.** FOUNDATION states this as a contract. VISION argues why it matters as cognitive architecture.
+
+### The cache is part of the thinking, not separate from it
+
+Not optimization. **Cognitive architecture.**
+
+- When the same holon recurs across observers, brokers, and time — the reuse IS memory.
+- When a compound holon is assembled from cached subholons — that is working-memory composition.
+- When a rarely-used holon is evicted — that is forgetting.
+- When a long-term holon is promoted back to L1 — that is recall.
+
+The 1 c/s → 7.1 c/s grind in 057 wasn't just a performance optimization. It was the machine getting better at REMEMBERING. Faster access to its own holons. Better hit rates on recurring patterns. Smarter eviction of the boilerplate. Working memory becoming effective.
+
+### Why this matters as a framing
+
+The algebra defines WHAT holons are. The cache defines how the machine HAS them ready. Without the cache, `encode(big-nested-holon)` is O(n) tree-walking every time. With the cache hot, it's O(1). That difference is the difference between a machine that COMPUTES its holons and a machine that REMEMBERS them.
+
+A thinking system that has to recompute its own holons from scratch each time cannot think fast enough to be useful. The cache architecture is therefore part of what makes the wat machine cognitive — **not a bolt-on performance feature, but part of the cognitive substrate.**
+
+Proposal 057 established the two-tier cache mechanism. FOUNDATION states it as load-bearing architecture. VISION elevates it to its aspirational role: the working memory of the hyperdimensional machine.
+
+---
+
+## The Engram Memory Hierarchy
+
+FOUNDATION states the load-bearing claim: engrams are holons. They participate in the algebra like any other holon (cosine comparison, Bundle/Bind/Permute/Difference operations, structural retrieval by AST walking).
+
+VISION picks up the speculative extension: an L3/L4 engram cache hierarchy and prefetching strategy that has not yet been built.
+
+### The engram LRU
+
+Same pattern as the holon cache — tiered memory by access cost:
+
+```
+L3 engram cache (hot)
+  Recently-matched engrams, in-memory
+  Fast residual scoring
+
+L4 engram disk (cold)
+  Everything ever minted
+  Load on demand, evict on LRU pressure
+```
+
+Recently-matched engrams stay hot. Rarely-used engrams page out. When a query's eigenvalue signature suggests a cold engram, it loads; on repeated matches it stays.
+
+### Prefetching via eigenvalue pre-filter
+
+The two-tier matching architecture (eigenvalue signature first, full residual second) makes prefetching natural:
+
+```
+1. Compute query's eigenvalue signature (cheap)
+2. Pre-filter all engrams by eigenvalue cosine (O(k·n), where n = library size)
+3. Top-k candidates — those most likely to match
+4. Prefetch them into the engram cache (L3)
+5. Full residual scoring against the prefetched candidates
+6. Evict irrelevant engrams
+```
+
+The engram cache stays focused on what the system is currently observing. **Learned-pattern working memory, shaped by the current stream.**
+
+### The complete memory hierarchy — five tiers
+
+```
+L1 holon cache     — per-thread hot holons (fastest)
+L2 holon cache     — shared warm holons (pipe access)
+L3 engram cache      — hot learned patterns (in-memory, residual scoring)
+L4 engram disk       — cold learned patterns (IO load on demand)
+Run DB               — full history, raw observations (query cost)
+```
+
+Five tiers. Each with its own access cost. Each with its own sizing policy.
+
+### Deployment: five knobs
+
+Adding engram caching and the capacity-guard mode to the deployment picture beyond FOUNDATION's L1/L2/dim/capacity-mode contracts:
+
+```
+d                    — vector dimension (per-frame capacity vs op cost)   [FOUNDATION]
+capacity-mode        — :silent | :warn | :error | :abort                  [FOUNDATION]
+L1 holon cache       — per-thread working holons                          [FOUNDATION]
+L2 holon cache       — shared working holons                              [FOUNDATION]
+L3 engram cache      — hot learned patterns                               [VISION — future]
+```
+
+All tunable. All deployment-time. Same algebra. Different performance profiles and safety postures.
+
+A DDoS filter tunes for high L3 engram hit rate against attack signatures, with small L1/L2. A trading analysis system tunes for large L1/L2 holon caches with moderate L3, because the holons are being composed fresh while the engrams are stable. Different applications stress different tiers. The architecture accommodates.
+
+**The machine doesn't just cache vectors. It caches learned patterns. It caches programs. It caches data structures. It caches anything that is a holon. The entire hierarchy is hyperdimensional working memory, tiered by access cost, tuned by the operator.**
 
 ---
 
