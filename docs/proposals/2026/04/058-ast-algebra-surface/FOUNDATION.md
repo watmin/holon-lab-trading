@@ -1333,7 +1333,7 @@ You see this in:
 You see this in:
 - Values-up, not queues-down (return data through functions; side effects at the edges)
 - The AST as data, operated on by named forms
-- The small core (MAP VSA primitives + Thermometer + Blend) and the rich stdlib (Concurrent, Then, Chain, HashMap, Vec, HashSet, get, …)
+- The small core (MAP VSA primitives + Thermometer + Blend) and the rich stdlib (Then, Chain, HashMap, Vec, HashSet, get, …)
 - The foundational principle (AST primary) itself — code is data is holon is vector
 
 **Hickey's talks.** "Simple Made Easy." "Don't Fear the Monad" (via Beckman). "Hammock Driven Development." "Values of Values." Watched many times. The principles are in the bones.
@@ -1683,7 +1683,7 @@ Algebra Core     Atom, Bind, Bundle, Permute, Thermometer, Blend,
     ↓            Orthogonalize, Resonance, ConditionalBind
     ↓            (what produces holon vectors)
     ↓
-Stdlib           Sequential, Concurrent, Then, Chain, Ngram, Analogy,
+Stdlib           Sequential, Then, Chain, Ngram, Analogy,
                  Amplify, Subtract, Flip, HashMap, Vec, HashSet,
                  Linear, Log, Circular, ...
                  (named compositions — defined with language core, using algebra core)
@@ -1759,9 +1759,9 @@ All three layers — language core, algebra core, stdlib (project and user) — 
 :wat/algebra/Bind
 :wat/algebra/Bundle
 
-:wat/std/Difference         ; project stdlib
-:wat/std/Concurrent
+:wat/std/Subtract           ; project stdlib
 :wat/std/HashMap
+:wat/std/Vec
 
 :alice/math/clamp           ; user extension
 :bob/trading/position
@@ -1963,7 +1963,7 @@ The Rust runtime hosting the wat-vm imposes a static-first model: all code (type
 8. Freeze symbol table, type environment, and macro registry.
 9. Enter main loop.
 
-**Hash identity is on the expanded AST.** Two source files that differ only in macro aliases (`Concurrent` vs `Bundle`, `Subtract` vs `Blend(_, _, 1, -1)`) expand to the same canonical AST and produce the same hash. Source-level clarity is preserved for readers; identity at the algebra level is uniformized.
+**Hash identity is on the expanded AST.** Two source files that differ only in macro aliases (`Unbind` vs `Bind`, `Subtract` vs `Blend(_, _, 1, -1)`) expand to the same canonical AST and produce the same hash. Source-level clarity is preserved for readers; identity at the algebra level is uniformized.
 
 **Nothing redefines after startup.** A struct is what its source declares. A function is what its source defines. Name collisions are caught at startup and halt the wat-vm; runtime never sees partial state.
 
@@ -2076,10 +2076,11 @@ Retrieval is NOT a core form. Presence is measured by `cosine(encode(target), re
       (lambda (i h) (Permute h i))
       list-of-holons)))
 
-(define (Concurrent list-of-holons)
-  ;; named commutative relation over Bundle
-  (Bind (Atom "concurrent")
-        (Bundle list-of-holons)))
+;; Concurrent was REJECTED (058-010) — no runtime specialization beyond
+;; Bundle, enclosing context already carries the temporal meaning.
+;; Userland may define it in their own namespace if they want the name:
+;;   (defmacro (:my/vocab/Concurrent (xs :AST) -> :AST)
+;;     `(Bundle ,xs))
 
 (define (Then a b)
   ;; binary directed temporal relation
@@ -2433,11 +2434,12 @@ Because keywords are a first-class literal type alongside strings, integers, flo
 (Bind (Atom "bytes") (Log 1500 1 1000000))
 (Bind (Atom "hour")  (Circular 14 24))
 
-;; Concurrent observations:
-(Concurrent
-  (list
-    (Bind (Atom "rsi")   (Thermometer 0.73 0 1))
-    (Bind (Atom "macd")  (Thermometer -0.02 -1 1))))
+;; Co-occurring observations — Bundle is the primitive, context carries the temporal meaning:
+(Bind (Atom :observed-at-t1)
+      (Bundle
+        (list
+          (Bind (Atom "rsi")   (Thermometer 0.73 0 1))
+          (Bind (Atom "macd")  (Thermometer -0.02 -1 1)))))
 
 ;; Temporal sequence:
 (Chain
@@ -2446,9 +2448,9 @@ Because keywords are a first-class literal type alongside strings, integers, flo
     (Bind (Atom "rsi") (Thermometer 0.71 0 1))
     (Bind (Atom "rsi") (Thermometer 0.74 0 1))))
 
-;; Relational verb with concurrent observations:
+;; Relational verb with bundled observations:
 (Bind (Atom "diverging")
-      (Concurrent
+      (Bundle
         (list
           (Bind (Atom "rsi")   (Thermometer 0.73 0 1))
           (Bind (Atom "price") (Thermometer 0.25 0 1)))))
@@ -2487,14 +2489,14 @@ Because keywords are a first-class literal type alongside strings, integers, flo
 
 (def keyed-by-composite
   (HashMap (list
-    (list (Concurrent (list (Atom "rsi") (Atom "overbought")))
+    (list (Bundle (list (Atom "rsi") (Atom "overbought")))
           some-value)
     (list (Bind (Atom "macd") (Atom "crossing-up"))
           other-value))))
 
 ;; Retrieve with the same composite as locator:
 (get keyed-by-composite
-     (Concurrent (list (Atom "rsi") (Atom "overbought"))))
+     (Bundle (list (Atom "rsi") (Atom "overbought"))))
 ;; → some-value
 
 ;; Keys can be HashMaps. Values can be HashMaps. Arbitrary nesting:
@@ -2579,7 +2581,7 @@ The implementation choice is outside FOUNDATION's scope. FOUNDATION declares the
 
 ;; Structural compositions (5)
 (Sequential list)              ; 058-009  — reframing: Bundle of index-permuted
-(Concurrent list)              ; 058-010  — Bundle alias (temporal intent)
+;; Concurrent REJECTED (058-010) — redundant with Bundle; userland macro if desired.
 (Then a b)                     ; 058-011  — binary directed temporal
 (Chain list)                   ; 058-012  — Bundle of pairwise Thens
 (Ngram n list)                 ; 058-013  — n-wise adjacency
@@ -2715,6 +2717,7 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 | 2026-04-18 | **`defmacro` added to Language Core; stdlib aliases become macros.** Resolves Beckman's finding #4 (alias hash-collision). `defmacro` is a compile-time form that registers parse-time syntactic rewrites. The startup pipeline now runs a macro-expansion pass BEFORE hashing, signing, and type-checking. Stdlib aliases like `Concurrent`, `Set`, `Subtract`, `Flip`, `Then`, `Chain`, `Analogy` become macros that expand to canonical core compositions (Bundle, Bind, Blend, Permute). After expansion, `hash(AST) IS identity` holds as an invariant — two source files differing only in macro aliases produce the same expanded AST and the same hash. Source-level reader clarity is preserved; algebra-level identity is uniformized. Language Core grows from 8 to 9 forms (adds `defmacro`). Also resolved: drop `Difference` from 058-004, keep `Subtract` (058-019) as the canonical `Blend(_, _, 1, -1)` idiom — one name per operation. | 058 |
 | 2026-04-18 | **Bind as query; algebra laws restated in similarity-measurement frame.** Round-2 reviewers (Hickey, Beckman) flagged that strict elementwise claims for Bundle associativity and Orthogonalize orthogonality don't hold under threshold. Beckman's counter-examples are correct: nested Bundle clamps magnitudes ≥ 2 losing information; Orthogonalize with fractional coefficients rounds back to pre-projection signs. The reframe: the algebra was always similarity-measured, not elementwise-exact. Bind is THE query primitive — its outcome is observable via cosine similarity; above 5σ means the query resolved, below means it failed (capacity exceeded, key absent, or crosstalk). Same lens applied to Bundle's associativity (similarity-associative at high d; elementwise non-associative in general) and Orthogonalize's orthogonality (similarity-orthogonal within budget; exact in the X=Y edge case only). Three apparent law violations are ONE substrate property: Kanerva-capacity-bounded similarity measurement. Updated FOUNDATION's Output Space section: replaced "Bind's self-inverse law" subsection with "Bind as query: measurement-based success signal"; replaced "Bundle is associative" claim with "Bundle is similarity-associative under capacity budget"; replaced "Orthogonalize's orthogonality is exact" with "exact only at X=Y; similarity-orthogonal otherwise." Also updated 058-003-bundle, 058-005-orthogonalize, 058-021-bind, 058-027-set. The 058-027 update clarifies that Set's membership accessor is the same Bind + cleanup query as Map's — not an asymmetry; same primitive. | 058 |
 | 2026-04-18 | **`:Thought` → `:Holon` rename across all 058 documents.** The algebra's universal type is renamed from `:Thought` to `:Holon`. Reasoning: the project is named "holon" (library `holon-rs`, labs `holon-lab-*`), and "Holon" in Koestler's sense — a thing that is simultaneously whole and part — is the honest universal substrate name for the algebra's values. Every algebra value IS a Holon: Atoms, Binds, Bundles, Permutes, Thermometers, Blends, Orthogonalizes, Resonances, ConditionalBinds, Cleanups. `:Thought` was an alias we had been using that did not match the project's own naming. The Rust identifier `ThoughtAST` becomes `HolonAST`; the type keyword `:Thought` becomes `:Holon`; prose describing the algebra's primitive values uses "holon(s)" where it previously used "thought(s)." Colloquial/semantic uses of "thought" as English (the narrative frame, the sign-off `these are very good thoughts.`) remain unchanged. | 058 |
+| 2026-04-18 | **Concurrent (058-010) rejected from project stdlib.** Hickey round-2 flagged Bundle/Concurrent/Set as a triplet of aliases with one canonical expansion. Set earned its place as HashSet (Rust-surface name, runtime backing via `:HashSet<T>` type annotation drives O(1) membership through Rust's std::HashSet). Concurrent does not — no runtime specialization, no corresponding `:Concurrent<T>` type, purely reader-intent. The enclosing context (the atom it's bound to, the field it's stored in) already carries the temporal-co-occurrence meaning. Concurrent rejected from project stdlib; kept as an audit record; userland may define it in their own namespace as a macro `(:my/vocab/Concurrent ...) → (Bundle ...)` if temporal framing matters to their application. FOUNDATION sweep: stdlib inventory, keyword-path examples, FOUNDATION data-structure examples all updated. 058-010 proposal gets REJECTED banner like 058-004, 058-025. INDEX per-proposal table and naming-aliases discussion updated. Resolves Hickey round-2 concern R1 complection #4. | 058 |
 | 2026-04-18 | **Container constructors renamed to Rust's names; `get` unified.** Three related changes. (1) `Map` → `HashMap`, `Array` → `Vec`, `Set` → `HashSet` — wat UpperCase constructor, `:Type<...>` annotation, and Rust runtime backing now share one name per concept (consistent with the Rust-primitive type decision — `:f64` not `:Scalar`, `:bool` not `:Bool`). `Map` is dropped as a name (it's overloaded with the higher-order function). (2) `get` is unified across all three containers with signature `(get container locator) -> :Option<Holon>`. HashMap: hash lookup by key, O(1) avg. Vec: direct index by `:usize`, O(1). HashSet: hash membership, returns `(Some x)` on hit, `:None` on miss. Direct lookup through Rust's runtime backings — no "walk," no cosine, no cleanup. The AST describes what the container IS; the runtime materializes the efficient backing (HashMap / Vec / HashSet from std); `get` goes through that backing. (3) `nth` retired — `(get my-vec i)` replaces it. Set's "missing accessor" concern (Hickey round 2) dissolves — HashSet uses the same `get` as the other containers; returns the element on hit for confirmation/canonicalization. FOUNDATION's stdlib section, examples, and inventory updated. 058-016 repurposed for HashMap with rename banner; 058-026 for Vec; 058-027 for HashSet. INDEX updated. | 058 |
 | 2026-04-18 | **Capacity is observable; the runtime can guard.** Added a new subsection to Dimensionality ("Capacity is observable; the runtime can guard") that sharpens the "unguarded, the algebra doesn't throw errors" statement from before. The algebra's capacity bound IS physical, and the bound IS observable. Every Holon-producing operation has a local capacity cost = its number of Holon constituents (scalars don't count). `(Bundle (list a b c))` costs 3; `(Bind a b)` costs 2; `(Atom literal)` and `(Permute h k)` cost 1; `(Blend h1 h2 w1 w2)` costs 2; `(Orthogonalize a b)` and `(Resonance a b)` cost 2. ConditionalBind arity/cost deferred pending 058 scrutiny pass (analogous to the Difference/Subtract duplication finding). Once produced, a Holon is singular — it consumes 1 unit when used as input to further operations. Each frame checks independently, like stack frames in traditional programming. The runtime has four modes, set at deployment: `:silent` (research, user accepts degradation), `:warn` (development, log but continue), `:error` (default — catchable CapacityExceeded), `:abort` (production fail-closed). Capacity is exposed as first-class observables: `(frame-cost op)`, `(frame-budget)`, `(frame-fill holon)` — programs reason about their own envelope. Same pattern as Presence is Measurement applied to the substrate's own physics: the machine observes internal state as a scalar; the user's policy decides what to do. Five deployment knobs now: d, capacity-mode, L1, L2, L3. | 058 |
 | 2026-04-18 | **Type grammar locked to Rust-surface form; `:Any` and `:Null` removed.** Three related changes landed together as the honest-Rust-correspondence sweep. (1) `:Any` dropped from the grammar. It was an escape hatch ("I refuse to declare a type") that degrades the static-verification story. Every apparent use case has a principled replacement: `:Holon` for any algebra value, `:Union<T,U>` for heterogeneous primitives, parametric `T`/`K`/`V` for generics, typed pairs for engram libraries, parametric `eval`. (2) Parametric types adopt Rust-surface syntax as single-token keywords — `:List<T>`, `:HashMap<K,V>`, `:Option<T>`, `:Result<T,E>`, `:Pair<T,U>`, `:Union<T,U,V>`, and the function type `:fn(T,U)->R` with parens + arrow (matching Rust's `fn(T, U) -> R` exactly). No parenthesized parametric-application form (`(:List :T)` retired); no internal colons; no internal whitespace. The `:` is Lisp's quote — one at the start, the whole expression is a single keyword token. Tokenizer tracks bracket depth across three pairs — `()`, `[]`, `<>` — and ends the keyword at whitespace or an unmatched closer. (3) `:Null` removed. Rust has no null; wat has no null. Absence is `:Option<T>` (enum with `:None` and `(Some value)` variants); unit is `:()`; structural absence is a form simply not being present. `(Atom null)` removed as a valid atom literal — atoms take string/int/float/bool/keyword only. Sweep applied to FOUNDATION's type grammar section, Atom literal spec, example signatures (Candle, Event, clamp, add-two, demo). Enum declaration for `:wat/std/Option<T>` replaces the earlier Union<Null,T> alias. Companion proposals (058-030, 058-028, 058-029, 058-013, 058-014, 058-016, 058-024, 058-026, 058-027, 058-029, HYPOTHETICAL, RUST-INTERPRETATION) swept in the same pass. | 058 |

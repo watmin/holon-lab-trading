@@ -86,7 +86,7 @@ New named compositions:
 23. **058-015-amplify** — `Blend(x, y, 1, s)`, scaled emphasis.
 24. **058-019-subtract** — `Blend(x, y, 1, -1)`, removal framing (sibling to Difference with different reader intent).
 25. **058-020-flip** — `Blend(x, y, 1, -2)`, linear inversion.
-26. **058-010-concurrent** — Bundle alias with temporal-co-occurrence intent.
+26. **058-010-concurrent** — **REJECTED** (2026-04-18). Redundant with Bundle; no runtime specialization. Enclosing context carries the temporal meaning. Kept as audit record. Userland may define it as a macro if needed.
 27. **058-011-then** — binary directed temporal relation.
 28. **058-012-chain** — Bundle of pairwise Thens.
 29. **058-013-ngram** — n-wise adjacency, generalizing Chain.
@@ -158,7 +158,7 @@ Shows which proposals must resolve before which others. Arrows flow from prerequ
                    ├─> 058-017 (Log)      ├─> all need Thermometer 058-023
                    └─> 058-018 (Circular) ┘
 
-   058-003 (Bundle sig) ──> 058-010 (Concurrent)
+   [058-010 Concurrent REJECTED — redundant with Bundle]
                          ──> 058-027 (HashSet)
 
    058-022 (Permute) ──> 058-009 (Sequential reframing)
@@ -210,7 +210,7 @@ Shows which proposals must resolve before which others. Arrows flow from prerequ
 | 007 | ConditionalBind | CORE | new | 3-arg gated binding |
 | 008 | Linear | STDLIB | reframing | Blend over two Thermometer anchors |
 | 009 | Sequential | STDLIB | reframing | End grandfathered variant; Bundle of Permutes |
-| 010 | Concurrent | STDLIB | new alias | Bundle with temporal-intent |
+| 010 | Concurrent | REJECTED | — | Bundle alias with no runtime specialization; enclosing context carries temporal meaning. Userland macro if desired. |
 | 011 | Then | STDLIB | new | Binary directed pair |
 | 012 | Chain | STDLIB | new | Bundle of pairwise Thens |
 | 013 | Ngram | STDLIB | new | n-wise adjacency |
@@ -258,8 +258,8 @@ If these three land cleanly, the remaining 27 proposals resolve with mechanical 
 
 Specific points where designer judgment is load-bearing:
 
-- **Naming aliases.** Bundle aliases: Bundle (primitive), Concurrent (temporal-co-occurrence intent), HashSet (data-structure intent — Rust name). HashMap and Vec are Bundle-of-Bind compositions with Rust-surface names. Is this the right granularity, or is there name bloat? Hickey round-2 flagged Concurrent vs. HashSet as a policy question — pick one alias or none.
-- **Cache canonicalization.** Do stdlib calls share cache entries with their expanded form, or keep distinct names in the AST? Tooling-level decision that ripples across 058-008/017/018, 058-009, 058-010, 058-015, 058-019, 058-020, 058-024.
+- **Naming aliases — resolved 2026-04-18.** Kept: Bundle (primitive), HashSet (data-structure, Rust-surface name, runtime backing via `:HashSet<T>` type). Rejected: Concurrent (no runtime specialization beyond Bundle; userland can define it). HashMap and Vec are Bundle-of-Bind compositions with Rust-surface names and runtime backings.
+- **Cache canonicalization.** Do stdlib calls share cache entries with their expanded form, or keep distinct names in the AST? Resolved 2026-04-18 via defmacro: expansion runs at parse time BEFORE hashing, so `hash(AST) IS identity` — two source files differing only in macro aliases (e.g., `Unbind` vs `Bind`, `Subtract` vs `Blend(_,_,1,-1)`) produce the same canonical AST and same hash.
 - **`:Any` type escape hatch.** Was considered, rejected. Heterogeneous data uses named `:Union<T,U,V>` types; generic containers use parametric `T`/`K`/`V`; atom literals use `:AtomLiteral`. Resolved in the 2026-04-18 type-grammar sweep.
 - **Cryptographic primitive choice.** FOUNDATION mentions SHA-256 / BLAKE3 as options. Deployment choice, but worth naming at review.
 - **Name-collision policy under Model A.** Startup halt on collision — strict — is the recommendation. Confirm no exception cases.

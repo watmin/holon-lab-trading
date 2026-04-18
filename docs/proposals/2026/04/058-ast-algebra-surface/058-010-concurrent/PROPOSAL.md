@@ -1,7 +1,24 @@
 # 058-010: `Concurrent` — Bundle-Aliasing Stdlib Form
 
+> **STATUS: REJECTED from project stdlib** (2026-04-18)
+>
+> `Concurrent` expands to `Bundle` with no runtime difference. Its only distinction is reader-intent: "these things happen simultaneously." But the enclosing context — the atom it's bound to (`(Bind (Atom :observed-at-t1) (Bundle ...))`), the field it's stored in, the named function that produces it — already carries the temporal semantics. The form name is redundant with the context.
+>
+> Unlike `HashSet`, `Concurrent` has no corresponding `:Concurrent<T>` type annotation and no specialized runtime backing. It does not earn its place under the stricter Hickey-test ("does the name communicate something the reader doesn't already get from the context?").
+>
+> **Rejected from project stdlib. Kept as a userland-macro example.** A vocab module that specifically wants temporal-co-occurrence framing can define it in its own namespace:
+>
+> ```scheme
+> (defmacro (:my/vocab/Concurrent (xs :AST) -> :AST)
+>   `(Bundle ,xs))
+> ```
+>
+> Same mechanics. Users' namespace. Project stdlib stays lean.
+>
+> This proposal is kept in the record as an honest trace of the design process.
+
 **Scope:** algebra
-**Class:** STDLIB
+**Class:** REJECTED (originally STDLIB; rejected 2026-04-18 as redundant with Bundle in the absence of runtime specialization)
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
 
