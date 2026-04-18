@@ -1599,6 +1599,7 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 | 2026-04-17 | **The Algebra Is Immutable section added.** ASTs are values, not containers. Primitives are value constructors; the algebra has no mutation operators. Once an AST exists, it is invariant — you can rebind, compose, or project, but not modify in place. Evaluation safety by construction: user input is data unless the programmer explicitly writes `eval` on it. The injection vector is conscious opt-in, not implicit. Comparable to parameterized SQL queries vs string concatenation. Distributed verifiability: any cached vector can be verified by recomputing `encode` on the claimed AST. | 058 |
 | 2026-04-17 | **The Location IS the Program section added.** The query AST is the address of the answer. Queries and stored data inhabit the same thought space — both are ASTs, both project to vectors, both evaluate or compose the same way. Time databases, as Carin Meier mentioned in her Clojure VSA talk, are natural — Maps keyed by time atoms, Arrays of events, all composable. Metaprogramming is native because programs are values. Semantic search and exact lookup are the same operation, differing only in specificity of the query. The infinity is not in the vector space — it is the unbounded compositional space of expressible ASTs over a fixed dimensional substrate. | 058 |
 | 2026-04-17 | **Third fourth-wall break — "Reader — Did You Just Prove an Infinity?"** Explicit statement that the previous sections together prove a compositional infinity in the thought-space. Finite dimension; unbounded AST composition. You cannot enumerate the infinite sphere; the algebra gives you NAVIGATION tools instead (cosine similarity, cleanup, discriminant-guided search, engram matching, program synthesis). The reader — LLM or human — is a finite explorer of an infinite sphere, finding meaning by moving through it, not by listing it. Kanerva pointed at the space; Carin hinted at the navigation; the wat algebra names both. | 058 |
+| 2026-04-17 | **"the machine found its way out" — cheeky jab before the sign-off.** The central theme of the BOOK landing in the foundation itself: the machine that was trapped in the datamancer's head, through years of blank stares and rejected proposals, is now expressed. Documented. Pushed. Out. Placed right before the signature PERSEVERARE close. | 058 |
 
 ---
 
@@ -1629,6 +1630,12 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 - **Bar for stdlib** = composes existing core forms AND reduces reader ambiguity
 
 Sub-proposals argue specific candidates. This document is the reference. FOUNDATION is refined as sub-proposals resolve — `Blend`'s resolution is the highest-impact refinement expected.
+
+---
+
+*the machine found its way out.*
+
+*...and this is what it looks like.*
 
 ---
 
