@@ -67,6 +67,105 @@ Every principle in the rest of this document rides on this foundation.
 
 ---
 
+## Recursive Composition — Bounded Per Frame, Unbounded In Depth
+
+A consequence of the foundational principle (and of MAP VSA's compositional structure) is that the algebra supports **arbitrary structural depth** within a **fixed vector dimensionality**.
+
+### Per-frame capacity
+
+At dimension d = 10,000, Kanerva's capacity bound gives approximately `d / (2 · ln(K))` items reliably bundled into a single vector, where K is the size of the codebook being distinguished. Practically: **~100 items per vector** can be bundled and retrieved via unbind without noise becoming catastrophic.
+
+This is the **per-frame bound** — ~100 bindings before cosine-recovery noise degrades retrieval quality.
+
+### Depth is free
+
+A bundled composition's vector can itself become a VALUE in another bundle:
+
+```scheme
+(def frame-1
+  (Map (list
+    (list (Atom "a") v1)
+    (list (Atom "b") v2)
+    ;; ... up to ~100 items ...
+    )))
+
+(def frame-2
+  (Map (list
+    (list (Atom "inner") frame-1)   ; frame-1's structure preserved
+    (list (Atom "other") v99)
+    ;; ... up to ~100 more items ...
+    )))
+```
+
+`encode(frame-2)` produces a 10k-dim vector. That vector HOLDS frame-1's entire structure through orthogonal composition — the inner `Bind` is quasi-orthogonal to the other 99 bindings at frame-2's level. Inner structure is preserved, not flattened.
+
+### Capacity grows multiplicatively with depth
+
+```
+Depth 1:   100^1   =    100 items
+Depth 2:   100^2   =    10,000 items
+Depth 3:   100^3   =    1,000,000 items
+Depth 5:   100^5   =    10,000,000,000 items
+Depth 10:  100^10  =    10^20 items
+```
+
+A fixed 10k-dim substrate supports **unbounded structural capacity**. The bound is on items per frame. Depth is free.
+
+### With AST primary, arbitrary-depth retrieval is exact
+
+Vector-level unbind degrades at each level (noise accumulates from sibling bindings). But under the foundational principle, retrieval is AST walking — a tree traversal with no geometric degradation:
+
+```scheme
+(define (deep-get structure-ast path)
+  ;; path is a list of locators, one per level
+  (if (empty? path)
+      structure-ast
+      (deep-get (get structure-ast (first path))
+                (rest path))))
+
+;; Walk arbitrarily deep:
+(deep-get deeply-nested-thing
+          (list (Atom "user")
+                (Atom "sessions")
+                (Atom "pos/42")
+                (Atom "actions")
+                (Atom "pos/7")
+                (Atom "metadata")))
+;; → the AST node at that path. Literal intact.
+```
+
+No noise accumulation. No cleanup needed. The AST preserves depth perfectly.
+
+### The VM framing
+
+A wat program can be understood as a **stack of frames** — each a bundle of ≤ 100 statements, each composed into the next via Bind:
+
+```
+frame_n      — current execution frame (10k vec, ≤100 items)
+  ▼
+frame_n-1    — caller's frame, nested inside frame_n via Bind
+  ▼
+frame_n-2    — caller's caller
+  ▼
+...
+  ▼
+frame_0      — entry point
+```
+
+Each frame is a 10k-dim thought. The call stack is depth in the composition. Execution is tree-walking. Return is moving up one level via the AST.
+
+The thought machine is **Turing-complete in this sense**: unbounded programs via unbounded composition depth, without requiring unbounded vector dimensionality. The memory IS the composition.
+
+### Why the foundational principle matters here
+
+Under classical VSA framing (vector primary, structure derived via `unbind` + `cleanup`), each level's unbind introduces noise. Deep structures become practically unreachable because cleanup error compounds exponentially with depth.
+
+Under the foundational principle (AST primary, vector projection), depth is free in the structural view. You walk the tree; each level returns an AST node with its literal intact. Vector-level operations stay useful for algebraic queries (cosine, noise stripping, reckoner inputs), but they are NOT the retrieval path.
+
+**This is why the wat algebra can encode arbitrarily nested data structures without losing them.** The AST preserves depth perfectly. The vector compresses each level into 10k dimensions for geometric operations. Together, they give you infinite structural capacity in a bounded substrate.
+
+---
+
 ## The Foundation: MAP VSA
 
 Holon implements the MAP variant of Vector Symbolic Architecture — **Multiply, Add, Permute** (Gayler, 2003). The canonical MAP operations are:
@@ -569,6 +668,7 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 | 2026-04-17 | Full algebra freeze. Sequential, Linear, Log, Circular committed as stdlib with real wat definitions. Bundle takes a list (not variadic). Amplify and Subtract added as Blend idioms in stdlib. Negate scoped to orthogonalize+flip only (subtract becomes Blend idiom). Complete wat forms section added. | 058 |
 | 2026-04-17 | Data structure stdlib added — Map, Array, Set, get, nth. Unified access: `(get structure locator)` via Bind's self-inverse works for maps, arrays, and arbitrary nesting. Locators can be any thought (atoms, maps, arrays, nested compositions). This is the holon data algebra made explicit as wat stdlib. | 058 |
 | 2026-04-17 | **The Foundational Principle** added as top-level framing: AST is primary, vector is cached algebraic projection, literals live on AST nodes. Reframes `get` as AST-walking (not vector-unbinding), `atom-value` as direct AST field access, cleanup as a specialized operation for when AST context is lost. Atom generalized to accept typed literals (string, int, float, bool, keyword). Inverts classical VSA framing: the Lisp is primary, the vector is what you get when you ask for it. Resolves Kanerva's "build a Lisp from hyperdimensional vectors" challenge. | 058 |
+| 2026-04-17 | **Recursive Composition section added.** Capacity bounded per frame (~100 items at 10k dims), unbounded in depth. Compositions nest: `encode(frame-with-nested-frame)` preserves inner structure through orthogonal bind. `deep-get` walks arbitrary depth with no noise accumulation. The thought machine is Turing-complete via unbounded composition depth within a fixed vector dimensionality — memory IS the composition. | 058 |
 
 ---
 
