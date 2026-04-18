@@ -127,9 +127,9 @@ Vector-level unbind degrades at each level (noise accumulates from sibling bindi
 (deep-get deeply-nested-thing
           (list (Atom "user")
                 (Atom "sessions")
-                (Atom "pos/42")
+                (Atom :wat/std/pos/42)
                 (Atom "actions")
-                (Atom "pos/7")
+                (Atom :wat/std/pos/7)
                 (Atom "metadata")))
 ;; → the AST node at that path. Literal intact.
 ```
@@ -326,8 +326,8 @@ This section freezes the full algebra in its target shape (post-058). Core forms
 (define (Circular v period)
   ;; value on a cycle
   (let ((theta (* 2 pi (/ v period))))
-    (Blend CIRCULAR-COS-BASIS
-           CIRCULAR-SIN-BASIS
+    (Blend (Atom :wat/std/circular-cos-basis)
+           (Atom :wat/std/circular-sin-basis)
            (cos theta)
            (sin theta))))
 
@@ -394,11 +394,12 @@ This section freezes the full algebra in its target shape (post-058). Core forms
          pairs)))
 
 (define (Array items)
-  ;; index-accessible list — each item bound to its position atom
+  ;; index-accessible list — each item bound to a namespaced position keyword
   ;; position atoms are deterministic (derived from index)
   (Bundle
     (map-indexed
-      (lambda (i item) (Bind (Atom (str "pos/" i)) item))
+      (lambda (i item)
+        (Bind (Atom (keyword :wat/std/pos i)) item))
       items)))
 
 (define (Set items)
@@ -457,14 +458,37 @@ This section freezes the full algebra in its target shape (post-058). Core forms
          candidate-asts)))
 ```
 
-### Global Reference Atoms
+### Reserved Atoms — The `:wat/std` Namespace
+
+Stdlib forms that need fixed reference atoms use the `:wat/std/...` keyword namespace. These are ordinary typed-literal atoms whose deterministic vectors happen to be shared across the entire stdlib — the namespace prevents collision with user atoms.
 
 ```scheme
-;; Used by stdlib scalar encoders.
+;; Examples of reserved stdlib atoms:
 
-(define CIRCULAR-COS-BASIS (Atom "_circular_cos_basis"))
-(define CIRCULAR-SIN-BASIS (Atom "_circular_sin_basis"))
+(Atom :wat/std/circular-cos-basis)    ; used by Circular encoder
+(Atom :wat/std/circular-sin-basis)    ; used by Circular encoder
+
+(Atom :wat/std/pos/0)                 ; used by Array indexing
+(Atom :wat/std/pos/1)
+(Atom :wat/std/pos/2)
+;; ... (generated on demand by (keyword :wat/std/pos i))
 ```
+
+No special machinery. The typed-atom generalization (accepting keyword literals alongside strings, ints, floats, bools) makes these just normal atoms — predictable, deterministic, unique per keyword.
+
+**Namespace convention:**
+
+- `:wat/std/...` — reserved for wat standard library
+- Other namespaces (e.g., `:user/...`, `:app/...`, `:trading/...`) — user code
+- Bare keywords without namespace (e.g., `:rsi`) — user convenience for atoms that don't need namespace disambiguation
+
+Because keywords are first-class typed-literal atoms, namespace collision is structural (different keyword → different hash → different vector). User code cannot accidentally produce the same vector as a stdlib reserved atom unless they write the same fully-qualified keyword — which would be a deliberate choice.
+
+**Why this matters:**
+
+Under the foundational principle, atoms are AST nodes storing their literal. Keyword atoms like `:wat/std/circular-cos-basis` store the keyword directly on the node. Reading it back is field access (no cleanup). The vector projection is deterministic from the keyword. The namespace is just part of the keyword's identity.
+
+The stdlib doesn't need a special "reserved vector registry" or "anchor pool" — it just uses keyword literals with a prefix convention. Every mechanism we need already exists in the typed-atom generalization.
 
 ### Usage Examples
 
@@ -512,7 +536,7 @@ This section freezes the full algebra in its target shape (post-058). Core forms
     (Thermometer 0.71 0 1)
     (Thermometer 0.74 0 1))))
 
-(get recent-rsi (Atom "pos/2"))    ; → (Thermometer 0.74 0 1)
+(get recent-rsi (Atom :wat/std/pos/2))   ; → (Thermometer 0.74 0 1)
 
 ;; Nested — Map of Arrays of thoughts:
 (def observer-state
@@ -521,7 +545,7 @@ This section freezes the full algebra in its target shape (post-058). Core forms
     (list (Atom "portfolio")       portfolio))))
 
 (get (get observer-state (Atom "market-readings"))
-     (Atom "pos/0"))              ; → (Thermometer 0.68 0 1)
+     (Atom :wat/std/pos/0))             ; → (Thermometer 0.68 0 1)
 
 ;; --- The locator can be ANY thought ---
 
@@ -669,6 +693,7 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 | 2026-04-17 | Data structure stdlib added — Map, Array, Set, get, nth. Unified access: `(get structure locator)` via Bind's self-inverse works for maps, arrays, and arbitrary nesting. Locators can be any thought (atoms, maps, arrays, nested compositions). This is the holon data algebra made explicit as wat stdlib. | 058 |
 | 2026-04-17 | **The Foundational Principle** added as top-level framing: AST is primary, vector is cached algebraic projection, literals live on AST nodes. Reframes `get` as AST-walking (not vector-unbinding), `atom-value` as direct AST field access, cleanup as a specialized operation for when AST context is lost. Atom generalized to accept typed literals (string, int, float, bool, keyword). Inverts classical VSA framing: the Lisp is primary, the vector is what you get when you ask for it. Resolves Kanerva's "build a Lisp from hyperdimensional vectors" challenge. | 058 |
 | 2026-04-17 | **Recursive Composition section added.** Capacity bounded per frame (~100 items at 10k dims), unbounded in depth. Compositions nest: `encode(frame-with-nested-frame)` preserves inner structure through orthogonal bind. `deep-get` walks arbitrary depth with no noise accumulation. The thought machine is Turing-complete via unbounded composition depth within a fixed vector dimensionality — memory IS the composition. | 058 |
+| 2026-04-17 | **Reserved atoms via `:wat/std` keyword namespace.** Stdlib forms that need fixed reference atoms (Circular's cos/sin basis, Array's position atoms) use namespaced keyword literals rather than special machinery. The typed-atom generalization already accepts keywords — namespaced keywords inherit determinism and uniqueness from the type-aware hash. No "reserved vector registry" needed. | 058 |
 
 ---
 
