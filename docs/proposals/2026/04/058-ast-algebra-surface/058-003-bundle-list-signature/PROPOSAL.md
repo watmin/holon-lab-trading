@@ -110,6 +110,16 @@ Does this change any algebraic property?
 
 No. Bundle's semantics (element-wise sum + threshold, commutative over inputs) are unchanged. Only the surface form of the argument is clarified.
 
+### Algebraic properties of Bundle
+
+Under the algebra's ternary output space (FOUNDATION's "Output Space" section, `threshold(0) = 0`), Bundle is:
+
+- **Commutative**: `Bundle([a, b]) = Bundle([b, a])` — order does not matter.
+- **Associative**: `Bundle([a, b, c]) = Bundle([Bundle([a, b]), c]) = Bundle([a, Bundle([b, c])])`. This holds because `threshold(0) = 0` prevents the rounding drift that would otherwise break associativity at dimensions where `a + b = 0`.
+- **Identity element**: the all-zero vector. `Bundle([a, 0⃗]) = a`.
+
+These properties let Chain, Ngram, Sequential, and other list-operating stdlib forms compose cleanly at arbitrary nesting depth without accumulating representation error.
+
 ## Simplicity Question
 
 Is this simple or easy?

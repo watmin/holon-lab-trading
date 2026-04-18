@@ -44,11 +44,13 @@ Two thought arguments. No scalar parameters.
 
 ## Why This Earns Core Status
 
-**1. It introduces ternary output (zeros are semantic).**
+**1. It produces zeros by selection, not by arithmetic cancellation.**
 
-Bind, Bundle, Blend, Permute, Orthogonalize — all of these thread through `threshold(...)` and produce strictly bipolar `{-1, +1}` output. Resonance deliberately PRESERVES `0` as a third value, meaning "no information at this dimension." This is a categorical departure.
+Under the algebra's ternary output space (FOUNDATION's "Output Space" section, `threshold(0) = 0`), every core form can produce `0` at a dimension. What makes Resonance distinct is HOW it produces zeros: by per-dimension SELECTION based on sign-agreement between `v` and `ref`. Bind, Bundle, Blend, Orthogonalize produce zeros via arithmetic cancellation (contributions sum to 0); Resonance produces zeros via explicit gating ("these dimensions do not resonate").
 
-The zero means "this dimension doesn't contribute because the two vectors disagreed." Downstream operations (similarity, cleanup, further binding) must handle three-valued vectors. That is a genuine semantic extension.
+Both outcomes yield valid ternary vectors. But the operational semantics are categorically distinct — selection-based gating is not expressible as weighted arithmetic.
+
+The zero at a dimension means "this dimension carries no signal because `v` and `ref` disagreed there." Downstream operations (similarity, cleanup, further binding) interpret zeros as "no information" — same contract as zeros produced by any other core form.
 
 **2. Not cleanly expressible with current core forms.**
 
@@ -169,7 +171,7 @@ Mostly. Output is a vector in the same dimensional space. Similarity, bind, bund
 
 Is it a distinct source category?
 
-Yes — it is the first operation that produces ternary output. Categorically distinct from all other core forms.
+Yes. Under FOUNDATION's ternary output space, every core form CAN produce ternary output, but Resonance is the only form whose zeros come from explicit per-dimension SELECTION rather than arithmetic cancellation. Categorically distinct from all other core forms by mechanism, not by output kind.
 
 ## Simplicity Question
 
@@ -218,7 +220,7 @@ pub enum ThoughtAST {
 
 ## Questions for Designers
 
-1. **Ternary output as a supported kind.** Resonance is the first core form producing `{-1, 0, +1}` output. Do we formalize ternary vectors as a distinct kind in the algebra, or do we treat the zeros as "encoded-as-zero but still conceptually bipolar"? The former is cleaner categorically; the latter avoids cascading type changes.
+1. **Ternary output as a supported kind.** ~~Resonance is the first core form producing `{-1, 0, +1}` output.~~ RESOLVED by FOUNDATION's "Output Space — Ternary by Default" section: the algebra's output space is ternary across all core forms. Resonance produces zeros deliberately via selection; other forms (Bundle, Blend, Orthogonalize) produce zeros via arithmetic cancellation. All zero-producing mechanisms are first-class.
 
 2. **Should `Mask`/`Gate` be the primitive instead?** A more general `Mask(x, boolean-vector)` primitive would make Resonance stdlib. Is the right level of generality "sign-agreement masking" (Resonance, concrete) or "arbitrary masking" (Mask, more general)?
 

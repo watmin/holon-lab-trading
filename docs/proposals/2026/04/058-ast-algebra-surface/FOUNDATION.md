@@ -1279,8 +1279,8 @@ Now — on to the specific algebra.
 
 Holon implements the MAP variant of Vector Symbolic Architecture — **Multiply, Add, Permute** (Gayler, 2003). The canonical MAP operations are:
 
-- **Multiply** → `Bind` — element-wise multiplication of bipolar vectors, self-inverse
-- **Add** → `Bundle` — element-wise addition + threshold, commutative
+- **Multiply** → `Bind` — element-wise multiplication of vectors, self-inverse where both inputs are non-zero
+- **Add** → `Bundle` — element-wise addition + threshold, commutative and associative under ternary thresholding
 - **Permute** → `Permute` — circular dimension shift
 
 Plus the identity function that maps names to vectors:
@@ -1289,8 +1289,97 @@ Plus the identity function that maps names to vectors:
 
 These four are the **algebraic foundation**. Everything else in the algebra is either:
 - A SCALAR PRIMITIVE — does something MAP cannot (Thermometer, Blend)
-- A NEW OPERATION — a distinct algebraic action (Difference, Negate, Resonance, ConditionalBind)
+- A NEW OPERATION — a distinct algebraic action (Orthogonalize, Resonance, ConditionalBind, Cleanup)
 - A STDLIB COMPOSITION — a named pattern built from existing core forms
+
+---
+
+## The Output Space — Ternary by Default, Continuous When Needed
+
+The algebra's output vectors live in **`{-1, 0, +1}^d`** — **ternary**, not bipolar. This is a load-bearing property of the substrate and every discrete operation respects it.
+
+### The threshold rule
+
+Every discrete-output core form produces its vector by summing contributions and then thresholding. The threshold rule is:
+
+```
+threshold(x) =
+    +1   if x > 0
+     0   if x = 0
+    -1   if x < 0
+```
+
+**`threshold(0) = 0`**. Zero is a first-class "no information at this dimension" signal, not a convention-picked ±1. This choice is not optional; it is what makes the algebra associative and its invariants exact.
+
+### Why ternary (not bipolar)
+
+Two load-bearing properties fall out of ternary thresholding:
+
+**1. Bundle is associative.**
+
+For `x = +1, y = -1, z = -1`:
+- `Bundle([x,y,z]) = threshold(-1) = -1`
+- `Bundle([Bundle([x,y]), z]) = Bundle([threshold(0), -1]) = Bundle([0, -1]) = threshold(-1) = -1`
+
+Both routes produce `-1`. Associative. Under strict bipolar thresholding (where `threshold(0) = +1`), these would differ; under ternary thresholding, they agree. Bundle's associativity is a requirement for Chain, Ngram, and Sequential to compose cleanly at arbitrary nesting depth.
+
+**2. Orthogonalize's orthogonality is exact.**
+
+For degenerate `X = Y`, the projection coefficient is 1, so `X - Y = [0, 0, ..., 0]` and `threshold([0, ..., 0]) = [0, 0, ..., 0]`. The result dotted with `Y` is 0 — **exactly orthogonal**. Under bipolar thresholding this would be rounded to `±Y`, breaking the claim. Ternary preserves it.
+
+### Zero as "no information"
+
+A `0` at dimension `i` means "this position carries no signal." Zero does not participate in similarity (0 · anything = 0). Zero under Bind propagates: `0 * b = 0` — the dimension stays silent. Zero under Bundle contributes nothing to the sum.
+
+This is semantically meaningful. Many operations produce zeros deliberately:
+- `Resonance(v, ref)` zeros dimensions where `v` and `ref` disagree in sign.
+- `Orthogonalize(X, Y)` produces zeros where `X` and `Y` completely coincide.
+- `Bundle` can produce zeros when positive and negative contributions cancel.
+
+Downstream operations treating zero as "no information" keep the algebra internally consistent.
+
+### Bind's self-inverse law weakens on ternary
+
+Bipolar Bind is self-inverse because `b² = 1` for `b ∈ {-1, +1}`. On ternary, `b² ∈ {0, 1}`, so:
+
+```
+Bind(Bind(a, b), b) [i] = a[i] * b[i]²
+                       = a[i]    if b[i] ≠ 0
+                       = 0       if b[i] = 0
+```
+
+Decoding via Bind recovers `a` only at dimensions where the key `b` is non-zero. At zero dimensions, decode produces zero — which is correct, because those dimensions carried no binding signal. The qualifier should be stated as a law: **Bind is self-inverse on non-zero positions.**
+
+### Continuous output when the operation requires it
+
+Some operations do not threshold — they produce continuous-valued vectors with magnitude:
+
+- **Accumulators** — running sums, decaying averages, frequency-weighted vectors. Magnitude carries information about count or weight.
+- **Subspace residuals** — `OnlineSubspace.residual(v)` returns a vector whose magnitude represents the fraction of `v` not explained by the learned subspace. Thresholding would destroy the magnitude signal.
+- **Pre-threshold intermediates** — internally in some encoders, the sum is computed in floating point before the final threshold step.
+
+When magnitude matters, don't threshold. When symbolic {-1, 0, +1} output is what downstream operations need, threshold. The algebra supports both regimes; the user (or the operation's specification) chooses.
+
+### Relationship to cosine similarity
+
+Cosine similarity is defined for any real-valued vector. On ternary vectors, it behaves the same way it does on bipolar: positive values indicate alignment, negative indicate opposition, zero indicates orthogonality. The contribution from any dimension with `0` on either side is zero, which matches the "no information" semantics.
+
+This means similarity-based retrieval (`Cleanup`, engram matching, discriminant-guided search) works uniformly over ternary inputs — the zero entries simply don't vote.
+
+### Operation-by-operation summary
+
+| Form | Output space | Threshold applied? |
+|---|---|---|
+| `Atom(literal)` | `{-1, +1}^d` (or `{-1, 0, +1}^d` for sparse atoms) | implementation-dependent |
+| `Bind(a, b)` | `{-1, 0, +1}^d` | no threshold — elementwise product |
+| `Bundle(xs)` | `{-1, 0, +1}^d` | ternary threshold |
+| `Permute(v, k)` | preserves input space | no — dimension shuffle |
+| `Thermometer(value, min, max)` | `{-1, +1}^d` | yes — gradient encoding |
+| `Blend(a, b, w1, w2)` | `{-1, 0, +1}^d` | ternary threshold after weighted sum |
+| `Orthogonalize(X, Y)` | `{-1, 0, +1}^d` | ternary threshold after projection removal |
+| `Resonance(v, ref)` | `{-1, 0, +1}^d` | no threshold (selection, not sum) |
+| `ConditionalBind(a, b, gate)` | `{-1, 0, +1}^d` | no threshold (per-dimension select) |
+| `Cleanup(v, candidates)` | whatever the matched candidate is | no — retrieval, not computation |
 
 ---
 
@@ -2276,6 +2365,7 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 | 2026-04-18 | **User-defined types + keyword-path naming.** Extended the existing `struct`, `enum`, `newtype` forms with keyword-path names (`:my/namespace/MyType`) and typed fields (`[field : Type]`). Added `deftype` as the structural-alias form companion to newtype's nominal alias. User types usable anywhere built-in types are used — `(define (analyze [c : :project/market/Candle]) : Thought ...)`. Naming discipline extends to types the same way it extends to functions. | 058 |
 | 2026-04-18 | **Model A adopted — fully static loading at startup.** The wat-vm loads all code (both types and functions) at startup and freezes the symbol table before the main event loop begins. No dynamic function registration; no dynamic type registration; no runtime hot-reload. The Rust-runtime static-first model guides this choice — implementing an unbounded dynamic Lisp in Rust would duplicate effort and widen the attack surface unnecessarily. Dynamic thought COMPOSITION (building ASTs at runtime) remains fully supported. Dynamic code DEFINITION does not. `load` and `load-types` become unified startup operations, distinguished by what kind of content they carry. Override semantics simplify to one-name-one-definition, fixed after startup — name collisions halt the wat-vm at startup. | 058 |
 | 2026-04-18 | **Constrained eval at runtime.** Despite static loading, `eval` remains a first-class runtime primitive, but typed and constrained: an AST is evaluatable at runtime if every function called resolves to the static symbol table and every type used exists in the static type universe, with argument types matching signatures. Unknown symbols or type mismatches error before execution. This yields a safe `eval` — attackers cannot invoke arbitrary code, only functions the operator explicitly loaded at startup. Lambdas remain first-class runtime values (closures over the static environment). Distributed code delivery becomes managed-restart: signed wat files enter the startup manifest; the wat-vm restarts to include them; continues operation. Trust boundary is the startup phase, not per-call. | 058 |
+| 2026-04-18 | **The Output Space — Ternary by Default, Continuous When Needed.** Added in response to Beckman's review findings on Bundle non-associativity and Orthogonalize's orthogonality claim. The algebra operates over `{-1, 0, +1}^d`, not `{-1, +1}^d`. `threshold(0) = 0`. This is load-bearing: it makes Bundle associative (required for Chain/Ngram/Sequential composition at depth) and Orthogonalize's orthogonality claim EXACT (degenerate `X = Y` produces all-zero, dotted with Y = 0). Zero is a first-class "no information here" signal that propagates through Bind (0 · b = 0), Bundle (contributes 0 to sum), and cosine similarity (contributes 0 to dot and norm). Resonance is NOT "the first" ternary form — the algebra was always ternary; Resonance is the first form that produces zeros by selection rather than by arithmetic cancellation. Continuous floats remain available for operations that need magnitude (accumulators, subspace residuals); thresholding is chosen per operation, not globally mandated. Bind's self-inverse property holds exactly at non-zero positions; at zero positions decode returns zero (correctly — no binding signal was there). 058-003 (Bundle), 058-005 (Orthogonalize), 058-006 (Resonance) updated to reflect the clarification. | 058 |
 
 ---
 

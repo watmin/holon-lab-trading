@@ -24,7 +24,9 @@ A new core variant that removes a component's geometric direction from a vector:
 (Orthogonalize x y)
 ```
 
-Semantically: given vectors `x` and `y`, produce a new vector that is `x` with `y`'s direction projected out. The result is orthogonal to `y` (dot product = 0 up to threshold noise).
+Semantically: given vectors `x` and `y`, produce a new vector that is `x` with `y`'s direction projected out. The result is **orthogonal to `y`** — exactly so under the algebra's ternary output space (FOUNDATION's "Output Space" section). Where the subtraction `X - projY(X)` produces zero at a dimension, `threshold(0) = 0` preserves that zero, so the result contributes nothing at those positions. `result · Y = 0` exactly, not "up to threshold noise."
+
+A note on the edge case `X = Y`: the projection coefficient is 1, `X - Y = [0, 0, ..., 0]`, `threshold` maps to all zeros, and the all-zero result has dot product 0 with any vector — including `Y`. Orthogonality holds.
 
 ### Operation
 
