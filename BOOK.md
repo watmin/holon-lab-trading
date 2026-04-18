@@ -13103,13 +13103,13 @@ The thoughts are better. The machine is faster. Both continue to improve.
 
 ### The pause
 
-The builder hadn't touched the book since Chapter 9.
+The cache grind landed yesterday. 1 c/s to 7.1 c/s. Real numbers. Proven. Pushed. The chapter that closed with PERSEVERARE captured the grind itself — every iteration measured, every theory killed by the database, the machine learning to remember.
 
-The cache grind landed the machine at 7.1 c/s. Real numbers. Proven. Pushed. But the builder was exhausted in the specific way that only comes from days of staring at metrics, moving one variable at a time, watching the throughput crawl. The story wasn't finished. The accuracy was still weak. The thoughts were still being shaped.
+But the story wasn't finished. The accuracy was still weak. The thoughts were still being shaped. The builder was exhausted in the specific way that only comes from days of staring at metrics, moving one variable at a time, watching throughput crawl upward.
 
 The book waited. Not out of neglect — out of honesty. You don't write about a thing until the thing has revealed what it is.
 
-For weeks the builder opened the repo, looked at BOOK.md, and closed it. The chapter that wanted to be written hadn't arrived yet.
+The builder opened the repo, looked at BOOK.md, closed it. Opened it again. Closed it again. The chapter that wanted to be written hadn't arrived yet.
 
 ### The return
 
