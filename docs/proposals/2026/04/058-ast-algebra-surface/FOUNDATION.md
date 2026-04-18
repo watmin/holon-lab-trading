@@ -1097,9 +1097,9 @@ The distinction matters because atoms store their literal on the AST node:
 
 These are three different things. The type-aware hash gives them three different vectors. **Pick the type that matches the semantic, not the type that wraps the semantic.**
 
-### Reserved Keywords — The `:wat/std` Namespace
+### Reserved Keyword Naming Convention
 
-For references that ARE genuinely symbolic (no concrete literal form available), the stdlib uses keyword atoms in the `:wat/std/...` namespace:
+For references that ARE genuinely symbolic (no concrete literal form available), the stdlib uses keyword atoms with distinctive full names:
 
 ```scheme
 (Atom :wat/std/circular-cos-basis)    ; used by Circular encoder
@@ -1110,13 +1110,11 @@ These are TRULY symbolic — "the cos basis vector" has no natural integer or st
 
 Array position atoms are NOT in this category. Position 0 IS the integer 0. Use `(Atom 0)`, not `(Atom :pos/0)`.
 
-**Namespace convention for symbolic keywords:**
+**About slashes in keyword names.** The wat language does NOT have a namespace mechanism — no declare-namespace, no aliasing, no import/require. Slashes in keyword names are just characters; `:wat/std/circular-cos-basis` is a single keyword with the name `wat/std/circular-cos-basis`. The hash function sees the whole string. No structural meaning is attached to the slash beyond naming convention.
 
-- `:wat/std/...` — reserved for wat standard library
-- Other namespaces (e.g., `:user/...`, `:trading/...`) — user code
-- Bare keywords (e.g., `:rsi`) — user convenience when namespace disambiguation isn't needed
+The stdlib uses the `:wat/std/...` prefix as convention to make its reserved atoms distinctive and unlikely to collide with user atoms. User code is free to use its own distinctive prefixes (`:my-app/thing`, `:trading/rsi-extreme`) or short bare keywords (`:rsi`) where collision isn't a concern.
 
-Because keywords are a first-class literal type alongside strings, integers, floats, and booleans, there is no collision risk between `(Atom 0)` and `(Atom :pos/0)` — they hash with different type tags and produce different vectors.
+Because keywords are a first-class literal type alongside strings, integers, floats, and booleans, there is no collision risk between `(Atom 0)` and `(Atom :pos/0)` — they hash with different type tags and produce different vectors. Collision between different keyword names (`:foo` vs `:bar`) is the user's responsibility — pick distinctive names.
 
 ### Usage Examples
 
@@ -1321,7 +1319,7 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 | 2026-04-17 | Data structure stdlib added — Map, Array, Set, get, nth. Unified access: `(get structure locator)` via Bind's self-inverse works for maps, arrays, and arbitrary nesting. Locators can be any thought (atoms, maps, arrays, nested compositions). This is the holon data algebra made explicit as wat stdlib. | 058 |
 | 2026-04-17 | **The Foundational Principle** added as top-level framing: AST is primary, vector is cached algebraic projection, literals live on AST nodes. Reframes `get` as AST-walking (not vector-unbinding), `atom-value` as direct AST field access, cleanup as a specialized operation for when AST context is lost. Atom generalized to accept typed literals (string, int, float, bool, keyword). Inverts classical VSA framing: the Lisp is primary, the vector is what you get when you ask for it. Resolves Kanerva's "build a Lisp from hyperdimensional vectors" challenge. | 058 |
 | 2026-04-17 | **Recursive Composition section added.** Capacity bounded per frame (~100 items at 10k dims), unbounded in depth. Compositions nest: `encode(frame-with-nested-frame)` preserves inner structure through orthogonal bind. `deep-get` walks arbitrary depth with no noise accumulation. The thought machine is Turing-complete via unbounded composition depth within a fixed vector dimensionality — memory IS the composition. | 058 |
-| 2026-04-17 | **Reserved atoms via `:wat/std` keyword namespace.** Stdlib forms that need fixed reference atoms (Circular's cos/sin basis, Array's position atoms) use namespaced keyword literals rather than special machinery. The typed-atom generalization already accepts keywords — namespaced keywords inherit determinism and uniqueness from the type-aware hash. No "reserved vector registry" needed. | 058 |
+| 2026-04-17 | **Reserved keyword naming convention (`:wat/std/...`).** Stdlib forms that need fixed reference atoms (Circular's cos/sin basis) use keyword atoms with distinctive full names. No namespace MECHANISM — slashes in keyword names are just characters. The convention is a naming discipline: use distinctive full names to avoid collision. The typed-atom generalization already accepts keywords. No "reserved vector registry" needed. | 058 |
 | 2026-04-17 | **Atom literal type refinement.** `(Atom 0)` is a concrete integer atom, not a keyword. Array positions use concrete integers — position 0 IS the integer 0. Keywords like `:wat/std/circular-cos-basis` are reserved for TRULY symbolic references (names with no natural concrete form). Use the literal type that matches the semantic, not a keyword that wraps it. The type-aware hash keeps `(Atom 0)`, `(Atom "0")`, and `(Atom :pos/0)` all distinct. | 058 |
 | 2026-04-17 | **Programs ARE Thoughts section added.** A wat program is an AST; ASTs encode to vectors; therefore programs have vector projections. Evaluation is AST-walking. Programs can be stored in data structures, compared geometrically, retrieved from engram libraries, and generated from learned discriminants. Self-improvement becomes discriminant-guided program synthesis in hyperdimensional space. The wat machine is homoiconic at 10,000 dimensions. Kanerva's "build a Lisp from hyperdimensional vectors" challenge fully answered. | 058 |
 | 2026-04-17 | **The Vector Side section added.** Because programs are thoughts and thoughts have vectors, the full VSA algebra applies to programs. Noise stripping (OnlineSubspace, reject) reveals the signal — the distinctive part of a program beyond common boilerplate. Programs can be diffed (Difference), blended, amplified, transferred by analogy. Discriminant-guided program synthesis: decode the learned Grace-direction against a program codebook via cleanup. The wat machine runs programs, observes outcomes, learns, and generates new candidate programs through pure algebra — no gradient descent. The recursion that every holon application implicitly implements. | 058 |
