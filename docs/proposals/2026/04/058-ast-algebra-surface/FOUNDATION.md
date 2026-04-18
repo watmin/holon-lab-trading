@@ -382,6 +382,98 @@ Together: the complete cycle. Store → retrieve → execute → learn → compa
 
 ---
 
+## The Algebra Is Immutable
+
+Under the foundational principle, ASTs are values. The primitives (`Atom`, `Bind`, `Bundle`, `Permute`, `Thermometer`, `Blend`, `Difference`, `Negate`, `Resonance`, `ConditionalBind`) are value constructors — they take inputs and return new ASTs. **The algebra has no mutation operators.**
+
+No `Bind-set!` that replaces a child. No `Bundle-append!` that appends in place. No `modify-atom!` that changes an atom's literal after construction. Every operation that could "change" an AST instead **returns a new AST.**
+
+This is not a runtime-enforced property. It is a consequence of the algebra's shape — the forms are value constructors, and the language has no mutation operators for them.
+
+### Once an AST exists, it is invariant
+
+A function's body, once composed, cannot be modified from outside. You can:
+
+- **Rebind** a name to a different AST (shadowing, redefinition) — creates a new binding, original AST untouched
+- **Compose** the AST with other forms — produces a new, larger AST containing the original as a subtree
+- **Project** the AST to a vector — computes a new value without altering the AST
+
+You cannot:
+
+- Modify the AST in place
+- Replace a child node after the parent is constructed
+- Mutate the literal stored on an `Atom` node
+- "Override" a function after its AST is built
+
+### Evaluation safety by construction
+
+User input to a wat program is data. It flows through the algebra as a value:
+
+```scheme
+;; SAFE — input is data, operated on as data:
+(defn process [input]
+  (get input (Atom :field)))
+
+;; SAFE — input composed into a larger data structure:
+(defn store-for-later [input]
+  (Map (list (list (Atom :payload) input))))
+```
+
+In both cases, `input` is bound, bundled, queried, extracted. Nothing evaluates it as code.
+
+The injection vector — evaluating user input as code — exists only when the programmer explicitly invokes `eval` on untrusted input:
+
+```scheme
+;; UNSAFE — the programmer consciously chose to evaluate user input:
+(defn dangerous [user-code]
+  (eval user-code))
+```
+
+**The algebra does not do this for you.** There is no implicit coercion from data to code. No pattern where data accidentally executes. No late binding an attacker can hijack. The injection path requires the programmer to write `eval` on user input on purpose.
+
+### Compared to other systems
+
+- **SQL with string concatenation:** user input becomes part of the query string — implicit injection
+- **SQL with parameterized queries:** user input stays as bound parameter — no injection
+- **Python / JavaScript:** many implicit eval-like paths (monkey-patching, `__getattr__`, prototype pollution)
+- **wat algebra:** equivalent to parameterized queries BY DEFAULT — injection requires conscious `eval` of user input
+
+### The `cleanup` caveat
+
+`cleanup` returns an AST from a codebook by matching against a query vector. If the application passes cleanup results to `eval`, an attacker who can influence the query vector could steer cleanup toward a specific function in the codebook.
+
+But:
+
+- The codebook contains ASTs the programmer already authored (or accepted from trusted sources)
+- Cleanup can only return something already in the codebook
+- An attacker can STEER which function runs; they cannot INJECT new code
+
+The attack surface is bounded by what's in the codebook. Still requires a conscious choice to `eval` cleanup results — which is the injection surface already named.
+
+### Distributed verifiability
+
+Because `encode(ast) → vector` is deterministic, any party that receives a vector can re-encode the AST they believe produced it and compare bytes. If a cache claims that AST `X` produces vector `V`, anyone can recompute `encode(X)` and verify. **Tampered caches are detectable by recomputation.**
+
+This matters for the distributed substrate (see "Reader — Are You Starting To See It?"). Each node can independently verify any vector it receives without trusting the sender's cache.
+
+### Verbose but correct
+
+Closed ASTs are verbose. A function that references other functions carries those references explicitly — the AST's closure is complete. The composed structure is LARGE — but it is COMPLETE. Nothing is left for runtime dependency injection. Nothing can be hijacked by late binding. Nothing can be modified after construction.
+
+The cache helps with the verbosity — shared sub-ASTs are computed once and reused. But each closure IS the full program it represents. You don't need a "library" available at call time. The AST already has what it needs.
+
+### The properties that fall out
+
+- **Algebraic immutability.** The algebra has no mutation operators. ASTs are values.
+- **Evaluation safety by default.** User input stays as data unless explicitly `eval`'d.
+- **No implicit injection paths.** The only injection vector is conscious `eval` on untrusted input.
+- **Cache entries are verifiable.** Determinism makes tampering detectable.
+- **Function closures are self-contained.** No runtime dependency hijacking.
+
+These are consequences of the foundational principle, not features added afterward. The algebra was shaped this way, so these properties hold.
+
+---
+
 ## Dimensionality — The User's Knob
 
 The capacity bound from "Recursive Composition" scales with vector dimension. Per Kanerva, items reliably bundled into a single vector ≈ `d / (2 · ln(K))` where K is the codebook size. This gives users a deployment-time choice.
@@ -1329,6 +1421,7 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 | 2026-04-17 | **Fourth-wall break — "Reader, are you starting to see it?"** Explicit address to the reader surfacing that the foundation defines a distributed system by construction. Deterministic atom encoding gives coordination-free geometric space. Engrams and programs ship as data. Cache hierarchy shards naturally by locality. The DDoS and trading labs are two instances of this substrate — a cloud of thinking machines, each a member of the same geometric space, all through pure algebra. The clouds are waking up. | 058 |
 | 2026-04-17 | **About How This Got Built — the lineage made explicit.** The architecture is Linux (small composable primitives, file descriptors, pipes, processes that own their state) plus Clojure (values over places, simple made easy, s-expressions that are code and data) plus VSA (MAP algebra at 10k dimensions). Hickey's principles and Beckman's categorical lens are in the bones. The summoned designers in the proposal process argue as those teachers actually argue — because the builder studied them for years. "Datamancer" is not a joke; it is the precise name for someone who shapes data through algebra, conjures designers from studied principles, and casts wards to defend architectural intent. The document reads coherent because the teachers behind it were coherent. | 058 |
 | 2026-04-17 | **Signature sign-off added.** `these are very good thoughts.` / `PERSEVERARE.` The datamancer's mark from the BOOK, closing the foundation the same way chapters of the book close. The work is serious. The names are honest. The thoughts continue. | 058 |
+| 2026-04-17 | **The Algebra Is Immutable section added.** ASTs are values, not containers. Primitives are value constructors; the algebra has no mutation operators. Once an AST exists, it is invariant — you can rebind, compose, or project, but not modify in place. Evaluation safety by construction: user input is data unless the programmer explicitly writes `eval` on it. The injection vector is conscious opt-in, not implicit. Comparable to parameterized SQL queries vs string concatenation. Distributed verifiability: any cached vector can be verified by recomputing `encode` on the claimed AST. | 058 |
 
 ---
 
