@@ -7,6 +7,66 @@ This document is not a PROPOSAL. It does not require designer review. It is the 
 
 ---
 
+## The Foundational Principle
+
+**The AST is the primary representation. The vector is its cached algebraic projection. The literal lives on the AST node.**
+
+A thought expressed in wat exists in two equivalent forms:
+
+- **AST form** — the structural tree (`Atom`, `Bind`, `Bundle`, `Permute`, etc.). Every node carries the information it represents. Literals (strings, numbers, booleans, keywords) are stored directly on `Atom` nodes.
+
+- **Vector form** — the high-dimensional bipolar projection produced by `encode`. Deterministic — same AST always yields the same vector. Cached for reuse.
+
+These are not two different things. They are the same thought seen from two perspectives:
+
+- Use the AST for **structural operations** — walking, querying, `get`, reading literals, pattern matching.
+- Use the vector for **algebraic operations** — cosine similarity, `Bind`, `Bundle`, reckoner inputs, noise subspace residuals.
+
+`encode(ast)` projects AST → vector. The projection is one-way in the information-recovery sense (dense vector bundles produce noise on `unbind`), but the AST itself is never lost when you have it.
+
+### Implications
+
+**1. Literals are read from AST nodes, not recovered from vectors.**
+
+```scheme
+(atom-value (Atom 42))   → 42     ; reads the AST node's field
+(atom-value (Atom "x"))  → "x"
+(atom-value (Atom true)) → true
+```
+
+No cleanup. No codebook search. No cosine interpretation. The `Atom` AST node stores the literal. Reading it is field access.
+
+**2. `get` walks the AST, not the vector.**
+
+Given a Map AST and a key AST, find the matching pair and return its value AST. Vector-level unbind is a different operation, applicable when you have ONLY the vector (no AST context). For normal wat program operation, you always have the AST.
+
+**3. The VectorManager's cache is memoization, not a codebook.**
+
+It avoids recomputing `encode` for ASTs that have been seen. Same AST → same vector → reuse the cached result. The cache is an optimization inside the `encode` function, not a separate data structure that stores associations.
+
+**4. Cleanup is rarely needed.**
+
+The case where you have a bare vector without its AST is specialized — anomalous component analysis, discriminant decode against candidate atoms, interpreting a learned direction. For normal wat program operation, cleanup is never invoked because the AST is always available.
+
+**5. This inverts the classical VSA framing.**
+
+Most VSA systems treat the vector as primary and derive structure via `unbind` + `cleanup`. The wat algebra treats the AST as primary and derives the vector via `encode`. Same mathematics. Different ergonomics. Much cleaner programs.
+
+### Kanerva's Challenge, Resolved
+
+Carin Meier cited Kanerva's suggestion that one could build a Lisp from hyperdimensional vectors. The resolution:
+
+- Not "build a Lisp OUT OF vectors."
+- Instead: "build a Lisp whose ASTs have canonical vector projections."
+- The Lisp stays a Lisp. The vector is what you get when you ask for it.
+- Code is data. Data has literals. Literals live on AST nodes.
+
+This document and the forms it defines are that Lisp. The vector algebra is how the Lisp's thoughts project into geometric space for measurement and learning. The AST is the primary representation throughout.
+
+Every principle in the rest of this document rides on this foundation.
+
+---
+
 ## The Foundation: MAP VSA
 
 Holon implements the MAP variant of Vector Symbolic Architecture — **Multiply, Add, Permute** (Gayler, 2003). The canonical MAP operations are:
@@ -99,8 +159,15 @@ This section freezes the full algebra in its target shape (post-058). Core forms
 ```scheme
 ;; --- MAP canonical ---
 
-(Atom name)
-;; deterministic bipolar vector from hash(name)
+(Atom literal)
+;; AST node storing a literal (string, int, float, bool, keyword, null).
+;; Literal is READ DIRECTLY from the AST node via (atom-value ...).
+;; Vector projection: deterministic bipolar vector from type-aware hash.
+;;   (Atom "foo")  — string literal
+;;   (Atom 42)     — integer literal
+;;   (Atom 1.6)    — float literal
+;;   (Atom true)   — boolean literal
+;; Type-aware hash ensures (Atom 1) ≠ (Atom "1") ≠ (Atom 1.0)
 
 (Bind a b)
 ;; element-wise multiplication, self-inverse
@@ -240,17 +307,55 @@ This section freezes the full algebra in its target shape (post-058). Core forms
   ;; semantically Bundle, named for reader clarity
   (Bundle items))
 
-(define (get structure locator)
-  ;; unified access for any Bind-based structure
-  ;; Bind is self-inverse: (Bind (Bind k v) k) = v
-  ;; works for Map with semantic keys, Array with position atoms,
-  ;; any nested combination, and for any kind of locator thought
-  (Bind structure locator))
+(define (get structure-ast locator-ast)
+  ;; AST-walking access — the primary case
+  ;; structure-ast is a Map / Array / nested combination (wat AST)
+  ;; locator-ast is whatever thought identifies the target
+  ;;
+  ;; Walks the AST, finds the matching entry, returns the value AST.
+  ;; No vector operation is performed. The literal stays on its AST node.
+  (cond
+    ((map? structure-ast)
+     (find-value-by-key (pairs structure-ast) locator-ast))
+    ((array? structure-ast)
+     (nth (items structure-ast) (pos-atom-index locator-ast)))
+    ;; ... other structural forms
+    ))
 
-(define (nth sequential-thought i)
-  ;; Permute-based index access for Sequential-encoded thoughts
-  ;; distinct from (get Array ...) — different encoding, different inverse
-  (Permute sequential-thought (- 0 i)))
+(define (nth sequential-ast i)
+  ;; AST indexing for Sequential or Array forms
+  ;; Returns the i-th child AST directly.
+  (list-ref (children sequential-ast) i))
+
+(define (atom-value atom-ast)
+  ;; Read the literal stored on an Atom AST node.
+  ;; No cleanup. No codebook. No cosine. Just field access.
+  (literal-field atom-ast))
+
+;; --- Vector-level unbind (different operation, specialized cases) ---
+
+(define (unbind-vector map-vector key-vector)
+  ;; For when you have ONLY vectors (no AST context):
+  ;;   - noise subspace residual
+  ;;   - reckoner's learned discriminant
+  ;;   - cross-system vector exchange
+  ;;
+  ;; Produces a noisy vector that approximates the value vector.
+  ;; Pair with cleanup against a candidate set for interpretation.
+  (Bind map-vector key-vector))
+
+(define (cleanup noisy-vector candidate-asts)
+  ;; Find the AST whose encoding most closely matches the noisy vector.
+  ;; Used in specialized cases:
+  ;;   - anomaly attribution / surprise fingerprint
+  ;;   - discriminant decode
+  ;;   - interpreting a learned direction against candidate atoms
+  ;;
+  ;; NOT used for normal structural get — that's AST walking.
+  (argmax
+    (map (lambda (candidate)
+           (cosine noisy-vector (encode candidate)))
+         candidate-asts)))
 ```
 
 ### Global Reference Atoms
@@ -463,6 +568,7 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 | 2026-04-17 | Added MAP VSA foundation section. Reclassified `Log` as stdlib. Flagged `Linear` and `Circular` as provisional-core pending `Blend` resolution. | 058 |
 | 2026-04-17 | Full algebra freeze. Sequential, Linear, Log, Circular committed as stdlib with real wat definitions. Bundle takes a list (not variadic). Amplify and Subtract added as Blend idioms in stdlib. Negate scoped to orthogonalize+flip only (subtract becomes Blend idiom). Complete wat forms section added. | 058 |
 | 2026-04-17 | Data structure stdlib added — Map, Array, Set, get, nth. Unified access: `(get structure locator)` via Bind's self-inverse works for maps, arrays, and arbitrary nesting. Locators can be any thought (atoms, maps, arrays, nested compositions). This is the holon data algebra made explicit as wat stdlib. | 058 |
+| 2026-04-17 | **The Foundational Principle** added as top-level framing: AST is primary, vector is cached algebraic projection, literals live on AST nodes. Reframes `get` as AST-walking (not vector-unbinding), `atom-value` as direct AST field access, cleanup as a specialized operation for when AST context is lost. Atom generalized to accept typed literals (string, int, float, bool, keyword). Inverts classical VSA framing: the Lisp is primary, the vector is what you get when you ask for it. Resolves Kanerva's "build a Lisp from hyperdimensional vectors" challenge. | 058 |
 
 ---
 
