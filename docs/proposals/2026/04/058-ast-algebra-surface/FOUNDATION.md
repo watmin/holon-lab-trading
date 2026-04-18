@@ -1396,12 +1396,32 @@ holon-lab-trading/src (Rust)
       The encoder evaluates HolonAST trees into vectors.
       Cache keys on HolonAST structural hash.
 
-wat/std/holons.wat (or similar)
-  └── Stdlib composition functions.
-      Each function takes arguments and produces a HolonAST built from
-      existing core variants.
-      No Rust changes required to add a stdlib function.
+wat/std/
+  └── Stdlib composition macros — ONE FILE PER FORM.
+      wat/std/Subtract.wat    ;; :wat/std/Subtract
+      wat/std/Amplify.wat     ;; :wat/std/Amplify
+      wat/std/Chain.wat       ;; :wat/std/Chain
+      wat/std/Ngram.wat       ;; :wat/std/Ngram
+      wat/std/Analogy.wat     ;; :wat/std/Analogy
+      wat/std/HashMap.wat     ;; :wat/std/HashMap
+      wat/std/Vec.wat         ;; :wat/std/Vec
+      wat/std/HashSet.wat     ;; :wat/std/HashSet
+      wat/std/Log.wat         ;; :wat/std/Log
+      wat/std/Circular.wat    ;; :wat/std/Circular
+      wat/std/Sequential.wat  ;; :wat/std/Sequential
+      wat/std/Flip.wat        ;; :wat/std/Flip
+      ... and so on, one file per stdlib form.
+
+      Each file is a single `defmacro` (or `define` for non-macro helpers
+      like `get` / `atom-value`) whose keyword-path name matches the file
+      name. The Rust wat-vm binary compiles them in via per-file `load`
+      calls in its startup manifest. Users add their own stdlib the same
+      way under their own directories (wat/alice/math/clamp.wat, etc.).
 ```
+
+**Keyword path = file path.** `:wat/std/Subtract` lives at `wat/std/Subtract.wat`. No translation. No manifest of exports to maintain. Cryptographic identity is per-file: signing `wat/std/Subtract.wat` signs exactly that form's body. Growth is additive: new form = new file, no edits elsewhere. `ls wat/std/` IS the stdlib inventory.
+
+User code follows the same discipline: `:alice/math/clamp` lives at `wat/alice/math/clamp.wat` (under the project's wat root). The file path under `wat/` mirrors the keyword-path segments after the initial `:`. Cross-project distribution is a tarball of `wat/` directories with signatures per file.
 
 ---
 
@@ -2373,12 +2393,13 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 | 2026-04-18 | **FOUNDATION split (Phase 2) — surgical trims of MIXED subsections.** Six speculative subsections moved from FOUNDATION to VISION: (1) Recursive Composition's "The VM framing" — holon-stack-as-call-stack, Turing-completeness-via-composition. (2) Programs ARE Holons: "Programs generated from learned directions" block, "Kanerva's challenge, fully answered", "What this makes the wat machine" (homoiconic-at-10k-dimensions), "The recursion closes" (self-improvement through program synthesis). (3) Vector Side's "Discriminant-guided program synthesis" + "Self-reference without paradox". (4) Cache Is Working Memory's "The cache is part of the thinking" + "Why this matters for the foundation" (cognitive-architecture framing). (5) Engram Caches's "The engram LRU" + "Prefetching via eigenvalue pre-filter" (L3/L4 implementation speculation). (6) Engram Caches's "The complete memory hierarchy" (five-tier framing) + "Deployment: five knobs now" (includes unbuilt L3 engram knob). Load-bearing claims preserved in FOUNDATION at each cut: engrams-are-holons, cache-is-working-memory (L1/L2 contract, deployment parameters), programs-are-holons, Implications-for-the-algebra, Why-this-matters-for-058. FOUNDATION shrinks 2508 → 2337 lines (−171). VISION grows 332 → 514 lines (+182 for the moved content). Content preserved verbatim; nothing lost. | 058 |
 | 2026-04-18 | **Naming Discipline consolidation.** Hickey queue item resolved. The no-namespace-mechanism policy was stated load-bearing in TWO places — `### The three layers, one naming discipline` (inside "Two Cores") and `**About slashes in keyword names.**` (inside "Atom Literal Types") — with slightly different framings that a reviewer had to reconcile. New top-level section `## Naming Discipline — Keyword Paths, No Mechanism` inserted between "Where Each Lives" and "Criterion for Core Forms" as the **single canonical statement** of the policy. It now covers: the no-mechanism claim; the keyword-path convention for all four naming positions (language core, algebra core, stdlib, user); what this is NOT (explicitly: not Clojure `ns`, not Rust `mod use`, not Python `import as`, not any declare-before-use system); collision detection at startup loads (Model A); reserved prefixes `:wat/lang/...`, `:wat/algebra/...`, `:wat/std/...`; type-tagged hashing keeping `(Atom 0)` distinct from `(Atom :pos/0)`; and why this choice (matches hash identity, matches static loading, matches Rust, keeps language surface small). The two former policy sites collapse to one-sentence pointers at the new canonical section. Other scattered usage references (`:alice/math/clamp` in examples, etc.) remain — they demonstrate the policy without restating it. | 058 |
 | 2026-04-18 | **Redefinition mode + eval-never-mutates invariant.** Two related additions to "The Algebra Is Immutable." (1) New subsection `### Redefinition mode — opt-in startup knob`: a deployment knob in the same tier as `d`, `capacity-mode`, `L1`, `L2`. `:strict` (default) halts startup on name collision; `:allow-redef` is an opt-in mode where the user explicitly accepts that later startup loads replace earlier ones, with each replacement logged (not silent). The mode is chosen at wat-vm startup, not per-file or per-definition. For authors who intentionally override stdlib behavior during development. (2) New property #4 in Constrained eval: **eval cannot register or replace any definition — ever, regardless of mode.** `define`, `defmacro`, `struct`, `enum`, `newtype`, `typealias`, and `load` forms in a submitted AST are refused by eval. The `redef-mode` knob governs startup; eval has no redefinition surface at all. An attacker who supplies a malicious AST cannot register a new function, replace an existing function, shadow a macro, or add a type — only invoke functions the operator explicitly loaded at startup. "What this gives us" summary updated to state both: the symbol table lifecycle (with mode-dependent collision behavior), and the eval invariant that no symbol-table mutation is ever possible through eval. | 058 |
+| 2026-04-18 | **Stdlib location resolved: one file per form.** Datamancer's call on FOUNDATION Open Question #1 — "feels honest." Each stdlib macro (or helper) lives at `wat/std/<Name>.wat`; the keyword path `:wat/std/<Name>` is the file path under `wat/`. No multi-form aggregate file, no manifest of exports to maintain. Cryptographic identity is per-file: signing `wat/std/Subtract.wat` signs exactly that form's body; editing Chain doesn't move Subtract's hash. Growth is additive (new form = new file, no edits elsewhere). `ls wat/std/` IS the stdlib inventory. User code follows the same discipline — `:alice/math/clamp` at `wat/alice/math/clamp.wat`. The Rust wat-vm binary compiles each in via per-file `(load ...)` calls in its startup manifest; cross-project distribution is a tarball of `wat/` directories with signatures per file. "Where Each Lives" updated to list every stdlib form at its own path. Same pattern as 058 itself (one proposal per directory). Matches the keyword-path naming discipline consolidated earlier: file-path and keyword-path are the same identifier. | 058 |
 
 ---
 
 ## Open Questions
 
-1. **Stdlib location.** Wat functions for stdlib live where? `wat/std/holons.wat`? A new file per form? A single file for all holon-algebra stdlib?
+1. ~~**Stdlib location.**~~ **RESOLVED.** One file per stdlib form. `:wat/std/Subtract` lives at `wat/std/Subtract.wat`; `:wat/std/Chain` at `wat/std/Chain.wat`; `:wat/std/HashMap` at `wat/std/HashMap.wat`. Keyword-path IS file-path. Matches the per-form cryptographic-identity story (signing one file signs one form's body; editing Chain doesn't move Subtract's hash), makes growth purely additive (new form = new file), and makes `ls wat/std/` the stdlib inventory. No manifest file to keep in sync. Same pattern as 058 itself (one proposal per directory). See "Where Each Lives" for the updated directory layout.
 
 2. **Stdlib optimization path.** If a stdlib form is frequently used and its wat-level construction becomes a bottleneck, is there a pattern for promoting it to a Rust-side helper function (still producing AST from existing variants) without making it a core variant?
 
