@@ -13350,6 +13350,84 @@ The sessions where the foundation landed have a signature now. If you ever want 
 
 ---
 
+### The first program
+
+Late in the session, after the two-cores distinction landed in FOUNDATION, the builder proposed the inaugural program. The exchange that produced it is worth preserving verbatim, because it shows how a first program gets written when the algebra is real: proposed, corrected against the substrate, refined.
+
+The builder:
+
+> i think our first program ought to be correct....
+>
+> ```scheme
+> (defn :watmin/hello-world (name)
+>   (Sequential (list "hello" name))
+> ```
+>
+> yes?
+
+The machine:
+
+> Yes — a first program is right. The datamancer's `hello-world` is a fitting inaugural thought.
+>
+> Three corrections before it ships:
+>
+> **1. Types required** — we just made them core.
+> **2. String literals need `Atom` wrapping** — `"hello"` is a string; `Sequential` takes Thoughts. `(Atom "hello")` lifts the literal into the algebra.
+> **3. Return type** — every `defn` declares what it produces.
+>
+> Corrected:
+>
+> ```scheme
+> (defn :watmin/hello-world [[name :Atom]] :Thought
+>   (Sequential (list (Atom "hello") name)))
+> ```
+>
+> Reading it:
+> - `:watmin/hello-world` — namespaced name. Keyword path. No collision with anyone else's `hello-world`.
+> - `[[name :Atom]]` — one parameter, typed. `name` is an Atom (carries a string, keyword, int, whatever literal).
+> - `:Thought` — returns a thought vector.
+> - Body: Sequential-bundle "hello" with the name's atom. Position-encoded so `(hello-world :alice)` and `(hello-world :bob)` produce distinguishable vectors, and so `(hello-world "hello")` (recursion-adjacent) is distinguishable from `(hello-world "world")`.
+>
+> Two small alternatives worth noting:
+>
+> **`Then` instead of `Sequential`** for the 2-arg case — `Then` is the binary specialization:
+>
+> ```scheme
+> (defn :watmin/hello-world [[name :Atom]] :Thought
+>   (Then (Atom "hello") name))
+> ```
+>
+> Same vector, cleaner reader intent for pairs. Either works. Your call.
+>
+> **Accept a raw string and lift internally**:
+>
+> ```scheme
+> (defn :watmin/hello-world [[name :String]] :Thought
+>   (Then (Atom "hello") (Atom name)))
+> ```
+>
+> Requires `:String` as a type (raw string, not yet an Atom). Shifts the Atom-wrapping inside the function so callers pass naked strings. Matches how most programming languages do `hello(name)`.
+>
+> Of the three, my lean: **`:Atom` parameter with Sequential** (your original shape, just typed and Atom-wrapped). Keeps the thought-algebra framing explicit at the call site; forces the caller to lift their raw input into the algebra before entering the stdlib. Clean boundary.
+>
+> Want me to land this as the first wat program alongside the proposals — `wat/programs/watmin/hello-world.wat` — so the machine has a canonical example to execute once `defn` ships?
+
+What this exchange shows:
+
+1. **A natural proposal is almost-right.** The builder's first draft had the shape but missed three algebra constraints — typing, atom-wrapping, return type. None of these are optional in the machine we built; all of them were argued into FOUNDATION hours earlier. A first program written without them would not compile, would not sign, would not evaluate.
+
+2. **The corrections are not nitpicks.** Each one points at a load-bearing decision in FOUNDATION. Types are the bridge to Rust eval. Atom-wrapping makes literals live on AST nodes (the foundational principle). Return types let the evaluator verify the body. The three corrections together are the ENTIRE two-cores story made concrete in five lines of code.
+
+3. **The alternatives expose the design surface.** Three versions of the same function show different tradeoffs: Sequential vs Then is a reader-intent choice; `:Atom` vs `:String` is a call-site-ergonomics choice. Neither is wrong; they are ways of asking what the function is FOR.
+
+4. **The question at the end keeps the author in charge.** The machine offers; the builder decides. The exchange ends with an open question, not a fait accompli. That is the collaboration shape.
+
+The first program will ship once `defn`, `lambda`, and the type system are proposed (058-028 through 058-030) and the wat evaluator grows the matching support. When it runs — when `(hello-world :watmin)` produces a vector that can be cleaned up to recover "hello" and `:watmin`, in order, from the inaugural thought — the machine will have said its first words.
+
+*this discussion is the show, verbatim.*
+
+---
+
 *these are very good thoughts.*
 
 **PERSEVERARE.**
