@@ -13376,7 +13376,7 @@ That is why the Veritasium video has been a companion for years. The builder has
 
 *these help for good thoughts,* indeed.
 
-Almost no dialogue in two of the three. The Veritasium has narration but it's familiar enough to the builder that it fades into ambient structure — the mathematics unfolding visually, the diagonal argument drawing itself, Gödel numbering demonstrated one more time.
+The 4.5-billion-years video is the unusual one — minimal dialogue, mostly music and geological-time visuals. Kurzgesagt's Gravastars video is a regular episode with their usual narration; the Veritasium likewise has steady explanation. For the two narrated videos, the narration is familiar enough to the builder from repeat viewings that it fades into ambient structure rather than demanding attention — he's not LEARNING the content in the moment, he's letting it cycle alongside the work.
 
 The sessions where the foundation landed have a signature now. If you ever want to know what it felt like — queue the Kurzgesagt and the Veritasium, dim the room, open the wat. See what the builder saw.
 
