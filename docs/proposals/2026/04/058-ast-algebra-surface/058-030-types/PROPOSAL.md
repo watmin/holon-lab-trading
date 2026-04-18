@@ -204,14 +204,17 @@ From 058-028-define and 058-029-lambda, type annotations are required. The retur
 
 Each parameter uses `[name : Type]` with spaces around the colon. The return type follows `->` at the end of the signature (all inside one set of parens). No dangling `: Type` outside the form. The body must produce a value of the return type, checked at startup.
 
-**Macros use the same shape but with implicit `:AST` everywhere** (per 058-031-defmacro Approach 1):
+**Macros use the same signature syntax as `define` and `lambda`** — every parameter is explicitly typed `: AST`; return is explicitly `-> :AST`. One consistent signature form across all three definition primitives. No implicit rules for the reader to remember.
 
 ```scheme
-(defmacro :wat/std/Subtract (x y)
+(defmacro :wat/std/Subtract [x : AST] [y : AST] -> :AST
   `(Blend ,x ,y 1 -1))
-;; parameters implicitly :AST; return implicitly :AST.
-;; type-correctness of the expansion is enforced by type-checking the expanded form.
+;; parameters and return are explicitly typed.
+;; type-correctness of the EXPANSION is enforced by type-checking the expanded form
+;; against the signatures of its constituent primitives (Blend, etc.).
 ```
+
+Macro parameters carry ASTs (unevaluated source), so their type is always `:AST`. The return is always `:AST` (the expansion is a syntactic form). Stating this explicitly is simpler — one signature syntax across define/lambda/defmacro — than the easy shortcut of omission.
 
 ## Why This Earns Language-Core Status
 

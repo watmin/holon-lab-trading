@@ -71,8 +71,10 @@ All three have the same hash. `hash(AST) IS identity` holds. The reader clarity 
 
 ## Shape
 
+`defmacro` uses the **same signature syntax as `define` and `lambda`** — every parameter typed, return type explicit. For macros, all parameters are `:AST` (unevaluated source ASTs) and the return is `:AST` (the replacement AST). Stating this explicitly keeps one fold across all definition forms. Omission would be easier (less to write) but not simpler (introduces a special rule for macros that differs from define/lambda).
+
 ```scheme
-(defmacro :namespace/macro-name (param1 param2 ...)
+(defmacro :namespace/macro-name [param1 : AST] [param2 : AST] ... -> :AST
   expansion-body)
 ```
 
@@ -88,7 +90,7 @@ The `expansion-body` is a Lisp expression. It can use:
 **Pure alias — Concurrent:**
 
 ```scheme
-(defmacro :wat/std/Concurrent (xs)
+(defmacro :wat/std/Concurrent [xs : AST] -> :AST
   `(Bundle ,xs))
 
 ;; User writes:
@@ -101,7 +103,7 @@ The `expansion-body` is a Lisp expression. It can use:
 **Transforming — Subtract:**
 
 ```scheme
-(defmacro :wat/std/Subtract (x y)
+(defmacro :wat/std/Subtract [x : AST] [y : AST] -> :AST
   `(Blend ,x ,y 1 -1))
 
 ;; User writes:
@@ -114,7 +116,7 @@ The `expansion-body` is a Lisp expression. It can use:
 **Parameterized — Amplify:**
 
 ```scheme
-(defmacro :wat/std/Amplify (x y s)
+(defmacro :wat/std/Amplify [x : AST] [y : AST] [s : AST] -> :AST
   `(Blend ,x ,y 1 ,s))
 
 ;; User writes:
@@ -127,7 +129,7 @@ The `expansion-body` is a Lisp expression. It can use:
 **Higher-order expansion — Chain:**
 
 ```scheme
-(defmacro :wat/std/Chain (thoughts)
+(defmacro :wat/std/Chain [thoughts : AST] -> :AST
   `(Bundle (pairwise-map Then ,thoughts)))
 
 ;; User writes:
@@ -138,7 +140,8 @@ The `expansion-body` is a Lisp expression. It can use:
 
 ;; which further expands Then:
 (Bundle (pairwise-map
-         (lambda (a b) (Bundle (list a (Permute b 1))))
+         (lambda ([a : Thought] [b : Thought] -> :Thought)
+           (Bundle (list a (Permute b 1))))
          [a b c d]))
 ```
 

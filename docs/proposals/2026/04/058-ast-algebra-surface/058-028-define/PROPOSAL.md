@@ -16,7 +16,7 @@
 ### Shape
 
 ```scheme
-(define (:namespace/function-name [param1 : Type1] [param2 : Type2] ...) : ReturnType
+(define (:namespace/function-name [param1 : Type1] [param2 : Type2] ... -> :ReturnType)
   body-expression)
 ```
 
@@ -24,13 +24,13 @@ Four positions:
 
 1. **Name** — a keyword-path value (`:watmin/hello-world`, `:wat/std/Difference`, `:alice/math/clamp`)
 2. **Parameter list** — `[name : Type]` pairs with spaces around the colon
-3. **Return type** — `: Type` after the parameter list
+3. **Return type** — `-> :Type` inside the parameter list's closing paren
 4. **Body** — an expression that evaluates to the return type
 
 ### Example
 
 ```scheme
-(define (:wat/std/Difference [a : Thought] [b : Thought]) : Thought
+(define (:wat/std/Difference [a : Thought] [b : Thought] -> :Thought)
   (Blend a b 1 -1))
 ```
 
@@ -98,7 +98,7 @@ Anyone can claim any prefix; `:bob/math/clamp` coexists with `:alice/math/clamp`
 
 Current wat LANGUAGE.md already lists `define` as a host Lisp form. This proposal extends the existing form:
 - Old: `(define (name args) body)` with optional type hints
-- New: `(define (:namespace/name [arg : Type] ...) : ReturnType body)` with required types and keyword-path names
+- New: `(define (:namespace/name [arg : Type] ... -> :ReturnType) body)` with required types and keyword-path names
 
 Backwards-incompatible in principle, but the pre-058 wat has no deployed stdlib authored with the old syntax — this is the polish pass before stdlib gets written.
 
@@ -123,17 +123,17 @@ With `define` available:
 
 ```
 wat/std/blends.wat:
-  (define (:wat/std/Difference [a : Thought] [b : Thought]) : Thought
+  (define (:wat/std/Difference [a : Thought] [b : Thought] -> :Thought)
     (Blend a b 1 -1))
-  (define (:wat/std/Amplify [x : Thought] [y : Thought] [s : Scalar]) : Thought
+  (define (:wat/std/Amplify [x : Thought] [y : Thought] [s : f64] -> :Thought)
     (Blend x y 1 s))
-  (define (:wat/std/Subtract [x : Thought] [y : Thought]) : Thought
+  (define (:wat/std/Subtract [x : Thought] [y : Thought] -> :Thought)
     (Blend x y 1 -1))
 
 wat/std/sequences.wat:
-  (define (:wat/std/Then [a : Thought] [b : Thought]) : Thought
+  (define (:wat/std/Then [a : Thought] [b : Thought] -> :Thought)
     (Bundle (list a (Permute b 1))))
-  (define (:wat/std/Chain [thoughts : (:List :Thought)]) : Thought
+  (define (:wat/std/Chain [thoughts : (:List :Thought)] -> :Thought)
     (Bundle (pairwise-map :wat/std/Then thoughts)))
 ```
 
@@ -155,7 +155,7 @@ Nothing prevents a user from writing `(define (:wat/std/Difference ...) ...)` in
 
 **3. Generic types.**
 
-This proposal uses concrete types (`:Thought`, `:Atom`, `:Scalar`). For higher-order stdlib (`map`, `reduce`, `filter`), generics are needed: `(define (:wat/std/map [f : (:Function :T :U)] [xs : (:List :T)]) : (:List :U) ...)`.
+This proposal uses concrete types (`:Thought`, `:Atom`, `:f64`). For higher-order stdlib (`map`, `reduce`, `filter`), generics are needed: `(define (:wat/std/map [f : (:Function :T -> :U)] [xs : (:List :T)] -> (:List :U)) ...)`.
 
 **Counter:** generics are part of 058-030-types. This proposal uses concrete types initially; generics layer on without changing `define`'s shape.
 
@@ -245,7 +245,7 @@ Once `define` is implemented (alongside `lambda` per 058-029 and types per 058-0
 7. **First wat program.** From BOOK's "The first program" section:
 
    ```scheme
-   (define (:watmin/hello-world [name : Atom]) : Thought
+   (define (:watmin/hello-world [name : Atom] -> :Thought)
      (Sequential (list (Atom "hello") name)))
    ```
 

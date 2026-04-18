@@ -16,29 +16,29 @@
 ### Shape
 
 ```scheme
-(lambda ([param1 : Type1] [param2 : Type2] ...) : ReturnType
+(lambda ([param1 : Type1] [param2 : Type2] ... -> :ReturnType)
   body-expression)
 ```
 
 Three positions:
 
 1. **Parameter list** — `[name : Type]` pairs (same syntax as `define`)
-2. **Return type** — `: Type` after the parameter list
+2. **Return type** — `-> :Type` inside the parameter list's closing paren
 3. **Body** — an expression that evaluates to the return type
 
 ### Example
 
 ```scheme
 ;; An anonymous function that doubles a Thought's emphasis against another:
-(lambda ([x : Thought] [y : Thought]) : Thought
+(lambda ([x : Thought] [y : Thought] -> :Thought)
   (Amplify x y 2))
 
 ;; Used inside map:
-(map (lambda ([t : Thought]) : Thought (Permute t 1))
+(map (lambda ([t : Thought] -> :Thought) (Permute t 1))
      my-thoughts)
 
 ;; Stored in a local variable (but still anonymous — no symbol-table entry):
-(let ([doubler (lambda ([x : Scalar]) : Scalar (* x 2))])
+(let ([doubler (lambda ([x : f64] -> :f64) (* x 2))])
   (doubler 21))
 ```
 
