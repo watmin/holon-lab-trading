@@ -2382,13 +2382,15 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 
 2. **Stdlib optimization path.** If a stdlib form is frequently used and its wat-level construction becomes a bottleneck, is there a pattern for promoting it to a Rust-side helper function (still producing AST from existing variants) without making it a core variant?
 
-3. **Enum-retained stdlib policy.** Linear, Log, Circular, Sequential are semantically stdlib but currently live in the HolonAST enum. Decision needed: remove the variants, keep them as fast paths, or deprecate them. This is an implementation concern outside FOUNDATION's scope, but the policy should be set.
+3. ~~**Enum-retained stdlib policy.**~~ **RESOLVED.** 058-008 Linear REJECTED (redundant with Thermometer under the 3-arity signature). Log (058-017), Circular (058-018), Sequential (058-009) are stdlib macros that expand to core compositions at parse time. 058-031 defmacro runs the expansion before hashing. The enum variants for Linear/Log/Circular/Sequential can be removed from HolonAST; the stdlib lives entirely as wat macros over the nine core variants (Atom, Bind, Bundle, Permute, Thermometer, Blend, Orthogonalize, Resonance, ConditionalBind).
 
-4. **Cache behavior for stdlib.** A wat stdlib function produces a HolonAST that is cached on its expanded shape. If two semantically-equivalent stdlib calls produce identical expansions, they share a cache entry. If the wat STORES the stdlib call as an unexpanded form, canonicalization is needed.
+4. ~~**Cache behavior for stdlib.**~~ **RESOLVED** by 058-031. Macros expand at parse time, BEFORE hashing. The canonical (post-expansion) AST is what hashes and caches. Two source files that differ only in macro aliases — `(Subtract a b)` vs `(Blend a b 1 -1)`, `(Concurrent xs)` vs `(Bundle xs)` — produce the same expanded AST and the same hash. No separate canonicalization layer needed; the expansion pass IS the canonicalization.
 
-5. **Ngram's `n` parameter handling.** `Ngram` takes a numeric argument alongside the list. Its expansion depends on `n`. Decide whether `n` participates in the cache key or whether different `n` values always produce different AST structures.
+5. ~~**Ngram's `n` parameter handling.**~~ **RESOLVED.** `Ngram` with different `n` produces a different expanded AST (different Sequential-encoded windows bundled). The integer `n` lives in the structural form after macro expansion, so the cache key naturally distinguishes `(Ngram 2 xs)` from `(Ngram 3 xs)`. No special handling needed beyond the generic expansion + hash pipeline.
 
 6. **The MAP canonical set completeness.** Beyond `Atom`, `Bind`, `Bundle`, `Permute`, `Thermometer`, and `Blend`, are there any other scalar encoding operations that cannot be expressed via these? If `Blend` handles all scalar-weighted combinations and `Thermometer` handles gradient construction, is that the complete set of scalar primitives?
+
+7. **`:allow-redef` expression syntax.** The `### Redefinition mode — opt-in startup knob` subsection names the mode but does not specify how a user expresses intentional redefinition. Options: (a) wat-vm CLI flag only (whole-run opt-in); (b) a per-file pragma like `;; #redefines :some/ns/name`; (c) a directive in the startup manifest that names the redefining files explicitly; (d) a `(redefines :name ...)` form at the definition site. The mode's PRESENCE is load-bearing; the EXPRESSION is implementation. Defer to a future proposal when the first production use case arrives.
 
 ---
 
