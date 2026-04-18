@@ -519,6 +519,26 @@ This is much simpler than the content-addressed runtime dance: no hash-keyed loo
 
 Macros are handled by the startup pipeline: macro definitions register at build/startup time; macro invocations in the source code expand to their transformed ASTs before the functions they produce enter the symbol table. Users who want runtime metaprogramming get it via dynamic holon composition (see below) — not via runtime macro redefinition.
 
+### Redefinition mode — opt-in startup knob
+
+The default one-name-one-definition rule halts startup on any collision. For production this is the correct stance: two conflicting definitions of a name means something is wrong, and the wat-vm should refuse to run rather than silently pick one.
+
+But some development scenarios want the opposite — `wat/my/clamp.wat` redefines a name that `wat/wat/std/clamp.wat` already provided, **on purpose,** because the user is overriding stdlib behavior. Under strict default this halts. That's the right default; it's not the only useful stance.
+
+A deployment knob, in the same tier as `d`, `capacity-mode`, `L1`, `L2`:
+
+```
+redef-mode = :strict         ;; default — name collisions halt startup
+           | :allow-redef    ;; opt-in — allow the user to redefine
+```
+
+- **`:strict`** (default) — one name, one definition. Collisions halt. Matches the production trust model. Nothing is ever ambiguous.
+- **`:allow-redef`** — opt-in. The user explicitly accepts that one of the loads will replace the other. The wat-vm loads each file in order, and later definitions replace earlier ones. **Replacement is logged** (not silent); the log entry names both sources.
+
+`:allow-redef` is for the author who WANTS to override. It is not for accident. The mode is chosen at wat-vm startup, same tier as every other deployment knob — it's not a per-file or per-definition flag. If you turned it on, you turned it on for the whole run.
+
+**This knob does NOT affect runtime eval.** Even in `:allow-redef`, runtime eval has no ability to redefine anything (see next section). The knob governs startup loads; runtime is governed by eval's structural invariants.
+
 ### Constrained eval at runtime
 
 **The wat-vm does support `eval`, but under strict constraints.** A runtime `eval` walks an AST and executes it — with the requirement that every function called and every type used must already be in the static symbol table.
@@ -542,13 +562,14 @@ Macros are handled by the startup pipeline: macro definitions register at build/
 ;; => a bipolar vector representing the dynamically composed holon.
 ```
 
-Three properties define constrained eval:
+Four properties define constrained eval:
 
 1. **Every function called must be in the static symbol table.** If `composed` references an unknown function, eval errors before executing anything.
 2. **Every type used must be in the static type universe.** Unknown types produce errors.
 3. **Every argument's type must match the called function's signature.** Type checks happen before body execution.
+4. **Eval cannot register or replace any definition.** If the submitted AST contains a `define`, `defmacro`, `struct`, `enum`, `newtype`, `typealias`, or `load` form — eval refuses. This is **not a mode; it is an invariant.** Every deployment — `:strict` or `:allow-redef` — has the same eval behavior: no symbol-table mutation, period. The `redef-mode` knob governs startup; eval has no redefinition surface at all.
 
-This is a SAFE `eval`. An attacker who supplies a malicious AST cannot invoke arbitrary code — only functions the operator explicitly loaded at startup. The attack surface is the symbol table's contents, which are frozen and verified. Nothing the attacker can send changes what functions are runnable.
+This is a SAFE `eval`. An attacker who supplies a malicious AST cannot invoke arbitrary code — only functions the operator explicitly loaded at startup. They cannot register a new function, cannot replace an existing function, cannot shadow a macro, cannot add a type. The attack surface is the symbol table's contents, which are frozen and verified. Nothing the attacker can send changes what functions are runnable.
 
 **Typical uses for constrained eval:**
 
@@ -572,9 +593,9 @@ A lambda is a VALUE, not a symbol-table entry. When it goes out of scope, it's c
 The full trust model, simplified:
 
 - **One verification phase: startup.** All loads succeed (with whatever cryptographic mode each requested) or the wat-vm refuses to start. No partial-state recovery.
-- **One symbol table lifecycle: fixed after startup.** One name, one definition. Predictable, fast, simple.
-- **One runtime code surface: constrained eval over the static universe.** Dynamic holon composition works. Dynamic code DEFINITION does not.
-- **One attack surface: the startup loads.** If the wat-vm starts, every piece of executable code is trusted. An attacker can't inject new code at runtime; at best they can supply crafted input data that constrained eval can handle safely.
+- **One symbol table lifecycle: fixed after startup.** One name, one definition — in `:strict` mode, collisions halt; in `:allow-redef` mode, the user explicitly accepts that later startup loads replace earlier ones (logged, not silent). Either way, the table is fixed once startup completes.
+- **One runtime code surface: constrained eval over the static universe.** Dynamic holon composition works. Dynamic code DEFINITION does not. Eval never mutates the symbol table, regardless of mode.
+- **One attack surface: the startup loads.** If the wat-vm starts, every piece of executable code is trusted. An attacker can't inject new code at runtime, can't replace an existing definition via eval, can't redefine a macro. At best they can supply crafted input data that constrained eval can handle safely.
 - **One model for receiving code over the wire.** A signed wat file is received → wat-vm restarts with it included in startup → continues operation. Managed restart, not live patch. Simple, verifiable, operationally mature.
 
 This is the property that matters: **the running wat-vm is a trusted environment.** Whatever is executing inside it has been verified at startup. The algebra does its work — dynamic composition, encoding, presence measurement, navigation — over a fixed and fully-vetted set of forms. That's exactly the substrate you want for systems where the cost of running the wrong code is high.
@@ -2351,6 +2372,7 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 | 2026-04-18 | **FOUNDATION split into load-bearing + VISION.md (Phase 1).** Hickey queue item resolved. FOUNDATION carried speculative/aspirational framings interleaved with load-bearing contracts; reviewers could not cleanly tell what they were being asked to accept. Phase 1 wholesale-moves four clearly-speculative sections into VISION.md: (1) "The Location IS the Program" — metaprogramming framing, query-as-address, semantic-search = exact-lookup; (2) "Reader — Did You Just Prove an Infinity?" — fourth-wall break, holographic reframing, NP-hard framing; (3) "Reader — Are You Starting To See It?" — clouds waking up, distributed cognition substrate; (4) "About How This Got Built" — lineage (Linux + Clojure + MAP VSA), datamancer framing, teachers-who-shaped-the-builder. FOUNDATION preamble updated to declare scope and cross-reference VISION. Content preserved verbatim; nothing lost. Phase 2 (follow-up commit) will do surgical trims of MIXED subsections — VM framing in Recursive Composition, discriminant-guided program synthesis in Programs ARE Holons, self-reference-without-paradox in Vector Side, L3/L4 engram speculation + five-tier hierarchy in Engram Caches, cognitive-architecture framing in Cache Is Working Memory. | 058 |
 | 2026-04-18 | **FOUNDATION split (Phase 2) — surgical trims of MIXED subsections.** Six speculative subsections moved from FOUNDATION to VISION: (1) Recursive Composition's "The VM framing" — holon-stack-as-call-stack, Turing-completeness-via-composition. (2) Programs ARE Holons: "Programs generated from learned directions" block, "Kanerva's challenge, fully answered", "What this makes the wat machine" (homoiconic-at-10k-dimensions), "The recursion closes" (self-improvement through program synthesis). (3) Vector Side's "Discriminant-guided program synthesis" + "Self-reference without paradox". (4) Cache Is Working Memory's "The cache is part of the thinking" + "Why this matters for the foundation" (cognitive-architecture framing). (5) Engram Caches's "The engram LRU" + "Prefetching via eigenvalue pre-filter" (L3/L4 implementation speculation). (6) Engram Caches's "The complete memory hierarchy" (five-tier framing) + "Deployment: five knobs now" (includes unbuilt L3 engram knob). Load-bearing claims preserved in FOUNDATION at each cut: engrams-are-holons, cache-is-working-memory (L1/L2 contract, deployment parameters), programs-are-holons, Implications-for-the-algebra, Why-this-matters-for-058. FOUNDATION shrinks 2508 → 2337 lines (−171). VISION grows 332 → 514 lines (+182 for the moved content). Content preserved verbatim; nothing lost. | 058 |
 | 2026-04-18 | **Naming Discipline consolidation.** Hickey queue item resolved. The no-namespace-mechanism policy was stated load-bearing in TWO places — `### The three layers, one naming discipline` (inside "Two Cores") and `**About slashes in keyword names.**` (inside "Atom Literal Types") — with slightly different framings that a reviewer had to reconcile. New top-level section `## Naming Discipline — Keyword Paths, No Mechanism` inserted between "Where Each Lives" and "Criterion for Core Forms" as the **single canonical statement** of the policy. It now covers: the no-mechanism claim; the keyword-path convention for all four naming positions (language core, algebra core, stdlib, user); what this is NOT (explicitly: not Clojure `ns`, not Rust `mod use`, not Python `import as`, not any declare-before-use system); collision detection at startup loads (Model A); reserved prefixes `:wat/lang/...`, `:wat/algebra/...`, `:wat/std/...`; type-tagged hashing keeping `(Atom 0)` distinct from `(Atom :pos/0)`; and why this choice (matches hash identity, matches static loading, matches Rust, keeps language surface small). The two former policy sites collapse to one-sentence pointers at the new canonical section. Other scattered usage references (`:alice/math/clamp` in examples, etc.) remain — they demonstrate the policy without restating it. | 058 |
+| 2026-04-18 | **Redefinition mode + eval-never-mutates invariant.** Two related additions to "The Algebra Is Immutable." (1) New subsection `### Redefinition mode — opt-in startup knob`: a deployment knob in the same tier as `d`, `capacity-mode`, `L1`, `L2`. `:strict` (default) halts startup on name collision; `:allow-redef` is an opt-in mode where the user explicitly accepts that later startup loads replace earlier ones, with each replacement logged (not silent). The mode is chosen at wat-vm startup, not per-file or per-definition. For authors who intentionally override stdlib behavior during development. (2) New property #4 in Constrained eval: **eval cannot register or replace any definition — ever, regardless of mode.** `define`, `defmacro`, `struct`, `enum`, `newtype`, `typealias`, and `load` forms in a submitted AST are refused by eval. The `redef-mode` knob governs startup; eval has no redefinition surface at all. An attacker who supplies a malicious AST cannot register a new function, replace an existing function, shadow a macro, or add a type — only invoke functions the operator explicitly loaded at startup. "What this gives us" summary updated to state both: the symbol table lifecycle (with mode-dependent collision behavior), and the eval invariant that no symbol-table mutation is ever possible through eval. | 058 |
 
 ---
 
