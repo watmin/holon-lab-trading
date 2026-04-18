@@ -10,11 +10,11 @@
 A wat stdlib macro (per 058-031-defmacro) that encodes "a, then b" — a DIRECTED binary sequence:
 
 ```scheme
-(defmacro Then [a : AST] [b : AST] -> :AST
+(defmacro (Then (a :AST) (b :AST) -> :AST)
   `(Bundle (list ,a (Permute ,b 1))))
 ```
 
-The first thought passes through unchanged; the second is permuted by one step. The bundled result is a vector whose structure encodes "a comes first, b comes after." The permutation makes `(Then a b)` categorically distinct from `(Then b a)` — order matters. Expansion happens at parse time, so `hash(AST)` sees only the canonical Bundle-over-Permute form.
+The first holon passes through unchanged; the second is permuted by one step. The bundled result is a vector whose structure encodes "a comes first, b comes after." The permutation makes `(Then a b)` categorically distinct from `(Then b a)` — order matters. Expansion happens at parse time, so `hash(AST)` sees only the canonical Bundle-over-Permute form.
 
 ### Semantics
 
@@ -46,8 +46,8 @@ Chain is "a, then b, then c, then d" — a walk of Then operations over a list. 
 Having a named Then lets Chain and Ngram write:
 
 ```scheme
-(defmacro Chain [thoughts : AST] -> :AST
-  `(Bundle (pairwise-map Then ,thoughts)))
+(defmacro (Chain (holons :AST) -> :AST)
+  `(Bundle (pairwise-map Then ,holons)))
 ```
 
 Rather than inlining the permutation logic in each. Because `Then` is itself a macro, the expansion recurses — nested macros expand in turn until only algebra-core operations remain.
@@ -58,7 +58,7 @@ Rather than inlining the permutation logic in each. Because `Then` is itself a m
 
 **4. The expansion handles composition cleanly.**
 
-`(Then (Then a b) c)` expands to `(Bundle [a' b' c'])` where the outer structure captures that there are two stages. But temporal-chain semantics prefer FLAT walks — this is where Chain comes in (see 058-012). Then itself is the binary atom; Chain composes Then over arbitrary-length sequences.
+`(Then (Then a b) c)` expands to `(Bundle (list a' b' c'))` where the outer structure captures that there are two stages. But temporal-chain semantics prefer FLAT walks — this is where Chain comes in (see 058-012). Then itself is the binary atom; Chain composes Then over arbitrary-length sequences.
 
 ## Arguments Against
 
@@ -76,13 +76,13 @@ Could also be written as `(Bundle (Permute a 0) (Permute b 1))` — treat the fi
 
 **3. Is this just a special case of `Sequential`?**
 
-`(Sequential [a b])` with a 2-element list expands to `(Bundle [a (Permute b 1)])` — the SAME as `(Then a b)`. So Then is "Sequential specialized to two arguments."
+`(Sequential (list a b))` with a 2-element list expands to `(Bundle (list a (Permute b 1)))` — the SAME as `(Then a b)`. So Then is "Sequential specialized to two arguments."
 
 **Mitigation:** yes, and this is the point. Then communicates "binary pairwise temporal relation" semantically. Sequential communicates "positional encoding of an n-long list." Two different intents, same underlying mechanism at length 2. Keep both names; they serve different reader contexts.
 
 The relationship:
-- `(Then a b)` ≡ `(Sequential [a b])` at length 2
-- `(Chain [a b])` ≡ `(Then a b)` at length 2
+- `(Then a b)` ≡ `(Sequential (list a b))` at length 2
+- `(Chain (list a b))` ≡ `(Then a b)` at length 2
 - `(Sequential xs)` ≡ `(Chain xs)` ? (see 058-012 — they might be different)
 
 These equivalences at short lengths are natural; longer lengths reveal the distinct semantics.
@@ -97,8 +97,8 @@ These equivalences at short lengths are natural; longer lengths reveal the disti
 |---|---|---|---|---|
 | `Bundle(xs)` | CORE | list | Superposition | primitive |
 | `Concurrent(xs)` | STDLIB | list | Co-occurrence | `(Bundle xs)` |
-| `Sequential(xs)` | STDLIB | list | Positional encoding | `(Bundle [xs[i] permuted by i])` |
-| `Then(a, b)` | STDLIB (this) | 2 | Pairwise temporal | `(Bundle [a (Permute b 1)])` |
+| `Sequential(xs)` | STDLIB | list | Positional encoding | `(Bundle (list xs[i] permuted by i))` |
+| `Then(a, b)` | STDLIB (this) | 2 | Pairwise temporal | `(Bundle (list a (Permute b 1)))` |
 | `Chain(xs)` | STDLIB (058-012) | list | Pairwise-Then chain | `(Bundle (pairwise-map Then xs))` |
 | `Ngram(n, xs)` | STDLIB (058-013) | list, n | n-wise adjacency | `(Bundle (n-wise-map Then-like xs))` |
 
@@ -136,7 +136,7 @@ Yes — `(Bundle (list a (Permute b 1)))`. Named form is for reader clarity.
 
 ```scheme
 ;; wat/std/sequences.wat (or similar)
-(defmacro Then [a : AST] [b : AST] -> :AST
+(defmacro (Then (a :AST) (b :AST) -> :AST)
   `(Bundle (list ,a (Permute ,b 1))))
 ```
 
@@ -146,7 +146,7 @@ Registration is parse-time (per 058-031-defmacro): every `(Then ...)` invocation
 
 1. **Permutation count convention.** This proposal uses `(Permute b 1)`. Is 1 the right convention, or should it be a larger gap (e.g., 7, 13) for better dimensional decorrelation? Small permutations may not mix dimensions enough for downstream cleanup to distinguish positions. Should the stdlib form use a carefully-chosen constant, or always 1?
 
-2. **Relationship to `Sequential` at length 2.** `(Then a b) = (Sequential [a b])` if both use the same permutation scheme. Should they be enforced-equivalent at this length, or could their implementations diverge (different permutation choices)? Consistency seems valuable.
+2. **Relationship to `Sequential` at length 2.** `(Then a b) = (Sequential (list a b))` if both use the same permutation scheme. Should they be enforced-equivalent at this length, or could their implementations diverge (different permutation choices)? Consistency seems valuable.
 
 3. **Should Then also have a reverse form (`After(b, a) = Then(a, b)`)?** "A happens after B" is sometimes more natural than "B happens, then A." Same operation from the opposite reading. Worth a separate stdlib name, or too much alias proliferation?
 

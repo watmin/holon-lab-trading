@@ -48,13 +48,13 @@ Where:
 ### AST shape
 
 ```rust
-pub enum ThoughtAST {
+pub enum HolonAST {
     // ... existing variants ...
-    Orthogonalize(Arc<ThoughtAST>, Arc<ThoughtAST>),
+    Orthogonalize(Arc<HolonAST>, Arc<HolonAST>),
 }
 ```
 
-Two thought arguments. No scalar parameters in the AST itself — the projection coefficient is computed from the encoded vectors at evaluation time.
+Two holon arguments. No scalar parameters in the AST itself — the projection coefficient is computed from the encoded vectors at evaluation time.
 
 ## Why This Earns Core Status
 
@@ -66,7 +66,7 @@ This is a genuine difference in operational semantics:
 - `Blend`: weights provided by the programmer, independent of the vectors
 - `Orthogonalize`: weight DERIVED FROM the vectors at evaluation time
 
-If we widen Blend to accept expression-valued weights (computed from vectors), the two operations collapse — but that's a significant extension to Blend's semantics. At present, Blend takes f64 literals; Orthogonalize takes two thoughts and computes the internal coefficient.
+If we widen Blend to accept expression-valued weights (computed from vectors), the two operations collapse — but that's a significant extension to Blend's semantics. At present, Blend takes f64 literals; Orthogonalize takes two holons and computes the internal coefficient.
 
 **2. The operation is well-known and widely useful.**
 
@@ -104,7 +104,7 @@ For now, Blend takes f64 literals. Orthogonalize is either core, or Blend gets w
 
 **2. Arity and cache complexity.**
 
-`Orthogonalize` takes two thoughts. The encoder must compute both subvectors, then their inner products, then the projection. This is more work per encode than `Blend`'s simpler weighted sum. Cache invalidation is the same as any binary AST form.
+`Orthogonalize` takes two holons. The encoder must compute both subvectors, then their inner products, then the projection. This is more work per encode than `Blend`'s simpler weighted sum. Cache invalidation is the same as any binary AST form.
 
 Not a blocker, but worth naming.
 
@@ -184,12 +184,12 @@ pub fn orthogonalize(x: &Vector, y: &Vector) -> Vector {
 
 Two dot-product scans, then element-wise orthogonal computation. O(d) overall.
 
-**ThoughtAST changes:**
+**HolonAST changes:**
 
 ```rust
-pub enum ThoughtAST {
+pub enum HolonAST {
     // ... existing variants ...
-    Orthogonalize(Arc<ThoughtAST>, Arc<ThoughtAST>),
+    Orthogonalize(Arc<HolonAST>, Arc<HolonAST>),
 }
 ```
 

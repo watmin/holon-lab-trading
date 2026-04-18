@@ -11,7 +11,7 @@
 A wat stdlib macro (per 058-031-defmacro) that produces the classic VSA analogy completion:
 
 ```scheme
-(defmacro Analogy [a : AST] [b : AST] [c : AST] -> :AST
+(defmacro (Analogy (a :AST) (b :AST) (c :AST) -> :AST)
   `(Bundle (list ,c (Subtract ,b ,a))))
 ```
 
@@ -21,7 +21,7 @@ Expands to `c + (b - a)` — the classic "A is to B as C is to ?" vector arithme
 
 ### Semantics
 
-Given three thoughts forming the first three terms of an analogy (A, B, C), Analogy produces a thought that represents the FOURTH term — the completion. The vector-space intuition:
+Given three holons forming the first three terms of an analogy (A, B, C), Analogy produces a holon that represents the FOURTH term — the completion. The vector-space intuition:
 
 - The delta `B - A` captures the transformation from A to B.
 - Applying the same transformation to C: `C + (B - A)`.
@@ -68,7 +68,7 @@ If the algebra exposes `Bind`, `Bundle`, `Permute`, `Cleanup`, `Subtract`, `Anal
 **1. It's one line of code.**
 
 ```scheme
-(defmacro Analogy [a : AST] [b : AST] [c : AST] -> :AST
+(defmacro (Analogy (a :AST) (b :AST) (c :AST) -> :AST)
   `(Bundle (list ,c (Subtract ,b ,a))))
 ```
 
@@ -154,7 +154,7 @@ Yes — `(Bundle (list c (Subtract b a)))`, or directly `(Bundle (list c (Blend 
 
 ```scheme
 ;; wat/std/reasoning.wat (or similar)
-(defmacro Analogy [a : AST] [b : AST] [c : AST] -> :AST
+(defmacro (Analogy (a :AST) (b :AST) (c :AST) -> :AST)
   `(Bundle (list ,c (Subtract ,b ,a))))
 ```
 
@@ -169,7 +169,7 @@ Depends on `Bundle` (core), `Subtract` (stdlib macro, 058-019). Registered at pa
 3. **Should the stdlib also provide the four-term `AnalogyCleanup`?** A convenience form that runs cleanup against a candidate pool:
 
 ```scheme
-(defmacro AnalogyCleanup [a : AST] [b : AST] [c : AST] [candidates : AST] -> :AST
+(defmacro (AnalogyCleanup (a :AST) (b :AST) (c :AST) (candidates :AST) -> :AST)
   `(cleanup (Analogy ,a ,b ,c) ,candidates))
 ```
 

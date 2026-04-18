@@ -11,11 +11,11 @@
 A wat stdlib macro (per 058-031-defmacro) that encodes a LIST of events as pairwise transitions:
 
 ```scheme
-(defmacro Chain [thoughts : AST] -> :AST
-  `(Bundle (pairwise-map Then ,thoughts)))
+(defmacro (Chain (holons :AST) -> :AST)
+  `(Bundle (pairwise-map Then ,holons)))
 ```
 
-Where `pairwise-map` produces `(Then thoughts[0] thoughts[1])`, `(Then thoughts[1] thoughts[2])`, `(Then thoughts[2] thoughts[3])`, ... — a sliding window of Thens across adjacent pairs. Because `Then` (058-011) is itself a macro, the expansion recurses at parse time: the emitted `(Then a b)` nodes are rewritten to `(Bundle (list a (Permute b 1)))` in the same pass, so only algebra-core operations survive into the hashed AST.
+Where `pairwise-map` produces `(Then holons[0] holons[1])`, `(Then holons[1] holons[2])`, `(Then holons[2] holons[3])`, ... — a sliding window of Thens across adjacent pairs. Because `Then` (058-011) is itself a macro, the expansion recurses at parse time: the emitted `(Then a b)` nodes are rewritten to `(Bundle (list a (Permute b 1)))` in the same pass, so only algebra-core operations survive into the hashed AST.
 
 ### Semantics
 
@@ -25,15 +25,15 @@ Reader intent: "these things happened in sequence; the sequence itself is the en
 
 ## Example
 
-For `thoughts = [a, b, c, d]`:
+For `holons = (list a b c d)`:
 
 ```
-pairwise-map Then = [(Then a b), (Then b c), (Then c d)]
-                  = [(Bundle [a (Permute b 1)]),
-                     (Bundle [b (Permute c 1)]),
-                     (Bundle [c (Permute d 1)])]
+pairwise-map Then = (list (Then a b) (Then b c) (Then c d))
+                  = (list (Bundle (list a (Permute b 1)))
+                          (Bundle (list b (Permute c 1)))
+                          (Bundle (list c (Permute d 1))))
 
-Chain = (Bundle [(Then a b) (Then b c) (Then c d)])
+Chain = (Bundle (list (Then a b) (Then b c) (Then c d)))
 ```
 
 Three pairwise transitions, bundled into one vector. The resulting vector contains evidence of the TRANSITIONS, not the absolute positions.
@@ -42,7 +42,7 @@ Three pairwise transitions, bundled into one vector. The resulting vector contai
 
 **1. Its expansion uses only existing core/stdlib forms.** Bundle is core, Permute is core, Then is stdlib (058-011). Chain is a stdlib composition over stdlib and core primitives. Valid composition chain.
 
-**2. It reduces ambiguity for readers.** `(Chain [rsi-divergent price-rise volume-spike entry])` reads as "these four stages unfolded in order." Without the named form, the vocab code must write the explicit pairwise Then bundling, and readers must infer the intent.
+**2. It reduces ambiguity for readers.** `(Chain (list rsi-divergent price-rise volume-spike entry))` reads as "these four stages unfolded in order." Without the named form, the vocab code must write the explicit pairwise Then bundling, and readers must infer the intent.
 
 Both criteria met.
 
@@ -65,7 +65,7 @@ These are categorically different encodings for different uses:
 - Sequential: "the 3rd thing in this sequence was X"
 - Chain: "X was followed by Y somewhere in this sequence"
 
-Chain is superior for invariance to starting offset — a chain `[a, b, c]` and its shifted version in a longer sequence `[x, a, b, c, y]` share transitions `a→b` and `b→c`. Sequential doesn't share this invariance.
+Chain is superior for invariance to starting offset — a chain `(list a b c)` and its shifted version in a longer sequence `(list x a b c y)` share transitions `a→b` and `b→c`. Sequential doesn't share this invariance.
 
 **3. Dimensionality efficient.**
 
@@ -79,7 +79,7 @@ Ngram generalizes Chain: n-wise adjacency rather than pairwise. For `n=2`, Ngram
 
 **1. Redundancy with Sequential at composition time.**
 
-Chain and Sequential are both "encode a list of things in some order-aware way." Having both in stdlib means two names for "ordered list of thoughts," with subtly different encodings.
+Chain and Sequential are both "encode a list of things in some order-aware way." Having both in stdlib means two names for "ordered list of holons," with subtly different encodings.
 
 **Counter:** the encodings really are different. Sequential uses positional permutations; Chain uses pairwise Thens. Downstream operations (similarity, cleanup) behave differently on the two encodings. The name distinction corresponds to an encoding distinction, not a reader-style distinction.
 
@@ -88,11 +88,11 @@ Chain and Sequential are both "encode a list of things in some order-aware way."
 If Then (058-011) is rejected, Chain must re-express directly:
 
 ```scheme
-(defmacro Chain [thoughts : AST] -> :AST
+(defmacro (Chain (holons :AST) -> :AST)
   `(Bundle
      (pairwise-map
        (lambda (a b) (Bundle (list a (Permute b 1))))
-       ,thoughts)))
+       ,holons)))
 ```
 
 Works, but loses the readable Then layer. Then's presence makes Chain readable; without Then, Chain's expansion is cluttered.
@@ -117,13 +117,13 @@ Bundle this into Chain's definition or define it separately in the wat stdlib. M
 
 **4. Edge cases: empty or singleton input.**
 
-What does `(Chain [])` mean? `(Chain [a])`? Both produce empty pairwise lists; bundling an empty list is degenerate (zero vector or error).
+What does `(Chain (list))` mean? `(Chain (list a))`? Both produce empty pairwise lists; bundling an empty list is degenerate (zero vector or error).
 
 **Mitigation:** document the semantics:
-- `(Chain [])` → zero vector or error
-- `(Chain [a])` → `a` unchanged (or `(Bundle [a])` which equals `a`)
-- `(Chain [a b])` → `(Then a b)`
-- `(Chain [a b c ...])` → full pairwise bundle
+- `(Chain (list))` → zero vector or error
+- `(Chain (list a))` → `a` unchanged (or `(Bundle (list a))` which equals `a`)
+- `(Chain (list a b))` → `(Then a b)`
+- `(Chain (list a b c ...))` → full pairwise bundle
 
 These conventions should be consistent with Bundle's handling of short lists.
 
@@ -169,8 +169,8 @@ Yes — `(Bundle (pairwise-map Then xs))`, or if Then is rejected, the expanded 
 
 ```scheme
 ;; wat/std/sequences.wat (or similar)
-(defmacro Chain [thoughts : AST] -> :AST
-  `(Bundle (pairwise-map Then ,thoughts)))
+(defmacro (Chain (holons :AST) -> :AST)
+  `(Bundle (pairwise-map Then ,holons)))
 ```
 
 `pairwise-map` itself is a list combinator, not an AST-rewriting macro — it is a regular stdlib function used inside the macro expansion. If it doesn't exist yet:
@@ -182,19 +182,19 @@ Yes — `(Bundle (pairwise-map Then xs))`, or if Then is rejected, the expanded 
       (cons (f (first xs) (second xs))
             (pairwise-map f (rest xs)))))
 
-(defmacro Chain [thoughts : AST] -> :AST
-  `(Bundle (pairwise-map Then ,thoughts)))
+(defmacro (Chain (holons :AST) -> :AST)
+  `(Bundle (pairwise-map Then ,holons)))
 ```
 
 The macro is registered at parse time (per 058-031-defmacro); every `(Chain ...)` invocation is rewritten to the pairwise-Bundle form before hashing. Nested `(Then ...)` forms in the expansion are themselves expanded in the same pass.
 
 ## Questions for Designers
 
-1. **Edge case semantics.** What does `(Chain [])` produce? What does `(Chain [a])` produce? Proposal: empty → zero vector (or error, matching Bundle's empty behavior); singleton → `a` unchanged. Confirm conventions.
+1. **Edge case semantics.** What does `(Chain (list))` produce? What does `(Chain (list a))` produce? Proposal: empty → zero vector (or error, matching Bundle's empty behavior); singleton → `a` unchanged. Confirm conventions.
 
 2. **Dependency on Then's resolution.** If Then (058-011) is rejected, Chain must re-express directly. Should this sub-proposal be explicitly deferred until Then resolves, or should both be reviewed together?
 
-3. **Bounded vs. unbounded chain length.** For very long chains (hundreds of thoughts), the bundle's capacity is exhausted and individual transitions may not be recoverable via cleanup. Should Chain carry a length warning/limit, or is this a documentation concern only?
+3. **Bounded vs. unbounded chain length.** For very long chains (hundreds of holons), the bundle's capacity is exhausted and individual transitions may not be recoverable via cleanup. Should Chain carry a length warning/limit, or is this a documentation concern only?
 
 4. **Position information or not.** Chain encodes pairwise transitions but loses absolute position information (transition `a→b` in a long chain is indistinguishable from `a→b` at the start of a short chain). Is this the right tradeoff, or should Chain optionally encode starting position too?
 

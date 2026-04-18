@@ -1,188 +1,226 @@
-# 058-026: `Array` — Stdlib Indexed-List Constructor
+# 058-026: `Vec` — Stdlib Integer-Keyed HashMap
+
+> **STATUS: SUPERSEDES the original `Vec` proposal** (2026-04-18 Rust-surface naming sweep).
+>
+> The form previously called `Vec` is now named `Vec` — matching Rust's `std::vec::Vec` directly. The wat UpperCase constructor, the type annotation `:Vec<T>`, and the runtime backing all share one name. One name per concept across algebra, type annotation, and runtime.
+>
+> **Also:** `nth` is retired. Use `get` — `(get my-vec i)` with an integer index returns `:Option<Holon>`.
 
 **Scope:** algebra
-**Class:** STDLIB (macro alias for Sequential with data-structure intent)
+**Class:** STDLIB (runtime constructor building a HashMap with integer keys)
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
-**Depends on:** 058-009-sequential-reframing, 058-022-permute, 058-025-cleanup
-**Companion proposals:** 058-016-map, 058-027-set
+**Depends on:** 058-016-map (now HashMap), 058-021-bind, 058-003-bundle-list-signature
+**Companion proposals:** 058-027-set (now HashSet)
+**Supersedes:** earlier framing of Array as "Sequential alias" — dropped; see Reclassification Note
+
+## Reclassification Note
+
+Earlier drafts proposed Array as a macro alias for `Sequential` (the positional-encoding primitive). During round-2 designer review, the builder noticed that when we have the AST, we don't need cleanup-based retrieval for a data structure. Integer-keyed containers use exact lookup via the HashMap's runtime backing — the same mechanism as HashMap's `get` — and don't need the Sequential encoding at all.
+
+**Vec is now a stdlib constructor that produces a HashMap with integer keys.** Sequential (058-009) stays as a separate primitive for a different purpose: positional encoding where similarity reflects order. Vec is the DATA STRUCTURE (Rust's `Vec<T>`); Sequential is the SIMILARITY ENCODING. Different tools, different uses.
 
 ## The Candidate
 
-A wat stdlib macro (per 058-031-defmacro) that constructs an encoded indexed list from a list of thoughts:
+A wat stdlib function that builds an integer-keyed Map from a list of Holons:
 
 ```scheme
-(defmacro Array [ts : AST] -> :AST
-  `(Sequential ,ts))
+(define (:wat/std/Vec (items :List<Holon>) -> :Holon)
+  (Bundle
+    (map-with-index
+      (lambda ((item :Holon) (i :usize) -> :Holon)
+        (Bind (Atom i) item))
+      items)))
 ```
 
-Identical expansion to `Sequential` (058-009, which is itself a macro). The only distinction is reader intent: `Array` communicates "data-structure: ordered indexed list," while `Sequential` communicates "positional encoding of a temporal or ordered sequence." Both expand at parse time; `hash((Array ts)) = hash((Sequential ts))` — no alias collision.
+Expands at call time to: `(Bundle (list (Bind (Atom 0) items[0]) (Bind (Atom 1) items[1]) ...))`. The integer at each position is the KEY atom; each item is bound to its index.
 
 ### Semantics
 
-`Array` encodes a list of thoughts where each element at position `i` is permuted by `i` steps, and all elements are bundled. Indexed retrieval is possible via inverse permutation and cleanup:
+`Vec` produces a Holon that is structurally a Map — a Bundle of Bind pairs — where the keys are integer atoms `0, 1, 2, ...`. There is NO positional encoding via permutation; there is NO similarity-preserved order. The resulting Holon is a data structure with random-access-by-integer-key.
+
+**Every operation is AST walking.** No cleanup required. No similarity measurement for exact access.
 
 ```scheme
 ;; Build an array:
 (define fruits
   (Array (list apple banana cherry date)))
 
-;; Retrieve position 2 (cherry):
-(define position-2
-  (cleanup (Permute fruits -2) fruit-vocabulary))
+;; fruits' AST is structurally:
+;;   (Bundle (list (Bind (Atom 0) apple)
+;;                 (Bind (Atom 1) banana)
+;;                 (Bind (Atom 2) cherry)
+;;                 (Bind (Atom 3) date)))
 ```
 
-### The `nth` accessor
+### `nth` accessor
 
 ```scheme
-(define (nth array-thought index candidates)
-  (cleanup (Permute array-thought (- 0 index)) candidates))
-
-;; Raw variant (no cleanup):
-(define (nth-raw array-thought index)
-  (Permute array-thought (- 0 index)))
+(define (:wat/std/nth (arr :Holon) (i :usize) -> :Option<Holon>)
+  (get arr (Atom i)))
 ```
 
-`nth` inverts the position-permutation. The index's negation pulls position `i`'s contribution to position 0 (the "unpermuted" alignment for cleanup).
+`nth` is just `get` with an integer-atom key. Walks the AST, finds the Bind whose first argument is `(Atom i)`, returns the second argument. O(N) walk; exact; no codebook needed.
+
+### Other operations
+
+All expressible through the Map API:
+
+```scheme
+;; Append (cheap — new integer key is just count(arr))
+(define (:wat/std/append (arr :Holon) (item :Holon) -> :Holon)
+  (assoc arr (Atom (count arr)) item))
+
+;; Redefine at index (moderate — AST walk to find and replace)
+(define (:wat/std/set-at (arr :Holon) (i :usize) (v :Holon) -> :Holon)
+  (assoc arr (Atom i) v))
+
+;; Remove at index (moderate — AST walk to remove)
+(define (:wat/std/remove-at (arr :Holon) (i :usize) -> :Holon)
+  (dissoc arr (Atom i)))
+
+;; Count
+(define (:wat/std/count (arr :Holon) -> :usize)
+  (map-count arr))                  ; number of Bind nodes in the Bundle
+```
+
+### Front-insert: expensive but supported
+
+Inserting at position 0 requires **renumbering every existing entry** — each current key `i` becomes `i + 1`, then the new item gets key `0`. The identity of every existing binding changes (different key atom), so the old bindings are removed and new ones are added.
+
+```scheme
+(define (:wat/std/cons-front (arr :Holon) (item :Holon) -> :Holon)
+  (let ((n (count arr)))
+    ;; Step 1: collect all existing items with their old keys
+    ;; Step 2: rebuild the array with keys shifted by 1 and the new item at key 0
+    (Array (cons item
+                 (map (lambda ((i :usize) -> :Holon) (nth arr i))
+                      (range n))))))
+```
+
+**Cost: O(N).** Every binding is rebuilt. This is the structural cost of a data structure that doesn't reserve space at the front.
+
+**Recommendation: don't use `cons-front` in hot paths.** Prefer `append` (O(1)-ish — just a new Bind added). When you need front-insertion frequently, use a different data structure that's designed for it (a future `:Deque` or similar, or reverse the convention so the "front" is the high-key end).
+
+### Why this is a runtime function, not a macro
+
+Array's argument is a `:List<Holon>` — a runtime list, potentially unbounded. The macro expansion would need to iterate the list at parse time to generate `Bind(Atom 0, x_0)`, `Bind(Atom 1, x_1)`, etc. — but the list might be computed from runtime data. Macros run at parse time on the source AST only; they can't enumerate a runtime list.
+
+So Array is a RUNTIME FUNCTION. It produces a Holon (a Bundle-of-Binds) at runtime from the given list. The Holon has exact AST structure; subsequent accesses walk that structure.
+
+If we wanted a compile-time Array macro for literal input (small known-at-parse-time lists), we could add one later as a separate form. Not needed for 058.
 
 ## Why Stdlib Earns the Name
 
-Under FOUNDATION's stdlib criterion:
+**1. Array isn't algebraically distinct from Map.** It's a specific use of Map where keys happen to be integers. Same algebra; reader-intent naming.
 
-1. **Its expansion uses only existing core/stdlib forms.** Sequential is stdlib (058-009); transitively, Array expands to Bundle over Permute, both core.
+**2. The stdlib criterion says:** if a form's expansion uses only core forms, and the name reduces ambiguity, it earns stdlib status. Array expands to Map (which expands to Bundle-of-Bind) via runtime enumeration. Uses only core. The name "Array" reads as "indexed collection" where "Map" reads as "named dictionary." Distinct reader intent.
 
-2. **It reduces ambiguity for readers.** `(Array fruits)` communicates "an indexed list of fruits." `(Sequential fruits)` communicates "the order of these fruits matters." Same vector, different reader framings.
-
-Both criteria met.
+**3. Sequential (058-009) stays separate.** Sequential is the similarity-preserving positional encoding. Array is the data structure. Not aliases; different purposes.
 
 ## Arguments For
 
-**1. Data-structure framing distinct from temporal framing.**
+**1. Uses only existing primitives.** No new algebra needed — Array is Bind + Bundle + an enumeration helper.
 
-`Sequential` reads as "temporal/ordered sequence." `Array` reads as "data container indexed by integers." A vocab module encoding a time series uses Sequential; a vocab module encoding a list of options uses Array. Same underlying encoding; different reader intents.
+**2. AST-walkable access.** No cleanup. No similarity measurement. Exact get/set via the AST.
 
-Examples:
-- `(Sequential stages-of-formation)` — "these stages happened in this order"
-- `(Array candidate-moves)` — "these are the moves, indexed 0 through 3"
+**3. Honest about cost.** Front-insertion is expensive; document it. Append is cheap; it's the natural operation.
 
-**2. Pairs naturally with `nth` for read/write symmetry.**
-
-Just as Map pairs with `get`, Array pairs with `nth`. Indexed retrieval from an Array is a common operation that deserves a named accessor.
-
-**3. Consistent with holon-rs's `Array` concept.**
-
-Holon libraries treat arrays as indexed collections separate from temporal sequences. Having both `Array` and `Sequential` in wat matches the existing library surface.
-
-**4. Composes with other data-structure stdlib forms.**
-
-- `Map` of Arrays: records with list fields
-- Array of Maps: tables
-- Array of Arrays: 2D grids
-- `Set` of Arrays: unordered collection of ordered lists
-
-All expressible because Array is a wat function.
+**4. Matches Clojure's vector / Rust's Vec / Python's list semantics.** Programmers from those languages understand it instantly.
 
 ## Arguments Against
 
-**1. Alias for Sequential — is the name earning its place?**
+**1. Array and Map look almost identical at the call site.**
 
-`Array` and `Sequential` produce identical vectors. Both take lists. Both encode position. Same math.
+`(Array items)` constructs integer-keyed; `(Map kv-pairs)` constructs arbitrary-keyed. The underlying Holon structure is the same family (Bundle of Binds). Readers must know which form to use based on whether they care about integer keys vs. arbitrary keys.
 
-**Counter:** same argument as Concurrent/Bundle, Set/Bundle, Subtract/Difference. Reader intent carries load-bearing information; naming the intent is a legitimate stdlib purpose. FOUNDATION's criterion admits reader-clarity as sufficient justification.
+**Counter:** the distinction IS meaningful — integer-keyed collections are a common case with their own operations (nth, append). A separate name for the common case is worth it.
 
-**2. Alias proliferation.**
+**2. Front-insert cost is a gotcha.**
 
-Three stdlib forms for "list of thoughts in order":
-- `Sequential` (temporal encoding intent)
-- `Array` (data-structure intent)
-- Possibly `List` or `Vector` (other language conventions)
+Programmers used to linked-list front-insert (O(1)) will be surprised by O(N) cost.
 
-Where does the proliferation stop?
+**Counter:** document it prominently; guide users toward `append`. If front-insert patterns are common, a future Deque primitive handles them efficiently.
 
-**Mitigation:** two canonical aliases — `Sequential` for temporal, `Array` for data-structure. No further aliases. `List` and `Vector` are ambiguous (vector conflicts with VSA vectors; list conflicts with the underlying argument type).
+**3. Array of Arrays gets nested; cost of nested access compounds.**
 
-**3. Accessor requires a codebook.**
+`(nth (nth matrix row) col)` is O(N_row + N_col) AST walks. For large matrices, not efficient.
 
-`nth` uses cleanup, which requires a candidate vocabulary. Same issue as `get` for Map.
-
-**Mitigation:** provide both `nth` (with cleanup) and `nth-raw` (without). Same pattern as Map.
-
-**4. `nth`'s negation can be confusing.**
-
-`(nth arr 2)` expands to `(Permute arr -2)`. The negative index means "undo 2 steps of forward permutation." Readers unfamiliar with the convention may find this counter-intuitive.
-
-**Mitigation:** document clearly — Array encoding permutes each item by its position; `nth` inverts by permuting backward by the same count. The negation is a mechanical necessity of the inverse permutation.
+**Counter:** for large multi-dimensional data, a proper matrix representation (a single Map keyed by (row, col) pairs, or a dedicated tensor type) is appropriate. Array handles small indexed collections natively.
 
 ## Comparison
 
-| Form | Class | Expansion | Reader intent |
+| Form | Expansion | Access path | Ordering |
 |---|---|---|---|
-| `Sequential(ts)` | STDLIB macro (058-009) | Bundle of index-permuted items | Temporal/ordered sequence |
-| `Array(ts)` | STDLIB macro (this) | `Sequential(ts)` → Bundle of index-permuted items | Data-structure: indexed list |
-| `nth(a, i, cb)` | STDLIB helper (this) | cleanup(Permute(a, -i), cb) | Array accessor |
-| `nth-raw(a, i)` | STDLIB helper (this) | Permute(a, -i) | Raw Array accessor |
-| `Concurrent(ts)` | STDLIB macro (058-010) | Bundle(ts) | Temporal co-occurrence |
-| `Set(ts)` | STDLIB macro (058-027) | Bundle(ts) | Data-structure: unordered collection |
+| `Array(items)` | Bundle of `Bind(Atom i, item_i)` for i in 0..N | `get arr (Atom i)` — AST walk | Keys are integers; no inherent ordering in the Bundle |
+| `Map(kv-pairs)` | Bundle of `Bind(k, v)` per pair | `get map k` — AST walk | Keys are any atoms; no inherent ordering |
+| `Sequential(items)` | Bundle of `Permute(item_i, i)` for each i | Inverse permutation + cleanup | Positionally encoded; similarity reflects order |
+| `Set(items)` | `(Bundle items)` | `cosine set query` — similarity | Unordered; membership test |
 
-Array and Sequential share a parse-time expansion; Concurrent and Set share a parse-time expansion. Four data-structure-ish stdlib macros, two underlying encodings, distinguished by reader intent at source. All collapse to canonical core forms in the hashed AST.
+**Array and Map share a structure (Bundle of Binds); they differ only in what keys are used.** Sequential and Set are fundamentally different encodings with different access patterns.
 
 ## Algebraic Question
 
 Does Array compose with the existing algebra?
 
-Trivially — it IS Sequential. All downstream operations work.
+Trivially — it IS Map, so every Map operation works on Array.
 
 Is it a distinct source category?
 
-No. Stdlib alias.
+No — it is a specialization of Map with a naming convention. Stdlib.
 
 ## Simplicity Question
 
 Is this simple or easy?
 
-Simple. One-line expansion.
+Simple. One constructor function. Operations delegate to Map. No new algebraic content.
 
 Is anything complected?
 
-The alias pair (Array ≡ Sequential) risks confusion. Mitigated by clear intent-distinction documentation.
-
-Could existing forms express it?
-
-Yes — directly via Sequential. Named form earns its place via data-structure reader intent.
+No. Array has one role ("integer-indexed collection"), one construction path, one access mechanism (AST walk via Map's get).
 
 ## Implementation Scope
 
-**Zero Rust changes beyond 058-031-defmacro's macro-expansion pass.** Pure wat.
+**Zero Rust changes.** Pure wat stdlib.
 
-**wat stdlib addition** — `wat/std/structures.wat`:
+**wat stdlib addition:**
 
 ```scheme
-;; the Array macro — parse-time alias for Sequential
-(defmacro Array [ts : AST] -> :AST
-  `(Sequential ,ts))
+;; wat/std/structures.wat (or similar)
 
-;; accessor helpers — regular stdlib functions, not macros
-(define (nth array-thought index candidates)
-  (cleanup (Permute array-thought (- 0 index)) candidates))
+(define (:wat/std/Vec (items :List<Holon>) -> :Holon)
+  (Bundle
+    (map-with-index
+      (lambda ((item :Holon) (i :usize) -> :Holon)
+        (Bind (Atom i) item))
+      items)))
 
-(define (nth-raw array-thought index)
-  (Permute array-thought (- 0 index)))
+(define (:wat/std/nth (arr :Holon) (i :usize) -> :Option<Holon>)
+  (get arr (Atom i)))
+
+(define (:wat/std/append (arr :Holon) (item :Holon) -> :Holon)
+  (assoc arr (Atom (count arr)) item))
 ```
 
-`Array` is registered at parse time (per 058-031-defmacro); every `(Array ts)` is rewritten to `(Sequential ts)`, which in turn expands (also as a macro, per 058-009) to the canonical Bundle-over-Permute form. The `nth` and `nth-raw` accessors are regular runtime functions — they do not need macro semantics because they operate on already-encoded thought vectors.
+Ships as wat code once `define`, `lambda`, Bundle/Bind/Atom/Map/get are in.
 
 ## Questions for Designers
 
-1. **Array vs Sequential: keep both or unify?** Same expansion, different reader intents. Recommendation: keep both; the intent distinction is real in vocab code.
+1. **Is Array worth a named stdlib form, or should users just call `Map` with integer keys directly?** This proposal argues yes — the common-case naming ergonomics justify the separate name. But it IS reader-intent naming on top of Map; pure primitive minimalists could reject it.
 
-2. **Accessor naming.** `nth` is Lisp-idiomatic for positional retrieval. Alternative: `get-at`, `index`, `[]`-style operator. Recommendation: `nth` — matches Lisp tradition.
+2. **Front-insertion policy.** This proposal supports `cons-front` with O(N) cost. Should we:
+   - (a) Document the cost prominently but provide the operation (current proposal — "you can but shouldn't")
+   - (b) Refuse to provide it; users write their own if they need it
+   - (c) Provide a Deque primitive that supports efficient front-insert and rename this structure
 
-3. **Negative indices (from end).** Python-style `arr[-1]` for last element. Would require knowing the array length at retrieval time (not directly in the encoded AST without metadata). Explicit positive indices only, for now.
+   Recommendation: (a) matches the user's direction — "append to front IS possible.. you gotta eat the cost... we can support it."
 
-4. **Bounds checking.** `(nth arr 999)` when arr has 4 elements — what happens? Unbind-then-cleanup will return a noisy vector that may still match some candidate, producing an incorrect result. Document as user responsibility; consider a `nth-safe` variant that requires length metadata.
+3. **Should `Vec` be a reserved naming convention for integer-keyed Maps, or just a stdlib function?** If the former, it becomes a linter convention ("if keys are integers, use `Vec`"). If the latter, it's just one possible way to construct an integer-keyed Map.
 
-5. **Array length.** Can an encoded Array expose its length? Not directly — the length is not in the encoding unless deliberately added. A `(pair length array-ast)` pattern might be needed for bounds-checked access. Future work.
+4. **Relationship to `Sequential` (058-009).** These are NOT aliases anymore. Sequential is positional encoding; Array is integer-keyed Map. Vocab modules pick based on need: Sequential when similarity should reflect position, Array when random-access-by-integer is the goal.
 
-6. **2D Array (tables).** `Array` of `Array` works but is awkward. A first-class 2D table structure might be a useful stdlib addition later. Out of scope for this proposal.
+5. **Front-insert alternatives — a future `Deque`?** Not proposed here. When the trading enterprise or other application shows a need for efficient front-insert, propose Deque as a separate primitive. Until then, Array-with-O(N)-front-insert is documented and supported.
 
-7. **Dependency on 058-009-sequential-reframing.** If Sequential stays as a variant (reframing rejected), Array's definition unfolds to the expanded Bundle+Permute directly. Resolution order: 058-009 first, then this proposal aligns.
+6. **`count` implementation.** `(count arr)` returns the number of Bind nodes in the Bundle. This walks the AST (O(N)). Is that acceptable, or should we carry a `:count` metadata on the Bundle's AST node?
+
+   Recommendation: start without metadata; add if performance demands it.

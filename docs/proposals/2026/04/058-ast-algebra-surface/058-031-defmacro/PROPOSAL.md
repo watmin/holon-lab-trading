@@ -12,7 +12,7 @@
 `defmacro` is a **compile-time language-core form** that registers a syntactic transformation. Unlike `define`, which creates a runtime function, `defmacro` defines a rewriter: it takes a source-level form and returns its canonical replacement BEFORE any evaluation, hashing, caching, or signing occurs.
 
 ```scheme
-(defmacro :namespace/macro-name [arg1 : AST] [arg2 : AST] ... -> :AST
+(defmacro (:namespace/macro-name (arg1 :AST) (arg2 :AST) ... -> :AST)
   body-expression)
 ```
 
@@ -32,7 +32,7 @@ Stdlib aliases like `Concurrent`, `Set`, `Subtract`, `Flip`, `Then`, `Chain` all
 (Bundle xs)        → AST: (Call :wat/std/Bundle (xs))       hash: H3
 ```
 
-All three produce the same vector (elementwise threshold sum). But they have three distinct hashes. FOUNDATION's claim — `hash(AST) IS the thought's identity` — becomes contradictory: **same meaning, different identities.**
+All three produce the same vector (elementwise threshold sum). But they have three distinct hashes. FOUNDATION's claim — `hash(AST) IS the holon's identity` — becomes contradictory: **same meaning, different identities.**
 
 **The resolution:**
 
@@ -74,7 +74,7 @@ All three have the same hash. `hash(AST) IS identity` holds. The reader clarity 
 `defmacro` uses the **same signature syntax as `define` and `lambda`** — every parameter typed `: AST`, return type `-> :AST`. One consistent signature form across all three definition primitives. Omission would be easier (less to write) but not simpler (introduces a special rule for macros that differs from define/lambda).
 
 ```scheme
-(defmacro :namespace/macro-name [param1 : AST] [param2 : AST] ... -> :AST
+(defmacro (:namespace/macro-name (param1 :AST) (param2 :AST) ... -> :AST)
   expansion-body)
 ```
 
@@ -90,20 +90,20 @@ The `expansion-body` is a Lisp expression. It can use:
 **Pure alias — Concurrent:**
 
 ```scheme
-(defmacro :wat/std/Concurrent [xs : AST] -> :AST
+(defmacro (:wat/std/Concurrent (xs :AST) -> :AST)
   `(Bundle ,xs))
 
 ;; User writes:
-(Concurrent [a b c])
+(Concurrent (list a b c))
 
 ;; Parser expands:
-(Bundle [a b c])
+(Bundle (list a b c))
 ```
 
 **Transforming — Subtract:**
 
 ```scheme
-(defmacro :wat/std/Subtract [x : AST] [y : AST] -> :AST
+(defmacro (:wat/std/Subtract (x :AST) (y :AST) -> :AST)
   `(Blend ,x ,y 1 -1))
 
 ;; User writes:
@@ -116,7 +116,7 @@ The `expansion-body` is a Lisp expression. It can use:
 **Parameterized — Amplify:**
 
 ```scheme
-(defmacro :wat/std/Amplify [x : AST] [y : AST] [s : AST] -> :AST
+(defmacro (:wat/std/Amplify (x :AST) (y :AST) (s :AST) -> :AST)
   `(Blend ,x ,y 1 ,s))
 
 ;; User writes:
@@ -129,20 +129,20 @@ The `expansion-body` is a Lisp expression. It can use:
 **Higher-order expansion — Chain:**
 
 ```scheme
-(defmacro :wat/std/Chain [thoughts : AST] -> :AST
-  `(Bundle (pairwise-map Then ,thoughts)))
+(defmacro (:wat/std/Chain (holons :AST) -> :AST)
+  `(Bundle (pairwise-map Then ,holons)))
 
 ;; User writes:
-(Chain [a b c d])
+(Chain (list a b c d))
 
 ;; Parser expands:
-(Bundle (pairwise-map Then [a b c d]))
+(Bundle (pairwise-map Then (list a b c d)))
 
 ;; which further expands Then:
 (Bundle (pairwise-map
-         (lambda ([a : Thought] [b : Thought] -> :Thought)
+         (lambda ((a :Holon) (b :Holon) -> :Holon)
            (Bundle (list a (Permute b 1))))
-         [a b c d]))
+         (list a b c d)))
 ```
 
 The final form contains only algebra core operations. No stdlib-alias function calls survive into the hashed AST.
@@ -157,9 +157,9 @@ Without macros, we have two choices: drop the aliases (simplest but costs source
 
 Every Lisp since the 1960s has had macros. Common Lisp, Scheme, Racket, Clojure, Emacs Lisp. The mechanism is well-understood: hygienic or unhygienic, parameter-as-AST, expand-and-reparse. Choosing NOT to include macros would be a departure from Lisp tradition, not a minimalism.
 
-**3. It is orthogonal to the thought algebra.**
+**3. It is orthogonal to the holon algebra.**
 
-`defmacro` doesn't construct thought vectors; it constructs source ASTs. It operates at the language level, alongside `define`, `lambda`, `struct`, `enum`, `newtype`, `deftype`, `load`, `load-types`. Orthogonal to algebra core.
+`defmacro` doesn't construct holon vectors; it constructs source ASTs. It operates at the language level, alongside `define`, `lambda`, `struct`, `enum`, `newtype`, `deftype`, `load`, `load-types`. Orthogonal to algebra core.
 
 **4. It is interpretable by the Rust-backed wat-vm.**
 
@@ -192,7 +192,7 @@ But the HASH used in the content-addressed symbol table (per FOUNDATION's Model 
 - **Different file signatures** (the text differs)
 - **Same expanded-AST hash** (the semantics are identical)
 
-This is the correct behavior. Signing guarantees "this file was produced by this author." Hashing the expanded AST identifies thoughts by their canonical semantic content.
+This is the correct behavior. Signing guarantees "this file was produced by this author." Hashing the expanded AST identifies holons by their canonical semantic content.
 
 **An attacker cannot craft a malicious macro** that would pass signature verification and produce unexpected behavior. Macros are loaded at build time via the verified `load-macros` (or equivalent) form. Adding a new macro requires signing the file that introduces it. The expansion pass uses only verified macros. There is no path for unverified code to affect expansion.
 
@@ -258,7 +258,7 @@ If macros can expand to arbitrary forms, the type checker sees a different AST t
 
 Does `defmacro` compose with the existing algebra?
 
-It is orthogonal to the algebra. The algebra is about thoughts and operations on thoughts. `defmacro` is about source-to-source rewriting — a meta-level concern. The two layers don't interact directly.
+It is orthogonal to the algebra. The algebra is about holons and operations on holons. `defmacro` is about source-to-source rewriting — a meta-level concern. The two layers don't interact directly.
 
 Is it a distinct source category?
 
@@ -363,4 +363,4 @@ This proposal directly resolves finding #4 from the designer review. The "alias 
 2. All stdlib aliases are rewritten as macros.
 3. Expansion runs before hashing.
 
-Confirmed: `hash(AST) IS the thought's identity` holds as an invariant after expansion. Source-level clarity (`Concurrent`, `Set`, `Subtract`, etc.) is preserved for readers; canonical semantic identity is preserved for the algebra and cryptography.
+Confirmed: `hash(AST) IS the holon's identity` holds as an invariant after expansion. Source-level clarity (`Concurrent`, `Set`, `Subtract`, etc.) is preserved for readers; canonical semantic identity is preserved for the algebra and cryptography.

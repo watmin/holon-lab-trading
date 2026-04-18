@@ -34,13 +34,13 @@ Resonance(v, ref)[i] = v[i] * mask[i]       ∈ {-1, 0, +1}
 ### AST shape
 
 ```rust
-pub enum ThoughtAST {
+pub enum HolonAST {
     // ... existing variants ...
-    Resonance(Arc<ThoughtAST>, Arc<ThoughtAST>),
+    Resonance(Arc<HolonAST>, Arc<HolonAST>),
 }
 ```
 
-Two thought arguments. No scalar parameters.
+Two holon arguments. No scalar parameters.
 
 ## Why This Earns Core Status
 
@@ -203,12 +203,12 @@ pub fn resonance(v: &Vector, reference: &Vector) -> Vector {
 
 O(d), branch-heavy but straightforward.
 
-**ThoughtAST changes:**
+**HolonAST changes:**
 
 ```rust
-pub enum ThoughtAST {
+pub enum HolonAST {
     // ... existing variants ...
-    Resonance(Arc<ThoughtAST>, Arc<ThoughtAST>),
+    Resonance(Arc<HolonAST>, Arc<HolonAST>),
 }
 ```
 

@@ -16,25 +16,25 @@
 ### Shape
 
 ```scheme
-(define (:namespace/function-name [param1 : Type1] [param2 : Type2] ... -> :ReturnType)
+(define (:namespace/function-name (param1 :Type1) (param2 :Type2) ... -> :ReturnType)
   body-expression)
 ```
 
 Four positions:
 
 1. **Name** — a keyword-path value (`:watmin/hello-world`, `:wat/std/Difference`, `:alice/math/clamp`)
-2. **Parameter list** — `[name : Type]` pairs with spaces around the colon
+2. **Parameter list** — `(name :Type)` pairs; name is a bare symbol, type is a keyword
 3. **Return type** — `-> :Type` inside the parameter list's closing paren
 4. **Body** — an expression that evaluates to the return type
 
 ### Example
 
 ```scheme
-(define (:wat/std/Difference [a : Thought] [b : Thought] -> :Thought)
+(define (:wat/std/Difference (a :Holon) (b :Holon) -> :Holon)
   (Blend a b 1 -1))
 ```
 
-Readable as: "define the function `:wat/std/Difference`, which takes two Thoughts named `a` and `b` and returns a Thought, by evaluating `(Blend a b 1 -1)`."
+Readable as: "define the function `:wat/std/Difference`, which takes two Holons named `a` and `b` and returns a Holon, by evaluating `(Blend a b 1 -1)`."
 
 ### AST shape
 
@@ -72,7 +72,7 @@ Every stdlib proposal in 058 uses `define` in its expansion:
 
 Without a `define` primitive in the wat language, these are theoretical compositions, not runnable definitions.
 
-FOUNDATION's "Two Cores" section makes this explicit: algebra core is the thought primitives; language core is the definition primitives; stdlib depends on both.
+FOUNDATION's "Two Cores" section makes this explicit: algebra core is the holon primitives; language core is the definition primitives; stdlib depends on both.
 
 **2. Typed parameters are required for static dispatch and cryptographic signing.**
 
@@ -98,13 +98,13 @@ Anyone can claim any prefix; `:bob/math/clamp` coexists with `:alice/math/clamp`
 
 Current wat LANGUAGE.md already lists `define` as a host Lisp form. This proposal extends the existing form:
 - Old: `(define (name args) body)` with optional type hints
-- New: `(define (:namespace/name [arg : Type] ... -> :ReturnType) body)` with required types and keyword-path names
+- New: `(define (:namespace/name (arg :Type) ... -> :ReturnType) body)` with required types and keyword-path names
 
 Backwards-incompatible in principle, but the pre-058 wat has no deployed stdlib authored with the old syntax — this is the polish pass before stdlib gets written.
 
 **2. The parameter-vector syntax is Lisp-canonical.**
 
-`[name : Type]` is readable, inspectable, walks cleanly with standard Lisp operations. The space around the colon aligns with existing wat convention (per LANGUAGE.md).
+`(name :Type)` is readable, inspectable, walks cleanly with standard Lisp operations. Parenthesized sublists match wat's honest Lisp surface — all grouping is parens.
 
 **3. Static-dispatch is predictable and fast.**
 
@@ -123,18 +123,18 @@ With `define` available:
 
 ```
 wat/std/blends.wat:
-  (define (:wat/std/Difference [a : Thought] [b : Thought] -> :Thought)
+  (define (:wat/std/Difference (a :Holon) (b :Holon) -> :Holon)
     (Blend a b 1 -1))
-  (define (:wat/std/Amplify [x : Thought] [y : Thought] [s : f64] -> :Thought)
+  (define (:wat/std/Amplify (x :Holon) (y :Holon) (s :f64) -> :Holon)
     (Blend x y 1 s))
-  (define (:wat/std/Subtract [x : Thought] [y : Thought] -> :Thought)
+  (define (:wat/std/Subtract (x :Holon) (y :Holon) -> :Holon)
     (Blend x y 1 -1))
 
 wat/std/sequences.wat:
-  (define (:wat/std/Then [a : Thought] [b : Thought] -> :Thought)
+  (define (:wat/std/Then (a :Holon) (b :Holon) -> :Holon)
     (Bundle (list a (Permute b 1))))
-  (define (:wat/std/Chain [thoughts : (:List :Thought)] -> :Thought)
-    (Bundle (pairwise-map :wat/std/Then thoughts)))
+  (define (:wat/std/Chain (holons :List<Holon>) -> :Holon)
+    (Bundle (pairwise-map :wat/std/Then holons)))
 ```
 
 The wat stdlib becomes real, editable, inspectable files.
@@ -155,7 +155,7 @@ Nothing prevents a user from writing `(define (:wat/std/Difference ...) ...)` in
 
 **3. Generic types.**
 
-This proposal uses concrete types (`:Thought`, `:Atom`, `:f64`). For higher-order stdlib (`map`, `reduce`, `filter`), generics are needed: `(define (:wat/std/map [f : (:Function :T -> :U)] [xs : (:List :T)] -> (:List :U)) ...)`.
+This proposal uses concrete types (`:Holon`, `:Atom`, `:f64`). For higher-order stdlib (`map`, `reduce`, `filter`), generics are needed: `(define (:wat/std/map (f :fn(T)->U) (xs :List<T>) -> :List<U>) ...)`.
 
 **Counter:** generics are part of 058-030-types. This proposal uses concrete types initially; generics layer on without changing `define`'s shape.
 
@@ -245,7 +245,7 @@ Once `define` is implemented (alongside `lambda` per 058-029 and types per 058-0
 7. **First wat program.** From BOOK's "The first program" section:
 
    ```scheme
-   (define (:watmin/hello-world [name : Atom] -> :Thought)
+   (define (:watmin/hello-world (name :Atom) -> :Holon)
      (Sequential (list (Atom "hello") name)))
    ```
 

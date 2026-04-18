@@ -27,9 +27,9 @@ Element-wise scalar multiplication, element-wise addition, threshold into the te
 ### AST Shape
 
 ```rust
-pub enum ThoughtAST {
+pub enum HolonAST {
     // ... existing variants ...
-    Blend(Arc<ThoughtAST>, Arc<ThoughtAST>, f64, f64),
+    Blend(Arc<HolonAST>, Arc<HolonAST>, f64, f64),
 }
 ```
 
@@ -107,7 +107,7 @@ The threshold step maps `(w1·a + w2·b)` into `{-1, 0, +1}^d` — the algebra's
 
 The existing holon `blend(a, b, α)` is convex with a single alpha. Option B (two independent weights) requires extending holon-rs with a new function `blend_weighted(a, b, w1, w2)`. The existing convex form becomes a special case: `blend(a, b, α) = blend_weighted(a, b, 1-α, α)`.
 
-This is a small addition (~20 lines in holon-rs). But it is a change to holon-rs alongside the ThoughtAST change. Worth naming as a cross-cutting impact.
+This is a small addition (~20 lines in holon-rs). But it is a change to holon-rs alongside the HolonAST change. Worth naming as a cross-cutting impact.
 
 **2. The form takes 4 arguments — heavier than existing core forms.**
 
@@ -131,7 +131,7 @@ Mitigation: the operation is consistent — `threshold(w1·a + w2·b)` regardles
 
 **5. Hickey's bar: could existing generators express it?**
 
-Partially. `Amplify(x, y, s) = Bundle([x, scale(y, s)])` if we had a `scale(v, s)` primitive. But we don't. And `scale(v, s)` is ALSO scalar-weighted-vector operation — it's just the single-vector form of Blend. If the algebra gains scalar-weighted operations at all, Blend is the clean binary form.
+Partially. `Amplify(x, y, s) = Bundle((list x (scale y s)))` if we had a `scale(v, s)` primitive. But we don't. And `scale(v, s)` is ALSO scalar-weighted-vector operation — it's just the single-vector form of Blend. If the algebra gains scalar-weighted operations at all, Blend is the clean binary form.
 
 Without Blend (or scale), Linear and Circular cannot be expressed as stdlib compositions. They must remain core. FOUNDATION's criterion for `Blend` is essentially: is the unification worth adding a new core form?
 
@@ -203,12 +203,12 @@ pub fn blend(a: &Vector, b: &Vector, alpha: f64) -> Vector {
 
 Backward compatible. All current callers continue to work.
 
-**ThoughtAST changes:**
+**HolonAST changes:**
 
 ```rust
-pub enum ThoughtAST {
+pub enum HolonAST {
     // ... existing variants ...
-    Blend(Arc<ThoughtAST>, Arc<ThoughtAST>, f64, f64),
+    Blend(Arc<HolonAST>, Arc<HolonAST>, f64, f64),
 }
 ```
 

@@ -25,7 +25,7 @@ This proposal now argues `Difference` as a STDLIB form — a wat function that e
 
 ## The Candidate
 
-A wat stdlib function that produces the element-wise difference of two thoughts:
+A wat stdlib function that produces the element-wise difference of two holons:
 
 ```scheme
 (define (Difference a b)
@@ -40,8 +40,8 @@ The delta from `b` to `a`. Dimensions where `a` is +1 and `b` is -1 (or vice ver
 ### Usage patterns
 
 ```scheme
-;; "What changed between two thoughts?"
-(Difference thought-new thought-old)
+;; "What changed between two holons?"
+(Difference holon-new holon-old)
 
 ;; "What is anomalous in a relative to baseline?"
 (Difference observed baseline)
@@ -163,7 +163,7 @@ Yes — `(Blend a b 1 -1)`. The proposal argues that the named form improves rea
   (Blend a b 1 -1))
 ```
 
-Lives in whichever wat file holds the stdlib (likely `wat/std/thoughts.wat` or similar — see open question 1 in FOUNDATION.md).
+Lives in whichever wat file holds the stdlib (likely `wat/std/holons.wat` or similar — see open question 1 in FOUNDATION.md).
 
 **Cache behavior:**
 

@@ -7,10 +7,10 @@
 
 ## The Candidate
 
-A wat stdlib macro (per 058-031-defmacro) that expresses "these thoughts happen simultaneously, at the same moment, with no ordering among them":
+A wat stdlib macro (per 058-031-defmacro) that expresses "these holons happen simultaneously, at the same moment, with no ordering among them":
 
 ```scheme
-(defmacro Concurrent [xs : AST] -> :AST
+(defmacro (Concurrent (xs :AST) -> :AST)
   `(Bundle ,xs))
 ```
 
@@ -26,7 +26,7 @@ Under FOUNDATION's stdlib criterion, a named form earns its place if:
 
 1. **Its expansion uses only existing core forms.** Bundle is core. Expansion is `(Bundle xs)` verbatim. Criterion satisfied.
 
-2. **It reduces ambiguity for readers.** A vocab module that says `(Concurrent [price-rising rsi-extended volume-thin])` communicates "these three observations are about the SAME moment." A Bundle call with the same arguments communicates "these three things are summed together, semantics up to reader." The named form asserts temporal co-occurrence as the reason for bundling.
+2. **It reduces ambiguity for readers.** A vocab module that says `(Concurrent (list price-rising rsi-extended volume-thin))` communicates "these three observations are about the SAME moment." A Bundle call with the same arguments communicates "these three things are summed together, semantics up to reader." The named form asserts temporal co-occurrence as the reason for bundling.
 
 Both criteria met.
 
@@ -35,16 +35,17 @@ Both criteria met.
 **1. Vocab modules distinguish co-occurrence from aggregation.**
 
 A trading vocab module might produce:
-- A `Concurrent` thought: "at this candle, price is rising AND rsi is extended AND volume is thin"
-- A `Pattern` thought: "this is a head-and-shoulders shape"
-- A `Signal` thought: "entry triggered"
+- A `Concurrent` holon: "at this candle, price is rising AND rsi is extended AND volume is thin"
+- A `Pattern` holon: "this is a head-and-shoulders shape"
+- A `Signal` holon: "entry triggered"
 
 All three are Bundles under the hood. The NAMES carry the semantic distinction — the reader understands that Concurrent encodes simultaneity, Pattern encodes shape, Signal encodes decision. Without the names, a reader sees three `Bundle(...)` calls and must infer the purpose from context.
+
 
 **2. Concurrent pairs conceptually with Then (058-011) and Sequential.**
 
 - `Concurrent(a, b, c)` — at the same time
-- `Sequential([a, b, c])` — in this order
+- `Sequential((list a b c))` — in this order
 - `Then(a, b)` — after a, b follows
 
 These three forms carve up the temporal semantics space. Concurrent is the "no ordering" case. Its presence completes the vocabulary.
@@ -56,7 +57,7 @@ Holon's Python and Rust libraries expose Concurrent as a named operation alongsi
 **4. The expansion is trivial — the name is the cost.**
 
 ```scheme
-(defmacro Concurrent [xs : AST] -> :AST
+(defmacro (Concurrent (xs :AST) -> :AST)
   `(Bundle ,xs))
 ```
 
@@ -127,7 +128,7 @@ Yes — `(Bundle xs)`. The stdlib form asserts reader intent.
 
 ```scheme
 ;; wat/std/sequences.wat (or similar)
-(defmacro Concurrent [xs : AST] -> :AST
+(defmacro (Concurrent (xs :AST) -> :AST)
   `(Bundle ,xs))
 ```
 

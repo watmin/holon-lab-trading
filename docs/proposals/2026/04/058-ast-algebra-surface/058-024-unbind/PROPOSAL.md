@@ -11,7 +11,7 @@
 A wat stdlib macro (per 058-031-defmacro) that represents the INVERSE of a Bind operation — the decode direction of role-filler binding:
 
 ```scheme
-(defmacro Unbind [c : AST] [k : AST] -> :AST
+(defmacro (Unbind (c :AST) (k :AST) -> :AST)
   `(Bind ,c ,k))
 ```
 
@@ -70,15 +70,15 @@ Readers navigating between these contexts benefit from a name per context. Encod
 From 058-016-map:
 
 ```scheme
-(define (get map-thought key candidates)
-  (cleanup (Unbind map-thought key) candidates))
+(define (get map-holon key candidates)
+  (cleanup (Unbind map-holon key) candidates))
 ```
 
 Versus:
 
 ```scheme
-(define (get map-thought key candidates)
-  (cleanup (Bind map-thought key) candidates))  ; semantically confusing
+(define (get map-holon key candidates)
+  (cleanup (Bind map-holon key) candidates))  ; semantically confusing
 ```
 
 The first reads as "to get from a map, unbind the key and clean up." The second reads as "to get, bind the key to the map?" — which is backwards from the intent.
@@ -157,7 +157,7 @@ Yes — `(Bind c k)`. Named macro earns its place via reader clarity; the source
 **wat stdlib addition** — `wat/std/decode.wat` or `wat/std/bind.wat`:
 
 ```scheme
-(defmacro Unbind [c : AST] [k : AST] -> :AST
+(defmacro (Unbind (c :AST) (k :AST) -> :AST)
   `(Bind ,c ,k))
 ```
 

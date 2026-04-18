@@ -12,7 +12,7 @@
 A wat stdlib macro (per 058-031-defmacro) that linearly removes `y`'s contribution from `x`:
 
 ```scheme
-(defmacro Subtract [x : AST] [y : AST] -> :AST
+(defmacro (Subtract (x :AST) (y :AST) -> :AST)
   `(Blend ,x ,y 1 -1))
 ;; Expands at parse time to: (Blend x y 1 -1)
 ;; which computes: threshold(1·x + (-1)·y) — linearly subtract y from x
@@ -127,7 +127,7 @@ Yes — `(Blend x y 1 -1)` or `(Amplify x y -1)`. Named form earns its place via
 **wat stdlib addition** — `wat/std/blends.wat`:
 
 ```scheme
-(defmacro Subtract [x : AST] [y : AST] -> :AST
+(defmacro (Subtract (x :AST) (y :AST) -> :AST)
   `(Blend ,x ,y 1 -1))
 ```
 

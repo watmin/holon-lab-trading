@@ -43,7 +43,7 @@ The existing wat-vm in the codebase already implements some of this. This guide 
 │   7. Interpreter   : walks AST or bytecode               │
 │   8. Native bridge : calls Rust primitives               │
 │   9. Eval engine   : dynamic AST over static symbols     │
-│  10. Encoder       : ThoughtAST → vector (lazy, cached)  │
+│  10. Encoder       : HolonAST → vector (lazy, cached)  │
 │  11. Cache         : L1/L2 per FOUNDATION memory tiers   │
 └──────────────────────────────────────────────────────────┘
 ```
@@ -69,7 +69,7 @@ pub enum Value {
     Function(Arc<Function>),       // defined or lambda
 
     // Algebra-level values
-    ThoughtAST(Arc<ThoughtAST>),   // UpperCase forms build these
+    HolonAST(Arc<HolonAST>),   // UpperCase forms build these
     Vector(Arc<HyperVector>),      // lowercase primitives produce these
 
     // User types (structs, enums, newtypes)
@@ -81,20 +81,20 @@ pub enum Value {
 
 `Arc` everywhere: wat values are shared and cheap to clone. No deep copies.
 
-### `ThoughtAST` — the UpperCase tier
+### `HolonAST` — the UpperCase tier
 
 ```rust
-pub enum ThoughtAST {
+pub enum HolonAST {
     Atom(AtomLiteral),
-    Bind(Arc<ThoughtAST>, Arc<ThoughtAST>),
-    Bundle(Arc<Vec<ThoughtAST>>),
-    Permute(Arc<ThoughtAST>, i32),
+    Bind(Arc<HolonAST>, Arc<HolonAST>),
+    Bundle(Arc<Vec<HolonAST>>),
+    Permute(Arc<HolonAST>, i32),
     Thermometer(f64, f64, f64),            // value, min, max
-    Blend(Arc<ThoughtAST>, Arc<ThoughtAST>, f64, f64),
-    Orthogonalize(Arc<ThoughtAST>, Arc<ThoughtAST>),
-    Resonance(Arc<ThoughtAST>, Arc<ThoughtAST>),
-    ConditionalBind(Arc<ThoughtAST>, Arc<ThoughtAST>, Arc<ThoughtAST>),
-    Cleanup(Arc<ThoughtAST>, Arc<Vec<ThoughtAST>>),
+    Blend(Arc<HolonAST>, Arc<HolonAST>, f64, f64),
+    Orthogonalize(Arc<HolonAST>, Arc<HolonAST>),
+    Resonance(Arc<HolonAST>, Arc<HolonAST>),
+    ConditionalBind(Arc<HolonAST>, Arc<HolonAST>, Arc<HolonAST>),
+    Cleanup(Arc<HolonAST>, Arc<Vec<HolonAST>>),
 }
 
 pub enum AtomLiteral {
@@ -107,7 +107,7 @@ pub enum AtomLiteral {
 }
 ```
 
-UpperCase forms in wat evaluate to `Value::ThoughtAST(...)`. They do NOT compute vectors. Encoding happens separately via `encode(ast)`.
+UpperCase forms in wat evaluate to `Value::HolonAST(...)`. They do NOT compute vectors. Encoding happens separately via `encode(ast)`.
 
 ### `Function` — callable values
 
@@ -160,7 +160,7 @@ pub enum TypeDef {
 }
 
 pub struct TypeEnv {
-    builtins: HashMap<Keyword, BuiltinType>,    // :Thought, :Atom, :Scalar, etc.
+    builtins: HashMap<Keyword, BuiltinType>,    // :Holon, :Atom, :f64, etc.
     user_types: HashMap<Keyword, TypeDef>,
     // Frozen after startup.
 }
@@ -193,7 +193,7 @@ Standard recursive-descent parser for s-expressions. Nothing novel here; any Lis
 Key concerns:
 - Handle `;` line comments.
 - Parse keyword tokens (`:foo/bar/baz`) as keyword literals, preserving full path.
-- Parse type annotations `[name : Type]` with whitespace handling.
+- Parse type annotations `(name :Type)` — parenthesized sublist, keyword-typed.
 - Parse literals: string, int, float, bool, null, keyword.
 - Produce a `WatAST` enum covering all possible forms.
 
@@ -254,25 +254,25 @@ Runs after the Resolver. For each `define` (and each nested expression):
 3. Verify the body's final type matches the declared return type.
 4. Store the verified function in the SymbolTable.
 
-Key subtlety: **UpperCase forms produce `:Thought`; lowercase primitives produce `:Vector` or other concrete types.** The type checker must know which layer each form is at. Maintain a table:
+Key subtlety: **UpperCase forms produce `:Holon`; lowercase primitives produce `:Vector` or other concrete types.** The type checker must know which layer each form is at. Maintain a table:
 
 ```rust
 let upper_signatures = hashmap!{
-    "Atom"        => FunctionType { params: vec!["Any"],    return: "Thought" },
-    "Bind"        => FunctionType { params: vec!["Thought", "Thought"], return: "Thought" },
-    "Bundle"      => FunctionType { params: vec!["(:List :Thought)"],   return: "Thought" },
+    "Atom"        => FunctionType { params: vec!["AtomLiteral"],    return: "Holon" },
+    "Bind"        => FunctionType { params: vec!["Holon", "Holon"], return: "Holon" },
+    "Bundle"      => FunctionType { params: vec!["List<Holon>"],   return: "Holon" },
     // ...
 };
 
 let lower_signatures = hashmap!{
     "atom"        => FunctionType { params: vec!["String"], return: "Vector" },
     "bind"        => FunctionType { params: vec!["Vector", "Vector"],   return: "Vector" },
-    "bundle"      => FunctionType { params: vec!["(:List :Vector)"],    return: "Vector" },
+    "bundle"      => FunctionType { params: vec!["List<Vector>"],    return: "Vector" },
     // ...
 };
 ```
 
-Generics (parametric types, `(:List :T)`, `(:Function [...] :T)`) use simple substitution. No advanced type features needed.
+Generics (parametric types, `:List<T>`, `:fn(args)->T`) use simple substitution. No advanced type features needed.
 
 ---
 
@@ -300,7 +300,7 @@ pub fn eval(ast: &WatAST, env: &Environment, symbols: &SymbolTable) -> Result<Va
 
         WatAST::UpperCall { name, args } => {
             let arg_values: Vec<_> = args.iter().map(|a| eval(a, env, symbols)).collect::<Result<_, _>>()?;
-            construct_thought_ast(name, arg_values)  // returns Value::ThoughtAST(...)
+            construct_holon_ast(name, arg_values)  // returns Value::HolonAST(...)
         }
 
         WatAST::Lambda { params, return_type, body } => {
@@ -394,22 +394,22 @@ All existing holon-rs primitives become natives under this bridge. Zero duplicat
 
 ## The Encoder
 
-`encode(ast: &ThoughtAST) -> HyperVector`: the function that realizes a ThoughtAST into a vector.
+`encode(ast: &HolonAST) -> HyperVector`: the function that realizes a HolonAST into a vector.
 
 ```rust
-pub fn encode(ast: &ThoughtAST, cache: &Cache, natives: &NativeRegistry) -> HyperVector {
+pub fn encode(ast: &HolonAST, cache: &Cache, natives: &NativeRegistry) -> HyperVector {
     // Check cache first
     if let Some(v) = cache.get(ast) { return v.clone(); }
 
     // Realize by walking the AST and calling lowercase primitives
     let v = match ast {
-        ThoughtAST::Atom(lit)     => holon_rs::atom_typed(lit),
-        ThoughtAST::Bind(a, b)    => holon_rs::bind(&encode(a, cache, natives), &encode(b, cache, natives)),
-        ThoughtAST::Bundle(xs)    => {
+        HolonAST::Atom(lit)     => holon_rs::atom_typed(lit),
+        HolonAST::Bind(a, b)    => holon_rs::bind(&encode(a, cache, natives), &encode(b, cache, natives)),
+        HolonAST::Bundle(xs)    => {
             let vecs: Vec<_> = xs.iter().map(|x| encode(x, cache, natives)).collect();
             holon_rs::bundle(&vecs)
         }
-        ThoughtAST::Permute(t, k) => holon_rs::permute(&encode(t, cache, natives), *k),
+        HolonAST::Permute(t, k) => holon_rs::permute(&encode(t, cache, natives), *k),
         // ... other variants
     };
 
@@ -418,24 +418,24 @@ pub fn encode(ast: &ThoughtAST, cache: &Cache, natives: &NativeRegistry) -> Hype
 }
 ```
 
-Cache keyed by `Arc<ThoughtAST>` (or its hash). The L1/L2 memory hierarchy per FOUNDATION's "Cache Is Working Memory" section.
+Cache keyed by `Arc<HolonAST>` (or its hash). The L1/L2 memory hierarchy per FOUNDATION's "Cache Is Working Memory" section.
 
-**Laziness:** `eval` of an UpperCase call produces `Value::ThoughtAST(...)`. The encoder only runs when something explicitly calls it — `(encode my-ast)` or `(cosine a b)` internally encodes both.
+**Laziness:** `eval` of an UpperCase call produces `Value::HolonAST(...)`. The encoder only runs when something explicitly calls it — `(encode my-ast)` or `(cosine a b)` internally encodes both.
 
 ---
 
 ## Constrained Eval
 
-A runtime primitive that takes a ThoughtAST value and evaluates it. Implementation:
+A runtime primitive that takes a HolonAST value and evaluates it. Implementation:
 
 ```rust
-pub fn constrained_eval(ast: &ThoughtAST, symbols: &SymbolTable, types: &TypeEnv) -> Result<Value, EvalError> {
+pub fn constrained_eval(ast: &HolonAST, symbols: &SymbolTable, types: &TypeEnv) -> Result<Value, EvalError> {
     // Walk the AST. For each node:
     //   - Verify the form is known (UpperCase or symbol-table entry).
     //   - Verify types match.
     //   - Execute if all checks pass; else error.
 
-    // Most ThoughtAST nodes are algebra-core — known by construction.
+    // Most HolonAST nodes are algebra-core — known by construction.
     // The only check needed is that user-supplied parts (atom literals,
     // keyword references, sub-AST) are well-formed and well-typed.
 
@@ -444,12 +444,12 @@ pub fn constrained_eval(ast: &ThoughtAST, symbols: &SymbolTable, types: &TypeEnv
     //   - Check argument types against signature.
     //   - If ok, apply.
 
-    // Since eval receives a ThoughtAST (not a raw source AST), much of
+    // Since eval receives a HolonAST (not a raw source AST), much of
     // the resolution has already happened. The main additional check
     // is type conformity of user-supplied leaves.
 
     verify_tree(ast, symbols, types)?;
-    Ok(Value::ThoughtAST(Arc::new(ast.clone())))
+    Ok(Value::HolonAST(Arc::new(ast.clone())))
 }
 ```
 
@@ -457,7 +457,7 @@ Essentially: `verify` the AST against the static environment, then return it. Th
 
 Eval errors reveal the exact node that failed and why:
 - "Unknown function `:attacker/evil/exec` at path ..."
-- "Expected :Thought, got :Int at argument 2 of Difference"
+- "Expected :Holon, got :i32 at argument 2 of Difference"
 - "Unknown type `:fake/type/Foo`"
 
 ---
@@ -544,19 +544,19 @@ Once the wat-vm is booted, the main loop is application-specific. A trading lab 
 ```rust
 pub fn main_loop(vm: &WatVm, market_stream: impl Stream<Item=MarketEvent>) {
     for event in market_stream {
-        // Construct a ThoughtAST from the event (UpperCase call-emitting code).
-        let event_thought = wrap_event(event);  // produces Value::ThoughtAST(...)
+        // Construct a HolonAST from the event (UpperCase call-emitting code).
+        let event_holon = wrap_event(event);  // produces Value::HolonAST(...)
 
         // Look up the on-event handler in the symbol table (registered at startup).
         let handler = vm.symbol_table.lookup(&keyword(":my/trading/on-event")).unwrap();
 
         // Apply the handler.
-        apply_function(handler, &[event_thought], &vm.symbol_table).unwrap();
+        apply_function(handler, &[event_holon], &vm.symbol_table).unwrap();
     }
 }
 ```
 
-The handler's body is Rust-inaccessible code — it's stored as a ThoughtAST in the symbol table. The interpreter walks it, calls natives as needed, produces side effects (sending orders, updating engrams, etc.) via native bridge calls.
+The handler's body is Rust-inaccessible code — it's stored as a HolonAST in the symbol table. The interpreter walks it, calls natives as needed, produces side effects (sending orders, updating engrams, etc.) via native bridge calls.
 
 ---
 
@@ -596,7 +596,7 @@ Bytecode speeds up tight loops and repeated evaluations. Not needed for an initi
 
 **4. Error handling.** Rich error types with source spans. Every `EvalError` / `BootError` / `TypeError` should point at the file + line + column that caused it.
 
-**5. Generics in the type system.** Start with just `:List<T>` and `:Function<args, return>`. Add more if needed.
+**5. Generics in the type system.** Start with just `:List<T>` and `:fn(args)->return`. Add more if needed.
 
 **6. Macro handling.** Macros run at startup, before type-check. They transform source ASTs into final ASTs. The type checker sees the post-macroexpansion form.
 

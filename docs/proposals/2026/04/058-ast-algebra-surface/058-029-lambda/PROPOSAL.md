@@ -16,29 +16,29 @@
 ### Shape
 
 ```scheme
-(lambda ([param1 : Type1] [param2 : Type2] ... -> :ReturnType)
+(lambda ((param1 :Type1) (param2 :Type2) ... -> :ReturnType)
   body-expression)
 ```
 
 Three positions:
 
-1. **Parameter list** — `[name : Type]` pairs (same syntax as `define`)
+1. **Parameter list** — `(name :Type)` pairs (same syntax as `define`)
 2. **Return type** — `-> :Type` inside the parameter list's closing paren
 3. **Body** — an expression that evaluates to the return type
 
 ### Example
 
 ```scheme
-;; An anonymous function that doubles a Thought's emphasis against another:
-(lambda ([x : Thought] [y : Thought] -> :Thought)
+;; An anonymous function that doubles a Holon's emphasis against another:
+(lambda ((x :Holon) (y :Holon) -> :Holon)
   (Amplify x y 2))
 
 ;; Used inside map:
-(map (lambda ([t : Thought] -> :Thought) (Permute t 1))
-     my-thoughts)
+(map (lambda ((t :Holon) -> :Holon) (Permute t 1))
+     my-holons)
 
 ;; Stored in a local variable (but still anonymous — no symbol-table entry):
-(let ([doubler (lambda ([x : f64] -> :f64) (* x 2))])
+(let ((doubler (lambda ((x :f64) -> :f64) (* x 2))))
   (doubler 21))
 ```
 
@@ -46,8 +46,8 @@ Three positions:
 
 `define` = `lambda` + startup-time symbol-table registration. Specifically:
 
-- `(define (:my/ns/double [x : f64] -> :f64) (* x 2))` at STARTUP registers a function under `:my/ns/double` in the static symbol table.
-- `(lambda ([x : f64] -> :f64) (* x 2))` at RUNTIME produces a `:Function` value that can be stored, passed, or invoked — but is NOT added to any table.
+- `(define (:my/ns/double (x :f64) -> :f64) (* x 2))` at STARTUP registers a function under `:my/ns/double` in the static symbol table.
+- `(lambda ((x :f64) -> :f64) (* x 2))` at RUNTIME produces a `:fn(f64)->f64` value that can be stored, passed, or invoked — but is NOT added to any table.
 
 This distinction is load-bearing in Model A: `define`s are fixed after startup; lambdas are created and discarded freely at runtime. The static-loading guarantee is not violated because lambdas never enter the symbol table.
 
@@ -73,27 +73,27 @@ Identical structure to `Define` but without the `name` field and without the sym
 Stdlib forms like `map`, `reduce`, `filter` take functions as arguments:
 
 ```scheme
-(define (:wat/std/map [f : (:Function :T -> :U)] [xs : (:List :T)] -> (:List :U))
+(define (:wat/std/map (f :fn(T)->U) (xs :List<T>) -> :List<U>)
   ...)
 
 ;; Call site with an inline lambda:
-(map (lambda ([t : Thought] -> :Thought) (Permute t 1))
-     [a b c d])
+(map (lambda ((t :Holon) -> :Holon) (Permute t 1))
+     (list a b c d))
 ```
 
 Without `lambda`, every higher-order call requires pre-defining the transformation via `define`, cluttering the startup symbol table with one-off functions. This is unworkable at scale, and it also means that runtime code composition becomes impossible — users would need to anticipate every helper at startup.
 
 **2. Functions as first-class values.**
 
-The wat type system includes `:Function` as a type (per 058-030-types). Lambda is how you CREATE values of that type at runtime without requiring a startup registration. Without lambda:
+The wat type system includes `:fn(args)->return` as a type (per 058-030-types). Lambda is how you CREATE values of that type at runtime without requiring a startup registration. Without lambda:
 
 ```scheme
 ;; Awkward — you must add a named helper to stdlib:
-(define (:internal/my-shift [t : Thought] -> :Thought) (Permute t 1))
-(map :internal/my-shift [a b c])
+(define (:internal/my-shift (t :Holon) -> :Holon) (Permute t 1))
+(map :internal/my-shift (list a b c))
 
 ;; Clean — pass the function directly:
-(map (lambda ([t : Thought] -> :Thought) (Permute t 1)) [a b c])
+(map (lambda ((t :Holon) -> :Holon) (Permute t 1)) (list a b c))
 ```
 
 The second form is load-bearing for any language that treats functions as values.
@@ -103,8 +103,8 @@ The second form is load-bearing for any language that treats functions as values
 Lambdas capture their enclosing lexical scope, including references to the static symbol table:
 
 ```scheme
-(define (:wat/std/amplify-all [xs : (:List :Thought)] [reference : Thought] [factor : f64] -> (:List :Thought))
-  (map (lambda ([x : Thought] -> :Thought)
+(define (:wat/std/amplify-all (xs :List<Holon>) (reference :Holon) (factor :f64) -> :List<Holon>)
+  (map (lambda ((x :Holon) -> :Holon)
          (Amplify x reference factor))    ; references `reference` and `factor` from enclosing scope
        xs))
 ```
@@ -130,7 +130,7 @@ A lambda is an AST node like any other. Its EDN is hashable and part of the encl
 (lambda (x) (* x 2))
 
 ;; New (types required, return inside signature):
-(lambda ([x : f64] -> :f64) (* x 2))
+(lambda ((x :f64) -> :f64) (* x 2))
 ```
 
 Stdlib authors writing `(define ...)` forms use typed lambdas for their higher-order arguments. The syntax pairs cleanly.
@@ -154,9 +154,9 @@ Having both as separate primitives lets the evaluator handle them independently.
 Inside a larger function, lambdas let you factor out small transformations without polluting the global symbol table:
 
 ```scheme
-(define (:my/complex-analysis [data : Thought] -> :Thought)
-  (let ([extract-signal (lambda ([d : Thought] -> :Thought) (Orthogonalize d noise))]
-        [amplify-signal (lambda ([s : Thought] -> :Thought) (Amplify s reference 2))])
+(define (:my/complex-analysis (data :Holon) -> :Holon)
+  (let ((extract-signal (lambda ((d :Holon) -> :Holon) (Orthogonalize d noise)))
+        (amplify-signal (lambda ((s :Holon) -> :Holon) (Amplify s reference 2))))
     (amplify-signal (extract-signal data))))
 ```
 
@@ -182,7 +182,7 @@ Capturing lexical scope is non-trivial. The evaluator must:
 **3. Type annotations on small lambdas feel verbose.**
 
 ```scheme
-(map (lambda ([t : Thought] -> :Thought) (Permute t 1)) xs)
+(map (lambda ((t :Holon) -> :Holon) (Permute t 1)) xs)
 ```
 
 vs. Clojure's:
@@ -250,9 +250,9 @@ Estimated ~150-250 lines of Rust. Closure implementation is the main new work (~
 
 1. **Closure capture semantics.** Value-capture (snapshot at creation) or reference-capture (see later mutations)? Recommendation: value-capture, consistent with FOUNDATION's "Algebra Is Immutable" section — nothing to mutate; snapshot suffices.
 
-2. **Recursion in lambdas.** A lambda can't reference itself by name (no name). How to do recursion? Options: (a) force use of `define` for recursive functions, (b) support `Y` combinator pattern, (c) add a name-binding form like Clojure's `fn` with optional self-name: `(lambda self ([params] -> :ReturnType) body)` where `self` refers to the lambda itself. Recommendation: (a) — use `define` for recursion. Keeps lambda purely value-level without introducing self-reference complication.
+2. **Recursion in lambdas.** A lambda can't reference itself by name (no name). How to do recursion? Options: (a) force use of `define` for recursive functions, (b) support `Y` combinator pattern, (c) add a name-binding form like Clojure's `fn` with optional self-name: `(lambda self ((params ...) -> :ReturnType) body)` where `self` refers to the lambda itself. Recommendation: (a) — use `define` for recursion. Keeps lambda purely value-level without introducing self-reference complication.
 
-3. **Higher-order parameter types.** `:Function` as a type works but is generic. For stricter typing: `(:Function :Thought :Thought -> :Thought)` (a function from two Thoughts to a Thought). Handled in 058-030-types.
+3. **Higher-order parameter types.** `:fn(...)` types carry argument and return information. For stricter typing: `:fn(Holon,Holon)->Holon` (a function from two Holons to a Holon). Handled in 058-030-types.
 
 4. **Brevity sugars.** Clojure's `#(...)` anonymous function shortcut. Python's `lambda x: expr`. Rust's `|x| expr`. Should wat have a shortcut? Recommendation: skip for now — the explicit form with types is the load-bearing primitive. Sugars can come later, expanding to full lambdas with inferred types.
 

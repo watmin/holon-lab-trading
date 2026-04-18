@@ -10,7 +10,7 @@
 Clarify and lock `Bundle`'s signature as taking a single LIST argument (not variadic).
 
 ```scheme
-(Bundle list-of-thoughts)    ; one argument — a list
+(Bundle list-of-holons)    ; one argument — a list
 ```
 
 Not:
@@ -27,11 +27,11 @@ The inconsistency is not harmful (variadic and list-taking are equivalent in exp
 
 ## The Claim
 
-`(Bundle list-of-thoughts)` is the canonical form.
+`(Bundle list-of-holons)` is the canonical form.
 
 - Takes exactly one argument
-- That argument is a list of thoughts
-- Produces `threshold(Σ encode(thought_i))` — element-wise sum + threshold
+- That argument is a list of holons
+- Produces `threshold(Σ encode(holon_i))` — element-wise sum + threshold
 
 ## Arguments For
 
@@ -70,7 +70,7 @@ These stdlib forms all take a single list argument, because they all delegate to
 
 `(and a b c)`, `(or a b c)`, `(+ 1 2 3 4)` are variadic. Bundle could follow this convention.
 
-**Counter:** Bundle's arguments are not atoms — they are thoughts (potentially complex ASTs). The Lisp tradition varies: variadic is natural for atomic arguments (boolean combinators, arithmetic); list-taking is natural for list-operating functions (`reduce`, `map`, `filter`). Bundle is more the latter — it REDUCES a list to a single vector.
+**Counter:** Bundle's arguments are not atoms — they are holons (potentially complex ASTs). The Lisp tradition varies: variadic is natural for atomic arguments (boolean combinators, arithmetic); list-taking is natural for list-operating functions (`reduce`, `map`, `filter`). Bundle is more the latter — it REDUCES a list to a single vector.
 
 **2. Variadic looks shorter for literal cases.**
 
@@ -88,12 +88,12 @@ If any existing code was written as variadic, this is a breaking change.
 
 | Form | Signature | Rationale |
 |---|---|---|
-| `Bundle` (this proposal) | `(Bundle list)` | Reduces list of thoughts to one vector |
-| `Sequential` | `(Sequential list)` | Positional encoding of a list of thoughts |
+| `Bundle` (this proposal) | `(Bundle list)` | Reduces list of holons to one vector |
+| `Sequential` | `(Sequential list)` | Positional encoding of a list of holons |
 | `Concurrent` | `(Concurrent list)` | Bundle wrapper |
 | `Chain` | `(Chain list)` | Pairwise Thens bundled |
 | `Ngram n` | `(Ngram n list)` | Sized windows, bundled |
-| `Array` | `(Array list)` | Indexed bundle of thoughts |
+| `Array` | `(Array list)` | Indexed bundle of holons |
 | `Set` | `(Set list)` | Semantic alias for Bundle |
 | `Bind` | `(Bind a b)` | Fixed-arity binary |
 | `Blend` | `(Blend a b w1 w2)` | Fixed-arity 4-parameter |
@@ -104,7 +104,7 @@ Pattern: list-operating forms take lists; fixed-arity forms take positional argu
 
 Does the list signature compose with the algebra?
 
-Yes — it IS the algebra. Every upstream form that needs to combine multiple thoughts produces a list and hands it to Bundle (directly or via stdlib wrappers like Concurrent, Chain).
+Yes — it IS the algebra. Every upstream form that needs to combine multiple holons produces a list and hands it to Bundle (directly or via stdlib wrappers like Concurrent, Chain).
 
 Does this change any algebraic property?
 
@@ -128,7 +128,7 @@ Simple. One form. One argument. One semantic.
 
 Is anything complected?
 
-No. The signature names what Bundle IS — a reducer over a list of thoughts. The list-taking form is how the body is expressed; it doesn't smuggle other concerns.
+No. The signature names what Bundle IS — a reducer over a list of holons. The list-taking form is how the body is expressed; it doesn't smuggle other concerns.
 
 Could existing forms express it?
 

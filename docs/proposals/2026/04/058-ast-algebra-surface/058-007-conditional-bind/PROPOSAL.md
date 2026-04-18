@@ -30,13 +30,13 @@ Intuition: `gate` selects which dimensions of `a` get "modified by" `b` and whic
 ### AST shape
 
 ```rust
-pub enum ThoughtAST {
+pub enum HolonAST {
     // ... existing variants ...
-    ConditionalBind(Arc<ThoughtAST>, Arc<ThoughtAST>, Arc<ThoughtAST>),
+    ConditionalBind(Arc<HolonAST>, Arc<HolonAST>, Arc<HolonAST>),
 }
 ```
 
-Three thought arguments. No scalar parameters.
+Three holon arguments. No scalar parameters.
 
 ## Why This Earns Core Status
 
@@ -133,7 +133,7 @@ If `gate` has zeros (e.g., is the output of `Resonance`), what happens? Conventi
 
 **3. Three-argument forms are visually heavier.**
 
-All other core forms are binary or 4-argument with scalar weights. A 3-arg thought-thought-thought form is new territory. Readers must remember "first two are the bind operands, third is the gate."
+All other core forms are binary or 4-argument with scalar weights. A 3-arg holon-holon-holon form is new territory. Readers must remember "first two are the bind operands, third is the gate."
 
 **Mitigation:** consistent argument order (operands first, then control) is a learnable convention. The alternative — making it a chained composition — is less readable.
 
@@ -200,12 +200,12 @@ pub fn conditional_bind(a: &Vector, b: &Vector, gate: &Vector) -> Vector {
 }
 ```
 
-**ThoughtAST changes:**
+**HolonAST changes:**
 
 ```rust
-pub enum ThoughtAST {
+pub enum HolonAST {
     // ... existing variants ...
-    ConditionalBind(Arc<ThoughtAST>, Arc<ThoughtAST>, Arc<ThoughtAST>),
+    ConditionalBind(Arc<HolonAST>, Arc<HolonAST>, Arc<HolonAST>),
 }
 ```
 

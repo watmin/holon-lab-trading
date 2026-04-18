@@ -1,59 +1,55 @@
-# 058-027: `Set` — Stdlib Unordered-Collection Constructor
+# 058-027: `HashSet` — Stdlib Unordered-Collection Constructor
+
+> **STATUS: SUPERSEDES the original `Set` proposal** (2026-04-18 Rust-surface naming sweep).
+>
+> The form previously called `Set` is now named `HashSet` — matching Rust's `std::collections::HashSet` directly. The wat UpperCase constructor, the type annotation `:HashSet<T>`, and the runtime backing all share one name.
+>
+> **Also:** the unified `get` accessor works for HashSet the same way it works for HashMap and Vec. `(get my-set x)` returns `:Option<T>` — `(Some x)` if x is in the set (confirmation / canonicalization), `:None` if not. The "no accessor" asymmetry Hickey flagged in round 2 dissolves — HashSet uses the same `get` as the other containers.
 
 **Scope:** algebra
 **Class:** STDLIB (macro alias for Bundle with data-structure intent)
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
 **Depends on:** Bundle (CORE, 058-003 for signature)
-**Companion proposals:** 058-016-map, 058-026-array
+**Companion proposals:** 058-016-map (now HashMap), 058-026-array (now Vec)
 
 ## The Candidate
 
-A wat stdlib macro (per 058-031-defmacro) that constructs an encoded unordered collection from a list of thoughts:
+A wat stdlib macro (per 058-031-defmacro) that constructs an encoded unordered collection from a list of holons:
 
 ```scheme
-(defmacro Set [xs : AST] -> :AST
+(defmacro (HashSet (xs :AST) -> :AST)
   `(Bundle ,xs))
 ```
 
-Identical expansion to `Bundle` and to `Concurrent` (058-010, also a macro). The only distinction is reader intent at source: `Set` communicates "data-structure: unordered collection," while `Bundle` communicates "superposition primitive" and `Concurrent` communicates "temporal co-occurrence." All three collapse to the same canonical AST after parse-time expansion, so `hash((Set xs)) = hash((Concurrent xs)) = hash((Bundle xs))` — no alias collision.
+Expansion is Bundle. The distinction is reader intent at source: `HashSet` communicates "data-structure: unordered collection with O(1) membership"; `Bundle` communicates "superposition primitive." Both collapse to the same canonical AST after parse-time expansion, so `hash((HashSet xs)) = hash((Bundle xs))` — no alias collision.
 
 ### Semantics
 
-`Set` encodes a collection of thoughts where order does NOT matter. The encoding is Bundle's commutative elementwise sum — `Set([a, b, c])` and `Set([c, b, a])` produce the same vector. Set membership can be tested via cosine similarity (is this member's vector aligned with the bundled set?), though cleanup is recommended for crisp answers.
+`HashSet` encodes a collection of holons where order does NOT matter. The algebra-level encoding is Bundle's commutative elementwise sum — `HashSet((list a b c))` and `HashSet((list c b a))` produce the same vector. The runtime backs the Holon with Rust's `std::HashSet` for O(1) average membership checks. Both retrieval regimes are supported: structural (`get`) and similarity (`presence`).
 
-### Membership test — just Bind + similarity, same as Map
-
-Set's accessor is expressed in the existing primitives; no dedicated form is needed.
+### `get` — structural membership, unified with HashMap and Vec
 
 ```scheme
-;; Build a set:
-(define fruits
-  (Set (list apple banana cherry date)))
-
-;; Option 1 — direct cosine similarity (simpler for Set specifically, because
-;; Set is a pure superposition with no role-filler binding):
-(> (cosine-similarity fruits apple) threshold)   ; membership test, runtime-measurable
-
-;; Option 2 — Bind + cleanup (the same pattern as Map's `get`):
-(cleanup (Bind apple fruits) fruit-vocabulary)   ; returns the candidate
-                                                  ; most aligned with `apple`'s
-                                                  ; bound signal in the set
-
-;; Either way, the success signal is the cosine score. Above 5σ means
-;; "apple is in the set"; below means "it isn't" or "capacity exceeded."
+(get (s :HashSet<T>) (candidate :T)) -> :Option<T>
+;; Hash-based membership via Rust's HashSet::get(), O(1) average.
+;; Returns (Some candidate) if the element is present (confirmation /
+;; canonicalization); :None if absent.
 ```
 
-**The query is runtime-measurable.** Same semantics as every other query in the algebra: compute a candidate result; check cosine; decide based on the score. See FOUNDATION's "Bind as query: measurement-based success signal" for the general framing.
+Same signature shape as `(get :HashMap<K,V> :K)` and `(get :Vec<T> :usize)` — one `get`, three containers, uniform contract. The "missing accessor" concern Hickey flagged in round 2 is resolved by unification: HashSet uses the same `get` as the other containers. Returns Option<T> everywhere.
 
-No dedicated `contains?` accessor is proposed because the primitive operations already express it. If a vocab module wants a named wrapper for clarity:
+### `presence` — similarity membership
+
+For similarity-based queries (approximate membership, fuzzy match), the algebra's general presence primitive applies:
 
 ```scheme
-(define (:my/std/contains? [s : Thought] [candidate : Thought] [threshold : f64] -> :bool)
-  (> (cosine-similarity s candidate) threshold))
+(presence candidate (encode my-set)) -> :f64
+;; Cosine of candidate's encoding against the set's bundled vector.
+;; Above 5/sqrt(d) = "present with confidence"; below = absent or capacity exceeded.
 ```
 
-Users can define such wrappers in their own stdlib. It's not load-bearing for Set's proposal.
+The caller picks the regime: structural for exact, similarity for fuzzy. See FOUNDATION's "Presence is Measurement, Not Verdict" for the general framing.
 
 ## Why Stdlib Earns the Name
 
@@ -134,7 +130,7 @@ Mitigation:
 
 **5. Duplicate handling.**
 
-`(Set [:a :a :b])` superposes `:a` twice. The resulting vector has more of `:a`'s signature than a set without duplicates. Is this mathematically a "set" or a "multiset"?
+`(Set (list :a :a :b))` superposes `:a` twice. The resulting vector has more of `:a`'s signature than a set without duplicates. Is this mathematically a "set" or a "multiset"?
 
 **Counter:** technically a multiset (though the multiplicities are lost in cleanup). For strict set semantics, users deduplicate before calling. Document the behavior; if a `StrictSet` is needed later, add it in userland stdlib.
 
@@ -181,7 +177,7 @@ Yes — `(Bundle xs)`. Named form earns its place via data-structure reader inte
 **wat stdlib addition** — `wat/std/structures.wat`:
 
 ```scheme
-(defmacro Set [xs : AST] -> :AST
+(defmacro (Set (xs :AST) -> :AST)
   `(Bundle ,xs))
 ```
 
@@ -191,8 +187,8 @@ Optional userland helper (not part of this proposal):
 
 ```scheme
 ;; userland: threshold-based membership test — regular function, not a macro
-(define (contains? set-thought candidate threshold)
-  (> (cosine-similarity set-thought candidate) threshold))
+(define (contains? set-holon candidate threshold)
+  (> (cosine-similarity set-holon candidate) threshold))
 ```
 
 ## Questions for Designers
@@ -201,16 +197,16 @@ Optional userland helper (not part of this proposal):
 
 2. **Accessor expectations.** Map has `get`, Array has `nth`. Should Set have a dedicated accessor? Proposal: no — similarity testing IS the accessor for Set. Document this asymmetry.
 
-3. **Duplicates vs strict set semantics.** `(Set [:a :a :b])` is technically a multiset (duplicates superpose). Document as "Set does not deduplicate; pre-filter for strict set semantics." Add a `StrictSet` stdlib form only if demand emerges.
+3. **Duplicates vs strict set semantics.** `(Set (list :a :a :b))` is technically a multiset (duplicates superpose). Document as "Set does not deduplicate; pre-filter for strict set semantics." Add a `StrictSet` stdlib form only if demand emerges.
 
 4. **Set size capacity.** Bundle's reliable-recovery bound is ~d/(2·ln(K)). For d=10,000 that's ~100 items. Document the limit; large sets use engram libraries instead.
 
 5. **Relationship to `Group` / `Collection` / `Multiset`.** Are any of these distinct enough to warrant their own stdlib names? Recommendation: no — Set covers the data-structure intent; further aliases are redundant.
 
 6. **Set operations (union, intersection).** In classical set theory, `A ∪ B`, `A ∩ B`, `A \ B` are primary operations. For Bundle-encoded sets:
-   - Union: `(Set (concat A B))` or `(Bundle [A B])` — works cleanly
+   - Union: `(Set (concat A B))` or `(Bundle (list A B))` — works cleanly
    - Intersection: `(Resonance A B)` — keeps dimensions where both sets align (per 058-006)
    - Difference: `(Orthogonalize A B)` or `(Subtract A B)` (058-019) — removes B's contribution from A
    Worth noting as future stdlib idioms but out of scope for this proposal.
 
-7. **Empty set.** `(Set [])` produces an empty Bundle — all-zeros or undefined vector. Document as degenerate case; callers should check for empty before encoding.
+7. **Empty set.** `(Set (list))` produces an empty Bundle — all-zeros or undefined vector. Document as degenerate case; callers should check for empty before encoding.

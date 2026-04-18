@@ -12,7 +12,7 @@
 A wat stdlib macro (per 058-031-defmacro) that scales the contribution of `y` in a blend with `x`:
 
 ```scheme
-(defmacro Amplify [x : AST] [y : AST] [s : AST] -> :AST
+(defmacro (Amplify (x :AST) (y :AST) (s :AST) -> :AST)
   `(Blend ,x ,y 1 ,s))
 ;; Expands at parse time to: (Blend x y 1 s)
 ;; which computes: threshold(1·x + s·y) — boost component y in x by factor s
@@ -25,7 +25,7 @@ A Blend call with literal weights `(1, s)`. The first weight stays at 1 (anchor 
 Amplify means "increase the importance of `y` relative to `x`." If `y` is a direction or pattern you want to emphasize in `x`:
 - `s > 1`: boost `y` above `x`'s weight
 - `0 < s < 1`: partial dampening of `y`
-- `s = 1`: equal blend (same as `Bundle [x y]`)
+- `s = 1`: equal blend (same as `Bundle (list x y)`)
 - `s = 0`: `x` only, `y` silenced
 - `s < 0`: negative emphasis — `y` counteracts
 
@@ -78,7 +78,7 @@ Different idioms, same underlying primitive.
 **1. Trivial expansion.**
 
 ```scheme
-(defmacro Amplify [x : AST] [y : AST] [s : AST] -> :AST
+(defmacro (Amplify (x :AST) (y :AST) (s :AST) -> :AST)
   `(Blend ,x ,y 1 ,s))
 ```
 
@@ -88,7 +88,7 @@ One-line expansion. Three tokens replaced by three tokens (`Amplify x y s` ≈ `
 
 **2. Overlap with Bundle at `s = 1` and with `Subtract`/`Flip` at specific negatives.**
 
-- `(Amplify x y 1)` ≡ `(Bundle [x y])` — redundant at `s = 1`
+- `(Amplify x y 1)` ≡ `(Bundle (list x y))` — redundant at `s = 1`
 - `(Amplify x y -1)` ≡ `(Subtract x y)` — redundant at `s = -1`
 - `(Amplify x y -2)` ≡ `(Flip x y)` — redundant at `s = -2`
 
@@ -107,7 +107,7 @@ Alternative: extend Blend's interface to accept "amplify" as a keyword-ish conve
 Or make Bundle variadic with weights:
 
 ```scheme
-(Bundle [x y] :weights [1 2])
+(Bundle (list x y) :weights (list 1 2))
 ```
 
 **Counter:** both alternatives complicate core interfaces. Keeping Amplify as a stdlib form preserves Blend's clean 4-arg signature and keeps the naming explicit. Stringly-typed keyword dispatch is WORSE than a named wrapper.
@@ -126,7 +126,7 @@ Or make Bundle variadic with weights:
 | `Amplify(x, y, s)` | STDLIB (this) | `(1, s)` | Scale y's emphasis by factor s |
 | `Subtract(x, y)` | STDLIB macro (058-019) | `(1, -1)` | Remove y linearly from x |
 | `Flip(x, y)` | STDLIB macro (058-020) | `(1, -2)` | Invert y's contribution |
-| `Bundle([x, y])` | CORE | `(1, 1)` | Equal superposition |
+| `Bundle((list x y))` | CORE | `(1, 1)` | Equal superposition |
 
 Amplify is the parameterized macro; Subtract and Flip are specific-weight macros; Bundle-of-pair is the core form at `(1, 1)`. 058-004-difference is REJECTED; Subtract is the canonical delta macro.
 
@@ -161,7 +161,7 @@ Yes — `(Blend x y 1 s)`. Named form earns its place via reader clarity.
 **wat stdlib addition** — `wat/std/blends.wat`:
 
 ```scheme
-(defmacro Amplify [x : AST] [y : AST] [s : AST] -> :AST
+(defmacro (Amplify (x :AST) (y :AST) (s :AST) -> :AST)
   `(Blend ,x ,y 1 ,s))
 ```
 
@@ -169,7 +169,7 @@ Registered at parse time (per 058-031-defmacro): every `(Amplify x y s)` invocat
 
 ## Questions for Designers
 
-1. **`s = 1` degeneracy.** `(Amplify x y 1)` ≡ `(Bundle [x y])`. Should Amplify document this, or restrict `s ≠ 1`? Recommendation: document, don't restrict.
+1. **`s = 1` degeneracy.** `(Amplify x y 1)` ≡ `(Bundle (list x y))`. Should Amplify document this, or restrict `s ≠ 1`? Recommendation: document, don't restrict.
 
 2. **Negative `s` overlap with Subtract / Flip.** `(Amplify x y -1)` ≡ `(Subtract x y)`, `(Amplify x y -2)` ≡ `(Flip x y)`. Recommendation: freely allow overlap; stylistic preference picks the most specific name.
 

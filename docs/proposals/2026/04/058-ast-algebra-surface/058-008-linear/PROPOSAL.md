@@ -9,7 +9,7 @@
 
 ## Reclassification Claim
 
-The current `ThoughtAST` enum has a `Linear(low_atom, high_atom, value, scale)` variant. FOUNDATION's audit lists it as CORE. Under the stdlib criterion (058-002-blend's Blend primitive, plus Thermometer as core), `Linear` is a BLENDING of two endpoint anchor Thermometers with weights derived from the scalar value's linear-normalized position.
+The current `HolonAST` enum has a `Linear(low_atom, high_atom, value, scale)` variant. FOUNDATION's audit lists it as CORE. Under the stdlib criterion (058-002-blend's Blend primitive, plus Thermometer as core), `Linear` is a BLENDING of two endpoint anchor Thermometers with weights derived from the scalar value's linear-normalized position.
 
 It is not a primitive algebraic operation. It is a scalar-to-vector conversion that expresses a position along a one-dimensional range by blending two endpoint anchors. That is exactly the shape of a Blend call with scalar-derived weights.
 
@@ -26,7 +26,7 @@ Parallel proposals 058-017-log and 058-018-circular apply the same reframing to 
 ### Stdlib definition
 
 ```scheme
-(defmacro Linear [low-atom : AST] [high-atom : AST] [value : AST] [scale : AST] -> :AST
+(defmacro (Linear (low-atom :AST) (high-atom :AST) (value :AST) (scale :AST) -> :AST)
   `(let* ((min (first ,scale))
           (max (second ,scale))
           (t (/ (- ,value min) (- max min)))                    ; normalize to [0,1]
@@ -58,7 +58,7 @@ As a CORE variant, the weight computation is hidden inside the Rust encoder disp
 
 **3. New linear-style encoders become trivial stdlib additions.**
 
-Clipped-linear (saturates outside `[min, max]`), piecewise-linear (multiple breakpoints), offset-linear, etc. — all become wat macros rather than ThoughtAST variants. The algebra stays closed; extension happens in the library.
+Clipped-linear (saturates outside `[min, max]`), piecewise-linear (multiple breakpoints), offset-linear, etc. — all become wat macros rather than HolonAST variants. The algebra stays closed; extension happens in the library.
 
 ## Arguments Against
 
@@ -123,10 +123,10 @@ Yes, once Blend is core. That is the whole claim.
 **holon-rs changes** — remove the variant:
 
 ```rust
-pub enum ThoughtAST {
+pub enum HolonAST {
     // remove: Linear(Atom, Atom, f64, Scale),
     // keep:   Thermometer(Atom, usize),
-    // add (per 058-002): Blend(Arc<ThoughtAST>, Arc<ThoughtAST>, f64, f64),
+    // add (per 058-002): Blend(Arc<HolonAST>, Arc<HolonAST>, f64, f64),
 }
 ```
 
@@ -135,7 +135,7 @@ Delete the Linear encoder match arm (~15-20 lines including tests). Macro expans
 **wat stdlib addition** — `wat/std/scalars.wat`:
 
 ```scheme
-(defmacro Linear [low : AST] [high : AST] [value : AST] [scale : AST] -> :AST
+(defmacro (Linear (low :AST) (high :AST) (value :AST) (scale :AST) -> :AST)
   `(let* ((min (first ,scale))
           (max (second ,scale))
           (t (/ (- ,value min) (- max min))))

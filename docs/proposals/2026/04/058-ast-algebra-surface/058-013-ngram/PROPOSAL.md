@@ -8,14 +8,14 @@
 
 ## The Candidate
 
-A wat stdlib macro (per 058-031-defmacro) that encodes `n`-wise adjacency windows over a list of thoughts:
+A wat stdlib macro (per 058-031-defmacro) that encodes `n`-wise adjacency windows over a list of holons:
 
 ```scheme
-(defmacro Ngram [n : AST] [thoughts : AST] -> :AST
-  `(Bundle (n-wise-map encode-window ,n ,thoughts)))
+(defmacro (Ngram (n :AST) (holons :AST) -> :AST)
+  `(Bundle (n-wise-map encode-window ,n ,holons)))
 ```
 
-Where `n-wise-map` is a regular stdlib function (not a macro) that slides a window of size `n` across `thoughts`, and `encode-window` encodes each window as a permutation-ordered Bundle (Sequential, specialized). The macro quasiquotes the call; `,n` and `,thoughts` splice in the argument ASTs.
+Where `n-wise-map` is a regular stdlib function (not a macro) that slides a window of size `n` across `holons`, and `encode-window` encodes each window as a permutation-ordered Bundle (Sequential, specialized). The macro quasiquotes the call; `,n` and `,holons` splice in the argument ASTs.
 
 ### More concretely
 
@@ -31,16 +31,16 @@ Where `n-wise-map` is a regular stdlib function (not a macro) that slides a wind
   ...)
 
 ;; the macro itself — expands at parse time
-(defmacro Ngram [n : AST] [thoughts : AST] -> :AST
-  `(Bundle (n-wise-map encode-window ,n ,thoughts)))
+(defmacro (Ngram (n :AST) (holons :AST) -> :AST)
+  `(Bundle (n-wise-map encode-window ,n ,holons)))
 ```
 
 The window-slicing combinator (`n-wise-map`) is a runtime list operation used inside the expansion — it is not itself a macro. The `Ngram` macro simply emits the canonical Bundle-over-n-wise-map call; Bundle, Permute, and the helpers do the actual work.
 
 ### Special cases
 
-- `n = 1`: each window is a single thought; Ngram produces `(Bundle [t0 t1 t2 ...])` = `(Bundle thoughts)` = `(Concurrent thoughts)`.
-- `n = 2`: each window is a pair; with the pairwise encoding, Ngram produces `(Chain thoughts)`.
+- `n = 1`: each window is a single holon; Ngram produces `(Bundle (list t0 t1 t2 ...))` = `(Bundle holons)` = `(Concurrent holons)`.
+- `n = 2`: each window is a pair; with the pairwise encoding, Ngram produces `(Chain holons)`.
 - `n = k`: each window is a `k`-tuple, permutation-encoded internally, then all windows bundled.
 
 ### Semantics
@@ -51,7 +51,7 @@ Ngram captures "the n-sized adjacency structure of this list." It is to natural-
 
 **1. Its expansion uses only existing core/stdlib forms.** Bundle, Permute are core; the window encoding decomposes into Bundle + Permute compositions. Ngram is a composition over primitives.
 
-**2. It reduces ambiguity for readers.** `(Ngram 3 [s1 s2 s3 s4 s5])` reads as "triplet-windowed encoding of these 5 stages." The expansion, written out, is a dense Bundle-of-Bundles-of-Permutes that requires the reader to infer the structure.
+**2. It reduces ambiguity for readers.** `(Ngram 3 (list s1 s2 s3 s4 s5))` reads as "triplet-windowed encoding of these 5 stages." The expansion, written out, is a dense Bundle-of-Bundles-of-Permutes that requires the reader to infer the structure.
 
 Both criteria met.
 
@@ -71,7 +71,7 @@ Could Chain be deprecated in favor of `(Ngram 2 xs)`? Possibly, but `Chain` read
 
 Each window encoding is its own sub-AST. Caching happens at the window level. Two Ngrams over overlapping lists share windows automatically via the L1 cache — identical sub-windows produce identical vectors.
 
-Example: `(Ngram 2 [a b c d])` and `(Ngram 2 [a b c e])` share the windows `(Then a b)` and `(Then b c)`. Different final outputs, but cached sub-computations reuse.
+Example: `(Ngram 2 (list a b c d))` and `(Ngram 2 (list a b c e))` share the windows `(Then a b)` and `(Then b c)`. Different final outputs, but cached sub-computations reuse.
 
 **4. Invariance properties.**
 
@@ -99,9 +99,9 @@ The expansion depends on a sliding-window combinator. If unavailable, must defin
 
 Works but requires `take`, `length`, standard list combinators. Assumes these exist in the wat stdlib or become bundled additions.
 
-**3. Edge cases: `n > length(thoughts)` or `n = 0`.**
+**3. Edge cases: `n > length(holons)` or `n = 0`.**
 
-What should `(Ngram 5 [a b c])` produce? Options:
+What should `(Ngram 5 (list a b c))` produce? Options:
 - Empty bundle (no windows fit) → zero vector.
 - Degenerate to `Sequential` (just encode all items).
 - Error.
@@ -115,15 +115,15 @@ The proposal encodes each window as a Sequential-like position-permuted bundle, 
 **Mitigation:** simplify the definition:
 
 ```scheme
-(defmacro Ngram [n : AST] [thoughts : AST] -> :AST
-  `(Bundle (n-wise-map (lambda (window) (Sequential window)) ,n ,thoughts)))
+(defmacro (Ngram (n :AST) (holons :AST) -> :AST)
+  `(Bundle (n-wise-map (lambda (window) (Sequential window)) ,n ,holons)))
 ```
 
 Or, even more concise (once Sequential is a parse-time macro per 058-009):
 
 ```scheme
-(defmacro Ngram [n : AST] [thoughts : AST] -> :AST
-  `(Bundle (map Sequential (n-wise-split ,n ,thoughts))))
+(defmacro (Ngram (n :AST) (holons :AST) -> :AST)
+  `(Bundle (map Sequential (n-wise-split ,n ,holons))))
 ```
 
 Where `n-wise-split` produces the list of windows. Cleaner composition. Note that `Sequential` in the expansion is itself a macro — it is expanded in the same parse-time pass once `Ngram` is expanded.
@@ -181,8 +181,8 @@ Yes, once the sliding-window combinator is available. Pure composition.
             (n-wise-split n (rest xs)))))
 
 ;; the macro itself — registered at parse time
-(defmacro Ngram [n : AST] [thoughts : AST] -> :AST
-  `(Bundle (map Sequential (n-wise-split ,n ,thoughts))))
+(defmacro (Ngram (n :AST) (holons :AST) -> :AST)
+  `(Bundle (map Sequential (n-wise-split ,n ,holons))))
 ```
 
 Depends on `take`, `length`, `map`, `rest` being available in the wat stdlib (standard list combinators). `Ngram` is registered at parse time (per 058-031-defmacro); every `(Ngram n xs)` invocation is rewritten to the canonical Bundle-of-Sequentials form before hashing, with `Sequential` itself further expanded by the same pass.
@@ -191,7 +191,7 @@ Depends on `take`, `length`, `map`, `rest` being available in the wat stdlib (st
 
 1. **Window encoding: Sequential or custom?** The cleanest definition uses Sequential to encode each window. If 058-009 keeps Sequential as a stdlib form, this is clean. If Sequential is rejected (stays as variant), Ngram's internal window encoding inlines the Bundle+Permute pattern.
 
-2. **Edge cases.** What does `(Ngram 0 xs)` produce? `(Ngram 5 [a b c])`? `(Ngram 2 [])`? Proposal: `n=0` is error, `n > length` is empty bundle (zero vector), `xs = []` is empty bundle. Confirm conventions.
+2. **Edge cases.** What does `(Ngram 0 xs)` produce? `(Ngram 5 (list a b c))`? `(Ngram 2 (list))`? Proposal: `n=0` is error, `n > length` is empty bundle (zero vector), `xs = (list)` is empty bundle. Confirm conventions.
 
 3. **Specialized names for small `n`: `Bigram`, `Trigram`?** Pros: readable for the common cases. Cons: name proliferation. Recommendation: keep only `Ngram` as the parameterized form, and `Chain` as the `n=2` specialization (already in 058-012). Avoid `Bigram`/`Trigram` unless they earn distinct semantic intent beyond "Ngram with specific n."
 

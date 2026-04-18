@@ -7,39 +7,67 @@
 
 ## The Candidate
 
-`Thermometer` is the scalar-gradient primitive — it produces a dense-bipolar vector (in the algebra's ternary output space `{-1, 0, +1}^d` with no zeros by construction) whose dimensions encode a monotonic gradient along a direction seeded by an atom. See FOUNDATION's "Output Space" section.
+`Thermometer` is the primitive scalar-to-vector encoder. It takes a numeric value and a range, and produces a dense-bipolar vector whose monotonic gradient encodes the value's position in the range.
 
 ```scheme
-(Thermometer atom dim)
+(Thermometer value min max)
 ```
 
-One atom argument (the anchor identity) and one dimension count (the vector width).
+Three arguments: a numeric `value`, and the range bounds `min` and `max`. All three are scalars (typically `:f64`).
 
 ### Operation
 
-Given an atom `a` and a dimension count `d`, Thermometer produces a dense-bipolar vector `v` (within the algebra's ternary output space, but with no zeros by construction) where some fixed-from-the-atom's-seed pattern specifies the "gradient" — the direction of increasing magnitude.
-
-Concretely, Thermometer typically produces:
+The value's normalized position in the range is `t = (value - min) / (max - min) ∈ [0, 1]`. Thermometer produces a bipolar vector of dimension `d` where the first `t · d` dimensions are `+1` and the rest are `-1`:
 
 ```
-Thermometer(atom, d)[i] = +1 if i < (d * t(atom))
-                        = -1 otherwise
+Thermometer(value, min, max)[i] = +1 if i < (d · t)
+                                = -1 otherwise
 ```
 
-Where `t(atom)` is some atom-dependent position in `[0, 1]`. The specific position is part of the atom's deterministic seeding — different atoms produce thermometer vectors with different "transition points."
+Where `t` is clamped to `[0, 1]` if `value` falls outside `[min, max]`.
 
-The key property: the CUMULATIVE SUM of a Thermometer vector monotonically advances from one end (all +1s below the transition) to the other (all -1s above). This produces a GRADIENT that Blend can interpolate over.
+Key properties:
+- **Monotonic gradient.** The cumulative sum rises linearly from `0` (at `t = 0`) to `d` (at `t = 1`). This gradient structure is what makes Blend-between-thermometers produce meaningful similarity between nearby values.
+- **Deterministic.** Same `(value, min, max, d)` always produces the same vector. No codebook needed.
+- **Similarity-smooth.** `Thermometer(50, 0, 100)` and `Thermometer(52, 0, 100)` differ in only a few dimensions — their cosine similarity is close to 1. `Thermometer(10, 0, 100)` and `Thermometer(90, 0, 100)` differ in most dimensions — cosine close to 0. The similarity between vectors DIRECTLY reflects numeric distance of the encoded values.
 
-### AST shape (already exists)
+### Why 3-arity is the right signature
+
+Earlier drafts proposed `(Thermometer atom dim)` — seeded by an atom, anchor-style. That was a mental leftover from a different VSA scalar-encoding tradition (Blend-between-two-atom-anchors). Under the direct Thermometer-coding primitive, no atoms are needed — the gradient is computed from the value and range directly.
+
+The `d` dimension is inherited from the wat-vm's global dimension (per FOUNDATION's Dimensionality section); it doesn't need to be passed explicitly at the Thermometer call site.
+
+### AST shape
 
 ```rust
-pub enum ThoughtAST {
+pub enum HolonAST {
     // ... other variants ...
-    Thermometer(Atom, usize),
+    Thermometer { value: f64, min: f64, max: f64 },
 }
 ```
 
-One atom + one dim. Present in current `ThoughtAST`.
+Three scalar fields on the AST node. Present in current `HolonAST`.
+
+### Usage in composition
+
+Thermometer is directly a Holon. Combine freely:
+
+```scheme
+;; Bind a name to a scalar-encoded value
+(Bind (Atom "some-measure") (Thermometer 25.0 0.0 100.0))
+
+;; Build a scalar-field record
+(Map (list
+  (list (Atom :open)   (Thermometer 100.0 0.0 200.0))
+  (list (Atom :high)   (Thermometer 105.0 0.0 200.0))
+  (list (Atom :low)    (Thermometer 98.0  0.0 200.0))
+  (list (Atom :close)  (Thermometer 102.0 0.0 200.0))))
+
+;; Use as a query key
+(cleanup (Bind (Thermometer 50.0 0.0 100.0) record) vocabulary)
+```
+
+Linear, Log, Circular (058-008/017/018) become compositions that wrap Thermometer with different value transformations (linear direct, log-transform-before-thermometer, trigonometric-transform-for-wraparound).
 
 ## Why This IS Core
 

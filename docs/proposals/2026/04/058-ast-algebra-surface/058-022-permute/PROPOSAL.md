@@ -13,7 +13,7 @@
 (Permute v k)
 ```
 
-One thought argument and one integer step.
+One holon argument and one integer step.
 
 ### Operation
 
@@ -37,13 +37,13 @@ The exact permutation `P` is an implementation choice. The canonical choice in M
 ### AST shape (already exists)
 
 ```rust
-pub enum ThoughtAST {
+pub enum HolonAST {
     // ... other variants ...
-    Permute(Arc<ThoughtAST>, i32),
+    Permute(Arc<HolonAST>, i32),
 }
 ```
 
-One thought + one integer step count. Present in current `ThoughtAST`.
+One holon + one integer step count. Present in current `HolonAST`.
 
 ## Why This IS Core
 
@@ -59,9 +59,10 @@ VSA's ability to encode ORDERED structures (sequences, trees, positional records
 
 Without Permute, the algebra is position-agnostic. Bundle is commutative; Bind is not associative in a position-preserving way. Permute is what breaks the symmetry enough to encode ordering.
 
+
 **3. MAP VSA's "P" is Permute.**
 
-MAP VSA = Multiply (Bind), Add (Bundle), Permute. Permute is one of the three irreducible core operations. Removing it would degenerate the algebra to an unordered bag-of-thoughts.
+MAP VSA = Multiply (Bind), Add (Bundle), Permute. Permute is one of the three irreducible core operations. Removing it would degenerate the algebra to an unordered bag-of-holons.
 
 **4. Used by every positional stdlib form.**
 

@@ -9,7 +9,7 @@
 
 ## Reclassification Claim
 
-The current `ThoughtAST` enum has a `Log(low_atom, high_atom, value, scale)` variant. FOUNDATION's audit lists it as CORE. Under the stdlib criterion (058-002-blend's Blend primitive, plus Thermometer as core), `Log` is a BLENDING of two endpoint anchor Thermometers with weights derived from the value's LOG-normalized position.
+The current `HolonAST` enum has a `Log(low_atom, high_atom, value, scale)` variant. FOUNDATION's audit lists it as CORE. Under the stdlib criterion (058-002-blend's Blend primitive, plus Thermometer as core), `Log` is a BLENDING of two endpoint anchor Thermometers with weights derived from the value's LOG-normalized position.
 
 Log is structurally identical to Linear (058-008). The only difference is the normalization function — Log uses log-space interpolation, Linear uses linear-space. The algebraic operation is the same: weighted blend of two anchors.
 
@@ -24,7 +24,7 @@ With Blend as a pivotal core form (058-002), `Log` becomes a stdlib macro (per 0
 ### Stdlib definition
 
 ```scheme
-(defmacro Log [low-atom : AST] [high-atom : AST] [value : AST] [scale : AST] -> :AST
+(defmacro (Log (low-atom :AST) (high-atom :AST) (value :AST) (scale :AST) -> :AST)
   `(let* ((min (first ,scale))
           (max (second ,scale))
           (t (/ (- (log ,value) (log min))
@@ -120,7 +120,7 @@ Yes, once Blend is core.
 **holon-rs changes** — remove the variant:
 
 ```rust
-pub enum ThoughtAST {
+pub enum HolonAST {
     // remove: Log(Atom, Atom, f64, Scale),
 }
 ```
@@ -130,7 +130,7 @@ Delete the Log encoder match arm (~15-20 lines). Macro expansion is handled by 0
 **wat stdlib addition** — `wat/std/scalars.wat`:
 
 ```scheme
-(defmacro Log [low : AST] [high : AST] [value : AST] [scale : AST] -> :AST
+(defmacro (Log (low :AST) (high :AST) (value :AST) (scale :AST) -> :AST)
   `(let* ((min (first ,scale))
           (max (second ,scale))
           (t (/ (- (log ,value) (log min))

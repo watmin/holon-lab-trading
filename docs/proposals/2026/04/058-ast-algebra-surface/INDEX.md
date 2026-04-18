@@ -11,10 +11,10 @@
 **Foundational documents** (not proposals — read first):
 - `FOUNDATION.md` — the criterion for core/stdlib/language-core, the two-tier wat architecture, cryptographic provenance, Model A static loading, holographic framing
 - `RUST-INTERPRETATION.md` — practical guide for implementing the wat-vm in Rust under Model A
-- `HYPOTHETICAL-CANDLE-DESCRIBERS.wat` — worked example demonstrating programs-as-thoughts
+- `HYPOTHETICAL-CANDLE-DESCRIBERS.wat` — worked example demonstrating programs-as-holons
 
 **Sub-proposals** (30 total, each argues one form):
-- Algebra core: 10 forms (primitive operations on thought vectors)
+- Algebra core: 10 forms (primitive operations on holon vectors)
 - Algebra stdlib: 17 forms (named compositions over algebra core)
 - Language core: 3 forms (definition primitives that make stdlib writable)
 
@@ -40,7 +40,7 @@ These three are load-bearing; the rest depend on their resolution:
 
 5. **058-002-blend** — promotes `Blend(a, b, w1, w2)` to core with two independent scalar weights. Pivotal because six stdlib forms (Difference, Amplify, Subtract, Flip, Linear, Log, Circular) become expressible only after Blend lands as core.
 
-6. **058-001-atom-typed-literals** — generalizes `Atom` to accept any typed literal (string, int, float, bool, keyword, null). Required before data-structure stdlib (Map, Array) can use typed keys.
+6. **058-001-atom-typed-literals** — generalizes `Atom` to accept any typed literal (string, int, float, bool, keyword). Required before data-structure stdlib (HashMap, Vec) can use typed keys.
 
 7. **058-030-types** — the type system for language core. Required before `define` (058-028) and `lambda` (058-029) can have typed signatures.
 
@@ -59,7 +59,7 @@ These are existing wat/holon-rs primitives receiving dedicated proposals for lea
 11. **058-003-bundle-list-signature** — affirms Bundle as core with list signature.
 12. **058-022-permute** — affirms Permute as core.
 13. **058-023-thermometer** — affirms Thermometer as core.
-14. **058-025-cleanup** — affirms Cleanup as core (elevates from "library function" to named primitive).
+14. **058-025-cleanup** — **REJECTED.** The AST-primary framing dissolves Cleanup; retrieval is presence measurement (cosine + noise floor), not argmax-over-codebook. Kept as audit record.
 
 ### Phase 5 — Algebra core new forms (20 min)
 
@@ -71,7 +71,7 @@ Genuinely new algebraic operations:
 
 ### Phase 6 — Algebra stdlib (reframings, 15 min)
 
-Forms that used to be ThoughtAST variants; reframed as stdlib over Blend:
+Forms that used to be HolonAST variants; reframed as stdlib over Blend:
 
 18. **058-008-linear** — Blend over two Thermometer anchors with linear weights.
 19. **058-017-log** — same skeleton, log-normalized weights.
@@ -95,9 +95,9 @@ New named compositions:
 
 ### Phase 8 — Data structures (10 min)
 
-32. **058-016-map** — Bundle of Bind(key, value) pairs; the canonical VSA dictionary.
-33. **058-026-array** — Sequential alias with data-structure reader intent.
-34. **058-027-set** — Bundle alias with unordered-collection reader intent.
+32. **058-016-map** — renamed to `HashMap` (2026-04-18 Rust-surface sweep). Bundle of Bind(key, value) pairs; Rust backing is `std::HashMap`. `get` returns `:Option<V>`.
+33. **058-026-array** — renamed to `Vec` (2026-04-18). Integer-keyed HashMap; Rust backing is `std::Vec`. `get` with integer index returns `:Option<T>`; `nth` retired.
+34. **058-027-set** — renamed to `HashSet` (2026-04-18). Bundle alias with HashSet backing; unified `get` returns `:Option<T>` on membership.
 
 ### Phase 9 — Review synthesis (30 min)
 
@@ -145,7 +145,7 @@ Shows which proposals must resolve before which others. Arrows flow from prerequ
        v                       v
    058-003 (Bundle sig)     058-005 (Orthogonalize)
    058-021/022/023 (affirm) 058-006 (Resonance)
-   058-025 (Cleanup affirm) 058-007 (ConditionalBind)
+   [058-025 REJECTED]       058-007 (ConditionalBind)
 
 
  Stdlib cascades downstream of Blend:
@@ -159,24 +159,28 @@ Shows which proposals must resolve before which others. Arrows flow from prerequ
                    └─> 058-018 (Circular) ┘
 
    058-003 (Bundle sig) ──> 058-010 (Concurrent)
-                         ──> 058-027 (Set)
+                         ──> 058-027 (HashSet)
 
    058-022 (Permute) ──> 058-009 (Sequential reframing)
                       ──> 058-011 (Then) ────> 058-012 (Chain) ──> 058-013 (Ngram)
-                      ──> 058-026 (Array) [uses Sequential]
+                      ──> 058-026 (Vec) [integer-keyed HashMap]
 
-   058-009 (Sequential) ──> 058-026 (Array)
+   [058-009 Sequential and 058-026 Vec are now independent — Vec is integer-keyed HashMap, not a Sequential alias]
 
    058-004 (Difference) ──> 058-014 (Analogy)
 
-   058-001 (Atom typed) ──> 058-016 (Map) [keys as typed atoms]
+   058-001 (Atom typed) ──> 058-016 (HashMap) [keys as typed atoms]
 
-   058-025 (Cleanup) ──> 058-016 (Map get)
-                     ──> 058-026 (Array nth)
-                     ──> 058-014 (Analogy completion via cleanup)
+   [058-025 Cleanup REJECTED] — retrieval is presence measurement,
+                                 not argmax-over-codebook. HashMap / Vec /
+                                 HashSet all use unified `get` returning
+                                 :Option<T> through their Rust runtime
+                                 backings. Analogy's completion uses
+                                 presence measurement against a candidate
+                                 library.
 
    058-021 (Bind) ──> 058-024 (Unbind alias)
-                  ──> 058-016 (Map)
+                  ──> 058-016 (HashMap)
 
 
  Language core chain:
@@ -212,7 +216,7 @@ Shows which proposals must resolve before which others. Arrows flow from prerequ
 | 013 | Ngram | STDLIB | new | n-wise adjacency |
 | 014 | Analogy | STDLIB | new | `c + (b - a)` |
 | 015 | Amplify | STDLIB | new | `Blend(x, y, 1, s)` |
-| 016 | Map | STDLIB | new | Bundle of Bind(k, v) |
+| 016 | HashMap | STDLIB | new | Bundle of Bind(k, v); Rust HashMap backing |
 | 017 | Log | STDLIB | reframing | Same skeleton as Linear, log-space weights |
 | 018 | Circular | STDLIB | reframing | Same skeleton, sin/cos weights — tests Blend Option B |
 | 019 | Subtract | STDLIB | new | `Blend(x, y, 1, -1)`, removal framing |
@@ -221,9 +225,9 @@ Shows which proposals must resolve before which others. Arrows flow from prerequ
 | 022 | Permute | CORE | affirmation | Existing primitive, MAP's "P" |
 | 023 | Thermometer | CORE | affirmation | Scalar-gradient primitive |
 | 024 | Unbind | STDLIB | new alias | Bind alias with decode intent |
-| 025 | Cleanup | CORE | affirmation | Similarity-based retrieval, elevates to first-class core |
-| 026 | Array | STDLIB | new alias | Sequential with data-structure intent |
-| 027 | Set | STDLIB | new alias | Bundle with unordered-collection intent |
+| 025 | Cleanup | REJECTED | — | Dissolved by AST-primary framing; retrieval is presence measurement, not argmax-over-codebook |
+| 026 | Vec | STDLIB | new | Integer-keyed HashMap; Rust Vec backing |
+| 027 | HashSet | STDLIB | new | Bundle of elements; Rust HashSet backing |
 | 028 | define | LANG CORE | new | Typed named function registration |
 | 029 | lambda | LANG CORE | new | Typed anonymous functions with closures |
 | 030 | types | LANG CORE | new | Type system, keyword-path user types |
@@ -254,9 +258,9 @@ If these three land cleanly, the remaining 27 proposals resolve with mechanical 
 
 Specific points where designer judgment is load-bearing:
 
-- **Naming aliases.** 4 stdlib forms are Bundle aliases (Bundle itself, Concurrent, Set, Bundle-of-pair). 3 are Bind/Sequential aliases. Is this the right granularity, or is there name bloat?
+- **Naming aliases.** Bundle aliases: Bundle (primitive), Concurrent (temporal-co-occurrence intent), HashSet (data-structure intent — Rust name). HashMap and Vec are Bundle-of-Bind compositions with Rust-surface names. Is this the right granularity, or is there name bloat? Hickey round-2 flagged Concurrent vs. HashSet as a policy question — pick one alias or none.
 - **Cache canonicalization.** Do stdlib calls share cache entries with their expanded form, or keep distinct names in the AST? Tooling-level decision that ripples across 058-008/017/018, 058-009, 058-010, 058-015, 058-019, 058-020, 058-024.
-- **`:Any` type escape hatch.** When is it acceptable? Primarily for primitives like `Cleanup` that take heterogeneous candidate types.
+- **`:Any` type escape hatch.** Was considered, rejected. Heterogeneous data uses named `:Union<T,U,V>` types; generic containers use parametric `T`/`K`/`V`; atom literals use `:AtomLiteral`. Resolved in the 2026-04-18 type-grammar sweep.
 - **Cryptographic primitive choice.** FOUNDATION mentions SHA-256 / BLAKE3 as options. Deployment choice, but worth naming at review.
 - **Name-collision policy under Model A.** Startup halt on collision — strict — is the recommendation. Confirm no exception cases.
 
@@ -270,7 +274,7 @@ Once designer decisions are made, implementation priorities shape up:
 2. **Land Blend.** Pivotal for stdlib cascade.
 3. **Land the new algebra core (Orthogonalize, Resonance, ConditionalBind).** Small Rust changes each.
 4. **Land the stdlib as real wat files.** Most proposals become small `.wat` additions once the language supports them.
-5. **Reframe the existing variants.** Linear/Log/Circular/Sequential move from ThoughtAST variants to stdlib functions.
+5. **Reframe the existing variants.** Linear/Log/Circular/Sequential move from HolonAST variants to stdlib functions.
 6. **Verify with HYPOTHETICAL-CANDLE-DESCRIBERS.wat.** When this file runs end-to-end, the 058 batch is functionally delivered.
 
 ---

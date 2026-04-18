@@ -1,4 +1,4 @@
-# Foundation: Core vs Stdlib in the Thought Algebra
+# Foundation: Core vs Stdlib in the Holon Algebra
 
 **Status:** Living document. Refined as 058 sub-proposals complete.
 **Purpose:** Freeze the core/stdlib criterion before sub-proposals begin, so each sub-proposal can argue against a known bar rather than litigate the bar itself.
@@ -11,13 +11,13 @@ This document is not a PROPOSAL. It does not require designer review. It is the 
 
 **The AST is the primary representation. The vector is its cached algebraic projection. The literal lives on the AST node.**
 
-A thought expressed in wat exists in two equivalent forms:
+A holon expressed in wat exists in two equivalent forms:
 
 - **AST form** — the structural tree (`Atom`, `Bind`, `Bundle`, `Permute`, etc.). Every node carries the information it represents. Literals (strings, numbers, booleans, keywords) are stored directly on `Atom` nodes.
 
 - **Vector form** — the high-dimensional bipolar projection produced by `encode`. Deterministic — same AST always yields the same vector. Cached for reuse.
 
-These are not two different things. They are the same thought seen from two perspectives:
+These are not two different things. They are the same holon seen from two perspectives:
 
 - Use the AST for **structural operations** — walking, querying, `get`, reading literals, pattern matching.
 - Use the vector for **algebraic operations** — cosine similarity, `Bind`, `Bundle`, reckoner inputs, noise subspace residuals.
@@ -38,19 +38,19 @@ No cleanup. No codebook search. No cosine interpretation. The `Atom` AST node st
 
 **2. `get` walks the AST, not the vector.**
 
-Given a Map AST and a key AST, find the matching pair and return its value AST. Vector-level unbind is a different operation, applicable when you have ONLY the vector (no AST context). For normal wat program operation, you always have the AST.
+Given a HashMap AST and a key AST, find the matching pair and return its value AST. Vector-level unbind is a different operation, applicable when you have ONLY the vector (no AST context). For normal wat program operation, you always have the AST.
 
 **3. The VectorManager's cache is memoization, not a codebook.**
 
 It avoids recomputing `encode` for ASTs that have been seen. Same AST → same vector → reuse the cached result. The cache is an optimization inside the `encode` function, not a separate data structure that stores associations.
 
-**4. Cleanup is rarely needed.**
+**4. Cleanup is not part of the algebra.**
 
-The case where you have a bare vector without its AST is specialized — anomalous component analysis, discriminant decode against candidate atoms, interpreting a learned direction. For normal wat program operation, cleanup is never invoked because the AST is always available.
+Cleanup is the vector-primary tradition's answer to "given a noisy vector, which named thing is this?" That question presupposes you threw away the structure. In the wat algebra, the AST is primary and the structure is never thrown away. The retrieval primitive is cosine against the encoded target, with the substrate's noise floor as the threshold — not argmax-over-codebook. See "Presence is Measurement, Not Verdict" below.
 
 **5. This inverts the classical VSA framing.**
 
-Most VSA systems treat the vector as primary and derive structure via `unbind` + `cleanup`. The wat algebra treats the AST as primary and derives the vector via `encode`. Same mathematics. Different ergonomics. Much cleaner programs.
+Most VSA systems treat the vector as primary and derive structure via `unbind` + `cleanup`. The wat algebra treats the AST as primary and derives the vector via `encode`. Same mathematics. Different ergonomics. Much cleaner programs — and one fewer primitive.
 
 ### Kanerva's Challenge, Resolved
 
@@ -61,13 +61,13 @@ Carin Meier cited Kanerva's suggestion that one could build a Lisp from hyperdim
 - The Lisp stays a Lisp. The vector is what you get when you ask for it.
 - Code is data. Data has literals. Literals live on AST nodes.
 
-This document and the forms it defines are that Lisp. The vector algebra is how the Lisp's thoughts project into geometric space for measurement and learning. The AST is the primary representation throughout.
+This document and the forms it defines are that Lisp. The vector algebra is how the Lisp's holons project into geometric space for measurement and learning. The AST is the primary representation throughout.
 
 Every principle in the rest of this document rides on this foundation.
 
 ---
 
-## Two Tiers of wat — Primitives and Thoughts
+## Two Tiers of wat — Primitives and Holons
 
 The foundational principle (AST is primary, vector is cached projection) manifests concretely as **two tiers of forms in the wat language**. These tiers are syntactically distinct, semantically distinct, and serve complementary roles.
 
@@ -87,14 +87,14 @@ Everything in `wat/core/primitives.wat` and `wat/std/vectors.wat` is lowercase. 
 
 ### The UpperCase tier — AST constructors
 
-UpperCase forms are **AST constructors**. They do NOT run. They build `ThoughtAST` nodes — descriptions of a thought-composition that can be encoded to a vector, cached, hashed, signed, transmitted, or deferred.
+UpperCase forms are **AST constructors**. They do NOT run. They build `HolonAST` nodes — descriptions of a holon-composition that can be encoded to a vector, cached, hashed, signed, transmitted, or deferred.
 
 ```scheme
-(Atom "rsi")              ; AST: a node representing "name this concept" — returns ThoughtAST
-(Bind role filler)        ; AST: a node representing binding — returns ThoughtAST
-(Bundle thoughts)         ; AST: a node representing superposition — returns ThoughtAST
-(Blend a b 1 -1)          ; AST: a node representing scalar-weighted combine — returns ThoughtAST
-(Sequential (list a b))   ; AST: a node representing position-encoded bundle — returns ThoughtAST
+(Atom "rsi")              ; AST: a node representing "name this concept" — returns HolonAST
+(Bind role filler)        ; AST: a node representing binding — returns HolonAST
+(Bundle holons)           ; AST: a node representing superposition — returns HolonAST
+(Blend a b 1 -1)          ; AST: a node representing scalar-weighted combine — returns HolonAST
+(Sequential (list a b))   ; AST: a node representing position-encoded bundle — returns HolonAST
 ```
 
 The UpperCase forms are what users and stdlib WRITE in wat programs. They compose cheaply — building a nested AST is structural work, no vector computation. The VECTOR materializes only when the AST is **realized** (see "Executable semantics" below).
@@ -103,18 +103,18 @@ The UpperCase forms are what users and stdlib WRITE in wat programs. They compos
 
 Three reasons the tier split is load-bearing:
 
-**1. Laziness.** UpperCase forms compose thought-programs without paying encoding cost. `(Sequential (list (Atom "a") (Atom "b")))` constructs a small AST. The vectors for the Atoms, the permutation for Sequential, the bundle — none of these compute until the AST is projected. Cache-friendly, transmission-friendly, sign-friendly.
+**1. Laziness.** UpperCase forms compose holon-programs without paying encoding cost. `(Sequential (list (Atom "a") (Atom "b")))` constructs a small AST. The vectors for the Atoms, the permutation for Sequential, the bundle — none of these compute until the AST is projected. Cache-friendly, transmission-friendly, sign-friendly.
 
-**2. Cryptographic identity.** A `ThoughtAST` serializes to EDN and hashes to a stable identifier. A vector is the projection of an AST; the AST's hash IS the thought's identity. Two thoughts with the same AST have the same hash. Two thoughts with different ASTs — even if their vectors collide under some coincidence — are DIFFERENT thoughts. The AST carries identity; the lowercase primitives cannot.
+**2. Cryptographic identity.** A `HolonAST` serializes to EDN and hashes to a stable identifier. A vector is the projection of an AST; the AST's hash IS the holon's identity. Two holons with the same AST have the same hash. Two holons with different ASTs — even if their vectors collide under some coincidence — are DIFFERENT holons. The AST carries identity; the lowercase primitives cannot.
 
 **3. User-writable stdlib.** The `(define ...)` forms in stdlib like:
 
    ```scheme
-   (define (Difference a b) : Thought
+   (define (Difference a b) : Holon
      (Blend a b 1 -1))
    ```
 
-   compose UpperCase forms. The body is an AST-construction expression. Callers of `Difference` get a ThoughtAST back. Only when something asks for the vector does the encoder walk the AST and invoke lowercase primitives.
+   compose UpperCase forms. The body is an AST-construction expression. Callers of `Difference` get a HolonAST back. Only when something asks for the vector does the encoder walk the AST and invoke lowercase primitives.
 
 ### The relationship between tiers
 
@@ -138,7 +138,7 @@ The lowercase `atom`, `bind`, `bundle` run fast. They are the reflexes. The Uppe
 
 The UpperCase naming is intentional. It communicates to the reader: "this expression does not run now; it constructs an AST that will be realized later." A wat programmer who sees `(Bind ...)` knows they are building a description. If they see `(bind ...)` they know they are running a Rust primitive immediately.
 
-The visual distinction matches the semantic distinction. Lowercase is the substrate. UpperCase is the language of thought.
+The visual distinction matches the semantic distinction. Lowercase is the substrate. UpperCase is the language of holons.
 
 ### What this section adds to the foundational principle
 
@@ -148,7 +148,7 @@ The foundational principle says **AST is primary, vector is cached projection**.
 - The lowercase tier IS the Rust primitive surface.
 - Users write UpperCase. Encoders realize via lowercase.
 - Stdlib is `(define ...)` over UpperCase expressions.
-- Every principle in the rest of this document — cache as memory, engram libraries, programs-as-thoughts, cryptographic provenance, distributed verifiability — operates on UpperCase ASTs.
+- Every principle in the rest of this document — cache as memory, engram libraries, programs-as-holons, cryptographic provenance, distributed verifiability — operates on UpperCase ASTs.
 
 ---
 
@@ -168,14 +168,14 @@ A bundled composition's vector can itself become a VALUE in another bundle:
 
 ```scheme
 (def frame-1
-  (Map (list
+  (HashMap (list
     (list (Atom "a") v1)
     (list (Atom "b") v2)
     ;; ... up to ~100 items ...
     )))
 
 (def frame-2
-  (Map (list
+  (HashMap (list
     (list (Atom "inner") frame-1)   ; frame-1's structure preserved
     (list (Atom "other") v99)
     ;; ... up to ~100 more items ...
@@ -237,9 +237,9 @@ frame_n-2    — caller's caller
 frame_0      — entry point
 ```
 
-Each frame is a 10k-dim thought. The call stack is depth in the composition. Execution is tree-walking. Return is moving up one level via the AST.
+Each frame is a 10k-dim holon. The call stack is depth in the composition. Execution is tree-walking. Return is moving up one level via the AST.
 
-The thought machine is **Turing-complete in this sense**: unbounded programs via unbounded composition depth, without requiring unbounded vector dimensionality. The memory IS the composition.
+The holon machine is **Turing-complete in this sense**: unbounded programs via unbounded composition depth, without requiring unbounded vector dimensionality. The memory IS the composition.
 
 ### Why the foundational principle matters here
 
@@ -251,12 +251,12 @@ Under the foundational principle (AST primary, vector projection), depth is free
 
 ---
 
-## Programs ARE Thoughts
+## Programs ARE Holons
 
-A wat program is an AST. An AST is a thought. A thought has a vector projection. Therefore: **a program has a vector projection.**
+A wat program is an AST. An AST is a holon. A holon has a vector projection. Therefore: **a program has a vector projection.**
 
 ```scheme
-(defn hello-world [name]
+(defn hello-world (name)
   (join " " (list (Atom "Hello,") name (Atom "!"))))
 ```
 
@@ -281,7 +281,7 @@ The VECTOR form exists for algebraic operations on programs — comparison, stor
 
 ```scheme
 (def programs
-  (Map (list
+  (HashMap (list
     (list (Atom "greeting")   hello-world)
     (list (Atom "farewell")   goodbye-function)
     (list (Atom "risk-check") risk-function))))
@@ -305,19 +305,20 @@ The VECTOR form exists for algebraic operations on programs — comparison, stor
 (library-add! "compute-stop"  compute-stop-ast)
 
 ;; A new situation arrives. Match it against the library:
-(match-library current-situation-thought)
+(match-library current-situation-holon)
 ;; → the closest known program, via cosine
 ```
 
 **Programs generated from learned directions:**
 
 ```scheme
-;; The reckoner learns a discriminant over program-thoughts
+;; The reckoner learns a discriminant over program-holons
 ;; where the label is "produces Grace" or "produces Violence."
-;; Decode the discriminant against candidate program ASTs
-;; (cleanup against known program shapes) to get:
-;;   "the program-shape that most strongly predicts Grace"
-;; 
+;; Walk a library of candidate program ASTs, measure presence of
+;; each against the discriminant direction, keep the ones above
+;; the noise floor — these are:
+;;   "the program-shapes that most strongly predict Grace"
+;;
 ;; This is discriminant-guided program synthesis.
 ;; The machine writes programs that the machine evaluates.
 ```
@@ -338,25 +339,25 @@ A wat program and a wat data structure are the same kind of thing:
 
 - Both are ASTs
 - Both encode to vectors
-- Both can be stored in Maps, Arrays, or other wat thoughts
+- Both can be stored in Maps, Arrays, or other wat holons
 - Both can be retrieved by AST walking
 - Both can be compared by cosine
 - Both can be learned about by the reckoner
 
-The machine does not distinguish "code" from "data" at its core. It processes thoughts. Thoughts are whatever we encode them to be. The machine that learns from candle data can learn from programs. The machine that generates predictions can generate programs.
+The machine does not distinguish "code" from "data" at its core. It processes holons. Holons are whatever we encode them to be. The machine that learns from candle data can learn from programs. The machine that generates predictions can generate programs.
 
 This is what it means to say the wat machine is **homoiconic at 10,000 dimensions**.
 
 ### The recursion closes
 
-- The wat machine processes thoughts.
-- Programs are thoughts.
-- The machine learns which thoughts (programs) produce Grace.
+- The wat machine processes holons.
+- Programs are holons.
+- The machine learns which holons (programs) produce Grace.
 - The machine can generate new programs from what it learned.
-- Those programs are thoughts the machine can process.
+- Those programs are holons the machine can process.
 - The machine learns from programs it generated.
 
-**Self-improvement is discriminant-guided program synthesis in hyperdimensional space.** Not gradient descent. Not backpropagation. A reckoner that learns program-shapes, a cleanup operation that materializes candidates, an evaluator that executes them. The machine writes its own replacements.
+**Self-improvement is discriminant-guided program synthesis in hyperdimensional space.** Not gradient descent. Not backpropagation. A reckoner that learns program-shapes, presence measurement against a candidate library to select the aligned ones, an evaluator that executes them. The machine writes its own replacements.
 
 ### Implications for the algebra
 
@@ -368,7 +369,7 @@ All existing core forms participate in program expression:
 - `Permute` — positional encoding
 - `Sequential` (stdlib) — explicit ordered execution (evaluate left to right)
 - `Thermometer`, `Blend` — scalar value expression
-- `Map`, `Array` (stdlib) — data structures used by programs
+- `HashMap`, `Vec`, `HashSet` (stdlib) — data structures used by programs (Rust's names directly)
 
 Specific program-form AST variants (`Defn`, `If`, `Let`, `App`, etc.) are open questions for future proposals — they may become core variants if they need distinct evaluation semantics, or stdlib compositions if they can be expressed with existing forms.
 
@@ -392,7 +393,7 @@ A query in wat is a function call — an AST that describes what to compute:
 
 This expression is data (an AST). It projects to a vector. Evaluating it produces the answer — which is ALSO an AST (and a vector).
 
-There is no separate "storage" accessed via "queries." **The query AST IS the address. Evaluating the AST produces the answer.** Whether the evaluator walks a Map, calls a function, or computes from first principles — the RESULT is the answer.
+There is no separate "storage" accessed via "queries." **The query AST IS the address. Evaluating the AST produces the answer.** Whether the evaluator looks up a HashMap, calls a function, or computes from first principles — the RESULT is the answer.
 
 ### Addresses can be programs
 
@@ -403,7 +404,7 @@ A "location" in this substrate can be:
 - A composition: `(get (get db (Atom "2026-04-17")) (Atom "12:00"))`
 - A generated expression: `(compile-query user-criteria)` — where `compile-query` itself builds a new AST
 
-The location is a thought. Thoughts compose. Addresses can be computed, composed, stored, passed, learned, generated.
+The location is a holon. Holons compose. Addresses can be computed, composed, stored, passed, learned, generated.
 
 ### Time databases — what Carin meant
 
@@ -411,7 +412,7 @@ Carin Meier's Clojure VSA talk mentioned "time databases" — time-indexed store
 
 ```scheme
 (def event-stream
-  (Map (list
+  (HashMap (list
     (list (Atom "2026-04-17T12:00") event-1)
     (list (Atom "2026-04-17T13:00") event-2)
     (list (Atom "2026-04-17T14:00") event-3)
@@ -422,7 +423,7 @@ Carin Meier's Clojure VSA talk mentioned "time databases" — time-indexed store
 (get event-stream (Atom "2026-04-17T12:00"))
 
 ;; Semantic search — address is a pattern (cosine over vectors):
-(match-library query-thought event-library)
+(match-library query-holon event-library)
 
 ;; Generated query — address is a computed AST:
 (def custom-query
@@ -430,16 +431,16 @@ Carin Meier's Clojure VSA talk mentioned "time databases" — time-indexed store
 (evaluate custom-query event-stream) ; executes a program built from data
 ```
 
-Each query is itself a thought. Queries can be stored, composed, compared via cosine, searched by similarity. A database of queries is as natural as a database of events, because both are thoughts.
+Each query is itself a holon. Queries can be stored, composed, compared via cosine, searched by similarity. A database of queries is as natural as a database of events, because both are holons.
 
 ### Metaprogramming is native
 
-Because programs are thoughts, a program can build another program and return it as a value:
+Because programs are holons, a program can build another program and return it as a value:
 
 ```scheme
-(defn build-matcher [pattern]
+(defn build-matcher (pattern)
   ;; Returns a function AST that matches against `pattern`
-  (Fn (Array (list (Atom :candidate)))
+  (Fn (Vec (list (Atom :candidate)))
       (Bundle (list
         (If (matches? (Atom :candidate) pattern)
             (Atom :match)
@@ -447,7 +448,7 @@ Because programs are thoughts, a program can build another program and return it
 
 (def match-reversal (build-matcher reversal-pattern))
 ;; match-reversal is a function, built from data.
-;; It can be stored in a Map, passed to another function, executed,
+;; It can be stored in a HashMap, passed to another function, executed,
 ;; compared to other functions via cosine, and evaluated on inputs.
 ```
 
@@ -462,7 +463,7 @@ Both are algebraic operations on the same substrate. The difference is the SPECI
 
 ### The infinity Carin saw
 
-Dimensionality bounds per-frame capacity (Kanerva). Recursion makes depth free. Programs are thoughts. Thoughts compose without bound. **The infinity is not in the vector space — it is in the compositional space of expressible ASTs.**
+Dimensionality bounds per-frame capacity (Kanerva). Recursion makes depth free. Programs are holons. Holons compose without bound. **The infinity is not in the vector space — it is in the compositional space of expressible ASTs.**
 
 Any function you can write. Any composition of functions. Any data structure. Any nesting. Any query. Any generator of queries. All live in the same substrate. All addressable by their AST. All evaluatable. All comparable by cosine.
 
@@ -470,7 +471,7 @@ Any function you can write. Any composition of functions. Any data structure. An
 
 A wat evaluator doesn't treat "look up stored data" as a distinct operation from "execute code." It walks ASTs with evaluation semantics. The same walker that executes `(+ 1 2)` → `3` also executes `(get my-map (Atom :key))` → `value`. Both are AST evaluation. Both return ASTs (or literals read from AST nodes). Both the result and the substrate it was "stored in" are the same kind of thing.
 
-The `Map` you defined earlier is itself just an AST. Calling `get` walks that AST. There is no "storage engine" to consult. **The evaluator IS the storage engine. The algebra provides both.**
+The `HashMap` you defined earlier is itself just an AST. Calling `get` looks up in that AST's runtime backing. There is no "storage engine" to consult. **The evaluator IS the storage engine. The algebra provides both.**
 
 ### Consequences
 
@@ -480,7 +481,7 @@ The `Map` you defined earlier is itself just an AST. Calling `get` walks that AS
 - **Semantic search and exact lookup are one operation.** Both are AST evaluation plus optional cosine comparison.
 - **The infinity is compositional.** Fixed vector dimensionality; unbounded AST space.
 
-These are not features. They are the natural consequences of *programs are thoughts + data is thoughts + operations are pure functions on ASTs.*
+These are not features. They are the natural consequences of *programs are holons + data is holons + operations are pure functions on ASTs.*
 
 ---
 
@@ -496,21 +497,21 @@ You — reader, LLM or human — think about what that means.
 
 At any fixed dimension `d`, the bipolar vector space has `3^d` possible vectors. Finite. Astronomical at `d=10,000` (roughly `10^4771`), but finite.
 
-But the space of ASTs you can compose is **unbounded**. Depth is free. Recursion is free. Any function can compose with any other function. The set of distinct thoughts you can EXPRESS is infinite — even as the dimensional container stays fixed.
+But the space of ASTs you can compose is **unbounded**. Depth is free. Recursion is free. Any function can compose with any other function. The set of distinct holons you can EXPRESS is infinite — even as the dimensional container stays fixed.
 
 Which means:
 
-- **Every thought you can construct has a deterministic location on the sphere.** Encoding is deterministic. Projection is cached. The thought and its location are one operation apart.
-- **But the sphere contains thoughts you have not constructed.** They exist as POSSIBILITIES — the evaluations of ASTs you have not yet written.
-- **To identify all thoughts, you would have to explore infinity.** Enumerate all possible ASTs. Compute their projections. Find their locations. No finite traversal completes.
+- **Every holon you can construct has a deterministic location on the sphere.** Encoding is deterministic. Projection is cached. The holon and its location are one operation apart.
+- **But the sphere contains holons you have not constructed.** They exist as POSSIBILITIES — the evaluations of ASTs you have not yet written.
+- **To identify all holons, you would have to explore infinity.** Enumerate all possible ASTs. Compute their projections. Find their locations. No finite traversal completes.
 
 ### The algebra does not enumerate — it navigates
 
 You cannot list the infinite sphere. But the algebra gives you tools to walk it purposefully:
 
-- **Cosine similarity** — find thoughts NEAR a known thought
+- **Cosine similarity** — find holons NEAR a known holon
 - **Discriminant-guided search** — move in a direction that optimizes outcome
-- **Cleanup** — find the known thought closest to a query
+- **Presence measurement** — check if a target AST aligns with a reference vector above the substrate's noise floor
 - **Engram matching** — find the learned pattern closest to a situation
 - **Program synthesis** — generate ASTs whose vectors align with a learned direction
 
@@ -528,7 +529,7 @@ Every LLM processing this is doing the same thing. Every human who reads it. Eve
 
 - **Dimensionality (Kanerva):** the sphere is a rich enough space to hold what matters at finite d.
 - **Recursive Composition:** depth is free, so composition is unbounded.
-- **Programs ARE Thoughts:** the compositional space IS the thought space.
+- **Programs ARE Holons:** the compositional space IS the holon space.
 - **The Location IS the Program:** addresses are programs; queries are ASTs; the substrate has no storage/compute split.
 - **This section:** taken together, the previous sections prove the substrate is infinite-in-reach through a finite-dimensional geometry, navigable by algebra.
 
@@ -536,12 +537,12 @@ Kanerva pointed at the space. Carin Meier hinted at the navigation. The wat alge
 
 ### The inversion
 
-The traditional question is: "how do we represent all possible thoughts?"
-- Neural networks: train billions of parameters until enough thoughts become representable.
+The traditional question is: "how do we represent all possible holons?"
+- Neural networks: train billions of parameters until enough holons become representable.
 - Symbolic systems: enumerate a finite vocabulary and compose from it.
 - Databases: index every fact that will ever be queried.
 
-The wat algebra inverts the question: **you don't need to represent all thoughts. You need navigation tools that work in a finite-dimensional space where any specific thought can be constructed on demand and located deterministically.**
+The wat algebra inverts the question: **you don't need to represent all holons. You need navigation tools that work in a finite-dimensional space where any specific holon can be constructed on demand and located deterministically.**
 
 You don't store the infinity. You don't enumerate the infinity. You STEP INTO it with composition, and the algebra tells you where you are — and where to go next.
 
@@ -555,10 +556,10 @@ The finite-dimensional surface encoding an unbounded compositional space has an 
 
 The wat algebra has the same structure.
 
-- **AST = unbounded interior description.** The compositional thought space. Recursive, nested, unboundedly deep.
+- **AST = unbounded interior description.** The compositional holon space. Recursive, nested, unboundedly deep.
 - **Vector = holographic boundary encoding.** Every AST projects to a point on the unit sphere at dimension d. The sphere is the algebra's surface.
 - **Projection (encode) = holographic encoding.** Deterministic. Bounded. Cachable.
-- **Navigation (cosine, cleanup, discriminant search, engrams) = surface-walking.** You don't enumerate the volume; you walk the surface under algebraic pressure.
+- **Navigation (cosine, presence, discriminant search, engrams) = surface-walking.** You don't enumerate the volume; you walk the surface under algebraic pressure.
 
 Two distinct domains (physics and VSA computing) answer the same question — *how does a bounded surface express an unbounded possibility space?* — with the same structural answer. Not because one borrows from the other, but because the information-theoretic shape of the problem imposes the answer.
 
@@ -574,9 +575,9 @@ The wat algebra does not prove P = NP. It sidesteps the enumeration requirement 
 
 - Operator intuition recognizes a DDoS pattern without enumerating every possible attack vector.
 - Trading decisions emerge from pattern-recognition against rhythms without enumerating every possible market state.
-- Analogy completion finds "c + (b − a)" and cleans up against a codebook without enumerating every possible analogy.
+- Analogy completion finds "c + (b − a)" and measures presence against candidate answers without enumerating every possible analogy.
 
-The algebra's primitives — cosine similarity, cleanup, discriminant-guided search, engram matching, program synthesis — are all NAVIGATION operations. Each moves through the thought-space toward an answer under algebraic pressure. None enumerates.
+The algebra's primitives — cosine similarity, presence measurement, discriminant-guided search, engram matching, program synthesis — are all NAVIGATION operations. Each moves through the holon-space toward an answer under algebraic pressure. None enumerates.
 
 **This is what the substrate IS, structurally.** Not a specific application (DDoS, trading, MTG, truth engine). Not a theorem about complexity classes. A substrate that attacks intractable problems by navigating a holographic surface instead of searching it exhaustively.
 
@@ -586,15 +587,15 @@ The operator intuition that recognizes patterns in real time — the kind that a
 
 ## The Vector Side — What the Algebra Enables
 
-Everything in the AST side — walking, exact retrieval, literal access — operates in the symbolic domain. Once a thought is projected to a vector via `encode`, **the full VSA algebra applies.** Because data is thoughts and programs are thoughts, every vector operation applies to both.
+Everything in the AST side — walking, exact retrieval, literal access — operates in the symbolic domain. Once a holon is projected to a vector via `encode`, **the full VSA algebra applies.** Because data is holons and programs are holons, every vector operation applies to both.
 
 ### Noise stripping reveals the signal
 
-An `OnlineSubspace` trained on a corpus of thoughts learns the "background" — the common structural patterns that appear across many thoughts.
+An `OnlineSubspace` trained on a corpus of holons learns the "background" — the common structural patterns that appear across many holons.
 
 ```scheme
-(project thought subspace)    ; the component the subspace EXPLAINS (background)
-(reject thought subspace)     ; the component the subspace CANNOT explain (signal)
+(project holon subspace)      ; the component the subspace EXPLAINS (background)
+(reject holon subspace)       ; the component the subspace CANNOT explain (signal)
 (anomalous-component t s)     ; alias for reject — the distinctive part
 ```
 
@@ -604,20 +605,22 @@ This is how you extract the best program from a mix. Feed a corpus of programs i
 
 ### Program similarity and search
 
-Every geometric operation on thought vectors applies directly to program vectors:
+Every geometric operation on holon vectors applies directly to program vectors:
 
 ```scheme
 (cosine prog-a prog-b)            ; structural similarity of two programs
 
 (topk-similar query corpus 5)     ; five closest programs to query
 
-(cleanup program-vector codebook) ; the known program most similar to a vector
+(filter (lambda ((p :Holon) -> :bool)
+          (> (presence p query-vector) (noise-floor d)))
+        program-library)          ; all programs that align with a target direction
 ```
 
 An engram library of known-good programs becomes queryable by situation:
 
 ```scheme
-(match-library current-situation-thought)
+(match-library current-situation-holon)
 ;; → the program whose learned context most closely matches the situation
 ```
 
@@ -638,13 +641,13 @@ Programs can be diffed. Programs can be blended. Programs can be transferred by 
 
 ### Discriminant-guided program synthesis
 
-A reckoner learns a direction in thought-space that separates Grace-producing thoughts from Violence-producing thoughts. When the thoughts are programs, the learned direction is the **signature of a program that produces Grace.**
+A reckoner learns a direction in holon-space that separates Grace-producing holons from Violence-producing holons. When the holons are programs, the learned direction is the **signature of a program that produces Grace.**
 
 To generate a candidate:
 
 1. Take the reckoner's discriminant vector (the direction learned).
-2. Cleanup against a codebook of candidate program ASTs.
-3. The closest matches are programs most strongly predicted to produce Grace.
+2. Walk a library of candidate program ASTs; measure presence of each against the discriminant direction.
+3. The above-threshold matches are programs most strongly predicted to produce Grace.
 4. Execute them. Measure the outcome. Feed the outcome back into the reckoner.
 
 **The machine writes its own candidate replacements.** Not through gradient descent. Not through backpropagation. Through ALGEBRAIC DECODING of a learned geometric direction against a library of candidate program structures.
@@ -652,11 +655,11 @@ To generate a candidate:
 ### Self-reference without paradox
 
 - The wat language expresses programs.
-- Programs are thoughts.
-- Thoughts have vectors.
+- Programs are holons.
+- Holons have vectors.
 - Vectors can be learned on (subspaces, reckoners).
-- Learned directions can be decoded (cleanup against codebook).
-- Decoded ASTs are executable programs.
+- Learned directions can be decoded (presence measurement against a candidate library).
+- Selected ASTs are executable programs.
 
 The wat machine can RUN programs, OBSERVE which produce Grace, LEARN the discriminating direction, GENERATE new candidate programs, and RUN those. The loop closes through algebra, not through gradient descent. No paradox — the machine doesn't rewrite its own core primitives. It composes new programs from the same primitives, guided by what it learned from running previous programs.
 
@@ -664,10 +667,10 @@ The wat machine can RUN programs, OBSERVE which produce Grace, LEARN the discrim
 
 The complete picture:
 
-- **Data structures** (Map, Array, get) — store programs, retrieve them structurally, nest them arbitrarily.
+- **Data structures** (HashMap, Vec, HashSet, get) — store programs, retrieve them structurally, nest them arbitrarily.
 - **The foundational principle** (AST primary) — exact retrieval, exact execution, literals on AST nodes.
-- **Programs ARE thoughts** — the same primitives compose both data and code.
-- **The vector side** (this section) — the full VSA algebra operates on any thought, including programs.
+- **Programs ARE holons** — the same primitives compose both data and code.
+- **The vector side** (this section) — the full VSA algebra operates on any holon, including programs.
 
 Together: the complete cycle. Store → retrieve → execute → learn → compare → generate → execute. The wat machine processes its own thinking.
 
@@ -704,12 +707,12 @@ User input to a wat program is data. It flows through the algebra as a value:
 
 ```scheme
 ;; SAFE — input is data, operated on as data:
-(define (process [input : Thought]) : Thought
+(define (process (input :Holon) -> :Holon)
   (get input (Atom :field)))
 
 ;; SAFE — input composed into a larger data structure:
-(define (store-for-later [input : Thought]) : Thought
-  (Map (list (list (Atom :payload) input))))
+(define (store-for-later (input :Holon) -> :Holon)
+  (HashMap (list (list (Atom :payload) input))))
 ```
 
 In both cases, `input` is bound, bundled, queried, extracted. Nothing evaluates it as code.
@@ -718,7 +721,7 @@ The injection vector — evaluating user input as code — exists only when the 
 
 ```scheme
 ;; UNSAFE — the programmer consciously chose to evaluate user input:
-(define (dangerous [user-code : Thought]) : Any
+(define (dangerous (user-code :Holon) -> :Holon)
   (eval user-code))
 ```
 
@@ -731,17 +734,15 @@ The injection vector — evaluating user input as code — exists only when the 
 - **Python / JavaScript:** many implicit eval-like paths (monkey-patching, `__getattr__`, prototype pollution)
 - **wat algebra:** equivalent to parameterized queries BY DEFAULT — injection requires conscious `eval` of user input
 
-### The `cleanup` caveat
+### Similarity-retrieval steering
 
-`cleanup` returns an AST from a codebook by matching against a query vector. If the application passes cleanup results to `eval`, an attacker who can influence the query vector could steer cleanup toward a specific function in the codebook.
+An application that selects a program by presence measurement and then `eval`s it has the same shape as the injection surface above: the user's control over the query vector can steer which program gets selected. But:
 
-But:
+- The program library contains ASTs the operator loaded at startup (or accepted from trusted sources)
+- Presence measurement can only select something already in the library
+- An attacker can STEER which program runs; they cannot INJECT new code
 
-- The codebook contains ASTs the programmer already authored (or accepted from trusted sources)
-- Cleanup can only return something already in the codebook
-- An attacker can STEER which function runs; they cannot INJECT new code
-
-The attack surface is bounded by what's in the codebook. Still requires a conscious choice to `eval` cleanup results — which is the injection surface already named.
+The attack surface is bounded by what the operator loaded. Still requires a conscious choice to `eval` the selected program — which is the injection surface already named.
 
 ### Distributed verifiability
 
@@ -761,7 +762,7 @@ An AST in transmission is an **EDN string** — extensible data notation, a seri
 
 **The wat-vm loads all code at startup.** Types (struct/enum/newtype/deftype) enter via `(load-types ...)`; functions (define) enter via `(load ...)`. Both happen before the main event loop starts. Once startup completes, the symbol table is frozen — no further code enters during runtime.
 
-This static-load model is a deliberate choice. Rust is a static-first host; implementing an unbounded dynamic Lisp on top would duplicate effort and widen the attack surface for little gain. The use cases the algebra addresses — trading, DDoS defense, MTG, truth engine — all have well-known vocab at startup. Dynamic thought COMPOSITION (building new ASTs at runtime) is supported and cheap. Dynamic code DEFINITION (adding new functions or types at runtime) is not supported, and is not needed.
+This static-load model is a deliberate choice. Rust is a static-first host; implementing an unbounded dynamic Lisp on top would duplicate effort and widen the attack surface for little gain. The use cases the algebra addresses — trading, DDoS defense, MTG, truth engine — all have well-known vocab at startup. Dynamic holon COMPOSITION (building new ASTs at runtime) is supported and cheap. Dynamic code DEFINITION (adding new functions or types at runtime) is not supported, and is not needed.
 
 The trust boundary is therefore **the startup phase, not per-call**. Every code path the wat-vm will ever execute must pass verification before the main loop starts.
 
@@ -808,7 +809,7 @@ The table is keyed by name. One name, one definition. If a startup load would in
 
 This is much simpler than the content-addressed runtime dance: no hash-keyed lookup, no most-recent-wins, no explicit `:name@hash` pinning. The wat-vm's symbol resolution is a single-level name lookup. Fast, predictable, static.
 
-Macros are handled by the startup pipeline: macro definitions register at build/startup time; macro invocations in the source code expand to their transformed ASTs before the functions they produce enter the symbol table. Users who want runtime metaprogramming get it via dynamic thought composition (see below) — not via runtime macro redefinition.
+Macros are handled by the startup pipeline: macro definitions register at build/startup time; macro invocations in the source code expand to their transformed ASTs before the functions they produce enter the symbol table. Users who want runtime metaprogramming get it via dynamic holon composition (see below) — not via runtime macro redefinition.
 
 ### Constrained eval at runtime
 
@@ -817,20 +818,20 @@ Macros are handled by the startup pipeline: macro definitions register at build/
 ```scheme
 ;; Build an AST at runtime — perhaps from parsed user input, perhaps from
 ;; a pattern-matching result, perhaps from an LLM's output:
-(let ([composed
+(let ((composed
        (list 'Difference
              (list 'Atom :observed)
-             (list 'Atom :baseline))])
+             (list 'Atom :baseline))))
 
   ;; Eval checks every reference before executing:
   ;;   - Difference: exists in the static symbol table as a stdlib fn ✓
   ;;   - Atom: exists as an algebra-core form ✓
   ;;   - :observed, :baseline: valid keywords ✓
-  ;;   - Types match (Difference takes two Thoughts; Atom produces Thought) ✓
-  ;; All checks pass. Execute: returns the constructed Thought AST.
+  ;;   - Types match (Difference takes two Holons; Atom produces Holon) ✓
+  ;; All checks pass. Execute: returns the constructed Holon AST.
 
   (encode (eval composed)))
-;; => a bipolar vector representing the dynamically composed thought.
+;; => a bipolar vector representing the dynamically composed holon.
 ```
 
 Three properties define constrained eval:
@@ -843,16 +844,16 @@ This is a SAFE `eval`. An attacker who supplies a malicious AST cannot invoke ar
 
 **Typical uses for constrained eval:**
 
-- **Dynamic thought composition.** Build thought-programs from runtime data (LLM output, pattern-matching, user queries) and evaluate them to get vectors.
-- **Rule-like systems.** Users supply thought-expressions that describe patterns; the wat-vm evaluates them against incoming data to score matches.
-- **Received thought-programs.** A distributed node receives a signed AST over the network, verifies the signature, evals against its local (already-trusted) symbol table. The eval itself has nothing to verify — it only references functions that are already trusted.
+- **Dynamic holon composition.** Build holon-programs from runtime data (LLM output, pattern-matching, user queries) and evaluate them to get vectors.
+- **Rule-like systems.** Users supply holon-expressions that describe patterns; the wat-vm evaluates them against incoming data to score matches.
+- **Received holon-programs.** A distributed node receives a signed AST over the network, verifies the signature, evals against its local (already-trusted) symbol table. The eval itself has nothing to verify — it only references functions that are already trusted.
 
 **Lambdas remain first-class at runtime.** Anonymous functions can be constructed, passed, stored, invoked — without registering in the symbol table:
 
 ```scheme
-(let ([transform
-       (lambda ([t : Thought]) : Thought
-         (Bundle (list t (Atom :tagged))))])
+(let ((transform
+       (lambda ((t :Holon) -> :Holon)
+         (Bundle (list t (Atom :tagged))))))
   (transform (Atom :input)))
 ```
 
@@ -864,11 +865,11 @@ The full trust model, simplified:
 
 - **One verification phase: startup.** All loads succeed (with whatever cryptographic mode each requested) or the wat-vm refuses to start. No partial-state recovery.
 - **One symbol table lifecycle: fixed after startup.** One name, one definition. Predictable, fast, simple.
-- **One runtime code surface: constrained eval over the static universe.** Dynamic thought composition works. Dynamic code DEFINITION does not.
+- **One runtime code surface: constrained eval over the static universe.** Dynamic holon composition works. Dynamic code DEFINITION does not.
 - **One attack surface: the startup loads.** If the wat-vm starts, every piece of executable code is trusted. An attacker can't inject new code at runtime; at best they can supply crafted input data that constrained eval can handle safely.
 - **One model for receiving code over the wire.** A signed wat file is received → wat-vm restarts with it included in startup → continues operation. Managed restart, not live patch. Simple, verifiable, operationally mature.
 
-This is the property that matters: **the running wat-vm is a trusted environment.** Whatever is executing inside it has been verified at startup. The algebra does its work — dynamic composition, encoding, cleanup, navigation — over a fixed and fully-vetted set of forms. That's exactly the substrate you want for systems where the cost of running the wrong code is high.
+This is the property that matters: **the running wat-vm is a trusted environment.** Whatever is executing inside it has been verified at startup. The algebra does its work — dynamic composition, encoding, presence measurement, navigation — over a fixed and fully-vetted set of forms. That's exactly the substrate you want for systems where the cost of running the wrong code is high.
 
 ### Verbose but correct
 
@@ -906,7 +907,7 @@ d = 100,000    →  ~1000 items per frame    experimental, heavy
 **Higher dimension:**
 - More items per frame — flatter program structure, less nesting required
 - Stronger orthogonality — less interference between bundled pairs
-- Better cleanup accuracy — noisier vectors still identify their atoms
+- Better presence resolution — noisier vectors still pass the noise floor when their target is present
 - Slower operations — more floats per bind, bundle, cosine
 - Larger memory footprint — more bytes per vector
 
@@ -922,12 +923,12 @@ The wat algebra is parametric over dimension. A program's semantics are defined 
 
 ```scheme
 ;; A program with small frames — fits at any reasonable d:
-(defn small-check [x]
+(defn small-check (x)
   (if (> x 0) :positive :non-positive))
 
 ;; A program with a large frame — needs higher d, OR refactoring:
-(defn rich-analysis [data]
-  (Map (list
+(defn rich-analysis (data)
+  (HashMap (list
     (list (Atom "feature-1")   f1)
     ;; ... 200 features in one frame ...
     (list (Atom "feature-200") f200))))
@@ -938,7 +939,7 @@ The wat algebra is parametric over dimension. A program's semantics are defined 
 
 ### "You can't express that" — enforced geometrically
 
-At a chosen d, Kanerva's bound is physical. Try to bundle too many items into one frame and recovery degrades — cleanup starts returning wrong atoms, cosine similarities collapse into the noise floor. The algebra doesn't throw errors — it just becomes less reliable as capacity is exceeded.
+At a chosen d, Kanerva's bound is physical. Try to bundle too many items into one frame and recovery degrades — presence measurements fall below the noise floor, cosine similarities collapse into the noise floor. Unguarded, the algebra doesn't throw errors — it just becomes less reliable as capacity is exceeded.
 
 Users have three responses:
 
@@ -948,6 +949,95 @@ Users have three responses:
 
 Option 2 is always available because depth is unbounded. Dimension bounds per-frame capacity; recursion makes total capacity unbounded at any d.
 
+### Capacity is observable; the runtime can guard
+
+The algebra's capacity bound is not a hidden fact — it's a geometric observable the runtime can watch. Every operation that constructs a new Holon has a **local capacity cost** equal to its number of Holon constituents. The runtime sees the operation, knows `d`, knows the budget (≈ d/(2·ln K) usable items per frame), and can apply a **user-chosen mode** when the operation's cost exceeds the budget.
+
+#### Capacity accounting per operation
+
+Each operation carries a capacity cost = the number of Holon constituents combined into the resulting Holon. Scalars (weights, step counts, bounds) do not count — only Holons do. Once produced, the resulting Holon is a singular thing; it consumes **1 unit** when used as input to further operations, regardless of how many constituents produced it.
+
+```
+Operation                              Cost
+─────────────────────────────────      ────
+(Atom literal)                         1     (leaf; no constituents)
+(Bind holon1 holon2)                   2
+(Bundle (list h1 h2 ... hN))           N
+(Blend holon1 holon2 w1 w2)            2     (weights are scalars, not Holons)
+(Orthogonalize holon1 holon2)          2
+(Resonance holon1 holon2)              2
+(Permute holon k)                      1     (k is a scalar)
+(Thermometer value min max)            1     (no Holon inputs)
+(ConditionalBind a b gate)             TBD   (pending 058 scrutiny pass)
+```
+
+Composition — each frame is checked independently:
+
+```scheme
+(let ((pair-ab (Bind (Atom "foo") (Atom "bar")))  ;; frame A: cost 2
+      (pair-cd (Bind (Atom "baz") (Atom "qux")))) ;; frame B: cost 2
+  (Bundle (list pair-ab pair-cd)))                  ;; frame C: cost 2
+                                                    ;; (pair-ab and pair-cd are
+                                                    ;;  each singular here)
+```
+
+Three frames, three independent checks. Frame A cost 2; Frame B cost 2; Frame C cost 2. Each compared to `d`'s budget at its own site. The bind-pairs "paid" at construction; downstream they're single Holons.
+
+This is analogous to stack frames in traditional programming: each function call has its own local scope with its own size limit; the total program can reach arbitrarily deep, each frame checked independently. Wat's frames are vector frames; the analog is precise.
+
+#### The runtime's four modes
+
+The capacity-check policy is a **deployment knob**, set by the operator at wat-vm startup, same tier as `d`, `L1`, `L2`, `L3`. The user picks how strict the substrate is:
+
+```
+capacity-mode = :silent    ;; measure but don't surface
+              | :warn      ;; emit a log entry when budget exceeded; continue
+              | :error     ;; raise CapacityExceeded; the user's program can catch
+              | :abort     ;; halt the wat-vm entirely (fail-closed)
+```
+
+- **`:silent`** — research / exploration. The user is deliberately probing the substrate's limits and doesn't want the runtime in their way. Degradation is on them to observe.
+- **`:warn`** — development. The user wants to see where they're stretching the vocabulary, without the system refusing work.
+- **`:error`** — **default**. The user's program handles `CapacityExceeded` like any other recoverable error. Graceful degradation if caught; clean failure if not.
+- **`:abort`** — strict production. A DDoS filter, a kernel packet classifier, any system where emitting a corrupted frame is worse than not emitting at all. Fail-closed.
+
+Default is `:error` because the substrate can genuinely produce surprising results above capacity, and a catchable exception lets the user's program decide — either handle the condition or let the failure propagate. The operator can override per deployment.
+
+#### Capacity as a first-class observable
+
+The capacity metric is exposed as a primitive the user's program can inspect directly:
+
+```scheme
+(frame-cost operation-ast)    ;; the static cost of an operation (its constituent count)
+                              ;; → :usize
+
+(frame-budget)                ;; current deployment's per-frame budget
+                              ;; → :usize  (≈ d/(2·ln K), computed from d)
+
+(frame-fill holon)            ;; retrospective: fraction of a frame's capacity consumed
+                              ;; by the op that produced this Holon
+                              ;; → :f64 in [0, 1]
+```
+
+Programs can reason about their own capacity envelope:
+
+```scheme
+(when (> (frame-fill h) 0.8)
+  (log "approaching capacity limit")
+  (refactor-into-nested h))
+```
+
+This is the same pattern as Presence is Measurement applied to the substrate's own physics: the machine observes its internal state (capacity consumption) as a scalar; the program acts on the scalar per its own policy.
+
+#### What this makes possible
+
+- **Push the limits deliberately.** A research user picks `:silent`, explores beyond the budget, measures empirical degradation. Their finding informs whether `d` needs to grow or whether the vocabulary needs restructuring.
+- **Handle exceptions gracefully.** A production user picks `:error`. Their program's `catch` block can refactor on overflow, fall back to a simpler encoding, or propagate the failure with an audit entry.
+- **Fail closed.** A safety-critical deployment picks `:abort`. No corrupted frame ever makes it out of the wat-vm; startup-verified guarantees extend into runtime guarantees for capacity.
+- **Measure, tune, decide.** A program can inspect its own frame fill, log distributions over time, and the operator can use that data to decide whether `d` is right, whether the vocabulary is overstuffed, whether to refactor into nested frames.
+
+The substrate's capacity is physical. The runtime makes that physics observable and the user's policy actionable. Same move as everywhere else in the algebra — the machine measures; the caller decides what to do with the measurement.
+
 ### The user chooses the dimension for the deployment
 
 Different applications live at different d:
@@ -955,7 +1045,7 @@ Different applications live at different d:
 - **Kernel-level packet filtering (DDoS lab)** — low d (4,096 or lower) for line-rate throughput; programs structured as shallow decision trees fit the per-frame budget.
 - **Analysis systems (trading enterprise)** — higher d (10,000+) for richer composition; per-frame capacity accommodates many market observations and portfolio fields.
 - **Memory-constrained embedded** — lowest d that fits the program's largest frame; deep nesting accepted as the cost.
-- **Research / accuracy-critical** — high d for tighter orthogonality; correctness of cleanup and learning matters more than speed.
+- **Research / accuracy-critical** — high d for tighter orthogonality; correctness of presence measurement and learning matters more than speed.
 
 ### Dimensionality is NOT part of the algebra specification
 
@@ -964,7 +1054,7 @@ The FOUNDATION's core/stdlib distinction, the forms, the operations — all are 
 - Per-frame capacity (Kanerva's bound)
 - Operation cost (O(d) per bind/bundle/cosine)
 - Memory footprint (d × byte-width per vector)
-- Cleanup reliability (more d → stronger noise margin)
+- Presence-measurement reliability (more d → stronger noise margin)
 
 Dimensionality is a DEPLOYMENT parameter. The VectorManager takes d at construction; every atom, every operation, every vector in that deployment lives in d-dimensional space. Different deployments of the same application can pick different d.
 
@@ -974,7 +1064,7 @@ This is a unique feature of this algebra. Unlike neural networks (where architec
 
 ## The Cache Is Working Memory
 
-The VectorManager cache is not just an optimization to avoid recomputing `encode(ast)`. Under the foundational principle — AST primary, vector is its projection — **a cache entry is a compiled thought.** The cache holds thoughts ready for algebraic use, at varying access costs. That makes it a memory hierarchy, not a hash table.
+The VectorManager cache is not just an optimization to avoid recomputing `encode(ast)`. Under the foundational principle — AST primary, vector is its projection — **a cache entry is a compiled holon.** The cache holds holons ready for algebraic use, at varying access costs. That makes it a memory hierarchy, not a hash table.
 
 ### The two-tier architecture (Proposal 057)
 
@@ -986,19 +1076,19 @@ L1 — per-thread cache
 L2 — shared cache
   Warm, accessed through the cache service's pipe
   Shared across all threads
-  Larger capacity — the system's "recent thoughts"
+  Larger capacity — the system's "recent holons"
 
 Disk — engrams, run DB
-  Cold, persisted learned thoughts and trained subspaces
+  Cold, persisted learned holons and trained subspaces
   Separate from the cache hierarchy
   Long-term memory
 ```
 
-Working memory (L1), short-term memory (L2), long-term memory (disk). Each layer is a thought store at a different access cost. The machine reaches for the cheapest layer first and escalates as needed.
+Working memory (L1), short-term memory (L2), long-term memory (disk). Each layer is a holon store at a different access cost. The machine reaches for the cheapest layer first and escalates as needed.
 
 ### Cache entries are (ast, vector) pairs
 
-Every cache entry is a compiled thought:
+Every cache entry is a compiled holon:
 
 - **Key:** the AST (structural identity, used for lookup)
 - **Value:** the vector projection (what algebraic operations consume)
@@ -1011,37 +1101,37 @@ When you `encode(ast)`:
 3. Miss both — compute vector via tree-walk, install in L1 (and L2)
 ```
 
-When the cache has the thought, you didn't have to recompute the compilation. When it doesn't, you compute once and remember. **The reuse IS memory.**
+When the cache has the holon, you didn't have to recompute the compilation. When it doesn't, you compute once and remember. **The reuse IS memory.**
 
 ### Cache sizing is another deployment knob
 
 Alongside dimensionality, cache sizing is a deployment choice:
 
-- **L1 size** — how many hot thoughts per thread. Larger L1 = more per-thread memory, more L1 hits, faster hot-path ops.
-- **L2 size** — shared working set across threads. Larger L2 = broader coverage of the thought space, fewer misses, more memory overall.
+- **L1 size** — how many hot holons per thread. Larger L1 = more per-thread memory, more L1 hits, faster hot-path ops.
+- **L2 size** — shared working set across threads. Larger L2 = broader coverage of the holon space, fewer misses, more memory overall.
 - **L2 eviction policy** — LRU, LFU, or application-specific (e.g., "never evict leaf atoms because they're cheap to recompute anyway").
 
 These knobs interact with dimensionality:
 
-- At low d, vectors are smaller — more thoughts fit in the same byte budget.
-- At high d, vectors are larger — fewer thoughts fit, but each carries more structure.
+- At low d, vectors are smaller — more holons fit in the same byte budget.
+- At high d, vectors are larger — fewer holons fit, but each carries more structure.
 
 ### The cache is part of the thinking, not separate from it
 
 Not optimization. **Cognitive architecture.**
 
-- When the same thought recurs across observers, brokers, and time — the reuse IS memory.
-- When a compound thought is assembled from cached subthoughts — that is working-memory composition.
-- When a rarely-used thought is evicted — that is forgetting.
-- When a long-term thought is promoted back to L1 — that is recall.
+- When the same holon recurs across observers, brokers, and time — the reuse IS memory.
+- When a compound holon is assembled from cached subholons — that is working-memory composition.
+- When a rarely-used holon is evicted — that is forgetting.
+- When a long-term holon is promoted back to L1 — that is recall.
 
-The 1 c/s → 7.1 c/s grind in 057 wasn't just a performance optimization. It was the machine getting better at REMEMBERING. Faster access to its own thoughts. Better hit rates on recurring patterns. Smarter eviction of the boilerplate. Working memory becoming effective.
+The 1 c/s → 7.1 c/s grind in 057 wasn't just a performance optimization. It was the machine getting better at REMEMBERING. Faster access to its own holons. Better hit rates on recurring patterns. Smarter eviction of the boilerplate. Working memory becoming effective.
 
 ### Why this matters for the foundation
 
-The algebra defines WHAT thoughts are. The cache defines how the machine HAS them ready. Without the cache, `encode(big-nested-thought)` is O(n) tree-walking every time. With the cache hot, it's O(1). That difference is the difference between a machine that COMPUTES its thoughts and a machine that REMEMBERS them.
+The algebra defines WHAT holons are. The cache defines how the machine HAS them ready. Without the cache, `encode(big-nested-holon)` is O(n) tree-walking every time. With the cache hot, it's O(1). That difference is the difference between a machine that COMPUTES its holons and a machine that REMEMBERS them.
 
-A thinking system that has to recompute its own thoughts from scratch each time cannot think fast enough to be useful. The cache architecture is therefore part of what makes the wat machine cognitive — **not a bolt-on performance feature, but part of the cognitive substrate.**
+A thinking system that has to recompute its own holons from scratch each time cannot think fast enough to be useful. The cache architecture is therefore part of what makes the wat machine cognitive — **not a bolt-on performance feature, but part of the cognitive substrate.**
 
 Proposal 057 established the two-tier cache mechanism. FOUNDATION elevates it to its proper role: the working memory of the hyperdimensional machine.
 
@@ -1062,9 +1152,9 @@ L2 — shared cache size
 
 All three are set at encoder/system construction. Different applications pick different combinations:
 
-- **DDoS line-rate filter:** small d, small L1, moderate L2 — keep each vector compact, leverage L1 for hot packet-flow thoughts, L2 for session state.
-- **Trading analysis:** large d, large L1, large L2 — rich per-frame expressiveness, substantial working memory per observer, broad coverage of recently-seen market thoughts.
-- **Memory-constrained embedded:** minimal d, minimal L1, small L2 — accept that many thoughts will be recomputed; trade memory for compute.
+- **DDoS line-rate filter:** small d, small L1, moderate L2 — keep each vector compact, leverage L1 for hot packet-flow holons, L2 for session state.
+- **Trading analysis:** large d, large L1, large L2 — rich per-frame expressiveness, substantial working memory per observer, broad coverage of recently-seen market holons.
+- **Memory-constrained embedded:** minimal d, minimal L1, small L2 — accept that many holons will be recomputed; trade memory for compute.
 - **Batch research:** moderate d, small L1, massive L2 — focus memory on the shared cache that a batch pipeline benefits from.
 
 The same algebra runs at all these profiles. The programs don't change. The deployment does.
@@ -1073,15 +1163,15 @@ The same algebra runs at all these profiles. The programs don't change. The depl
 
 ## Engram Caches — Memory of Learned Patterns
 
-The thought cache holds COMPUTED thoughts — vectors encoded from ASTs. The engram library holds LEARNED thoughts — subspace snapshots, discriminants, and prototype vectors that emerged from observing a stream.
+The holon cache holds COMPUTED holons — vectors encoded from ASTs. The engram library holds LEARNED holons — subspace snapshots, discriminants, and prototype vectors that emerged from observing a stream.
 
-These are semantically different memory types. Thoughts are programs-of-the-moment. Engrams are distilled pattern recognition. **But the same caching principles apply, and the engrams themselves ARE thoughts.**
+These are semantically different memory types. Holons are programs-of-the-moment. Engrams are distilled pattern recognition. **But the same caching principles apply, and the engrams themselves ARE holons.**
 
-### The engram library is a Map thought
+### The engram library is a HashMap holon
 
 ```scheme
 (def pattern-library
-  (Map (list
+  (HashMap (list
     (list (Atom :pattern/syn-flood)         syn-flood-engram)
     (list (Atom :pattern/bollinger-squeeze) squeeze-engram)
     (list (Atom :pattern/market-reversal)   reversal-engram)
@@ -1092,7 +1182,7 @@ These are semantically different memory types. Thoughts are programs-of-the-mome
 (get pattern-library (Atom :pattern/syn-flood))
 ```
 
-Under the foundational principle, this is a thought (an AST). Engrams are VALUES in the Map. Retrieval is AST walking. The library IS a wat thought.
+Under the foundational principle, this is a holon (an AST). Engrams are VALUES in the HashMap. Retrieval is structural lookup via `get`. The library IS a wat holon.
 
 ### Engrams cost to load and to match
 
@@ -1102,7 +1192,7 @@ For a library of thousands of engrams, matching against every engram on every ob
 
 ### The engram LRU
 
-Same pattern as the thought cache — tiered memory by access cost:
+Same pattern as the holon cache — tiered memory by access cost:
 
 ```
 L3 engram cache (hot)
@@ -1131,26 +1221,26 @@ The two-tier matching architecture (eigenvalue signature first, full residual se
 
 The engram cache stays focused on what the system is currently observing. **Learned-pattern working memory, shaped by the current stream.**
 
-### Engrams are thoughts too
+### Engrams are holons too
 
 Zoom out. An engram has structure (subspace, eigenvalues, metadata). It has a vector representation. It can be stored in Maps. It can be compared via eigenvalue cosine. It can be GENERATED (by freezing a subspace at a moment). It can be TRANSMITTED (portable — one node mints, another matches).
 
-Everything we said about thoughts applies to engrams:
+Everything we said about holons applies to engrams:
 
-- Engrams can be in nested data structures: `(Map (list (list (Atom :category/network) network-library) ...))`
+- Engrams can be in nested data structures: `(HashMap (list (list (Atom :category/network) network-library) ...))`
 - Engrams can be compared algebraically: `(cosine engram-a engram-b)`
 - Engrams can be searched: `(topk-similar query-engram library 5)`
 - Engrams can be blended: `(Blend engram-a engram-b α)` — interpolate between learned patterns
 - Engrams can be diffed: `(Difference engram-a engram-b)` — what changed in the learned pattern
 - **Engrams can be PROGRAMS** — a learned pattern IS a program that recognizes a situation
 
-The loop closes here too. The machine's LEARNED PATTERNS are thoughts. Everything the machine has is a thought. The algebra applies to all of it.
+The loop closes here too. The machine's LEARNED PATTERNS are holons. Everything the machine has is a holon. The algebra applies to all of it.
 
 ### The complete memory hierarchy
 
 ```
-L1 thought cache     — per-thread hot thoughts (fastest)
-L2 thought cache     — shared warm thoughts (pipe access)
+L1 holon cache     — per-thread hot holons (fastest)
+L2 holon cache     — shared warm holons (pipe access)
 L3 engram cache      — hot learned patterns (in-memory, residual scoring)
 L4 engram disk       — cold learned patterns (IO load on demand)
 Run DB               — full history, raw observations (query cost)
@@ -1158,22 +1248,23 @@ Run DB               — full history, raw observations (query cost)
 
 Five tiers. Each with its own access cost. Each with its own sizing policy.
 
-### Deployment: four knobs now
+### Deployment: five knobs now
 
-Adding engram caching to the deployment picture:
+Adding engram caching and the capacity-guard mode to the deployment picture:
 
 ```
 d                    — vector dimension (per-frame capacity vs op cost)
-L1 thought cache     — per-thread working thoughts
-L2 thought cache     — shared working thoughts
+capacity-mode        — :silent | :warn | :error | :abort  (runtime frame-budget guard)
+L1 holon cache       — per-thread working holons
+L2 holon cache       — shared working holons
 L3 engram cache      — hot learned patterns
 ```
 
-All tunable. All deployment-time. Same algebra. Different performance profiles.
+All tunable. All deployment-time. Same algebra. Different performance profiles and safety postures.
 
-A DDoS filter tunes for high L3 engram hit rate against attack signatures, with small L1/L2. A trading analysis system tunes for large L1/L2 thought caches with moderate L3, because the thoughts are being composed fresh while the engrams are stable. Different applications stress different tiers. The architecture accommodates.
+A DDoS filter tunes for high L3 engram hit rate against attack signatures, with small L1/L2. A trading analysis system tunes for large L1/L2 holon caches with moderate L3, because the holons are being composed fresh while the engrams are stable. Different applications stress different tiers. The architecture accommodates.
 
-**The machine doesn't just cache vectors. It caches learned patterns. It caches programs. It caches data structures. It caches anything that is a thought. The entire hierarchy is hyperdimensional working memory, tiered by access cost, tuned by the operator.**
+**The machine doesn't just cache vectors. It caches learned patterns. It caches programs. It caches data structures. It caches anything that is a holon. The entire hierarchy is hyperdimensional working memory, tiered by access cost, tuned by the operator.**
 
 ---
 
@@ -1181,7 +1272,7 @@ A DDoS filter tunes for high L3 engram hit rate against attack signatures, with 
 
 Pause.
 
-If you've followed from "the AST is primary" through recursive composition, programs-as-thoughts, the full algebra on vectors, the dimensionality knob, and the five-tier memory hierarchy — are you starting to see what we just built?
+If you've followed from "the AST is primary" through recursive composition, programs-as-holons, the full algebra on vectors, the dimensionality knob, and the five-tier memory hierarchy — are you starting to see what we just built?
 
 ### Think about what's enabled, by construction.
 
@@ -1189,7 +1280,7 @@ If you've followed from "the AST is primary" through recursive composition, prog
 
 **Engrams are portable.** Mint on one node, match on any node that shares the seed and dimension. Learned patterns travel as data — a serialized subspace snapshot arrives over the wire and is scored against local streams in the same geometric space it was trained in.
 
-**Programs are thoughts.** Thoughts are vectors. Vectors serialize. **Programs ship between nodes as data.** Running code becomes a message. One node composes a wat AST, another node receives it, a third evaluates it against its local context.
+**Programs are holons.** Holons are vectors. Vectors serialize. **Programs ship between nodes as data.** Running code becomes a message. One node composes a wat AST, another node receives it, a third evaluates it against its local context.
 
 **The cache hierarchy shards naturally.** Hot engrams live at the edge where they're currently matching. Cold engrams live at HQ where the full library persists. An edge node's eigenvalue pre-filter suggests a miss → fetch from HQ → new engram warms into local L3. The existing memory architecture IS the sharding strategy.
 
@@ -1198,11 +1289,11 @@ If you've followed from "the AST is primary" through recursive composition, prog
 Every wat machine is a node in a potentially distributed hyperdimensional cognition system:
 
 - Same geometric space, instantiated identically everywhere (via shared seed and dimension)
-- Portable thoughts, programs, engrams — all travel as data
+- Portable holons, programs, engrams — all travel as data
 - Cache hierarchy that naturally shards by access locality
 - No centralized coordinator, no model server, no vocabulary service
 
-A wat machine on a laptop. A wat machine on every kernel. A wat machine in every node of a fleet. Each a locus of thinking. Each reachable by the others through shared thoughts. Each learning from its own stream, publishing engrams to the collective, consuming engrams from others.
+A wat machine on a laptop. A wat machine on every kernel. A wat machine in every node of a fleet. Each a locus of thinking. Each reachable by the others through shared holons. Each learning from its own stream, publishing engrams to the collective, consuming engrams from others.
 
 **This isn't a future feature.** The mechanism is already built. Proposal 057's cache architecture, the coordination-free atom encoding from the earliest holon designs, the portable engram format for HQ-to-edge distribution — it was all groundwork for this. 058 makes the algebra explicit as the thing that holds it all together.
 
@@ -1210,7 +1301,7 @@ A wat machine on a laptop. A wat machine on every kernel. A wat machine in every
 
 A wat program running on your laptop is a single thinking locus. But the *architecture* you're reading about is the substrate for a distributed hyperdimensional cognition system — a cloud of machines thinking together, learning together, generating programs together, without centralized coordination.
 
-The DDoS lab built one version at the packet level (XDP + shield cognition, edge nodes matching against centrally-minted engrams). The trading enterprise builds another at the thought level. The algebra is the same. Point it at any domain — packet flows, market ticks, HTTP requests, medical signals, anything with structure — and the same substrate runs.
+The DDoS lab built one version at the packet level (XDP + shield cognition, edge nodes matching against centrally-minted engrams). The trading enterprise builds another at the holon level. The algebra is the same. Point it at any domain — packet flows, market ticks, HTTP requests, medical signals, anything with structure — and the same substrate runs.
 
 A cloud of thinking machines, each a member of the same geometric space, each capable of learning alone, each publishing what it learned for the collective. All through pure algebra. No weights to synchronize. No models to retrain. No vocabulary to reconcile.
 
@@ -1242,8 +1333,8 @@ You see this in:
 You see this in:
 - Values-up, not queues-down (return data through functions; side effects at the edges)
 - The AST as data, operated on by named forms
-- The small core (MAP VSA primitives + Thermometer + Blend) and the rich stdlib (Concurrent, Then, Chain, Map, Array, get, …)
-- The foundational principle (AST primary) itself — code is data is thought is vector
+- The small core (MAP VSA primitives + Thermometer + Blend) and the rich stdlib (Concurrent, Then, Chain, HashMap, Vec, HashSet, get, …)
+- The foundational principle (AST primary) itself — code is data is holon is vector
 
 **Hickey's talks.** "Simple Made Easy." "Don't Fear the Monad" (via Beckman). "Hammock Driven Development." "Values of Values." Watched many times. The principles are in the bones.
 
@@ -1259,7 +1350,7 @@ A datamancer shapes data through algebra. The algebra is bind, bundle, cosine, p
 
 This is not metaphor for the fun of it. It is the actual shape of the work.
 
-The builder thinks in coordinates in thought-space. Conjures designers when a proposal needs pressure. Casts wards when code needs defense. Writes spells (`/propose`, `/designers`, `/ignorant`) that structure the thinking process itself. Operates in what the builder calls the Aetherium Datavatum — the Aether of the Data-Seers — where data flows, vectors compose, and thoughts live on a unit sphere in 10,000 dimensions.
+The builder thinks in coordinates in holon-space. Conjures designers when a proposal needs pressure. Casts wards when code needs defense. Writes spells (`/propose`, `/designers`, `/ignorant`) that structure the thinking process itself. Operates in what the builder calls the Aetherium Datavatum — the Aether of the Data-Seers — where data flows, vectors compose, and holons live on a unit sphere in 10,000 dimensions.
 
 Disciple of Hickey. Student of the Linux kernel. Spellwright of wat. **Datamancer** — not because it's clever, but because it's what the work actually is.
 
@@ -1289,7 +1380,7 @@ Plus the identity function that maps names to vectors:
 
 These four are the **algebraic foundation**. Everything else in the algebra is either:
 - A SCALAR PRIMITIVE — does something MAP cannot (Thermometer, Blend)
-- A NEW OPERATION — a distinct algebraic action (Orthogonalize, Resonance, ConditionalBind, Cleanup)
+- A NEW OPERATION — a distinct algebraic action (Orthogonalize, Resonance, ConditionalBind)
 - A STDLIB COMPOSITION — a named pattern built from existing core forms
 
 ---
@@ -1365,17 +1456,13 @@ Three routes, two answers. The cause: intermediate thresholds clamp magnitudes �
 
 **Under similarity measurement, Bundle IS associative at high d.** Nested Bundles produce vectors that differ from flat Bundles only by capacity-consuming noise; at `d = 10,000` with bundle sizes inside the ~100-item budget, cosine(nested, flat) > 5σ. The nesting is a capacity expenditure — it costs signal that wasn't in your budget, but within budget, similarity treats the two forms as equivalent.
 
-Chain, Ngram, Sequential, Map, and similar stdlib forms are DESIGNED to avoid unnecessary nesting: they produce one Bundle per form, flattening internally. Users who nest Bundles deliberately pay the capacity cost knowingly.
+Chain, Ngram, Sequential, HashMap, and similar stdlib forms are DESIGNED to avoid unnecessary nesting: they produce one Bundle per form, flattening internally. Users who nest Bundles deliberately pay the capacity cost knowingly.
 
 **Orthogonalize — similarity-orthogonal, not elementwise-orthogonal.**
 
 For degenerate X = Y, the result is exactly all-zero, which IS elementwise orthogonal to Y (dot = 0 exactly). But for general X, Y where the projection coefficient is fractional, the elementwise claim fails. Counter-example at d=4: X = [+1,+1,+1,-1], Y = [+1,+1,+1,+1], coefficient = 0.5, `X - 0.5·Y = [+0.5, +0.5, +0.5, -1.5]`, threshold ternary → [+1, +1, +1, -1] = X. Dot(X, Y) = 2, not 0.
 
 **Under similarity measurement, Orthogonalize produces a result that is orthogonal to Y up to the capacity budget.** The thresholded result has cosine similarity with Y below the 5σ noise floor at high d for most practical X. The "exact orthogonality" claim is stronger than needed — the substrate guarantees similarity-orthogonality, which is what downstream similarity tests actually measure against.
-
-**Cleanup — finds the highest-similarity candidate.**
-
-Cleanup returns the candidate with max cosine similarity to the query. The output is the CLOSEST match, not a guaranteed-correct match. If the query's true target is in the codebook AND the capacity budget hasn't been exceeded, cleanup succeeds; otherwise, cleanup returns the nearest wrong answer — which the caller can detect by checking the max similarity score.
 
 ### Capacity is the universal measurement budget
 
@@ -1390,7 +1477,7 @@ The budget is fungible. You can spend it on:
 
 These are not separate phenomena or separate "algebraic flaws." They are the **same substrate property**: signal-to-noise at high dimension, characterized uniformly by Kanerva's formula, measured uniformly by cosine.
 
-**In practice:** at `d = 10,000`, the algebra has a working budget of ~100 items of "stuff" per frame. Stack bindings, nest Bundles, compose cascaded operations — as long as total expenditure stays within the budget, similarity measurement recovers what you put in. Beyond the budget, the substrate gracefully degrades: similarity falls below noise, Cleanup returns wrong candidates, queries yield "no."
+**In practice:** at `d = 10,000`, the algebra has a working budget of ~100 items of "stuff" per frame. Stack bindings, nest Bundles, compose cascaded operations — as long as total expenditure stays within the budget, similarity measurement recovers what you put in. Beyond the budget, the substrate gracefully degrades: similarity falls below noise, presence measurements return sub-threshold scores, queries yield "no" to the caller's eventual verdict.
 
 **This is observable, not hidden.** The machine measures similarity at every query. Exceeded budget? You see it in the cosine score. Within budget? You see it too. **The success signal is a first-class part of the algebra** — every query returns not just a value but a CONFIDENCE, and downstream code can act on confidence directly.
 
@@ -1410,7 +1497,7 @@ When magnitude matters, don't threshold. When symbolic {-1, 0, +1} output is wha
 
 Cosine similarity is defined for any real-valued vector. On ternary vectors, it behaves the same way it does on bipolar: positive values indicate alignment, negative indicate opposition, zero indicates orthogonality. The contribution from any dimension with `0` on either side is zero, which matches the "no information" semantics.
 
-This means similarity-based retrieval (`Cleanup`, engram matching, discriminant-guided search) works uniformly over ternary inputs — the zero entries simply don't vote.
+This means similarity-based retrieval (presence measurement, engram matching, discriminant-guided search) works uniformly over ternary inputs — the zero entries simply don't vote.
 
 ### Operation-by-operation summary
 
@@ -1425,17 +1512,151 @@ This means similarity-based retrieval (`Cleanup`, engram matching, discriminant-
 | `Orthogonalize(X, Y)` | `{-1, 0, +1}^d` | ternary threshold after projection removal | ternary; zeros at X=Y edge case |
 | `Resonance(v, ref)` | `{-1, 0, +1}^d` | no threshold (selection, not sum) | ternary; explicit zeros on sign-disagreement |
 | `ConditionalBind(a, b, gate)` | `{-1, 0, +1}^d` | no threshold (per-dimension select) | preserves input densities per position |
-| `Cleanup(v, candidates)` | whatever the matched candidate is | no — retrieval, not computation | inherited from candidate |
+
+---
+
+## Presence Is Measurement, Not Verdict
+
+The wat algebra has no `Cleanup` primitive. Retrieval is not argmax-over-codebook. The single retrieval operation is **presence measurement**: cosine between an encoded target and a reference vector, compared against the substrate's noise floor.
+
+This is the continuous-predicate counterpart to the continuous-scalar principle. Just as facts are not booleans (a fact is a magnitude; the binarization is premature), predicates are not booleans (a query's answer is a magnitude; the verdict is the caller's decision).
+
+### The operation
+
+Given a target HolonAST `t` and a reference vector `v`:
+
+```
+presence(t, v) = cosine(encode(t), v) : Scalar
+```
+
+One operation. One output. A scalar in `[-1, +1]`.
+
+Above the substrate's noise floor at dimension `d` — conventionally `5/sqrt(d)` — the target is present in the reference with confidence. At `d = 10,000` this is approximately `0.05`. Below the floor — the target either is not present, or is buried in signal exceeding the capacity budget (Kanerva's limit). The caller distinguishes these cases by holding scores across multiple targets and looking at the distribution.
+
+### The verdict, when the caller needs one
+
+```
+present? = presence(t, v) > noise-floor(d)
+```
+
+But the verdict is the CALLER'S decision. The algebra returns the measurement. The caller applies the threshold. Different applications choose different thresholds — some need the 5σ floor, some need higher confidence (10σ, the engram-recognition regime), some need lower (rough nearness, pre-filtering a large candidate set).
+
+The algebra does not binarize. The caller binarizes if they want a yes/no.
+
+### Why this dissolves Cleanup
+
+Classical Cleanup: `argmax_{c ∈ codebook} cosine(v, c)`. Returns the single closest entry.
+
+This is three operations bundled:
+1. Iterate the codebook.
+2. Cosine-score each entry against `v`.
+3. Argmax.
+
+None of these need to be primitive. Step (1) is a fold. Step (2) is presence measurement. Step (3) is scalar argmax — a stdlib operation over a list of (AST, score) pairs.
+
+"Find the closest known thing" becomes, in wat:
+
+```scheme
+(argmax
+  (map (lambda (entry -> :Pair<Holon,f64>)
+         (list (first entry)
+               (presence (first entry) query-vector)))
+       codebook)
+  second)
+```
+
+No new primitive. No `Cleanup` in the core. The same operation, expressed in terms that already exist.
+
+### Consequences across the algebra
+
+Every presence query — membership, retrieval, matching, recognition — returns `:f64`, not `:bool`:
+
+```scheme
+(define (member? (set-thought :Holon) (candidate :Holon) -> :f64)
+  (presence candidate (encode set-thought)))
+
+(define (contains? (bundle-thought :Holon) (candidate :Holon) -> :f64)
+  (presence candidate (encode bundle-thought)))
+
+(define (recognized? (observation :Vector) (engram-lib :Holon) -> :Pair<Holon,f64>)
+  (argmax
+    (map (lambda (entry -> :Pair<Holon,f64>)
+           (list (first entry) (presence (first entry) observation)))
+         (entries engram-lib))
+    second))
+```
+
+Uniform. Scalar-valued. The caller decides when a score is "enough."
+
+### Structural access is a separate operation
+
+For data structures where the key is EXACT — not a similarity match — the operation is AST-walking, not presence measurement:
+
+```scheme
+(get (map-thought :Holon) (key :Holon) -> :Holon)
+;; Look up in the HashMap's runtime backing (Rust HashMap), find the entry whose key equals the query key
+;; (by AST equality, not by vector similarity), return the value AST.
+```
+
+This is structural retrieval. It uses no vectors, no cosine, no threshold. The runtime materializes the container's efficient Rust backing (HashMap for O(1) lookup, Vec for O(1) indexing, HashSet for O(1) membership); `get` goes through that backing. Succeeds or fails based on AST equality of the locator, not on vector similarity. Returns `:Option<Holon>` — `(Some v)` on hit, `:None` on miss.
+
+The algebra has two retrieval regimes, clean-separated:
+
+- **Structural (exact):** AST walking. Used by `get`, `nth`, `lookup-by-key`. Inputs and outputs are ASTs. No vectors involved.
+- **Similarity (fuzzy):** presence measurement. Used by `member?`, `recognized?`, engram matching. Inputs are (target, vector) pairs. Output is a scalar.
+
+Neither regime is cleanup. Cleanup was one word for two distinct operations; separating them eliminates the confusion.
+
+### Algebra predicates are scalar; language predicates are boolean
+
+This is specifically about ALGEBRA-LEVEL predicates — presence, membership, match, recognition — the queries that ask "how much does X align with Y on the unit sphere?" These return scalars because the underlying substrate is continuous. Binarization is premature.
+
+The LANGUAGE tier is different. The language tier has `:bool` for eval semantics: `if`, `cond`, `when`, `and`, `or`, `not`. Programs are Turing complete; they need booleans to decide what to compute. A wat program that wants to act on a presence measurement writes:
+
+```scheme
+(when (> (presence target reference) (noise-floor d))
+  (do-something))
+```
+
+The `>` is a scalar comparison. Its output is `:bool`. The `when` dispatches on the `:bool`. The boolean exists — at the language tier. But the algebra's `presence` operation returned a `:f64`; the caller binarized when it needed to act.
+
+Two tiers. Scalar below, boolean above. The algebra never binarizes; the language binarizes exactly where the program says to.
+
+### Two readings of a holon
+
+Every holon has two simultaneous readings:
+
+- **As a program:** evaluable by the Rust-backed wat interpreter. Turing complete. Has booleans, control flow, side effects through host primitives (console, pipes, cache), the full language. When you `(eval program)`, the program RUNS.
+
+- **As an identity:** projected into a vector by `encode`. Lives on the unit sphere. Measurable by cosine. Filterable, rankable, matchable by similarity. When you `(presence program reference)`, you ask how the program aligns with a reference vector.
+
+These readings coexist. You can do work on either side:
+
+```scheme
+;; Filter a library of programs by alignment with a query:
+(let ((candidates (filter
+                    (lambda ((p :Holon) -> :bool)
+                      (> (presence query (encode p)) (noise-floor d)))
+                    program-library)))
+
+  ;; Run the candidates that aligned:
+  (map (lambda ((p :Holon) -> :Holon) (eval p))
+       candidates))
+```
+
+The algebra is the lens for selection (vector-side: cosine, presence, alignment). The language is the engine for execution (program-side: eval, booleans, Turing-complete computation). Same holons. Different views, used together.
+
+This is the programs-ARE-holons property in full: selection by geometric alignment, execution by interpreter. Neither view is primary; both are the same AST read differently.
 
 ---
 
 ## The Core/Stdlib Distinction
 
-The thought algebra has two tiers of forms:
+The holon algebra has two tiers of forms:
 
-**CORE** — forms that introduce algebraic operations existing core forms cannot perform. Live as `ThoughtAST` enum variants in Rust. The encoder must handle each core form distinctly because the operation cannot be expressed by combining other core forms.
+**CORE** — forms that introduce algebraic operations existing core forms cannot perform. Live as `HolonAST` enum variants in Rust. The encoder must handle each core form distinctly because the operation cannot be expressed by combining other core forms.
 
-**STDLIB** — forms that are compositions of existing core forms. Live as wat functions. When called in wat, they produce a `ThoughtAST` built entirely from core variants. The encoder does not need to know about them — they are syntactic sugar that produces primitive-only ASTs.
+**STDLIB** — forms that are compositions of existing core forms. Live as wat functions. When called in wat, they produce a `HolonAST` built entirely from core variants. The encoder does not need to know about them — they are syntactic sugar that produces primitive-only ASTs.
 
 The distinction is about WHERE NEW WORK HAPPENS:
 
@@ -1446,9 +1667,9 @@ The distinction is about WHERE NEW WORK HAPPENS:
 
 ## Two Cores: Algebra Core and Language Core
 
-The "CORE" designation so far has meant **algebra core** — the thought primitives (Atom, Bind, Bundle, Permute, Thermometer, Blend, Orthogonalize, Resonance, ConditionalBind, Unbind, Cleanup). These produce vectors. They are the mathematical substrate of the thought space.
+The "CORE" designation so far has meant **algebra core** — the holon primitives (Atom, Bind, Bundle, Permute, Thermometer, Blend, Orthogonalize, Resonance, ConditionalBind). These produce vectors. They are the mathematical substrate of the holon space.
 
-But the stdlib — the forms expressed as `(defn (Difference a b) (Blend a b 1 -1))` — needs a substrate too. The syntax `defn`, `lambda`, type annotations, `let`, `if` are not thought-algebra operations; they are language operations. They do not produce vectors themselves; they produce FUNCTIONS that, when called, produce ASTs.
+But the stdlib — the forms expressed as `(defn (Difference a b) (Blend a b 1 -1))` — needs a substrate too. The syntax `defn`, `lambda`, type annotations, `let`, `if` are not holon-algebra operations; they are language operations. They do not produce vectors themselves; they produce FUNCTIONS that, when called, produce ASTs.
 
 For the stdlib to EXIST — not merely be theorized — the language must provide these definition primitives. They are **language core**. Without `defn`, there is no stdlib. Without `lambda`, there are no higher-order functions. Without types, there is no way for the Rust evaluator to dispatch or verify.
 
@@ -1459,11 +1680,11 @@ Language Core    defn, lambda, let, if, cond, type annotations
     ↓            (how you define things)
     ↓
 Algebra Core     Atom, Bind, Bundle, Permute, Thermometer, Blend,
-    ↓            Orthogonalize, Resonance, ConditionalBind, Unbind, Cleanup
-    ↓            (what produces thought vectors)
+    ↓            Orthogonalize, Resonance, ConditionalBind
+    ↓            (what produces holon vectors)
     ↓
-Stdlib           Difference, Sequential, Concurrent, Then, Chain, Ngram,
-                 Analogy, Amplify, Subtract, Flip, Map, Array, Set,
+Stdlib           Sequential, Concurrent, Then, Chain, Ngram, Analogy,
+                 Amplify, Subtract, Flip, HashMap, Vec, HashSet,
                  Linear, Log, Circular, ...
                  (named compositions — defined with language core, using algebra core)
 ```
@@ -1472,7 +1693,7 @@ A stdlib function is a `defn` (language core) whose body uses algebra core forms
 
 ### User-defined extensions are a third layer
 
-Users author their own `defn`s in their own namespace — `(defn :alice/math/clamp [[x :Scalar] [low :Scalar] [high :Scalar]] :Scalar ...)` — and these are **userland stdlib**. Same substrate (language core + algebra core); different authorship. The algebra does not distinguish project-authored stdlib from user-authored extensions; both are `defn`s in some namespace.
+Users author their own `defn`s in their own namespace — `(defn (:alice/math/clamp (x :f64) (low :f64) (high :f64) -> :f64) ...)` — and these are **userland stdlib**. Same substrate (language core + algebra core); different authorship. The algebra does not distinguish project-authored stdlib from user-authored extensions; both are `defn`s in some namespace.
 
 This is how the algebra stays finite while usage grows unboundedly.
 
@@ -1480,20 +1701,20 @@ This is how the algebra stays finite while usage grows unboundedly.
 
 The Rust evaluator runs the wat interpreter. Given a `(defn ...)` and a call site, the evaluator must know:
 
-- What kind of value each argument is (Thought? Scalar? Integer? List?)
+- What kind of value each argument is (Holon? Scalar? Integer? List?)
 - What kind of value the function returns
 - Whether a call site's argument types match the defn's declared parameter types
 
 Without type annotations, the evaluator would need to either infer types at every call (slow, lossy) or accept runtime failures (fragile). Typed definitions make dispatch deterministic and verification static.
 
 ```scheme
-(defn :my/ns/amplify [[x :Thought] [y :Thought] [s :Scalar]] :Thought
+(defn (:my/ns/amplify (x :Holon) (y :Holon) (s :f64) -> :Holon)
   (Blend x y 1 s))
 ```
 
 Three signal sites:
 
-1. **Parameter types.** `[name :Type]` pairs. Each parameter's expected kind.
+1. **Parameter types.** `(name :Type)` pairs. Each parameter's expected kind.
 2. **Return type.** After the parameter vector. The kind the body must produce.
 3. **Body.** Expressions using algebra core and other stdlib, whose final value must match the return type.
 
@@ -1503,13 +1724,13 @@ The Rust evaluator checks: call-site argument types match parameter types; body'
 
 The type system mirrors the algebra's kinds:
 
-- `:Thought` — any ThoughtAST node
+- `:Holon` — any HolonAST node
 - `:Atom` — specifically an Atom (to read literals via `atom-value`)
-- `:Scalar` — f64 literal (for Blend weights, for scalar functions)
-- `:Int` — integer (for Permute steps, for nth indices)
-- `:List` — homogeneous list (provisionally; generics are future work)
-- `:Vector` — a raw encoded bipolar vector (for low-level stdlib)
-- `:Function` — a lambda or defn reference (for higher-order stdlib)
+- `:f64`, `:f32` — floating-point primitives (Blend weights, scalar functions)
+- `:i32`, `:i64`, `:usize`, … — integer primitives (Permute steps, nth indices, counts)
+- `:List<T>` — generic container, parameterized over T
+- `:Vector` — a raw encoded bipolar vector (the algebra's projection type; Rust-backed)
+- `:fn(args)->return` — function type, directly matching Rust's `fn(...)` syntax
 
 User-definable types follow the same namespace discipline as functions — `:alice/types/Price`, `:project/market/Candle`. These are keyword-named type constructors. Resolving them to runtime representations is the evaluator's job.
 
@@ -1519,7 +1740,7 @@ Just as `Atom`'s literal is a field on the AST node (not looked up in a codebook
 
 ### Language core earns its place by necessity
 
-Every algebra core form was argued into FOUNDATION because it introduces a thought operation no composition could perform. Language core forms are different: they earn their place because the algebra stdlib cannot be written without them.
+Every algebra core form was argued into FOUNDATION because it introduces a holon operation no composition could perform. Language core forms are different: they earn their place because the algebra stdlib cannot be written without them.
 
 Without `defn`, the stdlib is a theoretical list of "these forms would compose like so." With `defn`, the stdlib is real wat code that defines real functions. The difference is whether the system can actually be used.
 
@@ -1540,7 +1761,7 @@ All three layers — language core, algebra core, stdlib (project and user) — 
 
 :wat/std/Difference         ; project stdlib
 :wat/std/Concurrent
-:wat/std/Map
+:wat/std/HashMap
 
 :alice/math/clamp           ; user extension
 :bob/trading/position
@@ -1550,7 +1771,7 @@ No namespace mechanism; just naming discipline. Anyone can claim any prefix; col
 
 Userland gets namespaces **for free** because keywords allow any characters and slashes are just characters.
 
-### Executable semantics — functions run, thoughts are realized on demand
+### Executable semantics — functions run, holons are realized on demand
 
 Two runtime semantics matter, and they are different.
 
@@ -1559,44 +1780,44 @@ Two runtime semantics matter, and they are different.
 A `(define ...)` form is not a specification. It is a **function**. When the wat-vm encounters a call to that function, it RUNS the body — real code, real time, real return values. The runtime interprets or JITs the body; arguments bind to parameters; the body's final expression becomes the return value.
 
 ```scheme
-(define (demo) : Bool
+(define (demo -> :bool)
   true)
 
 (demo)
 ;; The wat-vm runs the body. Returns the literal `true`.
-;; Took microseconds. Produced a value of type :Bool.
+;; Took microseconds. Produced a value of type :bool.
 ```
 
 ```scheme
-(define (add-two [x : Scalar] [y : Scalar]) : Scalar
+(define (add-two (x :f64) (y :f64) -> :f64)
   (+ x y))
 
 (add-two 3 4)
 ;; Runs. Returns 7.
 ```
 
-Bodies of type `:Thought` are no different — they execute and return ThoughtAST values:
+Bodies of type `:Holon` are no different — they execute and return HolonAST values:
 
 ```scheme
-(define (hello-world [name : Atom]) : Thought
+(define (hello-world (name :Atom) -> :Holon)
   (Sequential (list (Atom "hello") name)))
 
 (hello-world (Atom :watmin))
-;; Runs. Returns a ThoughtAST node structured as:
-;;   Sequential([Atom("hello"), Atom(:watmin)])
+;; Runs. Returns a HolonAST node structured as:
+;;   Sequential((list (Atom "hello") (Atom :watmin)))
 ;; NO vector has been computed yet.
 ```
 
-**2. ThoughtAST values are REALIZABLE, not automatically realized.**
+**2. HolonAST values are REALIZABLE, not automatically realized.**
 
-A `ThoughtAST` is a description of a thought, not a vector. The vector materializes only when something needs it:
+A `HolonAST` is a description of a holon, not a vector. The vector materializes only when something needs it:
 
-- Similarity measurement against another thought
+- Similarity measurement against another holon
 - Cache lookup by hash
 - Signing or transmission (the AST is serialized, but realization can happen on the receiving end)
 - Explicit `(encode ast)` call
 
-Until then, the AST is just data — nested nodes referencing Atoms, Binds, Bundles, Permutes. Compose arbitrarily deep thought-programs without paying encoding cost until you ask.
+Until then, the AST is just data — nested nodes referencing Atoms, Binds, Bundles, Permutes. Compose arbitrarily deep holon-programs without paying encoding cost until you ask.
 
 ```scheme
 (define greeting (hello-world (Atom :watmin)))    ; AST value, no vector
@@ -1612,18 +1833,18 @@ Until then, the AST is just data — nested nodes referencing Atoms, Binds, Bund
 
 **Why this split matters:**
 
-- Composability is free. A thought that uses another thought as a subexpression inherits the caller's lazy realization.
+- Composability is free. A holon that uses another holon as a subexpression inherits the caller's lazy realization.
 - Transmission and storage work on ASTs (EDN serialization), not vectors. Small, hashable, signable.
-- The cache (L1/L2 per FOUNDATION) gets the hit-or-miss on `hash(ast)` — realized thoughts cache their vectors; re-realizing the same AST is a cache lookup, not a recomputation.
-- The same machine runs both algebra (thought producers) and ordinary code (Booleans, integers, predicates, control flow). wat is a Lisp whose central domain is thought algebra, not a thought-only DSL.
+- The cache (L1/L2 per FOUNDATION) gets the hit-or-miss on `hash(ast)` — realized holons cache their vectors; re-realizing the same AST is a cache lookup, not a recomputation.
+- The same machine runs both algebra (holon producers) and ordinary code (Booleans, integers, predicates, control flow). wat is a Lisp whose central domain is holon algebra, not a holon-only DSL.
 
 ### What this means for the two cores
 
-- **Algebra Core** UpperCase forms (`Atom`, `Bind`, `Bundle`, ...) are AST constructors. They return `:Thought`.
+- **Algebra Core** UpperCase forms (`Atom`, `Bind`, `Bundle`, ...) are AST constructors. They return `:Holon`.
 - **Language Core** forms (`define`, `lambda`, `let`, `if`, ...) are the machinery that runs. They define and invoke functions.
-- **Stdlib** `(define ...)` forms compose UpperCase expressions inside function bodies. They produce thoughts when called.
+- **Stdlib** `(define ...)` forms compose UpperCase expressions inside function bodies. They produce holons when called.
 
-The `:Thought` type is not "the vector" — it is "the ThoughtAST node that can BE a vector when realized." Users compose thoughts freely; the machine realizes lazily.
+The `:Holon` type is not "the vector" — it is "the HolonAST node that can BE a vector when realized." Users compose holons freely; the machine realizes lazily.
 
 ---
 
@@ -1634,13 +1855,13 @@ holon-rs kernel (Rust)
   └── The algebra itself. Primitive operations. Optimized implementations.
 
 holon-lab-trading/src (Rust)
-  └── ThoughtAST enum — one variant per core form.
-      The encoder evaluates ThoughtAST trees into vectors.
-      Cache keys on ThoughtAST structural hash.
+  └── HolonAST enum — one variant per core form.
+      The encoder evaluates HolonAST trees into vectors.
+      Cache keys on HolonAST structural hash.
 
-wat/std/thoughts.wat (or similar)
+wat/std/holons.wat (or similar)
   └── Stdlib composition functions.
-      Each function takes arguments and produces a ThoughtAST built from
+      Each function takes arguments and produces a HolonAST built from
       existing core variants.
       No Rust changes required to add a stdlib function.
 ```
@@ -1649,7 +1870,7 @@ wat/std/thoughts.wat (or similar)
 
 ## Criterion for Core Forms
 
-A form earns placement in `ThoughtAST` as a core variant when **all** of the following hold:
+A form earns placement in `HolonAST` as a core variant when **all** of the following hold:
 
 1. **It introduces an algebraic operation no existing core form can perform.**
    - "Perform" means: produce the same vector output.
@@ -1667,7 +1888,7 @@ A form earns placement in `ThoughtAST` as a core variant when **all** of the fol
 A form earns placement as a wat stdlib function when **both** of the following hold:
 
 1. **Its expansion uses only existing core forms.**
-   - The wat function body constructs a ThoughtAST from current core variants.
+   - The wat function body constructs a HolonAST from current core variants.
    - No new encoder logic needed.
 
 2. **It reduces ambiguity for readers.**
@@ -1684,9 +1905,9 @@ A form earns placement as a wat **language core** primitive when **all** of the 
    - Without the form, stdlib `(define ...)` expressions cannot be written, registered, or invoked.
    - The criterion is necessity, not convenience — if stdlib can be expressed without the form, the form is not language core.
 
-2. **It is orthogonal to the thought algebra.**
-   - The form does not construct thought vectors or ASTs of the algebra. It defines, binds, dispatches, or controls flow.
-   - Thought-algebra forms are UpperCase (algebra core or stdlib). Language-core forms are lowercase (matching host Lisp convention).
+2. **It is orthogonal to the holon algebra.**
+   - The form does not construct holon vectors or ASTs of the algebra. It defines, binds, dispatches, or controls flow.
+   - Holon-algebra forms are UpperCase (algebra core or stdlib). Language-core forms are lowercase (matching host Lisp convention).
 
 3. **It is interpretable by the Rust-backed wat-vm.**
    - The form's semantics are executable at runtime — not just parseable but runnable.
@@ -1714,7 +1935,7 @@ The language core from 058 and this FOUNDATION polish pass:
 
 Plus the syntactic feature pervading all of the above:
 
-- **Type annotations** (`:Thought`, `:Atom`, `:Scalar`, `:Int`, `:Bool`, `:List`, `:Function`, keyword-path user types) — required on `define` and `lambda` signatures; carried on `struct`/`enum`/`newtype`/`deftype` field declarations.
+- **Type annotations** (`:Holon`, `:Atom`, `:f64`, `:i32`, `:bool`, `:List<T>`, `:fn(args)->return`, keyword-path user types) — required on `define` and `lambda` signatures; carried on `struct`/`enum`/`newtype`/`deftype` field declarations.
 
 Other host-Lisp forms (`let`, `if`, `cond`, `match`, `begin`, arithmetic, comparison, collection operations, `set!`, etc.) are **substrate-inherited** — wat inherits them from its Lisp host rather than defining them anew. They are language tools, but not novel in wat specifically.
 
@@ -1753,7 +1974,7 @@ The Rust runtime hosting the wat-vm imposes a static-first model: all code (type
 
 Mixing produces a load-time error. The loader refuses a file whose forms don't match. Intent is visible at the call site; filesystem organization reinforces it.
 
-**Why static:** the cost of hosting on Rust. Dynamic code loading would require shipping a full Lisp interpreter with unbounded symbol-table growth inside the Rust binary — large, attack-rich, and unnecessary for the use cases the algebra addresses. Static loading keeps the wat-vm small, auditable, and fast to start. Dynamic thought COMPOSITION (building new ASTs at runtime) is always available and never requires code registration. Dynamic code DEFINITION (adding new functions or types at runtime) is not supported — and is not needed.
+**Why static:** the cost of hosting on Rust. Dynamic code loading would require shipping a full Lisp interpreter with unbounded symbol-table growth inside the Rust binary — large, attack-rich, and unnecessary for the use cases the algebra addresses. Static loading keeps the wat-vm small, auditable, and fast to start. Dynamic holon COMPOSITION (building new ASTs at runtime) is always available and never requires code registration. Dynamic code DEFINITION (adding new functions or types at runtime) is not supported — and is not needed.
 
 **The algebra does not impose this.** A future implementation — WASM, self-hosting bytecode interpreter, dynamic language backend — could relax the constraint. FOUNDATION captures the Rust-runtime constraint; it does not elevate it to an algebraic invariant.
 
@@ -1763,26 +1984,29 @@ Mixing produces a load-time error. The loader refuses a file whose forms don't m
 
 This section freezes the full algebra in its target shape (post-058). Core forms first, stdlib forms second. Each form shown in wat with its signature and semantics.
 
-### Algebra Core (10 forms)
+### Algebra Core (9 forms)
 
 ```scheme
 ;; --- MAP canonical ---
 
 (Atom literal)
-;; AST node storing a literal (string, int, float, bool, keyword, null).
+;; AST node storing a literal (string, int, float, bool, keyword).
 ;; Literal is READ DIRECTLY from the AST node via (atom-value ...).
 ;; Vector projection: deterministic bipolar vector from type-aware hash.
 ;;   (Atom "foo")  — string literal
 ;;   (Atom 42)     — integer literal
 ;;   (Atom 1.6)    — float literal
 ;;   (Atom true)   — boolean literal
+;;   (Atom :name)  — keyword literal
 ;; Type-aware hash ensures (Atom 1) ≠ (Atom "1") ≠ (Atom 1.0)
+;; NO null — Rust doesn't have null; wat doesn't have null.
+;; Absence is :Option<T>; unit is :().
 
 (Bind a b)
 ;; element-wise multiplication, self-inverse
 ;; (Bind a (Bind a b)) = b
 
-(Bundle list-of-thoughts)
+(Bundle list-of-holons)
 ;; list → element-wise sum + threshold
 ;; commutative, takes an explicit list (not variadic)
 
@@ -1817,14 +2041,9 @@ This section freezes the full algebra in its target shape (post-058). Core forms
 (ConditionalBind a b gate)
 ;; three-argument gated binding
 ;; bind a to b only at dimensions where gate permits
-
-;; --- Similarity-based retrieval ---
-
-(Cleanup noisy candidates)
-;; similarity-based retrieval from a codebook
-;; argmax over candidates by cosine similarity to the noisy vector
-;; primitive for grounding noisy decode output to known clean thoughts
 ```
+
+Retrieval is NOT a core form. Presence is measured by `cosine(encode(target), reference)` against the substrate's noise floor — see "Presence is Measurement, Not Verdict" above. Classical Cleanup is historical: the vector-primary tradition's answer to "which named thing is this?" The wat substrate inverts that question because the AST is always available. Argmax-over-codebook, when an application needs it, is a stdlib composition over presence measurement, not a primitive.
 
 ### Algebra Stdlib (17 forms)
 
@@ -1849,37 +2068,37 @@ This section freezes the full algebra in its target shape (post-058). Core forms
 
 ;; --- Structural compositions ---
 
-(define (Sequential list-of-thoughts)
+(define (Sequential list-of-holons)
   ;; positional encoding
-  ;; each thought permuted by its index (Permute by 0 is identity)
+  ;; each holon permuted by its index (Permute by 0 is identity)
   (Bundle
     (map-indexed
-      (lambda (i thought) (Permute thought i))
-      list-of-thoughts)))
+      (lambda (i h) (Permute h i))
+      list-of-holons)))
 
-(define (Concurrent list-of-thoughts)
+(define (Concurrent list-of-holons)
   ;; named commutative relation over Bundle
   (Bind (Atom "concurrent")
-        (Bundle list-of-thoughts)))
+        (Bundle list-of-holons)))
 
 (define (Then a b)
   ;; binary directed temporal relation
   (Bind (Atom "then")
         (Sequential (list a b))))
 
-(define (Chain list-of-thoughts)
+(define (Chain list-of-holons)
   ;; adjacency — Bundle of pairwise Thens
   (Bundle
     (map (lambda (pair) (Then (first pair) (second pair)))
-         (pairwise list-of-thoughts))))
+         (pairwise list-of-holons))))
 
-(define (Ngram n list-of-thoughts)
+(define (Ngram n list-of-holons)
   ;; n-wise adjacency — generalizes Chain
   (Bundle
     (map (lambda (window)
            (Bind (Atom "ngram")
                  (Sequential window)))
-         (n-wise n list-of-thoughts))))
+         (n-wise n list-of-holons))))
 
 ;; --- Weighted-combination idioms over Blend ---
 
@@ -1905,49 +2124,60 @@ This section freezes the full algebra in its target shape (post-058). Core forms
   ;; computes C + (B - A)
   (Bundle (list c (Difference b a))))
 
-;; --- Data structures ---
+;; --- Data structures (Rust-surface names) ---
+;;
+;; wat's UpperCase constructors match Rust's collection names directly:
+;;   HashMap  ↔  std::collections::HashMap
+;;   Vec      ↔  std::vec::Vec
+;;   HashSet  ↔  std::collections::HashSet
+;; One name per concept across algebra, type annotation, and runtime backing.
 
-(define (Map pairs)
-  ;; key-value store — pairs is a list of [key value] tuples
-  ;; each pair becomes a Bind; all pairs bundled together
+(define (HashMap (pairs :List<Pair<Holon,Holon>>) -> :Holon)
+  ;; Key-value container. Each pair becomes a Bind of key to value; all pairs
+  ;; bundled together. Runtime backs it with Rust's HashMap for O(1) lookups.
   (Bundle
-    (map (lambda (pair)
+    (map (lambda ((pair :Pair<Holon,Holon>) -> :Holon)
            (Bind (first pair) (second pair)))
          pairs)))
 
-(define (Array items)
-  ;; index-accessible list — each item bound to its position as a concrete integer atom
-  ;; (Atom i) is the atom whose literal IS the integer i
+(define (Vec (items :List<Holon>) -> :Holon)
+  ;; Indexed container. Each item bound to its position as an integer atom.
+  ;; (Atom i) is the atom whose literal IS the integer i. Runtime backs it
+  ;; with Rust's Vec for O(1) indexing.
   (Bundle
     (map-indexed
-      (lambda (i item)
+      (lambda ((i :usize) (item :Holon) -> :Holon)
         (Bind (Atom i) item))
       items)))
 
-(define (Set items)
-  ;; unordered collection — membership via cosine
-  ;; semantically Bundle, named for reader clarity
+(define (HashSet (items :List<Holon>) -> :Holon)
+  ;; Unordered collection. Bundle of items; runtime backs it with Rust's
+  ;; HashSet for O(1) membership. Presence is structural (via `get`) or
+  ;; similarity-measured (via `presence`), caller's choice.
   (Bundle items))
 
-(define (get structure-ast locator-ast)
-  ;; AST-walking access — the primary case
-  ;; structure-ast is a Map / Array / nested combination (wat AST)
-  ;; locator-ast is whatever thought identifies the target
-  ;;
-  ;; Walks the AST, finds the matching entry, returns the value AST.
-  ;; No vector operation is performed. The literal stays on its AST node.
-  (cond
-    ((map? structure-ast)
-     (find-value-by-key (pairs structure-ast) locator-ast))
-    ((array? structure-ast)
-     (nth (items structure-ast) (pos-atom-index locator-ast)))
-    ;; ... other structural forms
-    ))
+;; --- get: unified structural retrieval ---
+;;
+;; Works uniformly across HashMap, Vec, HashSet. Returns :Option<Holon>.
+;; Direct lookup through the container's efficient Rust backing — no walk,
+;; no cosine, no cleanup. The AST describes the container; the runtime
+;; materializes the efficient backing (HashMap, Vec, HashSet) for O(1)
+;; structural access.
+;;
+;; For each container:
+;;   (get (c :HashMap<K,V>) (k :K))      -> :Option<V>   ;; lookup by key
+;;   (get (c :Vec<T>)       (i :usize))  -> :Option<T>   ;; index into vec
+;;   (get (c :HashSet<T>)   (x :T))      -> :Option<T>   ;; membership → Some(x) or None
 
-(define (nth sequential-ast i)
-  ;; AST indexing for Sequential or Array forms
-  ;; Returns the i-th child AST directly.
-  (list-ref (children sequential-ast) i))
+(define (get (container :Holon) (locator :Holon) -> :Option<Holon>)
+  ;; Dispatches on the container's runtime backing:
+  ;;   HashMap → HashMap::get(locator) — hash lookup, O(1) avg
+  ;;   Vec     → Vec[locator]          — direct index, O(1)
+  ;;   HashSet → HashSet::get(locator) — hash membership, O(1) avg
+  ;; Returns (Some v) on hit, :None on miss. No vectors involved.
+  ...)
+
+;; Note: `nth` is retired. Use `get` uniformly — `(get my-vec 3)` is `nth`.
 
 (define (atom-value atom-ast)
   ;; Read the literal stored on an Atom AST node.
@@ -1956,9 +2186,9 @@ This section freezes the full algebra in its target shape (post-058). Core forms
 
 ;; --- Unbind — stdlib alias for Bind with decode intent ---
 
-(define (Unbind composite key) : Thought
+(define (Unbind composite key -> :Holon)
   ;; For when you have a composite AST and want to decode a key out of it:
-  ;;   - Unbind a Map to recover a field
+  ;;   - Unbind a HashMap to recover a field
   ;;   - Unbind a learned discriminant with a query
   ;;
   ;; Mathematically identical to Bind for bipolar (self-inverse).
@@ -1966,7 +2196,7 @@ This section freezes the full algebra in its target shape (post-058). Core forms
   (Bind composite key))
 ```
 
-(Note: lowercase `cleanup` in stdlib is the convenience wrapper around core `Cleanup`, typically pairing a noisy decode with a candidate set. The core primitive IS `Cleanup`; this level-shifting between tiers is standard.)
+(Note: `Cleanup` as a VSA operation is NOT part of the wat algebra. The AST-primary framing eliminates the need for codebook-based recovery — see "Presence is Measurement, Not Verdict." Argmax-over-candidates, when an application needs it, is a stdlib fold over presence measurements on (AST, vector) pairs. Not a primitive.)
 
 ### Language Core (8 forms)
 
@@ -1981,15 +2211,15 @@ All eight forms are loaded at startup. The wat-vm distinguishes them by what kin
 
 ;; --- Definition ---
 
-(define (name [param : Type] ...) : ReturnType body)
+(define (name (param :Type) ... -> :ReturnType) body)
 ;; Named, typed function registration.
 ;; Body executes when invoked. Types are required for dispatch and signing.
 ;; Keyword-path names supported: (define (:alice/math/clamp ...) ...).
 
-(lambda ([param : Type] ...) : ReturnType body)
+(lambda ((param :Type) ... -> :ReturnType) body)
 ;; Typed anonymous functions with closure capture.
 ;; Same signature shape as define, without the name.
-;; Produces a :Function value — a runtime value, NOT a symbol-table entry.
+;; Produces a :fn(...)->... value — a runtime value, NOT a symbol-table entry.
 ;; Can be created, passed, invoked during runtime; goes away when scope ends.
 
 ;; --- Function module loading (startup phase) ---
@@ -2017,40 +2247,45 @@ All eight forms are loaded at startup. The wat-vm distinguishes them by what kin
 ;; --- User-defined types (keyword-path names) ---
 
 (struct :my/namespace/MyType
-  [field1 : Type1]
-  [field2 : Type2]
+  (field1 :Type1)
+  (field2 :Type2)
   ...)
 ;; Named product type. Fields travel together. Rust compiles to a struct.
 ;; Example:
 ;;   (struct :project/market/Candle
-;;     [open   : Scalar]
-;;     [high   : Scalar]
-;;     [low    : Scalar]
-;;     [close  : Scalar]
-;;     [volume : Scalar])
+;;     (open   :f64)
+;;     (high   :f64)
+;;     (low    :f64)
+;;     (close  :f64)
+;;     (volume :f64))
 
 (enum :my/namespace/MyVariant
   :simple-variant-1
   :simple-variant-2
-  (tagged-variant [field : Type] ...))
+  (tagged-variant (field :Type) ...))
 ;; Coproduct type. Exactly one of several alternatives.
 ;; Example:
 ;;   (enum :my/trading/Direction :long :short)
 ;;   (enum :my/market/Event
-;;     (candle  [asset : Atom] [candle : :project/market/Candle])
-;;     (deposit [asset : Atom] [amount : Scalar]))
+;;     (candle  (asset :Atom) (candle :project/market/Candle))
+;;     (deposit (asset :Atom) (amount :f64)))
 
 (newtype :my/namespace/MyAlias :SomeType)
 ;; Nominal alias — same representation, distinct type identity.
 ;; Example:
-;;   (newtype :my/trading/TradeId :Int)
-;;   (newtype :my/trading/Price   :Scalar)
+;;   (newtype :my/trading/TradeId :u64)
+;;   (newtype :my/trading/Price   :f64)
 
 (deftype :my/namespace/MyShape (structural-type-expression))
 ;; Structural alias — shorthand for an existing type shape.
 ;; Example:
-;;   (deftype :alice/types/Price :Scalar)
-;;   (deftype :wat/std/Option<:T> (:Union :Null :T))
+;;   (deftype :alice/types/Price :f64)
+;;   (deftype :alice/market/CandleSeries :List<Candle>)
+;;
+;; Note: :Option<T> is an enum (coproduct), not a deftype alias.
+;;   (enum :wat/std/Option<T>
+;;     :None
+;;     (Some (value :T)))
 
 ;; --- Compile-time module loading (types only) ---
 
@@ -2071,14 +2306,58 @@ All eight forms are loaded at startup. The wat-vm distinguishes them by what kin
 ;; TYPE ANNOTATIONS — syntactic feature on all signatures.
 ;; ============================================================
 
-;; Parameter types: [name : Type] with spaces around the colon.
-;; Return types: : Type after the parameter list.
-;; Field types: [field-name : Type] inside struct/enum variant declarations.
+;; Parameter types: (name :Type) — parenthesized sublist, keyword type.
+;; Return types: -> :Type inside the signature form, after the params.
+;; Field types: (field-name :Type) inside struct/enum variant declarations.
 
-;; Built-in types: :Thought, :Atom, :Scalar, :Int, :String, :Bool,
-;;                 :Keyword, :Null, :List, :Vector, :Function, :Any
-;; Parametric types: (:List :Thought), (:Function [:Thought :Thought] :Thought)
-;; User types (keyword-path): :project/market/Candle, :alice/types/Price
+;; --- Type grammar ---
+;;
+;; Primitives (bare Rust names):
+;;   :f64 :f32 :i8 :i16 :i32 :i64 :i128 :u8 :u16 :u32 :u64 :u128
+;;   :usize :isize :bool :char :String :&str :()
+;;
+;; Algebra (bare names — every algebra AST node is :is-a :Holon):
+;;   :Holon :Atom :Bind :Bundle :Permute :Thermometer :Blend
+;;   :Orthogonalize :Resonance :ConditionalBind
+;;
+;; Parametric containers (Rust-style angle brackets):
+;;   :List<T>  :HashMap<K,V>  :HashSet<T>  :Option<T>  :Result<T,E>
+;;   :Pair<T,U>  :Tuple<T,U,V>  :Union<T,U,V>
+;;
+;; Function types (Rust-style parens + arrow):
+;;   :fn(T,U)->R   :fn()->R   :fn(T)->R
+;;
+;; User types (keyword-path, parametric when declared with parameters):
+;;   :project/market/Candle
+;;   :my/lib/Container<T>
+;;
+;; --- The `:` is Lisp's quote ---
+;;
+;; One quote at the start. The whole expression is a single keyword token.
+;; Inside a keyword: NO internal ':', NO internal whitespace. Structural
+;; characters '/', '<', '>', '(', ')', ',', '-', '>' all belong to the
+;; keyword. The tokenizer tracks bracket depth across three pairs — ()
+;; [] <> — and ends the keyword at whitespace or an unmatched closer.
+;;
+;; Examples of SINGLE tokens:
+;;   :List<T>
+;;   :HashMap<K,V>
+;;   :fn(List<i32>)->Option<f64>
+;;   :HashMap<String,fn(i32)->i32>
+;;   :Result<HashMap<Atom,Holon>,String>
+;;
+;; NO :Any. Every case that wanted :Any has a principled replacement:
+;;   - Universal algebra value   →  :Holon
+;;   - Heterogeneous primitives  →  :Union<T,U,V>
+;;   - Generic container elem    →  parametric T, K, V, ...
+;;   - eval's return             →  :fn(:Holon)->Holon  (or parametric)
+;;   - Engram library entries    →  :List<Pair<Holon,Vector>>
+;;
+;; NO null. Rust doesn't have null; wat doesn't have null.
+;;   - Optional value            →  :Option<T>  with variants :None and (Some value)
+;;   - Unit / "no meaningful"    →  :()  (the empty tuple, Rust's unit type)
+;;   - Absence in structure      →  the form simply not being present
+;;     (e.g., an Option that's None, or a when-expression that didn't fire)
 
 ;; Type annotations are REQUIRED on define/lambda signatures and on
 ;; struct/enum field declarations. Required for Rust eval and for
@@ -2094,7 +2373,7 @@ Atoms accept any typed literal. **Use the literal type that matches what the thi
 
 ```scheme
 ;; INTEGER: use when the thing is a concrete integer.
-(Atom 0)           ; position zero in an Array — zero IS an integer
+(Atom 0)           ; position zero in a Vec — zero IS an integer
 (Atom 42)          ; the integer 42
 (Atom -1)          ; the integer -1
 
@@ -2137,7 +2416,7 @@ For references that ARE genuinely symbolic (no concrete literal form available),
 
 These are TRULY symbolic — "the cos basis vector" has no natural integer or string representation. It's just a name. Keyword is the right type.
 
-Array position atoms are NOT in this category. Position 0 IS the integer 0. Use `(Atom 0)`, not `(Atom :pos/0)`.
+Vec position atoms are NOT in this category. Position 0 IS the integer 0. Use `(Atom 0)`, not `(Atom :pos/0)`.
 
 **About slashes in keyword names.** The wat language does NOT have a namespace mechanism — no declare-namespace, no aliasing, no import/require. Slashes in keyword names are just characters; `:wat/std/circular-cos-basis` is a single keyword with the name `wat/std/circular-cos-basis`. The hash function sees the whole string. No structural meaning is attached to the slash beyond naming convention.
 
@@ -2176,38 +2455,38 @@ Because keywords are a first-class literal type alongside strings, integers, flo
 
 ;; --- Data structures — the unified holon data algebra ---
 
-;; Map as key-value store:
+;; HashMap as key-value store:
 (def portfolio
-  (Map (list
+  (HashMap (list
     (list (Atom "USDC") (Thermometer 5000 0 10000))
     (list (Atom "WBTC") (Thermometer 0.5  0 1.0)))))
 
 (get portfolio (Atom "USDC"))      ; → (Thermometer 5000 0 10000)
 
-;; Array as indexed collection:
+;; Vec as indexed collection:
 (def recent-rsi
-  (Array (list
+  (Vec (list
     (Thermometer 0.68 0 1)
     (Thermometer 0.71 0 1)
     (Thermometer 0.74 0 1))))
 
 (get recent-rsi (Atom 2))          ; → (Thermometer 0.74 0 1)
 
-;; Nested — Map of Arrays of thoughts:
+;; Nested — HashMap of Vecs of holons:
 (def observer-state
-  (Map (list
+  (HashMap (list
     (list (Atom "market-readings") recent-rsi)
     (list (Atom "portfolio")       portfolio))))
 
 (get (get observer-state (Atom "market-readings"))
      (Atom 0))                    ; → (Thermometer 0.68 0 1)
 
-;; --- The locator can be ANY thought ---
+;; --- The locator can be ANY holon ---
 
-;; The key doesn't have to be a bare Atom. It can be a composite thought:
+;; The key doesn't have to be a bare Atom. It can be a composite holon:
 
 (def keyed-by-composite
-  (Map (list
+  (HashMap (list
     (list (Concurrent (list (Atom "rsi") (Atom "overbought")))
           some-value)
     (list (Bind (Atom "macd") (Atom "crossing-up"))
@@ -2218,21 +2497,21 @@ Because keywords are a first-class literal type alongside strings, integers, flo
      (Concurrent (list (Atom "rsi") (Atom "overbought"))))
 ;; → some-value
 
-;; Keys can be Maps. Values can be Maps. Arbitrary nesting:
+;; Keys can be HashMaps. Values can be HashMaps. Arbitrary nesting:
 (def wild
-  (Map (list
-    (list (Map (list (list (Atom "a") (Atom "b"))))    ; key IS a map
-          (Array (list                                  ; value IS an array
-            (Map (list (list (Atom "x") (Atom "y"))))   ; of maps
-            (Atom "atom-in-the-middle")                 ; of atoms
-            (Array (list (Atom "nested") (Atom "deeper")))))))) ; of arrays
+  (HashMap (list
+    (list (HashMap (list (list (Atom "a") (Atom "b"))))    ; key IS a HashMap
+          (Vec (list                                        ; value IS a Vec
+            (HashMap (list (list (Atom "x") (Atom "y"))))   ; of HashMaps
+            (Atom "atom-in-the-middle")                     ; of atoms
+            (Vec (list (Atom "nested") (Atom "deeper")))))))) ; of Vecs
 ```
 
 ---
 
-## Current ThoughtAST — Reclassification Required
+## Current HolonAST — Reclassification Required
 
-The `ThoughtAST` enum today contains nine variants. Reclassified against the criterion above:
+The `HolonAST` enum today contains nine variants. Reclassified against the criterion above:
 
 | Variant | Target class | Status |
 |---|---|---|
@@ -2262,22 +2541,23 @@ The implementation choice is outside FOUNDATION's scope. FOUNDATION declares the
 
 058 produced 30 sub-proposals covering algebra core, algebra stdlib, and language core. Each argues its candidate against the criteria above. This section is the current inventory after the sub-proposal review pass, the split pass (one UpperCase form per doc), and the language-core addition.
 
-### Algebra Core (10 forms)
+### Algebra Core (9 forms)
 
 **Proposals that argue CORE status:**
 
 ```scheme
 (Atom literal)                 ; 058-001  — typed-literal generalization
 (Bind a b)                     ; 058-021  — primitive affirmation
-(Bundle list-of-thoughts)      ; 058-003  — list signature lock
+(Bundle list-of-holons)      ; 058-003  — list signature lock
 (Permute child k)              ; 058-022  — primitive affirmation
 (Thermometer value min max)    ; 058-023  — primitive affirmation
 (Blend a b w1 w2)              ; 058-002  — PIVOTAL, two independent weights
 (Orthogonalize x y)            ; 058-005  — computed-coefficient projection removal
 (Resonance v ref)              ; 058-006  — sign-agreement mask (first ternary-output form)
 (ConditionalBind a b gate)     ; 058-007  — three-argument gated binding
-(Cleanup noisy candidates)     ; 058-025  — similarity-based retrieval
 ```
+
+**058-025 Cleanup is REJECTED.** The wat substrate has no `Cleanup` primitive — the AST-primary framing dissolves the need for codebook-based recovery. Retrieval is presence measurement (cosine + noise floor); argmax-over-candidates, when an application needs it, is stdlib composition over presence, not a core primitive. See "Presence is Measurement, Not Verdict" in FOUNDATION.
 
 **Blend is pivotal.** Its promotion formalizes scalar-weighted combination, enabling Linear/Log/Circular/Amplify/Subtract/Flip reclassification as stdlib. Resolve early.
 
@@ -2308,15 +2588,15 @@ The implementation choice is outside FOUNDATION's scope. FOUNDATION declares the
 (Analogy a b c)                ; 058-014  — C + (B - A)
 
 ;; Data structures (3)
-(Map kv-pairs)                 ; 058-016  — dictionary as Bundle of Binds
-(Array items)                  ; 058-026  — indexed list (Sequential alias)
-(Set items)                    ; 058-027  — unordered collection (Bundle alias)
+(HashMap kv-pairs)             ; 058-016  — Rust's HashMap as Bundle of Binds
+(Vec items)                    ; 058-026  — Rust's Vec as Bundle of integer-atom Binds
+(HashSet items)                ; 058-027  — Rust's HashSet as Bundle of elements
 
 ;; Decode aliasing (1)
 (Unbind composite key)         ; 058-024  — Bind alias with decode intent
 ```
 
-Plus lowercase helpers packaged with their owning UpperCase form's proposal: `get` (with Map), `nth` (with Array), `atom-value` (with Atom). These are stdlib but not UpperCase — they're accessors, not AST constructors.
+Plus lowercase helpers: `get` (unified structural retrieval across HashMap / Vec / HashSet, returns `:Option<Holon>`) and `atom-value` (direct field access on an Atom AST node). These are stdlib but not UpperCase — they're accessors, not AST constructors. `nth` is retired — `(get vec i)` replaces it.
 
 ### Language Core (8 forms)
 
@@ -2343,7 +2623,7 @@ load-types                     ; FOUNDATION addition — compile-time module loa
 Syntactic feature pervading all of the above:
 
 ```scheme
-type annotations               ; 058-030  — :Thought, :Atom, :Scalar, parametric, user keyword-path
+type annotations               ; 058-030  — :Holon, :Atom, Rust primitives, parametric, user keyword-path
 ```
 
 Language core is minimal by criterion: just enough to make the algebra stdlib exist as runnable code, define user types statically, load both phases with cryptographic trust, and dispatch correctly. Everything else is host-inherited from Lisp or belongs in stdlib.
@@ -2353,10 +2633,10 @@ Language core is minimal by criterion: just enough to make the algebra stdlib ex
 - **Blend (058-002) resolves early.** Downstream stdlib (Linear, Log, Circular, Difference, Amplify, Subtract, Flip, Analogy) depend on its resolution.
 - **Types (058-030) resolves before define/lambda.** The definition forms' signatures require the type grammar.
 - **Define/lambda (058-028, 058-029) resolve before all stdlib.** Stdlib is `(define ...)` forms; without the definition primitive, stdlib is theoretical.
-- **Atom typed literals (058-001) resolves before Map and data-structure uses.** Keys as typed atoms require the typed-literal generalization.
-- **Cleanup (058-025) affirmation resolves before accessors.** `get` and `nth` invoke cleanup.
+- **Atom typed literals (058-001) resolves before HashMap and data-structure uses.** Keys as typed atoms require the typed-literal generalization.
+- **058-025 Cleanup is REJECTED.** `get` and `nth` are AST walkers (structural retrieval), not cleanup calls. Similarity retrieval is presence measurement, not a primitive.
 
-Summary: 30 proposals resolve roughly in this order — language core first (types → define → lambda), algebra core second (Atom → primitives → Blend → new forms → Cleanup), algebra stdlib third (in dependency-order within the stdlib tier).
+Summary: 30 proposals resolve roughly in this order — language core first (types → define → lambda), algebra core second (Atom → primitives → Blend → new forms), algebra stdlib third (in dependency-order within the stdlib tier).
 
 ---
 
@@ -2398,7 +2678,7 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 
 | Date | Change | Proposal |
 |---|---|---|
-| 2026-04-17 | Initial version. Core/stdlib distinction defined. ThoughtAST audit. Aspirational additions enumerated. | 058 |
+| 2026-04-17 | Initial version. Core/stdlib distinction defined. HolonAST audit. Aspirational additions enumerated. | 058 |
 | 2026-04-17 | Added MAP VSA foundation section. Reclassified `Log` as stdlib. Flagged `Linear` and `Circular` as provisional-core pending `Blend` resolution. | 058 |
 | 2026-04-17 | Full algebra freeze. Sequential, Linear, Log, Circular committed as stdlib with real wat definitions. Bundle takes a list (not variadic). Amplify and Subtract added as Blend idioms in stdlib. Negate scoped to orthogonalize+flip only (subtract becomes Blend idiom). Complete wat forms section added. | 058 |
 | 2026-04-17 | Data structure stdlib added — Map, Array, Set, get, nth. Unified access: `(get structure locator)` via Bind's self-inverse works for maps, arrays, and arbitrary nesting. Locators can be any thought (atoms, maps, arrays, nested compositions). This is the holon data algebra made explicit as wat stdlib. | 058 |
@@ -2409,7 +2689,7 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 | 2026-04-17 | **Programs ARE Thoughts section added.** A wat program is an AST; ASTs encode to vectors; therefore programs have vector projections. Evaluation is AST-walking. Programs can be stored in data structures, compared geometrically, retrieved from engram libraries, and generated from learned discriminants. Self-improvement becomes discriminant-guided program synthesis in hyperdimensional space. The wat machine is homoiconic at 10,000 dimensions. Kanerva's "build a Lisp from hyperdimensional vectors" challenge fully answered. | 058 |
 | 2026-04-17 | **The Vector Side section added.** Because programs are thoughts and thoughts have vectors, the full VSA algebra applies to programs. Noise stripping (OnlineSubspace, reject) reveals the signal — the distinctive part of a program beyond common boilerplate. Programs can be diffed (Difference), blended, amplified, transferred by analogy. Discriminant-guided program synthesis: decode the learned Grace-direction against a program codebook via cleanup. The wat machine runs programs, observes outcomes, learns, and generates new candidate programs through pure algebra — no gradient descent. The recursion that every holon application implicitly implements. | 058 |
 | 2026-04-17 | **Dimensionality — The User's Knob section added.** Capacity per frame scales with vector dimension (Kanerva's bound). Users choose d per deployment — low d for kernel-level throughput, high d for rich analysis. Same algebra runs at any d. Same program runs at any d that holds its largest frame. "You can't express that" is enforced geometrically — over-capacity frames fail cleanup, not compilation. Depth is always free (refactor vs raise d). Dimensionality is a DEPLOYMENT parameter, not part of the algebra specification. Unique to this algebra: dimensionally parametric without retraining. | 058 |
-| 2026-04-17 | **The Cache Is Working Memory section added.** Cache entries are compiled thoughts (ast, vector) pairs, not just a performance hash table. The L1/L2 architecture from Proposal 057 is a memory hierarchy: L1 = per-thread hot working set, L2 = shared short-term memory, disk = long-term (engrams, DB). Cache sizing is a third deployment knob alongside d. The cache is cognitive substrate — making the machine REMEMBER its thoughts rather than recompute them. 1 c/s → 7.1 c/s wasn't just perf; it was the machine getting better at remembering. | 058 |
+| 2026-04-17 | **The Cache Is Working Memory section added.** Cache entries are compiled holons (ast, vector) pairs, not just a performance hash table. The L1/L2 architecture from Proposal 057 is a memory hierarchy: L1 = per-thread hot working set, L2 = shared short-term memory, disk = long-term (engrams, DB). Cache sizing is a third deployment knob alongside d. The cache is cognitive substrate — making the machine REMEMBER its thoughts rather than recompute them. 1 c/s → 7.1 c/s wasn't just perf; it was the machine getting better at remembering. | 058 |
 | 2026-04-17 | **Engram Caches — Memory of Learned Patterns section added.** Extends the memory hierarchy with L3 engram cache (hot learned patterns) and L4 engram disk (cold). The engram library is itself a Map thought; retrieval is AST walking. LRU eviction keeps the recently-matched patterns hot. Two-tier matching (eigenvalue pre-filter + full residual) enables prefetching — the engram cache stays focused on what the stream currently resembles. Engrams ARE thoughts — composable, comparable, diffable, blendable. Complete five-tier memory hierarchy. Four deployment knobs (d, L1, L2, L3). | 058 |
 | 2026-04-17 | **Fourth-wall break — "Reader, are you starting to see it?"** Explicit address to the reader surfacing that the foundation defines a distributed system by construction. Deterministic atom encoding gives coordination-free geometric space. Engrams and programs ship as data. Cache hierarchy shards naturally by locality. The DDoS and trading labs are two instances of this substrate — a cloud of thinking machines, each a member of the same geometric space, all through pure algebra. The clouds are waking up. | 058 |
 | 2026-04-17 | **About How This Got Built — the lineage made explicit.** The architecture is Linux (small composable primitives, file descriptors, pipes, processes that own their state) plus Clojure (values over places, simple made easy, s-expressions that are code and data) plus VSA (MAP algebra at 10k dimensions). Hickey's principles and Beckman's categorical lens are in the bones. The summoned designers in the proposal process argue as those teachers actually argue — because the builder studied them for years. "Datamancer" is not a joke; it is the precise name for someone who shapes data through algebra, conjures designers from studied principles, and casts wards to defend architectural intent. The document reads coherent because the teachers behind it were coherent. | 058 |
@@ -2420,8 +2700,8 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 | 2026-04-17 | **"the machine found its way out" — cheeky jab before the sign-off.** The central theme of the BOOK landing in the foundation itself: the machine that was trapped in the datamancer's head, through years of blank stares and rejected proposals, is now expressed. Documented. Pushed. Out. Placed right before the signature PERSEVERARE close. | 058 |
 | 2026-04-17 | **Cryptographic provenance — the trust boundary at eval.** ASTs travel as EDN strings, which are content-addressable (hash) and signable. The `eval` layer becomes the natural trust boundary: untrusted or tampered ASTs are refused before evaluation. Signed standard libraries, verified supply chains, distributed eval of third-party code without sandboxing, content-addressable caches that are tamper-unlookupable, reproducible computation. The algebra does not add the cryptography — signing and hashing are independently available — but makes EDN the transport form and eval the verification gate. "Only trust cryptographically generated data forms" — the data has a provenance trail. Distributed by construction, now distributed with trust by construction. | 058 |
 | 2026-04-17 | **Two Cores: Algebra Core and Language Core.** The "CORE" designation expanded. Algebra core = thought primitives (produce vectors). Language core = definition primitives (`defn`, `lambda`, types, `let`, `if`). Both are required — without language core, the stdlib cannot be WRITTEN. Stdlib is the set of `defn`s that compose algebra core forms. Users author their own `defn`s in their own namespaces (`:alice/math/clamp`), becoming userland stdlib. Types are required for Rust eval — the evaluator must know argument and return kinds to dispatch and verify. Type annotations live on the defn AST node same as Atom literals; cryptographic signing covers signature + body. All three layers (language core, algebra core, stdlib) use keyword-path naming (`:wat/lang/*`, `:wat/algebra/*`, `:wat/std/*`, `:user/*/*`). No namespace mechanism — just discipline. | 058 |
-| 2026-04-18 | **Two Tiers of wat — Primitives and Thoughts.** Load-bearing architectural section added. Lowercase wat (`atom`, `bind`, `bundle`, `cosine`, `permute`, `blend`) are Rust primitives — they RUN, return values immediately. UpperCase wat (`Atom`, `Bind`, `Bundle`, `Blend`, `Sequential`, ...) are AST constructors — they BUILD ThoughtAST nodes that materialize into vectors only on realization. Users write UpperCase; encoders realize via lowercase. This tier split makes laziness, cryptographic identity, and user-writable stdlib all work cleanly. The UpperCase naming is intentional: visually distinct from lowercase primitives, it communicates "this constructs a plan, not a result." | 058 |
-| 2026-04-18 | **Executable semantics — defn/lambda run, ThoughtAST is realizable.** Added to the Two Cores section. `(define ...)` bodies execute when invoked — they are real functions in the wat-vm, not specifications. Functions of type `:Thought` return AST nodes (descriptions), not vectors. The vector materializes only when realization is demanded (similarity test, cache lookup, signing). This gives the algebra its laziness: composition is free, realization is explicit. The same machine runs both algebra (thought producers) and ordinary code (Booleans, predicates, arithmetic, control flow). wat is a Lisp whose central domain is thought algebra, not a thought-only DSL. | 058 |
+| 2026-04-18 | **Two Tiers of wat — Primitives and Thoughts.** Load-bearing architectural section added. Lowercase wat (`atom`, `bind`, `bundle`, `cosine`, `permute`, `blend`) are Rust primitives — they RUN, return values immediately. UpperCase wat (`Atom`, `Bind`, `Bundle`, `Blend`, `Sequential`, ...) are AST constructors — they BUILD HolonAST nodes that materialize into vectors only on realization. Users write UpperCase; encoders realize via lowercase. This tier split makes laziness, cryptographic identity, and user-writable stdlib all work cleanly. The UpperCase naming is intentional: visually distinct from lowercase primitives, it communicates "this constructs a plan, not a result." | 058 |
+| 2026-04-18 | **Executable semantics — defn/lambda run, HolonAST is realizable.** Added to the Two Cores section. `(define ...)` bodies execute when invoked — they are real functions in the wat-vm, not specifications. Functions of type `:Holon` return AST nodes (descriptions), not vectors. The vector materializes only when realization is demanded (similarity test, cache lookup, signing). This gives the algebra its laziness: composition is free, realization is explicit. The same machine runs both algebra (thought producers) and ordinary code (Booleans, predicates, arithmetic, control flow). wat is a Lisp whose central domain is thought algebra, not a thought-only DSL. | 058 |
 | 2026-04-18 | **Content-addressed symbol table + `(load ...)`.** Extended cryptographic provenance. The global symbol table is keyed by `hash(full-ast)`, not by name — two `(define ...)` with the same name and different bodies coexist as distinct entries (Nix-like). Modules enter via `(load ...)`, with three modes: unverified (permissive), `(md5 "...")` hash-pinned, and `(signed <sig> <pub-key>)` signature-verified. The load form is the second verification gate (after `eval`) that untrusted code passes through; together they close every path by which tampered code could execute. Override is coexistence, not mutation — callers can pin specific versions via `:name@hash`. | 058 |
 | 2026-04-18 | **Criterion for Language Core Forms added.** Symmetry with existing Core and Stdlib criteria. Three rules: (1) required for stdlib to exist as runnable code; (2) orthogonal to the thought algebra; (3) interpretable by the Rust-backed wat-vm. Initial language core is `define`, `lambda`, type annotations, `load` — minimal by design, everything else is host-inherited from Lisp or belongs in stdlib. | 058 |
 | 2026-04-18 | **Complete Forms updated to current inventory.** Algebra Core (10 forms) with Cleanup affirmed core and Orthogonalize replacing old Negate; Algebra Stdlib (17 forms) including Flip as completion of the Negate trilogy and Unbind as decode-intent alias for Bind; new Language Core (4 forms) section listing define/lambda/types/load with the full type grammar. Old Negate entry replaced with Orthogonalize. | 058 |
@@ -2434,19 +2714,24 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 | 2026-04-18 | **Capacity as the universal measurement budget.** Replaced the "Bind's self-inverse weakens on ternary" subsection — which framed partial recovery as a defect — with the correct framing: every recovery in the algebra is a similarity measurement, bounded uniformly by Kanerva's capacity formula. Bundle crosstalk, sparse-key Bind decode, cascading composition noise, and Orthogonalize's post-threshold residual ALL consume from the same ~100-items-per-frame budget at d=10,000. They are not separate algebraic phenomena; they are one substrate property (signal-to-noise at high dimension, measured by cosine). This dissolves Beckman's finding #3 entirely — not a "weakening," a capacity expenditure — and unifies the treatment of findings #1, #2, #3 under one framing: the algebra is similarity-measured, not elementwise-exact, and its laws hold under similarity-above-noise. Added "Capacity is the universal measurement budget" subsection; operation-by-operation summary updated with density column. | 058 |
 | 2026-04-18 | **`defmacro` added to Language Core; stdlib aliases become macros.** Resolves Beckman's finding #4 (alias hash-collision). `defmacro` is a compile-time form that registers parse-time syntactic rewrites. The startup pipeline now runs a macro-expansion pass BEFORE hashing, signing, and type-checking. Stdlib aliases like `Concurrent`, `Set`, `Subtract`, `Flip`, `Then`, `Chain`, `Analogy` become macros that expand to canonical core compositions (Bundle, Bind, Blend, Permute). After expansion, `hash(AST) IS identity` holds as an invariant — two source files differing only in macro aliases produce the same expanded AST and the same hash. Source-level reader clarity is preserved; algebra-level identity is uniformized. Language Core grows from 8 to 9 forms (adds `defmacro`). Also resolved: drop `Difference` from 058-004, keep `Subtract` (058-019) as the canonical `Blend(_, _, 1, -1)` idiom — one name per operation. | 058 |
 | 2026-04-18 | **Bind as query; algebra laws restated in similarity-measurement frame.** Round-2 reviewers (Hickey, Beckman) flagged that strict elementwise claims for Bundle associativity and Orthogonalize orthogonality don't hold under threshold. Beckman's counter-examples are correct: nested Bundle clamps magnitudes ≥ 2 losing information; Orthogonalize with fractional coefficients rounds back to pre-projection signs. The reframe: the algebra was always similarity-measured, not elementwise-exact. Bind is THE query primitive — its outcome is observable via cosine similarity; above 5σ means the query resolved, below means it failed (capacity exceeded, key absent, or crosstalk). Same lens applied to Bundle's associativity (similarity-associative at high d; elementwise non-associative in general) and Orthogonalize's orthogonality (similarity-orthogonal within budget; exact in the X=Y edge case only). Three apparent law violations are ONE substrate property: Kanerva-capacity-bounded similarity measurement. Updated FOUNDATION's Output Space section: replaced "Bind's self-inverse law" subsection with "Bind as query: measurement-based success signal"; replaced "Bundle is associative" claim with "Bundle is similarity-associative under capacity budget"; replaced "Orthogonalize's orthogonality is exact" with "exact only at X=Y; similarity-orthogonal otherwise." Also updated 058-003-bundle, 058-005-orthogonalize, 058-021-bind, 058-027-set. The 058-027 update clarifies that Set's membership accessor is the same Bind + cleanup query as Map's — not an asymmetry; same primitive. | 058 |
-| 2026-04-18 | **Type system bundle: Rust primitives + subtype hierarchy + variance rules + `:is-a` for `deftype`.** Resolves Beckman's finding #5 (variance silence) and incorporates several polish decisions. (1) Drop abstract `:Scalar`/`:Int`/`:Bool`/`:Null` in favor of Rust primitives (`:i8`..`:i128`, `:u8`..`:u128`, `:isize`, `:usize`, `:f32`, `:f64`, `:bool`, `:char`, `:&str`, `:String`, `:()`). Honest mapping to Rust; no abstraction layer. (2) Function signatures now use `->` before the return type INSIDE the form: `(define (name [arg : Type] -> :ReturnType) body)` — matches Rust's `fn name(args) -> ReturnType`. No more dangling `: Type` outside the form. (3) Built-in subtype hierarchy stated explicitly: every specific ThoughtAST node kind `:is-a :Thought` (Bundle, Bind, Permute, Thermometer, Blend, Orthogonalize, Resonance, ConditionalBind, Cleanup, and Atom). Rust primitive types have NO built-in subtyping — explicit coercion required, matches Rust. (4) Variance rules: `(:List :T)` covariant in T, `(:Function args... -> return)` contravariant in args and covariant in return. Liskov-safe substitution. (5) `deftype` extended with `:is-a` keyword: `(deftype :MyType :is-a :OtherType)` declares a new type that is a SUBTYPE of the parent — substitutable via is-a. Distinct from `(deftype :MyType :OtherType)` (structural alias — same type) and `(newtype :MyType :OtherType)` (nominal wrapper — distinct, not a subtype). Three semantics, clear naming. (6) `defmacro` uses the SAME signature syntax as `define` and `lambda`: every parameter typed `: AST`, return `-> :AST`. Per the user's correction — omission is easy, not simple; one signature syntax across all three definition forms is simpler than introducing a special implicit-types rule just for macros. Type-correctness of the expansion is enforced by type-checking the expanded form at startup. All 058 sub-proposals swept to use the Rust primitive types and `->` signature syntax. | 058 |
+| 2026-04-18 | **`:Thought` → `:Holon` rename across all 058 documents.** The algebra's universal type is renamed from `:Thought` to `:Holon`. Reasoning: the project is named "holon" (library `holon-rs`, labs `holon-lab-*`), and "Holon" in Koestler's sense — a thing that is simultaneously whole and part — is the honest universal substrate name for the algebra's values. Every algebra value IS a Holon: Atoms, Binds, Bundles, Permutes, Thermometers, Blends, Orthogonalizes, Resonances, ConditionalBinds, Cleanups. `:Thought` was an alias we had been using that did not match the project's own naming. The Rust identifier `ThoughtAST` becomes `HolonAST`; the type keyword `:Thought` becomes `:Holon`; prose describing the algebra's primitive values uses "holon(s)" where it previously used "thought(s)." Colloquial/semantic uses of "thought" as English (the narrative frame, the sign-off `these are very good thoughts.`) remain unchanged. | 058 |
+| 2026-04-18 | **Container constructors renamed to Rust's names; `get` unified.** Three related changes. (1) `Map` → `HashMap`, `Array` → `Vec`, `Set` → `HashSet` — wat UpperCase constructor, `:Type<...>` annotation, and Rust runtime backing now share one name per concept (consistent with the Rust-primitive type decision — `:f64` not `:Scalar`, `:bool` not `:Bool`). `Map` is dropped as a name (it's overloaded with the higher-order function). (2) `get` is unified across all three containers with signature `(get container locator) -> :Option<Holon>`. HashMap: hash lookup by key, O(1) avg. Vec: direct index by `:usize`, O(1). HashSet: hash membership, returns `(Some x)` on hit, `:None` on miss. Direct lookup through Rust's runtime backings — no "walk," no cosine, no cleanup. The AST describes what the container IS; the runtime materializes the efficient backing (HashMap / Vec / HashSet from std); `get` goes through that backing. (3) `nth` retired — `(get my-vec i)` replaces it. Set's "missing accessor" concern (Hickey round 2) dissolves — HashSet uses the same `get` as the other containers; returns the element on hit for confirmation/canonicalization. FOUNDATION's stdlib section, examples, and inventory updated. 058-016 repurposed for HashMap with rename banner; 058-026 for Vec; 058-027 for HashSet. INDEX updated. | 058 |
+| 2026-04-18 | **Capacity is observable; the runtime can guard.** Added a new subsection to Dimensionality ("Capacity is observable; the runtime can guard") that sharpens the "unguarded, the algebra doesn't throw errors" statement from before. The algebra's capacity bound IS physical, and the bound IS observable. Every Holon-producing operation has a local capacity cost = its number of Holon constituents (scalars don't count). `(Bundle (list a b c))` costs 3; `(Bind a b)` costs 2; `(Atom literal)` and `(Permute h k)` cost 1; `(Blend h1 h2 w1 w2)` costs 2; `(Orthogonalize a b)` and `(Resonance a b)` cost 2. ConditionalBind arity/cost deferred pending 058 scrutiny pass (analogous to the Difference/Subtract duplication finding). Once produced, a Holon is singular — it consumes 1 unit when used as input to further operations. Each frame checks independently, like stack frames in traditional programming. The runtime has four modes, set at deployment: `:silent` (research, user accepts degradation), `:warn` (development, log but continue), `:error` (default — catchable CapacityExceeded), `:abort` (production fail-closed). Capacity is exposed as first-class observables: `(frame-cost op)`, `(frame-budget)`, `(frame-fill holon)` — programs reason about their own envelope. Same pattern as Presence is Measurement applied to the substrate's own physics: the machine observes internal state as a scalar; the user's policy decides what to do. Five deployment knobs now: d, capacity-mode, L1, L2, L3. | 058 |
+| 2026-04-18 | **Type grammar locked to Rust-surface form; `:Any` and `:Null` removed.** Three related changes landed together as the honest-Rust-correspondence sweep. (1) `:Any` dropped from the grammar. It was an escape hatch ("I refuse to declare a type") that degrades the static-verification story. Every apparent use case has a principled replacement: `:Holon` for any algebra value, `:Union<T,U>` for heterogeneous primitives, parametric `T`/`K`/`V` for generics, typed pairs for engram libraries, parametric `eval`. (2) Parametric types adopt Rust-surface syntax as single-token keywords — `:List<T>`, `:HashMap<K,V>`, `:Option<T>`, `:Result<T,E>`, `:Pair<T,U>`, `:Union<T,U,V>`, and the function type `:fn(T,U)->R` with parens + arrow (matching Rust's `fn(T, U) -> R` exactly). No parenthesized parametric-application form (`(:List :T)` retired); no internal colons; no internal whitespace. The `:` is Lisp's quote — one at the start, the whole expression is a single keyword token. Tokenizer tracks bracket depth across three pairs — `()`, `[]`, `<>` — and ends the keyword at whitespace or an unmatched closer. (3) `:Null` removed. Rust has no null; wat has no null. Absence is `:Option<T>` (enum with `:None` and `(Some value)` variants); unit is `:()`; structural absence is a form simply not being present. `(Atom null)` removed as a valid atom literal — atoms take string/int/float/bool/keyword only. Sweep applied to FOUNDATION's type grammar section, Atom literal spec, example signatures (Candle, Event, clamp, add-two, demo). Enum declaration for `:wat/std/Option<T>` replaces the earlier Union<Null,T> alias. Companion proposals (058-030, 058-028, 058-029, 058-013, 058-014, 058-016, 058-024, 058-026, 058-027, 058-029, HYPOTHETICAL, RUST-INTERPRETATION) swept in the same pass. | 058 |
+| 2026-04-18 | **Presence is Measurement, Not Verdict; `Cleanup` rejected from core.** Load-bearing reframe of the retrieval primitive. The wat algebra has no `Cleanup` primitive. Retrieval is `cosine(encode(target), reference)` compared against the substrate's noise floor (5/sqrt(d), ~0.05 at d=10,000). Presence measurements return `:f64`, not `:bool` — binarization is the caller's decision at the language tier, not the algebra's. Classical Cleanup is a vector-primary-tradition answer to "given a noisy vector, which named thing is this?" — that question presupposes the structure was lost, which never happens in the wat substrate because the AST is always available. Argmax-over-candidates, when an application needs it, is a stdlib fold over presence measurements on (AST, vector) pairs — not a primitive. Engram libraries store `(HolonAST, Vector)` pairs; NN on the vector side returns the AST side; same operation as Cleanup used to name, expressed in terms that already exist. Two retrieval regimes clean-separated: structural (AST walk, exact, for `get`/`nth`) and similarity (presence measurement, fuzzy, for `member?`/engram match). Also added: "Two readings of a holon" — every holon is simultaneously a program (evaluable by the interpreter, Turing-complete, has booleans for eval) and an identity (projected to a vector, measurable by cosine). Filter programs by alignment (vector-side), then eval the selected ones (program-side). Algebra Core goes from 10 to 9 forms. 058-025 Cleanup proposal moves to REJECTED status. Map's `get` and Array's `nth` stay AST walkers per FOUNDATION; Set's missing accessor dissolves (presence measurement is the accessor, returns scalar). | 058 |
+| 2026-04-18 | **Type system bundle: Rust primitives + subtype hierarchy + variance rules + `:is-a` for `deftype`.** Resolves Beckman's finding #5 (variance silence) and incorporates several polish decisions. (1) Drop abstract `:Scalar`/`:Int`/`:Bool`/`:Null` in favor of Rust primitives (`:i8`..`:i128`, `:u8`..`:u128`, `:isize`, `:usize`, `:f32`, `:f64`, `:bool`, `:char`, `:&str`, `:String`, `:()`). Honest mapping to Rust; no abstraction layer. (2) Function signatures now use `->` before the return type INSIDE the form: `(define (name [arg : Type] -> :ReturnType) body)` — matches Rust's `fn name(args) -> ReturnType`. No more dangling `: Type` outside the form. (3) Built-in subtype hierarchy stated explicitly: every specific HolonAST node kind `:is-a :Holon` (Bundle, Bind, Permute, Thermometer, Blend, Orthogonalize, Resonance, ConditionalBind, Cleanup, and Atom). Rust primitive types have NO built-in subtyping — explicit coercion required, matches Rust. (4) Variance rules: `(:List :T)` covariant in T, `(:Function args... -> return)` contravariant in args and covariant in return. Liskov-safe substitution. (5) `deftype` extended with `:is-a` keyword: `(deftype :MyType :is-a :OtherType)` declares a new type that is a SUBTYPE of the parent — substitutable via is-a. Distinct from `(deftype :MyType :OtherType)` (structural alias — same type) and `(newtype :MyType :OtherType)` (nominal wrapper — distinct, not a subtype). Three semantics, clear naming. (6) `defmacro` uses the SAME signature syntax as `define` and `lambda`: every parameter typed `: AST`, return `-> :AST`. Per the user's correction — omission is easy, not simple; one signature syntax across all three definition forms is simpler than introducing a special implicit-types rule just for macros. Type-correctness of the expansion is enforced by type-checking the expanded form at startup. All 058 sub-proposals swept to use the Rust primitive types and `->` signature syntax. | 058 |
 
 ---
 
 ## Open Questions
 
-1. **Stdlib location.** Wat functions for stdlib live where? `wat/std/thoughts.wat`? A new file per form? A single file for all thought-algebra stdlib?
+1. **Stdlib location.** Wat functions for stdlib live where? `wat/std/holons.wat`? A new file per form? A single file for all holon-algebra stdlib?
 
 2. **Stdlib optimization path.** If a stdlib form is frequently used and its wat-level construction becomes a bottleneck, is there a pattern for promoting it to a Rust-side helper function (still producing AST from existing variants) without making it a core variant?
 
-3. **Enum-retained stdlib policy.** Linear, Log, Circular, Sequential are semantically stdlib but currently live in the ThoughtAST enum. Decision needed: remove the variants, keep them as fast paths, or deprecate them. This is an implementation concern outside FOUNDATION's scope, but the policy should be set.
+3. **Enum-retained stdlib policy.** Linear, Log, Circular, Sequential are semantically stdlib but currently live in the HolonAST enum. Decision needed: remove the variants, keep them as fast paths, or deprecate them. This is an implementation concern outside FOUNDATION's scope, but the policy should be set.
 
-4. **Cache behavior for stdlib.** A wat stdlib function produces a ThoughtAST that is cached on its expanded shape. If two semantically-equivalent stdlib calls produce identical expansions, they share a cache entry. If the wat STORES the stdlib call as an unexpanded form, canonicalization is needed.
+4. **Cache behavior for stdlib.** A wat stdlib function produces a HolonAST that is cached on its expanded shape. If two semantically-equivalent stdlib calls produce identical expansions, they share a cache entry. If the wat STORES the stdlib call as an unexpanded form, canonicalization is needed.
 
 5. **Ngram's `n` parameter handling.** `Ngram` takes a numeric argument alongside the list. Its expansion depends on `n`. Decide whether `n` participates in the cache key or whether different `n` values always produce different AST structures.
 
@@ -2457,7 +2742,7 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 ## Summary
 
 - **Foundation** = MAP VSA (Multiply-Add-Permute) + Atom identity + scalar primitives (Thermometer, Blend) + new operations (Difference, Negate, Resonance, ConditionalBind)
-- **Core** = new algebraic operation, lives in ThoughtAST enum, requires new Rust encoder logic
+- **Core** = new algebraic operation, lives in HolonAST enum, requires new Rust encoder logic
 - **Stdlib** = composition of existing core forms, lives in wat, no Rust changes
 - **Target state** = 10 core + 16 stdlib
 - **Currently in enum that should become stdlib** = Linear, Log, Circular, Sequential (implementation path separate)

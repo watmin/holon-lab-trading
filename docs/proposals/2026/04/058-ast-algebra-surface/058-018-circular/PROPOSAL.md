@@ -9,7 +9,7 @@
 
 ## Reclassification Claim
 
-The current `ThoughtAST` enum has a `Circular(low_atom, high_atom, value, scale)` variant. FOUNDATION's audit lists it as CORE. Under the stdlib criterion (058-002-blend's Blend primitive, plus Thermometer as core), `Circular` is a BLENDING of two endpoint anchor Thermometers with weights derived from sin/cos of a normalized angle.
+The current `HolonAST` enum has a `Circular(low_atom, high_atom, value, scale)` variant. FOUNDATION's audit lists it as CORE. Under the stdlib criterion (058-002-blend's Blend primitive, plus Thermometer as core), `Circular` is a BLENDING of two endpoint anchor Thermometers with weights derived from sin/cos of a normalized angle.
 
 Circular is structurally identical to Linear (058-008) and Log (058-017): `Blend(Thermometer(low), Thermometer(high), w_low, w_high)` where the weights are scalar functions of the value. The only difference is the weight function — Circular uses trigonometric functions to capture WRAP-AROUND semantics.
 
@@ -24,7 +24,7 @@ With Blend as a pivotal core form (058-002) — and specifically Option B (two I
 ### Stdlib definition
 
 ```scheme
-(defmacro Circular [low-atom : AST] [high-atom : AST] [value : AST] [scale : AST] -> :AST
+(defmacro (Circular (low-atom :AST) (high-atom :AST) (value :AST) (scale :AST) -> :AST)
   `(let* ((period (first ,scale))
           (angle (* 2 pi (/ ,value period)))
           (w-low (cos angle))                                  ; circular weighting
@@ -121,7 +121,7 @@ Yes, once Blend Option B is core.
 **holon-rs changes** — remove the variant:
 
 ```rust
-pub enum ThoughtAST {
+pub enum HolonAST {
     // remove: Circular(Atom, Atom, f64, Scale),
 }
 ```
@@ -131,7 +131,7 @@ Delete the Circular encoder match arm (~15-20 lines). Macro expansion is handled
 **wat stdlib addition** — `wat/std/scalars.wat`:
 
 ```scheme
-(defmacro Circular [low : AST] [high : AST] [value : AST] [scale : AST] -> :AST
+(defmacro (Circular (low :AST) (high :AST) (value :AST) (scale :AST) -> :AST)
   `(let* ((period (first ,scale))
           (angle (* 2 pi (/ ,value period))))
      (Blend (Thermometer ,low dim) (Thermometer ,high dim) (cos angle) (sin angle))))

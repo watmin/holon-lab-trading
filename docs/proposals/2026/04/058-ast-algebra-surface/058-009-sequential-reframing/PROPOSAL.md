@@ -7,20 +7,20 @@
 
 ## Reclassification Claim
 
-The current `ThoughtAST` enum has a `Sequential(Vec<ThoughtAST>)` variant. FOUNDATION's audit lists it as "CORE (grandfathered)" — acknowledging that it is expressible via existing primitives (Bundle + Permute) but has been preserved for historical reasons.
+The current `HolonAST` enum has a `Sequential(Vec<HolonAST>)` variant. FOUNDATION's audit lists it as "CORE (grandfathered)" — acknowledging that it is expressible via existing primitives (Bundle + Permute) but has been preserved for historical reasons.
 
-This proposal argues that the grandfathering should end. `Sequential` should be a pure stdlib macro (per 058-031-defmacro) expanding to a specific Bundle-over-Permute composition, with NO corresponding ThoughtAST variant.
+This proposal argues that the grandfathering should end. `Sequential` should be a pure stdlib macro (per 058-031-defmacro) expanding to a specific Bundle-over-Permute composition, with NO corresponding HolonAST variant.
 
 ## The Reframing
 
-`Sequential(list-of-thoughts)` is position-encoded bundling: each thought `t_i` at position `i` is permuted by `i` steps, and the permuted thoughts are bundled.
+`Sequential(list-of-holons)` is position-encoded bundling: each holon `t_i` at position `i` is permuted by `i` steps, and the permuted holons are bundled.
 
 ```scheme
-(defmacro Sequential [thoughts : AST] -> :AST
+(defmacro (Sequential (holons :AST) -> :AST)
   `(Bundle
      (map-with-index
        (lambda (t i) (Permute t i))
-       ,thoughts)))
+       ,holons)))
 ```
 
 Or, thought of with explicit index iteration:
@@ -28,9 +28,9 @@ Or, thought of with explicit index iteration:
 ```scheme
 ;; conceptual unrolling of the emitted expansion for a known-length list:
 (Bundle
-  (list (Permute (nth thoughts 0) 0)
-        (Permute (nth thoughts 1) 1)
-        (Permute (nth thoughts 2) 2)
+  (list (Permute (nth holons 0) 0)
+        (Permute (nth holons 1) 1)
+        (Permute (nth holons 2) 2)
         ...))
 ```
 
@@ -60,11 +60,11 @@ As a stdlib macro, Sequential is visible in the wat source, inspectable, extensi
 
 ```scheme
 ;; user can define related macros:
-(defmacro ReverseSequential [thoughts : AST] -> :AST
-  `(Sequential (reverse ,thoughts)))
+(defmacro (ReverseSequential (holons :AST) -> :AST)
+  `(Sequential (reverse ,holons)))
 
-(defmacro SequentialFromN [start : AST] [thoughts : AST] -> :AST
-  `(Bundle (map-with-index (lambda (t i) (Permute t (+ i ,start))) ,thoughts)))
+(defmacro (SequentialFromN (start :AST) (holons :AST) -> :AST)
+  `(Bundle (map-with-index (lambda (t i) (Permute t (+ i ,start))) ,holons)))
 ```
 
 As a variant, Sequential's behavior is hidden in Rust encoder dispatch. Users can't trivially produce related forms without compiling new Rust.
@@ -77,12 +77,12 @@ One less variant to pattern-match, one less cache-key discriminator, one less ca
 
 **1. Performance.**
 
-Currently `Sequential(thoughts)` dispatches to a specialized Rust encoder that computes the result in one pass. The stdlib form builds an intermediate list (`map-with-index` output), then passes it to `Bundle`, which then iterates. Two passes minimum.
+Currently `Sequential(holons)` dispatches to a specialized Rust encoder that computes the result in one pass. The stdlib form builds an intermediate list (`map-with-index` output), then passes it to `Bundle`, which then iterates. Two passes minimum.
 
 **Mitigation:**
-- The intermediate list has `O(k)` entries for `k` thoughts (not `O(d)` — each entry is a small ThoughtAST, not a vector). The overhead is bounded.
-- The ACTUAL vector-level work is identical: for each of `k` thoughts, encode, permute by `i`, accumulate into running sum, threshold at end. Whether this is driven by one specialized encoder or by macro-emitted primitives, the vector ops are the same.
-- Macro-emitted Bundle can cache each permuted thought independently. Specialized Sequential encodes everything in one shot and caches only the final result. The macro version has FINER-GRAINED cache — better reuse when two Sequentials share sub-sequences.
+- The intermediate list has `O(k)` entries for `k` holons (not `O(d)` — each entry is a small HolonAST, not a vector). The overhead is bounded.
+- The ACTUAL vector-level work is identical: for each of `k` holons, encode, permute by `i`, accumulate into running sum, threshold at end. Whether this is driven by one specialized encoder or by macro-emitted primitives, the vector ops are the same.
+- Macro-emitted Bundle can cache each permuted holon independently. Specialized Sequential encodes everything in one shot and caches only the final result. The macro version has FINER-GRAINED cache — better reuse when two Sequentials share sub-sequences.
 
 **2. Loss of semantic name in AST — resolved by parse-time expansion.**
 
@@ -94,7 +94,7 @@ A `Sequential([a, b, c])` AST node clearly reads as "this is a sequence." Under 
 
 Historical code, tests, and examples use `Sequential` as a variant. Removing it is a breaking change to the Rust enum.
 
-**Mitigation:** migration is mechanical — replace variant pattern matches with macro expansions at parse time. Any existing `wat` code that writes `(Sequential ...)` keeps working (the name just resolves to the macro at parse time instead of a variant match at eval time). Rust code that constructs `ThoughtAST::Sequential(...)` directly must change to construct the expanded Bundle/Permute form, OR route the construction through the wat macro-expansion pass.
+**Mitigation:** migration is mechanical — replace variant pattern matches with macro expansions at parse time. Any existing `wat` code that writes `(Sequential ...)` keeps working (the name just resolves to the macro at parse time instead of a variant match at eval time). Rust code that constructs `HolonAST::Sequential(...)` directly must change to construct the expanded Bundle/Permute form, OR route the construction through the wat macro-expansion pass.
 
 ## Comparison to Related Reframings
 
@@ -125,7 +125,7 @@ Simpler. One less variant. The operation's structure (Bundle of indexed Permutes
 
 Is anything complected?
 
-Removes a small complection: the variant mixes "this is a positional composition of thoughts" with "I dispatch to a specialized encoder." Separating them puts the operation in stdlib (where it belongs) and leaves the encoder general-purpose.
+Removes a small complection: the variant mixes "this is a positional composition of holons" with "I dispatch to a specialized encoder." Separating them puts the operation in stdlib (where it belongs) and leaves the encoder general-purpose.
 
 Could existing forms express it?
 
@@ -136,8 +136,8 @@ Yes — this is the entire claim. `Bundle` + `Permute` + `map-with-index` is suf
 **holon-rs changes** — remove the variant:
 
 ```rust
-pub enum ThoughtAST {
-    // remove: Sequential(Vec<ThoughtAST>),
+pub enum HolonAST {
+    // remove: Sequential(Vec<HolonAST>),
     // keep everything else
 }
 ```
@@ -148,9 +148,9 @@ Delete the Sequential encoder match arm (~15-20 lines including tests).
 
 ```scheme
 ;; wat/std/sequences.wat (or equivalent)
-(defmacro Sequential [thoughts : AST] -> :AST
+(defmacro (Sequential (holons :AST) -> :AST)
   `(Bundle
-     (map-with-index (lambda (t i) (Permute t i)) ,thoughts)))
+     (map-with-index (lambda (t i) (Permute t i)) ,holons)))
 ```
 
 Registered at parse time (per 058-031-defmacro): every `(Sequential ...)` invocation is rewritten to the canonical `(Bundle (map-with-index ...))` form before hashing. `map-with-index` itself remains a regular runtime list combinator, not a macro.
@@ -168,6 +168,6 @@ Registered at parse time (per 058-031-defmacro): every `(Sequential ...)` invoca
 
 3. **Should the AST preserve `Sequential` as a semantic name?** As with Linear/Log/Circular, preserving stdlib forms in AST walks keeps semantics visible. Cache keys can be on the stdlib form or on the expanded form. Decision should be consistent across all reframings.
 
-4. **Relationship to `Array` (058-026).** Array is also an indexed list-of-thoughts form. Does Array's expansion internally rely on Sequential, or does Array have its own independent expansion? If Array uses Sequential, making Sequential stdlib is prerequisite for Array's stdlib form.
+4. **Relationship to `Array` (058-026).** Array is also an indexed list-of-holons form. Does Array's expansion internally rely on Sequential, or does Array have its own independent expansion? If Array uses Sequential, making Sequential stdlib is prerequisite for Array's stdlib form.
 
 5. **Historical note: why was Sequential grandfathered?** Understanding why it was kept as a variant originally (perf? clarity?) helps decide if this reframing is the right call or if there's a forgotten reason for the special case. If the reason was just "we had it before we had Permute as a clean variant," grandfathering can end cleanly.

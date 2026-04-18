@@ -1,7 +1,27 @@
 # 058-025: `Cleanup` — Core Primitive Affirmation
 
+> **STATUS: REJECTED** (2026-04-18)
+>
+> `Cleanup` is NOT part of the wat algebra.
+>
+> Cleanup is the vector-primary tradition's answer to "given a noisy vector, which named thing is this?" It exists in classical VSA because classical VSA treats the vector as primary and derives structure via `unbind` + `cleanup`. The wat algebra INVERTS that framing — the AST is primary, the vector is its cached projection, and the structure is never lost. The question Cleanup answers never arises.
+>
+> The retrieval primitive is **presence measurement**: `cosine(encode(target-AST), reference-vector)` compared against the substrate's noise floor (5/sqrt(d), ~0.05 at d=10,000). Presence returns a scalar `:f64`, not a verdict. The caller binarizes at a chosen threshold if they need to act.
+>
+> For structural retrieval (Map `get`, Array `nth`): AST walking. No vectors involved.
+>
+> For similarity retrieval (engram matching, `member?`, discriminant-guided program synthesis): iterate presence measurement against the (AST, Vector) pair library; keep the pairs whose scores exceed the caller's threshold. This is a stdlib fold over presence — not a primitive.
+>
+> Engram libraries are `(HolonAST, Vector)` pairs. Nearest neighbor on the vector side returns the AST side. Same operation Cleanup used to name, expressed in terms that already exist.
+>
+> See FOUNDATION.md "Presence is Measurement, Not Verdict" for the full framing.
+>
+> This proposal is kept in the record as an honest trace of the design process. It argued Cleanup as an affirmed core primitive; after applying the AST-primary principle rigorously, the primitive dissolved. No content below is binding; it documents what was considered before the rejection.
+>
+> **Algebra Core goes from 10 forms to 9.** Atom, Bind, Bundle, Permute, Thermometer, Blend, Orthogonalize, Resonance, ConditionalBind.
+
 **Scope:** algebra
-**Class:** CORE (existing primitive — this proposal affirms)
+**Class:** REJECTED (was proposed as CORE affirmation; dissolved after the retrieval-is-measurement reframing)
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
 
@@ -25,21 +45,21 @@ Where `similarity` is typically cosine similarity (dot product of normalized vec
 
 ### Why it is needed
 
-VSA encoding is LOSSY in the composite — `Bundle`, `Bind` on ternary, `Orthogonalize` all produce vectors where the original operands are only APPROXIMATELY recoverable. Decode operations (Unbind, Difference, Analogy) return NOISY versions of the decoded thought. To ACTUALLY get back a clean thought, the noisy decode must be matched against a codebook of known clean vectors.
+VSA encoding is LOSSY in the composite — `Bundle`, `Bind` on ternary, `Orthogonalize` all produce vectors where the original operands are only APPROXIMATELY recoverable. Decode operations (Unbind, Difference, Analogy) return NOISY versions of the decoded holon. To ACTUALLY get back a clean holon, the noisy decode must be matched against a codebook of known clean vectors.
 
 That matching is Cleanup.
 
 ### AST shape (already exists in holon-rs)
 
 ```rust
-pub enum ThoughtAST {
+pub enum HolonAST {
     // ... other variants ...
-    Cleanup(Arc<ThoughtAST>, Arc<Vec<ThoughtAST>>),
+    Cleanup(Arc<HolonAST>, Arc<Vec<HolonAST>>),
     // or similar — the second argument is a list of candidates
 }
 ```
 
-Current holon-rs exposes cleanup as a library function. Whether it needs a ThoughtAST variant or stays as a runtime function is a design question (see Question 3 below).
+Current holon-rs exposes cleanup as a library function. Whether it needs a HolonAST variant or stays as a runtime function is a design question (see Question 3 below).
 
 ## Why This IS Core
 
@@ -87,7 +107,7 @@ The operation is algebraically primitive but computationally well-studied.
 
 **3. Similarity is a first-class algebraic concept.**
 
-"How similar are these two vectors" — via cosine similarity or dot product — is the only way the algebra has to compare thoughts. Every decision in VSA (classification, ranking, retrieval) eventually reduces to a similarity comparison. Cleanup is the batched form of this comparison.
+"How similar are these two vectors" — via cosine similarity or dot product — is the only way the algebra has to compare holons. Every decision in VSA (classification, ranking, retrieval) eventually reduces to a similarity comparison. Cleanup is the batched form of this comparison.
 
 ## Arguments Against Removing or Reframing
 
@@ -167,7 +187,7 @@ For large codebooks, eigen-prefiltering and engram-library acceleration are used
 
 2. **Should Cleanup decompose into `Similarity` + `Argmax`?** A future proposal could split Cleanup into the scalar similarity primitive and the aggregation over candidates. Pros: cleaner layering, more composable. Cons: changes a well-known primitive's signature. Recommendation: defer to a future proposal; affirm Cleanup as-is for now.
 
-3. **Cleanup as AST variant vs. library function.** Currently holon-rs exposes Cleanup as a library function. Should it also be a ThoughtAST variant (so ASTs can contain Cleanup nodes, and caching applies)? Most cleanup calls are AT RESULT TIME, so AST embedding may not be necessary. But for expressible-in-AST patterns, variant status helps. Design question.
+3. **Cleanup as AST variant vs. library function.** Currently holon-rs exposes Cleanup as a library function. Should it also be a HolonAST variant (so ASTs can contain Cleanup nodes, and caching applies)? Most cleanup calls are AT RESULT TIME, so AST embedding may not be necessary. But for expressible-in-AST patterns, variant status helps. Design question.
 
 4. **Return type.** Cleanup returns THE best match, or a ranked list, or match-with-score. Different variants in different contexts. Should there be multiple Cleanup forms (`Cleanup`, `CleanupRanked`, `CleanupWithScore`), or one with an options parameter? Recommendation: one primitive returns the match; stdlib `CleanupRanked` and similar are extensions.
 

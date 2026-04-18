@@ -13,7 +13,7 @@
 (Bind a b)
 ```
 
-Two thought arguments. No scalar parameters.
+Two holon arguments. No scalar parameters.
 
 ### Operation
 
@@ -59,13 +59,13 @@ This is not a weakening of Bind. It is honest about what the substrate actually 
 ### AST shape (already exists)
 
 ```rust
-pub enum ThoughtAST {
+pub enum HolonAST {
     // ... other variants ...
-    Bind(Arc<ThoughtAST>, Arc<ThoughtAST>),
+    Bind(Arc<HolonAST>, Arc<HolonAST>),
 }
 ```
 
-Binary AST node. Present in current `ThoughtAST`.
+Binary AST node. Present in current `HolonAST`.
 
 ## Why This IS Core
 
@@ -79,7 +79,7 @@ Only Bind has the property that `Bind(Bind(a, b), b) = a` (on non-zero positions
 
 **3. Role-filler binding is the structural mechanism.**
 
-The entire "encoded JSON" / "structured thought" / "role-filler knowledge graph" story of VSA relies on Bind. Without Bind, there is no way to associate a role with a filler such that the association can be later queried. Remove Bind, and the algebra loses structure.
+The entire "encoded JSON" / "structured holon" / "role-filler knowledge graph" story of VSA relies on Bind. Without Bind, there is no way to associate a role with a filler such that the association can be later queried. Remove Bind, and the algebra loses structure.
 
 **4. MAP VSA's "M" is Bind.**
 
@@ -102,7 +102,7 @@ Different implementations, same algebraic role. Bind is CANONICAL in VSA.
 **2. Used by every stdlib form that encodes structure.**
 
 `Map(kv-pairs)` = `Bundle(Bind(k, v) for each pair)` (058-016).
-`Array(thoughts)` = `Sequential(thoughts)` uses Permute but often also Bind for indexing.
+`Array(holons)` = `Sequential(holons)` uses Permute but often also Bind for indexing.
 Role-filler encoding (canonical JSON→vector in holon) relies on Bind per-key.
 
 Without Bind as core, the stdlib collapses.

@@ -117,10 +117,10 @@ impl VectorManager {
 
 ~30 lines of Rust. No algebraic changes. The cache keys on the typed literal (tuple of tag + bytes). Deterministic. Cacheable.
 
-**ThoughtAST changes** — `Atom` variant carries the typed literal:
+**HolonAST changes** — `Atom` variant carries the typed literal:
 
 ```rust
-pub enum ThoughtAST {
+pub enum HolonAST {
     Atom(AtomLiteral),
     // ... other variants unchanged
 }
@@ -139,7 +139,7 @@ Returns the literal from the AST node. Type-preserving.
 
 1. **Is the typed hash categorically sound?** The hash input is `(type_tag, literal_bytes)`. Different types with identical bytes produce different vectors. Is this the right axis of distinction — type first, then value — or should it be inverted (value first, then type), or collapsed (bytes only, letting the user provide a type-prefixed string if they want distinction)?
 
-2. **Should `Atom` remain one variant, or should typed atoms be distinct variants?** Option A: `Atom(AtomLiteral)` — one variant, internally tagged. Option B: `AtomStr(String)`, `AtomInt(i64)`, `AtomFloat(f64)`, etc. — separate variants. Option A is simpler and keeps the ThoughtAST enum small. Option B allows pattern-matching on literal type without destructuring the inner `AtomLiteral`. Which fits the algebra better?
+2. **Should `Atom` remain one variant, or should typed atoms be distinct variants?** Option A: `Atom(AtomLiteral)` — one variant, internally tagged. Option B: `AtomStr(String)`, `AtomInt(i64)`, `AtomFloat(f64)`, etc. — separate variants. Option A is simpler and keeps the HolonAST enum small. Option B allows pattern-matching on literal type without destructuring the inner `AtomLiteral`. Which fits the algebra better?
 
 3. **What about `Null` as an atom?** FOUNDATION's foundational principle says literals live on AST nodes. A null/none literal raises a question: is "no value" a first-class atom, or should it be represented structurally (absence of a Bind, or a specific absence marker)? Holon traditionally has no `nil` — absence is structural. Does allowing `(Atom null)` break this convention?
 

@@ -23,20 +23,24 @@ The type system has two tiers of built-ins: **algebraic types** (abstractions ov
 **Algebraic types** (keyword names for VSA roles):
 
 ```
-:Thought         — any ThoughtAST node
+:Holon           — any HolonAST node (the universal substrate type)
 :Atom            — an Atom node specifically (read literal via atom-value)
-:Bundle          — a Bundle node (:is-a :Thought)
-:Bind            — a Bind node (:is-a :Thought)
-:Permute         — a Permute node (:is-a :Thought)
-:Thermometer     — a Thermometer node (:is-a :Thought)
-:Blend           — a Blend node (:is-a :Thought)
-:Orthogonalize   — an Orthogonalize node (:is-a :Thought)
-:Resonance       — a Resonance node (:is-a :Thought)
-:ConditionalBind — a ConditionalBind node (:is-a :Thought)
-:Cleanup         — a Cleanup node (:is-a :Thought)
+:Bundle          — a Bundle node (:is-a :Holon)
+:Bind            — a Bind node (:is-a :Holon)
+:Permute         — a Permute node (:is-a :Holon)
+:Thermometer     — a Thermometer node (:is-a :Holon)
+:Blend           — a Blend node (:is-a :Holon)
+:Orthogonalize   — an Orthogonalize node (:is-a :Holon)
+:Resonance       — a Resonance node (:is-a :Holon)
+:ConditionalBind — a ConditionalBind node (:is-a :Holon)
 :Vector          — a raw encoded ternary vector in `{-1, 0, +1}^d` (post-encode form; see FOUNDATION's "Output Space")
 :AST             — a parsed source AST (for macro parameters; see 058-031-defmacro)
 ```
+
+**Note on `:Holon`:** Holon (Koestler's sense) is the universal substrate — a thing that is simultaneously whole and part. Every algebra value IS a Holon: `Atom`, `Bind`, `Bundle`, `Permute`, `Thermometer`, `Blend`, `Orthogonalize`, `Resonance`, `ConditionalBind` are all subtypes of `:Holon`. The rename from `:Thought` to `:Holon` makes the algebra's universal type match the project's own name (holon-rs, holon-lab-*).
+
+**Note on `:Cleanup`:** REJECTED as a core form (see 058-025). Retrieval is presence measurement (cosine + noise floor), not argmax-over-codebook. No `:Cleanup` type exists.
+
 
 **Rust primitive types** (mapped directly to Rust):
 
@@ -61,35 +65,92 @@ The type system has two tiers of built-ins: **algebraic types** (abstractions ov
 ```
 :Keyword     — keyword literal (e.g., :foo, :foo/bar/baz)
 :Type        — a type-name value (types as first-class keywords)
-:Any         — escape hatch; disables static checking for this position
 ```
 
-No `:Scalar` / `:Int` / `:Bool` / `:Null` abstractions. Use the concrete Rust types directly. Blend's weights are `:f64`. Permute's step count is `:i32` or `:usize`. `nth`'s index is `:usize`. Booleans are `:bool`. The unit value is `:()`.
+**NO `:Any`.** `:Any` would be an escape hatch ("I refuse to declare a type") — easy, not simple. Every apparent use case has a principled replacement:
+
+- Universal algebra value → `:Holon`
+- Heterogeneous primitives → `:Union<T,U,V>`
+- Generic container element → parametric type parameter (`T`, `K`, `V`)
+- `eval`'s return → `:fn(:Holon)->Holon` or parametric `:fn(:Holon)->T`
+- Engram library entries → `:List<Pair<Holon,Vector>>`
+
+If a programmer can't declare the type of their value, that is a design signal that the function hasn't been fully specified. The type system is the forcing function.
+
+**NO `:Scalar` / `:Int` / `:Bool` / `:Null` abstractions.** Use the concrete Rust types directly. Blend's weights are `:f64`. Permute's step count is `:i32` or `:usize`. `nth`'s index is `:usize`. Booleans are `:bool`. The unit value is `:()`. Absence is `:Option<T>`, never null.
+
+**NO null.** Rust doesn't have null; wat doesn't have null. `:Option<T>` is an enum with variants `:None` and `(Some value)` for optional values. `:()` (the unit type) represents "no meaningful return." Structural absence — a `when` that didn't fire, a branch that wasn't taken, a field that doesn't exist in a variant — is expressed by the form simply not being present. Atom literals are string, int, float, bool, keyword — no null.
+
 
 ### Parametric types
 
-Parametric types are expressed as keyword-heads with type arguments:
+Parametric types use Rust-surface syntax as single-token keywords:
 
-```scheme
-(:List :Thought)                 ; list of thoughts
-(:List :f64)                     ; list of f64 values
-(:List (:List :Thought))         ; list of lists of thoughts
-(:Vec :u8)                       ; Rust Vec<u8> — byte buffer
-(:Option :Thought)               ; Option<Thought>
-(:Result :Thought :Error)        ; Result<Thought, Error>
-(:Arc :Thought)                  ; Arc<Thought>
+```
+:List<Holon>                   ; list of holons
+:List<f64>                     ; list of f64 values
+:List<List<Holon>>             ; list of lists of holons (nested)
+:Vec<u8>                       ; Rust Vec<u8> — byte buffer
+:HashMap<K,V>                  ; Rust HashMap<K, V>
+:HashSet<T>                    ; Rust HashSet<T>
+:Option<Holon>                 ; Option<Holon>
+:Result<Holon,Error>           ; Result<Holon, Error>
+:Pair<Holon,Vector>            ; tuple of 2
+:Tuple<T,U,V>                  ; tuple of 3
+:Union<T,U,V>                  ; coproduct (for type annotations)
+:Arc<Holon>                    ; Arc<Holon>
 ```
 
-Function types use the `->` separator:
+Function types mirror Rust's `fn(T, U) -> R` exactly:
 
-```scheme
-(:Function :Thought :Thought -> :Thought)             ; binary Thought → Thought
-(:Function :f64 -> :f64)                              ; unary f64 → f64
-(:Function :Atom -> :Thought)                         ; Atom → Thought
-(:Function :Thought :Thought :f64 :f64 -> :Thought)   ; Blend's type
+```
+:fn(Holon,Holon)->Holon              ; binary Holon → Holon
+:fn(f64)->f64                        ; unary f64 → f64
+:fn(Atom)->Holon                     ; Atom → Holon
+:fn(Holon,Holon,f64,f64)->Holon      ; Blend's type
+:fn()->Holon                         ; nullary
+:fn(T)->T                            ; identity on T
+:fn(List<T>,fn(T)->U)->List<U>       ; map's type
 ```
 
-All arguments appear on the left of `->`; the return type is on the right. Single parenthesized form; no dangling return type.
+Arguments between the parens, return after `->`. Direct one-to-one correspondence with Rust's syntax.
+
+### The tokenizer rule
+
+The `:` is Lisp's quote. One at the start; the whole expression is a single keyword token. Inside a keyword:
+- NO internal `:` (re-quoting is illegal)
+- NO internal whitespace (whitespace ends the keyword)
+- Structural characters `/`, `<`, `>`, `(`, `)`, `,`, `-`, `>` all belong to the keyword
+- The tokenizer tracks bracket depth across three pairs — `()`, `[]`, `<>` — and ends the keyword at whitespace or an unmatched closing bracket
+
+Nested generics compose:
+
+```
+:HashMap<String,fn(i32)->i32>
+:Result<HashMap<Atom,Holon>,String>
+:fn(List<i32>)->Option<f64>
+:Option<HashMap<Atom,List<Holon>>>
+```
+
+All single tokens. Each is a hashable string. The type-aware hash (058-001) applies at the whole-keyword granularity.
+
+### Rust-mapping is direct
+
+```
+wat keyword                                    Rust
+─────────────────────────────                  ──────────────────────────
+:HashMap<K,V>                                  HashMap<K, V>
+:List<T>                                       Vec<T>
+:Option<T>                                     Option<T>
+:Result<T,E>                                   Result<T, E>
+:fn(T,U)->R                                    fn(T, U) -> R
+:fn(List<i32>)->Option<f64>                    fn(Vec<i32>) -> Option<f64>
+:HashMap<String,fn(i32)->i32>                  HashMap<String, fn(i32) -> i32>
+:Union<T,U>                                    enum { T(T), U(U) }   (or Either<T,U>)
+:Pair<T,U>                                     (T, U)
+```
+
+The compiler strips the `:`, inserts spaces after commas, and emits Rust. Translation is string rewriting. No AST walk, no canonicalization pass — the keyword IS the type.
 
 ### User-definable types
 
@@ -98,18 +159,18 @@ Users declare types using the compile-time forms `struct`, `enum`, `newtype`, an
 ```scheme
 ;; Structs — named product types with typed fields.
 (struct :project/market/Candle
-  [open   : f64]
-  [high   : f64]
-  [low    : f64]
-  [close  : f64]
-  [volume : f64])
+  (open   :f64)
+  (high   :f64)
+  (low    :f64)
+  (close  :f64)
+  (volume :f64))
 
 ;; Enums — coproduct types with optional tagged variants.
 (enum :project/trading/Direction :long :short)
 
 (enum :project/market/Event
-  (candle  [asset : Atom] [candle : :project/market/Candle])
-  (deposit [asset : Atom] [amount : f64]))
+  (candle  (asset :Atom) (candle :project/market/Candle))
+  (deposit (asset :Atom) (amount :f64)))
 
 ;; Newtypes — nominal aliases with distinct identity.
 ;; Not a subtype of the wrapped type — nominal distinction.
@@ -118,7 +179,14 @@ Users declare types using the compile-time forms `struct`, `enum`, `newtype`, an
 
 ;; Deftypes — structural aliases; shorthand for existing type shapes.
 (deftype :alice/types/Amount :f64)
-(deftype :wat/std/Option<:T> (:Union :() :T))
+(deftype :alice/market/CandleSeries :List<Candle>)
+(deftype :alice/trading/Scores :HashMap<Atom,f64>)
+
+;; Note: :Option<T> is Rust's enum Option<T>, declared as an enum:
+;;   (enum :wat/std/Option<T>
+;;     :None
+;;     (Some (value :T)))
+;; NOT a deftype alias — it has two distinct variants.
 
 ;; Deftype with :is-a — declares a new type that IS a subtype of the other.
 ;; Every value of :ChildType is substitutable where :ParentType is expected.
@@ -143,19 +211,18 @@ Users pick based on what they mean: identical (`deftype` alias), substitutable (
 The type system has built-in subtype facts (stated as type-system knowledge; users don't write them):
 
 ```
-:Atom            :is-a :Thought
-:Bundle          :is-a :Thought
-:Bind            :is-a :Thought
-:Permute         :is-a :Thought
-:Thermometer     :is-a :Thought
-:Blend           :is-a :Thought
-:Orthogonalize   :is-a :Thought
-:Resonance       :is-a :Thought
-:ConditionalBind :is-a :Thought
-:Cleanup         :is-a :Thought
+:Atom            :is-a :Holon
+:Bundle          :is-a :Holon
+:Bind            :is-a :Holon
+:Permute         :is-a :Holon
+:Thermometer     :is-a :Holon
+:Blend           :is-a :Holon
+:Orthogonalize   :is-a :Holon
+:Resonance       :is-a :Holon
+:ConditionalBind :is-a :Holon
 ```
 
-Every specific ThoughtAST node kind **is a Thought**. A parameter typed as `:Thought` accepts any of these.
+Every specific HolonAST node kind **is a Holon**. A parameter typed as `:Holon` accepts any of these.
 
 **No built-in subtyping between the Rust primitive types.** `:i32` is NOT a subtype of `:i64`; `:f32` is NOT a subtype of `:f64`. Matches Rust's strictness — explicit coercion required (e.g., `(as-f64 int-value)`). Prevents silent precision loss.
 
@@ -163,27 +230,27 @@ Every specific ThoughtAST node kind **is a Thought**. A parameter typed as `:Tho
 
 For parametric types, the type system has built-in variance rules (also stated as type-system knowledge):
 
-**`(:List :T)` — covariant in T.**
+**`:List<T>` — covariant in T.**
 
-If `:A :is-a :B`, then `(:List :A) :is-a (:List :B)`. Example: `(:List :Atom) :is-a (:List :Thought)` because every Atom is a Thought.
+If `:A :is-a :B`, then `:List<A> :is-a :List<B>`. Example: `:List<Atom> :is-a :List<Holon>` because every Atom is a Holon.
 
 Intuition: a list of subtypes is always usable where a list of supertypes is expected (the elements are already the right kind).
 
-**`(:Function args... -> return)` — contravariant in args, covariant in return.**
+**`:fn(args)->return` — contravariant in args, covariant in return.**
 
 If `:A :is-a :B` and `:C :is-a :D`, then:
-- `(:Function :B -> :C) :is-a (:Function :A -> :D)`
-- Reads: "Function accepting a wider argument and returning a narrower result is substitutable where Function accepting a narrower argument and returning a wider result is expected."
+- `:fn(B)->C :is-a :fn(A)->D`
+- Reads: "Function accepting a wider argument and returning a narrower result is substitutable where a function accepting a narrower argument and returning a wider result is expected."
 
 Liskov intuition:
 - **Accept more (broader input)** — safe, caller's narrower input still fits
 - **Return less (narrower output)** — safe, caller's wider-expected output is satisfied
 
-Example: `(:Function :Thought -> :Atom) :is-a (:Function :Atom -> :Thought)`:
-- The function on the left accepts any Thought (broader than Atom) and returns an Atom (narrower than Thought)
-- Substitutable for a function expected to accept an Atom and return a Thought
+Example: `:fn(Holon)->Atom :is-a :fn(Atom)->Holon`:
+- The function on the left accepts any Holon (broader than Atom) and returns an Atom (narrower than Holon)
+- Substitutable for a function expected to accept an Atom and return a Holon
 
-**Other parametric types** (`:Vec`, `:Arc`, `:Option`, `:Result`) — same pattern as their Rust analogs. `:Vec<:T>` covariant, `:Option<:T>` covariant, `:Result<:T :E>` covariant in both, `:Arc<:T>` covariant.
+**Other parametric types** (`:Vec<T>`, `:Arc<T>`, `:Option<T>`, `:Result<T,E>`, `:HashMap<K,V>`) — same pattern as their Rust analogs. `:Vec<T>` covariant, `:Option<T>` covariant, `:Result<T,E>` covariant in both, `:Arc<T>` covariant. `:HashMap<K,V>` invariant in K (hash-based lookup requires exact type) and covariant in V.
 
 **User parametric types** (future; not in scope for 058) would declare variance in their type parameter declarations. For 058, variance is hardcoded for built-in parametric types.
 
@@ -192,22 +259,22 @@ Example: `(:Function :Thought -> :Atom) :is-a (:Function :Atom -> :Thought)`:
 From 058-028-define and 058-029-lambda, type annotations are required. The return type goes INSIDE the signature parens using `->`:
 
 ```scheme
-(define (:my/ns/amplify [x : Thought] [y : Thought] [s : f64] -> :Thought)
+(define (:my/ns/amplify (x :Holon) (y :Holon) (s :f64) -> :Holon)
   (Blend x y 1 s))
 
-(lambda ([t : Thought] -> :Thought)
+(lambda ((t :Holon) -> :Holon)
   (Permute t 1))
 
 ;; Matches Rust's fn name(args) -> ReturnType:
-;;   fn amplify(x: Thought, y: Thought, s: f64) -> Thought { ... }
+;;   fn amplify(x: Holon, y: Holon, s: f64) -> Holon { ... }
 ```
 
-Each parameter uses `[name : Type]` with spaces around the colon. The return type follows `->` at the end of the signature (all inside one set of parens). No dangling `: Type` outside the form. The body must produce a value of the return type, checked at startup.
+Each parameter uses `(name :Type)` — parenthesized sublist with a bare symbol name and a keyword type. The return type follows `->` at the end of the signature (all inside one set of parens). No dangling `: Type` outside the form. The body must produce a value of the return type, checked at startup.
 
 **Macros use the same signature syntax as `define` and `lambda`** — every parameter is explicitly typed `: AST`; return is explicitly `-> :AST`. One consistent signature form across all three definition primitives. No implicit rules for the reader to remember.
 
 ```scheme
-(defmacro :wat/std/Subtract [x : AST] [y : AST] -> :AST
+(defmacro (:wat/std/Subtract (x :AST) (y :AST) -> :AST)
   `(Blend ,x ,y 1 -1))
 ;; parameters and return are explicitly typed.
 ;; type-correctness of the EXPANSION is enforced by type-checking the expanded form
@@ -222,7 +289,7 @@ Macro parameters carry ASTs (unevaluated source), so their type is always `:AST`
 
 Under Model A (fully static loading), the wat-vm verifies all code at startup before the main loop runs. When the verifier processes a `define`, it needs to know:
 
-- What kind of value each argument is (Thought? Scalar? Integer? List?)
+- What kind of value each argument is (Holon? Scalar? Integer? List?)
 - What kind of value the function returns
 - Whether the body produces a value of the declared return type
 
@@ -237,15 +304,15 @@ Per FOUNDATION's "Cryptographic provenance" section, ASTs are signed. A `define`
 **3. Types enable static verification of stdlib compositions.**
 
 ```scheme
-(define (:wat/std/Chain [thoughts : (:List :Thought)]) : Thought
-  (Bundle (pairwise-map :wat/std/Then thoughts)))
+(define (:wat/std/Chain (holons :List<Holon>) -> :Holon)
+  (Bundle (pairwise-map :wat/std/Then holons)))
 ```
 
 The startup verifier can check:
-- `thoughts` has type `(:List :Thought)`
-- `pairwise-map` returns `(:List :Thought)` given `:wat/std/Then` (a `(:Function [:Thought :Thought] :Thought)`) and a `(:List :Thought)`
-- `Bundle` takes `(:List :Thought)` and returns `:Thought`
-- Body returns `:Thought`, matching the declared return
+- `holons` has type `:List<Holon>`
+- `pairwise-map` returns `:List<Holon>` given `:wat/std/Then` (of type `:fn(Holon,Holon)->Holon`) and a `:List<Holon>`
+- `Bundle` takes `:List<Holon>` and returns `:Holon`
+- Body returns `:Holon`, matching the declared return
 
 Without types, these checks defer to runtime or never happen. With types, stdlib correctness is mechanically verifiable at startup.
 
@@ -256,7 +323,7 @@ Users author their own types with the same naming discipline as functions. `:ali
 User types are usable anywhere built-in types are used:
 
 ```scheme
-(define (:my/trading/analyze [c : :project/market/Candle]) : Thought
+(define (:my/trading/analyze (c :project/market/Candle) -> :Holon)
   (Sequential
     (list (Thermometer (:close c) 0 100)
           (Thermometer (:volume c) 0 10000))))
@@ -272,18 +339,18 @@ The built-in types correspond to the algebra's actual kinds. There is no specula
 
 Just as functions are keywords (`:wat/std/Difference`), user types are keywords (`:alice/types/Price`, `:project/market/Candle`). Same naming mechanism, same namespace discipline. Users learn one convention, use it everywhere.
 
-Built-in types use shorthand within their own namespace: `:Thought` is shorthand for `:wat/types/Thought` when context makes it unambiguous.
+Built-in types use shorthand within their own namespace: `:Holon` is shorthand for `:wat/types/Holon` when context makes it unambiguous.
 
 **3. Parametric types handle the essential cases.**
 
-Generics (`(:List :T)`, `(:Function [args] return)`) cover the recurring need for higher-order stdlib and container operations. More elaborate generics (variance, bounds, existentials) are out of scope — the target is "enough type system to dispatch correctly," not a full algebraic type theory.
+Generics (`:List<T>`, `:HashMap<K,V>`, `:fn(args)->return`) cover the recurring need for higher-order stdlib and container operations. More elaborate generics (bounds, existentials, higher-kinded types) are out of scope — the target is "enough type system to dispatch correctly and map cleanly to Rust," not a full algebraic type theory.
 
 **4. Structural typing for structural aliases; nominal for struct/enum/newtype.**
 
-- `(deftype :Candle (:Map [[:open :Scalar] ...]))` is a structural alias, not a nominal type. Any Map with the declared fields of the declared types satisfies the alias. Useful for "some shape that I'm naming."
+- `(deftype :CandleScores :HashMap<Atom,f64>)` is a structural alias, not a nominal type. Any HashMap with the declared key/value types satisfies the alias. Useful for "some shape that I'm naming."
 - `(struct :project/market/Candle ...)` is nominal. A value is a Candle if and only if it was constructed as one. Distinct from other structs with identical fields.
 - `(enum :Direction ...)` is nominal. Only values constructed via the enum's constructors inhabit the type.
-- `(newtype :TradeId :Int)` is nominal. A `:TradeId` is NOT a `:Int` even though they share representation.
+- `(newtype :TradeId :u64)` is nominal. A `:TradeId` is NOT a `:u64` even though they share representation.
 
 This matches how VSA-based data structures are used — nominal types protect semantics; structural aliases provide shorthand.
 
@@ -309,19 +376,19 @@ Having `struct` be nominal but `deftype` be structural may confuse readers. Why 
 
 This proposal REQUIRES explicit types on `define` and `lambda` parameters. Some languages infer these from usage. Scheme and Clojure are traditionally untyped; Haskell and F# infer aggressively; Rust infers locally.
 
-**Counter:** explicit types on function boundaries are the Model A contract. Local inference (within function bodies, for intermediate values) IS supported — the verifier can infer that `(Blend a b 1 -1)` returns `:Thought` from Blend's signature. Function boundary types are required; internal types are derived. This matches Rust's approach.
+**Counter:** explicit types on function boundaries are the Model A contract. Local inference (within function bodies, for intermediate values) IS supported — the verifier can infer that `(Blend a b 1 -1)` returns `:Holon` from Blend's signature. Function boundary types are required; internal types are derived. This matches Rust's approach.
 
 **4. Generics complexity.**
 
-Parametric types need generic resolution: when `map` receives a `(:List :Thought)` and a `(:Function [:Thought] :Scalar)`, the result is `(:List :Scalar)` (the Function's return type substituted for `T`). This is basic unification.
+Parametric types need generic resolution: when `map` receives a `:List<Holon>` and a `:fn(Holon)->f64`, the result is `:List<f64>` (the function's return type substituted for `T`). This is basic unification.
 
 **Counter:** yes, but bounded. The wat language doesn't need variance, higher-kinded types, or other advanced features. Simple substitution suffices for the stdlib's needs.
 
-**5. :Any as escape hatch — abuse risk.**
+**5. Heterogeneous data without `:Any`.**
 
-`:Any` disables type checking for a position. It exists because some stdlib forms (like `cleanup` taking arbitrary candidate types) genuinely need flexibility.
+Some applications genuinely have heterogeneous data — a list of mixed primitives, a dispatch table over variant types. Without `:Any`, how do these get typed?
 
-**Counter:** document `:Any` as a last resort. Prefer concrete types where possible. Audit usage in stdlib.
+**Counter:** use `:Union<T,U,V>` for closed heterogeneous sets, enums for named variant types, parametric types for generic containers. Every case that ever wanted `:Any` has a principled named alternative. The type system's benefit (static verification) depends on closure of the type universe — no escape hatch.
 
 ## Type Checking Semantics (Model A)
 
@@ -329,7 +396,7 @@ Parametric types need generic resolution: when `map` receives a `(:List :Thought
 
 When the wat-vm boots, it processes all loaded files in order. For each `define`:
 
-1. Parse the parameter list — each must be `[name : Type]`
+1. Parse the parameter list — each must be `(name :Type)`
 2. Parse the return type — must be a well-formed type in the type environment
 3. Type-check the body — every sub-expression must produce a type compatible with its usage
 4. Verify the body's final expression matches the declared return type
@@ -344,19 +411,25 @@ When a call site is evaluated at runtime:
 2. Each argument's type must be a subtype/alias of the corresponding parameter type
 3. If match, bind parameters, evaluate body, return result
 
-If types matched at startup verification, the body is guaranteed to return the declared type — no per-call return check needed. The argument-type check at the call site guards against user data misuse (e.g., a `:Scalar` passed where a `:Thought` is expected).
+If types matched at startup verification, the body is guaranteed to return the declared type — no per-call return check needed. The argument-type check at the call site guards against user data misuse (e.g., an `:f64` passed where a `:Holon` is expected).
 
 ### Primitive dispatch
 
 Primitives like `Bundle` are built into the wat-vm with their signatures hardcoded:
 
 ```
-Bundle: (:List :Thought) -> :Thought
-Bind: :Thought :Thought -> :Thought
-Blend: :Thought :Thought :Scalar :Scalar -> :Thought
-Permute: :Thought :Int -> :Thought
-Atom: :Any -> :Atom          ; :Any accommodates typed literals
-Thermometer: :Scalar :Scalar :Scalar -> :Thought
+Bundle:      :fn(:List<Holon>)->Holon
+Bind:        :fn(Holon,Holon)->Holon
+Blend:       :fn(Holon,Holon,f64,f64)->Holon
+Permute:     :fn(Holon,i32)->Holon
+Atom:        :fn(AtomLiteral)->Atom           ; AtomLiteral is a Union of permitted literal types
+Thermometer: :fn(f64,f64,f64)->Holon
+```
+
+Where `:AtomLiteral` is an internally-defined Union type covering the permitted atom literals (see 058-001):
+
+```
+(deftype :AtomLiteral :Union<String,i32,f64,bool,Keyword>)
 ```
 
 Stdlib `define`s compose these primitives; their types derive from the primitives' signatures via substitution.
@@ -379,17 +452,27 @@ Add type AST:
 
 ```rust
 pub enum TypeAST {
-    Named(Keyword),                          // :Thought, :Scalar, :alice/types/Price
-    Parametric(Keyword, Vec<TypeAST>),       // (:List :Thought), (:Function [args] ret)
-    Any,                                     // :Any escape hatch
+    Named(Keyword),                          // :Holon, :f64, :alice/types/Price
+    Parametric {                             // :List<Holon>, :HashMap<K,V>
+        constructor: Keyword,
+        args: Vec<TypeAST>,
+    },
+    Function {                               // :fn(T,U)->R
+        args: Vec<TypeAST>,
+        ret: Box<TypeAST>,
+    },
+    Union(Vec<TypeAST>),                     // :Union<T,U,V>
+    Var(Keyword),                            // lexically-scoped type variable T, K, V
 }
 ```
+
+No `Any` variant. The type grammar is closed; the enum enumerates exactly the forms the language admits.
 
 Type environment (frozen after startup):
 
 ```rust
 pub struct TypeEnv {
-    builtins: HashMap<Keyword, TypeDef>,     // :Thought, :Atom, etc.
+    builtins: HashMap<Keyword, TypeDef>,     // :Holon, :Atom, etc.
     user_types: HashMap<Keyword, TypeDef>,   // struct, enum, newtype, deftype registrations
 }
 
@@ -406,9 +489,11 @@ Type checker:
 
 ```rust
 pub fn check_subtype(actual: &TypeAST, expected: &TypeAST, env: &TypeEnv) -> Result<(), TypeError> {
-    // :Any is always compatible
-    // Named types must match (through aliases)
-    // Parametric types unify per argument
+    // Named types must match (through aliases, through :is-a hierarchy)
+    // Parametric types unify per argument, honoring variance
+    // Function types unify contravariantly in args, covariantly in return
+    // Union types: actual must match at least one expected variant; expected-as-union accepts any matching variant
+    // Type variables bind during unification, checked for consistency
 }
 
 pub fn infer_expr(expr: &WatAST, env: &TypeEnv, locals: &Locals, table: &SymbolTable) -> Result<TypeAST, TypeError> {
@@ -441,24 +526,24 @@ New language-core forms (alongside `define` and `lambda`), all compile-time-regi
 
 ## Questions for Designers
 
-1. **Generics scope.** Is `(:Function [args] return)` and `(:List :T)` sufficient, or do we need variance, bounds (`T extends :Thought`), or existentials? Recommendation: start minimal — just List and Function parametrics. Add more if stdlib needs emerge.
+1. **Generics scope.** Is `:fn(args)->return` and `:List<T>` (plus `:HashMap<K,V>`, `:Option<T>`, `:Result<T,E>`, `:Pair<T,U>`, `:Union<T,U,V>`, `:Arc<T>`, `:Vec<T>`) sufficient, or do we need bounds (`T: Holon`), higher-kinded types, or existentials? Recommendation: start minimal — the host-inherited parametric constructors plus user parametric types via `deftype`/`struct`/`enum` parametric declarations. Add bounds if stdlib needs emerge.
 
-2. **Type inference strength.** Parameter types on `define`/`lambda` are required. Should all intermediate expressions be inferred, or should `let` support optional type annotations? Recommendation: infer intermediates; allow optional `[let [[x : Thought] (Blend a b 1 -1)]]` for explicit annotation when helpful.
+2. **Type inference strength.** Parameter types on `define`/`lambda` are required. Should all intermediate expressions be inferred, or should `let` support optional type annotations? Recommendation: infer intermediates; allow optional `(let (((x :Holon) (Blend a b 1 -1))))` for explicit annotation when helpful.
 
 3. **Nominal vs. structural typing.** Proposal uses nominal for struct/enum/newtype and structural for deftype. Is this the right split? Recommendation: yes — nominal protects semantics, structural provides shorthand.
 
-4. **:Any usage.** Document as last resort. Should it be restricted (only in specific primitive positions) or freely available? Recommendation: freely available, but linters flag its use.
+4. **`:Any` removed from grammar.** Resolved. `:Any` is not part of the type system. Use `:Holon` for any algebra value, `:Union<T,U,...>` for closed heterogeneous sets, parametric `T`/`K`/`V` for generics. The type universe is closed — no escape hatch — which is what makes startup verification total.
 
-5. **Type promotion rules.** If a function takes `:Scalar` and you pass an `:Int`, does it auto-promote? Recommendation: no implicit promotion — explicit `(to-scalar int)` or similar. Matches Rust's strictness; prevents surprising behavior.
+5. **Type promotion rules.** If a function takes `:f64` and you pass an `:i32`, does it auto-promote? Recommendation: no implicit promotion — explicit `(as-f64 int)` or similar. Matches Rust's strictness; prevents surprising behavior.
 
-6. **Error reporting.** Type errors need to point at the offending expression with a useful message. "Expected :Thought, got :Scalar at line X" is the minimum. Structured error types with source locations are part of the implementation.
+6. **Error reporting.** Type errors need to point at the offending expression with a useful message. "Expected `:Holon`, got `:f64` at line X" is the minimum. Structured error types with source locations are part of the implementation.
 
 7. **Metadata on types.** `deftype` could accept documentation strings, constraints, validators. Worth including in the first version? Recommendation: start simple (just alias); add metadata if needed.
 
-8. **Subtype hierarchy.** Is `:Atom` a subtype of `:Thought` (atoms ARE thoughts in the ThoughtAST)? Recommendation: yes — every Atom is a Thought. A parameter `:Thought` accepts an Atom value. Document the subtype relationships.
+8. **Subtype hierarchy.** Is `:Atom` a subtype of `:Holon` (atoms ARE holons in the HolonAST)? Recommendation: yes — every Atom is a Holon. A parameter `:Holon` accepts an Atom value. Document the subtype relationships.
 
 9. **Dependency ordering.** Types depend on nothing; `define` and `lambda` depend on types. Resolution order: 058-030 (types) first, then 058-028 (define) and 058-029 (lambda).
 
-10. **First-class types.** Types as keyword values can be passed around. Does this enable type-reflecting code? Probably, though not the focus of this proposal. Example: `(type-of x)` returns the keyword `:Thought`. Useful for introspection but out of scope for language core.
+10. **First-class types.** Types as keyword values can be passed around. Does this enable type-reflecting code? Probably, though not the focus of this proposal. Example: `(type-of x)` returns the keyword `:Holon`. Useful for introspection but out of scope for language core.
 
-11. **Keyword-path in type names with generic parameters.** `(deftype :wat/std/Option<:T> (:Union :Null :T))` uses a `<>`-style generic parameter. Is this the right syntax, or should generic parameters be expressed differently? Recommendation: `<>` is readable; keep it. Alternative: explicit parameter list like `(deftype (:wat/std/Option :T) (:Union :Null :T))` — more Lispy but less visually distinct. Pick one, document.
+11. **Keyword-path in type names with generic parameters — RESOLVED.** Rust-surface angle-bracket keyword syntax, single token, no internal spaces, no internal colons. The `:` is Lisp's quote — one at the start; everything else is inside. `:wat/std/Container<T>` at declaration, `:wat/std/Container<Holon>` at use. Function types use `:fn(args)->return` with parens and arrow (Rust's native syntax). The tokenizer tracks bracket depth across `()`, `[]`, `<>` and ends the keyword at whitespace or an unmatched closer.

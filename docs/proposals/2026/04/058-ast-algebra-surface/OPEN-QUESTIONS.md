@@ -466,7 +466,7 @@ Over-naming risk, but this is the most common use case. Worth a second named for
 
 2. **Recursion in lambdas.** A lambda can't reference itself by name (no name). How to do recursion? Options: (a) force use of `define` for recursive functions, (b) support `Y` combinator pattern, (c) add a name-binding form like Clojure's `fn` with optional self-name: `(lambda self ([params]) : ReturnType body)` where `self` refers to the lambda itself. Recommendation: (a) — use `define` for recursion. Keeps lambda purely value-level without introducing self-reference complication.
 
-3. **Higher-order parameter types.** `:Function` as a type works but is generic. For stricter typing: `(:Function [:Thought :Thought] :Thought)` (a function from `[:Thought :Thought]` to `:Thought`). Handled in 058-030-types.
+3. **Higher-order parameter types.** `:fn(...)` types carry argument and return information. For stricter typing: `:fn(Holon,Holon)->Holon` (a function from two Holons to a Holon). Handled in 058-030-types.
 
 4. **Brevity sugars.** Clojure's `#(...)` anonymous function shortcut. Python's `lambda x: expr`. Rust's `|x| expr`. Should wat have a shortcut? Recommendation: skip for now — the explicit form with types is the load-bearing primitive. Sugars can come later, expanding to full lambdas with inferred types.
 
@@ -480,17 +480,17 @@ Over-naming risk, but this is the most common use case. Worth a second named for
 
 ## 058-030: Types
 
-1. **Generics scope.** Is `(:Function [args] return)` and `(:List :T)` sufficient, or do we need variance, bounds (`T extends :Thought`), or existentials? Recommendation: start minimal — just List and Function parametrics. Add more if stdlib needs emerge.
+1. **Generics scope.** Is `:fn(args)->return` and `:List<T>` sufficient, or do we need variance, bounds (`T extends :Holon`), or existentials? Recommendation: start minimal — just List and fn parametrics. Add more if stdlib needs emerge.
 
 2. **Type inference strength.** Parameter types on `define`/`lambda` are required. Should all intermediate expressions be inferred, or should `let` support optional type annotations? Recommendation: infer intermediates; allow optional `[let [[x : Thought] (Blend a b 1 -1)]]` for explicit annotation when helpful.
 
 3. **Nominal vs. structural typing.** Proposal uses nominal for struct/enum/newtype and structural for deftype. Is this the right split? Recommendation: yes — nominal protects semantics, structural provides shorthand.
 
-4. **:Any usage.** Document as last resort. Should it be restricted (only in specific primitive positions) or freely available? Recommendation: freely available, but linters flag its use.
+4. **`:Any` usage.** Was considered, rejected. Heterogeneous data uses named `:Union<T,U,V>` types; generic containers use parametric `T`/`K`/`V`; atom literals use `:AtomLiteral`. Resolved in the 2026-04-18 type-grammar sweep.
 
-5. **Type promotion rules.** If a function takes `:Scalar` and you pass an `:Int`, does it auto-promote? Recommendation: no implicit promotion — explicit `(to-scalar int)` or similar. Matches Rust's strictness; prevents surprising behavior.
+5. **Type promotion rules.** If a function takes `:f64` and you pass an `:i32`, does it auto-promote? Recommendation: no implicit promotion — explicit `(to-f64 int)` or similar. Matches Rust's strictness; prevents surprising behavior.
 
-6. **Error reporting.** Type errors need to point at the offending expression with a useful message. "Expected :Thought, got :Scalar at line X" is the minimum. Structured error types with source locations are part of the implementation.
+6. **Error reporting.** Type errors need to point at the offending expression with a useful message. "Expected :Holon, got :f64 at line X" is the minimum. Structured error types with source locations are part of the implementation.
 
 7. **Metadata on types.** `deftype` could accept documentation strings, constraints, validators. Worth including in the first version? Recommendation: start simple (just alias); add metadata if needed.
 
@@ -500,7 +500,7 @@ Over-naming risk, but this is the most common use case. Worth a second named for
 
 10. **First-class types.** Types as keyword values can be passed around. Does this enable type-reflecting code? Probably, though not the focus of this proposal. Example: `(type-of x)` returns the keyword `:Thought`. Useful for introspection but out of scope for language core.
 
-11. **Keyword-path in type names with generic parameters.** `(deftype :wat/std/Option<:T> (:Union :Null :T))` uses a `<>`-style generic parameter. Is this the right syntax, or should generic parameters be expressed differently? Recommendation: `<>` is readable; keep it. Alternative: explicit parameter list like `(deftype (:wat/std/Option :T) (:Union :Null :T))` — more Lispy but less visually distinct. Pick one, document.
+11. **Keyword-path in type names with generic parameters.** `(deftype :wat/std/Option<T> :Union<None,Some<T>>)` uses a `<>`-style generic parameter. Is this the right syntax, or should generic parameters be expressed differently? Recommendation: `<>` is readable; keep it. Alternative: explicit parameter list like `(deftype (:wat/std/Option T) ...)` — more Lispy but less visually distinct. Pick one, document. (Enum form resolved in 058-030-types: `(enum :wat/std/Option<T> :None (Some (value :T)))`.)
 
 ---
 

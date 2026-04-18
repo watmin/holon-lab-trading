@@ -1,52 +1,63 @@
-# 058-016: `Map` — Stdlib Dictionary Constructor
+# 058-016: `HashMap` — Stdlib Dictionary Constructor
+
+> **STATUS: SUPERSEDES the original `Map` proposal** (2026-04-18 Rust-surface naming sweep).
+>
+> The form previously called `Map` is now named `HashMap` — matching Rust's `std::collections::HashMap` directly. The wat UpperCase constructor, the type annotation `:HashMap<K,V>`, and the runtime backing all share one name. This is consistent with the Rust-primitive type decision (`:f64` not `:Scalar`, `:bool` not `:Bool`) — one name per concept across algebra, type annotation, and runtime.
+>
+> **Also changed in the same sweep:** `get` is now direct structural lookup (no `cleanup`, no `Unbind` to a noisy vector, no codebook). The runtime materializes a Rust `HashMap` from the Holon AST for O(1) lookups. `get` returns `:Option<Holon>` — `(Some v)` on hit, `:None` on miss.
+>
+> The concept is unchanged. Only the name and the accessor mechanics.
 
 **Scope:** algebra
 **Class:** STDLIB
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
-**Depends on:** 058-021-bind, 058-024-unbind (for the `get` accessor)
-**Companion proposals:** 058-026-array, 058-027-set
+**Depends on:** 058-021-bind, 058-001-atom-typed-literals (keys as typed atoms)
+**Companion proposals:** 058-026-array (now `Vec`), 058-027-set (now `HashSet`)
 
 ## The Candidate
 
 A wat stdlib function that constructs an encoded dictionary from a list of key-value pairs:
 
 ```scheme
-(define (Map kv-pairs)
+(define (HashMap (pairs :List<Pair<Holon,Holon>>) -> :Holon)
   (Bundle
-    (map (lambda (kv) (Bind (first kv) (second kv)))
-         kv-pairs)))
+    (map (lambda ((pair :Pair<Holon,Holon>) -> :Holon)
+           (Bind (first pair) (second pair)))
+         pairs)))
 ```
 
 Expands to a Bundle of `Bind(key, value)` for each pair — classical VSA role-filler structure.
 
 ### Semantics
 
-`Map` encodes a dictionary as a single vector where each key-value pair is represented by `Bind(key, value)`, and all pairs are superposed via Bundle. The key property: given the encoded Map and a key, the value can be recovered by unbinding (and cleanup):
+`HashMap` encodes a dictionary as a Holon. Each key-value pair is represented by `Bind(key, value)`, and all pairs are superposed via Bundle. The runtime backs the Holon with Rust's `std::HashMap` for efficient O(1) lookups:
 
 ```scheme
 (define record
-  (Map (list (list :color red)
-             (list :shape circle)
-             (list :size large))))
+  (HashMap (list (list (Atom :color) red-value)
+                 (list (Atom :shape) circle-value)
+                 (list (Atom :size)  large-value))))
 
 ;; Retrieval: get the value for :color
 (define recovered-color
-  (cleanup (Unbind record :color) color-vocabulary))
+  (get record (Atom :color)))
+;; → (Some red-value)  [the value AST, not a noisy decode]
 ```
 
-### The `get` accessor
+### The `get` accessor — unified across HashMap, Vec, HashSet
 
 ```scheme
-(define (get map-thought key candidates)
-  (cleanup (Unbind map-thought key) candidates))
-
-;; Raw variant (no cleanup — returns the noisy vector):
-(define (get-raw map-thought key)
-  (Unbind map-thought key))
+(define (get (container :Holon) (locator :Holon) -> :Option<Holon>)
+  ;; Structural lookup through the container's efficient Rust backing.
+  ;; For HashMap: hash-based lookup against the key, O(1) average.
+  ;; Returns (Some value) on hit, :None on miss.
+  ...)
 ```
 
-`get` uses Unbind (058-024) and Cleanup (058-025) — both primitives. Users supply the candidate vocabulary for cleanup.
+No `cleanup`. No noisy `Unbind` decode. No codebook. The runtime uses Rust's HashMap under the hood; the Holon describes what the container IS; `get` goes through the efficient backing. This is the same `get` that works on `Vec` (indexed) and `HashSet` (membership) — one signature, uniform contract, returns `:Option<Holon>` everywhere.
+
+See FOUNDATION's "Presence is Measurement, Not Verdict" for why Cleanup is not part of the wat algebra. Structural retrieval (`get`) uses AST equality and the runtime's Rust backing; similarity retrieval (`presence`) uses cosine against the noise floor. Two regimes, cleanly separated.
 
 ## Why Stdlib Earns the Name
 
@@ -100,7 +111,7 @@ All naturally expressible because Map is a wat function, not an opaque variant.
 
 **2. Map with duplicate keys bundles both values.**
 
-`(Map [[:a 1] [:a 2]])` produces `Bundle(Bind(:a, 1), Bind(:a, 2))`. A `get` for `:a` returns a superposition of 1 and 2 — noisy, not crisp.
+`(Map (list (list :a 1) (list :a 2)))` produces `Bundle(Bind(:a, 1), Bind(:a, 2))`. A `get` for `:a` returns a superposition of 1 and 2 — noisy, not crisp.
 
 **Mitigation:** document that Map does NOT deduplicate. Users wanting single-value semantics deduplicate before calling. If frequent, a `UniqueMap` wrapper could exist in stdlib.
 
@@ -163,25 +174,25 @@ Yes — via explicit Bundle/Bind composition. Named form earns its place via rea
   (Bundle
     (map (lambda (kv) (Bind (first kv) (second kv))) kv-pairs)))
 
-(define (get map-thought key candidates)
-  (cleanup (Unbind map-thought key) candidates))
+(define (get map-holon key candidates)
+  (cleanup (Unbind map-holon key) candidates))
 
-(define (get-raw map-thought key)
-  (Unbind map-thought key))
+(define (get-raw map-holon key)
+  (Unbind map-holon key))
 ```
 
 ## Questions for Designers
 
-1. **Duplicate keys.** `(Map [[:a 1] [:a 2]])` produces noisy cleanup for key `:a`. Document the behavior as "Map does not deduplicate; pre-filter if needed," or add an automatic deduplication pass? Recommendation: document, don't automate.
+1. **Duplicate keys.** `(Map (list (list :a 1) (list :a 2)))` produces noisy cleanup for key `:a`. Document the behavior as "Map does not deduplicate; pre-filter if needed," or add an automatic deduplication pass? Recommendation: document, don't automate.
 
 2. **Accessor variants.** `get` (with cleanup) vs `get-raw` (without). Both useful. Keep both with these names? Or use `get` for raw and `get-cleanup` for the cleanup variant? Recommendation: `get` is the common case (with cleanup); `get-raw` for the raw case.
 
-3. **Key type constraints.** Map keys are often keyword atoms (`:color`, `:price`). Can keys also be integers, strings, composite ASTs? Per 058-001, Atom accepts typed literals; any atom can be a key. Per 058-007-conditional-bind, full ASTs can be used as binding operands. Confirm: Map keys can be any thought.
+3. **Key type constraints.** Map keys are often keyword atoms (`:color`, `:price`). Can keys also be integers, strings, composite ASTs? Per 058-001, Atom accepts typed literals; any atom can be a key. Per 058-007-conditional-bind, full ASTs can be used as binding operands. Confirm: Map keys can be any holon.
 
 4. **Performance for large Maps.** Bundle's capacity is bounded (~d / ln(K) items for reliable cleanup). Maps with many keys exceed capacity and produce noisy retrieval. Document the capacity bound; stdlib could provide a `LargeMap` variant using partitioning if demand arises.
 
-5. **Nested Maps.** `(Map [[:user (Map [[:name "alice"] [:age 30]])]])` nests dictionaries. `get`s compose: `(get (get root :user cb) :name cb)`. Or a `deep-get` stdlib variant for path-based access. Out of scope for this proposal but worth noting as a likely next stdlib addition.
+5. **Nested Maps.** `(Map (list (list :user (Map (list (list :name "alice") (list :age 30))))))` nests dictionaries. `get`s compose: `(get (get root :user cb) :name cb)`. Or a `deep-get` stdlib variant for path-based access. Out of scope for this proposal but worth noting as a likely next stdlib addition.
 
-6. **Empty Map.** `(Map [])` produces an empty Bundle — an all-zeros or undefined vector. Document the degenerate case or forbid it.
+6. **Empty Map.** `(Map (list))` produces an empty Bundle — an all-zeros or undefined vector. Document the degenerate case or forbid it.
 
 7. **Dependency ordering.** Map depends on Bundle and Bind (both core). `get` depends on Unbind (058-024) and Cleanup (058-025). If any prerequisite is rejected, Map and its accessors change. Explicit dependency statement: this proposal assumes all four primitives are available.
