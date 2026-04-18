@@ -291,6 +291,97 @@ The FOUNDATION claim here is minimal: **programs CAN be expressed using the exis
 
 ---
 
+## The Vector Side — What the Algebra Enables
+
+Everything in the AST side — walking, exact retrieval, literal access — operates in the symbolic domain. Once a thought is projected to a vector via `encode`, **the full VSA algebra applies.** Because data is thoughts and programs are thoughts, every vector operation applies to both.
+
+### Noise stripping reveals the signal
+
+An `OnlineSubspace` trained on a corpus of thoughts learns the "background" — the common structural patterns that appear across many thoughts.
+
+```scheme
+(project thought subspace)    ; the component the subspace EXPLAINS (background)
+(reject thought subspace)     ; the component the subspace CANNOT explain (signal)
+(anomalous-component t s)     ; alias for reject — the distinctive part
+```
+
+For programs: boilerplate (common function application patterns, common literal uses, common control flow) lives in the background. What makes THIS program distinctive — its specific choices, its combinations, its particular composition — is the anomalous component. **The signal is what remains after noise is stripped.**
+
+This is how you extract the best program from a mix. Feed a corpus of programs into a subspace. For any new program, the residual tells you what's novel. The programs with high residual are the ones that DO something — they carry signal above the baseline.
+
+### Program similarity and search
+
+Every geometric operation on thought vectors applies directly to program vectors:
+
+```scheme
+(cosine prog-a prog-b)            ; structural similarity of two programs
+
+(topk-similar query corpus 5)     ; five closest programs to query
+
+(cleanup program-vector codebook) ; the known program most similar to a vector
+```
+
+An engram library of known-good programs becomes queryable by situation:
+
+```scheme
+(match-library current-situation-thought)
+;; → the program whose learned context most closely matches the situation
+```
+
+### The full algebra of programs
+
+Every operation in the algebra ops library works on program vectors:
+
+```scheme
+(Difference prog-a prog-b)       ; what changed between two programs
+(Negate prog-full prog-a)        ; prog-full WITHOUT prog-a's contribution
+(Blend prog-a prog-b α)          ; interpolation between two programs
+(Amplify base specific s)        ; base program with specific pattern emphasized
+(Analogy prog-a prog-b prog-c)   ; A:B :: C:? — relational program transfer
+(Resonance prog reference)       ; the part of prog that agrees with reference
+```
+
+Programs can be diffed. Programs can be blended. Programs can be transferred by analogy. All through vector algebra, because programs are vectors.
+
+### Discriminant-guided program synthesis
+
+A reckoner learns a direction in thought-space that separates Grace-producing thoughts from Violence-producing thoughts. When the thoughts are programs, the learned direction is the **signature of a program that produces Grace.**
+
+To generate a candidate:
+
+1. Take the reckoner's discriminant vector (the direction learned).
+2. Cleanup against a codebook of candidate program ASTs.
+3. The closest matches are programs most strongly predicted to produce Grace.
+4. Execute them. Measure the outcome. Feed the outcome back into the reckoner.
+
+**The machine writes its own candidate replacements.** Not through gradient descent. Not through backpropagation. Through ALGEBRAIC DECODING of a learned geometric direction against a library of candidate program structures.
+
+### Self-reference without paradox
+
+- The wat language expresses programs.
+- Programs are thoughts.
+- Thoughts have vectors.
+- Vectors can be learned on (subspaces, reckoners).
+- Learned directions can be decoded (cleanup against codebook).
+- Decoded ASTs are executable programs.
+
+The wat machine can RUN programs, OBSERVE which produce Grace, LEARN the discriminating direction, GENERATE new candidate programs, and RUN those. The loop closes through algebra, not through gradient descent. No paradox — the machine doesn't rewrite its own core primitives. It composes new programs from the same primitives, guided by what it learned from running previous programs.
+
+### Why this matters for 058
+
+The complete picture:
+
+- **Data structures** (Map, Array, get) — store programs, retrieve them structurally, nest them arbitrarily.
+- **The foundational principle** (AST primary) — exact retrieval, exact execution, literals on AST nodes.
+- **Programs ARE thoughts** — the same primitives compose both data and code.
+- **The vector side** (this section) — the full VSA algebra operates on any thought, including programs.
+
+Together: the complete cycle. Store → retrieve → execute → learn → compare → generate → execute. The wat machine processes its own thinking.
+
+**This is the recursion that the DDoS detector, the trading enterprise, and every other holon application were implicitly implementing.** 058 makes the recursion explicit as a composable algebra.
+
+---
+
 ## The Foundation: MAP VSA
 
 Holon implements the MAP variant of Vector Symbolic Architecture — **Multiply, Add, Permute** (Gayler, 2003). The canonical MAP operations are:
@@ -848,6 +939,7 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 | 2026-04-17 | **Reserved atoms via `:wat/std` keyword namespace.** Stdlib forms that need fixed reference atoms (Circular's cos/sin basis, Array's position atoms) use namespaced keyword literals rather than special machinery. The typed-atom generalization already accepts keywords — namespaced keywords inherit determinism and uniqueness from the type-aware hash. No "reserved vector registry" needed. | 058 |
 | 2026-04-17 | **Atom literal type refinement.** `(Atom 0)` is a concrete integer atom, not a keyword. Array positions use concrete integers — position 0 IS the integer 0. Keywords like `:wat/std/circular-cos-basis` are reserved for TRULY symbolic references (names with no natural concrete form). Use the literal type that matches the semantic, not a keyword that wraps it. The type-aware hash keeps `(Atom 0)`, `(Atom "0")`, and `(Atom :pos/0)` all distinct. | 058 |
 | 2026-04-17 | **Programs ARE Thoughts section added.** A wat program is an AST; ASTs encode to vectors; therefore programs have vector projections. Evaluation is AST-walking. Programs can be stored in data structures, compared geometrically, retrieved from engram libraries, and generated from learned discriminants. Self-improvement becomes discriminant-guided program synthesis in hyperdimensional space. The wat machine is homoiconic at 10,000 dimensions. Kanerva's "build a Lisp from hyperdimensional vectors" challenge fully answered. | 058 |
+| 2026-04-17 | **The Vector Side section added.** Because programs are thoughts and thoughts have vectors, the full VSA algebra applies to programs. Noise stripping (OnlineSubspace, reject) reveals the signal — the distinctive part of a program beyond common boilerplate. Programs can be diffed (Difference), blended, amplified, transferred by analogy. Discriminant-guided program synthesis: decode the learned Grace-direction against a program codebook via cleanup. The wat machine runs programs, observes outcomes, learns, and generates new candidate programs through pure algebra — no gradient descent. The recursion that every holon application implicitly implements. | 058 |
 
 ---
 
