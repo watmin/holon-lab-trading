@@ -749,7 +749,7 @@ Because `encode(ast) → vector` is deterministic, any party that receives a vec
 
 This matters for the distributed substrate (see "Reader — Are You Starting To See It?"). Each node can independently verify any vector it receives without trusting the sender's cache.
 
-### Cryptographic provenance — the trust boundary at eval
+### Cryptographic provenance — the trust boundary at startup
 
 Distributed verifiability gets stronger when the algebra crosses trust boundaries.
 
@@ -759,94 +759,116 @@ An AST in transmission is an **EDN string** — extensible data notation, a seri
 
 **EDN strings can be signed.** A trusted producer signs the EDN with a private key; any receiver can verify the signature against the known public key. **The AST has a cryptographic provenance.**
 
-The `eval` layer is the natural trust boundary. An untrusted AST — one that arrives over the wire without a valid signature, or whose hash does not match what the cache claims — **is refused at eval time.** The algebra does not evaluate what it cannot verify.
+**The wat-vm loads all code at startup.** Types (struct/enum/newtype/deftype) enter via `(load-types ...)`; functions (define) enter via `(load ...)`. Both happen before the main event loop starts. Once startup completes, the symbol table is frozen — no further code enters during runtime.
+
+This static-load model is a deliberate choice. Rust is a static-first host; implementing an unbounded dynamic Lisp on top would duplicate effort and widen the attack surface for little gain. The use cases the algebra addresses — trading, DDoS defense, MTG, truth engine — all have well-known vocab at startup. Dynamic thought COMPOSITION (building new ASTs at runtime) is supported and cheap. Dynamic code DEFINITION (adding new functions or types at runtime) is not supported, and is not needed.
+
+The trust boundary is therefore **the startup phase, not per-call**. Every code path the wat-vm will ever execute must pass verification before the main loop starts.
+
+### Startup loading: `load` and `load-types`
+
+Both load forms happen at startup, with identical cryptographic modes:
 
 ```scheme
-;; UNSAFE — old-style blind evaluation:
-(eval user-code)
+;; Unverified — trust the contents. Suitable for trusted local development.
+(load-types "project/market/types.wat")
+(load       "project/market/indicators.wat")
 
-;; SAFE — cryptographic gating at the eval layer:
-(eval-verified user-code expected-hash)        ; refuses if hash mismatches
-(eval-signed user-code trusted-public-keys)    ; refuses if signature invalid
+;; Hash-pinned — require the file to hash to a specific value.
+;; Halts startup if the hash does not match.
+(load-types "project/market/types.wat"        (md5 "abc123..."))
+(load       "project/market/indicators.wat"   (md5 "def456..."))
+
+;; Signature-verified — require a valid signature from the named public key.
+;; Halts startup if the signature is invalid.
+(load-types "project/market/types.wat"        (signed <sig> <pub-key>))
+(load       "project/market/indicators.wat"   (signed <sig> <pub-key>))
 ```
 
-Signed evals let a distributed system **only trust cryptographically generated data forms.** An AST without provenance is not executable. The attack surface collapses from "any code an attacker can inject" to "any code an attacker can sign with a trusted key" — which is the supply-chain boundary, not the evaluation boundary.
+The two forms differ only in what the loaded file is allowed to contain:
 
-What this enables:
+- `(load-types ...)` files contain ONLY type declarations (`struct`, `enum`, `newtype`, `deftype`). A runtime form in such a file is a startup error.
+- `(load ...)` files contain ONLY function definitions (`define`). A type declaration in such a file is a startup error.
 
-- **Signed standard libraries.** The stdlib is a set of ASTs signed by the project's release key. Any node verifies signatures before loading; a tampered stdlib is refused automatically.
-- **Supply-chain integrity.** Every dependency — every AST imported from anywhere — has a hash that can be pinned. The compiled-in AST must match the source-code hash, or the build refuses.
-- **Distributed eval of untrusted code.** A service accepts ASTs from third parties, verifies signatures against the set of authorized signers, refuses the rest. The service does not need to sandbox evaluation — the evaluation is only happening on ASTs that were cryptographically vouched for.
-- **Content-addressable cache.** Cache entries are keyed by `hash(ast)`, making tampering not just detectable (as in the previous subsection) but *self-correcting* — a tampered entry has the wrong key and cannot be looked up by the correct query.
-- **Reproducible computation.** Given an input AST's hash and the algebra's deterministic encode, the output vector is reproducible across any verifier. A dispute over "did you actually evaluate X?" resolves to a hash comparison.
+The phase split persists at the FILE level for clarity — but both load operations happen at the same time (startup) and fail the same way (halt the wat-vm before the main loop starts).
 
-The algebra does not add the cryptography — modern signing and hashing primitives are well-understood and independently available. The algebra's contribution is making **EDN the transport form** and **eval the verification gate.** Together, they give the distributed substrate a clean trust story: data forms carry provenance; eval enforces it; untrusted inputs cannot execute.
+**If any load fails verification, the wat-vm refuses to run.** No partial state. No degraded mode. Either every piece of code passed its trust check, or nothing starts. This is exactly the semantic appropriate for a production substrate: you want certainty about what the machine will run.
 
-This is what "distributed by construction" looks like when the construction carries security requirements. The trust boundary is the eval call, not a firewall, not an authentication proxy, not a sandbox. The algebra is the sandbox — **and the sandbox only runs what the cryptography vouches for.**
+### The symbol table after startup
 
-### The content-addressed symbol table
+After all loads complete successfully, the symbol table is **fixed**:
 
-Cryptographic provenance applies not just to top-level `eval` but to the **symbol table itself**. The wat runtime maintains a global table of `(define ...)` forms — every function registered, addressable by name. In a naive Lisp, the table is keyed by name: `:my-func → <body>`. Override the name, you override the function. Name collisions are destructive.
+- Every function that can ever be called is in the table.
+- Every type that can ever be referenced exists in the Rust binary.
+- Every macro has been applied (macros run at build/startup time, not runtime).
+- No further `define` can register.
+- No further `struct`/`enum`/`newtype`/`deftype` can be added.
 
-The wat symbol table is different. It is **content-addressed**: keyed by `hash(ast)`, where `ast` is the full definition — name, parameter types, return type, body. Two `(define ...)` expressions with identical content produce identical hashes and collapse into one entry. Two with different content produce different hashes — even if their names are the same — and coexist in the table as distinct entries.
+The table is keyed by name. One name, one definition. If a startup load would introduce a name collision (two files both defining `:my/ns/clamp` with different bodies), that's a startup error — reconciled at the source level, not at runtime.
+
+This is much simpler than the content-addressed runtime dance: no hash-keyed lookup, no most-recent-wins, no explicit `:name@hash` pinning. The wat-vm's symbol resolution is a single-level name lookup. Fast, predictable, static.
+
+Macros are handled by the startup pipeline: macro definitions register at build/startup time; macro invocations in the source code expand to their transformed ASTs before the functions they produce enter the symbol table. Users who want runtime metaprogramming get it via dynamic thought composition (see below) — not via runtime macro redefinition.
+
+### Constrained eval at runtime
+
+**The wat-vm does support `eval`, but under strict constraints.** A runtime `eval` walks an AST and executes it — with the requirement that every function called and every type used must already be in the static symbol table.
 
 ```scheme
-;; Alice's version (loaded first):
-(define (clamp [x : Scalar] [low : Scalar] [high : Scalar]) : Scalar
-  (max low (min high x)))
-;; hashes to: 0xABC123...
+;; Build an AST at runtime — perhaps from parsed user input, perhaps from
+;; a pattern-matching result, perhaps from an LLM's output:
+(let ([composed
+       (list 'Difference
+             (list 'Atom :observed)
+             (list 'Atom :baseline))])
 
-;; Bob's fork (loaded later, same name, different body):
-(define (clamp [x : Scalar] [low : Scalar] [high : Scalar]) : Scalar
-  (if (< x low) low (if (> x high) high x)))
-;; hashes to: 0xDEF456...
+  ;; Eval checks every reference before executing:
+  ;;   - Difference: exists in the static symbol table as a stdlib fn ✓
+  ;;   - Atom: exists as an algebra-core form ✓
+  ;;   - :observed, :baseline: valid keywords ✓
+  ;;   - Types match (Difference takes two Thoughts; Atom produces Thought) ✓
+  ;; All checks pass. Execute: returns the constructed Thought AST.
 
-;; Both entries coexist in the symbol table.
-;; Same name, different content, different identities.
+  (encode (eval composed)))
+;; => a bipolar vector representing the dynamically composed thought.
 ```
 
-This is **Nix-like**. Functions are values identified by their structure. Renaming preserves identity; content change creates new identity. Duplicates collapse; variants coexist.
+Three properties define constrained eval:
 
-### The `load` form
+1. **Every function called must be in the static symbol table.** If `composed` references an unknown function, eval errors before executing anything.
+2. **Every type used must be in the static type universe.** Unknown types produce errors.
+3. **Every argument's type must match the called function's signature.** Type checks happen before body execution.
 
-Modules enter the symbol table via `load`. A wat file contains `(define ...)` forms; loading the file parses each form, computes its hash, and registers it:
+This is a SAFE `eval`. An attacker who supplies a malicious AST cannot invoke arbitrary code — only functions the operator explicitly loaded at startup. The attack surface is the symbol table's contents, which are frozen and verified. Nothing the attacker can send changes what functions are runnable.
+
+**Typical uses for constrained eval:**
+
+- **Dynamic thought composition.** Build thought-programs from runtime data (LLM output, pattern-matching, user queries) and evaluate them to get vectors.
+- **Rule-like systems.** Users supply thought-expressions that describe patterns; the wat-vm evaluates them against incoming data to score matches.
+- **Received thought-programs.** A distributed node receives a signed AST over the network, verifies the signature, evals against its local (already-trusted) symbol table. The eval itself has nothing to verify — it only references functions that are already trusted.
+
+**Lambdas remain first-class at runtime.** Anonymous functions can be constructed, passed, stored, invoked — without registering in the symbol table:
 
 ```scheme
-(load "some/name.wat")                          ; permissive — trust the contents
-(load "some/name.wat" (md5 "abc123..."))        ; verified — require content hash to match
-(load "some/name.wat" (signed <sig> <pub-key>)) ; verified — require signature
+(let ([transform
+       (lambda ([t : Thought]) : Thought
+         (Bundle (list t (Atom :tagged))))])
+  (transform (Atom :input)))
 ```
 
-The load form has three modes:
+A lambda is a VALUE, not a symbol-table entry. When it goes out of scope, it's cleaned up. Runtime code creation is preserved; symbol-table mutation is not.
 
-**1. Unverified load.** Reads the file, hashes each definition, registers them. Accepts whatever content is on disk. Suitable for trusted local development; dangerous for untrusted network code.
+### What this gives us
 
-**2. Hash-pinned load.** Caller specifies the expected file hash (or a hash for each definition). The load succeeds only if actual hashes match expected. Any tampering — accidental file corruption, malicious substitution — causes load failure and no entries enter the symbol table. Suitable for pinning dependencies to specific versions.
+The full trust model, simplified:
 
-**3. Signature-verified load.** Caller specifies an expected signature and the public key it should verify against. The load computes the signature over the file's content and checks it against the supplied signature. Failure means load refusal. Suitable for distributed systems receiving code from trusted authors.
+- **One verification phase: startup.** All loads succeed (with whatever cryptographic mode each requested) or the wat-vm refuses to start. No partial-state recovery.
+- **One symbol table lifecycle: fixed after startup.** One name, one definition. Predictable, fast, simple.
+- **One runtime code surface: constrained eval over the static universe.** Dynamic thought composition works. Dynamic code DEFINITION does not.
+- **One attack surface: the startup loads.** If the wat-vm starts, every piece of executable code is trusted. An attacker can't inject new code at runtime; at best they can supply crafted input data that constrained eval can handle safely.
+- **One model for receiving code over the wire.** A signed wat file is received → wat-vm restarts with it included in startup → continues operation. Managed restart, not live patch. Simple, verifiable, operationally mature.
 
-**Safety is at load time, not call time.** Once a definition is in the symbol table, it is trusted. Calls resolve through the table without re-verifying signatures. This keeps call-site performance uncompromised while placing the cryptographic gate at the boundary where untrusted content enters the system.
-
-### Override semantics
-
-Because the symbol table is content-addressed, **override is not mutation — it is coexistence**. Two definitions with the same name and different bodies both live. Resolution at call sites follows a policy:
-
-- **Most-recent-wins (default).** A bare name lookup returns the most recently loaded definition with that name. Classic Lisp-style redefinition; old definitions remain in the table but callers get the new one.
-
-- **Unique-required (strict mode).** A bare name lookup errors if multiple entries share the name. Callers must pin a specific version: `:my-func@abc123...`.
-
-- **Explicit pin.** At any time, a caller can force a specific version by including the hash: `(my-func@0xABC123 args)`. This resolves to the exact entry regardless of what else loads.
-
-The combination of content-addressing + cryptographic load + pin-at-call gives the language both **Lisp-style flexibility** (redefinition is allowed) and **supply-chain safety** (verified loads cannot be silently shadowed by attacker-controlled files). The programmer chooses the policy appropriate to the deployment.
-
-### What this adds to cryptographic provenance
-
-The previous sections covered provenance at `eval` — ASTs coming in as data are refused if unverified. This section covers provenance at **the boundary where code enters the symbol table**. Both boundaries enforce the same rule: nothing runs unless the cryptography vouches for it.
-
-- `eval` gates evaluation of AST values encountered at runtime.
-- `load` gates registration of definitions into the symbol table.
-
-Together, the two gates close every path by which untrusted code could execute: via direct eval of a received AST, or via registration of a received definition that later gets called. The algebra's trust boundary is not a firewall — it is the pair of verification gates at these two entry points.
+This is the property that matters: **the running wat-vm is a trusted environment.** Whatever is executing inside it has been verified at startup. The algebra does its work — dynamic composition, encoding, cleanup, navigation — over a fixed and fully-vetted set of forms. That's exactly the substrate you want for systems where the cost of running the wrong code is high.
 
 ### Verbose but correct
 
@@ -1535,16 +1557,51 @@ A form earns placement as a wat **language core** primitive when **all** of the 
    - The form's semantics are executable at runtime — not just parseable but runnable.
    - This excludes purely-documentary forms (though those can still live in the language).
 
-The initial language core from 058:
+The language core from 058 and this FOUNDATION polish pass:
+
+**Function registration forms (register at startup into the static symbol table):**
 
 - `define` — named, typed function registration
-- `lambda` — typed anonymous functions with closure capture
-- Type annotations (`:Thought`, `:Atom`, `:Scalar`, `:Int`, `:Bool`, `:List`, `:Function`, ...)
-- `load` — cryptographically-gateable module loading into the content-addressed symbol table
+- `lambda` — typed anonymous functions with closure capture (runtime values, not symbol-table entries)
+- `load` — cryptographically-gateable module loading at startup, functions only
+
+**Type declaration forms (materialized at compile time into the Rust-backed wat-vm binary):**
+
+- `struct` — named product type with typed fields
+- `enum` — coproduct with typed variants
+- `newtype` — nominal alias over another type
+- `deftype` — structural alias; aliases for existing type shapes
+- `load-types` — cryptographically-gateable bring-in of type declarations at startup
+
+Plus the syntactic feature pervading all of the above:
+
+- **Type annotations** (`:Thought`, `:Atom`, `:Scalar`, `:Int`, `:Bool`, `:List`, `:Function`, keyword-path user types) — required on `define` and `lambda` signatures; carried on `struct`/`enum`/`newtype`/`deftype` field declarations.
 
 Other host-Lisp forms (`let`, `if`, `cond`, `match`, `begin`, arithmetic, comparison, collection operations, `set!`, etc.) are **substrate-inherited** — wat inherits them from its Lisp host rather than defining them anew. They are language tools, but not novel in wat specifically.
 
-Language core is minimal on purpose: just enough to write stdlib, define functions, load modules, and verify trust at the boundary. Anything more is host-inherited or stdlib.
+Language core is minimal on purpose: just enough to write stdlib, define functions and types, load modules at both phases, and verify trust at the boundary. Anything more is host-inherited or stdlib.
+
+### All loading happens at startup
+
+The Rust runtime hosting the wat-vm imposes a static-first model: all code (types AND functions) loads at startup, before the main event loop begins. Nothing new enters the system after startup.
+
+- `struct`, `enum`, `newtype`, `deftype` are **type declarations**. The build pipeline extracts them from wat files, generates Rust code, compiles the binary.
+- `load-types "path/to/file.wat"` is the type loader — reads a file, parses type declarations, feeds them to the build. Verification modes (`(md5 ...)`, `(signed ...)`) run at build/startup.
+- `define`, `lambda` are **function definitions**. They register at startup into the symbol table.
+- `load "path/to/file.wat"` is the function loader — reads a file, parses `define`s, registers them. Same verification modes.
+
+**Nothing redefines after startup.** A struct is what its source declares. A function is what its source defines. Name collisions are caught at startup and halt the wat-vm; runtime never sees partial state.
+
+**File-level discipline.** To keep the two kinds of content clean on the filesystem, wat files are single-purpose:
+
+- Files loaded via `(load-types ...)` contain ONLY type declarations — no `define`s.
+- Files loaded via `(load ...)` contain ONLY function definitions — no type declarations.
+
+Mixing produces a load-time error. The loader refuses a file whose forms don't match. Intent is visible at the call site; filesystem organization reinforces it.
+
+**Why static:** the cost of hosting on Rust. Dynamic code loading would require shipping a full Lisp interpreter with unbounded symbol-table growth inside the Rust binary — large, attack-rich, and unnecessary for the use cases the algebra addresses. Static loading keeps the wat-vm small, auditable, and fast to start. Dynamic thought COMPOSITION (building new ASTs at runtime) is always available and never requires code registration. Dynamic code DEFINITION (adding new functions or types at runtime) is not supported — and is not needed.
+
+**The algebra does not impose this.** A future implementation — WASM, self-hosting bytecode interpreter, dynamic language backend — could relax the constraint. FOUNDATION captures the Rust-runtime constraint; it does not elevate it to an algebraic invariant.
 
 ---
 
@@ -1757,52 +1814,125 @@ This section freezes the full algebra in its target shape (post-058). Core forms
 
 (Note: lowercase `cleanup` in stdlib is the convenience wrapper around core `Cleanup`, typically pairing a noisy decode with a candidate set. The core primitive IS `Cleanup`; this level-shifting between tiers is standard.)
 
-### Language Core (4 forms)
+### Language Core (8 forms)
+
+All eight forms are loaded at startup. The wat-vm distinguishes them by what kind of content they carry, not by when they happen — both `load` and `load-types` are startup operations. After startup completes, the symbol table and type universe are fixed; no new forms register during runtime.
 
 ```scheme
+;; ============================================================
+;; FUNCTION DEFINITIONS — register at startup into the static
+;; symbol table. Once registered, they remain for the wat-vm's
+;; lifetime. Cannot be redefined.
+;; ============================================================
+
 ;; --- Definition ---
 
 (define (name [param : Type] ...) : ReturnType body)
 ;; Named, typed function registration.
-;; Body executes when invoked. Types are required for Rust eval.
-;; Registers in the content-addressed symbol table keyed by hash(full-ast).
+;; Body executes when invoked. Types are required for dispatch and signing.
 ;; Keyword-path names supported: (define (:alice/math/clamp ...) ...).
 
 (lambda ([param : Type] ...) : ReturnType body)
 ;; Typed anonymous functions with closure capture.
 ;; Same signature shape as define, without the name.
-;; Produces a :Function value that can be passed, stored, invoked.
-;; define = lambda + symbol-table registration.
+;; Produces a :Function value — a runtime value, NOT a symbol-table entry.
+;; Can be created, passed, invoked during runtime; goes away when scope ends.
 
-;; --- Module loading ---
+;; --- Function module loading (startup phase) ---
 
 (load "path/to/file.wat")
-;; Unverified load — reads the file, parses defines, registers.
+;; Unverified startup load — reads the file, parses defines, registers.
 ;; Trust the contents; accept whatever's on disk.
 
 (load "path/to/file.wat" (md5 "abc123..."))
-;; Hash-pinned load — requires file content to hash to the given value.
-;; Refuses if mismatched; no entries register.
+;; Hash-pinned startup load — requires file content to hash to the given value.
+;; Halts wat-vm startup if mismatched.
 
 (load "path/to/file.wat" (signed <signature> <pub-key>))
-;; Signature-verified load — verifies signature against supplied public key.
-;; Refuses if signature invalid; no entries register.
+;; Signature-verified startup load — verifies signature against supplied public key.
+;; Halts wat-vm startup if signature invalid.
 
-;; --- Type annotations ---
+;; All (load ...) happens at startup. Files loaded via (load ...) must
+;; contain ONLY function definitions — a type declaration is a startup error.
+
+;; ============================================================
+;; TYPE DECLARATIONS — materialized into the wat-vm binary at
+;; build time. Fully static.
+;; ============================================================
+
+;; --- User-defined types (keyword-path names) ---
+
+(struct :my/namespace/MyType
+  [field1 : Type1]
+  [field2 : Type2]
+  ...)
+;; Named product type. Fields travel together. Rust compiles to a struct.
+;; Example:
+;;   (struct :project/market/Candle
+;;     [open   : Scalar]
+;;     [high   : Scalar]
+;;     [low    : Scalar]
+;;     [close  : Scalar]
+;;     [volume : Scalar])
+
+(enum :my/namespace/MyVariant
+  :simple-variant-1
+  :simple-variant-2
+  (tagged-variant [field : Type] ...))
+;; Coproduct type. Exactly one of several alternatives.
+;; Example:
+;;   (enum :my/trading/Direction :long :short)
+;;   (enum :my/market/Event
+;;     (candle  [asset : Atom] [candle : :project/market/Candle])
+;;     (deposit [asset : Atom] [amount : Scalar]))
+
+(newtype :my/namespace/MyAlias :SomeType)
+;; Nominal alias — same representation, distinct type identity.
+;; Example:
+;;   (newtype :my/trading/TradeId :Int)
+;;   (newtype :my/trading/Price   :Scalar)
+
+(deftype :my/namespace/MyShape (structural-type-expression))
+;; Structural alias — shorthand for an existing type shape.
+;; Example:
+;;   (deftype :alice/types/Price :Scalar)
+;;   (deftype :wat/std/Option<:T> (:Union :Null :T))
+
+;; --- Compile-time module loading (types only) ---
+
+(load-types "path/to/types.wat")
+;; Unverified build-time load. Reads the file, parses type declarations,
+;; feeds them to the build pipeline for Rust code generation.
+
+(load-types "path/to/types.wat" (md5 "abc123..."))
+;; Hash-pinned build-time load. Build halts if the file hash does not match.
+
+(load-types "path/to/types.wat" (signed <signature> <pub-key>))
+;; Signature-verified build-time load. Build halts if the signature is invalid.
+
+;; Compile-time-loaded files must contain ONLY type declarations.
+;; A runtime form (define/lambda) in a load-types target is a load error.
+
+;; ============================================================
+;; TYPE ANNOTATIONS — syntactic feature on all signatures.
+;; ============================================================
 
 ;; Parameter types: [name : Type] with spaces around the colon.
 ;; Return types: : Type after the parameter list.
+;; Field types: [field-name : Type] inside struct/enum variant declarations.
+
 ;; Built-in types: :Thought, :Atom, :Scalar, :Int, :String, :Bool,
 ;;                 :Keyword, :Null, :List, :Vector, :Function, :Any
 ;; Parametric types: (:List :Thought), (:Function [:Thought :Thought] :Thought)
-;; User types: (deftype :alice/types/Price :Scalar)
+;; User types (keyword-path): :project/market/Candle, :alice/types/Price
 
-;; Type annotations are REQUIRED for Rust eval and cryptographic signing.
-;; The old wat LANGUAGE.md's "optional, documentation" framing applied
-;; to the pre-058 language; post-058, types are load-bearing.
+;; Type annotations are REQUIRED on define/lambda signatures and on
+;; struct/enum field declarations. Required for Rust eval and for
+;; cryptographic signing (the AST's type annotations are part of the
+;; hashed content).
 ```
 
-Host-inherited Lisp forms — `let`, `let*`, `if`, `when`, `cond`, `match`, `begin`, arithmetic, comparison, collections, `set!`, `push!`, CSP primitives (`make-pipe`, `send`, `recv`, `spawn`, ...), parallelism (`pmap`, `pfor-each`) — remain as listed in the current wat LANGUAGE.md. They are language tools, substrate-inherited, not novel in wat specifically. Language core is the minimum NEW set required for the algebra stdlib to exist.
+Host-inherited Lisp forms — `let`, `let*`, `if`, `when`, `cond`, `match`, `begin`, arithmetic, comparison, collections, `set!`, `push!`, CSP primitives (`make-pipe`, `send`, `recv`, `spawn`, ...), parallelism (`pmap`, `pfor-each`) — remain as listed in the current wat LANGUAGE.md. They are language tools, substrate-inherited, not novel in wat specifically. Language core is the minimum NEW set required for the algebra stdlib to exist AND for typed user structures to be usable.
 
 ### Atom Literal Types — Use the Right Kind
 
@@ -2034,18 +2164,35 @@ The implementation choice is outside FOUNDATION's scope. FOUNDATION declares the
 
 Plus lowercase helpers packaged with their owning UpperCase form's proposal: `get` (with Map), `nth` (with Array), `atom-value` (with Atom). These are stdlib but not UpperCase — they're accessors, not AST constructors.
 
-### Language Core (4 forms)
+### Language Core (8 forms)
 
 **Proposals that argue LANGUAGE CORE status:**
+
+Runtime forms (registered at wat-vm runtime into the content-addressed symbol table):
 
 ```scheme
 define                         ; 058-028  — typed named function registration
 lambda                         ; 058-029  — typed anonymous functions + closures
-type annotations               ; 058-030  — :Thought, :Atom, :Scalar, parametric, user-defined
-load                           ; this FOUNDATION addition — cryptographically-gateable module loading
+load                           ; FOUNDATION addition — runtime module loading (functions only)
 ```
 
-Language core is minimal by criterion: just enough to make the algebra stdlib exist as runnable code, load it with trust, and dispatch correctly. Everything else is host-inherited from Lisp or belongs in stdlib.
+Compile-time forms (materialized into the Rust-backed wat-vm binary; cannot be redefined at runtime):
+
+```scheme
+struct                         ; FOUNDATION addition — named product type
+enum                           ; FOUNDATION addition — coproduct type
+newtype                        ; FOUNDATION addition — nominal alias
+deftype                        ; 058-030 + FOUNDATION — structural alias
+load-types                     ; FOUNDATION addition — compile-time module loading (types only)
+```
+
+Syntactic feature pervading all of the above:
+
+```scheme
+type annotations               ; 058-030  — :Thought, :Atom, :Scalar, parametric, user keyword-path
+```
+
+Language core is minimal by criterion: just enough to make the algebra stdlib exist as runnable code, define user types statically, load both phases with cryptographic trust, and dispatch correctly. Everything else is host-inherited from Lisp or belongs in stdlib.
 
 ### Dependency Ordering
 
@@ -2126,6 +2273,9 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 | 2026-04-18 | **Complete Forms updated to current inventory.** Algebra Core (10 forms) with Cleanup affirmed core and Orthogonalize replacing old Negate; Algebra Stdlib (17 forms) including Flip as completion of the Negate trilogy and Unbind as decode-intent alias for Bind; new Language Core (4 forms) section listing define/lambda/types/load with the full type grammar. Old Negate entry replaced with Orthogonalize. | 058 |
 | 2026-04-18 | **Aspirational Additions section rewritten to match the 30-proposal reality.** Post-review inventory replaces the initial plan. Algebra Core: 10 forms (5 affirmations, 4 new, plus Blend as pivotal). Algebra Stdlib: 17 forms (6 Blend idioms, 5 structural, 1 relational, 3 data structures, 1 decode alias, plus helpers). Language Core: 4 forms (define, lambda, types, load). Dependency ordering updated: language core → algebra core → algebra stdlib. Negate gone from core; Difference moved to stdlib. | 058 |
 | 2026-04-18 | **Holographic reframing + NP-hard framing added.** The finite-dimensional unit sphere encoding an unbounded compositional space has a name in physics: the holographic principle (t'Hooft 1993, Susskind 1995, Maldacena 1997). AST = unbounded interior description; vector = holographic boundary encoding; projection = holographic encoding; navigation = surface-walking. Two domains answer the same question with the same structural answer because the information-theoretic shape imposes it. The NP-hard framing: navigation-without-enumeration is a structural attack on intractability. The substrate does not solve NP-hard in the complexity-theoretic sense; it sidesteps the enumeration requirement. The wat algebra formalizes operator intuition (years of pattern-recognition skill developed manually) and makes it available to machines. | 058 |
+| 2026-04-18 | **User-defined types + keyword-path naming.** Extended the existing `struct`, `enum`, `newtype` forms with keyword-path names (`:my/namespace/MyType`) and typed fields (`[field : Type]`). Added `deftype` as the structural-alias form companion to newtype's nominal alias. User types usable anywhere built-in types are used — `(define (analyze [c : :project/market/Candle]) : Thought ...)`. Naming discipline extends to types the same way it extends to functions. | 058 |
+| 2026-04-18 | **Model A adopted — fully static loading at startup.** The wat-vm loads all code (both types and functions) at startup and freezes the symbol table before the main event loop begins. No dynamic function registration; no dynamic type registration; no runtime hot-reload. The Rust-runtime static-first model guides this choice — implementing an unbounded dynamic Lisp in Rust would duplicate effort and widen the attack surface unnecessarily. Dynamic thought COMPOSITION (building ASTs at runtime) remains fully supported. Dynamic code DEFINITION does not. `load` and `load-types` become unified startup operations, distinguished by what kind of content they carry. Override semantics simplify to one-name-one-definition, fixed after startup — name collisions halt the wat-vm at startup. | 058 |
+| 2026-04-18 | **Constrained eval at runtime.** Despite static loading, `eval` remains a first-class runtime primitive, but typed and constrained: an AST is evaluatable at runtime if every function called resolves to the static symbol table and every type used exists in the static type universe, with argument types matching signatures. Unknown symbols or type mismatches error before execution. This yields a safe `eval` — attackers cannot invoke arbitrary code, only functions the operator explicitly loaded at startup. Lambdas remain first-class runtime values (closures over the static environment). Distributed code delivery becomes managed-restart: signed wat files enter the startup manifest; the wat-vm restarts to include them; continues operation. Trust boundary is the startup phase, not per-call. | 058 |
 
 ---
 
