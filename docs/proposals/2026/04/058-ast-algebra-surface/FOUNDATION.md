@@ -127,9 +127,9 @@ Vector-level unbind degrades at each level (noise accumulates from sibling bindi
 (deep-get deeply-nested-thing
           (list (Atom "user")
                 (Atom "sessions")
-                (Atom :wat/std/pos/42)
+                (Atom 42)          ; concrete integer position
                 (Atom "actions")
-                (Atom :wat/std/pos/7)
+                (Atom 7)           ; concrete integer position
                 (Atom "metadata")))
 ;; → the AST node at that path. Literal intact.
 ```
@@ -394,12 +394,12 @@ This section freezes the full algebra in its target shape (post-058). Core forms
          pairs)))
 
 (define (Array items)
-  ;; index-accessible list — each item bound to a namespaced position keyword
-  ;; position atoms are deterministic (derived from index)
+  ;; index-accessible list — each item bound to its position as a concrete integer atom
+  ;; (Atom i) is the atom whose literal IS the integer i
   (Bundle
     (map-indexed
       (lambda (i item)
-        (Bind (Atom (keyword :wat/std/pos i)) item))
+        (Bind (Atom i) item))
       items)))
 
 (define (Set items)
@@ -458,37 +458,64 @@ This section freezes the full algebra in its target shape (post-058). Core forms
          candidate-asts)))
 ```
 
-### Reserved Atoms — The `:wat/std` Namespace
+### Atom Literal Types — Use the Right Kind
 
-Stdlib forms that need fixed reference atoms use the `:wat/std/...` keyword namespace. These are ordinary typed-literal atoms whose deterministic vectors happen to be shared across the entire stdlib — the namespace prevents collision with user atoms.
+Atoms accept any typed literal. **Use the literal type that matches what the thing IS**, not a keyword wrapping of it.
 
 ```scheme
-;; Examples of reserved stdlib atoms:
+;; INTEGER: use when the thing is a concrete integer.
+(Atom 0)           ; position zero in an Array — zero IS an integer
+(Atom 42)          ; the integer 42
+(Atom -1)          ; the integer -1
 
-(Atom :wat/std/circular-cos-basis)    ; used by Circular encoder
-(Atom :wat/std/circular-sin-basis)    ; used by Circular encoder
+;; FLOAT: use when the thing is a concrete float.
+(Atom 1.6)         ; the float 1.6
+(Atom 3.14159)     ; the float pi (approximate)
 
-(Atom :wat/std/pos/0)                 ; used by Array indexing
-(Atom :wat/std/pos/1)
-(Atom :wat/std/pos/2)
-;; ... (generated on demand by (keyword :wat/std/pos i))
+;; BOOLEAN: use when the thing is concretely true or false.
+(Atom true)
+(Atom false)
+
+;; STRING: use when the thing IS a string literal.
+(Atom "rsi")       ; the string "rsi"
+(Atom "trail")     ; the string "trail"
+
+;; KEYWORD: use when the thing is a SYMBOLIC NAME — no concrete literal form.
+(Atom :wat/std/circular-cos-basis)    ; a reserved symbolic anchor
+(Atom :trading/momentum-lens)          ; a named concept
+(Atom :rsi)                            ; a short-form symbolic name
 ```
 
-No special machinery. The typed-atom generalization (accepting keyword literals alongside strings, ints, floats, bools) makes these just normal atoms — predictable, deterministic, unique per keyword.
+The distinction matters because atoms store their literal on the AST node:
 
-**Namespace convention:**
+```scheme
+(atom-value (Atom 0))      ; → 0    (the integer)
+(atom-value (Atom "0"))    ; → "0"  (the string)
+(atom-value (Atom :pos/0)) ; → :pos/0  (the keyword)
+```
+
+These are three different things. The type-aware hash gives them three different vectors. **Pick the type that matches the semantic, not the type that wraps the semantic.**
+
+### Reserved Keywords — The `:wat/std` Namespace
+
+For references that ARE genuinely symbolic (no concrete literal form available), the stdlib uses keyword atoms in the `:wat/std/...` namespace:
+
+```scheme
+(Atom :wat/std/circular-cos-basis)    ; used by Circular encoder
+(Atom :wat/std/circular-sin-basis)    ; used by Circular encoder
+```
+
+These are TRULY symbolic — "the cos basis vector" has no natural integer or string representation. It's just a name. Keyword is the right type.
+
+Array position atoms are NOT in this category. Position 0 IS the integer 0. Use `(Atom 0)`, not `(Atom :pos/0)`.
+
+**Namespace convention for symbolic keywords:**
 
 - `:wat/std/...` — reserved for wat standard library
-- Other namespaces (e.g., `:user/...`, `:app/...`, `:trading/...`) — user code
-- Bare keywords without namespace (e.g., `:rsi`) — user convenience for atoms that don't need namespace disambiguation
+- Other namespaces (e.g., `:user/...`, `:trading/...`) — user code
+- Bare keywords (e.g., `:rsi`) — user convenience when namespace disambiguation isn't needed
 
-Because keywords are first-class typed-literal atoms, namespace collision is structural (different keyword → different hash → different vector). User code cannot accidentally produce the same vector as a stdlib reserved atom unless they write the same fully-qualified keyword — which would be a deliberate choice.
-
-**Why this matters:**
-
-Under the foundational principle, atoms are AST nodes storing their literal. Keyword atoms like `:wat/std/circular-cos-basis` store the keyword directly on the node. Reading it back is field access (no cleanup). The vector projection is deterministic from the keyword. The namespace is just part of the keyword's identity.
-
-The stdlib doesn't need a special "reserved vector registry" or "anchor pool" — it just uses keyword literals with a prefix convention. Every mechanism we need already exists in the typed-atom generalization.
+Because keywords are a first-class literal type alongside strings, integers, floats, and booleans, there is no collision risk between `(Atom 0)` and `(Atom :pos/0)` — they hash with different type tags and produce different vectors.
 
 ### Usage Examples
 
@@ -536,7 +563,7 @@ The stdlib doesn't need a special "reserved vector registry" or "anchor pool" �
     (Thermometer 0.71 0 1)
     (Thermometer 0.74 0 1))))
 
-(get recent-rsi (Atom :wat/std/pos/2))   ; → (Thermometer 0.74 0 1)
+(get recent-rsi (Atom 2))          ; → (Thermometer 0.74 0 1)
 
 ;; Nested — Map of Arrays of thoughts:
 (def observer-state
@@ -545,7 +572,7 @@ The stdlib doesn't need a special "reserved vector registry" or "anchor pool" �
     (list (Atom "portfolio")       portfolio))))
 
 (get (get observer-state (Atom "market-readings"))
-     (Atom :wat/std/pos/0))             ; → (Thermometer 0.68 0 1)
+     (Atom 0))                    ; → (Thermometer 0.68 0 1)
 
 ;; --- The locator can be ANY thought ---
 
@@ -694,6 +721,7 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 | 2026-04-17 | **The Foundational Principle** added as top-level framing: AST is primary, vector is cached algebraic projection, literals live on AST nodes. Reframes `get` as AST-walking (not vector-unbinding), `atom-value` as direct AST field access, cleanup as a specialized operation for when AST context is lost. Atom generalized to accept typed literals (string, int, float, bool, keyword). Inverts classical VSA framing: the Lisp is primary, the vector is what you get when you ask for it. Resolves Kanerva's "build a Lisp from hyperdimensional vectors" challenge. | 058 |
 | 2026-04-17 | **Recursive Composition section added.** Capacity bounded per frame (~100 items at 10k dims), unbounded in depth. Compositions nest: `encode(frame-with-nested-frame)` preserves inner structure through orthogonal bind. `deep-get` walks arbitrary depth with no noise accumulation. The thought machine is Turing-complete via unbounded composition depth within a fixed vector dimensionality — memory IS the composition. | 058 |
 | 2026-04-17 | **Reserved atoms via `:wat/std` keyword namespace.** Stdlib forms that need fixed reference atoms (Circular's cos/sin basis, Array's position atoms) use namespaced keyword literals rather than special machinery. The typed-atom generalization already accepts keywords — namespaced keywords inherit determinism and uniqueness from the type-aware hash. No "reserved vector registry" needed. | 058 |
+| 2026-04-17 | **Atom literal type refinement.** `(Atom 0)` is a concrete integer atom, not a keyword. Array positions use concrete integers — position 0 IS the integer 0. Keywords like `:wat/std/circular-cos-basis` are reserved for TRULY symbolic references (names with no natural concrete form). Use the literal type that matches the semantic, not a keyword that wraps it. The type-aware hash keeps `(Atom 0)`, `(Atom "0")`, and `(Atom :pos/0)` all distinct. | 058 |
 
 ---
 
