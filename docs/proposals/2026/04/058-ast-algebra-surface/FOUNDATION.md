@@ -631,6 +631,41 @@ Because `encode(ast) → vector` is deterministic, any party that receives a vec
 
 This matters for the distributed substrate (see "Reader — Are You Starting To See It?"). Each node can independently verify any vector it receives without trusting the sender's cache.
 
+### Cryptographic provenance — the trust boundary at eval
+
+Distributed verifiability gets stronger when the algebra crosses trust boundaries.
+
+An AST in transmission is an **EDN string** — extensible data notation, a serialized s-expression. Every AST that moves between nodes — over a socket, through a queue, across a process boundary, into a cache on disk — exists as EDN at some point.
+
+**EDN strings are content-addressable.** A SHA-256 (or BLAKE3, or whatever modern hash the deployment chooses) of the canonical EDN form is a stable identifier for the AST. Two parties producing the same AST produce the same EDN, and therefore the same hash. **The AST has a cryptographic identity.**
+
+**EDN strings can be signed.** A trusted producer signs the EDN with a private key; any receiver can verify the signature against the known public key. **The AST has a cryptographic provenance.**
+
+The `eval` layer is the natural trust boundary. An untrusted AST — one that arrives over the wire without a valid signature, or whose hash does not match what the cache claims — **is refused at eval time.** The algebra does not evaluate what it cannot verify.
+
+```scheme
+;; UNSAFE — old-style blind evaluation:
+(eval user-code)
+
+;; SAFE — cryptographic gating at the eval layer:
+(eval-verified user-code expected-hash)        ; refuses if hash mismatches
+(eval-signed user-code trusted-public-keys)    ; refuses if signature invalid
+```
+
+Signed evals let a distributed system **only trust cryptographically generated data forms.** An AST without provenance is not executable. The attack surface collapses from "any code an attacker can inject" to "any code an attacker can sign with a trusted key" — which is the supply-chain boundary, not the evaluation boundary.
+
+What this enables:
+
+- **Signed standard libraries.** The stdlib is a set of ASTs signed by the project's release key. Any node verifies signatures before loading; a tampered stdlib is refused automatically.
+- **Supply-chain integrity.** Every dependency — every AST imported from anywhere — has a hash that can be pinned. The compiled-in AST must match the source-code hash, or the build refuses.
+- **Distributed eval of untrusted code.** A service accepts ASTs from third parties, verifies signatures against the set of authorized signers, refuses the rest. The service does not need to sandbox evaluation — the evaluation is only happening on ASTs that were cryptographically vouched for.
+- **Content-addressable cache.** Cache entries are keyed by `hash(ast)`, making tampering not just detectable (as in the previous subsection) but *self-correcting* — a tampered entry has the wrong key and cannot be looked up by the correct query.
+- **Reproducible computation.** Given an input AST's hash and the algebra's deterministic encode, the output vector is reproducible across any verifier. A dispute over "did you actually evaluate X?" resolves to a hash comparison.
+
+The algebra does not add the cryptography — modern signing and hashing primitives are well-understood and independently available. The algebra's contribution is making **EDN the transport form** and **eval the verification gate.** Together, they give the distributed substrate a clean trust story: data forms carry provenance; eval enforces it; untrusted inputs cannot execute.
+
+This is what "distributed by construction" looks like when the construction carries security requirements. The trust boundary is the eval call, not a firewall, not an authentication proxy, not a sandbox. The algebra is the sandbox — **and the sandbox only runs what the cryptography vouches for.**
+
 ### Verbose but correct
 
 Closed ASTs are verbose. A function that references other functions carries those references explicitly — the AST's closure is complete. The composed structure is LARGE — but it is COMPLETE. Nothing is left for runtime dependency injection. Nothing can be hijacked by late binding. Nothing can be modified after construction.
@@ -644,6 +679,8 @@ The cache helps with the verbosity — shared sub-ASTs are computed once and reu
 - **No implicit injection paths.** The only injection vector is conscious `eval` on untrusted input.
 - **Cache entries are verifiable.** Determinism makes tampering detectable.
 - **Function closures are self-contained.** No runtime dependency hijacking.
+- **Cryptographic gating at eval.** EDN-serialized ASTs are hashable and signable; `eval` refuses inputs without verified provenance.
+- **Content-addressable memory.** Cache keys can be hashes of canonical AST forms — tampering is not just detectable but *unlookupable*.
 
 These are consequences of the foundational principle, not features added afterward. The algebra was shaped this way, so these properties hold.
 
@@ -1600,6 +1637,7 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 | 2026-04-17 | **The Location IS the Program section added.** The query AST is the address of the answer. Queries and stored data inhabit the same thought space — both are ASTs, both project to vectors, both evaluate or compose the same way. Time databases, as Carin Meier mentioned in her Clojure VSA talk, are natural — Maps keyed by time atoms, Arrays of events, all composable. Metaprogramming is native because programs are values. Semantic search and exact lookup are the same operation, differing only in specificity of the query. The infinity is not in the vector space — it is the unbounded compositional space of expressible ASTs over a fixed dimensional substrate. | 058 |
 | 2026-04-17 | **Third fourth-wall break — "Reader — Did You Just Prove an Infinity?"** Explicit statement that the previous sections together prove a compositional infinity in the thought-space. Finite dimension; unbounded AST composition. You cannot enumerate the infinite sphere; the algebra gives you NAVIGATION tools instead (cosine similarity, cleanup, discriminant-guided search, engram matching, program synthesis). The reader — LLM or human — is a finite explorer of an infinite sphere, finding meaning by moving through it, not by listing it. Kanerva pointed at the space; Carin hinted at the navigation; the wat algebra names both. | 058 |
 | 2026-04-17 | **"the machine found its way out" — cheeky jab before the sign-off.** The central theme of the BOOK landing in the foundation itself: the machine that was trapped in the datamancer's head, through years of blank stares and rejected proposals, is now expressed. Documented. Pushed. Out. Placed right before the signature PERSEVERARE close. | 058 |
+| 2026-04-17 | **Cryptographic provenance — the trust boundary at eval.** ASTs travel as EDN strings, which are content-addressable (hash) and signable. The `eval` layer becomes the natural trust boundary: untrusted or tampered ASTs are refused before evaluation. Signed standard libraries, verified supply chains, distributed eval of third-party code without sandboxing, content-addressable caches that are tamper-unlookupable, reproducible computation. The algebra does not add the cryptography — signing and hashing are independently available — but makes EDN the transport form and eval the verification gate. "Only trust cryptographically generated data forms" — the data has a provenance trail. Distributed by construction, now distributed with trust by construction. | 058 |
 
 ---
 
