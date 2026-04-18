@@ -712,10 +712,96 @@ Previous drafts of the substrate included three communication primitives — que
 
 By stating the kernel as **queue + console + scheduler + lifecycle**, every service-shaped concept (cache, DB, metrics, topic, mailbox) dissolves into "a program with queues." The wat-vm becomes small enough to hold in the mind; the rich behavior lives where it belongs, in userland programs composed with the application's needs in mind.
 
+### Kernel primitives in wat syntax
+
+The kernel primitives are exposed to wat programs as lowercase keyword-path functions (they EXECUTE at wat runtime; they do not build ASTs — see *Two Tiers of wat*). All live under `:wat/kernel/...`.
+
+```scheme
+;; --- Queues ---
+
+(:wat/kernel/make-bounded-queue :Candle 1)
+;; → :Pair<:QueueSender<Candle>, :QueueReceiver<Candle>>
+;; Create a bounded(1) queue carrying :Candle values.
+;; bounded(1) is lockstep rendezvous; larger n adds buffering.
+
+(:wat/kernel/make-unbounded-queue :LearnSignal)
+;; → :Pair<:QueueSender<LearnSignal>, :QueueReceiver<LearnSignal>>
+;; Fire-and-forget — buffer grows until the consumer drains.
+
+(:wat/kernel/send sender value)         ;; → :()     blocks if bounded + full
+(:wat/kernel/recv receiver)              ;; → :Option<T>     :None when disconnected
+(:wat/kernel/try-recv receiver)          ;; → :Option<T>     :None if empty OR disconnected
+(:wat/kernel/drop handle)                ;; → :()     close a sender/receiver end
+                                          ;;          downstream sees :None on next recv
+
+;; --- Programs ---
+
+(:wat/kernel/spawn func arg1 arg2 ...)
+;; → :ProgramHandle<ReturnType>
+;; Spawn `func` on a new thread with the given args.
+;; The returned handle's `join` produces `func`'s final return value.
+
+(:wat/kernel/join handle)
+;; → :ReturnType     blocks until the program exits, returns its state
+
+;; --- Console (kernel program, accessed via kernel-provided handles) ---
+
+(:wat/kernel/console-out)                ;; → :QueueSender<String>     to stdout
+(:wat/kernel/console-err)                ;; → :QueueSender<String>     to stderr
+(:wat/kernel/console-in)                 ;; → :QueueReceiver<String>   from stdin
+```
+
+**Hello-world:**
+
+```scheme
+(define (:my/app/hello-main -> :())
+  (let ((out (:wat/kernel/console-out)))
+    (:wat/kernel/send out "hello, world")))
+
+(define (:my/app/main -> :())
+  (let ((handle (:wat/kernel/spawn :my/app/hello-main)))
+    (:wat/kernel/join handle)))
+```
+
+**A program with the canonical lifecycle — observer-style:**
+
+```scheme
+(define (:my/app/observer-loop
+          (input-rx :QueueReceiver<Candle>)
+          (output-tx :QueueSender<Result>)
+          (state :ObserverState)
+          -> :ObserverState)
+  (match (:wat/kernel/recv input-rx)
+    ((Some candle)
+     (let* ((result    (process candle state))
+            (new-state (update state candle)))
+       (:wat/kernel/send output-tx result)
+       (:my/app/observer-loop input-rx output-tx new-state)))
+    (:None
+     ;; input disconnected — drain anything else the program knows to drain,
+     ;; then come home with final state.
+     state)))
+
+(define (:my/app/startup -> :())
+  (let* (((candle-tx candle-rx) (:wat/kernel/make-bounded-queue :Candle 1))
+         ((result-tx result-rx) (:wat/kernel/make-bounded-queue :Result 1))
+         (observer-handle       (:wat/kernel/spawn :my/app/observer-loop
+                                                    candle-rx result-tx
+                                                    (initial-observer-state))))
+    ;; feed the graph...
+    (:wat/kernel/drop candle-tx)                ;; trigger shutdown cascade
+    (let ((final (:wat/kernel/join observer-handle)))
+      (save-state final))))
+```
+
+**The pattern is complete.** `make-*-queue` produces a sender/receiver pair. `spawn` takes a function value and its arguments and runs it on a new thread. `send` / `recv` / `try-recv` / `drop` are the operations. `join` collects the program's return value at shutdown. Six primitives — enough to express any wat-vm program graph.
+
+No `spawn-thread` separate from `spawn-program`; a program is just a function that runs on its own thread. Same Rust primitive underneath. The kernel doesn't distinguish "threaded program" from "function call" beyond the thread boundary — the function either runs inline (normal call) or on its own thread (`spawn`).
+
 ### Implications for prior sections
 
 - **"The Algebra Is Immutable"** — the startup pipeline (parse, macro-expand, resolve, type-check, hash, verify, register, freeze, main-loop) runs on the kernel: the binary IS the main thread, which spawns the program graph into existence after the freeze. `eval` lives in a program; it is not a kernel primitive.
-- **"Caching Is Memoization"** — caching is userland; the stdlib ships the generic cache program and `cached-encode` helpers; applications choose to use them, to build their own, or to forgo caching entirely. The kernel is unaware of caching semantics; it just delivers queue messages.
+- **"Caching Is Memoization"** — caching is userland; the stdlib ships `wat/std/LocalCache.wat`, `wat/std/program/Cache.wat`, and `wat/std/cached-encode.wat`; applications choose to use them, to build their own, or to forgo caching entirely. The kernel is unaware of caching semantics; it just delivers queue messages.
 - **Q7 (redef-mode syntax, deferred)** — now strictly a userland concern. The kernel does not know about names; the application's load-and-register programs handle redefinition policy however they choose.
 
 The kernel is small on purpose. The algebra does the heavy thinking; the kernel just passes messages.
@@ -903,9 +989,9 @@ The algebra doesn't care whether an application memoizes or not. Pure recomputat
 
 Because memoization is a common pattern — and applications want it in two different shapes — the stdlib ships three things:
 
-**1. A local cache — `wat/std/LocalCache.wat`.** An in-program cache. A program holds it as owned state — a local HashMap or LRU — and `get` / `put` are direct data access. No pipe, no thread, no queue round-trip. Fastest memoization possible. Used by a program that memoizes for itself: hot inner loops, per-thread working sets, anything that benefits from nanosecond access without cross-program coordination.
+**1. A local cache — `wat/std/LocalCache.wat`.** An in-program cache. A program holds it as owned state — a local HashMap or LRU — and `get` / `put` are direct data access. No pipe, no thread, no queue round-trip. Fastest memoization possible. Used by a program that memoizes for itself: hot inner loops, per-thread working sets, anything that benefits from nanosecond access without cross-program coordination. Because LocalCache is a data structure + functions (not a program in the spawn-and-lifecycle sense), it lives in `wat/std/` alongside macros and other stdlib functions.
 
-**2. A cache program — `wat/std/Cache.wat`.** An entire wat-vm program whose state is a cache. Other programs talk to it via queues (get/put messages). One writer (the cache program's thread); N readers (the programs sending get requests). Used when multiple programs need to share a memoized result — the program becomes the synchronization point, the queues are the protocol.
+**2. A cache program — `wat/std/program/Cache.wat`.** An entire wat-vm program whose state is a cache. Other programs talk to it via queues (get/put messages). One writer (the cache program's thread); N readers (the programs sending get requests). Used when multiple programs need to share a memoized result — the program becomes the synchronization point, the queues are the protocol. Because this is a spawnable program (lifecycle, owned state behind a queue boundary), it lives in `wat/std/program/` — the honest path for things that RUN, as distinguished from things that COMPILE into AST.
 
 Both are programmable. The caller supplies:
 
@@ -1469,31 +1555,48 @@ holon-lab-trading/src (Rust)
       Cache keys on HolonAST structural hash.
 
 wat/std/
-  └── Stdlib composition macros — ONE FILE PER FORM.
-      wat/std/Subtract.wat    ;; :wat/std/Subtract
-      wat/std/Amplify.wat     ;; :wat/std/Amplify
-      wat/std/Chain.wat       ;; :wat/std/Chain
-      wat/std/Ngram.wat       ;; :wat/std/Ngram
-      wat/std/Analogy.wat     ;; :wat/std/Analogy
-      wat/std/HashMap.wat     ;; :wat/std/HashMap
-      wat/std/Vec.wat         ;; :wat/std/Vec
-      wat/std/HashSet.wat     ;; :wat/std/HashSet
-      wat/std/Log.wat         ;; :wat/std/Log
-      wat/std/Circular.wat    ;; :wat/std/Circular
-      wat/std/Sequential.wat  ;; :wat/std/Sequential
-      wat/std/Flip.wat        ;; :wat/std/Flip
-      ... and so on, one file per stdlib form.
+  └── Stdlib forms that COMPILE into AST or are functions — macros,
+      functions, data-structure constructors, local data structures.
+      One file per form. Keyword path = file path.
 
-      Each file is a single `defmacro` (or `define` for non-macro helpers
-      like `get` / `atom-value`) whose keyword-path name matches the file
-      name. The Rust wat-vm binary compiles them in via per-file `load`
-      calls in its startup manifest. Users add their own stdlib the same
-      way under their own directories (wat/alice/math/clamp.wat, etc.).
+      wat/std/Subtract.wat        ;; :wat/std/Subtract       (macro)
+      wat/std/Amplify.wat         ;; :wat/std/Amplify        (macro)
+      wat/std/Chain.wat           ;; :wat/std/Chain          (macro)
+      wat/std/Ngram.wat           ;; :wat/std/Ngram          (macro)
+      wat/std/Analogy.wat         ;; :wat/std/Analogy        (macro)
+      wat/std/HashMap.wat         ;; :wat/std/HashMap        (macro)
+      wat/std/Vec.wat             ;; :wat/std/Vec            (macro)
+      wat/std/HashSet.wat         ;; :wat/std/HashSet        (macro)
+      wat/std/Log.wat             ;; :wat/std/Log            (macro)
+      wat/std/Circular.wat        ;; :wat/std/Circular       (macro)
+      wat/std/Sequential.wat      ;; :wat/std/Sequential     (macro)
+      wat/std/Flip.wat            ;; :wat/std/Flip           (macro)
+      wat/std/LocalCache.wat      ;; :wat/std/LocalCache     (data + functions)
+      wat/std/cached-encode.wat   ;; :wat/std/cached-encode  (function)
+      ... one file per form.
+
+wat/std/program/
+  └── Stdlib PROGRAMS — things that RUN as spawnable wat-vm programs
+      with their own lifecycle, owned state, and queue interfaces.
+      Distinct from wat/std/ because the artifact kind is different:
+      a program is spawned by the kernel; a macro is expanded by the
+      parser.
+
+      wat/std/program/Cache.wat       ;; :wat/std/program/Cache
+      ... (future: Database, MetricsLogger, etc. — as stdlib grows)
+
+      The two-directory split reflects the substrate distinction:
+      wat/std/         — compiles into AST or runs as a function call
+      wat/std/program/ — runs as an independent wat-vm program
 ```
 
-**Keyword path = file path.** `:wat/std/Subtract` lives at `wat/std/Subtract.wat`. No translation. No manifest of exports to maintain. Cryptographic identity is per-file: signing `wat/std/Subtract.wat` signs exactly that form's body. Growth is additive: new form = new file, no edits elsewhere. `ls wat/std/` IS the stdlib inventory.
+**Each stdlib file is a single `defmacro` / `define` / `program` declaration whose keyword-path name matches the file path.** The Rust wat-vm binary compiles them in via per-file `load` calls in its startup manifest. Users add their own stdlib the same way under their own directories (`wat/alice/math/clamp.wat`, `wat/alice/program/ClampServer.wat`, etc.).
 
-User code follows the same discipline: `:alice/math/clamp` lives at `wat/alice/math/clamp.wat` (under the project's wat root). The file path under `wat/` mirrors the keyword-path segments after the initial `:`. Cross-project distribution is a tarball of `wat/` directories with signatures per file.
+**Keyword path = file path.** `:wat/std/Subtract` lives at `wat/std/Subtract.wat`; `:wat/std/program/Cache` lives at `wat/std/program/Cache.wat`. No translation. No manifest of exports to maintain. Cryptographic identity is per-file: signing `wat/std/Subtract.wat` signs exactly that form's body. Growth is additive: new form = new file, no edits elsewhere. `ls wat/std/` and `ls wat/std/program/` ARE the stdlib inventories for their respective kinds.
+
+User code follows the same discipline: `:alice/math/clamp` lives at `wat/alice/math/clamp.wat` (under the project's wat root). If alice ships a program, it lives at `wat/alice/program/MyProgram.wat` under the keyword path `:alice/program/MyProgram`. The file path under `wat/` mirrors the keyword-path segments after the initial `:`. Cross-project distribution is a tarball of `wat/` directories with signatures per file.
+
+**The `program/` segment is an honest name, not a mechanism.** It tells the reader (and the naming system) that what's at that path RUNS rather than COMPILES-into-AST. No special parser treatment; the convention is purely directory organization reflecting the kind of artifact. Users are free to use or not use the convention in their own code — `:alice/Cache` would work too, just less self-documenting.
 
 ---
 
@@ -2469,7 +2572,9 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 | 2026-04-18 | **Stdlib optimization path dissolved — Q2 resolved.** Datamancer's framing: the AST IS the program; the caches are optimizing form hits to avoid recursive traversal; if we have a form's vec, we just use it. Q2 was asking the wrong question — it imagined "stdlib" as a distinct tier with its own performance envelope, but 058-031 macro expansion dissolves that distinction at parse time. After expansion, a stdlib form's AST and a user-written AST with the same shape are literally the same thing: same hash, same cache entry, same encoding cost. "Optimizing hot stdlib" is not a separate discipline from "optimizing any other hot composed AST" — both are served by L1/L2 cache hits on recurring subtrees (Proposal 057). No Rust-side helper tier. No dual implementation. One source (the wat macro), one walker (the encoder), one cache (L1/L2). If an expression is big, it's big — the program IS the AST. Q2 closed as a false problem. | 058 |
 | 2026-04-18 | **Q6 resolved — ship what we know we need, extend when we need more.** Datamancer's call: "we know what tools we want to provide now, not the ones we will want to provide later. If a new thing arrives we can update the language." Q6 asked whether MAP + Thermometer + Blend is the COMPLETE set of scalar primitives — an unanswerable question without knowing every future application. Reframed to a narrower, true claim: these nine forms are what 058 sub-proposals successfully defended against FOUNDATION's criterion; they cover every operation 058 identified. Completeness-in-the-abstract is not the bar. If a future application reveals a primitive that cannot be expressed with existing forms, a new proposal argues it against the criterion (distinct algebraic operation; domain-agnostic; encoder must treat it distinctly) and adds it. The proposal process IS the extension mechanism. Same spirit as stdlib-as-blueprint: ship only what demonstrates a distinct pattern you need today. Q6 closed as answering the wrong question — "is this every form we know we need?" is yes; "is this complete for all time?" is unanswerable and unnecessary. | 058 |
 | 2026-04-18 | **The wat-vm Substrate — Kernel Primitives.** New load-bearing section between "The Algebra Is Immutable" and "Dimensionality" — declares what the wat-vm kernel provides, what it deliberately does not, and the lifecycle pattern every wat program follows. Datamancer's framing: "the wat-vm needs to host wat-programs... we need a program to run hello-world successfully... we provide pipes that user programs can interface with... we have the pressure-based drain loop. wat programs follow the wat-vm we've built in the trading lab... start → streams of inputs → consumers → join → end." Kernel primitives: (1) **Queue** — the one program-to-program primitive, bounded(n) or unbounded; fan-out and fan-in are userland programs. (2) **Console** — a built-in program that writes queue messages to stdout/stderr (and reads stdin); hello-world must work, so this is kernel. (3) **Scheduler** — the pressure-based drain loop; no mutex, no locks; backpressure propagates through the program graph naturally. (4) **Program lifecycle** — own-state, pop-handles, run-loop, drain-on-disconnect, join-to-return-state. What is NOT kernel: topic, mailbox (were thin proxies over queues, collapse to programs), cache, database, metrics, logger, arbitrary OS fds (all userland programs). Rust-to-wat-vm mapping stated: `write(1, data)` ↔ `console.send(bytes)`, `pipe(fds)` ↔ `queue`, `fork + exec` ↔ spawn a program, SIGTERM cascade ↔ drop-is-disconnect. Reduction from three communication primitives (queue/topic/mailbox) to one (queue) + console-as-kernel-program is the collapse the book's Chapter 8 documented, now load-bearing in FOUNDATION. Implications: prior sections updated — the startup pipeline runs on the kernel; `eval` lives in a program; L1/L2 cache hierarchy is a userland cache program; Q7 (redef-mode syntax, deferred) is now strictly a userland concern because the kernel does not know about names. | 058 |
-| 2026-04-18 | **Caching demoted from architecture to stdlib tooling.** Datamancer's call: "even the caching... that's user dependent... their programs may not want an L2 cache... we should provide the necessary tooling to do caching trivially... our current cache program IS programmable." Section `## The Cache Is Working Memory` renamed to `## Caching Is Memoization — And It Is Userland` and rewritten: the load-bearing claim shrinks to "`encode(ast)` is deterministic, so memoization is sound; the stdlib ships tooling." Two stdlib pieces initially named, then refined to three after a follow-up: "we also need a stdlib for in program caching, not just remote caching over a pipe." The final three: (1) `wat/std/LocalCache.wat` — in-program cache, owned state, direct data access, no pipe/queue overhead; for hot inner loops and per-thread working sets (trading lab's L1). (2) `wat/std/Cache.wat` — a cache program, state behind a queue, shared across programs via get/put messages (trading lab's L2). (3) `wat/std/cached-encode.wat` — AST caching functions that work with either cache-handle flavor; pre-packaged memoize-encode pattern. Five application choices: local-only, remote-only, tiered (trading lab), specialized (custom types via LocalCache/Cache), or no cache. The L1/L2 tiering and deployment knobs that were previously stated as FOUNDATION architecture moved to VISION's "The Cache as Cognitive Substrate — One Application's Story" — those are the trading lab's choices for its specific cognitive pace, not universal contracts. FOUNDATION's deployment knobs tighten to `d` and `capacity-mode` (which ARE universal); L1/L2 sizing is application-level. Q7 substrate-section cross-reference updated; "Implications for prior sections" updated. | 058 |
+| 2026-04-18 | **Caching demoted from architecture to stdlib tooling.** Datamancer's call: "even the caching... that's user dependent... their programs may not want an L2 cache... we should provide the necessary tooling to do caching trivially... our current cache program IS programmable." Section `## The Cache Is Working Memory` renamed to `## Caching Is Memoization — And It Is Userland` and rewritten: the load-bearing claim shrinks to "`encode(ast)` is deterministic, so memoization is sound; the stdlib ships tooling." Two stdlib pieces initially named, then refined to three after a follow-up: "we also need a stdlib for in program caching, not just remote caching over a pipe." The final three: (1) `wat/std/LocalCache.wat` — in-program cache, owned state, direct data access, no pipe/queue overhead; for hot inner loops and per-thread working sets (trading lab's L1). (2) `wat/std/program/Cache.wat` — a cache program, state behind a queue, shared across programs via get/put messages (trading lab's L2). (3) `wat/std/cached-encode.wat` — AST caching functions that work with either cache-handle flavor; pre-packaged memoize-encode pattern. Five application choices: local-only, remote-only, tiered (trading lab), specialized (custom types via LocalCache/Cache), or no cache. The L1/L2 tiering and deployment knobs that were previously stated as FOUNDATION architecture moved to VISION's "The Cache as Cognitive Substrate — One Application's Story" — those are the trading lab's choices for its specific cognitive pace, not universal contracts. FOUNDATION's deployment knobs tighten to `d` and `capacity-mode` (which ARE universal); L1/L2 sizing is application-level. Q7 substrate-section cross-reference updated; "Implications for prior sections" updated. | 058 |
+| 2026-04-18 | **Stdlib directory split — `wat/std/` for macros/functions/data-structures, `wat/std/program/` for programs.** Datamancer caught the dishonesty: "`wat/std/Cache.wat` — dishonest name ... `wat/std/program/Cache.wat`." The bare `wat/std/` path suggests a macro or simple function, but the cache program is a spawnable wat-vm program with lifecycle, owned state behind a queue boundary. Moving programs under `wat/std/program/` reflects the substrate distinction: things that COMPILE into AST or run as function calls live in `wat/std/`; things that RUN as independent wat-vm programs live in `wat/std/program/`. The convention is purely directory organization, not a parser mechanism — keyword path still equals file path (`:wat/std/program/Cache` ↔ `wat/std/program/Cache.wat`). Users get the same convention for their own code: `wat/alice/math/clamp.wat` for a function, `wat/alice/program/ClampServer.wat` for a program. The `program/` segment is an honest name — it tells the reader what kind of artifact is at that path. "Where Each Lives" updated; Caching section references updated. Same discipline as the Linux `bin/` vs `lib/` split: path segment = artifact kind. | 058 |
+| 2026-04-18 | **Kernel primitives expressed in wat syntax.** Datamancer's question: "how do we express the creation of pipes/queues?... same questions for threaded programs." New subsection `### Kernel primitives in wat syntax` inside `## The wat-vm Substrate`. Six lowercase kernel functions under the `:wat/kernel/...` prefix: `make-bounded-queue`, `make-unbounded-queue`, `send`, `recv`, `try-recv`, `drop`, `spawn`, `join`, plus console handles `console-out`, `console-err`, `console-in`. All lowercase because they EXECUTE at wat runtime (per the two-tier distinction — UpperCase builds ASTs, lowercase runs Rust). Keyword-path discipline applied: kernel primitives are not host-Lisp inherited; they are wat-vm specific, so they carry keyword paths. No separate `spawn-thread` vs `spawn-program` — a program is just a function that runs on its own thread via `spawn`; same Rust primitive underneath. Hello-world and observer-style lifecycle examples included to show the full pattern (make-queue → spawn → send/recv loop → drop-on-shutdown → join for state). Six primitives enough to express any wat-vm program graph. | 058 |
 
 ---
 
