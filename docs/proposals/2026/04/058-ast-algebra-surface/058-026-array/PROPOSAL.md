@@ -12,7 +12,7 @@
 A wat stdlib macro (per 058-031-defmacro) that constructs an encoded indexed list from a list of thoughts:
 
 ```scheme
-(defmacro Array (ts)
+(defmacro Array [ts : AST] -> :AST
   `(Sequential ,ts))
 ```
 
@@ -158,7 +158,7 @@ Yes — directly via Sequential. Named form earns its place via data-structure r
 
 ```scheme
 ;; the Array macro — parse-time alias for Sequential
-(defmacro Array (ts)
+(defmacro Array [ts : AST] -> :AST
   `(Sequential ,ts))
 
 ;; accessor helpers — regular stdlib functions, not macros

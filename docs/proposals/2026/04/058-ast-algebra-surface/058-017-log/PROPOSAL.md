@@ -24,7 +24,7 @@ With Blend as a pivotal core form (058-002), `Log` becomes a stdlib macro (per 0
 ### Stdlib definition
 
 ```scheme
-(defmacro Log (low-atom high-atom value scale)
+(defmacro Log [low-atom : AST] [high-atom : AST] [value : AST] [scale : AST] -> :AST
   `(let* ((min (first ,scale))
           (max (second ,scale))
           (t (/ (- (log ,value) (log min))
@@ -130,7 +130,7 @@ Delete the Log encoder match arm (~15-20 lines). Macro expansion is handled by 0
 **wat stdlib addition** — `wat/std/scalars.wat`:
 
 ```scheme
-(defmacro Log (low high value scale)
+(defmacro Log [low : AST] [high : AST] [value : AST] [scale : AST] -> :AST
   `(let* ((min (first ,scale))
           (max (second ,scale))
           (t (/ (- (log ,value) (log min))

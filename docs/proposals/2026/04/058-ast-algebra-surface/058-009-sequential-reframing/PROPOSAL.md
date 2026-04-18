@@ -16,7 +16,7 @@ This proposal argues that the grandfathering should end. `Sequential` should be 
 `Sequential(list-of-thoughts)` is position-encoded bundling: each thought `t_i` at position `i` is permuted by `i` steps, and the permuted thoughts are bundled.
 
 ```scheme
-(defmacro Sequential (thoughts)
+(defmacro Sequential [thoughts : AST] -> :AST
   `(Bundle
      (map-with-index
        (lambda (t i) (Permute t i))
@@ -60,10 +60,10 @@ As a stdlib macro, Sequential is visible in the wat source, inspectable, extensi
 
 ```scheme
 ;; user can define related macros:
-(defmacro ReverseSequential (thoughts)
+(defmacro ReverseSequential [thoughts : AST] -> :AST
   `(Sequential (reverse ,thoughts)))
 
-(defmacro SequentialFromN (start thoughts)
+(defmacro SequentialFromN [start : AST] [thoughts : AST] -> :AST
   `(Bundle (map-with-index (lambda (t i) (Permute t (+ i ,start))) ,thoughts)))
 ```
 
@@ -148,7 +148,7 @@ Delete the Sequential encoder match arm (~15-20 lines including tests).
 
 ```scheme
 ;; wat/std/sequences.wat (or equivalent)
-(defmacro Sequential (thoughts)
+(defmacro Sequential [thoughts : AST] -> :AST
   `(Bundle
      (map-with-index (lambda (t i) (Permute t i)) ,thoughts)))
 ```

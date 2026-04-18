@@ -12,7 +12,7 @@
 A wat stdlib macro (per 058-031-defmacro) that scales the contribution of `y` in a blend with `x`:
 
 ```scheme
-(defmacro Amplify (x y s)
+(defmacro Amplify [x : AST] [y : AST] [s : AST] -> :AST
   `(Blend ,x ,y 1 ,s))
 ;; Expands at parse time to: (Blend x y 1 s)
 ;; which computes: threshold(1·x + s·y) — boost component y in x by factor s
@@ -78,7 +78,7 @@ Different idioms, same underlying primitive.
 **1. Trivial expansion.**
 
 ```scheme
-(defmacro Amplify (x y s)
+(defmacro Amplify [x : AST] [y : AST] [s : AST] -> :AST
   `(Blend ,x ,y 1 ,s))
 ```
 
@@ -161,7 +161,7 @@ Yes — `(Blend x y 1 s)`. Named form earns its place via reader clarity.
 **wat stdlib addition** — `wat/std/blends.wat`:
 
 ```scheme
-(defmacro Amplify (x y s)
+(defmacro Amplify [x : AST] [y : AST] [s : AST] -> :AST
   `(Blend ,x ,y 1 ,s))
 ```
 

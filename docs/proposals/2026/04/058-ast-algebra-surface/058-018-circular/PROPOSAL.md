@@ -24,7 +24,7 @@ With Blend as a pivotal core form (058-002) — and specifically Option B (two I
 ### Stdlib definition
 
 ```scheme
-(defmacro Circular (low-atom high-atom value scale)
+(defmacro Circular [low-atom : AST] [high-atom : AST] [value : AST] [scale : AST] -> :AST
   `(let* ((period (first ,scale))
           (angle (* 2 pi (/ ,value period)))
           (w-low (cos angle))                                  ; circular weighting
@@ -131,7 +131,7 @@ Delete the Circular encoder match arm (~15-20 lines). Macro expansion is handled
 **wat stdlib addition** — `wat/std/scalars.wat`:
 
 ```scheme
-(defmacro Circular (low high value scale)
+(defmacro Circular [low : AST] [high : AST] [value : AST] [scale : AST] -> :AST
   `(let* ((period (first ,scale))
           (angle (* 2 pi (/ ,value period))))
      (Blend (Thermometer ,low dim) (Thermometer ,high dim) (cos angle) (sin angle))))

@@ -11,7 +11,7 @@
 A wat stdlib macro (per 058-031-defmacro) that encodes `n`-wise adjacency windows over a list of thoughts:
 
 ```scheme
-(defmacro Ngram (n thoughts)
+(defmacro Ngram [n : AST] [thoughts : AST] -> :AST
   `(Bundle (n-wise-map encode-window ,n ,thoughts)))
 ```
 
@@ -31,7 +31,7 @@ Where `n-wise-map` is a regular stdlib function (not a macro) that slides a wind
   ...)
 
 ;; the macro itself — expands at parse time
-(defmacro Ngram (n thoughts)
+(defmacro Ngram [n : AST] [thoughts : AST] -> :AST
   `(Bundle (n-wise-map encode-window ,n ,thoughts)))
 ```
 
@@ -115,14 +115,14 @@ The proposal encodes each window as a Sequential-like position-permuted bundle, 
 **Mitigation:** simplify the definition:
 
 ```scheme
-(defmacro Ngram (n thoughts)
+(defmacro Ngram [n : AST] [thoughts : AST] -> :AST
   `(Bundle (n-wise-map (lambda (window) (Sequential window)) ,n ,thoughts)))
 ```
 
 Or, even more concise (once Sequential is a parse-time macro per 058-009):
 
 ```scheme
-(defmacro Ngram (n thoughts)
+(defmacro Ngram [n : AST] [thoughts : AST] -> :AST
   `(Bundle (map Sequential (n-wise-split ,n ,thoughts))))
 ```
 
@@ -181,7 +181,7 @@ Yes, once the sliding-window combinator is available. Pure composition.
             (n-wise-split n (rest xs)))))
 
 ;; the macro itself — registered at parse time
-(defmacro Ngram (n thoughts)
+(defmacro Ngram [n : AST] [thoughts : AST] -> :AST
   `(Bundle (map Sequential (n-wise-split ,n ,thoughts))))
 ```
 

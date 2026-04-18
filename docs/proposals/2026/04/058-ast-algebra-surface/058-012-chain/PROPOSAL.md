@@ -11,7 +11,7 @@
 A wat stdlib macro (per 058-031-defmacro) that encodes a LIST of events as pairwise transitions:
 
 ```scheme
-(defmacro Chain (thoughts)
+(defmacro Chain [thoughts : AST] -> :AST
   `(Bundle (pairwise-map Then ,thoughts)))
 ```
 
@@ -88,7 +88,7 @@ Chain and Sequential are both "encode a list of things in some order-aware way."
 If Then (058-011) is rejected, Chain must re-express directly:
 
 ```scheme
-(defmacro Chain (thoughts)
+(defmacro Chain [thoughts : AST] -> :AST
   `(Bundle
      (pairwise-map
        (lambda (a b) (Bundle (list a (Permute b 1))))
@@ -169,7 +169,7 @@ Yes — `(Bundle (pairwise-map Then xs))`, or if Then is rejected, the expanded 
 
 ```scheme
 ;; wat/std/sequences.wat (or similar)
-(defmacro Chain (thoughts)
+(defmacro Chain [thoughts : AST] -> :AST
   `(Bundle (pairwise-map Then ,thoughts)))
 ```
 
@@ -182,7 +182,7 @@ Yes — `(Bundle (pairwise-map Then xs))`, or if Then is rejected, the expanded 
       (cons (f (first xs) (second xs))
             (pairwise-map f (rest xs)))))
 
-(defmacro Chain (thoughts)
+(defmacro Chain [thoughts : AST] -> :AST
   `(Bundle (pairwise-map Then ,thoughts)))
 ```
 

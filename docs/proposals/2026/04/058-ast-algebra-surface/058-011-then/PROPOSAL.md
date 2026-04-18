@@ -10,7 +10,7 @@
 A wat stdlib macro (per 058-031-defmacro) that encodes "a, then b" — a DIRECTED binary sequence:
 
 ```scheme
-(defmacro Then (a b)
+(defmacro Then [a : AST] [b : AST] -> :AST
   `(Bundle (list ,a (Permute ,b 1))))
 ```
 
@@ -46,7 +46,7 @@ Chain is "a, then b, then c, then d" — a walk of Then operations over a list. 
 Having a named Then lets Chain and Ngram write:
 
 ```scheme
-(defmacro Chain (thoughts)
+(defmacro Chain [thoughts : AST] -> :AST
   `(Bundle (pairwise-map Then ,thoughts)))
 ```
 
@@ -136,7 +136,7 @@ Yes — `(Bundle (list a (Permute b 1)))`. Named form is for reader clarity.
 
 ```scheme
 ;; wat/std/sequences.wat (or similar)
-(defmacro Then (a b)
+(defmacro Then [a : AST] [b : AST] -> :AST
   `(Bundle (list ,a (Permute ,b 1))))
 ```
 

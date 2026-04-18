@@ -12,7 +12,7 @@
 A wat stdlib macro (per 058-031-defmacro) that constructs an encoded unordered collection from a list of thoughts:
 
 ```scheme
-(defmacro Set (xs)
+(defmacro Set [xs : AST] -> :AST
   `(Bundle ,xs))
 ```
 
@@ -171,7 +171,7 @@ Yes — `(Bundle xs)`. Named form earns its place via data-structure reader inte
 **wat stdlib addition** — `wat/std/structures.wat`:
 
 ```scheme
-(defmacro Set (xs)
+(defmacro Set [xs : AST] -> :AST
   `(Bundle ,xs))
 ```
 

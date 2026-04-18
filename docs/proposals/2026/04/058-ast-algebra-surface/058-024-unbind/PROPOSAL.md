@@ -11,7 +11,7 @@
 A wat stdlib macro (per 058-031-defmacro) that represents the INVERSE of a Bind operation — the decode direction of role-filler binding:
 
 ```scheme
-(defmacro Unbind (c k)
+(defmacro Unbind [c : AST] [k : AST] -> :AST
   `(Bind ,c ,k))
 ```
 
@@ -157,7 +157,7 @@ Yes — `(Bind c k)`. Named macro earns its place via reader clarity; the source
 **wat stdlib addition** — `wat/std/decode.wat` or `wat/std/bind.wat`:
 
 ```scheme
-(defmacro Unbind (c k)
+(defmacro Unbind [c : AST] [k : AST] -> :AST
   `(Bind ,c ,k))
 ```
 

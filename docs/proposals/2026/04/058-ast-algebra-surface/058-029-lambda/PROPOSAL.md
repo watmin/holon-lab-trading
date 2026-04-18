@@ -46,8 +46,8 @@ Three positions:
 
 `define` = `lambda` + startup-time symbol-table registration. Specifically:
 
-- `(define (:my/ns/double [x : Scalar]) : Scalar (* x 2))` at STARTUP registers a function under `:my/ns/double` in the static symbol table.
-- `(lambda ([x : Scalar]) : Scalar (* x 2))` at RUNTIME produces a `:Function` value that can be stored, passed, or invoked — but is NOT added to any table.
+- `(define (:my/ns/double [x : f64] -> :f64) (* x 2))` at STARTUP registers a function under `:my/ns/double` in the static symbol table.
+- `(lambda ([x : f64] -> :f64) (* x 2))` at RUNTIME produces a `:Function` value that can be stored, passed, or invoked — but is NOT added to any table.
 
 This distinction is load-bearing in Model A: `define`s are fixed after startup; lambdas are created and discarded freely at runtime. The static-loading guarantee is not violated because lambdas never enter the symbol table.
 
@@ -73,11 +73,11 @@ Identical structure to `Define` but without the `name` field and without the sym
 Stdlib forms like `map`, `reduce`, `filter` take functions as arguments:
 
 ```scheme
-(define (:wat/std/map [f : (:Function :T :U)] [xs : (:List :T)]) : (:List :U)
+(define (:wat/std/map [f : (:Function :T -> :U)] [xs : (:List :T)] -> (:List :U))
   ...)
 
 ;; Call site with an inline lambda:
-(map (lambda ([t : Thought]) : Thought (Permute t 1))
+(map (lambda ([t : Thought] -> :Thought) (Permute t 1))
      [a b c d])
 ```
 
@@ -89,11 +89,11 @@ The wat type system includes `:Function` as a type (per 058-030-types). Lambda i
 
 ```scheme
 ;; Awkward — you must add a named helper to stdlib:
-(define (:internal/my-shift [t : Thought]) : Thought (Permute t 1))
+(define (:internal/my-shift [t : Thought] -> :Thought) (Permute t 1))
 (map :internal/my-shift [a b c])
 
 ;; Clean — pass the function directly:
-(map (lambda ([t : Thought]) : Thought (Permute t 1)) [a b c])
+(map (lambda ([t : Thought] -> :Thought) (Permute t 1)) [a b c])
 ```
 
 The second form is load-bearing for any language that treats functions as values.
@@ -103,8 +103,8 @@ The second form is load-bearing for any language that treats functions as values
 Lambdas capture their enclosing lexical scope, including references to the static symbol table:
 
 ```scheme
-(define (:wat/std/amplify-all [xs : (:List :Thought)] [reference : Thought] [factor : Scalar]) : (:List :Thought)
-  (map (lambda ([x : Thought]) : Thought
+(define (:wat/std/amplify-all [xs : (:List :Thought)] [reference : Thought] [factor : f64] -> (:List :Thought))
+  (map (lambda ([x : Thought] -> :Thought)
          (Amplify x reference factor))    ; references `reference` and `factor` from enclosing scope
        xs))
 ```
@@ -129,8 +129,8 @@ A lambda is an AST node like any other. Its EDN is hashable and part of the encl
 ;; Old (per LANGUAGE.md — types optional):
 (lambda (x) (* x 2))
 
-;; New (types required):
-(lambda ([x : Scalar]) : Scalar (* x 2))
+;; New (types required, return inside signature):
+(lambda ([x : f64] -> :f64) (* x 2))
 ```
 
 Stdlib authors writing `(define ...)` forms use typed lambdas for their higher-order arguments. The syntax pairs cleanly.
@@ -154,9 +154,9 @@ Having both as separate primitives lets the evaluator handle them independently.
 Inside a larger function, lambdas let you factor out small transformations without polluting the global symbol table:
 
 ```scheme
-(define (:my/complex-analysis [data : Thought]) : Thought
-  (let ([extract-signal (lambda ([d : Thought]) : Thought (Orthogonalize d noise))]
-        [amplify-signal (lambda ([s : Thought]) : Thought (Amplify s reference 2))])
+(define (:my/complex-analysis [data : Thought] -> :Thought)
+  (let ([extract-signal (lambda ([d : Thought] -> :Thought) (Orthogonalize d noise))]
+        [amplify-signal (lambda ([s : Thought] -> :Thought) (Amplify s reference 2))])
     (amplify-signal (extract-signal data))))
 ```
 
@@ -182,7 +182,7 @@ Capturing lexical scope is non-trivial. The evaluator must:
 **3. Type annotations on small lambdas feel verbose.**
 
 ```scheme
-(map (lambda ([t : Thought]) : Thought (Permute t 1)) xs)
+(map (lambda ([t : Thought] -> :Thought) (Permute t 1)) xs)
 ```
 
 vs. Clojure's:
@@ -250,9 +250,9 @@ Estimated ~150-250 lines of Rust. Closure implementation is the main new work (~
 
 1. **Closure capture semantics.** Value-capture (snapshot at creation) or reference-capture (see later mutations)? Recommendation: value-capture, consistent with FOUNDATION's "Algebra Is Immutable" section — nothing to mutate; snapshot suffices.
 
-2. **Recursion in lambdas.** A lambda can't reference itself by name (no name). How to do recursion? Options: (a) force use of `define` for recursive functions, (b) support `Y` combinator pattern, (c) add a name-binding form like Clojure's `fn` with optional self-name: `(lambda self ([params]) : ReturnType body)` where `self` refers to the lambda itself. Recommendation: (a) — use `define` for recursion. Keeps lambda purely value-level without introducing self-reference complication.
+2. **Recursion in lambdas.** A lambda can't reference itself by name (no name). How to do recursion? Options: (a) force use of `define` for recursive functions, (b) support `Y` combinator pattern, (c) add a name-binding form like Clojure's `fn` with optional self-name: `(lambda self ([params] -> :ReturnType) body)` where `self` refers to the lambda itself. Recommendation: (a) — use `define` for recursion. Keeps lambda purely value-level without introducing self-reference complication.
 
-3. **Higher-order parameter types.** `:Function` as a type works but is generic. For stricter typing: `(:Function [:Thought :Thought] :Thought)` (a function from `[:Thought :Thought]` to `:Thought`). Handled in 058-030-types.
+3. **Higher-order parameter types.** `:Function` as a type works but is generic. For stricter typing: `(:Function :Thought :Thought -> :Thought)` (a function from two Thoughts to a Thought). Handled in 058-030-types.
 
 4. **Brevity sugars.** Clojure's `#(...)` anonymous function shortcut. Python's `lambda x: expr`. Rust's `|x| expr`. Should wat have a shortcut? Recommendation: skip for now — the explicit form with types is the load-bearing primitive. Sugars can come later, expanding to full lambdas with inferred types.
 

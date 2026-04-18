@@ -11,7 +11,7 @@
 A wat stdlib macro (per 058-031-defmacro) that produces the classic VSA analogy completion:
 
 ```scheme
-(defmacro Analogy (a b c)
+(defmacro Analogy [a : AST] [b : AST] [c : AST] -> :AST
   `(Bundle (list ,c (Subtract ,b ,a))))
 ```
 
@@ -68,7 +68,7 @@ If the algebra exposes `Bind`, `Bundle`, `Permute`, `Cleanup`, `Subtract`, `Anal
 **1. It's one line of code.**
 
 ```scheme
-(defmacro Analogy (a b c)
+(defmacro Analogy [a : AST] [b : AST] [c : AST] -> :AST
   `(Bundle (list ,c (Subtract ,b ,a))))
 ```
 
@@ -154,7 +154,7 @@ Yes — `(Bundle (list c (Subtract b a)))`, or directly `(Bundle (list c (Blend 
 
 ```scheme
 ;; wat/std/reasoning.wat (or similar)
-(defmacro Analogy (a b c)
+(defmacro Analogy [a : AST] [b : AST] [c : AST] -> :AST
   `(Bundle (list ,c (Subtract ,b ,a))))
 ```
 
@@ -169,7 +169,7 @@ Depends on `Bundle` (core), `Subtract` (stdlib macro, 058-019). Registered at pa
 3. **Should the stdlib also provide the four-term `AnalogyCleanup`?** A convenience form that runs cleanup against a candidate pool:
 
 ```scheme
-(defmacro AnalogyCleanup (a b c candidates)
+(defmacro AnalogyCleanup [a : AST] [b : AST] [c : AST] [candidates : AST] -> :AST
   `(cleanup (Analogy ,a ,b ,c) ,candidates))
 ```
 

@@ -26,7 +26,7 @@ Parallel proposals 058-017-log and 058-018-circular apply the same reframing to 
 ### Stdlib definition
 
 ```scheme
-(defmacro Linear (low-atom high-atom value scale)
+(defmacro Linear [low-atom : AST] [high-atom : AST] [value : AST] [scale : AST] -> :AST
   `(let* ((min (first ,scale))
           (max (second ,scale))
           (t (/ (- ,value min) (- max min)))                    ; normalize to [0,1]
@@ -135,7 +135,7 @@ Delete the Linear encoder match arm (~15-20 lines including tests). Macro expans
 **wat stdlib addition** — `wat/std/scalars.wat`:
 
 ```scheme
-(defmacro Linear (low high value scale)
+(defmacro Linear [low : AST] [high : AST] [value : AST] [scale : AST] -> :AST
   `(let* ((min (first ,scale))
           (max (second ,scale))
           (t (/ (- ,value min) (- max min))))

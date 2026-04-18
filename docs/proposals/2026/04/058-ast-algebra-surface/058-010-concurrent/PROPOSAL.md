@@ -10,7 +10,7 @@
 A wat stdlib macro (per 058-031-defmacro) that expresses "these thoughts happen simultaneously, at the same moment, with no ordering among them":
 
 ```scheme
-(defmacro Concurrent (xs)
+(defmacro Concurrent [xs : AST] -> :AST
   `(Bundle ,xs))
 ```
 
@@ -56,7 +56,7 @@ Holon's Python and Rust libraries expose Concurrent as a named operation alongsi
 **4. The expansion is trivial — the name is the cost.**
 
 ```scheme
-(defmacro Concurrent (xs)
+(defmacro Concurrent [xs : AST] -> :AST
   `(Bundle ,xs))
 ```
 
@@ -127,7 +127,7 @@ Yes — `(Bundle xs)`. The stdlib form asserts reader intent.
 
 ```scheme
 ;; wat/std/sequences.wat (or similar)
-(defmacro Concurrent (xs)
+(defmacro Concurrent [xs : AST] -> :AST
   `(Bundle ,xs))
 ```
 

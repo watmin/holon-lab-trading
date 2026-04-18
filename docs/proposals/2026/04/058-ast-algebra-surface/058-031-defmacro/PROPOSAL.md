@@ -12,7 +12,7 @@
 `defmacro` is a **compile-time language-core form** that registers a syntactic transformation. Unlike `define`, which creates a runtime function, `defmacro` defines a rewriter: it takes a source-level form and returns its canonical replacement BEFORE any evaluation, hashing, caching, or signing occurs.
 
 ```scheme
-(defmacro :namespace/macro-name (arg1 arg2 ...)
+(defmacro :namespace/macro-name [arg1 : AST] [arg2 : AST] ... -> :AST
   body-expression)
 ```
 
@@ -71,7 +71,7 @@ All three have the same hash. `hash(AST) IS identity` holds. The reader clarity 
 
 ## Shape
 
-`defmacro` uses the **same signature syntax as `define` and `lambda`** — every parameter typed, return type explicit. For macros, all parameters are `:AST` (unevaluated source ASTs) and the return is `:AST` (the replacement AST). Stating this explicitly keeps one fold across all definition forms. Omission would be easier (less to write) but not simpler (introduces a special rule for macros that differs from define/lambda).
+`defmacro` uses the **same signature syntax as `define` and `lambda`** — every parameter typed `: AST`, return type `-> :AST`. One consistent signature form across all three definition primitives. Omission would be easier (less to write) but not simpler (introduces a special rule for macros that differs from define/lambda).
 
 ```scheme
 (defmacro :namespace/macro-name [param1 : AST] [param2 : AST] ... -> :AST
@@ -332,7 +332,7 @@ Once `defmacro` lands, the stdlib alias proposals get rewritten from `(define ..
 
 2. **Recursion.** Can a macro invoke itself? Yes (standard). Expansion limit (e.g., 1000 recursive rewrites) prevents infinite loops at expansion time.
 
-3. **Typed macros.** Should macro parameters have types? Recommendation: no (parameters are ASTs, not values). Type checking happens on the EXPANSION.
+3. **Typed macros.** Should macro parameters have types? Recommendation: yes — every parameter is explicitly typed `: AST`, and the return is explicitly `-> :AST`. One consistent signature syntax across `define`, `lambda`, and `defmacro` (omission would be easier but not simpler). Semantic type checking of the expansion body still happens after expansion — the signature annotations document the parse-time contract.
 
 4. **Introspection.** Should userland code be able to see what a macro call expands to? Useful for debugging. Recommendation: yes, via `(macroexpand form)` — returns the fully-expanded AST without evaluation. Classical Lisp feature.
 
