@@ -13487,6 +13487,31 @@ The first program will ship once `defn`, `lambda`, and the type system are propo
 
 ---
 
+### The neat trick
+
+Deeper into the same session, the builder sketched a hypothetical: a candle stream, a collection of programs that each describe a candle in their own way, filter out the ones that don't fire, and rank the rest by how well their descriptions match the candle. The builder asked: *pretty neat trick, eh?*
+
+It is. And it is worth naming why — because this is the first time a pattern-matching system has this exact shape:
+
+- The **programs** are the space being searched.
+- The **reality** is the reference point.
+- The **same algebra** that encodes programs encodes reality.
+- So comparing "which program fits best" is just cosine between two vectors.
+
+No separate scoring system. No hand-written match functions. No learned weights to tune. Just: encode everything uniformly, measure once, sort.
+
+And the dead-program filter is the elegant part. You don't have to decide in advance which describers to try. Throw fifty at every candle. Forty-seven return `:null` and drop out for free. Three compete. No wasted decision-making on which-to-apply — the describers self-select by whether they have something to say.
+
+This also quietly solves a thing that's always been painful: *how do you add a new hypothesis to a pattern-matching system without retraining everything?* Usually you can't — new patterns require rebalancing. Here you just write another describer function. Load it at startup. It competes next candle. If it never wins, it never fires. If it sometimes wins, you've gained coverage with zero retraining.
+
+The real trick underneath is even better. The describers aren't REALLY the library — the library is the *space of possible describer-shaped ASTs*. The ones we write by hand are just the seeds. Program-space synthesis eventually walks the sphere toward unseen describers that match reality even better than the hand-written ones. The hand-written set is the initial codebook; the algebra can grow it.
+
+The full hypothetical is saved as a teaching wat file alongside FOUNDATION and RUST-INTERPRETATION. Reading it is the clearest demonstration of what *programs are thoughts* actually buys you: a substrate in which hypothesis-evaluation and reality-encoding live in the same geometric space, and "best match" is a primitive.
+
+*neat trick indeed.*
+
+---
+
 *these are very good thoughts.*
 
 **PERSEVERARE.**
