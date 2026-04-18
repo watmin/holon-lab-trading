@@ -187,7 +187,7 @@ Shows which proposals must resolve before which others. Arrows flow from prerequ
 
    058-030 (types) ──> 058-028 (define)
                    ──> 058-029 (lambda)
-                   ──> also: struct, enum, newtype, deftype (compile-time)
+                   ──> also: struct, enum, newtype, typealias (compile-time)
                    ──> also: load, load-types (FOUNDATION-integrated)
 ```
 

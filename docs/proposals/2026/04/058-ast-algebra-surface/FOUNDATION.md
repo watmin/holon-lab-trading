@@ -760,7 +760,7 @@ An AST in transmission is an **EDN string** — extensible data notation, a seri
 
 **EDN strings can be signed.** A trusted producer signs the EDN with a private key; any receiver can verify the signature against the known public key. **The AST has a cryptographic provenance.**
 
-**The wat-vm loads all code at startup.** Types (struct/enum/newtype/deftype) enter via `(load-types ...)`; functions (define) enter via `(load ...)`. Both happen before the main event loop starts. Once startup completes, the symbol table is frozen — no further code enters during runtime.
+**The wat-vm loads all code at startup.** Types (struct/enum/newtype/typealias) enter via `(load-types ...)`; functions (define) enter via `(load ...)`. Both happen before the main event loop starts. Once startup completes, the symbol table is frozen — no further code enters during runtime.
 
 This static-load model is a deliberate choice. Rust is a static-first host; implementing an unbounded dynamic Lisp on top would duplicate effort and widen the attack surface for little gain. The use cases the algebra addresses — trading, DDoS defense, MTG, truth engine — all have well-known vocab at startup. Dynamic holon COMPOSITION (building new ASTs at runtime) is supported and cheap. Dynamic code DEFINITION (adding new functions or types at runtime) is not supported, and is not needed.
 
@@ -788,7 +788,7 @@ Both load forms happen at startup, with identical cryptographic modes:
 
 The two forms differ only in what the loaded file is allowed to contain:
 
-- `(load-types ...)` files contain ONLY type declarations (`struct`, `enum`, `newtype`, `deftype`). A runtime form in such a file is a startup error.
+- `(load-types ...)` files contain ONLY type declarations (`struct`, `enum`, `newtype`, `typealias`). A runtime form in such a file is a startup error.
 - `(load ...)` files contain ONLY function definitions (`define`). A type declaration in such a file is a startup error.
 
 The phase split persists at the FILE level for clarity — but both load operations happen at the same time (startup) and fail the same way (halt the wat-vm before the main loop starts).
@@ -803,7 +803,7 @@ After all loads complete successfully, the symbol table is **fixed**:
 - Every type that can ever be referenced exists in the Rust binary.
 - Every macro has been applied (macros run at build/startup time, not runtime).
 - No further `define` can register.
-- No further `struct`/`enum`/`newtype`/`deftype` can be added.
+- No further `struct`/`enum`/`newtype`/`typealias` can be added.
 
 The table is keyed by name. One name, one definition. If a startup load would introduce a name collision (two files both defining `:my/ns/clamp` with different bodies), that's a startup error — reconciled at the source level, not at runtime.
 
@@ -1939,7 +1939,7 @@ The language core from 058 and this FOUNDATION polish pass:
 - `struct` — named product type with typed fields
 - `enum` — coproduct with typed variants
 - `newtype` — nominal alias over another type
-- `deftype` — structural alias; aliases for existing type shapes
+- `typealias` — structural alias; alternative name for an existing type shape
 - `load-types` — cryptographically-gateable bring-in of type declarations at startup
 
 **Syntactic transformation form (runs at parse time):**
@@ -1948,7 +1948,7 @@ The language core from 058 and this FOUNDATION polish pass:
 
 Plus the syntactic feature pervading all of the above:
 
-- **Type annotations** (`:Holon`, `:Atom`, `:f64`, `:i32`, `:bool`, `:List<T>`, `:fn(args)->return`, keyword-path user types) — required on `define` and `lambda` signatures; carried on `struct`/`enum`/`newtype`/`deftype` field declarations.
+- **Type annotations** (`:Holon`, `:f64`, `:i32`, `:bool`, `:List<T>`, `:fn(args)->return`, keyword-path user types) — required on `define` and `lambda` signatures; carried on `struct`/`enum`/`newtype` field declarations. `:Holon` is an enum with 9 variants (Atom, Bind, Bundle, Permute, Thermometer, Blend, Orthogonalize, Resonance, ConditionalBind) — functions operating on `:Holon` pattern-match to select variant behavior.
 
 Other host-Lisp forms (`let`, `if`, `cond`, `match`, `begin`, arithmetic, comparison, collection operations, `set!`, etc.) are **substrate-inherited** — wat inherits them from its Lisp host rather than defining them anew. They are language tools, but not novel in wat specifically.
 
@@ -1958,7 +1958,7 @@ Language core is minimal on purpose: just enough to write stdlib, define functio
 
 The Rust runtime hosting the wat-vm imposes a static-first model: all code (types AND functions AND macros) loads at startup, before the main event loop begins. Nothing new enters the system after startup.
 
-- `struct`, `enum`, `newtype`, `deftype` are **type declarations**. The build pipeline extracts them from wat files, generates Rust code, compiles the binary.
+- `struct`, `enum`, `newtype`, `typealias` are **type declarations**. Four distinct head keywords, four distinct semantics. The build pipeline extracts them from wat files, generates Rust code (`struct`, `enum`, `struct NewType(Inner);`, `type Alias = Expr;` respectively), compiles the binary.
 - `load-types "path/to/file.wat"` is the type loader — reads a file, parses type declarations, feeds them to the build. Verification modes (`(md5 ...)`, `(signed ...)`) run at build/startup.
 - `define`, `lambda` are **function definitions**. They register at startup into the symbol table.
 - `load "path/to/file.wat"` is the function loader — reads a file, parses `define`s, registers them. Same verification modes.
@@ -2289,13 +2289,15 @@ All eight forms are loaded at startup. The wat-vm distinguishes them by what kin
 ;;   (newtype :my/trading/TradeId :u64)
 ;;   (newtype :my/trading/Price   :f64)
 
-(deftype :my/namespace/MyShape (structural-type-expression))
-;; Structural alias — shorthand for an existing type shape.
+(typealias :my/namespace/MyShape (structural-type-expression))
+;; Structural alias — alternative name for an existing type shape.
+;; Compiles to Rust: `type Name = Expr;`
 ;; Example:
-;;   (deftype :alice/types/Price :f64)
-;;   (deftype :alice/market/CandleSeries :List<Candle>)
+;;   (typealias :alice/types/Amount :f64)
+;;   (typealias :alice/market/CandleSeries :List<Candle>)
+;;   (typealias :alice/trading/Scores :HashMap<Atom,f64>)
 ;;
-;; Note: :Option<T> is an enum (coproduct), not a deftype alias.
+;; Note: :Option<T> is an enum (coproduct), not a typealias.
 ;;   (enum :wat/std/Option<T>
 ;;     :None
 ;;     (Some (value :T)))
@@ -2329,9 +2331,10 @@ All eight forms are loaded at startup. The wat-vm distinguishes them by what kin
 ;;   :f64 :f32 :i8 :i16 :i32 :i64 :i128 :u8 :u16 :u32 :u64 :u128
 ;;   :usize :isize :bool :char :String :&str :()
 ;;
-;; Algebra (bare names — every algebra AST node is :is-a :Holon):
-;;   :Holon :Atom :Bind :Bundle :Permute :Thermometer :Blend
-;;   :Orthogonalize :Resonance :ConditionalBind
+;; Algebra — :Holon is an enum; :Atom, :Bind, :Bundle, :Permute,
+;;   :Thermometer, :Blend, :Orthogonalize, :Resonance, :ConditionalBind
+;;   are its nine variants (not separate subtypes). Pattern-match to
+;;   select variant behavior.
 ;;
 ;; Parametric containers (Rust-style angle brackets):
 ;;   :List<T>  :HashMap<K,V>  :HashSet<T>  :Option<T>  :Result<T,E>
@@ -2630,7 +2633,7 @@ Compile-time forms (materialized into the Rust-backed wat-vm binary; cannot be r
 struct                         ; FOUNDATION addition — named product type
 enum                           ; FOUNDATION addition — coproduct type
 newtype                        ; FOUNDATION addition — nominal alias
-deftype                        ; 058-030 + FOUNDATION — structural alias
+typealias                      ; 058-030 + FOUNDATION — structural alias
 load-types                     ; FOUNDATION addition — compile-time module loading (types only)
 ```
 
@@ -2729,6 +2732,7 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 | 2026-04-18 | **`defmacro` added to Language Core; stdlib aliases become macros.** Resolves Beckman's finding #4 (alias hash-collision). `defmacro` is a compile-time form that registers parse-time syntactic rewrites. The startup pipeline now runs a macro-expansion pass BEFORE hashing, signing, and type-checking. Stdlib aliases like `Concurrent`, `Set`, `Subtract`, `Flip`, `Then`, `Chain`, `Analogy` become macros that expand to canonical core compositions (Bundle, Bind, Blend, Permute). After expansion, `hash(AST) IS identity` holds as an invariant — two source files differing only in macro aliases produce the same expanded AST and the same hash. Source-level reader clarity is preserved; algebra-level identity is uniformized. Language Core grows from 8 to 9 forms (adds `defmacro`). Also resolved: drop `Difference` from 058-004, keep `Subtract` (058-019) as the canonical `Blend(_, _, 1, -1)` idiom — one name per operation. | 058 |
 | 2026-04-18 | **Bind as query; algebra laws restated in similarity-measurement frame.** Round-2 reviewers (Hickey, Beckman) flagged that strict elementwise claims for Bundle associativity and Orthogonalize orthogonality don't hold under threshold. Beckman's counter-examples are correct: nested Bundle clamps magnitudes ≥ 2 losing information; Orthogonalize with fractional coefficients rounds back to pre-projection signs. The reframe: the algebra was always similarity-measured, not elementwise-exact. Bind is THE query primitive — its outcome is observable via cosine similarity; above 5σ means the query resolved, below means it failed (capacity exceeded, key absent, or crosstalk). Same lens applied to Bundle's associativity (similarity-associative at high d; elementwise non-associative in general) and Orthogonalize's orthogonality (similarity-orthogonal within budget; exact in the X=Y edge case only). Three apparent law violations are ONE substrate property: Kanerva-capacity-bounded similarity measurement. Updated FOUNDATION's Output Space section: replaced "Bind's self-inverse law" subsection with "Bind as query: measurement-based success signal"; replaced "Bundle is associative" claim with "Bundle is similarity-associative under capacity budget"; replaced "Orthogonalize's orthogonality is exact" with "exact only at X=Y; similarity-orthogonal otherwise." Also updated 058-003-bundle, 058-005-orthogonalize, 058-021-bind, 058-027-set. The 058-027 update clarifies that Set's membership accessor is the same Bind + cleanup query as Map's — not an asymmetry; same primitive. | 058 |
 | 2026-04-18 | **`:Thought` → `:Holon` rename across all 058 documents.** The algebra's universal type is renamed from `:Thought` to `:Holon`. Reasoning: the project is named "holon" (library `holon-rs`, labs `holon-lab-*`), and "Holon" in Koestler's sense — a thing that is simultaneously whole and part — is the honest universal substrate name for the algebra's values. Every algebra value IS a Holon: Atoms, Binds, Bundles, Permutes, Thermometers, Blends, Orthogonalizes, Resonances, ConditionalBinds, Cleanups. `:Thought` was an alias we had been using that did not match the project's own naming. The Rust identifier `ThoughtAST` becomes `HolonAST`; the type keyword `:Thought` becomes `:Holon`; prose describing the algebra's primitive values uses "holon(s)" where it previously used "thought(s)." Colloquial/semantic uses of "thought" as English (the narrative frame, the sign-off `these are very good thoughts.`) remain unchanged. | 058 |
+| 2026-04-18 | **Type system simplified to four declaration forms; `deftype`/`:is-a`/subtype/impl/trait all dropped.** Hickey's round-2 N4 concern (syntactic ambiguity of `(deftype :A :B)` vs `(deftype :A :is-a :B)`) resolved by a deeper simplification than the three-distinct-heads split. (1) **`deftype` gone; `typealias` is the structural-alias form.** Four type-declaration forms now, each with a distinct head keyword: `newtype` (nominal wrapper, `struct Name(Inner)` in Rust), `struct` (product), `enum` (coproduct), `typealias` (structural alias, `type Name = Expr` in Rust). Zero ambiguity at parse. (2) **No nominal subtyping — `:is-a` dropped from grammar entirely.** Rust has no nominal subtyping; wat matches. The "every Atom is a Holon" relationship is expressed through the `:Holon` enum — `Atom`, `Bind`, `Bundle`, etc. are VARIANTS of the Holon enum, not separate subtypes. Pattern-matching (`match`) selects variant behavior, same as Rust's `match holon { HolonAST::Atom(lit) => ... }`. (3) **No `impl` or `trait` in wat source.** The function declaration `(define (name (c :Candle) -> :f64) body)` carries everything Rust needs to generate an `impl Candle { fn name(&self) -> f64 { ... } }` block. The compiler groups functions by their first typed parameter into `impl` blocks automatically. Users write functions; Rust gets impls. (4) **Polymorphism via enum-wrapping**, not traits. A function that works on multiple struct types takes an enum that wraps them as variants (closed set, pattern-matched). Alternatively, per-type functions with distinct names. Rust's trait system can arrive later as a separate proposal if needed. (5) **Variance simplified** — invariance for primitives, structs, parametric containers; Liskov-standard contravariance/covariance for `:fn(args)->return`. No user-declared variance needed because no user-declared subtyping. Sweep: 058-030 rewritten (User-definable types section replaced, subtype-hierarchy section replaced with enum-variants framing, variance rules simplified); FOUNDATION sections updated (keyword-path examples, startup semantics, stdlib-list, language-core list); 058-031 and RUST-INTERPRETATION updated for the form rename. | 058 |
 | 2026-04-18 | **Stdlib macro definitions audited; Linear (058-008) rejected; Analogy/Chain/Ngram/Log/Circular updated.** Systematic pass over every stdlib proposal to verify: correct `defmacro` syntax, current Rust-surface types (`:f64` / `:usize` / `:List<T>`), current Thermometer 3-arity signature `(Thermometer value min max)`, no references to rejected forms (Cleanup, Unbind, Then, Difference, Concurrent). Findings: (1) Linear (058-008) is identical to Thermometer under the new signature — the Linear wrapper existed to bridge old `(Thermometer atom dim)` to scalar encoding; with the new signature, Thermometer IS the linear encoding. Linear rejected on the stdlib-as-blueprint test (no new pattern). (2) Analogy (058-014) rewrote cleanup-based usage examples to presence-measurement against candidate libraries (post-Cleanup rejection). (3) Chain (058-012) inlines binary Sequential instead of depending on Then. (4) Ngram (058-013) drops Then dependency; n=2 case now produces the same vectors as Chain via binary Sequentials. (5) Log (058-017) rewritten under the new Thermometer signature — becomes `(Thermometer (log value) (log min) (log max))`, demonstrating log-transformation of inputs before linear encoding. (6) Circular (058-018) rewritten under the new signature — Blend of two fixed basis Atoms (`:wat/std/circular-cos-basis`, `:wat/std/circular-sin-basis`) with `(cos, sin)` weights; demonstrates 2D cyclic encoding with negative-allowed weights. (7) Vec (058-026) banner typo fixed; `nth` retired (unified `get` replaces it). Sweep also touched INDEX per-proposal table. | 058 |
 | 2026-04-18 | **Stdlib-as-blueprint framing locked; Then (058-011) and Unbind (058-024) rejected.** The stdlib's purpose is named explicitly: it is a blueprint of macros — ship useful ready-made forms AND demonstrate how to build more. Criterion for Stdlib Forms rewritten from "reduces ambiguity for readers" (weak — any name does this) to three conditions: (1) expansion uses only core forms, (2) demonstrates a distinct pattern users could not derive from another existing stdlib form, (3) is domain-free. Forms that fail the demonstration test are userland macros — they may still be useful in specific vocab, but the project doesn't ship them. Under this rule: Then (058-011) is rejected (arity-specialization of Sequential; demonstrates nothing new); Unbind (058-024) is rejected (identity alias for Bind — Bind-on-Bind IS Unbind, a fact about the algebra, not a name worth projecting — simple, not easy). Chain (058-012) stays as project stdlib because its encoding is transitional (distinct from Sequential's positional), but its expansion no longer depends on Then — it inlines the binary Sequential pattern directly. Same resolution shape as Concurrent (058-010), Difference (058-004), Cleanup (058-025) rejections: fail the demonstration test, rejected, userland path documented in the REJECTED banner. | 058 |
 | 2026-04-18 | **Concurrent (058-010) rejected from project stdlib.** Hickey round-2 flagged Bundle/Concurrent/Set as a triplet of aliases with one canonical expansion. Set earned its place as HashSet (Rust-surface name, runtime backing via `:HashSet<T>` type annotation drives O(1) membership through Rust's std::HashSet). Concurrent does not — no runtime specialization, no corresponding `:Concurrent<T>` type, purely reader-intent. The enclosing context (the atom it's bound to, the field it's stored in) already carries the temporal-co-occurrence meaning. Concurrent rejected from project stdlib; kept as an audit record; userland may define it in their own namespace as a macro `(:my/vocab/Concurrent ...) → (Bundle ...)` if temporal framing matters to their application. FOUNDATION sweep: stdlib inventory, keyword-path examples, FOUNDATION data-structure examples all updated. 058-010 proposal gets REJECTED banner like 058-004, 058-025. INDEX per-proposal table and naming-aliases discussion updated. Resolves Hickey round-2 concern R1 complection #4. | 058 |

@@ -156,7 +156,7 @@ pub enum TypeDef {
     Struct(StructDef),
     Enum(EnumDef),
     Newtype(NewtypeDef),
-    Alias(AliasDef),        // deftype
+    Alias(AliasDef),        // typealias
 }
 
 pub struct TypeEnv {
@@ -166,7 +166,7 @@ pub struct TypeEnv {
 }
 ```
 
-Similar freeze semantics. User types are registered via `struct`/`enum`/`newtype`/`deftype` forms during startup load.
+Similar freeze semantics. User types are registered via `struct`/`enum`/`newtype`/`typealias` forms during startup load.
 
 ### `Environment` — lexical scope
 

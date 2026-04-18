@@ -159,7 +159,7 @@ Every Lisp since the 1960s has had macros. Common Lisp, Scheme, Racket, Clojure,
 
 **3. It is orthogonal to the holon algebra.**
 
-`defmacro` doesn't construct holon vectors; it constructs source ASTs. It operates at the language level, alongside `define`, `lambda`, `struct`, `enum`, `newtype`, `deftype`, `load`, `load-types`. Orthogonal to algebra core.
+`defmacro` doesn't construct holon vectors; it constructs source ASTs. It operates at the language level, alongside `define`, `lambda`, `struct`, `enum`, `newtype`, `typealias`, `load`, `load-types`. Orthogonal to algebra core.
 
 **4. It is interpretable by the Rust-backed wat-vm.**
 
@@ -248,7 +248,7 @@ If macros can expand to arbitrary forms, the type checker sees a different AST t
 |---|---|---|---|---|
 | `define` | Runtime fn | Call time | Body | Function name + signature |
 | `lambda` | Runtime fn (anon) | Call time | Body | Lambda AST |
-| `struct`/`enum`/`newtype`/`deftype` | Compile-time type | Build time | N/A (declarative) | Type name + shape |
+| `struct`/`enum`/`newtype`/`typealias` | Compile-time type | Build time | N/A (declarative) | Type name + shape |
 | `load`/`load-types` | Startup | Startup | Reads file, registers | Files covered at startup |
 | `defmacro` | Compile-time macro | Parse time | Expansion body (at parse) | The EXPANDED form (not the macro call) |
 

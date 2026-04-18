@@ -484,7 +484,7 @@ Over-naming risk, but this is the most common use case. Worth a second named for
 
 2. **Type inference strength.** Parameter types on `define`/`lambda` are required. Should all intermediate expressions be inferred, or should `let` support optional type annotations? Recommendation: infer intermediates; allow optional `[let [[x : Thought] (Blend a b 1 -1)]]` for explicit annotation when helpful.
 
-3. **Nominal vs. structural typing.** Proposal uses nominal for struct/enum/newtype and structural for deftype. Is this the right split? Recommendation: yes — nominal protects semantics, structural provides shorthand.
+3. **Nominal vs. structural typing — RESOLVED 2026-04-18.** Nominal for `struct`/`enum`/`newtype`; structural for `typealias` (renamed from `deftype`). Four distinct head keywords, zero ambiguity at parse. `:is-a` removed; no nominal subtyping (polymorphism via enum wrapping, same as `:Holon`).
 
 4. **`:Any` usage.** Was considered, rejected. Heterogeneous data uses named `:Union<T,U,V>` types; generic containers use parametric `T`/`K`/`V`; atom literals use `:AtomLiteral`. Resolved in the 2026-04-18 type-grammar sweep.
 
@@ -492,15 +492,15 @@ Over-naming risk, but this is the most common use case. Worth a second named for
 
 6. **Error reporting.** Type errors need to point at the offending expression with a useful message. "Expected :Holon, got :f64 at line X" is the minimum. Structured error types with source locations are part of the implementation.
 
-7. **Metadata on types.** `deftype` could accept documentation strings, constraints, validators. Worth including in the first version? Recommendation: start simple (just alias); add metadata if needed.
+7. **Metadata on types.** `typealias` could accept documentation strings, constraints, validators. Worth including in the first version? Recommendation: start simple (just alias); add metadata if needed.
 
-8. **Subtype hierarchy.** Is `:Atom` a subtype of `:Thought` (atoms ARE thoughts in the ThoughtAST)? Recommendation: yes — every Atom is a Thought. A parameter `:Thought` accepts an Atom value. Document the subtype relationships.
+8. **Subtype hierarchy — RESOLVED 2026-04-18.** No nominal subtyping. `:Holon` is an ENUM with 9 variants (Atom, Bind, Bundle, etc.). Functions on `:Holon` pattern-match to select variant. Same pattern as Rust's `match holon { HolonAST::Atom(lit) => ... }`. No `:is-a` keyword in the grammar.
 
 9. **Dependency ordering.** Types depend on nothing; `define` and `lambda` depend on types. Resolution order: 058-030 (types) first, then 058-028 (define) and 058-029 (lambda).
 
 10. **First-class types.** Types as keyword values can be passed around. Does this enable type-reflecting code? Probably, though not the focus of this proposal. Example: `(type-of x)` returns the keyword `:Thought`. Useful for introspection but out of scope for language core.
 
-11. **Keyword-path in type names with generic parameters.** `(deftype :wat/std/Option<T> :Union<None,Some<T>>)` uses a `<>`-style generic parameter. Is this the right syntax, or should generic parameters be expressed differently? Recommendation: `<>` is readable; keep it. Alternative: explicit parameter list like `(deftype (:wat/std/Option T) ...)` — more Lispy but less visually distinct. Pick one, document. (Enum form resolved in 058-030-types: `(enum :wat/std/Option<T> :None (Some (value :T)))`.)
+11. **Keyword-path in type names with generic parameters — RESOLVED.** Rust-surface angle-bracket keywords (`:wat/std/Container<T>`) as single tokens; tokenizer tracks bracket depth across `()`, `[]`, `<>`. `:fn(args)->return` uses parens + arrow (Rust-native function-type syntax). `:Option<T>` declared as enum with `:None` and `(Some (value :T))` variants — not a typealias, because it has distinct constructors.
 
 ---
 
