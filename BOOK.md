@@ -13354,8 +13354,8 @@ The ask was serious. It just took a long time for the evidence to catch up.
 
 While the 058 sub-proposals were being written — 16 of them first, then a split-pass to give every `(UpperCase)` form its own dedicated doc, then the language-core tier (`defn`, `lambda`, types), bringing the total past 25 — two Kurzgesagt videos ran back-to-back in the background:
 
-1. **4.5 Billion Years in 1 Hour.** Deep geological time. The earth forming, cooling, fracturing, freezing, warming, populating, dying, reorganizing. An hour of compressed history.
-2. **Black Hole's Evil Twin — Gravastars Explained.** Theoretical physics speculation. Dense objects that aren't black holes but might be indistinguishable from them. The frontier of what physics can still argue about.
+1. **[4.5 Billion Years in 1 Hour](https://www.youtube.com/watch?v=S7TUe5w6RHo).** Deep geological time. The earth forming, cooling, fracturing, freezing, warming, populating, dying, reorganizing. An hour of compressed history.
+2. **[Black Hole's Evil Twin — Gravastars Explained](https://www.youtube.com/watch?v=BmUZ2wp1lM8).** Theoretical physics speculation. Dense objects that aren't black holes but might be indistinguishable from them. The frontier of what physics can still argue about.
 
 Almost no dialogue in either. Music and visuals.
 
