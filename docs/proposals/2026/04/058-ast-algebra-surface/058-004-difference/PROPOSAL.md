@@ -1,7 +1,16 @@
 # 058-004: `Difference` — Stdlib Idiom over `Blend`
 
+> **STATUS: REJECTED** (2026-04-18)
+>
+> `Difference` is mathematically identical to `Subtract` (058-019) — both expand to `(Blend a b 1 -1)`. After designer review, we resolved: one name per operation. `Subtract` wins (fits the imperative Blend-idiom family with `Amplify` and `Flip`; single verb tone). `Difference` is dropped.
+>
+> This proposal is kept in the record as an honest trace of the design process. It was argued, considered, and rejected in favor of `Subtract`. No content below is binding; it documents what was considered.
+>
+> **Use `Subtract` (058-019) for the canonical `(Blend a b 1 -1)` idiom.**
+> **Analogy (058-014) now uses `Subtract` in its expansion**, not `Difference`.
+
 **Scope:** algebra
-**Class:** STDLIB (reclassified from CORE during sub-proposal review)
+**Class:** REJECTED (was proposed as STDLIB, reclassified from CORE during sub-proposal review, ultimately dropped in favor of `Subtract`)
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
 **Depends on:** 058-002-blend (pivotal — if Blend is rejected, this proposal must be rewritten)
