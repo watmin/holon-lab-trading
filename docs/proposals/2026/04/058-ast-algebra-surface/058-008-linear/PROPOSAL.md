@@ -1,10 +1,27 @@
 # 058-008: `Linear` — Reframe as Stdlib over Blend
 
+> **STATUS: REJECTED from project stdlib** (2026-04-18)
+>
+> This proposal was written when `Thermometer` took `(atom, dim)` — a seeded gradient primitive. Under that old signature, `Linear(value, min, max, scale)` required a wrapper macro that computed weighted positions and blended two Thermometer-seeded endpoints. The wrapper earned its place as the bridge.
+>
+> After the 2026-04-18 Thermometer signature sweep, `Thermometer` takes `(value, min, max)` directly and produces the linear gradient itself: proportion of `+1` dimensions = `(value - min) / (max - min)`. `Linear(v, min, max)` becomes identical to `(Thermometer v min max)`. Under the stdlib-as-blueprint test, Linear demonstrates no new pattern — it's a rename.
+>
+> Use `Thermometer` directly for linear scalar encoding. `Log` (058-017) and `Circular` (058-018) stay because they demonstrate **distinct** transformations (log-scale, cyclic) — those aren't rename-only.
+>
+> Userland may define the alias if readability matters to their vocab:
+>
+> ```scheme
+> (defmacro (:my/vocab/Linear (v :AST) (min :AST) (max :AST) -> :AST)
+>   `(Thermometer ,v ,min ,max))
+> ```
+>
+> This proposal is kept in the record as an honest trace of the design process.
+
 **Scope:** algebra
-**Class:** STDLIB (reclassification from current CORE variant)
+**Class:** REJECTED (was STDLIB under old Thermometer signature; identical to Thermometer under new signature)
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
-**Depends on:** 058-002-blend (pivotal — if Blend rejected, Linear stays core)
+**Depends on:** 058-002-blend, 058-023-thermometer
 **Companion proposals:** 058-017-log, 058-018-circular
 
 ## Reclassification Claim

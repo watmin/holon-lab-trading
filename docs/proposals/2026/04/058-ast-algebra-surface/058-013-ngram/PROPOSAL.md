@@ -4,7 +4,9 @@
 **Class:** STDLIB
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
-**Depends on:** 058-011-then (for the pairwise case), 058-012-chain (generalizes)
+**Depends on:** 058-009-sequential-reframing (window-encoding primitive), 058-012-chain (generalizes)
+
+> **Updated 2026-04-18:** Dropped dependency on Then (058-011 REJECTED). The `n=2` special case expands to a bundle of binary Sequentials (equivalent to what Chain produces), not to `(Then ...)` calls.
 
 ## The Candidate
 
@@ -39,9 +41,9 @@ The window-slicing combinator (`n-wise-map`) is a runtime list operation used in
 
 ### Special cases
 
-- `n = 1`: each window is a single holon; Ngram produces `(Bundle (list t0 t1 t2 ...))` = `(Bundle holons)` = `(Concurrent holons)`.
-- `n = 2`: each window is a pair; with the pairwise encoding, Ngram produces `(Chain holons)`.
-- `n = k`: each window is a `k`-tuple, permutation-encoded internally, then all windows bundled.
+- `n = 1`: each window is a single holon; Ngram produces `(Bundle (list t0 t1 t2 ...))` — same as `(Bundle holons)`.
+- `n = 2`: each window is a pair encoded as a binary Sequential; produces the same vector as `(Chain holons)`.
+- `n = k`: each window is a `k`-tuple, permutation-encoded internally via Sequential, then all windows bundled.
 
 ### Semantics
 
@@ -71,7 +73,7 @@ Could Chain be deprecated in favor of `(Ngram 2 xs)`? Possibly, but `Chain` read
 
 Each window encoding is its own sub-AST. Caching happens at the window level. Two Ngrams over overlapping lists share windows automatically via the L1 cache — identical sub-windows produce identical vectors.
 
-Example: `(Ngram 2 (list a b c d))` and `(Ngram 2 (list a b c e))` share the windows `(Then a b)` and `(Then b c)`. Different final outputs, but cached sub-computations reuse.
+Example: `(Ngram 2 (list a b c d))` and `(Ngram 2 (list a b c e))` share the windows `(Sequential (list a b))` and `(Sequential (list b c))`. Different final outputs, but cached sub-computations reuse.
 
 **4. Invariance properties.**
 
@@ -81,7 +83,7 @@ Ngram is shift-invariant on windows: moving a pattern within a longer list leave
 
 **1. Parameterization adds surface complexity.**
 
-Ngram takes an integer `n` as its first argument, unlike Bundle/Concurrent/Chain which are unary over a list. Readers must remember the parameter order: "n comes first." Could be confusing if `n` is a computed value or passed through variable.
+Ngram takes an integer `n` as its first argument, unlike Bundle/Chain which are unary over a list. Readers must remember the parameter order: "n comes first." Could be confusing if `n` is a computed value or passed through variable.
 
 **Mitigation:** keyword argument or specialized names per `n` could solve this — `Bigram`, `Trigram`, `Quadgram`. But that proliferates names. Keeping one parameterized `Ngram` is cleaner than 5+ specialized forms.
 

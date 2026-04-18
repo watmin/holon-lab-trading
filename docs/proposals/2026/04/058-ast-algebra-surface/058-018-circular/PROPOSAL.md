@@ -19,23 +19,28 @@ With Blend as a pivotal core form (058-002) — and specifically Option B (two I
 
 ### Current semantics
 
-`Circular(low_atom, high_atom, value, scale)` encodes values on a circular scale (time-of-day, angles, phase). A value and its `value + period` produce the same vector. The key property: positions equidistant along the circle blend equally.
+`Circular(value, period)` encodes values on a circular scale (time-of-day, angles, phase). A value and its `value + period` produce the same vector. The key property: positions equidistant along the circle blend equally.
 
 ### Stdlib definition
 
 ```scheme
-(defmacro (Circular (low-atom :AST) (high-atom :AST) (value :AST) (scale :AST) -> :AST)
-  `(let* ((period (first ,scale))
-          (angle (* 2 pi (/ ,value period)))
-          (w-low (cos angle))                                  ; circular weighting
-          (w-high (sin angle)))
-     (Blend (Thermometer ,low-atom dim)
-            (Thermometer ,high-atom dim)
-            w-low
-            w-high)))
+(defmacro (Circular (value :AST) (period :AST) -> :AST)
+  `(let* ((angle   (* 2 pi (/ ,value ,period)))
+          (w-cos   (cos angle))                  ;; can be negative
+          (w-sin   (sin angle)))                 ;; can be negative
+     (Blend (Atom :wat/std/circular-cos-basis)
+            (Atom :wat/std/circular-sin-basis)
+            w-cos
+            w-sin)))
 ```
 
-`angle` maps `value` to a position on the unit circle. `cos angle` and `sin angle` are the weights — they span a full period as `value` cycles, and they can be NEGATIVE (unlike Linear's `1-t, t` or Log's log-scaled weights which are both non-negative). Expansion happens at parse time (per 058-031-defmacro), so `hash(AST)` sees only the canonical `(let* ... (Blend (Thermometer ...) (Thermometer ...) w-low w-high))` form — no `Circular` call node survives into the hashed AST.
+`angle` maps `value` to a position on the unit circle. `cos angle` and `sin angle` are the weights — they span a full period as `value` cycles. The two Atoms `:wat/std/circular-cos-basis` and `:wat/std/circular-sin-basis` are fixed reference vectors (seeded by the VectorManager at startup) that span the 2D basis of the circle; Blend's two independent weights let Circular project onto any point on that basis.
+
+Expansion happens at parse time (per 058-031-defmacro), so `hash(AST)` sees only the canonical `(let* ... (Blend (Atom :...) (Atom :...) w-cos w-sin))` form — no `Circular` call node survives into the hashed AST.
+
+### Why Circular earns its stdlib place (under the blueprint test)
+
+Circular demonstrates a **distinct pattern** — Blending two fixed basis Atoms with `(cos, sin)` weights to encode cyclical values. This is categorically different from Thermometer's linear gradient: Circular's weights can be negative, the encoding wraps (`value + period` produces the same vector as `value`), and the two basis Atoms establish a 2D embedding rather than a 1D range. A user who wants cyclic encoding (time-of-day, angle, phase) can't derive this pattern from Thermometer alone. Worth shipping as a blueprint.
 
 ## Why Stdlib Earns the Name
 

@@ -2,7 +2,7 @@
 
 > **STATUS: SUPERSEDES the original `Vec` proposal** (2026-04-18 Rust-surface naming sweep).
 >
-> The form previously called `Vec` is now named `Vec` — matching Rust's `std::vec::Vec` directly. The wat UpperCase constructor, the type annotation `:Vec<T>`, and the runtime backing all share one name. One name per concept across algebra, type annotation, and runtime.
+> The form previously called `Array` is now named `Vec` — matching Rust's `std::vec::Vec` directly. The wat UpperCase constructor, the type annotation `:Vec<T>`, and the runtime backing all share one name. One name per concept across algebra, type annotation, and runtime.
 >
 > **Also:** `nth` is retired. Use `get` — `(get my-vec i)` with an integer index returns `:Option<Holon>`.
 
@@ -53,14 +53,16 @@ Expands at call time to: `(Bundle (list (Bind (Atom 0) items[0]) (Bind (Atom 1) 
 ;;                 (Bind (Atom 3) date)))
 ```
 
-### `nth` accessor
+### `nth` retired
+
+`nth` was redundant with the unified `get` introduced in the 2026-04-18 sweep. Use `get` directly:
 
 ```scheme
-(define (:wat/std/nth (arr :Holon) (i :usize) -> :Option<Holon>)
-  (get arr (Atom i)))
+(get my-vec 3)                 ;; returns :Option<Holon>
+;; equivalent to the old (nth my-vec 3)
 ```
 
-`nth` is just `get` with an integer-atom key. Walks the AST, finds the Bind whose first argument is `(Atom i)`, returns the second argument. O(N) walk; exact; no codebook needed.
+`get` with a `:usize` locator goes through the Vec's Rust `Vec<Holon>` backing for O(1) indexing. Returns `(Some v)` at valid indices, `:None` out of range. Same signature as `get` on HashMap (hash lookup) and HashSet (hash membership). One name, three containers.
 
 ### Other operations
 

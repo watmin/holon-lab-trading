@@ -93,21 +93,20 @@ Chain and Sequential are both "encode a list of things in some order-aware way."
 
 **Counter:** the encodings really are different. Sequential uses positional permutations; Chain uses pairwise Thens. Downstream operations (similarity, cleanup) behave differently on the two encodings. The name distinction corresponds to an encoding distinction, not a reader-style distinction.
 
-**2. Dependency chain is long: Chain → Then → (Bundle, Permute).**
+**2. ~~Dependency chain~~ — resolved 2026-04-18.**
 
-If Then (058-011) is rejected, Chain must re-express directly:
+058-011 Then was REJECTED. Chain no longer depends on it; expansion inlines the binary Sequential pattern directly:
 
 ```scheme
 (defmacro (Chain (holons :AST) -> :AST)
   `(Bundle
      (pairwise-map
-       (lambda (a b) (Bundle (list a (Permute b 1))))
+       (lambda ((a :Holon) (b :Holon) -> :Holon)
+         (Sequential (list a b)))
        ,holons)))
 ```
 
-Works, but loses the readable Then layer. Then's presence makes Chain readable; without Then, Chain's expansion is cluttered.
-
-**Mitigation:** this is a dependency, not a blocker. 058-011-then should resolve first; if it passes, Chain is clean; if it fails, Chain rewrites.
+Chain stays in stdlib because its encoding (transitional) is distinct from Sequential's (absolute-positional) — different pattern, different similarity semantics. Only the expansion changed, not the algebraic status.
 
 **3. `pairwise-map` may not exist in the wat stdlib.**
 
@@ -132,7 +131,7 @@ What does `(Chain (list))` mean? `(Chain (list a))`? Both produce empty pairwise
 **Mitigation:** document the semantics:
 - `(Chain (list))` → zero vector or error
 - `(Chain (list a))` → `a` unchanged (or `(Bundle (list a))` which equals `a`)
-- `(Chain (list a b))` → `(Then a b)`
+- `(Chain (list a b))` → `(Sequential (list a b))` — the binary-Sequential pattern
 - `(Chain (list a b c ...))` → full pairwise bundle
 
 These conventions should be consistent with Bundle's handling of short lists.
@@ -142,7 +141,7 @@ These conventions should be consistent with Bundle's handling of short lists.
 | Form | Class | Encoding | Invariance |
 |---|---|---|---|
 | `Sequential(xs)` | STDLIB | Position-permuted bundle | Position-sensitive (shift changes vector) |
-| `Chain(xs)` | STDLIB (this) | Pairwise-Then bundle | Shift-invariant (transitions preserved) |
+| `Chain(xs)` | STDLIB (this) | Pairwise binary-Sequential bundle | Shift-invariant (transitions preserved) |
 | `Ngram(n, xs)` | STDLIB (058-013) | n-wise pairwise bundle | Adjacent-n invariance |
 
 Chain sits between Sequential (stricter, position-based) and Ngram (more general, n-wise windowed).
@@ -155,7 +154,7 @@ Yes. Output is a vector in the ternary output space `{-1, 0, +1}^d` (Bundle of B
 
 Is it a distinct source category?
 
-No — it is a composition over Bundle and Then. Stdlib idiom.
+No — it is a composition over Bundle and Sequential. Stdlib idiom, distinct encoding pattern.
 
 ## Simplicity Question
 
@@ -165,38 +164,39 @@ Simple — one line, clear intent.
 
 Is anything complected?
 
-No. Chain's role is "pairwise-Then bundle"; no other concerns smuggled in.
+No. Chain's role is "pairwise binary-Sequential bundle"; no other concerns smuggled in.
 
 Could existing forms express it?
 
-Yes — `(Bundle (pairwise-map Then xs))`, or if Then is rejected, the expanded Bundle/Permute form.
+Yes — `(Bundle (pairwise-map (lambda (a b) (Sequential (list a b))) xs))`. Chain earns its name through the distinct transitional-encoding pattern and reader-clarity on a common use case.
 
 ## Implementation Scope
 
 **Zero Rust changes beyond 058-031-defmacro's macro-expansion pass.** Pure wat.
 
-**wat stdlib addition** — one macro, registered at parse time (given Then is registered and `pairwise-map` exists):
+**wat stdlib addition** — one macro, registered at parse time:
 
 ```scheme
 ;; wat/std/sequences.wat (or similar)
 (defmacro (Chain (holons :AST) -> :AST)
-  `(Bundle (pairwise-map Then ,holons)))
+  `(Bundle
+     (pairwise-map
+       (lambda ((a :Holon) (b :Holon) -> :Holon)
+         (Sequential (list a b)))
+       ,holons)))
 ```
 
 `pairwise-map` itself is a list combinator, not an AST-rewriting macro — it is a regular stdlib function used inside the macro expansion. If it doesn't exist yet:
 
 ```scheme
-(define (pairwise-map f xs)
+(define (pairwise-map (f :fn(Holon,Holon)->Holon) (xs :List<Holon>) -> :List<Holon>)
   (if (or (empty? xs) (empty? (rest xs)))
       '()
       (cons (f (first xs) (second xs))
             (pairwise-map f (rest xs)))))
-
-(defmacro (Chain (holons :AST) -> :AST)
-  `(Bundle (pairwise-map Then ,holons)))
 ```
 
-The macro is registered at parse time (per 058-031-defmacro); every `(Chain ...)` invocation is rewritten to the pairwise-Bundle form before hashing. Nested `(Then ...)` forms in the expansion are themselves expanded in the same pass.
+The macro is registered at parse time (per 058-031-defmacro); every `(Chain ...)` invocation is rewritten to the pairwise-Bundle form before hashing. Nested `(Sequential ...)` forms expand further to core `(Bundle (list a (Permute b 1)))` in the same pass.
 
 ## Questions for Designers
 

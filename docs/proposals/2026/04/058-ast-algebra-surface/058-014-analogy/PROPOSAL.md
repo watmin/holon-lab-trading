@@ -15,7 +15,7 @@ A wat stdlib macro (per 058-031-defmacro) that produces the classic VSA analogy 
   `(Bundle (list ,c (Subtract ,b ,a))))
 ```
 
-Expands to `c + (b - a)` — the classic "A is to B as C is to ?" vector arithmetic. The result is a vector that, under cleanup against a codebook of candidate answers, retrieves the fourth term of the analogy.
+Expands to `c + (b - a)` — the classic "A is to B as C is to ?" vector arithmetic. The result is a Holon that represents the fourth term of the analogy as a point in thought-space. The caller retrieves the actual answer by measuring **presence** of that Holon against a candidate library — presence measurement above the substrate's noise floor (5σ ≈ 0.05 at d=10,000) identifies the matching candidate.
 
 `Subtract` (058-019) is itself a macro that further expands to `(Blend b a 1 -1)`. Because expansion happens at parse time and nested macros expand in the same pass, the final hashed AST contains only algebra-core operations (`Bundle`, `Blend`) — no `Analogy` or `Subtract` call nodes survive into `hash(AST)`.
 
@@ -25,9 +25,9 @@ Given three holons forming the first three terms of an analogy (A, B, C), Analog
 
 - The delta `B - A` captures the transformation from A to B.
 - Applying the same transformation to C: `C + (B - A)`.
-- Under cleanup to a codebook, this retrieves the element that has the same relationship to C as B has to A.
+- Presence-measuring this result against a candidate library retrieves the element that has the same relationship to C as B has to A.
 
-Classic example: `Analogy(king, queen, man)` ≈ `woman`.
+Classic example: `Analogy(king, queen, man)` ≈ `woman` — the result's vector is near `woman`'s vector on the unit sphere; presence of `woman` against the result is above the noise floor.
 
 ## Why Stdlib Earns the Name
 
@@ -47,21 +47,26 @@ The analogical reasoning capability of VSA is one of its most-cited strengths. K
 
 Three lines of decomposition explain what `Bundle(c, Subtract(b, a))` does. Not immediately readable without VSA background. The name `Analogy` carries the semantic weight — readers who know VSA recognize it instantly.
 
-**3. Composes with cleanup for the full retrieval pattern.**
+**3. Composes with presence measurement for the full retrieval pattern.**
 
 The typical usage is:
 
 ```scheme
-(cleanup
-  (Analogy king queen man)
-  candidates)
+;; Find the candidate that best matches the analogy's completion:
+(argmax
+  (map (lambda ((cand :Holon) -> :Pair<Holon,f64>)
+         (list cand (presence cand (encode (Analogy king queen man)))))
+       candidates)
+  second)
 ```
 
-Where `cleanup` finds the nearest codebook entry. With `Analogy` named, this reads as "complete this analogy against the candidate pool." Without `Analogy`, the expression becomes `(cleanup (Bundle (list man (Subtract queen king))) candidates)` — dense.
+With `Analogy` named, this reads as "complete this analogy, then find the best-matching candidate by presence measurement." Without `Analogy`, the expression's inner form becomes `(Bundle (list man (Subtract queen king)))` — mechanically identical, but the reader has to recognize the pattern.
+
+Cleanup is NOT used here — Cleanup was rejected as a core form (see 058-025 and FOUNDATION's "Presence is Measurement, Not Verdict"). Retrieval is presence measurement against known candidates, not argmax-over-codebook.
 
 **4. Parallel structure with other VSA stdlib.**
 
-If the algebra exposes `Bind`, `Bundle`, `Permute`, `Cleanup`, `Subtract`, `Analogy` as a coherent set, users get the standard VSA toolkit with familiar names. Missing `Analogy` would force every VSA example to hand-roll the composition.
+If the algebra exposes `Bind`, `Bundle`, `Permute`, `Subtract`, `Analogy` as a coherent set, users get the core VSA toolkit with familiar names. Missing `Analogy` would force every VSA-style example to hand-roll the composition.
 
 ## Arguments Against
 
@@ -95,22 +100,26 @@ Some users already write analogies inline. Adding a named form might not be used
 ## Example Usage
 
 ```scheme
-;; Classical king-queen-man analogy
+;; Classical king-queen-man analogy — find the best-matching candidate
+;; by presence measurement:
+(define (best-match (analogy-result :Holon) (candidates :List<Holon>) -> :Pair<Holon,f64>)
+  (argmax
+    (map (lambda ((c :Holon) -> :Pair<Holon,f64>)
+           (list c (presence c (encode analogy-result))))
+         candidates)
+    second))
+
 (define completion
-  (cleanup (Analogy king queen man) vocabulary))
-;; after parse-time expansion, the AST is:
-;;   (cleanup (Bundle (list man (Blend queen king 1 -1))) vocabulary)
+  (best-match (Analogy king queen man) vocabulary))
+;; after parse-time expansion, the Analogy AST is:
+;;   (Bundle (list man (Blend queen king 1 -1)))
 
 ;; Trading analogy: "uptrend was to breakout as reversal is to ?"
 (define predicted
-  (cleanup (Analogy uptrend breakout reversal) candidate-patterns))
-
-;; Sequence continuation
-(define next-step
-  (cleanup (Analogy step1 step2 step2) step-codebook))
+  (best-match (Analogy uptrend breakout reversal) candidate-patterns))
 ```
 
-The pattern is always: `cleanup` of `Analogy` against a candidate pool.
+The pattern is always: `Analogy` produces a completion Holon; the caller presence-measures that Holon against a candidate library to find the best match.
 
 ## Comparison
 
@@ -126,7 +135,7 @@ Analogy builds directly on Bundle and Subtract — a two-level stdlib macro comp
 
 Does Analogy compose with the existing algebra?
 
-Yes — output is a vector in the ternary output space `{-1, 0, +1}^d` (Bundle of two ternary inputs, thresholded; see FOUNDATION's "Output Space" section). Composes cleanly with cleanup, similarity, further bundling.
+Yes — output is a Holon whose vector projection lives in the ternary output space `{-1, 0, +1}^d` (Bundle of two ternary inputs, thresholded; see FOUNDATION's "Output Space" section). Composes cleanly with presence measurement, similarity, further bundling.
 
 Is it a distinct source category?
 

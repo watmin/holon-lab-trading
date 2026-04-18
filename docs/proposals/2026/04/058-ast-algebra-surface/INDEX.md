@@ -73,7 +73,7 @@ Genuinely new algebraic operations:
 
 Forms that used to be HolonAST variants; reframed as stdlib over Blend:
 
-18. **058-008-linear** — Blend over two Thermometer anchors with linear weights.
+18. **058-008-linear** — **REJECTED** (2026-04-18). Under the new 3-arity Thermometer signature `(Thermometer value min max)`, Linear is identical to Thermometer itself. Use `Thermometer` directly. Log (058-017) and Circular (058-018) keep their stdlib slots — they demonstrate distinct transformations (log, cyclic).
 19. **058-017-log** — same skeleton, log-normalized weights.
 20. **058-018-circular** — same skeleton, sin/cos weights. Proves Blend Option B's independent-weights signature.
 21. **058-009-sequential-reframing** — end the grandfathered variant; Sequential becomes stdlib over Bundle and Permute.
@@ -208,7 +208,7 @@ Shows which proposals must resolve before which others. Arrows flow from prerequ
 | 005 | Orthogonalize | CORE | new | Projection removal with computed coefficient |
 | 006 | Resonance | CORE | new | Sign-agreement mask, first ternary output |
 | 007 | ConditionalBind | CORE | new | 3-arg gated binding |
-| 008 | Linear | STDLIB | reframing | Blend over two Thermometer anchors |
+| 008 | Linear | REJECTED | — | Identical to Thermometer under new 3-arity signature; userland alias if desired |
 | 009 | Sequential | STDLIB | reframing | End grandfathered variant; Bundle of Permutes |
 | 010 | Concurrent | REJECTED | — | Bundle alias with no runtime specialization; enclosing context carries temporal meaning. Userland macro if desired. |
 | 011 | Then | REJECTED | — | Arity-specialization of Sequential; userland macro |
@@ -217,7 +217,7 @@ Shows which proposals must resolve before which others. Arrows flow from prerequ
 | 014 | Analogy | STDLIB | new | `c + (b - a)` |
 | 015 | Amplify | STDLIB | new | `Blend(x, y, 1, s)` |
 | 016 | HashMap | STDLIB | new | Bundle of Bind(k, v); Rust HashMap backing |
-| 017 | Log | STDLIB | reframing | Same skeleton as Linear, log-space weights |
+| 017 | Log | STDLIB | reframing | Thermometer with log-transformed inputs; distinct encoding pattern |
 | 018 | Circular | STDLIB | reframing | Same skeleton, sin/cos weights — tests Blend Option B |
 | 019 | Subtract | STDLIB | new | `Blend(x, y, 1, -1)`, removal framing |
 | 020 | Flip | STDLIB | new | `Blend(x, y, 1, -2)`, linear inversion |

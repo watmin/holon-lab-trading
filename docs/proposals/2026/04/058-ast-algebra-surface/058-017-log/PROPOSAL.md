@@ -19,25 +19,24 @@ With Blend as a pivotal core form (058-002), `Log` becomes a stdlib macro (per 0
 
 ### Current semantics
 
-`Log(low_atom, high_atom, value, scale)` produces a vector that places `value` along a range `[min, max]` using LOG-SPACE interpolation. A value at the geometric midpoint of `[min, max]` gets equal anchor weights — useful for encoding ratios, rates, byte counts, request frequencies.
+`Log(value, min, max)` produces a vector that places `value` along a range `[min, max]` using LOG-SPACE interpolation. A value at the geometric midpoint of `[min, max]` appears at the linear midpoint of the encoding — useful for encoding ratios, rates, byte counts, request frequencies.
 
 ### Stdlib definition
 
 ```scheme
-(defmacro (Log (low-atom :AST) (high-atom :AST) (value :AST) (scale :AST) -> :AST)
-  `(let* ((min (first ,scale))
-          (max (second ,scale))
-          (t (/ (- (log ,value) (log min))
-                (- (log max) (log min))))                      ; log-normalize to [0,1]
-          (w-low (- 1 t))
-          (w-high t))
-     (Blend (Thermometer ,low-atom dim)
-            (Thermometer ,high-atom dim)
-            w-low
-            w-high)))
+(defmacro (Log (value :AST) (min :AST) (max :AST) -> :AST)
+  `(Thermometer (log ,value) (log ,min) (log ,max)))
 ```
 
-Identical skeleton to Linear. The only difference is `t`'s computation: Linear uses `(value - min) / (max - min)`, Log uses `(log value - log min) / (log max - log min)`. Everything downstream is the same. Expansion happens at parse time (per 058-031-defmacro), so `hash(AST)` sees only the canonical `(let* ... (Blend (Thermometer ...) (Thermometer ...) w-low w-high))` form — no `Log` call node survives into the hashed AST.
+Log-transform the value and the bounds, then encode linearly with Thermometer. Because Thermometer's encoding is intrinsically linear in its inputs, log-transforming the inputs gives log-scale output — the geometric midpoint of `[min, max]` lands at the linear midpoint of the Thermometer gradient.
+
+Expansion happens at parse time (per 058-031-defmacro), so `hash(AST)` sees only the canonical `(Thermometer (log value) (log min) (log max))` form — no `Log` call node survives into the hashed AST.
+
+### Why Log earns its stdlib place (under the blueprint test)
+
+Log demonstrates a **distinct pattern** — log-transforming inputs before Thermometer to get log-scale encoding. A user who wants to encode a ratio, rate, or count spanning orders of magnitude can't derive this from Thermometer alone without thinking about the transformation. The macro is one line, but the pattern teaches: "want log-scale? log-transform first." That's a demonstration worth shipping.
+
+Contrast with Linear (058-008 REJECTED) — which under the new Thermometer signature is identical to Thermometer itself. Linear had nothing distinct to teach; Log does.
 
 ## Why Stdlib Earns the Name
 
