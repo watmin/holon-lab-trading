@@ -563,6 +563,112 @@ The same algebra runs at all these profiles. The programs don't change. The depl
 
 ---
 
+## Engram Caches — Memory of Learned Patterns
+
+The thought cache holds COMPUTED thoughts — vectors encoded from ASTs. The engram library holds LEARNED thoughts — subspace snapshots, discriminants, and prototype vectors that emerged from observing a stream.
+
+These are semantically different memory types. Thoughts are programs-of-the-moment. Engrams are distilled pattern recognition. **But the same caching principles apply, and the engrams themselves ARE thoughts.**
+
+### The engram library is a Map thought
+
+```scheme
+(def pattern-library
+  (Map (list
+    (list (Atom :pattern/syn-flood)         syn-flood-engram)
+    (list (Atom :pattern/bollinger-squeeze) squeeze-engram)
+    (list (Atom :pattern/market-reversal)   reversal-engram)
+    ;; ... potentially thousands ...
+    )))
+
+;; get an engram by name:
+(get pattern-library (Atom :pattern/syn-flood))
+```
+
+Under the foundational principle, this is a thought (an AST). Engrams are VALUES in the Map. Retrieval is AST walking. The library IS a wat thought.
+
+### Engrams cost to load and to match
+
+Each engram holds a subspace snapshot (mean + k components + threshold state), an eigenvalue signature, and metadata. Loading from disk = IO + deserialization. Matching = residual scoring against the subspace (O(k·d) per match).
+
+For a library of thousands of engrams, matching against every engram on every observation is expensive. The machine benefits from **recognizing which patterns are CURRENTLY relevant** and keeping those hot.
+
+### The engram LRU
+
+Same pattern as the thought cache — tiered memory by access cost:
+
+```
+L3 engram cache (hot)
+  Recently-matched engrams, in-memory
+  Fast residual scoring
+
+L4 engram disk (cold)
+  Everything ever minted
+  Load on demand, evict on LRU pressure
+```
+
+Recently-matched engrams stay hot. Rarely-used engrams page out. When a query's eigenvalue signature suggests a cold engram, it loads; on repeated matches it stays.
+
+### Prefetching via eigenvalue pre-filter
+
+The two-tier matching architecture (eigenvalue signature first, full residual second) makes prefetching natural:
+
+```
+1. Compute query's eigenvalue signature (cheap)
+2. Pre-filter all engrams by eigenvalue cosine (O(k·n), where n = library size)
+3. Top-k candidates — those most likely to match
+4. Prefetch them into the engram cache (L3)
+5. Full residual scoring against the prefetched candidates
+6. Evict irrelevant engrams
+```
+
+The engram cache stays focused on what the system is currently observing. **Learned-pattern working memory, shaped by the current stream.**
+
+### Engrams are thoughts too
+
+Zoom out. An engram has structure (subspace, eigenvalues, metadata). It has a vector representation. It can be stored in Maps. It can be compared via eigenvalue cosine. It can be GENERATED (by freezing a subspace at a moment). It can be TRANSMITTED (portable — one node mints, another matches).
+
+Everything we said about thoughts applies to engrams:
+
+- Engrams can be in nested data structures: `(Map (list (list (Atom :category/network) network-library) ...))`
+- Engrams can be compared algebraically: `(cosine engram-a engram-b)`
+- Engrams can be searched: `(topk-similar query-engram library 5)`
+- Engrams can be blended: `(Blend engram-a engram-b α)` — interpolate between learned patterns
+- Engrams can be diffed: `(Difference engram-a engram-b)` — what changed in the learned pattern
+- **Engrams can be PROGRAMS** — a learned pattern IS a program that recognizes a situation
+
+The loop closes here too. The machine's LEARNED PATTERNS are thoughts. Everything the machine has is a thought. The algebra applies to all of it.
+
+### The complete memory hierarchy
+
+```
+L1 thought cache     — per-thread hot thoughts (fastest)
+L2 thought cache     — shared warm thoughts (pipe access)
+L3 engram cache      — hot learned patterns (in-memory, residual scoring)
+L4 engram disk       — cold learned patterns (IO load on demand)
+Run DB               — full history, raw observations (query cost)
+```
+
+Five tiers. Each with its own access cost. Each with its own sizing policy.
+
+### Deployment: four knobs now
+
+Adding engram caching to the deployment picture:
+
+```
+d                    — vector dimension (per-frame capacity vs op cost)
+L1 thought cache     — per-thread working thoughts
+L2 thought cache     — shared working thoughts
+L3 engram cache      — hot learned patterns
+```
+
+All tunable. All deployment-time. Same algebra. Different performance profiles.
+
+A DDoS filter tunes for high L3 engram hit rate against attack signatures, with small L1/L2. A trading analysis system tunes for large L1/L2 thought caches with moderate L3, because the thoughts are being composed fresh while the engrams are stable. Different applications stress different tiers. The architecture accommodates.
+
+**The machine doesn't just cache vectors. It caches learned patterns. It caches programs. It caches data structures. It caches anything that is a thought. The entire hierarchy is hyperdimensional working memory, tiered by access cost, tuned by the operator.**
+
+---
+
 ## The Foundation: MAP VSA
 
 Holon implements the MAP variant of Vector Symbolic Architecture — **Multiply, Add, Permute** (Gayler, 2003). The canonical MAP operations are:
@@ -1123,6 +1229,7 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 | 2026-04-17 | **The Vector Side section added.** Because programs are thoughts and thoughts have vectors, the full VSA algebra applies to programs. Noise stripping (OnlineSubspace, reject) reveals the signal — the distinctive part of a program beyond common boilerplate. Programs can be diffed (Difference), blended, amplified, transferred by analogy. Discriminant-guided program synthesis: decode the learned Grace-direction against a program codebook via cleanup. The wat machine runs programs, observes outcomes, learns, and generates new candidate programs through pure algebra — no gradient descent. The recursion that every holon application implicitly implements. | 058 |
 | 2026-04-17 | **Dimensionality — The User's Knob section added.** Capacity per frame scales with vector dimension (Kanerva's bound). Users choose d per deployment — low d for kernel-level throughput, high d for rich analysis. Same algebra runs at any d. Same program runs at any d that holds its largest frame. "You can't express that" is enforced geometrically — over-capacity frames fail cleanup, not compilation. Depth is always free (refactor vs raise d). Dimensionality is a DEPLOYMENT parameter, not part of the algebra specification. Unique to this algebra: dimensionally parametric without retraining. | 058 |
 | 2026-04-17 | **The Cache Is Working Memory section added.** Cache entries are compiled thoughts (ast, vector) pairs, not just a performance hash table. The L1/L2 architecture from Proposal 057 is a memory hierarchy: L1 = per-thread hot working set, L2 = shared short-term memory, disk = long-term (engrams, DB). Cache sizing is a third deployment knob alongside d. The cache is cognitive substrate — making the machine REMEMBER its thoughts rather than recompute them. 1 c/s → 7.1 c/s wasn't just perf; it was the machine getting better at remembering. | 058 |
+| 2026-04-17 | **Engram Caches — Memory of Learned Patterns section added.** Extends the memory hierarchy with L3 engram cache (hot learned patterns) and L4 engram disk (cold). The engram library is itself a Map thought; retrieval is AST walking. LRU eviction keeps the recently-matched patterns hot. Two-tier matching (eigenvalue pre-filter + full residual) enables prefetching — the engram cache stays focused on what the stream currently resembles. Engrams ARE thoughts — composable, comparable, diffable, blendable. Complete five-tier memory hierarchy. Four deployment knobs (d, L1, L2, L3). | 058 |
 
 ---
 
