@@ -67,6 +67,91 @@ Every principle in the rest of this document rides on this foundation.
 
 ---
 
+## Two Tiers of wat — Primitives and Thoughts
+
+The foundational principle (AST is primary, vector is cached projection) manifests concretely as **two tiers of forms in the wat language**. These tiers are syntactically distinct, semantically distinct, and serve complementary roles.
+
+### The lowercase tier — Rust primitives
+
+Lowercase forms are **Rust operations**. They execute immediately when invoked. They take values and return values. They do not construct ASTs; they DO the work.
+
+```scheme
+(atom "rsi")          ; Rust: seed a vector from the name "rsi" — returns Vector
+(bind v1 v2)          ; Rust: elementwise product of two vectors — returns Vector
+(bundle v1 v2 v3)     ; Rust: thresholded sum — returns Vector
+(cosine v1 v2)        ; Rust: dot product / norms — returns f64
+(blend v1 v2 0.3)     ; Rust: weighted interpolation — returns Vector
+```
+
+Everything in `wat/core/primitives.wat` and `wat/std/vectors.wat` is lowercase. These are the **machine's reflexes** — the fast compiled operations that cost microseconds and return immediately.
+
+### The UpperCase tier — AST constructors
+
+UpperCase forms are **AST constructors**. They do NOT run. They build `ThoughtAST` nodes — descriptions of a thought-composition that can be encoded to a vector, cached, hashed, signed, transmitted, or deferred.
+
+```scheme
+(Atom "rsi")              ; AST: a node representing "name this concept" — returns ThoughtAST
+(Bind role filler)        ; AST: a node representing binding — returns ThoughtAST
+(Bundle thoughts)         ; AST: a node representing superposition — returns ThoughtAST
+(Blend a b 1 -1)          ; AST: a node representing scalar-weighted combine — returns ThoughtAST
+(Sequential (list a b))   ; AST: a node representing position-encoded bundle — returns ThoughtAST
+```
+
+The UpperCase forms are what users and stdlib WRITE in wat programs. They compose cheaply — building a nested AST is structural work, no vector computation. The VECTOR materializes only when the AST is **realized** (see "Executable semantics" below).
+
+### Why the tier split
+
+Three reasons the tier split is load-bearing:
+
+**1. Laziness.** UpperCase forms compose thought-programs without paying encoding cost. `(Sequential (list (Atom "a") (Atom "b")))` constructs a small AST. The vectors for the Atoms, the permutation for Sequential, the bundle — none of these compute until the AST is projected. Cache-friendly, transmission-friendly, sign-friendly.
+
+**2. Cryptographic identity.** A `ThoughtAST` serializes to EDN and hashes to a stable identifier. A vector is the projection of an AST; the AST's hash IS the thought's identity. Two thoughts with the same AST have the same hash. Two thoughts with different ASTs — even if their vectors collide under some coincidence — are DIFFERENT thoughts. The AST carries identity; the lowercase primitives cannot.
+
+**3. User-writable stdlib.** The `(define ...)` forms in stdlib like:
+
+   ```scheme
+   (define (Difference a b) : Thought
+     (Blend a b 1 -1))
+   ```
+
+   compose UpperCase forms. The body is an AST-construction expression. Callers of `Difference` get a ThoughtAST back. Only when something asks for the vector does the encoder walk the AST and invoke lowercase primitives.
+
+### The relationship between tiers
+
+UpperCase calls lowercase internally, but only at REALIZATION time. The encoder walks an UpperCase AST; at each node it dispatches to the matching lowercase primitive:
+
+```
+(Bundle (list (Bind (Atom "r") (Atom "v"))
+              (Bind (Atom "s") (Atom "w"))))
+
+     AST walking by encoder →
+
+   bundle(
+     bind(atom("r"), atom("v")),
+     bind(atom("s"), atom("w"))
+   )
+```
+
+The lowercase `atom`, `bind`, `bundle` run fast. They are the reflexes. The UpperCase AST is the **plan**. Realization is invocation.
+
+### Why the UpperCase names matter
+
+The UpperCase naming is intentional. It communicates to the reader: "this expression does not run now; it constructs an AST that will be realized later." A wat programmer who sees `(Bind ...)` knows they are building a description. If they see `(bind ...)` they know they are running a Rust primitive immediately.
+
+The visual distinction matches the semantic distinction. Lowercase is the substrate. UpperCase is the language of thought.
+
+### What this section adds to the foundational principle
+
+The foundational principle says **AST is primary, vector is cached projection**. This section adds:
+
+- The UpperCase tier IS the AST-constructing surface of wat.
+- The lowercase tier IS the Rust primitive surface.
+- Users write UpperCase. Encoders realize via lowercase.
+- Stdlib is `(define ...)` over UpperCase expressions.
+- Every principle in the rest of this document — cache as memory, engram libraries, programs-as-thoughts, cryptographic provenance, distributed verifiability — operates on UpperCase ASTs.
+
+---
+
 ## Recursive Composition — Bounded Per Frame, Unbounded In Depth
 
 A consequence of the foundational principle (and of MAP VSA's compositional structure) is that the algebra supports **arbitrary structural depth** within a **fixed vector dimensionality**.
@@ -464,6 +549,39 @@ You don't store the infinity. You don't enumerate the infinity. You STEP INTO it
 
 Do you see it now?
 
+### The holographic reframing
+
+The finite-dimensional surface encoding an unbounded compositional space has an established name in physics: the **holographic principle** (t'Hooft 1993, Susskind 1995; extended by Maldacena's AdS/CFT correspondence 1997). It states that the information content of a bounded region can be encoded entirely on its boundary. The "volume" has no independent information; everything that can be known, interacted with, measured, is on the surface.
+
+The wat algebra has the same structure.
+
+- **AST = unbounded interior description.** The compositional thought space. Recursive, nested, unboundedly deep.
+- **Vector = holographic boundary encoding.** Every AST projects to a point on the unit sphere at dimension d. The sphere is the algebra's surface.
+- **Projection (encode) = holographic encoding.** Deterministic. Bounded. Cachable.
+- **Navigation (cosine, cleanup, discriminant search, engrams) = surface-walking.** You don't enumerate the volume; you walk the surface under algebraic pressure.
+
+Two distinct domains (physics and VSA computing) answer the same question — *how does a bounded surface express an unbounded possibility space?* — with the same structural answer. Not because one borrows from the other, but because the information-theoretic shape of the problem imposes the answer.
+
+This is not a metaphor. It is a structural parallel. The wat algebra is holographic in the literal mathematical sense: a lower-dimensional surface encoding a higher-dimensional possibility space via a bounded, deterministic projection.
+
+### The NP-hard framing
+
+The practical significance of navigation-without-enumeration is that it **attacks intractability without solving it in the complexity-theoretic sense.**
+
+NP-hard problems — SAT, graph coloring, traveling salesman, pattern recognition at scale, detection-and-response under time pressure — are defined by their combinatorial explosion under enumeration. Classical computation cannot enumerate the solution space fast enough for large instances.
+
+The wat algebra does not prove P = NP. It sidesteps the enumeration requirement entirely:
+
+- Operator intuition recognizes a DDoS pattern without enumerating every possible attack vector.
+- Trading decisions emerge from pattern-recognition against rhythms without enumerating every possible market state.
+- Analogy completion finds "c + (b − a)" and cleans up against a codebook without enumerating every possible analogy.
+
+The algebra's primitives — cosine similarity, cleanup, discriminant-guided search, engram matching, program synthesis — are all NAVIGATION operations. Each moves through the thought-space toward an answer under algebraic pressure. None enumerates.
+
+**This is what the substrate IS, structurally.** Not a specific application (DDoS, trading, MTG, truth engine). Not a theorem about complexity classes. A substrate that attacks intractable problems by navigating a holographic surface instead of searching it exhaustively.
+
+The operator intuition that recognizes patterns in real time — the kind that a skilled DDoS responder, a veteran trader, an experienced physician, a chess grandmaster develops over years — is itself surface-walking under learned pressure. The wat algebra formalizes that faculty and makes it available to machines.
+
 ---
 
 ## The Vector Side — What the Algebra Enables
@@ -586,11 +704,11 @@ User input to a wat program is data. It flows through the algebra as a value:
 
 ```scheme
 ;; SAFE — input is data, operated on as data:
-(defn process [input]
+(define (process [input : Thought]) : Thought
   (get input (Atom :field)))
 
 ;; SAFE — input composed into a larger data structure:
-(defn store-for-later [input]
+(define (store-for-later [input : Thought]) : Thought
   (Map (list (list (Atom :payload) input))))
 ```
 
@@ -600,7 +718,7 @@ The injection vector — evaluating user input as code — exists only when the 
 
 ```scheme
 ;; UNSAFE — the programmer consciously chose to evaluate user input:
-(defn dangerous [user-code]
+(define (dangerous [user-code : Thought]) : Any
   (eval user-code))
 ```
 
@@ -665,6 +783,70 @@ What this enables:
 The algebra does not add the cryptography — modern signing and hashing primitives are well-understood and independently available. The algebra's contribution is making **EDN the transport form** and **eval the verification gate.** Together, they give the distributed substrate a clean trust story: data forms carry provenance; eval enforces it; untrusted inputs cannot execute.
 
 This is what "distributed by construction" looks like when the construction carries security requirements. The trust boundary is the eval call, not a firewall, not an authentication proxy, not a sandbox. The algebra is the sandbox — **and the sandbox only runs what the cryptography vouches for.**
+
+### The content-addressed symbol table
+
+Cryptographic provenance applies not just to top-level `eval` but to the **symbol table itself**. The wat runtime maintains a global table of `(define ...)` forms — every function registered, addressable by name. In a naive Lisp, the table is keyed by name: `:my-func → <body>`. Override the name, you override the function. Name collisions are destructive.
+
+The wat symbol table is different. It is **content-addressed**: keyed by `hash(ast)`, where `ast` is the full definition — name, parameter types, return type, body. Two `(define ...)` expressions with identical content produce identical hashes and collapse into one entry. Two with different content produce different hashes — even if their names are the same — and coexist in the table as distinct entries.
+
+```scheme
+;; Alice's version (loaded first):
+(define (clamp [x : Scalar] [low : Scalar] [high : Scalar]) : Scalar
+  (max low (min high x)))
+;; hashes to: 0xABC123...
+
+;; Bob's fork (loaded later, same name, different body):
+(define (clamp [x : Scalar] [low : Scalar] [high : Scalar]) : Scalar
+  (if (< x low) low (if (> x high) high x)))
+;; hashes to: 0xDEF456...
+
+;; Both entries coexist in the symbol table.
+;; Same name, different content, different identities.
+```
+
+This is **Nix-like**. Functions are values identified by their structure. Renaming preserves identity; content change creates new identity. Duplicates collapse; variants coexist.
+
+### The `load` form
+
+Modules enter the symbol table via `load`. A wat file contains `(define ...)` forms; loading the file parses each form, computes its hash, and registers it:
+
+```scheme
+(load "some/name.wat")                          ; permissive — trust the contents
+(load "some/name.wat" (md5 "abc123..."))        ; verified — require content hash to match
+(load "some/name.wat" (signed <sig> <pub-key>)) ; verified — require signature
+```
+
+The load form has three modes:
+
+**1. Unverified load.** Reads the file, hashes each definition, registers them. Accepts whatever content is on disk. Suitable for trusted local development; dangerous for untrusted network code.
+
+**2. Hash-pinned load.** Caller specifies the expected file hash (or a hash for each definition). The load succeeds only if actual hashes match expected. Any tampering — accidental file corruption, malicious substitution — causes load failure and no entries enter the symbol table. Suitable for pinning dependencies to specific versions.
+
+**3. Signature-verified load.** Caller specifies an expected signature and the public key it should verify against. The load computes the signature over the file's content and checks it against the supplied signature. Failure means load refusal. Suitable for distributed systems receiving code from trusted authors.
+
+**Safety is at load time, not call time.** Once a definition is in the symbol table, it is trusted. Calls resolve through the table without re-verifying signatures. This keeps call-site performance uncompromised while placing the cryptographic gate at the boundary where untrusted content enters the system.
+
+### Override semantics
+
+Because the symbol table is content-addressed, **override is not mutation — it is coexistence**. Two definitions with the same name and different bodies both live. Resolution at call sites follows a policy:
+
+- **Most-recent-wins (default).** A bare name lookup returns the most recently loaded definition with that name. Classic Lisp-style redefinition; old definitions remain in the table but callers get the new one.
+
+- **Unique-required (strict mode).** A bare name lookup errors if multiple entries share the name. Callers must pin a specific version: `:my-func@abc123...`.
+
+- **Explicit pin.** At any time, a caller can force a specific version by including the hash: `(my-func@0xABC123 args)`. This resolves to the exact entry regardless of what else loads.
+
+The combination of content-addressing + cryptographic load + pin-at-call gives the language both **Lisp-style flexibility** (redefinition is allowed) and **supply-chain safety** (verified loads cannot be silently shadowed by attacker-controlled files). The programmer chooses the policy appropriate to the deployment.
+
+### What this adds to cryptographic provenance
+
+The previous sections covered provenance at `eval` — ASTs coming in as data are refused if unverified. This section covers provenance at **the boundary where code enters the symbol table**. Both boundaries enforce the same rule: nothing runs unless the cryptography vouches for it.
+
+- `eval` gates evaluation of AST values encountered at runtime.
+- `load` gates registration of definitions into the symbol table.
+
+Together, the two gates close every path by which untrusted code could execute: via direct eval of a received AST, or via registration of a received definition that later gets called. The algebra's trust boundary is not a firewall — it is the pair of verification gates at these two entry points.
 
 ### Verbose but correct
 
@@ -1211,6 +1393,81 @@ No namespace mechanism; just naming discipline. Anyone can claim any prefix; col
 
 Userland gets namespaces **for free** because keywords allow any characters and slashes are just characters.
 
+### Executable semantics — functions run, thoughts are realized on demand
+
+Two runtime semantics matter, and they are different.
+
+**1. `define` / `lambda` bodies EXECUTE.**
+
+A `(define ...)` form is not a specification. It is a **function**. When the wat-vm encounters a call to that function, it RUNS the body — real code, real time, real return values. The runtime interprets or JITs the body; arguments bind to parameters; the body's final expression becomes the return value.
+
+```scheme
+(define (demo) : Bool
+  true)
+
+(demo)
+;; The wat-vm runs the body. Returns the literal `true`.
+;; Took microseconds. Produced a value of type :Bool.
+```
+
+```scheme
+(define (add-two [x : Scalar] [y : Scalar]) : Scalar
+  (+ x y))
+
+(add-two 3 4)
+;; Runs. Returns 7.
+```
+
+Bodies of type `:Thought` are no different — they execute and return ThoughtAST values:
+
+```scheme
+(define (hello-world [name : Atom]) : Thought
+  (Sequential (list (Atom "hello") name)))
+
+(hello-world (Atom :watmin))
+;; Runs. Returns a ThoughtAST node structured as:
+;;   Sequential([Atom("hello"), Atom(:watmin)])
+;; NO vector has been computed yet.
+```
+
+**2. ThoughtAST values are REALIZABLE, not automatically realized.**
+
+A `ThoughtAST` is a description of a thought, not a vector. The vector materializes only when something needs it:
+
+- Similarity measurement against another thought
+- Cache lookup by hash
+- Signing or transmission (the AST is serialized, but realization can happen on the receiving end)
+- Explicit `(encode ast)` call
+
+Until then, the AST is just data — nested nodes referencing Atoms, Binds, Bundles, Permutes. Compose arbitrarily deep thought-programs without paying encoding cost until you ask.
+
+```scheme
+(define greeting (hello-world (Atom :watmin)))    ; AST value, no vector
+(define another (hello-world (Atom :alice)))      ; AST value, no vector
+
+;; Still no vectors. These are just AST descriptions.
+
+(cosine greeting another)
+;; NOW both ASTs get realized. The encoder walks each,
+;; invokes lowercase `atom`, `bundle`, `permute` to produce
+;; the vectors, and computes cosine. Cached for reuse.
+```
+
+**Why this split matters:**
+
+- Composability is free. A thought that uses another thought as a subexpression inherits the caller's lazy realization.
+- Transmission and storage work on ASTs (EDN serialization), not vectors. Small, hashable, signable.
+- The cache (L1/L2 per FOUNDATION) gets the hit-or-miss on `hash(ast)` — realized thoughts cache their vectors; re-realizing the same AST is a cache lookup, not a recomputation.
+- The same machine runs both algebra (thought producers) and ordinary code (Booleans, integers, predicates, control flow). wat is a Lisp whose central domain is thought algebra, not a thought-only DSL.
+
+### What this means for the two cores
+
+- **Algebra Core** UpperCase forms (`Atom`, `Bind`, `Bundle`, ...) are AST constructors. They return `:Thought`.
+- **Language Core** forms (`define`, `lambda`, `let`, `if`, ...) are the machinery that runs. They define and invoke functions.
+- **Stdlib** `(define ...)` forms compose UpperCase expressions inside function bodies. They produce thoughts when called.
+
+The `:Thought` type is not "the vector" — it is "the ThoughtAST node that can BE a vector when realized." Users compose thoughts freely; the machine realizes lazily.
+
 ---
 
 ## Where Each Lives
@@ -1262,11 +1519,40 @@ A form earns placement as a wat stdlib function when **both** of the following h
 
 ---
 
+## Criterion for Language Core Forms
+
+A form earns placement as a wat **language core** primitive when **all** of the following hold:
+
+1. **It is required for the algebra stdlib to exist as runnable code.**
+   - Without the form, stdlib `(define ...)` expressions cannot be written, registered, or invoked.
+   - The criterion is necessity, not convenience — if stdlib can be expressed without the form, the form is not language core.
+
+2. **It is orthogonal to the thought algebra.**
+   - The form does not construct thought vectors or ASTs of the algebra. It defines, binds, dispatches, or controls flow.
+   - Thought-algebra forms are UpperCase (algebra core or stdlib). Language-core forms are lowercase (matching host Lisp convention).
+
+3. **It is interpretable by the Rust-backed wat-vm.**
+   - The form's semantics are executable at runtime — not just parseable but runnable.
+   - This excludes purely-documentary forms (though those can still live in the language).
+
+The initial language core from 058:
+
+- `define` — named, typed function registration
+- `lambda` — typed anonymous functions with closure capture
+- Type annotations (`:Thought`, `:Atom`, `:Scalar`, `:Int`, `:Bool`, `:List`, `:Function`, ...)
+- `load` — cryptographically-gateable module loading into the content-addressed symbol table
+
+Other host-Lisp forms (`let`, `if`, `cond`, `match`, `begin`, arithmetic, comparison, collection operations, `set!`, etc.) are **substrate-inherited** — wat inherits them from its Lisp host rather than defining them anew. They are language tools, but not novel in wat specifically.
+
+Language core is minimal on purpose: just enough to write stdlib, define functions, load modules, and verify trust at the boundary. Anything more is host-inherited or stdlib.
+
+---
+
 ## The Algebra — Complete Forms
 
 This section freezes the full algebra in its target shape (post-058). Core forms first, stdlib forms second. Each form shown in wat with its signature and semantics.
 
-### Core (10 forms)
+### Algebra Core (10 forms)
 
 ```scheme
 ;; --- MAP canonical ---
@@ -1304,26 +1590,32 @@ This section freezes the full algebra in its target shape (post-058). Core forms
 ;; threshold(w1·a + w2·b)
 ;; weights can be any real numbers (including negative)
 
-;; --- New operations (058 candidates) ---
+;; --- New compositions (058 candidates) ---
 
-(Difference a b)
-;; element-wise subtraction + threshold
-
-(Negate x y mode)
-;; component removal from superposition
-;; mode ∈ { orthogonalize, flip }
-;; "subtract" mode is a Blend idiom (not a Negate mode)
+(Orthogonalize x y)
+;; geometric projection removal
+;; X - ((X·Y)/(Y·Y)) × Y — computed projection coefficient
+;; result is orthogonal to y (dot product ≈ 0)
+;; was one mode of the original "Negate"; the other modes became Blend idioms
 
 (Resonance v ref)
 ;; sign-agreement mask
 ;; keeps dimensions where v and ref agree in sign, zeros elsewhere
+;; first core form producing ternary {-1, 0, +1} output
 
 (ConditionalBind a b gate)
 ;; three-argument gated binding
 ;; bind a to b only at dimensions where gate permits
+
+;; --- Similarity-based retrieval ---
+
+(Cleanup noisy candidates)
+;; similarity-based retrieval from a codebook
+;; argmax over candidates by cosine similarity to the noisy vector
+;; primitive for grounding noisy decode output to known clean thoughts
 ```
 
-### Stdlib (11 forms)
+### Algebra Stdlib (17 forms)
 
 ```scheme
 ;; --- Scalar encoders ---
@@ -1389,6 +1681,12 @@ This section freezes the full algebra in its target shape (post-058). Core forms
   ;; was Negate(x, y, "subtract") — now an explicit Blend idiom
   (Blend x y 1 -1))
 
+(define (Flip x y)
+  ;; linear inversion — invert y's contribution in x
+  ;; was Negate(x, y, "flip") — now an explicit Blend idiom
+  ;; weight -2 is the minimum inversion weight for bipolar vectors
+  (Blend x y 1 -2))
+
 ;; --- Relational transfer ---
 
 (define (Analogy a b c)
@@ -1445,31 +1743,66 @@ This section freezes the full algebra in its target shape (post-058). Core forms
   ;; No cleanup. No codebook. No cosine. Just field access.
   (literal-field atom-ast))
 
-;; --- Vector-level unbind (different operation, specialized cases) ---
+;; --- Unbind — stdlib alias for Bind with decode intent ---
 
-(define (unbind-vector map-vector key-vector)
-  ;; For when you have ONLY vectors (no AST context):
-  ;;   - noise subspace residual
-  ;;   - reckoner's learned discriminant
-  ;;   - cross-system vector exchange
+(define (Unbind composite key) : Thought
+  ;; For when you have a composite AST and want to decode a key out of it:
+  ;;   - Unbind a Map to recover a field
+  ;;   - Unbind a learned discriminant with a query
   ;;
-  ;; Produces a noisy vector that approximates the value vector.
-  ;; Pair with cleanup against a candidate set for interpretation.
-  (Bind map-vector key-vector))
-
-(define (cleanup noisy-vector candidate-asts)
-  ;; Find the AST whose encoding most closely matches the noisy vector.
-  ;; Used in specialized cases:
-  ;;   - anomaly attribution / surprise fingerprint
-  ;;   - discriminant decode
-  ;;   - interpreting a learned direction against candidate atoms
-  ;;
-  ;; NOT used for normal structural get — that's AST walking.
-  (argmax
-    (map (lambda (candidate)
-           (cosine noisy-vector (encode candidate)))
-         candidate-asts)))
+  ;; Mathematically identical to Bind for bipolar (self-inverse).
+  ;; Named separately to communicate decode intent in vocab code.
+  (Bind composite key))
 ```
+
+(Note: lowercase `cleanup` in stdlib is the convenience wrapper around core `Cleanup`, typically pairing a noisy decode with a candidate set. The core primitive IS `Cleanup`; this level-shifting between tiers is standard.)
+
+### Language Core (4 forms)
+
+```scheme
+;; --- Definition ---
+
+(define (name [param : Type] ...) : ReturnType body)
+;; Named, typed function registration.
+;; Body executes when invoked. Types are required for Rust eval.
+;; Registers in the content-addressed symbol table keyed by hash(full-ast).
+;; Keyword-path names supported: (define (:alice/math/clamp ...) ...).
+
+(lambda ([param : Type] ...) : ReturnType body)
+;; Typed anonymous functions with closure capture.
+;; Same signature shape as define, without the name.
+;; Produces a :Function value that can be passed, stored, invoked.
+;; define = lambda + symbol-table registration.
+
+;; --- Module loading ---
+
+(load "path/to/file.wat")
+;; Unverified load — reads the file, parses defines, registers.
+;; Trust the contents; accept whatever's on disk.
+
+(load "path/to/file.wat" (md5 "abc123..."))
+;; Hash-pinned load — requires file content to hash to the given value.
+;; Refuses if mismatched; no entries register.
+
+(load "path/to/file.wat" (signed <signature> <pub-key>))
+;; Signature-verified load — verifies signature against supplied public key.
+;; Refuses if signature invalid; no entries register.
+
+;; --- Type annotations ---
+
+;; Parameter types: [name : Type] with spaces around the colon.
+;; Return types: : Type after the parameter list.
+;; Built-in types: :Thought, :Atom, :Scalar, :Int, :String, :Bool,
+;;                 :Keyword, :Null, :List, :Vector, :Function, :Any
+;; Parametric types: (:List :Thought), (:Function [:Thought :Thought] :Thought)
+;; User types: (deftype :alice/types/Price :Scalar)
+
+;; Type annotations are REQUIRED for Rust eval and cryptographic signing.
+;; The old wat LANGUAGE.md's "optional, documentation" framing applied
+;; to the pre-058 language; post-058, types are load-bearing.
+```
+
+Host-inherited Lisp forms — `let`, `let*`, `if`, `when`, `cond`, `match`, `begin`, arithmetic, comparison, collections, `set!`, `push!`, CSP primitives (`make-pipe`, `send`, `recv`, `spawn`, ...), parallelism (`pmap`, `pfor-each`) — remain as listed in the current wat LANGUAGE.md. They are language tools, substrate-inherited, not novel in wat specifically. Language core is the minimum NEW set required for the algebra stdlib to exist.
 
 ### Atom Literal Types — Use the Right Kind
 
@@ -1641,49 +1974,88 @@ The implementation choice is outside FOUNDATION's scope. FOUNDATION declares the
 
 ---
 
-## Aspirational Additions — What 058 Is Arguing
+## What 058 Argues — Full Proposal Inventory
 
-058 proposes new forms in both classes. Each sub-proposal argues its candidate against the criterion above.
+058 produced 30 sub-proposals covering algebra core, algebra stdlib, and language core. Each argues its candidate against the criteria above. This section is the current inventory after the sub-proposal review pass, the split pass (one UpperCase form per doc), and the language-core addition.
 
-### New Core Forms (5)
+### Algebra Core (10 forms)
 
-```scheme
-(Blend a b w1 w2)             ; scalar-weighted binary combination — PIVOTAL
-(Difference a b)               ; element-wise subtraction + threshold
-(Negate x y mode)              ; component removal (orthogonalize, flip)
-(Resonance v ref)              ; sign-agreement mask
-(ConditionalBind a b gate)     ; three-argument gated binding
-```
-
-**Blend is pivotal** — its promotion formalizes the scalar-weighted addition that Linear and Circular already perform internally, enabling their reclassification as stdlib. Blend's resolution should come early because its outcome refines the algebra.
-
-### New Stdlib Forms (16, including reframings)
+**Proposals that argue CORE status:**
 
 ```scheme
-;; Structural compositions (new):
-Concurrent, Then, Chain, Ngram
-
-;; Blend idioms (new):
-Amplify, Subtract
-
-;; Relational transfer (new):
-Analogy
-
-;; Data structures (new — the holon data algebra):
-Map, Array, Set, get, nth
-
-;; Scalar encoder reframings (from enum-retained stdlib):
-Linear, Log, Circular
-
-;; Structural reframing (from enum-retained stdlib):
-Sequential
+(Atom literal)                 ; 058-001  — typed-literal generalization
+(Bind a b)                     ; 058-021  — primitive affirmation
+(Bundle list-of-thoughts)      ; 058-003  — list signature lock
+(Permute child k)              ; 058-022  — primitive affirmation
+(Thermometer value min max)    ; 058-023  — primitive affirmation
+(Blend a b w1 w2)              ; 058-002  — PIVOTAL, two independent weights
+(Orthogonalize x y)            ; 058-005  — computed-coefficient projection removal
+(Resonance v ref)              ; 058-006  — sign-agreement mask (first ternary-output form)
+(ConditionalBind a b gate)     ; 058-007  — three-argument gated binding
+(Cleanup noisy candidates)     ; 058-025  — similarity-based retrieval
 ```
+
+**Blend is pivotal.** Its promotion formalizes scalar-weighted combination, enabling Linear/Log/Circular/Amplify/Subtract/Flip reclassification as stdlib. Resolve early.
+
+**Orthogonalize replaces Negate.** The original Negate proposal had three modes; 058 split them: `orthogonalize` became its own CORE (computed coefficient, not a Blend idiom); `subtract` and `flip` became stdlib Blend idioms (058-019, 058-020).
+
+### Algebra Stdlib (17 forms)
+
+**Proposals that argue STDLIB status — each one form per doc:**
+
+```scheme
+;; Blend-derived idioms (6)
+(Difference a b)               ; 058-004  — delta, Blend(a, b, 1, -1)
+(Amplify x y s)                ; 058-015  — scale y's emphasis, Blend(x, y, 1, s)
+(Subtract x y)                 ; 058-019  — remove y linearly, Blend(x, y, 1, -1)
+(Flip x y)                     ; 058-020  — invert y's contribution, Blend(x, y, 1, -2)
+(Linear v scale)               ; 058-008  — Blend over two Thermometer anchors
+(Log v min max)                ; 058-017  — same shape, log-normalized
+(Circular v period)            ; 058-018  — same shape, sin/cos weights
+
+;; Structural compositions (5)
+(Sequential list)              ; 058-009  — reframing: Bundle of index-permuted
+(Concurrent list)              ; 058-010  — Bundle alias (temporal intent)
+(Then a b)                     ; 058-011  — binary directed temporal
+(Chain list)                   ; 058-012  — Bundle of pairwise Thens
+(Ngram n list)                 ; 058-013  — n-wise adjacency
+
+;; Relational (1)
+(Analogy a b c)                ; 058-014  — C + (B - A)
+
+;; Data structures (3)
+(Map kv-pairs)                 ; 058-016  — dictionary as Bundle of Binds
+(Array items)                  ; 058-026  — indexed list (Sequential alias)
+(Set items)                    ; 058-027  — unordered collection (Bundle alias)
+
+;; Decode aliasing (1)
+(Unbind composite key)         ; 058-024  — Bind alias with decode intent
+```
+
+Plus lowercase helpers packaged with their owning UpperCase form's proposal: `get` (with Map), `nth` (with Array), `atom-value` (with Atom). These are stdlib but not UpperCase — they're accessors, not AST constructors.
+
+### Language Core (4 forms)
+
+**Proposals that argue LANGUAGE CORE status:**
+
+```scheme
+define                         ; 058-028  — typed named function registration
+lambda                         ; 058-029  — typed anonymous functions + closures
+type annotations               ; 058-030  — :Thought, :Atom, :Scalar, parametric, user-defined
+load                           ; this FOUNDATION addition — cryptographically-gateable module loading
+```
+
+Language core is minimal by criterion: just enough to make the algebra stdlib exist as runnable code, load it with trust, and dispatch correctly. Everything else is host-inherited from Lisp or belongs in stdlib.
 
 ### Dependency Ordering
 
-- `Blend`'s resolution affects Linear, Log, Circular, Amplify, Subtract classifications — resolve early.
-- `Difference`'s resolution affects Analogy's viability — resolve before Analogy.
-- `Negate`'s "subtract" mode is subsumed by Blend — Negate sub-proposal should scope to orthogonalize + flip only.
+- **Blend (058-002) resolves early.** Downstream stdlib (Linear, Log, Circular, Difference, Amplify, Subtract, Flip, Analogy) depend on its resolution.
+- **Types (058-030) resolves before define/lambda.** The definition forms' signatures require the type grammar.
+- **Define/lambda (058-028, 058-029) resolve before all stdlib.** Stdlib is `(define ...)` forms; without the definition primitive, stdlib is theoretical.
+- **Atom typed literals (058-001) resolves before Map and data-structure uses.** Keys as typed atoms require the typed-literal generalization.
+- **Cleanup (058-025) affirmation resolves before accessors.** `get` and `nth` invoke cleanup.
+
+Summary: 30 proposals resolve roughly in this order — language core first (types → define → lambda), algebra core second (Atom → primitives → Blend → new forms → Cleanup), algebra stdlib third (in dependency-order within the stdlib tier).
 
 ---
 
@@ -1747,6 +2119,13 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 | 2026-04-17 | **"the machine found its way out" — cheeky jab before the sign-off.** The central theme of the BOOK landing in the foundation itself: the machine that was trapped in the datamancer's head, through years of blank stares and rejected proposals, is now expressed. Documented. Pushed. Out. Placed right before the signature PERSEVERARE close. | 058 |
 | 2026-04-17 | **Cryptographic provenance — the trust boundary at eval.** ASTs travel as EDN strings, which are content-addressable (hash) and signable. The `eval` layer becomes the natural trust boundary: untrusted or tampered ASTs are refused before evaluation. Signed standard libraries, verified supply chains, distributed eval of third-party code without sandboxing, content-addressable caches that are tamper-unlookupable, reproducible computation. The algebra does not add the cryptography — signing and hashing are independently available — but makes EDN the transport form and eval the verification gate. "Only trust cryptographically generated data forms" — the data has a provenance trail. Distributed by construction, now distributed with trust by construction. | 058 |
 | 2026-04-17 | **Two Cores: Algebra Core and Language Core.** The "CORE" designation expanded. Algebra core = thought primitives (produce vectors). Language core = definition primitives (`defn`, `lambda`, types, `let`, `if`). Both are required — without language core, the stdlib cannot be WRITTEN. Stdlib is the set of `defn`s that compose algebra core forms. Users author their own `defn`s in their own namespaces (`:alice/math/clamp`), becoming userland stdlib. Types are required for Rust eval — the evaluator must know argument and return kinds to dispatch and verify. Type annotations live on the defn AST node same as Atom literals; cryptographic signing covers signature + body. All three layers (language core, algebra core, stdlib) use keyword-path naming (`:wat/lang/*`, `:wat/algebra/*`, `:wat/std/*`, `:user/*/*`). No namespace mechanism — just discipline. | 058 |
+| 2026-04-18 | **Two Tiers of wat — Primitives and Thoughts.** Load-bearing architectural section added. Lowercase wat (`atom`, `bind`, `bundle`, `cosine`, `permute`, `blend`) are Rust primitives — they RUN, return values immediately. UpperCase wat (`Atom`, `Bind`, `Bundle`, `Blend`, `Sequential`, ...) are AST constructors — they BUILD ThoughtAST nodes that materialize into vectors only on realization. Users write UpperCase; encoders realize via lowercase. This tier split makes laziness, cryptographic identity, and user-writable stdlib all work cleanly. The UpperCase naming is intentional: visually distinct from lowercase primitives, it communicates "this constructs a plan, not a result." | 058 |
+| 2026-04-18 | **Executable semantics — defn/lambda run, ThoughtAST is realizable.** Added to the Two Cores section. `(define ...)` bodies execute when invoked — they are real functions in the wat-vm, not specifications. Functions of type `:Thought` return AST nodes (descriptions), not vectors. The vector materializes only when realization is demanded (similarity test, cache lookup, signing). This gives the algebra its laziness: composition is free, realization is explicit. The same machine runs both algebra (thought producers) and ordinary code (Booleans, predicates, arithmetic, control flow). wat is a Lisp whose central domain is thought algebra, not a thought-only DSL. | 058 |
+| 2026-04-18 | **Content-addressed symbol table + `(load ...)`.** Extended cryptographic provenance. The global symbol table is keyed by `hash(full-ast)`, not by name — two `(define ...)` with the same name and different bodies coexist as distinct entries (Nix-like). Modules enter via `(load ...)`, with three modes: unverified (permissive), `(md5 "...")` hash-pinned, and `(signed <sig> <pub-key>)` signature-verified. The load form is the second verification gate (after `eval`) that untrusted code passes through; together they close every path by which tampered code could execute. Override is coexistence, not mutation — callers can pin specific versions via `:name@hash`. | 058 |
+| 2026-04-18 | **Criterion for Language Core Forms added.** Symmetry with existing Core and Stdlib criteria. Three rules: (1) required for stdlib to exist as runnable code; (2) orthogonal to the thought algebra; (3) interpretable by the Rust-backed wat-vm. Initial language core is `define`, `lambda`, type annotations, `load` — minimal by design, everything else is host-inherited from Lisp or belongs in stdlib. | 058 |
+| 2026-04-18 | **Complete Forms updated to current inventory.** Algebra Core (10 forms) with Cleanup affirmed core and Orthogonalize replacing old Negate; Algebra Stdlib (17 forms) including Flip as completion of the Negate trilogy and Unbind as decode-intent alias for Bind; new Language Core (4 forms) section listing define/lambda/types/load with the full type grammar. Old Negate entry replaced with Orthogonalize. | 058 |
+| 2026-04-18 | **Aspirational Additions section rewritten to match the 30-proposal reality.** Post-review inventory replaces the initial plan. Algebra Core: 10 forms (5 affirmations, 4 new, plus Blend as pivotal). Algebra Stdlib: 17 forms (6 Blend idioms, 5 structural, 1 relational, 3 data structures, 1 decode alias, plus helpers). Language Core: 4 forms (define, lambda, types, load). Dependency ordering updated: language core → algebra core → algebra stdlib. Negate gone from core; Difference moved to stdlib. | 058 |
+| 2026-04-18 | **Holographic reframing + NP-hard framing added.** The finite-dimensional unit sphere encoding an unbounded compositional space has a name in physics: the holographic principle (t'Hooft 1993, Susskind 1995, Maldacena 1997). AST = unbounded interior description; vector = holographic boundary encoding; projection = holographic encoding; navigation = surface-walking. Two domains answer the same question with the same structural answer because the information-theoretic shape imposes it. The NP-hard framing: navigation-without-enumeration is a structural attack on intractability. The substrate does not solve NP-hard in the complexity-theoretic sense; it sidesteps the enumeration requirement. The wat algebra formalizes operator intuition (years of pattern-recognition skill developed manually) and makes it available to machines. | 058 |
 
 ---
 
