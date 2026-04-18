@@ -12,20 +12,17 @@ This document is not a PROPOSAL. It does not require designer review. It is the 
 Holon implements the MAP variant of Vector Symbolic Architecture — **Multiply, Add, Permute** (Gayler, 2003). The canonical MAP operations are:
 
 - **Multiply** → `Bind` — element-wise multiplication of bipolar vectors, self-inverse
-- **Add** → `Bundle` — element-wise addition + threshold, commutative superposition
+- **Add** → `Bundle` — element-wise addition + threshold, commutative
 - **Permute** → `Permute` — circular dimension shift
 
 Plus the identity function that maps names to vectors:
 
 - **Atom** — hash-to-vector, deterministic, no codebook
 
-These four are the **algebraic foundation**. Everything else in the AST is either:
-- A SCALAR ENCODER (maps a scalar value to a vector)
-- A STRUCTURAL COMPOSITION (combines existing core forms in a named pattern)
-
-Scalar encoders need operations the canonical MAP set cannot perform — specifically, **scalar-weighted vector addition** (interpolating between anchor vectors based on a value). This operation is not in Multiply (multiplication), Add (unweighted sum), or Permute (shift).
-
-Currently, scalar-weighted addition is hidden inside `Linear`, `Log`, and `Circular` — each variant performs it internally with its own specific weighting scheme. Under a rigorous audit, the SHARED PRIMITIVE would be promoted (see Aspirational Additions → Blend), and Linear/Log/Circular would become stdlib compositions over that primitive.
+These four are the **algebraic foundation**. Everything else in the algebra is either:
+- A SCALAR PRIMITIVE — does something MAP cannot (Thermometer, Blend)
+- A NEW OPERATION — a distinct algebraic action (Difference, Negate, Resonance, ConditionalBind)
+- A STDLIB COMPOSITION — a named pattern built from existing core forms
 
 ---
 
@@ -49,8 +46,6 @@ The distinction is about WHERE NEW WORK HAPPENS:
 ```
 holon-rs kernel (Rust)
   └── The algebra itself. Primitive operations. Optimized implementations.
-      Fixed surface — changes only when a genuine new algebraic operation
-      is introduced.
 
 holon-lab-trading/src (Rust)
   └── ThoughtAST enum — one variant per core form.
@@ -81,18 +76,6 @@ A form earns placement in `ThoughtAST` as a core variant when **all** of the fol
 3. **The encoder must treat it distinctly.**
    - If the encoder could handle the form by first expanding it to existing variants, then calling the existing encoder logic, it is stdlib, not core.
 
-**Examples of operations that would pass:**
-- Element-wise subtraction + threshold (no existing core form subtracts)
-- Component removal from a superposition (no existing core form removes directionally)
-- Three-argument gated binding (no existing core form takes three arguments with a gate role)
-
-**Examples of operations that would NOT pass:**
-- Named wrapping of a Bundle (Bundle already exists; the wrapping is notational)
-- Adjacency-based list encoding (composes from Bundle + Permute)
-- Named temporal ordering (composes from Sequential and/or Permute)
-
----
-
 ## Criterion for Stdlib Forms
 
 A form earns placement as a wat stdlib function when **both** of the following hold:
@@ -105,98 +88,336 @@ A form earns placement as a wat stdlib function when **both** of the following h
    - Its absence would cause subagents and humans to write inconsistent wat when expressing the same concept.
    - The named form conveys intent more clearly than the expanded primitive composition.
 
-Stdlib forms SHOULD BE:
-- Generic (cover broad patterns, not specific instances)
-- Composable (work cleanly with other stdlib forms and with list-producing operations like `map`, `filter`)
-- Named by what they STRUCTURALLY DO, not what they SPECIFICALLY MEAN (e.g., `Concurrent` names the structural co-occurrence, not a specific trading pattern)
+---
+
+## The Algebra — Complete Forms
+
+This section freezes the full algebra in its target shape (post-058). Core forms first, stdlib forms second. Each form shown in wat with its signature and semantics.
+
+### Core (10 forms)
+
+```scheme
+;; --- MAP canonical ---
+
+(Atom name)
+;; deterministic bipolar vector from hash(name)
+
+(Bind a b)
+;; element-wise multiplication, self-inverse
+;; (Bind a (Bind a b)) = b
+
+(Bundle list-of-thoughts)
+;; list → element-wise sum + threshold
+;; commutative, takes an explicit list (not variadic)
+
+(Permute child k)
+;; circular shift of dimensions by integer k
+
+;; --- Scalar primitives ---
+
+(Thermometer value min max)
+;; gradient encoding: proportion of dimensions set to +1
+;; based on (value - min) / (max - min)
+;; exact cosine geometry — extremes anti-correlated
+
+(Blend a b w1 w2)
+;; scalar-weighted binary combination
+;; threshold(w1·a + w2·b)
+;; weights can be any real numbers (including negative)
+
+;; --- New operations (058 candidates) ---
+
+(Difference a b)
+;; element-wise subtraction + threshold
+
+(Negate x y mode)
+;; component removal from superposition
+;; mode ∈ { orthogonalize, flip }
+;; "subtract" mode is a Blend idiom (not a Negate mode)
+
+(Resonance v ref)
+;; sign-agreement mask
+;; keeps dimensions where v and ref agree in sign, zeros elsewhere
+
+(ConditionalBind a b gate)
+;; three-argument gated binding
+;; bind a to b only at dimensions where gate permits
+```
+
+### Stdlib (11 forms)
+
+```scheme
+;; --- Scalar encoders ---
+
+(define (Linear v scale)
+  ;; value on a known bounded scale
+  (Thermometer v 0 scale))
+
+(define (Log v min max)
+  ;; value spanning orders of magnitude
+  (Thermometer (ln v) (ln min) (ln max)))
+
+(define (Circular v period)
+  ;; value on a cycle
+  (let ((theta (* 2 pi (/ v period))))
+    (Blend CIRCULAR-COS-BASIS
+           CIRCULAR-SIN-BASIS
+           (cos theta)
+           (sin theta))))
+
+;; --- Structural compositions ---
+
+(define (Sequential list-of-thoughts)
+  ;; positional encoding
+  ;; each thought permuted by its index (Permute by 0 is identity)
+  (Bundle
+    (map-indexed
+      (lambda (i thought) (Permute thought i))
+      list-of-thoughts)))
+
+(define (Concurrent list-of-thoughts)
+  ;; named commutative relation over Bundle
+  (Bind (Atom "concurrent")
+        (Bundle list-of-thoughts)))
+
+(define (Then a b)
+  ;; binary directed temporal relation
+  (Bind (Atom "then")
+        (Sequential (list a b))))
+
+(define (Chain list-of-thoughts)
+  ;; adjacency — Bundle of pairwise Thens
+  (Bundle
+    (map (lambda (pair) (Then (first pair) (second pair)))
+         (pairwise list-of-thoughts))))
+
+(define (Ngram n list-of-thoughts)
+  ;; n-wise adjacency — generalizes Chain
+  (Bundle
+    (map (lambda (window)
+           (Bind (Atom "ngram")
+                 (Sequential window)))
+         (n-wise n list-of-thoughts))))
+
+;; --- Weighted-combination idioms over Blend ---
+
+(define (Amplify x y s)
+  ;; boost component y in x by factor s
+  (Blend x y 1 s))
+
+(define (Subtract x y)
+  ;; remove y from x at full strength
+  ;; was Negate(x, y, "subtract") — now an explicit Blend idiom
+  (Blend x y 1 -1))
+
+;; --- Relational transfer ---
+
+(define (Analogy a b c)
+  ;; A is to B as C is to ?
+  ;; computes C + (B - A)
+  (Bundle (list c (Difference b a))))
+
+;; --- Data structures ---
+
+(define (Map pairs)
+  ;; key-value store — pairs is a list of [key value] tuples
+  ;; each pair becomes a Bind; all pairs bundled together
+  (Bundle
+    (map (lambda (pair)
+           (Bind (first pair) (second pair)))
+         pairs)))
+
+(define (Array items)
+  ;; index-accessible list — each item bound to its position atom
+  ;; position atoms are deterministic (derived from index)
+  (Bundle
+    (map-indexed
+      (lambda (i item) (Bind (Atom (str "pos/" i)) item))
+      items)))
+
+(define (Set items)
+  ;; unordered collection — membership via cosine
+  ;; semantically Bundle, named for reader clarity
+  (Bundle items))
+
+(define (get structure locator)
+  ;; unified access for any Bind-based structure
+  ;; Bind is self-inverse: (Bind (Bind k v) k) = v
+  ;; works for Map with semantic keys, Array with position atoms,
+  ;; any nested combination, and for any kind of locator thought
+  (Bind structure locator))
+
+(define (nth sequential-thought i)
+  ;; Permute-based index access for Sequential-encoded thoughts
+  ;; distinct from (get Array ...) — different encoding, different inverse
+  (Permute sequential-thought (- 0 i)))
+```
+
+### Global Reference Atoms
+
+```scheme
+;; Used by stdlib scalar encoders.
+
+(define CIRCULAR-COS-BASIS (Atom "_circular_cos_basis"))
+(define CIRCULAR-SIN-BASIS (Atom "_circular_sin_basis"))
+```
+
+### Usage Examples
+
+```scheme
+;; Role-filler separation everywhere — Bind joins name-atom to value:
+
+(Bind (Atom "rsi")   (Thermometer 0.73 0 1))
+(Bind (Atom "bytes") (Log 1500 1 1000000))
+(Bind (Atom "hour")  (Circular 14 24))
+
+;; Concurrent observations:
+(Concurrent
+  (list
+    (Bind (Atom "rsi")   (Thermometer 0.73 0 1))
+    (Bind (Atom "macd")  (Thermometer -0.02 -1 1))))
+
+;; Temporal sequence:
+(Chain
+  (list
+    (Bind (Atom "rsi") (Thermometer 0.68 0 1))
+    (Bind (Atom "rsi") (Thermometer 0.71 0 1))
+    (Bind (Atom "rsi") (Thermometer 0.74 0 1))))
+
+;; Relational verb with concurrent observations:
+(Bind (Atom "diverging")
+      (Concurrent
+        (list
+          (Bind (Atom "rsi")   (Thermometer 0.73 0 1))
+          (Bind (Atom "price") (Thermometer 0.25 0 1)))))
+
+;; --- Data structures — the unified holon data algebra ---
+
+;; Map as key-value store:
+(def portfolio
+  (Map (list
+    (list (Atom "USDC") (Thermometer 5000 0 10000))
+    (list (Atom "WBTC") (Thermometer 0.5  0 1.0)))))
+
+(get portfolio (Atom "USDC"))      ; → (Thermometer 5000 0 10000)
+
+;; Array as indexed collection:
+(def recent-rsi
+  (Array (list
+    (Thermometer 0.68 0 1)
+    (Thermometer 0.71 0 1)
+    (Thermometer 0.74 0 1))))
+
+(get recent-rsi (Atom "pos/2"))    ; → (Thermometer 0.74 0 1)
+
+;; Nested — Map of Arrays of thoughts:
+(def observer-state
+  (Map (list
+    (list (Atom "market-readings") recent-rsi)
+    (list (Atom "portfolio")       portfolio))))
+
+(get (get observer-state (Atom "market-readings"))
+     (Atom "pos/0"))              ; → (Thermometer 0.68 0 1)
+
+;; --- The locator can be ANY thought ---
+
+;; The key doesn't have to be a bare Atom. It can be a composite thought:
+
+(def keyed-by-composite
+  (Map (list
+    (list (Concurrent (list (Atom "rsi") (Atom "overbought")))
+          some-value)
+    (list (Bind (Atom "macd") (Atom "crossing-up"))
+          other-value))))
+
+;; Retrieve with the same composite as locator:
+(get keyed-by-composite
+     (Concurrent (list (Atom "rsi") (Atom "overbought"))))
+;; → some-value
+
+;; Keys can be Maps. Values can be Maps. Arbitrary nesting:
+(def wild
+  (Map (list
+    (list (Map (list (list (Atom "a") (Atom "b"))))    ; key IS a map
+          (Array (list                                  ; value IS an array
+            (Map (list (list (Atom "x") (Atom "y"))))   ; of maps
+            (Atom "atom-in-the-middle")                 ; of atoms
+            (Array (list (Atom "nested") (Atom "deeper")))))))) ; of arrays
+```
 
 ---
 
-## Current ThoughtAST Audit
+## Current ThoughtAST — Reclassification Required
 
-The ThoughtAST enum today contains nine variants. Classified under the criterion above:
+The `ThoughtAST` enum today contains nine variants. Reclassified against the criterion above:
 
-| Variant | Class | Algebraic Operation | Rationale |
-|---|---|---|---|
-| `Atom(name)` | CORE | hash-to-vector | Fundamental MAP identity; no composition produces this |
-| `Bind(a, b)` | CORE | element-wise multiplication | MAP's Multiply; self-inverse binding |
-| `Bundle(children)` | CORE | element-wise sum + threshold | MAP's Add; commutative superposition |
-| `Permute(child, k)` | CORE | circular dimension shift | MAP's Permute |
-| `Linear(name, v, scale)` | CORE (provisional) | weighted interpolation between anchor vectors + threshold | Currently core; becomes stdlib if `Blend` is promoted (see below) |
-| `Log(name, v)` | STDLIB (grandfathered) | Linear with log-transformed input value | Composition — expands to `(Linear name (ln v) appropriate-scale)` |
-| `Circular(name, v, period)` | CORE (provisional) | cyclical rotation between anchor vectors via cos/sin weighting | Currently core; becomes stdlib if `Blend` is promoted — same weighted-add mechanism as Linear with different weight function |
-| `Thermometer{v, min, max}` | CORE | gradient encoding (proportion of dimensions set by value position) | Genuinely distinct from interpolation/rotation — a construction, not a blend |
-| `Sequential(children)` | STDLIB (grandfathered) | Bundle of children each permuted by position | Composition of Bundle + Permute |
+| Variant | Target class | Status |
+|---|---|---|
+| `Atom` | CORE | stays |
+| `Bind` | CORE | stays |
+| `Bundle` | CORE | stays (signature clarified — takes a list) |
+| `Permute` | CORE | stays |
+| `Thermometer` | CORE | stays |
+| `Linear` | STDLIB | expands to `(Thermometer v 0 scale)` |
+| `Log` | STDLIB | expands to `(Thermometer (ln v) ln-min ln-max)` |
+| `Circular` | STDLIB | expands to `Blend` with trig weights |
+| `Sequential` | STDLIB | expands to `Bundle of Permute-shifted children` |
 
-### The Grandfathered Forms
+Four variants (Linear, Log, Circular, Sequential) should semantically be stdlib. The Rust enum variants currently exist for operational reasons. Migrating them is an implementation decision separate from the semantic classification — the wat algebra treats them as stdlib regardless of how the Rust enum is shaped.
 
-Two forms in the current `ThoughtAST` enum are classified as stdlib under the strict criterion:
+**Implementation options for enum-retained stdlib:**
 
-**`Sequential`** — its expansion is `Bundle(A, Permute(B, 1), Permute(C, 2), ...)`, a pure composition of existing core forms. Promoted to a variant in Proposal 044 under Beckman's "distinct source category" argument (ordered lists vs multisets). That argument does not survive the new criterion, which prioritizes "introduces a new operation" over "represents a distinct category."
+1. Remove the variants; all callers use wat stdlib functions that produce the expanded core forms.
+2. Keep the variants as fast-path optimizations; the canonical definition lives in wat; the Rust variant is a cache-friendly representation.
+3. Deprecate the variants; keep them for backwards compat but discourage new use.
 
-**`Log`** — its expansion is `(Linear name (ln value) appropriate-scale)`. Log is Linear with a log-transformed scalar input. The interpolation mechanism, anchor vectors, and output are all from Linear. Only the scalar preprocessing differs. Under the strict criterion, Log is a stdlib composition over Linear + scalar arithmetic.
-
-**Pending grandfathering (conditional on `Blend` promotion):**
-
-**`Linear` and `Circular`** — both perform scalar-weighted vector addition with two anchor/basis vectors. Linear uses `(1-t) * a + t * b` weighting; Circular uses `cos(θ) * a + sin(θ) * b` weighting. Neither weighting scheme is expressible by `Bind`, `Bundle`, or `Permute` — they all require **scalar-weighted vector addition**, which is the operation the `Blend` core candidate (058-007) would introduce.
-
-If `Blend` is promoted, both Linear and Circular become stdlib — their expansions become compositions over Blend + scalar arithmetic. Under that outcome, the truly core scalar primitives would be:
-
-- `Blend` (scalar-weighted combination) — NEW
-- `Thermometer` (gradient construction) — unchanged, different mechanism
-
-If `Blend` is NOT promoted, Linear and Circular remain core as they are today, and stdlib candidates that depend on Blend (including Log under a more rigorous derivation) would be rewritten.
-
-**Decision for current grandfathered forms:** `Sequential` and `Log` stay in the enum.
-
-**Rationale:** Operationally, they are already implemented. Removing either would require migrating callers and could cost cache coherence. Future stdlib additions go to wat, not the enum. The grandfathering is expedient, not a precedent for adding more compositions as enum variants.
-
-**If future work finds that stdlib-in-wat performs worse than stdlib-in-enum** (e.g., cache behavior, pattern matching overhead), the criterion can be revisited to allow stdlib enum variants. That would be a foundation refinement, argued in its own proposal.
+The implementation choice is outside FOUNDATION's scope. FOUNDATION declares the semantic classification; the implementation proposal argues the optimal enum shape.
 
 ---
 
-## Aspirational Additions — What 058 Is Working Toward
+## Aspirational Additions — What 058 Is Arguing
 
-058 proposes additions in BOTH classes. Each sub-proposal argues its candidate against the criterion above.
+058 proposes new forms in both classes. Each sub-proposal argues its candidate against the criterion above.
 
-### Aspirational Stdlib Forms (wat functions, no enum changes)
+### New Core Forms (5)
 
-Proposed wat stdlib additions. Each is a composition of existing core forms. Each earns its place by the reader-clarity criterion.
+```scheme
+(Blend a b w1 w2)             ; scalar-weighted binary combination — PIVOTAL
+(Difference a b)               ; element-wise subtraction + threshold
+(Negate x y mode)              ; component removal (orthogonalize, flip)
+(Resonance v ref)              ; sign-agreement mask
+(ConditionalBind a b gate)     ; three-argument gated binding
+```
 
-| Form | Expansion | Rationale |
-|---|---|---|
-| `(Concurrent list)` | `(Bind (Atom "concurrent") (Bundle list))` | Names co-occurrence. Distinguishes "Bundle as a relation" from "Bundle as bare superposition." |
-| `(Then a b)` | `(Bind (Atom "then") (Sequential a b))` — binary | Names pairwise temporal ordering. Atomic form for sequential composition. |
-| `(Chain list)` | `(Bundle (pairwise-Then list))` | Adjacency-based ordering. Offset-independent. Composes Then + Bundle. |
-| `(Ngram n list)` | `(Bundle (n-wise-Then list))` | Windowed adjacency. Generalizes Chain. |
-| `(Analogy a b c)` | `C + (B - A)` via Difference | Relational transfer. Depends on Difference being core. |
+**Blend is pivotal** — its promotion formalizes the scalar-weighted addition that Linear and Circular already perform internally, enabling their reclassification as stdlib. Blend's resolution should come early because its outcome refines the algebra.
 
-### Aspirational Core Forms (new ThoughtAST variants)
+### New Stdlib Forms (16, including reframings)
 
-Proposed core additions. Each introduces an algebraic operation existing core forms cannot perform.
+```scheme
+;; Structural compositions (new):
+Concurrent, Then, Chain, Ngram
 
-| Form | Operation | Rationale |
-|---|---|---|
-| `Difference(a, b)` | element-wise subtraction + threshold | Subtraction is not in Bind (multiply), Bundle (sum), or Permute (shift) |
-| `Negate(x, y)` | component removal from superposition | Directional removal; three methods (subtract/orthogonalize/flip) |
-| **`Blend(a, b, α)`** | **scalar-weighted linear interpolation** | **PIVOTAL** — If promoted, retroactively makes `Linear` and `Circular` stdlib (both perform scalar-weighted addition with different weighting schemes). This sub-proposal triggers an audit refinement. |
-| `Amplify(x, y, s)` | weighted component boost | Class TBD; may be derivable from Blend + Bundle |
-| `Resonance(v, ref)` | sign-agreement mask | Dimension-wise sign filtering; new operation |
-| `ConditionalBind(a, b, g)` | three-argument gated binding | Arity is new; no existing core form takes three arguments with a gate role |
+;; Blend idioms (new):
+Amplify, Subtract
+
+;; Relational transfer (new):
+Analogy
+
+;; Data structures (new — the holon data algebra):
+Map, Array, Set, get, nth
+
+;; Scalar encoder reframings (from enum-retained stdlib):
+Linear, Log, Circular
+
+;; Structural reframing (from enum-retained stdlib):
+Sequential
+```
 
 ### Dependency Ordering
 
-Two dependencies across the aspirational additions:
-
-- `058-005-analogy` depends on `Difference`. If `Difference` is killed, `Analogy` must be rewritten or killed.
-- `Blend`'s resolution affects the classification of `Linear`, `Circular`, and arguably `Log` (which is stdlib of Linear). Resolve `Blend` before committing FOUNDATION's final audit.
-
-Suggested sub-proposal order:
-1. Stdlib candidates that don't depend on core candidates (Concurrent, Then, Chain, Ngram) — resolve first, independent of core resolutions
-2. `Blend` core candidate — resolve early because its outcome refines FOUNDATION
-3. Other core candidates (Difference, Negate, Resonance, ConditionalBind) — parallel, independent
-4. `Amplify` core candidate — after Blend, because Amplify may be stdlib over Blend
-5. `Analogy` stdlib candidate — after Difference, because Analogy uses Difference
+- `Blend`'s resolution affects Linear, Log, Circular, Amplify, Subtract classifications — resolve early.
+- `Difference`'s resolution affects Analogy's viability — resolve before Analogy.
+- `Negate`'s "subtract" mode is subsumed by Blend — Negate sub-proposal should scope to orthogonalize + flip only.
 
 ---
 
@@ -212,12 +433,10 @@ Each sub-proposal declares its CLASS at the top:
 **Criterion reference:** FOUNDATION.md
 ```
 
-The sub-proposal argues the candidate against the criterion for its class:
+- **CORE sub-proposals** argue the "introduces a new algebraic operation" bar.
+- **STDLIB sub-proposals** argue the "composition reduces reader ambiguity" bar.
 
-- **CORE sub-proposals** argue the "introduces a new algebraic operation" bar. Designers review whether the claim holds.
-- **STDLIB sub-proposals** argue the "composition that reduces reader ambiguity" bar. Designers review whether the form is generic enough and whether the clarity gain justifies its addition.
-
-The parent synthesis (written after all sub-proposals resolve) tallies the verdicts and produces the final roadmap — which forms were added, which were killed, which were deferred.
+The parent synthesis (written after all sub-proposals resolve) tallies the verdicts and produces the final roadmap.
 
 ---
 
@@ -238,42 +457,38 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 
 ## Revision History
 
-This document evolves as 058 (and later proposals) clarify the criterion.
-
 | Date | Change | Proposal |
 |---|---|---|
 | 2026-04-17 | Initial version. Core/stdlib distinction defined. ThoughtAST audit. Aspirational additions enumerated. | 058 |
-| 2026-04-17 | Added MAP VSA foundation section. Reclassified `Log` as stdlib (grandfathered). Flagged `Linear` and `Circular` as provisional-core pending `Blend` resolution. Added dependency ordering for sub-proposals. | 058 |
+| 2026-04-17 | Added MAP VSA foundation section. Reclassified `Log` as stdlib. Flagged `Linear` and `Circular` as provisional-core pending `Blend` resolution. | 058 |
+| 2026-04-17 | Full algebra freeze. Sequential, Linear, Log, Circular committed as stdlib with real wat definitions. Bundle takes a list (not variadic). Amplify and Subtract added as Blend idioms in stdlib. Negate scoped to orthogonalize+flip only (subtract becomes Blend idiom). Complete wat forms section added. | 058 |
+| 2026-04-17 | Data structure stdlib added — Map, Array, Set, get, nth. Unified access: `(get structure locator)` via Bind's self-inverse works for maps, arrays, and arbitrary nesting. Locators can be any thought (atoms, maps, arrays, nested compositions). This is the holon data algebra made explicit as wat stdlib. | 058 |
 
 ---
 
-## Open Questions (Surface Before Sub-Proposals Begin)
+## Open Questions
 
-These are questions the FOUNDATION itself doesn't resolve. They may be answered by sub-proposal reviews, or by separate discussion.
+1. **Stdlib location.** Wat functions for stdlib live where? `wat/std/thoughts.wat`? A new file per form? A single file for all thought-algebra stdlib?
 
-1. **Stdlib location.** Wat functions for stdlib live where? `wat/std/thoughts.wat`? A new file per form? A single file for all thought-algebra stdlib? This affects where each stdlib sub-proposal points its implementation.
+2. **Stdlib optimization path.** If a stdlib form is frequently used and its wat-level construction becomes a bottleneck, is there a pattern for promoting it to a Rust-side helper function (still producing AST from existing variants) without making it a core variant?
 
-2. **Stdlib optimization path.** If a stdlib form is frequently used and its wat-level construction becomes a bottleneck, is there a pattern for promoting it to a Rust-side helper function (still producing AST from existing variants) without making it a core variant? Needs a clear rule.
+3. **Enum-retained stdlib policy.** Linear, Log, Circular, Sequential are semantically stdlib but currently live in the ThoughtAST enum. Decision needed: remove the variants, keep them as fast paths, or deprecate them. This is an implementation concern outside FOUNDATION's scope, but the policy should be set.
 
-3. **Grandfathering precedent.** Sequential is the one grandfathered form. If future work reveals other core variants that would be classified as stdlib under the new criterion, what's the policy? Migrate? Grandfather? Case-by-case?
+4. **Cache behavior for stdlib.** A wat stdlib function produces a ThoughtAST that is cached on its expanded shape. If two semantically-equivalent stdlib calls produce identical expansions, they share a cache entry. If the wat STORES the stdlib call as an unexpanded form, canonicalization is needed.
 
-4. **Cache behavior for stdlib.** A wat stdlib function produces a ThoughtAST that is cached on its expanded shape. Two semantically-equivalent stdlib calls that produce IDENTICAL expansions share a cache entry. But if the wat STORES the stdlib call as an unexpanded form (for pattern matching or readability), we'd need the cache to canonicalize. Currently stdlib functions expand eagerly — so this is a non-issue. Flagged for completeness.
+5. **Ngram's `n` parameter handling.** `Ngram` takes a numeric argument alongside the list. Its expansion depends on `n`. Decide whether `n` participates in the cache key or whether different `n` values always produce different AST structures.
 
-5. **The `Amplify` class question.** `Amplify(x, y, s)` may be derivable from `Blend + Bundle`. Its sub-proposal should determine class. If stdlib, move it to the stdlib list.
-
-6. **The `Blend`-triggered audit.** If `Blend` is promoted as a core variant, `Linear` and `Circular` become stdlib (both perform scalar-weighted addition under different weighting schemes). The audit refinement should happen as part of `Blend`'s RESOLUTION, with FOUNDATION.md updated accordingly. If `Blend` is killed, Linear and Circular remain core and this open question closes with no change.
-
-7. **The MAP canonical set.** Beyond `Atom`, `Bind`, `Bundle`, `Permute`, and `Thermometer`, are there any other scalar encoding operations that are NOT expressible via `Blend`? If `Blend` handles all scalar-weighted combinations and `Thermometer` handles gradient construction, is that the complete set? Flag for deeper audit if needed.
+6. **The MAP canonical set completeness.** Beyond `Atom`, `Bind`, `Bundle`, `Permute`, `Thermometer`, and `Blend`, are there any other scalar encoding operations that cannot be expressed via these? If `Blend` handles all scalar-weighted combinations and `Thermometer` handles gradient construction, is that the complete set of scalar primitives?
 
 ---
 
 ## Summary
 
-- **Foundation** = MAP VSA (Multiply-Add-Permute) + Atom identity + scalar encoders + compositions
+- **Foundation** = MAP VSA (Multiply-Add-Permute) + Atom identity + scalar primitives (Thermometer, Blend) + new operations (Difference, Negate, Resonance, ConditionalBind)
 - **Core** = new algebraic operation, lives in ThoughtAST enum, requires new Rust encoder logic
 - **Stdlib** = composition of existing core forms, lives in wat, no Rust changes
-- **Current state** = 7 core variants (Atom, Bind, Bundle, Permute, Linear*, Circular*, Thermometer) + 2 grandfathered stdlib variants (Sequential, Log). (*Linear and Circular are provisional-core pending `Blend` resolution.)
-- **058 aspirational** = 5 stdlib additions (Concurrent, Then, Chain, Ngram, Analogy) + 6 core additions (Difference, Negate, Blend, Amplify, Resonance, ConditionalBind — Amplify class TBD)
+- **Target state** = 10 core + 16 stdlib
+- **Currently in enum that should become stdlib** = Linear, Log, Circular, Sequential (implementation path separate)
 - **Bar for core** = introduces an operation existing core forms cannot perform
 - **Bar for stdlib** = composes existing core forms AND reduces reader ambiguity
 
