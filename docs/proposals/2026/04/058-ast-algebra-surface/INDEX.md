@@ -87,11 +87,11 @@ New named compositions:
 24. **058-019-subtract** — `Blend(x, y, 1, -1)`, removal framing (sibling to Difference with different reader intent).
 25. **058-020-flip** — `Blend(x, y, 1, -2)`, linear inversion.
 26. **058-010-concurrent** — **REJECTED** (2026-04-18). Redundant with Bundle; no runtime specialization. Enclosing context carries the temporal meaning. Kept as audit record. Userland may define it as a macro if needed.
-27. **058-011-then** — binary directed temporal relation.
+27. **058-011-then** — **REJECTED** (2026-04-18). Arity-specialization of Sequential; no new pattern. Userland macro if desired.
 28. **058-012-chain** — Bundle of pairwise Thens.
 29. **058-013-ngram** — n-wise adjacency, generalizing Chain.
 30. **058-014-analogy** — `c + (b − a)` via Bundle + Difference.
-31. **058-024-unbind** — stdlib alias for Bind with decode reader intent.
+31. **058-024-unbind** — **REJECTED** (2026-04-18). Identity alias for Bind; demonstrates no new pattern. Bind-on-Bind IS Unbind — a fact about the algebra, not a name worth projecting.
 
 ### Phase 8 — Data structures (10 min)
 
@@ -162,7 +162,7 @@ Shows which proposals must resolve before which others. Arrows flow from prerequ
                          ──> 058-027 (HashSet)
 
    058-022 (Permute) ──> 058-009 (Sequential reframing)
-                      ──> 058-011 (Then) ────> 058-012 (Chain) ──> 058-013 (Ngram)
+                      ──> [058-011 Then REJECTED] 058-012 (Chain inlines binary Sequential) ──> 058-013 (Ngram)
                       ──> 058-026 (Vec) [integer-keyed HashMap]
 
    [058-009 Sequential and 058-026 Vec are now independent — Vec is integer-keyed HashMap, not a Sequential alias]
@@ -179,7 +179,7 @@ Shows which proposals must resolve before which others. Arrows flow from prerequ
                                  presence measurement against a candidate
                                  library.
 
-   058-021 (Bind) ──> 058-024 (Unbind alias)
+   [058-024 Unbind REJECTED — identity alias for Bind; userland]
                   ──> 058-016 (HashMap)
 
 
@@ -211,7 +211,7 @@ Shows which proposals must resolve before which others. Arrows flow from prerequ
 | 008 | Linear | STDLIB | reframing | Blend over two Thermometer anchors |
 | 009 | Sequential | STDLIB | reframing | End grandfathered variant; Bundle of Permutes |
 | 010 | Concurrent | REJECTED | — | Bundle alias with no runtime specialization; enclosing context carries temporal meaning. Userland macro if desired. |
-| 011 | Then | STDLIB | new | Binary directed pair |
+| 011 | Then | REJECTED | — | Arity-specialization of Sequential; userland macro |
 | 012 | Chain | STDLIB | new | Bundle of pairwise Thens |
 | 013 | Ngram | STDLIB | new | n-wise adjacency |
 | 014 | Analogy | STDLIB | new | `c + (b - a)` |
@@ -224,7 +224,7 @@ Shows which proposals must resolve before which others. Arrows flow from prerequ
 | 021 | Bind | CORE | affirmation | Existing primitive, MAP's "M" |
 | 022 | Permute | CORE | affirmation | Existing primitive, MAP's "P" |
 | 023 | Thermometer | CORE | affirmation | Scalar-gradient primitive |
-| 024 | Unbind | STDLIB | new alias | Bind alias with decode intent |
+| 024 | Unbind | REJECTED | — | Identity alias for Bind; no new pattern; userland macro |
 | 025 | Cleanup | REJECTED | — | Dissolved by AST-primary framing; retrieval is presence measurement, not argmax-over-codebook |
 | 026 | Vec | STDLIB | new | Integer-keyed HashMap; Rust Vec backing |
 | 027 | HashSet | STDLIB | new | Bundle of elements; Rust HashSet backing |
@@ -259,7 +259,7 @@ If these three land cleanly, the remaining 27 proposals resolve with mechanical 
 Specific points where designer judgment is load-bearing:
 
 - **Naming aliases — resolved 2026-04-18.** Kept: Bundle (primitive), HashSet (data-structure, Rust-surface name, runtime backing via `:HashSet<T>` type). Rejected: Concurrent (no runtime specialization beyond Bundle; userland can define it). HashMap and Vec are Bundle-of-Bind compositions with Rust-surface names and runtime backings.
-- **Cache canonicalization.** Do stdlib calls share cache entries with their expanded form, or keep distinct names in the AST? Resolved 2026-04-18 via defmacro: expansion runs at parse time BEFORE hashing, so `hash(AST) IS identity` — two source files differing only in macro aliases (e.g., `Unbind` vs `Bind`, `Subtract` vs `Blend(_,_,1,-1)`) produce the same canonical AST and same hash.
+- **Cache canonicalization.** Do stdlib calls share cache entries with their expanded form, or keep distinct names in the AST? Resolved 2026-04-18 via defmacro: expansion runs at parse time BEFORE hashing, so `hash(AST) IS identity` — two source files differing only in macro aliases (e.g., `Subtract` vs `Blend(_,_,1,-1)`, or userland `Then` vs `Sequential (list a b)`) produce the same canonical AST and same hash.
 - **`:Any` type escape hatch.** Was considered, rejected. Heterogeneous data uses named `:Union<T,U,V>` types; generic containers use parametric `T`/`K`/`V`; atom literals use `:AtomLiteral`. Resolved in the 2026-04-18 type-grammar sweep.
 - **Cryptographic primitive choice.** FOUNDATION mentions SHA-256 / BLAKE3 as options. Deployment choice, but worth naming at review.
 - **Name-collision policy under Model A.** Startup halt on collision — strict — is the recommendation. Confirm no exception cases.

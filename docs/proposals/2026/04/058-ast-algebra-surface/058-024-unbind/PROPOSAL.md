@@ -1,10 +1,29 @@
 # 058-024: `Unbind` — Decode Alias for Bind
 
+> **STATUS: REJECTED from project stdlib** (2026-04-18)
+>
+> `Unbind` is literally `(Bind composite key)` — same math, same vector, same hash. Under the stdlib-as-blueprint framing (each stdlib form should DEMONSTRATE a distinct pattern), Unbind demonstrates nothing Bind doesn't already show. It's pure reader-intent with no new math, no runtime specialization, no new primitive pattern.
+>
+> **Bind-on-Bind IS Unbind.** That's a fact about the algebra the user learns once. Hiding it behind an alias makes the code "easier" (two names for the same operation signal author intent) but not "simpler" (one form, one meaning, one learning moment). The substrate is simpler without the alias.
+>
+> Hickey round-1 approved Unbind on "decode-intent is stable reader signal" grounds. Under the stricter blueprint test adopted 2026-04-18, that justification doesn't earn project-stdlib status — reader-intent aliases that show no new pattern are userland examples, same category as the rejected `Concurrent` and `Then`.
+>
+> Userland may define it in their own namespace if decode-intent framing matters to their vocab:
+>
+> ```scheme
+> (defmacro (:my/vocab/Unbind (c :AST) (k :AST) -> :AST)
+>   `(Bind ,c ,k))
+> ```
+>
+> Same mechanics. Users' namespace. Project stdlib stays lean.
+>
+> This proposal is kept in the record as an honest trace of the design process.
+
 **Scope:** algebra
-**Class:** STDLIB (named macro alias for Bind)
+**Class:** REJECTED (was STDLIB; rejected 2026-04-18 — identity alias for Bind, no new pattern demonstrated)
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
-**Depends on:** 058-021-bind (pivotal — Unbind is an alias for Bind)
+**Depends on:** 058-021-bind (Unbind was an alias for Bind)
 
 ## The Candidate
 

@@ -1333,7 +1333,7 @@ You see this in:
 You see this in:
 - Values-up, not queues-down (return data through functions; side effects at the edges)
 - The AST as data, operated on by named forms
-- The small core (MAP VSA primitives + Thermometer + Blend) and the rich stdlib (Then, Chain, HashMap, Vec, HashSet, get, …)
+- The small core (MAP VSA primitives + Thermometer + Blend) and the rich stdlib (Sequential, Chain, Ngram, HashMap, Vec, HashSet, get, …)
 - The foundational principle (AST primary) itself — code is data is holon is vector
 
 **Hickey's talks.** "Simple Made Easy." "Don't Fear the Monad" (via Beckman). "Hammock Driven Development." "Values of Values." Watched many times. The principles are in the bones.
@@ -1683,7 +1683,7 @@ Algebra Core     Atom, Bind, Bundle, Permute, Thermometer, Blend,
     ↓            Orthogonalize, Resonance, ConditionalBind
     ↓            (what produces holon vectors)
     ↓
-Stdlib           Sequential, Then, Chain, Ngram, Analogy,
+Stdlib           Sequential, Chain, Ngram, Analogy,
                  Amplify, Subtract, Flip, HashMap, Vec, HashSet,
                  Linear, Log, Circular, ...
                  (named compositions — defined with language core, using algebra core)
@@ -1885,15 +1885,28 @@ A form earns placement in `HolonAST` as a core variant when **all** of the follo
 
 ## Criterion for Stdlib Forms
 
-A form earns placement as a wat stdlib function when **both** of the following hold:
+The stdlib is a **blueprint of macros**. Its purpose is twofold: ship useful forms users will want ready-made, AND demonstrate how to build more. Each stdlib form is a teaching example — a template a user can study and copy when building their own vocabulary.
 
-1. **Its expansion uses only existing core forms.**
-   - The wat function body constructs a HolonAST from current core variants.
+A form earns placement as a wat stdlib macro when **all** of the following hold:
+
+1. **Its expansion uses only existing core forms (or other stdlib forms that themselves expand to core).**
+   - The wat function/macro body constructs a HolonAST from current core variants.
    - No new encoder logic needed.
 
-2. **It reduces ambiguity for readers.**
-   - Its absence would cause subagents and humans to write inconsistent wat when expressing the same concept.
-   - The named form conveys intent more clearly than the expanded primitive composition.
+2. **It demonstrates a DISTINCT pattern — something a user couldn't derive from another existing stdlib form without thinking about the algebra fresh.**
+   - Chain demonstrates *transitional* encoding (different from Sequential's *positional*).
+   - Ngram demonstrates *parametric adjacency*.
+   - Subtract demonstrates the *named Blend weight* idiom.
+   - Linear/Log/Circular demonstrate *scalar encoding patterns* with different distributions.
+   - Each shows the user a template they can copy.
+
+3. **It is domain-free.**
+   - Trading vocabulary, DDoS vocabulary, MTG vocabulary — all would want this form.
+   - Domain-specific patterns (temporal co-occurrence framing, financial ratios, packet-flow thresholds) belong in userland, not project stdlib.
+
+**Forms that FAIL the demonstration test are userland macros**, even if the name reads well. Pure aliases (Unbind = Bind, Concurrent = Bundle, Then = binary Sequential, Difference = Subtract) don't demonstrate new patterns — they're named alternatives for operations already shown elsewhere. Users can still define them in their own namespace; the project stdlib doesn't ship them.
+
+The blueprint framing gives the stdlib a clear purpose: the project ships the macros every domain will likely need AND the macros whose PATTERNS teach something worth learning. Everything else is application vocabulary.
 
 ---
 
@@ -2082,15 +2095,17 @@ Retrieval is NOT a core form. Presence is measured by `cosine(encode(target), re
 ;;   (defmacro (:my/vocab/Concurrent (xs :AST) -> :AST)
 ;;     `(Bundle ,xs))
 
-(define (Then a b)
-  ;; binary directed temporal relation
-  (Bind (Atom "then")
-        (Sequential (list a b))))
+;; Then was REJECTED (058-011) — arity-specialization of Sequential,
+;; demonstrates nothing Sequential doesn't. Userland may define it:
+;;   (defmacro (:my/vocab/Then (a :AST) (b :AST) -> :AST)
+;;     `(Sequential (list ,a ,b)))
 
 (define (Chain list-of-holons)
-  ;; adjacency — Bundle of pairwise Thens
+  ;; adjacency — Bundle of pairwise binary Sequentials
+  ;; distinct from Sequential: captures transitions, not absolute positions
   (Bundle
-    (map (lambda (pair) (Then (first pair) (second pair)))
+    (map (lambda (pair)
+           (Sequential (list (first pair) (second pair))))
          (pairwise list-of-holons))))
 
 (define (Ngram n list-of-holons)
@@ -2185,16 +2200,13 @@ Retrieval is NOT a core form. Presence is measured by `cosine(encode(target), re
   ;; No cleanup. No codebook. No cosine. Just field access.
   (literal-field atom-ast))
 
-;; --- Unbind — stdlib alias for Bind with decode intent ---
-
-(define (Unbind composite key -> :Holon)
-  ;; For when you have a composite AST and want to decode a key out of it:
-  ;;   - Unbind a HashMap to recover a field
-  ;;   - Unbind a learned discriminant with a query
-  ;;
-  ;; Mathematically identical to Bind for bipolar (self-inverse).
-  ;; Named separately to communicate decode intent in vocab code.
-  (Bind composite key))
+;; Unbind was REJECTED (058-024) — literally (Bind composite key).
+;; Under the stdlib-as-blueprint test, it demonstrates no new pattern.
+;; Bind-on-Bind IS Unbind; that's a fact about the algebra the user
+;; learns once. Userland may define the alias if decode-intent framing
+;; matters to their vocab:
+;;   (defmacro (:my/vocab/Unbind (c :AST) (k :AST) -> :AST)
+;;     `(Bind ,c ,k))
 ```
 
 (Note: `Cleanup` as a VSA operation is NOT part of the wat algebra. The AST-primary framing eliminates the need for codebook-based recovery — see "Presence is Measurement, Not Verdict." Argmax-over-candidates, when an application needs it, is a stdlib fold over presence measurements on (AST, vector) pairs. Not a primitive.)
@@ -2582,7 +2594,7 @@ The implementation choice is outside FOUNDATION's scope. FOUNDATION declares the
 ;; Structural compositions (5)
 (Sequential list)              ; 058-009  — reframing: Bundle of index-permuted
 ;; Concurrent REJECTED (058-010) — redundant with Bundle; userland macro if desired.
-(Then a b)                     ; 058-011  — binary directed temporal
+;; Then REJECTED (058-011) — arity-specialization of Sequential; userland.
 (Chain list)                   ; 058-012  — Bundle of pairwise Thens
 (Ngram n list)                 ; 058-013  — n-wise adjacency
 
@@ -2595,7 +2607,7 @@ The implementation choice is outside FOUNDATION's scope. FOUNDATION declares the
 (HashSet items)                ; 058-027  — Rust's HashSet as Bundle of elements
 
 ;; Decode aliasing (1)
-(Unbind composite key)         ; 058-024  — Bind alias with decode intent
+;; Unbind REJECTED (058-024) — identity alias for Bind; userland.
 ```
 
 Plus lowercase helpers: `get` (unified structural retrieval across HashMap / Vec / HashSet, returns `:Option<Holon>`) and `atom-value` (direct field access on an Atom AST node). These are stdlib but not UpperCase — they're accessors, not AST constructors. `nth` is retired — `(get vec i)` replaces it.
@@ -2717,6 +2729,7 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 | 2026-04-18 | **`defmacro` added to Language Core; stdlib aliases become macros.** Resolves Beckman's finding #4 (alias hash-collision). `defmacro` is a compile-time form that registers parse-time syntactic rewrites. The startup pipeline now runs a macro-expansion pass BEFORE hashing, signing, and type-checking. Stdlib aliases like `Concurrent`, `Set`, `Subtract`, `Flip`, `Then`, `Chain`, `Analogy` become macros that expand to canonical core compositions (Bundle, Bind, Blend, Permute). After expansion, `hash(AST) IS identity` holds as an invariant — two source files differing only in macro aliases produce the same expanded AST and the same hash. Source-level reader clarity is preserved; algebra-level identity is uniformized. Language Core grows from 8 to 9 forms (adds `defmacro`). Also resolved: drop `Difference` from 058-004, keep `Subtract` (058-019) as the canonical `Blend(_, _, 1, -1)` idiom — one name per operation. | 058 |
 | 2026-04-18 | **Bind as query; algebra laws restated in similarity-measurement frame.** Round-2 reviewers (Hickey, Beckman) flagged that strict elementwise claims for Bundle associativity and Orthogonalize orthogonality don't hold under threshold. Beckman's counter-examples are correct: nested Bundle clamps magnitudes ≥ 2 losing information; Orthogonalize with fractional coefficients rounds back to pre-projection signs. The reframe: the algebra was always similarity-measured, not elementwise-exact. Bind is THE query primitive — its outcome is observable via cosine similarity; above 5σ means the query resolved, below means it failed (capacity exceeded, key absent, or crosstalk). Same lens applied to Bundle's associativity (similarity-associative at high d; elementwise non-associative in general) and Orthogonalize's orthogonality (similarity-orthogonal within budget; exact in the X=Y edge case only). Three apparent law violations are ONE substrate property: Kanerva-capacity-bounded similarity measurement. Updated FOUNDATION's Output Space section: replaced "Bind's self-inverse law" subsection with "Bind as query: measurement-based success signal"; replaced "Bundle is associative" claim with "Bundle is similarity-associative under capacity budget"; replaced "Orthogonalize's orthogonality is exact" with "exact only at X=Y; similarity-orthogonal otherwise." Also updated 058-003-bundle, 058-005-orthogonalize, 058-021-bind, 058-027-set. The 058-027 update clarifies that Set's membership accessor is the same Bind + cleanup query as Map's — not an asymmetry; same primitive. | 058 |
 | 2026-04-18 | **`:Thought` → `:Holon` rename across all 058 documents.** The algebra's universal type is renamed from `:Thought` to `:Holon`. Reasoning: the project is named "holon" (library `holon-rs`, labs `holon-lab-*`), and "Holon" in Koestler's sense — a thing that is simultaneously whole and part — is the honest universal substrate name for the algebra's values. Every algebra value IS a Holon: Atoms, Binds, Bundles, Permutes, Thermometers, Blends, Orthogonalizes, Resonances, ConditionalBinds, Cleanups. `:Thought` was an alias we had been using that did not match the project's own naming. The Rust identifier `ThoughtAST` becomes `HolonAST`; the type keyword `:Thought` becomes `:Holon`; prose describing the algebra's primitive values uses "holon(s)" where it previously used "thought(s)." Colloquial/semantic uses of "thought" as English (the narrative frame, the sign-off `these are very good thoughts.`) remain unchanged. | 058 |
+| 2026-04-18 | **Stdlib-as-blueprint framing locked; Then (058-011) and Unbind (058-024) rejected.** The stdlib's purpose is named explicitly: it is a blueprint of macros — ship useful ready-made forms AND demonstrate how to build more. Criterion for Stdlib Forms rewritten from "reduces ambiguity for readers" (weak — any name does this) to three conditions: (1) expansion uses only core forms, (2) demonstrates a distinct pattern users could not derive from another existing stdlib form, (3) is domain-free. Forms that fail the demonstration test are userland macros — they may still be useful in specific vocab, but the project doesn't ship them. Under this rule: Then (058-011) is rejected (arity-specialization of Sequential; demonstrates nothing new); Unbind (058-024) is rejected (identity alias for Bind — Bind-on-Bind IS Unbind, a fact about the algebra, not a name worth projecting — simple, not easy). Chain (058-012) stays as project stdlib because its encoding is transitional (distinct from Sequential's positional), but its expansion no longer depends on Then — it inlines the binary Sequential pattern directly. Same resolution shape as Concurrent (058-010), Difference (058-004), Cleanup (058-025) rejections: fail the demonstration test, rejected, userland path documented in the REJECTED banner. | 058 |
 | 2026-04-18 | **Concurrent (058-010) rejected from project stdlib.** Hickey round-2 flagged Bundle/Concurrent/Set as a triplet of aliases with one canonical expansion. Set earned its place as HashSet (Rust-surface name, runtime backing via `:HashSet<T>` type annotation drives O(1) membership through Rust's std::HashSet). Concurrent does not — no runtime specialization, no corresponding `:Concurrent<T>` type, purely reader-intent. The enclosing context (the atom it's bound to, the field it's stored in) already carries the temporal-co-occurrence meaning. Concurrent rejected from project stdlib; kept as an audit record; userland may define it in their own namespace as a macro `(:my/vocab/Concurrent ...) → (Bundle ...)` if temporal framing matters to their application. FOUNDATION sweep: stdlib inventory, keyword-path examples, FOUNDATION data-structure examples all updated. 058-010 proposal gets REJECTED banner like 058-004, 058-025. INDEX per-proposal table and naming-aliases discussion updated. Resolves Hickey round-2 concern R1 complection #4. | 058 |
 | 2026-04-18 | **Container constructors renamed to Rust's names; `get` unified.** Three related changes. (1) `Map` → `HashMap`, `Array` → `Vec`, `Set` → `HashSet` — wat UpperCase constructor, `:Type<...>` annotation, and Rust runtime backing now share one name per concept (consistent with the Rust-primitive type decision — `:f64` not `:Scalar`, `:bool` not `:Bool`). `Map` is dropped as a name (it's overloaded with the higher-order function). (2) `get` is unified across all three containers with signature `(get container locator) -> :Option<Holon>`. HashMap: hash lookup by key, O(1) avg. Vec: direct index by `:usize`, O(1). HashSet: hash membership, returns `(Some x)` on hit, `:None` on miss. Direct lookup through Rust's runtime backings — no "walk," no cosine, no cleanup. The AST describes what the container IS; the runtime materializes the efficient backing (HashMap / Vec / HashSet from std); `get` goes through that backing. (3) `nth` retired — `(get my-vec i)` replaces it. Set's "missing accessor" concern (Hickey round 2) dissolves — HashSet uses the same `get` as the other containers; returns the element on hit for confirmation/canonicalization. FOUNDATION's stdlib section, examples, and inventory updated. 058-016 repurposed for HashMap with rename banner; 058-026 for Vec; 058-027 for HashSet. INDEX updated. | 058 |
 | 2026-04-18 | **Capacity is observable; the runtime can guard.** Added a new subsection to Dimensionality ("Capacity is observable; the runtime can guard") that sharpens the "unguarded, the algebra doesn't throw errors" statement from before. The algebra's capacity bound IS physical, and the bound IS observable. Every Holon-producing operation has a local capacity cost = its number of Holon constituents (scalars don't count). `(Bundle (list a b c))` costs 3; `(Bind a b)` costs 2; `(Atom literal)` and `(Permute h k)` cost 1; `(Blend h1 h2 w1 w2)` costs 2; `(Orthogonalize a b)` and `(Resonance a b)` cost 2. ConditionalBind arity/cost deferred pending 058 scrutiny pass (analogous to the Difference/Subtract duplication finding). Once produced, a Holon is singular — it consumes 1 unit when used as input to further operations. Each frame checks independently, like stack frames in traditional programming. The runtime has four modes, set at deployment: `:silent` (research, user accepts degradation), `:warn` (development, log but continue), `:error` (default — catchable CapacityExceeded), `:abort` (production fail-closed). Capacity is exposed as first-class observables: `(frame-cost op)`, `(frame-budget)`, `(frame-fill holon)` — programs reason about their own envelope. Same pattern as Presence is Measurement applied to the substrate's own physics: the machine observes internal state as a scalar; the user's policy decides what to do. Five deployment knobs now: d, capacity-mode, L1, L2, L3. | 058 |

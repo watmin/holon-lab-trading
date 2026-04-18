@@ -1,10 +1,12 @@
-# 058-012: `Chain` — Bundle of Pairwise Thens
+# 058-012: `Chain` — Bundle of Pairwise Transitions
+
+> **Updated 2026-04-18:** Chain no longer depends on `Then` (058-011 REJECTED). The binary Sequential pattern is inlined directly — Chain remains a distinct stdlib form because its encoding (pairwise transitions) is categorically different from Sequential's (absolute positions). The rejection of Then does not affect Chain's algebraic status; only its expansion changes.
 
 **Scope:** algebra
 **Class:** STDLIB
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
-**Depends on:** 058-011-then (pivotal — if Then is rejected, this must re-express via Bundle + Permute directly)
+**Depends on:** 058-003-bundle-list-signature, 058-009-sequential-reframing, 058-022-permute
 
 ## The Candidate
 
@@ -12,14 +14,18 @@ A wat stdlib macro (per 058-031-defmacro) that encodes a LIST of events as pairw
 
 ```scheme
 (defmacro (Chain (holons :AST) -> :AST)
-  `(Bundle (pairwise-map Then ,holons)))
+  `(Bundle
+    (pairwise-map
+      (lambda ((a :Holon) (b :Holon) -> :Holon)
+        (Sequential (list a b)))
+      ,holons)))
 ```
 
-Where `pairwise-map` produces `(Then holons[0] holons[1])`, `(Then holons[1] holons[2])`, `(Then holons[2] holons[3])`, ... — a sliding window of Thens across adjacent pairs. Because `Then` (058-011) is itself a macro, the expansion recurses at parse time: the emitted `(Then a b)` nodes are rewritten to `(Bundle (list a (Permute b 1)))` in the same pass, so only algebra-core operations survive into the hashed AST.
+Where `pairwise-map` produces pairs of consecutive items. Each pair is wrapped in a binary `Sequential` (equivalent to `(Bundle (list a (Permute b 1)))` — position 0 for the first, position 1 for the second). All pairs are then bundled into one vector. The expansion at parse time resolves to only algebra-core operations (Bundle, Permute).
 
 ### Semantics
 
-Chain captures "this sequence of events unfolded in this order, with each transition visible." Unlike Sequential (which encodes each item at its position relative to the start), Chain encodes each ADJACENT TRANSITION as a Then, then bundles all transitions together.
+Chain captures "this sequence of events unfolded in this order, with each transition visible." Unlike Sequential (which encodes each item at its position relative to the start), Chain encodes each ADJACENT TRANSITION as a binary Sequential, then bundles all transitions together.
 
 Reader intent: "these things happened in sequence; the sequence itself is the encoded information."
 
@@ -28,12 +34,16 @@ Reader intent: "these things happened in sequence; the sequence itself is the en
 For `holons = (list a b c d)`:
 
 ```
-pairwise-map Then = (list (Then a b) (Then b c) (Then c d))
-                  = (list (Bundle (list a (Permute b 1)))
-                          (Bundle (list b (Permute c 1)))
-                          (Bundle (list c (Permute d 1))))
+pairwise pattern = (list (Sequential (list a b))
+                         (Sequential (list b c))
+                         (Sequential (list c d)))
+                 = (list (Bundle (list a (Permute b 1)))
+                         (Bundle (list b (Permute c 1)))
+                         (Bundle (list c (Permute d 1))))
 
-Chain = (Bundle (list (Then a b) (Then b c) (Then c d)))
+Chain = (Bundle (list (Sequential (list a b))
+                      (Sequential (list b c))
+                      (Sequential (list c d))))
 ```
 
 Three pairwise transitions, bundled into one vector. The resulting vector contains evidence of the TRANSITIONS, not the absolute positions.

@@ -1,7 +1,33 @@
 # 058-011: `Then` — Binary Directed Temporal Relation
 
+> **STATUS: REJECTED from project stdlib** (2026-04-18)
+>
+> `Then` is the 2-argument specialization of `Sequential`. Same positional encoding; same math; same vector; same canonical AST after macro expansion. No runtime specialization. No corresponding `:Then<T>` type annotation. Under the same test that rejected `Concurrent` (redundancy with Bundle under its enclosing context), Then is redundant with Sequential.
+>
+> The "a then b" thought is meaningful in vocab code — particularly when we return to the trading lab and need to express ordered candle pairs, indicator transitions, pattern-followed-by-pattern. When that time comes, userland defines it in its own namespace:
+>
+> ```scheme
+> (defmacro (:my/vocab/Then (a :AST) (b :AST) -> :AST)
+>   `(Sequential (list ,a ,b)))
+> ```
+>
+> Same mechanics. Users' namespace. Project stdlib stays lean.
+>
+> **Chain (058-012) was defined in terms of Then.** Post-rejection, Chain inlines the binary-Sequential pattern:
+>
+> ```scheme
+> (define (Chain (xs :List<Holon>) -> :Holon)
+>   (Bundle
+>     (pairwise-map
+>       (lambda ((a :Holon) (b :Holon) -> :Holon)
+>         (Sequential (list a b)))
+>       xs)))
+> ```
+>
+> This proposal is kept in the record as an honest trace of the design process.
+
 **Scope:** algebra
-**Class:** STDLIB
+**Class:** REJECTED (was STDLIB; rejected 2026-04-18 as arity-specialization of Sequential with no runtime specialization)
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
 
