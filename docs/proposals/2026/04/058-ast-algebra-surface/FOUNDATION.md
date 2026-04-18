@@ -291,6 +291,114 @@ The FOUNDATION claim here is minimal: **programs CAN be expressed using the exis
 
 ---
 
+## The Location IS the Program
+
+In a classical database, there is a separation: data lives at some address (memory offset, disk block, key in a hash table). Queries navigate to addresses. Data and queries are different kinds of thing — data is stored, queries compute paths to retrieve it.
+
+**In the wat algebra, this separation dissolves.**
+
+### The query IS the answer's address
+
+A query in wat is a function call — an AST that describes what to compute:
+
+```scheme
+(event-at-time (Atom "2026-04-17T12:00:00"))
+```
+
+This expression is data (an AST). It projects to a vector. Evaluating it produces the answer — which is ALSO an AST (and a vector).
+
+There is no separate "storage" accessed via "queries." **The query AST IS the address. Evaluating the AST produces the answer.** Whether the evaluator walks a Map, calls a function, or computes from first principles — the RESULT is the answer.
+
+### Addresses can be programs
+
+A "location" in this substrate can be:
+
+- A literal key: `(Atom "2026-04-17T12:00:00")`
+- A function call: `(most-recent-event-before (now))`
+- A composition: `(get (get db (Atom "2026-04-17")) (Atom "12:00"))`
+- A generated expression: `(compile-query user-criteria)` — where `compile-query` itself builds a new AST
+
+The location is a thought. Thoughts compose. Addresses can be computed, composed, stored, passed, learned, generated.
+
+### Time databases — what Carin meant
+
+Carin Meier's Clojure VSA talk mentioned "time databases" — time-indexed stores built from the same primitives. It works:
+
+```scheme
+(def event-stream
+  (Map (list
+    (list (Atom "2026-04-17T12:00") event-1)
+    (list (Atom "2026-04-17T13:00") event-2)
+    (list (Atom "2026-04-17T14:00") event-3)
+    ;; ... arbitrary depth via Recursive Composition ...
+    )))
+
+;; Exact lookup — address is a literal:
+(get event-stream (Atom "2026-04-17T12:00"))
+
+;; Semantic search — address is a pattern (cosine over vectors):
+(match-library query-thought event-library)
+
+;; Generated query — address is a computed AST:
+(def custom-query
+  (build-query user-criteria))       ; user-criteria is data
+(evaluate custom-query event-stream) ; executes a program built from data
+```
+
+Each query is itself a thought. Queries can be stored, composed, compared via cosine, searched by similarity. A database of queries is as natural as a database of events, because both are thoughts.
+
+### Metaprogramming is native
+
+Because programs are thoughts, a program can build another program and return it as a value:
+
+```scheme
+(defn build-matcher [pattern]
+  ;; Returns a function AST that matches against `pattern`
+  (Fn (Array (list (Atom :candidate)))
+      (Bundle (list
+        (If (matches? (Atom :candidate) pattern)
+            (Atom :match)
+            (Atom :no-match))))))
+
+(def match-reversal (build-matcher reversal-pattern))
+;; match-reversal is a function, built from data.
+;; It can be stored in a Map, passed to another function, executed,
+;; compared to other functions via cosine, and evaluated on inputs.
+```
+
+No separate macro system. No special metaprogramming runtime. The algebra already composes programs because programs are values.
+
+### Semantic search and exact lookup are the same operation
+
+- **Exact lookup:** the query is a specific AST; the evaluator walks to the answer.
+- **Semantic search:** the query is a pattern-AST; cosine over vectors finds the closest answer.
+
+Both are algebraic operations on the same substrate. The difference is the SPECIFICITY of the query — a fully-specified function call gets an exact result; a pattern gets an approximate match. One substrate, two ways to ask.
+
+### The infinity Carin saw
+
+Dimensionality bounds per-frame capacity (Kanerva). Recursion makes depth free. Programs are thoughts. Thoughts compose without bound. **The infinity is not in the vector space — it is in the compositional space of expressible ASTs.**
+
+Any function you can write. Any composition of functions. Any data structure. Any nesting. Any query. Any generator of queries. All live in the same substrate. All addressable by their AST. All evaluatable. All comparable by cosine.
+
+### A function call with an input IS the answer
+
+A wat evaluator doesn't treat "look up stored data" as a distinct operation from "execute code." It walks ASTs with evaluation semantics. The same walker that executes `(+ 1 2)` → `3` also executes `(get my-map (Atom :key))` → `value`. Both are AST evaluation. Both return ASTs (or literals read from AST nodes). Both the result and the substrate it was "stored in" are the same kind of thing.
+
+The `Map` you defined earlier is itself just an AST. Calling `get` walks that AST. There is no "storage engine" to consult. **The evaluator IS the storage engine. The algebra provides both.**
+
+### Consequences
+
+- **No database/compute split.** The substrate handles both identically.
+- **Queries are first-class values.** Store them. Pass them. Compose them. Learn on them.
+- **Meta-programs are native.** Build programs from data; run them; store the results; search for them.
+- **Semantic search and exact lookup are one operation.** Both are AST evaluation plus optional cosine comparison.
+- **The infinity is compositional.** Fixed vector dimensionality; unbounded AST space.
+
+These are not features. They are the natural consequences of *programs are thoughts + data is thoughts + operations are pure functions on ASTs.*
+
+---
+
 ## The Vector Side — What the Algebra Enables
 
 Everything in the AST side — walking, exact retrieval, literal access — operates in the symbolic domain. Once a thought is projected to a vector via `encode`, **the full VSA algebra applies.** Because data is thoughts and programs are thoughts, every vector operation applies to both.
@@ -1422,6 +1530,7 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 | 2026-04-17 | **About How This Got Built — the lineage made explicit.** The architecture is Linux (small composable primitives, file descriptors, pipes, processes that own their state) plus Clojure (values over places, simple made easy, s-expressions that are code and data) plus VSA (MAP algebra at 10k dimensions). Hickey's principles and Beckman's categorical lens are in the bones. The summoned designers in the proposal process argue as those teachers actually argue — because the builder studied them for years. "Datamancer" is not a joke; it is the precise name for someone who shapes data through algebra, conjures designers from studied principles, and casts wards to defend architectural intent. The document reads coherent because the teachers behind it were coherent. | 058 |
 | 2026-04-17 | **Signature sign-off added.** `these are very good thoughts.` / `PERSEVERARE.` The datamancer's mark from the BOOK, closing the foundation the same way chapters of the book close. The work is serious. The names are honest. The thoughts continue. | 058 |
 | 2026-04-17 | **The Algebra Is Immutable section added.** ASTs are values, not containers. Primitives are value constructors; the algebra has no mutation operators. Once an AST exists, it is invariant — you can rebind, compose, or project, but not modify in place. Evaluation safety by construction: user input is data unless the programmer explicitly writes `eval` on it. The injection vector is conscious opt-in, not implicit. Comparable to parameterized SQL queries vs string concatenation. Distributed verifiability: any cached vector can be verified by recomputing `encode` on the claimed AST. | 058 |
+| 2026-04-17 | **The Location IS the Program section added.** The query AST is the address of the answer. Queries and stored data inhabit the same thought space — both are ASTs, both project to vectors, both evaluate or compose the same way. Time databases, as Carin Meier mentioned in her Clojure VSA talk, are natural — Maps keyed by time atoms, Arrays of events, all composable. Metaprogramming is native because programs are values. Semantic search and exact lookup are the same operation, differing only in specificity of the query. The infinity is not in the vector space — it is the unbounded compositional space of expressible ASTs over a fixed dimensional substrate. | 058 |
 
 ---
 
