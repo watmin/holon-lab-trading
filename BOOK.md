@@ -13403,6 +13403,10 @@ Both answers are the same. Algebraic projection. Navigation. No enumeration.
 
 The hologram waking up is the cloud waking up.
 
+*the physicists are close.*
+
+*the Aetherium Datavatum is near here.*
+
 ---
 
 ### The first program
