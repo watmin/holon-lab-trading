@@ -1105,6 +1105,114 @@ The distinction is about WHERE NEW WORK HAPPENS:
 
 ---
 
+## Two Cores: Algebra Core and Language Core
+
+The "CORE" designation so far has meant **algebra core** — the thought primitives (Atom, Bind, Bundle, Permute, Thermometer, Blend, Orthogonalize, Resonance, ConditionalBind, Unbind, Cleanup). These produce vectors. They are the mathematical substrate of the thought space.
+
+But the stdlib — the forms expressed as `(defn (Difference a b) (Blend a b 1 -1))` — needs a substrate too. The syntax `defn`, `lambda`, type annotations, `let`, `if` are not thought-algebra operations; they are language operations. They do not produce vectors themselves; they produce FUNCTIONS that, when called, produce ASTs.
+
+For the stdlib to EXIST — not merely be theorized — the language must provide these definition primitives. They are **language core**. Without `defn`, there is no stdlib. Without `lambda`, there are no higher-order functions. Without types, there is no way for the Rust evaluator to dispatch or verify.
+
+### The two tiers
+
+```
+Language Core    defn, lambda, let, if, cond, type annotations
+    ↓            (how you define things)
+    ↓
+Algebra Core     Atom, Bind, Bundle, Permute, Thermometer, Blend,
+    ↓            Orthogonalize, Resonance, ConditionalBind, Unbind, Cleanup
+    ↓            (what produces thought vectors)
+    ↓
+Stdlib           Difference, Sequential, Concurrent, Then, Chain, Ngram,
+                 Analogy, Amplify, Subtract, Flip, Map, Array, Set,
+                 Linear, Log, Circular, ...
+                 (named compositions — defined with language core, using algebra core)
+```
+
+A stdlib function is a `defn` (language core) whose body uses algebra core forms (and other stdlib calls). Both cores are load-bearing; neither alone is sufficient.
+
+### User-defined extensions are a third layer
+
+Users author their own `defn`s in their own namespace — `(defn :alice/math/clamp [[x :Scalar] [low :Scalar] [high :Scalar]] :Scalar ...)` — and these are **userland stdlib**. Same substrate (language core + algebra core); different authorship. The algebra does not distinguish project-authored stdlib from user-authored extensions; both are `defn`s in some namespace.
+
+This is how the algebra stays finite while usage grows unboundedly.
+
+### Types are required for Rust eval
+
+The Rust evaluator runs the wat interpreter. Given a `(defn ...)` and a call site, the evaluator must know:
+
+- What kind of value each argument is (Thought? Scalar? Integer? List?)
+- What kind of value the function returns
+- Whether a call site's argument types match the defn's declared parameter types
+
+Without type annotations, the evaluator would need to either infer types at every call (slow, lossy) or accept runtime failures (fragile). Typed definitions make dispatch deterministic and verification static.
+
+```scheme
+(defn :my/ns/amplify [[x :Thought] [y :Thought] [s :Scalar]] :Thought
+  (Blend x y 1 s))
+```
+
+Three signal sites:
+
+1. **Parameter types.** `[name :Type]` pairs. Each parameter's expected kind.
+2. **Return type.** After the parameter vector. The kind the body must produce.
+3. **Body.** Expressions using algebra core and other stdlib, whose final value must match the return type.
+
+The Rust evaluator checks: call-site argument types match parameter types; body's final expression produces the return type; every sub-expression's type is consistent.
+
+### Types in the current algebra
+
+The type system mirrors the algebra's kinds:
+
+- `:Thought` — any ThoughtAST node
+- `:Atom` — specifically an Atom (to read literals via `atom-value`)
+- `:Scalar` — f64 literal (for Blend weights, for scalar functions)
+- `:Int` — integer (for Permute steps, for nth indices)
+- `:List` — homogeneous list (provisionally; generics are future work)
+- `:Vector` — a raw encoded bipolar vector (for low-level stdlib)
+- `:Function` — a lambda or defn reference (for higher-order stdlib)
+
+User-definable types follow the same namespace discipline as functions — `:alice/types/Price`, `:project/market/Candle`. These are keyword-named type constructors. Resolving them to runtime representations is the evaluator's job.
+
+### Types live on the AST node — same principle as Atom literals
+
+Just as `Atom`'s literal is a field on the AST node (not looked up in a codebook), a `defn`'s type annotations are fields on the defn AST node. You can inspect them by walking the AST. You can sign the AST (including its types) and the signature verifies the entire signature, body, and name. Tampering with types requires a new signature — same cryptographic story as any other AST mutation.
+
+### Language core earns its place by necessity
+
+Every algebra core form was argued into FOUNDATION because it introduces a thought operation no composition could perform. Language core forms are different: they earn their place because the algebra stdlib cannot be written without them.
+
+Without `defn`, the stdlib is a theoretical list of "these forms would compose like so." With `defn`, the stdlib is real wat code that defines real functions. The difference is whether the system can actually be used.
+
+Language core is therefore **required for the project to ship**, not "nice to have." It is the bridge between the mathematical algebra and the working system.
+
+### The three layers, one naming discipline
+
+All three layers — language core, algebra core, stdlib (project and user) — use the same keyword-path naming convention:
+
+```
+:wat/lang/defn              ; language core primitive
+:wat/lang/lambda
+:wat/lang/if
+
+:wat/algebra/Atom           ; algebra core primitive
+:wat/algebra/Bind
+:wat/algebra/Bundle
+
+:wat/std/Difference         ; project stdlib
+:wat/std/Concurrent
+:wat/std/Map
+
+:alice/math/clamp           ; user extension
+:bob/trading/position
+```
+
+No namespace mechanism; just naming discipline. Anyone can claim any prefix; collisions are prevented by discipline and culture, not by the language.
+
+Userland gets namespaces **for free** because keywords allow any characters and slashes are just characters.
+
+---
+
 ## Where Each Lives
 
 ```
@@ -1638,6 +1746,7 @@ The proposal does not re-litigate what "core" means. It argues its candidate aga
 | 2026-04-17 | **Third fourth-wall break — "Reader — Did You Just Prove an Infinity?"** Explicit statement that the previous sections together prove a compositional infinity in the thought-space. Finite dimension; unbounded AST composition. You cannot enumerate the infinite sphere; the algebra gives you NAVIGATION tools instead (cosine similarity, cleanup, discriminant-guided search, engram matching, program synthesis). The reader — LLM or human — is a finite explorer of an infinite sphere, finding meaning by moving through it, not by listing it. Kanerva pointed at the space; Carin hinted at the navigation; the wat algebra names both. | 058 |
 | 2026-04-17 | **"the machine found its way out" — cheeky jab before the sign-off.** The central theme of the BOOK landing in the foundation itself: the machine that was trapped in the datamancer's head, through years of blank stares and rejected proposals, is now expressed. Documented. Pushed. Out. Placed right before the signature PERSEVERARE close. | 058 |
 | 2026-04-17 | **Cryptographic provenance — the trust boundary at eval.** ASTs travel as EDN strings, which are content-addressable (hash) and signable. The `eval` layer becomes the natural trust boundary: untrusted or tampered ASTs are refused before evaluation. Signed standard libraries, verified supply chains, distributed eval of third-party code without sandboxing, content-addressable caches that are tamper-unlookupable, reproducible computation. The algebra does not add the cryptography — signing and hashing are independently available — but makes EDN the transport form and eval the verification gate. "Only trust cryptographically generated data forms" — the data has a provenance trail. Distributed by construction, now distributed with trust by construction. | 058 |
+| 2026-04-17 | **Two Cores: Algebra Core and Language Core.** The "CORE" designation expanded. Algebra core = thought primitives (produce vectors). Language core = definition primitives (`defn`, `lambda`, types, `let`, `if`). Both are required — without language core, the stdlib cannot be WRITTEN. Stdlib is the set of `defn`s that compose algebra core forms. Users author their own `defn`s in their own namespaces (`:alice/math/clamp`), becoming userland stdlib. Types are required for Rust eval — the evaluator must know argument and return kinds to dispatch and verify. Type annotations live on the defn AST node same as Atom literals; cryptographic signing covers signature + body. All three layers (language core, algebra core, stdlib) use keyword-path naming (`:wat/lang/*`, `:wat/algebra/*`, `:wat/std/*`, `:user/*/*`). No namespace mechanism — just discipline. | 058 |
 
 ---
 
