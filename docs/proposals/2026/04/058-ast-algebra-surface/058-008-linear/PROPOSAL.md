@@ -1,0 +1,157 @@
+# 058-008: `Linear` — Reframe as Stdlib over Blend
+
+**Scope:** algebra
+**Class:** STDLIB (reclassification from current CORE variant)
+**Parent:** 058-ast-algebra-surface
+**Foundation:** ../FOUNDATION.md
+**Depends on:** 058-002-blend (pivotal — if Blend rejected, Linear stays core)
+**Companion proposals:** 058-017-log, 058-018-circular
+
+## Reclassification Claim
+
+The current `ThoughtAST` enum has a `Linear(low_atom, high_atom, value, scale)` variant. FOUNDATION's audit lists it as CORE. Under the stdlib criterion (058-002-blend's Blend primitive, plus Thermometer as core), `Linear` is a BLENDING of two endpoint anchor Thermometers with weights derived from the scalar value's linear-normalized position.
+
+It is not a primitive algebraic operation. It is a scalar-to-vector conversion that expresses a position along a one-dimensional range by blending two endpoint anchors. That is exactly the shape of a Blend call with scalar-derived weights.
+
+With Blend as a pivotal core form (058-002), `Linear` becomes a stdlib function. This proposal reclassifies it accordingly.
+
+Parallel proposals 058-017-log and 058-018-circular apply the same reframing to the Log and Circular scalar encoders, which are structurally identical except for the weight-computing function.
+
+## The Reframing
+
+### Current semantics
+
+`Linear(low_atom, high_atom, value, scale)` produces a vector that is `low_anchor` when `value == min` and `high_anchor` when `value == max`, linearly interpolating in between.
+
+### Stdlib definition
+
+```scheme
+(define (Linear low-atom high-atom value scale)
+  (let* ((min (first scale))
+         (max (second scale))
+         (t (/ (- value min) (- max min)))                     ; normalize to [0,1]
+         (w-low (- 1 t))
+         (w-high t))
+    (Blend (Thermometer low-atom dim)
+           (Thermometer high-atom dim)
+           w-low
+           w-high)))
+```
+
+`t` is the linear-normalized position of `value` in the range `[min, max]`. `w-low` weights the low anchor; `w-high` weights the high anchor. Their sum is always 1 (a partition-of-unity linear interpolation).
+
+## Why Stdlib Earns the Name
+
+**1. The operation is a Blend with a specific weight-computing function.**
+
+The algebraic skeleton is:
+
+```
+Blend(Thermometer(low), Thermometer(high), w_low(value), w_high(value))
+```
+
+Linear uses `w_low(value) = 1 - t` and `w_high(value) = t` for `t = (value - min) / (max - min)`. The ALGEBRAIC operation is the weighted sum. The weight functions are scalar computations that belong in stdlib, not the algebra.
+
+**2. The stdlib form makes the weight computation explicit.**
+
+As a CORE variant, the weight computation is hidden inside the Rust encoder dispatch. As a stdlib form, it is visible in the wat source — users can read, understand, and extend.
+
+**3. New linear-style encoders become trivial stdlib additions.**
+
+Clipped-linear (saturates outside `[min, max]`), piecewise-linear (multiple breakpoints), offset-linear, etc. — all become wat functions rather than ThoughtAST variants. The algebra stays closed; extension happens in the library.
+
+## Arguments Against
+
+**1. Loss of dispatch efficiency.**
+
+Current implementation pattern-matches on the `Linear` variant and dispatches to a specialized encoder. Stdlib expansion requires Blend evaluation with runtime-computed weights, which adds one indirection.
+
+**Mitigation:** the overhead is a single match arm vs. a stdlib function call. The vector-level work (Thermometer encoding + Blend) dominates. Dispatch cost is noise.
+
+**2. Cache key shape changes.**
+
+Currently `Linear(low, high, value, scale)` is one AST node. The reframing makes it a stdlib call that expands to `Blend(Thermometer(...), Thermometer(...), w_low, w_high)` with computed weights.
+
+**Mitigation:** cache keys can be on the stdlib form (preserve name, add cache entry) OR on the expanded form (canonical, shared with identical Blend calls elsewhere). Either works. Consistency with other reframings (058-017, 058-018, 058-009) is the main criterion.
+
+**3. Loss of semantic name in AST walks.**
+
+Eager expansion loses the `Linear` label in AST inspection. Preserving the stdlib form in AST keeps the label visible.
+
+**Mitigation:** preserve stdlib forms in AST; expand only during vector computation. Consistent with recommendations for Linear/Log/Circular/Concurrent/Sequential.
+
+**4. Dependency on Blend passing.**
+
+If 058-002-blend is rejected, this reframing is void and `Linear` stays core. The designers must resolve Blend first.
+
+## Comparison
+
+| Form | Class (current) | Class (proposed) | Expansion |
+|---|---|---|---|
+| `Linear(low, high, v, scale)` | CORE | STDLIB (this) | `Blend(Therm(low), Therm(high), 1-t, t)` |
+| `Log(low, high, v, scale)` | CORE | STDLIB (058-017) | `Blend(Therm(low), Therm(high), 1-log_t, log_t)` |
+| `Circular(low, high, v, scale)` | CORE | STDLIB (058-018) | `Blend(Therm(low), Therm(high), cos θ, sin θ)` |
+| `Thermometer(atom, dim)` | CORE | CORE (unchanged) | primitive |
+| `Blend(a, b, w1, w2)` | CORE (pending 058-002) | CORE (pending 058-002) | primitive |
+
+Three separate reframings, identical structural argument, different weight functions.
+
+## Algebraic Question
+
+Does Linear compose with the existing algebra?
+
+Yes. Output is a bipolar vector (Blend's threshold of a scalar-weighted sum of bipolar Thermometer outputs). Same dimensional space. All downstream operations work.
+
+Is it a distinct source category?
+
+No. Once Blend is core, Linear is a Blend specialization with a particular weight-computing function. Stdlib.
+
+## Simplicity Question
+
+Is this simple or easy?
+
+Simpler than the current state. One less CORE variant. The operation's structure (Blend of two anchor Thermometers with linear weights) is made explicit.
+
+Is anything complected?
+
+Removes a small complection. The current variant mixes "I am a scalar-to-vector operation" with "I use linear interpolation specifically." Reframing separates the two — the scalar-to-vector machinery is Blend; the linear weights are a scalar function in stdlib.
+
+Could existing forms express it?
+
+Yes, once Blend is core. That is the whole claim.
+
+## Implementation Scope
+
+**holon-rs changes** — remove the variant:
+
+```rust
+pub enum ThoughtAST {
+    // remove: Linear(Atom, Atom, f64, Scale),
+    // keep:   Thermometer(Atom, usize),
+    // add (per 058-002): Blend(Arc<ThoughtAST>, Arc<ThoughtAST>, f64, f64),
+}
+```
+
+Delete the Linear encoder match arm (~15-20 lines including tests).
+
+**wat stdlib addition** — `wat/std/scalars.wat`:
+
+```scheme
+(define (Linear low high value scale)
+  (let* ((min (first scale))
+         (max (second scale))
+         (t (/ (- value min) (- max min))))
+    (Blend (Thermometer low dim) (Thermometer high dim) (- 1 t) t)))
+```
+
+## Questions for Designers
+
+1. **Is Thermometer itself core?** This reframing assumes Thermometer stays core. 058-023-thermometer treats Thermometer as the primitive. Confirm.
+
+2. **Should stdlib forms be preserved in AST or eagerly expanded?** Preserving keeps the semantic name in AST walks. Eager expansion collapses cache keys to canonical Blend. Either works; consistency across Linear/Log/Circular is the key.
+
+3. **Are there hidden differences between the current variant implementation and the reframing?** Float-to-integer rounding, clipping, specialized arithmetic — audit before committing to confirm the reframing is byte-for-byte equivalent to the current Linear encoder.
+
+4. **Dependency on 058-002-blend.** If Blend is rejected, Linear stays core. Should resolution be explicitly deferred until Blend resolves?
+
+5. **Scale argument shape.** `scale` here is a list `(min max)`. Is this the conventional shape across Linear/Log/Circular? Log also uses min/max; Circular uses a single period. Inconsistent shapes may complicate stdlib code. Confirm per-encoder conventions.
