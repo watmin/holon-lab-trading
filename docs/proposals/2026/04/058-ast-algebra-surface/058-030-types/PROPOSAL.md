@@ -25,7 +25,7 @@ The type system has two tiers of built-ins: **algebraic types** (abstractions ov
 **Algebraic types:**
 
 ```
-:Holon    — the algebra's AST type, declared as an enum with 9 variants
+:Holon    — the algebra's AST type, declared as an enum with 6 variants
 :Vector   — a raw encoded ternary vector in `{-1, 0, +1}^d` (post-encode form)
 :AST      — a parsed source AST (for macro parameters; see 058-031-defmacro)
 ```
@@ -34,16 +34,15 @@ The type system has two tiers of built-ins: **algebraic types** (abstractions ov
 
 ```scheme
 (:wat/core/enum :wat/algebra/Holon
-  (Atom            (literal :AtomLiteral))
-  (Bind            (a :Holon) (b :Holon))
-  (Bundle          (items :List<Holon>))
-  (Permute         (child :Holon) (k :i32))
-  (Thermometer     (value :f64) (min :f64) (max :f64))
-  (Blend           (a :Holon) (b :Holon) (w1 :f64) (w2 :f64))
-  (Orthogonalize   (x :Holon) (y :Holon))
-  (Resonance       (v :Holon) (ref :Holon))
-  (ConditionalBind (a :Holon) (b :Holon) (gate :Holon)))
+  (Atom        (payload :T))                                            ;; parametric per 058-001
+  (Bind        (a :Holon) (b :Holon))
+  (Bundle      (items :List<Holon>))
+  (Permute     (child :Holon) (k :i32))
+  (Thermometer (value :f64) (min :f64) (max :f64))
+  (Blend       (a :Holon) (b :Holon) (w1 :f64) (w2 :f64)))
 ```
+
+Six variants — the algebra core. `Orthogonalize`, `Resonance`, and `ConditionalBind` are NOT variants of `:Holon`: Orthogonalize (058-005) migrated to stdlib as `Reject` + `Project` macros over `Blend` + `:wat/algebra/dot`; Resonance (058-006) and ConditionalBind (058-007) were rejected as speculative primitives with no production use. See their PROPOSAL.md REJECTED banners and FOUNDATION-CHANGELOG for the record.
 
 Every algebra AST node is a **variant** of the `:Holon` enum. A function typed `(f (h :Holon) -> ...)` accepts any variant and pattern-matches to select behavior:
 
@@ -283,15 +282,12 @@ The wat type system has no nominal subtype relation (no `:A :is-a :B` keyword, n
 ;; Pattern-matching extracts the variant:
 (:wat/core/define (:my/app/encode (h :Holon) -> :Vector)
   (:wat/core/match h
-    ((Atom literal)         ...)
+    ((Atom payload)         ...)
     ((Bind a b)             ...)
     ((Bundle items)         ...)
     ((Permute child k)      ...)
     ((Thermometer v mn mx)  ...)
-    ((Blend a b w1 w2)      ...)
-    ((Orthogonalize x y)    ...)
-    ((Resonance v ref)      ...)
-    ((ConditionalBind a b g) ...)))
+    ((Blend a b w1 w2)      ...)))
 ```
 
 Same semantics as Rust's `match holon { HolonAST::Atom(lit) => ..., ... }`. Exhaustive. Compiler-verified. No runtime dispatch overhead.

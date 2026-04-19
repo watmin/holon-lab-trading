@@ -9,6 +9,14 @@ This document is not a PROPOSAL. It does not require designer review. It is the 
 
 Speculative and aspirational framings — the holographic/NP-hard lens, the distributed "clouds waking up" vision, the lineage, the metaprogramming-is-native framing — live in **VISION.md** (companion reading). Nothing in VISION is required to accept FOUNDATION; the algebra works without any of it. Proposals cite FOUNDATION, not VISION.
 
+**Map of this document.** FOUNDATION covers three connected but distinct tiers. A reader walking top-to-bottom meets them in this order:
+
+1. **The algebra** — The Foundational Principle, Two Tiers of wat, Recursive Composition, Programs ARE Holons, The Vector Side, The Algebra Is Immutable, `:wat/config`, Dimensionality, Output Space, Presence Is Measurement, The Algebra — Complete Forms, Atom Literal Types. This tier defines what a holon IS and how algebra operations compose. Read for: the substrate's mathematical contract.
+2. **The kernel substrate** — The wat-vm Substrate — Kernel Primitives, the canonical lifecycle, Programs are userland. This tier defines how wat programs COMMUNICATE — queues, spawn, select, HandlePool, Signal, stdio handles. Read for: the runtime contract.
+3. **The language core** — Caching Is Memoization, Engram Caches, Two Cores, Criterion sections, Where Each Lives, Naming Discipline, Criterion for Language Core Forms. This tier defines how wat PROGRAMS are written — `define`, `lambda`, types, `load!`, `defmacro`. Read for: the authoring contract.
+
+The three interconnect — the algebra encodes holons, the kernel moves them between programs, the language lets users compose both. Reading out of order is fine; each tier is internally self-contained.
+
 ---
 
 ## The Foundational Principle
@@ -518,6 +526,22 @@ An AST in transmission is an **EDN string** — extensible data notation, a seri
 
 **EDN strings are content-addressable.** A SHA-256 (or BLAKE3, or whatever modern hash the deployment chooses) of the canonical EDN form is a stable identifier for the AST. Two parties producing the same AST produce the same EDN, and therefore the same hash. **The AST has a cryptographic identity.**
 
+**Two load-bearing sub-claims about "same AST → same EDN":**
+
+- **Canonical-EDN walks a strictly-smaller subtree on each recursive
+  call.** Every AST is a finite tree built by the parser from finite
+  source; the canonicalizer descends into children (Bind / Bundle /
+  Permute / Blend) or into an `Atom`'s payload (which is itself at most
+  a finite AST). Termination is well-founded by construction.
+- **`Atom<f64>` payloads containing IEEE-754 NaN are implementation-
+  defined.** A quiet NaN and a signaling NaN share a semantic ("not a
+  number") but have different bit patterns, and
+  `f64::to_le_bytes` exposes those bits. Applications requiring cross-
+  node determinism exclude NaN from atom payloads, OR implementations
+  canonicalize to a single NaN bit pattern at registration time.
+  Everything else (`+0.0` vs `-0.0`, subnormals, infinities) has a
+  single canonical bit pattern and is deterministic across nodes.
+
 **EDN strings can be signed.** A trusted producer signs the EDN with a private key; any receiver can verify the signature against the known public key. **The AST has a cryptographic provenance.**
 
 **The wat-vm loads all code at startup.** A single form — `(:wat/core/load! ...)` — pulls in a file of any mixture of declarations: types (struct/enum/newtype/typealias), functions (define), macros (defmacro), config setters (set-<field>!). Everything happens before the main event loop starts. Once startup completes, the symbol table is frozen — no further code enters during runtime.
@@ -706,9 +730,30 @@ The struct grows by FOUNDATION proposal — each addition specifies the field na
   :warn      ;; development — log but continue
   :error     ;; catchable CapacityExceeded
   :abort)    ;; production fail-closed
+
+;; (:wat/config/set-global-seed! s)  — s : :u64
+;; (:wat/config/global-seed)          → :u64
+;;
+;;   Global seed for deterministic vector generation. The VectorManager
+;;   and the ScalarEncoder both derive their per-atom, per-position, and
+;;   per-scalar-base vectors from this seed. Two nodes running the same
+;;   wat program produce bit-identical vectors iff they share this seed —
+;;   that is the mechanism by which FOUNDATION's "bit-identical across
+;;   nodes at the same d" claim holds (see Thermometer's canonical
+;;   layout, engram portability, distributed verifiability of cached
+;;   vectors).
+;;
+;;   DEFAULT: 42. Setting global-seed is optional; most programs accept
+;;   the default and inherit cross-node determinism by convention. A
+;;   program that sets a non-default seed commits to that seed — every
+;;   other node running the program must commit the same value.
+;;   Application authors should never need to touch it for correctness;
+;;   the override exists for deliberate isolation (two deployments of
+;;   the same application that intentionally live on different seeded
+;;   hyperspheres so their engrams cannot accidentally cross-match).
 ```
 
-Future proposals may add fields. The bar: **the value is universal across every holon program, not app-specific.** `L1-cache-size` and `L2-cache-size` were considered for inclusion (see VISION's "The Cache as Cognitive Substrate — One Application's Story") and rejected as app-specific — the trading lab's 256K L1 reflects its cognitive pace, not a universal choice. Dims and capacity-mode clear the bar; most candidates won't.
+Future proposals may add fields. The bar: **the value is universal across every holon program, not app-specific.** `L1-cache-size` and `L2-cache-size` were considered for inclusion (see VISION's "The Cache as Cognitive Substrate — One Application's Story") and rejected as app-specific — the trading lab's 256K L1 reflects its cognitive pace, not a universal choice. `dims`, `capacity-mode`, and `global-seed` clear the bar; most candidates won't.
 
 ### The bang convention
 
@@ -2102,7 +2147,7 @@ The project reserves four prefixes, and they are **protected at startup** — us
 
 - `:wat/core/...` — language core primitives (`:wat/core/define`, `:wat/core/lambda`, `:wat/core/let`, `:wat/core/let*`, `:wat/core/if`, `:wat/core/match`, `:wat/core/cond`, `:wat/core/defmacro`, `:wat/core/load!`, `:wat/core/list`, `:wat/core/first`, `:wat/core/second`, `:wat/core/+`, `:wat/core/-`, `:wat/core/*`, `:wat/core/>`, `:wat/core/=`, …)
 - `:wat/kernel/...` — wat-vm kernel primitives (`:wat/kernel/make-bounded-queue`, `:wat/kernel/make-unbounded-queue`, `:wat/kernel/spawn`, `:wat/kernel/send`, `:wat/kernel/recv`, `:wat/kernel/try-recv`, `:wat/kernel/select`, `:wat/kernel/drop`, `:wat/kernel/join`, `:wat/kernel/HandlePool`)
-- `:wat/config/...` — ambient startup constants: setters (`set-dims!`, `set-capacity-mode!`), getters (`dims`, `capacity-mode`), and the `:wat/config/CapacityMode` enum. Required-at-startup values the program author commits once; see "`:wat/config` — Ambient Startup Constants."
+- `:wat/config/...` — ambient startup constants: setters (`set-dims!`, `set-capacity-mode!`, `set-global-seed!`), getters (`dims`, `capacity-mode`, `global-seed`), and the `:wat/config/CapacityMode` enum. Required-at-startup or defaulted values the program author commits at most once; see "`:wat/config` — Ambient Startup Constants."
 - `:wat/algebra/...` — algebra core primitives (`:wat/algebra/Atom`, `:wat/algebra/Bind`, `:wat/algebra/Bundle`, `:wat/algebra/Blend`, …)
 - `:wat/std/...` — project stdlib (`:wat/std/Subtract`, `:wat/std/HashMap`, `:wat/std/Chain`, `:wat/std/LocalCache`, circular basis atoms, `:wat/std/program/Cache`, …)
   - `:wat/std/list/...` — generic list combinators that compose core primitives (`:wat/std/list/pairwise-map`, `:wat/std/list/n-wise-map`, `:wat/std/list/map-with-index`, `:wat/std/list/window`, `:wat/std/list/zip`, `:wat/std/list/take-while`, …). Each is a short composition of Rust iterator methods; each is called from stdlib-macro-emitted ASTs and from user code.

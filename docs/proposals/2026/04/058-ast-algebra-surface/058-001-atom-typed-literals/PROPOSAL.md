@@ -41,17 +41,25 @@ The hash for every variant is `hash(type-tag, canonical-EDN(value))` producing a
 ### Extraction — polymorphic
 
 ```scheme
-(:wat/core/define (:wat/std/atom-value (a :Atom<T>) -> :T)
-  ;; Returns the inner T directly. Single polymorphic function;
-  ;; type-checker infers T at each call site.
+(:wat/core/define (:wat/std/atom-value (a :Holon) -> :Option<T>)
+  ;; Returns (Some inner) when `a` is an Atom<T> for the T the caller
+  ;; requests; :None when `a` is a non-Atom variant (Bind, Bundle, ...)
+  ;; or an Atom<U> for some U ≠ T. T is inferred from the call site's
+  ;; expected type. In well-typed programs the :None case is a bug; the
+  ;; type checker guarantees :Some at every call site where T matches
+  ;; the atom's declared payload.
   ...)
 
-(:wat/std/atom-value (:wat/algebra/Atom 42))           ;; → 42 as :i64
-(:wat/std/atom-value (:wat/algebra/Atom some-bundle))  ;; → some-bundle as :Holon
-(:wat/std/atom-value (:wat/algebra/Atom my-candle))    ;; → the Candle struct
+(:wat/std/atom-value (:wat/algebra/Atom 42))           ;; → (Some 42) as :Option<i64>
+(:wat/std/atom-value (:wat/algebra/Atom some-bundle))  ;; → (Some some-bundle) as :Option<Holon>
+(:wat/std/atom-value (:wat/algebra/Atom my-candle))    ;; → (Some candle) as :Option<Candle>
 ```
 
-No tagged-union unwrapping, no match. The atom's parametric T carries the type through.
+The Option carries the two sources of recovery failure that can't be
+ruled out at the type level: the argument isn't an Atom variant at all,
+or its payload is a different T than requested. In well-typed programs
+neither happens; applications may `match` or `unwrap` per their
+discipline.
 
 ### Two encodings of any composite — both legitimate
 
@@ -66,6 +74,23 @@ Different use cases:
 - Direct encoding when structure matters (analogy, presence of constituents).
 - Atomized wrapping when identity matters (library keying, opaque naming, program-as-pointer).
 
+### `Atom<T>` does not join — nested atomization is distinct layering
+
+`Atom<T>` is parametric; it is NOT idempotent under nesting.
+`(:wat/algebra/Atom (:wat/algebra/Atom 42))` is a legitimate composite
+AST: the outer Atom has payload type `:Atom<i64>` (which is itself a
+`:Holon` variant), and its canonical-EDN serialization recursively
+canonicalizes that inner Atom. The outer vector is distinct from the
+inner vector; a library that stores `(Atom (Atom 42))` keeps a handle
+to the layering, not a handle to the integer `42`.
+
+In categorical terms: `Atom<T>` is an embedding of `T` into the Holon
+space — it has a unit (`x ↦ Atom(x)`) but no join that flattens
+`Atom<Atom<T>>` to `Atom<T>`. Each wrap produces a new opaque-identity
+vector over the previous. Applications that want `Atom<T>` to collapse
+write that collapse as a specific function in their own code; the
+substrate does not impose one.
+
 ### The three Questions from 058's original draft, closed
 
 **Q1 — typed hash categorically sound?** YES.
@@ -74,7 +99,7 @@ Different use cases:
 
 **Q2 — one variant vs separate variants?** ONE (parametric).
 
-Not `AtomStr`/`AtomInt`/`AtomFloat`/... as separate HolonAST variants. One `Atom<T>` variant at the type level; at the Rust level, a type-tagged payload (or trait-object) that carries the canonical EDN form. Keeps the HolonAST enum at 7 variants — the small-enum virtue preserved. Pattern-matching through the `Atom<T>` parametric is handled by type-inference, not by variant-count.
+Not `AtomStr`/`AtomInt`/`AtomFloat`/... as separate HolonAST variants. One `Atom<T>` variant at the type level; at the Rust level, a type-tagged payload (via `std::any::Any` trait object + TypeId dispatch through an `AtomTypeRegistry`) that carries the canonical EDN form. Keeps the HolonAST enum at 6 variants — the small-enum virtue preserved. Pattern-matching through the `Atom<T>` parametric is handled by type-inference, not by variant-count.
 
 **Q3-Q6** — resolved earlier: no `:Null`, keyword-naming-by-convention, additive backward compat, vector-side type erasure inherent.
 
