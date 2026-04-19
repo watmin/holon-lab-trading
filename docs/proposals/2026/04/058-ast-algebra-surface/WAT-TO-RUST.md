@@ -94,7 +94,7 @@ holon::kernel::primitives::bind(
 
 No interpreter dispatch, no symbol-table lookup, no HolonAST enum match. The `:wat/core/` forms expand inline; the `:wat/algebra/` forms become direct Rust function calls.
 
-### Kernel primitives — crossbeam + std::thread
+### Kernel primitives — crossbeam + std::thread + wat-vm runtime
 
 ```scheme
 (:wat/kernel/make-bounded-queue :Candle 1)
@@ -114,7 +114,67 @@ std::thread::spawn(move || {
 })
 ```
 
-Kernel primitives are a thin wrapper over std + crossbeam. The emitted Rust looks like what a human would write.
+```scheme
+(:wat/kernel/select receivers)
+```
+
+```rust
+// emitted as a crossbeam Select block over the receiver list:
+{
+    let mut sel = crossbeam::channel::Select::new();
+    for rx in &receivers { sel.recv(rx.inner()); }
+    let op = sel.select();
+    let i = op.index();
+    match op.recv(receivers[i].inner()) {
+        Ok(v)  => (i, Some(v)),
+        Err(_) => (i, None),
+    }
+}
+```
+
+```scheme
+(:wat/kernel/HandlePool/new "cache" handles)
+(:wat/kernel/HandlePool/pop pool)
+(:wat/kernel/HandlePool/finish pool)
+```
+
+```rust
+// HandlePool<T> ships in the runtime support crate — the compiler
+// emits direct calls to it. The runtime crate is linked into every
+// compiled wat binary.
+watvm_runtime::HandlePool::new("cache", handles)
+pool.pop()
+pool.finish()
+```
+
+The `signals` parameter the kernel passes to `:user/main` is populated by an OS-signal handler installed at startup:
+
+```rust
+// emitted as part of the main shim — not visible in wat source:
+static SIGNALS_TX: OnceCell<QueueSender<Signal>> = OnceCell::new();
+
+extern "C" fn handler(sig: libc::c_int) {
+    let s = match sig {
+        libc::SIGINT  => Signal::SIGINT,
+        libc::SIGTERM => Signal::SIGTERM,
+        _ => return,
+    };
+    if let Some(tx) = SIGNALS_TX.get() { let _ = tx.send(s); }
+}
+
+fn main() {
+    let (stdin_rx, stdout_tx, stderr_tx) = watvm_runtime::stdio();
+    let (signals_tx, signals_rx) = crossbeam::channel::unbounded::<Signal>();
+    SIGNALS_TX.set(signals_tx).unwrap();
+    unsafe {
+        libc::signal(libc::SIGINT,  handler as _);
+        libc::signal(libc::SIGTERM, handler as _);
+    }
+    user::main(stdin_rx, stdout_tx, stderr_tx, signals_rx);
+}
+```
+
+Kernel primitives are a thin wrapper over `std` + `crossbeam` + a small `watvm_runtime` support crate (HandlePool, stdio bootstrap, signal shim). The emitted Rust looks like what a human would write.
 
 ### Stdlib macros — already compiled at parse
 
@@ -159,13 +219,88 @@ The four `:wat/core/` type-declaration forms (`struct`, `enum`, `newtype`, `type
 
 ---
 
+## Programs Are Userland — Implementation Language Is Free
+
+FOUNDATION's "Programs are userland" section names the conformance contract: a program is any function that (1) is named by keyword path in the static symbol table, (2) takes its handles as parameters, (3) returns final state as its return value, (4) observes the drop cascade, (5) does not create self-pipes, (6) uses `:wat/kernel/HandlePool` for any client handles it exposes.
+
+The compile path makes this orthogonality concrete. Three ways a program enters the binary:
+
+### Path A — wat-authored, compiled
+
+A wat `define` becomes a Rust `pub fn` per "What the Compiler Emits" above. The emitted source goes into `src/<module>.rs`; rustc includes it in the binary.
+
+### Path B — wat-authored, interpreted
+
+Same `define`, but the wat-vm loads the AST at startup and walks it at call time. The interpret path. No compilation step. Useful for development; the compile path is the production-tier.
+
+### Path C — Rust-authored, registered by keyword path
+
+The trading lab's `market_observer_program`, `regime_observer_program`, `broker_program`, `treasury_program` are hand-written Rust. They conform to the six rules. They get registered with keyword paths at startup:
+
+```rust
+// in the app's startup manifest — linked into the binary:
+watvm_runtime::register_program(
+    KeywordPath::parse(":project/trading/program/MarketObserver"),
+    Arc::new(|args| {
+        // argument unpacking + cast to typed signature
+        let (rx, tx, cache, vm, scalar, console, db, obs, i, ri) = unpack(args);
+        market_observer_program(rx, tx, cache, vm, scalar, console, db, obs, i, ri)
+    }),
+);
+```
+
+The wat-vm — both interpreter and compiler — sees `:project/trading/program/MarketObserver` in the symbol table. A wat call to `(:wat/kernel/spawn :project/trading/program/MarketObserver ...)` dispatches into the Rust function on either path. The compile path emits a direct call; the interpret path invokes the registered function pointer.
+
+### What this means for `:wat/std/program/Console` and `:wat/std/program/Cache`
+
+The two stdlib programs are Path-C programs that happen to live in the runtime support crate:
+
+```rust
+// watvm_runtime/src/programs.rs — ships with the compiler and linker:
+pub fn console_program(output: QueueSender<String>, num_producers: usize) 
+    -> (HandlePool<ConsoleHandle>, ConsoleDriver) { ... }
+
+pub fn cache_program<K, V>(
+    name: &str,
+    capacity: usize,
+    num_clients: usize,
+    can_emit: Box<dyn Fn() -> bool + Send>,
+    emit: Box<dyn Fn(CacheStats) + Send>,
+) -> (HandlePool<CacheHandle<K, V>>, CacheDriver) { ... }
+```
+
+Compile-path emission for these calls is a direct call into the runtime crate. The interpret path looks them up in the kernel-registered program table. Users authoring new stdlib programs would do the same: write Rust in a sibling crate, register the keyword path, share the compilation output.
+
+### What this means for `Database`, `telemetry`, `rate-gate`
+
+All three are **userland**. An app that wants them ships them itself:
+
+- Trading lab: `src/programs/stdlib/database.rs`, `src/programs/telemetry.rs`. Registered under `:project/trading/program/Database`, `:project/trading/telemetry/emit-metric`, `:project/trading/rate-gate`. The names are the app's choice, not the wat-vm's.
+- Another app (say, a DDoS detector): probably wants different schemas, different telemetry format, maybe no database at all. Ships its own programs under `:ddos-lab/program/...`.
+
+The wat-vm does not ship Database. Does not ship a telemetry format. Does not ship a rate gate. Apps supply those, Rust-authored or wat-authored, registered by keyword path.
+
+---
+
 ## Bootstrap — wat-vm in wat
 
-If the compile path works, the wat-vm itself can be written in wat. Today's `src/bin/wat-vm.rs` (≈840 lines), the market-observer module, the regime-observer module, the broker module, the treasury, the Console/Cache/Database programs — all expressible as wat programs.
+If the compile path works, the wat-vm's orchestration layer can be written in wat. Today's `src/bin/wat-vm.rs` (≈840 lines) — the counting, pooling, wiring, candle-stream loop, shutdown cascade — is all keyword-path-dispatched calls and queue management. Expressible as a wat `:user/main`.
 
-Run `wat-to-rust` on that wat source. Get Rust source. Compile with rustc. The resulting binary behaves identically to today's hand-written trading lab. Self-hosting.
+Run `wat-to-rust` on that wat source. Get Rust source. Combine with the runtime support crate (Console/Cache/HandlePool/stdio/signals), the algebra primitives from `holon-rs`, and the app's Rust-authored programs (Market Observer, etc.). Compile with rustc. The resulting binary behaves identically to today's hand-written trading lab. Self-hosting at the orchestration tier.
 
-The payoff: every change to the wat-vm is a change to **wat source**, not to Rust source. New kernel primitives, new stdlib programs, new algebra operations — all authored in wat, compiled through wat-to-rust, hitting production at the performance tier of native code. The handwritten Rust ossifies to the compiler itself (wat-to-rust) and the `holon-rs` algebra primitives. Everything else moves up into wat.
+**What stays hand-written Rust:**
+- `holon-rs` algebra primitives (the bind/bundle/permute/threshold kernel).
+- `watvm_runtime` support (HandlePool, stdio bootstrap, signal shim, Console program, Cache program).
+- `wat-to-rust` (the compiler itself).
+- App-specific performance-critical programs (Market Observer, etc.) — until an author chooses to re-express them in wat.
+
+**What moves up into wat:**
+- `:user/main` for every app — counting, wiring, spawn, shutdown cascade.
+- App-specific userland macros and functions.
+- New stdlib macros (Subtract, Chain, HashMap, etc.) authored in wat.
+- Experimental program graphs — authors prototype in wat, migrate to Rust if they need the performance.
+
+The line between hand-written Rust and wat moves over time as authors choose. Nothing forces the migration; the six-rule contract is all that's required.
 
 ---
 
