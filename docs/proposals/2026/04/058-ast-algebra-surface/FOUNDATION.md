@@ -2711,10 +2711,17 @@ All eight forms are loaded at startup. The wat-vm distinguishes them by what kin
 ;; --- The `:` is Lisp's quote ---
 ;;
 ;; One quote at the start. The whole expression is a single keyword token.
-;; Inside a keyword: NO internal ':', NO internal whitespace. Structural
-;; characters '/', '<', '>', '(', ')', ',', '-', '>' all belong to the
-;; keyword. The tokenizer tracks bracket depth across three pairs — ()
-;; [] <> — and ends the keyword at whitespace or an unmatched closer.
+;; Inside a keyword: NO internal ':', NO internal whitespace. Every
+;; other character belongs to the keyword — `/`, `<`, `>`, `(`, `)`,
+;; `,`, `-`, letters, digits. These are plain characters; none of them
+;; have special tokenizer meaning except the two parens. The tokenizer
+;; tracks PAREN depth only (because `(` and `)` can appear inside a
+;; keyword — as in `:fn(T,U)->R` — and the lexer must distinguish an
+;; internal matched pair from the outer `)` that closes the enclosing
+;; form). A keyword ends at whitespace at paren-depth 0 or at an
+;; unmatched `)`. `[]` and `{}` are NOT wat syntax; `<` and `>` are
+;; plain chars that happen to appear in parametric type keywords like
+;; `:List<T>`.
 ;;
 ;; Examples of SINGLE tokens:
 ;;   :List<T>

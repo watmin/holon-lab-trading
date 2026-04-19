@@ -136,9 +136,11 @@ Arguments between the parens, return after `->`. Direct one-to-one correspondenc
 
 The `:` is Lisp's quote. One at the start; the whole expression is a single keyword token. Inside a keyword:
 - NO internal `:` (re-quoting is illegal)
-- NO internal whitespace (whitespace ends the keyword)
-- Structural characters `/`, `<`, `>`, `(`, `)`, `,`, `-`, `>` all belong to the keyword
-- The tokenizer tracks bracket depth across three pairs — `()`, `[]`, `<>` — and ends the keyword at whitespace or an unmatched closing bracket
+- NO internal whitespace (whitespace ends the keyword at paren-depth 0)
+- Every other character belongs to the keyword — `/`, `<`, `>`, `(`, `)`, `,`, `-`, letters, digits. These are plain chars; none of them has special tokenizer meaning except `(` and `)`
+- The tokenizer tracks PAREN depth only (because `(` and `)` can appear inside a keyword — as in `:fn(T,U)->R` — and the lexer must distinguish an internal matched pair from the outer `)` that closes the enclosing form)
+- A keyword ends at whitespace at paren-depth 0 or at an unmatched `)`
+- `[]` and `{}` are NOT wat syntax; `<` and `>` are plain chars inside parametric type keywords like `:List<T>`
 
 Nested generics compose:
 
@@ -604,4 +606,4 @@ New language-core forms (alongside `define` and `lambda`), all compile-time-regi
 
 10. **First-class types.** Types as keyword values can be passed around. Does this enable type-reflecting code? Probably, though not the focus of this proposal. Example: `(type-of x)` returns the keyword `:Holon`. Useful for introspection but out of scope for language core.
 
-11. **Keyword-path in type names with generic parameters — RESOLVED.** Rust-surface angle-bracket keyword syntax, single token, no internal spaces, no internal colons. The `:` is Lisp's quote — one at the start; everything else is inside. `:wat/std/Container<T>` at declaration, `:wat/std/Container<Holon>` at use. Function types use `:fn(args)->return` with parens and arrow (Rust's native syntax). The tokenizer tracks bracket depth across `()`, `[]`, `<>` and ends the keyword at whitespace or an unmatched closer.
+11. **Keyword-path in type names with generic parameters — RESOLVED.** Rust-surface angle-bracket keyword syntax, single token, no internal spaces, no internal colons. The `:` is Lisp's quote — one at the start; everything else is inside. `:wat/std/Container<T>` at declaration, `:wat/std/Container<Holon>` at use. Function types use `:fn(args)->return` with parens and arrow (Rust's native syntax). The tokenizer tracks PAREN depth only (`()` is the only structural bracket in wat; `<` and `>` are plain chars that appear in parametric type keywords). A keyword ends at whitespace at paren-depth 0 or at an unmatched `)`.
