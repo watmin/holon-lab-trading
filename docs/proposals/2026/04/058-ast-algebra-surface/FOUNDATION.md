@@ -41,9 +41,9 @@ These are not two different things. They are the same holon seen from two perspe
 **1. Literals are read from AST nodes, not recovered from vectors.**
 
 ```scheme
-(:wat::std::atom-value (:wat::algebra::Atom 42))   → 42     ; reads the AST node's field
-(:wat::std::atom-value (:wat::algebra::Atom "x"))  → "x"
-(:wat::std::atom-value (:wat::algebra::Atom true)) → true
+(:wat::core::atom-value (:wat::algebra::Atom 42))   → 42     ; reads the AST node's field
+(:wat::core::atom-value (:wat::algebra::Atom "x"))  → "x"
+(:wat::core::atom-value (:wat::algebra::Atom true)) → true
 ```
 
 No cleanup. No codebook search. No cosine interpretation. The `Atom` AST node stores the literal. Reading it is field access.
@@ -351,7 +351,7 @@ This unlocks the algebra's real power for self-referential reasoning:
 ;; same program → cosine = 1 (deterministic)
 
 ;; Extraction recovers the program:
-(:wat::std::atom-value (:wat::algebra::Atom prog-a))  ;; → prog-a, fully reconstituted
+(:wat::core::atom-value (:wat::algebra::Atom prog-a))  ;; → prog-a, fully reconstituted
 ;; Now eval it, walk it, modify it, spawn it.
 ```
 
@@ -772,9 +772,26 @@ The struct grows by FOUNDATION proposal — each addition specifies the field na
 ;;   the override exists for deliberate isolation (two deployments of
 ;;   the same application that intentionally live on different seeded
 ;;   hyperspheres so their engrams cannot accidentally cross-match).
+
+;; (:wat::config::set-noise-floor! x)  — x : :f64
+;; (:wat::config::noise-floor)          → :f64
+;;
+;;   Cosine threshold separating signal from noise for the substrate
+;;   at this dims. Presence measurements (FOUNDATION 1718) compare
+;;   against this floor to decide whether a target is "in" a reference
+;;   vector with confidence. The algebra itself does NOT binarize —
+;;   presence returns :f64; the floor is the value the caller
+;;   conventionally compares against.
+;;
+;;   DEFAULT: 5.0 / sqrt(dims) — the 5-sigma substrate noise floor.
+;;   At d = 10,000, ≈ 0.05; at d = 1,024, ≈ 0.156. Setting noise-floor
+;;   is optional; the derived value fits most applications. Override
+;;   for tighter confidence (10σ engram-recognition regime) or looser
+;;   (rough pre-filtering of a large candidate library before a
+;;   stricter downstream threshold).
 ```
 
-Future proposals may add fields. The bar: **the value is universal across every holon program, not app-specific.** `L1-cache-size` and `L2-cache-size` were considered for inclusion (see VISION's "The Cache as Cognitive Substrate — One Application's Story") and rejected as app-specific — the trading lab's 256K L1 reflects its cognitive pace, not a universal choice. `dims`, `capacity-mode`, and `global-seed` clear the bar; most candidates won't.
+Future proposals may add fields. The bar: **the value is universal across every holon program, not app-specific.** `L1-cache-size` and `L2-cache-size` were considered for inclusion (see VISION's "The Cache as Cognitive Substrate — One Application's Story") and rejected as app-specific — the trading lab's 256K L1 reflects its cognitive pace, not a universal choice. `dims`, `capacity-mode`, `global-seed`, and `noise-floor` clear the bar; most candidates won't.
 
 ### The bang convention
 
@@ -2166,9 +2183,9 @@ This makes the discipline enforceable in practice: conflicts fail loudly and ear
 
 The project reserves four prefixes, and they are **protected at startup** — users cannot define anything at these paths. Attempting `(:wat::core::define (:wat::kernel::my-func ...) ...)` or `(:wat::core::defmacro (:wat::std::MyAlias ...) ...)` halts the wat-vm with a startup error.
 
-- `:wat::core::...` — language core primitives (`:wat::core::define`, `:wat::core::lambda`, `:wat::core::let`, `:wat::core::let*`, `:wat::core::if`, `:wat::core::match`, `:wat::core::cond`, `:wat::core::defmacro`, `:wat::core::load!`, `:wat::core::vec`, `:wat::core::first`, `:wat::core::second`, `:wat::core::+`, `:wat::core::-`, `:wat::core::*`, `:wat::core::>`, `:wat::core::=`, …)
-- `:wat::kernel::...` — wat-vm kernel primitives (`:wat::kernel::make-bounded-queue`, `:wat::kernel::make-unbounded-queue`, `:wat::kernel::spawn`, `:wat::kernel::send`, `:wat::kernel::recv`, `:wat::kernel::try-recv`, `:wat::kernel::select`, `:wat::kernel::drop`, `:wat::kernel::join`, `:wat::kernel::HandlePool`)
-- `:wat::config::...` — ambient startup constants: setters (`set-dims!`, `set-capacity-mode!`, `set-global-seed!`), getters (`dims`, `capacity-mode`, `global-seed`), and the `:wat::config::CapacityMode` enum. Required-at-startup or defaulted values the program author commits at most once; see "`:wat::config` — Ambient Startup Constants."
+- `:wat::core::...` — language core primitives (`:wat::core::define`, `:wat::core::lambda`, `:wat::core::let`, `:wat::core::let*`, `:wat::core::if`, `:wat::core::match`, `:wat::core::cond`, `:wat::core::defmacro`, `:wat::core::load!`, `:wat::core::vec`, `:wat::core::quote`, `:wat::core::atom-value`, `:wat::core::presence`, `:wat::core::eval-ast!`, `:wat::core::eval-edn!`, `:wat::core::eval-digest!`, `:wat::core::eval-signed!`, `:wat::core::first`, `:wat::core::second`, `:wat::core::+`, `:wat::core::-`, `:wat::core::*`, `:wat::core::>`, `:wat::core::=`, …)
+- `:wat::kernel::...` — wat-vm kernel primitives (`:wat::kernel::make-bounded-queue`, `:wat::kernel::make-unbounded-queue`, `:wat::kernel::spawn`, `:wat::kernel::send`, `:wat::kernel::recv`, `:wat::kernel::try-recv`, `:wat::kernel::select`, `:wat::kernel::drop`, `:wat::kernel::join`, `:wat::kernel::HandlePool`, `:wat::kernel::stopped`)
+- `:wat::config::...` — ambient startup constants: setters (`set-dims!`, `set-capacity-mode!`, `set-global-seed!`, `set-noise-floor!`), accessors (`dims`, `capacity-mode`, `global-seed`, `noise-floor`), and the `:wat::config::CapacityMode` enum. Required-at-startup or defaulted values the program author commits at most once; see "`:wat::config` — Ambient Startup Constants."
 - `:wat::algebra::...` — algebra core primitives (`:wat::algebra::Atom`, `:wat::algebra::Bind`, `:wat::algebra::Bundle`, `:wat::algebra::Blend`, …)
 - `:wat::std::...` — project stdlib (`:wat::std::Subtract`, `:wat::std::HashMap`, `:wat::std::Chain`, `:wat::std::LocalCache`, circular basis atoms, `:wat::std::program::Cache`, …)
   - `:wat::std::list::...` — generic list combinators that compose core primitives (`:wat::std::list::pairwise-map`, `:wat::std::list::n-wise-map`, `:wat::std::list::map-with-index`, `:wat::std::list::window`, `:wat::std::list::zip`, `:wat::std::list::take-while`, …). Each is a short composition of Rust iterator methods; each is called from stdlib-macro-emitted ASTs and from user code.
@@ -2402,7 +2419,7 @@ This section freezes the full algebra in its target shape (post-058). Core forms
 
 (:wat::algebra::Atom literal)
 ;; AST node storing a literal (string, int, float, bool, keyword).
-;; Literal is READ DIRECTLY from the AST node via (:wat::std::atom-value ...).
+;; Literal is READ DIRECTLY from the AST node via (:wat::core::atom-value ...).
 ;; Vector projection: deterministic bipolar vector from type-aware hash.
 ;;   (:wat::algebra::Atom "foo")  — string literal
 ;;   (:wat::algebra::Atom 42)     — integer literal
@@ -2622,7 +2639,7 @@ Retrieval is NOT a core form. Presence is measured by `cosine(encode(target), re
 
 ;; Note: `nth` is retired. Use `get` uniformly — `(:wat::std::get my-vec 3)` is `nth`.
 
-(:wat::core::define (:wat::std::atom-value atom-ast)
+(:wat::core::define (:wat::core::atom-value atom-ast)
   ;; Read the literal stored on an Atom AST node.
   ;; No cleanup. No codebook. No cosine. Just field access.
   (literal-field atom-ast))
@@ -2893,9 +2910,9 @@ Atoms accept any typed literal. **Use the literal type that matches what the thi
 The distinction matters because atoms store their literal on the AST node:
 
 ```scheme
-(:wat::std::atom-value (:wat::algebra::Atom 0))      ; → 0    (the integer)
-(:wat::std::atom-value (:wat::algebra::Atom "0"))    ; → "0"  (the string)
-(:wat::std::atom-value (:wat::algebra::Atom :pos::0)) ; → :pos::0  (the keyword)
+(:wat::core::atom-value (:wat::algebra::Atom 0))      ; → 0    (the integer)
+(:wat::core::atom-value (:wat::algebra::Atom "0"))    ; → "0"  (the string)
+(:wat::core::atom-value (:wat::algebra::Atom :pos::0)) ; → :pos::0  (the keyword)
 ```
 
 These are three different things. The type-aware hash gives them three different vectors. **Pick the type that matches the semantic, not the type that wraps the semantic.**

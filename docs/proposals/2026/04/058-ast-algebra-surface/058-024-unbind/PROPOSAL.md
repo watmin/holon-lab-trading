@@ -19,6 +19,39 @@
 >
 > This proposal is kept in the record as an honest trace of the design process.
 
+> **2026-04-19 operational proof.** The self-inverse claim — that
+> `Bind(Bind(k, p), k)` recovers `p` at the vector level — is observable
+> through presence measurement (FOUNDATION 1718) in the shipped
+> wat-vm. The presence hello-world (`tests/wat_vm_cli.rs ::
+> presence_proof_hello_world`) demonstrates both directions:
+>
+> ```
+> $ echo watmin | wat-vm presence-proof.wat
+> None     ; presence(program-atom, Bind(k, program-atom))       below 5σ
+> Some     ; presence(program-atom, Bind(Bind(k, p), k))         above 5σ
+> watmin   ; (eval-ast! (atom-value program-atom))               echo fires
+> ```
+>
+> `presence(program-atom, Bind(k, program-atom))` measures below the
+> substrate noise floor (`5 / sqrt(d) ≈ 0.156` at d=1024) — MAP bind
+> orthogonalizes its inputs, so the composite's vector holds the
+> program only in the sense the algebra can unbind it, not in the
+> sense a direct cosine can see it. Applying Bind again with the key
+> recovers a vector whose presence against the program-atom is above
+> the floor. Not argmax-over-codebook, not cleanup — a scalar
+> measurement the caller binarizes. This is the shape of the
+> rejection. No Unbind primitive exists because Bind's self-inverse
+> is already measurable; wrapping it as a named form adds nothing
+> the measurement doesn't already reveal.
+>
+> Also confirms the AST-level reduction was the wrong lift: a prior
+> runtime experiment structurally reduced `Bind(Bind(x, y), x) → y` at
+> construction. Backed out. The self-inverse is a VECTOR fact with
+> non-zero-position caveats (see "Semantics" below) — lifting it to
+> an AST rewrite implied exact recovery where MAP acknowledges
+> quantized noise. The shipped runtime always builds the Bind tree;
+> presence reveals the dynamics.
+
 **Scope:** algebra
 **Class:** REJECTED (was STDLIB; rejected 2026-04-18 — identity alias for Bind, no new pattern demonstrated)
 **Parent:** 058-ast-algebra-surface

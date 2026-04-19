@@ -41,25 +41,48 @@ The hash for every variant is `hash(type-tag, canonical-EDN(value))` producing a
 ### Extraction — polymorphic
 
 ```scheme
-(:wat::core::define (:wat::std::atom-value (a :holon::HolonAST) -> :Option<T>)
-  ;; Returns (Some inner) when `a` is an Atom<T> for the T the caller
-  ;; requests; :None when `a` is a non-Atom variant (Bind, Bundle, ...)
-  ;; or an Atom<U> for some U ≠ T. T is inferred from the call site's
-  ;; expected type. In well-typed programs the :None case is a bug; the
-  ;; type checker guarantees :Some at every call site where T matches
-  ;; the atom's declared payload.
+(:wat::core::define (:wat::core::atom-value (a :holon::HolonAST) -> :T)
+  ;; Reads the AST node's payload field. Structural; exact. No cosine,
+  ;; no codebook, no cleanup — just field access. T is inferred from
+  ;; the call site's expected type (narrowed by let-binding type
+  ;; ascription or function signature).
+  ;;
+  ;; Runtime type error if `a` is NOT an Atom variant (Bind, Bundle,
+  ;; Permute, Thermometer, Blend) — the caller committed to extracting
+  ;; a payload, so a non-Atom input is a type mismatch, not a silent
+  ;; None. In well-typed programs the checker guarantees the Atom
+  ;; variant; the runtime check catches programs whose types were
+  ;; narrowed away from `:holon::HolonAST` without the shape being
+  ;; established.
   ...)
 
-(:wat::std::atom-value (:wat::algebra::Atom 42))           ;; → (Some 42) as :Option<i64>
-(:wat::std::atom-value (:wat::algebra::Atom some-bundle))  ;; → (Some some-bundle) as :Option<holon::HolonAST>
-(:wat::std::atom-value (:wat::algebra::Atom my-candle))    ;; → (Some candle) as :Option<Candle>
+(:wat::core::atom-value (:wat::algebra::Atom 42))           ;; → 42           : :i64
+(:wat::core::atom-value (:wat::algebra::Atom some-bundle))  ;; → some-bundle  : :holon::HolonAST
+(:wat::core::atom-value (:wat::algebra::Atom my-candle))    ;; → candle       : :Candle
 ```
 
-The Option carries the two sources of recovery failure that can't be
-ruled out at the type level: the argument isn't an Atom variant at all,
-or its payload is a different T than requested. In well-typed programs
-neither happens; applications may `match` or `unwrap` per their
-discipline.
+FOUNDATION line 44 frames this as *"reads the AST node's field"* — an
+exact read on the typed box, not a probabilistic recovery. Retrieval
+from a COMPOSITE holon (Bind, Bundle, …) is a different operation:
+`:wat::core::presence` (FOUNDATION 1718) returns a cosine scalar; the
+caller binarizes against `(:wat::config::noise-floor)`. The two regimes
+are clean-separated — structural reads return `:T`; similarity
+measurements return `:f64`; neither uses Option.
+
+> **2026-04-19 reconciliation.** The form as originally accepted
+> (2026-04-18) had signature
+> `:wat::std::atom-value (a :holon::HolonAST) -> :Option<T>` — Some on
+> Atom match, None on non-Atom variants. The shipped implementation
+> (wat-rs) moved the form to `:wat::core::` (same tier as
+> `:wat::algebra::Atom`; they are duals) and tightened the return type
+> to `:T` exact per FOUNDATION line 44's framing — the Option was
+> capturing a case the type system handles more cleanly via narrowing.
+> Applications needing a "maybe it's an Atom" check over a general
+> holon compose it from `presence` + a structural-shape predicate at
+> userland. The 058-024 Unbind rejection + FOUNDATION 1718's
+> presence-is-measurement framing together justify the tighter
+> signature: retrieval from non-Atom composites is presence's job, not
+> atom-value's.
 
 ### Two encodings of any composite — both legitimate
 
@@ -252,7 +275,7 @@ pub enum HolonAST {
 **`atom-value` stdlib** — direct field access:
 
 ```scheme
-(:wat::core::define (:wat::std::atom-value atom-ast)
+(:wat::core::define (:wat::core::atom-value atom-ast)
   (literal-field atom-ast))
 ```
 
