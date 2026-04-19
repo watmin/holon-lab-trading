@@ -19,7 +19,7 @@ Analogy occupies a third status between ACCEPTED and REJECTED:
 - **Classical VSA heritage** — Plate, Kanerva, Eliasmith all describe it. It's one of VSA's most-cited strengths, documented in the primer (`series-001-002-holon-ops.md` line 159-170): `analogy(a, b, c) → C + (B - A)`.
 - **Primer cites** a concrete hypothetical use (cross-domain rule transfer: "SYN flood 80 → 443") but says "Explored in the challenge batches" — no challenge number, no F1=X.XX measurement.
 - **Not currently adopted** — trading lab doesn't use Analogy. DDoS lab doesn't use Analogy. Challenge batches "explored" it without citing measurable outcomes.
-- **Trivially expressible when needed** — users who want the operation write `(:wat/algebra/Bundle (:wat/core/list c (:wat/std/Subtract b a)))` inline; the stdlib name is convenience, not a new primitive.
+- **Trivially expressible when needed** — users who want the operation write `(:wat::algebra::Bundle (:wat::core::vec c (:wat::std::Subtract b a)))` inline; the stdlib name is convenience, not a new primitive.
 
 Unlike Flip (magic-weight, primer-collision with single-arg `flip`), Resonance (no citation, wrong abstraction level per Mask Q2), or ConditionalBind (half-abstraction — gate-consumer without a gate-producer), **Analogy is clean; it just lacks adoption**. Rejecting it would suggest something is structurally wrong with it, which isn't true. Accepting it would ship a name nobody uses today.
 
@@ -27,7 +27,7 @@ Unlike Flip (magic-weight, primer-collision with single-arg `flip`), Resonance (
 
 ### What DEFERRED means concretely
 
-- **Not in algebra stdlib.** `:wat/std/Analogy` is NOT registered in the symbol table from 058. Apps that want the operation write the inline Bundle+Subtract form or define it in their own namespace: `(:my/app/Analogy a b c) = (Bundle (list c (Subtract b a)))`.
+- **Not in algebra stdlib.** `:wat::std::Analogy` is NOT registered in the symbol table from 058. Apps that want the operation write the inline Bundle+Subtract form or define it in their own namespace: `(:my::app::Analogy a b c) = (Bundle (list c (Subtract b a)))`.
 - **Proposal preserved intact.** Content below this banner is the full audit record — the expansion, the semantics, the arguments, the worked king/queen/man example. All of it stays.
 - **Resume mechanism.** A future proposal — likely `058-014-R2` or a fresh number — picks up from this state with concrete application evidence (which challenge, what measurement, what couldn't be done without it). The algebra decision doesn't need re-arguing; only the earn-stdlib-with-citation part does.
 - **No live designer questions.** Q1 (delta name) resolved (Subtract wins). Q3 (AnalogyCleanup) resolved (argmax purged, caller's policy). Q2/Q4/Q5 moot for 058 under deferral.
@@ -53,8 +53,8 @@ See FOUNDATION-CHANGELOG 2026-04-18 entry for the deferral record.
 A wat stdlib macro (per 058-031-defmacro) that produces the classic VSA analogy completion:
 
 ```scheme
-(:wat/core/defmacro (:wat/std/Analogy (a :AST) (b :AST) (c :AST) -> :AST)
-  `(:wat/algebra/Bundle (:wat/core/list ,c (:wat/std/Subtract ,b ,a))))
+(:wat::core::defmacro (:wat::std::Analogy (a :AST) (b :AST) (c :AST) -> :AST)
+  `(:wat::algebra::Bundle (:wat::core::vec ,c (:wat::std::Subtract ,b ,a))))
 ```
 
 Expands to `c + (b - a)` — the classic "A is to B as C is to ?" vector arithmetic. The result is a Holon that represents the fourth term of the analogy as a point in thought-space. The caller retrieves the actual answer by measuring **presence** of that Holon against a candidate library — presence measurement above the substrate's noise floor (5σ ≈ 0.05 at d=10,000) identifies the matching candidate.
@@ -98,13 +98,13 @@ The typical usage is:
 ;; Return the list of (candidate, presence-score) pairs. The caller
 ;; decides the selection policy — top-1, above-threshold, weighted
 ;; mixture, whatever their application demands.
-(:wat/core/map candidates
-  (:wat/core/lambda (cand)
-    (:wat/core/list cand
-                     (presence cand (encode (:wat/std/Analogy king queen man))))))
+(:wat::core::map candidates
+  (:wat::core::lambda (cand)
+    (:wat::core::vec cand
+                     (presence cand (encode (:wat::std::Analogy king queen man))))))
 ```
 
-With `Analogy` named, this reads as "complete this analogy, then measure each candidate's overlay by presence." Without `Analogy`, the expression's inner form becomes `(:wat/algebra/Bundle (:wat/core/list man (:wat/std/Subtract queen king)))` — mechanically identical, but the reader has to recognize the pattern.
+With `Analogy` named, this reads as "complete this analogy, then measure each candidate's overlay by presence." Without `Analogy`, the expression's inner form becomes `(:wat::algebra::Bundle (:wat::core::vec man (:wat::std::Subtract queen king)))` — mechanically identical, but the reader has to recognize the pattern.
 
 Cleanup is NOT used here — Cleanup was rejected as a core form (see 058-025 and FOUNDATION's "Presence is Measurement, Not Verdict"). Retrieval is presence measurement against known candidates; selection — picking a single winner or ranking or filtering by threshold — is the caller's policy, not a substrate primitive. No `argmax` exists in the algebra.
 
@@ -117,8 +117,8 @@ If the algebra exposes `Bind`, `Bundle`, `Permute`, `Subtract`, `Analogy` as a c
 **1. It's one line of code.**
 
 ```scheme
-(:wat/core/defmacro (:wat/std/Analogy (a :AST) (b :AST) (c :AST) -> :AST)
-  `(:wat/algebra/Bundle (:wat/core/list ,c (:wat/std/Subtract ,b ,a))))
+(:wat::core::defmacro (:wat::std::Analogy (a :AST) (b :AST) (c :AST) -> :AST)
+  `(:wat::algebra::Bundle (:wat::core::vec ,c (:wat::std::Subtract ,b ,a))))
 ```
 
 One line. Is a named form earning its place for one line of expansion?
@@ -148,22 +148,22 @@ Some users already write analogies inline. Adding a named form might not be used
 ;; against the analogy's completion and return the full measurement list.
 ;; The caller's next step — whether that is max-by-score, threshold
 ;; filter, top-k sort, or a weighted bundle — lives in the caller.
-(:wat/core/define (:my/app/measure-candidates
+(:wat::core::define (:my::app::measure-candidates
                     (analogy-result :Holon)
-                    (candidates     :List<Holon>)
-                    -> :List<Pair<Holon,f64>>)
-  (:wat/core/map candidates
-    (:wat/core/lambda (c)
-      (:wat/core/list c (presence c (encode analogy-result))))))
+                    (candidates     :Vec<Holon>)
+                    -> :Vec<Pair<Holon,f64>>)
+  (:wat::core::map candidates
+    (:wat::core::lambda (c)
+      (:wat::core::vec c (presence c (encode analogy-result))))))
 
-(:wat/core/define :my/app/candidate-scores
-  (:my/app/measure-candidates (:wat/std/Analogy king queen man) vocabulary))
+(:wat::core::define :my::app::candidate-scores
+  (:my::app::measure-candidates (:wat::std::Analogy king queen man) vocabulary))
 ;; after parse-time expansion, the Analogy AST is:
 ;;   (Bundle (list man (Blend queen king 1 -1)))
 
 ;; Trading analogy: "uptrend was to breakout as reversal is to ?"
-(:wat/core/define :my/app/reversal-candidate-scores
-  (:my/app/measure-candidates (:wat/std/Analogy uptrend breakout reversal) candidate-patterns))
+(:wat::core::define :my::app::reversal-candidate-scores
+  (:my::app::measure-candidates (:wat::std::Analogy uptrend breakout reversal) candidate-patterns))
 ```
 
 The pattern is always: `Analogy` produces a completion Holon; the caller presence-measures that Holon against a candidate library and chooses a selection policy (max-by-score, threshold filter, top-k, weighted Bundle).
@@ -210,8 +210,8 @@ Yes — `(Bundle (list c (Subtract b a)))`, or directly `(Bundle (list c (Blend 
 
 ```scheme
 ;; wat/std/reasoning.wat (or similar)
-(:wat/core/defmacro (:wat/std/Analogy (a :AST) (b :AST) (c :AST) -> :AST)
-  `(:wat/algebra/Bundle (:wat/core/list ,c (:wat/std/Subtract ,b ,a))))
+(:wat::core::defmacro (:wat::std::Analogy (a :AST) (b :AST) (c :AST) -> :AST)
+  `(:wat::algebra::Bundle (:wat::core::vec ,c (:wat::std::Subtract ,b ,a))))
 ```
 
 Depends on `Bundle` (core), `Subtract` (stdlib macro, 058-019). Registered at parse time (per 058-031-defmacro): every `(Analogy ...)` invocation expands to the canonical Bundle + Subtract form, and `Subtract` is then expanded further to `Blend` in the same pass.
@@ -225,8 +225,8 @@ Depends on `Bundle` (core), `Subtract` (stdlib macro, 058-019). Registered at pa
 3. **Should the stdlib also provide the four-term `AnalogyCleanup`?** A convenience form that runs cleanup against a candidate pool:
 
 ```scheme
-(:wat/core/defmacro (:my/vocab/AnalogyCleanup (a :AST) (b :AST) (c :AST) (candidates :AST) -> :AST)
-  `(cleanup (:wat/std/Analogy ,a ,b ,c) ,candidates))
+(:wat::core::defmacro (:my::vocab::AnalogyCleanup (a :AST) (b :AST) (c :AST) (candidates :AST) -> :AST)
+  `(cleanup (:wat::std::Analogy ,a ,b ,c) ,candidates))
 ```
 
 Over-naming risk, but this is the most common use case. Worth a second named form, or let users compose cleanup around Analogy manually?

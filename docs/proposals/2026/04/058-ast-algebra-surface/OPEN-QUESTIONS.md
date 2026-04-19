@@ -29,7 +29,7 @@ Round 3 reviewers may reopen any of these decisions; the per-question reasoning 
 
 ## 058-002: Blend — ACCEPTED
 
-**All questions in this section are RESOLVED.** Blend enters algebra core as `(:wat/algebra/Blend a b w1 w2)` — two independent real-valued scalar weights (Option B), negative weights allowed, binary arity. See 058-002/PROPOSAL.md's ACCEPTED banner for the per-question reasoning, and FOUNDATION-CHANGELOG 2026-04-18 entry "Blend keystone closed." Designer review may still reopen in Round 3.
+**All questions in this section are RESOLVED.** Blend enters algebra core as `(:wat::algebra::Blend a b w1 w2)` — two independent real-valued scalar weights (Option B), negative weights allowed, binary arity. See 058-002/PROPOSAL.md's ACCEPTED banner for the per-question reasoning, and FOUNDATION-CHANGELOG 2026-04-18 entry "Blend keystone closed." Designer review may still reopen in Round 3.
 
 
 ---
@@ -50,19 +50,19 @@ Round 3 reviewers may reopen any of these decisions; the per-question reasoning 
 
 ## 058-004: Difference — REJECTED
 
-**All questions in this section are MOOT.** 058-004 was rejected — same math as Subtract, no new pattern demonstrated; `:wat/std/Subtract` (058-019) is the canonical delta macro. See FOUNDATION-CHANGELOG for the rejection record. Designers need not opine.
+**All questions in this section are MOOT.** 058-004 was rejected — same math as Subtract, no new pattern demonstrated; `:wat::std::Subtract` (058-019) is the canonical delta macro. See FOUNDATION-CHANGELOG for the rejection record. Designers need not opine.
 
 
 ---
 
 ## 058-005: Orthogonalize — ACCEPTED (reframed + renamed to Reject + Project)
 
-**All questions in this section are RESOLVED.** The Gram-Schmidt projection-removal operation ships as **two stdlib macros** over the widened Blend + new `:wat/algebra/dot` measurement primitive:
+**All questions in this section are RESOLVED.** The Gram-Schmidt projection-removal operation ships as **two stdlib macros** over the widened Blend + new `:wat::algebra::dot` measurement primitive:
 
-- `(:wat/std/Reject x y)` — x with y's direction removed. The DDoS sidecar's core detection mechanism (primer line 277-289, Challenge 010 F1=1.000).
-- `(:wat/std/Project x y)` — x's component along y; complement, `= Subtract(x, Reject(x, y))`.
+- `(:wat::std::Reject x y)` — x with y's direction removed. The DDoS sidecar's core detection mechanism (primer line 277-289, Challenge 010 F1=1.000).
+- `(:wat::std::Project x y)` — x's component along y; complement, `= Subtract(x, Reject(x, y))`.
 
-Q1 (core vs stdlib) resolves stdlib — widened Blend absorbs the computed-coefficient case via `:wat/algebra/dot`. Q2 (ship Project) resolves YES — Project + Reject = x (Gram-Schmidt decomposition). Q3 (name) resolves Reject — aligns with primer, holon-rs, and challenge writeups. Q4/Q5 documentation notes landed in the proposal. **Algebra core shrinks 7 → 6.** See 058-005/PROPOSAL.md's ACCEPTED banner for per-question reasoning.
+Q1 (core vs stdlib) resolves stdlib — widened Blend absorbs the computed-coefficient case via `:wat::algebra::dot`. Q2 (ship Project) resolves YES — Project + Reject = x (Gram-Schmidt decomposition). Q3 (name) resolves Reject — aligns with primer, holon-rs, and challenge writeups. Q4/Q5 documentation notes landed in the proposal. **Algebra core shrinks 7 → 6.** See 058-005/PROPOSAL.md's ACCEPTED banner for per-question reasoning.
 
 
 ---
@@ -178,7 +178,7 @@ Q1 (core vs stdlib) resolves stdlib — widened Blend absorbs the computed-coeff
 
 ## 058-019: Subtract
 
-1. **Subtract vs Difference: keep both or unify?** — **RESOLVED.** 058-004 Difference REJECTED (no new pattern; same math as Subtract). Only `:wat/std/Subtract` exists. See FOUNDATION-CHANGELOG 2026-04-18 stdlib macro audit entry.
+1. **Subtract vs Difference: keep both or unify?** — **RESOLVED.** 058-004 Difference REJECTED (no new pattern; same math as Subtract). Only `:wat::std::Subtract` exists. See FOUNDATION-CHANGELOG 2026-04-18 stdlib macro audit entry.
 
 2. **Naming: `Subtract` or `Remove`?** "Subtract" has mathematical connotations; "Remove" has more direct intent ("remove the noise"). Recommendation: keep `Subtract` — aligns with holon-rs's `subtract` function; readers recognize it.
 
@@ -192,7 +192,7 @@ Q1 (core vs stdlib) resolves stdlib — widened Blend absorbs the computed-coeff
 
 ## 058-020: Flip — REJECTED
 
-**All questions in this section are MOOT.** 058-020 was rejected for three reasons: (1) the primer's `flip` is single-arg elementwise negation, not the proposal's 2-arg Blend idiom — same name, different operation; (2) the `-2` weight is a tradition-matching convention, not an algebraic minimum (any weight `< -1` produces the same thresholded result); (3) no cited production use beyond unit tests. The operation is trivially expressible inline as `(:wat/algebra/Blend x y 1 -2)` when needed. See FOUNDATION-CHANGELOG 2026-04-18 entry and 058-020/PROPOSAL.md REJECTED banner. Designers need not opine.
+**All questions in this section are MOOT.** 058-020 was rejected for three reasons: (1) the primer's `flip` is single-arg elementwise negation, not the proposal's 2-arg Blend idiom — same name, different operation; (2) the `-2` weight is a tradition-matching convention, not an algebraic minimum (any weight `< -1` produces the same thresholded result); (3) no cited production use beyond unit tests. The operation is trivially expressible inline as `(:wat::algebra::Blend x y 1 -2)` when needed. See FOUNDATION-CHANGELOG 2026-04-18 entry and 058-020/PROPOSAL.md REJECTED banner. Designers need not opine.
 
 
 ---
@@ -219,7 +219,7 @@ Bind, Permute, and Thermometer are affirmed core primitives already present in h
 
 ## 058-026: Array
 
-1. **Array vs Sequential: keep both or unify?** — **RESOLVED.** Both stay. Array is renamed to `:wat/std/Vec` per the container-constructor-renaming decision (HashMap/Vec/HashSet share names with their Rust backings). Sequential is positional algebra encoding; Vec is an indexed container with O(1) `get` through Rust's `std::vec::Vec`. Distinct intents, distinct runtime semantics.
+1. **Array vs Sequential: keep both or unify?** — **RESOLVED.** Both stay. Array is renamed to `:wat::std::Vec` per the container-constructor-renaming decision (HashMap/Vec/HashSet share names with their Rust backings). Sequential is positional algebra encoding; Vec is an indexed container with O(1) `get` through Rust's `std::vec::Vec`. Distinct intents, distinct runtime semantics.
 
 2. **Accessor naming.** `nth` is Lisp-idiomatic for positional retrieval. Alternative: `get-at`, `index`, `[]`-style operator. Recommendation: `nth` — matches Lisp tradition.
 
@@ -265,7 +265,7 @@ Bind, Permute, and Thermometer are affirmed core primitives already present in h
 
 3. **Required-ness of parameter types.** Same question. Recommendation: keep required for the same reason.
 
-4. **Forward references.** Can `:wat/std/Chain` reference `:wat/std/Then` before Then is defined (e.g., in a single load pass)? Since all loading happens at startup before the symbol table freezes, forward references are natural: the resolver runs after all parsing but before type-checking. Recommendation: support forward references within the startup phase; they do not complicate Model A.
+4. **Forward references.** Can `:wat::std::Chain` reference `:wat::std::Then` before Then is defined (e.g., in a single load pass)? Since all loading happens at startup before the symbol table freezes, forward references are natural: the resolver runs after all parsing but before type-checking. Recommendation: support forward references within the startup phase; they do not complicate Model A.
 
 5. **Metadata / documentation strings.** Clojure's `defn` supports docstrings and metadata. Worth including in `define`'s AST shape? Recommendation: yes — optional metadata field. Docstrings help readers; metadata supports tooling.
 
@@ -274,7 +274,7 @@ Bind, Permute, and Thermometer are affirmed core primitives already present in h
 7. **First wat program.** From BOOK's "The first program" section:
 
    ```scheme
-   (define (:watmin/hello-world [name : Atom]) : Thought
+   (define (:watmin::hello-world [name : Atom]) : Thought
      (Sequential (list (Atom "hello") name)))
    ```
 
@@ -302,7 +302,7 @@ Bind, Permute, and Thermometer are affirmed core primitives already present in h
 
 ## 058-030: Types
 
-1. **Generics scope.** Is `:fn(args)->return` and `:List<T>` sufficient, or do we need variance, bounds (`T extends :Holon`), or existentials? Recommendation: start minimal — just List and fn parametrics. Add more if stdlib needs emerge.
+1. **Generics scope.** Is `:fn(args)->return` and `:Vec<T>` sufficient, or do we need variance, bounds (`T extends :Holon`), or existentials? Recommendation: start minimal — just List and fn parametrics. Add more if stdlib needs emerge.
 
 2. **Type inference strength — RESOLVED 2026-04-19 to required typed let bindings.** Parameter types on `define`/`lambda` are required; let bindings are too. Every binding has shape `((name :Type) rhs)` — the typed form is mandatory, not optional. Reversal of the earlier "infer intermediates" recommendation after wat-rs slice 7b surfaced the trade-off: anonymous functions declare their constraints, and the discipline is cleanest when it applies uniformly. See FOUNDATION-CHANGELOG 2026-04-19 "Typed-let discipline" for reasoning.
 
@@ -322,7 +322,7 @@ Bind, Permute, and Thermometer are affirmed core primitives already present in h
 
 10. **First-class types.** Types as keyword values can be passed around. Does this enable type-reflecting code? Probably, though not the focus of this proposal. Example: `(type-of x)` returns the keyword `:Thought`. Useful for introspection but out of scope for language core.
 
-11. **Keyword-path in type names with generic parameters — RESOLVED.** Rust-surface angle-bracket keywords (`:wat/std/Container<T>`) as single tokens; tokenizer tracks bracket depth across `()`, `[]`, `<>`. `:fn(args)->return` uses parens + arrow (Rust-native function-type syntax). `:Option<T>` declared as enum with `:None` and `(Some (value :T))` variants — not a typealias, because it has distinct constructors.
+11. **Keyword-path in type names with generic parameters — RESOLVED.** Rust-surface angle-bracket keywords (`:wat::std::Container<T>`) as single tokens; tokenizer tracks bracket depth across `()`, `[]`, `<>`. `:fn(args)->return` uses parens + arrow (Rust-native function-type syntax). `:Option<T>` declared as enum with `:None` and `(Some (value :T))` variants — not a typealias, because it has distinct constructors.
 
 ---
 
@@ -373,9 +373,9 @@ Bind, Permute, and Thermometer are affirmed core primitives already present in h
 ### Theme: Dependency on 058-002 (Blend) resolution — RESOLVED (Blend ACCEPTED as Option B with negative weights)
 - ~~058-004 Q3~~ — Difference REJECTED; moot.
 - ~~058-008 Q4~~ — Linear REJECTED (identical to Thermometer); moot.
-- ~~058-015 Q4~~ — Amplify becomes `(:wat/algebra/Blend x y 1 s)`; stdlib macro unblocked.
-- ~~058-018 Q3~~ — Circular becomes `(:wat/algebra/Blend cos-basis sin-basis (cos θ) (sin θ))`; stdlib macro unblocked.
-- ~~058-019 Q4~~ — Subtract becomes `(:wat/algebra/Blend x y 1 -1)`; stdlib macro.
+- ~~058-015 Q4~~ — Amplify becomes `(:wat::algebra::Blend x y 1 s)`; stdlib macro unblocked.
+- ~~058-018 Q3~~ — Circular becomes `(:wat::algebra::Blend cos-basis sin-basis (cos θ) (sin θ))`; stdlib macro unblocked.
+- ~~058-019 Q4~~ — Subtract becomes `(:wat::algebra::Blend x y 1 -1)`; stdlib macro.
 - ~~058-020 Q4~~ — Flip REJECTED; moot.
 - **Status:** Blend is ACCEPTED. All downstream stdlib macros are unblocked. Designer review may still reopen Blend in Round 3; the downstream cascade adapts to whatever final shape designers affirm.
 
@@ -414,13 +414,13 @@ Bind, Permute, and Thermometer are affirmed core primitives already present in h
 
 The bareword-sweep agent flagged these as ambiguous — names left bare because their keyword paths were not in the mapping rules at sweep time. Datamancer direction already given; a mechanical pass will land them in source before implementation, not before designer review.
 
-- **Math primitives** — `cos`, `sin`, `pi`, `log`, `ln` used inside Circular (058-018) and Log (058-017) macro expansions. **Decision:** these are used ONLY inside stdlib macros, so they live at `:wat/std/math/cos`, `:wat/std/math/sin`, `:wat/std/math/pi`, `:wat/std/math/log`, `:wat/std/math/ln`. Sub-proposal sweep pending (trivial; substitute at call sites).
-- **Substrate accessors derived from `:wat/config/dims`** — `noise-floor` (the `5/sqrt(d)` threshold) is the primary example. **Decision:** these become typed properties on `:wat/config`. `(:wat/config/noise-floor) -> :f64` is computed at freeze time from `:wat/config/dims` and exposed as a direct getter. The config struct grows a computed-field tier; setters set the independent fields (dims), computed fields are populated at freeze. FOUNDATION update pending.
-- **Algebra substrate operations** — `cosine`, `dot`, `encode`, `project`, `reject`, `anomalous-component`, `presence` appear bare in examples. **Decision:** these are algebra-level operations, so they live under `:wat/algebra/...` (e.g., `:wat/algebra/cosine`, `:wat/algebra/presence`). Distinct from `:wat/config/noise-floor` (which is a constant derived from dims) by the kind of value they return. Sub-proposal sweep pending.
-- **Engram library operations** — `match-library`, `library-add!`, `entries` are app-level engram primitives. Not stdlib, not kernel — these live in the app's own keyword space (e.g., `:project/trading/engram/match`, `:project/trading/engram/add!`). The bang on `library-add!` is correct — the engram library mutates during learning, which is a program's private state behind a queue, not ambient state. Designers will see references to `entries` and `match-library` in examples; they are placeholder app-level ops.
-- **List combinators — RESOLVED.** The split between `:wat/core/` and `:wat/std/list/` is drawn along **Rust-direct correspondence**: core wraps single-method calls on Rust's `Iterator` / `Vec` / `&[T]`; stdlib wraps small compositions of those methods.
-  - **`:wat/core/`** (single-method direct): `list`, `cons`, `first`, `second`, `rest`, `map`, `for-each`, `filter`, `fold`, `foldl`, `foldr`, `reduce`, `length`, `reverse`, `range`, `take`, `drop`, `empty?`. No `null?` — Rust has no null; wat follows. Each maps to a single Rust iterator method or equivalent (`xs.len()`, `xs.is_empty()`, `xs.iter().take(n)`, etc.).
-  - **`:wat/std/list/`** (iterator-method compositions): `pairwise-map`, `n-wise-map`, `map-with-index`, `window`, `zip`, `unzip`, `take-while`, `drop-while`, and similar short compositions. Each is also a near-one-liner in Rust (`xs.windows(2).map(f)`, `xs.iter().enumerate().map(f)`, etc.), but a COMPOSITION of core methods, not a single call. Stdlib macros emit calls to these by keyword path; resolution happens at load time.
-  - **Userland** (not stdlib): `encode-window`. Domain-specific to asset tracking — it's the trading lab's Bundle-with-Permute-by-index of a candle window. Lives at its app's own path (e.g., `:project/trading/engram/encode-window`). Not generic; not stdlib.
+- **Math primitives** — `cos`, `sin`, `pi`, `log`, `ln` used inside Circular (058-018) and Log (058-017) macro expansions. **Decision:** these are used ONLY inside stdlib macros, so they live at `:wat::std::math::cos`, `:wat::std::math::sin`, `:wat::std::math::pi`, `:wat::std::math::log`, `:wat::std::math::ln`. Sub-proposal sweep pending (trivial; substitute at call sites).
+- **Substrate accessors derived from `:wat::config::dims`** — `noise-floor` (the `5/sqrt(d)` threshold) is the primary example. **Decision:** these become typed properties on `:wat::config`. `(:wat::config::noise-floor) -> :f64` is computed at freeze time from `:wat::config::dims` and exposed as a direct getter. The config struct grows a computed-field tier; setters set the independent fields (dims), computed fields are populated at freeze. FOUNDATION update pending.
+- **Algebra substrate operations** — `cosine`, `dot`, `encode`, `project`, `reject`, `anomalous-component`, `presence` appear bare in examples. **Decision:** these are algebra-level operations, so they live under `:wat::algebra::...` (e.g., `:wat::algebra::cosine`, `:wat::algebra::presence`). Distinct from `:wat::config::noise-floor` (which is a constant derived from dims) by the kind of value they return. Sub-proposal sweep pending.
+- **Engram library operations** — `match-library`, `library-add!`, `entries` are app-level engram primitives. Not stdlib, not kernel — these live in the app's own keyword space (e.g., `:project::trading::engram/match`, `:project::trading::engram/add!`). The bang on `library-add!` is correct — the engram library mutates during learning, which is a program's private state behind a queue, not ambient state. Designers will see references to `entries` and `match-library` in examples; they are placeholder app-level ops.
+- **List combinators — RESOLVED.** The split between `:wat::core::` and `:wat::std::list::` is drawn along **Rust-direct correspondence**: core wraps single-method calls on Rust's `Iterator` / `Vec` / `&[T]`; stdlib wraps small compositions of those methods.
+  - **`:wat::core::`** (single-method direct): `list`, `cons`, `first`, `second`, `rest`, `map`, `for-each`, `filter`, `fold`, `foldl`, `foldr`, `reduce`, `length`, `reverse`, `range`, `take`, `drop`, `empty?`. No `null?` — Rust has no null; wat follows. Each maps to a single Rust iterator method or equivalent (`xs.len()`, `xs.is_empty()`, `xs.iter().take(n)`, etc.).
+  - **`:wat::std::list::`** (iterator-method compositions): `pairwise-map`, `n-wise-map`, `map-with-index`, `window`, `zip`, `unzip`, `take-while`, `drop-while`, and similar short compositions. Each is also a near-one-liner in Rust (`xs.windows(2).map(f)`, `xs.iter().enumerate().map(f)`, etc.), but a COMPOSITION of core methods, not a single call. Stdlib macros emit calls to these by keyword path; resolution happens at load time.
+  - **Userland** (not stdlib): `encode-window`. Domain-specific to asset tracking — it's the trading lab's Bundle-with-Permute-by-index of a candle window. Lives at its app's own path (e.g., `:project::trading::engram/encode-window`). Not generic; not stdlib.
   - **Load-bearing insight:** the division line between core and stdlib is not philosophical — it's "does Rust give us this as a method, or is it a short composition of methods?" This framing extends to future primitive proposals: show its Rust correspondence; if it's one method, it's core; if it's a short composition, it's stdlib; if it's app-shaped, it's userland.
   - Sub-proposal sweep pending: Chain/Ngram/Sequential/Analogy still use bare `pairwise-map` / `n-wise-map` / `map-with-index` in their macro bodies. Mechanical rewrite to full keyword paths can land post-Round-3.

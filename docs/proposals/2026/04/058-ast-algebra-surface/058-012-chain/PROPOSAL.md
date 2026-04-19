@@ -13,11 +13,11 @@
 
 Chain's proposed expansion — `(Bundle (pairwise-map (λ a b → (Sequential (list a b))) xs))` — is exactly `(Ngram 2 xs)` under the reframed Sequential (058-009, now bind-chain). Ngram at n=2 produces pairs, each Sequential-encoded, bundled. That's Bigram.
 
-058-013 Ngram's reframe ships **Bigram** (`(:wat/std/Ngram 2 xs)`) as a named stdlib macro. Chain and Bigram are the same form. Keep the clearer name and the family (Bigram, Trigram, user-defined Pentagram, ...) — reject the redundant alias.
+058-013 Ngram's reframe ships **Bigram** (`(:wat::std::Ngram 2 xs)`) as a named stdlib macro. Chain and Bigram are the same form. Keep the clearer name and the family (Bigram, Trigram, user-defined Pentagram, ...) — reject the redundant alias.
 
 **What users who said "chain" write instead:**
-- `(:wat/std/Bigram xs)` — the canonical name for pairwise transitions.
-- `(:wat/std/Ngram 2 xs)` — the direct form if they prefer parameter-explicit.
+- `(:wat::std::Bigram xs)` — the canonical name for pairwise transitions.
+- `(:wat::std::Ngram 2 xs)` — the direct form if they prefer parameter-explicit.
 
 **What this doesn't affect:**
 - Ngram (058-013) stays ACCEPTED with its reframe.
@@ -37,11 +37,11 @@ See FOUNDATION-CHANGELOG 2026-04-18 entry for the rejection + reframe record.
 A wat stdlib macro (per 058-031-defmacro) that encodes a LIST of events as pairwise transitions:
 
 ```scheme
-(:wat/core/defmacro (:wat/std/Chain (holons :AST) -> :AST)
-  `(:wat/algebra/Bundle
+(:wat::core::defmacro (:wat::std::Chain (holons :AST) -> :AST)
+  `(:wat::algebra::Bundle
     (pairwise-map
-      (:wat/core/lambda ((a :Holon) (b :Holon) -> :Holon)
-        (:wat/std/Sequential (:wat/core/list a b)))
+      (:wat::core::lambda ((a :Holon) (b :Holon) -> :Holon)
+        (:wat::std::Sequential (:wat::core::vec a b)))
       ,holons)))
 ```
 
@@ -122,11 +122,11 @@ Chain and Sequential are both "encode a list of things in some order-aware way."
 058-011 Then was REJECTED. Chain no longer depends on it; expansion inlines the binary Sequential pattern directly:
 
 ```scheme
-(:wat/core/defmacro (:wat/std/Chain (holons :AST) -> :AST)
-  `(:wat/algebra/Bundle
+(:wat::core::defmacro (:wat::std::Chain (holons :AST) -> :AST)
+  `(:wat::algebra::Bundle
      (pairwise-map
-       (:wat/core/lambda ((a :Holon) (b :Holon) -> :Holon)
-         (:wat/std/Sequential (:wat/core/list a b)))
+       (:wat::core::lambda ((a :Holon) (b :Holon) -> :Holon)
+         (:wat::std::Sequential (:wat::core::vec a b)))
        ,holons)))
 ```
 
@@ -139,11 +139,11 @@ The expansion assumes a `pairwise-map` combinator (or equivalent: `map-pairs`, `
 **Mitigation:** pairwise-map is easy to define:
 
 ```scheme
-(:wat/core/define (:wat/std/pairwise-map f xs)
-  (:wat/core/if (:wat/core/or (:wat/core/empty? xs) (:wat/core/empty? (:wat/core/rest xs)))
+(:wat::core::define (:wat::std::pairwise-map f xs)
+  (:wat::core::if (:wat::core::or (:wat::core::empty? xs) (:wat::core::empty? (:wat::core::rest xs)))
       '()
-      (:wat/core/cons (f (:wat/core/first xs) (:wat/core/second xs))
-            (:wat/std/pairwise-map f (:wat/core/rest xs)))))
+      (:wat::core::cons (f (:wat::core::first xs) (:wat::core::second xs))
+            (:wat::std::pairwise-map f (:wat::core::rest xs)))))
 ```
 
 Bundle this into Chain's definition or define it separately in the wat stdlib. Minor hygiene issue, not a blocker.
@@ -202,22 +202,22 @@ Yes — `(Bundle (pairwise-map (lambda (a b) (Sequential (list a b))) xs))`. Cha
 
 ```scheme
 ;; wat/std/sequences.wat (or similar)
-(:wat/core/defmacro (:wat/std/Chain (holons :AST) -> :AST)
-  `(:wat/algebra/Bundle
+(:wat::core::defmacro (:wat::std::Chain (holons :AST) -> :AST)
+  `(:wat::algebra::Bundle
      (pairwise-map
-       (:wat/core/lambda ((a :Holon) (b :Holon) -> :Holon)
-         (:wat/std/Sequential (:wat/core/list a b)))
+       (:wat::core::lambda ((a :Holon) (b :Holon) -> :Holon)
+         (:wat::std::Sequential (:wat::core::vec a b)))
        ,holons)))
 ```
 
 `pairwise-map` itself is a list combinator, not an AST-rewriting macro — it is a regular stdlib function used inside the macro expansion. If it doesn't exist yet:
 
 ```scheme
-(:wat/core/define (:wat/std/pairwise-map (f :fn(Holon,Holon)->Holon) (xs :List<Holon>) -> :List<Holon>)
-  (:wat/core/if (:wat/core/or (:wat/core/empty? xs) (:wat/core/empty? (:wat/core/rest xs)))
+(:wat::core::define (:wat::std::pairwise-map (f :fn(Holon,Holon)->Holon) (xs :Vec<Holon>) -> :Vec<Holon>)
+  (:wat::core::if (:wat::core::or (:wat::core::empty? xs) (:wat::core::empty? (:wat::core::rest xs)))
       '()
-      (:wat/core/cons (f (:wat/core/first xs) (:wat/core/second xs))
-            (:wat/std/pairwise-map f (:wat/core/rest xs)))))
+      (:wat::core::cons (f (:wat::core::first xs) (:wat::core::second xs))
+            (:wat::std::pairwise-map f (:wat::core::rest xs)))))
 ```
 
 The macro is registered at parse time (per 058-031-defmacro); every `(Chain ...)` invocation is rewritten to the pairwise-Bundle form before hashing. Nested `(Sequential ...)` forms expand further to core `(Bundle (list a (Permute b 1)))` in the same pass.

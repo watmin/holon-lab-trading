@@ -33,7 +33,7 @@ The three rounds of review converged. The algebra at six forms, the stdlib as bl
 → **RESOLVED.** 058-021, 058-022, 058-023 collapsed into CORE-AUDIT.md as audit entries (operation, canonical form, MAP/VSA role, downstream conventions). No proposal-shaped argumentation. 058-025 (Cleanup) REJECTED because the AST-primary framing dissolves the need for codebook-based recovery. Zero designer questions remain on any of these.
 
 **R2 concern: Rust-primitive type sweep (`:Scalar`/`:Int`/`:Bool`/`:Null`) hadn't propagated.**
-→ **RESOLVED.** 2026-04-18 "Type grammar locked to Rust-surface form" entry plus the separate 140-scheme-block bareword sweep. `:f64`, `:usize`, `:i32`, `:bool`, `:()`, `:List<T>`, `:HashMap<K,V>`, `:Option<T>` throughout. `:Any` dropped entirely; `:Null` dropped entirely. 058-030 rewritten to match.
+→ **RESOLVED.** 2026-04-18 "Type grammar locked to Rust-surface form" entry plus the separate 140-scheme-block bareword sweep. `:f64`, `:usize`, `:i32`, `:bool`, `:()`, `:Vec<T>`, `:HashMap<K,V>`, `:Option<T>` throughout. `:Any` dropped entirely; `:Null` dropped entirely. 058-030 rewritten to match.
 
 **R2 concern: `deftype` with `:is-a` syntactic ambiguity (R2 N4).**
 → **RESOLVED STRONGER THAN ASKED.** The datamancer went further than the three-head split I suggested. `deftype` dropped. Four distinct head keywords: `newtype` (nominal), `struct` (product), `enum` (coproduct, the polymorphism mechanism), `typealias` (structural alias). `:is-a` keyword dropped entirely — no nominal subtyping. The "every Atom is a Holon" relationship is expressed through the `:Holon` enum's variant set, pattern-matched directly (same as Rust's `match holon { HolonAST::Atom(lit) => ... }`). Zero ambiguity at parse. Simpler than three heads.
@@ -42,7 +42,7 @@ The three rounds of review converged. The algebra at six forms, the stdlib as bl
 → **LARGELY RESOLVED.** 058-031 ships with Racket-style sets-of-scopes hygiene (Flatt 2016) — every Identifier carries a scope set, binding resolution uses (name, scope-set) pairs, variable capture is structurally impossible. This replaces the earlier "start unhygienic, add hygiene later" recommendation. Datamancer's call: "macro expansion must be safe." 058-032 adds typed macros (`:AST<T>` with macro-authoring-time type checking). The macro-set-versioning story is addressed in 058-031's "Provenance — Macro-Set Versioning and Distributed Consensus" section. What remains deferred: introspection (`macroexpand`) and some debugging tooling, each named and scoped. That is the right stance.
 
 **R2 concern: `:Any` polymorphism erosion risk (R1 hammock #5).**
-→ **RESOLVED.** `:Any` dropped from the grammar. Every apparent use case has a principled replacement: `:Holon` for any algebra value, `:Union<T,U,V>` for closed heterogeneous sets, parametric `T`/`K`/`V` for generic containers, `:List<Pair<Holon,Vector>>` for engram libraries. The type universe is closed — no escape hatch — which is what makes startup verification total.
+→ **RESOLVED.** `:Any` dropped from the grammar. Every apparent use case has a principled replacement: `:Holon` for any algebra value, `:Union<T,U,V>` for closed heterogeneous sets, parametric `T`/`K`/`V` for generic containers, `:Vec<Pair<Holon,Vector>>` for engram libraries. The type universe is closed — no escape hatch — which is what makes startup verification total.
 
 **R2 concern: Thermometer atom-to-fractional-position convention (R2 N5).**
 → **RESOLVED.** Locked: `N = round(d · clamp((v-min)/(max-min), 0, 1))`; first N +1, remaining -1. Bit-identical across nodes. Cosine geometry `1 - 2·|a-b|/(mx-mn)` exact. Already running in production in holon-rs across 652k BTC candles.
@@ -77,7 +77,7 @@ Mechanical pass. Not a designer question.
 
 ### R3-2. Batch title "AST algebra surface" understates scope
 
-058 now commits: the 6-form algebra core, the measurements tier (cosine, dot), the 18-form stdlib, the 8-form language core (including `defmacro` and typed macros), the type system (4 heads, parametric polymorphism), the kernel primitives (queue, send/recv, spawn, join, select, HandlePool, Signal), the config-setter tier (`:wat/config`), the two stdlib programs (Console, Cache), the conformance contract (six rules for programs-are-userland), the startup pipeline, the entry-file shape, the interpret path (RUST-INTERPRETATION.md), and the compile path (WAT-TO-RUST.md as seed).
+058 now commits: the 6-form algebra core, the measurements tier (cosine, dot), the 18-form stdlib, the 8-form language core (including `defmacro` and typed macros), the type system (4 heads, parametric polymorphism), the kernel primitives (queue, send/recv, spawn, join, select, HandlePool, Signal), the config-setter tier (`:wat::config`), the two stdlib programs (Console, Cache), the conformance contract (six rules for programs-are-userland), the startup pipeline, the entry-file shape, the interpret path (RUST-INTERPRETATION.md), and the compile path (WAT-TO-RUST.md as seed).
 
 This is substantive substrate, not just an algebra surface. A future reader arriving at the title "058-ast-algebra-surface" and the repository-level claim that this batch is "algebra extension" will be surprised by the kernel primitives section in FOUNDATION.md (~430 lines).
 
@@ -198,7 +198,7 @@ It is the same pattern Clojure applies to data vs. functions (`(list 1 2 3)` is 
 
 ### 4. The ambient-stdio removal is the Hickey lens applied to the team's own work
 
-The R3 final entry removed ambient `:wat/kernel/console-out`/`console-err`/`console-in` accessors. Every stdio handle now threads through function parameters explicitly. The justification: "ambient authority is exactly the dishonesty wat's type system is meant to prevent."
+The R3 final entry removed ambient `:wat::kernel::console-out`/`console-err`/`console-in` accessors. Every stdio handle now threads through function parameters explicitly. The justification: "ambient authority is exactly the dishonesty wat's type system is meant to prevent."
 
 This is the Hickey test recursively applied: is the implicit-access convenient (easy) or unentangled (simple)? Easy. So remove it. Make every side-effect visible at the type.
 

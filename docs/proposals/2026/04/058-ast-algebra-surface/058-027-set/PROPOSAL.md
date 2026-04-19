@@ -26,8 +26,8 @@ The sections below were written before the 2026-04-18 rename + `get`-unification
 A wat stdlib macro (per 058-031-defmacro) that constructs an encoded unordered collection from a list of holons:
 
 ```scheme
-(:wat/core/defmacro (:wat/std/HashSet (xs :AST) -> :AST)
-  `(:wat/algebra/Bundle ,xs))
+(:wat::core::defmacro (:wat::std::HashSet (xs :AST) -> :AST)
+  `(:wat::algebra::Bundle ,xs))
 ```
 
 Expansion is Bundle. The distinction is reader intent at source: `HashSet` communicates "data-structure: unordered collection with O(1) membership"; `Bundle` communicates "superposition primitive." Both collapse to the same canonical AST after parse-time expansion, so `hash((HashSet xs)) = hash((Bundle xs))` — no alias collision.
@@ -39,7 +39,7 @@ Expansion is Bundle. The distinction is reader intent at source: `HashSet` commu
 ### `get` — structural membership, unified with HashMap and Vec
 
 ```scheme
-(:wat/std/get (s :HashSet<T>) (candidate :T)) -> :Option<T>
+(:wat::std::get (s :HashSet<T>) (candidate :T)) -> :Option<T>
 ;; Hash-based membership via Rust's HashSet::get(), O(1) average.
 ;; Returns (Some candidate) if the element is present (confirmation /
 ;; canonicalization); :None if absent.
@@ -186,8 +186,8 @@ Yes — `(Bundle xs)`. Named form earns its place via data-structure reader inte
 **wat stdlib addition** — `wat/std/structures.wat`:
 
 ```scheme
-(:wat/core/defmacro (:wat/std/HashSet (xs :AST) -> :AST)
-  `(:wat/algebra/Bundle ,xs))
+(:wat::core::defmacro (:wat::std::HashSet (xs :AST) -> :AST)
+  `(:wat::algebra::Bundle ,xs))
 ```
 
 Registered at parse time (per 058-031-defmacro): every `(Set xs)` invocation is rewritten to `(Bundle xs)` before hashing.
@@ -196,8 +196,8 @@ Optional userland helper (not part of this proposal):
 
 ```scheme
 ;; userland: threshold-based membership test — regular function, not a macro
-(:wat/core/define (:my/vocab/contains? set-holon candidate threshold)
-  (:wat/core/> (cosine-similarity set-holon candidate) threshold))
+(:wat::core::define (:my::vocab::contains? set-holon candidate threshold)
+  (:wat::core::> (cosine-similarity set-holon candidate) threshold))
 ```
 
 ## Questions for Designers

@@ -12,13 +12,13 @@
 `defmacro` is a **compile-time language-core form** that registers a syntactic transformation. Unlike `define`, which creates a runtime function, `defmacro` defines a rewriter: it takes a source-level form and returns its canonical replacement BEFORE any evaluation, hashing, caching, or signing occurs.
 
 ```scheme
-(:wat/core/defmacro (:namespace/macro-name (arg1 :AST<T1>) (arg2 :AST<T2>) ... -> :AST<R>)
+(:wat::core::defmacro (:namespace::macro-name (arg1 :AST<T1>) (arg2 :AST<T2>) ... -> :AST<R>)
   body-expression)
 ```
 
 The body is a Lisp expression that evaluates AT PARSE TIME to produce a new AST. The resulting AST replaces the invocation.
 
-Every macro parameter carries a concrete value type `T` via the `:AST<T>` wrapper (per 058-032). `T` is the value type the argument expression must produce — `:Holon`, `:f64`, `:List<Holon>`, etc. Bare `:AST` without `<T>` is not a valid parameter type; the language enforces the same discipline on macros as on every other typed position.
+Every macro parameter carries a concrete value type `T` via the `:AST<T>` wrapper (per 058-032). `T` is the value type the argument expression must produce — `:Holon`, `:f64`, `:Vec<Holon>`, etc. Bare `:AST` without `<T>` is not a valid parameter type; the language enforces the same discipline on macros as on every other typed position.
 
 ## Why This Form Exists
 
@@ -29,9 +29,9 @@ This proposal responds directly to Beckman's finding #4 (alias hash collision) f
 Stdlib aliases like `Concurrent`, `Set`, `Subtract`, `Flip`, `Then`, `Chain` all expand to compositions of core primitives. Under the naive `(define (Alias ...) (Primitive ...))` encoding, the source AST retains the alias name as a distinct node:
 
 ```scheme
-(:wat/std/Concurrent xs)    → AST: (Call :wat/std/Concurrent (xs))   hash: H1
-(:wat/std/HashSet xs)       → AST: (Call :wat/std/HashSet (xs))      hash: H2
-(:wat/algebra/Bundle xs)    → AST: (Call :wat/algebra/Bundle (xs))   hash: H3
+(:wat::std::Concurrent xs)    → AST: (Call :wat::std::Concurrent (xs))   hash: H1
+(:wat::std::HashSet xs)       → AST: (Call :wat::std::HashSet (xs))      hash: H2
+(:wat::algebra::Bundle xs)    → AST: (Call :wat::algebra::Bundle (xs))   hash: H3
 ```
 
 All three produce the same vector (elementwise threshold sum). But they have three distinct hashes. FOUNDATION's claim — `hash(AST) IS the holon's identity` — becomes contradictory: **same meaning, different identities.**
@@ -41,14 +41,14 @@ All three produce the same vector (elementwise threshold sum). But they have thr
 If `Concurrent` and `Set` are MACROS rather than functions, they expand at parse time to their canonical form BEFORE hashing:
 
 ```scheme
-(:wat/std/Concurrent xs)    → parser sees macro call → expands
-                            → AST becomes: (Call :wat/algebra/Bundle (xs))
-                            → hash: H3 (same as (:wat/algebra/Bundle xs) directly)
+(:wat::std::Concurrent xs)    → parser sees macro call → expands
+                            → AST becomes: (Call :wat::algebra::Bundle (xs))
+                            → hash: H3 (same as (:wat::algebra::Bundle xs) directly)
 
-(:wat/std/HashSet xs)       → same expansion path → AST: (Call :wat/algebra/Bundle (xs))
+(:wat::std::HashSet xs)       → same expansion path → AST: (Call :wat::algebra::Bundle (xs))
                             → hash: H3
 
-(:wat/algebra/Bundle xs)    → no macro expansion needed → AST: (Call :wat/algebra/Bundle (xs))
+(:wat::algebra::Bundle xs)    → no macro expansion needed → AST: (Call :wat::algebra::Bundle (xs))
                             → hash: H3
 ```
 
@@ -76,7 +76,7 @@ All three have the same hash. `hash(AST) IS identity` holds. The reader clarity 
 `defmacro` uses the **same signature syntax as `define` and `lambda`** — every parameter typed with a concrete value type, return type explicit. One consistent signature form across all three definition primitives. Macros use `:AST<T>` (per 058-032) rather than bare `:T` because the parameter arrives unevaluated at parse time; `T` still commits to the evaluation type.
 
 ```scheme
-(:wat/core/defmacro (:namespace/macro-name (param1 :AST<T1>) (param2 :AST<T2>) ... -> :AST<R>)
+(:wat::core::defmacro (:namespace::macro-name (param1 :AST<T1>) (param2 :AST<T2>) ... -> :AST<R>)
   expansion-body)
 ```
 
@@ -92,59 +92,59 @@ The `expansion-body` is a Lisp expression. It can use:
 **Pure alias — Concurrent:**
 
 ```scheme
-(:wat/core/defmacro (:wat/std/Concurrent (xs :AST<List<Holon>>) -> :AST<Holon>)
-  `(:wat/algebra/Bundle ,xs))
+(:wat::core::defmacro (:wat::std::Concurrent (xs :AST<List<Holon>>) -> :AST<Holon>)
+  `(:wat::algebra::Bundle ,xs))
 
 ;; User writes:
-(:wat/std/Concurrent (:wat/core/list a b c))
+(:wat::std::Concurrent (:wat::core::vec a b c))
 
 ;; Parser expands:
-(:wat/algebra/Bundle (:wat/core/list a b c))
+(:wat::algebra::Bundle (:wat::core::vec a b c))
 ```
 
 **Transforming — Subtract:**
 
 ```scheme
-(:wat/core/defmacro (:wat/std/Subtract (x :AST<Holon>) (y :AST<Holon>) -> :AST<Holon>)
-  `(:wat/algebra/Blend ,x ,y 1 -1))
+(:wat::core::defmacro (:wat::std::Subtract (x :AST<Holon>) (y :AST<Holon>) -> :AST<Holon>)
+  `(:wat::algebra::Blend ,x ,y 1 -1))
 
 ;; User writes:
-(:wat/std/Subtract a b)
+(:wat::std::Subtract a b)
 
 ;; Parser expands:
-(:wat/algebra/Blend a b 1 -1)
+(:wat::algebra::Blend a b 1 -1)
 ```
 
 **Parameterized — Amplify:**
 
 ```scheme
-(:wat/core/defmacro (:wat/std/Amplify (x :AST<Holon>) (y :AST<Holon>) (s :AST<f64>) -> :AST<Holon>)
-  `(:wat/algebra/Blend ,x ,y 1 ,s))
+(:wat::core::defmacro (:wat::std::Amplify (x :AST<Holon>) (y :AST<Holon>) (s :AST<f64>) -> :AST<Holon>)
+  `(:wat::algebra::Blend ,x ,y 1 ,s))
 
 ;; User writes:
-(:wat/std/Amplify a b 2)
+(:wat::std::Amplify a b 2)
 
 ;; Parser expands:
-(:wat/algebra/Blend a b 1 2)
+(:wat::algebra::Blend a b 1 2)
 ```
 
 **Higher-order expansion — Chain:**
 
 ```scheme
-(:wat/core/defmacro (:wat/std/Chain (holons :AST<List<Holon>>) -> :AST<Holon>)
-  `(:wat/algebra/Bundle (pairwise-map :wat/std/Then ,holons)))
+(:wat::core::defmacro (:wat::std::Chain (holons :AST<List<Holon>>) -> :AST<Holon>)
+  `(:wat::algebra::Bundle (pairwise-map :wat::std::Then ,holons)))
 
 ;; User writes:
-(:wat/std/Chain (:wat/core/list a b c d))
+(:wat::std::Chain (:wat::core::vec a b c d))
 
 ;; Parser expands:
-(:wat/algebra/Bundle (pairwise-map :wat/std/Then (:wat/core/list a b c d)))
+(:wat::algebra::Bundle (pairwise-map :wat::std::Then (:wat::core::vec a b c d)))
 
 ;; which further expands Then:
-(:wat/algebra/Bundle (pairwise-map
-         (:wat/core/lambda ((a :Holon) (b :Holon) -> :Holon)
-           (:wat/algebra/Bundle (:wat/core/list a (:wat/algebra/Permute b 1))))
-         (:wat/core/list a b c d)))
+(:wat::algebra::Bundle (pairwise-map
+         (:wat::core::lambda ((a :Holon) (b :Holon) -> :Holon)
+           (:wat::algebra::Bundle (:wat::core::vec a (:wat::algebra::Permute b 1))))
+         (:wat::core::vec a b c d)))
 ```
 
 The final form contains only algebra core operations. No stdlib-alias function calls survive into the hashed AST.
@@ -181,7 +181,7 @@ Under Model A, startup proceeds:
 8. Freeze symbol table and type environment.
 9. Enter main loop.
 
-**Step 2 is the new insertion.** Macros are registered at build time (same mechanism as type declarations — loaded via `(:wat/core/load! ...)` or embedded in compiled-in stdlib). The expansion pass walks every source AST and rewrites until fixpoint.
+**Step 2 is the new insertion.** Macros are registered at build time (same mechanism as type declarations — loaded via `(:wat::core::load! ...)` or embedded in compiled-in stdlib). The expansion pass walks every source AST and rewrites until fixpoint.
 
 ## Cryptographic Implications
 
@@ -196,7 +196,7 @@ But the HASH used in the content-addressed symbol table (per FOUNDATION's Model 
 
 This is the correct behavior. Signing guarantees "this file was produced by this author." Hashing the expanded AST identifies holons by their canonical semantic content.
 
-**An attacker cannot craft a malicious macro** that would pass signature verification and produce unexpected behavior. Macros are loaded at build time via the verified `(:wat/core/load! ...)` (or equivalent) form. Adding a new macro requires signing the file that introduces it. The expansion pass uses only verified macros. There is no path for unverified code to affect expansion.
+**An attacker cannot craft a malicious macro** that would pass signature verification and produce unexpected behavior. Macros are loaded at build time via the verified `(:wat::core::load! ...)` (or equivalent) form. Adding a new macro requires signing the file that introduces it. The expansion pass uses only verified macros. There is no path for unverified code to affect expansion.
 
 ## Type Checking
 
@@ -247,18 +247,18 @@ Matthew Flatt's 2016 paper — *"Binding as Sets of Scopes"* — is the referenc
 
 ```scheme
 ;; Macro introduces `tmp`:
-(:wat/core/defmacro (:my/vocab/swap-thoughts (a :AST<Holon>) (b :AST<Holon>) -> :AST<Holon>)
-  `(:wat/core/let ((tmp ,a))          ; `tmp` here has macro-scope M
+(:wat::core::defmacro (:my::vocab::swap-thoughts (a :AST<Holon>) (b :AST<Holon>) -> :AST<Holon>)
+  `(:wat::core::let ((tmp ,a))          ; `tmp` here has macro-scope M
      (set! ,a ,b)
      (set! ,b tmp)))
 
 ;; User writes:
-(:wat/core/let ((tmp :my-thought))    ; `tmp` here has user-scope U (outer lexical scope)
-  (:my/vocab/swap-thoughts tmp other-var))
+(:wat::core::let ((tmp :my-thought))    ; `tmp` here has user-scope U (outer lexical scope)
+  (:my::vocab::swap-thoughts tmp other-var))
 
 ;; After expansion:
-(:wat/core/let ((tmp[U] :my-thought))                 ; user's tmp retains U
-  (:wat/core/let ((tmp[M] tmp[U]))                    ; macro's tmp gets M; references user's U
+(:wat::core::let ((tmp[U] :my-thought))                 ; user's tmp retains U
+  (:wat::core::let ((tmp[M] tmp[U]))                    ; macro's tmp gets M; references user's U
     (set! tmp[U] other-var)                           ; user's tmp — resolved via U
     (set! other-var tmp[M])))                         ; macro's tmp — resolved via M
 ```
@@ -331,7 +331,7 @@ FOUNDATION's distributed-verifiability claim assumes two nodes producing the sam
 
 1. **Project stdlib macros** (Chain, Ngram, Analogy, Subtract, Amplify, Flip, Log, Circular, HashMap, Vec, HashSet) are defined in `wat/std/*.wat` files shipped with the algebra release. The content-addressed symbol table is seeded with these macros at wat-vm startup. Two nodes running **the same algebra version** have **bit-identical stdlib macros** — guaranteed by versioning, not by coincidence.
 
-2. **User macros** (`:my/vocab/*`) are expanded locally. Their expansions produce hashes that are VALID LOCALLY. A receiving node that wants to verify a hash produced by a user macro must either:
+2. **User macros** (`:my::vocab::*`) are expanded locally. Their expansions produce hashes that are VALID LOCALLY. A receiving node that wants to verify a hash produced by a user macro must either:
    - Receive the user macro's definition alongside (and expand it the same way), OR
    - Receive the **pre-expanded AST** (the hash's source) directly, bypassing the user macro
 

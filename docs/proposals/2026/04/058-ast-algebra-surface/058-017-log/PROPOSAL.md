@@ -25,16 +25,16 @@ Every ratio, rate, and multiplicative quantity in the vocab passes through Log. 
 **Macro expansion** (after Blend acceptance — 058-002):
 
 ```scheme
-(:wat/core/defmacro (:wat/std/Log (value :AST) (min :AST) (max :AST) -> :AST)
-  `(:wat/algebra/Thermometer (:wat/std/math/ln ,value)
-                              (:wat/std/math/ln ,min)
-                              (:wat/std/math/ln ,max)))
+(:wat::core::defmacro (:wat::std::Log (value :AST) (min :AST) (max :AST) -> :AST)
+  `(:wat::algebra::Thermometer (:wat::std::math::ln ,value)
+                              (:wat::std::math::ln ,min)
+                              (:wat::std::math::ln ,max)))
 ```
 
-Log-transform the inputs, then the standard Thermometer gradient. Natural log (`:wat/std/math/ln`) is the conventional base; any base produces the same result (base cancels in the ratio).
+Log-transform the inputs, then the standard Thermometer gradient. Natural log (`:wat::std::math::ln`) is the conventional base; any base produces the same result (base cancels in the ratio).
 
 **Questions for Designers — all resolved:**
-- Q1 (`log` in wat stdlib): RESOLVED — `:wat/std/math/ln` (single Rust method `f64::ln`); see FOUNDATION-CHANGELOG 2026-04-18 core/stdlib division entry.
+- Q1 (`log` in wat stdlib): RESOLVED — `:wat::std::math::ln` (single Rust method `f64::ln`); see FOUNDATION-CHANGELOG 2026-04-18 core/stdlib division entry.
 - Q2 (numerical preconditions): document as user responsibility — `value, min, max` must all be positive for `ln` to be defined. Trading-lab callers pass `.max(0.0001)` guards where inputs can touch zero (see `trade_atoms.rs`).
 - Q3 (log base): natural log is conventional; any base cancels in the ratio.
 - Q4 (consistency concerns with Linear/Circular): RESOLVED via 058-031 defmacro — macros expand at parse time; hash is on the expanded AST.
@@ -63,8 +63,8 @@ With Blend as a pivotal core form (058-002), `Log` becomes a stdlib macro (per 0
 ### Stdlib definition
 
 ```scheme
-(:wat/core/defmacro (:wat/std/Log (value :AST) (min :AST) (max :AST) -> :AST)
-  `(:wat/algebra/Thermometer (log ,value) (log ,min) (log ,max)))
+(:wat::core::defmacro (:wat::std::Log (value :AST) (min :AST) (max :AST) -> :AST)
+  `(:wat::algebra::Thermometer (log ,value) (log ,min) (log ,max)))
 ```
 
 Log-transform the value and the bounds, then encode linearly with Thermometer. Because Thermometer's encoding is intrinsically linear in its inputs, log-transforming the inputs gives log-scale output — the geometric midpoint of `[min, max]` lands at the linear midpoint of the Thermometer gradient.
@@ -168,12 +168,12 @@ Delete the Log encoder match arm (~15-20 lines). Macro expansion is handled by 0
 **wat stdlib addition** — `wat/std/scalars.wat`:
 
 ```scheme
-(:wat/core/defmacro (:wat/std/Log (low :AST) (high :AST) (value :AST) (scale :AST) -> :AST)
-  `(:wat/core/let* ((min (:wat/core/first ,scale))
-          (max (:wat/core/second ,scale))
-          (t (:wat/core// (:wat/core/- (log ,value) (log min))
-                (:wat/core/- (log max) (log min)))))
-     (:wat/algebra/Blend (:wat/algebra/Thermometer ,low dim) (:wat/algebra/Thermometer ,high dim) (:wat/core/- 1 t) t)))
+(:wat::core::defmacro (:wat::std::Log (low :AST) (high :AST) (value :AST) (scale :AST) -> :AST)
+  `(:wat::core::let* ((min (:wat::core::first ,scale))
+          (max (:wat::core::second ,scale))
+          (t (:wat::core::/ (:wat::core::- (log ,value) (log min))
+                (:wat::core::- (log max) (log min)))))
+     (:wat::algebra::Blend (:wat::algebra::Thermometer ,low dim) (:wat::algebra::Thermometer ,high dim) (:wat::core::- 1 t) t)))
 ```
 
 Registered at parse time (per 058-031-defmacro): every `(Log ...)` invocation is rewritten to the canonical `let* + Blend-over-Thermometers` form before hashing.

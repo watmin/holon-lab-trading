@@ -38,7 +38,7 @@ See FOUNDATION-CHANGELOG for the 2026-04-18 rejection record.
 A 3-argument core variant that conditionally applies binding based on a per-dimension gate vector:
 
 ```scheme
-(:wat/algebra/ConditionalBind a b gate)
+(:wat::algebra::ConditionalBind a b gate)
 ```
 
 Semantically: at each dimension `i`, if `gate[i]` is "on" (positive), produce `bind(a, b)[i]`; if `gate[i]` is "off" (negative), produce `a[i]` unchanged.
@@ -146,8 +146,8 @@ O(d), three-input scan.
 Given a `Mask(x, selector)` primitive:
 
 ```scheme
-(:wat/core/define (:wat/std/ConditionalBind a b gate)
-  (:wat/algebra/Blend (Mask (:wat/algebra/Bind a b) gate)          ; bound portion (where gate on)
+(:wat::core::define (:wat::std::ConditionalBind a b gate)
+  (:wat::algebra::Blend (Mask (:wat::algebra::Bind a b) gate)          ; bound portion (where gate on)
          (Mask a (negate gate))          ; pass-through portion (where gate off)
          1 1))
 ```

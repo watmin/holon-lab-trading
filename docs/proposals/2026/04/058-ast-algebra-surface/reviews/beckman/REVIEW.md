@@ -23,7 +23,7 @@ The rejection pattern holds categorically. Ten forms rejected for redundancy or 
 
 2. **Laws appendix still missing.** Round 1 and Round 2 both asked for a Laws section. Round 3 prose states most laws in narrative form across several sections, but there is no single "Laws" appendix where the full ledger can be checked at a glance. Given the similarity-measurement reframe introduces per-operation capacity-bounded laws, this is where a reviewer most needs a consolidated statement. Not a blocker; a cleanup.
 
-3. **Reserved identity atoms still not adopted.** Round 1 and Round 2 recommended `(Atom :wat/algebra/zero)` → all-zero vector (Bundle's identity) and `(Atom :wat/algebra/one)` → all-+1 vector (Bind's dense-identity). Still no named identities. With ternary output, the Bundle identity is in the algebra's reachable space; making it named would close the monoid story. Minor; nice-to-have.
+3. **Reserved identity atoms still not adopted.** Round 1 and Round 2 recommended `(Atom :wat::algebra::zero)` → all-zero vector (Bundle's identity) and `(Atom :wat::algebra::one)` → all-+1 vector (Bind's dense-identity). Still no named identities. With ternary output, the Bundle identity is in the algebra's reachable space; making it named would close the monoid story. Minor; nice-to-have.
 
 **Net.** Round 2 said 90% complete; Round 3 moves it to ~98%. The last 2% is documentation drift (issue 1), completeness polish (issue 2), and algebra finish (issue 3). None of these block acceptance. The algebra is categorically sound.
 
@@ -98,12 +98,12 @@ However: the FOUNDATION's Laws section (when it exists) SHOULD state the four pe
 FOUNDATION lines 2402-2408 show:
 
 ```scheme
-(:wat/core/define (:wat/std/Sequential list-of-holons)
+(:wat::core::define (:wat::std::Sequential list-of-holons)
   ;; positional encoding
   ;; each holon permuted by its index (Permute by 0 is identity)
-  (:wat/algebra/Bundle
+  (:wat::algebra::Bundle
     (map-indexed
-      (:wat/core/lambda (i h) (:wat/algebra/Permute h i))
+      (:wat::core::lambda (i h) (:wat::algebra::Permute h i))
       list-of-holons)))
 ```
 
@@ -112,15 +112,15 @@ This is **bundle-sum** — `Bundle([Permute(a, 0), Permute(b, 1), Permute(c, 2),
 058-009 PROPOSAL.md (ACCEPTED) uses **bind-chain**:
 
 ```
-(:wat/std/Sequential [a b c]) = Bind(Bind(a, Permute(b, 1)), Permute(c, 2))
+(:wat::std::Sequential [a b c]) = Bind(Bind(a, Permute(b, 1)), Permute(c, 2))
 ```
 
-FOUNDATION line 1961 comment admits this: `;; :wat/std/Sequential     (macro, bind-chain)` — knowing what it should be. But the actual code example at line 2405 is the OLD bundle-sum.
+FOUNDATION line 1961 comment admits this: `;; :wat::std::Sequential     (macro, bind-chain)` — knowing what it should be. But the actual code example at line 2405 is the OLD bundle-sum.
 
 FOUNDATION line 2956 (in "What 058 Argues" inventory) also says:
 
 ```
-(:wat/std/Sequential list)              ; 058-009  — reframing: Bundle of index-permuted
+(:wat::std::Sequential list)              ; 058-009  — reframing: Bundle of index-permuted
 ```
 
 **Why this matters categorically.** Bind-chain and Bundle-of-Permutes are DIFFERENT operations with different composition properties:
@@ -171,13 +171,13 @@ This is adequate for a reader; it is not adequate for a REVIEWER who needs to ch
 
 ### R3-3 (MINOR): Reserved identity atoms still not adopted
 
-With ternary output, Bundle has an identity element (the all-zero vector). Bind has a dense identity (the all-+1 vector). Neither is reachable through a named Atom. `(Atom :wat/algebra/zero)` hashes to a random vector, not the all-zero vector.
+With ternary output, Bundle has an identity element (the all-zero vector). Bind has a dense identity (the all-+1 vector). Neither is reachable through a named Atom. `(Atom :wat::algebra::zero)` hashes to a random vector, not the all-zero vector.
 
 This has been flagged in Rounds 1 and 2 as a small fix that would close the monoid story:
 
 ```
-(Atom :wat/algebra/zero)    → [0, 0, ..., 0]   (Bundle identity)
-(Atom :wat/algebra/one)     → [+1, +1, ..., +1] (Bind dense identity)
+(Atom :wat::algebra::zero)    → [0, 0, ..., 0]   (Bundle identity)
+(Atom :wat::algebra::one)     → [+1, +1, ..., +1] (Bind dense identity)
 ```
 
 These would be distinguished atoms that bypass the hash, returning canonical identity vectors.
@@ -237,7 +237,7 @@ Round 2 accepted Analogy as stdlib. Round 3 DEFERRED it: proven-working-but-unad
 
 This is honest. The algebra's claim was "everything shipping in 058 has production use." Analogy does not have current production use. Rather than ACCEPT (shipping a name nobody calls) or REJECT (losing the proof work), DEFERRED creates a third status for the kind of claim Analogy embodies.
 
-**Categorically:** this is a documentation-status decision, not an algebraic one. The operation `c + (b - a)` is a stdlib fold over Subtract + Bundle; anyone who needs it writes `(:wat/algebra/Bundle (:wat/core/list c (:wat/std/Subtract b a)))` inline. Costs nothing. DEFERRED is fine.
+**Categorically:** this is a documentation-status decision, not an algebraic one. The operation `c + (b - a)` is a stdlib fold over Subtract + Bundle; anyone who needs it writes `(:wat::algebra::Bundle (:wat::core::vec c (:wat::std::Subtract b a)))` inline. Costs nothing. DEFERRED is fine.
 
 ### R3-8 (MINOR): Sequential and Blend non-associativity under similarity — state explicitly
 
@@ -423,7 +423,7 @@ If the batch:
 
 1. **Fixes FOUNDATION Sequential expansion to bind-chain** (R3-1). Mechanical. Lines 2402-2408 and 2956.
 2. **Adds a Laws appendix** enumerating L1-L19 across the exact/similarity/fails partition. 
-3. **(Optional) Reserves `:wat/algebra/zero` as Bundle's named identity atom.**
+3. **(Optional) Reserves `:wat::algebra::zero` as Bundle's named identity atom.**
 
 ...then the algebra is done. The programs-are-thoughts claim holds. The programs-are-atoms claim holds. The distributed verifiability story holds. The stdlib is writable and hash-canonical. The compositions check out under the stated frames.
 

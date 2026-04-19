@@ -12,8 +12,8 @@
 A **keyword-path-based type system** for the wat language, providing:
 
 1. A small set of **built-in types** for the primitives the algebra exposes.
-2. A **parametric type constructor** for containers (`:List<T>`, `:HashMap<K,V>`, `:fn(T,U)->R`).
-3. **User-definable types** via keyword-path naming discipline (`:my/namespace/MyType`), through FOUR compile-time forms with distinct head keywords: `newtype`, `struct`, `enum`, `typealias`.
+2. A **parametric type constructor** for containers (`:Vec<T>`, `:HashMap<K,V>`, `:fn(T,U)->R`).
+3. **User-definable types** via keyword-path naming discipline (`:my::namespace::MyType`), through FOUR compile-time forms with distinct head keywords: `newtype`, `struct`, `enum`, `typealias`.
 4. **Static type checking** at wat-vm startup — signatures of `define` and call sites must match before the main loop runs.
 
 **No `deftype`. No `:is-a`. No `subtype`. No `impl`. No `trait`.** Four type-declaration heads, each unambiguous. Polymorphism for user types uses enums (closed variant set, like `:Holon`) or explicit per-type functions. Rust's compiled output groups wat function declarations into `impl` blocks automatically — the user writes functions, the compiler emits the impls.
@@ -33,22 +33,22 @@ The type system has two tiers of built-ins: **algebraic types** (abstractions ov
 **`:Holon` is an enum, not a subtype root.** This matches the underlying Rust `HolonAST` enum exactly. Declared in FOUNDATION as:
 
 ```scheme
-(:wat/core/enum :wat/algebra/Holon
+(:wat::core::enum :wat::algebra::Holon
   (Atom        (payload :T))                                            ;; parametric per 058-001
   (Bind        (a :Holon) (b :Holon))
-  (Bundle      (items :List<Holon>))
+  (Bundle      (items :Vec<Holon>))
   (Permute     (child :Holon) (k :i32))
   (Thermometer (value :f64) (min :f64) (max :f64))
   (Blend       (a :Holon) (b :Holon) (w1 :f64) (w2 :f64)))
 ```
 
-Six variants — the algebra core. `Orthogonalize`, `Resonance`, and `ConditionalBind` are NOT variants of `:Holon`: Orthogonalize (058-005) migrated to stdlib as `Reject` + `Project` macros over `Blend` + `:wat/algebra/dot`; Resonance (058-006) and ConditionalBind (058-007) were rejected as speculative primitives with no production use. See their PROPOSAL.md REJECTED banners and FOUNDATION-CHANGELOG for the record.
+Six variants — the algebra core. `Orthogonalize`, `Resonance`, and `ConditionalBind` are NOT variants of `:Holon`: Orthogonalize (058-005) migrated to stdlib as `Reject` + `Project` macros over `Blend` + `:wat::algebra::dot`; Resonance (058-006) and ConditionalBind (058-007) were rejected as speculative primitives with no production use. See their PROPOSAL.md REJECTED banners and FOUNDATION-CHANGELOG for the record.
 
 Every algebra AST node is a **variant** of the `:Holon` enum. A function typed `(f (h :Holon) -> ...)` accepts any variant and pattern-matches to select behavior:
 
 ```scheme
-(:wat/core/define (:wat/std/atom-value (h :Holon) -> :AtomLiteral)
-  (:wat/core/match h
+(:wat::core::define (:wat::std::atom-value (h :Holon) -> :AtomLiteral)
+  (:wat::core::match h
     ((Atom literal)  literal)
     (_               (error "atom-value: not an Atom variant"))))
 ```
@@ -79,17 +79,17 @@ No `:Atom`-as-subtype-of-`:Holon` — `Atom` is just a variant name used in `mat
 **Meta types:**
 
 ```
-:Keyword     — keyword literal (e.g., :foo, :foo/bar/baz)
+:Keyword     — keyword literal (e.g., :foo, :foo::bar::baz)
 :Type        — a type-name value (types as first-class keywords)
 ```
 
 **NO `:Any`.** `:Any` would be an escape hatch ("I refuse to declare a type") — easy, not simple. Every apparent use case has a principled replacement:
 
 - Universal algebra value → `:Holon`
-- Heterogeneous primitives → `:Union<T,U,V>`
+- Heterogeneous data → **declare a named `:wat::core::enum`** with named variants. Every coproduct carries a discriminator; dispatch is explicit. Matches Rust exactly (Rust has no anonymous union type).
 - Generic container element → parametric type parameter (`T`, `K`, `V`)
 - `eval`'s return → `:fn(:Holon)->Holon` or parametric `:fn(:Holon)->T`
-- Engram library entries → `:List<Pair<Holon,Vector>>`
+- Engram library entries → `:Vec<(Holon,Vector)>` (tuple-literal type)
 
 If a programmer can't declare the type of their value, that is a design signal that the function hasn't been fully specified. The type system is the forcing function.
 
@@ -103,19 +103,20 @@ If a programmer can't declare the type of their value, that is a design signal t
 Parametric types use Rust-surface syntax as single-token keywords:
 
 ```
-:List<Holon>                   ; list of holons
-:List<f64>                     ; list of f64 values
-:List<List<Holon>>             ; list of lists of holons (nested)
-:Vec<u8>                       ; Rust Vec<u8> — byte buffer
-:HashMap<K,V>                  ; Rust HashMap<K, V>
-:HashSet<T>                    ; Rust HashSet<T>
-:Option<Holon>                 ; Option<Holon>
-:Result<Holon,Error>           ; Result<Holon, Error>
-:Pair<Holon,Vector>            ; tuple of 2
-:Tuple<T,U,V>                  ; tuple of 3
-:Union<T,U,V>                  ; coproduct (for type annotations)
-:Arc<Holon>                    ; Arc<Holon>
+:Vec<Holon>                   ; Rust Vec<Holon>
+:Vec<f64>                     ; Rust Vec<f64>
+:Vec<Vec<Holon>>              ; nested Vec (lists of lists)
+:Vec<u8>                      ; Rust Vec<u8> — byte buffer
+:HashMap<K,V>                 ; Rust HashMap<K, V>
+:HashSet<T>                   ; Rust HashSet<T>
+:Option<Holon>                ; Rust Option<Holon>
+:Result<Holon,Error>          ; Rust Result<Holon, Error>
+:(Holon,Vector)               ; Rust tuple — 2-tuple
+:(T,U,V)                      ; Rust tuple — 3-tuple
+:Arc<Holon>                   ; Rust Arc<Holon>
 ```
+
+**Coproducts use named enums.** Anonymous `:Union<T,U,V>` was considered and retired 2026-04-19 — Rust has no anonymous union type. Heterogeneous data is expressed with `(:wat::core::enum :my::Name ...)` declarations; every variant carries a named discriminator.
 
 Function types mirror Rust's `fn(T, U) -> R` exactly:
 
@@ -126,28 +127,28 @@ Function types mirror Rust's `fn(T, U) -> R` exactly:
 :fn(Holon,Holon,f64,f64)->Holon      ; Blend's type
 :fn()->Holon                         ; nullary
 :fn(T)->T                            ; identity on T
-:fn(List<T>,fn(T)->U)->List<U>       ; map's type
+:fn(Vec<T>,fn(T)->U)->Vec<U>         ; map's type
 ```
 
 Arguments between the parens, return after `->`. Direct one-to-one correspondence with Rust's syntax.
 
 ### The tokenizer rule
 
-The `:` is Lisp's quote. One at the start; the whole expression is a single keyword token. Inside a keyword:
-- NO internal `:` (re-quoting is illegal)
-- NO internal whitespace (whitespace ends the keyword at paren-depth 0)
-- Every other character belongs to the keyword — `/`, `<`, `>`, `(`, `)`, `,`, `-`, letters, digits. These are plain chars; none of them has special tokenizer meaning except `(` and `)`
-- The tokenizer tracks PAREN depth only (because `(` and `)` can appear inside a keyword — as in `:fn(T,U)->R` — and the lexer must distinguish an internal matched pair from the outer `)` that closes the enclosing form)
-- A keyword ends at whitespace at paren-depth 0 or at an unmatched `)`
-- `[]` and `{}` are NOT wat syntax; `<` and `>` are plain chars inside parametric type keywords like `:List<T>`
+`:` is **wat's symbol-literal reader macro** — one leading `:` marks the start of a symbol; the body that follows is a literal Rust path. Inside a keyword:
+- NO internal whitespace (whitespace ends the keyword at paren-depth 0).
+- Internal `::` is Rust's path separator — body characters, not special. `:wat::core::load!` is a single keyword.
+- Every other character belongs to the keyword — `<`, `>`, `/`, `(`, `)`, `,`, `-`, `!`, `?`, letters, digits. These are plain chars; none has special tokenizer meaning except `(` and `)`.
+- The tokenizer tracks PAREN depth only (because `(` and `)` can appear inside a keyword — as in `:fn(T,U)->R` or `:(i64,String)` — and the lexer must distinguish an internal matched pair from the outer `)` that closes the enclosing form).
+- A keyword ends at whitespace at paren-depth 0, at an unmatched `)`, or at a `"` / `;`.
+- `[]` and `{}` are NOT wat syntax; `<` and `>` are plain chars inside parametric type keywords like `:Vec<T>`.
 
 Nested generics compose:
 
 ```
 :HashMap<String,fn(i32)->i32>
 :Result<HashMap<Atom,Holon>,String>
-:fn(List<i32>)->Option<f64>
-:Option<HashMap<Atom,List<Holon>>>
+:fn(Vec<i32>)->Option<f64>
+:Option<HashMap<Atom,Vec<Holon>>>
 ```
 
 All single tokens. Each is a hashable string. The type-aware hash (058-001) applies at the whole-keyword granularity.
@@ -158,14 +159,14 @@ All single tokens. Each is a hashable string. The type-aware hash (058-001) appl
 wat keyword                                    Rust
 ─────────────────────────────                  ──────────────────────────
 :HashMap<K,V>                                  HashMap<K, V>
-:List<T>                                       Vec<T>
+:Vec<T>                                       Vec<T>
 :Option<T>                                     Option<T>
 :Result<T,E>                                   Result<T, E>
 :fn(T,U)->R                                    fn(T, U) -> R
 :fn(List<i32>)->Option<f64>                    fn(Vec<i32>) -> Option<f64>
 :HashMap<String,fn(i32)->i32>                  HashMap<String, fn(i32) -> i32>
 :Union<T,U>                                    enum { T(T), U(U) }   (or Either<T,U>)
-:Pair<T,U>                                     (T, U)
+:(T,U)                                     (T, U)
 ```
 
 The compiler strips the `:`, inserts spaces after commas, and emits Rust. Translation is string rewriting. No AST walk, no canonicalization pass — the keyword IS the type.
@@ -179,13 +180,13 @@ Users declare types using FOUR compile-time forms, each with a distinct head key
 ;; Compiles to Rust: `struct Name(Inner);`
 ;; NOT substitutable for its inner type — explicit conversion required.
 
-(:wat/core/newtype :project/trading/Price   :f64)
-(:wat/core/newtype :project/trading/TradeId :u64)
+(:wat::core::newtype :project::trading::Price   :f64)
+(:wat::core::newtype :project::trading::TradeId :u64)
 
 ;; --- 2. struct: named product type with typed fields ---
 ;; Compiles to Rust: `struct Name { field: Type, ... }`
 
-(:wat/core/struct :project/market/Candle
+(:wat::core::struct :project::market::Candle
   (open   :f64)
   (high   :f64)
   (low    :f64)
@@ -196,19 +197,19 @@ Users declare types using FOUR compile-time forms, each with a distinct head key
 ;; Compiles to Rust: `enum Name { Variant, Variant(Fields), ... }`
 ;; Variants are unit (no payload) or tagged (with typed fields).
 
-(:wat/core/enum :project/trading/Direction :long :short)
+(:wat::core::enum :project::trading::Direction :long :short)
 
-(:wat/core/enum :project/market/Event
-  (candle  (asset :Atom) (candle :project/market/Candle))
+(:wat::core::enum :project::market::Event
+  (candle  (asset :Atom) (candle :project::market::Candle))
   (deposit (asset :Atom) (amount :f64)))
 
 ;; --- 4. typealias: structural shorthand for an existing type expression ---
 ;; Compiles to Rust: `type Name = Expr;`
 ;; :A and its expansion are the SAME type — useful for naming complex shapes.
 
-(:wat/core/typealias :alice/types/Amount         :f64)
-(:wat/core/typealias :alice/market/CandleSeries  :List<Candle>)
-(:wat/core/typealias :alice/trading/Scores       :HashMap<Atom,f64>)
+(:wat::core::typealias :alice::types::Amount         :f64)
+(:wat::core::typealias :alice::market::CandleSeries  :Vec<Candle>)
+(:wat::core::typealias :alice::trading::Scores       :HashMap<Atom,f64>)
 ```
 
 All four forms use keyword-path names for namespacing (discipline, not mechanism). They materialize into the Rust-backed wat-vm binary at build time; they cannot be redefined at runtime.
@@ -229,12 +230,12 @@ Users pick based on what they mean: distinct nominal wrapper (`newtype`), new pr
 "A function that works on multiple types" is expressed via **enum wrapping**, not via traits or subtype declarations. Example: a function that handles both `Candle` and `BullishCandle`:
 
 ```scheme
-(:wat/core/enum :alice/market/Candleish
-  (Regular  (c :project/market/Candle))
-  (Bullish  (c :alice/market/BullishCandle)))
+(:wat::core::enum :alice::market::Candleish
+  (Regular  (c :project::market::Candle))
+  (Bullish  (c :alice::market::BullishCandle)))
 
-(:wat/core/define (:alice/market/analyze (c :Candleish) -> :Signal)
-  (:wat/core/match c
+(:wat::core::define (:alice::market::analyze (c :Candleish) -> :Signal)
+  (:wat::core::match c
     ((Regular candle)   ...)
     ((Bullish candle)   ...)))
 ```
@@ -244,8 +245,8 @@ The set of types the function accepts is **closed** at the enum declaration. Cal
 Alternatively, write per-type functions with distinct names:
 
 ```scheme
-(:wat/core/define (:alice/market/analyze-candle   (c :Candle)         -> :Signal) ...)
-(:wat/core/define (:alice/market/analyze-bullish  (c :BullishCandle)  -> :Signal) ...)
+(:wat::core::define (:alice::market::analyze-candle   (c :Candle)         -> :Signal) ...)
+(:wat::core::define (:alice::market::analyze-bullish  (c :BullishCandle)  -> :Signal) ...)
 ```
 
 No polymorphism needed — the caller picks which function to invoke. Simple, Rust-honest.
@@ -258,10 +259,10 @@ Rust groups methods under `impl Type { ... }` blocks. But wat's function declara
 
 ```scheme
 ;; wat source:
-(:wat/core/define (:my/market/open     (c :Candle) -> :f64) body1)
-(:wat/core/define (:my/market/high     (c :Candle) -> :f64) body2)
-(:wat/core/define (:my/market/low      (c :Candle) -> :f64) body3)
-(:wat/core/define (:my/market/close    (c :Candle) -> :f64) body4)
+(:wat::core::define (:my::market::open     (c :Candle) -> :f64) body1)
+(:wat::core::define (:my::market::high     (c :Candle) -> :f64) body2)
+(:wat::core::define (:my::market::low      (c :Candle) -> :f64) body3)
+(:wat::core::define (:my::market::close    (c :Candle) -> :f64) body4)
 
 ;; Compiler generates:
 ;;   impl Candle {
@@ -280,8 +281,8 @@ The wat type system has no nominal subtype relation (no `:A :is-a :B` keyword, n
 
 ```scheme
 ;; Pattern-matching extracts the variant:
-(:wat/core/define (:my/app/encode (h :Holon) -> :Vector)
-  (:wat/core/match h
+(:wat::core::define (:my::app::encode (h :Holon) -> :Vector)
+  (:wat::core::match h
     ((Atom payload)         ...)
     ((Bind a b)             ...)
     ((Bundle items)         ...)
@@ -298,7 +299,7 @@ Same semantics as Rust's `match holon { HolonAST::Atom(lit) => ..., ... }`. Exha
 
 ### Variance Rules — Only Where Matters
 
-Without nominal subtyping, most variance questions dissolve. Primitive types are invariant (`:i32` is `:i32`). User-declared types are invariant (`:Candle` is `:Candle`). Parametric containers are invariant by default (`:List<Candle>` is `:List<Candle>`).
+Without nominal subtyping, most variance questions dissolve. Primitive types are invariant (`:i32` is `:i32`). User-declared types are invariant (`:Candle` is `:Candle`). Parametric containers are invariant by default (`:Vec<Candle>` is `:Vec<Candle>`).
 
 The one case that still needs variance is **function types** — because Rust itself handles this for function pointers and closures. The rule is Liskov-standard:
 
@@ -306,7 +307,7 @@ The one case that still needs variance is **function types** — because Rust it
 
 Concretely: a function is substitutable for another function if it accepts the same or BROADER inputs and returns the same or NARROWER outputs. In practice, with no nominal subtyping, this rule is rarely exercised — it exists for Rust closure types and for the edge cases the Rust compiler already handles.
 
-**Parametric containers (`:List<T>`, `:HashMap<K,V>`, `:Vec<T>`, `:Option<T>`, `:Result<T,E>`, `:HashSet<T>`, `:Pair<T,U>`) are invariant** — matches Rust's strictness for mutable containers. `:Vec<i32>` is `:Vec<i32>`, not interchangeable with `:Vec<i64>`. Explicit conversion required.
+**Parametric containers (`:Vec<T>`, `:HashMap<K,V>`, `:Vec<T>`, `:Option<T>`, `:Result<T,E>`, `:HashSet<T>`, `:(T,U)`) are invariant** — matches Rust's strictness for mutable containers. `:Vec<i32>` is `:Vec<i32>`, not interchangeable with `:Vec<i64>`. Explicit conversion required.
 
 This is a simpler variance story than the previous `:is-a`-driven covariance rules, because the source of subtyping complexity (user-declared subtypes) is gone.
 
@@ -315,11 +316,11 @@ This is a simpler variance story than the previous `:is-a`-driven covariance rul
 From 058-028-define and 058-029-lambda, type annotations are required. The return type goes INSIDE the signature parens using `->`:
 
 ```scheme
-(:wat/core/define (:my/ns/amplify (x :Holon) (y :Holon) (s :f64) -> :Holon)
-  (:wat/algebra/Blend x y 1 s))
+(:wat::core::define (:my::ns::amplify (x :Holon) (y :Holon) (s :f64) -> :Holon)
+  (:wat::algebra::Blend x y 1 s))
 
-(:wat/core/lambda ((t :Holon) -> :Holon)
-  (:wat/algebra/Permute t 1))
+(:wat::core::lambda ((t :Holon) -> :Holon)
+  (:wat::algebra::Permute t 1))
 
 ;; Matches Rust's fn name(args) -> ReturnType:
 ;;   fn amplify(x: Holon, y: Holon, s: f64) -> Holon { ... }
@@ -330,8 +331,8 @@ Each parameter uses `(name :Type)` — parenthesized sublist with a bare symbol 
 **Macros use the same signature syntax as `define` and `lambda`** — every parameter is explicitly typed `: AST`; return is explicitly `-> :AST`. One consistent signature form across all three definition primitives. No implicit rules for the reader to remember.
 
 ```scheme
-(:wat/core/defmacro (:wat/std/Subtract (x :AST) (y :AST) -> :AST)
-  `(:wat/algebra/Blend ,x ,y 1 -1))
+(:wat::core::defmacro (:wat::std::Subtract (x :AST) (y :AST) -> :AST)
+  `(:wat::algebra::Blend ,x ,y 1 -1))
 ;; parameters and return are explicitly typed.
 ;; type-correctness of the EXPANSION is enforced by type-checking the expanded form
 ;; against the signatures of its constituent primitives (Blend, etc.).
@@ -360,29 +361,29 @@ Per FOUNDATION's "Cryptographic provenance" section, ASTs are signed. A `define`
 **3. Types enable static verification of stdlib compositions.**
 
 ```scheme
-(:wat/core/define (:wat/std/Chain (holons :List<Holon>) -> :Holon)
-  (:wat/algebra/Bundle (pairwise-map :wat/std/Then holons)))
+(:wat::core::define (:wat::std::Chain (holons :Vec<Holon>) -> :Holon)
+  (:wat::algebra::Bundle (pairwise-map :wat::std::Then holons)))
 ```
 
 The startup verifier can check:
-- `holons` has type `:List<Holon>`
-- `pairwise-map` returns `:List<Holon>` given `:wat/std/Then` (of type `:fn(Holon,Holon)->Holon`) and a `:List<Holon>`
-- `Bundle` takes `:List<Holon>` and returns `:Holon`
+- `holons` has type `:Vec<Holon>`
+- `pairwise-map` returns `:Vec<Holon>` given `:wat::std::Then` (of type `:fn(Holon,Holon)->Holon`) and a `:Vec<Holon>`
+- `Bundle` takes `:Vec<Holon>` and returns `:Holon`
 - Body returns `:Holon`, matching the declared return
 
 Without types, these checks defer to runtime or never happen. With types, stdlib correctness is mechanically verifiable at startup.
 
 **4. Extension via user-defined types.**
 
-Users author their own types with the same naming discipline as functions. `:alice/types/Price`, `:project/market/Candle`. The type system is open — any user can add types, and collisions are prevented by the keyword-path discipline plus startup verification (two structs with the same keyword-path name in the compile-time sources is a build error).
+Users author their own types with the same naming discipline as functions. `:alice::types::Price`, `:project::market::Candle`. The type system is open — any user can add types, and collisions are prevented by the keyword-path discipline plus startup verification (two structs with the same keyword-path name in the compile-time sources is a build error).
 
 User types are usable anywhere built-in types are used:
 
 ```scheme
-(:wat/core/define (:my/trading/analyze (c :project/market/Candle) -> :Holon)
-  (:wat/std/Sequential
-    (:wat/core/list (:wat/algebra/Thermometer (:close c) 0 100)
-          (:wat/algebra/Thermometer (:volume c) 0 10000))))
+(:wat::core::define (:my::trading::analyze (c :project::market::Candle) -> :Holon)
+  (:wat::std::Sequential
+    (:wat::core::vec (:wat::algebra::Thermometer (:close c) 0 100)
+          (:wat::algebra::Thermometer (:volume c) 0 10000))))
 ```
 
 ## Arguments For
@@ -393,18 +394,18 @@ The built-in types correspond to the algebra's actual kinds. There is no specula
 
 **2. Keyword-path types match the naming discipline.**
 
-Just as functions are keywords (`:wat/std/Difference`), user types are keywords (`:alice/types/Price`, `:project/market/Candle`). Same naming mechanism, same namespace discipline. Users learn one convention, use it everywhere.
+Just as functions are keywords (`:wat::std::Difference`), user types are keywords (`:alice::types::Price`, `:project::market::Candle`). Same naming mechanism, same namespace discipline. Users learn one convention, use it everywhere.
 
 Built-in types use shorthand within their own namespace: `:Holon` is shorthand for `:wat/types/Holon` when context makes it unambiguous.
 
 **3. Parametric types handle the essential cases.**
 
-Generics (`:List<T>`, `:HashMap<K,V>`, `:fn(args)->return`) cover the recurring need for higher-order stdlib and container operations. More elaborate generics (bounds, existentials, higher-kinded types) are out of scope — the target is "enough type system to dispatch correctly and map cleanly to Rust," not a full algebraic type theory.
+Generics (`:Vec<T>`, `:HashMap<K,V>`, `:fn(args)->return`) cover the recurring need for higher-order stdlib and container operations. More elaborate generics (bounds, existentials, higher-kinded types) are out of scope — the target is "enough type system to dispatch correctly and map cleanly to Rust," not a full algebraic type theory.
 
 **4. Structural typing for structural aliases; nominal for struct/enum/newtype.**
 
 - `(typealias :CandleScores :HashMap<Atom,f64>)` is a structural alias, not a nominal type. `:CandleScores` and `:HashMap<Atom,f64>` are THE SAME type — interchangeable in signatures. Useful for "some shape that I'm naming."
-- `(struct :project/market/Candle ...)` is nominal. A value is a Candle if and only if it was constructed as one. Distinct from other structs with identical fields.
+- `(struct :project::market::Candle ...)` is nominal. A value is a Candle if and only if it was constructed as one. Distinct from other structs with identical fields.
 - `(enum :Direction ...)` is nominal. Only values constructed via the enum's constructors inhabit the type.
 - `(newtype :TradeId :u64)` is nominal. A `:TradeId` is NOT a `:u64` even though they share representation.
 
@@ -436,7 +437,7 @@ This proposal REQUIRES explicit types on `define` and `lambda` parameters. Some 
 
 **4. Generics complexity.**
 
-Parametric types need generic resolution: when `map` receives a `:List<Holon>` and a `:fn(Holon)->f64`, the result is `:List<f64>` (the function's return type substituted for `T`). This is basic unification.
+Parametric types need generic resolution: when `map` receives a `:Vec<Holon>` and a `:fn(Holon)->f64`, the result is `:Vec<f64>` (the function's return type substituted for `T`). This is basic unification.
 
 **Counter:** yes, but bounded. The wat language doesn't need variance, higher-kinded types, or other advanced features. Simple substitution suffices for the stdlib's needs.
 
@@ -474,7 +475,7 @@ If types matched at startup verification, the body is guaranteed to return the d
 Primitives like `Bundle` are built into the wat-vm with their signatures hardcoded:
 
 ```
-Bundle:      :fn(:List<Holon>)->Holon
+Bundle:      :fn(:Vec<Holon>)->Holon
 Bind:        :fn(Holon,Holon)->Holon
 Blend:       :fn(Holon,Holon,f64,f64)->Holon
 Permute:     :fn(Holon,i32)->Holon
@@ -508,8 +509,8 @@ Add type AST:
 
 ```rust
 pub enum TypeAST {
-    Named(Keyword),                          // :Holon, :f64, :alice/types/Price
-    Parametric {                             // :List<Holon>, :HashMap<K,V>
+    Named(Keyword),                          // :Holon, :f64, :alice::types::Price
+    Parametric {                             // :Vec<Holon>, :HashMap<K,V>
         constructor: Keyword,
         args: Vec<TypeAST>,
     },
@@ -578,7 +579,7 @@ Estimated ~500-800 lines of Rust for:
 
 **`struct`, `enum`, `newtype`, `typealias` forms:**
 
-New language-core forms (alongside `define` and `lambda`), all compile-time-registering. Build pipeline extracts them from wat files loaded via `(:wat/core/load! ...)`, generates Rust code, compiles. See FOUNDATION's "All loading happens at startup" section for the pipeline description.
+New language-core forms (alongside `define` and `lambda`), all compile-time-registering. Build pipeline extracts them from wat files loaded via `(:wat::core::load! ...)`, generates Rust code, compiles. See FOUNDATION's "All loading happens at startup" section for the pipeline description.
 
 ## Questions for Designers
 
@@ -602,4 +603,4 @@ New language-core forms (alongside `define` and `lambda`), all compile-time-regi
 
 10. **First-class types.** Types as keyword values can be passed around. Does this enable type-reflecting code? Probably, though not the focus of this proposal. Example: `(type-of x)` returns the keyword `:Holon`. Useful for introspection but out of scope for language core.
 
-11. **Keyword-path in type names with generic parameters — RESOLVED.** Rust-surface angle-bracket keyword syntax, single token, no internal spaces, no internal colons. The `:` is Lisp's quote — one at the start; everything else is inside. `:wat/std/Container<T>` at declaration, `:wat/std/Container<Holon>` at use. Function types use `:fn(args)->return` with parens and arrow (Rust's native syntax). The tokenizer tracks PAREN depth only (`()` is the only structural bracket in wat; `<` and `>` are plain chars that appear in parametric type keywords). A keyword ends at whitespace at paren-depth 0 or at an unmatched `)`.
+11. **Keyword-path in type names with generic parameters — RESOLVED.** Rust-surface angle-bracket keyword syntax, single token, no internal spaces, no internal colons. The `:` is Lisp's quote — one at the start; everything else is inside. `:wat::std::Container<T>` at declaration, `:wat::std::Container<Holon>` at use. Function types use `:fn(args)->return` with parens and arrow (Rust's native syntax). The tokenizer tracks PAREN depth only (`()` is the only structural bracket in wat; `<` and `>` are plain chars that appear in parametric type keywords). A keyword ends at whitespace at paren-depth 0 or at an unmatched `)`.

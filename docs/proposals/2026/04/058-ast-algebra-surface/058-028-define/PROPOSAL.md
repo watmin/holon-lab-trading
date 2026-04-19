@@ -16,13 +16,13 @@
 ### Shape
 
 ```scheme
-(:wat/core/define (:namespace/function-name (param1 :Type1) (param2 :Type2) ... -> :ReturnType)
+(:wat::core::define (:namespace::function-name (param1 :Type1) (param2 :Type2) ... -> :ReturnType)
   body-expression)
 ```
 
 Four positions:
 
-1. **Name** — a keyword-path value (`:watmin/hello-world`, `:wat/std/Difference`, `:alice/math/clamp`)
+1. **Name** — a keyword-path value (`:watmin::hello-world`, `:wat::std::Difference`, `:alice::math::clamp`)
 2. **Parameter list** — `(name :Type)` pairs; name is a bare symbol, type is a keyword
 3. **Return type** — `-> :Type` inside the parameter list's closing paren
 4. **Body** — an expression that evaluates to the return type
@@ -30,11 +30,11 @@ Four positions:
 ### Example
 
 ```scheme
-(:wat/core/define (:wat/std/Difference (a :Holon) (b :Holon) -> :Holon)
-  (:wat/algebra/Blend a b 1 -1))
+(:wat::core::define (:wat::std::Difference (a :Holon) (b :Holon) -> :Holon)
+  (:wat::algebra::Blend a b 1 -1))
 ```
 
-Readable as: "define the function `:wat/std/Difference`, which takes two Holons named `a` and `b` and returns a Holon, by evaluating `(Blend a b 1 -1)`."
+Readable as: "define the function `:wat::std::Difference`, which takes two Holons named `a` and `b` and returns a Holon, by evaluating `(Blend a b 1 -1)`."
 
 ### AST shape
 
@@ -48,7 +48,7 @@ Readable as: "define the function `:wat/std/Difference`, which takes two Holons 
 
 ```rust
 pub struct Define {
-    name: Keyword,                       // :namespace/func-name
+    name: Keyword,                       // :namespace::func-name
     params: Vec<(Symbol, TypeAST)>,      // typed parameters
     return_type: TypeAST,
     body: Arc<WatAST>,
@@ -65,9 +65,9 @@ Registered by name in the startup symbol table. After startup completes, the sym
 Every stdlib proposal in 058 uses `define` in its expansion:
 
 ```scheme
-(:wat/core/define (:wat/std/Difference a b) (:wat/algebra/Blend a b 1 -1))
-(:wat/core/define (:wat/std/Concurrent xs) (:wat/algebra/Bundle xs))
-(:wat/core/define (:wat/std/Chain xs) (:wat/algebra/Bundle (pairwise-map :wat/std/Then xs)))
+(:wat::core::define (:wat::std::Difference a b) (:wat::algebra::Blend a b 1 -1))
+(:wat::core::define (:wat::std::Concurrent xs) (:wat::algebra::Bundle xs))
+(:wat::core::define (:wat::std::Chain xs) (:wat::algebra::Bundle (pairwise-map :wat::std::Then xs)))
 ```
 
 Without a `define` primitive in the wat language, these are theoretical compositions, not runnable definitions.
@@ -88,9 +88,9 @@ Type annotations are also part of the cryptographic signature. The hash of a `de
 
 **3. Keyword-path names give namespacing without a namespace mechanism.**
 
-`:wat/std/Difference` and `:alice/math/clamp` are keyword literals. Per FOUNDATION's naming-convention guidance (no namespace MECHANISM; slashes are just characters), these are distinctive names that avoid collision by discipline.
+`:wat::std::Difference` and `:alice::math::clamp` are keyword literals. Per FOUNDATION's naming-convention guidance (no namespace MECHANISM; slashes are just characters), these are distinctive names that avoid collision by discipline.
 
-Anyone can claim any prefix; `:bob/math/clamp` coexists with `:alice/math/clamp` in the same program (or fails at startup if both load the same name). The collision detection runs at startup and halts the wat-vm if ambiguity is found.
+Anyone can claim any prefix; `:bob::math/clamp` coexists with `:alice::math::clamp` in the same program (or fails at startup if both load the same name). The collision detection runs at startup and halts the wat-vm if ambiguity is found.
 
 ## Arguments For
 
@@ -98,7 +98,7 @@ Anyone can claim any prefix; `:bob/math/clamp` coexists with `:alice/math/clamp`
 
 Current wat LANGUAGE.md already lists `define` as a host Lisp form. This proposal extends the existing form:
 - Old: `(define (name args) body)` with optional type hints
-- New: `(define (:namespace/name (arg :Type) ... -> :ReturnType) body)` with required types and keyword-path names
+- New: `(define (:namespace::name (arg :Type) ... -> :ReturnType) body)` with required types and keyword-path names
 
 Backwards-incompatible in principle, but the pre-058 wat has no deployed stdlib authored with the old syntax — this is the polish pass before stdlib gets written.
 
@@ -123,18 +123,18 @@ With `define` available:
 
 ```
 wat/std/blends.wat:
-  (define (:wat/std/Difference (a :Holon) (b :Holon) -> :Holon)
+  (define (:wat::std::Difference (a :Holon) (b :Holon) -> :Holon)
     (Blend a b 1 -1))
-  (define (:wat/std/Amplify (x :Holon) (y :Holon) (s :f64) -> :Holon)
+  (define (:wat::std::Amplify (x :Holon) (y :Holon) (s :f64) -> :Holon)
     (Blend x y 1 s))
-  (define (:wat/std/Subtract (x :Holon) (y :Holon) -> :Holon)
+  (define (:wat::std::Subtract (x :Holon) (y :Holon) -> :Holon)
     (Blend x y 1 -1))
 
 wat/std/sequences.wat:
-  (define (:wat/std/Then (a :Holon) (b :Holon) -> :Holon)
+  (define (:wat::std::Then (a :Holon) (b :Holon) -> :Holon)
     (Bundle (list a (Permute b 1))))
-  (define (:wat/std/Chain (holons :List<Holon>) -> :Holon)
-    (Bundle (pairwise-map :wat/std/Then holons)))
+  (define (:wat::std::Chain (holons :Vec<Holon>) -> :Holon)
+    (Bundle (pairwise-map :wat::std::Then holons)))
 ```
 
 The wat stdlib becomes real, editable, inspectable files.
@@ -149,13 +149,13 @@ Requiring types on every `define` adds verbosity. Untyped `(define (name args) b
 
 **2. Namespacing is by discipline, not enforcement.**
 
-Nothing prevents a user from writing `(define (:wat/std/Difference ...) ...)` in their own code, duplicating the project stdlib name.
+Nothing prevents a user from writing `(define (:wat::std::Difference ...) ...)` in their own code, duplicating the project stdlib name.
 
 **Counter:** this is the same tradeoff FOUNDATION already accepts — no namespace mechanism, just discipline. Collisions halt startup (name collision is a boot error in Model A), so silent shadowing is impossible. The programmer sees the error and reconciles at the source level.
 
 **3. Generic types.**
 
-This proposal uses concrete types (`:Holon`, `:Atom`, `:f64`). For higher-order stdlib (`map`, `reduce`, `filter`), generics are needed: `(define (:wat/std/map (f :fn(T)->U) (xs :List<T>) -> :List<U>) ...)`.
+This proposal uses concrete types (`:Holon`, `:Atom`, `:f64`). For higher-order stdlib (`map`, `reduce`, `filter`), generics are needed: `(define (:wat::std::map (f :fn(T)->U) (xs :Vec<T>) -> :Vec<U>) ...)`.
 
 **Counter:** generics are part of 058-030-types. This proposal uses concrete types initially; generics layer on without changing `define`'s shape.
 
@@ -226,7 +226,7 @@ Estimated ~200-300 lines of Rust (evaluator path, symbol table, type-checker sca
 
 **wat stdlib bootstrap:**
 
-Once `define` is implemented (alongside `lambda` per 058-029 and types per 058-030), the stdlib proposals become real wat files loaded via `(:wat/core/load! ...)` at startup.
+Once `define` is implemented (alongside `lambda` per 058-029 and types per 058-030), the stdlib proposals become real wat files loaded via `(:wat::core::load! ...)` at startup.
 
 ## Questions for Designers
 
@@ -236,7 +236,7 @@ Once `define` is implemented (alongside `lambda` per 058-029 and types per 058-0
 
 3. **Required-ness of parameter types.** Same question. Recommendation: keep required for the same reason.
 
-4. **Forward references.** Can `:wat/std/Chain` reference `:wat/std/Then` before Then is defined (e.g., in a single load pass)? Since all loading happens at startup before the symbol table freezes, forward references are natural: the resolver runs after all parsing but before type-checking. Recommendation: support forward references within the startup phase; they do not complicate Model A.
+4. **Forward references.** Can `:wat::std::Chain` reference `:wat::std::Then` before Then is defined (e.g., in a single load pass)? Since all loading happens at startup before the symbol table freezes, forward references are natural: the resolver runs after all parsing but before type-checking. Recommendation: support forward references within the startup phase; they do not complicate Model A.
 
 5. **Metadata / documentation strings.** Clojure's `defn` supports docstrings and metadata. Worth including in `define`'s AST shape? Recommendation: yes — optional metadata field. Docstrings help readers; metadata supports tooling.
 
@@ -245,8 +245,8 @@ Once `define` is implemented (alongside `lambda` per 058-029 and types per 058-0
 7. **First wat program.** From BOOK's "The first program" section:
 
    ```scheme
-   (:wat/core/define (:watmin/hello-world (name :Atom) -> :Holon)
-     (:wat/std/Sequential (:wat/core/list (:wat/algebra/Atom "hello") name)))
+   (:wat::core::define (:watmin::hello-world (name :Atom) -> :Holon)
+     (:wat::std::Sequential (:wat::core::vec (:wat::algebra::Atom "hello") name)))
    ```
 
    This proposal specifies the `define` that makes that program runnable. The first program's execution waits on this proposal's implementation plus 058-029 and 058-030.

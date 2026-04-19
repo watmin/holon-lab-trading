@@ -28,8 +28,8 @@ This proposal now argues `Difference` as a STDLIB form — a wat function that e
 A wat stdlib function that produces the element-wise difference of two holons:
 
 ```scheme
-(:wat/core/define (:wat/std/Difference a b)
-  (:wat/algebra/Blend a b 1 -1))
+(:wat::core::define (:wat::std::Difference a b)
+  (:wat::algebra::Blend a b 1 -1))
 ;; Expands to: threshold(1·a + (-1)·b) = threshold(a - b)
 ```
 
@@ -41,13 +41,13 @@ The delta from `b` to `a`. Dimensions where `a` is +1 and `b` is -1 (or vice ver
 
 ```scheme
 ;; "What changed between two holons?"
-(:wat/std/Difference holon-new holon-old)
+(:wat::std::Difference holon-new holon-old)
 
 ;; "What is anomalous in a relative to baseline?"
-(:wat/std/Difference observed baseline)
+(:wat::std::Difference observed baseline)
 
 ;; "Feature extraction via contrast:"
-(:wat/std/Difference candle-now candle-previous)
+(:wat::std::Difference candle-now candle-previous)
 ```
 
 ## Why Stdlib Earns the Name
@@ -69,7 +69,7 @@ Across vocab modules, distinctions between "current vs prior," "observed vs base
 **2. The stdlib form is one line.**
 
 ```scheme
-(:wat/core/define (:wat/std/Difference a b) (:wat/algebra/Blend a b 1 -1))
+(:wat::core::define (:wat::std::Difference a b) (:wat::algebra::Blend a b 1 -1))
 ```
 
 No implementation complexity. Just a named composition over Blend.
@@ -84,10 +84,10 @@ Without `Difference`, Analogy's body is `(Bundle (list c (Blend b a 1 -1)))` —
 
 ```scheme
 ;; "how different is x from y, in the direction of z?"
-(:wat/algebra/Resonance (:wat/std/Difference x y) z)
+(:wat::algebra::Resonance (:wat::std::Difference x y) z)
 
 ;; "the delta, amplified:"
-(:wat/std/Amplify (:wat/std/Difference x y) reference strength)
+(:wat::std::Amplify (:wat::std::Difference x y) reference strength)
 ```
 
 Stdlib idioms compose with each other naturally.
@@ -159,8 +159,8 @@ Yes — `(Blend a b 1 -1)`. The proposal argues that the named form improves rea
 **wat stdlib addition:**
 
 ```scheme
-(:wat/core/define (:wat/std/Difference a b)
-  (:wat/algebra/Blend a b 1 -1))
+(:wat::core::define (:wat::std::Difference a b)
+  (:wat::algebra::Blend a b 1 -1))
 ```
 
 Lives in whichever wat file holds the stdlib (likely `wat/std/holons.wat` or similar — see open question 1 in FOUNDATION.md).

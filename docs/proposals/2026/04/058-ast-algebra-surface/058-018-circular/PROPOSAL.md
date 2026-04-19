@@ -26,19 +26,19 @@
 **Macro expansion** (after Blend acceptance with Option B independent weights):
 
 ```scheme
-(:wat/core/defmacro (:wat/std/Circular (value :AST) (period :AST) -> :AST)
-  `(:wat/core/let ((theta (:wat/core/* 2 :wat/std/math/pi
-                                       (:wat/core// ,value ,period))))
-     (:wat/algebra/Blend (:wat/algebra/Atom :wat/std/circular-cos-basis)
-                          (:wat/algebra/Atom :wat/std/circular-sin-basis)
-                          (:wat/std/math/cos theta)
-                          (:wat/std/math/sin theta))))
+(:wat::core::defmacro (:wat::std::Circular (value :AST) (period :AST) -> :AST)
+  `(:wat::core::let ((theta (:wat::core::* 2 :wat::std::math::pi
+                                       (:wat::core::/ ,value ,period))))
+     (:wat::algebra::Blend (:wat::algebra::Atom :wat::std::circular-cos-basis)
+                          (:wat::algebra::Atom :wat::std::circular-sin-basis)
+                          (:wat::std::math::cos theta)
+                          (:wat::std::math::sin theta))))
 ```
 
-Two reserved basis atoms (`:wat/std/circular-cos-basis`, `:wat/std/circular-sin-basis`) plus `cos(θ)` and `sin(θ)` weights produce the 2D cyclic encoding. This is the proof that Blend needs Option B — `cos(π/4) + sin(π/4) ≈ 1.414 ≠ 1`, so Option A's convex constraint cannot express it.
+Two reserved basis atoms (`:wat::std::circular-cos-basis`, `:wat::std::circular-sin-basis`) plus `cos(θ)` and `sin(θ)` weights produce the 2D cyclic encoding. This is the proof that Blend needs Option B — `cos(π/4) + sin(π/4) ≈ 1.414 ≠ 1`, so Option A's convex constraint cannot express it.
 
 **Questions for Designers — all resolved:**
-- Q1 (`sin`/`cos`/`pi` in stdlib): RESOLVED — `:wat/std/math/sin`, `:wat/std/math/cos`, `:wat/std/math/pi` are stdlib (single Rust methods / constant).
+- Q1 (`sin`/`cos`/`pi` in stdlib): RESOLVED — `:wat::std::math::sin`, `:wat::std::math::cos`, `:wat::std::math::pi` are stdlib (single Rust methods / constant).
 - Q2 (scale argument shape: period vs `(min, max)`): keep `period` single argument — cyclic semantics wrap naturally over `[0, period)`; the `(min, max)` shape only makes sense for monotone-value encoders like Linear/Log. Per-encoder shape is honest.
 - Q3 (Blend Option B verification): RESOLVED — 058-002 ACCEPTED as Option B with negative weights, which is exactly what Circular needs.
 - Q4 (angle conventions): standard radians, counterclockwise from 0, `θ = 2π · value / period`.
@@ -69,17 +69,17 @@ With Blend as a pivotal core form (058-002) — and specifically Option B (two I
 ### Stdlib definition
 
 ```scheme
-(:wat/core/defmacro (:wat/std/Circular (value :AST) (period :AST) -> :AST)
-  `(:wat/core/let* ((angle   (:wat/core/* 2 pi (:wat/core// ,value ,period)))
+(:wat::core::defmacro (:wat::std::Circular (value :AST) (period :AST) -> :AST)
+  `(:wat::core::let* ((angle   (:wat::core::* 2 pi (:wat::core::/ ,value ,period)))
           (w-cos   (cos angle))                  ;; can be negative
           (w-sin   (sin angle)))                 ;; can be negative
-     (:wat/algebra/Blend (:wat/algebra/Atom :wat/std/circular-cos-basis)
-            (:wat/algebra/Atom :wat/std/circular-sin-basis)
+     (:wat::algebra::Blend (:wat::algebra::Atom :wat::std::circular-cos-basis)
+            (:wat::algebra::Atom :wat::std::circular-sin-basis)
             w-cos
             w-sin)))
 ```
 
-`angle` maps `value` to a position on the unit circle. `cos angle` and `sin angle` are the weights — they span a full period as `value` cycles. The two Atoms `:wat/std/circular-cos-basis` and `:wat/std/circular-sin-basis` are fixed reference vectors (seeded by the VectorManager at startup) that span the 2D basis of the circle; Blend's two independent weights let Circular project onto any point on that basis.
+`angle` maps `value` to a position on the unit circle. `cos angle` and `sin angle` are the weights — they span a full period as `value` cycles. The two Atoms `:wat::std::circular-cos-basis` and `:wat::std::circular-sin-basis` are fixed reference vectors (seeded by the VectorManager at startup) that span the 2D basis of the circle; Blend's two independent weights let Circular project onto any point on that basis.
 
 Expansion happens at parse time (per 058-031-defmacro), so `hash(AST)` sees only the canonical `(let* ... (Blend (Atom :...) (Atom :...) w-cos w-sin))` form — no `Circular` call node survives into the hashed AST.
 
@@ -181,10 +181,10 @@ Delete the Circular encoder match arm (~15-20 lines). Macro expansion is handled
 **wat stdlib addition** — `wat/std/scalars.wat`:
 
 ```scheme
-(:wat/core/defmacro (:wat/std/Circular (low :AST) (high :AST) (value :AST) (scale :AST) -> :AST)
-  `(:wat/core/let* ((period (:wat/core/first ,scale))
-          (angle (:wat/core/* 2 pi (:wat/core// ,value period))))
-     (:wat/algebra/Blend (:wat/algebra/Thermometer ,low dim) (:wat/algebra/Thermometer ,high dim) (cos angle) (sin angle))))
+(:wat::core::defmacro (:wat::std::Circular (low :AST) (high :AST) (value :AST) (scale :AST) -> :AST)
+  `(:wat::core::let* ((period (:wat::core::first ,scale))
+          (angle (:wat::core::* 2 pi (:wat::core::/ ,value period))))
+     (:wat::algebra::Blend (:wat::algebra::Thermometer ,low dim) (:wat::algebra::Thermometer ,high dim) (cos angle) (sin angle))))
 ```
 
 Registered at parse time (per 058-031-defmacro): every `(Circular ...)` invocation is rewritten to the canonical `let* + Blend-over-Thermometers` form before hashing.

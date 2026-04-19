@@ -28,10 +28,10 @@ The sections below were written before the 2026-04-18 container-constructor rena
 A wat stdlib function that constructs an encoded dictionary from a list of key-value pairs:
 
 ```scheme
-(:wat/core/define (:wat/std/HashMap (pairs :List<Pair<Holon,Holon>>) -> :Holon)
-  (:wat/algebra/Bundle
-    (:wat/core/map (:wat/core/lambda ((pair :Pair<Holon,Holon>) -> :Holon)
-           (:wat/algebra/Bind (:wat/core/first pair) (:wat/core/second pair)))
+(:wat::core::define (:wat::std::HashMap (pairs :Vec<Pair<Holon,Holon>>) -> :Holon)
+  (:wat::algebra::Bundle
+    (:wat::core::map (:wat::core::lambda ((pair :(Holon,Holon)) -> :Holon)
+           (:wat::algebra::Bind (:wat::core::first pair) (:wat::core::second pair)))
          pairs)))
 ```
 
@@ -42,21 +42,21 @@ Expands to a Bundle of `Bind(key, value)` for each pair — classical VSA role-f
 `HashMap` encodes a dictionary as a Holon. Each key-value pair is represented by `Bind(key, value)`, and all pairs are superposed via Bundle. The runtime backs the Holon with Rust's `std::HashMap` for efficient O(1) lookups:
 
 ```scheme
-(:wat/core/define :my/app/record
-  (:wat/std/HashMap (:wat/core/list (:wat/core/list (:wat/algebra/Atom :color) red-value)
-                 (:wat/core/list (:wat/algebra/Atom :shape) circle-value)
-                 (:wat/core/list (:wat/algebra/Atom :size)  large-value))))
+(:wat::core::define :my::app::record
+  (:wat::std::HashMap (:wat::core::vec (:wat::core::vec (:wat::algebra::Atom :color) red-value)
+                 (:wat::core::vec (:wat::algebra::Atom :shape) circle-value)
+                 (:wat::core::vec (:wat::algebra::Atom :size)  large-value))))
 
 ;; Retrieval: get the value for :color
-(:wat/core/define :my/app/recovered-color
-  (:wat/std/get :my/app/record (:wat/algebra/Atom :color)))
+(:wat::core::define :my::app::recovered-color
+  (:wat::std::get :my::app::record (:wat::algebra::Atom :color)))
 ;; → (Some red-value)  [the value AST, not a noisy decode]
 ```
 
 ### The `get` accessor — unified across HashMap, Vec, HashSet
 
 ```scheme
-(:wat/core/define (:wat/std/get (container :Holon) (locator :Holon) -> :Option<Holon>)
+(:wat::core::define (:wat::std::get (container :Holon) (locator :Holon) -> :Option<Holon>)
   ;; Structural lookup through the container's efficient Rust backing.
   ;; For HashMap: hash-based lookup against the key, O(1) average.
   ;; Returns (Some value) on hit, :None on miss.
@@ -88,10 +88,10 @@ The structure `Bundle(Bind(k1, v1), Bind(k2, v2), ...)` IS the classical VSA dic
 A vocab module producing structured observations:
 
 ```scheme
-(:wat/std/HashMap (:wat/core/list
-  (:wat/core/list :price price-value)
-  (:wat/core/list :volume volume-value)
-  (:wat/core/list :timestamp time-value)))
+(:wat::std::HashMap (:wat::core::vec
+  (:wat::core::vec :price price-value)
+  (:wat::core::vec :volume volume-value)
+  (:wat::core::vec :timestamp time-value)))
 ```
 
 Reads as "build a record with these fields." Without `Map`, the reader must recognize the Bundle-of-Binds pattern and infer the dictionary intent.
@@ -178,14 +178,14 @@ Yes — via explicit Bundle/Bind composition. Named form earns its place via rea
 **wat stdlib addition** — `wat/std/structures.wat` (or similar):
 
 ```scheme
-(:wat/core/define (:wat/std/HashMap kv-pairs)
-  (:wat/algebra/Bundle
-    (:wat/core/map (:wat/core/lambda (kv) (:wat/algebra/Bind (:wat/core/first kv) (:wat/core/second kv))) kv-pairs)))
+(:wat::core::define (:wat::std::HashMap kv-pairs)
+  (:wat::algebra::Bundle
+    (:wat::core::map (:wat::core::lambda (kv) (:wat::algebra::Bind (:wat::core::first kv) (:wat::core::second kv))) kv-pairs)))
 
-(:wat/core/define (:wat/std/get map-holon key candidates)
+(:wat::core::define (:wat::std::get map-holon key candidates)
   (cleanup (Unbind map-holon key) candidates))
 
-(:wat/core/define (:wat/std/get-raw map-holon key)
+(:wat::core::define (:wat::std::get-raw map-holon key)
   (Unbind map-holon key))
 ```
 

@@ -44,7 +44,7 @@ The question for Round 3: **does the parametric structure compose cleanly with t
 
 ### Algebra core shrinks 7 → 6
 
-**058-005 Orthogonalize** reframed to stdlib macros `Reject` + `Project` over Blend + a new `:wat/algebra/dot` measurement primitive. The datamancer introduces a scalar-returning measurement tier alongside HolonAST-producing core variants. Categorically: `cosine : :Holon × :Holon → :f64` and `dot : :Holon × :Holon → :f64` are bilinear measurements, orthogonal to the vector-producing HolonAST variants. This is a new categorical tier.
+**058-005 Orthogonalize** reframed to stdlib macros `Reject` + `Project` over Blend + a new `:wat::algebra::dot` measurement primitive. The datamancer introduces a scalar-returning measurement tier alongside HolonAST-producing core variants. Categorically: `cosine : :Holon × :Holon → :f64` and `dot : :Holon × :Holon → :f64` are bilinear measurements, orthogonal to the vector-producing HolonAST variants. This is a new categorical tier.
 
 ### The rejection pattern
 
@@ -90,7 +90,7 @@ The dominant questions you'll likely want to work through:
 - **The similarity-measurement frame as the answer to Round-2 associativity**. Either this closes the concern or it doesn't. Judge.
 - **Parametric Atom and the coproduct structure**. Is hash-over-EDN(T) a functor of T? What's the invariance claim when T is itself a Holon? Is there a categorical soundness problem in the recursion?
 - **Blend Option B with negative weights**. Earlier Round-2 flagged Option B as a natural linear-map generalization of Bundle's monoid. Does keeping Bundle-as-monoid and Blend-as-linear-map cleanly (no variadic Blend) preserve the canonical MAP set?
-- **`:wat/algebra/dot` and the measurement tier**. Does adding scalar-returning operations as a parallel tier preserve the algebra's independence, or does it couple vector-producing forms to scalar computation?
+- **`:wat::algebra::dot` and the measurement tier**. Does adding scalar-returning operations as a parallel tier preserve the algebra's independence, or does it couple vector-producing forms to scalar computation?
 - **The REJECTED ten** — Resonance, ConditionalBind, Flip, etc. — do the rejections hold categorically? Or is the algebra missing an operation it needs for composition at some depth?
 - **Sequential bind-chain semantics** — the compound-vector vs superposition choice matters for Ngram composition. Does the bind-chain form preserve the operations Ngram performs against it?
 

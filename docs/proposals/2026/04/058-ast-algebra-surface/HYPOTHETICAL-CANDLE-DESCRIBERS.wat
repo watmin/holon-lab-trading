@@ -19,7 +19,7 @@
 ;; TYPES (loaded via load-types at startup)
 ;; ------------------------------------------------------------
 
-(struct :demo/market/Candle
+(struct :demo::market/Candle
   (open   :f64)
   (high   :f64)
   (low    :f64)
@@ -35,7 +35,7 @@
 ;; ------------------------------------------------------------
 
 ;; Doji — open and close are nearly equal.
-(define (:demo/desc/doji (c :demo/market/Candle) -> :Holon)
+(define (:demo::desc::doji (c :demo::market/Candle) -> :Holon)
   (if (< (abs (- (:open c) (:close c)))
          (* 0.001 (:close c)))
       (Sequential
@@ -45,7 +45,7 @@
       (Atom :null)))
 
 ;; Hammer — long lower wick, small body near the high.
-(define (:demo/desc/hammer (c :demo/market/Candle) -> :Holon)
+(define (:demo::desc::hammer (c :demo::market/Candle) -> :Holon)
   (let ((body       (abs (- (:open c) (:close c))))
         (lower-wick (- (min (:open c) (:close c)) (:low c))))
     (if (> lower-wick (* 2 body))
@@ -57,7 +57,7 @@
         (Atom :null))))
 
 ;; Strong bullish — close noticeably above open, high volume.
-(define (:demo/desc/strong-bullish (c :demo/market/Candle) -> :Holon)
+(define (:demo::desc::strong-bullish (c :demo::market/Candle) -> :Holon)
   (if (and (> (:close c) (* 1.02 (:open c)))
            (> (:volume c) 1000))
       (Sequential
@@ -70,7 +70,7 @@
       (Atom :null)))
 
 ;; Quiet day — tight body, low volume.
-(define (:demo/desc/quiet-day (c :demo/market/Candle) -> :Holon)
+(define (:demo::desc::quiet-day (c :demo::market/Candle) -> :Holon)
   (if (and (< (abs (- (:open c) (:close c)))
               (* 0.005 (:close c)))
            (< (:volume c) 100))
@@ -87,7 +87,7 @@
 ;; measure describers against.
 ;; ------------------------------------------------------------
 
-(define (:demo/encode-candle (c :demo/market/Candle) -> :Holon)
+(define (:demo::encode-candle (c :demo::market/Candle) -> :Holon)
   (Sequential
     (list (Bind (Atom :open)   (Thermometer (:open c)   0 100))
           (Bind (Atom :high)   (Thermometer (:high c)   0 100))
@@ -101,7 +101,7 @@
 ;; returned something other than (Atom :null).
 ;; ------------------------------------------------------------
 
-(define (:demo/alive? (t :Holon) -> :bool)
+(define (:demo::alive? (t :Holon) -> :bool)
   (not (equal-ast? t (Atom :null))))
 
 
@@ -115,10 +115,10 @@
 ;; cache serves repeated lookups.
 ;; ------------------------------------------------------------
 
-(define (:demo/score (describer-output :Holon)
+(define (:demo::score (describer-output :Holon)
                      (candle-holon     :Holon)
                      -> :f64)
-  (if (:demo/alive? describer-output)
+  (if (:demo::alive? describer-output)
       (cosine (encode describer-output)
               (encode candle-holon))
       0.0))
@@ -129,14 +129,14 @@
 ;; filter the dead, sort by score descending.
 ;; ------------------------------------------------------------
 
-(define (:demo/rank (c          :demo/market/Candle)
-                    (describers :List<fn(demo/market/Candle)->Holon>)
-                    -> :List<Pair<fn(demo/market/Candle)->Holon,f64>>)
-  (let ((ref    (:demo/encode-candle c))
-        (scored (map (lambda ((d :fn(demo/market/Candle)->Holon) -> :Pair<fn(demo/market/Candle)->Holon,f64>)
-                       (list d (:demo/score (d c) ref)))
+(define (:demo::rank (c          :demo::market/Candle)
+                    (describers :Vec<fn(demo::market::Candle)->Holon>)
+                    -> :Vec<(fn(demo::market::Candle)->Holon,f64)>)
+  (let ((ref    (:demo::encode-candle c))
+        (scored (map (lambda ((d :fn(demo::market::Candle)->Holon) -> :(fn(demo::market::Candle)->Holon,f64))
+                       (list d (:demo::score (d c) ref)))
                      describers))
-        (live   (filter (lambda ((pair :Pair<fn(demo/market/Candle)->Holon,f64>) -> :bool)
+        (live   (filter (lambda ((pair :(fn(demo::market::Candle)->Holon,f64)) -> :bool)
                           (> (second pair) 0.0))
                         scored)))
     (sort-by second live :descending? true)))
@@ -147,13 +147,13 @@
 ;; the describers, returns the best-matching one (if any).
 ;; ------------------------------------------------------------
 
-(define (:demo/on-candle (c :demo/market/Candle)
-                         -> :Option<fn(demo/market/Candle)->Holon>)
-  (let ((describers (list :demo/desc/doji
-                          :demo/desc/hammer
-                          :demo/desc/strong-bullish
-                          :demo/desc/quiet-day))
-        (ranked (:demo/rank c describers)))
+(define (:demo::on-candle (c :demo::market/Candle)
+                         -> :Option<fn(demo::market::Candle)->Holon>)
+  (let ((describers (list :demo::desc::doji
+                          :demo::desc::hammer
+                          :demo::desc::strong-bullish
+                          :demo::desc::quiet-day))
+        (ranked (:demo::rank c describers)))
     (if (empty? ranked)
         :None
         (Some (first (first ranked))))))
@@ -170,7 +170,7 @@
 ;;   close = 99.90
 ;;   volume = 2500
 ;;
-;; 1. (:demo/on-candle candle) invokes.
+;; 1. (:demo::on-candle candle) invokes.
 ;;
 ;; 2. Each describer is applied:
 ;;    - doji?          close - open = -0.10, threshold = 0.10.  EDGE CASE.
@@ -195,7 +195,7 @@
 ;;
 ;; 5. Ranked: hammer (0.42), doji (0.15). Best match: hammer.
 ;;
-;; 6. Return (Some :demo/desc/hammer).
+;; 6. Return (Some :demo::desc::hammer).
 ;;
 ;; ============================================================
 

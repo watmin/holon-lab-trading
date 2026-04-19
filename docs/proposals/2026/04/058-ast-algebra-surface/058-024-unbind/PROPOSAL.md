@@ -11,8 +11,8 @@
 > Userland may define it in their own namespace if decode-intent framing matters to their vocab:
 >
 > ```scheme
-> (:wat/core/defmacro (:my/vocab/Unbind (c :AST) (k :AST) -> :AST)
->   `(:wat/algebra/Bind ,c ,k))
+> (:wat::core::defmacro (:my::vocab::Unbind (c :AST) (k :AST) -> :AST)
+>   `(:wat::algebra::Bind ,c ,k))
 > ```
 >
 > Same mechanics. Users' namespace. Project stdlib stays lean.
@@ -30,8 +30,8 @@
 A wat stdlib macro (per 058-031-defmacro) that represents the INVERSE of a Bind operation — the decode direction of role-filler binding:
 
 ```scheme
-(:wat/core/defmacro (:wat/std/Unbind (c :AST) (k :AST) -> :AST)
-  `(:wat/algebra/Bind ,c ,k))
+(:wat::core::defmacro (:wat::std::Unbind (c :AST) (k :AST) -> :AST)
+  `(:wat::algebra::Bind ,c ,k))
 ```
 
 Identical math to Bind. The ONLY distinction is reader intent at source: Unbind communicates "I am decoding, extracting, recovering" rather than "I am binding, composing, encoding." Expansion happens at parse time, so `hash((Unbind c k)) = hash((Bind c k))` — the alias-collision concern from Beckman's finding #4 does not apply.
@@ -51,15 +51,15 @@ Typical usage:
 
 ```scheme
 ;; Encoding: bind each key to its value, bundle them
-(:wat/core/define :my/app/record
-  (:wat/algebra/Bundle (:wat/core/list
-    (:wat/algebra/Bind :color red)
-    (:wat/algebra/Bind :shape circle)
-    (:wat/algebra/Bind :size large))))
+(:wat::core::define :my::app::record
+  (:wat::algebra::Bundle (:wat::core::vec
+    (:wat::algebra::Bind :color red)
+    (:wat::algebra::Bind :shape circle)
+    (:wat::algebra::Bind :size large))))
 
 ;; Decoding: unbind by a known key, cleanup against candidate values
-(:wat/core/define :my/app/recovered-color
-  (cleanup (:wat/std/Unbind :my/app/record :color) color-vocabulary))
+(:wat::core::define :my::app::recovered-color
+  (cleanup (:wat::std::Unbind :my::app::record :color) color-vocabulary))
 ```
 
 Here `Unbind record :color` says "apply the `:color` key against the encoded record to decode a noisy version of `red`." Mechanically, this is `Bind(record, :color)` — but the intent is DECODE, not ENCODE.
@@ -89,15 +89,15 @@ Readers navigating between these contexts benefit from a name per context. Encod
 From 058-016-map:
 
 ```scheme
-(:wat/core/define (:wat/std/get map-holon key candidates)
-  (cleanup (:wat/std/Unbind map-holon key) candidates))
+(:wat::core::define (:wat::std::get map-holon key candidates)
+  (cleanup (:wat::std::Unbind map-holon key) candidates))
 ```
 
 Versus:
 
 ```scheme
-(:wat/core/define (:wat/std/get map-holon key candidates)
-  (cleanup (:wat/algebra/Bind map-holon key) candidates))  ; semantically confusing
+(:wat::core::define (:wat::std::get map-holon key candidates)
+  (cleanup (:wat::algebra::Bind map-holon key) candidates))  ; semantically confusing
 ```
 
 The first reads as "to get from a map, unbind the key and clean up." The second reads as "to get, bind the key to the map?" — which is backwards from the intent.
@@ -176,8 +176,8 @@ Yes — `(Bind c k)`. Named macro earns its place via reader clarity; the source
 **wat stdlib addition** — `wat/std/decode.wat` or `wat/std/bind.wat`:
 
 ```scheme
-(:wat/core/defmacro (:wat/std/Unbind (c :AST) (k :AST) -> :AST)
-  `(:wat/algebra/Bind ,c ,k))
+(:wat::core::defmacro (:wat::std::Unbind (c :AST) (k :AST) -> :AST)
+  `(:wat::algebra::Bind ,c ,k))
 ```
 
 Registered at parse time (per 058-031-defmacro): every `(Unbind c k)` invocation is rewritten to `(Bind c k)` before hashing.

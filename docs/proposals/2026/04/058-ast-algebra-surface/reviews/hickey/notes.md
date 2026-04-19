@@ -26,7 +26,7 @@
 
 7. **`deftype` with `:is-a` syntactic ambiguity (N4)** → RESOLVED via simplification. `deftype` gone entirely. Four distinct heads: `newtype` (nominal), `struct`, `enum`, `typealias` (structural). No `:is-a` keyword at all — nominal subtyping dropped; `:Holon` is an enum with variants pattern-matched. This is a stronger resolution than the three-heads split I suggested — they went further.
 
-8. **`:Any` polymorphism erosion (R1 hammock #5)** → RESOLVED. `:Any` dropped from grammar. Every case has principled replacement (`:Holon`, `:Union<T,U>`, parametric T, `:List<Pair<Holon,Vector>>`).
+8. **`:Any` polymorphism erosion (R1 hammock #5)** → RESOLVED. `:Any` dropped from grammar. Every case has principled replacement (`:Holon`, `:Union<T,U>`, parametric T, `:Vec<Pair<Holon,Vector>>`).
 
 9. **keyword-path naming as convention-dressed-as-mechanism** → PARTIALLY RESOLVED. Consolidated to one canonical policy section. BUT: parametric polymorphism was added (2026-04-18 "Parametric polymorphism as substrate"). This is new complexity and needs its own audit.
 
@@ -73,7 +73,7 @@ HOWEVER: the datamancer owns this. They've committed to the work, named the cost
 
 ### N7 (R3). `dot` as scalar-returning algebra primitive
 
-New primitive: `:wat/algebra/dot`. Sibling to cosine. `:Holon :Holon -> :f64`. Scalar-out, not Holon-out.
+New primitive: `:wat::algebra::dot`. Sibling to cosine. `:Holon :Holon -> :f64`. Scalar-out, not Holon-out.
 
 Introduced to support the Reject/Project stdlib macros (which need a computed Gram-Schmidt coefficient `(x·y)/(y·y)`).
 
@@ -85,7 +85,7 @@ Tier: FOUNDATION now names TWO categories — Holon-producing primitives (6 form
 
 **Verdict:** ACCEPT. The tier split is the honest naming of what's already implicit. Not a new thing — a previously-implicit thing made explicit.
 
-Small nit: `dot` should probably be read as `:wat/algebra/dot` everywhere. Let me grep for bare references... seems consistent.
+Small nit: `dot` should probably be read as `:wat::algebra::dot` everywhere. Let me grep for bare references... seems consistent.
 
 ### N8 (R3). Algebra core shrinks to 6 forms
 
@@ -124,7 +124,7 @@ BUT: the alternative (land algebra first, kernel later) would leave algebra unru
 
 ### N10 (R3). Programs-are-userland + Console/Cache as the only stdlib programs
 
-2026-04-18 entry: "The ONLY two stdlib programs are `:wat/std/program/Console` (single-sink stdout/stderr serializer) and `:wat/std/program/Cache<K,V>` (LRU memoization for AST-encoding hot path; 1 c/s → 7.1 c/s evidence)."
+2026-04-18 entry: "The ONLY two stdlib programs are `:wat::std::program::Console` (single-sink stdout/stderr serializer) and `:wat::std::program::Cache<K,V>` (LRU memoization for AST-encoding hot path; 1 c/s → 7.1 c/s evidence)."
 
 Everything else — Database, metrics, rate-gates, signal converters, CLI, all domain programs — userland.
 
@@ -150,7 +150,7 @@ Hickey test: Does the Bigram/Trigram + user-extensible-Pentagram pattern shape t
 - Ngram (general form): ACCEPTED.
 - Bigram (n=2 named shortcut): ACCEPTED.
 - Trigram (n=3 named shortcut): ACCEPTED.
-- User's higher-n: `(:my/app/Pentagram xs) = (Ngram 5 xs)` in their own namespace.
+- User's higher-n: `(:my::app::Pentagram xs) = (Ngram 5 xs)` in their own namespace.
 
 **Verdict:** ACCEPT. The pattern is honest. Ship the useful defaults, hand extension to users. Matches Linux's /bin/ls vs user's own /home/me/bin/lsx.
 
@@ -158,13 +158,13 @@ Small concern: is there a principled line between "ship Bigram" and "ship Pentag
 
 ### N12 (R3). Naming discipline — keyword paths with no bare aliases
 
-2026-04-18 entry ("Honesty ratcheted up"): "No bare aliases. Every call to a wat-vm-provided form uses its full keyword path, always — `(:wat/core/define ...)`, `(:wat/core/let* ...)`, `(:wat/algebra/Bundle ...)`."
+2026-04-18 entry ("Honesty ratcheted up"): "No bare aliases. Every call to a wat-vm-provided form uses its full keyword path, always — `(:wat::core::define ...)`, `(:wat::core::let* ...)`, `(:wat::algebra::Bundle ...)`."
 
 Hickey test: Is this simple or merely strict?
 
 Arguments for simple: one name per thing, no shadowing-by-symbol-table, no precedence rules. Hash identity is on the full path. Consistent with "no namespace mechanism, just discipline."
 
-Arguments for heavy: every expression in user code is verbose. `(:wat/algebra/Bundle (:wat/core/list ...))` reads like `std::collections::HashMap::new().insert(...)`. Programs become visually cluttered.
+Arguments for heavy: every expression in user code is verbose. `(:wat::algebra::Bundle (:wat::core::vec ...))` reads like `std::collections::HashMap::new().insert(...)`. Programs become visually cluttered.
 
 But: the alternative (bare aliases with precedence) IS the complection the datamancer killed. Shadowing rules are EASY (everyone knows them) and COMPLECTED (name/precedence braided).
 
@@ -174,37 +174,37 @@ Also: the trading lab and HYPOTHETICAL already read this way. It's the shape of 
 
 ### N13 (R3). Entry file's two-part shape (config setters then loads)
 
-2026-04-18 "Load-form unification" entry: parser enforces `(:wat/config/set-*!)` setters precede `(:wat/core/load!)` calls. Loaded files can't contain setters.
+2026-04-18 "Load-form unification" entry: parser enforces `(:wat::config::set-*!)` setters precede `(:wat::core::load!)` calls. Loaded files can't contain setters.
 
 Hickey test: Does the entry-file shape check earn its place?
 
-The committed config values (`:wat/config/dims`, `:wat/config/capacity-mode`) are LOAD-BEARING — they affect every encoded vector's identity. Hiding them inside a transitive load would make the program's deployment choices non-local.
+The committed config values (`:wat::config::dims`, `:wat::config::capacity-mode`) are LOAD-BEARING — they affect every encoded vector's identity. Hiding them inside a transitive load would make the program's deployment choices non-local.
 
 Forcing setters-first in the entry file is a one-file discipline with a clear read: "EVERY deployment choice is on the first lines of the entry file." Reader sees it at a glance.
 
 **Verdict:** ACCEPT. Well-motivated. The entry-file two-part shape is a small, load-bearing piece of discipline.
 
-### N14 (R3). `:user/main` as entry point
+### N14 (R3). `:user::main` as entry point
 
-2026-04-18 entry: `:user/main` (not bare `main`). Kernel-required slot under `:user/...` convention. Kernel provides `:wat/...` paths; user provides `:user/...` slots.
+2026-04-18 entry: `:user::main` (not bare `main`). Kernel-required slot under `:user::...` convention. Kernel provides `:wat/...` paths; user provides `:user::...` slots.
 
 Hickey test: Is this principled or contrived?
 
-The earlier draft had "main is a reserved bare name" — a narrow exception. Exceptions are complections. Making it `:user/main` under a slot convention removes the exception.
+The earlier draft had "main is a reserved bare name" — a narrow exception. Exceptions are complections. Making it `:user::main` under a slot convention removes the exception.
 
-Future slots named: `:user/shutdown-handler`, `:user/on-signal`.
+Future slots named: `:user::shutdown-handler`, `:user::on-signal`.
 
-**Verdict:** ACCEPT. Principled. The `:wat/...` = kernel-provided, `:user/...` = user-provided distinction is honest.
+**Verdict:** ACCEPT. Principled. The `:wat/...` = kernel-provided, `:user::...` = user-provided distinction is honest.
 
 ### N15 (R3). Signal enum and signals queue
 
-`:wat/kernel/Signal` enum (:SIGINT, :SIGTERM initially, SIGHUP etc. via proposal). `:user/main` takes four params: stdin, stdout, stderr, signals (QueueReceiver<Signal>).
+`:wat::kernel::Signal` enum (:SIGINT, :SIGTERM initially, SIGHUP etc. via proposal). `:user::main` takes four params: stdin, stdout, stderr, signals (QueueReceiver<Signal>).
 
 **Verdict:** ACCEPT. Explicit-signal handling through a queue matches the CSP discipline. No ambient signal handlers. Matches Go's `signal.Notify`.
 
 ### N16 (R3). Ambient console accessors removed; stdio threads through parameters
 
-2026-04-18 final entry: removed `:wat/kernel/console-out`, `console-err`, `console-in`. Stdio handles flow through `:user/main`'s four params. Any function that writes to console declares the handle it needs.
+2026-04-18 final entry: removed `:wat::kernel::console-out`, `console-err`, `console-in`. Stdio handles flow through `:user::main`'s four params. Any function that writes to console declares the handle it needs.
 
 Datamancer: "this is the /frustrating/ part of haskell.. so what.. it works.. simple not easy."
 
@@ -271,7 +271,7 @@ Hickey test: is this one-name-one-thing, or is this shadowing Rust semantics in 
 
 The 2026-04-18 entry says: "The AST describes what the container IS; the runtime materializes the efficient backing (HashMap / Vec / HashSet from std); `get` goes through that backing. Direct lookup through Rust's runtime backings — no "walk," no cosine, no cleanup."
 
-So `(:wat/std/get my-hashmap k)` compiles to a literal Rust HashMap::get call. The AST says "this is a HashMap"; the runtime materializes the std::HashMap; get goes through std::HashMap::get.
+So `(:wat::std::get my-hashmap k)` compiles to a literal Rust HashMap::get call. The AST says "this is a HashMap"; the runtime materializes the std::HashMap; get goes through std::HashMap::get.
 
 This is honest. The wat AST IS the type declaration; the backing IS the Rust collection; the get IS Rust's get. No abstraction gap.
 
@@ -313,7 +313,7 @@ Going through each — mostly ACCEPT since most are closed.
 - 058-002 Blend: ACCEPT. Option B correct; two independent weights unbraided.
 - 058-003 Bundle list signature: ACCEPT. Lock the list form.
 - 058-004 Difference: ACCEPT REJECTION (rejected; audit record).
-- 058-005 Orthogonalize→Reject+Project: ACCEPT. Reframed well; uses :wat/algebra/dot; algebra core shrinks 7→6.
+- 058-005 Orthogonalize→Reject+Project: ACCEPT. Reframed well; uses :wat::algebra::dot; algebra core shrinks 7→6.
 - 058-006 Resonance: ACCEPT REJECTION. Speculative, no production use.
 - 058-007 ConditionalBind: ACCEPT REJECTION. Speculative; half-abstraction.
 - 058-008 Linear: ACCEPT REJECTION. Identical to Thermometer under 3-arity.

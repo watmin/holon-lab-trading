@@ -17,12 +17,12 @@ Bare `:AST` (without parameterization) is **retired as a parameter type** — sa
 
 ```scheme
 ;; 058-031 draft — placeholder typing.
-(:wat/core/defmacro (:wat/std/Subtract (x :AST) (y :AST) -> :AST)
-  `(:wat/algebra/Blend ,x ,y 1 -1))
+(:wat::core::defmacro (:wat::std::Subtract (x :AST) (y :AST) -> :AST)
+  `(:wat::algebra::Blend ,x ,y 1 -1))
 
 ;; 058-032 honest — concrete typing.
-(:wat/core/defmacro (:wat/std/Subtract (x :AST<Holon>) (y :AST<Holon>) -> :AST<Holon>)
-  `(:wat/algebra/Blend ,x ,y 1 -1))
+(:wat::core::defmacro (:wat::std::Subtract (x :AST<Holon>) (y :AST<Holon>) -> :AST<Holon>)
+  `(:wat::algebra::Blend ,x ,y 1 -1))
 ```
 
 The `:AST<T>` wrapper declares: "this parameter is an AST expression whose evaluated value has type `T`." The type checker:
@@ -58,7 +58,7 @@ With that distinction:
 ```
 :AST<T>    — a WatAST expression whose evaluation produces a value of type T.
              T ranges over any concrete value type: :Holon, :f64, :i32,
-             :bool, :String, :List<U>, :HashMap<K,V>, user-defined
+             :bool, :String, :Vec<U>, :HashMap<K,V>, user-defined
              newtype/struct/enum/typealias, etc.
              T MUST be concrete. Bare :AST without <T> is not a valid
              parameter type — same discipline as banning :Any.
@@ -73,7 +73,7 @@ With that distinction:
 ### Typed macro signature
 
 ```scheme
-(:wat/core/defmacro (:namespace/macro-name (p1 :AST<T1>) (p2 :AST<T2>) ... -> :AST<R>)
+(:wat::core::defmacro (:namespace::macro-name (p1 :AST<T1>) (p2 :AST<T2>) ... -> :AST<R>)
   body-expression)
 ```
 
@@ -88,21 +88,21 @@ Every stdlib macro from 058-031 has a concrete value type for each argument. 058
 **Pure alias — Concurrent:**
 
 ```scheme
-(:wat/core/defmacro (:wat/std/Concurrent (xs :AST<List<Holon>>) -> :AST<Holon>)
-  `(:wat/algebra/Bundle ,xs))
+(:wat::core::defmacro (:wat::std::Concurrent (xs :AST<List<Holon>>) -> :AST<Holon>)
+  `(:wat::algebra::Bundle ,xs))
 ```
 
 At definition time the checker sees:
 - `xs : :AST<List<Holon>>` — an expression producing a list of Holons
-- Body constructs `(Bundle ,xs)`. Bundle's signature is `(Bundle (items :List<Holon>) -> :Holon)`.
-- Spliced `xs` into Bundle's `items` slot: `:AST<List<Holon>>` matches the expected `:List<Holon>` at evaluation. ✓
+- Body constructs `(Bundle ,xs)`. Bundle's signature is `(Bundle (items :Vec<Holon>) -> :Holon)`.
+- Spliced `xs` into Bundle's `items` slot: `:AST<List<Holon>>` matches the expected `:Vec<Holon>` at evaluation. ✓
 - Body returns `:AST<Holon>` ✓ matches declared return.
 
 **Transforming — Subtract:**
 
 ```scheme
-(:wat/core/defmacro (:wat/std/Subtract (x :AST<Holon>) (y :AST<Holon>) -> :AST<Holon>)
-  `(:wat/algebra/Blend ,x ,y 1 -1))
+(:wat::core::defmacro (:wat::std::Subtract (x :AST<Holon>) (y :AST<Holon>) -> :AST<Holon>)
+  `(:wat::algebra::Blend ,x ,y 1 -1))
 ```
 
 Blend's signature: `(Blend (a :Holon) (b :Holon) (w1 :f64) (w2 :f64) -> :Holon)`.
@@ -114,27 +114,27 @@ Blend's signature: `(Blend (a :Holon) (b :Holon) (w1 :f64) (w2 :f64) -> :Holon)`
 **Parameterized — Amplify:**
 
 ```scheme
-(:wat/core/defmacro (:wat/std/Amplify (x :AST<Holon>) (y :AST<Holon>) (s :AST<f64>) -> :AST<Holon>)
-  `(:wat/algebra/Blend ,x ,y 1 ,s))
+(:wat::core::defmacro (:wat::std::Amplify (x :AST<Holon>) (y :AST<Holon>) (s :AST<f64>) -> :AST<Holon>)
+  `(:wat::algebra::Blend ,x ,y 1 ,s))
 ```
 
 Call site errors land at the caller by name:
 
 ```scheme
-(:wat/std/Amplify foo bar 2.5)    ;; OK: 2.5 : :f64 matches :AST<f64>
-(:wat/std/Amplify foo bar "oh")   ;; ERROR at my-file.wat:12:
-                                  ;;   :wat/std/Amplify expects (s :AST<f64>)
+(:wat::std::Amplify foo bar 2.5)    ;; OK: 2.5 : :f64 matches :AST<f64>
+(:wat::std::Amplify foo bar "oh")   ;; ERROR at my-file.wat:12:
+                                  ;;   :wat::std::Amplify expects (s :AST<f64>)
                                   ;;   argument type is :AST<String>
 ```
 
 **Higher-order — Chain:**
 
 ```scheme
-(:wat/core/defmacro (:wat/std/Chain (holons :AST<List<Holon>>) -> :AST<Holon>)
-  `(:wat/algebra/Bundle (pairwise-map :wat/std/Then ,holons)))
+(:wat::core::defmacro (:wat::std::Chain (holons :AST<List<Holon>>) -> :AST<Holon>)
+  `(:wat::algebra::Bundle (pairwise-map :wat::std::Then ,holons)))
 ```
 
-Checker verifies `pairwise-map : :fn(:fn(Holon,Holon)->Holon, :List<Holon>) -> :List<Holon>` (or its typed-macro equivalent), `Then : :fn(Holon,Holon)->Holon`, so `(pairwise-map Then holons)` has type `:List<Holon>`, and `Bundle` over it produces `:Holon`. Declared return `:AST<Holon>` ✓.
+Checker verifies `pairwise-map : :fn(:fn(Holon,Holon)->Holon, :Vec<Holon>) -> :Vec<Holon>` (or its typed-macro equivalent), `Then : :fn(Holon,Holon)->Holon`, so `(pairwise-map Then holons)` has type `:Vec<Holon>`, and `Bundle` over it produces `:Holon`. Declared return `:AST<Holon>` ✓.
 
 ### Quasiquote under a typed environment
 
@@ -221,7 +221,7 @@ Scope-set tracking from 058-031 is orthogonal to type tracking. Both live on `Id
 With typed macros and 058-031's `Origin` tracking, error messages gain macro-level precision:
 
 ```
-Error: :wat/std/Amplify expects (s :AST<f64>), got :AST<String>.
+Error: :wat::std::Amplify expects (s :AST<f64>), got :AST<String>.
   Call site:         my-app.wat:7:14
   Macro definition:  wat/std/idioms.wat:42:3
   Parameter s:       wat/std/idioms.wat:42:31
@@ -256,7 +256,7 @@ Every parameter has a concrete type. No "sometimes it's typed, sometimes it isn'
 
 **2. Error locality.**
 
-Under 058-031's expansion-time check, a wrong-type `Subtract` call surfaces as a type error at the expanded `Blend` — mentioning a form the user never typed. Under typed macros, the error says `:wat/std/Subtract expects (y :AST<Holon>)`, naming the macro the user actually invoked.
+Under 058-031's expansion-time check, a wrong-type `Subtract` call surfaces as a type error at the expanded `Blend` — mentioning a form the user never typed. Under typed macros, the error says `:wat::std::Subtract expects (y :AST<Holon>)`, naming the macro the user actually invoked.
 
 **3. Type information at the signature documents intent.**
 
@@ -278,7 +278,7 @@ Macro-definition-time type checking reuses the type checker that already runs on
 
 **1. Type grammar grows by one form.**
 
-`:AST<T>` is a new parametric type. Minor; listed in 058-030 alongside `:List<T>`, `:HashMap<K,V>`, etc.
+`:AST<T>` is a new parametric type. Minor; listed in 058-030 alongside `:Vec<T>`, `:HashMap<K,V>`, etc.
 
 **2. Macro-definition-time checking adds startup work.**
 
@@ -293,10 +293,10 @@ All stdlib macro examples in 058-031 use bare `:AST` and must update to `:AST<T>
 058-001 Atom accepting as parametric `Atom<T>` required parametric polymorphism at the substrate level. 058-030 Q1 resolved to YES accordingly. Macros follow: a macro that takes `:AST<T>` for any T is legal, and `T` is a type variable bound at the macro's signature scope. The typical use — a macro that operates identically on any typed AST — becomes expressible. Example:
 
 ```scheme
-(:wat/core/defmacro (:my/app/identity-macro (expr :AST<T>) -> :AST<T>)
+(:wat::core::defmacro (:my::app::identity-macro (expr :AST<T>) -> :AST<T>)
   `,expr)
 
-(:wat/core/defmacro (:my/app/safe-wrap (expr :AST<T>) -> :AST<Option<T>>)
+(:wat::core::defmacro (:my::app::safe-wrap (expr :AST<T>) -> :AST<Option<T>>)
   `(Some ,expr))
 ```
 

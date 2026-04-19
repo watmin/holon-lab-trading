@@ -9,7 +9,7 @@
 
 ## ACCEPTED — 2026-04-18
 
-`Blend` enters the algebra core as a new variant with signature `(:wat/algebra/Blend a b w1 w2)` — two independent real-valued scalar weights. All five designer questions closed on the arguments below. Designer review in Round 3 may still reopen any of them; this section records our best reading.
+`Blend` enters the algebra core as a new variant with signature `(:wat::algebra::Blend a b w1 w2)` — two independent real-valued scalar weights. All five designer questions closed on the arguments below. Designer review in Round 3 may still reopen any of them; this section records our best reading.
 
 ### Q1 — Distinct source category? **YES.**
 
@@ -44,10 +44,10 @@ Q1 and Q2 answers mean Blend is accepted; the conditional branch does not fire.
 With Blend ACCEPTED as Option B with negative weights, the following stdlib reclassifications become mechanical:
 
 - **058-008 Linear** — already REJECTED (identical to Thermometer with the 3-arity signature); not affected.
-- **058-018 Circular** — becomes `(:wat/algebra/Blend cos-basis sin-basis (cos θ) (sin θ))`; stdlib macro.
-- **058-015 Amplify** — becomes `(:wat/algebra/Blend x y 1 s)`; stdlib macro.
-- **058-019 Subtract** — becomes `(:wat/algebra/Blend x y 1 -1)`; stdlib macro (the canonical delta — 058-004 Difference REJECTED).
-- **058-020 Flip** — becomes `(:wat/algebra/Blend x y 1 -2)`; stdlib macro.
+- **058-018 Circular** — becomes `(:wat::algebra::Blend cos-basis sin-basis (cos θ) (sin θ))`; stdlib macro.
+- **058-015 Amplify** — becomes `(:wat::algebra::Blend x y 1 s)`; stdlib macro.
+- **058-019 Subtract** — becomes `(:wat::algebra::Blend x y 1 -1)`; stdlib macro (the canonical delta — 058-004 Difference REJECTED).
+- **058-020 Flip** — becomes `(:wat::algebra::Blend x y 1 -2)`; stdlib macro.
 - **058-005 Orthogonalize** — stays core (computed-coefficient projection removal, which Blend cannot express because the coefficient depends on a dot product of the inputs).
 
 The original three-mode Negate decomposes cleanly: one mode (orthogonalize) stays core; two modes (subtract, flip) become stdlib Blend idioms.
@@ -61,7 +61,7 @@ The original three-mode Negate decomposes cleanly: one mode (orthogonalize) stay
 A new core variant that introduces scalar-weighted vector addition — an operation no existing core form can perform.
 
 ```scheme
-(:wat/algebra/Blend a b w1 w2)
+(:wat::algebra::Blend a b w1 w2)
 ```
 
 Semantically: `threshold(w1 × a + w2 × b)` where `a` and `b` are vectors in the algebra's ternary output space `{-1, 0, +1}^d` and `w1`, `w2` are arbitrary real-valued scalar weights (positive, negative, or fractional). See FOUNDATION's "Output Space" section for the ternary convention (`threshold(0) = 0`).
@@ -274,19 +274,19 @@ If `Blend` is promoted, the following FOUNDATION refinements follow:
 
 1. **`Linear` reclassified as stdlib:**
    ```scheme
-   (:wat/core/define (:wat/std/Linear v scale)
-     (:wat/algebra/Blend (:wat/algebra/Atom :wat/std/linear-low)
-                         (:wat/algebra/Atom :wat/std/linear-high)
-            (:wat/core/- 1 (:wat/core// v scale))
-            (:wat/core// v scale)))
+   (:wat::core::define (:wat::std::Linear v scale)
+     (:wat::algebra::Blend (:wat::algebra::Atom :wat::std::linear-low)
+                         (:wat::algebra::Atom :wat::std::linear-high)
+            (:wat::core::- 1 (:wat::core::/ v scale))
+            (:wat::core::/ v scale)))
    ```
 
 2. **`Circular` reclassified as stdlib:**
    ```scheme
-   (:wat/core/define (:wat/std/Circular v period)
-     (:wat/core/let ((theta (:wat/core/* 2 pi (:wat/core// v period))))
-       (:wat/algebra/Blend (:wat/algebra/Atom :wat/std/circular-cos-basis)
-              (:wat/algebra/Atom :wat/std/circular-sin-basis)
+   (:wat::core::define (:wat::std::Circular v period)
+     (:wat::core::let ((theta (:wat::core::* 2 pi (:wat::core::/ v period))))
+       (:wat::algebra::Blend (:wat::algebra::Atom :wat::std::circular-cos-basis)
+              (:wat::algebra::Atom :wat::std::circular-sin-basis)
               (cos theta)
               (sin theta))))
    ```
@@ -295,14 +295,14 @@ If `Blend` is promoted, the following FOUNDATION refinements follow:
 
 4. **`Amplify` becomes stdlib** (see 058-015-amplify):
    ```scheme
-   (:wat/core/define (:wat/std/Amplify x y s)
-     (:wat/algebra/Blend x y 1 s))
+   (:wat::core::define (:wat::std::Amplify x y s)
+     (:wat::algebra::Blend x y 1 s))
    ```
 
 5. **`Subtract` enters as stdlib** (see 058-019-subtract — historically Negate's subtract mode):
    ```scheme
-   (:wat/core/define (:wat/std/Subtract x y)
-     (:wat/algebra/Blend x y 1 -1))
+   (:wat::core::define (:wat::std::Subtract x y)
+     (:wat::algebra::Blend x y 1 -1))
    ```
 
 6. **`Negate` is split** — the orthogonalize mode becomes its own CORE form (see 058-005-orthogonalize), while subtract/flip modes become stdlib Blend idioms (see 058-019-subtract, 058-020-flip).

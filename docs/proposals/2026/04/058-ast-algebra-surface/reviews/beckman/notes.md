@@ -8,7 +8,7 @@ Round 3 has done substantial work. Let me catalog what has landed vs what remain
 
 1. **Similarity-measurement reframe.** FOUNDATION §"The algebra is similarity-measured, not elementwise-exact" + §"Bind as query" + §"Algebraic laws under similarity measurement" explicitly acknowledge Bundle's non-associativity AT THE ELEMENTWISE LEVEL and state associativity UNDER SIMILARITY MEASUREMENT AT HIGH d. The Round-2 counter-example is preserved verbatim in FOUNDATION line 1560-1565.
 
-2. **Reject + Project stdlib.** 058-005 ACCEPTED as stdlib macros over Blend + a new scalar measurement primitive `:wat/algebra/dot`. Algebra core shrinks 7 → 6.
+2. **Reject + Project stdlib.** 058-005 ACCEPTED as stdlib macros over Blend + a new scalar measurement primitive `:wat::algebra::dot`. Algebra core shrinks 7 → 6.
 
 3. **Ten forms REJECTED**: Resonance, ConditionalBind, Flip, Chain, Concurrent, Then, Unbind, Cleanup, Difference, Linear. Analogy DEFERRED.
 
@@ -93,25 +93,25 @@ Language core count 8 vs 9. Check INDEX.md — says "Language core: 5 forms" in 
 
 **FOUNDATION line 2405 shows the OLD bundle-sum expansion:**
 ```
-(:wat/core/define (:wat/std/Sequential list-of-holons)
+(:wat::core::define (:wat::std::Sequential list-of-holons)
   ;; positional encoding
   ;; each holon permuted by its index (Permute by 0 is identity)
-  (:wat/algebra/Bundle
+  (:wat::algebra::Bundle
     (map-indexed
-      (:wat/core/lambda (i h) (:wat/algebra/Permute h i))
+      (:wat::core::lambda (i h) (:wat::algebra::Permute h i))
       list-of-holons)))
 ```
 
 **058-009 PROPOSAL.md (ACCEPTED) uses bind-chain:**
 ```
-(:wat/std/Sequential [a b c]) = Bind(Bind(a, Permute(b, 1)), Permute(c, 2))
+(:wat::std::Sequential [a b c]) = Bind(Bind(a, Permute(b, 1)), Permute(c, 2))
 ```
 
 **FOUNDATION line 1961 comment says "(macro, bind-chain)"** — acknowledging what it should be — but the actual code at 2405 is wrong.
 
 Also FOUNDATION line 2956 (in "What 058 Argues" inventory):
 ```
-(:wat/std/Sequential list)              ; 058-009  — reframing: Bundle of index-permuted
+(:wat::std::Sequential list)              ; 058-009  — reframing: Bundle of index-permuted
 ```
 Also wrong. Still says "Bundle of index-permuted."
 
@@ -364,7 +364,7 @@ Let me walk through the six core forms and their composition properties.
 - `Bind(Bind(a, b), b) ≈ a` under similarity ✓
 - `Bind(Bind(a, b), c) = Bind(a, Bind(b, c))` associative ✓ (elementwise product is associative exactly)
 
-**Bundle:** `:List<:Holon> → :Holon`. Elementwise sum + ternary threshold.
+**Bundle:** `:Vec<:Holon> → :Holon`. Elementwise sum + ternary threshold.
 - Commutative ✓ (sum commutes, threshold preserves)
 - NOT elementwise associative; similarity-associative within capacity ✓ (FOUNDATION is honest)
 - Bundle([]) = zero vector (identity) ✓
@@ -425,7 +425,7 @@ Under FOUNDATION's similarity-measurement frame: acceptable.
 - **FOUNDATION's Sequential expansion at line 2405 is wrong** — shows old bundle-sum, not bind-chain. Mechanical bug.
 - **FOUNDATION line 2956** inventory also wrong.
 - **Laws section still missing.** Many laws are stated in prose but not collected. Round-2 recommended a Laws appendix; still not done.
-- **Reserved atoms (zero, one) not adopted.** Round-1 and Round-2 both recommended `:wat/algebra/zero` for Bundle identity; still not.
+- **Reserved atoms (zero, one) not adopted.** Round-1 and Round-2 both recommended `:wat::algebra::zero` for Bundle identity; still not.
 
 ## Summary of composition and laws ledger
 

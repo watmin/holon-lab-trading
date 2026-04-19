@@ -63,7 +63,7 @@ pub enum Value {
     Int(i64),
     Scalar(f64),
     String(Arc<str>),
-    Keyword(Arc<Keyword>),        // :foo, :foo/bar/baz
+    Keyword(Arc<Keyword>),        // :foo, :foo::bar::baz
     Null,
     List(Arc<Vec<Value>>),
     Function(Arc<Function>),       // defined or lambda
@@ -192,7 +192,7 @@ Standard recursive-descent parser for s-expressions. Nothing novel here; any Lis
 
 Key concerns:
 - Handle `;` line comments.
-- Parse keyword tokens (`:foo/bar/baz`) as keyword literals, preserving full path.
+- Parse keyword tokens (`:foo::bar::baz`) as keyword literals, preserving full path.
 - Parse type annotations `(name :Type)` — parenthesized sublist, keyword-typed.
 - Parse literals: string, int, float, bool, null, keyword.
 - Produce a `WatAST` enum covering all possible forms.
@@ -239,7 +239,7 @@ Pass that walks the WatAST and resolves symbol references:
 - Type references: verify in TypeEnv-being-built.
 - UpperCase calls: verify the form is a known algebra primitive.
 
-Forward references are allowed — the resolver runs AFTER all loads have parsed, so `:wat/std/Difference` and `:my/module/consumer` can reference each other regardless of file order.
+Forward references are allowed — the resolver runs AFTER all loads have parsed, so `:wat::std::Difference` and `:my::module::consumer` can reference each other regardless of file order.
 
 Output: a resolved WatAST where every symbol reference has been verified.
 
@@ -272,7 +272,7 @@ let lower_signatures = hashmap!{
 };
 ```
 
-Generics (parametric types, `:List<T>`, `:fn(args)->T`) use simple substitution. No advanced type features needed.
+Generics (parametric types, `:Vec<T>`, `:fn(args)->T`) use simple substitution. No advanced type features needed.
 
 ---
 
@@ -456,9 +456,9 @@ pub fn constrained_eval(ast: &HolonAST, symbols: &SymbolTable, types: &TypeEnv) 
 Essentially: `verify` the AST against the static environment, then return it. The encoding (if needed) happens separately via `encode`.
 
 Eval errors reveal the exact node that failed and why:
-- "Unknown function `:attacker/evil/exec` at path ..."
+- "Unknown function `:attacker::evil/exec` at path ..."
 - "Expected :Holon, got :i32 at argument 2 of Difference"
-- "Unknown type `:fake/type/Foo`"
+- "Unknown type `:fake::type/Foo`"
 
 ---
 
@@ -548,7 +548,7 @@ pub fn main_loop(vm: &WatVm, market_stream: impl Stream<Item=MarketEvent>) {
         let event_holon = wrap_event(event);  // produces Value::HolonAST(...)
 
         // Look up the on-event handler in the symbol table (registered at startup).
-        let handler = vm.symbol_table.lookup(&keyword(":my/trading/on-event")).unwrap();
+        let handler = vm.symbol_table.lookup(&keyword(":my::trading::on-event")).unwrap();
 
         // Apply the handler.
         apply_function(handler, &[event_holon], &vm.symbol_table).unwrap();
@@ -596,7 +596,7 @@ Bytecode speeds up tight loops and repeated evaluations. Not needed for an initi
 
 **4. Error handling.** Rich error types with source spans. Every `EvalError` / `BootError` / `TypeError` should point at the file + line + column that caused it.
 
-**5. Generics in the type system.** Start with just `:List<T>` and `:fn(args)->return`. Add more if needed.
+**5. Generics in the type system.** Start with just `:Vec<T>` and `:fn(args)->return`. Add more if needed.
 
 **6. Macro handling.** Macros run at startup, before type-check. They transform source ASTs into final ASTs. The type checker sees the post-macroexpansion form.
 

@@ -33,7 +33,7 @@ Every rejection has a per-proposal REJECTED banner citing the reasoning. The spe
 
 ### Substantive reframes since Round 2
 
-- **058-005 Orthogonalize → Reject + Project stdlib.** The computed-coefficient argument for CORE dissolved when Blend accepted as Option B (Q1 reply). Algebra core shrinks 7 → 6. Named to match primer + holon-rs (`reject`, not `orthogonalize`). Also ships `Project` as companion. Uses a new `:wat/algebra/dot` measurement primitive (scalar-returning sibling to `cosine`; not a HolonAST variant).
+- **058-005 Orthogonalize → Reject + Project stdlib.** The computed-coefficient argument for CORE dissolved when Blend accepted as Option B (Q1 reply). Algebra core shrinks 7 → 6. Named to match primer + holon-rs (`reject`, not `orthogonalize`). Also ships `Project` as companion. Uses a new `:wat::algebra::dot` measurement primitive (scalar-returning sibling to `cosine`; not a HolonAST variant).
 - **058-001 Atom → parametric Atom<T>.** Substrate-level decision: Atom accepts any serializable T (primitive, composite Holon, user-defined type). Enables programs-as-atoms (opaque-identity vector for any value). This commits the language to **parametric polymorphism across the board** — 058-030 Q1 (generics scope) resolved YES; user types + function signatures + macros all parametric (rank-1).
 - **058-002 Blend accepted as Option B.** Two independent real-valued weights, negative allowed, binary arity. Option A's convex constraint identified as a complection. All downstream Blend-idiom macros unblocked.
 - **058-009 Sequential reframed to bind-chain.** Primer's "positional list encoder" and trading-lab production both use bind-chain with Permute; the original bundle-sum expansion diverged from both. Corrected.
@@ -43,12 +43,12 @@ Every rejection has a per-proposal REJECTED banner citing the reasoning. The spe
 ### New cross-cutting decisions
 
 - **Programs ARE Atoms** substrate corollary. Any holon can be atomized via parametric Atom, giving it an opaque-identity vector.
-- **Core/stdlib division line named:** single Rust method → `:wat/core/`; short composition → `:wat/std/`; app-shaped → userland.
-- **No bare aliases.** Dual-tier symbol table removed. Every call uses its full keyword path. `:wat/lang/` renamed to `:wat/core/`.
-- **Naming discipline enforced:** `(:wat/core/define ...)`, `(:wat/core/let* ...)`, `(:wat/algebra/Bundle ...)`, etc. Bareword sweep complete across every scheme block in the batch.
+- **Core/stdlib division line named:** single Rust method → `:wat::core::`; short composition → `:wat::std::`; app-shaped → userland.
+- **No bare aliases.** Dual-tier symbol table removed. Every call uses its full keyword path. `:wat/lang/` renamed to `:wat::core::`.
+- **Naming discipline enforced:** `(:wat::core::define ...)`, `(:wat::core::let* ...)`, `(:wat::algebra::Bundle ...)`, etc. Bareword sweep complete across every scheme block in the batch.
 - **`:` quoting rule** documented explicitly. `:Atom<Holon>` legal; `:Atom<:Holon>` illegal. Inside angle brackets, parameters are bare Rust symbols.
-- **`:user/main`** as keyword-path entry point, receiving stdin/stdout/stderr/signals as parameters (no ambient capabilities).
-- **`:wat/kernel/select`** added; **`:wat/kernel/HandlePool`** promoted to kernel; Topic and Mailbox REJECTED. Config setters entry-file-only, before any `load!`. One loader `:wat/core/load!` for all file kinds.
+- **`:user::main`** as keyword-path entry point, receiving stdin/stdout/stderr/signals as parameters (no ambient capabilities).
+- **`:wat::kernel::select`** added; **`:wat::kernel::HandlePool`** promoted to kernel; Topic and Mailbox REJECTED. Config setters entry-file-only, before any `load!`. One loader `:wat::core::load!` for all file kinds.
 - **Programs-are-userland** subsection in FOUNDATION codifying the conformance contract (six rules). Only Console and Cache ship as stdlib programs (universal plumbing).
 - **`WAT-TO-RUST.md`** seeded — the compile path complementing the interpret path.
 - **Honest hello-world** — spawns Console program, joins to flush.

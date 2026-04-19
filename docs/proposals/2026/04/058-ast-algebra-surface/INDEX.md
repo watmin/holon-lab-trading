@@ -2,7 +2,7 @@
 
 **Purpose:** orient a first-time reviewer to the 058 batch. 29 sub-proposals, FOUNDATION, a core-primitive audit, plus implementation and example docs. This index gives suggested reading order, dependency graph, and pivotal-proposal highlights.
 
-**Scope grew across rounds.** The batch title says "AST algebra surface" but the work now covers substantially more: the 6-form algebra core, the measurements tier (cosine, dot), the 18-form stdlib, the 8-form language core (including parametric macros), the type system (four heads, rank-1 parametric polymorphism), the kernel primitives (queues, spawn, join, select, HandlePool, Signal), the config-setter tier (`:wat/config`), the two stdlib programs (Console, Cache), the conformance contract for programs-are-userland, the startup pipeline, the entry-file shape, the interpret path, and the compile path seed. Substrate, not just algebra. A first-time reader should expect kernel-primitives and type-system content in FOUNDATION alongside the algebra forms.
+**Scope grew across rounds.** The batch title says "AST algebra surface" but the work now covers substantially more: the 6-form algebra core, the measurements tier (cosine, dot), the 18-form stdlib, the 8-form language core (including parametric macros), the type system (four heads, rank-1 parametric polymorphism), the kernel primitives (queues, spawn, join, select, HandlePool, Signal), the config-setter tier (`:wat::config`), the two stdlib programs (Console, Cache), the conformance contract for programs-are-userland, the startup pipeline, the entry-file shape, the interpret path, and the compile path seed. Substrate, not just algebra. A first-time reader should expect kernel-primitives and type-system content in FOUNDATION alongside the algebra forms.
 
 **If you read nothing else:** start with FOUNDATION.md. It locks the criteria that every sub-proposal argues against.
 
@@ -47,9 +47,9 @@ Read in order:
 
 These three are load-bearing; the rest depend on their resolution:
 
-5. **058-002-blend** — **ACCEPTED.** `(:wat/algebra/Blend a b w1 w2)` enters algebra core with two independent real-valued scalar weights (Option B), negative weights allowed, binary arity. Unblocks Circular/Amplify/Subtract as stdlib macros. (Flip 058-020 REJECTED.) See 058-002/PROPOSAL.md's ACCEPTED banner for the per-question reasoning.
+5. **058-002-blend** — **ACCEPTED.** `(:wat::algebra::Blend a b w1 w2)` enters algebra core with two independent real-valued scalar weights (Option B), negative weights allowed, binary arity. Unblocks Circular/Amplify/Subtract as stdlib macros. (Flip 058-020 REJECTED.) See 058-002/PROPOSAL.md's ACCEPTED banner for the per-question reasoning.
 
-6. **058-001-atom-typed-literals** — **ACCEPTED (parametric).** `(:wat/algebra/Atom x)` accepts any serializable T — primitive, composite `:Holon`, or user-defined type. Substrate-level: enables programs-as-atoms, engram libraries of learned programs, cryptographically-identified program storage.
+6. **058-001-atom-typed-literals** — **ACCEPTED (parametric).** `(:wat::algebra::Atom x)` accepts any serializable T — primitive, composite `:Holon`, or user-defined type. Substrate-level: enables programs-as-atoms, engram libraries of learned programs, cryptographically-identified program storage.
 
 7. **058-030-types** — the type system for language core. Required before `define` (058-028) and `lambda` (058-029) can have typed signatures.
 
@@ -76,7 +76,7 @@ Existing holon-rs primitives; core status is settled. Consult `CORE-AUDIT.md` fo
 
 Genuinely new algebraic operations:
 
-15. **058-005-orthogonalize** — **ACCEPTED with reframe and rename.** Ships as `Reject` + `Project` stdlib macros over Blend + `:wat/algebra/dot`. Renamed from `Orthogonalize` to `Reject` to match the primer and holon-rs (cited production use: DDoS sidecar's core detection mechanism, Challenge 010 F1=1.000). Algebra core shrinks 7 → 6 as a consequence.
+15. **058-005-orthogonalize** — **ACCEPTED with reframe and rename.** Ships as `Reject` + `Project` stdlib macros over Blend + `:wat::algebra::dot`. Renamed from `Orthogonalize` to `Reject` to match the primer and holon-rs (cited production use: DDoS sidecar's core detection mechanism, Challenge 010 F1=1.000). Algebra core shrinks 7 → 6 as a consequence.
 16. **058-006-resonance** — **REJECTED.** Speculative, no production use. See proposal REJECTED banner.
 17. **058-007-conditional-bind** — **REJECTED.** Speculative, no production use. See proposal REJECTED banner.
 
@@ -100,7 +100,7 @@ New named compositions:
 26. **058-010-concurrent** — **REJECTED** (2026-04-18). Redundant with Bundle; no runtime specialization. Enclosing context carries the temporal meaning. Kept as audit record. Userland may define it as a macro if needed.
 27. **058-011-then** — **REJECTED** (2026-04-18). Arity-specialization of Sequential; no new pattern. Userland macro if desired.
 28. **058-012-chain** — **REJECTED.** Redundant with Bigram (new named form under 058-013 Ngram). `Chain xs` = `Ngram 2 xs` = Bigram.
-29. **058-013-ngram** — **ACCEPTED with reframe + two named shortcuts**. Ships `Ngram`, `Bigram` (= Ngram 2), `Trigram` (= Ngram 3). Uses bind-chain Sequential from the 058-009 reframe. Users write their own higher-n named macros (`:my/app/Pentagram = Ngram 5`) in their namespace.
+29. **058-013-ngram** — **ACCEPTED with reframe + two named shortcuts**. Ships `Ngram`, `Bigram` (= Ngram 2), `Trigram` (= Ngram 3). Uses bind-chain Sequential from the 058-009 reframe. Users write their own higher-n named macros (`:my::app::Pentagram = Ngram 5`) in their namespace.
 30. **058-014-analogy** — **DEFERRED.** Proven working (classical Kanerva A:B::C:?) but not currently adopted in any application in this workspace. Proposal preserved as resumable audit record; graduates to ACCEPTED when an application demands it with citation.
 31. **058-024-unbind** — **REJECTED** (2026-04-18). Identity alias for Bind; demonstrates no new pattern. Bind-on-Bind IS Unbind — a fact about the algebra, not a name worth projecting.
 
@@ -287,7 +287,7 @@ Once designer decisions are made, implementation priorities shape up:
 
 1. **Land types, define, lambda.** The language core must exist before stdlib can land.
 2. **Land Blend.** Pivotal for stdlib cascade.
-3. **Add `:wat/algebra/dot` measurement primitive to holon-rs.** Small Rust change. (Orthogonalize reframed as stdlib Reject/Project; Resonance and ConditionalBind REJECTED.)
+3. **Add `:wat::algebra::dot` measurement primitive to holon-rs.** Small Rust change. (Orthogonalize reframed as stdlib Reject/Project; Resonance and ConditionalBind REJECTED.)
 4. **Land the stdlib as real wat files.** Most proposals become small `.wat` additions once the language supports them.
 5. **Reframe the existing variants.** Linear/Log/Circular/Sequential move from HolonAST variants to stdlib functions.
 6. **Verify with HYPOTHETICAL-CANDLE-DESCRIBERS.wat.** When this file runs end-to-end, the 058 batch is functionally delivered.
