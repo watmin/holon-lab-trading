@@ -17,14 +17,19 @@ Phase 1 completion (2026-04-19 morning).
 ## Where we are
 
 **Phase 1 complete; programs-as-holons operational; `:Option<T>` +
-`match` live.** wat-rs ships the full startup pipeline, 30+ threads with
-zero Mutex, real Ed25519 crypto at `signed-load!` / `eval-signed!`,
+`match` live; kernel surface complete.** wat-rs ships the full startup
+pipeline, real Ed25519 crypto at `signed-load!` / `eval-signed!`,
 parametric `:Atom<T>`, the six algebra-core forms, `:wat::core::quote` /
 `:wat::core::atom-value` / `:wat::core::let*` / `:wat::core::presence`,
 config-committed `noise_floor`, `EncodingCtx` attached at freeze,
 `:Option<T>` with `:None` / `(Some _)` constructors,
-`(:wat::core::match ...)` with exhaustiveness, and `recv` upgraded to
-`:Option<String>`. The vector-level proof runs end-to-end:
+`(:wat::core::match ...)` with exhaustiveness, `recv` / `try-recv` /
+`select` returning `:Option<T>`, typed pipe values, tuples +
+destructuring, `make-bounded-queue` / `make-unbounded-queue`, `spawn` /
+`join` on a Mutex-free `:ProgramHandle<R>`, `HandlePool` with
+claim-or-panic, and the per-signal poll/reset primitives for SIGUSR1 /
+SIGUSR2 / SIGHUP. 409 tests green; zero warnings; zero Mutex. The
+vector-level proof runs end-to-end:
 
 ```
 $ echo watmin | wat-vm presence-proof.wat
@@ -62,20 +67,25 @@ informed by running real programs through them.
 
 ## The sequence
 
-### Step 1 — kernel primitives (full surface)
+### Step 1 — kernel primitives (full surface) — DONE (2026-04-19)
 
-- [ ] typed pipe values over arbitrary `T`
-- [ ] `make-bounded-queue` / `make-unbounded-queue`
-- [ ] `spawn` (for wat-authored functions)
-- [ ] `try-recv` / `select` / `drop` / `join`
-- [ ] `HandlePool`
-- [ ] user-signal surface: `sigusr1?` / `reset-sigusr1!` / `sigusr2?` /
+- [x] typed pipe values over arbitrary `T`
+- [x] `make-bounded-queue` / `make-unbounded-queue`
+- [x] `spawn` (for wat-authored functions) + `join`
+- [x] `try-recv` / `select` / `drop`
+- [x] `HandlePool` (channel-backed, Mutex-free)
+- [x] user-signal surface: `sigusr1?` / `reset-sigusr1!` / `sigusr2?` /
   `reset-sigusr2!` / `sighup?` / `reset-sighup!` — kernel maintains
   boolean state, userland polls + resets. Terminal signals (SIGINT /
   SIGTERM) stay on the existing `stopped` flag. No signals queue; no
-  4th `:user::main` parameter. Administrative stance 2026-04-19: the
-  kernel makes signal state MEASURABLE; userland is responsible for
-  the transitions.
+  4th `:user::main` parameter.
+
+Known deviations from spec, tracked separately:
+- `select`'s index is `:i64`, not `:usize` — `:usize` value variant
+  lands when a caller needs it.
+- `(drop)` is a scope-based close marker: the Arc reference dropped
+  inside the primitive is one of several; full channel-end close
+  happens when the enclosing let-scope releases its binding.
 
 ### Step 1.5 — naming-convention sweep (follow-up to the signal surface)
 
