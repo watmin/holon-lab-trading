@@ -13,6 +13,14 @@
 **Depends on:** Bundle (CORE, 058-003 for signature)
 **Companion proposals:** 058-016-map (now HashMap), 058-026-array (now Vec)
 
+---
+
+## HISTORICAL CONTENT — SUPERSEDED BY BANNER ABOVE
+
+The sections below were written before the 2026-04-18 rename + `get`-unification sweep. They describe an earlier design where membership was tested via `cleanup`-based vector retrieval against a codebook. **That design is REPLACED.** Membership test is now `(get my-set x)` — direct structural lookup through the runtime's Rust `HashSet<T>` backing, returning `:Option<T>` with `(Some x)` on hit and `:None` on miss. Cleanup doesn't participate. The banner at the top of this file is authoritative; the content below is preserved as audit record only.
+
+---
+
 ## The Candidate
 
 A wat stdlib macro (per 058-031-defmacro) that constructs an encoded unordered collection from a list of holons:

@@ -1378,6 +1378,19 @@ This is a unique feature of this algebra. Unlike neural networks (where architec
 
 The foundational principle makes one property load-bearing: **`encode(ast)` is deterministic.** Same AST always produces the same vector. This means memoization is sound — a program that sees the same AST twice can cache the result and avoid recomputing.
 
+### The AST is primary; both materializations are caches
+
+A Holon has two materializations derivable from its AST:
+
+- **Structural materialization** — for container forms (HashMap, Vec, HashSet), the runtime builds the corresponding Rust `std::collections::HashMap<K, V>` / `std::vec::Vec<T>` / `std::collections::HashSet<T>` from the AST. Used for O(1) structural `get` — exact, non-fuzzy, key-by-key lookup.
+- **Geometric materialization** — every Holon encodes to a vector in `{-1, 0, +1}^d` via the encoder walking the AST. Used for cosine similarity, presence measurement, engram matching — fuzzy, capacity-bounded, similarity-measured retrieval.
+
+**Both are caches.** Neither holds identity. Identity lives in the AST. Both are rebuilt from the AST when the application needs them. The algebra's cryptographic-provenance story, the hash-as-identity claim, the distributed-verifiability property — all rest on the AST alone; the two materializations are convenience projections for different query kinds.
+
+This is the honest framing: **the AST is primary. The Rust backing is its cached structural representation. The vector is its cached geometric projection.** Different questions route to different caches. Structural questions (`get`, key lookup, exact membership) go through the Rust backing. Similarity questions (`cosine`, `presence`, engram retrieval) go through the vector. Two question-kinds, two caches, both rooted in the same AST.
+
+Applications may materialize both, neither, or one depending on their needs. The trading lab materializes vectors for cosine-based broker decisions; the DDoS lab materializes vectors for subspace residual detection; an analytics app might materialize only the Rust backing and never encode to a vector at all. All three are valid. The algebra stays indifferent.
+
 The algebra doesn't care whether an application memoizes or not. Pure recomputation is correct (just potentially slow); memoization is correct (same answer, faster). An application may want aggressive caching (keep every vector it has ever computed); another may want none (memory-constrained embedded, line-rate packet filter that can't afford the overhead); another may want something in between. **The algebra is indifferent. Caching is an application concern.**
 
 ### The stdlib provides the tooling — three pieces
@@ -1493,6 +1506,20 @@ These four are the **algebraic foundation**. Everything else in the algebra is e
 - A SCALAR PRIMITIVE — does something MAP cannot (Thermometer, Blend)
 - A NEW OPERATION — a distinct algebraic action not expressible via existing primitives
 - A STDLIB COMPOSITION — a named pattern built from existing core forms
+
+---
+
+## Two Kinds of Algebra Primitive — Holon-Producing and Scalar-Returning
+
+The algebra names two categorically distinct kinds of primitive. Both operate on Holons. They differ in their return type.
+
+**Holon-producing primitives (six forms).** Take Holons, return a Holon. These are the HolonAST variants: `Atom`, `Bind`, `Bundle`, `Blend`, `Permute`, `Thermometer`. They construct new values in the algebra's ternary output space `{-1, 0, +1}^d`. Every composition (Bundle of Binds of Atoms, etc.) is built from these.
+
+**Scalar-returning measurements (two forms, tier).** Take Holons, return `:f64`. `cosine` and `dot` observe existing Holons and return a scalar. They do not construct new values. They are **measurements over the algebra**, orthogonal to the vector-producing primitives.
+
+The tier split is a clean decomplection. Holon-producing forms make things; measurements observe things. Different categories of operation; different return types; different algebraic roles. Presence measurement (FOUNDATION's retrieval primitive) is `cosine` against the substrate noise floor. Reject and Project (stdlib Gram-Schmidt) use `dot` to compute their coefficients. Neither measurement produces a new Holon; both yield a scalar the caller acts on.
+
+Complete listings are in "The Algebra — Complete Forms" below (algebra core and algebra stdlib) and in "Algebra Measurements" within that section.
 
 ---
 
@@ -2400,12 +2427,14 @@ Retrieval is NOT a core form. Presence is measured by `cosine(encode(target), re
 ;; --- Structural compositions ---
 
 (:wat/core/define (:wat/std/Sequential list-of-holons)
-  ;; positional encoding
-  ;; each holon permuted by its index (Permute by 0 is identity)
-  (:wat/algebra/Bundle
-    (map-indexed
-      (:wat/core/lambda (i h) (:wat/algebra/Permute h i))
-      list-of-holons)))
+  ;; positional encoding — BIND-CHAIN with Permute (not Bundle-sum).
+  ;; (Sequential [a])       = a
+  ;; (Sequential [a b])     = Bind(a, Permute(b, 1))
+  ;; (Sequential [a b c])   = Bind(Bind(a, Permute(b, 1)), Permute(c, 2))
+  ;; Compound vector with exact sequence identity — matches the primer's
+  ;; "positional list encoder" and the trading-lab production rhythm.
+  ;; See 058-009/PROPOSAL.md's ACCEPTED-with-reframe banner.
+  ...)
 
 ;; Concurrent was REJECTED (058-010) — no runtime specialization beyond
 ;; Bundle, enclosing context already carries the temporal meaning.
@@ -2952,12 +2981,14 @@ The implementation choice is outside FOUNDATION's scope. FOUNDATION declares the
 ;; Rejected Blend-derived names: Difference (058-004), Linear (058-008),
 ;; Flip (058-020) — see individual PROPOSAL.md REJECTED banners.
 
-;; Structural compositions (5)
-(:wat/std/Sequential list)              ; 058-009  — reframing: Bundle of index-permuted
+;; Structural compositions
+(:wat/std/Sequential list)              ; 058-009  — BIND-CHAIN with positional Permute
 ;; Concurrent REJECTED (058-010) — redundant with Bundle; userland macro if desired.
 ;; Then REJECTED (058-011) — arity-specialization of Sequential; userland.
-(:wat/std/Chain list)                   ; 058-012  — Bundle of pairwise Thens
-(:wat/std/Ngram n list)                 ; 058-013  — n-wise adjacency
+;; Chain REJECTED (058-012) — redundant with Bigram (= Ngram 2 xs).
+(:wat/std/Ngram n list)                 ; 058-013  — n-wise adjacency over Sequential-encoded windows
+(:wat/std/Bigram list)                  ; 058-013  — Ngram 2; named shortcut
+(:wat/std/Trigram list)                 ; 058-013  — Ngram 3; named shortcut
 
 ;; Relational (1)
 

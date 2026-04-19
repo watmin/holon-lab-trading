@@ -14,6 +14,14 @@
 **Companion proposals:** 058-027-set (now HashSet)
 **Supersedes:** earlier framing of Array as "Sequential alias" — dropped; see Reclassification Note
 
+---
+
+## HISTORICAL CONTENT — SUPERSEDED BY BANNER ABOVE
+
+The sections below were written before the 2026-04-18 rename + `get`-unification sweep. They reference `nth` as the accessor and describe an earlier Sequential-alias encoding. **Both are REPLACED.** `nth` is retired — use `get` with an integer index, returning `:Option<Holon>` through the runtime's Rust `Vec<T>` backing. The banner at the top of this file is authoritative; the content below is preserved as audit record only.
+
+---
+
 ## Reclassification Note
 
 Earlier drafts proposed Array as a macro alias for `Sequential` (the positional-encoding primitive). During round-2 designer review, the builder noticed that when we have the AST, we don't need cleanup-based retrieval for a data structure. Integer-keyed containers use exact lookup via the HashMap's runtime backing — the same mechanism as HashMap's `get` — and don't need the Sequential encoding at all.

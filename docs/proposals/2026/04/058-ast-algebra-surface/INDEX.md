@@ -2,6 +2,8 @@
 
 **Purpose:** orient a first-time reviewer to the 058 batch. 29 sub-proposals, FOUNDATION, a core-primitive audit, plus implementation and example docs. This index gives suggested reading order, dependency graph, and pivotal-proposal highlights.
 
+**Scope grew across rounds.** The batch title says "AST algebra surface" but the work now covers substantially more: the 6-form algebra core, the measurements tier (cosine, dot), the 18-form stdlib, the 8-form language core (including parametric macros), the type system (four heads, rank-1 parametric polymorphism), the kernel primitives (queues, spawn, join, select, HandlePool, Signal), the config-setter tier (`:wat/config`), the two stdlib programs (Console, Cache), the conformance contract for programs-are-userland, the startup pipeline, the entry-file shape, the interpret path, and the compile path seed. Substrate, not just algebra. A first-time reader should expect kernel-primitives and type-system content in FOUNDATION alongside the algebra forms.
+
 **If you read nothing else:** start with FOUNDATION.md. It locks the criteria that every sub-proposal argues against.
 
 ---

@@ -15,6 +15,14 @@
 **Depends on:** 058-021-bind, 058-001-atom-typed-literals (keys as typed atoms)
 **Companion proposals:** 058-026-array (now `Vec`), 058-027-set (now `HashSet`)
 
+---
+
+## HISTORICAL CONTENT — SUPERSEDED BY BANNER ABOVE
+
+The sections below were written before the 2026-04-18 container-constructor rename + `get`-unification sweep. They describe an earlier design where `get` was `(cleanup (Unbind map-vec key))` — a vector-side retrieval over a codebook, with designer questions about cleanup behavior and encoder dispatch. **That design is REPLACED.** `get` is now direct structural lookup through the runtime's Rust `HashMap` backing — O(1), exact, returning `:Option<Holon>`. Cleanup doesn't participate; Unbind doesn't participate; there is no codebook. The banner at the top of this file is authoritative; the content below is preserved as audit record only.
+
+---
+
 ## The Candidate
 
 A wat stdlib function that constructs an encoded dictionary from a list of key-value pairs:
