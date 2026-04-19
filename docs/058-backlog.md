@@ -62,14 +62,32 @@ informed by running real programs through them.
 
 ## The sequence
 
-### Step 1 — kernel primitives (full 8 of 8)
+### Step 1 — kernel primitives (full surface)
 
 - [ ] typed pipe values over arbitrary `T`
 - [ ] `make-bounded-queue` / `make-unbounded-queue`
 - [ ] `spawn` (for wat-authored functions)
 - [ ] `try-recv` / `select` / `drop` / `join`
 - [ ] `HandlePool`
-- [ ] `Signal` enum + signals queue + `:user::main` fourth parameter
+- [ ] user-signal surface: `sigusr1?` / `reset-sigusr1!` / `sigusr2?` /
+  `reset-sigusr2!` / `sighup?` / `reset-sighup!` — kernel maintains
+  boolean state, userland polls + resets. Terminal signals (SIGINT /
+  SIGTERM) stay on the existing `stopped` flag. No signals queue; no
+  4th `:user::main` parameter. Administrative stance 2026-04-19: the
+  kernel makes signal state MEASURABLE; userland is responsible for
+  the transitions.
+
+### Step 1.5 — naming-convention sweep (follow-up to the signal surface)
+
+- [ ] rename `(:wat::kernel::stopped)` → `(:wat::kernel::stopped?)` to
+  conform to the `?`-suffix predicate rule
+- [ ] split `(:wat::core::presence target ref)` (`:f64`) into
+  `(:wat::algebra::cosine target ref)` (`:f64`, the measurement) and
+  `(:wat::core::presence? target ref)` (`:bool`, binarized against
+  noise floor). Callers who want the exact value reach for `cosine`;
+  callers who want the verdict reach for `presence?`.
+- [ ] sweep other bare forms that are semantically predicates and
+  rename to conform (one-pass audit)
 
 ### Step 2 — `:Option<T>` + `match` — PARTIAL (out-of-order, 2026-04-19)
 

@@ -1027,30 +1027,44 @@ The kernel primitives are exposed to wat programs as lowercase keyword-path func
 ;; --- Console ---
 ;;
 ;; There are NO ambient console accessors. `:user::main` receives stdin,
-;; stdout, stderr, and a signals queue as parameters from the kernel.
-;; Any function that wants to write to the console receives the handle
-;; it needs in its signature. Honest threading — simple, not easy. The
-;; frustration IS the discipline; it makes every capability visible at
-;; the call site.
+;; stdout, and stderr as parameters from the kernel. Any function that
+;; wants to write to the console receives the handle it needs in its
+;; signature. Honest threading — simple, not easy. The frustration IS
+;; the discipline; it makes every capability visible at the call site.
 
 ;; --- Signals ---
 ;;
-;; The kernel installs OS signal handlers for SIGINT and SIGTERM at
-;; startup. Deliveries are forwarded to the `signals` queue the kernel
-;; passes to :user::main. A program that wants graceful shutdown selects
-;; across its input queues AND the signals receiver; on signal, it
-;; drops its root producers and lets the cascade propagate.
+;; SIGINT and SIGTERM are TERMINAL. The kernel installs handlers that
+;; set an irreversible stop flag; userland polls it and cascades
+;; shutdown by dropping its root producers. No recovery, no reset.
+(:wat::kernel::stopped)   ;; → :bool   set by SIGINT / SIGTERM
+                          ;;          once true, stays true until exit
+
+;; SIGUSR1, SIGUSR2, SIGHUP are NON-TERMINAL. The kernel maintains one
+;; boolean per signal — flipped true by the OS handler, flipped back to
+;; false by a userland call to the matching `reset-` primitive. The
+;; kernel's job is measurement; semantics live entirely in userland.
 ;;
-;; Signal is a :wat::kernel::... enum:
-(:wat::core::enum :wat::kernel::Signal
-  :SIGINT       ;; Ctrl-C
-  :SIGTERM      ;; kill, systemd stop, orchestrator TERM
-  )
+;; A service that wants to react to SIGHUP polls `(:wat::kernel::sighup?)`,
+;; does its work (reload config, rotate a file, whatever it defines),
+;; and calls `(:wat::kernel::reset-sighup!)` when finished. Coalesced
+;; delivery: five SIGHUPs arriving during busy work read as one "yes"
+;; on the next poll; counter semantics is userland's problem if it
+;; needs them.
+(:wat::kernel::sigusr1?)            ;; → :bool
+(:wat::kernel::reset-sigusr1!)      ;; → :()
+(:wat::kernel::sigusr2?)            ;; → :bool
+(:wat::kernel::reset-sigusr2!)      ;; → :()
+(:wat::kernel::sighup?)             ;; → :bool
+(:wat::kernel::reset-sighup!)       ;; → :()
 ;;
-;; Additional signals may be delivered in the future (SIGHUP for config
-;; reload, SIGUSR1/2 for app-specific triggers) — the enum grows by
-;; proposal. SIGPIPE is always handled silently by the kernel; it never
-;; reaches :user::main. SIGKILL is not deliverable (OS-enforced).
+;; SIGPIPE is always handled silently by the kernel; it never reaches
+;; userland. SIGKILL is not deliverable (OS-enforced).
+;;
+;; Design stance — naming convention: `?` suffix is a boolean predicate;
+;; `!` suffix is a state-committing mutation. `(:wat::kernel::stopped)`
+;; is a grandfathered bare name that will be renamed `stopped?` in the
+;; next naming sweep to conform.
 ```
 
 **Hello-world — spawn Console, write through it, join to flush:**
@@ -1062,12 +1076,13 @@ The kernel primitives are exposed to wat programs as lowercase keyword-path func
 (:wat::core::define (:user::main (stdin   :crossbeam_channel::Receiver<String>)
                                (stdout  :crossbeam_channel::Sender<String>)
                                (stderr  :crossbeam_channel::Sender<String>)
-                               (signals :crossbeam_channel::Receiver<wat/kernel/Signal>)
                                -> :())
-  ;; stdin, stderr, and signals are slot-required by the kernel signature,
-  ;; but this program does not use them. Only stdout is passed onward.
-  ;; Naming the unused parameters is honest — the kernel gives us four
-  ;; handles; we acknowledge all four; we use one.
+  ;; stdin and stderr are slot-required by the kernel signature, but
+  ;; this program does not use them. Only stdout is passed onward.
+  ;; Naming the unused parameters is honest — the kernel gives us three
+  ;; handles; we acknowledge all three; we use one. Signals are not a
+  ;; handle — they are kernel state the program polls on demand; see
+  ;; the signal primitives above.
   (:wat::core::let* (((pool console-driver)
                     (:wat::kernel::spawn :wat::std::program::Console stdout 1))
                    (console (:wat::kernel::HandlePool::pop pool)))
@@ -1086,9 +1101,9 @@ The kernel primitives are exposed to wat programs as lowercase keyword-path func
 
 **The `:user::main` signature is fixed by the kernel.** Every `:user::main` receives the three stdio handles as parameters whether it uses them or not. This is the kernel contract. Naming them in the signature without binding them to locals is honest — the handles exist, the program acknowledges them, the program chooses not to use them. A program that wants only stderr threads `stderr` down through its spawns and ignores `stdout` and `stdin`. The type system enforces it: you cannot write to a handle you weren't given.
 
-This is the Haskell discipline without the monad wrapper: threading plain values through function parameters. The frustration is the point — every side effect is visible at the call site. Simple, not easy.
+This is the Haskell discipline without the monad wrapper: threading plain values through function parameters. The frustration is the point — every side effect is visible at the call site. Simple, not easy. Signals are NOT threaded as a parameter — the kernel exposes signal state as pollable booleans (`:wat::kernel::stopped` for terminal; `sigusr1?` / `sigusr2?` / `sighup?` + matching `reset-*!` for user signals), reachable from any function that imports the kernel path. Signal state is ambient by design: a handler for SIGHUP can live deep inside a service loop without being plumbed through every caller.
 
-**The `:user::main` convention.** The entry point is `:user::main` — a keyword-path name the **kernel looks for at startup**. The user declares it with four parameters the kernel passes in: `(:wat::core::define (:user::main (stdin :crossbeam_channel::Receiver<String>) (stdout :crossbeam_channel::Sender<String>) (stderr :crossbeam_channel::Sender<String>) (signals :crossbeam_channel::Receiver<wat/kernel/Signal>) -> :()) ...)`. Same convention as C's `main(argc, argv)` and Rust's `fn main()` — but with every capability the kernel gives the program made explicit in the signature. No ambient stdio, no ambient signal handling. No bare-name exception to the keyword-path discipline.
+**The `:user::main` convention.** The entry point is `:user::main` — a keyword-path name the **kernel looks for at startup**. The user declares it with three parameters the kernel passes in: `(:wat::core::define (:user::main (stdin :crossbeam_channel::Receiver<String>) (stdout :crossbeam_channel::Sender<String>) (stderr :crossbeam_channel::Sender<String>) -> :()) ...)`. Same convention as C's `main(argc, argv)` and Rust's `fn main()` — but with every capability the kernel gives the program made explicit in the signature. No ambient stdio. No bare-name exception to the keyword-path discipline.
 
 `:user::main` is a **kernel-looked-up slot** that the USER provides. This is the inverse of `:wat::kernel::...` paths, which are kernel-PROVIDED implementations (protected from redefinition). `:user::main` is kernel-REQUIRED (user provides; kernel invokes); there is no default implementation; the user's definition fills the slot.
 
@@ -1136,7 +1151,6 @@ Two `:user::main` declarations across loaded files produce a startup name collis
 (:wat::core::define (:user::main (stdin   :crossbeam_channel::Receiver<String>)
                                (stdout  :crossbeam_channel::Sender<String>)
                                (stderr  :crossbeam_channel::Sender<String>)
-                               (signals :crossbeam_channel::Receiver<wat/kernel/Signal>)
                                -> :())
   (:wat::core::let*
       ((N 4)  ;; four observers
@@ -1178,16 +1192,18 @@ Two `:user::main` declarations across loaded files produce a startup name collis
     ;; (6) Assert EVERY handle was claimed — orphans deadlock the driver.
     (:wat::kernel::HandlePool::finish pool)
 
-    ;; (7) Feed the graph. `feed-candles` selects across stdin AND
-    ;;     `signals`, broadcasting to all worker candle senders inline.
-    ;;     A :SIGINT or :SIGTERM stops the feed loop early — graceful
-    ;;     shutdown is one queue message among others.
+    ;; (7) Feed the graph. `feed-candles` pulls from stdin and broadcasts
+    ;;     to all worker candle senders inline. On every loop iteration
+    ;;     it polls `(:wat::kernel::stopped)` — when SIGINT / SIGTERM has
+    ;;     fired the flag is true and the feed loop returns, letting the
+    ;;     drop cascade below propagate. Graceful shutdown is state
+    ;;     observation, not message delivery.
     (:wat::core::let
         ((candle-txs (:wat::std::list::map worker-queues
                        (:wat::core::lambda (qs)
                          (:wat::core::first (:wat::core::first qs))))))
       (:wat::std::program::Console/send main-console "starting")
-      (:my::app::feed-candles stdin signals candle-txs main-console)
+      (:my::app::feed-candles stdin candle-txs main-console)
 
       ;; (8) SHUTDOWN CASCADE — drop all candle senders first. Workers
       ;;     see :None on recv, drain, return. Their result-tx senders
@@ -1269,7 +1285,7 @@ The stdlib ships exactly two programs under `:wat::std::program::`. Both meet a 
 
 - **Database programs** — schemas, batching strategies, query languages are app-specific. Each app writes its own, or pulls from a userland library it chooses.
 - **Telemetry** (emit-metric, flush-metrics, rate-gates) — CloudWatch entry shape, rate-gate intervals, emit-closure composition are app choices. The trading lab's helpers live in `src/programs/telemetry.rs` precisely because they're its choices.
-- **Signal converters beyond the kernel's SIGINT/SIGTERM delivery** — a program that wants to convert signals into a domain-specific event type does it in userland, on top of the `signals` queue the kernel hands `:user::main`.
+- **Signal converters beyond the kernel's pollable flags** — a program that wants to convert signal observations into a domain-specific event type (e.g., "SIGHUP → config-reload-requested message") does it in userland, polling the kernel's `(:wat::kernel::sighup?)` / `(:wat::kernel::reset-sighup!)` pair (or terminal `stopped` flag) and emitting onto its own queue.
 - **Config loading, CLI parsing, environment access** — app choices. The kernel does not ship `argparse`.
 - **All domain programs** — Market Observer, Regime Observer, Broker, Treasury in the trading lab; Server, Worker, Ingest in another app. Every domain program is userland.
 
