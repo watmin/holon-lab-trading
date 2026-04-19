@@ -1,6 +1,6 @@
 # 058 — Consolidated Open Questions for Designers
 
-**Purpose:** single-scan sheet of every designer-facing question across the 29 sub-proposals. Each question preserved verbatim with its source proposal noted. Audited primitives (Bind, Permute, Thermometer) have no open questions — see `CORE-AUDIT.md`.
+**Purpose:** single-scan sheet of every designer-facing question across the 29 sub-proposals. Each question preserved verbatim with its source proposal noted. Audited primitives (Bind, Permute, Thermometer) have no open questions — see `CORE-AUDIT.md`. FOUNDATION's own Open Questions (Q1–Q7) and their resolutions live in `FOUNDATION.md` (`## Open Questions`).
 
 **Generated from:** sub-proposals' "Questions for Designers" sections.
 
@@ -462,6 +462,39 @@ Bind, Permute, and Thermometer are affirmed core primitives already present in h
 
 ---
 
+## 058-031: defmacro
+
+1. **Hygiene — RESOLVED.** The proposal ships with Racket-style sets-of-scopes hygiene (Flatt 2016). Every `Identifier` carries a `BTreeSet<ScopeId>`; the expander assigns a fresh scope per macro invocation; binding resolution uses `(name, scope_set)` pairs. Variable capture is structurally impossible, not discipline-enforced. The earlier "start unhygienic" recommendation was superseded — datamancer's call: "macro expansion must be safe... there's no way we can get rust to not be safe, right?"
+
+2. **Recursion.** Can a macro invoke itself during expansion? Yes (standard Lisp). Expansion limit (e.g., 1000 recursive rewrites) prevents infinite loops. The fixpoint-until-no-macro-calls semantic handles this — a pathological macro that always emits a new macro invocation hits the limit and errors at startup.
+
+3. **Typed macros — RESOLVED in 058-032.** Every macro parameter is `:AST<T>` with a concrete value type — same discipline as every other typed position in the language. Bare `:AST` without `<T>` is retired, matching 058-030's no-`:Any` rule. Macro-definition-time type checking runs before expansion; call-site checking names the parameter by its declared type. 058-031's initial draft called this deferred; 058-032 completes it.
+
+4. **Introspection.** Should userland code be able to see what a macro call expands to? Useful for debugging. Recommendation: yes, via `(macroexpand form)` — returns the fully-expanded AST without evaluation. Classical Lisp feature. Not in 058-031's ship set; could land in a follow-up proposal when debugging tooling is built out.
+
+5. **Signature-verification over expansion — RESOLVED via 058-031.** The hash used for cryptographic identity is on the EXPANDED AST (per FOUNDATION's Model A). Two semantically-identical source files that differ only in macro aliases produce the same expanded AST and the same hash. Source signatures are a separate concern (author identity vs. content identity).
+
+6. **Stdlib aliases as macros — complete list, partial resolution.** 058-031 anticipated ~13-14 stdlib proposals changing from `define` to `defmacro`. Landed state:
+   - **Accepted as macros**: 058-012 Chain, 058-013 Ngram, 058-014 Analogy, 058-015 Amplify, 058-019 Subtract, 058-020 Flip, 058-016 HashMap, 058-026 Vec, 058-027 HashSet, 058-017 Log, 058-018 Circular, 058-009 Sequential (reframed).
+   - **REJECTED** (stdlib-as-blueprint test failed; no distinct pattern): 058-004 Difference, 058-008 Linear, 058-010 Concurrent, 058-011 Then, 058-024 Unbind, 058-025 Cleanup.
+   - Users may define the rejected forms in their own namespaces as macros if they want the name.
+
+7. **Provenance / versioning across distributed nodes — RESOLVED in 058-031.** See the "Provenance — Macro-Set Versioning and Distributed Consensus" section. Stdlib macros lock with the algebra version; user macros carry local provenance; distributed consensus operates on expanded ASTs, not source + macro-set pairs; macro-set upgrades are coordinated events.
+
+---
+
+## 058-032: Typed Macros
+
+1. **Polymorphic macros — deferred.** A macro that accepts `:AST<T>` for any T (the "debug-print works on any type" case) requires parametric polymorphism. 058-030 does not currently provide polymorphism for functions either — the only polymorphism in 058-030 is via enum wrapping (closed coproducts pattern-matched). If a future proposal adds parametric polymorphism for functions, macros follow the same pattern. Out of scope for 058-032; not a loss, since it matches 058-030's existing discipline.
+
+2. **Bare `:AST` retirement — confirm.** 058-031's original examples used bare `:AST` as macro-parameter types; 058-032 retires that as a placeholder (same discipline as 058-030's ban on `:Any`). 058-031 examples swept to `:AST<T>` in the same commit. Any remaining bare-`:AST` parameter types in sub-proposal examples are unintentional — sweep pass welcome from the designer review.
+
+3. **Interaction with macro hygiene.** Typed-macro elaboration binds parameters in the type environment; 058-031's scope-set hygiene binds them in the scope environment. Both are per-parameter metadata on the `Identifier` struct; they operate orthogonally and compose cleanly. No open question other than the integration testing that happens when both features ship together.
+
+4. **Type-variable polymorphism inside a typed macro body.** Hypothetical: a macro whose body uses a type variable that appears in its signature (`(defmacro (swap (a :AST<T>) (b :AST<T>) -> :AST<T>) ...)` with T bound in the macro's scope). Under 058-030's current "no parametric polymorphism for functions" rule, macros also don't get this. If 058-030 relaxes, macros follow. No open action for 058-032; deferred with the broader polymorphism question.
+
+---
+
 ## Cross-cutting themes
 
 ### Theme: AST preservation vs. eager expansion (cache canonicalization)
@@ -471,6 +504,7 @@ Bind, Permute, and Thermometer are affirmed core primitives already present in h
 - 058-017 Q4 — "same consistency concerns as 058-008" for Log
 - 058-018 Q6 — "same consistency concerns as 058-008 and 058-017" for Circular
 - 058-024 Q2 — cache canonicalization for Unbind alias
+- **Theme-wide RESOLUTION via 058-031 (defmacro).** All of the above dissolve: macros expand at parse time, the canonical (post-expansion) AST is what hashes and caches. Two source files differing only in alias choice produce the same expanded AST and same hash. No separate canonicalization layer needed.
 
 ### Theme: Dependency on 058-002 (Blend) resolution
 - 058-004 Q3 — Difference cannot resolve before Blend
