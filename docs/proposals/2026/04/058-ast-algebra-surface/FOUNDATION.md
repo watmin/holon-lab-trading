@@ -176,22 +176,24 @@ This is the **per-frame bound** — ~100 bindings before cosine-recovery noise d
 
 ### Depth is free
 
-A bundled composition's vector can itself become a VALUE in another bundle:
+A bundled composition's vector can itself become a VALUE in another bundle.
+
+**`:wat::std::HashMap` calling convention.** Variadic, alternating key-then-value: `(HashMap k1 v1 k2 v2 ...)`. Odd arity halts at parse. Keys are restricted to primitive types (`:i64`, `:f64`, `:bool`, `:String`, `:wat::core::keyword`) in the currently-shipped surface; composite keys (Vec, Tuple, Holon, HashMap-in-HashMap) graduate when a caller demands them. Primitive keys are stored under a type-tagged canonical string at the Rust backing (`"I:42"`, `"S:42"`, `"B:true"`, `"K:foo"`, `"F:<bits>"`), so a `HashMap<String,V>` with key `"42"` never collides with a `HashMap<i64,V>` entry at key `42`. Duplicate keys in the constructor: later entries win.
 
 ```scheme
 (:wat::core::define :my::app::frame-1
-  (:wat::std::HashMap (:wat::core::vec
-    (:wat::core::vec (:wat::algebra::Atom "a") v1)
-    (:wat::core::vec (:wat::algebra::Atom "b") v2)
-    ;; ... up to ~100 items ...
-    )))
+  (:wat::std::HashMap
+    "a" v1
+    "b" v2
+    ;; ... up to ~100 items, alternating key / value ...
+    ))
 
 (:wat::core::define :my::app::frame-2
-  (:wat::std::HashMap (:wat::core::vec
-    (:wat::core::vec (:wat::algebra::Atom "inner") :my::app::frame-1)   ; frame-1's structure preserved
-    (:wat::core::vec (:wat::algebra::Atom "other") v99)
+  (:wat::std::HashMap
+    "inner" :my::app::frame-1   ; frame-1's structure preserved
+    "other" v99
     ;; ... up to ~100 more items ...
-    )))
+    ))
 ```
 
 `encode(frame-2)` produces a 10k-dim vector. That vector HOLDS frame-1's entire structure through orthogonal composition — the inner `Bind` is quasi-orthogonal to the other 99 bindings at frame-2's level. Inner structure is preserved, not flattened.
@@ -274,12 +276,12 @@ The VECTOR form exists for algebraic operations on programs — comparison, stor
 
 ```scheme
 (:wat::core::define :my::app::programs
-  (:wat::std::HashMap (:wat::core::vec
-    (:wat::core::vec (:wat::algebra::Atom "greeting")   :my::app::hello-world)
-    (:wat::core::vec (:wat::algebra::Atom "farewell")   :my::app::goodbye-function)
-    (:wat::core::vec (:wat::algebra::Atom "risk-check") :my::app::risk-function))))
+  (:wat::std::HashMap
+    "greeting"   :my::app::hello-world
+    "farewell"   :my::app::goodbye-function
+    "risk-check" :my::app::risk-function))
 
-(eval (:wat::std::get :my::app::programs (:wat::algebra::Atom "risk-check")) portfolio-state)
+(eval (:wat::std::get :my::app::programs "risk-check") portfolio-state)
 ```
 
 **Programs compared geometrically:**
@@ -480,7 +482,7 @@ User input to a wat program is data. It flows through the algebra as a value:
 
 ;; SAFE — input composed into a larger data structure:
 (:wat::core::define (:my::app::store-for-later (input :holon::HolonAST) -> :holon::HolonAST)
-  (:wat::std::HashMap (:wat::core::vec (:wat::core::vec (:wat::algebra::Atom :payload) input))))
+  (:wat::std::HashMap (:wat::algebra::Atom :payload) input))
 ```
 
 In both cases, `input` is bound, bundled, queried, extracted. Nothing evaluates it as code.
@@ -1369,10 +1371,10 @@ The wat algebra is parametric over dimension. A program's semantics are defined 
 
 ;; A program with a large frame — needs higher d, OR refactoring:
 (:wat::core::define (:my::app::rich-analysis data)
-  (:wat::std::HashMap (:wat::core::vec
-    (:wat::core::vec (:wat::algebra::Atom "feature-1")   f1)
+  (:wat::std::HashMap
+    "feature-1"   f1
     ;; ... 200 features in one frame ...
-    (:wat::core::vec (:wat::algebra::Atom "feature-200") f200))))
+    "feature-200" f200))
 ;; at d=4,096 this frame exceeds capacity, recovery degrades
 ;; at d=16,384 it fits cleanly
 ;; OR refactor into nested smaller frames at any d
@@ -1574,15 +1576,15 @@ These are semantically different memory types. Holons are programs-of-the-moment
 
 ```scheme
 (:wat::core::define :my::app::pattern-library
-  (:wat::std::HashMap (:wat::core::vec
-    (:wat::core::vec (:wat::algebra::Atom :pattern::syn-flood)         syn-flood-engram)
-    (:wat::core::vec (:wat::algebra::Atom :pattern::bollinger-squeeze) squeeze-engram)
-    (:wat::core::vec (:wat::algebra::Atom :pattern::market-reversal)   reversal-engram)
+  (:wat::std::HashMap
+    :pattern::syn-flood         syn-flood-engram
+    :pattern::bollinger-squeeze squeeze-engram
+    :pattern::market-reversal   reversal-engram
     ;; ... potentially thousands ...
-    )))
+    ))
 
 ;; get an engram by name:
-(:wat::std::get :my::app::pattern-library (:wat::algebra::Atom :pattern::syn-flood))
+(:wat::std::get :my::app::pattern-library :pattern::syn-flood)
 ```
 
 Under the foundational principle, this is a holon (an AST). Engrams are VALUES in the HashMap. Retrieval is structural lookup via `get`. The library IS a wat holon.
@@ -3015,11 +3017,11 @@ Vec position atoms are NOT in this category. Position 0 IS the integer 0. Use `(
 
 ;; HashMap as key-value store:
 (:wat::core::define :my::app::portfolio
-  (:wat::std::HashMap (:wat::core::vec
-    (:wat::core::vec (:wat::algebra::Atom "USDC") (:wat::algebra::Thermometer 5000 0 10000))
-    (:wat::core::vec (:wat::algebra::Atom "WBTC") (:wat::algebra::Thermometer 0.5  0 1.0)))))
+  (:wat::std::HashMap
+    "USDC" (:wat::algebra::Thermometer 5000 0 10000)
+    "WBTC" (:wat::algebra::Thermometer 0.5  0 1.0)))
 
-(:wat::std::get :my::app::portfolio (:wat::algebra::Atom "USDC"))      ; → (Thermometer 5000 0 10000)
+(:wat::std::get :my::app::portfolio "USDC")      ; → (Thermometer 5000 0 10000)
 
 ;; Vec as indexed collection:
 (:wat::core::define :my::app::recent-rsi
@@ -3032,23 +3034,32 @@ Vec position atoms are NOT in this category. Position 0 IS the integer 0. Use `(
 
 ;; Nested — HashMap of Vecs of holons:
 (:wat::core::define :my::app::observer-state
-  (:wat::std::HashMap (:wat::core::vec
-    (:wat::core::vec (:wat::algebra::Atom "market-readings") :my::app::recent-rsi)
-    (:wat::core::vec (:wat::algebra::Atom "portfolio")       :my::app::portfolio))))
+  (:wat::std::HashMap
+    "market-readings" :my::app::recent-rsi
+    "portfolio"       :my::app::portfolio))
 
-(:wat::std::get (:wat::std::get :my::app::observer-state (:wat::algebra::Atom "market-readings"))
+(:wat::std::get (:wat::std::get :my::app::observer-state "market-readings")
      (:wat::algebra::Atom 0))                    ; → (Thermometer 0.68 0 1)
 
-;; --- The locator can be ANY holon ---
+;; --- The locator can be ANY holon (aspirational; see note below) ---
+
+;; NOTE: the currently-shipped wat-rs HashMap scopes keys to
+;; primitives (:i64, :f64, :bool, :String, keyword) — type-tagged
+;; canonical strings are the backing representation. Composite-holon
+;; keys (Bundle / Bind / Thermometer / nested HashMap) are part of
+;; the algebra's unified-data-model vision and graduate when a
+;; caller demands them. The examples below describe the target
+;; shape; a caller that needs them today hashes the composite
+;; holon's canonical-EDN form to a String key themselves.
 
 ;; The key doesn't have to be a bare Atom. It can be a composite holon:
 
 (:wat::core::define :my::app::keyed-by-composite
-  (:wat::std::HashMap (:wat::core::vec
-    (:wat::core::vec (:wat::algebra::Bundle (:wat::core::vec (:wat::algebra::Atom "rsi") (:wat::algebra::Atom "overbought")))
-          some-value)
-    (:wat::core::vec (:wat::algebra::Bind (:wat::algebra::Atom "macd") (:wat::algebra::Atom "crossing-up"))
-          other-value))))
+  (:wat::std::HashMap
+    (:wat::algebra::Bundle (:wat::core::vec (:wat::algebra::Atom "rsi") (:wat::algebra::Atom "overbought")))
+      some-value
+    (:wat::algebra::Bind (:wat::algebra::Atom "macd") (:wat::algebra::Atom "crossing-up"))
+      other-value))
 
 ;; Retrieve with the same composite as locator:
 (:wat::std::get :my::app::keyed-by-composite
@@ -3057,12 +3068,12 @@ Vec position atoms are NOT in this category. Position 0 IS the integer 0. Use `(
 
 ;; Keys can be HashMaps. Values can be HashMaps. Arbitrary nesting:
 (:wat::core::define :my::app::wild
-  (:wat::std::HashMap (:wat::core::vec
-    (:wat::core::vec (:wat::std::HashMap (:wat::core::vec (:wat::core::vec (:wat::algebra::Atom "a") (:wat::algebra::Atom "b"))))    ; key IS a HashMap
-          (:wat::std::Vec (:wat::core::vec                                        ; value IS a Vec
-            (:wat::std::HashMap (:wat::core::vec (:wat::core::vec (:wat::algebra::Atom "x") (:wat::algebra::Atom "y"))))   ; of HashMaps
-            (:wat::algebra::Atom "atom-in-the-middle")                     ; of atoms
-            (:wat::std::Vec (:wat::core::vec (:wat::algebra::Atom "nested") (:wat::algebra::Atom "deeper")))))))) ; of Vecs
+  (:wat::std::HashMap
+    (:wat::std::HashMap "a" "b")                                          ; key IS a HashMap
+    (:wat::std::Vec (:wat::core::vec                                      ; value IS a Vec
+      (:wat::std::HashMap "x" "y")                                        ; of HashMaps
+      (:wat::algebra::Atom "atom-in-the-middle")                          ; of atoms
+      (:wat::std::Vec (:wat::core::vec (:wat::algebra::Atom "nested") (:wat::algebra::Atom "deeper")))))))   ; of Vecs
 ```
 
 ---

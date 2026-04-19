@@ -7,6 +7,18 @@
 > **Also changed in the same sweep:** `get` is now direct structural lookup (no `cleanup`, no `Unbind` to a noisy vector, no codebook). The runtime materializes a Rust `HashMap` from the Holon AST for O(1) lookups. `get` returns `:Option<holon::HolonAST>` — `(Some v)` on hit, `:None` on miss.
 >
 > The concept is unchanged. Only the name and the accessor mechanics.
+>
+> **2026-04-19 shipped shape.** `:wat::std::HashMap` is variadic with
+> alternating key/value args: `(HashMap k1 v1 k2 v2 ...)`. Odd arity
+> halts. The "Vec of Pair" signature in the historical sections is
+> superseded — the flat-args form is Lisp-idiomatic and easier to
+> write. Keys are primitive-scoped in the currently-shipped wat-rs
+> (`:i64`, `:f64`, `:bool`, `:String`, keyword); the Rust backing
+> stores them as type-tagged canonical strings so heterogeneous key
+> types never collide. Composite-holon keys (the algebra's unified-
+> data-model vision) graduate when a caller demands them.
+> `:wat::std::contains?` ships alongside `:wat::std::get` — boolean
+> membership test, same argument shape.
 
 **Scope:** algebra
 **Class:** STDLIB
