@@ -99,7 +99,7 @@ New named compositions:
 27. **058-011-then** — **REJECTED** (2026-04-18). Arity-specialization of Sequential; no new pattern. Userland macro if desired.
 28. **058-012-chain** — **REJECTED.** Redundant with Bigram (new named form under 058-013 Ngram). `Chain xs` = `Ngram 2 xs` = Bigram.
 29. **058-013-ngram** — **ACCEPTED with reframe + two named shortcuts**. Ships `Ngram`, `Bigram` (= Ngram 2), `Trigram` (= Ngram 3). Uses bind-chain Sequential from the 058-009 reframe. Users write their own higher-n named macros (`:my/app/Pentagram = Ngram 5`) in their namespace.
-30. **058-014-analogy** — `c + (b − a)` via Bundle + Difference.
+30. **058-014-analogy** — **DEFERRED.** Proven working (classical Kanerva A:B::C:?) but not currently adopted in any application in this workspace. Proposal preserved as resumable audit record; graduates to ACCEPTED when an application demands it with citation.
 31. **058-024-unbind** — **REJECTED** (2026-04-18). Identity alias for Bind; demonstrates no new pattern. Bind-on-Bind IS Unbind — a fact about the algebra, not a name worth projecting.
 
 ### Phase 8 — Data structures (10 min)

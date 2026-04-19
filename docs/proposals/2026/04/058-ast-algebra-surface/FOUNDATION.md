@@ -1746,7 +1746,7 @@ Algebra Core     Atom, Bind, Bundle, Permute, Thermometer, Blend,
     ↓            Orthogonalize
     ↓            (what produces holon vectors)
     ↓
-Stdlib           Sequential, Chain, Ngram, Analogy,
+Stdlib           Sequential, Ngram, Bigram, Trigram,
                  Amplify, Subtract, HashMap, Vec, HashSet, Sequential, Ngram, Bigram, Trigram,
                  Linear, Log, Circular, ...
                  (named compositions — defined with language core, using algebra core)
@@ -1912,7 +1912,6 @@ wat/std/
       wat/std/Ngram.wat           ;; :wat/std/Ngram          (macro)
       wat/std/Bigram.wat          ;; :wat/std/Bigram         (macro: Ngram 2)
       wat/std/Trigram.wat         ;; :wat/std/Trigram        (macro: Ngram 3)
-      wat/std/Analogy.wat         ;; :wat/std/Analogy        (macro)
       wat/std/HashMap.wat         ;; :wat/std/HashMap        (macro)
       wat/std/Vec.wat             ;; :wat/std/Vec            (macro)
       wat/std/HashSet.wat         ;; :wat/std/HashSet        (macro)
@@ -2394,12 +2393,11 @@ Retrieval is NOT a core form. Presence is measured by `cosine(encode(target), re
   ;; weight -2 is the minimum inversion weight for bipolar vectors
   (:wat/algebra/Blend x y 1 -2))
 
-;; --- Relational transfer ---
-
-(:wat/core/define (:wat/std/Analogy a b c)
-  ;; A is to B as C is to ?
-  ;; computes C + (B - A)
-  (:wat/algebra/Bundle (:wat/core/list c (:wat/std/Subtract b a))))
+;; --- Relational transfer: DEFERRED ---
+;; Analogy (058-014) is DEFERRED — proven working but not adopted.
+;; See 058-014/PROPOSAL.md for the resumable audit record.
+;; Inline form when needed:
+;;   (:wat/algebra/Bundle (:wat/core/list c (:wat/std/Subtract b a)))
 
 ;; --- Data structures (Rust-surface names) ---
 ;;
@@ -2858,7 +2856,6 @@ The implementation choice is outside FOUNDATION's scope. FOUNDATION declares the
 (:wat/std/Ngram n list)                 ; 058-013  — n-wise adjacency
 
 ;; Relational (1)
-(:wat/std/Analogy a b c)                ; 058-014  — C + (B - A)
 
 ;; Data structures (3)
 (:wat/std/HashMap kv-pairs)             ; 058-016  — Rust's HashMap as Bundle of Binds
@@ -2903,7 +2900,7 @@ Language core is minimal by criterion: just enough to make the algebra stdlib ex
 
 ### Dependency Ordering
 
-- **Blend (058-002) ACCEPTED.** Downstream stdlib that became Blend macros: Circular, Amplify, Subtract. (Linear, Difference, Flip — REJECTED. Log, Analogy — see their own sections.)
+- **Blend (058-002) ACCEPTED.** Downstream stdlib that became Blend macros: Circular, Amplify, Subtract. (Linear, Difference, Flip — REJECTED. Log — ACCEPTED as its own stdlib. Analogy — DEFERRED; preserved as resumable audit record.)
 - **Types (058-030) resolves before define/lambda.** The definition forms' signatures require the type grammar.
 - **Define/lambda (058-028, 058-029) resolve before all stdlib.** Stdlib is `(define ...)` forms; without the definition primitive, stdlib is theoretical.
 - **Atom typed literals (058-001) resolves before HashMap and data-structure uses.** Keys as typed atoms require the typed-literal generalization.

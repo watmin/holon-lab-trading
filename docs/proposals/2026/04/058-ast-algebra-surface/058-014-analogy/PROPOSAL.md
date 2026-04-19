@@ -1,10 +1,52 @@
 # 058-014: `Analogy` — Stdlib Idiom for "A Is To B As C Is To ?"
 
 **Scope:** algebra
-**Class:** STDLIB
+**Class:** **DEFERRED** — preserved as resumable audit record
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
-**Depends on:** 058-019-subtract (the canonical delta macro; 058-004-difference is REJECTED)
+
+---
+
+## DEFERRED — 2026-04-18
+
+Analogy is **proven to work** but **not currently adopted** in any application in this workspace. The proposal is preserved intact as a resumable audit record — when real application demand materializes, this proposal gets picked back up and re-argued with the citation it currently lacks.
+
+### Why DEFERRED and not REJECTED
+
+Analogy occupies a third status between ACCEPTED and REJECTED:
+
+- **Proven working** — the datamancer demonstrated it; the classical Kanerva / Plate A:B::C:? operation produces the right geometric relationship on the unit sphere. Not speculative; the math is known to work.
+- **Classical VSA heritage** — Plate, Kanerva, Eliasmith all describe it. It's one of VSA's most-cited strengths, documented in the primer (`series-001-002-holon-ops.md` line 159-170): `analogy(a, b, c) → C + (B - A)`.
+- **Primer cites** a concrete hypothetical use (cross-domain rule transfer: "SYN flood 80 → 443") but says "Explored in the challenge batches" — no challenge number, no F1=X.XX measurement.
+- **Not currently adopted** — trading lab doesn't use Analogy. DDoS lab doesn't use Analogy. Challenge batches "explored" it without citing measurable outcomes.
+- **Trivially expressible when needed** — users who want the operation write `(:wat/algebra/Bundle (:wat/core/list c (:wat/std/Subtract b a)))` inline; the stdlib name is convenience, not a new primitive.
+
+Unlike Flip (magic-weight, primer-collision with single-arg `flip`), Resonance (no citation, wrong abstraction level per Mask Q2), or ConditionalBind (half-abstraction — gate-consumer without a gate-producer), **Analogy is clean; it just lacks adoption**. Rejecting it would suggest something is structurally wrong with it, which isn't true. Accepting it would ship a name nobody uses today.
+
+**DEFERRED** captures the honest state: shape defended, implementation trivial, not shipping in 058, resume when an application demands it.
+
+### What DEFERRED means concretely
+
+- **Not in algebra stdlib.** `:wat/std/Analogy` is NOT registered in the symbol table from 058. Apps that want the operation write the inline Bundle+Subtract form or define it in their own namespace: `(:my/app/Analogy a b c) = (Bundle (list c (Subtract b a)))`.
+- **Proposal preserved intact.** Content below this banner is the full audit record — the expansion, the semantics, the arguments, the worked king/queen/man example. All of it stays.
+- **Resume mechanism.** A future proposal — likely `058-014-R2` or a fresh number — picks up from this state with concrete application evidence (which challenge, what measurement, what couldn't be done without it). The algebra decision doesn't need re-arguing; only the earn-stdlib-with-citation part does.
+- **No live designer questions.** Q1 (delta name) resolved (Subtract wins). Q3 (AnalogyCleanup) resolved (argmax purged, caller's policy). Q2/Q4/Q5 moot for 058 under deferral.
+
+### What application would graduate this to ACCEPTED
+
+Any of:
+- A trading-lab vocab that uses analogy to predict unseen patterns from learned transitions.
+- A DDoS-lab rule that transfers "attack A on port X" to "same attack on port Y" via analogy.
+- A text classifier that does concept transfer through the A:B::C:? shape.
+- A challenge batch that uses analogy explicitly, cites measurements, and the name earns its place on the blueprint test.
+
+Until then, Analogy stays where it is — an audit record of a working-but-unadopted primitive.
+
+See FOUNDATION-CHANGELOG 2026-04-18 entry for the deferral record.
+
+---
+
+## Historical content (preserved as the resumable audit record)
 
 ## The Candidate
 

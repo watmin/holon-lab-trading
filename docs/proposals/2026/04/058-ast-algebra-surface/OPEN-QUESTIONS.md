@@ -137,17 +137,10 @@ Everything else in this document is RESOLVED inline (with a pointer to the resol
 
 ---
 
-## 058-014: Analogy
+## 058-014: Analogy — DEFERRED
 
-1. **Dependency on 058-004's delta name.** — **RESOLVED.** 058-004 Difference REJECTED; only `:wat/std/Subtract` (058-019) exists. Analogy uses `(:wat/std/Subtract b a)`. See FOUNDATION-CHANGELOG 2026-04-18 stdlib macro audit entry.
+**All questions in this section are MOOT under deferral.** Analogy is proven working (classical Kanerva A:B::C:?) but not currently adopted in any application in this workspace. Proposal preserved as a resumable audit record — future proposal re-argues with application-citation evidence. Not shipping in 058. See 058-014/PROPOSAL.md's DEFERRED banner and FOUNDATION-CHANGELOG 2026-04-18 entry.
 
-2. **Argument order convention.** The standard `(a, b, c)` is "a is to b as c is to ?". Could alternatively be `(a, b, c, d)` returning a cleanup match, or `(from, to, apply-to)` with keyword-ish naming. Recommendation: stick with the three-term positional form, document clearly.
-
-3. **Should the stdlib also provide the four-term `AnalogyCleanup`?** — **RESOLVED: NO.** Cleanup is REJECTED (058-025); argmax is rejected as a substrate primitive. Analogy returns a completion Holon; callers measure presence against their candidate library and apply their own selection policy (top-1 fold, above-threshold filter, top-k sort, weighted Bundle). See FOUNDATION-CHANGELOG 2026-04-18 argmax-purge entry.
-
-4. **Domain applications.** In holon-lab-trading, are there specific analogy use cases? E.g., "trend phase X was to breakout as trend phase Y is to ?" This proposal's existence opens the door; concrete vocab applications should be tracked.
-
-5. **Relationship to Plate/Kanerva's formulations.** Different VSA literature has subtly different analogy completions (circular convolution-based, binding-based, etc.). Is this formulation (Bundle-based with Difference) compatible with all of them? Document the chosen formulation.
 
 ---
 
