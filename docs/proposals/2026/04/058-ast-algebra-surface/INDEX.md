@@ -45,7 +45,7 @@ Read in order:
 
 These three are load-bearing; the rest depend on their resolution:
 
-5. **058-002-blend** — promotes `Blend(a, b, w1, w2)` to core with two independent scalar weights. Pivotal because six stdlib forms (Difference, Amplify, Subtract, Flip, Linear, Log, Circular) become expressible only after Blend lands as core.
+5. **058-002-blend** — **ACCEPTED.** `(:wat/algebra/Blend a b w1 w2)` enters algebra core with two independent real-valued scalar weights (Option B), negative weights allowed, binary arity. Unblocks Circular/Amplify/Subtract/Flip as stdlib macros. See 058-002/PROPOSAL.md's ACCEPTED banner for the per-question reasoning.
 
 6. **058-001-atom-typed-literals** — generalizes `Atom` to accept any typed literal (string, int, float, bool, keyword). Required before data-structure stdlib (HashMap, Vec) can use typed keys.
 
@@ -214,7 +214,7 @@ Shows which proposals must resolve before which others. Arrows flow from prerequ
 | # | Form | Class | Status | Key argument |
 |---|---|---|---|---|
 | 001 | Atom typed literals | CORE | generalization | Atom accepts int/float/bool/keyword/null/string with type-aware hash |
-| 002 | Blend | CORE | PIVOTAL NEW | `threshold(w1·a + w2·b)` with two independent weights |
+| 002 | Blend | CORE | ACCEPTED | `threshold(w1·a + w2·b)` — two independent weights, negative allowed, binary |
 | 003 | Bundle list signature | CORE | clarification | Lock Bundle's arg as a single list (not variadic) |
 | 004 | Difference | STDLIB | reclassification | `Blend(a, b, 1, -1)`, delta framing |
 | 005 | Orthogonalize | CORE | new | Projection removal with computed coefficient |

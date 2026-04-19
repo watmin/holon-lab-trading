@@ -1,10 +1,60 @@
 # 058-002: `Blend` — Scalar-Weighted Binary Combination
 
 **Scope:** algebra
-**Class:** CORE (new variant)
+**Class:** CORE — **ACCEPTED**
 **Parent:** 058-ast-algebra-surface
 **Foundation:** ../FOUNDATION.md
-**Pivotal:** resolution triggers reclassification of `Linear` and `Circular` as stdlib.
+
+---
+
+## ACCEPTED — 2026-04-18
+
+`Blend` enters the algebra core as a new variant with signature `(:wat/algebra/Blend a b w1 w2)` — two independent real-valued scalar weights. All five designer questions closed on the arguments below. Designer review in Round 3 may still reopen any of them; this section records our best reading.
+
+### Q1 — Distinct source category? **YES.**
+
+Bundle is the MAP monoid "Add" — uniform +1 weights, associative, commutative. Blend is parameterized binary combination; non-commutative in the vector arguments when `w1 ≠ w2`. Different categorical object, different algebraic role. Self-answering under FOUNDATION's core criterion (new operation no existing primitive performs).
+
+### Q2 — Option A (convex, single alpha) vs Option B (two independent weights)? **Option B.**
+
+The counter-intuitive reading. Option A has less syntactic surface but more entangled semantics: `alpha` and `(1 - alpha)` are **braided** — the convexity constraint forces a relationship between them. **Option A is a complection hiding in plain sight.** Option B unbraids: each weight stands alone. By Hickey's "simple = unentangled concepts" definition, Option B is simpler despite having more parameters.
+
+Also load-bearing: Option A physically cannot express Circular, because `cos(θ) + sin(θ) ≠ 1` in general (at θ=π/4 the sum is ≈1.414). Option A keeps Circular in core; Option B lets Circular expand to a wat stdlib macro over `Blend`. Option B strictly dominates: smaller core, fuller coverage.
+
+### Q3 — Allow negative weights? **YES.**
+
+Follows from Option B — once weights are independent reals, negative is arithmetic, not a new concept. The operation is `threshold(w1·a + w2·b)` regardless of sign. `Blend(x, y, 1, -1) = Subtract`. The "blurs superposition intuition" objection lands in the naming tier, not the algebra tier. Semantic intent is carried by stdlib names (`Subtract`, `Amplify`, `Flip`) at the call site; the core primitive does not police interpretation.
+
+### Q4 — Variadic temptation? **Stay binary.**
+
+Generalizing to `Blend(pairs)` variadic would make Bundle a special case (all-1 weights), which dissolves MAP's canonical set. Bundle is the monoid Add; Blend is the parameterized binary combination; different categorical objects; coexist. Binary Blend does what every current proposal needs. If future work genuinely demands variadic weighted sum, it proposes separately with concrete motivation.
+
+### Q5 — holon-rs implementation impact? **Trivial.**
+
+~20 lines: new `blend_weighted(a, b, w1, w2)`; existing `blend(a, b, α)` becomes a thin wrapper `blend_weighted(a, b, 1.0 - α, α)`. Backward compatible. Cache key encoding for f64 weights follows the existing Thermometer pattern (value, min, max as f64 fields), already working in production.
+
+### Q6 — If rejected, path for Linear/Circular? **Moot.**
+
+Q1 and Q2 answers mean Blend is accepted; the conditional branch does not fire.
+
+---
+
+## Downstream cascade (now unblocked)
+
+With Blend ACCEPTED as Option B with negative weights, the following stdlib reclassifications become mechanical:
+
+- **058-008 Linear** — already REJECTED (identical to Thermometer with the 3-arity signature); not affected.
+- **058-018 Circular** — becomes `(:wat/algebra/Blend cos-basis sin-basis (cos θ) (sin θ))`; stdlib macro.
+- **058-015 Amplify** — becomes `(:wat/algebra/Blend x y 1 s)`; stdlib macro.
+- **058-019 Subtract** — becomes `(:wat/algebra/Blend x y 1 -1)`; stdlib macro (the canonical delta — 058-004 Difference REJECTED).
+- **058-020 Flip** — becomes `(:wat/algebra/Blend x y 1 -2)`; stdlib macro.
+- **058-005 Orthogonalize** — stays core (computed-coefficient projection removal, which Blend cannot express because the coefficient depends on a dot product of the inputs).
+
+The original three-mode Negate decomposes cleanly: one mode (orthogonalize) stays core; two modes (subtract, flip) become stdlib Blend idioms.
+
+---
+
+## Historical content (preserved — supports the above arguments)
 
 ## The Candidate
 

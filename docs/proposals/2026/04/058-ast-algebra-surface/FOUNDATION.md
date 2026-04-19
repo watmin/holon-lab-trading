@@ -2832,7 +2832,7 @@ The implementation choice is outside FOUNDATION's scope. FOUNDATION declares the
 
 **058-025 Cleanup is REJECTED.** The wat substrate has no `Cleanup` primitive — the AST-primary framing dissolves the need for codebook-based recovery. Retrieval is presence measurement (cosine + noise floor); argmax-over-candidates, when an application needs it, is stdlib composition over presence, not a core primitive. See "Presence is Measurement, Not Verdict" in FOUNDATION.
 
-**Blend is pivotal.** Its promotion formalizes scalar-weighted combination, enabling Linear/Log/Circular/Amplify/Subtract/Flip reclassification as stdlib. Resolve early.
+**Blend is ACCEPTED.** Two independent real-valued scalar weights (Option B), negative weights allowed, binary arity. Formalizes scalar-weighted combination, enabling Circular/Amplify/Subtract/Flip as stdlib macros. See 058-002/PROPOSAL.md's ACCEPTED banner for the full reasoning.
 
 **Orthogonalize replaces Negate.** The original Negate proposal had three modes; 058 split them: `orthogonalize` became its own CORE (computed coefficient, not a Blend idiom); `subtract` and `flip` became stdlib Blend idioms (058-019, 058-020).
 

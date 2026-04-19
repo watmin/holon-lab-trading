@@ -10,13 +10,6 @@
 
 The substantive decisions that still need designer opinions — everything else in this document is either RESOLVED (marked inline), MOOT (in a REJECTED proposal), or documentation-only.
 
-**058-002 Blend — the keystone.** All of 058-008 (Linear), 058-015 (Amplify), 058-018 (Circular), 058-019 (Subtract), 058-020 (Flip) branch on its resolution.
-- **Q1** Is scalar-weighted vector addition a distinct source category from Bundle?
-- **Q2** Option A (convex, single alpha) vs Option B (two independent weights)?
-- **Q3** Should negative weights be allowed?
-- **Q4** Variadic temptation — binary or generalized?
-- **Q6** If rejected, path for Linear/Circular?
-
 **058-001 Atom — typed literals.**
 - **Q1** Is the typed hash axis sound — `(type_tag, literal_bytes)` right shape?
 - **Q2** One variant `Atom(AtomLiteral)` or separate `AtomStr`/`AtomInt`/…?
@@ -46,19 +39,10 @@ Everything else in this document is RESOLVED inline (with a pointer to the resol
 
 ---
 
-## 058-002: Blend
+## 058-002: Blend — ACCEPTED
 
-1. **Is scalar-weighted vector addition a distinct source category from unweighted bundling?** The argument: Bundle's weights are implicitly uniform (+1); Blend's weights are parametric. Bundle is a monoid operation; Blend is parameterized by scalar weights and is not commutative in the vector arguments (`Blend(a, b, w1, w2)` ≠ `Blend(b, a, w1, w2)` unless `w1 = w2`). Different categorical nature. Is this enough to earn core status?
+**All questions in this section are RESOLVED.** Blend enters algebra core as `(:wat/algebra/Blend a b w1 w2)` — two independent real-valued scalar weights (Option B), negative weights allowed, binary arity. See 058-002/PROPOSAL.md's ACCEPTED banner for the per-question reasoning, and FOUNDATION-CHANGELOG 2026-04-18 entry "Blend keystone closed." Designer review may still reopen in Round 3.
 
-2. **Option A (convex, single alpha) vs Option B (two independent weights)?** Option A is simpler and matches existing holon `blend`. Option A captures Linear but NOT Circular (trig weights aren't convex). Option B captures both plus more. Which is the right level of generality for a core form? Option A with Circular staying core? Option B with full unification?
-
-3. **Should negative weights be allowed?** With Option B allowing negative weights, `Blend(x, y, 1, -1)` = Negate-subtract-mode. Does this blur the semantic distinction between "blend" and "subtract"? Or is it fine — the mathematics is consistent, and the stdlib names the specific use cases (Amplify, Subtract) for readability.
-
-4. **Variadic temptation — where do we stop?** Once you have Blend(a, b, w1, w2), do you generalize to Blend(pairs) variadic? This would subsume Bundle (all weights +1) as a special case. Is that the right direction, or does it dissolve the MAP canonical set? I argue stay binary; variadic proposes separately if ever.
-
-5. **Implementation impact on holon-rs.** Is ~20 lines of Rust (new `blend_weighted`, existing `blend` becomes a wrapper) an acceptable change? Any concern about cache key encoding for f64 weights?
-
-6. **If rejected, what is the recommended path for Linear and Circular?** They remain core and duplicate the scalar-weighted-add logic. Is that acceptable? Is there a different way to consolidate them without introducing Blend?
 
 ---
 
@@ -459,14 +443,14 @@ Bind, Permute, and Thermometer are affirmed core primitives already present in h
 - 058-024 Q2 — cache canonicalization for Unbind alias
 - **Theme-wide RESOLUTION via 058-031 (defmacro).** All of the above dissolve: macros expand at parse time, the canonical (post-expansion) AST is what hashes and caches. Two source files differing only in alias choice produce the same expanded AST and same hash. No separate canonicalization layer needed.
 
-### Theme: Dependency on 058-002 (Blend) resolution — still LIVE
+### Theme: Dependency on 058-002 (Blend) resolution — RESOLVED (Blend ACCEPTED as Option B with negative weights)
 - ~~058-004 Q3~~ — Difference REJECTED; moot.
 - ~~058-008 Q4~~ — Linear REJECTED (identical to Thermometer); moot.
-- 058-015 Q4 — Amplify cannot exist without Blend.
-- 058-018 Q3 — Circular is test case for Blend Option B.
-- ~~058-019 Q4~~ — Subtract accepted as stdlib macro (not core) regardless of Blend shape; the macro expansion adapts to whichever Blend shape wins.
-- ~~058-020 Q4~~ — Same as Subtract; stdlib macro.
-- **Status:** Blend's resolution governs Amplify (058-015) and Circular's Option-B verification (058-018 Q3). Other dependents have been severed by macro rewrites. Blend itself remains the keystone live question for Round 3.
+- ~~058-015 Q4~~ — Amplify becomes `(:wat/algebra/Blend x y 1 s)`; stdlib macro unblocked.
+- ~~058-018 Q3~~ — Circular becomes `(:wat/algebra/Blend cos-basis sin-basis (cos θ) (sin θ))`; stdlib macro unblocked.
+- ~~058-019 Q4~~ — Subtract becomes `(:wat/algebra/Blend x y 1 -1)`; stdlib macro.
+- ~~058-020 Q4~~ — Flip becomes `(:wat/algebra/Blend x y 1 -2)`; stdlib macro.
+- **Status:** Blend is ACCEPTED. All downstream stdlib macros are unblocked. Designer review may still reopen Blend in Round 3; the downstream cascade adapts to whatever final shape designers affirm.
 
 ### Theme: Naming — alias proliferation vs. reader-intent clarity — LARGELY RESOLVED
 - ~~058-004 Q1/Q2~~ — Difference REJECTED.
