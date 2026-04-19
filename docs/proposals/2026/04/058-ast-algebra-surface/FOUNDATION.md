@@ -754,12 +754,12 @@ The kernel primitives are exposed to wat programs as lowercase keyword-path func
 **Hello-world:**
 
 ```scheme
-(define (:my/app/hello-main -> :())
+(define (:my/app/hello -> :())
   (let ((out (:wat/kernel/console-out)))
     (:wat/kernel/send out "hello, world")))
 
 (define (:user/main -> :())
-  (let ((handle (:wat/kernel/spawn :my/app/hello-main)))
+  (let ((handle (:wat/kernel/spawn :my/app/hello)))
     (:wat/kernel/join handle)))
 ```
 
