@@ -483,18 +483,18 @@ Both load forms happen at startup, with identical cryptographic modes:
 
 ```scheme
 ;; Unverified — trust the contents. Suitable for trusted local development.
-(:wat/core/load-types "project/market/types.wat")
-(:wat/core/load       "project/market/indicators.wat")
+(:wat/core/load-types! "project/market/types.wat")
+(:wat/core/load!       "project/market/indicators.wat")
 
 ;; Hash-pinned — require the file to hash to a specific value.
 ;; Halts startup if the hash does not match.
-(:wat/core/load-types "project/market/types.wat"        (md5 "abc123..."))
-(:wat/core/load       "project/market/indicators.wat"   (md5 "def456..."))
+(:wat/core/load-types! "project/market/types.wat"        (md5 "abc123..."))
+(:wat/core/load!       "project/market/indicators.wat"   (md5 "def456..."))
 
 ;; Signature-verified — require a valid signature from the named public key.
 ;; Halts startup if the signature is invalid.
-(:wat/core/load-types "project/market/types.wat"        (signed <sig> <pub-key>))
-(:wat/core/load       "project/market/indicators.wat"   (signed <sig> <pub-key>))
+(:wat/core/load-types! "project/market/types.wat"        (signed <sig> <pub-key>))
+(:wat/core/load!       "project/market/indicators.wat"   (signed <sig> <pub-key>))
 ```
 
 The two forms differ only in what the loaded file is allowed to contain:
@@ -620,6 +620,109 @@ The cache helps with the verbosity — shared sub-ASTs are computed once and reu
 - **Content-addressable memory.** Cache keys can be hashes of canonical AST forms — tampering is not just detectable but *unlookupable*.
 
 These are consequences of the foundational principle, not features added afterward. The algebra was shaped this way, so these properties hold.
+
+---
+
+## `:wat/config` — Ambient Startup Constants
+
+Some values are pervasive enough that threading them through every function signature is noise. Vector dimension is the canonical example: every `:wat/algebra/Thermometer`, every `:wat/algebra/Bundle`, every cache-sizing heuristic, every noise-floor computation needs to know `d`. A program that passed `d` through every call site would be half parameters.
+
+The wat-vm solves this with a **kernel-owned config struct** reachable at `:wat/config`. The struct holds values the program commits to at startup. Every field is:
+
+1. **Set by a toplevel declaration with a bang** — `(:wat/config/set-<field>! <value>)`. Toplevel only; parsing halts if found inside a `define` body, `let`, or any nested scope.
+2. **Set exactly once across all loaded source** — two `set-<field>!` calls for the same field halt startup with "duplicate config: :<field> set at file1.wat and file2.wat."
+3. **Type-checked** — the setter's argument type is fixed by the field's schema. Passing the wrong type halts at parse.
+4. **Required** — the wat-vm does NOT supply defaults. If a required field is unset when the config pass completes, startup halts with "required config unset: :<field>." The program author must make every choice explicitly; no ambient defaults hide the decision.
+5. **Readable from anywhere** — `(:wat/config/<field>)` is a typed accessor available in any function, any thread, any time after startup. Every function has closure access; no `dims` parameter threading needed.
+
+### The fields
+
+The struct grows by FOUNDATION proposal — each addition specifies the field name, type, and setter/getter forms. Current fields:
+
+```scheme
+;; (:wat/config/set-dims! d)  — d : :usize
+;; (:wat/config/dims)          → :usize
+;;
+;;   Vector dimension. Every algebra operation uses this. A program that
+;;   commits to d=10000 is a different program from one that commits to
+;;   d=8192 — the capacity budgets, memory footprints, cache sizing, and
+;;   noise floors are all different. Not a deployment knob; a program
+;;   property. wat-to-rust bakes this as a compile-time Rust const.
+
+;; (:wat/config/set-capacity-mode! m)  — m : :wat/config/CapacityMode
+;; (:wat/config/capacity-mode)          → :wat/config/CapacityMode
+;;
+;;   Policy for capacity-exceeded situations (see "Dimensionality" —
+;;   capacity is observable, the runtime can guard). No default;
+;;   the program author must choose explicitly. Variants:
+
+(:wat/core/enum :wat/config/CapacityMode
+  :silent    ;; research — user accepts degradation, no check
+  :warn      ;; development — log but continue
+  :error     ;; catchable CapacityExceeded
+  :abort)    ;; production fail-closed
+```
+
+Future proposals may add fields. The bar: **the value is universal across every holon program, not app-specific.** `L1-cache-size` and `L2-cache-size` were considered for inclusion (see VISION's "The Cache as Cognitive Substrate — One Application's Story") and rejected as app-specific — the trading lab's 256K L1 reflects its cognitive pace, not a universal choice. Dims and capacity-mode clear the bar; most candidates won't.
+
+### The bang convention
+
+Two toplevel forms carry bangs in the current language, and they are the only ones on the near horizon:
+
+- **`(:wat/config/set-<field>! value)`** — commits a config field.
+- **`(:wat/core/load! path)`** — reads another wat file, parses it, integrates its forms into this program. Also commit-once (loading the same path twice halts startup).
+
+Bang = **this form writes to the ambient startup state; irreversible; observable in the committed program image.** Everything else — `:wat/core/define`, `:wat/core/defmacro`, `:wat/core/lambda`, `:wat/core/let`, algebra operations, kernel calls, user functions — is pure declaration or pure value-producing call. The visual weight of the bang is the point: when you see `!`, the form commits something that cannot be undone.
+
+### Startup pipeline with the config pass
+
+The config pass slots between parse and macro-expand so macros can read committed config values:
+
+```
+1. Parse all source (including recursive :wat/core/load!)
+2. Config pass          — populate :wat/config; check required / duplicate / typed
+3. Macro expansion      — macros can call :wat/config/<field> getters; baked to literals
+4. Resolve names
+5. Type-check
+6. Hash / sign / verify
+7. Freeze symbol table + config (immutable for the rest of the process)
+8. Invoke :user/main
+```
+
+Step 2 halts on any of: missing required field, duplicate setter, type mismatch. `:user/main` never runs with a bad config. After step 7, the config is frozen for the life of the process; no runtime setter exists.
+
+### The toplevel shape of a real wat program
+
+```scheme
+;; ─── Config first — the wat-vm refuses to start without these ───
+(:wat/config/set-dims! 10000)
+(:wat/config/set-capacity-mode! :error)
+
+;; ─── Loads — pull in stdlib and project source ───
+(:wat/core/load! "wat/std/Subtract.wat")
+(:wat/core/load! "wat/std/Chain.wat")
+(:wat/core/load! "wat/project/trading/candle.wat")
+(:wat/core/load! "wat/project/trading/observer.wat")
+(:wat/core/load! "wat/project/trading/main.wat")
+```
+
+That is the whole toplevel. Everything else — types, macros, functions, `:user/main` — lives inside the loaded files. The parse pulls them in recursively, the config pass commits the two configs, the remaining startup phases run, and `:user/main` is invoked with the four stdio/signals handles.
+
+### What this eliminates
+
+Parameters that previously threaded through function signatures disappear. A function that needed `dims` in its parameters loses it:
+
+```scheme
+;; Before — d threaded:
+(:wat/core/define (:my/app/encode-price (p :f64) (d :usize) -> :Holon)
+  (:wat/algebra/Thermometer p 0.0 100000.0 d))
+
+;; After — d read from ambient config inside Thermometer's implementation:
+(:wat/core/define (:my/app/encode-price (p :f64) -> :Holon)
+  (:wat/algebra/Thermometer p 0.0 100000.0))
+```
+
+`:wat/algebra/Thermometer` itself reads `(:wat/config/dims)` to size its vector. No caller needs to supply `d`. Same for `Bundle`, `Bind`, `Permute` — every algebra primitive that previously required explicit `d` pulls it from the ambient config. Signatures shrink; call sites stop carrying values the substrate already knows.
 
 ---
 
@@ -1510,22 +1613,23 @@ Classical Cleanup: `argmax_{c ∈ codebook} cosine(v, c)`. Returns the single cl
 This is three operations bundled:
 1. Iterate the codebook.
 2. Cosine-score each entry against `v`.
-3. Argmax.
+3. Pick a winner by some selection policy.
 
-None of these need to be primitive. Step (1) is a fold. Step (2) is presence measurement. Step (3) is scalar argmax — a stdlib operation over a list of (AST, score) pairs.
+None of these need to be primitive. Step (1) is a `:wat/core/map`. Step (2) is presence measurement. Step (3) is **not** an algebra operation — it is whatever selection policy the caller chooses. The algebra returns a list of measurements; the application picks what to do with them.
 
-"Find the closest known thing" becomes, in wat:
+"Measure the codebook" becomes, in wat:
 
 ```scheme
-(argmax
-  (:wat/core/map (:wat/core/lambda (entry -> :Pair<Holon,f64>)
-         (:wat/core/list (:wat/core/first entry)
-               (presence (:wat/core/first entry) query-vector)))
-       codebook)
-  :wat/core/second)
+(:wat/core/map codebook
+  (:wat/core/lambda (entry)
+    (:wat/core/list (:wat/core/first entry)
+                     (presence (:wat/core/first entry) query-vector))))
+;; → :List<:Pair<Holon,f64>>   — every entry paired with its overlay score
 ```
 
-No new primitive. No `Cleanup` in the core. The same operation, expressed in terms that already exist.
+No `Cleanup` in the core. The algebra returned the full list of (entry, presence-score) pairs. The caller now decides: top-1 (a fold with max-by-score), top-k (a sort then take), threshold filter (keep entries above `5/sqrt(d)` — the substrate noise floor), a weighted mixture of matches (a Bundle with Blend coefficients), or simply "pass the whole list onward" for a downstream stage. Four different policies, four different caller expressions, same substrate.
+
+**Classical VSA bundled selection into `Cleanup` because its vector-primary framing assumed you had thrown away the structure and needed a discrete winner.** The wat substrate never throws away structure — the AST is always alongside the vector. There is no "recover identity from the vector" step. There is only "measure overlay" — a `:f64` per entry — and the caller's choice of what the measurements mean for its problem. No `argmax` primitive exists; selection policy is the caller's code.
 
 ### Consequences across the algebra
 
@@ -1538,15 +1642,19 @@ Every presence query — membership, retrieval, matching, recognition — return
 (:wat/core/define (:my/app/contains? (bundle-thought :Holon) (candidate :Holon) -> :f64)
   (presence candidate (encode bundle-thought)))
 
-(:wat/core/define (:my/app/recognized? (observation :Vector) (engram-lib :Holon) -> :Pair<Holon,f64>)
-  (argmax
-    (:wat/core/map (:wat/core/lambda (entry -> :Pair<Holon,f64>)
-           (:wat/core/list (:wat/core/first entry) (presence (:wat/core/first entry) observation)))
-         (entries engram-lib))
-    :wat/core/second))
+(:wat/core/define (:my/app/recognize (observation :Vector)
+                                     (engram-lib :Holon)
+                                     -> :List<:Pair<Holon,f64>>)
+  ;; Return every engram with its presence score. The caller decides
+  ;; what to do with the list — top-1, above-threshold, weighted
+  ;; bundle, whatever their application demands.
+  (:wat/core/map (entries engram-lib)
+    (:wat/core/lambda (entry)
+      (:wat/core/list (:wat/core/first entry)
+                       (presence (:wat/core/first entry) observation)))))
 ```
 
-Uniform. Scalar-valued. The caller decides when a score is "enough."
+Uniform. Scalar-valued. The caller decides when a score is "enough," and which of many above-threshold entries to prefer. The function returns measurements; policy is the caller's code.
 
 ### Structural access is a separate operation
 
@@ -1920,8 +2028,9 @@ This makes the discipline enforceable in practice: conflicts fail loudly and ear
 
 The project reserves four prefixes, and they are **protected at startup** — users cannot define anything at these paths. Attempting `(:wat/core/define (:wat/kernel/my-func ...) ...)` or `(:wat/core/defmacro (:wat/std/MyAlias ...) ...)` halts the wat-vm with a startup error.
 
-- `:wat/core/...` — language core primitives (`:wat/core/define`, `:wat/core/lambda`, `:wat/core/let`, `:wat/core/let*`, `:wat/core/if`, `:wat/core/match`, `:wat/core/cond`, `:wat/core/defmacro`, `:wat/core/load`, `:wat/core/list`, `:wat/core/first`, `:wat/core/second`, `:wat/core/+`, `:wat/core/-`, `:wat/core/*`, `:wat/core/>`, `:wat/core/=`, …)
-- `:wat/kernel/...` — wat-vm kernel primitives (`:wat/kernel/make-bounded-queue`, `:wat/kernel/make-unbounded-queue`, `:wat/kernel/spawn`, `:wat/kernel/send`, `:wat/kernel/recv`, `:wat/kernel/try-recv`, `:wat/kernel/select`, `:wat/kernel/drop`, `:wat/kernel/join`)
+- `:wat/core/...` — language core primitives (`:wat/core/define`, `:wat/core/lambda`, `:wat/core/let`, `:wat/core/let*`, `:wat/core/if`, `:wat/core/match`, `:wat/core/cond`, `:wat/core/defmacro`, `:wat/core/load!`, `:wat/core/list`, `:wat/core/first`, `:wat/core/second`, `:wat/core/+`, `:wat/core/-`, `:wat/core/*`, `:wat/core/>`, `:wat/core/=`, …)
+- `:wat/kernel/...` — wat-vm kernel primitives (`:wat/kernel/make-bounded-queue`, `:wat/kernel/make-unbounded-queue`, `:wat/kernel/spawn`, `:wat/kernel/send`, `:wat/kernel/recv`, `:wat/kernel/try-recv`, `:wat/kernel/select`, `:wat/kernel/drop`, `:wat/kernel/join`, `:wat/kernel/HandlePool`)
+- `:wat/config/...` — ambient startup constants: setters (`set-dims!`, `set-capacity-mode!`), getters (`dims`, `capacity-mode`), and the `:wat/config/CapacityMode` enum. Required-at-startup values the program author commits once; see "`:wat/config` — Ambient Startup Constants."
 - `:wat/algebra/...` — algebra core primitives (`:wat/algebra/Atom`, `:wat/algebra/Bind`, `:wat/algebra/Bundle`, `:wat/algebra/Blend`, …)
 - `:wat/std/...` — project stdlib (`:wat/std/Subtract`, `:wat/std/HashMap`, `:wat/std/Chain`, `:wat/std/LocalCache`, circular basis atoms, `:wat/std/program/Cache`, …)
 
@@ -2370,19 +2479,19 @@ All eight forms are loaded at startup. The wat-vm distinguishes them by what kin
 
 ;; --- Function module loading (startup phase) ---
 
-(:wat/core/load "path/to/file.wat")
+(:wat/core/load! "path/to/file.wat")
 ;; Unverified startup load — reads the file, parses defines, registers.
 ;; Trust the contents; accept whatever's on disk.
 
-(:wat/core/load "path/to/file.wat" (md5 "abc123..."))
+(:wat/core/load! "path/to/file.wat" (md5 "abc123..."))
 ;; Hash-pinned startup load — requires file content to hash to the given value.
 ;; Halts wat-vm startup if mismatched.
 
-(:wat/core/load "path/to/file.wat" (signed <signature> <pub-key>))
+(:wat/core/load! "path/to/file.wat" (signed <signature> <pub-key>))
 ;; Signature-verified startup load — verifies signature against supplied public key.
 ;; Halts wat-vm startup if signature invalid.
 
-;; All (:wat/core/load ...) happens at startup. Files loaded via (:wat/core/load ...) must
+;; All (:wat/core/load! ...) happens at startup. Files loaded via (:wat/core/load! ...) must
 ;; contain ONLY function definitions — a type declaration is a startup error.
 
 ;; ============================================================
@@ -2437,14 +2546,14 @@ All eight forms are loaded at startup. The wat-vm distinguishes them by what kin
 
 ;; --- Compile-time module loading (types only) ---
 
-(:wat/core/load-types "path/to/types.wat")
+(:wat/core/load-types! "path/to/types.wat")
 ;; Unverified build-time load. Reads the file, parses type declarations,
 ;; feeds them to the build pipeline for Rust code generation.
 
-(:wat/core/load-types "path/to/types.wat" (md5 "abc123..."))
+(:wat/core/load-types! "path/to/types.wat" (md5 "abc123..."))
 ;; Hash-pinned build-time load. Build halts if the file hash does not match.
 
-(:wat/core/load-types "path/to/types.wat" (signed <signature> <pub-key>))
+(:wat/core/load-types! "path/to/types.wat" (signed <signature> <pub-key>))
 ;; Signature-verified build-time load. Build halts if the signature is invalid.
 
 ;; Compile-time-loaded files must contain ONLY type declarations.
@@ -2753,7 +2862,7 @@ Runtime forms (registered at wat-vm runtime into the content-addressed symbol ta
 ```scheme
 :wat/core/define               ; 058-028  — typed named function registration
 :wat/core/lambda               ; 058-029  — typed anonymous functions + closures
-:wat/core/load                 ; FOUNDATION addition — runtime module loading (functions only)
+:wat/core/load!                 ; FOUNDATION addition — runtime module loading (functions only)
 ```
 
 Compile-time forms (materialized into the Rust-backed wat-vm binary; cannot be redefined at runtime):
@@ -2763,7 +2872,7 @@ Compile-time forms (materialized into the Rust-backed wat-vm binary; cannot be r
 :wat/core/enum                 ; FOUNDATION addition — coproduct type
 :wat/core/newtype              ; FOUNDATION addition — nominal alias
 :wat/core/typealias            ; 058-030 + FOUNDATION — structural alias
-:wat/core/load-types           ; FOUNDATION addition — compile-time module loading (types only)
+:wat/core/load-types!           ; FOUNDATION addition — compile-time module loading (types only)
 ```
 
 Syntactic feature pervading all of the above:
