@@ -542,10 +542,14 @@ An AST in transmission is an **EDN string** — extensible data notation, a seri
   Everything else (`+0.0` vs `-0.0`, subnormals, infinities) has a
   single canonical bit pattern and is deterministic across nodes.
 
-**EDN strings can be signed.** A trusted producer signs the SHA-256 of the canonical-EDN with a private key; any receiver can verify the signature against the known public key. **The AST has a cryptographic provenance** — bound to MEANING, not to formatting. Comments, whitespace, or other byte-level changes that don't alter the parsed AST leave signatures valid. Two levels of signing exist:
+**EDN strings can be signed.** A trusted producer signs the SHA-256 of the canonical-EDN with a private key; any receiver can verify the signature against the known public key. **The AST has a cryptographic provenance** — bound to MEANING, not to formatting. Comments, whitespace, or other byte-level changes that don't alter the parsed AST leave signatures valid.
 
-- **Per-file**, inside the `signed-load!` form: `(:wat::core::signed-load! :wat::load::<iface> "path" :wat::verify::signed-<algo> :wat::verify::<iface> "sig" :wat::verify::<iface> "pubkey")`. Gates a single loaded file by signing the SHA-256 of its parsed AST.
-- **Full-program**, outside source syntax: after `load!` recursion + macro expansion completes, the flat form list has its own canonical-EDN and SHA-256. Signing THIS closes the glue between loaded files and the entry file. Delivered via the wat-vm CLI (or a companion signature file), not an in-source form — a signature carried inside a file cannot cover the file that carries it.
+Signatures live **per-form**, inside the source that invokes verification:
+
+- **Loaded source**: `(:wat::core::signed-load! :wat::load::<iface> "path" :wat::verify::signed-<algo> :wat::verify::<iface> "sig" :wat::verify::<iface> "pubkey")`. Gates a single loaded file by signing the SHA-256 of its parsed AST.
+- **Runtime eval**: `(:wat::core::eval-signed! :wat::eval::<iface> <locator> :wat::verify::signed-<algo> :wat::verify::<iface> "sig" :wat::verify::<iface> "pubkey")`. Gates an AST retrieved at runtime by signing the SHA-256 of its canonical EDN — same cryptographic target, same algorithm surface, per-call granularity.
+
+A program may invoke any number of `signed-load!` and `eval-signed!` forms, each with its own key and signature. The verification discipline is per-form because a program is a collection of forms with independent provenance needs — one loaded file from a trusted producer, another from a different producer, a runtime eval of an upstream message signed by the originator. One CLI-level signature cannot cover that structure; signatures belong where the fetch happens, at the form the wat author wrote to do the fetching.
 
 **Interface keywords** make all byte-fetching decisions explicit in the source:
 
