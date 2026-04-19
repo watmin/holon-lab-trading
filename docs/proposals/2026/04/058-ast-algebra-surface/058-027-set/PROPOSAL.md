@@ -5,6 +5,17 @@
 > The form previously called `Set` is now named `HashSet` — matching Rust's `std::collections::HashSet` directly. The wat UpperCase constructor, the type annotation `:HashSet<T>`, and the runtime backing all share one name.
 >
 > **Also:** the unified `get` accessor works for HashSet the same way it works for HashMap and Vec. `(get my-set x)` returns `:Option<T>` — `(Some x)` if x is in the set (confirmation / canonicalization), `:None` if not. The "no accessor" asymmetry Hickey flagged in round 2 dissolves — HashSet uses the same `get` as the other containers.
+>
+> **2026-04-19 shipped shape.** `:wat::std::HashSet` is variadic with
+> elements as flat args: `(HashSet x1 x2 x3 ...)`. The earlier
+> defmacro-over-Bundle framing (`(HashSet xs)` taking a Vec) is
+> superseded — flat args are Lisp-idiomatic and consistent with
+> `:wat::std::HashMap`'s alternating-pair form. Elements are
+> primitive-scoped in the currently-shipped wat-rs (`:i64`, `:f64`,
+> `:bool`, `:String`, keyword); composite-element support graduates
+> when a caller demands it. Duplicate elements collapse. Alongside
+> `get`, `:wat::std::member?` ships as the boolean-only membership
+> test; same shape as HashMap's `contains?`.
 
 **Scope:** algebra
 **Class:** STDLIB (macro alias for Bundle with data-structure intent)

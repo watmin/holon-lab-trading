@@ -2661,11 +2661,16 @@ Retrieval is NOT a core form. Presence is measured by `cosine(encode(target), re
         (:wat::algebra::Bind (:wat::algebra::Atom i) item))
       items)))
 
-(:wat::core::define (:wat::std::HashSet (items :Vec<holon::HolonAST>) -> :holon::HolonAST)
-  ;; Unordered collection. Bundle of items; runtime backs it with Rust's
-  ;; HashSet for O(1) membership. Presence is structural (via `get`) or
-  ;; similarity-measured (via `presence`), caller's choice.
-  (:wat::algebra::Bundle items))
+;; :wat::std::HashSet — variadic, element-list flat args.
+;; Shipped shape: `(HashSet x1 x2 x3 ...)`. Each element is stored
+;; under a type-tagged canonical-string key so `"42"` and `42` never
+;; collide. Primitive elements only in the shipped surface
+;; (:i64, :f64, :bool, :String, keyword); composite elements
+;; graduate when a caller demands them. Duplicate elements collapse.
+;;
+;; Companion:
+;;   (:wat::std::member? set x) → :bool
+;;   (:wat::std::get set x)     → :Option<T>  (Some-of-stored on hit)
 
 ;; --- get: unified structural retrieval ---
 ;;
