@@ -16,13 +16,15 @@ Phase 1 completion (2026-04-19 morning).
 
 ## Where we are
 
-**Phase 1 complete; programs-as-holons operational.** wat-rs ships the
-full startup pipeline, 30+ threads with zero Mutex, real Ed25519 crypto
-at `signed-load!` / `eval-signed!`, parametric `:Atom<T>`, the six
-algebra-core forms, `:wat::core::quote` / `:wat::core::atom-value` /
-`:wat::core::let*` / `:wat::core::presence`, config-committed
-`noise_floor`, `EncodingCtx` attached at freeze. The vector-level
-proof runs end-to-end:
+**Phase 1 complete; programs-as-holons operational; `:Option<T>` +
+`match` live.** wat-rs ships the full startup pipeline, 30+ threads with
+zero Mutex, real Ed25519 crypto at `signed-load!` / `eval-signed!`,
+parametric `:Atom<T>`, the six algebra-core forms, `:wat::core::quote` /
+`:wat::core::atom-value` / `:wat::core::let*` / `:wat::core::presence`,
+config-committed `noise_floor`, `EncodingCtx` attached at freeze,
+`:Option<T>` with `:None` / `(Some _)` constructors,
+`(:wat::core::match ...)` with exhaustiveness, and `recv` upgraded to
+`:Option<String>`. The vector-level proof runs end-to-end:
 
 ```
 $ echo watmin | wat-vm presence-proof.wat
@@ -69,11 +71,16 @@ informed by running real programs through them.
 - [ ] `HandlePool`
 - [ ] `Signal` enum + signals queue + `:user::main` fourth parameter
 
-### Step 2 — `:Option<T>` + `match`
+### Step 2 — `:Option<T>` + `match` — PARTIAL (out-of-order, 2026-04-19)
 
-- [ ] `Value::Option<Value>` + `Some` / `None` constructors
-- [ ] `(:wat::core::match ...)` with exhaustiveness check
-- [ ] `recv` / `try-recv` return `:Option<T>`
+Done ahead of Step 1 because every kernel primitive with an `:Option<T>`
+return needs the runtime first. `try-recv` / `select` land in Step 1
+already spec-shaped.
+
+- [x] `Value::Option<Value>` + `Some` / `None` constructors
+- [x] `(:wat::core::match ...)` with exhaustiveness check
+- [x] `recv` returns `:Option<T>` (`:None` on disconnect)
+- [ ] `try-recv` returns `:Option<T>` (lands with Step 1's try-recv)
 
 ### Step 3 — stdlib algebra macros
 
