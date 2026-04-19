@@ -1024,13 +1024,32 @@ The kernel primitives are exposed to wat programs as lowercase keyword-path func
 (:wat::kernel::HandlePool::pop pool)              ;; → :T    panics if empty
 (:wat::kernel::HandlePool::finish pool)           ;; → :()   panics if handles remain
 
-;; --- Console ---
+;; --- IO + Console ---
 ;;
-;; There are NO ambient console accessors. `:user::main` receives stdin,
-;; stdout, and stderr as parameters from the kernel. Any function that
-;; wants to write to the console receives the handle it needs in its
-;; signature. Honest threading — simple, not easy. The frustration IS
-;; the discipline; it makes every capability visible at the call site.
+;; There are NO ambient console accessors. `:user::main` receives
+;; stdin, stdout, and stderr as REAL OS HANDLES:
+;;
+;;   stdin  : :io::Stdin      (Rust's std::io::Stdin, shared via Arc)
+;;   stdout : :io::Stdout     (Rust's std::io::Stdout)
+;;   stderr : :io::Stderr     (Rust's std::io::Stderr)
+;;
+;; No channel intermediary — bytes go straight to the OS stream via
+;; std's internal locking. Two primitives operate on them:
+;;
+(:wat::io::write stdout "hello\n")    ;; → :()
+                                      ;; polymorphic over :io::Stdout
+                                      ;; and :io::Stderr; blocks until
+                                      ;; flushed.
+(:wat::io::read-line stdin)           ;; → :Option<String>
+                                      ;; (Some line) on read; :None
+                                      ;; on EOF. Trailing \n / \r\n
+                                      ;; stripped.
+;;
+;; Honest pedagogy: a good wat program IMMEDIATELY spawns a Console
+;; over both stdout AND stderr, pops its handles, and then forgets
+;; the stdio bindings. Console becomes the sole gateway for the rest
+;; of the program — nothing else writes to the world. See the
+;; hello-world below.
 
 ;; --- Signals ---
 ;;
@@ -1067,44 +1086,44 @@ The kernel primitives are exposed to wat programs as lowercase keyword-path func
 ;; `presence?`.
 ```
 
-**Hello-world — spawn Console, write through it, join to flush:**
+**Hello-world — spawn Console over stdout + stderr, write through it, join to flush:**
 
 ```scheme
-(:wat::core::define (:my::app::hello (console :ConsoleHandle) -> :())
-  (:wat::std::program::Console/send console "hello, world"))
+(:wat::core::define
+  (:my::app::hello (console :crossbeam_channel::Sender<(i64,String)>) -> :())
+  (:wat::std::program::Console/out console "hello, world\n"))
 
-(:wat::core::define (:user::main (stdin   :crossbeam_channel::Receiver<String>)
-                               (stdout  :crossbeam_channel::Sender<String>)
-                               (stderr  :crossbeam_channel::Sender<String>)
-                               -> :())
-  ;; stdin and stderr are slot-required by the kernel signature, but
-  ;; this program does not use them. Only stdout is passed onward.
-  ;; Naming the unused parameters is honest — the kernel gives us three
-  ;; handles; we acknowledge all three; we use one. Signals are not a
-  ;; handle — they are kernel state the program polls on demand; see
-  ;; the signal primitives above.
-  (:wat::core::let* (((pool console-driver)
-                    (:wat::kernel::spawn :wat::std::program::Console stdout 1))
-                   ((console :ConsoleHandle)
-                    (:wat::kernel::HandlePool::pop pool)))
-    (:wat::kernel::HandlePool::finish pool)
-    (:my::app::hello console)
-    ;; Drop the client handle → Console's input queue disconnects.
-    ;; Join the driver → Console drains remaining writes to stdout and exits.
-    ;; Without the join, buffered writes may be lost on program exit.
-    (:wat::kernel::drop console)
+(:wat::core::define (:user::main
+                     (stdin   :io::Stdin)
+                     (stdout  :io::Stdout)
+                     (stderr  :io::Stderr)
+                     -> :())
+  ;; Build Console over BOTH output streams; one client handle.
+  ;; After this, the program should IGNORE the raw stdio bindings —
+  ;; Console is the sole gateway.
+  (:wat::core::let*
+    (((pool console-driver)
+      (:wat::std::program::Console stdout stderr 1))
+     ;; Inner scope: pop handle, use it, drop it at scope exit so
+     ;; Console/loop's matching rx disconnects before we `join`.
+     ((_ :())
+      (:wat::core::let*
+        (((console :crossbeam_channel::Sender<(i64,String)>)
+          (:wat::kernel::HandlePool::pop pool))
+         ((_1 :()) (:wat::kernel::HandlePool::finish pool)))
+        (:my::app::hello console))))
     (:wat::kernel::join console-driver)))
 ```
 
-**Why this is hello-world, not a one-liner.** Writing to `stdout` directly is possible — the kernel hands `:user::main` a raw sender — but hello-world is pedagogical, and the honest pedagogy is: **every real program uses the Console stdlib to serialize writes.** The Console program owns the raw sender, runs a fan-in loop internally, and guarantees no garbled interleaving when multiple clients write concurrently. A single-writer program could skip it, but then the reader would learn a shortcut they have to un-learn when they add a second writer. Showing the Console pattern in hello-world means every subsequent program is a small variation on the same shape.
+**Why this is hello-world, not a one-liner.** `(:wat::io::write stdout "hello, world\n")` would work — the kernel hands `:user::main` the real OS handles — but hello-world is pedagogical, and the honest pedagogy is: **every real program uses Console as the sole gateway to the world.** The Console program owns stdout and stderr, runs a fan-in loop internally, and guarantees no garbled interleaving when multiple clients write concurrently. A single-writer program could skip it, but then the reader would learn a shortcut they have to un-learn when they add a second writer. Showing the Console pattern in hello-world means every subsequent program is a small variation on the same shape.
 
-**`:wat::std::program::Console` is a single-sink fan-in.** It takes one output sender (a stdio handle, typically `stdout` or `stderr`, but also any other `:crossbeam_channel::Sender<String>`) and a producer count, and returns a `HandlePool` of `:ConsoleHandle` clients plus a driver handle. Writers send via `:wat::std::program::Console/send`; the driver selects across all client queues and forwards to the owned sender. If a program wants serialized stdout AND serialized stderr, it spawns TWO Console programs — one per sink. Orthogonal. A Console owns exactly one resource.
+**`:wat::std::program::Console` is a dual-sink fan-in.** It takes TWO output handles — `:io::Stdout` and `:io::Stderr` — plus a client count, and returns `(HandlePool<Sender<(i64,String)>>, ProgramHandle<()>)`. Each client handle is a bounded(1) sender of tagged messages: `(0, msg)` routes to stdout, `(1, msg)` to stderr. The helpers `Console/out` and `Console/err` encode the tag so callers write strings directly without building tuples themselves. The driver selects across all N client queues, decodes each message, and calls `:wat::io::write` against the matching handle. One Console instance gates both streams — if a program routes anything to `stderr` WITHOUT going through Console, the gatekeeping story breaks. The discipline is the point.
 
 **The `:user::main` signature is fixed by the kernel.** Every `:user::main` receives the three stdio handles as parameters whether it uses them or not. This is the kernel contract. Naming them in the signature without binding them to locals is honest — the handles exist, the program acknowledges them, the program chooses not to use them. A program that wants only stderr threads `stderr` down through its spawns and ignores `stdout` and `stdin`. The type system enforces it: you cannot write to a handle you weren't given.
 
 This is the Haskell discipline without the monad wrapper: threading plain values through function parameters. The frustration is the point — every side effect is visible at the call site. Simple, not easy. Signals are NOT threaded as a parameter — the kernel exposes signal state as pollable booleans (`:wat::kernel::stopped?` for terminal; `sigusr1?` / `sigusr2?` / `sighup?` + matching `reset-*!` for user signals), reachable from any function that imports the kernel path. Signal state is ambient by design: a handler for SIGHUP can live deep inside a service loop without being plumbed through every caller.
 
-**The `:user::main` convention.** The entry point is `:user::main` — a keyword-path name the **kernel looks for at startup**. The user declares it with three parameters the kernel passes in: `(:wat::core::define (:user::main (stdin :crossbeam_channel::Receiver<String>) (stdout :crossbeam_channel::Sender<String>) (stderr :crossbeam_channel::Sender<String>) -> :()) ...)`. Same convention as C's `main(argc, argv)` and Rust's `fn main()` — but with every capability the kernel gives the program made explicit in the signature. No ambient stdio. No bare-name exception to the keyword-path discipline.
+**The `:user::main` convention.** The entry point is `:user::main` — a keyword-path name the **kernel looks for at startup**. The user declares it with three parameters the kernel passes in: `(:wat::core::define (:user::main (stdin :io::Stdin) (stdout :io::Stdout) (stderr :io::Stderr) -> :()) ...)`. The parameters are the REAL OS stream handles — `Arc`'d `std::io::Stdin` / `Stdout` / `Stderr` — with std's internal locking for thread-safe shared access. Same convention as C's `main(argc, argv)` and Rust's `fn main()` — but with every capability the kernel gives the program made explicit in the signature. No ambient stdio. No bare-name exception to the keyword-path discipline. No bridge-thread / channel indirection — a write to stdout is a write to the OS stream.
 
 `:user::main` is a **kernel-looked-up slot** that the USER provides. This is the inverse of `:wat::kernel::...` paths, which are kernel-PROVIDED implementations (protected from redefinition). `:user::main` is kernel-REQUIRED (user provides; kernel invokes); there is no default implementation; the user's definition fills the slot.
 
@@ -1118,7 +1137,7 @@ Two `:user::main` declarations across loaded files produce a startup name collis
 (:wat::core::define (:my::app::observer-loop
                     (input-rx  :crossbeam_channel::Receiver<Candle>)
                     (output-tx :crossbeam_channel::Sender<Result>)
-                    (console   :ConsoleHandle)
+                    (console   :crossbeam_channel::Sender<(i64,String)>)
                     (state     :ObserverState)
                     -> :ObserverState)
   (:wat::core::match (:wat::kernel::recv input-rx)
@@ -1126,7 +1145,7 @@ Two `:user::main` declarations across loaded files produce a startup name collis
      (:wat::core::let* ((result    (:my::app::process candle state))
                       (new-state (:my::app::update state candle)))
        (:wat::kernel::send output-tx result)
-       (:wat::std::program::Console/send console
+       (:wat::std::program::Console/out console
          (:wat::std::format "observed: ~a" candle))
        (:my::app::observer-loop input-rx output-tx console new-state)))
     (:None
@@ -1137,40 +1156,39 @@ Two `:user::main` declarations across loaded files produce a startup name collis
 ;; `select` returns (index, None) when a receiver disconnects — drop it.
 (:wat::core::define (:my::app::drain-results
                     (rxs      :Vec<QueueReceiver<Result>>)
-                    (console  :ConsoleHandle)
+                    (console  :crossbeam_channel::Sender<(i64,String)>)
                     -> :())
   (:wat::core::if (:wat::core::empty? rxs)
       :()
       (:wat::core::match (:wat::kernel::select rxs)
         ((Pair i (Some r))
-         (:wat::std::program::Console/send console
+         (:wat::std::program::Console/out console
            (:wat::std::format "result: ~a" r))
          (:my::app::drain-results rxs console))
         ((Pair i :None)
          (:my::app::drain-results (:wat::std::list::remove-at rxs i) console)))))
 
-(:wat::core::define (:user::main (stdin   :crossbeam_channel::Receiver<String>)
-                               (stdout  :crossbeam_channel::Sender<String>)
-                               (stderr  :crossbeam_channel::Sender<String>)
+(:wat::core::define (:user::main (stdin   :io::Stdin)
+                               (stdout  :io::Stdout)
+                               (stderr  :io::Stderr)
                                -> :())
   (:wat::core::let*
       (((N :i64) 4)  ;; four observers
 
        ;; (1) COUNT every consumer up front. One handle for main, one per worker.
-       ((num-console :i64) (:wat::core::+ 1 N))
+       ((num-console :i64) (:wat::core::i64::+ 1 N))
 
-       ;; (2) Spawn the Console stdlib program — a single-sink fan-in that
-       ;;     serializes writes to stdout from `num-console` client handles.
-       ;;     Returns a HandlePool + a driver handle. Console is concrete (it
-       ;;     owns a specific OS resource); generic Topic/Mailbox proxies are
-       ;;     NOT stdlib — fan-out and fan-in of user values are inline loops
-       ;;     at the call site. If we needed serialized stderr too, we would
-       ;;     spawn a second Console instance for stderr.
+       ;; (2) Call the Console stdlib program — a dual-sink fan-in
+       ;;     that serializes writes to stdout AND stderr from
+       ;;     `num-console` client handles. Returns a HandlePool + a
+       ;;     driver handle. Console owns both OS resources; generic
+       ;;     Topic/Mailbox proxies are NOT stdlib — fan-out and
+       ;;     fan-in of user values are inline loops at the call site.
        ((pool console-driver)
-        (:wat::kernel::spawn :wat::std::program::Console stdout num-console))
+        (:wat::std::program::Console stdout stderr num-console))
 
        ;; (3) POOL discipline — main claims its handle first.
-       ((main-console :ConsoleHandle)
+       ((main-console :crossbeam_channel::Sender<(i64,String)>)
         (:wat::kernel::HandlePool::pop pool))
 
        ;; (4) Per-worker queues: candle input + result output.
@@ -1206,7 +1224,7 @@ Two `:user::main` declarations across loaded files produce a startup name collis
           (:wat::std::list::map worker-queues
             (:wat::core::lambda (qs)
               (:wat::core::first (:wat::core::first qs))))))
-      (:wat::std::program::Console/send main-console "starting")
+      (:wat::std::program::Console/out main-console "starting")
       (:my::app::feed-candles stdin candle-txs main-console)
 
       ;; (8) SHUTDOWN CASCADE — drop all candle senders first. Workers
@@ -1245,7 +1263,7 @@ No `spawn-thread` separate from `spawn-program`; a program is just a function th
 
 The observer example above encodes seven patterns the project paid for in deadlocks. The wat-vm substrate makes them expressible; the stdlib programs make them reusable; this subsection names them so reviewers can find them by name.
 
-**1. Count every consumer before creating the I/O program.** The number of handles is a budget declared up front. `(:wat::kernel::spawn :wat::std::program::Console stdout stderr num-console)` takes the count as a parameter — the program allocates exactly that many client queues. No dynamic handle creation, no subscribe/unsubscribe semantics. If your count is wrong at startup, you find out at `:wat::kernel::HandlePool::finish` with an orphan error, not at runtime with a deadlock.
+**1. Count every consumer before creating the I/O program.** The number of handles is a budget declared up front. `(:wat::std::program::Console stdout stderr num-console)` takes the count as a parameter — the program allocates exactly that many client queues. No dynamic handle creation, no subscribe/unsubscribe semantics. If your count is wrong at startup, you find out at `:wat::kernel::HandlePool::finish` with an orphan error, not at runtime with a deadlock.
 
 **2. Claim or panic — the HandlePool discipline.** `pool.pop` claims one handle. `pool.finish` asserts the pool is empty. An orphaned handle is an I/O driver waiting forever for an input that never disconnects. The pool catches the mistake at construction time, naming the resource — `"broker-cache: 2 orphaned handle(s)"` — rather than leaving the program to hang on shutdown. Belt-and-suspenders: the pool's drop impl also panics if handles remain, in case `finish` is forgotten.
 
@@ -2119,9 +2137,13 @@ wat/std/program/
       (see "Programs are userland — with two exceptions"):
 
       wat/std/program/Console.wat  ;; :wat::std::program::Console
-                                    ;;   single-sink fan-in serializer for
-                                    ;;   one :crossbeam_channel::Sender<String> (stdout
-                                    ;;   or stderr, typically)
+                                    ;;   dual-sink fan-in serializer
+                                    ;;   over :io::Stdout + :io::Stderr;
+                                    ;;   the sole gateway a good wat
+                                    ;;   program uses to reach the
+                                    ;;   world. Client handles carry
+                                    ;;   tagged msgs; /out and /err
+                                    ;;   helpers encode the tag.
       wat/std/program/Cache.wat    ;; :wat::std::program::Cache<K,V>
                                     ;;   LRU memoization with telemetry
                                     ;;   hooks; the hot path of any holon
@@ -2209,10 +2231,11 @@ This makes the discipline enforceable in practice: conflicts fail loudly and ear
 
 The project reserves four prefixes, and they are **protected at startup** — users cannot define anything at these paths. Attempting `(:wat::core::define (:wat::kernel::my-func ...) ...)` or `(:wat::core::defmacro (:wat::std::MyAlias ...) ...)` halts the wat-vm with a startup error.
 
-- `:wat::core::...` — language core primitives (`:wat::core::define`, `:wat::core::lambda`, `:wat::core::let`, `:wat::core::let*`, `:wat::core::if`, `:wat::core::match`, `:wat::core::cond`, `:wat::core::defmacro`, `:wat::core::load!`, `:wat::core::vec`, `:wat::core::quote`, `:wat::core::atom-value`, `:wat::algebra::cosine`, `:wat::algebra::presence?`, `:wat::core::eval-ast!`, `:wat::core::eval-edn!`, `:wat::core::eval-digest!`, `:wat::core::eval-signed!`, `:wat::core::first`, `:wat::core::second`, `:wat::core::+`, `:wat::core::-`, `:wat::core::*`, `:wat::core::>`, `:wat::core::=`, …)
+- `:wat::core::...` — language core primitives (`:wat::core::define`, `:wat::core::lambda`, `:wat::core::let`, `:wat::core::let*`, `:wat::core::if`, `:wat::core::match`, `:wat::core::cond`, `:wat::core::defmacro`, `:wat::core::load!`, `:wat::core::vec`, `:wat::core::list`, `:wat::core::tuple`, `:wat::core::quote`, `:wat::core::atom-value`, `:wat::core::eval-ast!`, `:wat::core::eval-edn!`, `:wat::core::eval-digest!`, `:wat::core::eval-signed!`, `:wat::core::first`, `:wat::core::second`, `:wat::core::third`, `:wat::core::rest`, `:wat::core::map`, `:wat::core::foldl`, `:wat::core::range`, `:wat::core::take`, `:wat::core::drop`, `:wat::core::length`, `:wat::core::empty?`, `:wat::core::reverse`, `:wat::core::i64::+`, `:wat::core::i64::-`, `:wat::core::i64::*`, `:wat::core::i64::/`, `:wat::core::f64::+`, `:wat::core::f64::-`, `:wat::core::f64::*`, `:wat::core::f64::/`, `:wat::core::>`, `:wat::core::=`, …)
 - `:wat::kernel::...` — wat-vm kernel primitives (`:wat::kernel::make-bounded-queue`, `:wat::kernel::make-unbounded-queue`, `:wat::kernel::spawn`, `:wat::kernel::send`, `:wat::kernel::recv`, `:wat::kernel::try-recv`, `:wat::kernel::select`, `:wat::kernel::drop`, `:wat::kernel::join`, `:wat::kernel::HandlePool`, `:wat::kernel::stopped?`)
 - `:wat::config::...` — ambient startup constants: setters (`set-dims!`, `set-capacity-mode!`, `set-global-seed!`, `set-noise-floor!`), accessors (`dims`, `capacity-mode`, `global-seed`, `noise-floor`), and the `:wat::config::CapacityMode` enum. Required-at-startup or defaulted values the program author commits at most once; see "`:wat::config` — Ambient Startup Constants."
-- `:wat::algebra::...` — algebra core primitives (`:wat::algebra::Atom`, `:wat::algebra::Bind`, `:wat::algebra::Bundle`, `:wat::algebra::Blend`, …)
+- `:wat::algebra::...` — algebra core primitives (`:wat::algebra::Atom`, `:wat::algebra::Bind`, `:wat::algebra::Bundle`, `:wat::algebra::Blend`, `:wat::algebra::cosine`, `:wat::algebra::dot`, `:wat::algebra::presence?`, …)
+- `:wat::io::...` — I/O primitives for the real OS streams handed to `:user::main` (`:wat::io::write` for `:io::Stdout` / `:io::Stderr`, `:wat::io::read-line` for `:io::Stdin`). No channel indirection; calls go straight to the OS stream via std's internal locking.
 - `:wat::std::...` — project stdlib (`:wat::std::Subtract`, `:wat::std::HashMap`, `:wat::std::Chain`, `:wat::std::LocalCache`, circular basis atoms, `:wat::std::program::Cache`, …)
   - `:wat::std::list::...` — generic list combinators that compose core primitives (`:wat::std::list::pairwise-map`, `:wat::std::list::n-wise-map`, `:wat::std::list::map-with-index`, `:wat::std::list::window`, `:wat::std::list::zip`, `:wat::std::list::take-while`, …). Each is a short composition of Rust iterator methods; each is called from stdlib-macro-emitted ASTs and from user code.
   - `:wat::std::math::...` — math primitives used inside stdlib macros (`:wat::std::math::cos`, `:wat::std::math::sin`, `:wat::std::math::pi`, `:wat::std::math::log`, `:wat::std::math::ln`).

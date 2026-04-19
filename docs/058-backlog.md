@@ -17,25 +17,33 @@ Phase 1 completion (2026-04-19 morning).
 ## Where we are
 
 **Phase 1 complete; programs-as-holons operational; `:Option<T>` +
-`match` live; kernel surface complete.** wat-rs ships the full startup
-pipeline, real Ed25519 crypto at `signed-load!` / `eval-signed!`,
-parametric `:Atom<T>`, the six algebra-core forms, `:wat::core::quote` /
-`:wat::core::atom-value` / `:wat::core::let*` / `:wat::algebra::cosine` / `:wat::algebra::presence?`,
-config-committed `noise_floor`, `EncodingCtx` attached at freeze,
-`:Option<T>` with `:None` / `(Some _)` constructors,
-`(:wat::core::match ...)` with exhaustiveness, `recv` / `try-recv` /
-`select` returning `:Option<T>`, typed pipe values, tuples +
-destructuring, `make-bounded-queue` / `make-unbounded-queue`, `spawn` /
-`join` on a Mutex-free `:ProgramHandle<R>`, `HandlePool` with
-claim-or-panic, the per-signal poll/reset primitives for SIGUSR1 /
-SIGUSR2 / SIGHUP, the full stdlib algebra macros (Amplify, Subtract,
-Log, Circular, Reject, Project, Sequential, Bigram, Trigram, Ngram)
-plus Round 4a list primitives (list, map, length, empty?, reverse,
-range, take, drop, foldl, first/second/third polymorphic over Vec +
-tuple, rest, std::list::window, std::list::map-with-index), and the
-naming-convention sweep (`stopped?`, `cosine`, `presence?`). **453+
-tests green; zero warnings; zero Mutex.** The vector-level proof
-runs end-to-end:
+`match` live; kernel surface complete; first stdlib program
+(Console) shipped.** wat-rs ships the full startup pipeline, real
+Ed25519 crypto at `signed-load!` / `eval-signed!`, parametric
+`:Atom<T>`, the six algebra-core forms, `:wat::core::quote` /
+`:wat::core::atom-value` / `:wat::core::let*` / `:wat::algebra::cosine`
+/ `:wat::algebra::presence?` / `:wat::algebra::dot`, config-committed
+`noise_floor`, `EncodingCtx` attached at freeze, `:Option<T>` with
+`:None` / `(Some _)` constructors, `(:wat::core::match ...)` with
+exhaustiveness, `recv` / `try-recv` / `select` returning
+`:Option<T>`, typed pipe values, tuples + destructuring + the
+tuple constructor, `make-bounded-queue` / `make-unbounded-queue`,
+`spawn` / `join` on a Mutex-free `:ProgramHandle<R>`, `HandlePool`
+with claim-or-panic, the per-signal poll/reset primitives for
+SIGUSR1 / SIGUSR2 / SIGHUP, the full stdlib algebra macros
+(Amplify, Subtract, Log, Circular, Reject, Project, Sequential,
+Bigram, Trigram, Ngram) plus Round 4a list primitives (list, map,
+length, empty?, reverse, range, take, drop, foldl,
+first/second/third polymorphic over Vec + tuple, rest,
+std::list::window, std::list::map-with-index, std::list::remove-at),
+the naming-convention sweep (`stopped?`, `cosine`, `presence?`),
+the typed-arith split (`:wat::core::i64::*` vs `:wat::core::f64::*`),
+the I/O model (`:user::main` receives real `:io::Stdin` /
+`:io::Stdout` / `:io::Stderr`; `:wat::io::write` and
+`:wat::io::read-line` primitives go straight to the OS stream), and
+the Console stdlib program (dual-sink gateway; `Console/out` +
+`Console/err` helpers). **454+ tests green; zero warnings; zero
+Mutex.** The vector-level proof runs end-to-end:
 
 ```
 $ echo watmin | wat-vm presence-proof.wat
@@ -172,12 +180,27 @@ At `:wat::std::list::*`:
 constructor, already shipped. `nth` is `get` on Vec — graduates with
 HashMap/HashSet's `get`.)
 
-### Step 5 — stdlib programs (Console + Cache)
+### Step 5 — stdlib programs (Console + Cache) — PARTIAL (2026-04-19)
 
-- [ ] driver registry (Rust fn + keyword path → spawn target)
-- [ ] `:wat::std::program::Console` registered at wat-vm startup
-- [ ] `:wat::std::program::Cache<K,V>` registered at wat-vm startup
-- [ ] hello-world that uses Console to serialize stdout across workers
+- [x] ~~driver registry (Rust fn + keyword path → spawn target)~~ —
+  **DROPPED.** Path B confirmed: Console is a pure wat-source define
+  that spawns its own internal driver thread. No driver-registry
+  concept required. We may never need one — user direction: "we may
+  be able to do everything in wat... we may not need wat-to-rust at
+  all."
+- [x] `:wat::std::program::Console` — shipped as wat/std/program/Console.wat.
+  Dual-sink gateway: takes `:io::Stdout` + `:io::Stderr` + count,
+  returns `(HandlePool<Sender<(i64,String)>>, ProgramHandle<()>)`.
+  Helpers `Console/out` and `Console/err` encode the tag.
+- [x] I/O model retrofit — `:user::main` now receives real
+  `:io::Stdin` / `:io::Stdout` / `:io::Stderr` handles (not channel
+  bridges). Primitives `:wat::io::write` and `:wat::io::read-line`
+  go straight to the OS stream.
+- [ ] `:wat::std::program::Cache<K,V>` — blocked on Round 4b's
+  `HashMap<K,V>` + `get` / `contains?`.
+- [ ] hello-world that uses Console across multiple workers — small
+  follow-up; single-writer end-to-end already proven
+  (`stdlib_console_hello_world`).
 
 ### Step 6 — driver model proposal (058 growth)
 
