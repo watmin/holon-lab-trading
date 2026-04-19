@@ -758,16 +758,16 @@ The kernel primitives are exposed to wat programs as lowercase keyword-path func
   (let ((out (:wat/kernel/console-out)))
     (:wat/kernel/send out "hello, world")))
 
-(define (main -> :())
+(define (:user/main -> :())
   (let ((handle (:wat/kernel/spawn :my/app/hello-main)))
     (:wat/kernel/join handle)))
 ```
 
-**The `main` convention.** `main` is a bare name the **kernel looks for at startup**. The user declares it via `(define (main -> :()) ...)` — no keyword-path prefix needed; the user's definition fills the kernel's entry-point slot. This is the same convention C and Rust use: one `main` per program, declared by the user, called by the runtime.
+**The `:user/main` convention.** The entry point is `:user/main` — a keyword-path name the **kernel looks for at startup**. The user declares it via `(define (:user/main -> :()) ...)` and the wat-vm invokes it. Same convention as C and Rust `main`, but expressed honestly under the keyword-path naming discipline: no bare-name exception.
 
-`main` is a special case under the dual-tier model (see `## Naming Discipline — Keyword Paths, No Mechanism`): unlike other `:wat/...` names which have a protected full path AND a shadowable bare alias, `main` is **bare-only**. The kernel doesn't provide an implementation; it reserves the bare name as the entry-point slot. The user fills the slot.
+`:user/main` is a **kernel-looked-up slot** that the USER provides. This is the inverse of `:wat/kernel/...` paths, which are kernel-PROVIDED implementations (protected from redefinition). `:user/main` is kernel-REQUIRED (user provides; kernel invokes); there is no default implementation; the user's definition fills the slot.
 
-Two `main` declarations across loaded files produce a startup name collision and halt the wat-vm (same rule as any other name collision). Zero `main` declarations also halt: a wat program needs an entry point. Hypothetical future kernel slots (e.g., `shutdown-handler`, `on-signal`) would follow the same pattern: bare reserved name, user fills the slot.
+Two `:user/main` declarations across loaded files produce a startup name collision and halt the wat-vm (same rule as any other name collision). Zero `:user/main` declarations also halt: a wat program needs an entry point. Hypothetical future kernel slots (e.g., `:user/shutdown-handler`, `:user/on-signal`) would follow the same pattern under `:user/...`: kernel-required name, user provides the implementation.
 
 **A program with the canonical lifecycle — observer-style:**
 
@@ -788,7 +788,7 @@ Two `main` declarations across loaded files produce a startup name collision and
      ;; then come home with final state.
      state)))
 
-(define (main -> :())
+(define (:user/main -> :())
   (let* (((candle-tx candle-rx) (:wat/kernel/make-bounded-queue :Candle 1))
          ((result-tx result-rx) (:wat/kernel/make-bounded-queue :Result 1))
          (observer-handle       (:wat/kernel/spawn :my/app/observer-loop
@@ -2617,7 +2617,7 @@ If you are auditing a specific change, read the changelog alongside this documen
 
 6. ~~**The MAP canonical set completeness.**~~ **RESOLVED — wrong question.** "Completeness" is unanswerable without knowing every future application; any answer is either speculation or circular. The honest framing is narrower and true: **this is the set we know we need right now**, argued by the forms the 058 sub-proposals successfully defended against FOUNDATION's criterion. The nine algebra-core variants — `Atom`, `Bind`, `Bundle`, `Permute`, `Thermometer`, `Blend`, `Orthogonalize`, `Resonance`, `ConditionalBind` — cover every operation 058 identified; that's the claim. If a future application reveals a primitive that cannot be expressed with existing forms, a new proposal argues it against the criterion (demonstrates a distinct algebraic operation; is domain-agnostic; the encoder must treat it distinctly) and adds it. The proposal process IS the extension mechanism. Same spirit as the stdlib-as-blueprint rule: don't ship forms speculatively; ship only what demonstrates a distinct pattern you need today. Not "is this the complete set?" but "is this every form we know we need?" — yes.
 
-7. ~~**`:allow-redef` expression syntax.**~~ **RESOLVED — by analogy with `main`.** Datamancer's insight: "user declares main by name." The `main` entry-point convention dictates the resolution for redef too. The user doesn't need a special syntax to express "this redefines an existing name"; they just **USE the name**. The CLI flag `redef-mode=:allow-redef` at wat-vm startup permits later-loaded definitions to replace earlier ones; the user expresses intent simply by writing `(define (:some/existing/name ...) ...)` with a name that already exists in a prior-loaded file. The wat-vm logs each replacement (prior file + new file + resolved body) for audit. No per-file pragma, no `(redefines ...)` form at the definition site, no startup manifest directive — just the mode flag at the system level, and "using the name" at the declaration level. Same shape as `main`: reserved/conventional at the kernel level, bare-name at the user level. The mode is a system-wide opt-in; the syntax IS the declaration.
+7. ~~**`:allow-redef` expression syntax.**~~ **RESOLVED — by analogy with `:user/main`.** Datamancer's insight: "user declares main by name." The `:user/main` entry-point convention dictates the resolution for redef too. The user doesn't need a special syntax to express "this redefines an existing name"; they just **USE the name**. The CLI flag `redef-mode=:allow-redef` at wat-vm startup permits later-loaded definitions to replace earlier ones; the user expresses intent simply by writing `(define (:some/existing/name ...) ...)` with a name that already exists in a prior-loaded file. The wat-vm logs each replacement (prior file + new file + resolved body) for audit. No per-file pragma, no `(redefines ...)` form at the definition site, no startup manifest directive — just the mode flag at the system level, and "using the name" at the declaration level. Same shape as `:user/main`: kernel-looked-up slot filled by the user's declaration. The mode is a system-wide opt-in; the syntax IS the declaration.
 
 ---
 
