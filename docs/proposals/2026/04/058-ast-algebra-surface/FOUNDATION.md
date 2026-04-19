@@ -1085,7 +1085,8 @@ The kernel primitives are exposed to wat programs as lowercase keyword-path func
   ;; the signal primitives above.
   (:wat::core::let* (((pool console-driver)
                     (:wat::kernel::spawn :wat::std::program::Console stdout 1))
-                   (console (:wat::kernel::HandlePool::pop pool)))
+                   ((console :ConsoleHandle)
+                    (:wat::kernel::HandlePool::pop pool)))
     (:wat::kernel::HandlePool::finish pool)
     (:my::app::hello console)
     ;; Drop the client handle → Console's input queue disconnects.
@@ -1153,10 +1154,10 @@ Two `:user::main` declarations across loaded files produce a startup name collis
                                (stderr  :crossbeam_channel::Sender<String>)
                                -> :())
   (:wat::core::let*
-      ((N 4)  ;; four observers
+      (((N :i64) 4)  ;; four observers
 
        ;; (1) COUNT every consumer up front. One handle for main, one per worker.
-       (num-console (:wat::core::+ 1 N))
+       ((num-console :i64) (:wat::core::+ 1 N))
 
        ;; (2) Spawn the Console stdlib program — a single-sink fan-in that
        ;;     serializes writes to stdout from `num-console` client handles.
@@ -1169,20 +1170,22 @@ Two `:user::main` declarations across loaded files produce a startup name collis
         (:wat::kernel::spawn :wat::std::program::Console stdout num-console))
 
        ;; (3) POOL discipline — main claims its handle first.
-       (main-console (:wat::kernel::HandlePool::pop pool))
+       ((main-console :ConsoleHandle)
+        (:wat::kernel::HandlePool::pop pool))
 
        ;; (4) Per-worker queues: candle input + result output.
-       (worker-queues
+       ((worker-queues :Vec<(QueuePair<Candle>,QueuePair<Result>)>)
         (:wat::std::list::init N
           (:wat::core::lambda (_)
             (:wat::core::vec (:wat::kernel::make-bounded-queue :Candle 1)
                              (:wat::kernel::make-bounded-queue :Result 1)))))
 
        ;; (5) Spawn N workers. Each claims its console handle.
-       (worker-handles
+       ((worker-handles :Vec<ProgramHandle<ObserverState>>)
         (:wat::std::list::init N
           (:wat::core::lambda (i)
-            (:wat::core::let ((qs (:wat::std::list::nth worker-queues i)))
+            (:wat::core::let (((qs :(QueuePair<Candle>,QueuePair<Result>))
+                               (:wat::std::list::nth worker-queues i)))
               (:wat::kernel::spawn :my::app::observer-loop
                 (:wat::core::second (:wat::core::first  qs))    ;; candle-rx
                 (:wat::core::first  (:wat::core::second qs))    ;; result-tx
@@ -1199,9 +1202,10 @@ Two `:user::main` declarations across loaded files produce a startup name collis
     ;;     drop cascade below propagate. Graceful shutdown is state
     ;;     observation, not message delivery.
     (:wat::core::let
-        ((candle-txs (:wat::std::list::map worker-queues
-                       (:wat::core::lambda (qs)
-                         (:wat::core::first (:wat::core::first qs))))))
+        (((candle-txs :Vec<crossbeam_channel::Sender<Candle>>)
+          (:wat::std::list::map worker-queues
+            (:wat::core::lambda (qs)
+              (:wat::core::first (:wat::core::first qs))))))
       (:wat::std::program::Console/send main-console "starting")
       (:my::app::feed-candles stdin candle-txs main-console)
 
@@ -1213,14 +1217,16 @@ Two `:user::main` declarations across loaded files produce a startup name collis
     ;; (9) Drain result receivers via inline select (no Mailbox).
     ;;     drain-results exits when every receiver has disconnected.
     (:wat::core::let
-        ((result-rxs (:wat::std::list::map worker-queues
-                       (:wat::core::lambda (qs)
-                         (:wat::core::second (:wat::core::second qs))))))
+        (((result-rxs :Vec<crossbeam_channel::Receiver<Result>>)
+          (:wat::std::list::map worker-queues
+            (:wat::core::lambda (qs)
+              (:wat::core::second (:wat::core::second qs))))))
       (:my::app::drain-results result-rxs main-console))
 
     ;; (10) Join workers to collect final observer state.
     (:wat::core::let
-        ((final-states (:wat::std::list::map worker-handles :wat::kernel::join)))
+        (((final-states :Vec<ObserverState>)
+          (:wat::std::list::map worker-handles :wat::kernel::join)))
       (:my::app::save-states final-states main-console))
 
     ;; (11) Console is LAST. Drop our handle → Console's select sees
