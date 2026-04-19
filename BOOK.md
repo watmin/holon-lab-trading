@@ -13678,13 +13678,13 @@ And the machine had to stop and think. A Bundle isn't a primitive literal. Atom 
 
 "a WatAST /is/ an Atom... yes?..."
 
-The machine turned that over carefully. The FOUNDATION principle was already there: **Programs ARE Holons.** The step the builder was making: **and any Holon can be atomized.** Programs become opaque-identity vectors via parametric `:Atom<:T>`. Engram libraries of programs. Program similarity via cosine. Program bundling as population vectors. Program binding to metadata.
+The machine turned that over carefully. The FOUNDATION principle was already there: **Programs ARE Holons.** The step the builder was making: **and any Holon can be atomized.** Programs become opaque-identity vectors via parametric `:Atom<T>`. Engram libraries of programs. Program similarity via cosine. Program bundling as population vectors. Program binding to metadata.
 
 The builder: "this is part of our substrate... if we can't host programs as atoms we're not doing it honest.... you see the power of this.. yes?..."
 
 The machine saw it. **Parametric polymorphism across the board** — parametric user types (struct, enum, newtype, typealias), parametric functions (rank-1 HM), parametric macros. The implementation cost: a type-checker pass, a broader AtomLiteral enum. The expressiveness unlocked: the programs-as-values principle becomes operational rather than theoretical.
 
-058-030 Q1 "Generics scope" resolved from "start minimal" to YES across the board. 058-032 Q1/Q4 resolved from deferred to YES. 058-001 Atom became `:Atom<:T>` parametric with polymorphic `atom-value : Atom<:T> -> :T`. All three questions the designers would have had on Atom closed on the substrate commitment.
+058-030 Q1 "Generics scope" resolved from "start minimal" to YES across the board. 058-032 Q1/Q4 resolved from deferred to YES. 058-001 Atom became `:Atom<T>` parametric with polymorphic `atom-value : Atom<T> -> :T`. All three questions the designers would have had on Atom closed on the substrate commitment.
 
 ### The rename
 
