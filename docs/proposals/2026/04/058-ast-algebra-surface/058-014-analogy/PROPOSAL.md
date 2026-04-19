@@ -52,17 +52,19 @@ Three lines of decomposition explain what `Bundle(c, Subtract(b, a))` does. Not 
 The typical usage is:
 
 ```scheme
-;; Find the candidate that best matches the analogy's completion:
-(argmax
-  (:wat/core/map (:wat/core/lambda ((cand :Holon) -> :Pair<Holon,f64>)
-         (:wat/core/list cand (presence cand (encode (:wat/std/Analogy king queen man)))))
-       candidates)
-  :wat/core/second)
+;; Measure every candidate's overlay against the analogy's completion.
+;; Return the list of (candidate, presence-score) pairs. The caller
+;; decides the selection policy — top-1, above-threshold, weighted
+;; mixture, whatever their application demands.
+(:wat/core/map candidates
+  (:wat/core/lambda (cand)
+    (:wat/core/list cand
+                     (presence cand (encode (:wat/std/Analogy king queen man))))))
 ```
 
-With `Analogy` named, this reads as "complete this analogy, then find the best-matching candidate by presence measurement." Without `Analogy`, the expression's inner form becomes `(Bundle (list man (Subtract queen king)))` — mechanically identical, but the reader has to recognize the pattern.
+With `Analogy` named, this reads as "complete this analogy, then measure each candidate's overlay by presence." Without `Analogy`, the expression's inner form becomes `(:wat/algebra/Bundle (:wat/core/list man (:wat/std/Subtract queen king)))` — mechanically identical, but the reader has to recognize the pattern.
 
-Cleanup is NOT used here — Cleanup was rejected as a core form (see 058-025 and FOUNDATION's "Presence is Measurement, Not Verdict"). Retrieval is presence measurement against known candidates, not argmax-over-codebook.
+Cleanup is NOT used here — Cleanup was rejected as a core form (see 058-025 and FOUNDATION's "Presence is Measurement, Not Verdict"). Retrieval is presence measurement against known candidates; selection — picking a single winner or ranking or filtering by threshold — is the caller's policy, not a substrate primitive. No `argmax` exists in the algebra.
 
 **4. Parallel structure with other VSA stdlib.**
 
@@ -100,17 +102,20 @@ Some users already write analogies inline. Adding a named form might not be used
 ## Example Usage
 
 ```scheme
-;; Classical king-queen-man analogy — find the best-matching candidate
-;; by presence measurement:
-(:wat/core/define (:my/app/best-match (analogy-result :Holon) (candidates :List<Holon>) -> :Pair<Holon,f64>)
-  (argmax
-    (:wat/core/map (:wat/core/lambda ((c :Holon) -> :Pair<Holon,f64>)
-           (:wat/core/list c (presence c (encode analogy-result))))
-         candidates)
-    :wat/core/second))
+;; Classical king-queen-man analogy — measure every candidate's overlay
+;; against the analogy's completion and return the full measurement list.
+;; The caller's next step — whether that is max-by-score, threshold
+;; filter, top-k sort, or a weighted bundle — lives in the caller.
+(:wat/core/define (:my/app/measure-candidates
+                    (analogy-result :Holon)
+                    (candidates     :List<Holon>)
+                    -> :List<:Pair<Holon,f64>>)
+  (:wat/core/map candidates
+    (:wat/core/lambda (c)
+      (:wat/core/list c (presence c (encode analogy-result))))))
 
-(:wat/core/define :my/app/completion
-  (:my/app/best-match (:wat/std/Analogy king queen man) vocabulary))
+(:wat/core/define :my/app/candidate-scores
+  (:my/app/measure-candidates (:wat/std/Analogy king queen man) vocabulary))
 ;; after parse-time expansion, the Analogy AST is:
 ;;   (Bundle (list man (Blend queen king 1 -1)))
 
