@@ -293,10 +293,10 @@ All stdlib macro examples in 058-031 use bare `:AST` and must update to `:AST<T>
 058-001 Atom accepting as parametric `Atom<T>` required parametric polymorphism at the substrate level. 058-030 Q1 resolved to YES accordingly. Macros follow: a macro that takes `:AST<T>` for any T is legal, and `T` is a type variable bound at the macro's signature scope. The typical use — a macro that operates identically on any typed AST — becomes expressible. Example:
 
 ```scheme
-(:wat/core/defmacro (:my/app/identity-macro (expr :AST<:T>) -> :AST<:T>)
+(:wat/core/defmacro (:my/app/identity-macro (expr :AST<T>) -> :AST<T>)
   `,expr)
 
-(:wat/core/defmacro (:my/app/safe-wrap (expr :AST<:T>) -> :AST<:Option<:T>>)
+(:wat/core/defmacro (:my/app/safe-wrap (expr :AST<T>) -> :AST<Option<T>>)
   `(Some ,expr))
 ```
 

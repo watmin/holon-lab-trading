@@ -21,7 +21,7 @@ Everything else in this document is RESOLVED inline (with a pointer to the resol
 
 ## 058-001: Atom — ACCEPTED (parametric)
 
-**All questions in this section are RESOLVED.** Atom accepts into core as `:Atom<:T>` — parametric over any serializable T (primitive, composite `:Holon`, user-defined struct/enum/newtype). Substrate-level decision: without parametric Atom, programs cannot be atomized, which breaks FOUNDATION's "Programs ARE Holons" principle. See 058-001/PROPOSAL.md's ACCEPTED banner for the per-question reasoning, and FOUNDATION-CHANGELOG 2026-04-18 entry "Parametric polymorphism as substrate — programs ARE atoms, which demands it."
+**All questions in this section are RESOLVED.** Atom accepts into core as `:Atom<T>` — parametric over any serializable T (primitive, composite `:Holon`, user-defined struct/enum/newtype). Substrate-level decision: without parametric Atom, programs cannot be atomized, which breaks FOUNDATION's "Programs ARE Holons" principle. See 058-001/PROPOSAL.md's ACCEPTED banner for the per-question reasoning, and FOUNDATION-CHANGELOG 2026-04-18 entry "Parametric polymorphism as substrate — programs ARE atoms, which demands it."
 
 
 ---

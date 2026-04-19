@@ -9,7 +9,7 @@
 
 ## ACCEPTED as parametric — 2026-04-18
 
-Atom accepts into core as `:Atom<:T>` — **parametric over any serializable T**. Not just primitives (str, int, float, bool, keyword) — also `:Holon` (any AST node, including composite programs), user-defined struct/enum/newtype, any type the language admits.
+Atom accepts into core as `:Atom<T>` — **parametric over any serializable T**. Not just primitives (str, int, float, bool, keyword) — also `:Holon` (any AST node, including composite programs), user-defined struct/enum/newtype, any type the language admits.
 
 ### Why parametric and not primitive-only
 
@@ -23,25 +23,25 @@ Correct. Parametric Atom is substrate-level, not feature-level.
 
 ```scheme
 ;; primitives — unchanged
-(:wat/algebra/Atom 42)                      ;; :Atom<:i64>
-(:wat/algebra/Atom "foo")                   ;; :Atom<:String>
-(:wat/algebra/Atom :some/keyword)           ;; :Atom<:Keyword>
+(:wat/algebra/Atom 42)                      ;; :Atom<i64>
+(:wat/algebra/Atom "foo")                   ;; :Atom<String>
+(:wat/algebra/Atom :some/keyword)           ;; :Atom<Keyword>
 
 ;; composite holons — programs, bundles, binds, any AST
-(:wat/algebra/Atom some-bundle)             ;; :Atom<:Holon>
-(:wat/algebra/Atom trained-model-program)   ;; :Atom<:Holon>
+(:wat/algebra/Atom some-bundle)             ;; :Atom<Holon>
+(:wat/algebra/Atom trained-model-program)   ;; :Atom<Holon>
 
 ;; user-defined types — any struct, enum, newtype
-(:wat/algebra/Atom (my-candle ...))         ;; :Atom<:my/types/Candle>
-(:wat/algebra/Atom (my-wrapper 42))         ;; :Atom<:my/app/Wrapper<:i64>>
+(:wat/algebra/Atom (my-candle ...))         ;; :Atom<my/types/Candle>
+(:wat/algebra/Atom (my-wrapper 42))         ;; :Atom<my/app/Wrapper<i64>>
 ```
 
-The hash for every variant is `hash(type-tag, canonical-EDN(value))` producing a deterministic seeded-random vector in `{-1, 0, +1}^d`. The type-tag makes `Atom<:i64>` and `Atom<:String>` holding the same bytes hash differently. EDN serialization is the universal canonical form (FOUNDATION's cryptographic provenance chain).
+The hash for every variant is `hash(type-tag, canonical-EDN(value))` producing a deterministic seeded-random vector in `{-1, 0, +1}^d`. The type-tag makes `Atom<i64>` and `Atom<String>` holding the same bytes hash differently. EDN serialization is the universal canonical form (FOUNDATION's cryptographic provenance chain).
 
 ### Extraction — polymorphic
 
 ```scheme
-(:wat/core/define (:wat/std/atom-value (a :Atom<:T>) -> :T)
+(:wat/core/define (:wat/std/atom-value (a :Atom<T>) -> :T)
   ;; Returns the inner T directly. Single polymorphic function;
   ;; type-checker infers T at each call site.
   ...)

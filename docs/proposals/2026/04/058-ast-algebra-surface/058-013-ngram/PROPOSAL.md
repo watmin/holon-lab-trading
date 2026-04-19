@@ -16,18 +16,18 @@ Ngram is stdlib. Its expansion uses the **bind-chain Sequential** from 058-009 (
 ```scheme
 ;; General n-wise adjacency. Sliding window of size n, each window
 ;; encoded as a bind-chain Sequential, all windows bundled.
-(:wat/core/defmacro (:wat/std/Ngram (n :AST<:usize>) (xs :AST<:List<:Holon>>) -> :AST<:Holon>)
+(:wat/core/defmacro (:wat/std/Ngram (n :AST<usize>) (xs :AST<List<Holon>>) -> :AST<Holon>)
   `(:wat/algebra/Bundle
      (:wat/std/list/map
        (:wat/std/list/window ,n ,xs)
        :wat/std/Sequential)))
 
 ;; Named shortcut for n=2 — pairs.
-(:wat/core/defmacro (:wat/std/Bigram (xs :AST<:List<:Holon>>) -> :AST<:Holon>)
+(:wat/core/defmacro (:wat/std/Bigram (xs :AST<List<Holon>>) -> :AST<Holon>)
   `(:wat/std/Ngram 2 ,xs))
 
 ;; Named shortcut for n=3 — triples.
-(:wat/core/defmacro (:wat/std/Trigram (xs :AST<:List<:Holon>>) -> :AST<:Holon>)
+(:wat/core/defmacro (:wat/std/Trigram (xs :AST<List<Holon>>) -> :AST<Holon>)
   `(:wat/std/Ngram 3 ,xs))
 ```
 

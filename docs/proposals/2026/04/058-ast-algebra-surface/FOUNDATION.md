@@ -319,7 +319,7 @@ This unlocks the algebra's real power for self-referential reasoning:
 
 ```scheme
 ;; A program becomes an atomizable value:
-(:wat/algebra/Atom trained-model-program)   ;; :Atom<:Holon>
+(:wat/algebra/Atom trained-model-program)   ;; :Atom<Holon>
 
 ;; Programs go in libraries keyed by identity:
 (:wat/std/HashMap
@@ -2671,6 +2671,33 @@ All eight forms are loaded at startup. The wat-vm distinguishes them by what kin
 ;;   :fn(List<i32>)->Option<f64>
 ;;   :HashMap<String,fn(i32)->i32>
 ;;   :Result<HashMap<Atom,Holon>,String>
+;;   :Atom<Holon>
+;;   :Atom<i64>
+;;
+;; --- ILLEGAL: a second ':' inside a parametric type ---
+;;
+;; The ':' is a Rust-symbol quoter and appears ONCE, at the START of a
+;; keyword-path token. Inside angle brackets, the type parameters are
+;; bare Rust symbol names — do NOT re-quote them.
+;;
+;; WRONG (two colons in one type token):
+;;   :Atom<:Holon>                 ;; ':Holon' is a re-quote; illegal
+;;   :List<:T>                     ;; ':T' is a re-quote; illegal
+;;   :HashMap<:K,:V>               ;; ':K,:V' are re-quotes; illegal
+;;   :QueueReceiver<:wat/kernel/Signal>  ;; same mistake
+;;   :List<:Pair<Holon,f64>>       ;; same mistake at any nesting depth
+;;
+;; RIGHT (one colon at the start, bare Rust symbols inside):
+;;   :Atom<Holon>
+;;   :List<T>
+;;   :HashMap<K,V>
+;;   :QueueReceiver<wat/kernel/Signal>
+;;   :List<Pair<Holon,f64>>
+;;
+;; Rule of thumb: the ':' opens the quote; everything inside the matched
+;; brackets up to the balancing closer is part of the SAME symbol. A
+;; second ':' would re-quote, which makes no sense — you are already
+;; inside a quoted expression.
 ;;
 ;; NO :Any. Every case that wanted :Any has a principled replacement:
 ;;   - Universal algebra value   →  :Holon

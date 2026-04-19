@@ -14,7 +14,7 @@ Sequential is stdlib, and its expansion is **bind-chain with positional Permute*
 ### The correct expansion
 
 ```scheme
-(:wat/core/defmacro (:wat/std/Sequential (items :AST<:List<:Holon>>) -> :AST<:Holon>)
+(:wat/core/defmacro (:wat/std/Sequential (items :AST<List<Holon>>) -> :AST<Holon>)
   ;; Bind-chain with positional Permute:
   ;;   (Sequential [a])       = a
   ;;   (Sequential [a b])     = Bind(a, Permute(b, 1))
