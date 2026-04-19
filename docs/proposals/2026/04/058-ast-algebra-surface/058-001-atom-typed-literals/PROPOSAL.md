@@ -64,7 +64,7 @@ The hash for every variant is `hash(type-tag, canonical-EDN(value))` producing a
 FOUNDATION line 44 frames this as *"reads the AST node's field"* — an
 exact read on the typed box, not a probabilistic recovery. Retrieval
 from a COMPOSITE holon (Bind, Bundle, …) is a different operation:
-`:wat::core::presence` (FOUNDATION 1718) returns a cosine scalar; the
+`:wat::algebra::cosine` (FOUNDATION 1718) returns a cosine scalar; the
 caller binarizes against `(:wat::config::noise-floor)`. The two regimes
 are clean-separated — structural reads return `:T`; similarity
 measurements return `:f64`; neither uses Option.

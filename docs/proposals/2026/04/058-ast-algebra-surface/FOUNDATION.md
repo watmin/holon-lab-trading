@@ -1037,7 +1037,7 @@ The kernel primitives are exposed to wat programs as lowercase keyword-path func
 ;; SIGINT and SIGTERM are TERMINAL. The kernel installs handlers that
 ;; set an irreversible stop flag; userland polls it and cascades
 ;; shutdown by dropping its root producers. No recovery, no reset.
-(:wat::kernel::stopped)   ;; → :bool   set by SIGINT / SIGTERM
+(:wat::kernel::stopped?)  ;; → :bool   set by SIGINT / SIGTERM
                           ;;          once true, stays true until exit
 
 ;; SIGUSR1, SIGUSR2, SIGHUP are NON-TERMINAL. The kernel maintains one
@@ -1061,10 +1061,10 @@ The kernel primitives are exposed to wat programs as lowercase keyword-path func
 ;; SIGPIPE is always handled silently by the kernel; it never reaches
 ;; userland. SIGKILL is not deliverable (OS-enforced).
 ;;
-;; Design stance — naming convention: `?` suffix is a boolean predicate;
-;; `!` suffix is a state-committing mutation. `(:wat::kernel::stopped)`
-;; is a grandfathered bare name that will be renamed `stopped?` in the
-;; next naming sweep to conform.
+;; Design stance — naming convention: `?` suffix is a boolean
+;; predicate; `!` suffix is a state-committing mutation. Applied
+;; uniformly: `stopped?`, `sigusr1?` / `reset-sigusr1!`, `empty?`,
+;; `presence?`.
 ```
 
 **Hello-world — spawn Console, write through it, join to flush:**
@@ -1102,7 +1102,7 @@ The kernel primitives are exposed to wat programs as lowercase keyword-path func
 
 **The `:user::main` signature is fixed by the kernel.** Every `:user::main` receives the three stdio handles as parameters whether it uses them or not. This is the kernel contract. Naming them in the signature without binding them to locals is honest — the handles exist, the program acknowledges them, the program chooses not to use them. A program that wants only stderr threads `stderr` down through its spawns and ignores `stdout` and `stdin`. The type system enforces it: you cannot write to a handle you weren't given.
 
-This is the Haskell discipline without the monad wrapper: threading plain values through function parameters. The frustration is the point — every side effect is visible at the call site. Simple, not easy. Signals are NOT threaded as a parameter — the kernel exposes signal state as pollable booleans (`:wat::kernel::stopped` for terminal; `sigusr1?` / `sigusr2?` / `sighup?` + matching `reset-*!` for user signals), reachable from any function that imports the kernel path. Signal state is ambient by design: a handler for SIGHUP can live deep inside a service loop without being plumbed through every caller.
+This is the Haskell discipline without the monad wrapper: threading plain values through function parameters. The frustration is the point — every side effect is visible at the call site. Simple, not easy. Signals are NOT threaded as a parameter — the kernel exposes signal state as pollable booleans (`:wat::kernel::stopped?` for terminal; `sigusr1?` / `sigusr2?` / `sighup?` + matching `reset-*!` for user signals), reachable from any function that imports the kernel path. Signal state is ambient by design: a handler for SIGHUP can live deep inside a service loop without being plumbed through every caller.
 
 **The `:user::main` convention.** The entry point is `:user::main` — a keyword-path name the **kernel looks for at startup**. The user declares it with three parameters the kernel passes in: `(:wat::core::define (:user::main (stdin :crossbeam_channel::Receiver<String>) (stdout :crossbeam_channel::Sender<String>) (stderr :crossbeam_channel::Sender<String>) -> :()) ...)`. Same convention as C's `main(argc, argv)` and Rust's `fn main()` — but with every capability the kernel gives the program made explicit in the signature. No ambient stdio. No bare-name exception to the keyword-path discipline.
 
@@ -1197,7 +1197,7 @@ Two `:user::main` declarations across loaded files produce a startup name collis
 
     ;; (7) Feed the graph. `feed-candles` pulls from stdin and broadcasts
     ;;     to all worker candle senders inline. On every loop iteration
-    ;;     it polls `(:wat::kernel::stopped)` — when SIGINT / SIGTERM has
+    ;;     it polls `(:wat::kernel::stopped?)` — when SIGINT / SIGTERM has
     ;;     fired the flag is true and the feed loop returns, letting the
     ;;     drop cascade below propagate. Graceful shutdown is state
     ;;     observation, not message delivery.
@@ -2209,8 +2209,8 @@ This makes the discipline enforceable in practice: conflicts fail loudly and ear
 
 The project reserves four prefixes, and they are **protected at startup** — users cannot define anything at these paths. Attempting `(:wat::core::define (:wat::kernel::my-func ...) ...)` or `(:wat::core::defmacro (:wat::std::MyAlias ...) ...)` halts the wat-vm with a startup error.
 
-- `:wat::core::...` — language core primitives (`:wat::core::define`, `:wat::core::lambda`, `:wat::core::let`, `:wat::core::let*`, `:wat::core::if`, `:wat::core::match`, `:wat::core::cond`, `:wat::core::defmacro`, `:wat::core::load!`, `:wat::core::vec`, `:wat::core::quote`, `:wat::core::atom-value`, `:wat::core::presence`, `:wat::core::eval-ast!`, `:wat::core::eval-edn!`, `:wat::core::eval-digest!`, `:wat::core::eval-signed!`, `:wat::core::first`, `:wat::core::second`, `:wat::core::+`, `:wat::core::-`, `:wat::core::*`, `:wat::core::>`, `:wat::core::=`, …)
-- `:wat::kernel::...` — wat-vm kernel primitives (`:wat::kernel::make-bounded-queue`, `:wat::kernel::make-unbounded-queue`, `:wat::kernel::spawn`, `:wat::kernel::send`, `:wat::kernel::recv`, `:wat::kernel::try-recv`, `:wat::kernel::select`, `:wat::kernel::drop`, `:wat::kernel::join`, `:wat::kernel::HandlePool`, `:wat::kernel::stopped`)
+- `:wat::core::...` — language core primitives (`:wat::core::define`, `:wat::core::lambda`, `:wat::core::let`, `:wat::core::let*`, `:wat::core::if`, `:wat::core::match`, `:wat::core::cond`, `:wat::core::defmacro`, `:wat::core::load!`, `:wat::core::vec`, `:wat::core::quote`, `:wat::core::atom-value`, `:wat::algebra::cosine`, `:wat::algebra::presence?`, `:wat::core::eval-ast!`, `:wat::core::eval-edn!`, `:wat::core::eval-digest!`, `:wat::core::eval-signed!`, `:wat::core::first`, `:wat::core::second`, `:wat::core::+`, `:wat::core::-`, `:wat::core::*`, `:wat::core::>`, `:wat::core::=`, …)
+- `:wat::kernel::...` — wat-vm kernel primitives (`:wat::kernel::make-bounded-queue`, `:wat::kernel::make-unbounded-queue`, `:wat::kernel::spawn`, `:wat::kernel::send`, `:wat::kernel::recv`, `:wat::kernel::try-recv`, `:wat::kernel::select`, `:wat::kernel::drop`, `:wat::kernel::join`, `:wat::kernel::HandlePool`, `:wat::kernel::stopped?`)
 - `:wat::config::...` — ambient startup constants: setters (`set-dims!`, `set-capacity-mode!`, `set-global-seed!`, `set-noise-floor!`), accessors (`dims`, `capacity-mode`, `global-seed`, `noise-floor`), and the `:wat::config::CapacityMode` enum. Required-at-startup or defaulted values the program author commits at most once; see "`:wat::config` — Ambient Startup Constants."
 - `:wat::algebra::...` — algebra core primitives (`:wat::algebra::Atom`, `:wat::algebra::Bind`, `:wat::algebra::Bundle`, `:wat::algebra::Blend`, …)
 - `:wat::std::...` — project stdlib (`:wat::std::Subtract`, `:wat::std::HashMap`, `:wat::std::Chain`, `:wat::std::LocalCache`, circular basis atoms, `:wat::std::program::Cache`, …)

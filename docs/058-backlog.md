@@ -20,16 +20,22 @@ Phase 1 completion (2026-04-19 morning).
 `match` live; kernel surface complete.** wat-rs ships the full startup
 pipeline, real Ed25519 crypto at `signed-load!` / `eval-signed!`,
 parametric `:Atom<T>`, the six algebra-core forms, `:wat::core::quote` /
-`:wat::core::atom-value` / `:wat::core::let*` / `:wat::core::presence`,
+`:wat::core::atom-value` / `:wat::core::let*` / `:wat::algebra::cosine` / `:wat::algebra::presence?`,
 config-committed `noise_floor`, `EncodingCtx` attached at freeze,
 `:Option<T>` with `:None` / `(Some _)` constructors,
 `(:wat::core::match ...)` with exhaustiveness, `recv` / `try-recv` /
 `select` returning `:Option<T>`, typed pipe values, tuples +
 destructuring, `make-bounded-queue` / `make-unbounded-queue`, `spawn` /
 `join` on a Mutex-free `:ProgramHandle<R>`, `HandlePool` with
-claim-or-panic, and the per-signal poll/reset primitives for SIGUSR1 /
-SIGUSR2 / SIGHUP. 409 tests green; zero warnings; zero Mutex. The
-vector-level proof runs end-to-end:
+claim-or-panic, the per-signal poll/reset primitives for SIGUSR1 /
+SIGUSR2 / SIGHUP, the full stdlib algebra macros (Amplify, Subtract,
+Log, Circular, Reject, Project, Sequential, Bigram, Trigram, Ngram)
+plus Round 4a list primitives (list, map, length, empty?, reverse,
+range, take, drop, foldl, first/second/third polymorphic over Vec +
+tuple, rest, std::list::window, std::list::map-with-index), and the
+naming-convention sweep (`stopped?`, `cosine`, `presence?`). **453+
+tests green; zero warnings; zero Mutex.** The vector-level proof
+runs end-to-end:
 
 ```
 $ echo watmin | wat-vm presence-proof.wat
@@ -37,8 +43,6 @@ None
 Some
 watmin
 ```
-
-372 tests green; zero warnings.
 
 ---
 
@@ -87,23 +91,19 @@ Known deviations from spec, tracked separately:
   inside the primitive is one of several; full channel-end close
   happens when the enclosing let-scope releases its binding.
 
-### Step 1.5 — naming-convention sweep (follow-up to the signal surface)
+### Step 1.5 — naming-convention sweep — DONE (2026-04-19)
 
-- [ ] rename `(:wat::kernel::stopped)` → `(:wat::kernel::stopped?)` to
-  conform to the `?`-suffix predicate rule
-- [ ] split `(:wat::core::presence target ref)` (`:f64`) into
-  `(:wat::algebra::cosine target ref)` (`:f64`, the measurement) and
-  `(:wat::algebra::presence? target ref)` (`:bool`, binarized against
-  noise floor). Both land at `:wat::algebra::*` per OPEN-QUESTIONS
-  line 419 — algebra substrate operations take holons, not raw
-  numbers. Callers who want the exact value reach for `cosine`;
-  callers who want the verdict reach for `presence?`. **Not** at
-  `:wat::std::math::*` — that namespace is for raw-number utilities
-  (`ln`, `sin`, `cos`, `pi`); math's `cos(theta)` and algebra's
-  `cosine(x, y)` share a root but do different things — angle vs
-  holon-similarity.
-- [ ] sweep other bare forms that are semantically predicates and
-  rename to conform (one-pass audit)
+- [x] renamed `(:wat::kernel::stopped)` → `(:wat::kernel::stopped?)`
+- [x] split `(:wat::core::presence target ref)` (`:f64`) into
+  `(:wat::algebra::cosine target ref)` (`:f64`) and
+  `(:wat::algebra::presence? target ref)` (`:bool`, cosine vs
+  committed noise floor). Both live at `:wat::algebra::*` per
+  OPEN-QUESTIONS line 419. `:wat::std::math::*` stays for raw-number
+  utilities only (`ln`, `sin`, `cos` of an angle, `pi`).
+- [x] audit pass: no other bare form is a semantic predicate needing
+  `?`. Comparison operators (`=`, `<`, `>`, `<=`, `>=`) stay bare by
+  Lisp convention (operators, not predicates). `empty?` and the
+  sigusr/reset primitives already shipped conforming.
 
 ### Step 2 — `:Option<T>` + `match` — PARTIAL (out-of-order, 2026-04-19)
 
